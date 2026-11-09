@@ -20,13 +20,13 @@ impl Editor {
 
     /// This project's `.yumete/wiki.md`, whether or not it is there yet.
     ///
-    /// Warning: **問[項目根][`Editor::root`]，不自己再走一趟**（2026-10-01）。從前
-    /// 它從當前緩衝區往上找一個**已經存在的** `wiki.md`/`wiki.txt`，走法和項目
-    /// 根那一支不一樣——五份各走各的「往上找 `.yumete`」，這是其中一份。
+    /// Warning: **問[項目根][`Editor::root`]，不自己再走一趟**。從當前緩衝區往上找
+    /// 一個**已經存在的** `wiki.md`/`wiki.txt` 的話，走法就和項目根那一支不一樣
+    /// ——「往上找 `.yumete`」只許有一份。
     ///
-    /// Warning: **哪一種拼法真的在那裏**（2026-09-19，審查逮到的）。從前兩種都找、
-    /// 卻一律答 `wiki.md`——於是一本把百科寫成 `wiki.txt` 的書，`:wiki edit` 開
-    /// 出一個**空的** `wiki.md`，存一下載入那一頭就改認它：寫稿人的詞條一鍵全暗。
+    /// Warning: **答哪一種拼法真的在那裏**。兩種都找、卻一律答 `wiki.md` 的話，一本
+    /// 把百科寫成 `wiki.txt` 的書，`:wiki edit` 開出一個**空的** `wiki.md`，存一下
+    /// 載入那一頭就改認它：寫稿人的詞條一鍵全暗。
     pub(super) fn book_wiki_path(&self) -> PathBuf {
         let there = self.root().join(".yumete");
         match there.join("wiki.txt").is_file() && !there.join(WIKI_MD).is_file() {
@@ -58,7 +58,7 @@ impl Editor {
                 && path.parent().is_some_and(|d| d.file_name().is_some_and(|n| n == ".yumete")))
     }
 
-    /// 百科那一族命令 —— **一件一個**（2026-09-25 改，見 [`WikiCommand`]）。
+    /// 百科那一族命令 —— **一件一個**（見 [`WikiCommand`]）。
     pub(super) fn wiki_command(&mut self, what: WikiCommand) -> Result<CommandOutcome, EditorError> {
         match what {
             WikiCommand::Edit => {
@@ -69,7 +69,7 @@ impl Editor {
                 Some(path) => self.open_wiki_file(&path)?,
                 None => self.status = say!("word.no-data-directory"),
             },
-            // **The keys stay in the writing** (2026-09-17). Every other view
+            // **The keys stay in the writing**. Every other view
             // is a list to walk; this page is drawn from where the cursor is,
             // so putting the keys in it would freeze what it shows.
             WikiCommand::Mark(how) => match how {
@@ -173,9 +173,9 @@ impl Editor {
 /// One entry, laid out to be read (#287, §5.8.5): the breadcrumb, then its
 /// body with its own sub-headings re-levelled so the entry reads as `#`.
 ///
-/// Warning: **It borrows the entry rather than copying it** (2026-09-19). This is
+/// Warning: **It borrows the entry rather than copying it**. This is
 /// built **every frame the cursor stands on a name**, and an entry may be a
-/// chapter in its own right: copying every line of it cost 10 ms a frame at
+/// chapter in its own right: copying every line of it costs 10 ms a frame at
 /// 5000 lines and 30 ms at 20000, measured — the editor going sticky while you
 /// read. Nothing here outlives the frame it is drawn in.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -217,8 +217,8 @@ pub struct WikiView<'a> {
 }
 
 impl WikiView<'_> {
-    /// **The 章節 line** — 「辭典 › 君山」 — when the view is one entry
-    /// (2026-09-18: 「章節那一行能不能用灰一些的顏色」).
+    /// **The 章節 line** — 「辭典 › 君山」 — when the view is one entry,
+    /// drawn in a quieter colour than the body.
     ///
     /// It is not part of what the entry *says*: it is where the entry was
     /// written down. So the panel draws it quietly, under the name and above
@@ -236,12 +236,12 @@ impl WikiView<'_> {
     /// and **no more of it than a panel could draw**.
     ///
     /// Warning: `upto` is not a preference, it is what keeps this off the critical
-    /// path (2026-09-19). A float is at most a third of the page deep, so
+    /// path. A float is at most a third of the page deep, so
     /// `upto` lines is already more of the entry than it can use; and since
     /// every line kept is at least one row (or one 縱) drawn, a cut here can
     /// never take away a line the panel would have shown. The panel's own
     /// 「…」 still says it was cut, because it still has more than it can fit.
-    /// Without it the whole entry was built **and then wrapped** every frame.
+    /// Without it the whole entry is built **and then wrapped** every frame.
     pub fn body_prose(&self, upto: usize) -> String {
         match self.lede() {
             Some(lede) => self
@@ -308,7 +308,7 @@ impl Editor {
     /// one-character entry is never answered here: it could not be marked,
     /// and a panel over every 墨 in a novel would be a panel over the novel.
     pub fn wiki_here(&self) -> Option<WikiView<'_>> {
-        // **釘住的那一條先說話**（2026-09-25）。`:wiki <詞條名>` 挑完一條之後，
+        // **釘住的那一條先說話**。`:wiki <詞條名>` 挑完一條之後，
         // 眼前這一條是人**指名要看的**，而光標底下那一個只是碰巧站在那裏——
         // 指名的那一個大。光標一動它就没了（`forget_a_pinned_entry`）。
         if let Some((name, at)) = &self.wiki_pinned {
@@ -372,19 +372,17 @@ impl Editor {
         Some(WikiView { name, parts })
     }
 
-    /// **`空格 k`/`空格 K` 在散文裏問的是百科**（2026-09-29 定）。
+    /// **`空格 k`/`空格 K` 在散文裏問的是百科**。
     ///
-    /// 原話：「文本文件会说 space k / K 这不是程序文件所以不能显示文档。这是不好
-    /// 的，它以就可以显示百科。比如 space K 强制在邊欄显示。」
+    /// 散文不是程序文件，没有文檔可問，但有百科；`空格 K` 強制畫在邊欄。
     ///
     /// Warning: **百科不必「問」**：它是現算的，光標停到一個詞條名上浮窗自己就冒出來
     /// （`wiki_floating`）。所以這兩個鍵在散文裏只管一件事——**畫在哪**，和它們
     /// 在代碼裏管的是同一件事。
     pub(super) fn show_the_wiki_here(&mut self, afloat: bool) -> bool {
         // 光標底下什麽都没有就說一句——一個按了没反應的鍵，讀者只會以為自己記
-        // 錯了鍵。Warning: **大寫那一下照樣把那一格開出來**（2026-09-30 審出來
-        // 的）：原話是「space K 强制在邊欄显示」，而「強制」是一個持續的意
-        // 思——開好了等着，不是這一刻没東西就當没按過。
+        // 錯了鍵。Warning: **大寫那一下照樣把那一格開出來**：`空格 K` 是「強制在
+        // 邊欄顯示」，而「強制」是一個持續的意思——開好了等着，不是這一刻没東西就當没按過。
         if self.wiki_here().is_none() {
             self.status = say!("wiki.panel-empty");
             if !afloat {
@@ -501,15 +499,15 @@ impl Editor {
         block.is_literal() || matches!(block, crate::markdown::Block::Comment { .. })
     }
 
-    /// **The names this chapter has and does not show** (2026-09-19).
+    /// **The names this chapter has and does not show**.
     ///
     /// A name joins the segmenter and the mark goes where the segmenter *cut*,
     /// which is the right rule — 中國人 inside 中國人民 is not the name — and
     /// also means a name can be in the wiki, be right there in the sentence,
     /// and never light up: 「有身體」 loses to 這裏有/身體, and a name with a
-    /// space or a Latin letter is not one token at all. That used to happen
-    /// **in silence**: the entry was written, nothing appeared, and `:wiki`
-    /// reported nothing wrong. Now it is asked the only way it can be answered
+    /// space or a Latin letter is not one token at all. Left alone that happens
+    /// **in silence**: the entry is written, nothing appears, and `:wiki`
+    /// says nothing is wrong. So it is asked the only way it can be answered
     /// honestly — **by looking, not by predicting**: every name is searched for
     /// in the chapter that is open, and an occurrence carrying no mark is
     /// named with the lines it is on. Only this file, because only this file is

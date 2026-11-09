@@ -1,6 +1,6 @@
 //! `:check` — the four questions a person cannot answer by eye (#296).
 //!
-//! Moved out of `editor.rs` whole on 2026-09-08. Five commands that all do the
+//! Five commands that all do the
 //! same thing in five subjects: walk the whole document, and hand back a
 //! **results buffer** in the shape `gf` already reads — the 拆分表
 //! (`:table-check`), the 用詞 groups (#233), the crutch words (`:word-habit`,
@@ -8,8 +8,7 @@
 //! have (#240).
 //!
 //! A child module of `editor`, so `Editor`'s private fields and the free
-//! functions beside it are as reachable here as they were where this code used
-//! to stand.
+//! functions beside it are reachable here.
 
 use super::*;
 
@@ -86,8 +85,8 @@ impl Editor {
             // record whose quote runs on is two lines to this grid, and both
             // of them then have the wrong number of columns — reporting that
             // twice and calling it a column count sends its writer looking at
-            // the commas. `field_runs_on` has always known; until now the only
-            // place that said so was the door the file did not get through.
+            // the commas. `field_runs_on` knows, so the listing says so too, not
+            // only the door the file did not get through.
             let runs_on = match separator {
                 Separator::Pipe => false,
                 Separator::Delimiter(d) => crate::table::field_runs_on(&text, d),
@@ -206,7 +205,7 @@ impl Editor {
         };
     }
 
-    /// `:check-names` — a 百科 name written one homophone out (2026-09-20).
+    /// `:check-names` — a 百科 name written one homophone out.
     ///
     /// **The other half of [`Self::check_usage`].** That one settles 裏 against
     /// 裡, and it works because both spellings are in a list. A proper name is
@@ -307,9 +306,8 @@ impl Editor {
         // into the editor the list was read from.
         // Warning: **Short paths, or the listing is unreadable.** A server names
         // files absolutely, and an absolute path in a temporary directory is
-        // ninety characters that wrap onto a second line — measured
-        // 2026-09-20, drawing the thing: four complaints filled a page and not
-        // one of them could be read at a glance. `gf` still finds them because
+        // ninety characters that wrap onto a second line — drawn, four
+        // complaints fill a page and not one of them can be read at a glance. `gf` still finds them because
         // [`Self::show_listing_under`] tells it which root they are under.
         let root = self.project_root();
         let all: Vec<(String, usize, String, String)> = self
@@ -325,7 +323,7 @@ impl Editor {
                 )
             })
             .collect();
-        // **哪個服務器在答，在哪**——頂上一行（2026-09-29 定）。
+        // **哪個服務器在答，在哪**——頂上一行。
         //
         // Warning: 「乾淨」和「根本没人說過話」在這張單子上長得一模一樣，而這一行
         // 正是分得開它們的那一句：有它就是有人在聽，没有它就是没人在聽。
@@ -416,8 +414,8 @@ impl Editor {
     /// directory the file it was run on lives in.
     /// **`:version` —— 這一版是哪一版，以及東西都放在哪。**
     ///
-    /// Warning: **重點是路徑，不是版本號**（2026-10-05 一個用的人報的）。人裝完軟件
-    /// 第一個問題是「我該去改哪個文件」，而在這之前没有任何命令說得出來。四個地方
+    /// Warning: **重點是路徑，不是版本號**。人裝完軟件第一個問題是「我該去改哪個
+    /// 文件」。四個地方
     /// 各答一個問題：全局配置「我的設定在哪」、項目配置「這本書自己的設定在哪」、
     /// 數據目錄「我没存的稿子跑哪去了」、日誌「報 bug 要貼哪個檔」。
     ///
@@ -488,11 +486,9 @@ impl Editor {
             .path()
             .and_then(|p| p.parent())
             .map(Path::to_path_buf);
-        // **每一份報告自己說跳到哪**（2026-10-16）。
+        // **每一份報告自己說跳到哪**。
         //
-        // 一份報告說的是哪一個檔，緩衝區的名字已經寫着，所以行上不再抄一遍
-        // （原話：「why `文.md:` is needed if the `git-diff` shows the diff for
-        // only one file」）。行頭那個數字就是去處，這一句把它們收成一張表。
+        // 一份報告說的是哪一個檔，緩衝區的名字已經寫着，所以行上不抄一遍。行頭那個數字就是去處，這一句把它們收成一張表。
         //
         // Warning: **跨檔的那幾份不受影響**：`:grep` 的行是 `路徑:行:`，行頭不是數
         // 字，這裏記 `0`，`gf` 就落回「讀行上那個檔名」那條老路。`:git-diff`

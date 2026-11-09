@@ -1,5 +1,4 @@
-//! **The commands the key groups name** (2026-10-31, step 3 of the keymap
-//! plan): what `g h`, `Space f`, `]d`, `C-w s` and the rest do, each under
+//! **The commands the key groups name** (step 3 of the keymap plan): what `g h`, `Space f`, `]d`, `C-w s` and the rest do, each under
 //! its own name, so a binding can reach any of them without its group.
 //!
 //! Each is written as the body it runs, in the table, beside its name:
@@ -24,7 +23,7 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
         let line = e.sequence_span().map(|(n, _)| n).or(cx.operator_count);
         e.operator_count = None;
         // vim's jumps leave a closed fold closed (its `foldopen` has no
-        // `jump`, measured 2026-11-03).
+        // `jump`, measured in nvim).
         e.fold_stays_closed = true;
         // vim's `gg` keeps the column, as `G` does (`line_jump_keeps`).
         let keep = e.vim_keymap().then(|| e.line_jump_keeps()).flatten();
@@ -187,9 +186,9 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::OpenRecentMode, |e, _| e.pending = Pending::Open, Key::Char('o')),
     (NormalCmd::YumeMode, |e, _| e.pending = Pending::Yume, Key::Char('z')),
     (NormalCmd::GlobalSearch, |e, _| e.open_search(), Key::Char('/')),
-    // helix's `command_palette` (2026-11-01): every command and every key's
-    // command, each with its key and what it does, searched by description
-    // (`::`). It used to open an empty `:` line.
+    // helix's `command_palette`: every command and every key's command, each
+    // with its key and what it does, searched by description (`::`), not an
+    // empty `:` line.
     (NormalCmd::CommandPalette, |e, _| {
         e.open_the_command_line("");
         e.mode = Mode::Lookfor;
@@ -278,7 +277,7 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
         e.pending = Pending::SurroundFrom;
         e.operator_count = cx.operator_count;
     }, Key::Char('r')),
-    // ── z: vim's folds (2026-11-03) ───────────────────────────────────
+    // ── z: vim's folds ────────────────────────────────────────────────
     // vim's an operator, helix's the selection's lines (the flavour's `zf`).
     (NormalCmd::CreateFold, |e, _| match e.vim_keymap() {
         true => e.fold_operator(),
@@ -302,7 +301,7 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::ScrollViewLeft, |e, cx| e.scroll_sideways(Sideways::Shift(-(cx.count as isize))), Key::Char('h')),
     (NormalCmd::ScrollViewRight, |e, cx| e.scroll_sideways(Sideways::Shift(cx.count as isize)), Key::Char('l')),
     (NormalCmd::ScrollViewHalfLeft, |e, cx| {
-        // Half the window, its gutter counted, as vim's (nvim, 2026-11-04).
+        // Half the window, its gutter counted, as vim's (measured in nvim).
         let half = ((e.side_seen.get().1 + e.side_gutter.get()) / 2).max(1);
         e.scroll_sideways(Sideways::Shift(-((cx.count * half) as isize)));
     }, Key::Char('H')),
@@ -466,7 +465,7 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::TableCellWidth, |e, _| e.table_structure(Key::Char('w')), Key::Char('w')),
     (NormalCmd::TableSearchColumns, |e, _| e.table_structure(Key::Char('/')), Key::Char('/')),
     (NormalCmd::TableGotoCell, |e, _| e.table_structure(Key::Char('g')), Key::Char('g')),
-    // **The grid's own four** (2026-11-01). In a table's grid they are
+    // **The grid's own four**. In a table's grid they are
     // reached through `table_takes`, as its `Enter`, `Esc`, `Tab` and
     // `S-Tab`; outside one only the cell steps do anything, in a cell while
     // typing (where `Tab` is the same step).

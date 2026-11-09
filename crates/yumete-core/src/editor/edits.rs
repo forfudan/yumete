@@ -7,7 +7,7 @@
 
 use super::*;
 
-/// **寫作進度只記得動一本書**（2026-10-13）。記的是「開檔那一刻有多少字」，而數一
+/// **寫作進度只記得動一本書**。記的是「開檔那一刻有多少字」，而數一
 /// 遍是整份的——一份語料檔既不該進進度表，也不值那一趟。
 pub(super) const BIGGEST_TO_LOG: usize = 16 * 1024 * 1024;
 
@@ -30,13 +30,12 @@ impl Editor {
 
     /// Put `text` into the buffer, unless a grid says it must not go in.
     ///
-    /// **One gate, not ten.** The first version of this checked the delimiter
-    /// where a character is typed, and a review found seven other ways in — a
-    /// paste, the clipboard, an IME commit, `:s`, `r`, `R` — every one of which
-    /// wrote a comma into a cell and then wrote the file out, silently shifting
-    /// every column after it. Text reaches the buffer through exactly two
-    /// calls; this is one of them, and the check lives here so that adding an
-    /// eighth way in cannot reopen the hole.
+    /// **One gate, not ten.** Text reaches a cell by many ways — typing, a
+    /// paste, the clipboard, an IME commit, `:s`, `r`, `R` — and any of them
+    /// that writes a comma into a cell and then writes the file out silently
+    /// shifts every column after it. Text reaches the buffer through exactly
+    /// two calls; this is one of them, and the check lives here so that adding
+    /// another way in cannot open a hole.
     pub(super) fn edit_insert(&mut self, at: usize, text: &str) -> bool {
         if self.refuse_readonly() {
             return false;
@@ -72,9 +71,9 @@ impl Editor {
     /// name of whichever command asked.
     fn grid_refusal(&self, rebuilt: &str, panel: bool) -> Option<String> {
         // **A table is a table whether or not `:table` was typed.** This check
-        // used to open with `self.table.as_ref()?`, so `:replace` — which
-        // reaches every file `:grep` found, including files never opened — went
-        // through 13 rows of this project's own `development.md` and broke them.
+        // does not start from `self.table`: `:replace` reaches every file
+        // `:grep` found, including files never opened, and must not break the
+        // tables in them.
         let separator = self.grid_shape_here()?;
         let rows_only = separator == Separator::Pipe;
         // A delimited file is all cells. A document is not: only its table
@@ -102,10 +101,10 @@ impl Editor {
                 })
                 .collect()
         };
-        // **And a rule row has to stay one** (2026-10-17, found in review).
-        // The counts above are cells, and `| --- |` → `| xxx |` keeps every
-        // one of them — so `:%s/---/xxx/g` went through, and the file stopped
-        // being a table at all: no header, no columns, prose. Markdown knows
+        // **And a rule row has to stay one.** The counts above are cells, and
+        // `| --- |` → `| xxx |` keeps every one of them — so without this
+        // `:%s/---/xxx/g` would go through, and the file would stop being a
+        // table at all: no header, no columns, prose. Markdown knows
         // that row by its shape, not by its width, so the shape is what has
         // to be asked about.
         if rows_only {
@@ -130,9 +129,9 @@ impl Editor {
             .zip(&now)
             .find(|((_, a), (_, b))| a != b)
             .map(|((n, a), (_, b))| (*n, *a, *b))?;
-        // **A refusal that names no way through is a wall.** It used to say
-        // 「先 :table-render off」, which stopped being an escape the moment the check
-        // stopped asking whether table mode was on.
+        // **A refusal that names no way through is a wall.** It does not point
+        // at `:table-render off`: the check does not ask whether table mode is
+        // on, so turning it off is no escape.
         Some(match panel {
             true => say!("table.replace-would-change-width", line + 1, from + 1, to + 1),
             false => say!("table.substitution-would-change-width", line + 1, from + 1, to + 1),
@@ -296,7 +295,7 @@ impl Editor {
         self.reload_auto
     }
 
-    /// 配置說它開不開（2026-10-11 起它進得了 `config.toml`）。
+    /// 配置說它開不開（它進得了 `config.toml`）。
     pub fn set_reload_auto(&mut self, on: bool) {
         self.reload_auto = on;
     }
@@ -304,7 +303,7 @@ impl Editor {
     /// Insert `text` at the cursor and advance past it.
     pub(super) fn insert_str(&mut self, text: &str) {
         let at = self.sel.head();
-        // **覆寫模式先讓位**（vim 的 `R`，2026-10-06）。一個進去的字蓋一個，蓋到
+        // **覆寫模式先讓位**（vim 的 `R`）。一個進去的字蓋一個，蓋到
         // 行尾就不再蓋——vim 的 `R` 在行尾是接着寫，不吃換行。蓋掉的記下來，退格
         // 照着還回去。
         if self.overwriting {
@@ -327,7 +326,7 @@ impl Editor {
         // `i`'s selection is ahead of the caret, and moves with the text.
         let tail = self.sel.anchor();
         self.sel.set_head(at + n);
-        // **`a` 開的那一趟不塌錨點**（2026-10-10，照 helix）：選區跟着打的字長。
+        // **`a` 開的那一趟不塌錨點**（照 helix）：選區跟着打的字長。
         if self.insert_keeps_tail && tail > at {
             self.sel.set_anchor(tail + n);
         } else if !self.keep_anchor_while_inserting {
@@ -410,20 +409,17 @@ impl Editor {
     /// Open a new line below the cursor and enter Insert mode (`o`).
     /// **這一行開頭那一段空白**——`o`、`O` 和 Enter 拿它把縮進帶下去。
     ///
-    /// vim 的 `autoindent`、helix 的 `insert_newline` 都做這件事，而這一頭 2026-10-08
-    /// 之前一件都不做：代碼檔裏每按一次 Enter 光標就回到第 0 列（報的原話：「In
-    /// `go file`, pressing enter in a code block won't auto indent to the same
-    /// indentation level of the previous line」）。
+    /// vim 的 `autoindent`、helix 的 `insert_newline` 都做這件事：代碼檔裏按 Enter，
+    /// 新那一行與上一行同一級縮進，不回到第 0 列。
     ///
     /// Warning: **不許「發明」空白。** `upto` 是光標在這一行的第幾個字——光標停在縮進
     /// *裏面*的時候只帶它前面那一截，於是 `\t\tfoo` 在兩個 tab 中間按 Enter 得到
     /// `\t` ＋ `\tfoo`，兩行加起來一個字符不多不少。行首（第 0 列）按下去因此什麼
     /// 都不帶，而被推下去的那一行本來就帶着自己的縮進——同 vim。
     ///
-    /// Warning: **只在代碼檔裏**（`Syntax::Code`）。報的那一條就是代碼的
-    /// （「In `go file`, pressing enter …」），而散文這一頭本來就有自己的首行縮進
+    /// Warning: **只在代碼檔裏**（`Syntax::Code`）。散文這一頭有自己的首行縮進
     /// （`paragraph_indent`，那是畫出來的，檔案裏没有空白）——給一本小說自動帶
-    /// 縮進，是往稿子裏寫作者没打的空白。Markdown 的列表另有一條路
+    /// 縮進，是往稿子裏寫寫的人没打的空白。Markdown 的列表另有一條路
     /// （[`Self::continue_the_list`]），它在這一支之前就答完了。
     ///
     /// 全角空格（U+3000）也算空白：它在代碼註釋裏真出現過。
@@ -441,10 +437,10 @@ impl Editor {
 
     /// **vim's linewise `c`** (`cc`, `S`, `cj`, Visual `V` `c`): the lines'
     /// text goes, the last one's break stays, and Insert starts there. An
-    /// empty last line is not joined to the next (it was, 2026-11-04).
+    /// empty last line is not joined to the next.
     ///
-    /// **In code the first line's indent stays** (autoindent, measured in
-    /// nvim 2026-11-04), as `o` keeps it; not when that line is only blanks.
+    /// **In code the first line's indent stays** (autoindent, as nvim does),
+    /// as `o` keeps it; not when that line is only blanks.
     pub(super) fn change_whole_lines(&mut self, first: usize, last: usize, cut: bool) {
         let rope = self.current_buffer().rope();
         let start = rope.line_to_char(first);
@@ -503,7 +499,7 @@ impl Editor {
 
     /// 眼下這一行要帶下去的那一段縮進（Enter 用的，截到光標為止）。
     ///
-    /// **外加語法樹說的那幾級**（2026-10-08 第二期）：行尾一個 `(`、`{`、`[`，下一
+    /// **外加語法樹說的那幾級**：行尾一個 `(`、`{`、`[`，下一
     /// 行就多縮一級；新那一行開頭是 `}` 之類就少一級。差由 [`Editor::levels_to_open_at`]
     /// 算（helix 的 `Hybrid`），這裏只負責把它換成真的空白。
     pub(super) fn indent_to_carry(&self) -> String {
@@ -553,23 +549,23 @@ impl Editor {
             return;
         }
         // On a closed fold the new line goes after its last line, and the
-        // fold stays closed (vim's `o`, measured 2026-11-03).
+        // fold stays closed (vim's `o`).
         if let Some((_, last)) = self.shut_around(self.cursor_line()) {
             let at = self.current_buffer().rope().line_to_char(last);
             self.sel.set_anchor(at);
             self.sel.set_head(at);
         }
-        // **格內的 `o` 開的是這一格的一行**（設計 §03，2026-10-22）。
+        // **格內的 `o` 開的是這一格的一行**（設計 §03）。
         if self.open_a_line_in_the_cell(true) {
             return;
         }
         if self.open_a_row(true) {
             return;
         }
-        // **Below the record, not below the line** (2026-10-22). A field
-        // holding a line break makes a record of two lines, and opening the
-        // new row at the end of the *cursor's* line wedged it between them —
-        // the quoting then wrapped the wreck in quotes of its own.
+        // **Below the record, not below the line.** A field holding a line
+        // break makes a record of two lines, and opening the new row at the
+        // end of the *cursor's* line would wedge it between them — the quoting
+        // would then wrap the wreck in quotes of its own.
         let end = match self.record_lines_here() {
             Some((_, through)) => {
                 let rope = self.current_buffer().rope();
@@ -578,10 +574,9 @@ impl Editor {
             None => motion::line_end(self.current_buffer().rope(), self.sel.head()),
         };
         let row = self.blank_row();
-        // 縮進跟着下來，同 vim 的 `o`（2026-10-08）. **And the levels the
-        // syntax tree opens at the end of the line**, as helix's `o` does:
-        // after `fn f() {` or `def f():` the new line goes one in, as Enter's
-        // already did (2026-10-29).
+        // 縮進跟着下來，同 vim 的 `o`. **And the levels the syntax tree opens
+        // at the end of the line**, as helix's `o` does: after `fn f() {` or
+        // `def f():` the new line goes one in, as Enter's does.
         let indent = self.indent_for_a_line_after(self.cursor_line(), None, end);
         // **The file's own line ending** (#309), not a literal `\n`.
         let ending = self.current_buffer().ending();
@@ -597,22 +592,20 @@ impl Editor {
         self.note_fresh_indent(indent.chars().count(), false);
     }
 
-    /// **`o`/`O` inside a `|` table open a *row*, the way `t r` does**
-    /// (2026-10-17, found in review).
+    /// **`o`/`O` inside a `|` table open a *row*, the way `t r` does.**
     ///
-    /// Opening a line here used to write `{ending}{indent}{blank row}` and
-    /// then put the caret on the **first character of what it inserted** —
-    /// the row's leading wall. The first key typed therefore landed before
-    /// the pipe and the new line stopped being a row: `空格 t t` → `o` →
-    /// `wl` wrote `wl|  |  |  |` and the table split in two. `O` on the
-    /// header was worse: it wedged a blank row between the header and its
-    /// `| --- |`, and Markdown needs those adjacent, so the file stopped
-    /// being that table at all.
+    /// A plain open line here would write `{ending}{indent}{blank row}` and
+    /// put the caret on the **first character of what it inserted** — the
+    /// row's leading wall. The first key typed would land before the pipe and
+    /// the new line would stop being a row: `空格 t t` → `o` → `wl` would write
+    /// `wl|  |  |  |` and split the table in two. `O` on the header is worse:
+    /// it would wedge a blank row between the header and its `| --- |`, and
+    /// Markdown needs those adjacent, so the file would stop being that table
+    /// at all.
     ///
-    /// `md_new_row` has known all of this since it was written — it rebuilds
-    /// the region from its parsed parts, so the header and the rule keep
-    /// their places and the caret lands in a cell. `t r`/`t R` already used
-    /// it; these two did not. A delimited file has no header problem and no
+    /// `md_new_row` rebuilds the region from its parsed parts, so the header
+    /// and the rule keep their places and the caret lands in a cell; `t r`/
+    /// `t R` use it too. A delimited file has no header problem and no
     /// leading delimiter, so it keeps the plain path.
     ///
     /// Answers whether it handled the key.
@@ -644,7 +637,7 @@ impl Editor {
             None => motion::line_start(self.current_buffer().rope(), self.sel.head()),
         };
         let row = self.blank_row();
-        // 同 `o`：縮進照這一行的來（2026-10-08）。
+        // 同 `o`：縮進照這一行的來。
         let indent = self.indent_of_line(self.cursor_line(), None);
         let ending = self.current_buffer().ending();
         let done = self.without_cell_guard(|e| {
@@ -660,17 +653,16 @@ impl Editor {
     }
 
     /// **A blank line, and stay where you are** — helix's `]空格` / `[空格`
-    /// (`add_newline_below` / `add_newline_above`), 2026-10-06.
+    /// (`add_newline_below` / `add_newline_above`).
     ///
     /// Not `o` / `O`: those open a line *and start typing in it*. This one is
     /// for pushing a paragraph apart without leaving where the eye is, which
     /// is why helix gives it a key of its own and why it does not move the
     /// cursor. **It takes no indent either** — a blank line with trailing
     /// spaces on it is a blank line that greps wrong.
-    /// Warning: **每一段選區各插一條，而且不碰選區**（2026-10-06 夜審報的）。helix 的
-    /// `add_newline_impl` 對每一段各做一次、吃計數、一段選區都不動；這裏從前只讀
-    /// 主選區的頭，末尾還把選區塌成一個光標——函數自己的話是「不動光標」，頭確實
-    /// 没動，錨動了。
+    /// Warning: **每一段選區各插一條，而且不碰選區**。同 helix 的
+    /// `add_newline_impl`：對每一段各做一次、吃計數、一段選區都不動——「不動光標」
+    /// 說的是頭和錨都不動，不許把選區塌成一個光標。
     pub(super) fn add_blank_line(&mut self, below: bool, count: usize) {
         if self.refuse_readonly() {
             return;
@@ -694,11 +686,10 @@ impl Editor {
             true => rope.line_to_char((last + 1).min(rope.len_lines())),
             false => rope.line_to_char(first),
         };
-        // **A blank line inside a table cuts it in two** (2026-10-17, found in
-        // review). A table ends where its rows end, so `] 空格` between two
-        // rows left a headerless, ruleless second table below the gap — and
-        // it did it through `without_cell_guard`, where no other door could
-        // see it. `t r` is the key that adds a row, which is what this one
+        // **A blank line inside a table cuts it in two.** A table ends where
+        // its rows end, so `] 空格` between two rows would leave a headerless,
+        // ruleless second table below the gap — and through
+        // `without_cell_guard`, where no other door can see it. `t r` is the key that adds a row, which is what this one
         // means here.
         let rows = self.table_row_span_at(rope.char_to_line(from));
         let splits = rows.is_some_and(|(top, bottom)| {
@@ -734,7 +725,7 @@ impl Editor {
         self.clamp_cursor();
     }
 
-    /// **`5ix<Esc>` types five `x`** (`:h count`, 2026-10-06).
+    /// **`5ix<Esc>` types five `x`** (`:h count`).
     ///
     /// Remembered on the way *in* and spent on the way out, because what gets
     /// repeated is the whole typing session and nobody knows what that is
@@ -763,14 +754,13 @@ impl Editor {
             match opened {
                 // `i a I A` — 接着打，就在光標這裏。
                 None => self.type_through_pairs(typed),
-                // Warning: **`o`/`O` 這兩路要自己拼字串，不許叫 `add_blank_line`**
-                // （2026-10-06 夜審報的，兩個病）。① 那一支自己 `snapshot()`，於是
-                // 「整段算一個命令」是假的——`3o` 打完要按三下 `u` 纔回得去；
-                // ② 它把光標跟着原來那段文字往下挪，`O` 那一路算出來的落點是**已經
-                // 有字的那一行**，三遍全寫在同一行上（`3O` 打 `hi` 得
-                // `\n\nhihihi\nX`，而 vim 給 `hi\nhi\nhi\nX`）。
+                // Warning: **`o`/`O` 這兩路要自己拼字串，不許叫 `add_blank_line`**。
+                // ① 那一支自己 `snapshot()`，叫了它「整段算一個命令」就是假的——`3o`
+                // 打完要按三下 `u` 纔回得去；② 它把光標跟着原來那段文字往下挪，`O`
+                // 那一路算出來的落點會是**已經有字的那一行**，三遍全寫在同一行上
+                // （`3O` 打 `hi` 會得 `\n\nhihihi\nX`，而 vim 給 `hi\nhi\nhi\nX`）。
                 // The line break first, then the text typed through the pairs,
-                // as `3A(x` is (2026-10-29, review: `3o(x` closed only the first).
+                // as `3A(x` is, so `3o(x` closes every copy, not only the first.
                 Some(true) => {
                     let at = motion::line_end(self.current_buffer().rope(), self.sel.head());
                     if !self.edit_insert(at, &ending) {
@@ -860,8 +850,7 @@ impl Editor {
 
     /// **Take the word ahead** (`A-d` in Insert) — the other half of `C-w`.
     ///
-    /// helix binds it (`delete_word_forward`), readline binds it, and it was
-    /// one of four chords Insert mode here swallowed whole (2026-10-06).
+    /// helix binds it (`delete_word_forward`), and so does readline.
     ///
     /// The word is the segmenter's, for the reason `C-w` gives: a rule written
     /// as 「up to the next space」 eats a whole Chinese paragraph. And it never
@@ -872,7 +861,7 @@ impl Editor {
         let at = self.sel.head();
         let rope = self.current_buffer().rope();
         // **To the end of the word, not the start of the next** (helix's
-        // `delete_word_forward`, measured 2026-10-30): `foo   bar` with the
+        // `delete_word_forward`): `foo   bar` with the
         // cursor on `f` keeps its spaces; from the spaces it takes `   bar`.
         let (_, last) = motion::next_word_end(rope, at, self.word_grain(), self.segmenter.as_ref());
         let mut to = match last >= at && last < rope.len_chars() {
@@ -881,7 +870,7 @@ impl Editor {
         };
         // Nothing further on this line: take the rest of the line's text.
         // Only blanks left (`a␣␣` with the cursor on the first blank) is
-        // that case too: helix takes them all, not one (2026-10-30).
+        // that case too: helix takes them all, not one.
         let line_end = motion::line_end(rope, at);
         if rope.slice(at..line_end).chars().all(char::is_whitespace) {
             to = line_end;
@@ -906,9 +895,9 @@ impl Editor {
     }
 
     /// Take back everything from the start of the line to the cursor (`C-u`).
-    /// **刪到行尾**（Insert 裏的 `C-k`，2026-09-28）。
+    /// **刪到行尾**（Insert 裏的 `C-k`）。
     ///
-    /// `C-u` 是它的另一半，早就有了。這一對在 readline 裏是一起的，而一個只做了一半的
+    /// `C-u` 是它的另一半。這一對在 readline 裏是一起的，而一個只做了一半的
     /// 對子比兩個都没有更難記。
     ///
     /// Warning: **不跨行**：光標已經在行尾的時候什麼都不做，不去吃那個換行。readline 的
@@ -920,7 +909,7 @@ impl Editor {
         // 末那一個字留下。要的是這一行的**內容**有多長（不含換行）。
         let line = rope.char_to_line(at);
         let mut to = rope.line_to_char(line) + crate::zong::line_chars(rope, line).len();
-        // **At the line's end it takes the break** (2026-10-27, helix's
+        // **At the line's end it takes the break** (helix's
         // `kill_to_line_end`: 「if the cursor is on the newline char delete
         // that」). Not in a cell, whose walls a join would break, and not
         // under vim, whose `C-k` is a digraph.
@@ -940,11 +929,11 @@ impl Editor {
         }
     }
 
-    /// **把一個寄存器的內容插進來**（Insert 裏的 `C-r`，2026-09-28）。
+    /// **把一個寄存器的內容插進來**（Insert 裏的 `C-r`）。
     ///
-    /// Warning: **省掉的是一個撤銷點。** 從前寫到一半要放一個剛複製的人名，得 `Esc`、`p`、
-    /// 再 `i` 回來——而這個倉的規矩是「一次插入是一次撤銷」（§5.12.3），那一出一進
-    /// 白白多出一個撤銷點，一句話從此要按兩次 `u` 纔退得乾淨。
+    /// Warning: **省掉的是一個撤銷點。** 沒有它，寫到一半要放一個剛複製的人名，得
+    /// `Esc`、`p`、再 `i` 回來——而這個倉的規矩是「一次插入是一次撤銷」（§5.12.3），
+    /// 那一出一進白白多出一個撤銷點，一句話要按兩次 `u` 纔退得乾淨。
     pub(super) fn insert_register(&mut self, name: Option<char>) {
         let text = match name {
             Some(name) => self.held(name),
@@ -966,8 +955,8 @@ impl Editor {
         let began = self.insert_began?;
         let rope = self.current_buffer().rope();
         // And inside what Insert may touch: in a table, the Insert may have
-        // begun in another cell of this line (2026-10-30: `Tab` then `C-u`
-        // did nothing, the span crossing the cell's wall).
+        // begun in another cell of this line (`Tab` then `C-u`: the span
+        // would cross the cell's wall).
         (self.as_vim()
             && began < at
             && began <= rope.len_chars()
@@ -992,7 +981,7 @@ impl Editor {
             return;
         }
         let from = motion::line_start(self.current_buffer().rope(), at).max(self.insert_floor());
-        // **Helix's `kill_to_line_start`** (2026-10-27, measured): back to the
+        // **Helix's `kill_to_line_start`**: back to the
         // first non-blank when the cursor is past it, so the indent stays; at
         // the very start of a line, back over the break into the line above.
         // Not in a cell (its wall is the floor), and not under vim.
@@ -1047,13 +1036,12 @@ impl Editor {
         let last = motion::last_line(rope);
         let (start, end) = self.selection();
         let anchor_line = rope.char_to_line(start);
-        // **算末行之前先退一個字簇**（2026-10-11 報的，照 helix 的
-        // `Range::line_range`，`selection.rs:110-114`）。
+        // **算末行之前先退一個字簇**（照 helix 的 `Range::line_range`，
+        // `selection.rs:110-114`）。
         //
         // 選區的末端是**開區間**，所以光標停在行尾那個換行上的時候它已經落在下
-        // 一行的開頭了——照它算行號就多算一行，`x` 於是選了兩行。原話：「Press x
-        // at this location (end of line) will choose this line and also the
-        // next line. In helix only this line is selected.」
+        // 一行的開頭了——照它算行號就多算一行，`x` 會選上兩行。helix 在那裏只選
+        // 這一行。
         //
         // Warning: **「已經選滿了」和「光標停在行尾」要分得開。** helix 的選區**含**
         // 行尾那個換行，所以它一句 `range.to() == end` 就問得出「這一行整個在選區
@@ -1063,14 +1051,12 @@ impl Editor {
         // 所以：末端落在換行上纔退一格（那是「光標停在行尾」），而「已經選滿」由
         // `covers_whole_lines` 另外答——它答是，就往下再吃一行，這就是 helix 連按
         // `x` 一次多一行的那條路。
-        // **末端是開區間，所以算行號之前退一格**（2026-10-11 報的，照 helix 的
+        // **末端是開區間，所以算行號之前退一格**（照 helix 的
         // `Range::line_range`，`selection.rs:110-114`）。
         //
         // `selection()` 回的 `end` 在光標站的那一格**後面**：光標停在行尾那個換行
-        // 上時 `end` 已經落在下一行的第一個字上，照它算行號就多算一行，`x` 於是
-        // 選了兩行。原話：「Press x at this location (end of line) will choose
-        // this line and also the next line. In helix only this line is
-        // selected.」
+        // 上時 `end` 已經落在下一行的第一個字上，照它算行號就多算一行，`x` 會
+        // 選上兩行。helix 在那裏只選這一行。
         let last_char = motion::prev_grapheme(rope, end).max(start);
         let cursor_line = rope.char_to_line(last_char);
         let sel_start = rope.line_to_char(anchor_line);
@@ -1081,24 +1067,23 @@ impl Editor {
         };
         // **「已經選滿」只有真的是一段選區時纔算數。** 光標停在行尾的時候 `start`
         // 和 `end` 是同一點，照「頭在行尾」判就把它也當成選滿了，於是 `x` 又往下
-        // 吃一行——那正是 2026-10-11 報的那一條。
+        // 多吃一行。
         // Warning: **比的是頭站的那一格，不是開區間的 `end`。** 一行只有一個字的
         // 時候 `end` 正好等於 `line_tail`，照它判第一下 `x` 就被當成「已經選滿」、
-        // 一口吃兩行（2026-10-11，`一\n二\n三\n四\n` 上的 `xxx` 選了四行）。
+        // 一口吃兩行（`一\n二\n三\n四\n` 上的 `xxx` 會選上四行）。
         let covers_whole_lines = start == sel_start && last_char == line_tail;
         // 已經選滿了就往下再吃一行（連按 `x` 一次多一行），否則就是「把這一行
-        // 整個選上」。Warning: **兩個 `match` 加起來永遠是 `+1` 的寫法等於没寫**，
-        // 2026-10-11 第一版就是那樣，trace 打出 `covers=true next=1` 纔看出來。
+        // 整個選上」。Warning: **兩個 `match` 加起來永遠是 `+1` 的寫法等於没寫**——
+        // 那樣「已經選滿」那一支永遠不起作用。
         let mut next_line = match covers_whole_lines {
             true => cursor_line + 2,
             false => cursor_line + 1,
         };
-        // **In 全窗 it stops at the table's last row** (2026-10-17, found in
-        // review). `4x` on a table with three rows left ran off the end, and
-        // 「窗子拉得住你」 then pulled the caret back and **collapsed the
-        // selection** — so the `d` that followed deleted a single character
-        // from a reader who had asked for four rows. `3x` was right, so the
-        // only thing missing was the ceiling.
+        // **In 全窗 it stops at the table's last row.** Without the ceiling,
+        // `4x` on a table with three rows left would run off the end, and
+        // 「窗子拉得住你」 would pull the caret back and **collapse the
+        // selection** — so the `d` that followed would delete a single
+        // character from a reader who had asked for four rows.
         if self.grid_has_the_pane() {
             if let Some((_, bottom)) = self.table_row_span() {
                 next_line = next_line.min(bottom + 1);
@@ -1221,14 +1206,13 @@ impl Editor {
     /// takes the undo snapshot.
     ///
     /// Warning: **Deleting is not copying** — the reason this half exists at all
-    /// (#492): 「d 作为剪切功能会污染 register」. The register is a clipboard of
+    /// (#492): a cutting `d` pollutes the register. The register is a clipboard of
     /// one, so under a yanking `d` every tidy-up between a copy and a paste
     /// silently throws the copy away — yank a paragraph, take out a stray 、
     /// before pasting it, and the paragraph is gone.
     ///
-    /// Warning: **Which key this is under changed on 2026-09-28** (#405), and this
-    /// comment went on claiming the old answer until 2026-10-07. It is `A-d`
-    /// and `A-c`, which is Helix's own spelling; `d` and `c` yank, which is
+    /// Warning: **Which key this is under** (#405): `A-d` and `A-c`, which is
+    /// Helix's own spelling; `d` and `c` yank, which is
     /// also Helix's. In a grid it is `D` (`tables.rs`), because a grid has no
     /// `A-d`.
     pub(super) fn delete_selection(&mut self) {
@@ -1263,11 +1247,11 @@ impl Editor {
         if start == self.sel.head() {
             return;
         }
-        // **Ask before moving the selection** (2026-10-23). A grid may turn
-        // this cut away — the character before the cursor can be the quote
-        // that makes the cell a quoted one — and the refusal used to arrive
-        // after the selection had already been laid over the thing that was
-        // not cut, leaving the caret outside its own cell.
+        // **Ask before moving the selection.** A grid may turn this cut away —
+        // the character before the cursor can be the quote that makes the
+        // cell a quoted one — and a refusal that arrives after the selection
+        // has been laid over the thing that was not cut leaves the caret
+        // outside its own cell.
         if let Some(why) = self.cell_refuses_cut(start..self.sel.head()) {
             self.status = why;
             return;
@@ -1283,8 +1267,8 @@ impl Editor {
         self.cut_range(self.selection(), yanks)
     }
 
-    /// **The knife** — and since B2 (2026-09-20) it is handed the range rather
-    /// than reading the selection itself.
+    /// **The knife** — it is handed the range rather than reading the
+    /// selection itself (B2).
     ///
     /// That one parameter is the whole of what a second grammar needed: vim's
     /// `dw` has no selection to read, only the span its motion just returned.
@@ -1294,10 +1278,9 @@ impl Editor {
             // Deleting yanks, as it does in Helix: `d` then `p` moves text.
             // **Say the reason it gave**, not a stock one. `cell_refuses_cut`
             // answers with the refusal that fits — the rule row's names
-            // `t < = >`, which is the way through — and this threw it away
-            // and printed 「分隔符删不掉」 over the top, so the one message
-            // that tells the reader what to press instead was unreachable
-            // from `d` (found 2026-10-17 once `j` could stand on that row).
+            // `t < = >`, which is the way through — and printing
+            // 「分隔符删不掉」 over the top would make the one message that
+            // tells the reader what to press instead unreachable from `d`.
             if let Some(why) = self.cell_refuses_cut(start..end) {
                 self.status = why;
                 return;
@@ -1308,7 +1291,7 @@ impl Editor {
             }
             // **Nothing below this line may run on a refusal**: collapsing the
             // selection onto `start` over text that is still there is the
-            // fault §5.2.3 ⑤ was decided to close, and this is where it was.
+            // fault §5.2.3 ⑤ closes.
             let done = self.current_buffer_mut().remove(start..end);
             if !self.applied(done) {
                 return;
@@ -1331,9 +1314,9 @@ impl Editor {
     /// vertically. Both are "onward through the text", which is what the key
     /// means.
     ///
-    /// **翻頁走的是視窗，光標只是跟着**（2026-10-12 報的）。從前這一支只挪光
-    /// 標，視窗靠 `page_inset` 那條「離邊上不足 scrolloff 就推一把」的規矩跟，
-    /// 於是按 `C-d` 的手感是一下一下**跳**的：
+    /// **翻頁走的是視窗，光標只是跟着**。只挪光標、讓視窗靠 `page_inset` 那條
+    /// 「離邊上不足 scrolloff 就推一把」的規矩跟的話，按 `C-d` 的手感是一下一下
+    /// **跳**的：
     ///
     /// ```text
     /// 66 行的屏幕，光標在第 33 行（正中）
@@ -1341,7 +1324,6 @@ impl Editor {
     ///   C-d → 光標 99 行，上 32 下 33  ← 視窗一口氣挪了 63 行
     /// ```
     ///
-    /// 原話：「翻页会自动把 cursor 挪到屏幕底部；再按 ctrl+d 又回到中间」。
     /// helix 的 `scroll()` 是**先把視窗挪半頁、再把光標同步過去**
     /// （`commands.rs:1931`，`page_cursor_half_down`），vim 的 `CTRL-D` 一樣：
     /// 「the cursor stays in the same screen line」。這裏没有「視窗位置」這個
@@ -1356,10 +1338,9 @@ impl Editor {
         // 挪之前先記下它坐在第幾行——挪完就問不出來了。
         let sat_at = self.sat_at();
         let steps = ((page as f64 * fraction).round() as usize).max(1) * count;
-        // **Every cursor moves by the half page** (2026-10-27, helix's
+        // **Every cursor moves by the half page** (helix's
         // `page_cursor_half_down`/`_up`: `scroll` with `sync_cursor` transforms
-        // each selection). `C-d` with three cursors used to move one of them.
-        // A whole page (`C-f`, `PgDn`) is helix's `page_down`, which scrolls
+        // each selection), not only the primary. A whole page (`C-f`, `PgDn`) is helix's `page_down`, which scrolls
         // without syncing and so moves the primary alone — measured, and kept.
         if self.sel.is_plural() && fraction < 1.0 {
             let before = self.sel.head();
@@ -1423,8 +1404,7 @@ impl Editor {
     }
 
     /// Stop recording and write the keys into their register as text
-    /// ([`crate::input::macro_text`]), as helix and vim keep a macro (named
-    /// macros, 2026-11-03; there was one macro, kept apart). vim's `qA`
+    /// ([`crate::input::macro_text`]), as helix and vim keep a macro. vim's `qA`
     /// adds to register `a`.
     pub(super) fn stop_recording(&mut self) {
         let Some(mut keys) = self.recording.take() else { return };
@@ -1485,10 +1465,9 @@ impl Editor {
         // the next one either, so stop (#318). `revision`, not `char_count`:
         // a macro that types a character and rubs it out has still worked.
         let clipped = count.min(Self::WRITING_MAX);
-        // **數目是一條命令，和 `100p` 同一條規矩**（2026-10-02 補，#323 當初只改了
-        // [`Editor::repeat`]）。第一趟照常掙它自己那幾個撤回點——巨集裏每一條命令
-        // 各算一步，vim 也是這樣；第二趟起就不再掙了，所以 `10q` 和 `1q` 按同樣
-        // 多下 `u` 撤得掉。從前 `10q` 一個改動的巨集要按十一下。
+        // **數目是一條命令，和 `100p` 同一條規矩**（#323，同 [`Editor::repeat`]）。
+        // 第一趟照常掙它自己那幾個撤回點——巨集裏每一條命令各算一步，vim 也是這樣；
+        // 第二趟起就不再掙了，所以 `10q` 和 `1q` 按同樣多下 `u` 撤得掉。
         //
         // Warning: **開在哪一份上就關在哪一份上。** 巨集裏什麼鍵都可能有，包括換稿子
         // 的那幾個；拿 `current_buffer_mut()` 關的話，換過之後關的是別人，而開着
@@ -1531,8 +1510,8 @@ impl Editor {
 
     /// Put `text` in the register named by a pending `"`, or the unnamed one.
     pub(super) fn store(&mut self, text: String) {
-        // **Whatever the grid remembered about this register is now stale**
-        // (2026-10-21). The one key that may set it sets it after this call.
+        // **Whatever the grid remembered about this register is now stale.**
+        // The one key that may set it sets it after this call.
         self.register_grid = None;
         self.register_block = false;
         // 整行取出來的要帶着行尾——見 [`Editor::yank_whole_lines`]。
@@ -1540,7 +1519,7 @@ impl Editor {
             true => text + self.current_buffer().ending(),
             false => text,
         };
-        // **一段選區一份**（2026-10-09，見 [`Editor::register_parts`]）。有名字的格子和
+        // **一段選區一份**（見 [`Editor::register_parts`]）。有名字的格子和
         // 無名那一格走同一條規矩——helix 的寄存器無論叫不叫得出名字都是一串值。
         //
         // `edit_nth` 是這一段在**文檔次序**裏的序號（`#` 寄存器讀的也是它），所以收下來
@@ -1559,8 +1538,8 @@ impl Editor {
             }
         };
         let named = self.take_register();
-        // **vim keeps the kind with the register** (`:h linewise-register`,
-        // measured 2026-11-07): `v$y` holds a line break but is charwise, so
+        // **vim keeps the kind with the register** (`:h linewise-register`):
+        // `v$y` holds a line break but is charwise, so
         // `p` puts it inside the line, not on a line of its own.
         let charwise = self.as_vim() && self.extend && !self.vim_lines && !self.lines_at_key && text.ends_with('\n');
         let kept = named.is_none_or(|n| n.is_ascii_alphanumeric());
@@ -1571,15 +1550,14 @@ impl Editor {
             };
         }
         match named {
-            // **`"_` keeps nothing and `"+` / `"*` are the system clipboard**
-            // (2026-10-30), as in helix and vim: `"_d` deletes without touching
+            // **`"_` keeps nothing and `"+` / `"*` are the system clipboard**,
+            // as in helix and vim: `"_d` deletes without touching
             // what `p` puts, and `"+y` copies out of the editor.
             Some('_') => {}
             Some('+' | '*') => {
                 self.clipboard_request = Some(text);
             }
-            // **vim's `"A` adds to register `a`** (`:h quote_alpha`, measured
-            // in nvim 2026-11-04): lines added to text, or text to lines,
+            // **vim's `"A` adds to register `a`** (`:h quote_alpha`): lines added to text, or text to lines,
             // make lines.
             Some(name) if name.is_ascii_uppercase() && self.vim_keymap() => {
                 let name = name.to_ascii_lowercase();
@@ -1613,7 +1591,7 @@ impl Editor {
                     self.yanks.truncate(YANKS);
                 }
                 // **vim's `"1`–`"9`: the last nine deletes of a line or more**
-                // (`:h quote1`, 2026-10-30), each pushing the older ones down.
+                // (`:h quote1`), each pushing the older ones down.
                 let numbered = fresh
                     && self.keymap_rules().numbered_registers
                     && !self.storing_a_yank
@@ -1635,8 +1613,8 @@ impl Editor {
         }
     }
 
-    /// **vim's `""` follows the register just written** (`:h quotequote`,
-    /// nvim 2026-11-04): `"ayy` then `p` puts that line. helix's `"` is a
+    /// **vim's `""` follows the register just written** (`:h quotequote`):
+    /// `"ayy` then `p` puts that line. helix's `"` is a
     /// register like the others.
     fn unnamed_follows(&mut self, name: char) {
         if self.vim_keymap() {
@@ -1648,7 +1626,7 @@ impl Editor {
     /// Open the picker over everything that could be pasted (`Space \"`).
     pub(super) fn open_paste_picker(&mut self) {
         // 右邊那半扇要畫系統剪貼板，而只有前端讀得了它——問一次，面板開着的這
-        // 一趟都用那一份（2026-10-11 報的）。
+        // 一趟都用那一份。
         self.clipboard_peek = true;
         self.clipboard_seen = None;
         let mut items = vec![crate::picker::Item::Paste(
@@ -1719,14 +1697,14 @@ impl Editor {
 
     /// What `p` would paste from register `name` (the unnamed one for
     /// `None`), for a front end's own one-line fields: the settings panel's
-    /// `p` and `"ap` (2026-11-08).
+    /// `p` and `"ap`.
     pub fn register_contents(&self, name: Option<char>) -> String {
         self.register_text(name)
     }
 
     /// **Copy `text` as `y` copies**, into the register a pending `"`
     /// named or the unnamed one, for a front end's panel: the settings
-    /// panel's `y` copies a value (2026-11-08).
+    /// panel's `y` copies a value.
     pub fn yank_text(&mut self, text: &str) {
         let named = self.pending_register;
         let whole = std::mem::replace(&mut self.yank_whole_lines, false);
@@ -1755,8 +1733,8 @@ impl Editor {
                 Some(parts) => parts.concat(),
                 None => String::new(),
             },
-            // **一段選區一份**（2026-10-09）：N 段剪下來、N 段貼回去，逐字節還原
-            // ——`d` 再 `P` 是「把它放回去」的那一下，而它從前只放得回一段。
+            // **一段選區一份**：N 段剪下來、N 段貼回去，逐字節還原——`d` 再 `P`
+            // 是「把它放回去」的那一下，每一段都要放得回去。
             None => match self.register_parts.len() > 1 {
                 true => Self::part_for(&self.register_parts, self.edit_nth),
                 false => self.register.clone(),
@@ -1764,23 +1742,21 @@ impl Editor {
         }
     }
 
-    /// **Which of several copied pieces the `nth` selection gets** (2026-10-27,
-    /// measured against helix's `paste_impl`): its own, and the last one when
-    /// there are more selections than pieces. One cursor gets the first piece,
-    /// not all of them joined: copying two cursors' words and pasting at one
-    /// cursor used to paste both.
+    /// **Which of several copied pieces the `nth` selection gets** (as helix's
+    /// `paste_impl`): its own, and the last one when there are more selections
+    /// than pieces. One cursor gets the first piece, not all of them joined:
+    /// copying two cursors' words and pasting at one cursor pastes one word.
     fn part_for(parts: &[String], nth: Option<usize>) -> String {
         let nth = nth.unwrap_or(0);
         parts.get(nth).or(parts.last()).cloned().unwrap_or_default()
     }
 
-    /// **Do `op` to `span`** — the one door every verb goes through (B2,
-    /// 2026-09-20).
+    /// **Do `op` to `span`** — the one door every verb goes through (B2).
     ///
     /// helix hands it the selection; vim (B3) will hand it whatever its motion
     /// returned, without either of them knowing the other exists. Warning: A
     /// [`motion::Span::Missed`] does **nothing** — not 「operate on an empty
-    /// range」, which is how a failed motion used to eat one character.
+    /// range」, which would let a failed motion eat one character.
     pub(super) fn apply(&mut self, op: motion::Operator, span: motion::Span) {
         let motion::Span::Over { anchor, head } = span else { return };
         // Warning: **A span is in the caret's coordinates, a range is not** — and the
@@ -1795,8 +1771,7 @@ impl Editor {
         // not.
         let (start, last) = (anchor.min(head), anchor.max(head));
         let range = (start, motion::next_grapheme(self.current_buffer().rope(), last));
-        // **vim never takes the file's last line break** (measured against
-        // nvim 2026-11-07): charwise Visual may stand on a break, and on the
+        // **vim never takes the file's last line break** (as nvim): charwise Visual may stand on a break, and on the
         // last line `v$d` leaves `abcd\n`, not `abcd`. Linewise operators
         // keep their own rule.
         //
@@ -1835,7 +1810,7 @@ impl Editor {
         self.storing_a_yank = true;
         self.store(text);
         self.storing_a_yank = false;
-        // **vim's `"0` is the last yank** (`:h quote0`, 2026-10-30): a delete
+        // **vim's `"0` is the last yank** (`:h quote0`): a delete
         // fills the unnamed register, and `"0p` still has what was yanked.
         if named.is_none() && self.keymap_rules().numbered_registers {
             self.registers.insert('0', self.register_parts.clone());
@@ -1844,7 +1819,7 @@ impl Editor {
         self.light_the_yank((start, end));
     }
 
-    /// **Light what a yank copied** (2026-11-07, `[editor] yank_flash`): the
+    /// **Light what a yank copied** (`[editor] yank_flash`): the
     /// front end draws [`Editor::yank_flash`] on the selection's ground until
     /// [`YANK_FLASH`] is up, as nvim's `vim.hl.on_yank` does. Recorded
     /// whatever the setting says: the front end is the one that reads it.
@@ -1911,8 +1886,8 @@ impl Editor {
             return;
         }
         // Read before `recall`, which *takes* it: asking afterwards always
-        // answered `None`, so the reader who named a register was told 「nothing
-        // has been yanked」 about a register they had just named.
+        // answers `None`, and the reader who named a register would be told
+        // 「nothing has been yanked」 about a register they had just named.
         let named = self.pending_register;
         let copies = std::mem::replace(&mut self.paste_copies, 1).max(1);
         let fix_indent = std::mem::take(&mut self.paste_fixes_indent);
@@ -1938,14 +1913,13 @@ impl Editor {
         let (start, end) = (start, end.max(start));
         let at = if line_wise {
             let rope = self.current_buffer().rope();
-            // Warning: **`end` 是排他的**（2026-10-13 報的）。選區含光標那一格，所以
-            // `end` 指着它**後面**那一個字——空行上那正是下一行的第一個字，於是
-            // 「貼在這一行之後」算成了「貼在下一行之後」。報的原話：「在 hello 之前
-            // 按 p 實際會粘到 hello 之後」。要的是選區**最後一個字**那一行。
+            // Warning: **`end` 是排他的**。選區含光標那一格，所以 `end` 指着它
+            // **後面**那一個字——空行上那正是下一行的第一個字，照它算「貼在這一行
+            // 之後」就成了「貼在下一行之後」。要的是選區**最後一個字**那一行。
             let last = end.max(start).saturating_sub(1).max(start);
             let line = rope.char_to_line(if after { last } else { start });
             // A closed fold is one line: `p` puts after its last, `P`
-            // before its first (measured in nvim, 2026-11-03).
+            // before its first (as nvim).
             let line = match self.shut_around(line) {
                 Some((first, last)) => match after {
                     true => last,
@@ -1972,7 +1946,7 @@ impl Editor {
         } else {
             start
         };
-        // **貼在沒有終止符的末行後面：先補一個行尾**（2026-10-13 報的）。不補的話
+        // **貼在沒有終止符的末行後面：先補一個行尾**。不補的話
         // 整行就貼進了同一行——`Gyyp` 出 `barbar`。取來那一份自己的行尾不要了：原本
         // 沒有末尾換行的檔，別從這裏憑空多出來一個（存檔那一側另有規矩）。
         let rope = self.current_buffer().rope();
@@ -2003,18 +1977,16 @@ impl Editor {
             let lines = text.matches('\n').count();
             len = len.saturating_add_signed(self.fix_pasted_indent(first..first + lines, want));
         }
-        // **A record pasted into a grid may be several lines of it**
-        // (2026-10-22): a field with a line break in it is one record over two
+        // **A record pasted into a grid may be several lines of it**: a field with a line break in it is one record over two
         // lines, so which lines are rows has changed.
         self.rescan_records();
         // The pasted text becomes the selection, ending on its last grapheme.
         let rope = self.current_buffer().rope();
         let head = motion::prev_grapheme(rope, at + len).max(at);
-        // **Under the vim keymap there is no selection to leave** (`:h p`,
-        // 2026-10-30, measured against nvim): a charwise paste puts the cursor
-        // on its last character, a linewise one on the first non-blank of its
-        // first line. Leaving the pasted text selected made the next `i` type
-        // at its start.
+        // **Under the vim keymap there is no selection to leave** (`:h p`, as
+        // nvim): a charwise paste puts the cursor on its last character, a
+        // linewise one on the first non-blank of its first line. Leaving the
+        // pasted text selected would make the next `i` type at its start.
         if self.as_vim() {
             let to = match line_wise {
                 true => {
@@ -2166,7 +2138,7 @@ impl Editor {
         // [`Editor::show_buffer`] 都要記——Warning: 那一支只收「已經開着的」，開新檔走的是
         // 這裏，兩條路都記上 `ga` 纔一直有答案。
         let leaving = self.current_buffer().id();
-        // A preview is no empty scratch to be taken over (2026-11-08).
+        // A preview is no empty scratch to be taken over.
         let pristine = replace_pristine
             && self.buffers.len() == 1
             && self.buffers[0].path().is_none()
@@ -2191,7 +2163,7 @@ impl Editor {
         // (Feature #244). Asked once per path: reopening a file that is already
         // in the map is the same session still writing it.
         let opened = self.buffers[self.current].path().map(Path::to_path_buf);
-        // **大過這個就不記起點**（2026-10-13）：數漢字是整份的，而這個數的用處是
+        // **大過這個就不記起點**：數漢字是整份的，而這個數的用處是
         // 「今天寫了多少」——語料檔不是稿子。沒有這一格，進度那一支回落到「現在這
         // 個數」，也就是當天零字，正是想要的。量過：3.91 GB 的檔上這一句 3.2 秒。
         let small_enough = self.buffers[self.current].rope().len_bytes() <= BIGGEST_TO_LOG;
@@ -2207,9 +2179,9 @@ impl Editor {
         self.segment_memo.forget();
         self.sel.set_head(0);
         // Whether *this* buffer is a grid is asked again, the way `show_buffer`
-        // asks it. Without this, `:table` and then `:!wc -l` left the shell
-        // output being edited as a table: `o` opened `|  |  |` in it and `:s`
-        // was guarded against a table that was in another file.
+        // asks it. Without this, `:table` and then `:!wc -l` would leave the
+        // shell output being edited as a table: `o` would open `|  |  |` in it
+        // and `:s` would be guarded against a table that is in another file.
         self.leave_table_quietly();
         self.md_cache.borrow_mut().take();
         self.md_tables.borrow_mut().take();
@@ -2462,11 +2434,11 @@ impl Editor {
 /// The whole lines `from..to` touches, as `(start, end)` without the last
 /// line's break.
 ///
-/// **The last line the selection covers, not the one after it** (丟字第二輪,
-/// 2026-10-07). A selection made with `x` ends on the *start* of the following
-/// line, so `line_end` there reached past the last line's break: the break
-/// went inside the comment (a blank line before the closing mark) and the file
-/// came back with no final newline.
+/// **The last line the selection covers, not the one after it.** A selection
+/// made with `x` ends on the *start* of the following line, so `line_end`
+/// there would reach past the last line's break: the break would go inside the
+/// comment (a blank line before the closing mark) and the file would lose its
+/// final newline.
 /// Which comment key was pressed (helix's three).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum CommentKey {

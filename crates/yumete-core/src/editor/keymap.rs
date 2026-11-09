@@ -1,4 +1,4 @@
-//! **The key tree** (2026-11-05): one per mode, laid in `lay_aliases`.
+//! **The key tree**: one per mode, laid in `lay_aliases`.
 //!
 //! The built-in groups (`groups.rs`) are its nodes, and a command that opens
 //! a group is an edge to that node wherever it is bound: `Space w`, `C-w` and,
@@ -333,7 +333,7 @@ impl Editor {
         tree.notes.retain(|(_, n)| reached[*n]);
         tree.replaced.retain(|(_, _, n)| reached[*n]);
         // A table of the reader's with no keys in it (`{ label = … }` with
-        // no `run`) is said, not dropped without a word (review, 2026-11-05).
+        // no `run`) is said, not dropped without a word.
         tree.hollow = (0..tree.nodes.len())
             .filter(|&n| reached[n])
             .filter(|&n| tree.nodes[n].group.is_none() && tree.nodes[n].rows.is_empty() && tree.nodes[n].runs.is_empty())
@@ -462,7 +462,7 @@ impl Editor {
             || tree.runs.keys().any(|r| r.len() > first.len() && r.starts_with(first.as_str()));
         // …except a line written in `[keys.<mode>.space]`, which is the
         // Space group's wherever that is opened, beside a flat `"<space>…"`
-        // the top level holds (review, 2026-11-05).
+        // the top level holds.
         if held && !line.space && !tree.root.contains_key(first) {
             at_root(tree);
             return;
@@ -651,7 +651,7 @@ impl Editor {
     /// that took a key from the command it ran, and each row two spellings
     /// reached, with the one in force first.
     ///
-    /// One line however many (2026-11-05, the wording asked for): the
+    /// One line however many: the
     /// whole path of each key, so a group several levels deep reads as
     /// where it is.
     pub fn key_notes(&self) -> Vec<String> {
@@ -664,10 +664,9 @@ impl Editor {
 
     /// **The keys a table took from a command**, as written (`<Space>f`).
     /// Not a mistake: a LazyVim-style config takes them on purpose, so
-    /// start-up says it once for each change of them (2026-11-06).
+    /// start-up says it once for each change of them.
     pub fn taken_keys(&self) -> Vec<String> {
-        // A table grid's too (`[keys.table.Q]` takes `Q` there), once each
-        // (review, 2026-11-06).
+        // A table grid's too (`[keys.table.Q]` takes `Q` there), once each.
         let mut out: Vec<String> = Vec::new();
         for (path, _) in self.normal_tree.notes.iter().chain(&self.table_tree.notes) {
             let path = quoted(path);
@@ -686,7 +685,7 @@ impl Editor {
 
     /// **What is wrong in the reader's tables**: a group with no keys, and
     /// each key two spellings reached, the one in force first. Said at every
-    /// start-up until it is fixed (2026-11-06).
+    /// start-up until it is fixed.
     pub fn key_mistakes(&self) -> Vec<String> {
         let tree = &self.normal_tree;
         let mut parts = Vec::new();
@@ -861,7 +860,7 @@ impl Editor {
         true
     }
 
-    /// **A group with nothing in it is no group** (review, 2026-11-05): one
+    /// **A group with nothing in it is no group**: one
     /// `inherit = false` left empty, or that holds only `no_op`, closes as
     /// it opens, as a key bound to nothing would; its row is not listed
     /// either ([`Self::group_is_empty`]).
@@ -1145,8 +1144,8 @@ impl Editor {
     }
 
     /// A node's menu rows, worked out once for each menu drawn: a parent
-    /// asks them for its `+` row and whether to list it at all, and each
-    /// level of nesting used to ask twice (2^depth).
+    /// asks them for its `+` row and whether to list it at all, so each
+    /// level of nesting does not ask twice (2^depth).
     fn rows_of(&self, n: usize, memo: &Memo) -> KeyRows {
         if let Some(rows) = memo.borrow().get(&n) {
             return rows.clone();
@@ -1186,7 +1185,7 @@ impl Editor {
     /// first key at the top level that opens it, `␣` when that is Space.
     pub(super) fn space_sign(&self) -> String {
         // The key that opened it this time, when one did: `;` with
-        // `";" = "space_mode"` (review, 2026-11-06).
+        // `";" = "space_mode"`.
         if let Some(key) = self.group_opened_by.as_ref().filter(|_| self.pending.group().is_some()) {
             return key.clone();
         }

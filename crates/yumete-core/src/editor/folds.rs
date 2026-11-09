@@ -1,4 +1,4 @@
-//! **Folds on the page** (2026-11-03): which lines a window shows as one
+//! **Folds on the page**: which lines a window shows as one
 //! row, and vim's keys for them. The bookkeeping is [`crate::fold`]; this
 //! is where the folds a window has meet the page.
 //!
@@ -11,7 +11,7 @@
 //! What lands inside a closed fold opens it, as vim's `foldopen` does for
 //! search, marks, `%`, undo and the horizontal moves, and as Insert always
 //! does; only vim's jumps (`G`, `gg`, `:N`, `C-o`, `C-i`) leave it closed
-//! and put the cursor on the fold's line (measured in nvim, 2026-11-03).
+//! and put the cursor on the fold's line (measured in nvim).
 
 use super::*;
 use crate::fold::FoldSet;
@@ -45,7 +45,7 @@ impl FoldSpan {
 #[derive(Debug, Default)]
 pub(super) struct FoldView {
     /// The syntax too: `:syntax` changes which lines are headings without
-    /// an edit (review, 2026-11-03).
+    /// an edit.
     key: (u64, u64, u64, u64, bool, crate::syntax::Syntax),
     /// Outermost first: by first line, the longer of two that start on one
     /// line before the shorter.
@@ -157,7 +157,7 @@ impl Editor {
     /// **What a closed fold's line says**: in code vim's own,
     /// `+--  5 lines: fn main() {···`; in a text file the heading or the
     /// first words and how many 字 are folded, `## 第三節 ···· 4,213 字`, as
-    /// the status line counts them (decided 2026-11-03).
+    /// the status line counts them.
     pub fn fold_line(&self, line: usize) -> Option<String> {
         let (first, last) = self.shut_around(line).filter(|&(first, _)| first == line)?;
         let (depth, heading) = self
@@ -179,14 +179,14 @@ impl Editor {
         // in characters and fills with ︙.
         let vertical = self.layout() == Layout::Vertical;
         // Rows down a 縱, packed as the page packs them: `104` is one row
-        // there, and counted as three it cut the heading short (review).
+        // there, and counted as three it would cut the heading short.
         let size = |text: &str| match vertical {
             true => crate::zong::slot_count(text, self.tatechuyoko),
             false => yumete_cjk::str_width(text),
         };
         let dot = if vertical { "︙" } else { "·" };
         // The run stands after the line's hidden text, which the 縱 starts
-        // a row down for (measured on the page, 2026-11-03).
+        // a row down for (measured on the page).
         let width = match vertical {
             true => width.saturating_sub(1).max(4),
             false => width,
@@ -221,7 +221,7 @@ impl Editor {
         let mut units = crate::units::Units::default();
         let mut buf = String::new();
         // A heading's fold counts what is under it, as the outline does: the
-        // heading itself is on the line (decided 2026-11-03).
+        // heading itself is on the line.
         for l in first + usize::from(heading)..=last.min(rope.len_lines().saturating_sub(1)) {
             buf.clear();
             buf.extend(rope.line(l).chunks());
@@ -247,8 +247,7 @@ impl Editor {
             self.fold_return = None;
         }
         // Typing opens the folds every cursor is in, not the primary's
-        // alone: text a closed fold hides is not typed into unseen (review,
-        // 2026-11-03).
+        // alone: text a closed fold hides is not typed into unseen.
         if self.mode == Mode::Insert && self.sel.is_plural() {
             let rope = self.current_buffer().rope();
             let len = rope.len_chars();
@@ -296,11 +295,11 @@ impl Editor {
     /// fold opens it and moves on its first line ('foldopen' has `hor`:
     /// `l` `$` `f` …), and a word motion from one starts past it, at the
     /// end of its last line or the start of its first, as vim's
-    /// `fwd_word` does (measured in nvim 2026-11-04).
+    /// `fwd_word` does (measured in nvim).
     ///
     /// The edits at the cursor that do not take a closed fold whole act
     /// where a hidden cursor really is: `~` `J` `gJ` change its own line and
-    /// leave the fold closed, `a` and `A` type there (nvim 2026-11-04).
+    /// leave the fold closed, `a` and `A` type there (as in nvim).
     pub(super) fn before_a_motion(&mut self, cmd: yumete_cjk::actions::NormalCmd) {
         use yumete_cjk::actions::NormalCmd as C;
         if !self.vim_keymap() || self.pending != Pending::None || self.mode == Mode::Insert {
@@ -360,7 +359,7 @@ impl Editor {
 
     /// **Where the cursor stands when a closed fold hides it**: vim keeps it
     /// on its own line inside the fold, drawn on the fold's (`:3` in a fold
-    /// of lines 2–4 reads Ln 3; nvim 2026-11-04), and the fold keys act
+    /// of lines 2–4 reads Ln 3, as in nvim), and the fold keys act
     /// there. `None` when the cursor is where it is drawn.
     pub fn hidden_place(&self) -> Option<usize> {
         let (buffer, first, at) = self.fold_return?;
@@ -382,7 +381,7 @@ impl Editor {
 
     /// Open the closed folds that hide `line` and leave one that starts on
     /// it closed: the outline goes to a heading and shows it, and its mark
-    /// already says whether the section is closed (decided 2026-11-03).
+    /// already says whether the section is closed.
     pub(super) fn open_folds_over(&mut self, line: usize) {
         let hiding: Vec<FoldOf> = self
             .fold_view()
@@ -502,7 +501,7 @@ impl Editor {
 
     /// **A cursor a closed fold hid stands on its own line** once a key has
     /// opened the folds over it (`zR`, `zr`), as `zo` leaves it and vim's
-    /// does (review, 2026-11-04: `zR` put it on the fold's first line).
+    /// does — not on the fold's first line.
     fn back_where_hidden(&mut self, hidden: Option<usize>) {
         let Some(at) = hidden else { return };
         let line = self.current_buffer().rope().char_to_line(at.min(self.current_buffer().rope().len_chars()));
@@ -573,7 +572,7 @@ impl Editor {
             self.current_buffer_mut().folds_mut(window).disabled = false;
             self.fold_generation += 1;
         }
-        // Unset, vim's 'foldlevel' is 0 (review, 2026-11-03: it opened all).
+        // Unset, vim's 'foldlevel' is 0: every fold closes.
         let unset = if self.vim_keymap() { 0 } else { deepest };
         self.apply_fold_level(level.unwrap_or(unset));
         match view {

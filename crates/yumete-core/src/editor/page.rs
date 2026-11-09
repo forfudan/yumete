@@ -22,7 +22,7 @@ impl Editor {
     /// across**. Indentation and alignment are part of that language's
     /// grammar, the gutter and the diagnostics column are built on 「one line,
     /// one row」, and no writing tradition anywhere sets a program in 縱書 —
-    /// 2026-09-21 定：「见到程序文件，强制不允许开启竖排模式」。
+    /// a program file never opens 竪排.
     ///
     /// Warning: **The refusal is per buffer, not a setting that gets switched off.**
     /// 竪排 is 「I want to write this way」; a `.rs` is 「this one cannot be read
@@ -51,14 +51,14 @@ impl Editor {
     }
 
     /// **The layout the reader chose**, under a table's turn as well as a
-    /// program file's (2026-10-29): what a session keeps. A drawn grid turns
+    /// program file's: what a session keeps. A drawn grid turns
     /// [`Self::layout_wanted`] horizontal and remembers what it was; this is
     /// that.
     pub fn layout_chosen(&self) -> Layout {
         self.turned_for_table.unwrap_or(self.layout_wanted)
     }
 
-    /// **Run a view line from a session or a reload** (2026-10-29): without
+    /// **Run a view line from a session or a reload**: without
     /// asking for its prerequisites and without satisfying them. `:view-sentence
     /// off` under a horizontal config is refused by `execute` (it needs 竪排),
     /// and `!` would turn the page 竪排 to allow it; a session or a reload only
@@ -77,21 +77,21 @@ impl Editor {
     }
 
     /// **Whether a language server is there to ask about this file**: a code
-    /// file, or a text file one serves (2026-10-30, tinymist for Typst).
+    /// file, or a text file one serves (tinymist for Typst).
     pub(super) fn serves_this_file(&self) -> bool {
         self.writes_code() || self.current_buffer().path().is_some_and(|p| self.served.contains(p))
     }
 
-    /// **Whether the spot `at` is code** (2026-11-06): all of a code file,
+    /// **Whether the spot `at` is code**: all of a code file,
     /// and in Typst a `#…` expression, maths, a `@reference` or `<label>`,
     /// or a code block's body. There the server answers, as in a program:
     /// `Space k` is its documentation, and completion and signature help ask
     /// it. Everywhere else is writing, where the wiki and the words answer.
     /// Markdown has no such spot: its fences hold other languages.
     ///
-    /// Decided on the spot rather than the file because Typst is both
-    /// (2026-11-06: `Space k` on `#footnotes` showed the wiki, and completion
-    /// never offered a function).
+    /// Decided on the spot rather than the file because Typst is both: by the
+    /// file, `Space k` on `#footnotes` would show the wiki, and completion
+    /// would never offer a function.
     pub(super) fn server_spot(&self, at: usize) -> bool {
         match self.current_buffer().syntax() {
             crate::syntax::Syntax::Code(_) => true,
@@ -129,7 +129,7 @@ impl Editor {
         match self.block_scanned(line) {
             Block::Math { .. } => true,
             // A code body over several lines, but for the writing in its
-            // `[…]` (2026-11-08), which the runs above have marked plain.
+            // `[…]`, which the runs above have marked plain.
             Block::Code { .. } if self.typst_frames(line).is_some() => {
                 let plain = Kind::Token(crate::code::Token::Plain);
                 !self.markup_runs(line).iter().any(|s| s.kind == plain && on(s))
@@ -229,7 +229,7 @@ impl Editor {
         self.export = settings;
     }
 
-    /// **One `ye --export` word** (2026-11-08) — `vertical`, `page=A5` —
+    /// **One `ye --export` word** — `vertical`, `page=A5` —
     /// over the `[export]` settings for the rest of the run; `None` when it is
     /// not one of [`crate::export::WORDS`]. The same reading `:export` gives
     /// its words.
@@ -322,8 +322,8 @@ impl Editor {
         hidden
     }
 
-    /// **A table cell's own padding, off a 竪排 page** (2026-09-19:
-    /// 「表格的單元格寬度有問題，不夠 compact」/「表頭没對齊」).
+    /// **A table cell's own padding, off a 竪排 page**: the cells stay
+    /// compact and the header lines up.
     ///
     /// Two kinds of space live between a wall and the writing, and 竪排 can
     /// afford neither:
@@ -334,18 +334,18 @@ impl Editor {
     ///   page on nothing.
     /// - **The padding the file itself carries.** A table squared up in the
     ///   file — which is what this editor writes — has runs of spaces inside
-    ///   its cells, and those were measured in **cells**. A 縱 counts 字: six
+    ///   its cells, and those are measured in **cells**. A 縱 counts 字: six
     ///   spaces after 「級別」 are six rows, while the 「總監察」 under it has
     ///   four, so the bands drift apart and the header ends up beside the
-    ///   wrong one. That is 「表頭没對齊」, and it only shows on a file that
-    ///   has been squared up — a hand-typed table looks fine.
+    ///   wrong one. It only shows on a file that has been squared up — a
+    ///   hand-typed table looks fine.
     ///
     /// What replaces both is the padding this page works out for itself, in
     /// slots ([`crate::mdtable::Measure`]). The `|` stays: it is the character
     /// the band rule is drawn from.
     ///
     /// The rule row keeps **one** dash (and its `:` markers) for the same
-    /// reason: its dashes were counted in cells too, and the wall is re-filled
+    /// reason: its dashes are counted in cells too, and the wall is re-filled
     /// to the band's depth by the same padding as everything else.
     pub(super) fn table_slack_off_the_page(&self, line: usize) -> Vec<(usize, usize)> {
         if !self.line_is_table_row(line) {
@@ -370,13 +370,12 @@ impl Editor {
             }
             if ruled && to > from {
                 // **One dash, and nothing else** — the alignment markers go
-                // with the rest (2026-09-20). They used to be kept, on the
-                // reasoning that they say something the file says; turned, they
-                // do not. The rule row *is* the wall running down the 縱, and
-                // `:` has no wall glyph, so a `:-:` came out as two stray
-                // colons with the wall between them — and because that cell
-                // then kept three characters where `---` keeps one, **every
-                // band in the table went three slots deep** to match it.
+                // with the rest. They say something the file says, but turned
+                // they do not: the rule row *is* the wall running down the 縱,
+                // and `:` has no wall glyph, so a `:-:` would come out as two
+                // stray colons with the wall between them — and because that
+                // cell would keep three characters where `---` keeps one,
+                // **every band in the table would go three slots deep**.
                 // Alignment is not drawn on the turned page in any case: the
                 // cells are bands, and a band has no left or right.
                 let keep = (from..to).find(|&i| chars.get(i) == Some(&'-')).unwrap_or(from);
@@ -407,7 +406,7 @@ impl Editor {
     /// break), and anything inside a fence or a page's metadata, where a blank
     /// line is content.
     pub fn line_is_folded(&self, line: usize) -> bool {
-        // **Inside a closed fold** (2026-11-03), whatever the rest says.
+        // **Inside a closed fold**, whatever the rest says.
         if self.fold_hides(line) {
             return true;
         }
@@ -774,8 +773,8 @@ impl Editor {
         self.lay_aliases();
     }
 
-    /// Install one keymap's own lines (`[keys.helix.*]`, `[keys.vim.*]`,
-    /// 2026-11-04), laid after the shared ones while that keymap is in force.
+    /// Install one keymap's own lines (`[keys.helix.*]`, `[keys.vim.*]`),
+    /// laid after the shared ones while that keymap is in force.
     pub fn set_keymap_aliases<C: crate::editor::BindingCommands>(
         &mut self,
         keymap: yumete_cjk::KeyPreset,
@@ -798,7 +797,7 @@ impl Editor {
         self.lay_aliases();
     }
 
-    /// **The reader's own Normal-mode lines in force** (2026-11-04 review):
+    /// **The reader's own Normal-mode lines in force**:
     /// the shared ones, then this keymap's own over them, by the internal
     /// spelling of their keys. What the which-key menu, the sidebar, the
     /// flavour report and `:keymap-actions` read, so a line in
@@ -826,7 +825,7 @@ impl Editor {
         self.lay_aliases();
     }
 
-    /// **How the reader's tables were written** (2026-11-05): which keys
+    /// **How the reader's tables were written**: which keys
     /// are groups, the order of the lines, a command row's own text.
     pub fn set_key_shapes(&mut self, shapes: yumete_cjk::KeyShapes) {
         self.key_shapes = shapes;
@@ -863,7 +862,7 @@ impl Editor {
     }
 
     /// **哪些鍵走得出一行的兩頭**（vim 的 `whichwrap`，vim 鍵位專用）。
-    /// 存檔時缺的那個行尾補不補——`[editor] insert_final_newline`（2026-10-13）。
+    /// 存檔時缺的那個行尾補不補——`[editor] insert_final_newline`。
     pub fn set_insert_final_newline(&mut self, on: bool) {
         self.insert_final_newline = on;
     }
@@ -889,8 +888,8 @@ impl Editor {
 
     /// The preset's lines, then the reader's own over them.
     ///
-    /// **左邊那一串在這裏翻成內部拼法**（2026-10-08）：`A-d` 存成
-    /// [`yumete_cjk::actions::ALT`] ＋ `d`，`C-o` 存成那個控制字節。從前不翻，於是
+    /// **左邊那一串在這裏翻成內部拼法**：`A-d` 存成
+    /// [`yumete_cjk::actions::ALT`] ＋ `d`，`C-o` 存成那個控制字節。不翻的話
     /// 配置裏寫 `"A-d" = …` 綁的是 `A`、`-`、`d` 三個鍵連按——那個鍵永遠按不出來，
     /// 而配置照收、一聲不吭。一處翻，兩層（預設表和使用者那一層）都算。
     pub(super) fn lay_aliases(&mut self) {
@@ -903,7 +902,7 @@ impl Editor {
             .iter()
             .map(|(k, v)| (yumete_cjk::actions::written(k), vec![v.to_string()]))
             .collect();
-        // The shared lines, then this keymap's own over them (2026-11-04).
+        // The shared lines, then this keymap's own over them.
         let own = self.keymap_user[keymap_index(self.key_preset)].clone();
         let written = |lines: &HashMap<String, Vec<String>>| -> Vec<(String, Vec<String>)> {
             lines.iter().map(|(k, v)| (yumete_cjk::actions::written(k), v.clone())).collect()
@@ -916,7 +915,7 @@ impl Editor {
         // vim's `x` and `s` are written for Normal mode (`;{n}D`); in Visual
         // mode they are its own delete and change (`vim_*` in the table).
         // The reader's own lines come after, so an `x` of theirs holds in
-        // Visual mode too (found in review, 2026-11-02).
+        // Visual mode too.
         let mut select_preset = preset.clone();
         for key in self.key_preset.normal_only() {
             select_preset.remove(&yumete_cjk::actions::written(key));
@@ -1019,9 +1018,9 @@ impl Editor {
     /// Whether a **beside** split opened from here is laid out from the
     /// right, its second half on the left: on a 縱書 page, where reading
     /// runs right to left. **Asked only when a split is made**, which then
-    /// keeps the answer (2026-11-08): asked at draw time it mirrored every
-    /// window on the screen as the keys went between a 縱書 page and a
-    /// 橫排 one, and `:vertical` swapped a file and its preview.
+    /// keeps the answer: asked at draw time it would mirror every window on
+    /// the screen as the keys go between a 縱書 page and a 橫排 one, and
+    /// `:vertical` would swap a file and its preview.
     pub(super) fn splits_right_to_left(&self) -> bool {
         self.default_split() == crate::window::Split::Beside
     }
@@ -1093,14 +1092,14 @@ impl Editor {
     }
 
     /// `C-w s` / `C-w v` / `:hsplit` / `:vsplit`: a new window `how` from the
-    /// live one, on the same buffer at the same place, and the keys go to it
-    /// (2026-10-30). `false` when the tree would not split.
+    /// live one, on the same buffer at the same place, and the keys go to it.
+    /// `false` when the tree would not split.
     pub(super) fn split_window(&mut self, how: crate::window::Split) -> bool {
-        // **As many as fit** (2026-11-02, found in review): a split that
+        // **As many as fit**: a split that
         // would leave a window under a line of text or a few columns is
         // refused, so the keys never go into a window that is not drawn.
-        // Under the vim keymap it opens above or to the left, as vim's does
-        // (2026-11-04); helix's opens below or to the right.
+        // Under the vim keymap it opens above or to the left, as vim's does;
+        // helix's opens below or to the right.
         let (before, rtl) = (self.vim_keymap(), self.splits_right_to_left());
         if let Some(area) = self.text_area.get() {
             let mut tried = self.windows.clone();
@@ -1138,7 +1137,7 @@ impl Editor {
         };
         self.panes.insert(fresh, here);
         self.panel_focus = None;
-        // …and its folds, as vim's `:split` copies them (2026-11-03).
+        // …and its folds, as vim's `:split` copies them.
         let from = self.live;
         self.fold_copy_to(from, fresh);
         self.switch_to(fresh)
@@ -1209,8 +1208,8 @@ impl Editor {
 
     /// **vim's `C-w x`**: this window trades places with the next one of
     /// its row or column, or with the `nth`. The keys stay where they were
-    /// on the screen, so they are in the other window now (measured in
-    /// nvim, 2026-11-03).
+    /// on the screen, so they are in the other window then (measured in
+    /// nvim).
     pub(super) fn exchange_window(&mut self, nth: Option<usize>) {
         if self.panel_focus().is_some() {
             return;
@@ -1282,8 +1281,8 @@ impl Editor {
             return false;
         }
         self.panes.remove(&window);
-        // Its folds go with it (review, 2026-11-03: they were kept in every
-        // buffer and every undo point, and shifted on every edit).
+        // Its folds go with it, rather than being kept in every buffer and
+        // every undo point and shifted on every edit.
         for buffer in &mut self.buffers {
             buffer.forget_folds(window);
         }
@@ -1319,10 +1318,9 @@ impl Editor {
             goal_slot: self.sel.goal_slot(),
             extend: self.extend,
             highlight: None,
-            // **離開的那一半帶着自己的名字走**（2026-09-26）。分隔線上寫的是**正
-            // 在讀**的那一半叫什麼（站着的那一半由狀態行說），所以一換過去，剛纔
-            // 那一半就成了要具名的那一個。從前這裏是空字串，於是 `空格 2` 換過去
-            // 之後分隔線上什麼都没有——而它本來是有字的。
+            // **離開的那一半帶着自己的名字走**。分隔線上寫的是**正在讀**的那一半
+            // 叫什麼（站着的那一半由狀態行說），所以一換過去，剛纔那一半就成了要
+            // 具名的那一個；空字串的話 `空格 2` 換過去之後分隔線上什麼都没有。
             caption: self.current_buffer().display_name().to_string(),
             jumps: Vec::new(),
             jump_at: 0,
@@ -1382,7 +1380,7 @@ impl Editor {
 
     /// Where the keys go when the live window closes: the window they were
     /// in last, or, when none of those is left, the one that takes the room
-    /// (2026-10-31, chosen over vim's room rule and helix's tree order).
+    /// (chosen over vim's room rule and helix's tree order).
     /// **A preview is a window**: a text window is preferred, and with only
     /// previews left the keys go to one of them, so this is the last window
     /// only when it is the last of any kind.
@@ -1403,7 +1401,7 @@ impl Editor {
     /// that is not there is not a window. The live window is the editor's
     /// own business (`current` has already moved).
     /// **A window whose tab was closed goes back to the tab it showed
-    /// before** (2026-11-03, helix's `close_document`): the newest tab in
+    /// before** (helix's `close_document`): the newest tab in
     /// its own history that is still open, its cursor where that file was
     /// left. A window with none to go back to closes. The layout stays: a
     /// tab and a window are closed by different commands.
@@ -1512,7 +1510,7 @@ impl Editor {
         changes.at(line)
     }
 
-    /// **光標這一行屬於哪一段改動**，連它改之前寫的是什麼（`空格 x`，2026-10-11）。
+    /// **光標這一行屬於哪一段改動**，連它改之前寫的是什麼（`空格 x`）。
     ///
     /// Warning: **不問 `diff_gutter`。** 那一格管的是「行號槽畫不畫」，而按鍵問的
     /// 是「這裏改了什麼」——關掉行號槽的人照樣問得出這一句。
@@ -1521,7 +1519,7 @@ impl Editor {
         changes.run_at(self.cursor_line())
     }
 
-    /// **這一塊裏真正改掉的是哪幾個字**——帶子逐字上色用的（2026-10-11）。
+    /// **這一塊裏真正改掉的是哪幾個字**——帶子逐字上色用的。
     ///
     /// 回兩組，各按行：舊的那幾行裏哪幾段**走了**，新的那幾行裏哪幾段**來了**，
     /// 區間是那一行自己的字節偏移。走的是 `:git-diff` 那一套逐詞比對，所以兩處
@@ -1530,11 +1528,10 @@ impl Editor {
     /// Warning: **純添與剪口回空的。** 它們只有一側，「哪幾個字改了」没有意義——
     /// 整行淡底已經說完了那件事，再逐字指一遍是把整行重說一次。相差太遠
     /// （`diff::script` 回 `None`）也回空：那時逐詞比出來的東西讀不成話。
-    /// **這一塊改動的兩稿，一行一列**——三處共用的那一份（2026-10-16）。
+    /// **這一塊改動的兩稿，一行一列**——三處共用的那一份。
     ///
-    /// `空格 x` 的浮窗、`空格 X` 的邊欄、`:git-diff` 的報告，從前各算各的，於
-    /// 是行號、記號、底色的響度與折不折行四樣都不一樣（作者 2026-10-16 逐條報
-    /// 來）。現在都問這一支，差別只剩「怎麼畫」。
+    /// `空格 x` 的浮窗、`空格 X` 的邊欄、`:git-diff` 的報告都問這一支，差別只剩
+    /// 「怎麼畫」——各算各的話，行號、記號、底色的響度與折不折行四樣都會不一樣。
     ///
     /// 號碼照它自己那一稿算：舊的是 `HEAD` 裏的號（`Run::was_at`），新的是現在
     /// 這份檔裏的號。
@@ -1637,13 +1634,10 @@ impl Editor {
             .collect()
     }
 
-    /// **跳到下一處/上一處改動**（`]g`/`[g`，2026-10-06，helix 的
+    /// **跳到下一處/上一處改動**（`]g`/`[g`，helix 的
     /// `goto_next_change`/`goto_prev_change`）。
     ///
-    /// Warning: **一度以為我們没有 git diff 層**（夜審那份報告就是這麼寫的，我也跟着
-    /// 寫進了 §5.84）。更正：「git diff 我們已經有了。就是在行號右側用底色表
-    /// 示修改的情况。」——`crate::vcs` 整支都在，`diff_cell` 畫它。所以這兩個鍵
-    /// 補得起來，不是「不適用」。
+    /// git diff 層就是行號右側那一格底色：`crate::vcs` 算，`diff_cell` 畫。
     pub(super) fn go_to_change(&mut self, forward: bool) {
         let here = self.cursor_line();
         self.go_to_a_change(|changes| changes.hunk_from(here, forward));
@@ -1667,7 +1661,7 @@ impl Editor {
         self.goto_line(line + 1);
     }
 
-    /// **停手多久纔去重算改動條**（2026-09-19 定：300 毫秒）。
+    /// **停手多久纔去重算改動條**：300 毫秒。
     ///
     /// 按鍵一來就重新等——循環是 `recv_timeout(這個時長)`，所以它實際上是「停手
     /// 300 毫秒」，打字的時候一個子進程都不生。
@@ -1704,10 +1698,9 @@ impl Editor {
             self.vcs.remove(&id);
             return;
         };
-        // **`HEAD` 動過也算「要重算」**（2026-10-11 報的）。提交之後檔案一個字節
-        // 都没變、`revision` 也没變，於是這道快取一直答「不用算」，而改動條說的
-        // 正是「跟 `HEAD` 比」——人只好手動 `:reload`（那一下把 `revision` 推了
-        // 一格，所以看着像是重讀檔救的）。問一次只讀兩個小檔，不生子進程。
+        // **`HEAD` 動過也算「要重算」**。提交之後檔案一個字節都没變、`revision`
+        // 也没變，只看它們的話這道快取一直答「不用算」，而改動條說的正是「跟
+        // `HEAD` 比」。問一次只讀兩個小檔，不生子進程。
         let lines = buffer.line_count();
         let head_now = crate::vcs::Changes::head_mark(&path);
         let force = force || self.vcs_head.get(&id) != head_now.as_ref();
@@ -1719,12 +1712,12 @@ impl Editor {
             None => self.vcs_head.remove(&id),
         };
         self.vcs_asked.insert(id, revision);
-        // **跟緩衝區比，不跟磁碟比**（2026-09-19：在一段上面插一行，下面那
-        // 一段的竪綫就没了——記號釘在磁碟那一份的行號上，而緩衝區已經挪過了）。
+        // **跟緩衝區比，不跟磁碟比**：跟磁碟比的話，在一段上面插一行，下面那
+        // 一段的竪綫就没了——記號釘在磁碟那一份的行號上，而緩衝區已經挪過了。
         // `HEAD` 裏那一份按 buffer 存住：它只在存檔、換檔、`git` 那邊動過的時候
         // 纔會變，而**每一次停手**都要重比一遍。
-        // **Git has nothing to say, so the saved file does** (#298 ②,
-        // 2026-10-29): outside a repository, or for a file the repository does
+        // **Git has nothing to say, so the saved file does** (#298 ②):
+        // outside a repository, or for a file the repository does
         // not track, the bar compares the buffer with what was last saved —
         // what changed since then. A file never saved has nothing to compare.
         let base = match (force, self.vcs_base.get(&id)) {
@@ -1766,7 +1759,7 @@ impl Editor {
     /// Warning: **整份換掉，不是添上去**——理由寫在 [`crate::problem::Problems::set`]。
     /// 行與列進來的時候已經是**字符**，不是 LSP 的 UTF-16：換算是前端在收報那
     /// 一刻做的，這道門裏面不該再見到另一套坐標。
-    /// **一個服務器說的那一份**——`whose` 是哪一個服務器（#425，2026-09-30）。
+    /// **一個服務器說的那一份**——`whose` 是哪一個服務器（#425）。
     ///
     /// Warning: **一種語言跑得了好幾個服務器**（ruff 挑毛病、pylsp 講文檔），而
     /// 每一次 `publishDiagnostics` 只是**那一個**說的全部真相。不帶 `whose` 的
@@ -1790,7 +1783,7 @@ impl Editor {
     }
 
     /// **Whether the gutter has a lane for diagnostics**: always in code, and
-    /// in prose when a server serves the file (2026-10-30).
+    /// in prose when a server serves the file.
     pub fn has_a_problem_lane(&self) -> bool {
         self.serves_this_file()
     }
@@ -1804,7 +1797,7 @@ impl Editor {
         self.problems.worst_on(path, line)
     }
 
-    /// **The diagnostics follow the line edits** (2026-11-04), of every
+    /// **The diagnostics follow the line edits**, of every
     /// buffer: after each key, before each frame, and before a server's
     /// new word, so an edit made by a paste, a formatter or a rename in
     /// another file is never held over to move fresher news later.
@@ -1818,15 +1811,15 @@ impl Editor {
         }
     }
 
-    /// **The message drawn after the end of `line`** (2026-11-04), helix's
+    /// **The message drawn after the end of `line`**, helix's
     /// end-of-line diagnostics: the loudest at or above the level asked for,
     /// the first of equals, on one line. `None` when off, and on the line
     /// being typed in Insert, which is always half broken.
     ///
     /// Prose too, as helix, nvim's `virtual_text` and VS Code's Error Lens
-    /// all do: after a paragraph's last row (2026-11-04). It was code only
-    /// once, a paragraph's end being far from the fault; a spelling checker's
-    /// word seen without moving the cursor was worth more.
+    /// all do: after a paragraph's last row. A paragraph's end may be far
+    /// from the fault, but a spelling checker's word seen without moving the
+    /// cursor is worth more.
     pub fn problem_at_end_of(&self, line: usize) -> Option<(crate::problem::Severity, String)> {
         let level = self.end_of_line_diagnostics?;
         if self.mode == Mode::Insert && self.viewing.get().is_none_or(|v| v.window == self.live) && line == self.cursor_line() {
@@ -1871,10 +1864,10 @@ impl Editor {
         self.problems.count()
     }
 
-    /// **光標這一行上，服務器說的話**——浮框要畫的那一條（2026-09-21）。
+    /// **光標這一行上，服務器說的話**——浮框要畫的那一條。
     ///
-    /// 2026-09-21：「如何查看 error 和 warning 的 message？比如這一行是紅的，我
-    /// 該怎麽知道它是什麽錯？」號碼旁邊那一格只說得出**有多響**，說不出是什麽。
+    /// 一行是紅的，要看得到它是什麼錯：號碼旁邊那一格只說得出**有多響**，說不出
+    /// 是什麽。
     ///
     /// Warning: **一行可能有好幾句，最響的那一句先說**，後面的跟在它下面——`conut` 那
     /// 一行 rust-analyzer 同時說「找不到這個函數」和「有個 `count` 長得像」，而
@@ -1907,7 +1900,7 @@ impl Editor {
 
     // ---- `gd` 問服務器（#53 ②）---------------------------------------------
 
-    /// **把「這個東西寫在哪」問出去**，問得出就回 `true`（2026-09-21）。
+    /// **把「這個東西寫在哪」問出去**，問得出就回 `true`。
     ///
     /// 只在**代碼檔**上問：一份 `.md` 裏的「定義」是腳注、鏈接和百科名，那三種
     /// `gd` 自己答得了，而一份 `.rs` 裏一個都不會有。
@@ -1943,10 +1936,10 @@ impl Editor {
         self.definition_query.take()
     }
 
-    /// **那一句問話，看一眼而不取走**（2026-10-11）。
+    /// **那一句問話，看一眼而不取走**。
     ///
-    /// Warning: **發出去不等於問完了。** 從前發的那一下就把它取走，於是服務器答
-    /// 一句空的就只能當「哪兒都没寫」——而還在建索引的 rust-analyzer 對
+    /// Warning: **發出去不等於問完了。** 發的那一下就取走的話，服務器答一句空的
+    /// 就只能當「哪兒都没寫」——而還在建索引的 rust-analyzer 對
     /// `textDocument/definition` 答的正是一個空數組。問話留到**答案說得準**那
     /// 一刻纔取（[`Editor::take_definition_query`]），中間那幾趟它還在手上，
     /// 服務器忙完了自己會再問一次。
@@ -1960,7 +1953,7 @@ impl Editor {
     }
 
     /// **`gD` `gy` `gi`: the declaration, the type, an implementation**
-    /// (2026-11-02, helix's keys): asked of the language server as `gd`'s
+    /// (helix's keys): asked of the language server as `gd`'s
     /// definition is. A file no server serves says so.
     pub(super) fn ask_for_place(&mut self, kind: crate::lsp::Goto) {
         if !self.ask_where_this_is_written(kind) {
@@ -1973,10 +1966,10 @@ impl Editor {
     /// Warning: **列是 UTF-16 的，而這一頭數字符**——換算要那一行的正文，所以它在這裏
     /// 做，在檔已經打開之後。
     pub fn go_to_definition(&mut self, place: &crate::lsp::Place) {
-        // **問完就走開的人，不許把他拽回來**（2026-10-07）。答案隔幾百毫秒纔到，
+        // **問完就走開的人，不許把他拽回來**。答案隔幾百毫秒纔到，
         // 而那幾百毫秒裏光標可能已經挪開、緩衝區可能已經換掉、人可能已經在插入
         // 態打字——那時候 `open_file` ＋ `set_cursor` 是把正在寫的那一段從腳下
-        // 抽走。懸停與補全都各有這一道閘，這一支從前没有。
+        // 抽走。懸停與補全都各有這一道閘。
         let here = (self.current_buffer().id(), self.sel.head());
         if self.asked_where_from.take() != Some(here) {
             return;
@@ -2005,15 +1998,14 @@ impl Editor {
 
     // ---- `空格 k` 問服務器這是什麽（#53 ③）--------------------------------
 
-    /// **把「這是什麽」問出去**，問得出就回 `true`（2026-09-21）。
+    /// **把「這是什麽」問出去**，問得出就回 `true`。
     ///
     /// 與 `gd` 同一個形狀，同一條理由：只在代碼檔上問，問完不等。鍵位是
     /// `空格 k`，helix 的 hover 也是這一個。
     /// **`空格 k`/`空格 K`：把光標底下這個東西講給我聽**（#426）。
     ///
-    /// Warning: **講什麽看稿子**：代碼裏是服務器說的那個名字，散文裏是百科詞條
-    /// （2026-09-29 定，原話：「文本文件会说 space k / K 这不是程序文件所以不能
-    /// 显示文档。这是不好的，它以就可以显示百科」）。兩個鍵說的是同一句話，而
+    /// Warning: **講什麽看稿子**：代碼裏是服務器說的那個名字，散文裏是百科詞條，
+    /// 不是「這不是程序文件」。兩個鍵說的是同一句話，而
     /// 「畫在哪」是另一件事——`afloat` 那一半，見 [`Editor::ask_for_info`]。
     pub(super) fn ask_what_this_is(&mut self, afloat: bool) -> bool {
         // Writing asks the wiki; code, in a program or in Typst, the server.
@@ -2039,7 +2031,7 @@ impl Editor {
         true
     }
 
-    /// **`空格 i`/`空格 I`：把這一行的診斷拿出來看**（2026-09-29 定）。
+    /// **`空格 i`/`空格 I`：把這一行的診斷拿出來看**。
     ///
     /// 和 `空格 k`/`空格 K` 一個形狀：小寫浮、大寫進邊欄。Warning: **診斷不必問**
     /// ——它是服務器自己推過來的，早就在內存裏，所以這一支不發任何請求，也没有
@@ -2056,11 +2048,11 @@ impl Editor {
         self.ask_for_info(crate::sidebar::Info::Problems, afloat);
     }
 
-    /// **`空格 x`/`X`：這一塊改之前寫的是什麼**（2026-10-11）。
+    /// **`空格 x`/`X`：這一塊改之前寫的是什麼**。
     ///
     /// helix 没有這一件（它只有 `]g`/`[g` 跳塊、`空格 g` 那張改過的檔單子），vim
     /// 要靠插件；gitsigns／gitgutter／signify 三家的形狀一樣——行號槽標出塊、一個
-    /// 鍵看、一個鍵還原——這裏照它們做。跳塊 `]g`/`[g` 本來就有。
+    /// 鍵看、一個鍵還原——這裏照它們做。跳塊是 `]g`/`[g`。
     pub(super) fn show_the_change_here(&mut self, afloat: bool) {
         if self.change_here().is_none() {
             self.status = say!("change.none-here");
@@ -2073,7 +2065,7 @@ impl Editor {
         self.ask_for_info(crate::sidebar::Info::Change, afloat);
     }
 
-    /// **把這一塊還原成 `HEAD` 那一份**（改動那一格裏的 `u`，2026-10-11）。
+    /// **把這一塊還原成 `HEAD` 那一份**（改動那一格裏的 `u`）。
     ///
     /// Warning: **它是一次改稿，不是一次 undo。** 所以走和別的改稿同一條路——記進
     /// 歷史、`u` 退得回來。三家插件也是這麼做的（`reset_hunk` 寫的是緩衝區，不是
@@ -2100,7 +2092,7 @@ impl Editor {
             }
         };
         // In the file's own line ending: the diff was taken with `\r` off, and
-        // a CRLF file got its restored lines back with LF (2026-10-30).
+        // a CRLF file must not get its restored lines back with LF.
         let eol = self.current_buffer().ending().to_string();
         let text = match was.is_empty() {
             // 純添的那一段：還原就是把它拿掉。
@@ -2147,12 +2139,11 @@ impl Editor {
     }
 
     /// **有人按過 `:reload-config`** —— 前端去重讀配置檔並推一遍。
-    /// **設置面板存完之後也要重讀一遍**（2026-10-09 作者報的）。
+    /// **設置面板存完之後也要重讀一遍**。
     ///
-    /// 從前 `:w` 只把檔寫出去，而 `settings::apply` 一共只有兩個呼叫方：啓動，和
-    /// `:reload-config`。於是把排版方向改成竪排、存、屏幕一動不動，螢幕上也没有一句話
-    /// 說編輯器跑的還是舊的那一份——面板自己的註釋卻寫着「落完由 `:reload-config`
-    /// 那條同一支推進編輯器」，那個打算從來没接上線。
+    /// `settings::apply` 的呼叫方是啓動和 `:reload-config`；面板的 `:w` 只寫檔的話，
+    /// 把排版方向改成竪排、存、屏幕一動不動，也没有一句話說編輯器跑的還是舊的那一份。
+    /// 面板存完走 `:reload-config` 那同一支推進編輯器。
     /// Where the global `config.toml` is, which `:config-open` opens.
     pub fn set_config_file(&mut self, path: std::path::PathBuf) {
         self.config_file = Some(path);
@@ -2166,7 +2157,7 @@ impl Editor {
         std::mem::take(&mut self.config_reload)
     }
 
-    /// Whether the reload is `:reload-config` itself (2026-10-28): the way back
+    /// Whether the reload is `:reload-config` itself: the way back
     /// to the saved settings, so what `:theme` and the `:view-*` commands
     /// changed goes too. A save in the settings panel reloads without this.
     pub fn take_config_back(&mut self) -> bool {
@@ -2183,7 +2174,7 @@ impl Editor {
         std::mem::take(&mut self.settings_request)
     }
 
-    /// The setting `:settings <name>` named, if one was (2026-11-08).
+    /// The setting `:settings <name>` named, if one was.
     pub fn take_settings_target(&mut self) -> Option<String> {
         self.settings_target.take()
     }
@@ -2257,17 +2248,15 @@ impl Editor {
         self.hovered = Some((self.what_the_hover_covers(&told), told));
         self.info_scroll = 0;
         self.status = String::new();
-        // Warning: **鍵不跟過去**（2026-09-29 撤回，2026-09-23 加的）。加它的理由是
-        // 「送進邊欄要的就是讀得完，而讀得完得走得動」——Warning: **可要走得動本來就有
-        // `空格 4`**，和別的邊欄一個樣；而搶走鍵的代價是人正在寫字的時候光標被
-        // 挪走了。報上來的原話：「它直接把焦点给到了侧栏，但用户希望焦点留在
-        // 正文」。
+        // Warning: **鍵不跟過去**。送進邊欄是為了讀得完，而讀得完得走得動——可要
+        // 走得動有 `空格 4`，和別的邊欄一個樣；搶走鍵的代價是人正在寫字的時候光標被
+        // 挪走，焦點要留在正文。
         self.refresh_sidebar();
     }
 
     /// 服務器對這個東西無話可說。
     ///
-    /// Warning: **跟着光標走的時候不出聲**（2026-09-29）：那一問是編輯器自己發的，
+    /// Warning: **跟着光標走的時候不出聲**：那一問是編輯器自己發的，
     /// 報一句「服務器無話可說」等於每走到一個標點就罵一次。面板清空就是答覆。
     pub fn no_hover(&mut self) {
         self.hovered = None;
@@ -2276,7 +2265,7 @@ impl Editor {
         //
         // Warning: **只作廢文檔那一次。** 這一句是服務器隔了一趟循環纔回的，那時
         // `info_asked` 可能早已經是別人了（問完 `空格 k` 馬上按 `空格 d`）——
-        // 無條件 `take()` 會替那一位關窗（2026-09-30 審出來的）。
+        // 無條件 `take()` 會替那一位關窗。
         let by_hand = matches!(self.info_asked, Some((crate::sidebar::Info::Docs, _)));
         if by_hand {
             self.info_asked = None;
@@ -2287,12 +2276,12 @@ impl Editor {
         }
     }
 
-    /// **跟着光標那一問，這一刻該不該發出去**（2026-09-29）。
+    /// **跟着光標那一問，這一刻該不該發出去**。
     ///
     /// 前端每一輪問一次。三個條件：開關開着、光標停穩了、而且不是上一次問過的
     /// 那一格。Warning: **停穩纔問，是為了不閃**——按住 `j` 連走的時候一格都不問，面板
     /// 上停着上一條；手一停，三百毫秒後問一次，答案回來纔換（服務器無話可說就
-    /// 清空，定下來的）。
+    /// 清空）。
     pub fn docs_owed(&mut self) -> Option<(std::path::PathBuf, usize, usize)> {
         if self.info_live() != crate::sidebar::Info::Docs {
             return None;
@@ -2301,11 +2290,11 @@ impl Editor {
         if self.docs_asked_at == Some(at) {
             return None;
         }
-        // **手上那一則還說着這個東西，就別再問一遍**（2026-10-11 報的）。
+        // **手上那一則還說着這個東西，就別再問一遍**。
         //
-        // 從前的判準是「光標還在問過的那一個字上」，所以在 `counted` 裏走一格就
-        // 是一次新的問答：面板收掉、三百毫秒、再問、再畫。原話：「it is very
-        // inefficient」——對的，而且那一閃一閃纔是讀者看見的東西。服務器說得出
+        // 判準要是「光標還在問過的那一個字上」，在 `counted` 裏走一格就是一次新的
+        // 問答：面板收掉、三百毫秒、再問、再畫——没效率，而且那一閃一閃纔是讀者
+        // 看見的東西。服務器說得出
         // 它說的是哪一段，那就以那一段為準。
         if self.hovered.as_ref().is_some_and(|(over, _)| over.contains(&at)) {
             self.docs_asked_at = Some(at);
@@ -2332,24 +2321,23 @@ impl Editor {
         self.info_scroll
     }
 
-    /// **翻那一扇浮窗**——`by` 行，負數往回（2026-09-29）。
+    /// **翻那一扇浮窗**——`by` 行，負數往回。
     ///
     /// 回 `true` ＝ 這一鍵歸浮窗，正文不必再看它一眼。Warning: **只有浮着的那一份收
     /// 鍵**：進了邊欄的那一份走邊欄自己的 `jk`，而邊欄是走得進去的
     /// （`空格 4`）——浮窗不是。
     ///
-    /// Warning: **五種都收**（#426，原話：「也可以对五类信息进行翻页」）。
-    /// 從前只有文檔收，而散文稿子裏默認浮的是**百科**——一條長詞條被切在「…」
-    /// 上，`C-u`/`C-d` 卻去翻了正文，等於没有出路。
+    /// Warning: **五種都收**（#426）。只有文檔收的話，散文稿子裏默認浮的是
+    /// **百科**——一條長詞條被切在「…」上，`C-u`/`C-d` 卻去翻了正文，等於没有出路。
     ///
     /// Warning: **那一格開着的時候翻的是那一格**。五種共用一個容器，那就該共用
     /// 一套翻頁鍵——而「光標就在編輯區」正是這四個鍵的全部價值：讀完一條長詞
     /// 條不必先把光標挪進邊欄。
     ///
-    /// Warning: **A float that cannot move gives the key back** (2026-11-07
-    /// report: a one-line diagnostic floated over `config.imported.toml` and
-    /// `C-d` stopped paging). This used to answer `true` whenever a float was
-    /// up, so a float that showed all it had ate the key and nothing moved.
+    /// Warning: **A float that cannot move gives the key back**. Answering
+    /// `true` whenever a float is up, a float that shows all it has would eat
+    /// the key and nothing would move — a one-line diagnostic would stop
+    /// `C-d` paging.
     /// How far the float can go is the drawing's count when there is one
     /// (`note_float_room`): it counts wrapped rows, so a long diagnostic that
     /// is cut pages too, and a short hover that shows whole does not. One
@@ -2385,7 +2373,7 @@ impl Editor {
                 let run = self.change_here()?;
                 Some(run.was.len() + self.change_now().len())
             }
-            // Warning: **成對字段的那兩種不收這四個鍵**（2026-09-30 量出來的）。
+            // Warning: **成對字段的那兩種不收這四個鍵**。
             // 一是它們畫成兩欄（`Body::Keys`），本來就不按行翻；二是記錄**一直
             // 浮着**——讀成格子的時候它跟着光標，於是收了鍵就等於把格子的翻頁
             // 永遠吃掉。它們讀不完的出路是底邊那一行寫的「進邊欄」。
@@ -2393,7 +2381,7 @@ impl Editor {
         }
     }
 
-    /// **還有多久該問那一句**，`None` ＝ 没什麽等着（2026-09-29）。
+    /// **還有多久該問那一句**，`None` ＝ 没什麽等着。
     ///
     /// Warning: **不給這個數，那一問永遠不會自己發出去。** 光標是按鍵挪的，那一下把
     /// 循環叫醒了，可那時三百毫秒還没到；循環接着睡，而睡着的循環不會再看一眼
@@ -2406,7 +2394,7 @@ impl Editor {
 
     /// 按了一個鍵——跟着走的那一問要重新等它停穩。
     ///
-    /// Warning: **不問光標動没動**（2026-09-29 修）。這一支跑在派鍵**之前**，那時
+    /// Warning: **不問光標動没動**。這一支跑在派鍵**之前**，那時
     /// 光標還没挪——拿「動没動」當條件，答完一次之後的下一鍵就重新起不了錶，於是
     /// 那一問要等到再下一鍵纔算數。按住 `j` 連走照樣一格都不問：攔住它的是
     /// `docs_asked_at`（同一格不重複問）和這隻錶本身。
@@ -2416,11 +2404,10 @@ impl Editor {
         }
     }
 
-    /// **光標離開了問的那一格，那一則說明就作廢**（2026-09-29 報的）。
+    /// **光標離開了問的那一格，那一則說明就作廢**。
     ///
-    /// Warning: 從前光標一走只是**不畫**，答案還留着——於是走回那一格它又冒出來了。
-    /// 原話：「走出之后回到这个字母，它是不是不应该出现了？」對的：那一則是問
-    /// 出來的，問題已經過去了。
+    /// Warning: 光標一走只是**不畫**而答案還留着的話，走回那一格它又冒出來了。
+    /// 那一則是問出來的，問題已經過去了。
     ///
     /// 同 [`Editor::forget_a_dictionary_nobody_is_reading`]，在派鍵**之前**掃：
     /// 挪開光標的那一鍵掃的時候光標還没挪，掃不掉；下一鍵纔掃得掉——而那正是
@@ -2434,12 +2421,12 @@ impl Editor {
         self.hovered = None;
     }
 
-    /// **那一則說的是正文的哪一段**，換成字偏移（2026-10-11）。
+    /// **那一則說的是正文的哪一段**，換成字偏移。
     ///
     /// 服務器給的是行與 UTF-16 列，而這一頭數的是字——換算要那一行的正文，所以
     /// 它在這裏做，同 [`Editor::go_to_definition`]。
     ///
-    /// 不給範圍的那種服務器退回「問的那一個字」，也就是 2026-10-11 之前的規矩。
+    /// 不給範圍的那種服務器退回「問的那一個字」。
     fn what_the_hover_covers(&self, told: &crate::lsp::Told) -> std::ops::Range<usize> {
         let here = self.sel.head();
         let Some(over) = told.over else { return here..here + 1 };
@@ -2465,7 +2452,7 @@ impl Editor {
 
     /// **那一則是不是 Markdown**——服務器自己說的（`MarkupContent.kind`）。
     ///
-    /// Warning: 從前這裏無條件當 Markdown 畫。只會說純文本的服務器於是被誤畫：
+    /// Warning: 不許無條件當 Markdown 畫，不然只會說純文本的服務器被誤畫：
     /// `*` 成了強調、`#` 成了標題。答不出東西的時候回 `true`，那一格本來也不
     /// 畫任何東西。
     pub fn hover_is_markdown(&self) -> bool {
@@ -2481,7 +2468,7 @@ impl Editor {
 
     // ---- `C-n` 問服務器接下來能打什麽（#53 ④）------------------------------
 
-    /// **把「接下來能打什麽」問出去**，問得出就回 `true`（2026-09-21）。
+    /// **把「接下來能打什麽」問出去**，問得出就回 `true`。
     pub(super) fn ask_what_comes_next(&mut self, by_hand: bool) -> bool {
         let Some((path, line, utf16)) = self.where_the_cursor_is_in_code() else {
             return false;
@@ -2492,12 +2479,12 @@ impl Editor {
         true
     }
 
-    /// **這個括號裏該填什麼**——簽名提示（2026-10-08）。
+    /// **這個括號裏該填什麼**——簽名提示。
     ///
-    /// 報的原話：「In insert mode, when I type `(`, I expect that the function doc can
-    /// appear without triggering.」helix 的 `auto-signature-help` 是同一件事，出廠開着。
+    /// 插入態裏打 `(`，函數的說明不必另按就出來。helix 的 `auto-signature-help` 是
+    /// 同一件事，出廠開着。
     ///
-    /// The rules, helix's since 2026-10-28 (`helix-term/src/handlers/signature_help.rs`):
+    /// The rules, helix's (`helix-term/src/handlers/signature_help.rs`):
     ///
     /// - **Only in Insert, only in code**, as [`Self::maybe_ask_what_comes_next`].
     /// - **The server's own trigger characters ask** (rust-analyzer: `(`, `,`,
@@ -2506,8 +2493,8 @@ impl Editor {
     ///   move asks again** after [`SIGNATURE_AGAIN`] — see
     ///   [`Self::keep_the_signature_up`]. That is what keeps it up while an
     ///   argument is typed and moves the gold to the parameter under the caret.
-    /// - **An empty answer to those closes it**, as helix's does; `)` no longer
-    ///   closes it by itself (in `f(g(x)`, `f` is still being filled).
+    /// - **An empty answer to those closes it**, as helix's does; `)` does not
+    ///   close it by itself (in `f(g(x)`, `f` is still being filled).
     pub(super) fn maybe_ask_for_a_signature(&mut self, just_typed: &str) {
         if !self.serves_this_file() || self.mode != Mode::Insert || just_typed.is_empty() {
             return;
@@ -2524,12 +2511,12 @@ impl Editor {
         let Some((path, line, utf16)) = self.where_the_cursor_is_in_code() else {
             return;
         };
-        // **記的是這一次調用的左括號，不是剛打的那一個字**（2026-10-08 第二版）。
+        // **記的是這一次調用的左括號，不是剛打的那一個字**。
         //
-        // 第一版記的是「剛打的那個觸發字」，攣不住他報的那一幕：「我先打了
-        // std::env::var，显示了签名。然后我打 println!(，打到括号的时候显示的还是
-        // std:env:var 的签名」——因為打下新的 `(` 時這一格跟著更新了，而
-        // `self.signature` 裏還壓著上一次的答案，於是**新括號配舊答案**，守衛一路放行。
+        // 記「剛打的那個觸發字」的話，先打 `std::env::var(` 顯示了簽名，接着打
+        // `println!(` 時還顯示 `std::env::var` 的簽名——打下新的 `(` 時這一格跟著
+        // 更新了，而 `self.signature` 裏還壓著上一次的答案，於是**新括號配舊答案**，
+        // 守衛一路放行。
         //
         // 所以分成兩件事：
         //
@@ -2575,12 +2562,11 @@ impl Editor {
     }
 
     /// **After every key and every committed string**: the half of helix's
-    /// signature rules that is not about one character (2026-10-28). `was` is
+    /// signature rules that is not about one character. `was` is
     /// the mode, buffer, revision and caret before.
     ///
     /// Entering Insert asks at once (helix asks on the mode switch; at once
-    /// rather than after its 120 ms, as the trigger characters here have since
-    /// 2026-10-08: 「及時响应」). While a signature is up or asked for, an edit
+    /// rather than after its 120 ms, as the trigger characters here do). While a signature is up or asked for, an edit
     /// or a caret move asks again once things have been still for
     /// [`SIGNATURE_AGAIN`].
     pub(super) fn keep_the_signature_up(&mut self, was: (Mode, u64, u64, usize)) {
@@ -2643,17 +2629,16 @@ impl Editor {
         asked
     }
 
-    /// **簽名回空之後要補問的那一句 hover**，給前端發（2026-10-08）。
+    /// **簽名回空之後要補問的那一句 hover**，給前端發。
     pub fn take_signature_doc_query(&mut self) -> Option<(std::path::PathBuf, usize, usize)> {
         self.signature_doc_query.take()
     }
 
     /// **答案回來了**：記在問的那個位置上。
     ///
-    /// `None` ＝ 服務器說不出簽名。**那就在同一處問一句 hover**（2026-10-08 定）——
-    /// 量出來的：rust-analyzer 對**宏**一律回 `null`（`println!(` 就是），可同一處
-    /// 的 hover 答得好好的。原話：「優先顯示 signatureHelp，如果是 null，回退到
-    /// hover（…則最多顯示正文部分第一段）」。
+    /// `None` ＝ 服務器說不出簽名。**那就在同一處問一句 hover**——量出來的：
+    /// rust-analyzer 對**宏**一律回 `null`（`println!(` 就是），可同一處的 hover
+    /// 答得好好的。先 signatureHelp，回空就退到 hover（最多正文第一段）。
     pub fn show_signature(&mut self, one: Option<crate::lsp::Signature>) {
         let again = std::mem::take(&mut self.signature_again);
         match one {
@@ -2662,7 +2647,7 @@ impl Editor {
                 self.signature = Some((self.sel.head(), one));
             }
             // Asked again (or on entering Insert) and nothing: the caret has
-            // left the call. Closed, as helix's (2026-10-28).
+            // left the call. Closed, as helix's.
             None if again => {
                 self.signature_asked_at = None;
                 self.signature = None;
@@ -2673,15 +2658,14 @@ impl Editor {
         }
     }
 
-    /// **那一句回退的 hover 要問在哪一格**（2026-10-09）。
+    /// **那一句回退的 hover 要問在哪一格**。
     ///
-    /// Warning: **不是問簽名的那一格。** 他報了三次「`println!(` 還是不出簽名」，根子
-    /// 在這裏：從前這一句排的是 [`Self::signature_asked_at`]，也就是**問簽名的那個
-    /// 坐標**——左括號後面那一格。那一格對 signatureHelp 是對的（協議要的就是「我
+    /// Warning: **不是問簽名的那一格**（[`Self::signature_asked_at`]，左括號後面
+    /// 那一格）。那一格對 signatureHelp 是對的（協議要的就是「我
     /// 正在填第幾個參數」），可 hover 問的是另一件事：「這一格上是什麽東西」。括號
-    /// 裏面空無一物，於是 rust-analyzer 兩句都回 `null`，回退等於没有回退。
+    /// 裏面空無一物，問那裏的話 rust-analyzer 兩句都回 `null`，回退等於没有回退。
     ///
-    /// 要問的那一格一直就在手邊：[`Self::signature_on`] 記着這一次調用的左括號，被
+    /// 要問的那一格在手邊：[`Self::signature_on`] 記着這一次調用的左括號，被
     /// 調用的那個名字就貼在它前面。從括號往前走到第一個字母/數字/下劃線為止，
     /// `println!(` 跳過那個 `!` 落在 `n` 上。往前最多走四格——觸發字符本來就該挨着
     /// 名字，走得更遠就不是這一次調用的事了。
@@ -2689,9 +2673,9 @@ impl Editor {
         self.signature_asked_at = None;
         let bracket = self.signature_on?;
         let rope = self.current_buffer().rope();
-        // **After a `(` only** (2026-10-29, review): rust-analyzer adds `<` to
-        // the triggers, and in `if v.len() < MAX` the walk back from `<` landed
-        // on `len` and floated its documentation as a signature. A macro's call
+        // **After a `(` only**: rust-analyzer adds `<` to the triggers, and in
+        // `if v.len() < MAX` the walk back from `<` would land on `len` and
+        // float its documentation as a signature. A macro's call
         // opens with `(`; a comparison is not one.
         if rope.get_char(bracket) != Some('(') {
             return None;
@@ -2711,7 +2695,7 @@ impl Editor {
         None
     }
 
-    /// **回退那一句 hover 答回來了**：只取正文第一段（2026-10-08 定）。
+    /// **回退那一句 hover 答回來了**：只取正文第一段。
     ///
     /// 三家都不在插入態冒整段文檔（Neovim 的 `i_CTRL-S` 只給簽名，helix 要先
     /// `Esc`，VS Code 分兩個鍵），所以這裏最多一段，後面還有就單排一個 `…`。
@@ -2732,10 +2716,7 @@ impl Editor {
         if self.mode != Mode::Insert {
             return None;
         }
-        // Warning: **問它的那個括號還在不在**（2026-10-08 報的）。
-        //
-        // 原話：「I first typed `first_time_ever(` and it showed signature. I deleted the
-        // `first_time_ever(` but typed println!, the signature panel still persists.」
+        // Warning: **問它的那個括號還在不在**。
         //
         // 位置不比是對的——手正往括號裏填字，光標當然一直在走。要比的是另一件事：
         // **那一次調用還在嗎**。記下問的時候那個 `(` 在第幾格，這一格不再是它了，
@@ -2759,8 +2740,7 @@ impl Editor {
 
     /// **字落到頁面上了，要不要順手問一句**（#53 ④，自動那一半）。
     ///
-    /// 2026-09-21 定下的模型：**「只有當文字上屏才算字符落到屏幕上」觸發自動補
-    /// 全**。編碼串還在 IME 手裏的時候這裏一次都不會被叫到——那些鍵根本不進編輯
+    /// 模型是**「只有當文字上屏才算字符落到屏幕上」觸發自動補全**。編碼串還在 IME 手裏的時候這裏一次都不會被叫到——那些鍵根本不進編輯
     /// 器——所以候選欄與補全單子永遠不會同時收同一個鍵。
     ///
     /// Warning: **只在詞的中間問。** 剛打完的是空格、括號、分號，那就是一個詞結束了，
@@ -2773,7 +2753,7 @@ impl Editor {
         if self.mode != Mode::Insert {
             return;
         }
-        // The server's list on screen narrows first (2026-10-28); the server
+        // The server's list on screen narrows first; the server
         // is asked again only when its list said it is incomplete.
         if !just_typed.is_empty() && just_typed.chars().all(|c| c.is_alphanumeric() || c == '_') {
             let before = self.sel.head().saturating_sub(just_typed.chars().count());
@@ -2786,13 +2766,13 @@ impl Editor {
                 None => {}
             }
         }
-        // Words and paths the text itself offers (2026-10-28); in code, a path
+        // Words and paths the text itself offers; in code, a path
         // before the server is asked.
         if self.offer_from_the_text(false) {
             return;
         }
         // In writing the words answer; the server only where the caret is on
-        // code (2026-11-06), so a chapter typed in Chinese does not ask it
+        // code, so a chapter typed in Chinese does not ask it
         // for every character.
         if !self.server_answers_here() {
             self.offering = None;
@@ -2812,11 +2792,11 @@ impl Editor {
         self.ask_what_comes_next(false);
     }
 
-    /// **有一句補全的問題等着發嗎**（2026-10-08）。
-    /// **簽名那一問也等著發嗎**（2026-10-08）。
+    /// **有一句補全的問題等着發嗎**。
+    /// **簽名那一問也等著發嗎**。
     ///
     /// 與 [`Self::completion_is_waiting`] 同一個理由：它也要服務器先收到剛打的那個
-    /// `(`。原話：「我觉得這個地方可以和 autocompletion 一樣，及時响应、光標位置」。
+    /// `(`，和補全一樣及時。
     pub fn signature_is_waiting(&self) -> bool {
         self.signature_query.is_some()
     }
@@ -2824,8 +2804,7 @@ impl Editor {
     ///
     /// 前端拿這一句決定要不要**現在就把 `didChange` 發出去**：那一發平常按
     /// 300 毫秒節流，而補全要等服務器收到剛打的那一個字母才答得出來，於是
-    /// 單子慢上那一拍。原話：「this autocompletion should be instant (not as
-    /// delayed by 300ms as docs)」。
+    /// 單子慢上那一拍。補全要即時，不像文檔那樣等 300 毫秒。
     pub fn completion_is_waiting(&self) -> bool {
         self.completion_query.is_some()
     }
@@ -2845,16 +2824,16 @@ impl Editor {
     /// `completion_at` is not 「unknown」 but **that question was dropped**: a
     /// space or `;` ended the word and `maybe_ask_what_comes_next` cleared it.
     /// Shown anyway, the list would sit at the new caret while `Tab` used spans
-    /// the server worked out on the old text, and cut the wrong characters
-    /// (2026-09-23, the heaviest finding of that round: it changes the text).
+    /// the server worked out on the old text, and cut the wrong characters —
+    /// it changes the text.
     ///
-    /// **An answer the caret has typed past is still the answer** (2026-10-28),
+    /// **An answer the caret has typed past is still the answer**,
     /// as long as only word characters were typed since: it is narrowed by the
     /// longer word, as helix narrows the list on screen. Anything else in
     /// between and it is stale.
     pub fn show_offers(&mut self, items: Vec<crate::lsp::Offer>, incomplete: bool) {
-        // Not in Normal mode (review: "type a word, Esc" before the answer
-        // drew the list over Normal mode).
+        // Not in Normal mode: "type a word, Esc" before the answer must not
+        // draw the list over Normal mode.
         if self.mode != Mode::Insert {
             self.completion_sent = None;
             self.completion_at = None;
@@ -2877,7 +2856,7 @@ impl Editor {
         }
     }
 
-    /// **Words stand in when the server has nothing** (2026-10-28), as Zed's
+    /// **Words stand in when the server has nothing**, as Zed's
     /// `completions.words = "fallback"`: an empty answer, or no server for the
     /// language. In practice that is comments and strings, where rust-analyzer
     /// offers nothing. Whether words came up.
@@ -2960,11 +2939,10 @@ impl Editor {
             .collect()
     }
 
-    /// **A letter typed or taken back narrows the list on screen** (2026-10-28).
+    /// **A letter typed or taken back narrows the list on screen**.
     ///
-    /// Reported: in helix only the first letter of a name waits for the
-    /// server; after it 「the list is shrinking and converge to only
-    /// `to_string`… no delay at all」. Read in helix: `update_filter` re-scores
+    /// In helix only the first letter of a name waits for the server; after
+    /// it the list shrinks with no delay at all. `update_filter` re-scores
     /// the items it already has on every letter, and asks again only the
     /// servers that said `isIncomplete`, keeping the narrowed list up until
     /// their answer replaces it (`helix-term/src/ui/completion.rs`,
@@ -3066,7 +3044,7 @@ impl Editor {
         let long = rope.len_chars();
         let line = rope.char_to_line(self.sel.head().min(long));
         let head = rope.line_to_char(line);
-        // **行末那個換行符不算這一行的字**（2026-10-07）。`Rope::line` 把它一起
+        // **行末那個換行符不算這一行的字**。`Rope::line` 把它一起
         // 交出來，而 [`char_column`] 對「超出行尾」的答覆是「行尾」——兩件事湊在
         // 一起，一個數過了頭的 `end` 就指到**下一行的頭上**，`overwrite` 於是把
         // 換行符吃掉，兩行併成一行。服務器照着一份舊的文本數出界，是天天發生的事。
@@ -3081,15 +3059,15 @@ impl Editor {
                 head + crate::problem::char_column(&text, span.from),
                 head + crate::problem::char_column(&text, span.to),
             ),
-            // **No range: the word before the caret is replaced** (2026-10-29,
-            // review: pylsp sends `insertText` alone, and `pri` + Tab gave
-            // `priprint`). helix replaces from the start of the word there.
+            // **No range: the word before the caret is replaced**: pylsp sends
+            // `insertText` alone, and `pri` + Tab must give `print`, not
+            // `priprint`. helix replaces from the start of the word there.
             None => (self.sel.head() - self.word_before_the_cursor().chars().count(), self.sel.head()),
             // A range on another line was worked out on other text: insert only.
             Some(_) => (self.sel.head(), self.sel.head()),
         };
         // 打進去算**一次**編輯——`u` 一下把整個詞撤掉，而不是一個字母一個字母地
-        // 撤（同 2026-09-21 定下的「一次插入是一次撤銷」）。
+        // 撤（同「一次插入是一次撤銷」）。
         if self.mode != Mode::Insert {
             self.snapshot();
         }
@@ -3126,7 +3104,7 @@ impl Editor {
     /// and `:theme moxiang` names no mood, and a bare `:theme` names neither,
     /// which is how it comes to be the way to *ask*.
     #[allow(clippy::type_complexity)]
-    /// **這一幀要不要先畫成別的樣子**（2026-10-07）。前端每幀取一次。
+    /// **這一幀要不要先畫成別的樣子**。前端每幀取一次。
     pub fn take_trial(&mut self) -> Option<crate::editor::Trial> {
         self.trial.take()
     }

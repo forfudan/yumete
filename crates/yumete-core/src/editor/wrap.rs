@@ -5,16 +5,16 @@ use super::*;
 impl Editor {
     // ---- Soft wrap (Feature #77) ------------------------------------------
 
-    /// **這一行的前綴寬度索引**，長得值得建一份的話（2026-10-08）。見
+    /// **這一行的前綴寬度索引**，長得值得建一份的話。見
     /// [`crate::wrap::Widths`]，以及它掛在哪裏：[`crate::wrap::Measure::widths`]。
     ///
     /// 兩種情形回 `None`，都是「建它比不建貴」：
     ///
-    /// - **這一行不到一塊長**——索引裏連一個內部切點都没有，走的就是從前那一條
+    /// - **這一行不到一塊長**——索引裏連一個內部切點都没有，走的就是不建索引那一條
     ///   路，一個格子也不差；尋常的一段也就不佔備忘那 512 格。
     /// - **這一問跨不到一塊**（`span`）——逐字素走至多 86 µs，而建一份要把那一行
     ///   整個走一遍。1242 萬字那一行上建一次 190 ms，而光標一直在行首附近的人一
-    ///   條切點都用不上：2026-10-08 量到的，`gh` 之後不往右走，少了這一道就白付
+    ///   條切點都用不上：量過，`gh` 之後不往右走，少了這一道就白付
     ///   192 ms。
     ///
     /// `rope` 收的是調用方手上那一份，與 [`crate::wrap::Measure::version`] 同一條
@@ -61,10 +61,10 @@ impl Editor {
     /// A measure the writer has set wins, but only downwards: `:view-wrap-width 50` on a
     /// 40-column terminal still has to wrap at 40, because rows that do not fit
     /// cannot be read.
-    /// Warning: **那道下限不許大過真有的地方**（2026-10-02 一輪掃查報來的）。
-    /// `.max(MIN_WRAP_WIDTH)` 排在 `.min(available)` 後面，於是正文欄不到八格的
+    /// Warning: **那道下限不許大過真有的地方**。
+    /// `.max(MIN_WRAP_WIDTH)` 要是排在 `.min(available)` 後面，正文欄不到八格的
     /// 時候，折行按八格折而畫只畫得下五格——**中間那幾個字一格都没畫，也走不到**
-    /// （軟折行開着，没有橫向滾動）。八格的窗口上三十六個字母丟了十二個。
+    /// （軟折行開着，没有橫向滾動）。
     ///
     /// `MIN_WRAP_WIDTH` 那句註釋說的是「與其一行一個字，不如承認終端太窄」——
     /// 承認得對，可代價不該是把字吃掉。真有幾格就按幾格折：窄到那個地步本來就
@@ -83,9 +83,7 @@ impl Editor {
 
     /// The gap between 縱, if the writer has set one for this session.
     ///
-    /// Its own setting and nothing else's. `:view-dense` used to force it to
-    /// nothing, which is why the factory gap is now 0 rather than the 1 this
-    /// used to be quietly overriding.
+    /// Its own setting and nothing else's; the factory gap is 0.
     pub fn zong_gap(&self) -> Option<usize> {
         self.zong_gap
     }
@@ -99,11 +97,8 @@ impl Editor {
     /// So going back needs nothing remembered: what was configured was never
     /// touched, and simply applies again.
     ///
-    /// It replaced `:view-dense` (2026-09-16), which did five jobs and did
-    /// different ones in each layout — down the page it hid the margin, across
-    /// it took away the air between rows — and whose two answers covered a
-    /// different pair of these four in each. The gap between 縱 was the fifth,
-    /// and is its own setting now.
+    /// It does the same job in every layout — down the page and across alike
+    /// — and nothing about spacing: the gap between 縱 is its own setting.
     pub fn set_margin(&mut self, margin: yumete_cjk::Margin) {
         self.margin = margin;
         self.status = self.margin_report();
@@ -126,11 +121,10 @@ impl Editor {
 
     /// One 句 to a 縱 (`:view-sentence`, Feature #237).
     ///
-    /// **A view, and the point is that it is one.** The manual has taught
-    /// `:%s/。/。\n/g` for reading a draft back one sentence at a time since the
-    /// first version — a substitution that edits the manuscript in order to
-    /// read it, and has to be undone before anybody can write again. This is
-    /// that, without touching the file: the page breaks a 縱 at the end of every
+    /// **A view, and the point is that it is one.** Reading a draft back one
+    /// sentence at a time with `:%s/。/。\n/g` is a substitution that edits the
+    /// manuscript in order to read it, and has to be undone before anybody can
+    /// write again. This is that, without touching the file: the page breaks a 縱 at the end of every
     /// 句 as well as at the measure, so a long sentence still wraps rather than
     /// running off the foot of the page.
     ///
@@ -188,9 +182,9 @@ impl Editor {
     /// The width horizontal motion should wrap at, or `None` when the buffer is
     /// drawn as unwrapped logical lines.
     pub fn wrap_width(&self) -> Option<usize> {
-        // **Pages side by side always wrap** (2026-10-28, decided: 「Bands wrap
-        // inside each column anyway」): a line run past a page's edge would run
-        // into the next page, and the text is meant to flow down them.
+        // **Pages side by side always wrap** — bands wrap inside each column
+        // anyway: a line run past a page's edge would run into the next page,
+        // and the text is meant to flow down them.
         let paged = self.pages_on_screen > 1;
         if (self.soft_wrap || paged) && self.layout() == Layout::Horizontal {
             // A window being peeked at folds to its own width.
@@ -220,9 +214,9 @@ impl Editor {
     /// frame's answer — which is the only one there is before the page is
     /// divided, and a frame's lag on a column's width is not a thing anybody
     /// can see. What it buys is that a table's columns are measured against
-    /// **the rows on the screen** and no others: a long cell a page below the
-    /// window used to widen every column around it, with nothing visible to
-    /// say why.
+    /// **the rows on the screen** and no others, so a long cell a page below
+    /// the window does not widen every column around it, with nothing visible
+    /// to say why.
     pub fn set_page_top(&mut self, line: usize) {
         self.page_top = line;
     }
@@ -234,7 +228,7 @@ impl Editor {
     }
 
     /// The same, for whoever is drawing: this buffer's own when it has one
-    /// (a modeline's `ts`, 2026-11-04), else the editor's.
+    /// (a modeline's `ts`), else the editor's.
     pub fn tab_stop(&self) -> usize {
         self.current_buffer().local().tab_stop.unwrap_or(self.tab_stop_global)
     }
@@ -349,11 +343,10 @@ impl Editor {
     /// caret, where the eyes already are.
     ///
     /// Empty when nothing is pending, which is most of the time.
-    /// **「`ze` 爲無效按鍵組合，請重試」**——一句話，所有的層共用（2026-10-06 定）。
+    /// **「`ze` 爲無效按鍵組合，請重試」**——一句話，所有的層共用。
     ///
-    /// 原話：「各組如果按了一個無效的按鍵，可以直接説……`ze`」。從前每一層自己寫
-    /// 一句（`z 後面要 z 中間、t 頂上、b 底下`），於是每加一個鍵就要改一句中文，而
-    /// 那幾句話一加長就没人讀得完。[`Self::typed_so_far`] 本來就答得出按過的那幾個
+    /// 不是每一層自己寫一句（`z 後面要 z 中間、t 頂上、b 底下`）：那樣每加一個鍵
+    /// 就要改一句中文，而那幾句話一加長就没人讀得完。[`Self::typed_so_far`] 本來就答得出按過的那幾個
     /// 鍵，接上這一個，就是手指真按出來的那一串。
     /// Warning: **按過的那一串要在層關掉之前取**。每一層進門第一句就是
     /// `self.pending = Pending::None`，那之後 [`Self::typed_so_far`] 答的是空的
@@ -364,14 +357,13 @@ impl Editor {
     }
 
     pub fn typed_so_far(&self) -> String {
-        // **`gx`/`gz` 打到一半，HUD 寫的是 `gxa`、`gzdon`**（2026-10-04 定；鍵在
-        // 2026-10-10 從 `go`/`gu` 搬過來，見 `groups.rs` 的 `GOTO`）。
+        // **`gx`/`gz` 打到一半，HUD 寫的是 `gxa`、`gzdon`**（鍵見 `groups.rs` 的
+        // `GOTO`）。
         //
         // Warning: **按下 `x`/`z` 的那一刻 `pending` 就回到了 `None`**，而這兩個鍵
         // 還要再打幾個字母才算完——HUD 從那一刻起到標籤亮起來為止一個字都不說，
-        // 人會以為自己回到了 Normal。原話（那時這個鍵還拼作 `go`）：「HUD 一直
-        // 顯示到出現雙字母標籤。比如我打了 `goab`，那就等到打完 `b` 之後再清除
-        // HUD，打 `a` 的時候這個 HUD 依舊是存在的。」
+        // 人會以為自己回到了 Normal。所以 HUD 一直顯示到出現雙字母標籤：打
+        // `gxab` 的話，打完 `b` 纔清，打 `a` 的時候 HUD 依舊在。
         //
         // 和 vim operator 那一條同一個道理：**把打進去的那幾個字符原樣交回來**。
         if let Some(seeking) = self.seeking.as_ref().filter(|s| s.labels.is_empty()) {
@@ -386,11 +378,10 @@ impl Editor {
         // is to hand those characters back.
         if let Pending::VimOperator { op, first } = self.pending {
             // `ys` 内部記作一個字符 `s`；牌子上寫的是手按過的那兩個鍵。
-            // Warning: **只有 `ys` 這一個**（2026-10-06 夜審更正）。同一輪接上的
-            // vim `ds`/`cs` 不走這條路——它們落在 `SurroundOff`/`SurroundFrom`
+            // Warning: **只有 `ys` 這一個**。vim 的 `ds`/`cs` 不走這條路——它們落在 `SurroundOff`/`SurroundFrom`
             // 上，牌子畫的是這個編輯器自己的 `md`/`mr`。
-            // `gu` `gU` `g~` `gq` were typed with their `g`, and the sign said
-            // `u` until 2026-10-29.
+            // `gu` `gU` `g~` `gq` are typed with their `g`, and the sign says
+            // so, not a bare `u`.
             let mut word = match op {
                 's' => String::from("ys"),
                 'u' | 'U' | '~' | 'q' | 'w' => format!("g{op}"),
@@ -438,10 +429,9 @@ impl Editor {
             Pending::TableConvert => "tx",
             Pending::Hop { forward: true } => "]",
             Pending::Hop { forward: false } => "[",
-            // Warning: **`␣m`，不是 `␣c`**（2026-10-02 更正）。合併衝突 2026-09-12
-            // 就從 `空格 c` 搬到了 `空格 m`（#409，`空格 c` 讓給了行註釋），這一
-            // 格没跟着搬——按 `␣m` 畫出合併衝突那扇面板，而光標旁邊的小牌子寫着
-            // `␣c`，那是另一個現在還活着的鍵。
+            // Warning: **`␣m`，不是 `␣c`**。合併衝突在 `空格 m`（#409，`空格 c`
+            // 是行註釋）；這一格寫錯的話，按 `␣m` 畫出合併衝突那扇面板，而光標旁邊
+            // 的小牌子寫着 `␣c`，那是另一個活着的鍵。
             Pending::Conflict => "␣m",
             Pending::Case => "`",
             Pending::Mark => "M",
@@ -452,10 +442,9 @@ impl Editor {
             // Answered above, where its own characters are.
             Pending::VimOperator { .. } => "",
         };
-        // **The keys that really opened it** (2026-11-02, from the review
-        // before 0.16.0): under vim with the flavour's `vim_space_menu` off the
-        // Space menu is on `\`, and vim's case menu is `` g` ``. The table
-        // menu is under Space since 2026-09-21, and its sign said `t`.
+        // **The keys that really opened it**: under vim with the flavour's
+        // `vim_space_menu` off the Space menu is on `\`, and vim's case menu is
+        // `` g` ``. The table menu is under Space, so its sign is not a bare `t`.
         let space = self.space_sign();
         let word: String = match self.pending {
             Pending::Space | Pending::Open | Pending::Yume | Pending::YumeValue(_) | Pending::Conflict => {
@@ -469,7 +458,7 @@ impl Editor {
         // And a run of the reader's held in it: `␣b` of `Space bd`.
         let word = word + &self.held_sign();
         // And a count typed in a group of the reader's, after the keys before
-        // it: `␣abc3` (review, 2026-11-05).
+        // it: `␣abc3`.
         let word = match self.alias_count.filter(|_| self.node_here().is_some()) {
             Some(n) => format!("{word}{n}"),
             None => word,

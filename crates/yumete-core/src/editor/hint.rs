@@ -20,38 +20,32 @@ const WALKING: &[(Key, PlaceCmd)] = &[
 
 /// **走到下一區那個鍵的名字**：`\u{2423}w`。
 ///
-/// `\u{2423}`（OPEN BOX）就是空格鍵，一根橫綫兩端向上。2026-09-29 定，原話：
-/// 「不用显示 C-w……_ 其实是空格符号，就是短横+两端两个向上的竖线的符号。这样的
-/// 话节约空间而且用户也能理解。」
+/// `\u{2423}`（OPEN BOX）就是空格鍵，一根橫綫兩端向上：省地方，讀者也看得懂。
 ///
 /// Warning: **`C-w` 不寫了。** 同一件事兩種按法，而鍵位那一行是硬砍的——兩種都寫
 /// 要十一格，寫一種只要三格，省下的八格後面還排着別的鍵。`C-w` 照樣管用。
 ///
-/// Warning: **這一支從前分語言**（英文界面寫 `C-w / Space w`）。`\u{2423}` 在哪
-/// 種語言裏都是那個記號，所以不必分了。
+/// Warning: **這一支不分語言**：`\u{2423}` 在哪種語言裏都是那個記號。
 fn back_to_text_key() -> &'static str {
     "\u{2423}w"
 }
 
 impl Editor {
-    /// **The motions a vim operator may end with, as one line** (2026-10-06).
+    /// **The motions a vim operator may end with, as one line**.
     ///
-    /// Warning: **It used to be a hand-written list inside the message**, and it had
-    /// drifted: it said `w e b W E B $ 0 ^ G gg j k { } f i a` while the
-    /// editor also took `h l ␣ F t T ge gE H L ; ,` and, since the surround
-    /// round, `s`. A list of keys is data; writing it out a second time in
-    /// prose is how the two come apart. The wording around it did not change.
+    /// Warning: **Not a hand-written list inside the message**: a list of keys
+    /// is data, and writing it out a second time in prose is how the two come
+    /// apart.
     fn vim_motion_list() -> String {
         // The table's own order, which groups them the way a reader learnt
         // them (words, then the line, then down the page, then find).
         let mut out: Vec<&str> = yumete_cjk::keymap::VIM_MOTIONS.iter().map(|(k, _)| *k).collect();
-        // Warning: **The table is not the whole truth** (2026-10-06): what
+        // Warning: **The table is not the whole truth**: what
         // `vim_operator_key` actually asks is [`crate::vim::step_for`], and
         // that match arm takes more than `VIM_MOTIONS` lists. `h`/`l`/`␣` are
         // one grapheme; `ge`/`gE` are vim's 「back to the end of the previous
-        // word」, which the table deliberately leaves out because helix's `ge`
-        // means something else (that reason stopped applying when `vim.rs`
-        // took them, 2026-10-02); `;`/`,` are 「that find again」 and live in
+        // word」, which the table leaves out because helix's `ge` means
+        // something else; `;`/`,` are 「that find again」 and live in
         // `vim_operator_key` because the editor remembers which find it was;
         // `s` is vim-surround's.
         out.extend(["h", "l", "␣", "ge", "gE", ";", ",", "s"]);
@@ -84,8 +78,7 @@ impl Editor {
         // 幾個鍵，而標題寫的是**此刻擺着哪一種**——五種共用一格，只寫「信息」
         // 的話讀者不知道眼前這一則是字典還是診斷。
         if let Some(side) = self.panel_focus() {
-            // Warning: **問的是「這一格是信息嗎」，不是「它此刻有東西嗎」**
-            // （2026-09-30 看圖看出來的）。空着的時候問後者會落到下面那一行通用
+            // Warning: **問的是「這一格是信息嗎」，不是「它此刻有東西嗎」**。空着的時候問後者會落到下面那一行通用
             // 的邊欄提示上——而那一行寫着 `Tab 換視圖`、不寫 `PgUp PgDn`，於是
             // 一個空面板教的是一套它没有的鍵。標題同理：空着寫「信息」。
             if self.panel(side).map(|p| p.view()) == Some(crate::sidebar::View::Info) {
@@ -93,8 +86,7 @@ impl Editor {
                     Some(one) => crate::messages::say(one.tag(), &[]),
                     None => say!("label.panel.info"),
                 };
-                // Warning: **一段文章是「滾」，一張單子是「上下」**（2026-09-22
-                // 定的分別，2026-09-30 差點丟掉）。百科軟折行，`j` 走的是一屏
+                // Warning: **一段文章是「滾」，一張單子是「上下」**。百科軟折行，`j` 走的是一屏
                 // 行；字典、記錄、診斷是一條一條，`j` 走的是一條。同一個鍵兩
                 // 件事，這一行得說對是哪一件。
                 let walk = match self.info_in_this_sidebar(side) {
@@ -105,20 +97,19 @@ impl Editor {
                     self.place_hint(Place::Sidebar, spec).map(|keys| (keys.into(), says))
                 };
                 return Hint::Keys(what, [
-                        // Warning: **`J K g G` 也寫上**（2026-09-30 審出來的）。
+                        // Warning: **`J K g G` 也寫上**。
                         // 它們在這一格上真的管用，而通用那一行一格就寫得下
                         // `j k J K g G`——只寫 `j k` 是漏報。
                         sidebar(WALKING, walk),
-                        // Warning: **`w` 也要寫上**（2026-09-29 報的：「不仅没有提示
-                        // 而且 w 无效」）。兩件事一起壞的：這一行没說它，而它
-                        // 本來也真的不管用（見 `info_command`）。
+                        // Warning: **`w` 也要寫上**，而它也要真的管用（見
+                        // `info_command`）——兩件事是一起的。
                         sidebar(&[(Key::Char('w'), PlaceCmd::CycleSidebarWidth)], say!("hint.sidebar.width")),
                         sidebar(&[(Key::Char('q'), PlaceCmd::LeaveSidebar)], say!("hint.to-the-text")),
                         Some((back_to_text_key().into(), say!("hint.sidebar.back-to-text"))),
                     ]
                     .into_iter()
                     .flatten()
-                    // **改動那一格多兩個自己的鍵**（2026-10-11）。擺在最前面：這一
+                    // **改動那一格多兩個自己的鍵**。擺在最前面：這一
                     // 格是為它們開的，而通用那幾個每一扇都有。
                     .chain(match self.info_in_this_sidebar(side) {
                         Some(crate::sidebar::Info::Change) => {
@@ -139,21 +130,17 @@ impl Editor {
         // the keys are in a field, and the one that is not obvious is what
         // `Enter` does with them.
         //
-        // Warning: **`Enter` 兩種範圍下說同一句** (2026-09-25 定)。從前本文件那一種是
-        // 「下一處」、鍵留在框裏，跨檔那一種是「開找」、鍵落到結果上——一個鍵兩個
-        // 意思，這一行只好分開說。現在兩種都是「去看結果」。
+        // Warning: **`Enter` 兩種範圍下說同一句**：兩種都是「去看結果」，一個鍵一個
+        // 意思。
         //
-        // Warning: **This row used to say 「Tab 下一格」 in both states, and `Tab`
-        // does not do that in either** (2026-09-24 審出來的). In the box it
-        // falls through to nothing; in the panel it walks the slot's views.
-        // The next cell is `↓`.
-        // **挑選器的鍵寫在這一行，不寫在面板裏**（2026-10-01 定，原話：「快捷
-        // 键文案是不是可以收到命令行中？」）。搜索面板一直是這樣，而挑選器從前把
-        // 鍵寫在自己的腳注上、命令行那一行空着——騰出來的那一行歸名單。
+        // Warning: **This row does not say 「Tab 下一格」**: `Tab` does not do
+        // that in either state. In the box it falls through to nothing; in the
+        // panel it walks the slot's views. The next cell is `↓`.
+        // **挑選器的鍵寫在這一行，不寫在面板裏**，同搜索面板——騰出來的那一行
+        // 歸名單。
         //
-        // **一扇挑選器只有一行提示**（2026-10-08 定）。從前是兩行、跟着層換，而層
-        // 没有了。次序裏移動那一格把 `Tab`/`S-Tab` 寫在前面——原話：「这两个其实
-        // 更加顺手」。
+        // **一扇挑選器只有一行提示**：它没有層。次序裏移動那一格把 `Tab`/`S-Tab`
+        // 寫在前面，那兩個更順手。
         if let Some(picker) = self.picker() {
             let title = picker.title.clone();
             let picker_keys = |spec: &[(Key, PlaceCmd)], says: String| {
@@ -189,10 +176,9 @@ impl Editor {
             return Hint::Keys(title, keys);
         }
         if self.mode == Mode::Field {
-            // **換字那兩個鍵在框裏按不了，所以框裏那一行要指路**（2026-09-25
-            // 報的：「替换模式下如何替换？快捷鍵是什麼？如何全部替换？」）。
-            // 從前 `r R` 只在鍵已經回到面板之後纔出現在提示行上，而人還在框裏
-            // 打「換成什麼」的時候，正是他要問這句話的時候。
+            // **換字那兩個鍵在框裏按不了，所以框裏那一行要指路**：怎麼換、怎麼
+            // 全部換。人還在框裏打「換成什麼」的時候，正是他要問這句話的時候，
+            // 所以不能等鍵回到面板之後纔說 `r R`。
             let field = |spec: &[(Key, PlaceCmd)], says: String| {
                 self.place_hint(Place::Field, spec).map(|keys| (keys.into(), says))
             };
@@ -203,31 +189,25 @@ impl Editor {
             ];
             return Hint::Keys(say!("label.panel.search"), keys.into_iter().flatten().collect());
         }
-        // Warning: **這一行不再拿來預覽了**（2026-09-27 定，原話：「命令行现在不显示
-        // 预览了，所以可以空出来显示按键提示」）。從前站在一處命中上，這一行寫的
-        // 是那一處前後的句子——而預覽現在在正文裏：`jk` 走一步，正文就跳過去、選
-        // 區蓋上去（`Editor::show_hit`）。同一句話說兩遍，佔掉的正是讀者最需要看
-        // 見鍵位的那一刻。
+        // Warning: **這一行不拿來預覽**，空出來寫按鍵提示。預覽在正文裏：`jk` 走一步，正文就跳過去、選
+        // 區蓋上去（`Editor::show_hit`）。這一行再寫那一處前後的句子就是同一句話說
+        // 兩遍，佔掉的正是讀者最需要看見鍵位的那一刻。
         // The search panel is a form, not a list: none of the tree's keys
         // mean anything in it (#419).
         if let Some(side) = self.panel_focus() {
             if self.panel(side).map(|p| p.view()) == Some(crate::sidebar::View::Search) {
-                // Warning: **這一行是硬砍的，所以次序就是重要性**（2026-09-27 三個試
-                // 用的人各自撞上）。從前排頭的是 `/` 和 `d c a`，而砍在尾巴上的
-                // 是 `u 撤回`——一個是最不常用的，一個是按錯之後唯一的退路。英文
-                // 界面下整行要 170 欄纔寫得完，所以尾巴一定會被砍掉。
+                // Warning: **這一行是硬砍的，所以次序就是重要性**。英文界面下整行要
+                // 170 欄纔寫得完，所以尾巴一定會被砍掉；最不常用的不許排頭。
                 let mut keys: KeyRows = Vec::new();
-                // **改稿子的那兩個排最前，而且只在用得上的時候纔畫**
-                // （2026-09-29 定，原話：「光标不在结果上，不应该显示『r ....』
-                // 的提示。因此如果用户按了 r，也不需要任何提示」，`R` 同）。
+                // **改稿子的那兩個排最前，而且只在用得上的時候纔畫**：光標不在結果
+                // 上就不寫 `r`／`R`。
                 //
-                // Warning: 從前它們跟着「勾了替換」一起出現，於是站在搜索框上也寫着
+                // Warning: 不跟着「勾了替換」一起出現，否則站在搜索框上也寫着
                 // `r 換這一處`——按下去只換來一句解釋為什麽没反應。鍵不在那裏
                 // 的時候就別說它在。
                 //
-                // Warning: **`u 撤銷` 一個字都不寫**（同日定：「理論上用戶是知道 u 是
-                // 撤銷的……這個功能應該是常駐功能」）。這一行是硬砍的，常駐的鍵
-                // 佔着一格就是把別的擠出畫面。
+                // Warning: **`u 撤銷` 一個字都不寫**：讀者知道 `u` 是撤銷，它是常駐的。
+                // 這一行是硬砍的，常駐的鍵佔着一格就是把別的擠出畫面。
                 if self.search().replacing && self.search().field == crate::search_panel::Field::Results {
                     // Warning: **`r` 說的是站着的這一行**：檔名那一行上它換整個檔，
                     // 命中那一行上它換那一處。讀者站在哪一行，編輯器自己看得見。
@@ -244,12 +224,12 @@ impl Editor {
                         keys.push(("R".into(), say!("hint.search.replace-all")));
                     }
                 }
-                // The five switches are pressed by number and walked past
-                // (2026-09-24) — the row that walks is 範圍/找什麼/結果.
+                // The five switches are pressed by number and walked past —
+                // the row that walks is 範圍/找什麼/結果.
                 //
-                // Warning: **第七行只有走磁碟的範圍下纔畫**（2026-10-02 查出來的）。這
-                // 一行從前無條件寫着 `1–7`，而本文件和緩衝區那兩檔只有六行——按
-                // 下去的 `7` 什麼都不做也什麼都不說，而屏幕上寫着它管用。一個寫在
+                // Warning: **第七行只有走磁碟的範圍下纔畫**。本文件和緩衝區那兩檔只有
+                // 六行——無條件寫 `1–7` 的話，按下去的 `7` 什麼都不做也什麼都不說，而
+                // 屏幕上寫着它管用。一個寫在
                 // 屏幕上、按下去没反應的鍵，讀者只會以為自己記錯了（§5.12.39
                 // 那一族）。
                 let numbers = match self.search().on_disk() {
@@ -261,11 +241,10 @@ impl Editor {
                 keys.push(("q".into(), say!("hint.to-the-text")));
                 keys.push((back_to_text_key().into(), say!("hint.sidebar.back-to-text")));
                 keys.push(("/".into(), say!("hint.search.new-word")));
-                // **站在一個框上纔說得着編輯鍵**（2026-09-25）。站在結果上它們一個
+                // **站在一個框上纔說得着編輯鍵**。站在結果上它們一個
                 // 都不管用，而這一行擠不下說了也用不上的東西。
                 //
-                // 四對，大小寫並排（2026-09-29 定的寫法：「dD 删除 cC 修改
-                // aA 追加 iI 插入」）。大寫那一半管到末尾/管到框首框尾，小寫
+                // 四對，大小寫並排：`dD 刪除 cC 修改 aA 追加 iI 插入`。大寫那一半管到末尾/管到框首框尾，小寫
                 // 管光標底下那一個字。
                 if self.search().takes_text() {
                     keys.push(("dD".into(), say!("hint.search.box-delete")));
@@ -281,7 +260,7 @@ impl Editor {
             }
         }
         if let Some(side) = self.panel_focus() {
-            // **百科是一段文章，`j`/`k` 滾它**（2026-09-22 報的：那一頁翻不動）。
+            // **百科是一段文章，`j`/`k` 滾它**。
             // 別的視圖是行的列表，`j` 走下一行——同一個鍵兩件事，所以這一行得說
             // 對是哪一件。
             let walking = match self.panel(side).map(|p| p.view()) {
@@ -289,8 +268,8 @@ impl Editor {
                 Some(crate::sidebar::View::Info) => say!("hint.sidebar.move"),
                 _ => say!("hint.sidebar.move"),
             };
-            // 六個鍵一格：`j k` 一行、`J K` 半頁、`g G` 兩頭。從前只寫 `j k`，
-            // 另外四個管用卻没人知道（2026-09-23 審出來的）。
+            // 六個鍵一格：`j k` 一行、`J K` 半頁、`g G` 兩頭。只寫 `j k` 的話，
+            // 另外四個管用卻没人知道。
             let sidebar = |spec: &[(Key, PlaceCmd)], says: String| {
                 self.place_hint(Place::Sidebar, spec).map(|keys| (keys.into(), says))
             };
@@ -344,18 +323,13 @@ impl Editor {
                 // Three keys, and every one of them is a key the reader could
                 // not have guessed: `t` opens the rest of the table's keys,
                 // `Tab` is the only motion a table has that the text does not,
-                // and `空格 I` puts the row in the sidebar. `hjkl`, `c d`,
-                // `y Y`, `p` were here too and are gone — they are the keys
-                // this reader already has in the text, and `t` lists the
-                // ones that are not.
+                // and `空格 I` puts the row in the sidebar. Not `hjkl`, `c d`,
+                // `y Y`, `p` — they are the keys this reader already has in
+                // the text, and `t` lists the ones that are not.
                 //
-                // Warning: **按格移動不在這一行上了**（2026-09-30 定，原話「因为
-                // T 按格移动被折叠到 _t 中了，所以这个提示也就不需要了」）。它
-                // 從前寫在這裏是因為 `T` 是頂層的鍵；`空格 t T` 收了它之後，這
-                // 一行再寫一遍就是把三格裏最貴的一格花在單子上已經有的東西上。
-                // **分層那一鍵寫在這一行上**（2026-10-21 作者報的:「In cell
-                // mode, no information in command line about using enter to
-                // go intra-cell layer.」）。一個鍵改掉 `hjkl` 的意思而没有一
+                // Warning: **按格移動不在這一行上**：它在 `空格 t T` 底下，這一行再寫
+                // 一遍就是把三格裏最貴的一格花在單子上已經有的東西上。
+                // **分層那一鍵寫在這一行上**：格子裏 `Enter` 進格內那一層。一個鍵改掉 `hjkl` 的意思而没有一
                 // 處說出它，是這個編輯器對自己定的規矩的反面——而它正好是這
                 // 一行存在的理由。
                 //
@@ -378,10 +352,10 @@ impl Editor {
                     false => say!("label.table"),
                 };
                 Hint::Keys(where_at, [crossing, vec![
-                    // 2026-09-21 表格組搬到了 `空格 t`；這一行 2026-09-23 纔跟上。
+                    // 表格組在 `空格 t`。
                     ("\u{2423}t".into(), say!("hint.table.menu")),
                     ("Tab".into(), say!("hint.table.next-cell")),
-                    // **這一行的記錄去邊欄**（2026-09-30 提的）。浮窗那一個是
+                    // **這一行的記錄去邊欄**。浮窗那一個是
                     // 小寫的 `空格 i`，與別的四種信息同一條規矩——大寫進邊欄。
                     ("\u{2423}I".into(), say!("hint.table.into-the-sidebar")),
                 ]]
@@ -392,23 +366,23 @@ impl Editor {
     }
 
     /// **The panel is still open and the keys are in the text** — say how to
-    /// get back (2026-09-27).
+    /// get back.
     ///
     /// `Enter` on a result hands the keys to the page and leaves the list
     /// standing there, which is the point: you read the sentence around the
-    /// hit in its own context. But the row below went **blank** at that
-    /// moment, so a list of eleven hits was on screen with nothing saying how
-    /// to walk them or how to get back into it — and the manual's own rule is
-    /// that the half holding the keys owes the reader the way out.
+    /// hit in its own context. The row below must not go **blank** at that
+    /// moment, with a list of eleven hits on screen and nothing saying how to
+    /// walk them or how to get back into it — the half holding the keys owes
+    /// the reader the way out.
     ///
     /// Last of all the branches, so it only ever fills a row that would
     /// otherwise be empty: a pending key, a footnote, a table cell all have
     /// more to say from where the cursor is actually standing.
     fn the_way_back_to_the_list(&self) -> Hint {
-        // **浮着一則信息的時候，這一行說怎麽把它送進邊欄**（2026-09-30 定）。
+        // **浮着一則信息的時候，這一行說怎麽把它送進邊欄**。
         //
-        // 原話：「`␣K 進邊欄` 似乎反而不是很重要的信息，可以在命令行是空的时候
-        // 放到命令行中。」——浮窗的底邊那一頭改寫「怎麽翻頁」，那件事更常用；
+        // 那不是要緊的信息，所以寫在命令行空着的時候——浮窗的底邊那一頭寫「怎麽翻頁」，
+        // 那件事更常用；
         // 「送進邊欄」一天用不了一次，擺在一行本來就空着的地方正好。
         if self.mode == Mode::Normal && self.info_afloat().is_some() {
             return Hint::Says(say!("info.into-the-sidebar", self.the_key_into_the_info_panel()));
@@ -438,22 +412,19 @@ impl Editor {
     /// does not remember what follows it currently has nowhere to look but the
     /// manual, and the editor is sitting there knowing the answer.
     pub(super) fn pending_keys(&self) -> Option<Hint> {
-        // **`go`/`gu` 還在等字母，命令行說一句**（2026-10-04 定）。
+        // **`go`/`gu` 還在等字母，命令行說一句**。
         //
         // Warning: **按下 `o`/`u` 的那一刻 `pending` 就回到了 `None`**，於是 HUD
         // 空了、`g` 那扇菜單也收了——而這兩個鍵恰恰是**還要再打幾個字母才算完**
-        // 的。屏幕上一個字都不說話，人以為自己回到了 Normal，照 Normal 的習慣按
-        // 鍵。原話：「我以为我现在在 normal 模式，但其实 yumete 是在等我打拼
-        // 音。這其實有些危險的。」`gw` 没有這一族：它一按下去標籤就滿屏幕都是。
+        // 的。屏幕上一個字都不說話的話，人以為自己回到了 Normal，照 Normal 的習慣按
+        // 鍵，而編輯器其實在等他打拼音。`gw` 没有這一族：它一按下去標籤就滿屏幕都是。
         //
-        // Warning: **說的是一句話，不是再畫一遍 `g` 那扇菜單。** 做過那一版，當場
-        // 被否：菜單上那些鍵這時候一個都按不了，而且 `gu` 的候選框一開，兩扇浮窗
+        // Warning: **說的是一句話，不是再畫一遍 `g` 那扇菜單**：菜單上那些鍵這時候一個都按不了，而且 `gu` 的候選框一開，兩扇浮窗
         // 疊在同一屏上。這裏走 `Says`，和 vim 的 `d` 等動作同一條路。
         //
         // 標籤亮起來就閉嘴：那時屏幕上全是標籤，自己會說話。
         if let Some(seeking) = self.seeking.as_ref().filter(|s| s.labels.is_empty()) {
-            // 打進去的那幾個也跟在後面（2026-10-04 定：「請輸入拼音：don 這個
-            // 可以有」）。HUD 旁邊那塊牌子寫的是整串 `gudon`，這裏寫的是查詢本身。
+            // 打進去的那幾個也跟在後面（「請輸入拼音：don」）。HUD 旁邊那塊牌子寫的是整串 `gudon`，這裏寫的是查詢本身。
             let so_far = match seeking.typed.is_empty() {
                 true => String::new(),
                 false => format!("：{}", seeking.typed),
@@ -480,16 +451,12 @@ impl Editor {
             Pending::SwapRange => return None,
             Pending::None => {
                 // A count on its own is a sequence too — `10` is waiting for
-                // the key it applies to, so it gets a panel like `空格` and `g`
-                // (2026-10-14, asked for as 「can there be a shortcut hint panel
-                // for this too」).
+                // the key it applies to, so it gets a panel like `空格` and `g`.
                 //
-                // Warning: **It reads `count`, not `operator_count`.** This arm used to
-                // ask `operator_count`, which is only filled while a vim
-                // operator is waiting — so a bare count matched nothing and the
-                // line it would have said was dead code from the day it was
-                // written. Typing `10` put a `10` in the HUD and said nothing
-                // else.
+                // Warning: **It reads `count`, not `operator_count`.**
+                // `operator_count` is only filled while a vim operator is
+                // waiting — asked here, a bare count would match nothing, and
+                // typing `10` would put a `10` in the HUD and say nothing else.
                 let n = self.count?;
                 let count = n.to_string();
                 let mut rows: KeyRows = Self::COUNT_KEYS
@@ -508,8 +475,8 @@ impl Editor {
             // motions and the reader knows them — what they need to be told is
             // that the editor is still holding the `d`.
             Pending::VimOperator { op, first } => {
-                // The `g` operators are spelled with their `g` (2026-10-30: the
-                // sign read 「qg」 for a half-typed `gqg`).
+                // The `g` operators are spelled with their `g`: a half-typed
+                // `gqg` reads `gqg`, not 「qg」.
                 let op = match op {
                     'q' | 'w' | 'u' | 'U' | '~' => format!("g{op}"),
                     '#' => String::from("gc"),
@@ -526,10 +493,10 @@ impl Editor {
             Pending::Confirm => {
                 (say!("hint.confirm.title"), Self::said(Self::CONFIRM_KEYS.iter().copied()))
             }
-            // **每一格裝着什麼，就畫什麼**（2026-09-29 定：「Helix這個好」）。
+            // **每一格裝着什麼，就畫什麼**，同 helix。
             //
-            // 從前這張表寫的是說明——「a–z 哪一個」——而那句話回答不了任何人的問
-            // 題：a 是哪一個？哪一個什麼？helix 的答案是不解釋，直接把格子裏存着的
+            // 說明——「a–z 哪一個」——回答不了任何人的問題：a 是哪一個？哪一個
+            // 什麼？helix 的答案是不解釋，直接把格子裏存着的
             // 那段字印在右邊（`helix-view/src/info.rs:60`，寬 30），於是「a 是一個
             // 存東西的格子」不必說，看一眼就知道了。**空的格子不列**，所以一個都
             // 没存過的時候這張表上只有 `#` 一行。
@@ -548,9 +515,9 @@ impl Editor {
                 rows.push(("#".into(), say!("hint.register.hash")));
                 (say!("hint.register.title"), rows)
             }
-            // **Each step lists what it takes** (2026-10-27, helix's `m` group).
-            // A line saying 「type a bracket」 told the reader there was a
-            // choice and not what it was; helix lists the pairs and the
+            // **Each step lists what it takes** (helix's `m` group). A line
+            // saying 「type a bracket」 tells the reader there is a choice and
+            // not what it is; helix lists the pairs and the
             // objects, and so does this. The object list is the same
             // everywhere, code rows included — a Markdown file has code in
             // its fences.
@@ -575,7 +542,7 @@ impl Editor {
             Pending::SurroundFrom => (say!("hint.change"), Self::pair_rows(&[("m", "hint.obj.nearest-pair")])),
             Pending::SurroundTo(_) => (say!("hint.change-to"), Self::made_rows()),
             Pending::Mark => (say!("hint.mark.set-here"), vec![("a–z".into(), say!("hint.mark.name-it"))]),
-            // **哪幾個字母記過位置，分別記在哪**（2026-09-29，同 `"` 那一張）。
+            // **哪幾個字母記過位置，分別記在哪**（同 `"` 那一張）。
             //
             // 一個標記存的是位置而不是文字，所以右邊印的是「檔名 第幾行」。這一層
             // 與 `"` 共用 a–z 這一套名字卻是兩本帳：`"a` 裝的是一段話，`' a` 記的

@@ -26,11 +26,11 @@ impl Editor {
     /// command knows how to make it again.
     /// **整份進去，整份回來**——`:format` 的 `kind = "filter"` 走這一支。
     ///
-    /// Warning: **不許借 [`Self::provide_pipe_output`]**（2026-10-03 一輪審查報來的，會
-    /// 毀稿）。那一支換的是**選區**，而格式化餵進去的是整個緩衝：Normal 模式下
-    /// 選區是光標底下那一個字，於是整份格式化好的稿子被貼在那一個字的位置上，
-    /// 原文原封不動留在後面。實測 `aaa\nbbb\nccc\n` 過一遍 `tr a-z A-Z` 出來的
-    /// 是 `AAA\nBBB\nCCCaa\nbbb\nccc\n`——整份重了一遍，還少一個字。
+    /// Warning: **不許借 [`Self::provide_pipe_output`]**（會毀稿）。那一支換的是
+    /// **選區**，而格式化餵進去的是整個緩衝：Normal 模式下選區是光標底下那一個字，
+    /// 於是整份格式化好的稿子會被貼在那一個字的位置上，原文原封不動留在後面——
+    /// `aaa\nbbb\nccc\n` 過一遍 `tr a-z A-Z` 出來的是
+    /// `AAA\nBBB\nCCCaa\nbbb\nccc\n`，整份重了一遍，還少一個字。
     ///
     /// 一個撤回點，所以 `u` 收得回；可這是**看得見纔知道**的那一種壞，而格式化
     /// 完多半没人逐行看。
@@ -56,7 +56,7 @@ impl Editor {
         self.forget_the_text();
     }
 
-    /// **只有兩個把選區餵進去**（2026-10-06，逐條照 helix 的 `shell_impl`）：
+    /// **只有兩個把選區餵進去**（逐條照 helix 的 `shell_impl`）：
     /// `|` 與 `A-|` 餵，`!` 與 `A-!` 不餵——`!date` 是 vi 的 `:r !date`，「跑一條
     /// 命令，把答案放這裏」，光標在哪一段跟它没關係。
     pub(super) fn ask_the_shell(&mut self, line: String, put: crate::editor::Put) {
@@ -108,7 +108,7 @@ impl Editor {
     pub fn provide_pipe_output(&mut self, output: &str, put: crate::editor::Put) {
         use crate::editor::Put;
         let (start, end) = self.selection();
-        // **插在前面/後面的，把原文接回去**（2026-10-06）。整段仍舊走「換掉這一
+        // **插在前面/後面的，把原文接回去**。整段仍舊走「換掉這一
         // 段」那條路，所以換行規矩、表格那道閘、撤銷點全是現成的——`!` 和 `|`
         // 於是不會慢慢長出兩套邊界情形。
         let keep = self.current_buffer().rope().slice(start..end).to_string();
@@ -140,8 +140,8 @@ impl Editor {
             false => output.strip_suffix('\n').unwrap_or(output),
         };
         // A filter over whole rows is the *advertised* use — the manual's own
-        // example is `LC_ALL=C sort` over a table — and the grid used to refuse
-        // it, after spawning the command and reading its output. What matters
+        // example is `LC_ALL=C sort` over a table — so the grid does not refuse
+        // it after spawning the command and reading its output. What matters
         // is not that no delimiter moved, it is that **every row that comes
         // back has a row's shape**; `sort -u` dropping a duplicate row is a
         // table operation, not damage.

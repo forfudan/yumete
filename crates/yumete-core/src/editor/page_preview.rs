@@ -1,4 +1,4 @@
-//! **The preview tab** (2026-11-08): the typeset page of a Typst file, or a
+//! **The preview tab**: the typeset page of a Typst file, or a
 //! Markdown file rendered, as VS Code, Zed and Emacs show a preview, in a
 //! tab of its own.
 //!
@@ -75,12 +75,12 @@ pub enum PageStep {
     Top,
     Bottom,
     /// Whole pages, on when positive: `J` and `K`, as Zathura and Emacs's
-    /// evil-collection turn them (2026-11-07).
+    /// evil-collection turn them.
     Pages(i32),
     /// The page of that number, from 1: `5G`, `5gg`.
     Goto(usize),
     /// Columns sideways, leftwards when positive: `h` and `l`, which move
-    /// along a vertical page the way it reads (2026-11-08).
+    /// along a vertical page the way it reads.
     Across(i32),
 }
 
@@ -291,7 +291,7 @@ impl Editor {
         })
     }
 
-    /// **The open Typst file that pulls this one in** (2026-11-08), by
+    /// **The open Typst file that pulls this one in**, by
     /// `#include` or `#import`: a chapter typeset on its own lacks what its
     /// book sets up, so the book is what a chapter's new preview typesets.
     /// Only open files are read, and only one step up; `None` when no open
@@ -310,8 +310,7 @@ impl Editor {
         })
     }
 
-    /// **The Typst file the preview of this document typesets**
-    /// (2026-11-08), for `:export-as-preview`: the main file of the preview
+    /// **The Typst file the preview of this document typesets**, for `:export-as-preview`: the main file of the preview
     /// tab that typesets this file or the book it is a chapter of; else the
     /// open file that includes this one, as a new preview would take it;
     /// else this file. `None` for a buffer never saved.
@@ -325,8 +324,8 @@ impl Editor {
         self.includer_of_here().or_else(|| self.current_buffer().path().map(|p| self.real(p)))
     }
 
-    /// **The open files of the book `main` typesets with unsaved changes**
-    /// (2026-11-08): the `typst` compiler reads the files on disk, where the
+    /// **The open files of the book `main` typesets with unsaved changes**:
+    /// the `typst` compiler reads the files on disk, where the
     /// preview reads the buffers.
     pub(super) fn unsaved_in_the_book(&self, main: &Path) -> usize {
         self.buffers
@@ -378,7 +377,7 @@ impl Editor {
                 return None;
             }
         }
-        // **To the right on a 縱書 page too** (2026-11-08): a preview is a
+        // **To the right on a 縱書 page too**: a preview is a
         // window beside the text, not a column of it.
         let fresh = self.windows.split_on(from, crate::window::Split::Beside, false, false)?;
         let caption = self.buffer_with(preview).map(|i| self.buffers[i].display_name()).unwrap_or_default();
@@ -578,7 +577,7 @@ impl Editor {
         self.preview_fonts = fonts.trim().to_string();
     }
 
-    /// **Whether the Markdown preview is set vertically now** (2026-11-08):
+    /// **Whether the Markdown preview is set vertically now**:
     /// `:preview-vertical` is on and the page the writer chose is
     /// vertical. Only the direction is read from the editing window; how the
     /// page is set is the export's.
@@ -591,7 +590,7 @@ impl Editor {
     /// and the jump list, and nothing else does anything — there is no text
     /// here to move in or edit. `true` when the key was taken here.
     ///
-    /// The keys are a PDF reader's under vim (2026-11-07, as Zathura and
+    /// The keys are a PDF reader's under vim (as Zathura and
     /// evil-collection have them): `gg` and `G` the top and bottom, `J` and
     /// `K` a whole page, and a count before `G` or `gg` the page of that
     /// number. `gn`, `gp`, `ga`, `gt` and `gT` go to another tab; under vim,
@@ -601,7 +600,7 @@ impl Editor {
         if std::mem::take(&mut self.page_g) {
             match key {
                 Key::Char('g') => self.page_steps.push(count.map_or(PageStep::Top, PageStep::Goto)),
-                // **The tabs from a preview** (2026-11-08): helix's `gn`,
+                // **The tabs from a preview**: helix's `gn`,
                 // `gp` and `ga`, and vim's `gt` and `gT`, whatever the keymap
                 // — a preview is a tab, and this is how a tab is left.
                 Key::Char('n' | 't') => self.next_buffer(),
@@ -616,7 +615,7 @@ impl Editor {
             // Any other key after a `g` is its own key, without the count.
             count = None;
         }
-        // **vim's way out** (2026-11-08): `ZZ` is `:x` and `ZQ` is `:q!`,
+        // **vim's way out**: `ZZ` is `:x` and `ZQ` is `:q!`,
         // which in a preview close its window, or leave from the last one.
         if std::mem::take(&mut self.page_z) {
             match key {

@@ -29,7 +29,7 @@ impl Editor {
     /// Go back to the place a letter names (`' a`).
     pub(super) fn go_to_mark(&mut self, name: char) {
         // `''` and ``` `` ```: where the last jump came from, and pressed
-        // again, back (vim's, 2026-11-02).
+        // again, back (vim's).
         if matches!(name, '\'' | '`') {
             let Some((index, pos)) =
                 self.jump_at.checked_sub(1).and_then(|at| self.jumps.get(at)).and_then(|jump| self.jump_place(jump))
@@ -128,8 +128,7 @@ impl Editor {
 
     /// **記一筆，可是別把版面挪動** —— 落腳點本來就在屏幕上的那幾種跳法。
     ///
-    /// Warning: **「記進跳轉表」和「落在正中」是兩件事**（2026-10-04 報的：「`gw`
-    /// 跳转光标后，这一行会被移动到屏幕的中央位置……我总觉得怪怪的」）。
+    /// Warning: **「記進跳轉表」和「落在正中」是兩件事**。
     ///
     /// 居中那一條是給**跳到看不見的地方**的：`n`、`gd`、`:search` 的結果、wiki 條目
     /// ——你落在一個没見過的地方，貼着邊就只看得見命中的一側。
@@ -139,13 +138,13 @@ impl Editor {
     /// 已經鎖定了要去的地方）。
     ///
     /// helix 也不挪：`jump_to_label` 跳完只有一句 `doc.set_selection(...)`，没有
-    /// `align_view`（`helix-term/src/commands.rs`，2026-10-04 讀的）。
+    /// `align_view`（`helix-term/src/commands.rs`）。
     ///
     /// `C-o` 照樣回得來——那一半兩種跳法都要。
     pub(super) fn note_where_we_came_from(&mut self) {
         // The place a buffer switch just opened at is where the switch put
         // the cursor, not a place anyone jumped from. A preview has no place
-        // but itself, and `C-o` comes back to it (2026-11-08).
+        // but itself, and `C-o` comes back to it.
         if self.just_switched && !self.buffers[self.current].is_preview() {
             return;
         }
@@ -241,7 +240,7 @@ impl Editor {
         self.refresh_goal_column();
     }
 
-    /// **走改動表**（vim 的 `g;` 往舊、`g,` 往新，2026-10-06）。
+    /// **走改動表**（vim 的 `g;` 往舊、`g,` 往新）。
     ///
     /// 和 `g.` 是兩件事：那一個回**最後**改的地方，這一對是在改過的地方之間走。
     /// 一行只記一條（見 `Buffer::note_change`），所以打完一段話按 `g;` 是挪一段，
@@ -375,13 +374,13 @@ impl Editor {
     /// selecting the jumped-over range (unless already extending).
     /// The same, asked for the **nth** one, and told whether this is a repeat.
     ///
-    /// Warning: **數目是「第 n 個」，重複要往前挪一個**（2026-10-02 拿 nvim 量出來
-    /// 的）。從前兩件事都是靠**把這一支叫 n 遍**做的，而那對 `f`/`t` 兩樣都不對：
+    /// Warning: **數目是「第 n 個」，重複要往前挪一個**（拿 nvim 量過）。兩件事都不許
+    /// 靠**把這一支叫 n 遍**做，那對 `f`/`t` 兩樣都不對：
     ///
     /// - 每一趟都從上一個落點重新下錨，於是 `2f,` 選的是「第一個逗號到第二個」，
     ///   而 vim 和 helix 選的都是「光標到第二個」。
     /// - `t` 落在目標前一格，再叫一遍又配上同一個目標、頭拉回原處——`;` 於是永遠
-    ///   不前進，而 `tdtd` 的第二下把第一下選中的**收成了一點**。
+    ///   不前進，而 `tdtd` 的第二下把第一下選中的**收成一點**。
     ///
     /// nvim 量的（`a,b,c,d,e`，逗號在 2、4、6、8 欄）：`2t,`→3、`3t,`→5、
     /// `t,;`→3、`t,;;`→5、`9f,`→1（整個不動）。
@@ -407,8 +406,8 @@ impl Editor {
     pub(super) fn find_nth_char(&mut self, kind: FindKind, target: char, nth: usize, again: bool) {
         // 重複的時候，先從「已經貼着的那一個」上讓開一格。
         //
-        // **Under helix every `t`/`T` steps off first** (2026-10-27, measured:
-        // `t,` on `a,b,c` from `a` selects `a,b` there, and stayed put here).
+        // **Under helix every `t`/`T` steps off first** (measured: `t,` on
+        // `a,b,c` from `a` selects `a,b` there).
         // Helix's `find_char` starts an exclusive search one past the next
         // character, 「to enable repeated application」. vim's `t` stops
         // where it is, and only its `;` steps off.
@@ -438,7 +437,7 @@ impl Editor {
             nth,
         );
         self.sel.set_head(was);
-        // **全窗裏這一行是這一格**（2026-10-17 作者定）。`f`/`t` 是按詞走的那
+        // **全窗裏這一行是這一格**。`f`/`t` 是按詞走的那
         // 一族，所以它們看不見格子外面——找不到就說找不到，而不是把光標挪到格
         // 子邊上（`select_span` 那條夾在這裏是錯的：讀者按的是「跳到那個字」，
         // 沒有那個字就該一動不動）。
@@ -450,8 +449,8 @@ impl Editor {
         };
         if span == crate::motion::Span::Missed || outside {
             // **The sentence names the stretch that was searched.** 全窗裏
-            // 「這一行」是「這一格」（2026-10-17 作者定）; under helix the search
-            // runs on over line breaks (2026-10-23), so outside a cell it is
+            // 「這一行」是「這一格」; under helix the search
+            // runs on over line breaks, so outside a cell it is
             // everything ahead or behind; under vim it is still the line — and
             // inside a cell that a line break splits, vim's bound is that line,
             // not the cell, so 「這一格裏没有」 would be untrue there.
@@ -481,10 +480,10 @@ impl Editor {
             }
             other => other,
         };
-        // **vim 下獨立的 `f` 是跳轉，不是選擇**（2026-10-02，補上 B3 漏掉的那一族）。
-        // `w B e { } H L` 早就走這一條了（`keys.rs` 那個「A standalone motion, read
-        // vim's way」），只有 `f F t T` 四個落在 helix 那一支上，於是 vim 手指按
-        // `f,` 之後跳過去的那一整段是選中的，再按 `~` 就把那一段全變了大寫。
+        // **vim 下獨立的 `f` 是跳轉，不是選擇**，同 `w B e { } H L`（`keys.rs` 那個
+        // 「A standalone motion, read vim's way」）。`f F t T` 要是落在 helix 那一支
+        // 上，vim 手指按 `f,` 之後跳過去的那一整段是選中的，再按 `~` 就把那一段全變
+        // 了大寫。
         match self.keymap_rules().find_moves_caret && !self.expanding_alias {
             true => self.jump_to(span),
             false => self.take_span(span),

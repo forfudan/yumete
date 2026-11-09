@@ -1,12 +1,11 @@
-//! **Auto-pairs** (2026-10-29, roadmap #51): an opening bracket or a quote
+//! **Auto-pairs** (roadmap #51): an opening bracket or a quote
 //! typed in Insert writes its closer too, as helix's `auto-pairs` does.
 //!
-//! Three levels, as the other settings have them (2026-10-29: 「off: no auto
-//! pair at all. basic: match helix's lists of symbols to match. full: all the
-//! paired symbols just like in `m` group」). `basic` is the factory setting
-//! under both keymaps: 「this is not about keymap but more a feature」. `full`
-//! is a choice, not the default: 「writing novels with paired 「」 will make
-//! the writing tedious」.
+//! Three levels, as the other settings have them: `off`, no auto-pairs at
+//! all; `basic`, helix's list of symbols; `full`, every paired symbol the `m`
+//! group knows. `basic` is the factory setting under both keymaps, since this
+//! is a feature, not a matter of keymap. `full` is a choice, not the default:
+//! writing a novel with 「」 paired as it is typed is tedious.
 //!
 //! The rules are helix's, measured on 25.07.1:
 //!
@@ -36,7 +35,7 @@ pub enum AutoPairs {
     Basic,
     /// Every pair the `m` group knows, but the vertical presentation forms,
     /// which nobody types, and `< >`: in code `a < b` would come out
-    /// `a <> b` (2026-10-29, the reason helix's list leaves it out too).
+    /// `a <> b` (the reason helix's list leaves it out too).
     Full,
 }
 

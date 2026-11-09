@@ -1,5 +1,5 @@
 //! **A prompt's, a picker's and a sidebar's keys, each a named command**
-//! (2026-11-01, step 9 of the keymap plan). helix hard-codes these keys and
+//! (step 9 of the keymap plan). helix hard-codes these keys and
 //! nobody can rebind them; here each place has a default table, and the
 //! reader's own (`[keys.prompt]`, `[keys.picker]`, `[keys.sidebar]`) is read
 //! before it.
@@ -132,7 +132,7 @@ impl Editor {
     }
 
     /// **A line of the reader's own that follows them into `place`**
-    /// (`[keys] inherit`, 2026-11-01): a `[keys.normal]` line into a
+    /// (`[keys] inherit`): a `[keys.normal]` line into a
     /// sidebar, a `[keys.insert]` one into a prompt, when it is one key
     /// naming one command the place has. Read after the place's own table
     /// and before its defaults, so a Colemak reader's `n =
@@ -157,9 +157,8 @@ impl Editor {
             Place::Picker | Place::Field => return Vec::new(),
         };
         // helix's names for `j` and `k` are the visual ones; in a list a row
-        // is a row, so they mean the place's own line moves (found in review,
-        // 2026-11-02: a Colemak `n = "move_visual_line_down"` did nothing in
-        // the file tree).
+        // is a row, so they mean the place's own line moves (a Colemak
+        // `n = "move_visual_line_down"` walks the file tree).
         fn in_a_list(name: &str) -> &str {
             match name {
                 "move_visual_line_down" => "move_line_down",
@@ -275,8 +274,8 @@ impl Editor {
     }
 
     /// **The keys a hint row names for some commands of `place`, as they
-    /// are now** (2026-11-01): each key of `spec` that still runs its
-    /// command, in the order the row has always written them, then the
+    /// are now**: each key of `spec` that still runs its
+    /// command, in the order the row writes them, then the
     /// reader's own keys for those commands. `None` when no key is left,
     /// and the row is not drawn: a key that is not bound is not named.
     pub(super) fn place_hint(&self, place: Place, spec: &[(Key, PlaceCmd)]) -> Option<String> {
@@ -287,8 +286,7 @@ impl Editor {
         // A picker's and a field's keys are their own and the prompt's. The
         // spec says which of a command's default keys to show; any other key
         // that runs it is the reader's, even one that is a default key of
-        // another command (found in review, 2026-11-02: a sidebar's `j` bound
-        // to go up was left off the hint).
+        // another command (a sidebar's `j` bound to go up is on the hint).
         let chain = place.chain();
         let default = |key: &Key, name: PlaceCmd| {
             chain.iter().any(|&p| place_keys(p).iter().any(|(d, n)| d == key && *n == name))

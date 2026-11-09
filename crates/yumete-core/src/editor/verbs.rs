@@ -26,23 +26,22 @@ impl Editor {
         if self.refuse_readonly() {
             return;
         }
-        // **A record over several lines was read-only until 2026-10-21**, and
-        // the gate stood here. What it was guarding is gone: the caret and the
-        // span it edits are both the *value* now
-        // ([`Editor::value_span`]), so typing no longer lands in front of the
-        // opening `"` — which is what used to turn `alpha,"first line` into
-        // `alpha,ZZ"first line` and stop the record parsing.
+        // **A record over several lines is editable**: the caret and the span
+        // it edits are both the *value* ([`Editor::value_span`]), so typing
+        // does not land in front of the opening `"` — which would turn
+        // `alpha,"first line` into `alpha,ZZ"first line` and stop the record
+        // parsing.
         // 延伸模式 is left at the door. It is a *mode* kept outside `Mode`, so
-        // every operation has had to remember to clear it and some did not —
-        // `v i X Esc` came back to Normal still extending, and the next `j`
-        // grew a selection instead of moving.
+        // every operation would have to remember to clear it — else `v i X Esc`
+        // comes back to Normal still extending, and the next `j` grows a
+        // selection instead of moving.
         self.extend = false;
         self.edit_was_insert = true;
         self.insert_recording.clear();
         self.fresh_indent = None;
-        // Warning: **没花掉的插入計數在這裏清**（2026-10-06 夜審報的）。從前它只在
-        // `Esc` 那一臂清，而回 Normal 的路不止那一條（`show_buffer` 就是一條），
-        // 於是一個没走完的 `5i` 會把那個 5 記到下一次插入上——下一次打一個字就
+        // Warning: **没花掉的插入計數在這裏清**。回 Normal 的路不止 `Esc` 那一條
+        // （`show_buffer` 就是一條），只在 `Esc` 那一臂清的話，一個没走完的 `5i`
+        // 會把那個 5 記到下一次插入上——下一次打一個字就
         // 變成五個。進門清，比每一條出門的路都清一遍可靠。
         self.insert_again = 0;
         self.insert_opened = None;
@@ -57,13 +56,13 @@ impl Editor {
         self.mode = Mode::Insert;
     }
 
-    /// **出插入態的時候光標往回退一格**（2026-10-09，兩個神諭量出來的）。
+    /// **出插入態的時候光標往回退一格**（兩個神諭量出來的）。
     ///
     /// 這一條不是「對齊哪一邊」的取捨：`a` 打完按 `Esc`，**vim 與 helix 的答案是同
-    /// 一個**——回到剛纔站的那個字上。從前這裏一步都不退，於是行末 `a` `Esc` 之後
-    /// 光標停在最後一個字**之外**，狀態欄報的 `字` 比那一行的字數還大一個，再按 `l`
-    /// 直接跳到下一行，`d` 吃掉的是換行符。行中也一樣偏右一格（插點在 `c` 上
-    /// `a` `Esc`，兩家都回 `c`，這裏停在 `d`）。
+    /// 一個**——回到剛纔站的那個字上。一步都不退的話，行末 `a` `Esc` 之後光標停在
+    /// 最後一個字**之外**，狀態欄報的 `字` 比那一行的字數還大一個，再按 `l` 直接跳
+    /// 到下一行，`d` 吃掉的是換行符。行中也一樣偏右一格（插點在 `c` 上 `a` `Esc`，
+    /// 兩家都回 `c`）。
     ///
     /// 兩套鍵位的規矩不同，都是量出來的：
     ///
@@ -94,9 +93,8 @@ impl Editor {
         if !back {
             return;
         }
-        // **Every selection steps back, not the primary alone** (2026-10-27,
-        // measured against helix 25.07.1: `C` `a` `X` `Esc` left every other
-        // selection one character too long, `aXb` where helix has `aX`).
+        // **Every selection steps back, not the primary alone** (measured
+        // against helix 25.07.1: `C` `a` `X` `Esc` gives every selection `aX`).
         // Helix's `enter_normal_mode` transforms the whole selection. A grid
         // never holds several selections (`can_be_plural`), so the cell's
         // wall below concerns the single one only.
@@ -117,7 +115,7 @@ impl Editor {
             None => stepped,
         };
         // **留住錨點的那一趟，出門只動頭**：剛打的那一段連同原來那個字就是新的
-        // 選區（2026-10-10，照 helix 的 `restore_cursor`）。退到錨點前面就塌回一
+        // 選區（照 helix 的 `restore_cursor`）。退到錨點前面就塌回一
         // 點——刪回頭了，選區没有東西可圈。
         match keeping && stepped >= self.sel.anchor() {
             true => self.sel.set_head(stepped),
@@ -125,7 +123,7 @@ impl Editor {
         }
     }
 
-    /// **An insert key, with `i`'s selection carried along** (2026-10-27).
+    /// **An insert key, with `i`'s selection carried along**.
     ///
     /// Typing shifts it in [`Self::insert_str`]; this answers the rest. A
     /// deletion before it shifts it back by what went, but not behind the
@@ -171,11 +169,10 @@ impl Editor {
         let mut group: Option<bool> = None;
         for _ in 0..n {
             let (before, anchor) = (self.sel.head(), self.sel.anchor());
-            // Warning: **The buffer's revision, not its length** (2026-10-30).
-            // `4J` with the cursor on the line break joined once and stopped:
-            // a join swaps one `\n` for one space and leaves the cursor on
-            // the seam, so by length and position it looked like nothing had
-            // happened. The revision moves on every edit, however it nets out.
+            // Warning: **The buffer's revision, not its length**. A join swaps
+            // one `\n` for one space and leaves the cursor on the seam, so by
+            // length and position it looks like nothing happened, and `4J` with
+            // the cursor on the line break would join once and stop. The revision moves on every edit, however it nets out.
             let revision = self.current_buffer().revision();
             action(self);
             if self.sel.head() == before
@@ -216,11 +213,11 @@ impl Editor {
 
     /// Select the whole buffer (Helix `%`).
     ///
-    /// Warning: **收成一段，不是把主選區撐大**（2026-09-28 修，真機上崩出來的）。
+    /// Warning: **收成一段，不是把主選區撐大**。
     ///
-    /// `set_anchor`/`set_head` 問的永遠是主選區，所以從前 `CC` 之後按 `%`，手上是**三
-    /// 段**：一段蓋住全檔，兩段是舊的、躲在它裏面。接着按 `d`，`edit_each` 逐段做——第
-    /// 一段把整檔刪光，輪到第二段的時候它指着已經不存在的地方，`apply` 裏的
+    /// `set_anchor`/`set_head` 問的永遠是主選區，所以撐大的話 `CC` 之後按 `%`，手上是
+    /// **三段**：一段蓋住全檔，兩段是舊的、躲在它裏面。接着按 `d`，`edit_each` 逐段
+    /// 做——第一段把整檔刪光，輪到第二段的時候它指着已經不存在的地方，`apply` 裏的
     /// `next_grapheme` 當場 panic。
     ///
     /// 而且就算不崩，「全選」之後還剩三段也說不通：`%` 這個字的意思就是「這一份，一
@@ -275,12 +272,11 @@ impl Editor {
             if start != from {
                 start = rope.line_to_char((first + 1).min(rope.len_lines()));
             }
-            // Warning: **`to + 1`，不是 `to`**（2026-10-06 夜審報的）。照抄 helix 的
-            // `if end != range.to()` 抄漏了一件事：它的 `range.to()` 是**半開**的
-            // 上界，這個倉的 `span().1` 是最後那個字符**自己**。差一格，於是這個
-            // 條件恆真——「末尾已經落在行界上」那條路一次都走不到，每一次都退掉
-            // 最後一行。實測 `xx` 選整整兩行之後 `A-x` 只剩第一行，而 helix 一個
-            // 字都不動。
+            // Warning: **`to + 1`，不是 `to`**。helix 的 `if end != range.to()` 裏
+            // `range.to()` 是**半開**的上界，這個倉的 `span().1` 是最後那個字符
+            // **自己**。差一格的話這個條件恆真——「末尾已經落在行界上」那條路一次都
+            // 走不到，每一次都退掉最後一行：`xx` 選整整兩行之後 `A-x` 只剩第一行，
+            // 而 helix 一個字都不動。
             if end != to + 1 {
                 end = rope.line_to_char(last);
             }
@@ -304,7 +300,7 @@ impl Editor {
     /// typed. Between Latin words the space is kept.
     ///
     /// **vim's `gJ`: join, adding no space and removing no whitespace**
-    /// (2026-10-06, `:h gJ`).
+    /// (`:h gJ`).
     ///
     /// [`Self::join_lines`] works the seam out: a space between Latin words,
     /// none between two 漢字, and the next line's indent swallowed. The whole
@@ -323,7 +319,7 @@ impl Editor {
         }
         let seam = motion::line_end(rope, start);
         // **The whole break, not one character of it** — a CRLF pair is one
-        // break, and `seam + 1` used to leave its `\n` behind.
+        // break, and `seam + 1` would leave its `\n` behind.
         let past = motion::past_the_break(rope, start);
         self.snapshot();
         let _ = self.current_buffer_mut().replace(seam..past, "");
@@ -355,13 +351,12 @@ impl Editor {
         while next < len && blank(rope.char(next)) {
             next += 1;
         }
-        // **…and the blanks in front of it** (#326, 2026-10-01). The seam used
-        // to begin at `line_end`, so `"  \n漢字"` kept its two spaces and then
-        // took a third from the `_` arm below: 「行尾的空白留着，又加了一個空
-        // 格」. A line's trailing blanks are not text a reader typed on purpose
-        // — they are what a break was standing in for — and they are the
-        // reason the wide/wide rule kept missing: the character before the
-        // seam was a space, not the 漢字 the eye sees there.
+        // **…and the blanks in front of it** (#326). A seam beginning at
+        // `line_end` would keep the two spaces of `"  \n漢字"` and take a
+        // third from the `_` arm below. A line's trailing blanks are not text
+        // a reader typed on purpose — they are what a break was standing in
+        // for — and left there they defeat the wide/wide rule: the character
+        // before the seam is a space, not the 漢字 the eye sees there.
         let head = motion::line_start(rope, start);
         let mut end = motion::line_end(rope, start);
         while end > head && blank(rope.char(end - 1)) {
@@ -373,11 +368,10 @@ impl Editor {
         let glue = match (before, after) {
             // 一頭是空的——行首或檔尾——就没有接縫可言。
             (None, _) | (_, None) => "",
-            // Warning: **下一行是空行，也没有接縫**（2026-10-03，拿 nvim 比出來的）。
-            // 空行在這裏露面的樣子是一個換行符，而它既不是全角也不是空白，於是
-            // 從前掉進底下那個 `_`：`first\n\nsecond` 併出來是 `first \n` ——
-            // **行尾多一個誰也没打過的空格**，而 nvim 併出來的是乾淨的 `first`。
-            // #326 修過「行尾本來就有的空白」，漏的是「空白從下一行來」這一種。
+            // Warning: **下一行是空行，也没有接縫**（拿 nvim 比過）。空行在這裏露面
+            // 的樣子是一個換行符，而它既不是全角也不是空白，掉進底下那個 `_` 的話
+            // `first\n\nsecond` 併出來是 `first \n` ——**行尾多一個誰也没打過的
+            // 空格**，而 nvim 併出來的是乾淨的 `first`。
             (_, Some('\n' | '\r')) => "",
             // 兩邊都是全角：中文行末本來就不帶空格，補一個就是插進了没人打過
             // 的字。
@@ -391,7 +385,7 @@ impl Editor {
         if !self.applied(done) {
             return;
         }
-        // **`A-J` 選中補出來的那一格**（2026-10-06，helix 的 `join_selections_space`）。
+        // **`A-J` 選中補出來的那一格**（helix 的 `join_selections_space`）。
         // 接縫是算出來的，所以人看不見補了没有——選中它就看得見了，而且要改成
         // 別的（換行、全角空格）當場就打得掉。接縫是空的就退回原來那樣，收成一點。
         match self.select_the_seam && !glue.is_empty() {
@@ -466,12 +460,12 @@ impl Editor {
     }
 
     /// The width `:hard-wrap` fills to: this buffer's own (a modeline's
-    /// `tw`, 2026-11-04), else the config's.
+    /// `tw`), else the config's.
     pub fn hard_wrap(&self) -> usize {
         self.current_buffer().local().text_width.unwrap_or(self.hard_wrap)
     }
 
-    /// **`:hard-wrap [N]`** (2026-10-30): the selected lines, or the unit
+    /// **`:hard-wrap [N]`**: the selected lines, or the unit
     /// under the cursor, re-filled under the syntax's rules
     /// ([`crate::hardwrap`]); `0` joins each unit into one line. With no
     /// width and none set, it says so and changes nothing.
@@ -559,7 +553,7 @@ impl Editor {
         self.sel.set_head(motion::prev_grapheme(self.current_buffer().rope(), end).max(start));
     }
 
-    /// **mini.splitjoin's `gS`** (2026-11-07): the innermost `()` `[]` `{}`
+    /// **mini.splitjoin's `gS`**: the innermost `()` `[]` `{}`
     /// around the cursor, one item per line if it is on one line, back onto
     /// one line if it is not.
     ///
@@ -621,7 +615,7 @@ impl Editor {
         self.sel.set_head(open);
     }
 
-    /// **mini.align, as a command** (2026-11-07, `:align =`): the selected
+    /// **mini.align, as a command** (`:align =`): the selected
     /// lines lined up on the first `sign` in each, the parts before it
     /// padded to one display width, one space on either side of it.
     ///
@@ -709,8 +703,8 @@ impl Editor {
         }
         // **A case change may be more than one character** (#325). `ﬁ`
         // upper-cases to `FI`, `ß` to `SS`, and taking only the first of them
-        // — which is what a `char -> char` signature forces — deleted the
-        // rest, silently: `ﬁ` came back `F` and `ß` came back `S`. Ligatures
+        // — which is what a `char -> char` signature forces — would delete the
+        // rest, silently: `ﬁ` would come back `F` and `ß` `S`. Ligatures
         // pasted out of a PDF and German `ß` are ordinary in an English
         // manuscript.
         let text: String = self
@@ -740,7 +734,7 @@ impl Editor {
     /// The selection keeps its length — this writes over the text rather than
     /// replacing it with one character — so `r` on a selected word turns the
     /// whole word into that character, one for one.
-    /// **`r` and the key after it** (2026-10-30). Under the vim keymap a count
+    /// **`r` and the key after it**. Under the vim keymap a count
     /// writes over that many characters of the line, failing (changing
     /// nothing) when the line has fewer, and `r<Enter>` turns them into one
     /// line break (`:h r`, measured against nvim). Otherwise it is helix's
@@ -817,22 +811,23 @@ impl Editor {
         }
         // Over the *characters*, not over the range: a line ending is not a
         // character you meant to write over. `x` selects a line including its
-        // newline, so `x r Z` used to run the line into the next one — a lost
-        // paragraph, silently, from two keys that mean "blank this out".
-        // **One grapheme in, one out** (#324). Over `chars()` this wrote a
-        // `Z` per *code point*, so `r Z` on a ZWJ family emoji laid down five
-        // of them, and on a decomposed か (か + U+3099) two. `h` and `l` walk
+        // newline, so over the range `x r Z` would run the line into the next
+        // one — a lost paragraph, silently, from two keys that mean "blank
+        // this out".
+        // **One grapheme in, one out** (#324). Over `chars()` this would write
+        // a `Z` per *code point*, so `r Z` on a ZWJ family emoji would lay down
+        // five of them, and on a decomposed か (か + U+3099) two. `h` and `l` walk
         // by grapheme, so what a writer selected was one glyph and what they
         // got back was however many code points happened to be inside it —
         // and NFD Japanese and emoji are ordinary in a mixed manuscript.
         let slice = self.current_buffer().rope().slice(start..end).to_string();
-        // `r<Enter>` writes the file's own line ending (2026-10-30: LF in CRLF).
+        // `r<Enter>` writes the file's own line ending, not LF in CRLF.
         let ending = self.current_buffer().ending().to_string();
         let text: String = yumete_cjk::graphemes(&slice)
             .map(|had| match had.starts_with(['\n', '\r']) {
                 // A line ending is not a character anybody meant to write
                 // over: `x` selects a line including its newline, and `x r Z`
-                // used to run the line into the next one.
+                // must not run the line into the next one.
                 true => had.to_string(),
                 false if c == '\n' => ending.clone(),
                 false => c.to_string(),
@@ -845,10 +840,10 @@ impl Editor {
         // The selection is what it was: `r` writes over the text without moving
         // through it, so `r` then `l` steps one character, not two.
         //
-        // **Measured on the new text** (2026-10-30): a family emoji is seven
-        // chars and becomes one, so the old end lies past it — near the end of
-        // the file that panicked, elsewhere it selected text that was not
-        // written, and the next `d` took it.
+        // **Measured on the new text**: a family emoji is seven chars and
+        // becomes one, so the old end lies past it — near the end of the file
+        // that would panic, elsewhere it would select text that was not
+        // written, and the next `d` would take it.
         let end = start + text.chars().count();
         let head = motion::prev_grapheme(self.current_buffer().rope(), end).max(start);
         self.sel.set_anchor(start);
@@ -936,14 +931,13 @@ impl Editor {
         if !self.overwrite(start, end.max(start), &text) {
             return;
         }
-        // **頭是新文本的最後一個字素，不是它後面那一格**（2026-10-10 報的）。
+        // **頭是新文本的最後一個字素，不是它後面那一格**。
         // 這一頭的約定是光標**在選區裏**，而 `selection()` 交出來的末端是光標再
         // 往前一個字素（`modes.rs` 的 `next_grapheme`）——所以把頭放在排他的末端
         // 上，選區就寬了一格：`R` 之後按 `d`，連下一個字一起刪掉，而在行尾那一格
         // 是換行符，於是兩行被悄悄接成一行。
         //
-        // 隔壁兩支 `r` 一直是對的（`replace_str`、`replace_chars`），這一支漏了
-        // 退那一步。helix 的 `replace_with_yanked` 連選區都不自己設，純靠舊區間
+        // 隔壁兩支 `r`（`replace_str`、`replace_chars`）也退這一步。helix 的 `replace_with_yanked` 連選區都不自己設，純靠舊區間
         // 過一次變更映射，落下來正好是那一段替換文本。
         let end = start + text.chars().count();
         self.sel.set_anchor(start);
@@ -953,11 +947,11 @@ impl Editor {
     /// Indent (`>`) or unindent (`<`) every line a selection touches.
     ///
     /// **Every line once, however many selections touch it, and the
-    /// selections move with their text** (2026-10-27, measured against helix
-    /// 25.07.1, whose `indent` collects the lines of the whole selection and
-    /// maps each range through the change). It used to run once per
-    /// selection, so two cursors on one line indented it twice, and the
-    /// cursor stayed where the line used to start, on the new indent.
+    /// selections move with their text** (measured against helix 25.07.1,
+    /// whose `indent` collects the lines of the whole selection and maps each
+    /// range through the change). Run once per selection, two cursors on one
+    /// line would indent it twice, and the cursor would stay where the line
+    /// used to start, on the new indent.
     pub(super) fn indent(&mut self, add: bool) {
         let rope = self.current_buffer().rope().clone();
         let mut lines: Vec<usize> = Vec::new();
@@ -980,7 +974,7 @@ impl Editor {
             let at = self.current_buffer().rope().line_to_char(line);
             // **A line with nothing on it is not indented**: vim skips an
             // empty line (`op_shift`), helix a blank one, spaces only
-            // (`indent`; review, 2026-11-04).
+            // (`indent`).
             if add {
                 let text = self.current_buffer().rope().line(line);
                 let mut chars = text.chars().filter(|c| *c != '\n' && *c != '\r');
@@ -993,10 +987,9 @@ impl Editor {
                 }
             }
             // **vim shifts by columns and writes the indent afresh**
-            // (`shift_line`, measured in nvim 2026-11-04): tabs as far as
-            // they go and spaces for the rest, unless Tab types spaces. So
-            // `ts=4 sw=6 noet` gives a TAB and two spaces where this wrote
-            // six spaces.
+            // (`shift_line`, measured in nvim): tabs as far as they go and
+            // spaces for the rest, unless Tab types spaces. So `ts=4 sw=6
+            // noet` gives a TAB and two spaces, not six spaces.
             if vim {
                 if let Some((old, new)) = self.vim_shifted_indent(line, add) {
                     let spaces = |s: &str| s.chars().all(|c| c == ' ');
@@ -1102,7 +1095,7 @@ impl Editor {
 
     /// **The number `C-a` and `C-x` change for one selection.** vim's rule
     /// reaches ahead along the line from the cursor. helix's changes only a
-    /// selection that is a number, whole (2026-10-29, measured against helix
+    /// selection that is a number, whole (measured against helix
     /// 25.07.1: the cursor on the `1` of `12` makes it `22`, a letter or
     /// `12 ` with its space changes nothing). A selection that is a date or a
     /// time is one too ([`crate::dates`]).

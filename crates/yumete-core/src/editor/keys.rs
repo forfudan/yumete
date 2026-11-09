@@ -13,7 +13,7 @@ use yumete_cjk::actions::NormalCmd;
 pub(super) const LINE_END_GOAL: usize = usize::MAX / 4;
 
 /// 一段是**整行**還是行內的一截——`do_vim_span` 那道「落在換行符上就什麼都不做」
-/// 的閘只擋後者（2026-10-13）。
+/// 的閘只擋後者。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Shape {
     /// `dd`／`yy`／`cc` 那一路：這一段就是整行，連它的行尾。
@@ -100,15 +100,14 @@ impl Editor {
         // prompt too — a macro that can only move is not much of one.
         if self.recording.is_some() && !self.expanding_alias {
             // **Every key goes in, and stopping cuts back to where the keys
-            // that stopped it began** (2026-10-31). It used to leave out a
-            // `Q` that was a command, so a recording stopped by any other key
-            // (`"C-r" = "record_macro"`, or `Space q` bound to it) ended with
-            // that key, and replaying the macro started a new recording.
+            // that stopped it began**, so a recording stopped by any key
+            // (`"C-r" = "record_macro"`, or `Space q` bound to it) does not end
+            // with that key, and replaying the macro does not start a new
+            // recording.
             // Warning: **only the `Q` that is a command stops it**: a `Q` that
             // a half-finished sequence is waiting for is an operand (`fQ` is
-            // 「find Q」), and dropping it once left a bare `f` that swallowed
-            // whatever came next on replay — one reviewer's macro deleted their
-            // buffer that way. A key that begins a sequence is where that
+            // 「find Q」), and dropping it would leave a bare `f` that swallows
+            // whatever comes next on replay — a macro that can delete a buffer. A key that begins a sequence is where that
             // sequence's keys begin, so that is the mark.
             if let Some(keys) = self.recording.as_mut() {
                 if self.mode == Mode::Normal
@@ -121,7 +120,7 @@ impl Editor {
                 keys.push(key);
             }
         }
-        // **一份已經不作數的字典答案，這裏丟掉**（2026-09-23 審出來的）。
+        // **一份已經不作數的字典答案，這裏丟掉**。
         //
         // Warning: **在派鍵之前，不是之後。** `dictionary_live()` 問的是「焦點在不在
         // 字典那一側」——`Layer` 還在的時候那等於「在不在下層」，没了之後同一側
@@ -131,35 +130,31 @@ impl Editor {
         // 蓋住百科**，而且把鍵接走。掃在派鍵之前，`C-w` 那一下焦點還没挪過去，
         // 掃得掉；掃在之後就正好掃不掉。
         self.forget_a_dictionary_nobody_is_reading();
-        // 同上，釘住的那一條詞條也是：光標一動就鬆開（2026-09-25）。
+        // 同上，釘住的那一條詞條也是：光標一動就鬆開。
         self.forget_a_pinned_entry();
-        // `空格 k` 問來的那一則說明同理：光標走開就作廢，不許走回去又冒出來
-        // （2026-09-29 報的）。
+        // `空格 k` 問來的那一則說明同理：光標走開就作廢，不許走回去又冒出來。
         self.forget_a_hover_nobody_is_looking_at();
-        // 改動那一條問的是一塊而不是一個字，所以它有自己那一句（2026-10-11）。
+        // 改動那一條問的是一塊而不是一個字，所以它有自己那一句。
         self.forget_a_change_the_cursor_has_left();
         self.unhush_the_float_once_the_cursor_has_left();
         // 跟着光標走的那一問，光標一動就重新等它停穩。
         self.the_cursor_moved_under_the_docs();
-        // **浮着的那一則，四個鍵翻得動**（2026-09-29 定，#426 起五種都收）。
+        // **浮着的那一則，四個鍵翻得動**（#426，五種都收）。
         //
-        // 原話：「既然这几个面板要么在浮窗要么在右边栏，我们就可以用
-        // page up / page down 来对这五类进行翻页了」「这样，光标就在编辑区，也
-        // 可以对五类信息进行翻页。」Warning: **翻的是那一則的行，不是換一種**
+        // 五種信息不在浮窗就在邊欄，所以 PageUp／PageDown 翻得動它們，光標留在
+        // 編輯區。Warning: **翻的是那一則的行，不是換一種**
         // ——五種共用一個容器，那就該共用一套翻頁鍵；而「光標就在編輯區」正是
         // 這四個鍵的全部價值：讀完一條長詞條不必先把光標挪進邊欄。
         //
-        // Warning: **從前只有文檔收這四個鍵**，於是散文稿子裏默認浮的百科被切在
+        // Warning: **不只文檔收這四個鍵**，不然散文稿子裏默認浮的百科被切在
         // 「…」上卻翻不動，`C-u`/`C-d` 去翻了正文——等於没有出路。
         //
         // Warning: **和 helix 逐鍵相同**（`ui/popup.rs:289-297`）：浮窗開着的時候
         // 這四個鍵歸浮窗，没開就照舊翻正文，別的鍵一按浮窗就走。所以這裏**不
         // 攔**——翻不動就讓路，正文那一支自己接住。
         if self.mode == Mode::Normal && self.pending == Pending::None {
-            // Warning: **翻頁那一族要整族在這裏**（2026-10-01 報的：「你翻页
-            // 翻的是 buffer 不是浮窗/边栏」）。從前只攔了四個，而 `C-f`/`C-b`
-            // 與當天新加的 `C-n`/`C-p` 没攔住——同一族鍵，開着浮窗按下去有的
-            // 翻浮窗有的翻正文，讀者没法預測。
+            // Warning: **翻頁那一族要整族在這裏**，`C-f`/`C-b`/`C-n`/`C-p` 都算——
+            // 同一族鍵，開着浮窗按下去有的翻浮窗有的翻正文，讀者没法預測。
             //
             // 行數跟着「翻多少」走：整頁 8、三分之二 6、半頁 4。
             let by = match key {
@@ -180,16 +175,14 @@ impl Editor {
         // The sidebar takes Normal-mode keys while it has the focus; every
         // other mode is about the text and goes to the text.
         if self.sidebar_focused() && self.mode == Mode::Normal && self.pending == Pending::None {
-            // Warning: **上一句話這裏散掉**，同 `on_normal_key` 開頭那一句（2026-09-27
-            // 報的：「邊欄：4/10 的消息一直都在。我就算在边栏中换行他也在，我根本
-            // 看不到任何快捷键提示」）。從前這一支在清之前就回去了，於是側欄裏設
-            // 的任何一句話都賴着不走——而命令行那一格被它佔着，按鍵提示就没地方
-            // 畫。話是說給上一個按鍵的，下一個按鍵一到它就該散。
+            // Warning: **上一句話這裏散掉**，同 `on_normal_key` 開頭那一句。這一支
+            // 要是在清之前就回去，側欄裏設的任何一句話都賴着不走——而命令行那一格被
+            // 它佔着，按鍵提示就没地方畫。話是說給上一個按鍵的，下一個按鍵一到它就該散。
             self.status.clear();
             self.on_sidebar_key(key);
             return KeyOutcome::Continue;
         }
-        // **A page window holds no text** (2026-11-07): its keys scroll the
+        // **A page window holds no text**: its keys scroll the
         // page, and only `:` and `C-w` go on.
         if self.page_window_has_the_keys()
             && self.mode == Mode::Normal
@@ -210,11 +203,11 @@ impl Editor {
         // 上，`j` 走一行整頁跟着挪一行——那是打字機模式，不是 `zt`。清掉之後視口停在
         // 剛纔擺好的地方，因為下一幀 `page_inset` 回的是「光標舒舒服服在頁面上，別動」。
         self.aim = None;
-        // Warning: **An expansion is not a command of its own** (2026-09-19). Every
-        // key `play_keys` replays arrives here in Normal mode with nothing
-        // pending, so it cleared the record and then wrote itself into it: `.`
-        // after the vim preset's `x` pressed `D`, which the alias layer read
-        // again as 「cut to end of line」 — `x.` took the whole line. What `.`
+        // Warning: **An expansion is not a command of its own**. Every key
+        // `play_keys` replays arrives here in Normal mode with nothing pending,
+        // so recording it would clear the record and write itself into it: `.`
+        // after the vim preset's `x` would press `D`, which the alias layer
+        // reads again as 「cut to end of line」 — `x.` would take the whole line. What `.`
         // has to remember is the key the reader pressed, and that one was
         // recorded before the expansion began.
         let watching = !self.repeating_edit && !self.expanding_alias;
@@ -250,15 +243,15 @@ impl Editor {
             }
             Mode::Normal => {
                 self.back_from_the_pair_shown();
-                // **Judged by what the key becomes** (2026-10-31, 2026-11-01).
+                // **Judged by what the key becomes**.
                 // A one-key binding to one key (`"C-q" = "@w"`) is swapped
                 // inside `on_normal_key`, after this choice, so the swap is
                 // looked ahead here: `w` moves every cursor. A key that
                 // begins or finishes any other binding goes in once, and the
                 // binding's commands each reach the cursors their own keys
-                // reach (`run_one_binding`): `"zx" = "delete_selection"` used
-                // to run at the first cursor and send a plain `x` to the
-                // rest, because `x` alone moves every cursor.
+                // reach (`run_one_binding`): `"zx" = "delete_selection"` must
+                // not run at the first cursor and send a plain `x` to the
+                // rest, just because `x` alone moves every cursor.
                 match self.binding_fan(key) {
                     Fan::Key(waiting, acting) => self.fan_out(waiting, acting, true, &|e| e.on_normal_key(key)),
                     Fan::Once => {
@@ -267,8 +260,7 @@ impl Editor {
                         self.after_a_primary_edit(before);
                     }
                 }
-                // **An undo point is where the typing begins** (2026-10-27,
-                // helix's): `A` announces it and then goes to the line's end,
+                // **An undo point is where the typing begins** (helix's): `A` announces it and then goes to the line's end,
                 // and `u` comes back to that end, with every cursor.
                 //
                 // Warning: **`i`'s range kept in Normal mode's terms.** Its anchor is
@@ -338,16 +330,15 @@ impl Editor {
                 self.last_edit_keys = keys;
             }
         }
-        // Warning: **留人要排在忘掉前面**（2026-10-08 報的：「我在 txt 文件中有個
-        // tab-separated 部分，我进入了 _tt 後， gg 會跑到文件最頂端」）。
+        // Warning: **留人要排在忘掉前面**。
         //
-        // 兩支誰先跑決定了結果：`gg` 把光標丟到表格外面之後，
+        // 兩支誰先跑決定了結果：先忘的話，`gg` 把光標丟到表格外面之後，
         // `forget_a_guessed_table` 看見「猜來的表格，而光標不在區域裏」就把視圖扔了；
         // 等 `hold_the_pane` 跑到的時候 `self.table` 已經是 `None`，它第一句就回來了。
-        // `|` 表格没這個毛病，因為它不是猜來的（`Reach::File`）——于是同一下 `gg`，
-        // markdown 裏停在表格第一行，txt 裏的制表符表格跑到文首。
+        // `|` 表格不是猜來的（`Reach::File`），看不出這個分別；txt 裏的制表符表格
+        // 會跑到文首。
         //
-        // 換個順序就對了：留住之後光標回到格子裏，忘掉那一支自己就不再成立。
+        // 先留：留住之後光標回到格子裏，忘掉那一支自己就不再成立。
         // Warning: 內嵌那一種（不佔整窗）不受影響：`hold_the_pane` 第二句就問
         // `takes_the_pane()`，不佔窗就直接回來，走出猜來的塊照舊把它忘掉。
         self.hold_the_pane(held);
@@ -359,7 +350,7 @@ impl Editor {
         outcome
     }
 
-    /// **插入態 `C-o` 借的那一個鍵走完了，把模式放回去**（vim，2026-10-06）。
+    /// **插入態 `C-o` 借的那一個鍵走完了，把模式放回去**（vim）。
     ///
     /// `borrowed` 是**這一鍵開始之前**那一格的值：`C-o` 自己那一下會把它設上，
     /// 而那一下不該算成借走的那一鍵。所以問的是進門時的快照，不是現在的。
@@ -392,7 +383,7 @@ impl Editor {
         }
     }
 
-    /// **記下延伸關掉那一刻的那一段**，`gv` 拿它重選（vim，2026-10-06）。
+    /// **記下延伸關掉那一刻的那一段**，`gv` 拿它重選（vim）。
     ///
     /// 和 [`Self::hold_the_pane`] 同一個位置、同一條理由：這件事要在**每一鍵之後**
     /// 問一次，而「延伸是從哪幾條路關掉的」不止一條（`Esc`、`v` 再按一次、`d`、
@@ -413,17 +404,9 @@ impl Editor {
 
     /// **vim 鍵位下光標不停在換行符上**（十三條的第 9 條，規劃在 §5.85）。
     ///
-    /// 他報的是「`x` 在行尾會把下一行接上來」。實測比那細：
-    ///
-    /// ```text
-    /// gl      → 列 3    停在 c 上               ✓ 本來就對
-    /// glx     → ab      只吃掉 c                ✓ 本來就對
-    /// glxx    → abdef   ⚠ 第二下把下一行接上來
-    /// ```
-    ///
-    /// 漏的只有**挪動/編輯之後夾回來**那一步：第一下 `x` 之後光標落在 `ab` 的換行
-    /// 符上，第二下就把它吃了。`l` 自己擋得住（`line_last`），`x` 擋不住——而擋不住
-    /// 的不只 `x`。
+    /// 要緊的是**挪動/編輯之後夾回來**那一步：`abc` 上 `glx` 之後光標落在 `ab` 的
+    /// 換行符上，不夾的話第二下 `x` 就把它吃了，把下一行接上來。`l` 自己擋得住
+    /// （`line_last`），`x` 擋不住——而擋不住的不只 `x`。
     ///
     /// **寫在一處，不是四十處。** `clamp_cursor` 全樹叫了四十多次而它只夾到檔尾；
     /// 再往每一處加一道行内的夾，等於把一條規矩交給四十個函數去守。這裏和
@@ -438,15 +421,13 @@ impl Editor {
     ///   `Vd` 會留下空行。現成的 `vim_lines` 旗標說的正是這件事。
     /// * **空行上停在換行符上**——没別的地方可去，照 vim。
     ///
-    /// ⚠ **檔尾那條虛行也一起夾**（10-06 定）。檔案以換行結尾時我們多出一條
-    /// 最後那個換行符後面的空行，`j` 下得去而 nvim 眼裏没有它：掃神諭 2256 格裏
-    /// 34 格不同，**25 格全是它**（`jjhhhhhhhhhhx` 那一式）。
+    /// ⚠ **檔尾那條虛行也一起夾**。檔案以換行結尾時我們多出一條最後那個換行符
+    /// 後面的空行，`j` 下得去而 nvim 眼裏没有它。
     fn keep_off_the_newline(&mut self) {
         if !self.keymap_rules().caret_off_newline {
             return;
         }
-        // Warning: **`vim_lines && extend`，不是光看 `vim_lines`**（2026-10-06 寫這一支
-        // 的時候當場測出來的）。那個旗標只在 `d`/`c`/`y` 幾個 arm 裏花掉，所以
+        // Warning: **`vim_lines && extend`，不是光看 `vim_lines`**。那個旗標只在 `d`/`c`/`y` 幾個 arm 裏花掉，所以
         // `V` 之後按 `Esc`（或者任何一條不動手就走的路）它會**一直留着 true**，
         // 而夾這件事從此整個關掉。問「那一段**現在**還是不是整行可視選區」纔對。
         if self.mode != Mode::Normal || (self.vim_lines && self.extend) {
@@ -454,8 +435,8 @@ impl Editor {
         }
         let rope = self.current_buffer().rope().clone();
         let floor = self.last_real_line(&rope);
-        // **Charwise Visual may stand on the line break** (2026-11-07,
-        // measured against nvim): vim's `coladvance` allows one past the
+        // **Charwise Visual may stand on the line break** (measured against
+        // nvim): vim's `coladvance` allows one past the
         // last character while Visual is active, so `v$` reaches the break
         // and `v$d` joins the lines. The empty line after the last break is
         // still out of reach.
@@ -477,9 +458,8 @@ impl Editor {
     /// 條真行——可是它夾的是**位置**，不是**列**：`foo\n` 的第一行按 `j`，光標
     /// 走到虛行行首、被拉回上一行、落在行尾，看着就是往右跳了一格。
     ///
-    /// 2026-10-13 定的後一半：「光标進得去嗎？這個随 keymap，vim keymap 的話进
-    /// 不去（`~` 表示这里有个结尾换行符而已），helix keymap 進得去。」前一半是
-    /// 畫法：那一格照畫，`~` 當行號，同 helix。
+    /// 光標進不進得去跟着鍵位：vim 鍵位進不去（`~` 只表示這裏有個結尾換行符），
+    /// helix 鍵位進得去。畫法兩邊一樣：那一格照畫，`~` 當行號，同 helix。
     pub(super) fn vim_cannot_reach(&self, rope: &crate::Rope, pos: usize) -> bool {
         self.keymap_rules().caret_off_newline
             && self.mode == Mode::Normal
@@ -502,16 +482,14 @@ impl Editor {
         }
     }
 
-    /// **全窗表格 is a window onto one table, and nothing walks out of it**
-    /// (2026-09-07: 「理論上不能通過鼠標滾動或者 hjkl 前往正文……衹能
-    /// 通過 tq/tf/tb 離開回到其他模式，或者 t[ t] 去下一個表格」).
+    /// **全窗表格 is a window onto one table, and nothing walks out of it**:
+    /// neither the mouse wheel nor `hjkl` reaches the prose; `tq`/`tf`/`tb`
+    /// leave for another mode, and `t[` `t]` go to the next table.
     ///
-    /// The pane used to be a leaky mode: `gg`, `G`, `:120` and a search hit
-    /// are file-wide, they walked the cursor into the chapter, and the widget
-    /// — which draws between the table's first and last row and nowhere else
-    /// — then had nothing to draw. The old bargain was to hand the window
-    /// back to the prose page, so 全窗表格 could end without anybody asking
-    /// for it. Bounding it deletes that whole class of case, and it is what
+    /// `gg`, `G`, `:120` and a search hit are file-wide; unbounded, they would
+    /// walk the cursor into the chapter, and the widget — which draws between
+    /// the table's first and last row and nowhere else — would have nothing
+    /// to draw. Bounding it deletes that whole class of case, and it is what
     /// lets the gutter number the table's **own** rows: inside the window
     /// every number means the same thing.
     ///
@@ -538,11 +516,11 @@ impl Editor {
         if self.current_buffer().id() != buffer {
             return;
         }
-        // **A table with no rows still has to hold the caret somewhere**
-        // (2026-10-23). `ropey` reports a trailing empty line for every file
-        // that ends in a newline (#384), and that is where `␣t d` on the last
-        // row left the caret: `o` and `␣t r` then opened their row *under* it
-        // and wrote the blank line into the file (`名,值,尾␊␊,,␊`). The header
+        // **A table with no rows still has to hold the caret somewhere**.
+        // `ropey` reports a trailing empty line for every file that ends in a
+        // newline (#384), and that is where `␣t d` on the last row would leave
+        // the caret: `o` and `␣t r` would then open their row *under* it and
+        // write the blank line into the file (`名,值,尾␊␊,,␊`). The header
         // line is the only line such a table has, and every key that means
         // 「this cell」 is already turned away there, so it is somewhere the
         // caret can safely wait for `␣t r`.
@@ -748,9 +726,9 @@ impl Editor {
     }
 
 
-    /// **vim 的可視模式那八個鍵**，表在呼叫處（2026-10-06）。
+    /// **vim 的可視模式那八個鍵**，表在呼叫處。
     ///
-    /// 三條規矩，每一條都是夜審報出來的：
+    /// 三條規矩：
     ///
     /// 一、⚠ **`V` 選的是整行，而「整行」全樹只有一處守着**——`d`/`c`/`y` 那幾個
     /// arm 開頭的 `if self.vim_lines { extend_to_line_bounds() }`。這一族寫在它們
@@ -758,13 +736,12 @@ impl Editor {
     /// 字符貼的（實測貼進了 `beta` 中間），而且 `vim_lines` 永遠留着 `true`，下一個
     /// `d` 會拿它當整行。`x`/`s` 例外：它們轉交給老 arm，那邊自己做。
     ///
-    /// 二、**計數歸這一段**，不許漏到下一個鍵。`v` 之後 `2u` 轉小寫，接着的 `j` 從前
-    /// 走兩行——那個 2 没人花掉。
+    /// 二、**計數歸這一段**，不許漏到下一個鍵：`v` 之後 `2u` 轉小寫，接着的 `j` 不許
+    /// 走兩行。
     ///
     /// 三、**動完就回 Normal，光標落在那一段的開頭**。vim 的可視模式是為一次動作而
     /// 開的，一動完就結束；helix 的 select mode 不是，所以這一條只在這裏。
-    /// A vim word motion cut short at the first empty line it crosses
-    /// (2026-10-30): from `one two three` over a blank line, `w` lands on the
+    /// A vim word motion cut short at the first empty line it crosses: from `one two three` over a blank line, `w` lands on the
     /// blank line and `b` from below comes back to it.
     pub(super) fn stop_on_an_empty_line(&self, span: motion::Span, forward: bool) -> motion::Span {
         let motion::Span::Over { anchor, head } = span else { return span };
@@ -797,11 +774,11 @@ impl Editor {
         (start + column).min(motion::line_last(rope, start)).max(start)
     }
 
-    // **vim's Visual mode acts on the whole selection** (2026-10-06): `o`
-    // to its other end, `x` `s` delete and change it, `u` `U` `~` change its
-    // case, `p` writes the register over it, `y` yanks it, and each leaves
-    // Visual mode. They were taken ahead of the keymap; since 2026-11-01 they
-    // are rows of the vim keymap's table (`typed_extending`), so a reader's
+    // **vim's Visual mode acts on the whole selection**: `o` to its other
+    // end, `x` `s` delete and change it, `u` `U` `~` change its case, `p`
+    // writes the register over it, `y` yanks it, and each leaves Visual
+    // mode. They are rows of the vim keymap's table (`typed_extending`), not
+    // taken ahead of the keymap, so a reader's
     // own binding of one of these keys still wins, and vim's `x`/`s` aliases
     // (`;{n}D`, written for Normal mode) are left out of select mode.
     /// **`J`, `>` and `<` in vim's Visual mode** (`:h v_J`, `:h v_>`): act on
@@ -837,10 +814,10 @@ impl Editor {
         let was = std::mem::replace(&mut self.expanding_alias, true);
         self.on_normal_key(key);
         self.expanding_alias = was;
-        // **`.` repeats it as the Normal-mode command it was**
-        // (2026-10-30): `3>>` for three lines indented, `3J` for
-        // three joined. Recorded as the bare `>` it was a waiting
-        // operator that ate the next keys.
+        // **`.` repeats it as the Normal-mode command it was**: `3>>`
+        // for three lines indented, `3J` for three joined. Recorded as
+        // the bare `>` it would be a waiting operator that eats the
+        // next keys.
         let mut again: Vec<Key> = lines.to_string().chars().map(Key::Char).collect();
         match c {
             'J' => again.push(Key::Char('J')),
@@ -921,13 +898,13 @@ impl Editor {
         self.clamp_cursor();
     }
 
-    /// **One key of a vim operator's motion** (#429, 2026-09-18).
+    /// **One key of a vim operator's motion** (#429).
     ///
     /// `d`, `c` and `y` in vim are operators: they wait, and what they wait
     /// for is a motion. This editor has no operators — a motion here *is* a
-    /// selection, so `d` acts on what is already selected — which is why the
-    /// translation table could offer `dw` and `dd` and nothing else. The wait
-    /// is what this adds, and once there is a wait every motion the editor
+    /// selection, so `d` acts on what is already selected — and a translation
+    /// table could offer `dw` and `dd` and nothing else. The wait is what this
+    /// adds, and once there is a wait every motion the editor
     /// already has comes with it: `d$`, `de`, `dG`, `df,`, `di(`.
     ///
     /// **How it is carried out**: 延伸模式, the motion, and then the action —
@@ -940,7 +917,7 @@ impl Editor {
     /// register — `dd` then `p` puts the line back — so it is this editor's
     /// `D` (剪切), not its `d` (刪除，不動寄存器).
     fn vim_operator_key(&mut self, op: char, first: Option<char>, key: Key) {
-        // Warning: **Let go of the wait before doing anything** (2026-09-18): what
+        // Warning: **Let go of the wait before doing anything**: what
         // runs below reads `pending`, and an operator still holding the wait
         // answers its own motion as though it were the next key.
         self.pending = Pending::None;
@@ -975,7 +952,7 @@ impl Editor {
         // **The operator doubled is the line**: `dd`, `yy`, `cc`. `yss`, which
         // is vim-surround's 「wrap this line」, falls out of the same rule.
         //
-        // **`_` is the same thing spelled the other way** (`:h _`, 2026-10-06):
+        // **`_` is the same thing spelled the other way** (`:h _`):
         // `d_` is `dd`, and with a count it is that many lines. It is not in
         // [`yumete_cjk::keymap::VIM_MOTIONS`] because there is no motion for
         // 「this line and the n−1 below it」 — the doubled operator *is* that
@@ -997,7 +974,7 @@ impl Editor {
         // why it is here and not in the pure motion table.
         if first.is_none() && c == '%' {
             // **`d50%` takes the lines short of the far one** (`:h N%`,
-            // measured in vim 9.1 and nvim 0.12, 2026-11-07): on ten lines
+            // measured in vim 9.1 and nvim 0.12): on ten lines
             // `d50%` from line 1 takes lines 1 to 4, `Gd50%` lines 5 to 9,
             // and from line 5 itself nothing. Not `d{line}G`, which takes
             // both ends.
@@ -1057,7 +1034,7 @@ impl Editor {
             match self.vim_percent_target() {
                 // From the cursor to where `%` lands, inclusive: the bracket it
                 // found along the line is not part of the span when its partner
-                // lies behind (2026-10-30: `jd%` on `a(b⏎x)y` took the `)` too).
+                // lies behind (`jd%` on `a(b⏎x)y` leaves the `)`).
                 Some((_, other)) => {
                     let (anchor, head) = (here.min(other), here.max(other));
                     return self.do_vim(op, motion::Span::Over { anchor, head });
@@ -1068,7 +1045,7 @@ impl Editor {
                 }
             }
         }
-        // **vim-surround's three** (2026-10-06): `ds{bracket}` takes a pair
+        // **vim-surround's three**: `ds{bracket}` takes a pair
         // off, `cs{old}{new}` swaps one, `ys{motion}{bracket}` puts one on.
         //
         // They are written here and not in the preset's table because `d`,
@@ -1095,7 +1072,7 @@ impl Editor {
         // Warning: **`;` 和 `,` 也是動作**（`:h ;`）：`d;` 把剛纔那個 `f`/`t` 再做
         // 一遍，`d,` 反着做。[`crate::vim::step_for`] 是純函數，記不住「剛纔那
         // 個」——那是編輯器的記憶，不是文法的——所以這一句寫在這裏，而不是寫進
-        // 那張表。從前 `d;` 說的是「不是一個動作」。
+        // 那張表。
         if first.is_none() && matches!(c, ';' | ',') {
             let Some((kind, ch)) = self.last_find else {
                 self.count = None;
@@ -1128,7 +1105,7 @@ impl Editor {
         if let Some(f) = first {
             if let Some(step) = crate::vim::step_for(&f.to_string(), grain, Some(c)) {
                 // `dfa` is a find too: `;` and `,` repeat it afterwards
-                // (`:h ;`, 2026-10-30).
+                // (`:h ;`).
                 let kind = match f {
                     'f' => Some(FindKind::Forward),
                     'F' => Some(FindKind::Backward),
@@ -1147,8 +1124,8 @@ impl Editor {
             typed.push(f);
         }
         typed.push(c);
-        // **A key bound to a motion is that motion here too** (2026-11-01,
-        // step 8 of the keymap plan, as Zed's operators read the motion
+        // **A key bound to a motion is that motion here too** (step 8 of the
+        // keymap plan, as Zed's operators read the motion
         // keys): `"Q" = "jump_next_word_end"` makes `dQ` delete to the word's
         // end. A key bound to anything else is read as vim spells it.
         if first.is_none() {
@@ -1194,7 +1171,7 @@ impl Editor {
         let rope = self.current_buffer().rope();
         let here = rope.char_to_line(self.sel.head());
         // A closed fold is one line (`2dd` on a fold: the fold and the line
-        // after it, measured in nvim 2026-11-03).
+        // after it, measured in nvim).
         let (first, last) = self.lines_counted_over_folds(here, n);
         let rope = self.current_buffer().rope();
         // **`yss` is not a linewise `ys`.** vim-surround spells it
@@ -1211,7 +1188,7 @@ impl Editor {
         let span = self.line_span(first, last, op == 'c');
         self.do_vim_span(op, span, Shape::Lines);
         // `gUU` `guu` `g~~` leave the cursor at the line's start, where
-        // `gUj` keeps its column (nvim 2026-11-04).
+        // `gUj` keeps its column (as in nvim).
         if matches!(op, 'u' | 'U' | '~') {
             self.land_at_column(first, 0);
         }
@@ -1266,9 +1243,9 @@ impl Editor {
         motion::Span::Over { anchor, head: head.max(anchor) }
     }
 
-    /// **Operator ＋ motion, vim's way** (B3, 2026-09-20).
+    /// **Operator ＋ motion, vim's way** (B3).
     ///
-    /// The translation table is gone: nothing is replayed as keys. The motion
+    /// No translation table: nothing is replayed as keys. The motion
     /// is asked for its **caret** reading — where vim would put the cursor —
     /// and the verb then takes everything between here and there, with the
     /// motion's own class ([`crate::vim::Reach`]) deciding whether 「there」 is
@@ -1279,9 +1256,9 @@ impl Editor {
         let given = self.count.take();
         let n = given.unwrap_or(1).max(1);
         let start = self.sel.head();
-        // **`d5G`, `5dG` and `d5gg` reach line 5** (`:h G`, measured in nvim
-        // 2026-11-04). Walked as a motion, the count only repeated `G`, and
-        // all three deleted to the file's end or its start.
+        // **`d5G`, `5dG` and `d5gg` reach line 5** (`:h G`, measured in
+        // nvim). Walked as a motion, the count would only repeat `G`, and all
+        // three would delete to the file's end or its start.
         if let (Some(n), motion::Motion::FileEnd | motion::Motion::FileStart) = (given, step.motion) {
             let rope = self.current_buffer().rope();
             let (here, to) = (rope.char_to_line(start), n.max(1).saturating_sub(1).min(motion::last_line(rope)));
@@ -1298,8 +1275,8 @@ impl Editor {
         //
         // Warning: **數目只管最後那一個詞。** `c2w` 是「`w` 一趟，然後換到那個詞
         // 的末尾」，不是「換兩次詞尾」——所以規則落在**最後一跳**上，前面幾跳還
-        // 是 `w`。從前整個動作被換成詞尾，第二跳問到的還是同一個詞尾，於是
-        // `c2w` 只換一個詞（2026-10-02 拿 nvim 逐欄量出來的）。
+        // 是 `w`。整個動作換成詞尾的話，第二跳問到的還是同一個詞尾，`c2w` 只換
+        // 一個詞（拿 nvim 逐欄量過）。
         let (step, finally) = match (op, step.motion) {
             ('c', motion::Motion::WordForward(grain))
                 if !self.char_at_cursor().is_some_and(char::is_whitespace) =>
@@ -1311,14 +1288,12 @@ impl Editor {
         };
         // **An object is already both ends**; everything else is walked to.
         if step.reach == crate::vim::Reach::Object {
-            // **數目交給對象**（2026-10-11；2026-10-12 連括號引號一起交）。
-            // `vim::object` 造動作的時候數不到它——那個 2 在 `d2iw` 裏是按鍵，而
-            // 按鍵在這一層纔收齊。
+            // **數目交給對象**，括號引號也交。`vim::object` 造動作的時候數不到
+            // 它——那個 2 在 `d2iw` 裏是按鍵，而按鍵在這一層纔收齊。
             //
-            // 這裏從前只交給詞對象，註腳寫着「`2i(` 在 vim 裏是『往外第二層』，
-            // 不是『兩個括號對』」——那句話是對的，而它是 `pair_span` 該怎麼讀這
-            // 個數的事，不是該不該給它。給了之後 `2i(` 真的往外數一層，`2i"` 連
-            // 引號一起拿（vim 的 `count < 2` 那一條）。
+            // 「`2i(` 在 vim 裏是『往外第二層』，不是『兩個括號對』」是 `pair_span`
+            // 該怎麼讀這個數的事，不是該不該給它。`2i(` 往外數一層，`2i"` 連引號
+            // 一起拿（vim 的 `count < 2` 那一條）。
             let step = match step.motion {
                 motion::Motion::Object { what, around, .. }
                     if matches!(
@@ -1339,7 +1314,7 @@ impl Editor {
             if span == motion::Span::Missed {
                 // Warning: **The refusal has to reach the edit, not just the status
                 // line**: an empty selection cuts the character under the
-                // cursor, so `di(` outside a pair used to say 「没有這一對」
+                // cursor, so `di(` outside a pair would say 「没有這一對」
                 // *and delete a character anyway*.
                 self.status = match step.motion {
                     motion::Motion::Object { what: motion::Object::Word { .. }, .. } => {
@@ -1362,9 +1337,9 @@ impl Editor {
                 return;
             }
             // Warning: **A paragraph is a run of lines, so it goes down the lines
-            // path** (B5, 2026-09-21). Routed through `do_vim` instead, `dip`
-            // took the lines' *text* and left their newlines behind — two
-            // empty lines where a paragraph had been. The lines path already
+            // path** (B5). Routed through `do_vim` instead, `dip` would take
+            // the lines' *text* and leave their newlines behind — two empty
+            // lines where a paragraph had been. The lines path already
             // knows the two rules this needs: `d` swallows the last break,
             // `c` keeps it (the `dd`/`cc` pair).
             if matches!(step.motion, motion::Motion::Object { what: motion::Object::Paragraph, .. })
@@ -1375,8 +1350,8 @@ impl Editor {
                     return self.do_vim_lines(op, a.min(b), a.max(b));
                 }
             }
-            // **A sentence that fills its lines goes linewise** (2026-10-27,
-            // measured against vim 9.1): `:h exclusive-linewise` — the object
+            // **A sentence that fills its lines goes linewise** (measured
+            // against vim 9.1): `:h exclusive-linewise` — the object
             // ends in column 1 of the next line and starts at or before the
             // first non-blank, so `dis` on `Two.` between `One.` and a blank
             // line takes the line `Two.` whole. Without a next line it stays
@@ -1405,8 +1380,8 @@ impl Editor {
         let mut target = None;
         // Where the caret stood before the last hop, for the line rule below.
         let mut before = start;
-        // Warning: **`f`/`t` 的數目是「第 n 個」，一次問完**（2026-10-02 拿 nvim 量
-        // 出來的）。走底下那個迴圈的話每一趟都從上一個落點重新下錨，`d2f,` 刪的
+        // Warning: **`f`/`t` 的數目是「第 n 個」，一次問完**（拿 nvim 量過）。走底下
+        // 那個迴圈的話每一趟都從上一個落點重新下錨，`d2f,` 刪的
         // 就是「第一個逗號到第二個」；而數目超出的時候迴圈留下走成的那幾跳，
         // `d9f,`（只有四個逗號）**默默吃掉三十二個字**，nvim 在那裏一格不動。
         let nth = match step.motion {
@@ -1428,10 +1403,9 @@ impl Editor {
             // and `dt,` still takes that character — stopping here made `dt,`
             // do nothing at all.
             if i > 0 && head == self.sel.head() {
-                // Warning: **數目走不完，段落和句子就整個不做**（2026-10-18 拿 nvim
-                // 量出來的）。只有一個空行的時候 `d3}` 在 nvim 裏一個字都不刪，
-                // 而留着已經走成的那幾跳會讓它刪到檔尾（`d2{` 在第一行上 177
-                // 條錯的也是這個）。`f`/`t` 的數目不走這條路，它們一次問完
+                // Warning: **數目走不完，段落和句子就整個不做**（拿 nvim 量過）。
+                // 只有一個空行的時候 `d3}` 在 nvim 裏一個字都不刪，而留着已經走成的
+                // 那幾跳會讓它刪到檔尾（`d2{` 在第一行上同理）。`f`/`t` 的數目不走這條路，它們一次問完
                 // （上面那個 `nth`），而 `w` 在檔尾是 vim 自己開的特例。
                 if matches!(
                     step.motion,
@@ -1453,17 +1427,17 @@ impl Editor {
             return;
         };
         let rope = self.current_buffer().rope();
-        // Warning: **動不了算不算數，問的是動作的類，不是動作本身**（2026-10-02
-        // 拿 nvim 逐欄量出來的，`:h exclusive` 寫的也是這個）：
+        // Warning: **動不了算不算數，問的是動作的類，不是動作本身**（拿 nvim 逐欄
+        // 量過，`:h exclusive` 寫的也是這個）：
         //
         // - **排他**的落在原處 ＝ 零寬 ＝ 整個不做。`db` 在檔首、`d^` 在第 1 欄、
         //   `d0` 在第 1 欄、`dT,` 緊貼逗號後面，四個 nvim 都不動。
         // - **包含**的落在原處 ＝ 你站的那一格。`d$` 在行末那一格照樣刪掉它。
         // - **整行**的落在原處 ＝ 這一行。`dgg` 在第 1 行照樣刪掉第 1 行。
         //
-        // 這個判斷在動作那一層寫過三版，三版都錯：寫成通則（`dl` 在行末紅）、寫
-        // 成「偏移 0」（`dt,` 在檔首紅）、寫成「往回的纔算」（漏掉 `^` 和 `T`）。
-        // 錯的不是哪一版，是**問錯了層**——動作只說落點，類是文法的事。
+        // 這個判斷不寫在動作那一層：寫成通則（`dl` 在行末錯）、寫成「偏移 0」
+        // （`dt,` 在檔首錯）、寫成「往回的纔算」（漏掉 `^` 和 `T`）都不對——動作只
+        // 說落點，類是文法的事。
         if target == start && step.reach == crate::vim::Reach::Exclusive {
             self.count = None;
             self.alias_count = None;
@@ -1478,11 +1452,10 @@ impl Editor {
             // character**, whichever class the motion is: that is what `db`
             // and `dF,` do in vim.
             //
-            // Warning: **光標在第 1 欄的時候，頭要退到上一行的末尾**（2026-10-02 拿
-            // 這臺機器上的 nvim 量出來的）。`prev_grapheme(start)` 在第 1 欄上**就是
-            // 那個換行**，於是 `j0db` 把兩行焊成一行——正文第二行的開頭按一下，
-            // 上一行就接上來了。這是上面那條「`dw` 不跨行」的鏡像，而往前那一支
-            // （底下的 `Reach::Exclusive`）早就擋了，往回這一支没有。
+            // Warning: **光標在第 1 欄的時候，頭要退到上一行的末尾**（拿 nvim
+            // 量過）。`prev_grapheme(start)` 在第 1 欄上**就是那個換行**，不退的話
+            // `j0db` 把兩行焊成一行。這是上面那條「`dw` 不跨行」的鏡像，往前那一支
+            // 是底下的 `Reach::Exclusive`。
             //
             // vim 把它寫成一條通則（`:h exclusive`）：「If the motion is exclusive
             // and the end of the motion is in column 1, the end of the motion is
@@ -1493,18 +1466,17 @@ impl Editor {
             // 回的是 0（它從不 `Missed`），於是 `target == start` 這一支根本不進
             // 來，落到底下的排他那一支，做出一格的跨度——nvim 在那裏**什麼都不做**。
             //
-            // Warning: **只有排他的往回動作走這一支**（2026-10-02）。`ge` 是往回
+            // Warning: **只有排他的往回動作走這一支**。`ge` 是往回
             // 的**包含**動作，它要連光標自己那一格一起取：第 2 欄按 `dge`，nvim
             // 刪掉 `al` 兩個字，而這一支只給 `a`。
             _ if target < start && step.reach == crate::vim::Reach::Exclusive => {
                 let head = motion::prev_grapheme(rope, start);
                 match rope.char(head.min(rope.len_chars().saturating_sub(1))) == '\n' {
                     false => motion::Span::Over { anchor: target, head },
-                    // Warning: **上一行是空的就別再退**（2026-10-18 拿 nvim 量出來的）。
+                    // Warning: **上一行是空的就別再退**（拿 nvim 量過）。
                     // 退那一步是為了 `j0db`：上一行有字，終點該落在它的末一**格**，
                     // 而不是那個換行符。上一行空着的時候，那個換行符**就是**整行，
-                    // 退過去就連下一個換行一起吃，兩行焊成一行——`))d(` 156 條錯的
-                    // 都是這個。
+                    // 退過去就連下一個換行一起吃，兩行焊成一行（`))d(` 就是這樣）。
                     true if motion::line_start(rope, head) == head => {
                         // 那一行整個就是一個換行符，取的正是「一整行（空的）」，
                         // 所以交給整行那一支——零寬的跨度會被底下那道閘擋掉，
@@ -1531,8 +1503,8 @@ impl Editor {
             // itself select.
             _ => {
                 let crossed = rope.char_to_line(target) > rope.char_to_line(before);
-                // Warning: **空行上沒有詞可停，取走的就是那個換行符**（2026-10-13 報
-                // 的：「在空行按 dd 和 dw 無效」）。上面那條「詞不跨行」說的是「最後
+                // Warning: **空行上沒有詞可停，取走的就是那個換行符**，`dw` 在空行上
+                // 不是無效的。上面那條「詞不跨行」說的是「最後
                 // 走過的那個**詞**在行末」——空行上一個詞都沒走過，走的是 vim 排他
                 // 的第一條規矩（`:h exclusive`）：終點落在第 1 欄，終點退到上一行的
                 // 末尾**而且動作變成包含式**，於是那個換行算在裏頭，空行就此消失。
@@ -1540,10 +1512,10 @@ impl Editor {
                 // 交給 `Shape::Lines` 是因為這一段正是「一整行（空的）連它的行尾」，
                 // 而底下那道閘擋的是**量出來**零寬的那一種。
                 //
-                // Warning: **這一條也只給詞**（2026-10-18，和底下那一條同一天同一
-                // 個病）。它問的是「上一跳停在的那一行是不是空的」，而**每一個**
-                // 往前的排他動作走到空行上都會中——`d2}` 的第一跳正停在段落之間
-                // 的那個空行上，於是第二跳的落點被丟掉，刪到空行就停（184 條）。
+                // Warning: **這一條也只給詞**，同底下那一條。它問的是「上一跳停在的
+                // 那一行是不是空的」，而**每一個**往前的排他動作走到空行上都會中——
+                // `d2}` 的第一跳正停在段落之間的那個空行上，給了它的話第二跳的落點
+                // 被丟掉，刪到空行就停。
                 let word = matches!(step.motion, motion::Motion::WordForward(_));
                 if word
                     && crossed
@@ -1553,11 +1525,10 @@ impl Editor {
                     let span = motion::Span::Over { anchor: start.min(at), head: at };
                     return self.do_vim_span(op, span, Shape::Lines);
                 }
-                // Warning: **行末那道夾子是給詞的，不是通則**（2026-10-18 拿 nvim 量
-                // 出來的）。`:h word-motions` 那一條只說「最後走過的那個**詞**在行
-                // 末」，而這裏把它套在了每一個往前的排他動作上，於是 `d}` 184 條全
-                // 錯、`d)` 錯 148 條——兩個都該走到下一段/下一句的頭上，卻被收回起
-                // 點那一行的末尾。
+                // Warning: **行末那道夾子是給詞的，不是通則**（拿 nvim 量過）。
+                // `:h word-motions` 那一條只說「最後走過的那個**詞**在行末」；套在每一個
+                // 往前的排他動作上的話，`d}`、`d)` 會被收回起點那一行的末尾，而它們該走
+                // 到下一段/下一句的頭上。
                 //
                 // 其餘排他動作走 vim 自己的通則（`:h exclusive`）：終點落在第 1 欄，
                 // 終點退到**終點前一行**的末尾、動作變成包含式；起點又在首個非空白
@@ -1584,7 +1555,7 @@ impl Editor {
                 // 一行以上，終點後面只剩空白，起點又在縮進裏，整段就變成整行。
                 // 手冊只寫了終點落在第 1 欄那一條（`:h exclusive-linewise`），這
                 // 一條只在代碼裏——`}` 走到檔尾的時候終點是**包含**的，第 1 欄那
-                // 條夠不着，而 nvim 照樣整行整行地刪（2026-10-18 逐欄量過：
+                // 條夠不着，而 nvim 照樣整行整行地刪（逐欄量過：
                 // `  he said` 第 0/1/2 欄 `d}` 把整個檔刪空，第 3 欄留下 `  h`）。
                 // `c}` 和 `y}` 在同一處是逐字的，一併量過。
                 let tail_blank = || {
@@ -1648,8 +1619,8 @@ impl Editor {
             self.pending = Pending::Surround;
             return;
         }
-        // **Where the cell is the unit, the motion is already spoken for**
-        // (2026-10-23 作者定). The grid claims `d`, `c` and `y` at the whole
+        // **Where the cell is the unit, the motion is already spoken for**.
+        // The grid claims `d`, `c` and `y` at the whole
         // cell layer and hands them the wait ([`Editor::table_motion`]); the
         // span the motion worked out is a span of characters, and this layer
         // has no characters — it has one cell. `dd` `dw` `d$`, `cc` `cw` `cl`
@@ -1659,20 +1630,19 @@ impl Editor {
             self.alias_count = None;
             return self.cell_operator(op);
         }
-        // Warning: **動作落在換行符上，vim 就是「什麽都没動」**（2026-10-09 審出來的）。
+        // Warning: **動作落在換行符上，vim 就是「什麽都没動」**。
         //
         // `D` 在這一端拼成 `d$`，而 `$` 走 `line_last`——空行上那一格正是換行符，段寬
-        // 是零。可 `apply` 要往後多吃一個字素（helix 的光標含自己那一格），於是
-        // `DD` 的第二下把兩行焊成了一行，`D.....` 一路啃下去。`line_last` 自己的註釋
-        // 早寫過這件事（#382：「`d` 吃掉那條換行，把兩行焊成一行」），只是零寬那一格
-        // 漏在外頭。
+        // 是零。可 `apply` 要往後多吃一個字素（helix 的光標含自己那一格），不擋的話
+        // `DD` 的第二下把兩行焊成一行，`D.....` 一路啃下去（`line_last` 的註釋，
+        // #382：「`d` 吃掉那條換行，把兩行焊成一行」）。
         //
         // 只擋「整段就是那個換行符」：非空行的末字上 `dl`／`x` 照舊刪得掉它（那一格
         // 不是換行符），而 `dw` 從空行走到下一行是真的跨行，段寬不是零，不受影響。
         //
-        // Warning: **整行那一路不在這道閘底下**（2026-10-13 報的）。`dd` 在空行上
-        // 產生的正是同一個形狀的段（anchor ＝ head ＝ 那個換行符），於是一起被擋
-        // 住——空行上 `dd` 什麼都不刪，只能進插入模式按退格。而 `dd` 要的恰恰是那
+        // Warning: **整行那一路不在這道閘底下**。`dd` 在空行上產生的正是同一個形狀
+        // 的段（anchor ＝ head ＝ 那個換行符），一起擋住的話空行上 `dd` 什麼都不刪，
+        // 只能進插入模式按退格。而 `dd` 要的恰恰是那
         // 個換行符：vim 的 `dd` 刪的是「這一行連同它的行尾」。
         if matches!(op, 'd' | 'c' | 'y') && shape == Shape::Chars {
             if let motion::Span::Over { anchor, head } = span {
@@ -1685,9 +1655,9 @@ impl Editor {
             }
         }
         // **Whole lines keep the column the cursor wants** (nvim's
-        // 'nostartofline', measured 2026-11-04): `dd` `dj` `dG` on the line
-        // left where the first one was, `yk` `yH` `gUj` `>k` `zfk` on the
-        // first line taken. They used to go to its start.
+        // 'nostartofline', measured): `dd` `dj` `dG` on the line left where
+        // the first one was, `yk` `yH` `gUj` `>k` `zfk` on the first line
+        // taken, not at its start.
         let kept = (shape == Shape::Lines).then(|| {
             let rope = self.current_buffer().rope();
             let top = match span {
@@ -1744,13 +1714,13 @@ impl Editor {
                         self.refresh_goal_column();
                     }
                 }
-                // A closed fold shifted opens (nvim, 2026-11-04).
+                // A closed fold shifted opens (as in nvim).
                 if self.shut_around(line).is_some() {
                     self.open_folds_at(line, usize::MAX);
                 }
             }
-            // **`gq`** — the lines the motion crosses, filled (2026-10-29).
-            // `gw` is the same with the cursor put back (vim's, 2026-11-02).
+            // **`gq`** — the lines the motion crosses, filled.
+            // `gw` is the same with the cursor put back (vim's).
             'q' | 'w' => {
                 let kept = (op == 'w').then(|| self.sel.head());
                 self.take_object(span);
@@ -1764,7 +1734,7 @@ impl Editor {
                     self.refresh_goal_column();
                 }
             }
-            // **`zf`** — the lines the motion crosses, folded (2026-11-03).
+            // **`zf`** — the lines the motion crosses, folded.
             'Z' => {
                 if let motion::Span::Over { anchor, head } = span {
                     let rope = self.current_buffer().rope();
@@ -1788,7 +1758,7 @@ impl Editor {
                 self.sel.set_head(start);
                 self.refresh_goal_column();
             }
-            // **`gu`／`gU`／`g~`** — 換字形，選區就是那一段（2026-10-06）。
+            // **`gu`／`gU`／`g~`** — 換字形，選區就是那一段。
             'u' | 'U' | '~' => {
                 self.take_object(span);
                 match op {
@@ -1831,10 +1801,9 @@ impl Editor {
             true => self.edit_each_from(false, |e| e.insert_key_carrying_the_tail(key)),
             false => self.insert_key_carrying_the_tail(key),
         }
-        // **A move ends the selection `i` or `a` kept** (2026-10-27,
-        // measured: helix's `i` `→` `X` leaves a one-character cursor).
-        // From here on typing is plain typing, at every cursor. A closer
-        // stepped over is typing (2026-10-29, review).
+        // **A move ends the selection `i` or `a` kept** (measured: helix's
+        // `i` `→` `X` leaves a one-character cursor). From here on typing is
+        // plain typing, at every cursor. A closer stepped over is typing.
         if self.mode == Mode::Insert
             && !std::mem::take(&mut self.stepped_over)
             && self.current_buffer().rope().len_chars() == was_len
@@ -1905,8 +1874,7 @@ impl Editor {
                 }
             }
             // **`J` joins a line once however many cursors are on it**
-            // (2026-10-29, review: two on one line joined it twice;
-            // helix sorts the joins and drops the repeats). The first
+            // (helix sorts the joins and drops the repeats). The first
             // cursor on each line joins; the others ride along.
             let joins = matches!(acting, Key::Char('J') | Key::Alt('J'));
             // Likewise `C-a`/`C-x`: two cursors that reach the same
@@ -1938,13 +1906,13 @@ impl Editor {
         }
     }
 
-    /// A Normal command a binding names, at the cursors its own key reaches
-    /// (2026-11-01): `"zx" = "delete_selection"` deletes at every cursor, as
+    /// A Normal command a binding names, at the cursors its own key reaches:
+    /// `"zx" = "delete_selection"` deletes at every cursor, as
     /// `d` does, and so does each command of a list.
     fn run_normal_at_every_cursor(&mut self, name: &str) {
         // In Insert mode a bound name types as its own key would, at every
-        // cursor (found in review, 2026-11-02: `"C-l" = "delete_char_backward"`
-        // reached the primary alone).
+        // cursor: `"C-l" = "delete_char_backward"` does not reach the primary
+        // alone.
         if self.mode == Mode::Insert && self.sel.is_plural() {
             if let Some(key) = self.insert_key_for(name).filter(|k| multi::types_at_every_selection(*k)) {
                 self.insert_typed(key);
@@ -1984,9 +1952,9 @@ impl Editor {
     /// 3. `@xxd` — **keys**, played as though typed (#428), which is what the
     ///    vim preset is made of.
     ///
-    /// Warning: **A right-hand side that is none of the three plays nothing.** It
-    /// used to fall through to 「then it must be keys」, and a misspelt name
-    /// therefore typed its own letters into the chapter. The config refuses such
+    /// Warning: **A right-hand side that is none of the three plays nothing.**
+    /// Falling through to 「then it must be keys」, a misspelt name would type
+    /// its own letters into the chapter. The config refuses such
     /// a line and never installs it, so nothing should reach here — and if
     /// something ever does, the manuscript is not where it gets to say so.
     pub(super) fn run_binding(&mut self, commands: &[String]) {
@@ -2015,9 +1983,9 @@ impl Editor {
     }
 
     /// **A command line a binding names, run as if typed** — and what it
-    /// says heard (2026-10-31). It used to be `let _ = self.execute(…)`, so a
-    /// bound `:quit` never left and a failing command said nothing; reported
-    /// with `"C-q" = ":quit"`.
+    /// says heard: not `let _ = self.execute(…)`, under which a bound `:quit`
+    /// (`"C-q" = ":quit"`) would never leave and a failing command would say
+    /// nothing.
     pub(super) fn run_bound_command(&mut self, line: &str) {
         match self.execute(&format!(":{line}")) {
             Ok(crate::editor::CommandOutcome::Quit) => self.quit_from_binding = true,
@@ -2034,7 +2002,7 @@ impl Editor {
     /// a leading `;`: `2x` is `;` then `2D`, and `3dd` is `3x` then `d`.
     /// **Keys the reader typed and a binding held**, played as typed: the
     /// flavour's gates apply to them (vim's `Zj` with the flavour off is
-    /// vim's beep, not helix's sticky view; found 2026-11-03).
+    /// vim's beep, not helix's sticky view).
     pub(super) fn play_held(&mut self, keys: &str) {
         let outer = std::mem::replace(&mut self.replaying_held, true);
         self.play_keys(keys);
@@ -2042,17 +2010,16 @@ impl Editor {
     }
 
     fn play_keys(&mut self, keys: &str) {
-        // Warning: **Saved and restored, not set and cleared** (2026-09-19). An
-        // operator inside an expansion replays its motion through this same
-        // function, and the inner call's `= false` on the way out re-armed the
-        // alias layer for the **rest of the outer string**: the trailing key of
-        // `Q = "dwQ"` was expanded again and the stack went with it — an abort,
-        // which takes unsaved buffers with it. Two keys, one written `ddx` and
-        // one `wwx`, ended in two different meanings of `x`.
+        // Warning: **Saved and restored, not set and cleared**. An operator
+        // inside an expansion replays its motion through this same function,
+        // and an inner `= false` on the way out would re-arm the alias layer
+        // for the **rest of the outer string**: the trailing key of
+        // `Q = "dwQ"` would be expanded again and the stack would go with it —
+        // an abort, which takes unsaved buffers with it.
         let outer = self.expanding_alias;
         self.expanding_alias = true;
         let mut count = self.count.take();
-        // **`{n}` says where the count goes** (2026-09-18). Without it the
+        // **`{n}` says where the count goes**. Without it the
         // count lands on the first key that acts, which is right for
         // `dd` → `xd` and wrong for `dw`: there the count belongs to the `w`
         // that is *extending* the selection, not to the `v` that opened it.
@@ -2094,7 +2061,7 @@ impl Editor {
     }
 
     /// **The count a sequence was written with**, from before it and from
-    /// inside it (2026-09-18).
+    /// inside it.
     ///
     /// vim multiplies the two — `2d3w` is six words — and one of them is
     /// almost always absent, so this is the whole of that rule.
@@ -2143,8 +2110,7 @@ impl Editor {
             }
             // The five that are waiting for a character of the manuscript.
             // They answer in one place because the character may arrive as a
-            // key or as an IME commit (#414), and the two used to be written
-            // in two files with only `r` in the second one.
+            // key or as an IME commit (#414), and both must answer alike.
             waiting @ (Pending::Find(_)
             | Pending::Replace
             | Pending::MatchPair { .. }
@@ -2156,10 +2122,9 @@ impl Editor {
                 // guard does not count towards exhaustivity and this match is
                 // what catches a new `Pending` nobody handled.
                 //
-                // Warning: **這張表和 `wants_the_ime` 有意不同**（2026-10-04）。從前
-                // 兩張表是同一張，這裏還有一句 `debug_assert` 把它們釘在一起；而
-                // `mi`/`ma` 吃一個字符鍵、卻不要輸入法——「吃不吃鍵」和「要不要
-                // 輸入法」本來就是兩個問題，那一句斷言是在逼它們答同一個。
+                // Warning: **這張表和 `wants_the_ime` 有意不同**，別用斷言把它們釘在
+                // 一起：`mi`/`ma` 吃一個字符鍵、卻不要輸入法——「吃不吃鍵」和「要不要
+                // 輸入法」本來就是兩個問題。
                 self.pending = Pending::None;
                 if let Key::Char(c) = key {
                     self.answer_with_char(waiting, c);
@@ -2173,7 +2138,7 @@ impl Editor {
                 // Spent either way: a count typed before `f` belongs to that
                 // `f` and must not be left lying for the next command — unless
                 // the answer asked for another key (`mr`'s first one), whose
-                // command the count is still waiting for (2026-10-27).
+                // command the count is still waiting for.
                 if self.pending == Pending::None {
                     self.operator_count = None;
                 }
@@ -2226,7 +2191,7 @@ impl Editor {
                     self.status = String::new();
                 }
             }
-            // **A vim operator, waiting for its motion** (#429, 2026-09-18).
+            // **A vim operator, waiting for its motion** (#429).
             Pending::VimOperator { op, first } => {
                 self.vim_operator_key(op, first, key);
                 return;
@@ -2260,11 +2225,10 @@ impl Editor {
                 // A digit inside a count is the count's, not an alias — `10`
                 // must not fire a `0`.
                 //
-                // Warning: **Unless a sequence is being held** (2026-09-18): in
-                // `2d3w` the `3` arrives with a count already under way, and
-                // dropping it here handed the held `d` back with the *first*
-                // count on it — two characters deleted where vim deletes six
-                // words. Inside a held sequence the digit is answered below.
+                // Warning: **Unless a sequence is being held**: in `2d3w` the
+                // `3` arrives with a count already under way, and dropping it
+                // here would hand the held `d` back with the *first* count on
+                // it — two characters deleted where vim deletes six words. Inside a held sequence the digit is answered below.
                 Key::Char(c)
                     if !(c.is_ascii_digit()
                         && self.count.is_some()
@@ -2272,14 +2236,14 @@ impl Editor {
                 {
                     Some(c.to_string())
                 }
-                // **Alt 也綁得了**（2026-10-08）。鍵位表的鍵是一個 `String`，而
+                // **Alt 也綁得了**。鍵位表的鍵是一個 `String`，而
                 // Alt 没有自己的字節——借一個私用區的碼位當前綴（`actions::ALT`），
                 // 於是 `A-d` 在表裏是兩個 `char`，而查表那一層一個字都不用改。
                 //
-                // Warning: 從前這裏只認 `Key::Char`，於是配置裏寫 `"A-d" = …` 綁的是
-                // `A`、`-`、`d` 三個鍵連按：那個鍵永遠按不出來，而配置照收。
+                // Warning: 只認 `Key::Char` 的話，配置裏寫 `"A-d" = …` 綁的是 `A`、`-`、
+                // `d` 三個鍵連按：那個鍵永遠按不出來，而配置照收。
                 Key::Alt(c) => Some(format!("{}{c}", yumete_cjk::actions::ALT)),
-                // **其餘的鍵也綁得了**（2026-10-12）：`C-x` 那一族、`<tab>`、
+                // **其餘的鍵也綁得了**：`C-x` 那一族、`<tab>`、
                 // `<S-tab>`、方向鍵。寫在 [`typed_as`] 裏一處，和 [`pressed`]
                 // 逐條對着——少一邊就是「寫得進配置而按不出來」。
                 Key::Char(_) => None,
@@ -2305,7 +2269,7 @@ impl Editor {
                 // 而不是一個字。數字那條規矩只問單字符，Alt 不是數字。
                 let c = typed.chars().next_back().unwrap_or('\0');
                 let alone = typed.chars().count() == 1;
-                // **A digit inside a held sequence is a count** (2026-09-18):
+                // **A digit inside a held sequence is a count**:
                 // vim writes `d10w`, and `d1` is not the name of anything. An
                 // alias whose own name has a digit in it still wins, because
                 // that is asked first.
@@ -2341,7 +2305,7 @@ impl Editor {
                 let found = self.aliases().get(&held).cloned();
                 // **一個鍵換一個鍵走正路**：換出來的那一下當作人按的接着處理，所以
                 // 數字前綴、模式、計數都還在它身上。`@` 底下那一串纔是鍵，所以剝掉
-                // 它再數（2026-10-19：從前右邊光着寫就是鍵，現在要說出來）。
+                // 它再數（右邊是鍵的話要用 `@` 說出來）。
                 let one_key = found.as_deref().and_then(|b| match b {
                     [one] => Some(one.as_str()),
                     _ => None,
@@ -2374,7 +2338,7 @@ impl Editor {
                         }
                         // vim's `Z` waits for one more key and beeps at any
                         // but `Z` `Q`, eating it: `Zjx` deletes on the line it
-                        // started on (nvim, 2026-11-03). With the flavour on,
+                        // started on (as in nvim). With the flavour on,
                         // `Z` is helix's sticky view instead.
                         if held == "Z" && self.vim_keymap() && !self.flavor_on(yumete_cjk::FlavorItem::HelixKeysUnderVim) {
                             self.alias_count = None;
@@ -2433,7 +2397,7 @@ impl Editor {
             return;
         }
 
-        // **行文那一套是在門口把四個字母對調換出來的**（2026-10-12 定）。
+        // **行文那一套是在門口把四個字母對調換出來的**。
         //
         // 底下這一塊寫的是**視覺**那一套：`h` 往左 ＝ 下一縱，`j` 往下 ＝ 下一個
         // 字。出廠的行文那一套要的是和橫排逐鍵相同——`h` 上一個字、`j` 下一行
@@ -2444,18 +2408,17 @@ impl Editor {
         //   想要 l（下一個字）＝ 視覺的 j        想要 k（上一行）＝ 視覺的 l
         // ```
         //
-        // Warning: **是一個四元環，不是兩組對調**（h→k→l→j→h）。第一版寫成了
-        // h↔k、l↔j 兩組互換，於是 `j` 走的是上一行、`k` 走的是下一行——兩個鍵
-        // 正好反着，而且「按 j 不動」看起來像它根本没接上。
+        // Warning: **是一個四元環，不是兩組對調**（h→k→l→j→h）。寫成 h↔k、l↔j
+        // 兩組互換的話，`j` 走的是上一行、`k` 走的是下一行——兩個鍵正好反着。
         //
-        // Warning: **只換字母，不換方向鍵**（原話：「方向鍵永遠視覺，不跟開關」）。
+        // Warning: **只換字母，不換方向鍵**：方向鍵永遠視覺，不跟開關。
         // 三家參考都按名字分家：Emacs 的 `C-f` 永遠邏輯而 `→` 看方向，CSS 規範裏
         // `forward`/`backward` 是邏輯而 `left`/`right` 是視覺。一個箭頭是方向的
         // 圖，一個字母是一個詞。Insert 模式那一支（`prompt.rs`）本來就只認方向
         // 鍵，所以一個字都不用動。
         //
         // Warning: **別名展開出來的那幾個鍵，永遠按行文那一套算**——而在這個倉
-        // 裏那意味着**要換**，不是不換（2026-10-12 量出來的）。
+        // 裏那意味着**要換**，不是不換。
         //
         // 規矩是 vim 的（`normal.c:874`：「Only when typed by the user
         // directly, not when the result of a mapping or `x` translated to
@@ -2463,12 +2426,11 @@ impl Editor {
         // 思。vim 的引擎底子是邏輯的，所以「不換」就等於通用意思；**這裏的引擎
         // 底子是視覺的**（底下那一塊），通用意思要換出來。照抄那個 `!` 就反了。
         //
-        // 抓到它的是 vim 鍵位的 `+`——它是 `("+", "jgs")`，展開的 `j` 没換，於
-        // 是「下一行行首」在竪排下一行都不走。
+        // vim 鍵位的 `+` 是 `("+", "jgs")`：展開的 `j` 不換的話，「下一行行首」在
+        // 竪排下一行都不走。
         let follow_the_text = self.vertical_letters_follow_the_text()
             || (self.layout() == Layout::Vertical && self.expanding_alias);
-        // Warning: **vim 鍵位下這四個字母不轉，交還給底下那一層**（2026-10-13 報
-        // 的，「我用 helix，朋友用 vim」）。轉一圈進竪排那一支拿到的是**螢幕的單
+        // Warning: **vim 鍵位下這四個字母不轉，交還給底下那一層**。轉一圈進竪排那一支拿到的是**螢幕的單
         // 位**：`j` 轉成 `h` 就是「下一縱」，而 vim 的 `j` 是行文的一行——段落折
         // 成兩縱的時候那兩件事差整整一縱，`j` 只走到同一段的第二縱去。`h`/`l` 同
         // 病：轉成 `k`/`j` 之後走的是全文的字，`whichwrap` 那道閘繞過去了。
@@ -2510,13 +2472,12 @@ impl Editor {
             (run.1)(self, cx);
             self.note_the_group_count(operator_count);
         }
-        // Warning: **An unbound key does nothing** (2026-10-08 定). A phrasebook here
-        // once answered 「`$` is `gl` here」; that guesses what the person meant,
-        // and was removed with its eleven lines of copy.
+        // Warning: **An unbound key does nothing**. No phrasebook answering
+        // 「`$` is `gl` here」: that guesses what the person meant.
     }
 
     /// **A command's meaning where the page rereads its keys, when a binding
-    /// or a group runs it by name** (2026-11-01): a table's grid
+    /// or a group runs it by name**: a table's grid
     /// ([`Self::table_takes`]), then a vertical page whose letters walk the
     /// screen, where `move_char_left` is `h`'s screen step, one 縱 onward,
     /// as `h` itself is. `true` when one of them took it.
@@ -2533,10 +2494,10 @@ impl Editor {
             return false;
         }
         // Only the command a letter itself runs in this keymap: `gj` is
-        // `move_line_down` too, and the `g` keys never turn with the page
-        // (2026-10-13 定: 「gh gj gk gl 的逻辑性更大，所以不需要更改」).
+        // `move_line_down` too, and the `g` keys never turn with the page:
+        // `gh gj gk gl` are logical, not directions.
         //
-        // Asked of both tables (found in review, 2026-11-02): `move_char_*`
+        // Asked of both tables: `move_char_*`
         // is the letter's command in Normal mode and `extend_char_*` in select
         // mode, and a name reaches either from anywhere. An `extend_*` name
         // extends wherever it is pressed.
@@ -2567,8 +2528,8 @@ impl Editor {
     /// arrows in the visual way): `true` when the key was one of them.
     fn walk_the_vertical_screen(&mut self, key: Key, count: usize, continuing_zong: bool) -> bool {
         // The count applies here too — `10j` is exactly the key a 縱 of
-        // thirty-two characters is long for. These arms used to return
-        // before `repeat` could see it.
+        // thirty-two characters is long for, so these arms do not return
+        // before `repeat` sees it.
         match key {
             // Only the first step of a run may reset the goal slot; the
             // rest of a `10h` continues from the one it chose.
@@ -2600,17 +2561,14 @@ impl Editor {
             Key::Char('k') | Key::Up => {
                 self.repeat(count, |e| e.move_horizontal(motion::prev_grapheme));
             }
-            // Warning: **`H`/`L` are not here any more** (2026-09-12, #404).
-            // They turned the page sideways, and the rule was 「the capital
-            // follows the direction its lowercase does」 — `h` is leftward
-            // and leftward is onward on a 縱書 page, so `H` turned the page
-            // onward. That rule is right, and it is a rule about **screen
-            // quantities**: it still governs `J`/`K`.
+            // Warning: **`H`/`L` are not here** (#404). 「The capital follows
+            // the direction its lowercase does」 — `h` is leftward and leftward
+            // is onward on a 縱書 page — is right, and it is a rule about
+            // **screen quantities**: it governs `J`/`K`.
             //
-            // `H`/`L` now take a sentence, which is a **text unit**, and
-            // this editor's text units have never flipped — `w`, `e`, `b`
-            // and their capitals all read onward in both layouts, and
-            // nobody has ever found that strange. So the sentence pair
+            // `H`/`L` take a sentence, which is a **text unit**, and this
+            // editor's text units never flip — `w`, `e`, `b` and their
+            // capitals all read onward in both layouts. So the sentence pair
             // joins them: `H` is the sentence before, `L` the sentence
             // after, whichever way the page is set.
             _ => return false,
@@ -2636,9 +2594,9 @@ impl Editor {
                 // The count belongs to the `f`, which has already spent it:
                 // `3fx` is the third `x`, not the first.
                 let count = self.operator_count.take().unwrap_or(1).max(1);
-                // Warning: **一次問完，不是叫 n 遍**（2026-10-02）。從前走 `repeat`，
-                // 理由是它的早退（`10000fZ` 只看一眼）——而那個早退現在是
-                // `find_char` 自己的事：找不到第 n 個就 `Missed`，一格不動。
+                // Warning: **一次問完，不是叫 n 遍**。不走 `repeat`：早退（`10000fZ`
+                // 只看一眼）是 `find_char` 自己的事——找不到第 n 個就 `Missed`，一格
+                // 不動。
                 self.as_asked(|e| e.find_nth_char(kind, c, count, false));
             }
             Pending::Replace => self.replace_by_key(c),
@@ -2662,16 +2620,14 @@ impl Editor {
     ///
     /// * **A selection spanning lines** — `xxx gJ` makes those three lines one,
     ///   which is what Helix's `J` does and what vi's does in visual mode.
-    ///   Warning: It used to join the first pair and stop: `join_lines` reads the
-    ///   selection's first line and joins it with the next, once, and nothing
-    ///   asked it to go on. Selecting a paragraph and pressing `gJ` looked like
-    ///   it had worked.
+    ///   Warning: `join_lines` reads the selection's first line and joins it
+    ///   with the next, once — asked once, selecting a paragraph and pressing
+    ///   `gJ` would look like it had worked.
     /// * **`g3J`** — the sequence's own number, which is the order this editor
-    ///   settled on (「命令＋選擇＋動作」, §5.2). Warning: It was read from
-    ///   `operator_count`, which holds a count typed *before* the `g`, so the
-    ///   documented spelling was the one that did nothing: `g4J` joined one
-    ///   pair. `g30g` next door had it right all along.
-    /// * **`4gJ`** — vi's order, a count before the command. This one worked.
+    ///   settled on (「命令＋選擇＋動作」, §5.2). Warning: not `operator_count`,
+    ///   which holds a count typed *before* the `g`; read from there, `g4J`
+    ///   would join one pair. `g30g` next door reads it the same way.
+    /// * **`4gJ`** — vi's order, a count before the command.
     pub(super) fn join_count(&mut self, asked: Option<usize>) -> usize {
         let rope = self.current_buffer().rope();
         let (start, end) = self.selection();
@@ -2687,14 +2643,11 @@ impl Editor {
                 return last - first;
             }
         }
-        // **A count says how many lines end up as one** (2026-09-19),
-        // which is vim's rule: `3J` welds three lines, and that is two joins.
-        // The two ways of writing it used to disagree by one — `g3J` counted
-        // joins and `4gJ` counted lines — while the manual promised both meant
-        // the same thing. Counting lines is the half that matches vim and the
-        // half that matches 「選了幾行就併幾行」 above.
-        // Warning: **`asked` 是最上層那一條路**（2026-10-06）。`J` 從 `gJ` 搬到頂層
-        // 之後，`3J` 的那個 3 走的是 `on_normal_key` 開頭就取走的那個計數，既不
+        // **A count says how many lines end up as one**, which is vim's rule:
+        // `3J` welds three lines, and that is two joins. Both ways of writing
+        // it count lines — the half that matches vim and the half that matches
+        // 「選了幾行就併幾行」 above.
+        // Warning: **`asked` 是最上層那一條路**。`J` 在頂層，`3J` 的那個 3 走的是 `on_normal_key` 開頭就取走的那個計數，既不
         // 在 `sequence_span` 裏（没有序列），也不在 `operator_count` 那個**欄位**
         // 裏（那是前綴鍵存的）。不傳進來的話 `3J` 只併一次。
         self.sequence_span()
@@ -2707,10 +2660,9 @@ impl Editor {
     }
 
     /// **What a bare count may be finished with** — only the keys where N means
-    /// something other than 「do it N times」 (2026-10-14).
+    /// something other than 「do it N times」.
     ///
-    /// Asked for as: 「I type 10 and HUD shows `10`, can there be a shortcut hint
-    /// panel for this too」. Fifty-seven keys in Normal mode take a count, so
+    /// Typing `10` puts `10` in the HUD, and a hint panel follows. Fifty-seven keys in Normal mode take a count, so
     /// listing them all would redraw the whole keymap — and the rule for these
     /// panels is the one the manual already states: list only the keys **you
     /// could not have guessed**. 「N times」 is guessable, so it is one row at
@@ -2722,10 +2674,10 @@ impl Editor {
     /// Every description takes the count as `{0}`, which is why these rows are
     /// built with [`crate::messages::say`] and not [`Self::said`].
     ///
-    /// **Commands, not keys** (2026-11-01): each row names the key its
-    /// command is on now, under either keymap and with the reader's own
-    /// bindings, so the vim keymap's `;` and helix's `A-.` are one row. It
-    /// was two hand-written tables, one a keymap.
+    /// **Commands, not keys**: each row names the key its command is on now,
+    /// under either keymap and with the reader's own bindings, so the vim
+    /// keymap's `;` and helix's `A-.` are one row — not a hand-written table
+    /// a keymap.
     pub(super) const COUNT_KEYS: &'static [(&'static [&'static [NormalCmd]], &'static str)] = &[
         (&[&[NormalCmd::VimJoinSelections, NormalCmd::JoinSelections]], "hint.count.join"),
         (&[&[NormalCmd::GotoFileStart]], "hint.count.line"),
@@ -2738,7 +2690,7 @@ impl Editor {
     ];
 
     // Under the vim keymap repeating an `f`/`t` is `;`, under helix `A-.`
-    // (measured 2026-10-14 — under helix `;` collapses the selection
+    // (measured — under helix `;` collapses the selection
     // instead, so `3;` goes nowhere): the row asks vim's command first.
     // The screen rows are `H M L` under the vim keymap, which binds them as
     // vim does, and `gt gc gb` under helix's.
@@ -2766,7 +2718,7 @@ impl Editor {
     /// The pair rows both menus end with: a key, then the shapes it matches
     /// that the eye can tell apart. The `…` stands for the look-alikes it
     /// matches too (full width, half width, the vertical forms): listed, they
-    /// made rows of shapes nobody could tell apart (2026-10-28).
+    /// would make rows of shapes nobody could tell apart.
     const PAIR_ROWS: &'static [(&'static str, &'static str)] = &[
         ("(", "( …"),
         ("[", "[ 「 【 〔 …"),
@@ -2795,8 +2747,8 @@ impl Editor {
     }
 
     /// **The pairs `ms` and `mr`'s second key write**: each key's own pair and
-    /// no family (2026-10-29, review: the rows listed `[ 「 【 〔 …` and `ms[`
-    /// writes `[…]` alone). Any other character writes itself.
+    /// no family (`ms[` writes `[…]` alone, so the row does not list
+    /// `[ 「 【 〔 …`). Any other character writes itself.
     pub(super) fn made_rows() -> super::KeyRows {
         let mut rows: super::KeyRows = Self::PAIR_ROWS
             .iter()
@@ -2838,8 +2790,8 @@ impl Editor {
 
     /// **開命令行**——`:`、`!`、`空格 ?` 都走這一支。
     ///
-    /// Warning: 從前是三份抄的，而且抄漏了一行：`:` 不清 `completion`，另外兩個清
-    /// （2026-09-23 審出來的）。同一件事兩種收尾，正是這個倉在防的那一族。
+    /// Warning: 一支，不是三份抄的：抄的會漏行（`:` 不清 `completion`，另外兩個清），
+    /// 同一件事兩種收尾，正是這個倉在防的那一族。
     pub(super) fn open_the_command_line(&mut self, line: &str) {
         self.mode = Mode::Command;
         self.command_line = line.to_string();
@@ -2922,10 +2874,10 @@ fn hold_in_line(rope: &crate::Rope, at: usize, floor: usize) -> usize {
 
 /// A key sequence is written as a string (`"gJ"`, `"dw"`), and a chord has no
 /// letter of its own, so the table spells it as the control byte it is:
-/// `"\u{f}"` is `C-o`, `"\u{1b}"` is Esc. Played as `Key::Char`, those reached
-/// the editor as nothing at all — which is why four named actions
-/// (`jump_backward`, `collapse_selection`, `increment`, `decrement`) were
-/// listed by `:keymap-actions`, bindable, and **dead** until 2026-09-19.
+/// `"\u{f}"` is `C-o`, `"\u{1b}"` is Esc. Played as `Key::Char`, those would
+/// reach the editor as nothing at all — four named actions (`jump_backward`,
+/// `collapse_selection`, `increment`, `decrement`) listed by
+/// `:keymap-actions`, bindable, and **dead**.
 /// A key in the internal spelling a binding's string uses (`A-d` is
 /// [`yumete_cjk::actions::ALT`] then `d`, `C-o` its control byte): the
 /// inverse of [`pressed`], for [`yumete_cjk::actions::spell`] to write.
@@ -2967,12 +2919,12 @@ pub(super) fn pressed(c: char) -> Key {
     }
 }
 
-/// **有名字的那幾個鍵，兩個方向**（2026-10-12）——`<tab>`／`<S-tab>`／方向鍵那
+/// **有名字的那幾個鍵，兩個方向**——`<tab>`／`<S-tab>`／方向鍵那
 /// 一族。表在 [`yumete_cjk::actions::NAMED`]，這裏只把它和 [`Key`] 接上。
 ///
 /// 一支函數管兩頭，是因為兩頭必須逐條相同：[`pressed`] 把別名右邊那一串放回
 /// 鍵，[`typed_as`] 把按下的鍵翻成查表用的那一串。少一邊，寫得進配置而按不出
-/// 來——`C-o` 就是這麼死了一輪（手冊第 810 行一直寫着它能綁）。
+/// 來。
 fn named_key(c: char) -> Option<Key> {
     use yumete_cjk::actions::named_key as of;
     let is = |name: &str| of(name) == Some(c);
@@ -3003,11 +2955,11 @@ pub(super) fn typed_as(key: Key) -> Option<char> {
     let named = |name: &str| of(name);
     match key {
         Key::Char(c) => Some(c),
-        // **Alt 借一個私用區的碼位**（2026-10-08）：它没有自己的字節。
+        // **Alt 借一個私用區的碼位**：它没有自己的字節。
         Key::Alt(c) => Some(c),
-        // Warning: **`C-x` 從前綁不了**（2026-10-12 查出來的）：這一支只認
-        // `Key::Char` 和 `Key::Alt`，而 `written("C-o")` 交的是那個控制字節，
-        // 兩邊永遠對不上。配置照收、一聲不吭，手冊卻寫着它能綁。
+        // Warning: **`C-x` 也要綁得了**：只認 `Key::Char` 和 `Key::Alt` 的話，
+        // `written("C-o")` 交的是那個控制字節，兩邊永遠對不上——配置照收、一聲
+        // 不吭。
         Key::Ctrl(c) if c.is_ascii_alphabetic() => Some(yumete_cjk::actions::ctrl(c)),
         Key::Ctrl(_) => None,
         Key::Tab => named("tab"),
@@ -3029,8 +2981,7 @@ pub(super) fn typed_as(key: Key) -> Option<char> {
 
 /// **The cursors a command reaches when no key of the keymap runs it** —
 /// the vim preset's own commands, which its keys reach through the alias
-/// layer (found in review, 2026-11-02: vim's `x` deleted at one cursor of
-/// two). Each is classed by a key that does the same kind of thing: an edit
+/// layer (vim's `x` deletes at every cursor). Each is classed by a key that does the same kind of thing: an edit
 /// at each cursor in turn, or a move of every cursor.
 fn keyless_place(name: &str) -> Option<(Pending, Key)> {
     let like = match name {
@@ -3046,10 +2997,10 @@ fn keyless_place(name: &str) -> Option<(Pending, Key)> {
 mod key_table_tests {
     use super::*;
 
-    /// **一個鍵寫得進配置，就要按得出來**——兩個方向逐條對着（2026-10-12）。
+    /// **一個鍵寫得進配置，就要按得出來**——兩個方向逐條對着。
     ///
-    /// `C-o` 寫得進配置而永遠按不出來，整整漏了一輪：查表那一支只認 `Key::Char`
-    /// 和 `Key::Alt`，而手冊第 810 行一直寫着它能綁。
+    /// 查表那一支只認 `Key::Char` 和 `Key::Alt` 的話，`C-o` 寫得進配置而永遠按
+    /// 不出來。
     #[test]
     fn every_bindable_key_round_trips_through_the_table() {
         let every = [

@@ -1,4 +1,4 @@
-//! The editor's side of 雙鏈 (2026-10-30): when the project's links are read,
+//! The editor's side of 雙鏈: when the project's links are read,
 //! the panel that shows them two ways, `gr` on a Markdown file, and the one
 //! resolver `[[name]]` goes through everywhere.
 
@@ -28,7 +28,7 @@ impl Editor {
             self.collect_links_index();
         }
         // A thread already reading the project is waited for, not raced
-        // with a second reading here (found in review, 2026-11-02).
+        // with a second reading here.
         if self.links.is_none() {
             self.wait_for_links_index(std::time::Duration::from_secs(10));
         }

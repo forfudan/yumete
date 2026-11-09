@@ -14,31 +14,28 @@ impl Editor {
     /// Whether the panel opens **without being asked**, where the cursor is.
     ///
     /// Warning: **A row on a prose page never opens it** (#495) — `to`, `tb` and
-    /// `tf` alike. `tf` used to, on the reasoning that a level which folds
-    /// cells away owes the reader a way to read one whole. True in `tt`, where
-    /// the grid has the window; wrong on a page of prose, because the panel
-    /// takes a fifth of the width and **the paragraphs above and below rewrap
-    /// when it appears**: 「markdown 中如果向下移动遇到表格总是会发生 wrap
-    /// 跳动」. A panel that costs the whole page a reflow is not worth opening
+    /// `tf` alike. A level which folds cells away owes the reader a way to read
+    /// one whole — true in `tt`, where the grid has the window; on a page of
+    /// prose the panel takes a fifth of the width and **the paragraphs above
+    /// and below rewrap when it appears**, so moving down onto a table makes
+    /// the page jump. A panel that costs the whole page a reflow is not worth opening
     /// unasked, and `t i` opens it in one keystroke for the reader who wants
     /// it. A note in prose is not a row and is not affected: there is nothing
     /// on the page that says what a footnote holds.
     pub(super) fn detail_opens_here(&self) -> bool {
-        // **A row never opens by itself** (2026-10-20 作者定: 「make sure that
-        // the panel of record is not on automatically by default……This is
-        // also very annoying to see the floating panel by default」).
+        // **A row never opens by itself**: a floating record panel that is on
+        // by default is in the way.
         //
-        // It used to read 「a row, and **not** in the window」 — and inside the
-        // full-window grid that is false, so the answer was yes and the panel
-        // was there before anybody asked. `␣i` asks for it now, and
-        // `:instant-info record` is how to have it always.
+        // Not 「a row, and **not** in the window」 — inside the full-window grid
+        // that is false, so the panel would be there before anybody asked.
+        // `␣i` asks for it, and `:instant-info record` is how to have it
+        // always.
         //
         // Warning: **Only the row.** `detail()` also answers for a footnote the
         // cursor is pressing, and that one floats on its own as it always has
         // — a footnote is 「what is under the cursor」, which is a question the
-        // reader asked by standing there.
-        // (`a_footnote_inside_a_table_cell_still_answers` caught me writing
-        // `false` here and taking the note down with the row.)
+        // reader asked by standing there
+        // (`a_footnote_inside_a_table_cell_still_answers` holds this).
         !self.detail_shows_a_row()
     }
 
@@ -47,9 +44,8 @@ impl Editor {
     /// 小寫浮、大寫一定進邊欄——五種信息同一條規矩（#426）。
     pub(super) fn show_the_record_here(&mut self, afloat: bool) {
         if self.detail().is_none() {
-            // Warning: **不是字典那一句**（2026-09-30 報的）。從前這裏借用
-            // 「光標下没有字可查」——那是 `空格 d` 查不到字時說的，跟這一鍵没
-            // 有關係，而讀者只會以為自己按錯了鍵。
+            // Warning: **不是字典那一句**。不許借用「光標下没有字可查」——那是
+            // `空格 d` 查不到字時說的，跟這一鍵没有關係，而讀者只會以為自己按錯了鍵。
             self.status = say!("ui.cursor-is-not-in-a-table");
             if !afloat {
                 self.make_room_for_the_info();
@@ -57,18 +53,17 @@ impl Editor {
             return;
         }
         // **再按一次同一個鍵就收起來**，同別的四種——而且問的是同一句
-        // （[`Editor::info_on_screen`]）。從前這裏問 `detail_visible()`，它不知道
-        // `Esc` 把浮窗按下去了，於是按下去之後再按 `空格 i` 當場又收一次。
+        // （[`Editor::info_on_screen`]）。不問 `detail_visible()`：它不知道
+        // `Esc` 把浮窗按下去了，於是按下去之後再按 `空格 i` 會當場又收一次。
         if self.info_on_screen(crate::sidebar::Info::Record, afloat) {
             self.show_detail = Some(false);
             self.info_asked = None;
             self.status = say!("ui.detail-panel-off");
             return;
         }
-        // **Asked for this row, and gone when the cursor leaves it** (2026-10-20
-        // 作者定: 「space-i is a shortcut to turn on this panel / sidebar for
-        // this row (just like space-k for definition). When the cursor go out
-        // of the row, it disappear.」). `put_this_info_here` records the ask;
+        // **Asked for this row, and gone when the cursor leaves it**: `␣i`
+        // turns the panel on for this row, as `␣k` does a definition.
+        // `put_this_info_here` records the ask;
         // `info_asked_now` is where it expires.
         self.show_detail = Some(true);
         self.put_this_info_here(crate::sidebar::Info::Record, afloat);
@@ -83,10 +78,10 @@ impl Editor {
         let want = !self.detail_visible();
         self.show_detail = Some(want);
         match want {
-            // Warning: **走不收起的那一支**（2026-09-30 審出來的）。`ask_for_info`
+            // Warning: **走不收起的那一支**。`ask_for_info`
             // 的判準是「此刻擺的就是它，而且畫在這一鍵要的地方」——`q` 關掉之後
-            // `info_asked` 還記着記錄，於是這一下被當成「又按了一次」當場關回
-            // 去，要按兩下纔出得來。同 `look_up_here` 那一個。
+            // `info_asked` 還記着記錄，走另一支的話這一下會被當成「又按了一次」
+            // 當場關回去，要按兩下纔出得來。同 `look_up_here` 那一個。
             true => {
                 self.put_this_info_here(crate::sidebar::Info::Record, true);
                 self.status = say!("ui.detail-panel-on");
@@ -105,24 +100,21 @@ impl Editor {
     /// answer with theirs. The editor works out *what* to say; the front end
     /// decides where to put it.
     pub fn detail(&self) -> Option<Detail> {
-        // **Whatever the cursor is standing in answers** (#283). It used to
-        // be whatever the *file* was: a `Bounds::Md` view sent every question
-        // to the note panel, so `t i` inside a Markdown table — a table key,
-        // pressed in a table — answered 「這裏没有註」 and the row panel could
-        // only ever be reached by opening a `.csv`.
+        // **Whatever the cursor is standing in answers** (#283), not whatever
+        // the *file* is: `t i` inside a Markdown table — a table key, pressed
+        // in a table — answers with the row, not 「這裏没有註」.
         //
-        // The old reasoning was that a Markdown table is a page of a document
-        // and the document's question is the one worth asking. That is right
-        // in the *paragraph*, which is why the note panel still answers there
-        // — and wrong in the row, the more so since a cell wide enough to be
-        // folded away is one this panel is now the way to read whole.
+        // A Markdown table is a page of a document, and in the *paragraph* the
+        // document's question is the one worth asking, which is why the note
+        // panel answers there — but not in the row, the more so since a cell
+        // wide enough to be folded away is one this panel is the way to read
+        // whole.
         //
-        // Warning: **站在註上比在行裏精確，所以註先。**（2026-09-22 報的：`[^37]` 在
-        // 一格表格裏，浮窗什麽都不出，而狀態欄照樣寫着「腳注」。）兩條規矩夾出
-        // 一個洞：這裏無條件先給行，而行在散文頁上又**不主動打開**（#495），於是
-        // 兩樣都没有。`note_detail` 只在光標**正壓着** `[^n]` 或 `%%註%%` 的時候
+        // Warning: **站在註上比在行裏精確，所以註先。** 要是無條件先給行，而行在
+        // 散文頁上又**不主動打開**（#495），一格表格裏的 `[^37]` 就兩樣都没有：
+        // 浮窗什麽都不出，而狀態欄照樣寫着「腳注」。`note_detail` 只在光標**正壓着** `[^n]` 或 `%%註%%` 的時候
         // 纔答得出東西——那是讀者指着的那一個，而「這一格屬於某一行」只是它待的
-        // 地方。#283 要的「行裏按 `t i` 給行」照舊：讓開的只有光標壓着註的那幾格。
+        // 地方。#283 要的「行裏按 `t i` 給行」不變：讓開的只有光標壓着註的那幾格。
         self.note_detail().or_else(|| match self.in_a_table_row() {
             true => self.row_detail(),
             false => None,
@@ -131,11 +123,10 @@ impl Editor {
 
     /// Whether the panel is about to show a **row** rather than a note.
     ///
-    /// The two want different shapes, and the shape used to be picked from
-    /// whether the table had taken the window (#283): a row in a Markdown
-    /// document got the note's four-line strip along the bottom, so a
-    /// five-column row showed two of its fields and a 拆分表 row showed two
-    /// of twenty-eight. What decides is what the panel *holds* — a row is a
+    /// The two want different shapes, and not by whether the table has taken
+    /// the window (#283): a row in a Markdown document given the note's
+    /// four-line strip along the bottom shows two of a five-column row's
+    /// fields, and two of a 拆分表 row's twenty-eight. What decides is what the panel *holds* — a row is a
     /// tall thing wherever it is written.
     pub fn detail_shows_a_row(&self) -> bool {
         // 與 [`Self::detail`] 同一個次序，否則這兩句會各說各話：註贏了卻仍被
@@ -217,10 +208,10 @@ impl Editor {
         // moved onto its opening mark expects the panel then, not one step
         // later.
         let runs = self.markup_line_in(line, block);
-        // Warning: **最裏面那一條，不是第一條**（2026-09-28）。`spans` 交出來的是嵌套的：
+        // Warning: **最裏面那一條，不是第一條**。`spans` 交出來的是嵌套的：
         // `# 見[^1]` 交 `HeadingMark`/`Heading 1..6`/`Footnote 2..6`，而 `Heading`
         // 排在前面。取第一條拿到的是標題那個構造，再去它裏面找腳註當然找不到——
-        // **標題裏的腳註從此没有詳情面板**。不變式保證「起點最靠後的那一條」就是最內層。
+        // **標題裏的腳註就没有詳情面板**。不變式保證「起點最靠後的那一條」就是最內層。
         let construct = runs
             .iter()
             .filter(|s| within >= s.start && within < s.end)
@@ -270,10 +261,10 @@ impl Editor {
     /// search. A link, a `[[章節]]` and a `#錨點` are followed the same way —
     /// they are definitions too, and the ones a manuscript has most of.
     ///
-    /// Warning: **Standing on none of them it does nothing** (#454). It used to fall
-    /// through to 「這個詞還在哪裏」, so `gd` in the middle of a paragraph
-    /// scattered hits across the book and moved the caret. That question is
-    /// still one key away and always was: `g/`.
+    /// Warning: **Standing on none of them it does nothing** (#454). Falling
+    /// through to 「這個詞還在哪裏」 would make `gd` in the middle of a
+    /// paragraph scatter hits across the book and move the caret. That
+    /// question is one key away: `g/`.
     fn follow_note(&mut self) {
         // A reference with no note is the ordinary way a note gets written:
         // you type `[^1]` in the sentence and then need somewhere to put it.
@@ -289,10 +280,10 @@ impl Editor {
             // always followed them; `gd` asks the same question in the same
             // words, so it follows them as well.
             if self.link_under_cursor().is_some() {
-                // The same code `gL` runs (2026-11-02).
+                // The same code `gL` runs.
                 return self.follow_link();
             }
-            // **Typst code is the server's before the wiki's** (2026-11-06), as
+            // **Typst code is the server's before the wiki's**, as
             // `Space k` is: a name in `#let` is a variable, not an entry.
             if !self.writes_code()
                 && self.server_spot(self.sel.head())
@@ -305,19 +296,17 @@ impl Editor {
             if self.follow_wiki() {
                 return;
             }
-            // **代碼檔上，這個問題歸語言服務器**（#53 ②，2026-09-21）。前面那
+            // **代碼檔上，這個問題歸語言服務器**（#53 ②）。前面那
             // 三種——腳注、鏈接、百科名——是稿子裏的「定義」，而一份 `.rs` 裏一
             // 個都不會有；`gd` 問的還是同一句話（「這個東西寫在哪」），只是這一
             // 次答得出來的是別人。
             if self.ask_where_this_is_written(crate::lsp::Goto::Definition) {
                 return;
             }
-            // Warning: **And on ordinary writing it does nothing** (#454). It used to
-            // fall through here too — a whole-document search for whatever the
-            // cursor happened to be on — so `gd` in the middle of a paragraph
-            // scattered hits across the book and moved the caret.
-            // 「我希望它对于普通文本不适用（按下去没有效果）」. That search is
-            // still one key away and always was: `g/`.
+            // Warning: **And on ordinary writing it does nothing** (#454): no
+            // whole-document search for whatever the cursor happens to be on,
+            // which would scatter hits across the book and move the caret.
+            // That search is one key away: `g/`.
             self.status = say!("note.nothing-to-go-to");
             return;
         };
@@ -341,23 +330,23 @@ impl Editor {
     /// page that does not exist is how one gets written, which is what every
     /// wiki-shaped editor does and what a writer typing `[^1]` means.
     ///
-    /// Warning: **`g` is the document's group and `t` is the table's** (2026-09-12).
-    /// This key used to mean something else inside a grid — 「which row has
-    /// this in the key column」 — and a `[^1]` written into a table row then
-    /// searched the grid instead of going to its note, which is the one thing
-    /// `gd` is named for. A key whose meaning turns over depending on what the
+    /// Warning: **`g` is the document's group and `t` is the table's**. This
+    /// key means nothing else inside a grid — were it 「which row has this in
+    /// the key column」 there, a `[^1]` written into a table row would search
+    /// the grid instead of going to its note, which is the one thing `gd` is
+    /// named for. A key whose meaning turns over depending on what the
     /// cursor happens to be standing in cannot be relied on; the table's own
     /// questions are asked with `t/`, `t?` and `:table-jump`.
     ///
     /// Warning: **And that rule is the whole rule** (#454). A 拆分 cell holding 目
-    /// still *names* another row, and this key still refuses it: 「g 不管表格，
-    /// 表格的我们以后再说」. `t?` is the one that asks it.
+    /// still *names* another row, and this key still refuses it: `g` does not
+    /// answer for tables. `t?` is the one that asks it.
     pub(super) fn show_definition(&mut self) {
         self.definition_preview = false;
         self.follow_note();
     }
 
-    /// **`*`/`A-*`：記下要找什麼，不動光標**（2026-10-06，helix 的
+    /// **`*`/`A-*`：記下要找什麼，不動光標**（helix 的
     /// `search_selection_detect_word_boundaries`/`search_selection`）。
     ///
     /// `bounded` 為真時兩端各補一個 `\b`——**補不補是逐端看的**，同 helix：
@@ -410,23 +399,21 @@ impl Editor {
     pub(super) fn search_the_page(&mut self, back: bool) {
         let rope = self.current_buffer().rope();
         let (from, to) = self.selection();
-        // Warning: **一個字寬的「選區」是光標，不是選中**（2026-10-06）。這個編輯器
-        // 裏每一次移動都留下選區，而光標蓋着自己那一格——所以 `to > from` 恆真，
-        // 下面那條「取光標下那個詞」的路**一次都没走到過**。搜索面板那一扇早就
-        // 按這條規矩辦（`open_search` 的 `to > from + 1`），這裏跟上。
+        // Warning: **一個字寬的「選區」是光標，不是選中**。這個編輯器裏每一次移動
+        // 都留下選區，而光標蓋着自己那一格——所以問 `to > from` 的話它恆真，下面
+        // 那條「取光標下那個詞」的路**一次都走不到**。搜索面板那一扇同一條規矩
+        // （`open_search` 的 `to > from + 1`）。
         let needle = match to > from + 1 {
             true => rope.slice(from..to.min(rope.len_chars())).to_string(),
             false => {
-                // Warning: **問 `line_words`，不要問 `segment_line`**（2026-10-06 查出來
-                // 的）。`segment_line` 是**畫分詞底線**用的，它有意把拉丁詞整段濾
+                // Warning: **問 `line_words`，不要問 `segment_line`**。`segment_line` 是**畫分詞底線**用的，它有意把拉丁詞整段濾
                 // 掉（`words.rs`：「標點 runs and Latin words are never words to
-                // paint」）——於是這裏在英文上永遠落到下面那條退路，取的是**一個
-                // 字母**。實測 `one two three alpha` 站在 `o` 上按 `*`，搜的是 `o`、
-                // 報「第 2 處，共 5 處」；`l*` 搜 `n`。中文從來没事，所以躲了很久。
+                // paint」）——問它的話英文上永遠落到下面那條退路，取的是**一個
+                // 字母**：`one two three alpha` 站在 `o` 上按 `*`，搜的會是 `o`。
                 //
                 // `line_words` 正是 `w`/`b` 問的那一支（`word_object_span` 也問
                 // 它），所以這一行的註釋「which is what `w` would have taken」
-                // 現在是真的。
+                // 是真的。
                 let line = rope.char_to_line(self.sel.head());
                 let words = crate::motion::line_words(rope, line, self.word_grain(), self.segmenter.as_ref());
                 let here = self.sel.head();
@@ -451,11 +438,10 @@ impl Editor {
         // The first one *after* where you are standing: the useful answer to
         // 「還在哪裏」 is the next place, not the first page of the book.
         let here = self.sel.head();
-        // Warning: **往回要從這一處的開頭數起，不是從光標數起**（2026-10-06，和
-        // `repeat_search` 裏那一條同一個病）。落地之後光標停在匹配的**最後一個
+        // Warning: **往回要從這一處的開頭數起，不是從光標數起**（同 `repeat_search`
+        // 裏那一條）。落地之後光標停在匹配的**最後一個
         // 字**上，開頭在 `anchor`——拿光標去問，當前這一處的開頭就在光標之前，於是
-        // `#` 把自己又找了一遍，一動不動。匹配只有一個字的時候它是好的，所以這個
-        // 洞要等到 `g/` 真的取整個詞之後才露出來。
+        // `#` 把自己又找了一遍，一動不動。匹配只有一個字的時候兩種問法一樣。
         let from_here = self.sel.anchor().min(here);
         let at = match back {
             // 往回：光標**之前**最後一處；前面没有就繞到最末一處。
@@ -630,16 +616,14 @@ impl Editor {
         // question one column to the left, while `cell_position`, which asks
         // the view, was pointing one column to the right.
         let spans = self.row_cells(line);
-        // Warning: **照這張表數，不照這個檔數**（2026-09-23 審出來的）。一個 `.csv`
-        // 攤成整扇窗的時候，行號欄寫 1、狀態欄寫「行 1」，而這裏從前寫 2——
-        // 同一行三個數字兩種口徑。`table_row_base` 就是那兩處用的那一個。
-        // Warning: **一律寫行號，不寫主鍵的值**（2026-09-30 定，原話「我建议
-        // 都用行号数字，不要用主键的值（主键的值可能很长）」）。從前有主鍵就拿
-        // 主鍵的值當標題，而一格主鍵裏可以是一整句話，浮窗的標題欄放不下。
-        // **Numbered in records** (2026-10-20): a line inside a record that
-        // holds a line break is still that record, and this read the line's
-        // own distance from the top — so the panel titled itself 「記錄 8」
-        // over the fields of record 7.
+        // Warning: **照這張表數，不照這個檔數**。一個 `.csv` 攤成整扇窗的時候，
+        // 行號欄寫 1、狀態欄寫「行 1」，這裏也要寫 1，不許同一行三個數字兩種口徑。
+        // `table_row_base` 就是那兩處用的那一個。
+        // Warning: **一律寫行號，不寫主鍵的值**：一格主鍵裏可以是一整句話，浮窗的
+        // 標題欄放不下。
+        // **Numbered in records**: a line inside a record that holds a line
+        // break is still that record, so the line's own distance from the top
+        // would title the panel 「記錄 8」 over the fields of record 7.
         let title = format!("{}", self.table_row_index(line) + 1);
         // The field the cursor is in is shown even when it is empty: that it
         // *is* empty is the answer to "what is in this cell".
@@ -661,10 +645,10 @@ impl Editor {
                 // `None` when the row has no such field — a short row, which
                 // the grid already marks as ragged. An empty field is
                 // `Some("")`, and they are different answers to 「這一格有什麼」.
-                // **The value, not the bytes** (2026-10-23): the grid drew
-                // 「兩行␊的值」 and this panel, reading the source, wrote
-                // `"兩行的值"` — the quotes the editor owns, and the line break
-                // lost on the way to the screen. [`Self::cell_shown`] is what
+                // **The value, not the bytes**: the grid draws 「兩行␊的值」,
+                // and the source would give `"兩行的值"` — the quotes the
+                // editor owns, and the line break lost on the way to the
+                // screen. [`Self::cell_shown`] is what
                 // the grid reads; the front end then breaks it where the
                 // writer did.
                 let text = spans.get(i).map(|&s| self.cell_shown(&text, s));
@@ -695,7 +679,7 @@ impl Editor {
     /// A 拆分 cell is a *sequence* of components, each of which is a character
     /// with a row of its own — so one cell points at several rows, and which
     /// one is a question only a person can answer. **No column is declared
-    /// for it** (2026-10-30, as decided): any cell outside the key column is
+    /// for it**: any cell outside the key column is
     /// read this way, since the key column's own cell *is* its row.
     fn cell_links(&self) -> Vec<(char, Option<usize>)> {
         let Some(view) = &self.table else {

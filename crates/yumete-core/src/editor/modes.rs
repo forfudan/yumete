@@ -18,7 +18,7 @@ impl Editor {
     /// pendings those are is [`Pending::wants_the_ime`]'s to say; this is
     /// only the door it is asked through.
     ///
-    /// Warning: **`mi`/`ma` 不在裏面**（2026-10-04）：它們等的是物件的名字。
+    /// Warning: **`mi`/`ma` 不在裏面**：它們等的是物件的名字。
     pub fn wants_the_ime(&self) -> bool {
         self.pending.wants_the_ime()
     }
@@ -31,32 +31,29 @@ impl Editor {
     /// 1. **Where do the keys go?** `PAN.` when a side panel has them, `TBL`
     ///    or `CEL` when a grid does. That is asked first because it is the one with
     ///    teeth: `d` in the results list clears the search word, `d` in the
-    ///    page deletes a line of the novel, and both read `NORMAL` until
-    ///    2026-09-27.
+    ///    page deletes a line of the novel, and both must not read `NORMAL`.
     /// 2. **Is the selection being extended?** `SEL`, the way Helix writes it.
     /// 3. **Otherwise the mode's own word** — three letters.
     pub fn mode_label(&self) -> Option<String> {
         if self.mode == Mode::Normal && self.sidebar_focused() {
             return Some("PAN.NOR".to_string());
         }
-        // **選擇器也報狀態**（2026-10-01 定：「PICKER 下也可以显示状态，就像
-        // PANEL 一样……这样的好处是用户可以马上知道现在是插入状态与否」）。
+        // **選擇器也報狀態**，同面板：讀者馬上知道現在是不是插入狀態。
         //
-        // Warning: **2026-10-08 起只有一個詞。** 從前它跟着兩層換（`PIC.INS` / `PIC.NOR`），
-        // 而挑選器只剩打字那一層——開門就在框裏，`Esc` 一下關掉。那個詞照舊寫，
-        // 因為它答的正是上面那句「现在是插入状态与否」。
+        // Warning: **只有一個詞。** 挑選器只有打字那一層——開門就在框裏，`Esc` 一下
+        // 關掉——所以不跟着兩層換。那個詞照樣寫，因為它答的正是「現在是不是插入狀態」。
         //
-        // 順帶把那八個點與檔名之間那一格空氣也補回來了：模式一欄不空，狀態行
-        // 那條「借一格給點站」的路就走得通（`draw_status`）。
+        // 模式一欄不空，狀態行那條「借一格給點站」的路就走得通（`draw_status`），
+        // 那八個點與檔名之間有一格空氣。
         if self.mode == Mode::Picker {
             return Some("PIC.INS".to_string());
         }
-        // **覆寫模式報 `REP`**（vim 的 `R`，2026-10-06）。vim 寫 `-- REPLACE --`；
+        // **覆寫模式報 `REP`**（vim 的 `R`）。vim 寫 `-- REPLACE --`；
         // 這一欄的詞一律三個大寫字母（`NOR` `INS` `SEL`），所以取頭三個。
         //
-        // Warning: **這三支不許提前 return**（2026-10-21 改）。它們從前各自
-        // `return` 一個詞，而網格那一層的前綴是在底下加的——於是在表格裏按 `v`
-        // 報的是 `SEL` 而不是 `CEL.SEL`，鍵在哪一層那一問當場斷掉。先算出詞，
+        // Warning: **這三支不許提前 return**。網格那一層的前綴是在底下加的——各自
+        // `return` 一個詞的話，在表格裏按 `v` 報的是 `SEL` 而不是 `CEL.SEL`，鍵在
+        // 哪一層那一問當場斷掉。先算出詞，
         // 最後一步統一加前綴，這樣再添一個詞也不會漏。
         // A block reads `SEL` too: it is a selection being grown.
         let growing = (self.extend || self.block.is_some()) && self.mode == Mode::Normal;
@@ -65,14 +62,14 @@ impl Editor {
             (false, true) if self.mode == Mode::Insert => Some("REP".to_string()),
             _ => self.mode.label().map(str::to_string),
         };
-        // **A grid prefixes whatever word came out above** (2026-10-21), so
+        // **A grid prefixes whatever word came out above**, so
         // `REP` and `SEL` come along without this line knowing they exist, and
         // the layer answers 「where are my keys」 the way `PAN.` and `PIC.`
         // already do. [`Layer::label`] owns the spelling, including the one
         // two prefixes: `TBL.` at the top layer, `CEL.` in a cell.
         // …and only where the layers are in force: a table drawn into a page
         // of prose is a document, and a document's mode word is the
-        // document's (2026-10-21).
+        // document's.
         match self.layers_here() {
             true => word.map(|w| self.table_layer().label(&w)),
             false => word,
@@ -113,9 +110,8 @@ impl Editor {
 
     /// **手上有不止一段選區没有。**
     ///
-    /// 前端問它是為了一件事：Warning: **多選區下不畫內嵌的 preedit**（2026-09-28 定，原話：
-    /// 「我觉得是不是 multiselection 的时候应当禁止 pre-edit 而是用候选面板。这样的话防止
-    /// 一堆非确定的修改」）。
+    /// 前端問它是為了一件事：Warning: **多選區下不畫內嵌的 preedit**，用候選
+    /// 面板：免得一堆不確定的修改同時落在幾處。
     /// 只給測試：手上等的是不是一個字符（前端問的是 `Pending` 上同名的那一支）。
     #[cfg(test)]
     pub fn wants_the_ime_for_test(&self) -> bool {
@@ -127,7 +123,7 @@ impl Editor {
     }
 
     /// **主選區以外的那幾段**，各自照 [`Self::selection`] 的辦法撐開一個字素
-    /// （#405，2026-09-28）。
+    /// （#405）。
     ///
     /// Warning: **塌着的那些也要交出來。** 主選區塌着的時候有光標替它說話——橫排是終端自己
     /// 那個，竪排是畫進頁面的反白方塊——而次選區没有光標，它塌着的時候能被看見的只有
@@ -144,18 +140,18 @@ impl Editor {
         self.sel
             .secondaries()
             .map(|one| {
-                // Warning: **畫面這一支永遠不許崩**（2026-09-28 修）。狀態那一頭已經在
+                // Warning: **畫面這一支永遠不許崩**。狀態那一頭已經在
                 // `clamp_cursor` 裏收過了，可是「繪製不許 panic」不能靠別人守規矩——
                 // 一個指得太遠的下標最壞是畫錯一格，而 `next_grapheme` 拿到它是整個
-                // 編輯器退出。日誌裏那一條就是這麼來的。
+                // 編輯器退出。
                 let (start, end) = one.span();
                 let (start, end) = (start.min(len), end.min(len));
                 match insert {
-                    // **The cell after the gap is drawn too** (2026-10-27, as
-                    // helix draws every cursor in every mode): a caret is a
-                    // place between two characters and has no width, so it
-                    // used to be drawn as nothing at all, and a second cursor
-                    // vanished the moment you pressed `i`. One past the end
+                    // **The cell after the gap is drawn too** (as helix draws
+                    // every cursor in every mode): a caret is a place between
+                    // two characters and has no width, so drawn as itself it
+                    // would be nothing at all, and a second cursor would vanish
+                    // the moment you pressed `i`. One past the end
                     // of the file is the cell after the last character.
                     true => {
                         let head = one.head.min(len);
@@ -208,12 +204,12 @@ impl Editor {
     }
 
     /// How many characters at the start of the line the label stands for: the
-    /// `!` of a `:!` line, which `Shell:` says instead (2026-10-28), so the
+    /// `!` of a `:!` line, which `Shell:` says instead, so the
     /// line does not read as bash's own `!ls`.
     pub(super) fn prompt_hidden(&self) -> usize {
         match self.mode == Mode::Command && self.command_line.trim_start().starts_with('!') {
-            // Characters, not bytes (2026-10-29, review: a full-width space
-            // before the `!` is three bytes, and three characters were hidden).
+            // Characters, not bytes: a full-width space before the `!` is
+            // three bytes.
             true => command::shell_start(&self.command_line)
                 .map_or(0, |at| self.command_line[..at].chars().count()),
             false => 0,
@@ -228,9 +224,9 @@ impl Editor {
         }
     }
 
-    /// **The last shell command, as it ran** (2026-10-29, review: the ghost
-    /// read the history as typed, so after `:!! b` it offered `! b`, and Tab
-    /// then ran `echo a b b`). This session's last command is kept expanded;
+    /// **The last shell command, as it ran**, not the history as typed: after
+    /// `:!! b` the ghost must not offer `! b`, which Tab would then run as
+    /// `echo a b b`. This session's last command is kept expanded;
     /// before it runs one, the history's newest shell line with no `!` in it.
     fn last_shell_line(&self) -> Option<&str> {
         if let Some(last) = self.last_bang.as_deref() {
@@ -243,7 +239,7 @@ impl Editor {
     }
 
     /// **What the word being typed on a shell line can be finished with**
-    /// (2026-10-28), and where that word starts: program names from `$PATH`
+    /// and where that word starts: program names from `$PATH`
     /// for the first word and the first after `|`, `;` or `&`, file names after
     /// it — helix's shell completer. Programs are matched fuzzily and best
     /// first, as helix's are (`gt` finds `git`); files by prefix, as a shell's
@@ -293,8 +289,8 @@ impl Editor {
                 });
                 scored.into_iter().map(|(_, name)| name.clone()).collect()
             }
-            // **Quoted for the shell** (2026-10-29, review: `my file.txt` went
-            // in bare and the shell read two arguments). A backslash before
+            // **Quoted for the shell**, so `my file.txt` is one argument. A
+            // backslash before
             // each character the shell would read, as a shell's own
             // completion writes it; what was typed is read the same way.
             (false, _) => self
@@ -338,7 +334,7 @@ impl Editor {
 
     /// **The list a shell line offers**, which one Tab is on, and the drawn
     /// text before the word it completes, for the float to stand under that
-    /// word while Tab rewrites it (2026-10-28). Drawn the way code completion
+    /// word while Tab rewrites it. Drawn the way code completion
     /// is. Not while the last shell command is the ghost: Tab takes that first.
     pub fn shell_offers(&self) -> Option<(Vec<String>, Option<usize>, String)> {
         if self.mode != Mode::Command || (self.completion.is_none() && self.shell_ghost().is_some()) {
@@ -425,17 +421,17 @@ impl Editor {
     pub fn prompt_label(&self) -> Option<String> {
         let (prefix, _) = self.prompt()?;
         Some(match self.mode {
-            // **提示符自己說通配開着没有**（2026-10-12 作者定）。狀態欄這一行正
+            // **提示符自己說通配開着没有**。狀態欄這一行正
             // 被提示符佔着，所以按下 `A-j` 之後說一句是**看不見**的——量過，屏幕
             // 上一個字都不變。一個看不見的開關等於没有開關，所以狀態寫在這一行
             // 自己身上。
-            // **A line for the terminal says so** (2026-10-28): `!` and the
+            // **A line for the terminal says so**: `!` and the
             // words that run a shell command put `Shell:` where `:` was.
             Mode::Command if command::shell_start(&self.command_line).is_some() => {
                 say!("ui.prompt-shell")
             }
             // `s` `S` `A-k` `A-K` borrow this prompt, and say which they are in
-            // the reader's language (2026-10-30: English read 「search:」).
+            // the reader's language.
             Mode::Search if self.sift.is_some() => match self.sift {
                 Some(crate::editor::multi::Sift::Select) => say!("ui.prompt-select"),
                 Some(crate::editor::multi::Sift::Split) => say!("ui.prompt-split"),
@@ -466,19 +462,17 @@ impl Editor {
         if self.completion.is_some() {
             return String::new();
         }
-        // **An empty search prompt already guesses** (#274).
-        // 2026-09-05: 「`/` 搜索，enter 確認，再次按下 `/` 搜索，這個時候是不是
-        // 應該預填寫（灰色）上次搜索過內容？」 — `Enter` on an empty line has
-        // always repeated the last pattern, and the only thing missing was
-        // *saying so*: the guess is the whole of it from the first keystroke,
-        // so `/⏎` reads as「再找一次這個」rather than as a prompt you have to
-        // remember what you last put in. Typing narrows it the way it always
-        // did, and the first character that does not match takes it away.
+        // **An empty search prompt already guesses** (#274): the last pattern,
+        // in grey. `Enter` on an empty line repeats the last pattern, and the
+        // guess *says so* from the first keystroke, so `/⏎` reads as
+        // 「再找一次這個」 rather than as a prompt you have to remember what you
+        // last put in. Typing narrows it, and the first character that does
+        // not match takes it away.
         if self.mode == Mode::Search && self.command_line.is_empty() {
             return self.last_search.clone();
         }
         // A shell line guesses the last shell command, as `/` guesses the last
-        // pattern (2026-10-28); Tab takes it.
+        // pattern; Tab takes it.
         if self.mode == Mode::Command && command::shell_start(&self.command_line).is_some() {
             return self.shell_ghost().unwrap_or_default();
         }
@@ -522,14 +516,13 @@ impl Editor {
         (rows, self.completion.as_ref().map(|(_, i)| *i))
     }
 
-    /// **面板畫的那張單子，⇥ 走的也是它**——一張，不是兩張（2026-10-06）。
+    /// **面板畫的那張單子，⇥ 走的也是它**——一張，不是兩張。
     ///
     /// 回來的第二個數是「前面幾條是前綴配中的」，後面那些是猜的。畫的時候照它
-    /// 分顏色；⇥ 一路走到底，猜的那幾條也走得到（作者定：「tab應該可以走到上面。
-    /// helix 的模糊匹配就能走上去」）。
+    /// 分顏色；⇥ 一路走到底，猜的那幾條也走得到，同 helix 的模糊匹配。
     ///
     /// Warning: **問的是前綴，不是命令行現在那一行**。⇥ 把挑中的寫進命令行，而那一行
-    /// 一變，猜出來的就換了一套——「按一下 ⇥ 模糊匹配就消失了」。helix 同一個
+    /// 一變，猜出來的就換了一套——按一下 ⇥ 模糊匹配就消失了。helix 同一個
     /// 辦法：它的 ⇥ 改行而不重算那張單子（`ui/prompt.rs:375`）。
     pub fn command_rows(&self) -> (Vec<command::Choice>, usize) {
         let asked = match &self.completion {
@@ -543,10 +536,10 @@ impl Editor {
         if !command::still_naming(asked) {
             return (rows, exact);
         }
-        // **先補「名字裏有這個詞」的那幾條**（2026-10-16 報的：「I search
-        // `:panel` but cannot see anything related to `:yume-panel`」）。命令名
+        // **先補「名字裏有這個詞」的那幾條**：搜 `:panel` 要看得見
+        // `:yume-panel`。命令名
         // 是連字符分段的路徑，打的那個詞配上哪一段都算——這件事是「有或沒有」，
-        // 不該交給打分：`panel` 在這張表裏信息量太低，`yume-panel` 從來過不了
+        // 不該交給打分：`panel` 在這張表裏信息量太低，`yume-panel` 過不了
         // `SURE_ENOUGH` 那道門檻。排在前綴那幾條後面，所以畫出來是淡的。
         let named: Vec<&str> = rows.iter().map(|c| c.name).collect();
         rows.extend(command::by_segment(asked).into_iter().filter(|c| !named.contains(&c.name)));
@@ -576,9 +569,8 @@ impl Editor {
 
     /// **一句說完就該走的話**——幾秒之後自己從命令行上下去。
     ///
-    /// 2026-09-27 定，原話：「有些不是特别重要的消息可以有个参数「显示时间」，
-    /// 比如几秒，过了这个时间就会从命令行消失。比如那个宽度 1/4。这样不遮挡按键
-    /// 提示。」
+    /// 不太重要的消息帶一個「顯示時間」，比如幾秒，過了就從命令行消失（比如那個
+    /// 「寬度 1/4」），不遮擋按鍵提示。
     ///
     /// 誰該用它：**確認一下剛纔那個按鍵做了什麼**的那一類。邊欄寬了一檔、換了
     /// 一個區——按的人自己看得見結果，那句話只是個回聲。錯誤、問句、以及「這件事
@@ -640,16 +632,16 @@ impl Editor {
         at - rope.line_to_char(rope.char_to_line(at))
     }
 
-    /// **光標前面有幾個字** —— 狀態欄那個「字 N」（2026-10-09 作者定）。
+    /// **光標前面有幾個字** —— 狀態欄那個「字 N」。
     ///
     /// Warning: **這不是 [`Self::cursor_column`]。** 那一支交的是**字符下標**，而兩處
     /// 要的正是下標：內嵌 preedit 擺在第幾個字符上（`set_candidate`），和
     /// `drawn_runs_on_line` 裏那些跨度的比較。這一支交的是**讀者數出來的那個數**，
     /// 一個字素算一個——`葛`＋異體字選擇符是一個字，而 `:count` 的字數也是這麼算的
-    /// （作者的原則：「嚴格意義上 char 應該是 grapheme cluster 而不是 codepoint」）。
+    /// （原則：嚴格意義上一個字是一個字素簇，不是一個碼位）。
     ///
     /// Warning: **不許從行首數起。** 那一行每幀都問一次，而從行首走到光標是 O(前綴)：
-    /// 量過，四百萬字單行上走到行尾每幀多花 70 毫秒，他那條 1240 萬字的行按此推是
+    /// 量過，四百萬字單行上走到行尾每幀多花 70 毫秒，1240 萬字的行按此推是
     /// 210 毫秒。所以長行上從 [`crate::wrap::Widths`] 最近的那條切點起算，剩下那一截
     /// 不到一個 `BLOCK`；短行（四千字以下）索引根本不建，整段走過去也是幾微秒。
     pub fn cursor_grapheme(&self) -> usize {
@@ -672,14 +664,14 @@ impl Editor {
     ///
     /// **The page's column, not the text's** (#374). What is drawn before the
     /// caret is part of where the caret *is*: the space a tab advances over,
-    /// the padding that squares a table up. Counting only the characters put
-    /// the readout at 3 while the screen had the caret at 8 — and a caret
+    /// the padding that squares a table up. Counting only the characters would
+    /// put the readout at 3 while the screen has the caret at 8 — and a caret
     /// standing in a column the page does not have is the one thing #212 says
     /// may never happen.
     ///
     /// A closed fold's line is the exception: its whole text is off the
     /// page, so the page's column is always the first. vim's ruler says the
-    /// text's column there (`~` on a fold reads `2,2-1`; nvim 2026-11-04),
+    /// text's column there (`~` on a fold reads `2,2-1` in nvim),
     /// as it does for a line the fold hides.
     pub fn cursor_visual_column(&self) -> usize {
         let text = motion::visual_column(self.current_buffer().rope(), self.caret());
@@ -697,15 +689,14 @@ impl Editor {
             .filter(|run| run.column < col || (run.column == col && run.ink == crate::drawn::Ink::Typed))
             .map(|run| yumete_cjk::str_width(&run.text))
             .sum();
-        // Warning: **藏起來的那些也要減掉**（2026-10-02 一輪掃查報來的）。這一支加
-        // 了畫出來的（註號、補齊的格寬），卻從來没減過藏起來的（`**`、`(url)`、
-        // `[^1]` 的本體）——於是 `:render full` 底下報出來的列號**比那一行畫出來
-        // 的還長**：五百七十三個光標位置裏有四十九個這樣，最遠超出二十三格。
+        // Warning: **藏起來的那些也要減掉**。這一支加了畫出來的（註號、補齊的格寬），
+        // 不減藏起來的（`**`、`(url)`、`[^1]` 的本體）的話，`:render full` 底下報出來
+        // 的列號就**比那一行畫出來的還長**。
         //
         // 畫的那一邊問的是 [`crate::wrap::position`]，它**先濾掉藏起來的**再加畫
-        // 出來的。兩邊是同一條規矩的兩份推導，只在「什麼都没藏」的時候一致——
-        // `:render off`/`basic` 下一直對，所以没人發現。
-        // Warning: **没藏東西就別把那一行拿出來**（2026-10-08）。`line_text` 把一整行物化成
+        // 出來的。兩邊是同一條規矩的兩份推導，只在「什麼都没藏」的時候自然一致
+        // （`:render off`/`basic`），所以拿那兩檔試看不出分別。
+        // Warning: **没藏東西就別把那一行拿出來**。`line_text` 把一整行物化成
         // `String` 再拆成 `Vec<char>`，而這一支每幀都要問一次——一行 150 萬字的
         // 檔上就是每幀兩次大拷貝（`sample` 指的就是這裏）。藏起來的那一列空著的
         // 時候這筆賬是零，而「空著」正是没開 `:render` 與長行門槛下的常態。
@@ -750,7 +741,7 @@ impl Editor {
         }
     }
 
-    /// **一個字簇，不是一個 `char`**——查字典問的就是這個（2026-10-12）。
+    /// **一個字簇，不是一個 `char`**——查字典問的就是這個。
     ///
     /// [`char_at_cursor`](Self::char_at_cursor) 答的是一個碼位，而屏幕上的一個
     /// 「字」可以是好幾個：`🈚️` 是 U+1F21A ＋ 變體選擇符，一個帶 IVS 的漢字是
@@ -776,9 +767,9 @@ impl Editor {
     }
 
     pub fn grapheme_at_cursor(&self) -> Option<String> {
-        // **An empty cell holds no character to name** (2026-10-22 報的). In
-        // the grid the caret's position in an empty cell is the delimiter's,
-        // and the readout said 「this cell holds `,`」. The line's own rule
+        // **An empty cell holds no character to name**. In the grid the
+        // caret's position in an empty cell is the delimiter's, which would
+        // read 「this cell holds `,`」. The line's own rule
         // below — 「no character at the end of the line, so answer the one
         // before it」 — is the prose page's, where the character before is on
         // the same line; here it is in the cell next door.
@@ -790,7 +781,7 @@ impl Editor {
             }
         }
         // A cursor a closed fold hides is on its own line, as the status
-        // line's Ln and column already say (review, 2026-11-04).
+        // line's Ln and column already say.
         let caret = match self.viewing.get() {
             None => self.hidden_place().unwrap_or(self.caret()),
             Some(_) => self.caret(),

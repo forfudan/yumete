@@ -1,5 +1,4 @@
-//! **Insert mode's keys, each a named command** (2026-10-31, step 6 of the
-//! keymap plan; helix's `insert` keymap, `keymap/default.rs`).
+//! **Insert mode's keys, each a named command** (step 6 of the keymap plan; helix's `insert` keymap, `keymap/default.rs`).
 //!
 //! [`INSERT_KEYS`] says which command each key runs; a key it does not name
 //! types itself. Before it come the layers that depend on where the caret
@@ -30,7 +29,7 @@ pub(super) const INSERT_KEYS: &[(Key, NormalCmd, InsertWhen)] = &[
     (Key::Backspace, NormalCmd::DeleteCharBackward, None),
     (Key::Ctrl('h'), NormalCmd::DeleteCharBackward, None),
     (Key::Delete, NormalCmd::DeleteCharForward, None),
-    // vim's Insert `C-d` takes an indent off the line (2026-11-02);
+    // vim's Insert `C-d` takes an indent off the line;
     // helix's deletes forward.
     (Key::Ctrl('d'), NormalCmd::Unindent, Some(|e| e.vim_keymap())),
     (Key::Ctrl('d'), NormalCmd::DeleteCharForward, None),
@@ -138,7 +137,7 @@ impl Editor {
             .map(|(_, name, _)| name.name())
     }
 
-    /// **The reader's `[keys.insert]`, asked first** (2026-10-31): `true`
+    /// **The reader's `[keys.insert]`, asked first**: `true`
     /// when it took the key. A key that begins a longer binding is held, as
     /// `j` of `jk` is, and typed after all when the next key does not finish
     /// one.

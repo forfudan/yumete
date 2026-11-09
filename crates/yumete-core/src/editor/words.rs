@@ -5,7 +5,7 @@
 
 use super::*;
 
-/// **認詞只認得動一本書**（2026-10-13）。認詞掃的是整份正文，而「正在寫的這一篇」
+/// **認詞只認得動一本書**。認詞掃的是整份正文，而「正在寫的這一篇」
 /// 再長也就幾 MB；一個語料檔走進來，掃它一遍既没有意義，又要把整份物化一次。
 const BIGGEST_TO_DETECT: usize = 16 * 1024 * 1024;
 
@@ -29,10 +29,10 @@ impl Editor {
     /// segmentation overlay **and** the 平仄 margin, which asks the reader for
     /// a *word*'s reading (`了` is `le` in 為了 and `liǎo` in 了解). Both are
     /// kept against a hash of the line's text, and changing the dictionary
-    /// changes neither the text nor the hash — so a `:view-meter` turned on before
-    /// the IME finished loading its dictionary kept marking the 了 in 為了 仄
-    /// until the line was edited, which is the exact mistake the feature
-    /// exists to catch.
+    /// changes neither the text nor the hash — so without this a `:view-meter`
+    /// turned on before the IME finished loading its dictionary would keep
+    /// marking the 了 in 為了 仄 until the line was edited, which is the exact
+    /// mistake the feature exists to catch.
     fn forget_the_words(&mut self) {
         self.segment_memo.forget();
         self.meter_memo.forget();
@@ -118,7 +118,7 @@ impl Editor {
                 self.show_segmentation = false;
                 self.status = self.word_mark_said();
             }
-            // **裸的報告，帶參數的纔設**（2026-10-09 定）：問得出它現在是哪一種。
+            // **裸的報告，帶參數的纔設**：問得出它現在是哪一種。
             WordCommand::MarkReport => self.status = self.word_mark_said(),
             WordCommand::Reload => {
                 // The book's own list, here; the dictionary underneath it is
@@ -229,11 +229,10 @@ impl Editor {
 
     /// Where this project's own word list lives, whether or not it is there yet.
     ///
-    /// Warning: **問[項目根][`Editor::root`]，不自己再走一趟**（2026-10-01）。從前
-    /// 它從**當前緩衝區**往上找一個**已經存在的** `words.txt`——和項目根那一支
-    /// 的走法不一樣（那一支認 `.yumete` 目録與 `.git`，這一支只認那個檔），於是
-    /// `gd` 跳進別人的源碼之後，分詞器悄悄換了一份（通常是空的）詞表，而選擇器
-    /// 還顯示着原來的項目。五份各走各的「往上找 `.yumete`」，這是其中一份。
+    /// Warning: **問[項目根][`Editor::root`]，不自己再走一趟**。從**當前緩衝區**
+    /// 往上找一個**已經存在的** `words.txt` 的話，走法和項目根那一支不一樣（那一支
+    /// 認 `.yumete` 目録與 `.git`，這一支只認那個檔），於是 `gd` 跳進別人的源碼
+    /// 之後，分詞器悄悄換了一份（通常是空的）詞表，而選擇器還顯示着原來的項目。
     fn project_words_path(&self) -> PathBuf {
         self.root().join(".yumete").join("words.txt")
     }
@@ -298,11 +297,10 @@ impl Editor {
         let had = self.take_detected_words();
         let mut text = String::new();
         let mut files = 0usize;
-        // Warning: **這一篇，除非你說了別的** (#452). It used to read the whole
-        // project every time, and a project is usually not a book: in 宇浩's
-        // own repository 「宇夢」 never came out, because a few hundred 拆分表
-        // drowned the chapter the writer was actually in — 「一堆拆分表形成杂
-        // 音」. The statistics are ratios, so what is read *is* the question.
+        // Warning: **這一篇，除非你說了別的** (#452). A project is usually not a
+        // book: read whole, a repository's few hundred 拆分表 drown the chapter
+        // the writer is actually in, and its own words never come out. The
+        // statistics are ratios, so what is read *is* the question.
         match self.discover_root(scope) {
             None => {
                 files = 1;
@@ -408,11 +406,10 @@ impl Editor {
             Where::Buffer | Where::Buffers => None,
             Where::Working => Some(self.working_dir()),
             Where::Project => Some(self.root()),
-            // Warning: **同 `search_root_of`：`~` 要展開，相對路徑從工作路徑算起**
-            // （2026-10-02 審出來的——1afa2b6 漏了這一支）。同一個範圍交給兩支
-            // 代碼算，答案必須是同一個；從前這裏把 `~/稿` 原樣交給 `walk`，
-            // `ignore` 交出一個錯誤條目、`flatten()` 把它丟掉，於是一個字都没挖
-            // 到而且一聲不吭。
+            // Warning: **同 `search_root_of`：`~` 要展開，相對路徑從工作路徑算起**。
+            // 同一個範圍交給兩支代碼算，答案必須是同一個；把 `~/稿` 原樣交給 `walk`
+            // 的話，`ignore` 交出一個錯誤條目、`flatten()` 把它丟掉，於是一個字都
+            // 没挖到而且一聲不吭。
             Where::Named(path) => {
                 let full = Self::expand_tilde(&path.to_string_lossy());
                 Some(match full.is_absolute() {
@@ -439,22 +436,21 @@ impl Editor {
     /// the file being edited**, the way a table's schema is: the list belongs
     /// to the manuscript, not to the session that opened it.
     ///
-    /// Warning: **它一聲不吭**（2026-09-30 報的）。這一支有七個呼叫方，六個是
-    /// 編輯器自己讀的——啓動、輸入法的分詞器晚一秒送到、存檔之後。人什麽都没
-    /// 做，卻被告知一個他没在想的檔案在不在：「我打开任何非程序文檔或者新建一
-    /// 个 buffer，都会有这个消息在命令栏……我怕用户会感到奇怪。」
+    /// Warning: **它一聲不吭**。這一支有七個呼叫方，六個是編輯器自己讀的——啓動、
+    /// 輸入法的分詞器晚一秒送到、存檔之後。人什麽都没做，不該在打開一份文檔或新建
+    /// 一個 buffer 時被告知一個他没在想的檔案在不在。
     ///
     /// Warning: **報結果的那一句本來就有，而且更好。** `:word-list-reload` 與
     /// 存下 `words.txt` 都會走前端那一句 `word.lists-reread`，它問的是
     /// [`Editor::words_in_force`]——「宇浩語言模型 1250000 條 ＋ 本書 312 個
     /// 詞」，兩半一起說。没有 `words.txt` 的時候後半句自己不出現，那正是「這本
-    /// 書没有」的說法。從前這裏另說一句「没有找到 .yumete/words.txt」，是**同一
-    /// 件事的第二套說法**，而且說成了抱怨——當場就看出那是不一致的。
+    /// 書没有」的說法。這裏再說一句「没有找到 .yumete/words.txt」就是**同一件事的
+    /// 第二套說法**，而且說成了抱怨。
     pub fn reload_project_words(&mut self) -> Option<PathBuf> {
-        // Warning: **讀的那一頭也問[項目根][`Editor::root`]**（2026-10-01 審出來
-        // 的）。同一天把 `project_words_path`（寫、`:word-list-edit`）改成了
-        // `root()`，而**真正裝詞表的是這一支**，它還在從當前緩衝區往上走——於是
-        // 讀一份、寫另一份，`gd` 跳一下分詞器就換了詞表。
+        // Warning: **讀的那一頭也問[項目根][`Editor::root`]**，同
+        // `project_words_path`（寫、`:word-list-edit`）。**真正裝詞表的是這一支**，
+        // 它從當前緩衝區往上走的話就是讀一份、寫另一份，`gd` 跳一下分詞器就換了
+        // 詞表。
         let found = Some(self.root().join(".yumete").join("words.txt")).filter(|p| p.is_file());
         let (list, where_from) = match found.as_ref().and_then(|p| {
             std::fs::read_to_string(p).ok().map(|t| (t, p.clone()))
@@ -535,7 +531,7 @@ impl Editor {
     /// it actually runs, and reads the two apart (see
     /// [`DetectAsk`](crate::editor::DetectAsk)).
     pub(super) fn ask_for_detection(&mut self) {
-        // **太大的檔不認詞**（2026-10-13）。認詞讀的是「正在寫的這一篇」——一本長篇
+        // **太大的檔不認詞**。認詞讀的是「正在寫的這一篇」——一本長篇
         // 也就幾 MB，而掃一遍是整份的（`discover::words`）。一個語料檔走進來，掃它
         // 一遍既没有意義，又要在工作執行緒上把整份物化成 `String`。
         if self.current_buffer().rope().len_bytes() > BIGGEST_TO_DETECT {
@@ -646,7 +642,7 @@ impl Editor {
 
     /// Whether a 碼表 is loaded. **「表裏没有這個字」和「根本没有表」是兩個
     /// answer**，出廠 `[yume] start = false`，所以剛裝好的人問哪個字都會得到
-    /// 前一句——而那是假話（2026-09-23 審出來的）。
+    /// 前一句——而那是假話。
     pub fn ime_available(&self) -> bool {
         self.ime_available
     }
@@ -657,11 +653,11 @@ impl Editor {
         self.chaifen_available = available;
     }
 
-    /// **「表裏没有這個字」和「根本没有表」是兩個答案**，and since 2026-10-12
-    /// the 拆分表 is its own question: it is embedded in the binary and read
-    /// without a scheme, so 「碼表没載」 stopped being the reason a lookup
-    /// comes back empty. 一個不在表裏的字（emoji、拉丁字母）載了方案照樣不在，
-    /// 而從前答的是「`:yume-scheme` 載一次」——載了也没用。
+    /// **「表裏没有這個字」和「根本没有表」是兩個答案**, and the 拆分表 is its
+    /// own question: it is embedded in the binary and read without a scheme, so
+    /// 「碼表没載」 is not the reason a lookup comes back empty. 一個不在表裏的字
+    /// （emoji、拉丁字母）載了方案照樣不在，所以不許答「`:yume-scheme` 載一次」
+    /// ——載了也没用。
     pub fn chaifen_available(&self) -> bool {
         self.chaifen_available
     }
@@ -742,18 +738,16 @@ impl Editor {
     /// ends, and 「好。」 does not. What is left is exactly the run of 漢字 the
     /// eye has to cut for itself.
     ///
-    /// Warning: **標點與拉丁文一個都不畫**（#446）。從前這道閘問的是
-    /// `char::is_alphanumeric`，而**拉丁字母也是 alphanumeric**——於是
+    /// Warning: **標點與拉丁文一個都不畫**（#446）。這道閘不許問
+    /// `char::is_alphanumeric`：**拉丁字母也是 alphanumeric**——於是
     /// 「`` `w` ``（按詞移動）」裏那一組 `` `（ ``，因為前一個字符是字母 `w`
     /// 而不算邊界，**被當成一個詞塗了色**；反引號中間那個 `w` 兩邊都不是字母，
     /// 反倒被滤掉。塗出來的正好是反的，看着像 verbatim 錯了位。
-    /// 現在兩件事都問 [`yumete_cjk::is_segmentable`]：能上色的必須整段都是它，
+    /// 所以兩件事都問 [`yumete_cjk::is_segmentable`]：能上色的必須整段都是它，
     /// 邊界則是「不是它」——一段拉丁文對眼睛來說本來就是一道界。
     /// **光標底下那個詞佔幾格**，分成「光標之前」與「從光標起算」兩段。
     ///
-    /// 浮動的面板靠它讓開**整個詞**，而不只是光標站的那一格（2026-10-12 報的：
-    /// 「the panel still cover half of it … the word to show wiki may be several
-    /// characters」）。一個漢字本來就是兩格，而詞條常常好幾個字。
+    /// 浮動的面板靠它讓開**整個詞**，而不只是光標站的那一格，不蓋住半個詞。一個漢字本來就是兩格，而詞條常常好幾個字。
     ///
     /// 回的是格數不是位置，所以兩種版面共用一句：橫排往左右讓，竪排往上下讓。
     /// 光標不在任何一個詞上就回它自己那一個字的寬度。
@@ -787,7 +781,7 @@ impl Editor {
         if line >= rope.len_lines() {
             return Vec::new();
         }
-        // **太長的一行不分詞**（`:view-long-line`，2026-10-08）。
+        // **太長的一行不分詞**（`:view-long-line`）。
         //
         // 量出來的：一行 150 萬字的 CJK `.txt`，摔住標記那兩支之後每幀還要
         // 0.29 秒，`sample` 指的就是這裏（`DictionarySegmenter::segment` 與
@@ -814,7 +808,7 @@ impl Editor {
         // line, so a matching hash is a correct answer whatever else in the
         // document has moved.
         //
-        // Warning: **`:view-long-line` 不在這個印記裏**（2026-10-09）。那是一個設置，
+        // Warning: **`:view-long-line` 不在這個印記裏**。那是一個設置，
         // 門槛一動，照舊門槛算出來、按行文哈希收着的答案就過期了——攔住它的是那道
         // 閘擺在這一句**之前**（這一支開頭就問 `line_is_too_long`），不是這個印記。
         // 再加一個走這道閘的生產者，順序要照這個擺。
@@ -856,8 +850,8 @@ impl Editor {
     pub fn insert_committed(&mut self, text: &str) {
         let was = self.before_a_change();
         self.insert_committed_now(text);
-        // Where redo comes back to, as for a key (2026-10-29, review: `r`,
-        // `ms` and Chinese typed through the input method were missed).
+        // Where redo comes back to, as for a key — `r`, `ms` and Chinese typed
+        // through the input method included.
         self.settle_the_change(was);
         self.keep_the_signature_up(was);
     }
@@ -876,8 +870,8 @@ impl Editor {
         // document it is usually Chinese text. Committed characters go wherever
         // the mode is collecting them, not always into the buffer.
         if self.mode.types_into_command_line() {
-            // At the caret, not at the end. The prompt has had ← → Home End
-            // since it was written, and committing 中文 into the middle of a
+            // At the caret, not at the end. The prompt has ← → Home End, and
+            // committing 中文 into the middle of a
             // pattern that has already been typed is exactly what you go back
             // for.
             let len = self.command_line.chars().count();
@@ -894,10 +888,9 @@ impl Editor {
         }
         // **A picker's query is typed text too** (§5.2.2 fault 9). `空格 f`
         // offers a list of 「第三章.md」 and `空格 b` a list of open chapters,
-        // and until this line they could be filtered by what a keyboard puts
-        // out as ASCII — which in a Chinese manuscript is the extension and
-        // nothing else. `score` was already Unicode-clean; only the text was
-        // never arriving.
+        // and filtered only by what a keyboard puts out as ASCII they could
+        // be filtered by the extension and nothing else. `score` is
+        // Unicode-clean; this is how the text arrives.
         if self.mode == Mode::Picker {
             if let Some(picker) = self.picker.as_mut() {
                 for c in text.chars() {
@@ -910,10 +903,10 @@ impl Editor {
         // has to happen the moment you ask for it — so it stays where Helix
         // put it and learns 中文 instead: press `r`, the panel opens, and
         // whatever you choose is what the selection becomes.
-        // Warning: **也要落在每一段選區上**（2026-10-02 查出來的，#405 Phase 4 漏的
-        // 那一半）。底下那一支插入的已經走 `edit_each` 了，可這兩支早退的没有：
-        // 三個光標按 `r` 再打一個「好」，只有主選區換掉了；同樣三個光標按 `r` 再
-        // 敲一個字母，三段全換。**同一個鍵，中文和西文兩種答案**——而
+        // Warning: **也要落在每一段選區上**（#405 Phase 4）。底下那一支插入的走
+        // `edit_each`，這兩支早退的也要：否則三個光標按 `r` 再打一個「好」，只有主
+        // 選區換掉；同樣三個光標按 `r` 再敲一個字母，三段全換。**同一個鍵，中文和
+        // 西文兩種答案**——而
         // `keys.rs` 那一段寫着這個字符「有兩條路進來，一個是鍵，一個是上屏」，
         // 寫在一處就是為了讓兩條路說同一件事。
         //
@@ -924,7 +917,7 @@ impl Editor {
             let each = with.clone();
             // One character goes the way a typed one does, so the vim rules —
             // a count writes over that many, Visual `r` ends Visual — answer
-            // the same for 好 as for x (2026-10-30).
+            // the same for 好 as for x.
             let single = {
                 let mut chars = each.chars();
                 chars.next().filter(|_| chars.next().is_none())
@@ -957,7 +950,7 @@ impl Editor {
         // replaces the selection with two characters. These five each want
         // one character, so a commit of more than one is read by its first:
         // `f` 找的是那個字, not the phrase it arrived in.
-        // **Inside a `C-v` block the character is the block's** (2026-10-27):
+        // **Inside a `C-v` block the character is the block's**:
         // `f` moves the block's corner, and the per-selection path below
         // would move every line's piece instead and leave the block behind.
         if self.block.is_some() && self.pending.takes_a_character() {
@@ -983,7 +976,7 @@ impl Editor {
                     });
                 } else if super::multi::edits_every_selection(&waiting, Key::Char(c)) {
                     // `ms「` and friends through the IME, on every selection,
-                    // as the same keys typed are (2026-10-27).
+                    // as the same keys typed are.
                     if self.every_selection_has_its_own_pair(waiting, c) {
                         self.edit_each(move |e| {
                             e.pending = Pending::None;
@@ -1004,10 +997,8 @@ impl Editor {
         }
         // Warning: **上屏不自己開一個撤銷點——它加入正在進行的那一次插入。**
         //
-        // 2026-09-21 收到的話：「yume on 的時候，undo 是每字回撤的。我還是習慣按
-        // 『一次編輯』爲單位回撤。」量出來的其實是**每次上屏各自成段**：一段
-        // ASCII 只記一個點（進 Insert 時記的那一個，打字本身不再記），而每一次
-        // 上屏都在這裏補一刀。
+        // 撤銷按「一次編輯」爲單位，不是每次上屏各自成段：一段 ASCII 只記一個點
+        // （進 Insert 時記的那一個，打字本身不再記），上屏也不在這裏補一刀。
         //
         // 兩家上游都是「從 insert 到 normal 算一次」：helix 把插入期間的改動攢
         // 着，離開 Insert 時並成一條（`helix-term/src/ui/editor.rs`：「Store a
@@ -1021,24 +1012,23 @@ impl Editor {
         if self.mode != Mode::Insert {
             self.snapshot();
         }
-        // Warning: **上屏也要落在每一段選區上**（#405 Phase 4，2026-09-28）。
+        // Warning: **上屏也要落在每一段選區上**（#405 Phase 4）。
         //
         // 這一支是**前端直接叫的**，不走 `on_key`，所以 `edit_each` 那一層路由碰不到
-        // 它——實測四個光標打 `wo` 空格，「和」只落在最後一段上。中文是打出來的，多
-        // 選區下不能上屏纔是真的不能用。
-        // Warning: **多光標下也只在 Normal 記點**（2026-10-02 查出來的）。上面那一句
-        // 已經決定了「插入模式下不記」，而 `edit_each` 在選區是複數的時候**自己
-        // 又記一個**——於是四個光標下一句話上屏八次就是八下 `u`，而同一句話在一
-        // 個光標下是一下。敲鍵那一路早就是 `edit_each_from(false, …)`，這裏跟上。
-        // Warning: **上屏的字也要進 `.` 的那一串鍵**（2026-10-09 審出來的）。
+        // 它——不在這裏處理的話，四個光標打 `wo` 空格，「和」只落在最後一段上。中文
+        // 是打出來的，多選區下不能上屏纔是真的不能用。
+        // Warning: **多光標下也只在 Normal 記點**。上面那一句已經決定了「插入模式
+        // 下不記」，而 `edit_each` 在選區是複數的時候**自己又記一個**——那樣四個光標
+        // 下一句話上屏八次就是八下 `u`，而同一句話在一個光標下是一下。敲鍵那一路也是
+        // `edit_each_from(false, …)`。
+        // Warning: **上屏的字也要進 `.` 的那一串鍵**。
         //
         // `.` 重放的是**鍵**（`last_edit_keys`），而一次上屏是前端遞進來的一個**字
-        // 串**，不走 `on_key`——於是 `wc` ＋ 上屏「紅」＋ `Esc` 之後按 `.`，重放的是
-        // `w` `c` `Esc`：目標字被刪掉，什麽都不補回去。實測 `wc紅\e w .` 出來的是
-        // 「第紅行春日…」，那個「：」没了。`r` 那一條早就在 `repeat_edit` 裏單獨補
-        // 過（`last_replacement`），插入這一條漏了。
+        // 串**，不走 `on_key`——不記的話 `wc` ＋ 上屏「紅」＋ `Esc` 之後按 `.`，重放
+        // 的是 `w` `c` `Esc`：目標字被刪掉，什麽都不補回去。`r` 那一條在
+        // `repeat_edit` 裏單獨補（`last_replacement`）。
         //
-        // 補的辦法是把上屏的字當成敲進去的字記下來：重放的時候 `Key::Char('紅')` 在
+        // 辦法是把上屏的字當成敲進去的字記下來：重放的時候 `Key::Char('紅')` 在
         // 插入態就是插一個「紅」，和人打出來的結果逐字相同。記的條件與 `on_key` 那
         // 頭同一個（`watching`）——重放當口不許再記，不然 `.` 會自己長出字來。
         if !self.repeating_edit && !self.expanding_alias {
@@ -1049,7 +1039,7 @@ impl Editor {
             e.insert_recording.push_str(&text);
             // Through the pairs a character at a time, as helix takes a
             // commit, so `.` and a count (which replay it a character at a
-            // time) write what this wrote (2026-10-29, review).
+            // time) write what this wrote.
             match e.mode == Mode::Insert && e.auto_pairs() != super::AutoPairs::Off {
                 true => e.type_through_pairs(&text),
                 false => e.insert_str(&text),

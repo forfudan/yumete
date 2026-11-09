@@ -1,5 +1,4 @@
-//! **The key groups, as nodes of the keymap** (2026-10-31, step 3 of the
-//! keymap plan).
+//! **The key groups, as nodes of the keymap** (step 3 of the keymap plan).
 //!
 //! A group is what a key such as `g`, `Space` or `C-w` opens: a table of
 //! the keys that may follow, each naming a command, with the line its menu
@@ -176,8 +175,8 @@ impl Group {
     }
 
     /// Whether pressing `bind`'s key here reaches `bind` itself, and not an
-    /// earlier row on the same key (2026-11-04: the vim `gn` row shadows the
-    /// helix one, and the listing named both).
+    /// earlier row on the same key (the vim `gn` row shadows the helix one,
+    /// and the listing must not name both).
     pub(super) fn answers_with(&self, bind: &'static Bind, at: &Context) -> bool {
         self.bind_for(bind.key, at).is_none_or(|first| std::ptr::eq(first, bind))
     }
@@ -299,7 +298,7 @@ pub(super) fn key_label(key: Key) -> String {
         Key::Ctrl(c) => format!("C-{c}"),
         Key::Alt(c) => format!("A-{c}"),
         // As the hint row writes them (`Tab`, `↑`, `Enter`), not as a config
-        // spells them (`<tab>`): a menu is read, not copied (review, 2026-11-06).
+        // spells them (`<tab>`): a menu is read, not copied.
         other => super::places::hint_key(other),
     }
 }
@@ -454,7 +453,7 @@ impl Editor {
     /// What this editor's groups are asked against now.
     /// The context a group's own rows are read in: helix's for its sticky
     /// view, which vim has only from helix (`helix_keys_under_vim`), so
-    /// `j` `k` scroll there under both keymaps (decided 2026-11-03).
+    /// `j` `k` scroll there under both keymaps.
     pub(super) fn context_in(&self, group: &Group) -> Context {
         let at = self.group_context();
         match group.name == STICKY_VIEW.name {
@@ -464,10 +463,10 @@ impl Editor {
     }
 
     pub(super) fn group_context(&self) -> Context {
-        // **Which list is a question about the cursor, not the mode.** It
-        // used to be `md_region().is_none()`, which is *also* true of a
-        // Markdown table nobody has opened yet — so standing in one of
-        // 手冊's own tables offered the delimited file's keys.
+        // **Which list is a question about the cursor, not the mode.** Not
+        // `md_region().is_none()`, which is *also* true of a Markdown table
+        // nobody has opened yet — standing in one would offer the delimited
+        // file's keys.
         let table = match self.table.as_ref().map(|v| v.bounds) {
             Some(Bounds::Block) if self.block_region().is_some() => Some(Bounds::Block),
             Some(Bounds::Md) if self.md_region().is_some() => Some(Bounds::Md),
@@ -501,7 +500,7 @@ impl Editor {
         }
         let at = self.context_in(group);
         // **helix counts inside its view modes** (`z3j`, `Z3j` scroll three,
-        // measured 2026-11-03): a digit adds to the count and the mode stays.
+        // measured): a digit adds to the count and the mode stays.
         // vim's digits there are `z{height}<CR>`.
         if matches!(group.pending, Pending::Aim | Pending::AimStuck) && !at.vim {
             if let Key::Char(c @ '0'..='9') = key {
@@ -610,8 +609,7 @@ impl Editor {
     /// `None` means **any character follows**: `f`, `r`, `"`, `M`, `'` and
     /// the `mi`/`ma`/`ms`/`mr` pairs take a letter or a bracket the writer
     /// chooses, so there is no list for a document to be checked against.
-    /// `t` is vi's till, one of those, since the table group moved to
-    /// `Space t` (2026-09-21).
+    /// `t` is vi's till, one of those; the table group is `Space t`.
     pub fn keys_after(leader: char) -> Option<Vec<String>> {
         Some(match leader {
             // 空 is the first character of how the documents spell it: `空格 f`.
@@ -674,9 +672,8 @@ impl Editor {
         Self::commands_with(&yumete_cjk::Flavor::default())
     }
 
-    /// The same, at `flavor` (2026-11-04: `:keymap-actions` lists the keys
-    /// at the flavour in force, and again with it off to tell which keys are
-    /// the flavour's).
+    /// The same, at `flavor`: `:keymap-actions` lists the keys at the flavour
+    /// in force, and again with it off to tell which keys are the flavour's.
     pub(crate) fn commands_with(flavor: &yumete_cjk::Flavor) -> Vec<DocCommand> {
         use super::normal::{FLAVOR_NORMAL, HELIX_KEYS_UNDER_VIM, HELIX_NORMAL, SELECT_NORMAL, VIM_NORMAL};
         use yumete_cjk::FlavorItem;
@@ -716,7 +713,7 @@ impl Editor {
                 FLAVOR_NORMAL.iter().any(|(k, _, item, only)| k == key && factory(is_vim).has(Some(*item)) && only.under(is_vim))
             };
             // A key the vim preset spells for itself (`x` `s` `%` `K` `Q`…) is
-            // vim's, not the helix command's (found in review, 2026-11-02).
+            // vim's, not the helix command's.
             let preset_took = |key: &Key| {
                 let written = super::keys::key_internal(*key);
                 yumete_cjk::KeyPreset::Vim.table().iter().any(|(k, _)| yumete_cjk::actions::written(k) == written)
@@ -773,7 +770,7 @@ impl Editor {
                         else {
                             continue;
                         };
-                        // **Only the row the key reaches** (2026-11-04): under
+                        // **Only the row the key reaches**: under
                         // vim `gn` is vim's own and the helix row after it is
                         // never pressed, so it is not next-buffer's key. Asked
                         // wherever the row applies: Select mode, a vertical
@@ -830,9 +827,8 @@ impl Editor {
 
 /// **`g` — goto.**
 ///
-/// **`g` 那一層的四個字母一個都不轉**（2026-10-13 定）：竪排時 `hjkl` 跟着版面
-/// 轉，而 `gh gj gk gl` 不轉。原話：「竖排视觉方案只影响 hjkl 四个键……gh gj gk gl
-/// 的逻辑性更大，所以不需要更改」。方向鍵仍舊轉：它們永遠按螢幕走，而竪排的「往
+/// **`g` 那一層的四個字母一個都不轉**：竪排時 `hjkl` 跟着版面轉，而 `gh gj gk gl`
+/// 不轉——它們是邏輯上的行首行尾、檔首檔尾，不是視覺上的方向。方向鍵仍舊轉：它們永遠按螢幕走，而竪排的「往
 /// 下」就是順着這一行讀下去，也就是它的末尾。
 ///
 /// The vim preset's own rows come before helix's for the keys they share
@@ -851,8 +847,8 @@ pub(super) static GOTO: Group = Group {
         note("<N>g", "hint.goto.line-n"),
         ch('e', NormalCmd::JumpPrevWordEnd, "action.jump-prev-word-end").when(Only::Vim),
         ch('E', NormalCmd::JumpPrevLongWordEnd, "action.jump-prev-long-word-end").when(Only::Vim),
-        // helix's `ge` is the start of the last line (2026-11-01; it went to
-        // the end of the file).
+        // helix's `ge` is the start of the last line, not the end of the
+        // file.
         ch('e', NormalCmd::ExtendToLastLine, "action.goto-last-line").when(Only::Selecting),
         ch('e', NormalCmd::GotoLastLine, "action.goto-last-line"),
         ch('h', NormalCmd::GotoLineStart, "hint.goto.line-start-or-end").when(Only::GLetter),
@@ -865,7 +861,7 @@ pub(super) static GOTO: Group = Group {
         ch('f', NormalCmd::GotoFile, "hint.goto.open-this-file"),
         ch('L', NormalCmd::FollowLink, "hint.goto.follow-link").flavor(FlavorItem::GotoExtras),
         // vim's `gw` formats, as `gq` with the cursor kept; the jump labels
-        // are `gW` there, a flavour key (2026-11-02).
+        // are `gW` there, a flavour key.
         ch('w', NormalCmd::OperatorFillKeepCursor, "action.operator-fill-keep-cursor").when(Only::Vim),
         ch('W', NormalCmd::GotoWord, "hint.goto.jump-labels").when(Only::Vim).flavor(FlavorItem::GotoExtras),
         ch('w', NormalCmd::ExtendToWord, "hint.goto.jump-labels").when(Only::Selecting),
@@ -874,11 +870,11 @@ pub(super) static GOTO: Group = Group {
         // flavour key under helix, which leaves it free.
         ch('x', NormalCmd::OpenLink, "hint.goto.open-link").when(Only::Vim),
         ch('x', NormalCmd::OpenLink, "hint.goto.open-link").flavor(FlavorItem::GotoExtras),
-        // The two letter jumps (2026-11-02): `gz` by first letters (z as in
+        // The two letter jumps: `gz` by first letters (z as in
         // easymotion), `gZ` by pinyin (Z for 中). Both free in vim and helix.
         ch('z', NormalCmd::GotoWordByLetters, "hint.goto.seek-written").flavor(FlavorItem::GotoExtras),
         ch('Z', NormalCmd::GotoCharByPinyin, "hint.goto.seek-reading").flavor(FlavorItem::GotoExtras),
-        // mini.splitjoin's `gS` (2026-11-07), free in helix and vim.
+        // mini.splitjoin's `gS`, free in helix and vim.
         ch('S', NormalCmd::SplitJoin, "hint.goto.split-join").flavor(FlavorItem::SplitJoin),
         // `ga` `gp` `gr` `gc` are vim's or Neovim's own (`index.txt`: ga, gp,
         // gr; Neovim's defaults: gc, gr*), so helix's are helix's alone.
@@ -888,7 +884,7 @@ pub(super) static GOTO: Group = Group {
         ch('n', NormalCmd::GotoNextBuffer, "hint.goto.next-or-previous-buffer"),
         ch('p', NormalCmd::GotoPreviousBuffer, "hint.goto.next-or-previous-buffer").when(Only::Helix),
         ch('d', NormalCmd::GotoDefinition, "hint.goto.follow-note"),
-        // helix's `gD` `gy` `gi` `gm` (2026-11-02). vim's `gD` is its global
+        // helix's `gD` `gy` `gi` `gm`. vim's `gD` is its global
         // declaration, the same question; its `gi` and `gm` are its own
         // (the vim `gi` row is above), and `gy` is a key vim leaves free.
         ch('D', NormalCmd::GotoDeclaration, "hint.goto.declaration"),
@@ -943,7 +939,7 @@ pub(super) static GOTO: Group = Group {
 
 /// **`Space`** — helix's menu of the things that are not motions.
 ///
-/// **空格 空格 / 空格 退格 翻頁**（2026-10-18 要的）。A reader holding a book
+/// **空格 空格 / 空格 退格 翻頁**. A reader holding a book
 /// with one hand reaches for the space bar, which is what every reader on
 /// every platform pages with; here the bar is this menu's own leader, so the
 /// page turn is the bar pressed twice. The whole page, not the half `J`/`K`
@@ -1009,9 +1005,9 @@ pub(super) static SPACE: Group = Group {
 /// **`]` and `[` — 「the next one of these」**, and which way. Helix keeps
 /// the walks between things a document *has* on the brackets.
 ///
-/// Warning: **a code file's three are offered in code only** (2026-10-06,
-/// seen in a drawn frame). Offered everywhere, a code file's menu showed
-/// `c` twice and a manuscript's offered an `f` that never finds anything.
+/// Warning: **a code file's three are offered in code only**. Offered
+/// everywhere, a code file's menu would show `c` twice and a manuscript's
+/// would offer an `f` that never finds anything.
 /// They still answer anywhere; there is just nothing to find.
 pub(super) static RIGHT_BRACKET: Group = Group {
     name: "right_bracket",
@@ -1033,7 +1029,7 @@ pub(super) static RIGHT_BRACKET: Group = Group {
         // helix's comment is helix's only.
         ch('c', NormalCmd::GotoNextChange, "hint.hop.change").when(Only::Vim),
         ch('c', NormalCmd::GotoNextComment, "hint.hop.comment").listed(Only::Code),
-        // helix's (2026-11-02). Neovim's `]a` is the argument list and its
+        // helix's. Neovim's `]a` is the argument list and its
         // `]T` the last tag: those two are helix's alone; vim borrows `]e`
         // `]x` with the rest of helix's free keys.
         ch('a', NormalCmd::GotoNextParameter, "hint.hop.parameter").listed(Only::Code).when(Only::Helix),
@@ -1096,7 +1092,7 @@ pub(super) static LEFT_BRACKET: Group = Group {
 const VIEW_ROWS: &[Row] = &[
     ch('z', NormalCmd::AlignViewCenter, "hint.aim.middle"),
     ch('c', NormalCmd::AlignViewCenter, "hint.aim.middle").when(Only::Helix),
-    // vim's folds (2026-11-03, measured in nvim); `zc` `zj` `zk` are
+    // vim's folds (measured in nvim); `zc` `zj` `zk` are
     // helix's view keys under helix.
     ch('f', NormalCmd::CreateFold, "hint.fold.create").when(Only::Vim),
     ch('F', NormalCmd::CreateFoldLines, "hint.fold.create-lines").when(Only::Vim),
@@ -1121,7 +1117,7 @@ const VIEW_ROWS: &[Row] = &[
     ch('r', NormalCmd::FoldLess, "hint.fold.less").when(Only::Vim),
     ch('x', NormalCmd::ReapplyFoldLevelAndView, "hint.fold.reapply").when(Only::Vim),
     ch('X', NormalCmd::ReapplyFoldLevel, "hint.fold.reapply-only").when(Only::Vim),
-    // vim's other placings (measured in nvim 2026-11-03): the cursor goes
+    // vim's other placings (measured in nvim): the cursor goes
     // past the indent, and `z+` `z^` turn a page.
     quiet(Key::Enter, NormalCmd::VimAlignViewTop).when(Only::Vim),
     quiet(Key::Char('.'), NormalCmd::VimAlignViewCenter).when(Only::Vim),
@@ -1142,8 +1138,8 @@ const VIEW_ROWS: &[Row] = &[
     quiet(Key::Char('L'), NormalCmd::ScrollViewHalfRight).when(Only::Vim),
     quiet(Key::Char('s'), NormalCmd::AlignViewCursorLeft).when(Only::Vim),
     quiet(Key::Char('e'), NormalCmd::AlignViewCursorRight).when(Only::Vim),
-    // helix's rows from here on (2026-11-03: under vim they had leaked in,
-    // `z␣` `z⌫` `z/` …, where vim beeps). vim's sticky `Z` reads them as
+    // helix's rows from here on, not under vim (`z␣` `z⌫` `z/` …, where vim
+    // beeps). vim's sticky `Z` reads them as
     // helix's, see `context_in`. Listed as helix's popup lists them, the
     // keys of one command on one line.
     ch('t', NormalCmd::AlignViewTop, "hint.aim.top"),
@@ -1221,11 +1217,11 @@ pub(super) static MATCH: Group = Group {
     after: None,
 };
 
-/// **`C-w` / `Space w` — the regions** (2026-09-30, helix's
-/// `keymap/default.rs:193` and `:260`, one group behind two doors).
+/// **`C-w` / `Space w` — the regions** (helix's `keymap/default.rs:193` and
+/// `:260`, one group behind two doors).
 ///
-/// 原話：「space+w is the parent command for 『region』 operations (helix
-/// uses 『window』)。」`e`/`i`/`E`/`I` are this editor's own: helix has no
+/// `Space w` is the parent of the region operations (helix's 「window」).
+/// `e`/`i`/`E`/`I` are this editor's own: helix has no
 /// sidebars.
 pub(super) static WINDOW: Group = Group {
     name: "window",
@@ -1234,7 +1230,7 @@ pub(super) static WINDOW: Group = Group {
     opener: NormalCmd::WindowMode,
     rows: &[
         ch('w', NormalCmd::RotateView, "hint.region.next"),
-        // vim's (2026-11-03, measured in nvim): `W` `t` `b` `p` go to a
+        // vim's (measured in nvim): `W` `t` `b` `p` go to a
         // window; `x` `r` `R` and `H` `J` `K` `L` rearrange them; `c`
         // closes all but the last; `S` `F` `^` `:` as vim has them.
         ch('W', NormalCmd::RotateViewReverse, "hint.region.previous").when(Only::Vim),
@@ -1249,7 +1245,7 @@ pub(super) static WINDOW: Group = Group {
         ch('K', NormalCmd::MoveViewFarUp, "hint.region.to-edge").when(Only::Vim),
         ch('L', NormalCmd::MoveViewFarRight, "hint.region.to-edge").when(Only::Vim),
         ch('c', NormalCmd::VimCloseWindow, "hint.region.close-not-last").when(Only::Vim),
-        // vim opens a split above (2026-11-04), so its rows say so.
+        // vim opens a split above, so its rows say so.
         ch('S', NormalCmd::Hsplit, "hint.region.split-above").when(Only::Vim),
         ch('s', NormalCmd::Hsplit, "hint.region.split-above").when(Only::Vim),
         ch('F', NormalCmd::GotoFileHsplit, "hint.region.file-above").when(Only::Vim),
@@ -1275,7 +1271,7 @@ pub(super) static WINDOW: Group = Group {
         ch('n', NormalCmd::WindowNewMode, "hint.region.new"),
         ch('q', NormalCmd::Wclose, "hint.region.close"),
         ch('o', NormalCmd::Wonly, "hint.region.only"),
-        // helix's (2026-11-02). vim's `C-w t` is the top window and its
+        // helix's. vim's `C-w t` is the top window and its
         // `H` `J` `K` `L` move a window to an edge, so these are helix's;
         // `C-w f` is the same in both.
         ch('t', NormalCmd::TransposeView, "hint.region.transpose").when(Only::Helix),
@@ -1315,7 +1311,7 @@ pub(super) static WINDOW_NEW: Group = Group {
 ///
 /// The last line is `hint.vi.backtick` — 「vi 的記號：M 記、`'` 回去」. It is a
 /// line in a menu the reader opened, not a guess about why a key was
-/// pressed, which is why it outlived the phrasebook (2026-10-08).
+/// pressed.
 pub(super) static CASE: Group = Group {
     name: "case",
     pending: Pending::Case,
@@ -1361,7 +1357,7 @@ pub(super) static CONFLICT: Group = Group {
     after: None,
 };
 
-/// **`空格 o` — 開上次的那一組**（2026-10-18 作者定）。
+/// **`空格 o` — 開上次的那一組**。
 ///
 /// 三件事，三份不同的清單——這也是別家編輯器一致的形狀（VS Code 的
 /// 「Open Recent」列文件夾、`⌘P` 列檔，而「重開上次的窗」是第三件；vim 的
@@ -1385,10 +1381,10 @@ pub(super) static OPEN: Group = Group {
     after: None,
 };
 
-/// **`空格 z` — 輸入法那一組**（2026-10-17 作者定）。
+/// **`空格 z` — 輸入法那一組**。
 ///
-/// 原話：「In Yume, we have many shortcuts too with (shift + control + a
-/// letter). I want them to be aligned as much as possible.」So the letter
+/// Yume has many shortcuts of its own on ⌃⇧ and a letter, and the two line
+/// up as far as they can. So the letter
 /// under `z` is **Yume's own ⌃⇧ letter** wherever Yume has one (`m` 上屏方式,
 /// `y` 輸入預測, `i` 選方案, `n` 下一個方案, `/` 注解, `3`–`9` 一頁幾條), and
 /// the value under it is a letter of that value's own name.
@@ -1396,8 +1392,8 @@ pub(super) static OPEN: Group = Group {
 /// Warning: **The letters Yume uses and yumete has no answer for stay empty**
 /// — `O U D L H K J A .`. Lining the two up is only worth doing if the day
 /// yumete grows one of those, the letter is already the same on both sides
-/// and nobody's hand has to change. `0` is Yume's 字集過濾 and is ours too
-/// (2026-11-04); it opens the values rather than cycling them, as the other
+/// and nobody's hand has to change. `0` is Yume's 字集過濾 and is ours too;
+/// it opens the values rather than cycling them, as the other
 /// value letters here do. `s` 字集排序, `g` 整句字集軌 and `b` the built-in
 /// schemes have no Yume letter.
 pub(super) static YUME: Group = Group {
@@ -1525,7 +1521,7 @@ pub(super) static YUME_SORT: Group = Group {
     after: None,
 };
 
-/// **One lane first; the others keep their order** (2026-11-04).
+/// **One lane first; the others keep their order**.
 pub(super) static YUME_LANES: Group = Group {
     name: "yume_lanes",
     pending: Pending::YumeValue('g'),
@@ -1543,7 +1539,7 @@ pub(super) static YUME_LANES: Group = Group {
     after: None,
 };
 
-/// **The scheme carried in the binary, whatever is installed** (2026-11-04):
+/// **The scheme carried in the binary, whatever is installed**:
 /// `:yume ! <scheme>`. `Space z i` keeps the usual order, disk first.
 pub(super) static YUME_BUILTIN: Group = Group {
     name: "yume_builtin",
@@ -1569,8 +1565,8 @@ pub(super) static YUME_BUILTIN: Group = Group {
 /// who is *not* in a table yet, so the six that work anywhere head every
 /// list, and on a page with no table under the cursor they are the whole
 /// list. `o b t` are three answers to one question — how is this table
-/// drawn — from shallow to deep, and `q` steps back out of the deepest
-/// (2026-09-30: 「这五个是一个系列」; `f` folded into `b` on 2026-10-21).
+/// drawn — from shallow to deep, and `q` steps back out of the deepest:
+/// one series.
 ///
 /// Then what this table can do, by where it is: a fenced block is read where
 /// it lies (#216), so the keys that rewrite a file are not offered there,
@@ -1580,7 +1576,7 @@ pub(super) static YUME_BUILTIN: Group = Group {
 /// the line that kind of table says; every one of them is the table code's
 /// own answer to that key, which says why a key is refused where it is.
 ///
-/// 格子多寬 (`w`) belongs to the pane alone since 2026-10-22: 源碼 and 基本
+/// 格子多寬 (`w`) belongs to the pane alone: 源碼 and 基本
 /// draw every cell whole and may not do otherwise.
 pub(super) static TABLE: Group = Group {
     name: "table",
@@ -1594,7 +1590,7 @@ pub(super) static TABLE: Group = Group {
         ch('q', NormalCmd::TableLeaveWindow, "hint.table.leave-the-window"),
         ch(']', NormalCmd::GotoNextTable, "hint.table.next-or-previous"),
         ch('[', NormalCmd::GotoPrevTable, "hint.table.next-or-previous"),
-        // 2026-10-02 定：命令是 `:convert-table`，鍵位摺在這一組底下。
+        // 命令是 `:convert-table`，鍵位摺在這一組底下。
         ch('x', NormalCmd::TableConvertMode, "hint.table.convert"),
         ch('w', NormalCmd::TableCellWidth, "hint.table.fold-wide-cells").listed(Only::Pane),
         // In a fenced block.
@@ -1659,7 +1655,7 @@ pub(super) static TABLE: Group = Group {
 };
 
 /// `空格 t x` 底下那三種格式。**小寫是轉換，大寫是把剪貼板貼成那一種**
-/// （2026-10-02 定）——和這一組的習慣一致：大寫是「另一個方向」或者「重的
+/// ——和這一組的習慣一致：大寫是「另一個方向」或者「重的
 /// 那一個」。名字直接寫：它們就是命令上打的那三個詞。
 pub(super) static TABLE_CONVERT: Group = Group {
     name: "table_convert",
@@ -1705,7 +1701,7 @@ mod tests {
     use super::*;
 
     /// **Every row of every group names a command, and every command a
-    /// group runs is a name a configuration can bind** (2026-10-31).
+    /// group runs is a name a configuration can bind**.
     #[test]
     fn every_group_key_is_a_bindable_command() {
         let bindable: Vec<&str> = yumete_cjk::actions::ALL
@@ -1724,10 +1720,9 @@ mod tests {
         }
     }
 
-    /// **The `g` menu on a vertical page says what the keys do there**
-    /// (2026-10-31). It used to be a table of its own that still turned
-    /// `g h`/`g l` into `g k`/`g j`, which the keys stopped doing on
-    /// 2026-10-13; drawn from the rows, it cannot.
+    /// **The `g` menu on a vertical page says what the keys do there**:
+    /// drawn from the rows, it cannot turn `g h`/`g l` into `g k`/`g j`,
+    /// which the keys do not do.
     #[test]
     fn the_goto_menu_follows_the_page_and_the_preset() {
         let rows = |at: Context| GOTO.menu(&at);
@@ -1744,9 +1739,9 @@ mod tests {
         assert!(!vim.iter().any(|(k, _)| k == "h l"), "{vim:?}");
     }
 
-    /// **Each kind of table lists its own keys** (2026-10-31): the rows a
-    /// fenced block's table offers come first, and once hid the same keys
-    /// from a Markdown table's menu.
+    /// **Each kind of table lists its own keys**: the rows a fenced block's
+    /// table offers come first, and must not hide the same keys from a
+    /// Markdown table's menu.
     #[test]
     fn each_kind_of_table_lists_its_own_keys() {
         let md = Editor::table_keys(Some(Bounds::Md), false);

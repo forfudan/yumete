@@ -1,5 +1,4 @@
-//! **helix's tree keys in prose** (2026-11-02, decided after a writer's and
-//! a helix user's review): prose has no syntax tree, so it gets a ladder of
+//! **helix's tree keys in prose**: prose has no syntax tree, so it gets a ladder of
 //! its own units instead — clause, sentence, list item, block (a paragraph,
 //! a list, a quote: lines between blank lines), section (a heading and what
 //! is under it), file.
@@ -10,7 +9,7 @@
 //! a block's children are its sentences** (or its list items), a sentence's
 //! its clauses: `x A-I` is every sentence in the paragraph.
 //!
-//! The writer's two follow-ups (2026-11-03): **a clause takes the mark that
+//! Two refinements: **a clause takes the mark that
 //! ends it** when that is a comma, a 、, a semicolon or a colon, so the
 //! clauses of a sentence lie end to end and only its 。 is left over; and
 //! **a quotation is a rung of its own**, 「…」 『…』 “…” with their marks,

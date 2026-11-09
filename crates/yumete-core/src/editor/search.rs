@@ -18,13 +18,12 @@ impl Editor {
         self.compile_exactly(&self.smart_cased(pattern))
     }
 
-    /// [`Self::compile`]，但**不走**智能大小寫 —— `:s` 走這一條（2026-10-09 作者定）。
+    /// [`Self::compile`]，但**不走**智能大小寫 —— `:s` 走這一條。
     ///
-    /// 原話：「我覺得替換不應該智能大小寫的，因為本質他是個正則，既然是正則就應該
-    /// 默認嚴格。`/` 放寬了智能大小寫，我們必須說明。」
+    /// 替換本質上是一條正則，正則默認嚴格；`/` 放寬了智能大小寫，這一點要說明。
     ///
-    /// 量過三家：helix 的 `/` 是智能大小寫（`search.smart-case` 出廠 `true`，書裏的
-    /// 原話是「case-insensitive unless pattern contains upper case characters」，和
+    /// 量過三家：helix 的 `/` 是智能大小寫（`search.smart-case` 出廠 `true`，書裏寫的
+    /// 是「case-insensitive unless pattern contains upper case characters」，和
     /// 這一頭逐字相同），而 **helix 根本没有 `:s`**；vim 的 `/` 與 `:s` 兩個都分大小
     /// 寫。所以 `:s` 這一格没有 helix 的答案可抄，而 vim 的答案是「分」。
     ///
@@ -97,13 +96,13 @@ impl Editor {
     }
 
     pub(super) fn repeat_search(&mut self, forward: bool) {
-        // `n` with nothing to repeat used to do nothing and say nothing, which
+        // `n` with nothing to repeat says so: doing nothing and saying nothing
         // reads as a key that is broken rather than one with no answer yet.
         if self.last_search.is_empty() {
             self.status = say!("find.nothing-searched-yet");
             return;
         }
-        // **The caller notes the jump** (2026-11-02): confirming `/` does,
+        // **The caller notes the jump**: confirming `/` does,
         // as in helix and vim; `n`/`N` do under vim only — helix's do not,
         // so forty hits are not forty steps of `C-o`.
         self.jumped = true;
@@ -117,8 +116,8 @@ impl Editor {
                 return;
             }
         };
-        // **`/` 和面板走同一支掃描器**（2026-10-12）。通配關着的時候這就是一條光
-        // 禿禿的式子，答案與從前拿裸正則掃的逐字相同；開着的時候同一個 `Look` 多
+        // **`/` 和面板走同一支掃描器**。通配關着的時候這就是一條光
+        // 禿禿的式子，答案與拿裸正則掃的逐字相同；開着的時候同一個 `Look` 多
         // 帶了折過的字形與讀音，而掃描器一個字都不用改。
         let look = match self.search.wild {
             false => super::find::Look::plain(re),
@@ -141,14 +140,13 @@ impl Editor {
         // this search is concerned.
         let within = self.search_rows();
         let scoped = within != (0..rope.len_lines());
-        // Warning: **往回找要從這一處的開頭數起，不是從光標數起**（2026-09-24 報的：
-        // 「N 向上搜索這個快捷鍵無效」）。一次搜索落地之後光標停在匹配的**最後
+        // Warning: **往回找要從這一處的開頭數起，不是從光標數起**。一次搜索落地之後光標停在匹配的**最後
         // 一個字**上，開頭在 `anchor`；而 `search_backward` 找的是「開頭在
         // `from` 之前的最後一處」，拿光標去問，當前這一處的開頭就在光標之前，
         // 於是它把自己又找了一遍，光標紋絲不動。
         //
-        // Warning: **匹配只有一個字的時候它是好的**——那時光標就在開頭上。中文搜的多
-        // 半是兩個字以上，英文搜一個字母的多，所以這個洞躲了很久。
+        // Warning: **匹配只有一個字的時候兩種問法一樣**——那時光標就在開頭上，所以
+        // 拿一個字母去試看不出這個分別。
         let found = if forward {
             search_forward(rope, &look, (self.sel.head() + 1).min(len), within)
         } else {
@@ -165,19 +163,17 @@ impl Editor {
                 // covers the cursor's own grapheme.
                 let end = end.min(len);
                 let head = motion::prev_grapheme(rope, end).max(pos);
-                // **選區模式裏搜索是延伸，不是跳走**（2026-10-06，對齊 helix）。
+                // **選區模式裏搜索是延伸，不是跳走**（對齊 helix）。
                 // helix 的 select 下 `n`/`N` 綁的是 `extend_search_next`/`_prev`
                 // （`default.rs:359-360`），而 `/` 的 `search` 在 select 下走
                 // `Movement::Extend`、**模式不變**（`commands.rs` 的 `search_impl`）。
-                // 從前這裏無條件 `self.extend = false`，於是 `v` 之後按一下 `/`
-                // 就掉回 Normal，選區也没了——實測 `v w w Esc` 之後 `d` 只刪一個
-                // 空格。錨點留着，頭走到這一處**去的那一頭**：往前是最後一個字，
+                // 所以這裏不許無條件 `self.extend = false`：那樣 `v` 之後按一下 `/`
+                // 就掉回 Normal，選區也没了。錨點留着，頭走到這一處**去的那一頭**：往前是最後一個字，
                 // 往回是第一個字。
                 //
                 // **…and under helix the match is a selection of its own**
-                // (2026-10-27, measured: `e` `*` `v` `n` `n` `c` gives
-                // `X dog X dog X` there; here it grew one selection from the
-                // first `cat` to the last). `search_impl` with
+                // (`e` `*` `v` `n` `n` `c` gives `X dog X dog X` there, not one
+                // selection from the first `cat` to the last). `search_impl` with
                 // `Movement::Extend` *pushes* the match and makes it primary;
                 // the selections already made stay. vim's visual `n` grows the
                 // one selection, and the vim keymap keeps that.
@@ -196,8 +192,7 @@ impl Editor {
                         false => pos,
                     }),
                     // vim's cursor goes to the match's first character
-                    // (review, 2026-11-03: it stood on the last, so `/bar`
-                    // then `x` took the `r`).
+                    // (on the last, `/bar` then `x` would take the `r`).
                     (false, true) => {
                         self.sel.set_anchor(pos);
                         self.sel.set_head(pos);
@@ -216,10 +211,9 @@ impl Editor {
                 }
                 self.refresh_goal_column();
             }
-            // Warning: **說給人看的式子裏不許有我們自己加的那一段**（2026-10-09 審出
-            // 來的）。智能大小寫把 `(?i)` 寫進式子裏（`smart_cased`，那是正則引擎自
-            // 己的旗標，不另外實現一套），而面板那一路把穿好衣服的那一整條存進了
-            // `last_search`——於是找不到的時候狀態欄寫着「找不到：(?i)zhongguo」。那
+            // Warning: **說給人看的式子裏不許有我們自己加的那一段**。智能大小寫把 `(?i)` 寫進式子裏（`smart_cased`，那是正則引擎自
+            // 己的旗標，不另外實現一套）；面板那一路要是把穿好衣服的那一整條存進
+            // `last_search`，找不到的時候狀態欄就寫着「找不到：(?i)zhongguo」，而那
             // 四個字符不是打的人寫的。
             None if scoped => self.status = say!("find.not-in-table", as_typed(&pattern)),
             None => self.status = say!("find.not-found", as_typed(&pattern)),
@@ -253,8 +247,8 @@ impl Editor {
         }
         // **`f` — 照字面.** A manuscript is full of characters the regex engine
         // reads as instructions: `。` is safe, but `(注)`, `A.B`, `第1章*` and
-        // every URL are not, and the writer who wants those characters had to
-        // know which ones to backslash. `f` says 「these are the characters」
+        // every URL are not, and without it the writer who wants those characters
+        // has to know which ones to backslash. `f` says 「these are the characters」
         // and does the escaping.
         let wanted = match literal {
             true => regex::escape(pattern),
@@ -285,7 +279,7 @@ impl Editor {
             false => unescape_replacement(replacement),
         };
 
-        // 同 `/` 那一頭：一支匹配器，兩個旗標只改它怎麼造（2026-10-12）。
+        // 同 `/` 那一頭：一支匹配器，兩個旗標只改它怎麼造。
         //
         // `j` 折字形是**式子變換**（折完還是一條正則，`$1` 照樣展得開），`y` 讀音
         // 是**另一組跨度**——兩樣都掛在同一個 `Look` 上，疊得起來。
@@ -344,14 +338,14 @@ impl Editor {
                 return;
             }
         }
-        // `n` in vi means "count, and change nothing". It used to substitute.
+        // `n` in vi means "count, and change nothing".
         if count_only {
             self.status = say!("find.substitute-nothing-changed", count);
             return;
         }
-        // Warning: **配中了不等於改了**（2026-10-09 審出來的）。零寬的式子（` *$`、
-        // `x*`）每一行都配得中，而換上去的和換下來的一模一樣；從前照樣記一個撤銷點、
-        // 掛上 `[+]`、`:w` 真的寫一遍盤。報的處數不動（vim 也報配中幾處），只是檔没
+        // Warning: **配中了不等於改了**。零寬的式子（` *$`、`x*`）每一行都配得中，
+        // 而換上去的和換下來的一模一樣；這時不許記撤銷點、掛 `[+]`、讓 `:w` 真的寫一
+        // 遍盤。報的處數不動（vim 也報配中幾處），只是檔没
         // 變就什麽都不做。
         if count > 0 && rebuilt != text {
             self.snapshot();
@@ -365,8 +359,8 @@ impl Editor {
             self.refresh_goal_column();
         }
         // **vim's cursor goes to the last line substituted**, on its first
-        // non-blank, even when the text came out the same (`:h :s`, measured
-        // in nvim 2026-11-04). Helix has no `:s`; its users keep the cursor.
+        // non-blank, even when the text came out the same (`:h :s`, as nvim
+        // does). Helix has no `:s`; its users keep the cursor.
         if let Some(line) = last_hit.filter(|_| self.vim_keymap()) {
             let rope = self.current_buffer().rope();
             let line = line.min(motion::last_line(rope));
@@ -376,7 +370,7 @@ impl Editor {
         self.status = say!("find.substitute-changed", count);
     }
 
-    /// **這個範圍是反的嗎** —— 是就交寫的那兩個行號（2026-10-09）。
+    /// **這個範圍是反的嗎** —— 是就交寫的那兩個行號。
     ///
     /// 只有 `Rows::Span` 可能反（`,` 那一種是一張單子，順序不說明什麽）。交的是
     /// **讀者寫的那兩個數**，所以 `:$-1s` 在三行的檔上報的是「第 3 行到第 1 行」，
@@ -403,9 +397,9 @@ impl Editor {
         use crate::command::{Bound, Rows};
         let rope = self.current_buffer().rope();
         let last_line = motion::last_line(rope);
-        // Warning: **没有的那一行不許悄悄夾到末行**（2026-10-09 審出來的）。從前寫的是
-        // `n.saturating_sub(1).min(last_line)`，於是三行的檔上 `:99s/a/X/` 改的是**第
-        // 三行**，還報「換了 1 處」——把 `:9s` 打成 `:91s` 就是這樣改掉了一章的結尾。
+        // Warning: **没有的那一行不許悄悄夾到末行**。寫成
+        // `n.saturating_sub(1).min(last_line)` 的話，三行的檔上 `:99s/a/X/` 改的是**第
+        // 三行**，還報「換了 1 處」——把 `:9s` 打成 `:91s` 就會改掉一章的結尾。
         // `:0s` 同理，它改的是第一行。vim 兩種都報 `E16: Invalid range`，一個字不動。
         let resolve = |b: Bound| -> Result<usize, String> {
             match b {
@@ -484,7 +478,7 @@ impl Editor {
             if walk.chosen.has(idx) {
                 // 換行符不進正則，見 [`crate::editor::line_body`]。
                 let (line, _) = crate::editor::line_body(line);
-                // **跨度，不是捕獲**（2026-10-12）：讀音那一路的命中不是正則配上
+                // **跨度，不是捕獲**：讀音那一路的命中不是正則配上
                 // 的，`captures_iter` 看不見它。`$1` 照樣在 `expand` 裏展開——那一
                 // 支自己分得清哪一路配上的。
                 let cuts: Vec<usize> = line
@@ -526,15 +520,15 @@ impl Editor {
     /// quadratic. `next_hit` serialises the whole document and rescans it from
     /// the top for every match, and `write_one` copies it again for the grid
     /// guard — fine at one keystroke per `y`, ruinous when `a` does it N times
-    /// with no key in between. Measured before the fix: a 680 KB chapter with
-    /// 20,000 matches took **28.5 s** under `a` against 0.02 s for the same
-    /// `:s` without `c`, and a 2 MB one took **4 minutes 35 seconds** — on the
-    /// main thread, with no progress and no key that could stop it. A writer
-    /// watching a frozen screen kills the process, which is how `a` came to
-    /// cost both the substitution and the last few seconds of typing.
+    /// with no key in between. Measured, the loop takes **28.5 s** on a 680 KB
+    /// chapter with 20,000 matches against 0.02 s for the same `:s` without
+    /// `c`, and **4 minutes 35 seconds** on a 2 MB one — on the main thread,
+    /// with no progress and no key that could stop it. A writer watching a
+    /// frozen screen kills the process, and loses both the substitution and
+    /// the last few seconds of typing.
     ///
     /// One pass, one grid check, one `replace` — the same shape [`substitute`]
-    /// has always used, restricted to the matches at or after `walk.from`.
+    /// uses, restricted to the matches at or after `walk.from`.
     ///
     /// [`substitute`]: Self::substitute
     fn finish_all(&mut self, walk: &mut Confirming) -> Option<String> {
@@ -555,8 +549,8 @@ impl Editor {
             let (body, eol) = crate::editor::line_body(line);
             // Byte cursor inside `body`: everything before it is already in
             // `rebuilt`. `spans` comes back in order, so it only ever moves
-            // forward（2026-10-12 從 `captures_iter` 換過來的，理由同 `next_hit`：
-            // 讀音那一路的命中不是正則配上的）。
+            // forward（不用 `captures_iter`，理由同 `next_hit`：讀音那一路的命中
+            // 不是正則配上的）。
             let cuts: Vec<usize> = body
                 .char_indices()
                 .map(|(b, _)| b)

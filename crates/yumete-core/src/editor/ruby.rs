@@ -7,8 +7,8 @@ impl Editor {
     // ---- Ruby mode (Feature #65) ------------------------------------------
 
     /// The dialect this buffer is written in, from its file extension — and
-    /// the brace form in a Markdown file where it is the only spelling read
-    /// (2026-11-08): a writer who turned the others off writes `{…|…}`.
+    /// the brace form in a Markdown file where it is the only spelling read:
+    /// a writer who turned the others off writes `{…|…}`.
     fn file_dialect(&self) -> Dialect {
         let read = self.ruby_configured();
         let markdown = self.current_buffer().syntax() == crate::syntax::Syntax::Markdown;
@@ -220,9 +220,9 @@ impl Editor {
         };
         // ⇥ 走的是面板畫的那一張，猜的那幾條也在上面。
         //
-        // Warning: **不許先把 `completion` 取走**（寫的時候當場撞的）：取走之後
-        // [`Self::command_rows`] 就退回去問命令行現在那一行，而那正是上一個
-        // 修好的毛病。它自己認得存着的前綴。
+        // Warning: **不許先把 `completion` 取走**：取走之後
+        // [`Self::command_rows`] 就退回去問命令行現在那一行，那是錯的。它自己認得
+        // 存着的前綴。
         let (matches, _) = self.command_rows();
         if matches.is_empty() {
             return;
@@ -356,8 +356,8 @@ impl Editor {
         };
 
         // A reading is text, and text going into a row obeys the row's rule:
-        // `a,b` typed as a reading used to be written straight into the rope,
-        // past every gate, and the row it was on gained a field. Asked of the
+        // `a,b` typed as a reading must not go straight into the rope, past
+        // every gate, giving the row it is on a field. Asked of the
         // *file*, not of `:table`, since nobody turns table mode on to annotate
         // a character.
         if let Some(why) = self.replacement_reshapes_the_grid(span, &text) {
@@ -413,10 +413,9 @@ impl Editor {
     ///
     /// Warning: **Under the helix keymap it is helix's `.`**, which repeats the
     /// last *insert* only (`repeat_last_insert`, measured with
-    /// `scripts/oracle/hx_keys.py` 2026-10-29: `iX Esc d .` writes the `X`
-    /// again; it does not delete again). The wide one was vim's, and with
-    /// the selection acting first a stray `.` deleted whatever was selected
-    /// now (#413, proposed 2026-09-12).
+    /// `scripts/oracle/hx_keys.py`: `iX Esc d .` writes the `X` again; it does
+    /// not delete again). The wide one is vim's: with the selection acting
+    /// first a stray `.` would delete whatever is selected now (#413).
     pub(super) fn repeat_edit(&mut self) {
         let keys = match self.as_vim() {
             false => &self.last_insert_keys,
@@ -527,8 +526,8 @@ mod brace_tests {
         }
     }
 
-    /// **The brace form is read in a Markdown file, and elsewhere when asked**
-    /// (2026-11-08): `:ruby-markdown` on, off, and bare to flip.
+    /// **The brace form is read in a Markdown file, and elsewhere when asked**:
+    /// `:ruby-markdown` on, off, and bare to flip.
     #[test]
     fn the_brace_form_is_read_in_markdown_and_where_asked() {
         let mut ed = with("山顶的{气象站|qìxiàngzhàn}。", crate::syntax::Syntax::Markdown);
@@ -549,7 +548,7 @@ mod brace_tests {
         assert!(ed.readings_on_line(0).is_empty());
     }
 
-    /// **A reading in braces may be written into a table cell** (2026-11-08):
+    /// **A reading in braces may be written into a table cell**:
     /// its bar is the cell's, as everywhere a row is split, and a bare bar is
     /// still refused; cutting the closing brace, which would leave the bar a
     /// wall, is refused too.

@@ -62,7 +62,7 @@ impl super::Editor {
             let drawn = |line: usize| self.drawn_on_line(line);
             let typed = |line: usize| self.typed_on_line(line);
             let flat = |line: usize| self.table_row_at(line);
-            // 一行的前綴寬度索引（2026-10-08）：不折行的長行上，光標的列
+            // 一行的前綴寬度索引：不折行的長行上，光標的列
             // 不必每動一下就把前面那一整段逐字素走一遍。
             let widths = |rope: &ropey::Rope, line: usize, span: usize| self.line_widths(rope, line, span);
             let width = self.wrap_width().unwrap_or(crate::wrap::NO_WRAP);
@@ -97,9 +97,9 @@ impl super::Editor {
                 let anchor_goal = crate::wrap::column_of(rope, one.anchor, m);
                 let head_goal = crate::wrap::column_of(rope, one.head, m);
                 // **How many rows the selection spans: a copy goes that many
-                // down** (2026-10-27, helix's `copy_selection_on_line` steps by
-                // the selection's height). Two lines selected, `C` selects the
-                // next two, where it used to land one row down, overlapping.
+                // down** (helix's `copy_selection_on_line` steps by the
+                // selection's height). Two lines selected, `C` selects the next
+                // two, not one row down, overlapping.
                 let height = {
                     let (top, bottom) = one.span();
                     let mut rows = 1;
@@ -163,8 +163,8 @@ impl super::Editor {
     /// 的 `edit_each`（從後往前做，一個撤銷點）。這一支假定 `what` 不改文本。
     ///
     /// Warning: **目標列不在這裏管。** 它跟着每一段自己走（`Range::goal`），所以連按 `j` 跨過
-    /// 一行短行之後，每一段記得住的還是它自己原來那一列。2026-09-28 之前它是 `Editor`
-    /// 上的一個 `goal_column`，那時 N 段會一起瞄準主選區那一列。
+    /// 一行短行之後，每一段記得住的還是它自己原來那一列，不會 N 段一起瞄準主選區
+    /// 那一列。
     pub(super) fn each_selection(&mut self, what: impl Fn(&mut Self)) {
         if !self.sel.is_plural() {
             what(self);
@@ -180,30 +180,29 @@ impl super::Editor {
         // 每一段開跑之前擺回去，跑完之後留最後一段的那一份。
         let pending = self.pending;
         let count = self.count;
-        // `2mi(` keeps its count for every selection, not only the first
-        // (2026-10-27): the answer spends it.
+        // `2mi(` keeps its count for every selection, not only the first:
+        // the answer spends it.
         let operator_count = self.operator_count;
-        // Warning: **`"` 指的那個寄存器也是一次性的**（2026-09-28）：`take_register` 是
-        // **take**，第一趟就把它拿走了，後面幾段於是去讀無名的那一個，`"#p` 只有一段
+        // Warning: **`"` 指的那個寄存器也是一次性的**：`take_register` 是
+        // **take**，第一趟就把它拿走，後面幾段就會去讀無名的那一個，`"#p` 只有一段
         // 貼得上號。同 `pending` 和 `count`，每一段開跑之前擺回去。
         let named = self.pending_register;
-        // Warning: **模式也是一次性的**（2026-10-09 審出來的）。一組選區上按 `a`：第一趟
-        // 跑完編輯器已經在插入態了，而 `selection()` **在插入態不含光標下那一格**（那時
-        // 光標是兩個字之間的一條綫），於是第二趟起 `append_position` 交出來的是那一格
-        // 本身——`!` 插在 `。` 前面而不是後面。實測 `%s。` 再 `a!`：
-        // 「第一句話很長!。中間!。第三句也在這裏。!」，只有最後那一段落對。
+        // Warning: **模式也是一次性的**。一組選區上按 `a`：第一趟跑完編輯器已經在
+        // 插入態了，而 `selection()` **在插入態不含光標下那一格**（那時光標是兩個字
+        // 之間的一條綫），不擺回去的話第二趟起 `append_position` 交出來的是那一格
+        // 本身——`!` 插在 `。` 前面而不是後面。
         //
-        // 同上面那三格，每一段開跑之前擺回去；跑完之後照舊留最後一趟那一份。
+        // 同上面那三格，每一段開跑之前擺回去；跑完之後留最後一趟那一份。
         let mode = self.mode;
-        // Warning: **`extend` 和模式是同一件事的兩半**（2026-10-09）：合起來纔說得出「現在
+        // Warning: **`extend` 和模式是同一件事的兩半**：合起來纔說得出「現在
         // 在哪個模式裏」。vim 鍵位下漏掉它會改掉鍵的意思——`d` 在可視模式裏當場剪，
         // 出了可視模式就變成一個等移動的算符（`Pending::VimOperator`）。
         let extend = self.extend;
-        // Warning: **`V` 立起來的那一格也是一次性的**（2026-10-09）：`vim_lines` 說的是
+        // Warning: **`V` 立起來的那一格也是一次性的**：`vim_lines` 說的是
         // 「這一段選的是整行」，而第一趟的 `extend_to_line_bounds` 會把它花掉，後面幾
         // 段於是按字符那一路走——`Vy` 三段只有一段拿整行。同上面那四格。
         let lines = self.vim_lines;
-        // A count typed inside a vim operator (`d2w`) is one too (2026-10-29).
+        // A count typed inside a vim operator (`d2w`) is one too.
         let alias_count = self.alias_count;
         // 寄存器要分得出「這一趟」——見 `Editor::store`。
         self.edit_round += 1;
@@ -217,7 +216,7 @@ impl super::Editor {
             self.mode = mode;
             self.extend = extend;
             self.vim_lines = lines;
-            // **複製也要一段一份**（2026-10-09）：`y` 走的是這一支（它不改文本），而
+            // **複製也要一段一份**：`y` 走的是這一支（它不改文本），而
             // `store` 按 `edit_nth` 把 N 段各擺一格。見 [`Editor::copies_every_selection`]。
             self.edit_nth = Some(nth);
             what(self);
@@ -234,11 +233,11 @@ impl super::Editor {
         self.say_the_merge(merged);
     }
 
-    /// **`y` 要不要逐段各複製一次**（2026-10-09）。
+    /// **`y` 要不要逐段各複製一次**。
     ///
     /// 它不改文本，所以走的是 [`Self::each_selection`] 那一支：不報撤銷點，也不開 undo
-    /// group。要的只是 `edit_nth`——`store` 按它把 N 段各擺一格寄存器（`d` 那一條 2026-10-09
-    /// 做的），於是 `y` 再 `P` 和 `d` 再 `P` 一樣逐段還原。
+    /// group。要的只是 `edit_nth`——`store` 按它把 N 段各擺一格寄存器（同 `d`），
+    /// 於是 `y` 再 `P` 和 `d` 再 `P` 一樣逐段還原。
     ///
     /// Warning: **vim 鍵位下没選東西的時候 `y` 不是複製，是個算符**（`Pending::VimOperator`，
     /// 它在等一個移動）。那一下讓它照舊走一次就好：立一個算符立 N 次是白跑。
@@ -283,11 +282,11 @@ impl super::Editor {
         let primary = was.primary();
         let pending = self.pending;
         let count = self.count;
-        // `2mi(` keeps its count for every selection, not only the first
-        // (2026-10-27): the answer spends it.
+        // `2mi(` keeps its count for every selection, not only the first:
+        // the answer spends it.
         let operator_count = self.operator_count;
-        // Warning: **`"` 指的那個寄存器也是一次性的**（2026-09-28）：`take_register` 是
-        // **take**，第一趟就把它拿走了，後面幾段於是去讀無名的那一個，`"#p` 只有一段
+        // Warning: **`"` 指的那個寄存器也是一次性的**：`take_register` 是
+        // **take**，第一趟就把它拿走，後面幾段就會去讀無名的那一個，`"#p` 只有一段
         // 貼得上號。同 `pending` 和 `count`，每一段開跑之前擺回去。
         let named = self.pending_register;
         // 模式、`extend` 與 `V` 那一格同上一支，見那裏的註釋。
@@ -295,8 +294,8 @@ impl super::Editor {
         let extend = self.extend;
         let lines = self.vim_lines;
         let alias_count = self.alias_count;
-        // **What was typed is recorded once, not once per cursor** (2026-10-29,
-        // review: `3iX` with two cursors replayed `XX` three times). Every
+        // **What was typed is recorded once, not once per cursor**, or `3iX`
+        // with two cursors would replay `XX`. Every
         // cursor types the same keys, so the primary's recording is kept.
         let recorded = self.insert_recording.clone();
         let mut kept_recording = None;
@@ -307,13 +306,11 @@ impl super::Editor {
         for nth in (0..ranges.len()).rev() {
             let one = &ranges[nth];
             let before = self.current_buffer().rope().len_chars();
-            // Warning: **每一趟都先收進當下的文本裏**（2026-09-28 修）。從後往前做保住的是
-            // 下標**不被後面的編輯挪走**，保不住「前面那幾段本來就没越界」——`%` 那個
-            // bug 就是這麽炸的：手上留着兩段舊的，第一刀把整檔刪光，第二段指着虛空，
-            // `apply` 裏的 `next_grapheme` 當場 panic。
+            // Warning: **每一趟都先收進當下的文本裏**。從後往前做保住的是下標**不被
+            // 後面的編輯挪走**，保不住「前面那幾段本來就没越界」——手上留着兩段舊的，
+            // 第一刀把整檔刪光，第二段指着虛空，`apply` 裏的 `next_grapheme` 當場 panic。
             //
-            // 這一句是安全網，不是修法：真正的修法是別讓越界的選區留下來（`%` 那一支
-            // 已經改成收成一段）。可是「編輯不許 panic」不能靠別人守規矩。
+            // 這一句是安全網：要緊的是別讓越界的選區留下來（`%` 那一支收成一段）。可是「編輯不許 panic」不能靠別人守規矩。
             let mut one = *one;
             one.anchor = one.anchor.min(before);
             one.head = one.head.min(before);
@@ -337,9 +334,9 @@ impl super::Editor {
             let changes = self.take_the_journal(listening);
             let after = self.current_buffer().rope().len_chars();
             match changes {
-                // **Through each change where it was made** (2026-10-29, review:
-                // `md` on a pair enclosing another cursor moved that cursor by
-                // both brackets, or not at all when it had not run yet). The
+                // **Through each change where it was made**: `md` on a pair
+                // enclosing another cursor moves that cursor by the bracket
+                // before it, whether or not that cursor has run yet. The
                 // ones still to run move too: an edit here can reach before
                 // them, as an opening bracket does.
                 Some(changes) => {
@@ -424,9 +421,9 @@ impl super::Editor {
         heard.filter(|_| self.current_buffer().id() == id)
     }
 
-    /// **The other selections follow an edit made at the primary alone**
-    /// (2026-10-29, review: after `Space c` with three cursors the other two
-    /// pointed at shifted text, and `iX` landed in the wrong places).
+    /// **The other selections follow an edit made at the primary alone**:
+    /// after `Space c` with three cursors the other two do not point at
+    /// shifted text.
     ///
     /// The safety net for any key that edits once rather than at every
     /// selection: the change is found as the one span where the old and new
@@ -436,8 +433,8 @@ impl super::Editor {
     pub(super) fn after_a_primary_edit(&mut self, before: Option<(u64, u64, ropey::Rope, Vec<Range>)>) {
         let Some((id, revision, old, others)) = before else { return };
         let changes = self.take_the_journal(id);
-        // `u` and `U` put every selection back themselves (2026-10-29,
-        // review: the restored cursors were moved a second time and merged).
+        // `u` and `U` put every selection back themselves, so the restored
+        // cursors are not moved a second time.
         if std::mem::take(&mut self.selections_restored) {
             return;
         }
@@ -539,9 +536,8 @@ impl super::Editor {
             let (from, to) = self.drawn(*one);
             let first = rope.char_to_line(from);
             let last = rope.char_to_line(to.saturating_sub(1).max(from));
-            // **An empty line gets a cursor too** (2026-10-27, helix's
-            // `split_on_newline`; measured: `%` `A-s` `A` reached every line
-            // but the blank ones). It sits on that line's break.
+            // **An empty line gets a cursor too** (helix's `split_on_newline`:
+            // `%` `A-s` `A` reaches the blank lines as well). It sits on that line's break.
             for line in first..=last {
                 let head = rope.line_to_char(line);
                 let a = head.max(from);
@@ -561,23 +557,23 @@ impl super::Editor {
 
     /// **這裏開得了多選區没有。**
     ///
-    /// Warning: **佔滿整扇窗的那種表格裏開不了**（§5.13.8 三，2026-09-28 落地）。
+    /// Warning: **佔滿整扇窗的那種表格裏開不了**（§5.13.8 三）。
     ///
     /// 硬衝突只有一條，而且只在那一種裏：**橫向滾動的規矩是「把光標那一格整個留在屏幕
     /// 上」**（`yumete-tui/src/table.rs`），兩個光標在不同列的時候這句話没有答案。滿版
     /// 的表格是 CSV、碼表那一類——整個檔就是一張表（`Bounds::WholeFile`）。
     ///
-    /// Warning: **稿子裏的 `|` 表格不擋，量過。** §5.13.8 當時還列了第二條理由（格內光標是一
-    /// 個 `Option` 不是一個列表），可是那是**建模上的**不順，不是畫面上的壞：格子的底
-    /// 色跟着主選區走，和硬件光標、候選面板一樣，一屏上本來就只有一個。實測在稿子裏的
-    /// 表格上按 `C`，兩塊選區底色畫得好好的。而**批量改一整欄正是表格最常做的事**，把
+    /// Warning: **稿子裏的 `|` 表格不擋，量過。** 格內光標是一個 `Option` 不是一個列表，
+    /// 可那是**建模上的**不順，不是畫面上的壞：格子的底色跟着主選區走，和硬件光標、
+    /// 候選面板一樣，一屏上本來就只有一個。在稿子裏的表格上按 `C`，兩塊選區底色畫得
+    /// 好好的。而**批量改一整欄正是表格最常做的事**，把
     /// 它一起擋掉是拿一條没發生的毛病換一件真用得上的功能。
     ///
-    /// Warning: 用「表格模式開着」當閘試過，太寬：開檔的時候編輯器會**自己猜**出一張表，於是
+    /// Warning: 不用「表格模式開着」當閘，太寬：開檔的時候編輯器會**自己猜**出一張表，於是
     /// 稿子裏的表格一個都開不了多選區。
     ///
     /// 「這一欄每行一個光標」往後做成 `空格 t` 底下的一條命令，不讓通用的複製鍵去撞格子
-    /// 的邊界（§5.13.12b 五：現在不留鍵）。
+    /// 的邊界（§5.13.12b 五：不留鍵）。
     fn can_be_plural(&mut self) -> bool {
         if self.table.as_ref().is_some_and(|view| view.takes_the_pane()) {
             self.status = say!("selection.not-in-a-table");
@@ -630,7 +626,7 @@ impl super::Editor {
                         }
                     }
                 }
-                // **An empty piece is a piece** (2026-10-27, helix's
+                // **An empty piece is a piece** (helix's
                 // `split_on_matches` pushes one per match): `a,b,,c` cut on
                 // `,` is four selections, the third a cursor on the second
                 // comma. Only the piece after the last match must have
@@ -879,7 +875,7 @@ impl super::Editor {
         self.sel.rebuild(rest, next);
         self.clamp_cursor();
         self.refresh_goal_column();
-        // 「只留主選區，去掉 N 處」的反面，說法對稱（2026-10-06 定）。
+        // 「只留主選區，去掉 N 處」的反面，說法對稱。
         self.murmur(say!("selection.dropped-the-primary", self.sel.len().to_string()));
     }
 
@@ -906,12 +902,12 @@ impl super::Editor {
                     let (from, to) = one.span();
                     match out.last_mut() {
                         // 挨着就是「上一段的末尾够得着這一段的開頭」。
-                        // Warning: **`+ 1`**（2026-10-06 夜審報的）。helix 的判準是
+                        // Warning: **`+ 1`**。helix 的判準是
                         // `prev.to() == curr.from()`，而它的 `to()` 是半開的；這個
                         // 倉的 `span().1` 是最後那個字符自己，所以「首尾相接」寫
                         // 出來是 `last.span().1 + 1 == from`。少了那個 1，這個謂詞
                         // 只在**已經重疊**時成立——而重疊的 `normalize` 早併掉了，
-                        // 於是 `A-_` 是個空操作。
+                        // `A-_` 就成了空操作。
                         Some(last) if last.span().1 + 1 >= from => {
                             let end = last.span().1.max(to);
                             *last = crate::selection::Range::new(last.span().0, end);
@@ -940,7 +936,7 @@ impl super::Editor {
         self.clamp_cursor();
     }
 
-    /// **合併是靜默地少掉一段，所以要說一句**（2026-09-28 定）。
+    /// **合併是靜默地少掉一段，所以要說一句**。
     ///
     /// helix 不說。中文更常撞上：打一個字要按好幾下，相鄰的兩個光標很容易在中途撞到一
     /// 起，而那一刻屏幕上少一個光標、没有任何提示。走 murmur 而不是 status，因為它不該
@@ -955,7 +951,7 @@ impl super::Editor {
 
 /// **哪些鍵要逐段各做一次**（#405 Phase 1 第四步）。
 ///
-/// Warning: **這是一張明寫的表，不是規則。** 反過來寫（除了這幾個以外全都逐段做）試過在腦子裏
+/// Warning: **這是一張明寫的表，不是規則。** 反過來寫（除了這幾個以外全都逐段做）在腦子裏
 /// 推一遍就知道不行：`:`、空格選單、`u`、`/`、面板那一族、進插入的那幾個，每一個都是
 /// 「整個編輯器做一次」的事，漏一個就是一次很難查的怪象。明寫的表漏掉一個鍵，症狀是那個
 /// 鍵只動主選區，看得見、好查。
@@ -979,12 +975,12 @@ fn moves_every_selection(key: crate::input::Key) -> bool {
             | Key::Char(';')
             | Key::Alt(';')
             | Key::Char('x' | 'X')
-            // Sentences, paragraphs, line ends (2026-10-27, measured: they
-            // moved the primary alone, where helix moves every selection).
+            // Sentences, paragraphs, line ends: helix moves every selection
+            // (measured).
             | Key::Char('H' | 'L' | '{' | '}')
             | Key::Home
             | Key::End
-            // The flavour's line keys (2026-11-02), as `gh` `gs` `gl`.
+            // The flavour's line keys, as `gh` `gs` `gl`.
             | Key::Char('0' | '^' | '$')
     )
 }
@@ -998,7 +994,7 @@ pub(super) fn each_selection_key(pending: &super::Pending, key: crate::input::Ke
     match pending {
         // `f` `F` `t` `T` 補上的那一個字符：逐段各找各的。
         super::Pending::Find(_) => true,
-        // `mi`/`ma` and their object, `mm` (2026-10-27, helix's `m` group):
+        // `mi`/`ma` and their object, `mm` (helix's `m` group):
         // each selection takes its own pair, as helix's transform does.
         super::Pending::MatchPair { .. } => true,
         super::Pending::Match => matches!(key, crate::input::Key::Char('m')),
@@ -1006,9 +1002,8 @@ pub(super) fn each_selection_key(pending: &super::Pending, key: crate::input::Ke
         // 都是「整個編輯器做一次」。逐段做的是**行內**的那三個：到行首、到行首第一個
         // 字、到行尾……
         //
-        // **…and `gg`, `ge`, `gj`, `gk`** (2026-10-27; until then `gg`/`ge`
-        // moved the primary alone, on the reasoning that merging N selections
-        // into one 「is not what the user wants」). Helix moves every
+        // **…and `gg`, `ge`, `gj`, `gk`**, though N selections then merge
+        // into one. Helix moves every
         // selection to the file's start or end and lets them merge into one
         // (`goto_file_start_impl` transforms each). Merging is helix's answer,
         // so it is ours.
@@ -1042,8 +1037,7 @@ pub(super) fn edits_every_selection(pending: &super::Pending, key: crate::input:
     match pending {
         // `r` 補上的那一個字符：逐段各換各的。
         super::Pending::Replace => true,
-        // `ms`, `md` and the second key of `mr` (2026-10-27, helix's `m`
-        // group): every selection is wrapped, unwrapped or changed — `md`/`mr`
+        // `ms`, `md` and the second key of `mr` (helix's `m` group): every selection is wrapped, unwrapped or changed — `md`/`mr`
         // after `every_selection_has_its_own_pair` has said they may.
         super::Pending::Surround => {
             matches!(key, crate::input::Key::Char(_) | crate::input::Key::Enter)
@@ -1053,9 +1047,8 @@ pub(super) fn edits_every_selection(pending: &super::Pending, key: crate::input:
         }
         // The Glyph group (`` `u `` `` `s `` …): every selection converted.
         super::Pending::Case => matches!(key, crate::input::Key::Char(_)),
-        // **A vim operator's motion, at every cursor** (2026-10-29, review:
-        // `dw`, `cw`, `yiw` reached the primary alone and left the others on
-        // stale indexes). A count or the first half of a two-key motion only
+        // **A vim operator's motion, at every cursor**: `dw`, `cw`, `yiw` do
+        // not reach the primary alone and leave the others on stale indexes. A count or the first half of a two-key motion only
         // sets the wait again, and does so the same at each.
         super::Pending::VimOperator { .. } => true,
         super::Pending::None => matches!(
@@ -1063,15 +1056,15 @@ pub(super) fn edits_every_selection(pending: &super::Pending, key: crate::input:
             Key::Char('d') | Key::Alt('d') | Key::Char('p' | 'P')
         // Warning: **not `>` and `<`**: they indent every selection's lines in
         // one pass, each line once (`Editor::indent`).
-        // `~`, `J`, `A-J` and `R` changed the primary alone (2026-10-27,
-        // measured against helix, which changes every selection).
+        // `~`, `J`, `A-J` and `R` change every selection, as helix does
+        // (measured).
         ) || matches!(key, Key::Char('~' | 'J' | 'R') | Key::Alt('J'))
             || matches!(
             key,
             Key::Char('i' | 'a' | 'I' | 'A' | 'o' | 'O' | 'c') | Key::Alt('c')
         // `C-a`/`C-x` 給每一段各加各的（#405 Phase 3）。
         ) || matches!(key, Key::Ctrl('a') | Key::Ctrl('x'))
-            // The flavour's `D` / `A-D` (2026-11-02), as `d` / `A-d`.
+            // The flavour's `D` / `A-D`, as `d` / `A-d`.
             || matches!(key, Key::Char('D') | Key::Alt('D')),
         _ => false,
     }
@@ -1094,8 +1087,7 @@ pub(super) fn types_at_every_selection(key: crate::input::Key) -> bool {
         key,
         Key::Char(_) | Key::Enter | Key::Backspace | Key::Delete | Key::Tab
         // Moving and deleting by word or to the line's end, as helix's
-        // insert mode does at every cursor (2026-10-27, measured: they
-        // reached the primary alone).
+        // insert mode does at every cursor (measured).
             | Key::Left
             | Key::Right
             | Key::Up

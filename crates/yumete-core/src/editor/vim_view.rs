@@ -1,5 +1,5 @@
 //! **Where vim's `zt` `zz` `zb` leave the cursor** when scrolloff is at
-//! least half the window (nvim 0.12, measured 2026-11-07 with
+//! least half the window (nvim 0.12, measured with
 //! `scripts/oracle/view_sweep.py`).
 //!
 //! With that much scrolloff there is no room for it above and below at
@@ -13,7 +13,7 @@
 //! a row, no folds and 'scrolljump' 1. Held against nvim over windows of
 //! three to sixteen rows, scrolloff 0 to 9 and every line of short and long
 //! files, it agrees everywhere; the editor asks it only where its own,
-//! row-wise answer did not.
+//! row-wise answer does not.
 
 use super::Aim;
 
