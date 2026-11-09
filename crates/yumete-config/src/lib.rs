@@ -5414,7 +5414,7 @@ impl RawConfig {
             match one_character(&character, true) {
                 true => config.editor.indent_guides_character = character,
                 false => problems.push(said(
-                    format!("[editor] indent_guides_character = \"{character}\"：只能是一個佔一格的字符"),
+                    format!("[editor] indent_guides_character = \"{character}\"：只能是一個半角字符"),
                     format!("[editor] indent_guides_character = \"{character}\": one character, one cell wide"),
                 )),
             }
