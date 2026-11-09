@@ -281,6 +281,18 @@ fn formulas_kept_are_bounded() {
     assert_eq!(p.kept().0, crate::layout::FORMULAS_KEPT);
 }
 
+/// **Big formulas are kept to a budget in bytes**: each version of one
+/// edited key by key is a new picture, and a few are kept, not a thousand.
+#[test]
+fn big_formulas_kept_are_bounded_in_bytes() {
+    let mut p = Preview::new(options(800), Box::new(Boxes));
+    for k in 0..60 {
+        p.set_text(&format!("$${}{k}$$\n", "x+".repeat(1200)));
+    }
+    let kept = p.kept().0;
+    assert!((1..40).contains(&kept), "{kept}");
+}
+
 #[test]
 fn every_block_kind_lays_out_and_draws() {
     let text = "---\ntitle: x\n---\n\n# H\n\npara **b** *i* `c` ==h== ~~s~~ [l](x) <kbd>K</kbd> <ruby>漢<rt>hàn</rt></ruby>[^1]\n\n\

@@ -395,13 +395,43 @@ impl Key {
     }
 }
 
-/// How many formulas are kept drawn.
+/// How many formulas are kept drawn, and how many bytes of their pictures:
+/// the float draws every version of the formula being typed, and one of a
+/// sixty-row `aligned` is two megabytes of PNG, so a count alone would keep
+/// a gigabyte.
 const KEPT: usize = 512;
+const KEPT_BYTES: usize = 32 << 20;
 
 #[derive(Default)]
 struct Shelf {
     made: HashMap<Key, Result<Arc<Picture>, String>>,
     order: VecDeque<Key>,
+    /// What the kept pictures and their keys cost, in bytes.
+    bytes: usize,
+}
+
+/// What keeping `made` under `key` costs.
+fn cost(key: &Key, made: &Result<Arc<Picture>, String>) -> usize {
+    key.tex.len() + made.as_ref().map_or_else(String::len, |p| p.png.len())
+}
+
+impl Shelf {
+    /// Keep `made`, letting the oldest go until no more than [`KEPT`]
+    /// formulas and [`KEPT_BYTES`] are kept; the newest is kept whatever it
+    /// costs.
+    fn keep(&mut self, key: &Key, made: &Result<Arc<Picture>, String>) {
+        self.bytes += cost(key, made);
+        match self.made.insert(key.clone(), made.clone()) {
+            Some(old) => self.bytes -= cost(key, &old),
+            None => self.order.push_back(key.clone()),
+        }
+        while self.order.len() > KEPT || (self.bytes > KEPT_BYTES && self.order.len() > 1) {
+            let Some(old) = self.order.pop_front() else { break };
+            if let Some(gone) = self.made.remove(&old) {
+                self.bytes -= cost(&old, &gone);
+            }
+        }
+    }
 }
 
 static SHELF: Mutex<Option<Shelf>> = Mutex::new(None);
@@ -416,15 +446,7 @@ pub fn picture(key: &Key) -> Result<Arc<Picture>, String> {
     }
     let made = render(&key.tex, key.display, key.ink, key.size as f32 / 10.0).map(Arc::new);
     let mut shelf = SHELF.lock().unwrap_or_else(|e| e.into_inner());
-    let shelf = shelf.get_or_insert_with(Shelf::default);
-    if shelf.made.insert(key.clone(), made.clone()).is_none() {
-        shelf.order.push_back(key.clone());
-    }
-    while shelf.order.len() > KEPT {
-        if let Some(old) = shelf.order.pop_front() {
-            shelf.made.remove(&old);
-        }
-    }
+    shelf.get_or_insert_with(Shelf::default).keep(key, &made);
     made
 }
 
@@ -511,6 +533,32 @@ mod tests {
             }
         }
         assert!(tidy("ParseError: Undefined control sequence: \\foo").starts_with("Undefined control sequence"));
+    }
+
+    /// **The shelf keeps to a budget in bytes as well as in formulas**: big
+    /// pictures let the oldest go well before 512 are kept, small ones up to
+    /// 512, and the newest stays however big it is.
+    #[test]
+    fn the_shelf_keeps_to_a_budget_in_bytes() {
+        let key = |n: usize| Key { tex: format!("x_{{{n}}}"), display: true, ink: INK, size: 200 };
+        let pic = |bytes: usize| Ok(Arc::new(Picture { png: vec![0; bytes], width: 1, height: 1 }));
+        let mut shelf = Shelf::default();
+        for n in 0..600 {
+            shelf.keep(&key(n), &pic(2 << 20));
+            assert!(shelf.bytes <= KEPT_BYTES, "{n}: {}", shelf.bytes);
+        }
+        assert_eq!(shelf.made.len(), shelf.order.len());
+        assert!(shelf.made.len() < 20 && shelf.made.contains_key(&key(599)), "{}", shelf.made.len());
+        let mut shelf = Shelf::default();
+        for n in 0..600 {
+            shelf.keep(&key(n), &pic(100));
+        }
+        assert_eq!(shelf.made.len(), KEPT);
+        shelf.keep(&key(1000), &pic(KEPT_BYTES * 2));
+        assert_eq!(shelf.made.len(), 1, "the newest, alone");
+        // Drawn again, a formula costs what it costs now, once.
+        shelf.keep(&key(1000), &pic(10));
+        assert_eq!(shelf.bytes, cost(&key(1000), &pic(10)));
     }
 
     #[test]

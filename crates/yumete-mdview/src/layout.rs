@@ -135,8 +135,12 @@ pub(crate) struct Ctx {
     pub size: f32,
 }
 
-/// How many formulas are kept drawn.
+/// How many formulas are kept drawn, at most.
 pub(crate) const FORMULAS_KEPT: usize = 1024;
+/// How many bytes of formulas are kept drawn: each costs its pixels, or a
+/// share of this as if [`FORMULAS_KEPT`] filled it, whichever is more, so a
+/// big formula edited key by key keeps a few of its versions, not a thousand.
+pub(crate) const FORMULA_BYTES_KEPT: usize = 32 << 20;
 /// How many bytes of pictures are kept: two thirds for the pictures as read,
 /// one third for them scaled to the column.
 pub(crate) const IMAGE_BYTES_KEPT: usize = 96 << 20;
@@ -189,7 +193,8 @@ pub(crate) struct Engine {
     font_list: String,
     /// Whether adjacent full-width marks are squeezed.
     pub squeeze: bool,
-    /// Formulas drawn, at most [`FORMULAS_KEPT`] of them.
+    /// Formulas drawn, at most [`FORMULAS_KEPT`] of them and
+    /// [`FORMULA_BYTES_KEPT`] of their pixels.
     formula_cache: Lru<(String, bool, Rgba, u32), Option<FormulaPic>>,
     /// Pictures read from disk, with the file's stamp when read, and those
     /// pictures scaled to the column: each kept to a budget in bytes.
@@ -220,7 +225,7 @@ impl Engine {
             squeeze: true,
             families: [Han::Simplified, Han::Traditional, Han::Japanese].map(|h| Arc::new(families(h, ""))),
             font_list: String::new(),
-            formula_cache: Lru::new(FORMULAS_KEPT),
+            formula_cache: Lru::new(FORMULA_BYTES_KEPT),
             images: Lru::new(IMAGE_BYTES_KEPT / 3 * 2),
             scaled: Lru::new(IMAGE_BYTES_KEPT / 3),
             sizes: std::collections::HashMap::new(),
@@ -268,7 +273,8 @@ impl Engine {
             let (w, h) = (pix.width() as f32, pix.height() as f32);
             Some(FormulaPic { pix: Arc::new(pix), width: w, height: h, baseline: f.baseline })
         });
-        self.formula_cache.put(key, made.clone(), 1);
+        let pixels = made.as_ref().map_or(0, |f| f.pix.width() as usize * f.pix.height() as usize * 4);
+        self.formula_cache.put(key, made.clone(), pixels.max(FORMULA_BYTES_KEPT / FORMULAS_KEPT));
         made
     }
 
