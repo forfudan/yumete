@@ -524,6 +524,21 @@ impl Editor {
         self.preview_vertical = on;
     }
 
+    /// **The fonts the Markdown preview is set in** (2026-11-09): `[editor]
+    /// preview_font_family` when it names any, else the export's
+    /// (`[export] font_family`). `:export-as-preview` writes its page in
+    /// these; `:export` keeps the export's own.
+    pub fn preview_fonts(&self) -> &str {
+        match self.preview_fonts.trim().is_empty() {
+            true => &self.export.fonts,
+            false => &self.preview_fonts,
+        }
+    }
+
+    pub fn set_preview_fonts(&mut self, fonts: &str) {
+        self.preview_fonts = fonts.trim().to_string();
+    }
+
     /// **Whether the Markdown preview is set vertically now** (2026-11-08):
     /// `:preview-vertical` is on and the page the writer chose is
     /// vertical. Only the direction is read from the editing window; how the

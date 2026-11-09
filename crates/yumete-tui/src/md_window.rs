@@ -60,8 +60,9 @@ pub struct Want {
     pub cell: (u16, u16),
     pub theme: Theme,
     pub top: Top,
-    /// `[export] font_family`: the preview is set in the fonts the export
-    /// asks for.
+    /// `[editor] preview_font_family`, else `[export] font_family`: the
+    /// preview is set in the fonts the export asks for unless the writer
+    /// names others for the screen (2026-11-09).
     pub fonts: String,
     /// `[export] ruby_*`: the ruby spellings the export reads.
     pub ruby: yumete_core::ruby::Dialects,
@@ -406,7 +407,7 @@ impl MdPreviews {
                 cell,
                 theme: theme.clone(),
                 top,
-                fonts: config.export.font_family.clone(),
+                fonts: editor.preview_fonts().to_string(),
                 ruby: editor.export_settings().dialects(),
                 vertical,
             };

@@ -2077,6 +2077,9 @@ impl Editor {
         // a vertical page.
         settings.vertical = self.markdown_preview_vertical();
         settings.hanging = settings.vertical && settings.hanging;
+        // In the preview's fonts (2026-11-09), which are the export's until
+        // `[editor] preview_font_family` names others.
+        settings.fonts = self.preview_fonts().to_string();
         let look = looker(&text, &settings.fonts);
         let title = match source.as_deref().and_then(Path::file_name) {
             Some(name) => name.to_string_lossy().into_owned(),
@@ -2577,6 +2580,42 @@ mod tests {
         settings.vertical = false;
         ed.set_export_settings(settings);
         assert!(page(&mut ed).contains("writing-mode: vertical-rl"));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// **`:export-as-preview` is in the preview's fonts, `:export` in the
+    /// export's** (2026-11-09): with `[editor] preview_font_family` empty
+    /// the front end is asked for a look in `[export] font_family`; with a
+    /// list it is asked in that list, and a plain `:export` of the same file
+    /// still names only the export's fonts.
+    #[test]
+    fn the_preview_fonts_go_to_export_as_preview_and_not_to_export() {
+        static ASKED: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+        let dir = folder("fonts");
+        let path = dir.join("字.md");
+        std::fs::write(&path, "一段試排的話。\n").unwrap();
+        let mut ed = editor_on(&path);
+        ed.set_preview_look(std::sync::Arc::new(|_: &str, fonts: &str| {
+            ASKED.lock().unwrap().push(fonts.to_string());
+            crate::as_preview::test_look()
+        }));
+        let mut settings = ed.export_settings().clone();
+        settings.fonts = "'Print Serif', serif".to_string();
+        ed.set_export_settings(settings);
+        assert_eq!(ed.preview_fonts(), "'Print Serif', serif", "empty follows the export");
+        ed.execute(":export-as-preview!").unwrap();
+        assert_eq!(ASKED.lock().unwrap().pop().as_deref(), Some("'Print Serif', serif"));
+        ed.set_preview_fonts("  'Screen Sans', sans-serif ");
+        assert_eq!(ed.preview_fonts(), "'Screen Sans', sans-serif");
+        ed.execute(":export-as-preview!").unwrap();
+        assert_eq!(ASKED.lock().unwrap().pop().as_deref(), Some("'Screen Sans', sans-serif"));
+        let printed = dir.join("印.html");
+        ed.execute(&format!(":export html {}", printed.display())).unwrap();
+        let out = std::fs::read_to_string(&printed).unwrap();
+        assert!(out.contains("'Print Serif', serif") && !out.contains("Screen Sans"), "{out}");
+        assert!(ASKED.lock().unwrap().is_empty(), "a plain export asks the preview nothing");
+        ed.set_preview_fonts(" ");
+        assert_eq!(ed.preview_fonts(), "'Print Serif', serif", "only spaces is empty");
         std::fs::remove_dir_all(&dir).ok();
     }
 
