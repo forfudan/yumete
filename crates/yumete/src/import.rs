@@ -2172,7 +2172,11 @@ put(vim.fn.expand("~/written-by-the-config"), "x")
         let vimrc = vimrc_path(&env).unwrap().unwrap();
         assert_eq!(vimrc, home.join(".vimrc"));
         let before = snapshot(&home);
-        let (user, base, _) = read_vim("vim", &env, &vimrc, dump::TIMEOUT).unwrap();
+        // A Vim older than the import reads is a machine this test cannot run on.
+        let (user, base, _) = match read_vim("vim", &env, &vimrc, dump::TIMEOUT) {
+            Err(dump::Failed::TooOld(_)) => return,
+            read => read.unwrap(),
+        };
         assert_eq!(snapshot(&home), before, "the reader's files are as they were");
         let own = vim::translate(&user, &base, vim::Source::Vim);
         let out = vim_file("Vim", "vim", &vimrc, &user.version, "t", false, &own).text;
