@@ -163,19 +163,21 @@ impl Dialect {
     /// the tags around it were swallowed into the first's reading, and
     /// `:ruby-format typst` wrote `#ruby("漢", "かん</rt>字<rt>じ")`: 字 stopped
     /// being text at all (#330).
-    fn element(self, chars: &[char], from: usize) -> Vec<Ruby> {
+    ///
+    /// `quiet` is [`code_or_maths`] of `chars`, which only the brace form
+    /// reads: worked out once by the caller, not once a group.
+    fn element(self, chars: &[char], from: usize, quiet: &[bool]) -> Vec<Ruby> {
         match self {
             Dialect::Html => self.html_element(chars, from),
             Dialect::Typst => self.call(chars, from).into_iter().collect(),
-            Dialect::Markdown => self.braces(chars, from).into_iter().collect(),
+            Dialect::Markdown => self.braces(chars, from, quiet).into_iter().collect(),
         }
     }
 
     /// One `{base|reading}`, the whole of it as one group: a reading split
     /// per character stays in it, bars and all, as [`markup`] writes one
     /// (`漢|字` read `かん|じ`), and [`Ruby::reading_of`] says which it is.
-    fn braces(self, chars: &[char], from: usize) -> Option<Ruby> {
-        let quiet = code_or_maths(chars);
+    fn braces(self, chars: &[char], from: usize, quiet: &[bool]) -> Option<Ruby> {
         let plain = |i: usize, c: char| chars[i] == c && !escaped(chars, i) && !quiet[i];
         let mut i = from;
         'open: while i < chars.len() {
@@ -241,10 +243,7 @@ impl Dialect {
             let mut base = open.1;
             let mut began = open.0;
             while i < close.0 {
-                let Some(rt) = tag(chars, "rt", i) else { break };
-                if rt.0 >= close.0 {
-                    break;
-                }
+                let Some(rt) = tag_before(chars, "rt", i, close.0) else { break };
                 let Some(shut) = tag(chars, "/rt", rt.1) else {
                     return Vec::new();
                 };
@@ -252,9 +251,11 @@ impl Dialect {
                 // be an `<rp>` rather than the `<rt>`: the parenthesis a
                 // reader without ruby support falls back to is neither base
                 // nor reading, and dropping it is the whole of reading it.
-                let ends = match tag(chars, "rp", i) {
-                    Some(rp) if rp.0 < rt.0 => rp.0,
-                    _ => rt.0,
+                // Looked for only before the `<rt>`, so a text with no
+                // `<rp>` in it is not searched to its end for every pair.
+                let ends = match tag_before(chars, "rp", i, rt.0) {
+                    Some(rp) => rp.0,
+                    None => rt.0,
                 };
                 out.push(Ruby {
                     dialect: self,
@@ -265,11 +266,9 @@ impl Dialect {
                 });
                 // …and the closing parenthesis, if the writer left one.
                 let mut after = shut.1;
-                if let Some(rp) = tag(chars, "rp", after) {
-                    if rp.0 == after {
-                        if let Some(shut) = tag(chars, "/rp", rp.1) {
-                            after = shut.1;
-                        }
+                if let Some(rp) = tag_before(chars, "rp", after, after + 1) {
+                    if let Some(shut) = tag(chars, "/rp", rp.1) {
+                        after = shut.1;
                     }
                 }
                 i = after;
@@ -409,9 +408,15 @@ fn string_end(chars: &[char], from: usize) -> Option<usize> {
 /// leaves it in the file while reporting the file converted; and the name has
 /// to end where the tag does, so `<rtc>` is not an `<rt>`.
 fn tag(chars: &[char], name: &str, from: usize) -> Option<(usize, usize)> {
+    tag_before(chars, name, from, chars.len())
+}
+
+/// [`tag`], opening before `until`: the first such tag `tag` would find, if
+/// its `<` is before `until`, without looking further for one that is not.
+fn tag_before(chars: &[char], name: &str, from: usize, until: usize) -> Option<(usize, usize)> {
     let want: Vec<char> = name.chars().flat_map(char::to_lowercase).collect();
     let mut i = from;
-    while i < chars.len() {
+    while i < until.min(chars.len()) {
         if chars[i] != '<' {
             i += 1;
             continue;
@@ -549,23 +554,45 @@ impl Ruby {
 /// A group missing any of its tags is not a group — the text is left exactly as
 /// written, so half-typed markup shows as the characters it is rather than
 /// swallowing the rest of the paragraph.
+///
+/// **Linear in the text**: each dialect's next element is kept until the
+/// reading passes where it starts, and only then looked for again, so a
+/// dialect with nothing in the text is searched to its end once, not once a
+/// group. The preview reads a whole paragraph at once, and a paragraph may
+/// be a whole manuscript. What a search from a later place finds is the
+/// kept element, as long as that place is not past its start: every search
+/// here only moves forward.
 pub fn groups(chars: &[char], dialects: Dialects) -> Vec<Ruby> {
+    let quiet = match dialects.contains(Dialect::Markdown) {
+        true => code_or_maths(chars),
+        false => Vec::new(),
+    };
     let mut found = Vec::new();
     let mut at = 0usize;
-    while at < chars.len() {
+    let mut ahead: Vec<(Dialect, Vec<Ruby>)> = Vec::new();
+    if !chars.is_empty() {
+        ahead = dialects.iter().map(|d| (d, d.element(chars, 0, &quiet))).collect();
+    }
+    loop {
+        // A dialect with nothing ahead has nothing further on either.
+        ahead.retain(|(_, e)| !e.is_empty());
         // Whichever dialect matches earliest from here wins the next group; a
         // file that mixes them is read in document order, not dialect order.
         // Whole elements, because one of them may hold several groups.
-        let Some(next) = dialects
-            .iter()
-            .map(|d| d.element(chars, at))
-            .filter(|e| !e.is_empty())
-            .min_by_key(|e| e[0].start)
-        else {
+        let Some(k) = (0..ahead.len()).min_by_key(|&k| ahead[k].1[0].start) else {
             break;
         };
+        let next = std::mem::take(&mut ahead[k].1);
         at = next.last().map_or(at + 1, |g| g.end);
         found.extend(next);
+        if at >= chars.len() {
+            break;
+        }
+        for (d, e) in &mut ahead {
+            if e.first().is_none_or(|g| g.start < at) {
+                *e = d.element(chars, at, &quiet);
+            }
+        }
     }
     found
 }
@@ -736,6 +763,53 @@ mod tests {
     /// Every spelling.
     const EVERY: Dialects = Dialects(0b111);
     const BRACES: Dialects = Dialects(1 << (Dialect::Markdown as u8));
+
+    /// **Every dialect's next element is kept, not looked for again**: the
+    /// groups are the ones a fresh search from every group finds, on texts
+    /// made of the pieces each dialect is read from, broken ones too, and a
+    /// paragraph of 20000 lines with a reading on each is read in one pass.
+    #[test]
+    fn groups_are_read_in_one_pass() {
+        fn fresh(chars: &[char], dialects: Dialects) -> Vec<Ruby> {
+            let quiet = code_or_maths(chars);
+            let mut found = Vec::new();
+            let mut at = 0usize;
+            while at < chars.len() {
+                let Some(next) =
+                    dialects.iter().map(|d| d.element(chars, at, &quiet)).filter(|e| !e.is_empty()).min_by_key(|e| e[0].start)
+                else {
+                    break;
+                };
+                at = next.last().map_or(at + 1, |g| g.end);
+                found.extend(next);
+            }
+            found
+        }
+        const PIECES: [&str; 22] = [
+            "<ruby>", "</ruby>", "<rt>", "</rt>", "<rp>(", "</rp>", ")", "<RUBY lang=\"ja\">", "<rtc>", "漢", "a", "{", "}", "|", "\\",
+            "`", "$", "#ruby(\"", "\", \"", "\")", "\n", " ",
+        ];
+        let mut seed = 0x2545_f491_4f6c_dd1du64;
+        for _ in 0..3000 {
+            let mut text = String::new();
+            for _ in 0..(seed % 40) {
+                seed ^= seed << 13;
+                seed ^= seed >> 7;
+                seed ^= seed << 17;
+                text.push_str(PIECES[(seed % PIECES.len() as u64) as usize]);
+            }
+            let chars: Vec<char> = text.chars().collect();
+            for set in [HTML, BRACES, EVERY, Dialects::only(Dialect::Typst)] {
+                assert_eq!(groups(&chars, set), fresh(&chars, set), "{text:?}");
+            }
+        }
+        // HTML only, every spelling read: the other two have nothing ahead.
+        let line = "山上<ruby>漢字<rt>かんじ</rt></ruby>的灯，雨与雪。\n";
+        let chars: Vec<char> = line.repeat(20000).chars().collect();
+        let began = std::time::Instant::now();
+        assert_eq!(groups(&chars, EVERY).len(), 20000);
+        assert!(began.elapsed() < std::time::Duration::from_secs(3), "{:?}", began.elapsed());
+    }
 
     /// The brace groups of `text`: base and reading as they read.
     fn braces(text: &str) -> Vec<(String, String)> {
