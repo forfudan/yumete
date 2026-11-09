@@ -1,8 +1,7 @@
-//! One floating panel, and everything that used to draw its own (#299).
+//! One floating panel, for everything of that shape (#299).
 //!
 //! A ring, a gold name in its top-left, and something inside — the shape #273
-//! gave the `:` menu. Four things on the screen were already this shape and
-//! each drew its own: the `空格` which-key, the footnote and `%%註釋%%` strip
+//! gave the `:` menu. Four things on the screen are this shape: the `空格` which-key, the footnote and `%%註釋%%` strip
 //! (#294), `:write`'s safety check (#295), and the command row. What they differ
 //! in is four parameters — **title, body, a tag, and where it stands** — so
 //! that is what this takes.
@@ -35,7 +34,7 @@ pub enum Body {
     /// block: a ragged left edge on a list of two-character keys reads as
     /// noise.
     Keys(Vec<(String, String)>),
-    /// **一行一條，各帶各的淡底**——改動那一格（`空格 x`，2026-10-11）。
+    /// **一行一條，各帶各的淡底**——改動那一格（`空格 x`）。
     ///
     /// 和 `Keys` 同一個形狀（一條一行、不折行），差別只在它不分兩欄，而且每一
     /// 條自己說要什麼底色。色由 `:git-diff` 那一套來：刪掉的是 `Accent::Mark`、
@@ -43,7 +42,7 @@ pub enum Body {
     Tinted(Vec<Tint>),
 }
 
-/// **帶子裏的一行**（`空格 x`，2026-10-11）。
+/// **帶子裏的一行**（`空格 x`）。
 ///
 /// 兩層底色，因為它們答兩個問題：整行那一層說「這一行是改動的哪一側」，行內那
 /// 幾段說「真正動了的是這幾個字」。
@@ -59,7 +58,7 @@ pub struct Tint {
     pub marks: Vec<std::ops::Range<usize>>,
 }
 
-/// **這一扇站在哪裏**（2026-10-08）。
+/// **這一扇站在哪裏**。
 ///
 /// 兩種，因為兩種浮窗答的是兩種問題：「這是什麼」是讀一段話，讀完回到正文，
 /// 所以越不擋着正文越好；「接下來是什麼」是一張跟着手走的單子，越貼着手越好。
@@ -68,7 +67,7 @@ pub enum Stand {
     Corner,
     /// 貼着光標下面那一行（裝不下就上面）。補全那張單子用這一個。
     UnderCaret,
-    /// **通欄**——行內 diff 那一條帶子（2026-10-11）。
+    /// **通欄**——行內 diff 那一條帶子。
     ///
     /// 左右不收口（`open_sides`），寬度是整個編輯區，所以它看着不像一扇窗而像
     /// 「這幾行此刻換了一種畫法」。竪排不走這一種（見 `Anchor::Band` 的註釋）。
@@ -83,7 +82,7 @@ pub enum Stand {
 pub struct Panel {
     /// 站在哪裏——見 [`Stand`]。
     pub stand: Stand,
-    /// **正文裏要加重的那一段**（字符下標，不是字節；2026-10-08）。
+    /// **正文裏要加重的那一段**（字符下標，不是字節）。
     ///
     /// 簽名那一扇用它說「你正在填第幾個參數」——服務器說得出來
     /// （`lsp::Signature::active`），而「填到哪了」正是這一則存在的理由。
@@ -95,28 +94,28 @@ pub struct Panel {
     pub accent: Option<(usize, usize)>,
     pub title: String,
     /// **The 章節 line**, drawn quietly between the name and the body, with a
-    /// blank line (竪排: a blank 縱) under it (2026-09-18).
+    /// blank line (竪排: a blank 縱) under it.
     ///
     /// 「辭典 › 君山」 is where the entry was written down, not part of what it
     /// says — gold is the name, `quiet()` is the address, and the body is
     /// ordinary ink. `None` for everything that has no such line.
     pub lede: Option<String>,
-    /// **Whether the body is an entry rather than a note** (2026-09-19).
+    /// **Whether the body is an entry rather than a note.**
     ///
     /// A 百科 entry is several paragraphs and is set like a page of a book:
     /// each one opens with a 全角 space. A footnote, a `%%註釋%%`, `:write`'s
     /// check and the `[yumete]` line are each one short paragraph *about*
     /// something, and an indent on them is a stray space at the head of the
-    /// panel — which is what #287 quietly gave all four of them.
+    /// panel.
     pub entry: bool,
     pub body: Body,
-    /// **散文從第幾行畫起**（2026-09-29）——浮窗翻頁用的，別處一律 0。
+    /// **散文從第幾行畫起**——浮窗翻頁用的，別處一律 0。
     ///
     /// Warning: 只管 `Body::Prose` 的橫排那一支。竪書那一支量的是「一縱幾個字」，
     /// 不是行，翻頁在那裏是另一件事。
     pub scroll: usize,
-    /// **Whether the prose inside runs down the page** (2026-09-18:
-    /// 「只有百科才需要縱書，其他的都保持橫排」).
+    /// **Whether the prose inside runs down the page**: only a 百科 entry is
+    /// set down the page; everything else stays across.
     ///
     /// Not the same question as the panel's *shape*, which follows the page
     /// for everything that floats: a key table in a 竪排 page is still a table
@@ -130,21 +129,20 @@ pub struct Panel {
     /// **這一扇翻得動嗎**（#426）。翻得動的時候底邊右端寫的是「怎麽翻」而不是
     /// `tag`——五種信息都是這一類，而註、`[yumete]` 那一行不是。
     pub pages: bool,
-    /// **這一扇是拿來讀的，不是一張鍵表**（#426，2026-09-30 報的）。
+    /// **這一扇是拿來讀的，不是一張鍵表**（#426）。
     ///
     /// 決定它多大：讀的那幾扇按 2/3 × 1/3 擺，鍵表按整寬、半頁高——兩者都在
     /// `chrome::room` 裏，由 `chrome::Use` 分。Warning: **判準是「拿來幹什麽」，不是
-    /// `Body` 是哪一種。** 記錄畫成兩欄字段（`Body::Keys`），可它是讀的——它
-    /// 從前跟着 `空格` 選單一起吃了「鍵表」那一套，於是鋪滿整個屏幕寬。
+    /// `Body` 是哪一種。** 記錄畫成兩欄字段（`Body::Keys`），可它是讀的——
+    /// 跟着 `空格` 選單一起吃「鍵表」那一套的話，它會鋪滿整個屏幕寬。
     pub reading: bool,
     /// **Whether the body is Markdown and should be set as Markdown**
-    /// (#53 ③, 2026-09-21).
+    /// (#53 ③).
     ///
     /// A language server's hover answer *is* Markdown — that is what the
     /// protocol says it sends — and this editor already knows how to set
     /// Markdown: `**bold**` bold with its asterisks set back, `` `code` `` in
-    /// the literal's ink, a heading in 金. 2026-09-21 問：「它為什麼不能渲染
-    /// markdown 呢？我覺得完全可以呀。」 So it does, through the same
+    /// the literal's ink, a heading in 金. So it does, through the same
     /// [`crate::markup_style`] the page itself uses — one look, one answer to
     /// 「what does `**` mean here」.
     ///
@@ -172,12 +170,12 @@ fn is_table_rule(line: &str) -> bool {
             })
 }
 
-/// **A table, turned ninety degrees clockwise** (2026-09-18 定).
+/// **A table, turned ninety degrees clockwise.**
 ///
 /// 竪排 reads down and stacks 縱 leftwards, and a grid is read *across* — the
 /// one thing a vertical page cannot do. So the grid is turned instead of being
-/// spelled out as the `|` and `-` it is written with, which is what it used to
-/// come out as: a 縱 of loose pipes and dashes for every row of the table.
+/// spelled out as the `|` and `-` it is written with, which would come out as
+/// a 縱 of loose pipes and dashes for every row of the table.
 ///
 /// Clockwise is the direction that keeps the reading order: the table's first
 /// row becomes the **rightmost 縱**, read downward, and its cells run down in
@@ -205,12 +203,11 @@ fn table_zong(block: &[&str], tall: usize) -> Vec<String> {
         return Vec::new();
     }
     // **Each band gets the depth it needs, and only a band that cannot have it
-    // is cut** (2026-09-19: 「空間夠就渲染全部，不夠再摺疊，儘量保證撐滿
-    // 整個高度」).
+    // is cut**: with room, everything is drawn; without, it folds, and the
+    // whole height is filled.
     //
-    // The first cut of this divided the height evenly by the number of columns,
-    // which folded a short column away while the box below it stood empty. What
-    // it should ask is the question every fair share asks: **is there a depth
+    // Dividing the height evenly by the number of columns would fold a short
+    // column away while the box below it stood empty. What it asks is the question every fair share asks: **is there a depth
     // `k` such that no band needs more than it gets?** Raise `k` until the
     // bands that fit under it, plus the ones capped at it, fill the room — the
     // deep ones are cut and the shallow ones are left whole.
@@ -300,7 +297,7 @@ fn usual_width(widths: impl Iterator<Item = usize>) -> usize {
         .map_or(1, |(width, _)| width.max(1))
 }
 
-/// **How a key table falls into columns at one depth** (2026-11-04).
+/// **How a key table falls into columns at one depth.**
 ///
 /// Each column is as wide as its own rows — its widest key, the gap, its
 /// longest meaning — and not as wide as the widest row in the whole table: a
@@ -311,10 +308,10 @@ fn usual_width(widths: impl Iterator<Item = usize>) -> usize {
 /// keep everything.
 ///
 /// Warning: **A meaning starts after its column's widest key** (`H J K L`,
-/// `A-c`), so that is what a column is measured from. Until 2026-11-04 the
-/// width was planned with the usual one-cell key and drawn with the widest:
-/// 「下窗打開光標下…」 was cut in an 80-column `C-w` menu with twenty-five
-/// columns of the box still empty.
+/// `A-c`), so that is what a column is measured from. Planning the width
+/// with the usual one-cell key and drawing with the widest would cut
+/// 「下窗打開光標下…」 in an 80-column `C-w` menu with twenty-five columns of
+/// the box still empty.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct KeyColumns {
     /// How many keys are drawn; the last cell says how many more there are.
@@ -385,12 +382,11 @@ pub(crate) fn clip(text: &str, cells: usize) -> String {
     out
 }
 
-/// **A table, drawn as a table** — the 橫排 float's half (2026-09-19:
-/// 「橫排的浮窗也渲染一下吧，然後讓他不要 wrap，如果有必要可以省略」).
+/// **A table, drawn as a table** — the 橫排 float's half: not wrapped, and
+/// elided where it must be.
 ///
 /// A grid wrapped like prose is not a grid: the tail of every row lands under
-/// the head of the next one and the columns are gone, which is what the panel
-/// used to show. So a table is laid out at the width it is given and **never
+/// the head of the next one and the columns are gone. So a table is laid out at the width it is given and **never
 /// wrapped** — what does not fit is cut, and the cut is said out loud with a
 /// 「…」, cell by cell and then column by column.
 pub(crate) fn table_rows(block: &[&str], budget: usize) -> Vec<String> {
@@ -579,7 +575,7 @@ fn entry_zong(text: &str, tall: usize) -> Vec<String> {
             }
         }
     }
-    // 段落之間那一縱空白是作者放的，留着（2026-10-12）；**末尾那幾縱不是**——
+    // 段落之間那一縱空白是寫的人放的，留着；**末尾那幾縱不是**——
     // 詞條以換行收尾就會多出一縱，而它在框裏只是左邊一條白邊。
     while out.last().is_some_and(|z| z.trim().is_empty()) {
         out.pop();
@@ -637,13 +633,10 @@ pub fn draw(
 ) -> Option<Rect> {
     let ink = crate::theme::Palette::of(config);
     // How much of the page this may take. **Both answers live in
-    // `chrome::room`** and nothing works one out here — this used to say
-    // `area.height / 2 + 1` while the key table below said
-    // `(area.height - 2) / 2`, two spellings of one intent that had to be
-    // kept in step by hand.
+    // `chrome::room`** and nothing works one out here: two spellings of one
+    // intent would have to be kept in step by hand.
     //
-    // Warning: **判準是「拿來讀的嗎」，不只是 `Body` 哪一種**（2026-09-30
-    // 報的：記錄那一扇「size 和 location 看着不對」）。記錄畫成兩欄字段，可它
+    // Warning: **判準是「拿來讀的嗎」，不只是 `Body` 哪一種**。記錄畫成兩欄字段，可它
     // 和別的四種信息一樣是讀的，該和它們一樣大。
     let prose = matches!(panel.body, Body::Prose(_));
     let what = match (prose, panel.reading) {
@@ -656,10 +649,9 @@ pub fn draw(
     // used by everything below: the key table's depth, and the cut a body too
     // tall for the room takes.
     let cap = room_h.saturating_sub(2).max(1) as usize;
-    // **框上寫得下什麽，纔由什麽定寬**（2026-10-12 報的：竪排那一扇左邊空了一
-    // 大片）。下面三道底綫——名字、那一句話、讀到第幾——量的都是**畫在框綫上**
+    // **框上寫得下什麽，纔由什麽定寬**，不然竪排那一扇左邊會空一大片。下面三道底綫——名字、那一句話、讀到第幾——量的都是**畫在框綫上**
     // 的東西，而竪排一樣都不畫在那兒：名字是第一縱，數字順着左框往下走。照橫排
-    // 的尺寸撐出來的那二十幾格於是全是空的。
+    // 的尺寸撐出來的那二十幾格會全是空的。
     //
     // 所以這裏量的不是「有沒有」，是「這一扇畫不畫它」——同一個問題問一次，
     // 寬度和下面那幾支畫的人讀的是同一個答案。
@@ -668,9 +660,8 @@ pub fn draw(
         true => yumete_cjk::str_width(&panel.title),
         false => 0,
     };
-    // **翻得動的時候，底邊右端寫「怎麽翻」**（2026-09-30 定：「浮窗或者右侧
-    // 面板，可以显示『PgUp/PgDn 翻页』。『␣K 进边栏』似乎反而不是很重要的信息」）。
-    // 「進邊欄」挪到了命令行（`hint.rs` 的 `the_way_back_to_the_list`）。
+    // **翻得動的時候，底邊右端寫「怎麽翻」**（「PgUp/PgDn 翻頁」）。「進邊欄」
+    // 沒那麼要緊，在命令行（`hint.rs` 的 `the_way_back_to_the_list`）。
     //
     // 這裏先量一個最寬的：翻不翻得動要等下面算完 `cap` 纔知道，而寬度要先定。
     let paged = say!("info.page-it");
@@ -696,14 +687,13 @@ pub fn draw(
     // left column is the alignment, and an indent only pushes it off centre.
     let pad: usize = match panel.body {
         Body::Prose(_) => 1,
-        // Warning: **讀的那幾扇兩邊都留一格**（2026-09-30 報的：最長那一行
-        // 貼着框，看着像被裁了）。鍵表不留——它自己那一列就是對齊綫，往裏縮一
+        // Warning: **讀的那幾扇兩邊都留一格**：最長那一行貼着框，看着像被裁了。鍵表不留——它自己那一列就是對齊綫，往裏縮一
         // 格反而把它推離中間。
         Body::Keys(_) if panel.reading => 1,
         Body::Keys(_) => 0,
         Body::Tinted(_) => 1,
     };
-    // **Which of the lines are not the body** (2026-09-18). Three inks,
+    // **Which of the lines are not the body.** Three inks,
     // and the order is the same in both layouts: the name in 金, the 章節 line
     // quietly under it, then the entry. Counted rather than marked on each line
     // because they are always at the front — `gold` of them, then `quiet` of
@@ -716,43 +706,34 @@ pub fn draw(
     // A key table's columns, each as wide as its own rows (`key_columns`);
     // written by the sizing below, read by the drawing.
     let mut key_widths: Vec<usize> = Vec::new();
-    // **正文原樣交出去**（2026-10-11 定）。
+    // **正文原樣交出去**：不濾空行，不給每段頭上加全角空格。
     //
-    // 這裏從前有一支 `indented`：**空行濾掉、每段頭上加一個全角空格**
-    // （2026-09-18：「所有的段落不用空行，但是加一格縮進」）。那是為了省地方——
-    // 讀不完也得讓它看起來讀得完。翻得動之後省地方不再是理由，而縮進本身要錢：
-    // 橫排一格，竪排是一縱裏的一個**字**，而一縱只裝十來個字。
-    //
-    // 原話：「橫排也不要縮進，不要移除空行，保持對齊」，連着那條更一般的
-    // 「除非不行，否則應該減少邏輯特例」——所以不是給竪排開一個例外，是兩邊
-    // 一起把這一層拿掉。段落之間回到空行，那是 Markdown 自己的分法。
+    // 浮窗翻得動，省地方不是理由，而縮進本身要錢：橫排一格，竪排是一縱裏的一個
+    // **字**，而一縱只裝十來個字。除非不行，否則少開邏輯特例——所以不是給竪排
+    // 開一個例外，是兩邊都不加這一層。段落之間是空行，那是 Markdown 自己的分法。
     // `lines` is the prose, already wrapped; a key list draws itself from
     // `panel.body` and needs only its `count`.
     let (inner, count, lines, columns, key_w) = match &panel.body {
-        // **竪書的正文**（2026-09-18）：一縱是一列，字往下走，縱往左排。
+        // **竪書的正文**：一縱是一列，字往下走，縱往左排。
         // 量法轉置——能放多高就一縱多少字，需要幾縱就多寬（一個漢字兩格）。
         Body::Prose(text) if panel.vertical_text => {
             let tall = (room_h as usize).saturating_sub(2).max(1);
-            // **段落之間不空縱，改用一格縮進**（2026-09-18 定）。空一縱在
-            // 只有十來縱的小框裏把兩段推得老遠；兩格縮進太重。標題與章節行後面
-            // 各空一縱，那是另一回事——那兩縱不是正文，空白就是它們與正文的界。
+            // 標題與章節行後面各空一縱——那兩縱不是正文，空白就是它們與正文的界。
             //
             // 折行交給**頁面自己的竪排折行器**（`yumete_core::zong`）。
             //
-            // Warning: **不要拿橫排那一支來折竪書**（2026-09-18 撞到兩次）。橫排的
+            // Warning: **不要拿橫排那一支來折竪書**。橫排的
             // 預算是**格**，而一縱的長度是**字**：半角字一格一個，所以 52 格
             // 裝得下 28 個字，比 26 深的那一縱把框撐破（詞條裏有「500」「>」
-            // 這種就會發生）。折完按字數硬切一刀更糟——那一刀不認禁則，於是
-            // 「，」被切到了下一縱的頭上。`zong` 這一支本來就是按字算的，禁則
+            // 這種就會發生）。折完按字數硬切一刀更糟——那一刀不認禁則，會把
+            // 「，」切到下一縱的頭上。`zong` 這一支本來就是按字算的，禁則
             // 也在裏面，頁面上的竪排走的就是它。
-            // **標題是自己的一縱，排在最右**（2026-09-18 定，三個辦法裏
-            // 的丙）。竪排的書就是這麽做的：標題不貼在框邊上，它本身就是第一
-            // 縱，金墨。所以這一支不給 `chrome` 標題，框上没有名字。
+            // **標題是自己的一縱，排在最右**。竪排的書就是這麽做的：標題不貼在框
+            // 邊上，它本身就是第一縱，金墨。所以這一支不給 `chrome` 標題，框上没有名字。
             let mut zong: Vec<String> = vec![panel.title.chars().take(tall).collect()];
             gold = 1;
-            // 章節行緊貼標題（2026-09-18：「標題和章節行之間不需要空
-            // 行」）——它們是同一件事的兩半，名字與它寫在哪兒，金與灰已經把
-            // 兩者分開了。空的那一縱在**它們和正文之間**，只此一道。
+            // 章節行緊貼標題，中間不空——它們是同一件事的兩半，名字與它寫在哪兒，
+            // 金與灰已經把兩者分開了。空的那一縱在**它們和正文之間**，只此一道。
             if let Some(lede) = &panel.lede {
                 let rows = yumete_core::zong::zong_rows(lede, tall);
                 quiet = zong.len()..zong.len() + rows.len();
@@ -760,22 +741,16 @@ pub fn draw(
             }
             zong.push(String::new());
             zong.extend(entry_zong(text, tall));
-            // **裝不下的是「縱」，不是「行」**（2026-09-18）。橫排那一段截斷
+            // **裝不下的是「縱」，不是「行」**。橫排那一段截斷
             // （下面的 `cap`）數的是行，竪排這裏一行是一個字，照它辦就變成
             // 「把最左那一縱整根換成……，框高等於縱的條數」——高度塌掉、正文
             // 無聲少一截。所以竪排自己在這裏截：框最寬只有
             // `chrome::room` 的三分之一，換算成幾縱，多的砍掉。
             //
-            // Warning: **「…」接在末縱的腳下，不自己佔一縱**（2026-09-18：「最後
-            // 的省略號後面有個空行」）。自己佔一縱的話那一縱只有一個字，底下
-            // 一大片白——讀起來就是「這裏空了一行」，而它要說的是「話還没完」。
-            // **放不下的那幾縱翻得到，不是丟掉**（2026-10-11 定）。從前這裏
-            // `truncate` 完接一個「…」——於是那四個翻頁鍵在竪排下按了也沒有反
-            // 應，**不是攔住了，是後面根本沒有字**。報的原話：「我們截取了只能
-            // 顯示一頁的文本，剩下的都用…省略了」。
+            // **放不下的那幾縱翻得到，不是丟掉**。`truncate` 完接一個「…」的話，
+            // 那四個翻頁鍵在竪排下按了也沒有反應，**不是攔住了，是後面根本沒有字**。
             //
-            // 省略號一併去掉，同橫排 2026-09-30 那一條：還有多少由底邊那個數字
-            // 說，而它順帶說得出「還有多少」。
+            // 不畫省略號，同橫排那一條：還有多少由底邊那個數字說。
             let box_w = (room_w as usize).max(24).min(area.width as usize);
             let fits = box_w.saturating_sub(2 + pad * 2) / 2;
             if fits > 0 && zong.len() > fits {
@@ -793,18 +768,16 @@ pub fn draw(
             (across * 2, deep, zong, 1usize, 0usize)
         }
         Body::Prose(text) => {
-            // **As wide as `chrome::room` allows** (2026-09-18). What keeps
+            // **As wide as `chrome::room` allows.** What keeps
             // the caret uncovered is the *height* — a third of the page stands
             // in the top third or the bottom third and the caret is in
             // neither — so the width is free to be the reading measure
             // instead: two thirds of a 118-column page is 39 漢字 to the line.
-            // Warning: **The ring and the padding come out of the budget first**
-            // (2026-09-18). Wrapping at the room's full width and then
-            // clamping the *box* to it left every line two cells too long,
-            // and `put_text` stops at the border — so the last 漢字 of each
-            // row was eaten: 「百廢具興」 and no 「。」. The bug is
-            // older than the 2/3 rule; a half-width panel hid it by rarely
-            // reaching the cap.
+            // Warning: **The ring and the padding come out of the budget first.**
+            // Wrapping at the room's full width and then clamping the *box* to
+            // it leaves every line two cells too long, and `put_text` stops at
+            // the border — so the last 漢字 of each row is eaten: 「百廢具興」
+            // and no 「。」.
             let budget = (room_w as usize).saturating_sub(2 + pad * 2);
             let want = widest.saturating_sub(2).min(budget.max(8));
             // 章節行在最上面，灰的，底下空一行；正文每段縮進一格。橫排的標題
@@ -854,26 +827,25 @@ pub fn draw(
             if keys.is_empty() {
                 return None;
             }
-            // **The usual key's width plans the columns**, not the widest one
-            // (2026-11-02): one `A-c` among forty one-letter keys pushed the
-            // whole `Space` menu to fewer columns and hid ten of them. A wider
+            // **The usual key's width plans the columns**, not the widest one:
+            // one `A-c` among forty one-letter keys would push the whole
+            // `Space` menu to fewer columns and hide ten of them. A wider
             // key widens its own column only, where it is drawn.
             let key_w = usual_width(keys.iter().map(|(k, _)| yumete_cjk::str_width(k)));
             // **The room (`cap`, above) is where the depth starts**, and for a
             // field list where it stops. A key menu may grow past it — see
             // `deep_max` below.
-            // Warning: **…and never deeper than the page can actually place**
-            // (2026-09-19, caught in review). `chrome::place` refuses a box
-            // taller than the rows between the top of the page and the footer,
-            // and a refusal is drawn as *nothing at all*: on a short terminal
-            // a half-pressed `空格` showed no menu, which reads as 「the key
-            // did nothing」 rather than as 「there is no room」. The key table
-            // had no height cap of its own — two columns was all it knew.
+            // Warning: **…and never deeper than the page can actually place.**
+            // `chrome::place` refuses a box taller than the rows between the
+            // top of the page and the footer, and a refusal is drawn as
+            // *nothing at all*: on a short terminal a half-pressed `空格` would
+            // show no menu, which reads as 「the key did nothing」 rather than
+            // as 「there is no room」.
             let tall = bottom.saturating_sub(area.y).min(area.height);
             let deep_max = cap.min((tall.saturating_sub(2) as usize).max(1));
-            // Warning: **量的要和夾的是同一個數**（2026-10-12 看出來的）。上面那個
-            // `widest` 是**整個屏幕**減二，而下面 `width` 會把框夾進
-            // `chrome::room`——於是一張分了欄的表按屏幕寬分欄、按房間寬畫，第二
+            // Warning: **量的要和夾的是同一個數**。上面那個
+            // `widest` 要是**整個屏幕**減二，而下面 `width` 會把框夾進
+            // `chrome::room`——一張分了欄的表按屏幕寬分欄、按房間寬畫，第二
             // 欄整個落在框外，`put_text` 停在框邊：
             //
             // ```text
@@ -903,12 +875,11 @@ pub fn draw(
             // to keep a sentence whole.
             let least = key_w + 2 + 8;
             let most = ((widest + 2) / (least + 2)).max(1);
-            // **A key menu grows downward only to stop cutting meanings**
-            // (2026-11-04, chosen from pictures). Half the page was the cap
-            // until then, and depth it could not have was answered by more,
-            // narrower columns; with 43 keys under `空格` that left an
-            // 80-column menu five columns of 「文件挑選…」, 29 of the 43
-            // meanings cut. Now it starts at the room and takes one more row
+            // **A key menu grows downward only to stop cutting meanings.**
+            // Capped at half the page, depth it could not have would be
+            // answered by more, narrower columns; with 43 keys under `空格`
+            // that leaves an 80-column menu five columns of 「文件挑選…」, 29
+            // of the 43 meanings cut. So it starts at the room and takes one more row
             // at a time until no more than one meaning in twenty is cut — one
             // long line must not pull the whole menu to the full page — or
             // until it would reach the caret: the caret's line and one line of
@@ -938,8 +909,8 @@ pub fn draw(
                 }
             };
             // Each column gets its share, and what does not fit is cut
-            // *inside* the column rather than beyond the border — where it
-            // used to be dropped silently, leaving keys with no meanings.
+            // *inside* the column rather than beyond the border, where it
+            // would be dropped silently, leaving keys with no meanings.
             // Only when the width has run out too does the menu say 「there is
             // more」 — in the last cell, rather than ending as if that were all
             // the keys there are.
@@ -973,9 +944,9 @@ pub fn draw(
         }
     };
 
-    // **Prose too tall for half the page is cut, not dropped** (2026-09-17).
-    // The cap below used to refuse the whole panel — so a long footnote, or a
-    // wiki entry of several paragraphs, simply did not appear, which reads as
+    // **Prose too tall for half the page is cut, not dropped.**
+    // Refusing the whole panel would mean a long footnote, or a wiki entry of
+    // several paragraphs, simply did not appear, which reads as
     // 「the panel is unreliable」 rather than as 「there is no room」. A cut body
     // says what it can and ends in an ellipsis; the tag on the bottom border
     // still says where to read the rest.
@@ -983,12 +954,12 @@ pub fn draw(
     // Warning: **竪書不走這一段**，它在上面自己截過了：這裏的 `count` 對竪書是「一縱
     // 幾個字」而 `lines` 是一條條的縱，兩者不是同一個維度，照這裏辦會把最左那
     // 一縱換成「…」並且把框高壓成縱的條數。
-    // **讀到第幾行 / 共幾行**，寫在底邊左端（2026-09-30 定）。`None` ＝ 整則
+    // **讀到第幾行 / 共幾行**，寫在底邊左端。`None` ＝ 整則
     // 都在眼前，那時一個數字都不寫——數字出現本身就是「還有沒露出來的」。
     let mut read: Option<(usize, usize)> = zong_read;
-    // **帶子也翻得動**（2026-10-11 報的）。一塊六十行的改動在二十四行的屏幕上
-    // 從前只畫得出九行，而且**一個字都不說**——讀者看見的是「改了九行」，底下
-    // 那一半（新的那幾行）一次都露不出來。和散文那一支同一個辦法：`panel.scroll`
+    // **帶子也翻得動**。一塊六十行的改動在二十四行的屏幕上只畫得出九行，不翻
+    // 的話**一個字都不說**——讀者看見的是「改了九行」，底下那一半（新的那幾行）
+    // 一次都露不出來。和散文那一支同一個辦法：`panel.scroll`
     // 挑從第幾條起，底邊左端那個 `9/120` 說還有多少。
     //
     // Warning: **帶子的 `pages` 是關着的**，所以底邊右端留給 `u`／`y` 那一句，
@@ -1001,7 +972,7 @@ pub fn draw(
         }
     }
     // What the four paging keys can still move, said back to the editor so a
-    // float that shows whole gives them back to the text (2026-11-07).
+    // float that shows whole gives them back to the text.
     if !panel.vertical_text {
         let room = match &panel.body {
             Body::Tinted(rows) => rows.len().saturating_sub(count),
@@ -1016,14 +987,13 @@ pub fn draw(
             // 從第幾行起——翻過頁的話（`panel.scroll`），最多翻到「最後一屏」。
             let from = panel.scroll.min(count.saturating_sub(cap));
             let kept: Vec<String> = lines.into_iter().skip(from).take(cap).collect();
-            // Warning: **省略號整個去掉了**（2026-09-30 定：「现在允许翻页
-            // 了，`…` 可以不用了应该」）。它從前無條件把**最後一行換成 `…`**，
-            // 於是翻到底也永遠讀不到最後那一行——它不是多畫一個記號，它是吃掉
-            // 一行。「下面還有」這件事現在由底邊那個數字說，而那個數字還順帶說
+            // Warning: **不畫省略號**：浮窗翻得動。把**最後一行換成 `…`** 的話，
+            // 翻到底也永遠讀不到最後那一行——它不是多畫一個記號，它是吃掉
+            // 一行。「下面還有」這件事由底邊那個數字說，而那個數字還順帶說
             // 了「還有多少」。
             read = Some((from + kept.len(), count));
             // Warning: **`gold` 與 `quiet` 數的是行的序號，而這裏剛剛把前面幾行
-            // 切掉了**（2026-10-01 上墨之後才看見）。不跟着挪的話，翻過一頁之
+            // 切掉了**。不跟着挪的話，翻過一頁之
             // 後第一行正文被當成 `章節` 行畫成灰的，而且**不上標記**——一條
             // 詞條翻到第二頁，`` `代碼` `` 和 `**粗**` 就一個顏色都沒有了。
             gold = gold.saturating_sub(from);
@@ -1044,13 +1014,13 @@ pub fn draw(
         // 底邊兩頭各站一個，中間至少留一格橫線。
         .max(read_w + tag_w + 7)
         // `chrome::place` takes no box under eight cells, and a menu of one
-        // short row (`j  :w`) is seven: it drew nothing (review, 2026-11-05).
+        // short row (`j  :w`) is seven: it would draw nothing.
         .max(8)
         // Every float keeps to its room (above); which room that is was
         // settled once, by what the float is for.
         .min((room_w as usize).max(24))
         .min(area.width as usize) as u16;
-    // **帶子吃滿整個編輯區**（2026-10-11）：它要和正文逐格對齊，所以寬度不由內容
+    // **帶子吃滿整個編輯區**：它要和正文逐格對齊，所以寬度不由內容
     // 說了算。`place` 的 `Anchor::Band` 也從 `area.x` 起畫，兩邊是同一個意思。
     let width = match (&panel.stand, vertical) {
         (Stand::Band, false) => area.width,
@@ -1058,7 +1028,7 @@ pub fn draw(
     };
     let height = (deep + 2) as u16;
     // Where it stands, and whether there is room at all — one rule, in
-    // `chrome`, shared with everything else that floats (2026-09-18).
+    // `chrome`, shared with everything else that floats.
     // Warning: **站在光標底下那一種只管橫排**。竦書的「下一行」在旁邊不在底下，
     // 而補全那張單子只在代碼檔裏出來（代碼檔不竦排），所以竦的那一邊回老規矩。
     let stand = match (&panel.stand, vertical) {
@@ -1084,11 +1054,10 @@ pub fn draw(
         // Vertical prose carries its name as its first 縱 (below), so the
         // ring is left bare — a name in both places would be the same word
         // twice, two cells apart.
-        // **名字是空的就不畫名字**（2026-10-08 定）。辦法是「空標題」而不是在
+        // **名字是空的就不畫名字**。辦法是「空標題」而不是在
         // `Panel` 上再加一個開關：一扈浮窗要不要名字，就是「它叫什麼」這一個問題。
         // ① 竦書的散文把名字畫成第一縱（見下面），框上再寫一遍是同一個詞兩格之隔；
-        // ② 補全那一扈有意不要名字（2026-10-08 原話：「自動補全這個 title 太吸引
-        // 眼球，建議不要。這個面板就是空的標題，這樣不會干扰視線」）。
+        // ② 補全那一扈有意不要名字：標題太吸引眼球，空着纔不干擾視線。
         title: named.then(|| {
             (
                 panel.title.clone(),
@@ -1096,11 +1065,10 @@ pub fn draw(
             )
         }),
     });
-    // Warning: **The body sets no ground of its own** (2026-09-18: 「命令行文字
-    // 嚴格意義上來說底色是透明的，下面是什麽顏色就是什麽底色」). The ring has
-    // already painted the panel; text that carried its own copy of that colour
-    // dragged a patch of the *old* one behind every line the day the panel's
-    // ground moved. `Cell::set_style` patches, so a style with no `bg` keeps
+    // Warning: **The body sets no ground of its own**: text's ground is
+    // transparent, whatever is under it. The ring has already painted the
+    // panel; text that carried its own copy of that colour would drag a patch
+    // of the *old* one behind every line the day the panel's ground moved. `Cell::set_style` patches, so a style with no `bg` keeps
     // whatever is under it.
     let ground = Style::default();
     // 三色，一條規矩，橫竪通用：名字是金，章節行是灰，其餘是墨。
@@ -1109,7 +1077,7 @@ pub fn draw(
         _ if quiet.contains(&n) => ink.quiet(),
         _ => ink.text(),
     };
-    // **帶子沒有右牆，所以最後那一格也歸它**（2026-10-11 報的）：留一格空邊，
+    // **帶子沒有右牆，所以最後那一格也歸它**：留一格空邊，
     // 底色就比正文短一格，而正文那邊沒有這一格——對齊當場差掉。
     let limit = match matches!(panel.stand, Stand::Band) && !vertical {
         true => rect.x + width,
@@ -1131,9 +1099,9 @@ pub fn draw(
                     }
                     let shown = yumete_cjk::vertical::vertical_form(ch).unwrap_or(ch);
                     // Warning: **A turned table's rules have to reach across the
-                    // gap** (2026-09-18). A 縱 is two cells wide and 「─」 is
-                    // one, so a band rule came out as a dotted line with a
-                    // hole between every 縱. Written twice, it joins up.
+                    // gap.** A 縱 is two cells wide and 「─」 is one, so a band
+                    // rule written once is a dotted line with a hole between
+                    // every 縱. Written twice, it joins up.
                     let shown = match shown {
                         '─' | '┼' => format!("{shown}─"),
                         _ => shown.to_string(),
@@ -1183,9 +1151,9 @@ pub fn draw(
                 crate::put_marked_text(buf, x, y, limit, line, plain, ink);
             }
         }
-        // **一條一行，整行上淡底**——和 `:git-diff` 逐字同一套色（2026-10-11）。
+        // **一條一行，整行上淡底**——和 `:git-diff` 逐字同一套色。
         Body::Tinted(rows) => {
-            // **左右不收口的那一種從最左畫起**（2026-10-11）：沒有左牆可跳，也沒
+            // **左右不收口的那一種從最左畫起**：沒有左牆可跳，也沒
             // 有內邊距——帶子要和正文逐格對齊，差一格就全差了。
             let band = matches!(panel.stand, Stand::Band) && !vertical;
             // 翻過頁的話從第幾條起——最多翻到「最後一屏」，同散文那一支。
@@ -1197,7 +1165,7 @@ pub fn draw(
                 };
                 let y = rect.y + 1 + i as u16;
                 let style = match row.wash {
-                    // **整行那一層走 `washed`，行內那幾段走 `vcs`**（2026-10-11）。
+                    // **整行那一層走 `washed`，行內那幾段走 `vcs`**。
                     // 兩個數之差正是主題自己的那條理由——響度由面積定：一行攤
                     // 開是 1.08–1.12，幾個字 3:1。重的那一檔不是另挑的，就是改
                     // 動條的底色，而它旁邊那一格 `+ -` 本來就是改動條。中間那
@@ -1255,26 +1223,25 @@ pub fn draw(
                 let last = left > 0 && i + 1 == count && count > 1;
                 let (key, what) = match (last, left > 0 && count == 1) {
                     // The cell this line takes was a key's too, so it counts
-                    // as one more not shown (2026-10-30: it said 4 of 5).
+                    // as one more not shown.
                     (true, _) => ("…".to_string(), say!("menu.more", left + 1)),
                     (_, true) => (key.clone(), format!("{what} …")),
                     _ => (key.clone(), what.clone()),
                 };
                 // **名字空着的那一行是一句話，不是一條內容**——退一級。字典那一扇
-                // 用它寫「拆分表裏沒有這個字」（2026-10-13 定），而「還有 17 個」
+                // 用它寫「拆分表裏沒有這個字」，而「還有 17 個」
                 // 那一行退一級的理由是同一條：它說的是這扇窗，不是窗裏的東西。
                 let said = match last || key.is_empty() {
                     true => ink.quiet(),
                     false => ink.text(),
                 };
-                // Warning: **A column is cut at its own edge, not at the ring**
-                // (2026-09-19). `limit` is the box, so a meaning longer than
-                // its column was written straight across the column beside it
-                // — which only showed once a menu could have more than two.
+                // Warning: **A column is cut at its own edge, not at the ring.**
+                // `limit` is the box, so cut there a meaning longer than its
+                // column is written straight across the column beside it.
                 let edge = (x + one as u16).min(limit);
                 // **名字空着的那一行從最左起筆**，不縮進到值那一欄：它是一整句
-                // 話，不是某一欄的值，縮進會讀成上一行的續行（2026-10-13，同邊
-                // 欄那一半——那邊它也頂着左邊）。
+                // 話，不是某一欄的值，縮進會讀成上一行的續行（同邊欄那一半——
+                // 那邊它也頂着左邊）。
                 let bare = key.is_empty();
                 let at = match bare {
                     true => x,
@@ -1293,49 +1260,41 @@ pub fn draw(
     // written, not part of what it says.
     let floor = rect.y + height - 1;
     // 翻得動就寫「怎麽翻」，否則寫這一扇自己的那句話（註寫在第幾行、開哪個檔）。
-    // Warning: **竪排那一扇不在框上寫鍵**（2026-10-11 定，原話「though we do not
-    // write the hints on the border of the panel」）。它的框是橫的而正文是竪的，
-    // 一句橫着的提示貼在那條邊上讀起來像另一扇窗的東西；數字不一樣，它是一個記
-    // 號不是一句話。
-    // Warning: **竪排那一扇不在框上寫「怎麼翻」**（2026-10-11 定，原話「though we
-    // do not write the hints on the border of the panel」）。它的框是橫的而正文是
+    // Warning: **竪排那一扇不在框上寫「怎麼翻」**。它的框是橫的而正文是
     // 竪的，一句橫着的提示貼在那條邊上讀起來像另一扇窗的東西；數字不一樣，它是
     // 一個記號不是一句話。
     //
     // Warning: **收的只有那一句，不是整條邊。** 面板自己那一句（`tag`）照舊寫——
     // 改動帶子在竪排下是一扇浮窗，而它那一句是 `u 還原此處改動 · y 複製先前版
-    // 本`，是**按得動的兩個鍵**，不是「還有，翻得動」。第一版把兩者一起收了，金
-    // 樣當場紅了一幀。
+    // 本`，是**按得動的兩個鍵**，不是「還有，翻得動」。
     let right = match panel.pages && read.is_some() && !panel.vertical_text {
         true => Some(paged),
         false => panel.tag.clone(),
     };
     if let Some(tag) = right {
-        // **放不下就截，別讓它跑出左牆**（2026-10-11 從金樣幀上看出來的）。寬度
-        // 是由內容算的，上面又被 `room_w` 和 `area.width` 夾過兩道——夾完之後這
-        // 一句話可能比底邊還長。從前它照 `limit - w - 1` 起筆，於是起點落在框
-        // 外，畫出來是「y 複製先前版╯」：最後一個字被角吃掉，而讀者看不出那是
-        // 被截的。兩頭各留一格空氣，同左端那個數字。
+        // **放不下就截，別讓它跑出左牆**。寬度是由內容算的，上面又被 `room_w`
+        // 和 `area.width` 夾過兩道——夾完之後這一句話可能比底邊還長。照
+        // `limit - w - 1` 起筆的話起點落在框外，畫出來是「y 複製先前版╯」：最後
+        // 一個字被角吃掉，而讀者看不出那是被截的。兩頭各留一格空氣，同左端那個數字。
         let room = (width as usize).saturating_sub(3);
         let tag = clip(&tag, room);
         let w = yumete_cjk::str_width(&tag) as u16;
         put_text(buf, limit.saturating_sub(w + 1), floor, limit, &tag, ground.fg(ink.quiet()));
     }
-    // **讀到第幾行，貼底邊左端**（2026-09-30 定的，和右端那句各佔一頭：兩類
-    // 不同的信息，邊框有兩頭）。
+    // **讀到第幾行，貼底邊左端**（和右端那句各佔一頭：兩類不同的信息，邊框有
+    // 兩頭）。
     //
     // Warning: **兩邊各留一格空氣。** 貼着角寫出來的是「╰75/90───」，讀起來像
-    // 被擠出去的（報的：「现在似乎顶到了前头」）。上邊那一行的標題本來就是
+    // 被擠出去的。上邊那一行的標題本來就是
     // 「╭ 文檔」，這一行照它。
     if let Some((at, all)) = read {
         match panel.vertical_text {
-            // **竪排寫在左邊那條框綫上，往下讀**（2026-10-11 定）。竪書從右往
+            // **竪排寫在左邊那條框綫上，往下讀**。竪書從右往
             // 左讀，所以「讀到哪了」屬於左邊那一頭，和橫排擺在底邊左端是同一個
             // 位置——都是正文走完的地方。
             //
             // Warning: **半角數字，不是漢數字。** 框綫只有一格寬而漢字佔兩格，寫
-            // 上去會壓到最左那一縱的字。作者看過兩種擺法之後定的：「10 / 36
-            // 這樣就行」。
+            // 上去會壓到最左那一縱的字。寫成「10 / 36」。
             true => {
                 let room = rect.height.saturating_sub(2) as usize;
                 // 放不下就把兩邊的空氣擠掉；再放不下就不寫——一個截一半的
@@ -1419,11 +1378,10 @@ mod tests {
         (got.expect("the panel is drawn"), terminal.backend().buffer().clone())
     }
 
-    /// **竪排的浮窗翻得動，而且說得出還有多少**（2026-10-11 報的）。
+    /// **竪排的浮窗翻得動，而且說得出還有多少**。
     ///
-    /// 從前放不下的那幾縱是被 `truncate` 丟掉的，末縱接一個「…」——於是那四個
-    /// 翻頁鍵按了沒反應，**不是攔住了，是後面根本沒有字**。原話：「我們截取了只
-    /// 能顯示一頁的文本，剩下的都用…省略了」。
+    /// 放不下的那幾縱要是被 `truncate` 丟掉、末縱接一個「…」，那四個翻頁鍵按了
+    /// 就沒反應，**不是攔住了，是後面根本沒有字**。
     #[test]
     fn a_vertical_panel_pages_and_says_how_far_it_has_got() {
         let long: String = (0..18)
@@ -1433,8 +1391,7 @@ mod tests {
         let head = said(&first);
         assert!(!head.contains('…'), "省略號去掉了：還有多少由數字說");
 
-        // **數字竪着寫在左邊那條框綫上**（2026-10-11 定，原話「10 / 36 這樣就
-        // 行」）。竪書從右往左讀，所以「讀到哪了」屬於左邊那一頭——和橫排擺在底
+        // **數字竪着寫在左邊那條框綫上**（「10 / 36」）。竪書從右往左讀，所以「讀到哪了」屬於左邊那一頭——和橫排擺在底
         // 邊左端是同一個位置。半角，因為框綫只有一格寬。
         let down: String = (1..rect.height)
             .map(|y| first[(rect.x, rect.y + y)].symbol().to_string())
@@ -1452,7 +1409,7 @@ mod tests {
         assert_ne!(down2, down, "讀到第幾縱變了");
     }
 
-    /// **一張分了欄的表，第二欄不許落在框外**（2026-10-12 看出來的）。
+    /// **一張分了欄的表，第二欄不許落在框外**。
     ///
     /// 分欄按**整個屏幕**減二算，而框寬會被 `chrome::room` 夾一道——兩個數不是
     /// 同一個，於是第二欄整個站在框外，`put_text` 停在框邊，畫出來是
@@ -1519,12 +1476,10 @@ mod tests {
         );
     }
 
-    /// **兩段之間那一縱空白留着**（2026-10-12 報的：「In vertical mode, you
-    /// still removed the empty line between paragraphs」）。
+    /// **兩段之間那一縱空白留着**。
     ///
-    /// 縮進那一層 2026-10-11 從兩邊一起拿掉了，可空行還少一處：`zong_rows` 自己
-    /// 把空段落濾了，理由寫着「在框裏它是一縱空白」——而那一縱空白正是兩段之間
-    /// 的界。橫排那一邊從來沒省過它。
+    /// `zong_rows` 不許把空段落濾掉：「在框裏它是一縱空白」——而那一縱空白正是
+    /// 兩段之間的界。橫排那一邊也不省它。
     #[test]
     fn a_vertical_entry_keeps_the_blank_between_two_paragraphs() {
         let (_, buf) = zong("第一段天地玄黃。\n\n第二段宇宙洪荒。\n", 40, 14);
@@ -1541,12 +1496,11 @@ mod tests {
         );
     }
 
-    /// **竪排的框不許比正文寬**（2026-10-12 報的：「there seemed to be a minimum
-    /// width of the panel so that there are much space padded at left」）。
+    /// **竪排的框不許比正文寬**：左邊不許墊出一大片空白。
     ///
     /// 三道底綫——名字、「怎麼翻」、讀到第幾——量的都是**畫在框綫上**的東西，而
     /// 竪排一樣都不畫在那兒：名字是第一縱，數字順着左框往下走。照橫排撐出來的那
-    /// 二十幾格於是全是空的。
+    /// 二十幾格會全是空的。
     #[test]
     fn a_vertical_panel_is_no_wider_than_what_it_holds() {
         let config = Config::default();
@@ -1579,11 +1533,11 @@ mod tests {
         assert_eq!(rect.width, 3 * 2 + 2 + 2, "{rect:?}");
     }
 
-    /// **一行帶行內標記的標題出現在浮窗正文裏，從前會當場崩**（2026-09-28）。
+    /// **一行帶行內標記的標題出現在浮窗正文裏，不許崩**。
     ///
     /// `markdown::spans("# **甲**")` 交的是 `HeadingMark 0..1`/`Heading 1..7`/
-    /// `Marker 2..4`/`Strong 4..5`/`Marker 5..7`——**它會重疊**。從前這一段是順着往右
-    /// 切的（記一個 `from`，切 `chars[from..span.start]`），於是 `from` 已經走到 7 而下
+    /// `Marker 2..4`/`Strong 4..5`/`Marker 5..7`——**它會重疊**。順着往右切的話
+    /// （記一個 `from`，切 `chars[from..span.start]`），`from` 已經走到 7 而下
     /// 一段從 2 開始，`chars[7..2]` 是一個反向區間，Rust 當場 panic。
     ///
     /// Warning: 這一條要真的**畫**出來纔驗得到：崩在繪製那一步，不在解析那一步。
@@ -1620,13 +1574,13 @@ mod tests {
         assert!(text.contains('甲'), "標題畫出來了，而且一路沒崩：{text:?}");
     }
 
-    /// 2026-09-18: a long entry came out **half the height it should be** and
-    /// silently missing its tail. Two faults, one symptom: the row-counting cap
-    /// written for 橫排 was reading 竪書's 「how many 字 to a 縱」 as 「how many
-    /// rows」 — so it replaced the leftmost 縱 with an ellipsis and then made the
-    /// box as deep as the *number of 縱*; and the wrapper's budget is cells
-    /// while a 縱's length is 字, so 「500」 and 「>」 pushed a 縱 two 字 past the
-    /// room and tripped the cap in the first place.
+    /// A long entry must not come out **half the height it should be**,
+    /// silently missing its tail. Two faults give that one symptom: the
+    /// row-counting cap written for 橫排 reading 竪書's 「how many 字 to a 縱」
+    /// as 「how many rows」 — replacing the leftmost 縱 with an ellipsis and
+    /// making the box as deep as the *number of 縱*; and a wrapper whose budget
+    /// is cells while a 縱's length is 字, so 「500」 and 「>」 push a 縱 two 字
+    /// past the room.
     #[test]
     fn a_long_vertical_entry_fills_its_height_and_says_it_was_cut() {
         // Halfwidth digits on purpose: that is what made a 縱 longer than the
@@ -1648,9 +1602,8 @@ mod tests {
         // confusion, and it is what tripped the cap.
         assert!(rect.height <= 45 * 2 / 3);
 
-        // **放不下的那一截由底邊那個數字說**（2026-10-11 改的）。從前這裏是一個
-        // 竪排的省略號 `︙`，而那時放不下就是丟掉；翻得動之後它換成了「讀到第幾
-        // ／共幾」，而那個數還順帶說了「還有多少」——同橫排 2026-09-30 那一條。
+        // **放不下的那一截由底邊那個數字說**，不畫竪排的省略號 `︙`：翻得動，
+        // 「讀到第幾／共幾」還順帶說了「還有多少」——同橫排那一條。
         let text: String = (0..rect.height)
             .flat_map(|y| (0..rect.width).map(move |x| (x, y)))
             .map(|(x, y)| buffer[(rect.x + x, rect.y + y)].symbol().to_string())
@@ -1671,9 +1624,7 @@ mod tests {
             assert!(!head.contains(mark), "{mark} opens a 縱: {head:?}");
         }
 
-        // Warning: **這裏從前還驗「省略號掛在末縱的腳下、不自己佔一縱」**。那一條
-        // 連同省略號本身一起沒了（2026-10-11）：放不下的那幾縱現在翻得到，而
-        // 「還有」由底邊那個數字說。
+        // 沒有省略號可驗：放不下的那幾縱翻得到，「還有」由底邊那個數字說。
         // And the title is still its own 縱, in the box rather than on the ring.
         assert!(text.contains('洞') && text.contains('典'), "{text:?}");
     }
@@ -1726,11 +1677,10 @@ mod tests {
             .collect()
     }
 
-    /// 2026-09-19, caught in review: on a short terminal the `空格` menu drew
-    /// **nothing**. The key table had no height cap of its own — one column or
-    /// two — so its box came out taller than the page, `chrome::place` refused
-    /// it, and `draw` answered `None`, which the caller could not tell from
-    /// 「there was nothing to show」. A menu that does not fit goes wider, and
+    /// On a short terminal the `空格` menu must not draw **nothing**. A key
+    /// table with no height cap of its own comes out taller than the page,
+    /// `chrome::place` refuses it, and `draw` answers `None`, which the caller
+    /// cannot tell from 「there was nothing to show」. A menu that does not fit goes wider, and
     /// says in its last cell how many keys it could not draw.
     #[test]
     fn a_menu_too_tall_for_the_page_goes_wider_and_says_what_it_cut() {
@@ -1756,7 +1706,7 @@ mod tests {
         assert!(!text.contains('…'), "nothing was cut, yet it says so: {text:?}");
     }
 
-    /// **正在填的那一段加重，其餘不動**（2026-10-08，簽名提示）。
+    /// **正在填的那一段加重，其餘不動**（簽名提示）。
     ///
     /// 量的是墨：`value: T` 那幾格是金的，`fn push(` 與最後那一個 `)` 不是。
     #[test]
@@ -1891,11 +1841,11 @@ mod tests {
         ("F", "側窗打開光標下的文件"),
     ];
 
-    /// **A meaning is not cut while its box has room** (2026-11-04). A column's
-    /// width was planned with the usual one-cell key and drawn after the
-    /// column's widest one, so `H J K L` took six cells from every meaning in
-    /// its column: 「側窗打開光標下…」 on an 80-column page, with half the
-    /// width of the page still free.
+    /// **A meaning is not cut while its box has room.** A column's width
+    /// planned with the usual one-cell key and drawn after the column's widest
+    /// one lets `H J K L` take six cells from every meaning in its column:
+    /// 「側窗打開光標下…」 on an 80-column page, with half the width of the
+    /// page still free.
     #[test]
     fn a_column_is_as_wide_as_its_widest_key_needs() {
         // Seven rows on either side of the caret: the menu cannot grow past
@@ -1918,9 +1868,8 @@ mod tests {
         (0..40).map(|n| (format!("{}", (b'a' + (n % 26) as u8) as char), format!("第{n:02}個很長很長的動作"))).collect()
     }
 
-    /// **A key menu grows downward rather than cut its meanings** (2026-11-04,
-    /// chosen from pictures). Half an 80 × 24 page held 43 keys only as five
-    /// columns of 「文件挑選…」.
+    /// **A key menu grows downward rather than cut its meanings.** Half an
+    /// 80 × 24 page holds 43 keys only as five columns of 「文件挑選…」.
     #[test]
     fn a_long_menu_grows_down_instead_of_cutting() {
         let rows = long_menu();
@@ -1961,9 +1910,9 @@ mod tests {
         assert_eq!(rect.height, 5 + 2, "{rect:?}");
     }
 
-    /// **A menu of one short row is drawn** (review, 2026-11-05): `Q` over
-    /// `j  :w` is seven cells with its ring, and the floats take none under
-    /// eight, so `[keys.normal.Q] j = ":w"` opened a group with no menu.
+    /// **A menu of one short row is drawn**: `Q` over `j  :w` is seven cells
+    /// with its ring, and the floats take none under eight, so without the
+    /// floor `[keys.normal.Q] j = ":w"` would open a group with no menu.
     #[test]
     fn a_menu_of_one_short_row_is_drawn() {
         let config = Config::default();

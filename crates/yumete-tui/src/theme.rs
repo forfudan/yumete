@@ -34,8 +34,8 @@
 
 /// 三個字節的顏色——OSC 10/11/12 要的就是這三個數，不是一個 `Color`。
 ///
-/// 兩支取色的函數（[`Palette::caret`]、[`Palette::paper_bytes`]）的註釋從前整段
-/// 都在解釋這件事；名字一取，那段話就有地方掛了。
+/// 兩支取色的函數（[`Palette::caret`]、[`Palette::paper_bytes`]）交的都是它；
+/// 這件事的解釋掛在這個名字上。
 pub type Rgb = (u8, u8, u8);
 
 use ratatui::style::{Color, Modifier, Style};
@@ -56,13 +56,13 @@ pub fn name(config: &Config) -> String {
     in_force(config).name
 }
 
-/// Whether the theme in force has no light half (2026-10-25).
+/// Whether the theme in force has no light half.
 pub fn dark_only(config: &Config) -> bool {
     in_force(config).dark_only
 }
 
 /// Wear this theme from now on.
-/// **眼下選着的那一個，原樣取一份**（2026-10-07，預覽用）。
+/// **眼下選着的那一個，原樣取一份**（預覽用）。
 ///
 /// `None` ＝ 誰都沒選過，配置裏那一個還在位子上——放回去的時候也放回 `None`。
 pub fn snapshot() -> Option<ThemeConfig> {
@@ -103,7 +103,7 @@ static FILL: AtomicU8 = AtomicU8::new(0);
 
 /// Say whether a coloured run gets a ground, and answer what is in force now.
 ///
-/// `:theme-fill` on its own flips it, as every switch does (2026-11-07).
+/// `:theme-fill` on its own flips it, as every switch does.
 pub fn set_fill(how: yumete_core::command::Switch, config: &Config) -> bool {
     let now = in_force(config).fill;
     let want = how.over(now);
@@ -157,8 +157,8 @@ pub fn choose_mood(dark: bool) {
 static CHOSE_SYSTEM: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// `:theme-mode system`: the terminal's answer now, and **the choice kept as
-/// 「system」** (2026-10-29, review: a session ended in a dark terminal kept
-/// `dark`, and forced it on a light one).
+/// 「system」**: keeping `dark` from a session ended in a dark terminal would
+/// force it on a light one.
 pub fn choose_the_terminals_mood(dark: bool) {
     choose_mood(dark);
     CHOSE_SYSTEM.store(true, Ordering::Relaxed);
@@ -182,8 +182,8 @@ pub fn chosen_fill() -> Option<bool> {
 }
 
 /// **Forget what `:theme`, `:theme-mode` and `:theme-fill` chose**, so the
-/// config's answers are in force again (2026-10-28). `:reload-config` is the
-/// way back to the saved settings, and it used to leave a chosen theme on.
+/// config's answers are in force again. `:reload-config` is the way back to
+/// the saved settings, so it must not leave a chosen theme on.
 pub fn forget_choices() {
     put_back(None);
     FILL.store(0, Ordering::Relaxed);
@@ -266,9 +266,9 @@ pub fn terminal_answer() -> Option<bool> {
 ///
 /// Warning: The reply is read **straight off the descriptor**, which takes whatever
 /// is in it — the terminal's answer *and anything the reader has already
-/// typed*. That used to be dropped, and it is the first tenth of a second of
-/// the session: `yumete 第三章.md` followed straight away by `iHELLO` left the
-/// file untouched. What is not part of the reply now goes to
+/// typed*. Dropping that loses the first tenth of a second of the session:
+/// `yumete 第三章.md` followed straight away by `iHELLO` would leave the file
+/// untouched. What is not part of the reply goes to
 /// [`crate::typed_ahead`], which the front end plays back before it enters the
 /// loop.
 #[cfg(unix)]
@@ -283,13 +283,12 @@ pub fn ask_the_terminal() -> Option<bool> {
     }
     // Raw, or the terminal would echo the reply onto the screen and hand it
     // over a line at a time — which is to say, never.
-    // Warning: **還原原來那個狀態，不是無條件關掉**（2026-10-10 報的）。從前這裏是
-    // `enable_raw_mode()` 開、結束 `disable_raw_mode()` 關——啓動時對（那會兒編輯器
-    // 還沒進 raw mode），而這一支**在循環跑起來之後還會被叫**：`settings.rs` 的
-    // 「每一項設定，推一遍」在 `ambiguous_width = auto`／`theme mode = auto` 底下就
-    // 走到這裏，於是 `:settings` 裏改一項再 `:w`，探針問完就把正在用的 raw mode
-    // 關了。症狀是**終端開始回顯，而 Kitty 鍵盤協議那一層還挂着**，於是每一鍵顯示
-    // 成 `^[[104u`、鼠標點擊顯示成一串報告，看着像輸入法壞了。
+    // Warning: **還原原來那個狀態，不是無條件關掉**。`enable_raw_mode()` 開、結束
+    // `disable_raw_mode()` 關只在啓動時對（那會兒編輯器還沒進 raw mode），而這一支
+    // **在循環跑起來之後還會被叫**：`settings.rs` 的「每一項設定，推一遍」在
+    // `ambiguous_width = auto`／`theme mode = auto` 底下就走到這裏——無條件關的話，
+    // `:settings` 裏改一項再 `:w`，探針問完就把正在用的 raw mode 關了。症狀是
+    // **終端開始回顯，而 Kitty 鍵盤協議那一層還挂着**，於是每一鍵顯示成 `^[[104u`、鼠標點擊顯示成一串報告，看着像輸入法壞了。
     // `enable_raw_mode` 不計數，所以配對只能靠自己先問一句。
     let was_raw = ratatui::crossterm::terminal::is_raw_mode_enabled().unwrap_or(false);
     let raw = was_raw || ratatui::crossterm::terminal::enable_raw_mode().is_ok();
@@ -444,9 +443,9 @@ pub struct Palette {
     /// Whether a coloured run also gets a ground (`:theme-fill`).
     fill: bool,
     /// Colours copied from a borrowed theme, which win over the ones worked
-    /// out here (2026-10-25, see [`yumete_config::Pinned`]).
+    /// out here (see [`yumete_config::Pinned`]).
     pinned: Option<yumete_config::Pinned>,
-    /// Hues for bold, italic, heading levels and list markers (2026-11-04).
+    /// Hues for bold, italic, heading levels and list markers.
     prose: Option<yumete_config::Prose>,
     paint: bool,
     /// Whether this is the work area that is only being *read* (Feature #176).
@@ -459,9 +458,9 @@ pub struct Palette {
     /// not reading is not louder, it is quieter.
     ///
     /// How far, per thousand of the way to the page: 0 for the window the
-    /// keys are in. Set from `[theme] inactive` and `[theme] focus`
-    /// (2026-11-04: 74% kept for both was too much for a window and too
-    /// little for focus mode).
+    /// keys are in. Set from `[theme] inactive` and `[theme] focus`, two
+    /// settings because one share is too much for a window and too little for
+    /// focus mode.
     faded: u32,
     /// What [`Self::faded`] stands a window back by, and what
     /// [`Self::stood_back`] stands a paragraph back by in focus mode.
@@ -690,7 +689,7 @@ impl Palette {
 
     /// How far an accent goes toward the page when the ink goes `faded`:
     /// further, since an accent is louder (55% when the ink went 26%), and
-    /// never all the way, so a link stays a link (2026-11-04).
+    /// never all the way, so a link stays a link.
     fn accent_share(self) -> i64 {
         (i64::from(self.faded) * 55 / 26).min(850)
     }
@@ -701,11 +700,10 @@ impl Palette {
     /// Warning: **A mark is a displacement, not a position.** A rung is an absolute
     /// place on the line from 墨 to 紙, so 第 86 檔 means 「four rungs off the
     /// paper」 *and only on the paper*: a table banded at 第 86 inside a `:::`
-    /// kept the colour it would have had on the page, and read as a patch
-    /// glued onto the callout rather than a row of it. 「不是紙色的行還保持着
-    /// 原來的顏色，造成視覺上的不舒服。」
+    /// would keep the colour it would have had on the page, and read as a patch
+    /// glued onto the callout rather than a row of it.
     ///
-    /// The fix is the model a designer would reach for — a translucent sheet
+    /// The model is the one a designer would reach for — a translucent sheet
     /// laid over whatever is behind — and it is the same arithmetic the ladder
     /// already uses, applied as a **vector**: `depth` rungs of the 墨→紙
     /// distance, subtracted from `under`. On the paper that is exactly
@@ -763,8 +761,7 @@ impl Palette {
 
     /// **A window you are only reading**: [`Self::faded`], or with focus mode
     /// on as far back as focus mode stands a paragraph, so that the
-    /// paragraph being written is the one thing at full ink on the screen
-    /// (2026-11-04).
+    /// paragraph being written is the one thing at full ink on the screen.
     pub fn reading(self, focus_mode: bool) -> Palette {
         Palette {
             faded: match focus_mode {
@@ -864,15 +861,15 @@ impl Palette {
     pub fn band(self) -> Color {
         self.at(rung::BAND)
     }
-    /// **反顯自己算出來，別交給終端**（2026-10-12 在 Windows 上報的）。
+    /// **反顯自己算出來，別交給終端**。
     ///
     /// Warning: **一個漢字兩格，而第二格 ratatui 從來不發**——`Buffer::diff` 碰上一個
     /// 寬符號就 `to_skip = 1`（`buffer.rs:502`）。那半格長什麽樣由終端自己說，而兩
-    /// 家說法不同：**顏色跟着頭一格走，屬性不跟**。於是同一頁上選區（`bg(…)`，顏色）
-    /// 滿格，而光標（`Modifier::REVERSED`，屬性）只亮左半格——報上來的原話是
-    /// 「half correct half black」。macOS 那幾個終端兩樣都跟，所以那一端永遠看不見。
+    /// 家說法不同：Windows 上**顏色跟着頭一格走，屬性不跟**。交給終端的話，同一頁上
+    /// 選區（`bg(…)`，顏色）滿格，而光標（`Modifier::REVERSED`，屬性）只亮左半格。
+    /// macOS 那幾個終端兩樣都跟，所以那一端看不見。
     ///
-    /// 紙當墨、墨當紙，畫出來與從前逐像素相同，而送出去的是顏色。別的修飾（粗、斜）
+    /// 紙當墨、墨當紙，畫出來與終端的反顯逐像素相同，而送出去的是顏色。別的修飾（粗、斜）
     /// 原樣留着——反顯換掉的只是那兩個顏色。
     pub fn reversed(self, style: Style) -> Style {
         let fg = style.bg.unwrap_or_else(|| self.paper());
@@ -1007,8 +1004,7 @@ impl Palette {
         self.washed_to(self.gold, 1.9, 4.5)
     }
 
-    /// **同屏別的那幾處命中**——比 [`Ink::wash`] 更淡的一層（2026-09-27 定，
-    /// 原話：「同屏幕別的命中的底色可以淡一些，防止混淆」）。
+    /// **同屏別的那幾處命中**——比 [`Ink::wash`] 更淡的一層，防止混淆。
     ///
     /// 兩種標記各說一件事：站着的那一處說「按 `r` 它會變成這樣」，別的那幾處說
     /// 「這裏也有一處」。同一個距離的話，眼睛分不出哪一處是自己站着的——而站在
@@ -1021,20 +1017,19 @@ impl Palette {
 
     /// The same wash, for any of the 品色 — what a `:::` block sits on (#459).
     ///
-    /// Warning: **This is why the four callouts can differ by hue now and could not
-    /// before.** They used to be four *greys* 1.4–2.4 ΔE apart, which is below
-    /// the threshold at which two flat grounds can be told apart at all. A hue
+    /// Warning: **This is why the four callouts differ by hue.** Four *greys*
+    /// would be 1.4–2.4 ΔE apart, which is below the threshold at which two
+    /// flat grounds can be told apart at all. A hue
     /// held at a fixed distance off the page is a different proposition: the
     /// distance does the work of 「這是一塊」 and the hue does the work of
     /// 「哪一塊」, and neither is asked to do the other's job.
-    /// Warning: **1.5:1, not [`Ink::wash`]'s 1.9** (#465). That number was set when
-    /// 朱 was the only wash on the page and it is right for a small one — a
-    /// `==標記==` is a few characters and needs to be found. A callout is a
-    /// paragraph of prose the reader is meant to *read*, four of them are now
-    /// coloured, and a saturated hue reads louder than a grey at the same
-    /// distance: at 1.9 the writing inside came out at 5.8:1, the lowest
-    /// contrast anywhere on a page whose prose is otherwise over 9. 1.5 puts it
-    /// back to 7.4 and the block is still unmistakably a block — the table
+    /// Warning: **1.5:1, not [`Ink::wash`]'s 1.9** (#465). That number is right
+    /// for a small wash — a `==標記==` is a few characters and needs to be
+    /// found. A callout is a paragraph of prose the reader is meant to *read*,
+    /// four of them are coloured, and a saturated hue reads louder than a grey
+    /// at the same distance: at 1.9 the writing inside comes out at 5.8:1, the
+    /// lowest contrast anywhere on a page whose prose is otherwise over 9. 1.5
+    /// puts it at 7.4 and the block is still unmistakably a block — the table
     /// stripe beside it is 1.09.
     pub fn washed(self, accent: Accent) -> Color {
         let colour = self.accent_colour(accent);
@@ -1260,12 +1255,12 @@ impl Palette {
             return None;
         }
         let Color::Rgb(r, g, b) = from else { return None };
-        // **先問調色板有沒有顏色可花**（2026-10-09 作者定）。
+        // **先問調色板有沒有顏色可花**。
         //
         // Warning: 【黑白】那一版的本意是「一點顏色都沒有」——#471 把它的三個官服品色都
-        // 抹成了灰，而 `local/development.md` 記着 「greys only」。可這一支走的是寫死的
-        // 一條偏藍方向，不問調色板，而分詞與「換顏色」出廠都開着：於是深色下正文畫成
-        // `#D7E9F8`，一片淡藍，而黑白自己的青是 `#A3A3A3`。
+        // 抹成了灰，而 `local/development.md` 記着 「greys only」。寫死一條偏藍方向、不問
+        // 調色板的話，分詞與「換顏色」出廠都開着，深色下正文會畫成 `#D7E9F8`，一片淡藍，
+        // 而黑白自己的青是 `#A3A3A3`。
         //
         // 判準是**調色板自己的藍有沒有色度**：有就照舊走那條按眼睛定過的方向（別的九
         // 個主題一個像素都不變），沒有就退回 [`Self::word_ink`] 那一檔——在一個沒有顏
@@ -1376,7 +1371,7 @@ impl Palette {
     /// 主題色, so this is darker on a dark theme and lighter on a light one
     /// without anything here having to ask which.
     ///
-    /// **Unless the ladder has run out** (2026-10-26 review): a pure white
+    /// **Unless the ladder has run out**: a pure white
     /// paper — github's light one — has nothing lighter to give, 第 100 檔
     /// clamps back onto the page, and the status bar disappears into it. Then
     /// it turns round and goes as far toward the ink instead (第 80 檔), the
@@ -1446,7 +1441,7 @@ mod ground_tests {
     /// theme has the least contrast to spend. This is also the test that says
     /// there is no room for a *fourth*: it fails on any rung put between them.
     /// **A wash laid over the paper lands on the rung it names, in a light
-    /// mood too** (2026-10-26 review). `Palette::over` takes its own branch
+    /// mood too.** `Palette::over` takes its own branch
     /// on a light ladder, and no other test draws in one: a sign flip there
     /// would send every band and tint toward white with nothing turning red.
     #[test]
@@ -1469,9 +1464,9 @@ mod ground_tests {
         }
     }
 
-    /// **The status bar is never the page** (2026-10-26 review). github's
-    /// light paper is pure white, so 第 100 檔 clamped back onto it (1.000:1)
-    /// and the bar had no ground of its own; it turns round toward the ink.
+    /// **The status bar is never the page.** github's light paper is pure
+    /// white, so 第 100 檔 clamps back onto it (1.000:1) and the bar would have
+    /// no ground of its own; it turns round toward the ink.
     #[test]
     fn the_status_bar_has_a_ground_of_its_own_in_every_theme() {
         use super::Palette;
