@@ -28123,6 +28123,16 @@ fn align_lines_up_the_selected_lines_on_a_sign() {
     press(&mut ed, "%");
     ed.execute(":align :").unwrap();
     assert_eq!(ed.current_buffer().text(), "a      : 1\nlonger : 2\n");
+    // A full-width sign takes no spaces, and the padding is full-width
+    // (2026-11-09, review).
+    let mut ed = typed("甲：一\n乙乙乙：二\nab：三\n");
+    press(&mut ed, "%");
+    ed.execute(":align ：").unwrap();
+    assert_eq!(ed.current_buffer().text(), "甲\u{3000}\u{3000}：一\n乙乙乙：二\nab\u{3000}\u{3000}：三\n");
+    let mut ed = typed("a：一\n乙乙：二\n");
+    press(&mut ed, "%");
+    ed.execute(":align ：").unwrap();
+    assert_eq!(ed.current_buffer().text(), "a\u{3000} ：一\n乙乙：二\n", "a half column left over");
     let mut ed = typed("a = 1\nb\n");
     press(&mut ed, "%");
     ed.execute(":align").unwrap();

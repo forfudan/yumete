@@ -652,6 +652,12 @@ impl Editor {
             .filter_map(|(line, at)| at.map(|(a, _)| yumete_cjk::str_width(line[..a].trim_end())))
             .max()
             .unwrap_or(0);
+        // **A full-width sign takes no spaces** (2026-11-09, review: `：`
+        // came out as `甲     ： 一`). Chinese puts none around its own
+        // punctuation, and the padding is in full-width spaces, as
+        // `姓　　名：` is lined up by hand; a half column left over is one
+        // ASCII space.
+        let wide = sign.chars().all(|c| yumete_cjk::str_width(c.encode_utf8(&mut [0; 4])) == 2);
         let mut out = String::new();
         for (line, at) in lines.iter().zip(&found) {
             match *at {
@@ -660,10 +666,18 @@ impl Editor {
                     let pad = width - yumete_cjk::str_width(left);
                     let rest = line[b..].trim_start_matches([' ', '\t']);
                     out.push_str(left);
-                    out.push_str(&" ".repeat(pad));
-                    out.push(' ');
+                    match wide {
+                        true => {
+                            out.push_str(&"\u{3000}".repeat(pad / 2));
+                            out.push_str(&" ".repeat(pad % 2));
+                        }
+                        false => {
+                            out.push_str(&" ".repeat(pad));
+                            out.push(' ');
+                        }
+                    }
                     out.push_str(&line[a..b]);
-                    if !rest.is_empty() && !rest.starts_with(['\n', '\r']) {
+                    if !wide && !rest.is_empty() && !rest.starts_with(['\n', '\r']) {
                         out.push(' ');
                     }
                     out.push_str(rest);
