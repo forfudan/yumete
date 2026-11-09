@@ -706,7 +706,7 @@ pub fn run(
         editor.set_status(said);
     }
     // **Say once that the lone-Shift tap is not coming** (#339). Without the
-    // Kitty protocol a bare Shift is never reported, so the gesture a writer
+    // Kitty protocol a bare Shift never arrives, so the gesture a writer
     // uses dozens of times an hour does nothing at all — and says nothing
     // either, which reads as yumete being broken rather than as the terminal
     // having no way to tell us. Said at start-up and not repeated: it is a
@@ -825,18 +825,17 @@ pub fn run(
         // status line stands on (`standing_language_tag`) and the same pair
         // the keyboard flags are pushed for, two lines apart on purpose.
         //
-        // Warning: **`composes_here`, not `mode != Normal`.** The narrow test cost
-        // an evening twice over. `[ime] start` is `false` out of the box, so a
-        // fresh session is engaged with **no 碼表**, and a first version that
-        // asked only `engaged` took the system's input method away from a
-        // writer whose yumete could not type 漢字 either: 「你把输入法切走了，
-        // 我 i 进入 insert 模式用什么？」 A second version then handed the
-        // keyboard back in *every* mode that is not Normal — including the
-        // command line, where the command **name** is ASCII, so `:w` had its
-        // `w` composed by the system's input method and the file was never
-        // written. `composes_here` is the one gate that already knows all of
-        // this: the preedit, the candidate panel and the lone-Shift tap light
-        // up together with it, and now so does this.
+        // Warning: **`composes_here`, not `mode != Normal`.** `[ime] start` is
+        // `false` out of the box, so a fresh session is engaged with **no
+        // 碼表**: asking only `engaged` would take the system's input method
+        // away from a writer whose yumete cannot type 漢字 either, leaving
+        // nothing to type with in Insert. Handing the keyboard back in *every*
+        // mode that is not Normal would include the command line, where the
+        // command **name** is ASCII, so `:w` would have its `w` composed by the
+        // system's input method and the file would never be written.
+        // `composes_here` is the one gate that already knows all of this: the
+        // preedit, the candidate panel and the lone-Shift tap light up
+        // together with it, and so does this.
         let yume_has_the_keys = ime.holding_the_keys();
         // **Normal 下按過 Esc 而它没別的事可做**：把挂起再說一遍。
         // 抹掉信念，下面那一句自己會重發——它本來就是冪等的。
@@ -1810,15 +1809,14 @@ pub fn run(
                 if let Some(tag) = editor.take_scheme_request() {
                     // `:yume` **is** an answer
                     // about the language, typed on the command line that
-                    // borrowed it. Putting the borrow back afterwards undid
-                    // the command the writer had just run, silently, one
+                    // borrowed it. Putting the borrow back afterwards would
+                    // undo the command the writer had just run, silently, one
                     // keystroke later.
                     //
-                    // **Spelled the way the request is spelled now** (#412).
-                    // This asked for `+` and `-`, which is what the request
-                    // was before there were three answers to give (#290) —
-                    // and nothing has sent either since, so the undoing this
-                    // line exists to prevent had quietly come back.
+                    // **Spelled the way the request is spelled** (#412): not
+                    // `+` and `-`, which nothing sends since there are three
+                    // answers to give (#290) — asking for those would let the
+                    // undoing this line exists to prevent quietly come back.
                     if answers_the_language(&tag) {
                         borrowed.settled();
                     }
@@ -2183,9 +2181,8 @@ const WHEEL_DRAIN: std::time::Duration = std::time::Duration::from_millis(12);
 /// is trying to write *to us*: a hard trackpad flick sends thousands of mouse
 /// reports, and with nobody reading them that write blocks too — so it stops
 /// reading ours, and both sides wait for the other. It takes a few gestures to
-/// fill both buffers, which is exactly what 「it freezes on the fourth flick」
-/// looked like, with the heartbeat stopped in `drawing` after a frame that had
-/// cost 8 ms.
+/// fill both buffers, so it looks like a freeze on the fourth flick, with the
+/// heartbeat stopped in `drawing` after a frame that cost 8 ms.
 ///
 /// A reader that never draws cannot be blocked by drawing. The channel is
 /// unbounded, so the terminal's write to us always completes and it goes on
@@ -2752,7 +2749,7 @@ enum ShiftResult {
 /// that and the loop calls it on `FocusLost`.
 ///
 /// Requires the Kitty keyboard protocol so bare modifier presses and releases
-/// are reported at all.
+/// arrive at all.
 #[derive(Default)]
 struct ShiftTap(ModifierTap);
 
@@ -3168,7 +3165,7 @@ pub fn set_theme(
 /// (`x,y,w,h` in points) — see [`terminal_window`]. A line somebody wrote
 /// themselves before `:shot png` existed does not know `$YUMETE_SHOT`, so the
 /// file is looked for afterwards and its absence is said out loud rather than
-/// reported as a picture that was never written.
+/// passed off as a picture that was never written.
 ///
 /// Warning: **nothing the command says may reach the screen.**
 /// The editor's picture of the terminal is ratatui's, and it redraws only the
@@ -4249,8 +4246,8 @@ fn preedit_name(preedit: InlinePreedit) -> String {
 /// bury the line that matters. What is left is 「somebody put this here and the
 /// core will not have it」, which is what a binary format changing its magic
 /// under an old data directory looks like from the writer's chair — and which
-/// was, until this, completely silent: the 拆分 comments simply stopped
-/// appearing and nothing anywhere said why.
+/// would otherwise be completely silent: the 拆分 comments simply stop
+/// appearing and nothing anywhere says why.
 ///
 /// Only the first is spelled out. One reason is enough to send somebody to
 /// `scripts/build.sh`, and they are nearly always the same reason.
@@ -6063,10 +6060,10 @@ fn draw(
     } else if let Some((prefix, skip)) = prompt_view(editor, ime, prompt_area.width) {
         // Measured in cells, not characters: a Chinese search pattern is twice
         // as wide as it is long — and up to the **caret**, not to the end of
-        // the line, now that the prompt can be edited in the middle.
+        // the line, since the prompt can be edited in the middle.
         // The prefix is measured too, because `::` is two cells wide (#224)
-        // and a hard-coded 1 put the caret inside the second colon — and since
-        // #505 a search says `搜索:`, which is five.
+        // and a hard-coded 1 would put the caret inside the second colon — and
+        // a search says `搜索:` (#505), which is five.
         let before: String = editor.prompt_before_caret().chars().skip(skip).collect();
         let col = yumete_cjk::str_width(&prefix)
             + yumete_cjk::str_width(&before)
@@ -6224,7 +6221,7 @@ fn draw(
                 // `prompt_area` rather than `command_area`: with `[editor]
                 // command_line = false`, or a window too short for two rows, the
                 // status line is where everything that row would have carried
-                // goes, and the candidates are now one of those things.
+                // goes, and the candidates are one of those things.
                 PanelDisplay::Bottom => {
                     draw_candidate_row(frame, ime, config, prompt_area, show_code)
                 }
@@ -6649,7 +6646,7 @@ const MENU_WIDTH: u16 = 56;
 /// Wider than [`MENU_WIDTH`], because a row there is not a name — it is a
 /// sentence saying what the command does, and that sentence is the whole
 /// reason the panel is open. At 56 cells 「段組：把竪排的頁面橫着分成幾條，右上
-/// 讀到左上，」 stopped there, on a comma. This is about a printed line's
+/// 讀到左上，」 stops there, on a comma. This is about a printed line's
 /// measure: long enough for most of the corpus to land whole, short enough
 /// that the eye still comes back to the left edge without hunting.
 const LOOKFOR_WIDTH: u16 = 78;
@@ -8376,7 +8373,7 @@ fn draw_search_hint(
         return None;
     }
     let ink = crate::theme::Palette::of(config);
-    // `A-j` is the prompt's `toggle_wide_search`, named as it is bound now.
+    // `A-j` is the prompt's `toggle_wide_search`, named as it is bound.
     let wide = editor.place_keys_written(yumete_core::actions::Place::Prompt, yumete_core::actions::PlaceCmd::ToggleWideSearch);
     let about: Vec<String> = [Some(say!("ui.search-is-a-regex")), Some(say!("ui.search-smart-case")), wide.map(|k| say!("ui.search-wild", k))]
         .into_iter()
@@ -9345,10 +9342,10 @@ pub(crate) fn markup_style(kind: yumete_core::markdown::Kind, ink: crate::theme:
         // 所見即所得 gone.
         Kind::Marker | Kind::HeadingMark | Kind::Html => Style::default().fg(ink.marker()),
         // A terminal cannot make a heading bigger, and bold is what it has.
-        // The old colour was five ΔE from the ink for a third of a stop of
-        // contrast — the weight was doing all the work already.
+        // A colour five ΔE from the ink gives a third of a stop of contrast
+        // — the weight does all the work.
         // 金, because a heading is not prose and the page is otherwise grey.
-        // Weight alone said it in a hundred-line file and stopped saying it in
+        // Weight alone says it in a hundred-line file and stops saying it in
         // a chapter: bold prose and a heading are the same colour, and the eye
         // has to read them to tell them apart. (A theme with `Prose` colours
         // each level instead, in `markup_style_in`, which knows the level.)
@@ -9635,9 +9632,9 @@ pub(crate) fn table_row_depth(nth: usize) -> Option<i32> {
     match nth {
         // Warning: **The header and the rule under it are one thing** (#486), so they
         // take one ground — and the page's, because the header is already told
-        // apart by its ink. Banding the header alone split the two: a band that
-        // stopped at the `---` read as a row of its own with a line under it,
-        // rather than as a head.
+        // apart by its ink. Banding the header alone would split the two: a
+        // band that stops at the `---` reads as a row of its own with a line
+        // under it, rather than as a head.
         0 | 1 => None,
         // **How deep, not which rung** (#488). Four rungs under whatever the
         // row sits on: the paper on an ordinary page — which is 第 86 檔 to the
@@ -11090,7 +11087,7 @@ fn draw_search(
     let rule_across = |buf: &mut ratatui::buffer::Buffer, y: u16, from: u16| {
         // Warning: **擋在內容區的邊上，不是整扇面板的邊上。** `area` 已經減掉了底邊
         // 那一行，而底邊上寫着 `Tab 文件>…`——拿整扇面板的高度當閘，14 行的窗口
-        // 裏這一道線就畫到那一行上，把它整條蓋掉（測試攔下來的）。同 `draw_box`。
+        // 裏這一道線就畫到那一行上，把它整條蓋掉。同 `draw_box`。
         if y >= area.y + area.height {
             return;
         }
@@ -12842,12 +12839,12 @@ fn draw_horizontal(
         })
         .collect();
     let lit = |line: usize| lit_lines.iter().any(|&(a, b)| a <= line && line <= b);
-    // **The cell you are standing on** (#229). Insert has always been confined
-    // to it, and until now the only sign of that was the column name in the
-    // status line — so a table you were editing looked exactly like a table you
-    // were not. The grid renderer has said this since #118 (a cursor row banded
-    // at `HEAD`, the cell itself at `SELECTION`); this is the same answer for
-    // the table that is drawn as part of a page.
+    // **The cell you are standing on** (#229). Insert is confined to it, and
+    // the column name in the status line is not enough of a sign — a table
+    // you are editing would look exactly like a table you are not. The grid
+    // renderer says this too (#118: a cursor row banded at `HEAD`, the cell
+    // itself at `SELECTION`); this is the same answer for the table that is
+    // drawn as part of a page.
     //
     // A rung quieter than the grid's, because here the ground is competing with
     // prose and with a real selection: the cell takes `HEAD`, so a selection
@@ -12861,9 +12858,10 @@ fn draw_horizontal(
     // the mouse all walk the cursor out of a `|` table — into the prose under
     // it, or onto a table quoted inside a fence — and nothing puts `:table`
     // away when they do; `cell_position` answers「cell 0」for any line at all,
-    // so the ground was drawn on prose. The rule row goes with them: it is the
-    // drawing of the alignments, `clear_cell` refuses it and `move_cell_row`
-    // steps over it, so a ground saying「an edit lands here」would be a lie.
+    // so the ground would be drawn on prose. The rule row goes with them: it is
+    // the drawing of the alignments, `clear_cell` refuses it and
+    // `move_cell_row` steps over it, so a ground saying「an edit lands here」
+    // would be a lie.
     //
     // Either kind of region: a block recognised in a document (#216) stops
     // where its delimiter does, and the tint is the only thing on the page
@@ -13139,10 +13137,11 @@ fn draw_horizontal(
         // you have found the word itself.
         //
         // Warning: **The fill takes it too** (#469). `fill` was snapshotted from
-        // `ground` above and this line shadows `ground` alone, so the band
-        // stopped at the last character instead of crossing the row — and with
-        // `ground = "terminal"`, where the band is the *only* thing that ever
-        // gives `fill` a background, it was not drawn past the text at all.
+        // `ground` above and this line shadows `ground` alone, so without this
+        // the band stops at the last character instead of crossing the row —
+        // and with `ground = "terminal"`, where the band is the *only* thing
+        // that ever gives `fill` a background, it is not drawn past the text
+        // at all.
         let (ground, fill) = match hit_line == Some(row.line) {
             true => {
                 let band = ink.ground(yumete_config::rung::BAND);
@@ -13153,10 +13152,10 @@ fn draw_horizontal(
         // 焦點模式 has to name its ink out loud on a page that has none of its
         // own. With `[theme] ground = "terminal"` the page's style is empty on
         // purpose — the reader's palette — so standing a row back by swapping
-        // palettes changed nothing that ever reached a cell, and `:view-focus` was
-        // a silent no-op for everybody who gave the ground back while the
-        // status line said 「焦點：開」. The 縱書 page has had this rescue since
-        // it was written (`vertical.rs`); this one had not.
+        // palettes changes nothing that ever reaches a cell, and `:view-focus`
+        // would be a silent no-op for everybody who gives the ground back while
+        // the status line says 「焦點：開」. The 縱書 page does the same
+        // (`vertical.rs`).
         let ground = match focus && row.line != cursor_line && ground.fg.is_none() {
             true => ground.fg(ink.text()),
             false => ground,
@@ -13216,7 +13215,7 @@ fn draw_horizontal(
         let grid = editor.grid_on_line(row.line);
         // #212's padding writes the rule row's own dashes, so a rule being
         // *drawn* has to draw those too — otherwise the line stops where the
-        // file's dashes stopped and the rest of the row is bare.
+        // file's dashes stop and the rest of the row is bare.
         let runs: Vec<yumete_core::drawn::Run> = match editor.grid_rule_row(row.line) {
             false => runs,
             true => runs
@@ -13462,9 +13461,9 @@ fn draw_horizontal(
                         // must not rub out a `==highlight==`, which exists *to
                         // be* a ground, nor a container's own colour. The page
                         // itself is not a claim: every style on the row starts
-                        // from it now that the paper is painted, and reading
-                        // that as taken would have left the overlay with
-                        // nowhere it was allowed to draw.
+                        // from it since the paper is painted, and reading
+                        // that as taken would leave the overlay with
+                        // nowhere it is allowed to draw.
                         WordMark::Tint => {
                             if style.bg.is_none() || style.bg == page_bg {
                                 *style = style.bg(ink.word());
@@ -13818,11 +13817,11 @@ fn draw_horizontal(
         // were table. 「表格的底色不需要延伸到整个页宽，而是表格宽度就可以了。」
         if fill.bg.is_some() && (!row_is_a_table || hit_line == Some(row.line)) {
             // A whole width of spaces, and the page truncates them. Working out
-            // where the row ends and padding *exactly* the rest was one width
-            // question too many: it asked `char_width`, while the columns are
+            // where the row ends and padding *exactly* the rest is one width
+            // question too many: it asks `char_width`, while the columns are
             // dealt out by ratatui, and the two disagree about every East-Asian
             // ambiguous character (`—` `…` `▓`). One `——` in a fenced line and
-            // the ground stopped two cells short of the edge. Over-filling
+            // the ground would stop two cells short of the edge. Over-filling
             // cannot be wrong: nothing is drawn past the area.
             // …plus what the sideways scroll will cut off the front of it, so a
             // scrolled row is still painted to the right edge.
@@ -15061,9 +15060,9 @@ fn draw_command(
     match editor.hint() {
         Hint::Quiet => {}
         Hint::Says(text) => put(&text, news, &mut x),
-        // **The panel has this now.** A row holds four keys and `空格` has
+        // **The panel has this.** A row holds four keys and `空格` has
         // fourteen, so a half-pressed sequence is drawn as a list you can read
-        // down; the row keeps what it was always for — what just happened.
+        // down; the row keeps what it is for — what just happened.
         Hint::Keys(..) if editor.pending_menu().is_some() => {}
         Hint::Keys(name, keys) => {
             put(&name, label, &mut x);
@@ -15491,7 +15490,7 @@ fn position_in(editor: &Editor, full: bool) -> String {
 /// keeps the rest instead of dropping all of it: the block name goes first,
 /// then the 字 itself — which is on the page under the cursor anyway, so the
 /// bare `U+51AC` still answers the question the readout exists for (is the
-/// character wrong, or is the font?). The last stage earns its keep now that
+/// character wrong, or is the font?). The last stage earns its keep because
 /// the language tag (#337) stands on every line and takes ten cells with it.
 fn char_info(editor: &Editor, config: &Config) -> [String; 3] {
     let nothing = || [String::new(), String::new(), String::new()];
@@ -15980,7 +15979,7 @@ fn draw_panel_rows(
         title: None,
     });
     // The rows go inside the ring rather than through a `Paragraph`'s own
-    // block: the ring is `chrome`'s now, and one thing should draw it.
+    // block: the ring is `chrome`'s, and one thing should draw it.
     frame.render_widget(Paragraph::new(with_room_for_wide_glyphs(lines)).style(ground), inner);
 }
 
@@ -16683,8 +16682,8 @@ fn squeezed(text: &str) -> String {
     }
 
     /// #220: an installed data file the core refuses names the *version*, not
-    /// the symptom. Before this, `:yume` said nothing at all and the writer saw
-    /// only 拆分 comments that had stopped appearing.
+    /// the symptom. Otherwise `:yume` says nothing at all and the writer sees
+    /// only 拆分 comments that have stopped appearing.
     #[test]
     fn yume_names_a_data_file_the_core_will_not_have() {
         let entry = yumete_ime::data_set(Scheme::LINGMING)
@@ -17819,7 +17818,7 @@ fn squeezed(text: &str) -> String {
 
     /// The bar is the table's own top two rows brought up the page: the ruler
     /// above, the names under it, exactly as they stand when the head is in
-    /// view. Drawn the other way round until it was caught.
+    /// view — not the other way round.
     #[test]
     fn the_bar_is_ordered_the_way_the_table_top_is() {
         let mut source = String::from("| 地名 | 年代 |\n| --- | --- |\n");
@@ -18696,10 +18695,10 @@ fn squeezed(text: &str) -> String {
     ///
     /// **Not a number written down.** How many screen rows a file line is
     /// drawn at depends on what else the page puts above it — a reading, a row
-    /// of air, and since #379 the strip that numbers a table's columns at 基本
-    /// as well as at 全. Five tests said 「row 3 is the fourth line of the
-    /// file」 and all five broke the day the strip moved a level, which is a
-    /// test failing for something it was not about.
+    /// of air, and (#379) the strip that numbers a table's columns at 基本
+    /// as well as at 全. A test that says 「row 3 is the fourth line of the
+    /// file」 breaks whenever the strip moves a level, which is a test failing
+    /// for something it is not about.
     fn row_holding(buffer: &ratatui::buffer::Buffer, needle: &str) -> u16 {
         (0..buffer.area.height)
             .find(|&y| row_text(buffer, y).contains(needle))
@@ -18854,10 +18853,9 @@ fn squeezed(text: &str) -> String {
         let (buffer, at) = render_caret(&editor, &config, 10, 4);
         assert_eq!(
             row_text(&buffer, 0).trim_end(),
-            // Ten columns of writing, `q` through `z`. It was nine —
-            // `rstuvwxyz` and a blank column — for as long as the caret stood
-            // one past the `z` (#382); now it stands *on* the `z`, so the
-            // window ends on a character instead of on nothing.
+            // Ten columns of writing, `q` through `z`: the caret stands *on*
+            // the `z`, not one past it (#382), so the window ends on a
+            // character instead of on nothing.
             "qrstuvwxyz",
             "the tail of the line, not its head"
         );
@@ -20413,8 +20411,8 @@ fn squeezed(text: &str) -> String {
 
     #[test]
     fn the_number_band_is_a_gutter_of_its_own_colour() {
-        // …when it is asked for. Off by default now, and off in both layouts:
-        // 縱書 painted this band and 橫排 painted nothing.
+        // …when it is asked for. Off by default, and off in both layouts
+        // alike.
         // Set vertically the numbers sit above the 縱, in the text's own
         // columns. Position separates nothing, so the band has to be told apart
         // by colour or it reads as digits somebody typed.
@@ -22364,11 +22362,11 @@ fn squeezed(text: &str) -> String {
                 })
                 .collect();
             // Record 7 appears on the page once. Read from the middle of
-            // itself it was drawn a second time, as a row of its own.
+            // itself it would be drawn a second time, as a row of its own.
             //
             // `r7a┆` is the grid's own spelling — the detail panel down the
             // right prints the same field with spaces around it, and counting
-            // that caught my assertion rather than the code.
+            // that would test the assertion rather than the code.
             let sevens = rows.iter().filter(|r| r.contains("r7a┆")).count();
             assert!(sevens <= 1, "step {nth}: record 7 drawn twice:\n{}", rows.join("\n"));
             for row in &rows {
@@ -23008,9 +23006,9 @@ fn squeezed(text: &str) -> String {
 
     // ---- The cell you are standing on (#229) ------------------------------
 
-    /// A `|` table is drawn as part of its page, so until #229 the only sign
-    /// that Insert was confined to a cell was the column name in the status
-    /// line. The cell now carries a ground — **its whole box**, padding
+    /// A `|` table is drawn as part of its page, so without #229 the only
+    /// sign that Insert is confined to a cell would be the column name in the
+    /// status line. The cell carries a ground — **its whole box**, padding
     /// included, because the padding is the column's width and an empty cell
     /// has no content to tint.
     #[test]
@@ -23068,10 +23066,10 @@ fn squeezed(text: &str) -> String {
     /// The cell ground survives a `::: danger`, and still gives way to a
     /// `==highlight==`.
     ///
-    /// The guard was written as「the ground here is already `wash`」, and three
-    /// things paint `wash`: a highlight, a danger callout, and the search hit.
-    /// A `|` table inside a callout therefore had every character already
-    /// washed and lost the ground entirely — table mode drew nothing at all.
+    /// A guard written as「the ground here is already `wash`」 would be wrong:
+    /// three things paint `wash` — a highlight, a danger callout, and the
+    /// search hit — so a `|` table inside a callout would have every
+    /// character already washed and lose the ground entirely.
     #[test]
     fn the_cell_ground_survives_a_callout_but_not_a_highlight() {
         let mut config = Config::default();
@@ -24448,9 +24446,9 @@ fn squeezed(text: &str) -> String {
     /// does not change when the dictionary does.
     ///
     /// The trigger in the field is the ordinary one: `:view-meter` (on) before the
-    /// IME has finished loading its dictionary. Until this was fixed, the 了
-    /// in 為了 stayed marked 仄 for the rest of the session — the exact
-    /// mistake the feature exists to catch.
+    /// IME has finished loading its dictionary. Without this, the 了 in 為了
+    /// would stay marked 仄 for the rest of the session — the exact mistake
+    /// the feature exists to catch.
     #[test]
     fn a_new_dictionary_takes_the_meter_marks_with_it() {
         let mut editor = editor_with("為了他。\n");
