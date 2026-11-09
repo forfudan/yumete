@@ -6,7 +6,7 @@
 #
 # By default it also compiles the Yume IME data tables and installs them into the
 # user data directory (~/.local/share/yumete). Warning: **that directory is no longer
-# searched for 碼表** (2026-10-18) — it shadowed the input method's own copy —
+# searched for 碼表** — it shadowed the input method's own copy —
 # so unless the 宇浩 IME is installed, name it under `[ime] data_dirs`; this
 # script prints the line. The word list there is still read from it.
 # Pass --no-data (or set YUMETE_SKIP_DATA=1) to build only the binary.
@@ -99,7 +99,7 @@ install_ime_data() {
   yume_root="$(cd "$yume_root" && pwd)"
   if [[ ! -f "$yume_root/data/ling.txt" ]]; then
     # Warning: **不是每個人都跑得了那條流水綫。** 源表在一個私有倉裏，所以「去跑一下
-    # pipeline」對倉外的人是一條死路（2026-09-22 就這麽卡住過一個人）。出廠自帶
+    # pipeline」對倉外的人是一條死路。出廠自帶
     # 的那幾張表是公開的，說出來比不說強。
     echo "==> IME data: skipped (no source tables in $yume_root/data)"
     echo "    那幾張源表在一個私有倉裏，不過**出廠自帶的碼表不用你管**："
@@ -252,7 +252,7 @@ install_ime_data() {
   echo "==> IME data installed ($(ls -1 "$schemes"/*.ytab 2>/dev/null | wc -l | tr -d ' ') table(s), \
 $(ls -1 "$schemes"/*.toml 2>/dev/null | wc -l | tr -d ' ') scheme(s) in $dest)"
 
-  # Warning: **yumete 不再把這個目錄當碼表的來源**（2026-10-18）。它從前排在搜索順序
+  # Warning: **yumete 不再把這個目錄當碼表的來源**。它從前排在搜索順序
   # 的最前面，於是誰往裏拷過一份，那一份就永遠壓着宇浩輸入法自己那份——而後者是
   # 跟着安裝包更新的。一位 Linux 用戶正是這麼卡住的：包更新了，拼音照樣不能用。
   #
@@ -297,8 +297,8 @@ yumete_config_names_the_data_dir() {
 #
 # Warning: Which is why `install_ime_data` is **defined above this line**: bash binds
 # a function name when it reads the definition, not when the script starts, so
-# a call placed before it fails with `command not found` — and this call moved
-# up on 2026-09-14 while the definition stayed where it was.
+# a call placed before it fails with `command not found`, so this call stays
+# below the definition.
 if [[ "$install_data" == "1" ]]; then
   install_ime_data
 else

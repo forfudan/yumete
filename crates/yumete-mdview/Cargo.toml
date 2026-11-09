@@ -7,12 +7,12 @@ repository.workspace = true
 version.workspace = true
 
 [dependencies]
-# **Text layout with the system's own fonts** (2026-11-08): parley shapes,
+# **Text layout with the system's own fonts**: parley shapes,
 # breaks lines (ICU4X's UAX #14, strict, so no 「，」 at a line's start) and
 # finds fonts through fontique, which reads the fonts the system already has:
 # nothing is embedded. Apache-2.0 / MIT.
 parley = "0.12"
-# **Fontconfig opened at run time on Linux** (2026-11-08): fontique links
+# **Fontconfig opened at run time on Linux**: fontique links
 # libfontconfig at build time by default, which a build machine without its
 # headers cannot do, and a binary linked to it will not start where it is
 # missing. Opened when first asked for, a system without it only has no
@@ -29,7 +29,7 @@ vello_cpu = "0.3"
 icu_provider = { version = "2", default-features = false, features = ["logging"] }
 # Local pictures in a document: PNG and JPEG only.
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
-# **Characters shaped down a column** (2026-11-08) for the vertical
+# **Characters shaped down a column** for the vertical
 # preview: parley lays text across only, so the 漢字 of a vertical page are
 # shaped top to bottom here, in the face parley chose, which brings each
 # font's vertical forms and metrics (`vert`, `vmtx`, `VORG`). Already under

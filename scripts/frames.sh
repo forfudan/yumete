@@ -108,7 +108,7 @@ shoot() {
     while IFS='|' read -r name size keys; do
         [ -n "${name}" ] || continue
         rm -rf "${work}"
-        # Warning: **固定裝置自己是一個項目**（2026-10-02 修）。它坐在 `target/` 底下，
+        # Warning: **固定裝置自己是一個項目**。它坐在 `target/` 底下，
         # 也就是**倉裏面**——沒有這個記號的話，項目根往上一走就撞到倉自己的
         # `.git`，於是挑選器那一幀列的是整個倉、預覽的是真實的 `CHANGELOG.md`，
         # 我每改一次變更記錄它就「變了」。底片只許跟代碼走。
@@ -150,25 +150,24 @@ shoot() {
         for tag in TABLE RUBY OUTLINE RUST MOJO CONFLICT GITBIG GIT; do
             pressed="${pressed//:open ${tag}\\n/}"
         done
-        # Warning: **錯誤不許混進底片，退出碼不許吞掉**（2026-10-02 修）。從前這一行是
+        # Warning: **錯誤不許混進底片，退出碼不許吞掉**。從前這一行是
         # `> 底片 2>&1 || true`：`--keys` 認不得的鍵名會把那句報錯**寫進底片
         # 裏**，而退出碼被 `|| true` 吃了——於是 `空格選單` 和 `大綱` 兩幀拍了不
         # 知多久的「yumete: --keys: no key called "space"」，比對還一直是綠的。
         # Warning: **錯誤文件不許放在固定裝置裏**：挑選器會把它列出來。
         local whined="${DIR}/last.err"
-        # Warning: **在固定裝置那個目錄裏拍，不在倉根**（2026-10-02 修）。挑選器列的是
+        # Warning: **在固定裝置那個目錄裏拍，不在倉根**。挑選器列的是
         # 工作路徑底下的檔，而工作路徑從前是**這個倉**——於是 `挑選器` 那一幀預覽
         # 着真實的 `CHANGELOG.md`，我每改一次變更記錄它就「變了」。底片要只跟代碼
         # 走，不跟倉裏有哪些檔走。
-        # Warning: **底片不許看見使用者那一邊的東西**（2026-10-11 又踩一次，§5.77 記過
-        # 一回）。`XDG_DATA_HOME` 底下有兩樣會進畫面：沒存的草稿（啓動時狀態欄報
+        # Warning: **底片不許看見使用者那一邊的東西**（§5.77）。`XDG_DATA_HOME` 底下有兩樣會進畫面：沒存的草稿（啓動時狀態欄報
         # 「有 N 份沒存的草稿」）和他自己的詞庫（分詞着色看得見）。這一趟指到
         # `target/` 底下一個空的，所以底片只跟代碼走——他那邊開着幾扇 yumete、
         # 詞庫裏有什麼，一格都影響不到。
-        # The config too (2026-10-31): `hard_wrap = 80` in the user's own
+        # The config too: `hard_wrap = 80` in the user's own
         # config changed the settings frame. An empty folder beside the run,
         # named relatively so the settings page shows the same path on every
-        # machine. And an empty HOME (2026-11-04): the binary carries its own
+        # machine. And an empty HOME: the binary carries its own
         # tables now, so the input-method frames no longer read the ones
         # installed on this machine, and do not change when Yume is updated.
         if ! ( cd "${work}" && mkdir -p ../config ../home && HOME="${PWD}/../home" XDG_CONFIG_HOME=../config XDG_DATA_HOME="${PWD}/../data" "${BIN}" --lang=zh --shot="${size}" --keys="${pressed}" 文.md ) \

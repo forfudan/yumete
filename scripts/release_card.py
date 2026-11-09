@@ -25,7 +25,7 @@ import sys
 HERE = pathlib.Path(__file__).resolve().parent.parent
 CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
-# **字體**（2026-09-26 定的，原話：「用 wenkai GB 來渲染這個卡片以及截圖中的文字」）。
+# **字體**。
 #
 # Warning: **截圖那一塊必須是中文剛好兩倍寬的等寬體**，否則每一行的格子對不齊——終端畫面
 # 是按「一個漢字兩格」排的，字體不守這條，畫面就散。量過（Chrome，100px）：
@@ -40,7 +40,7 @@ CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 # Warning: **`document.fonts.check()` 會撒謊**：上面四個它全回 `true`，包括根本沒裝的
 # Sarasa。要判斷一個字體在不在，**量「中」和「A」的寬度比**，別問那個 API。
 #
-# **Yuniversus 接在文楷後面**（2026-10-23，0.11.0 那張拍的是拆分表）。文楷等寬缺的只
+# **Yuniversus 接在文楷後面**。文楷等寬缺的只
 # 有宇浩的私用區字根——量過那一幀 32 個字，缺 U+F485、U+F686 兩個，Yuniversus 兩個都
 # 有。格子是一格一個盒子排的，所以後備字體的字寬打不亂對齊；文楷有的字照舊是文楷。
 MONO = '"LXGW WenKai Mono GB", "Yuniversus", "Sarasa Mono SC", Menlo, monospace'
@@ -144,9 +144,8 @@ def render(md):
 # 終端畫面按「一個漢字兩格」排，這兩個數必須是這個比，不然整幅畫面散開。
 SHOT_PX = 15.0
 CELL = SHOT_PX / 2
-# **行高就是格高**（2026-10-13 報的）。終端的一行就是一格高，而這一塊是在模仿終端：
-# 行高一旦大過 1，框綫字之間就空出一截，竪綫斷成虛綫——報的原話：「there a gaps in the
-# table border (vertical)」。
+# **行高就是格高**。終端的一行就是一格高，而這一塊是在模仿終端：
+# 行高一旦大過 1，框綫字之間就空出一截，竪綫斷成虛綫。
 #
 # Warning: **底下那個 `scaleY` 不夠補**：`│` 的墨跡只佔字身框的四分之三上下，1.45 倍在
 # 一格高的行裏剛好蓋滿，在 1.5 倍行高的行裏只蓋到 1.09／1.5。要靠拉伸撐住 1.5 的行高得
@@ -186,7 +185,7 @@ def cells(ch, nxt=""):
 
 
 # 框綫字。**鎖進格子之後它們會斷成虛綫**——字形本身不占滿一格，而真終端會把它拉滿。
-# 2026-09-19 踩過一次：看圖的原話是「可以不用虛綫的吧」，而編輯器畫的一直是實綫。
+# 編輯器畫的是實綫，圖也要是實綫。
 # 橫的往寬裏拉一點，竪的往高裏拉一截。
 ACROSS = "─━┄┅┈┉╌╍┬┴┼┭┮┯┰┱┲┵┶┷┸┹┺┻"
 DOWN = "│┃┆┇┊┋╎╏├┤┼╭╮╰╯┌┐└┘┝┞┟┠┡┢┥┦┧┨┩┪"
@@ -217,7 +216,7 @@ def pin(shot, wide):
             for i, ch in enumerate(text):
                 w = cells(ch, text[i + 1] if i + 1 < len(text) else "")
                 if w:
-                    # Warning: **一條 `transform`，不是兩條**（2026-10-13 修）。從前
+                    # Warning: **一條 `transform`，不是兩條**。從前
                     # 橫的一條、竪的一條各自往 `style` 上接，而 CSS 裏後一條直接頂掉
                     # 前一條——`┬ ┴ ┼` 這幾個兩組都在的字於是只拉長不拉寬，接點比旁
                     # 邊那條橫綫細一截。
@@ -225,12 +224,11 @@ def pin(shot, wide):
                     sy = 1.9 if ch in DOWN else 1.0
                     box = ""
                     if (sx, sy) != (1.0, 1.0):
-                        # Warning: **拉伸之外還要 `z-index`**（2026-10-13 修）。每一格
+                        # Warning: **拉伸之外還要 `z-index`**。每一格
                         # 自帶底色，而後畫的蓋先畫的——拉長的那一截伸進下一行，正好
                         # 被下一行那一格的底色蓋掉，於是竪綫照樣是虛的。拉多少都沒
                         # 用（1.45／1.7／1.9 三個量過，三張圖一模一樣），因為問題不
-                        # 在長度在次序。報的原話：「there a gaps in the table border
-                        # (vertical)」。
+                        # 在長度在次序。
                         box = f";transform:scale({sx},{sy});z-index:1"
                     out.append(
                         f'<i style="{style};left:{at * CELL:.1f}px;'
@@ -263,7 +261,7 @@ def page(version, body, shot, url, width=1080, pad=64, base=19.0):
     def px(n):
         return round(n * k, 1)
 
-    # Warning: **只有正文按那個倍率放大，頁眉頁腳不跟**（2026-10-04 量出來的）。
+    # Warning: **只有正文按那個倍率放大，頁眉頁腳不跟**。
     # 第一版把 `k` 乘到了每一處，於是 46px 的標題成了 92px——「宇夢編輯器」五個字
     # 一行放不下，折成了「宇夢編輯/器」；頁腳同理，網址和 `Apache-2.0` 撞成了
     # `…v0.4.0Apache-2.0`。那兩條是裝飾與元信息，不是拿來讀的，所以走平方根：
@@ -372,8 +370,7 @@ def shoot(work, out, scale=1.0, width=1080):
     ).stdout
     found = re.search(r'data-h="(\d+)"', high)
     tall = int(found.group(1)) if found else 4000
-    # Warning: **清晰度靠 DPR，不靠把頁面做大**（2026-10-04 報上來的：「上次的清晰度
-    # 不高」）。`--window-size` 給的是 **CSS 像素**，Chrome 缺省 DPR 是 1，所以
+    # Warning: **清晰度靠 DPR，不靠把頁面做大**。`--window-size` 給的是 **CSS 像素**，Chrome 缺省 DPR 是 1，所以
     # 1080 的頁面出來就是 1080 的圖——在手機上放大看就是糊的。
     # `--force-device-scale-factor=2` 出 2160，版面一格不動。
     subprocess.run(
@@ -420,7 +417,7 @@ def main():
     global SHOT_PX, CELL
     cols = int(a.size.split("x")[0])
     # Warning: **留 3% 餘地。** 鋪滿到小數點那一位，88 欄算出來是 910.8px 而框內只有
-    # 910px——`overflow:hidden` 把最後一列切了半格（2026-10-04 看圖看出來的）。
+    # 910px——`overflow:hidden` 把最後一列切了半格。
     SHOT_PX = round((a.page_width - 2 * pad - 40) / cols * 2 * 0.97, 1)
     CELL = SHOT_PX / 2
 
@@ -446,7 +443,7 @@ def main():
         print("Warning: 這幾行寬度對不上，圖上會歪：" + "；".join(off), file=sys.stderr)
 
     url = f"https://github.com/{a.repo}/releases/tag/v{a.version}"
-    # **生成物進 `local/`**（2026-09-26 定的）。那個目錄本來就是為這種東西留的
+    # **生成物進 `local/`**。那個目錄本來就是為這種東西留的
     # ——`.gitignore` 裏一行 `/local/` 蓋住整棵樹，不必為每一種生成物再加一條規則，
     # 倉根也不會攢下一堆圖。
     out = pathlib.Path(a.out or HERE / "local" / "figures" / f"release-card-{a.version}.png")

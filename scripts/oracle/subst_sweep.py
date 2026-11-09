@@ -72,7 +72,7 @@ FIXTURES = [
     "alpha beta alpha\nxx alpha\nz\nalpha ALPHA a\n",
     "  a1 b22 c333\n\t你也是 a1 人類\nq\na1\n",
     # ⚠ **行尾要真有空白**，不然 `\\s+$` 那一式是空跑的（兩邊都原封不動，於是
-    # 「一樣」）。2026-10-10 第一版的兩個固定裝置就都沒有，白綠了一輪。
+    # 「一樣」）。
     "tail   \nkeep\n  both  \nz\t\n",
 ]
 
@@ -151,8 +151,8 @@ def main(only):
             lead = "gg" + "j" * line
             a = nvim(text, lead + v_cmd)
             b = yumete(text, lead + y_cmd)
-            # ⚠ **兩邊都原封不動的那一格證明不了任何事。** 2026-10-02 `vim_sweep`
-            # 栽過一次：2,350 格全綠而一格都沒驗。所以記下來，末尾印出「在**每一張**
+            # ⚠ **兩邊都原封不動的那一格證明不了任何事**：全綠可以是一格都沒驗。
+            # 所以記下來，末尾印出「在**每一張**
             # 固定裝置上都沒咬着」的那幾式——一張上沒咬着是正常的（那張沒有那個詞）。
             bit.setdefault(n, []).append(a != text or b != text)
             if a != b:

@@ -14,11 +14,11 @@ yumete-cjk = {path = "../yumete-cjk"}
 yumete-config = {path = "../yumete-config"}
 yumete-core = {path = "../yumete-core"}
 yumete-ime = {path = "../yumete-ime"}
-# The rendered Markdown preview (2026-11-08): its colours come from the
+# The rendered Markdown preview: its colours come from the
 # editor's palette (`preview_theme`) and its formulas from `tex`.
 yumete-mdview = {path = "../yumete-mdview"}
 
-# **TeX formulas as pictures** (2026-11-08): KaTeX's layout in Rust, with
+# **TeX formulas as pictures**: KaTeX's layout in Rust, with
 # KaTeX's fonts built in (`embed-fonts`), for Markdown's formulas in the
 # formula float. In the process and well under a millisecond a formula,
 # where the `typst` command and the bundled `mitex` package it replaces took
@@ -32,8 +32,7 @@ ratex-types = "0.1.15"
 # standard error, so that no later render has to point it away (`tex.rs`).
 ratex-unicode-font = "0.1.15"
 
-# **The preview's page in the theme's colours** (2026-11-08,
-# `:preview-theme`): the PNG tinymist hands over is read, each pixel
+# **The preview's page in the theme's colours** (`:preview-theme`): the PNG tinymist hands over is read, each pixel
 # mapped from paper and ink to the theme's, and written again. Already in
 # the tree under `ratex-render`; MIT or Apache-2.0.
 png = "0.17"

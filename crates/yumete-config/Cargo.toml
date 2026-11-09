@@ -10,7 +10,7 @@ version.workspace = true
 serde = {version = "1", features = ["derive"]}
 # A language server's `config` is any table and goes out as JSON.
 serde_json = "1"
-# `preserve_order` (2026-11-05): a key table is read in the file's order, which
+# `preserve_order`: a key table is read in the file's order, which
 # is the order its group's menu lists the keys in. It is `indexmap`, already in
 # the lock file under `toml_edit`.
 toml = {version = "0.8", features = ["preserve_order"]}

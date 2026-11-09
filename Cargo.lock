@@ -2513,8 +2513,8 @@ dependencies = [
 
 [[package]]
 name = "tree-sitter-typst"
-version = "0.1.2"
-source = "git+https://github.com/forfudan/tree-sitter-typst?tag=v0.1.2#dde8e107dd29724425d02a92304b450f565b3a19"
+version = "0.1.3"
+source = "git+https://github.com/forfudan/tree-sitter-typst?tag=v0.1.3#0937608a72d78f3aee10a587c372345555e82a86"
 dependencies = [
  "cc",
  "tree-sitter-language",

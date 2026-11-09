@@ -13,13 +13,13 @@ path = "src/main.rs"
 [target.'cfg(unix)'.dependencies]
 # The self-output test caps the child's file size, so a regression of the bug it
 # guards (a search that reads its own output) fails the test instead of filling
-# the disk the way it did on 2026-10-19. `--import vim` and `nvim` (2026-11-08)
+# the disk. `--import vim` and `nvim`
 # kill the editor's whole process group when it is done, so nothing it started
 # outlives the run. Already in the lock file.
 libc = "0.2"
 
 [dependencies]
-# `--import` (2026-11-06) reads another editor's files: helix's TOML, in the
+# `--import` reads another editor's files: helix's TOML, in the
 # order it was written so the imported tables keep it, and LazyVim's
 # `lazyvim.json`. Both were already in the lock file (`yumete-config` and
 # `yumete-core` use them).
@@ -28,7 +28,7 @@ toml = {version = "0.8", features = ["preserve_order"]}
 yumete-config = {path = "../yumete-config"}
 yumete-core = {path = "../yumete-core"}
 yumete-ime = {path = "../yumete-ime"}
-# `--md-render` (2026-11-08), the rendered Markdown preview drawn to PNG files
+# `--md-render`, the rendered Markdown preview drawn to PNG files
 # without the editor.
 yumete-mdview = {path = "../yumete-mdview"}
 yumete-tables = {path = "../yumete-tables"}

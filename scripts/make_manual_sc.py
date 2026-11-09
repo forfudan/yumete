@@ -35,7 +35,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-# **繁體正本在哪就從哪讀**（2026-10-17）。中文手冊不在倉裏了——它和
+# **繁體正本在哪就從哪讀**。中文手冊不在倉裏了——它和
 # `development.md` 一起搬進了 `local/`，那個目錄 git 不跟。先看倉裏（別人 clone
 # 了還想用這支的話），再看 `local/`。
 def _source() -> Path | None:
@@ -80,9 +80,9 @@ MAINLAND = re.compile("|".join(re.escape(w) for w in WORDS))
 
 
 def main() -> int:
-    # **沒有正本就什麼都不做**（2026-10-17 作者定）。中文手冊搬出倉之後，一份乾
-    # 淨的 clone 裏本來就沒有它可讀，而那不是錯——這一支是作者改完中文手冊纔跑
-    # 的，不是建置的一環。
+    # **沒有正本就什麼都不做**。中文手冊搬出倉之後，一份乾
+    # 淨的 clone 裏本來就沒有它可讀，而那不是錯——這一支是改完中文手冊纔跑的，
+    # 不是建置的一環。
     if SRC is None or OUT is None:
         print("找不到 manual_tc.md（docs/ 或 local/ 都沒有），沒有要生成的東西")
         return 0
