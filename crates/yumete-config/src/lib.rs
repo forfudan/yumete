@@ -5414,7 +5414,7 @@ impl RawConfig {
             match one_character(&character, true) {
                 true => config.editor.indent_guides_character = character,
                 false => problems.push(said(
-                    format!("[editor] indent_guides_character = \"{character}\"：要一個佔一格的字符"),
+                    format!("[editor] indent_guides_character = \"{character}\"：只能是一個佔一格的字符"),
                     format!("[editor] indent_guides_character = \"{character}\": one character, one cell wide"),
                 )),
             }
@@ -5453,7 +5453,7 @@ impl RawConfig {
             match one_character(&symbol, false) {
                 true => config.editor.indent_symbol = symbol,
                 false => problems.push(said(
-                    format!("[editor] indent_symbol = \"{symbol}\"：要一個字符"),
+                    format!("[editor] indent_symbol = \"{symbol}\"：只能是一個字符"),
                     format!("[editor] indent_symbol = \"{symbol}\": one character"),
                 )),
             }
