@@ -1401,6 +1401,25 @@ impl Engine {
         let mut b = Out::default();
         let mut y = 0.0;
         self.block(block, 0.0, room, &mut y, &mut b, cx);
+        // **Front matter is framed as wide as its lines**, as the export's
+        // page sets it (`max-inline-size`, no wider than its text): framed
+        // the whole of `room`, a few short lines would take most of the
+        // first screen across.
+        if let BlockKind::FrontMatter(_) = block.kind {
+            let words = |i: &Item| match i {
+                Item::Text { x, text, .. } => Some((*x, x + text.layout.width())),
+                _ => None,
+            };
+            let pad = b.items.iter().filter_map(words).map(|(x, _)| x).fold(f32::MAX, f32::min);
+            let end = b.items.iter().filter_map(words).map(|(_, end)| end).fold(0.0, f32::max);
+            if pad < f32::MAX {
+                for item in &mut b.items {
+                    if let Item::Frame { r, .. } = item {
+                        r.x1 = r.x1.min(r.x0 + f64::from(end + pad));
+                    }
+                }
+            }
+        }
         let w = b.items.iter().map(|i| match i {
             Item::Text { x, text, .. } => x + text.layout.width(),
             Item::Rect { r, .. } | Item::Frame { r, .. } => r.x1 as f32,
@@ -2154,6 +2173,18 @@ mod tests {
         assert!(!cols.iter().any(|c| c.contains("Table:")), "{cols:?}");
         assert!(at("事件") < at("1958") && at("1958") < at("建站") && at("建站") < at("2003"), "{cols:?}");
         assert_eq!(p.placed.len(), 1, "the caption is the table's");
+    }
+
+    /// **Front matter down the page is framed as wide as its lines**, not
+    /// across most of the screen, and the columns of the text follow it.
+    #[test]
+    fn front_matter_down_the_page_is_framed_as_wide_as_its_lines() {
+        let p = page("---\ntitle: 樣張\ndate: 1958\n---\n\n# 標題\n\n那年冬天，雪下得很大。\n", Latin::Turn, 600);
+        let frame = p.placed[0].laid.items.iter().find_map(|i| if let Item::Frame { r, .. } = i { Some(*r) } else { None });
+        let frame = frame.expect("the frame");
+        assert!(frame.width() < 200.0, "{} of 800 across", frame.width());
+        let cols = columns_of(&p);
+        assert!(cols.iter().any(|c| c.contains("標題")), "{cols:?}");
     }
 
     /// **Ruby** (2026-11-08): the reading is drawn beside its base, and a
