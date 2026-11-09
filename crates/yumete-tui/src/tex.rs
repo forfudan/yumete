@@ -15,15 +15,21 @@
 //!
 //! - **It writes to standard error** (`ratex-unicode-font`) the first time it
 //!   looks for a font for a character KaTeX's fonts lack — a 漢字 in
-//!   `\text{}` — and standard error is the screen. Every render runs with
-//!   standard error pointed at a file of its own ([`quietly`]); whatever was
-//!   said goes to `yumete.log`. Per render rather than once at start-up,
-//!   because which formula first needs the font, and whether any ever does,
-//!   is not known, and pointing it away costs a few microseconds. A lock
-//!   keeps two renders from crossing.
+//!   `\text{}` — and standard error is the screen. Those two lookups are
+//!   each made once a process, so [`quietly`] makes them itself, with
+//!   standard error pointed at a file of its own, at the first formula that
+//!   is not plain ASCII; whatever was said goes to `yumete.log`. From then on
+//!   nothing in RaTeX writes there and no render touches standard error.
+//!   Until then a render points it away too, in case a plain formula reaches
+//!   for a font: **standard error is the whole process's**, and a command
+//!   started while it points at the file would write into the file, so
+//!   pointing it away and starting a command that shares it
+//!   ([`stderr_steady`], `:!`) take one lock. Not at start-up: the two
+//!   fonts are some eighty megabytes, and a session may draw no formula.
 //! - **It may panic** on input it was not written for. A panic in it is
-//!   caught ([`render`]) and said as the formula's error; the front end's
-//!   panic hook leaves the screen alone for it ([`panicking_quietly`]).
+//!   caught ([`render`]) and said as the formula's error; the panic hook
+//!   writes its message to the log instead of the screen, and the front
+//!   end's leaves the screen alone for it ([`panicking_quietly`]).
 //!
 //! **The font for 漢字 in a formula** is RaTeX's own choice, and the only way
 //! to make it is the `RATEX_UNICODE_FONT` variable: [`choose_cjk_font`] sets
@@ -63,6 +69,9 @@ pub fn cjk_font() -> Option<&'static str> {
 /// before any thread is started — changing the environment is safe only
 /// then.
 pub fn choose_cjk_font() {
+    // The hook is wrapped here too, before any thread, so the front end's
+    // own wraps it rather than racing it.
+    hold_quiet_panics();
     if std::env::var_os("RATEX_UNICODE_FONT").is_some() {
         return;
     }
@@ -195,7 +204,7 @@ fn draw(tex: &str, display: bool, ink: Ink, size: f32, padding: f32, dpr: f32) -
         font_dir: String::new(),
         device_pixel_ratio: dpr,
     };
-    let made = quietly(|| {
+    let made = quietly(tex, || {
         QUIET_PANIC.with(|q| q.set(true));
         let made = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let ast = ratex_parser::parser::parse(tex).map_err(|e| e.to_string())?;
@@ -224,21 +233,68 @@ fn tidy(said: &str) -> String {
         .to_string()
 }
 
-/// One lock for every render: standard error is the process's, and two
-/// renders pointing it away at once would each put back the other's file.
+/// One lock for standard error while a render may point it away: two
+/// renders would each put back the other's file, and a command started in
+/// between would write into it.
 static QUIET: Mutex<()> = Mutex::new(());
 
-/// **Run `f` with standard error pointed into a file of its own**, then put
-/// it back, and note in the log whatever was written there.
-fn quietly<T>(f: impl FnOnce() -> T) -> T {
-    let _held = QUIET.lock().unwrap_or_else(|e| e.into_inner());
+/// Whether RaTeX's two font lookups have been made, under [`quietly`]: from
+/// then on it writes nothing to standard error.
+static WARM: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// **Standard error held as the process's own** while the guard lives: a
+/// command that shares the editor's standard error is started under it, so
+/// it never inherits the file a render points standard error at.
+pub fn stderr_steady() -> std::sync::MutexGuard<'static, ()> {
+    QUIET.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// **Run `f`, the render of `tex`, with nothing reaching the screen.**
+///
+/// Once RaTeX has looked for its fonts, `f` just runs. Before, standard
+/// error is pointed into a file of its own for it, under [`QUIET`], and put
+/// back after, whatever was written there noted in the log; a `tex` that is
+/// not plain ASCII is the one that has RaTeX's fonts looked for then, both
+/// at once, after which no render needs to point it away.
+fn quietly<T>(tex: &str, f: impl FnOnce() -> T) -> T {
+    use std::sync::atomic::Ordering;
+    hold_quiet_panics();
+    if WARM.load(Ordering::Acquire) {
+        return f();
+    }
+    let held = stderr_steady();
+    if WARM.load(Ordering::Acquire) {
+        drop(held);
+        return f();
+    }
     let Some(away) = Away::start() else { return f() };
+    if !tex.is_ascii() {
+        let _ = ratex_unicode_font::unicode_font_data_ref();
+        let _ = ratex_unicode_font::fallback_font_data_ref();
+        WARM.store(true, Ordering::Release);
+    }
     let out = f();
     let said = away.finish();
+    drop(held);
     if !said.trim().is_empty() {
         yumete_core::diag::note("formula", said.trim());
     }
     out
+}
+
+/// **A panic RaTeX's render catches is written to the log**, not to
+/// standard error, which is the screen and, once RaTeX has its fonts, is
+/// left where it is: the hook in force is wrapped once, and goes on for
+/// every other panic.
+fn hold_quiet_panics() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        let previous = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| match panicking_quietly() {
+            true => yumete_core::diag::note("formula", &info.to_string()),
+            false => previous(info),
+        }));
+    });
 }
 
 /// Standard error, pointed away.
@@ -395,13 +451,43 @@ impl Key {
     }
 }
 
-/// How many formulas are kept drawn.
+/// How many formulas are kept drawn, and how many bytes of their pictures:
+/// the float draws every version of the formula being typed, and one of a
+/// sixty-row `aligned` is two megabytes of PNG, so a count alone would keep
+/// a gigabyte.
 const KEPT: usize = 512;
+const KEPT_BYTES: usize = 32 << 20;
 
 #[derive(Default)]
 struct Shelf {
     made: HashMap<Key, Result<Arc<Picture>, String>>,
     order: VecDeque<Key>,
+    /// What the kept pictures and their keys cost, in bytes.
+    bytes: usize,
+}
+
+/// What keeping `made` under `key` costs.
+fn cost(key: &Key, made: &Result<Arc<Picture>, String>) -> usize {
+    key.tex.len() + made.as_ref().map_or_else(String::len, |p| p.png.len())
+}
+
+impl Shelf {
+    /// Keep `made`, letting the oldest go until no more than [`KEPT`]
+    /// formulas and [`KEPT_BYTES`] are kept; the newest is kept whatever it
+    /// costs.
+    fn keep(&mut self, key: &Key, made: &Result<Arc<Picture>, String>) {
+        self.bytes += cost(key, made);
+        match self.made.insert(key.clone(), made.clone()) {
+            Some(old) => self.bytes -= cost(key, &old),
+            None => self.order.push_back(key.clone()),
+        }
+        while self.order.len() > KEPT || (self.bytes > KEPT_BYTES && self.order.len() > 1) {
+            let Some(old) = self.order.pop_front() else { break };
+            if let Some(gone) = self.made.remove(&old) {
+                self.bytes -= cost(&old, &gone);
+            }
+        }
+    }
 }
 
 static SHELF: Mutex<Option<Shelf>> = Mutex::new(None);
@@ -416,15 +502,7 @@ pub fn picture(key: &Key) -> Result<Arc<Picture>, String> {
     }
     let made = render(&key.tex, key.display, key.ink, key.size as f32 / 10.0).map(Arc::new);
     let mut shelf = SHELF.lock().unwrap_or_else(|e| e.into_inner());
-    let shelf = shelf.get_or_insert_with(Shelf::default);
-    if shelf.made.insert(key.clone(), made.clone()).is_none() {
-        shelf.order.push_back(key.clone());
-    }
-    while shelf.order.len() > KEPT {
-        if let Some(old) = shelf.order.pop_front() {
-            shelf.made.remove(&old);
-        }
-    }
+    shelf.get_or_insert_with(Shelf::default).keep(key, &made);
     made
 }
 
@@ -513,6 +591,32 @@ mod tests {
         assert!(tidy("ParseError: Undefined control sequence: \\foo").starts_with("Undefined control sequence"));
     }
 
+    /// **The shelf keeps to a budget in bytes as well as in formulas**: big
+    /// pictures let the oldest go well before 512 are kept, small ones up to
+    /// 512, and the newest stays however big it is.
+    #[test]
+    fn the_shelf_keeps_to_a_budget_in_bytes() {
+        let key = |n: usize| Key { tex: format!("x_{{{n}}}"), display: true, ink: INK, size: 200 };
+        let pic = |bytes: usize| Ok(Arc::new(Picture { png: vec![0; bytes], width: 1, height: 1 }));
+        let mut shelf = Shelf::default();
+        for n in 0..600 {
+            shelf.keep(&key(n), &pic(2 << 20));
+            assert!(shelf.bytes <= KEPT_BYTES, "{n}: {}", shelf.bytes);
+        }
+        assert_eq!(shelf.made.len(), shelf.order.len());
+        assert!(shelf.made.len() < 20 && shelf.made.contains_key(&key(599)), "{}", shelf.made.len());
+        let mut shelf = Shelf::default();
+        for n in 0..600 {
+            shelf.keep(&key(n), &pic(100));
+        }
+        assert_eq!(shelf.made.len(), KEPT);
+        shelf.keep(&key(1000), &pic(KEPT_BYTES * 2));
+        assert_eq!(shelf.made.len(), 1, "the newest, alone");
+        // Drawn again, a formula costs what it costs now, once.
+        shelf.keep(&key(1000), &pic(10));
+        assert_eq!(shelf.bytes, cost(&key(1000), &pic(10)));
+    }
+
     #[test]
     fn a_drawn_formula_is_kept() {
         let key = Key { tex: r"\alpha+\beta".to_string(), display: false, ink: INK, size: 200 };
@@ -520,6 +624,33 @@ mod tests {
         let again = picture(&key).unwrap();
         assert!(Arc::ptr_eq(&first, &again), "drawn once");
         assert_ne!(key.hash(), Key { size: 210, ..key.clone() }.hash());
+    }
+
+    /// **Once RaTeX has looked for its fonts no render touches standard
+    /// error**, which is the whole process's: a command started meanwhile
+    /// on another thread would inherit whatever it pointed at.
+    #[cfg(unix)]
+    #[test]
+    fn after_the_fonts_a_render_leaves_standard_error_alone() {
+        let _ = render(r"\text{面积} = \pi r^2", true, INK, 24.0);
+        let stat = || {
+            // SAFETY: `fstat` on descriptor 2 into a zeroed struct.
+            let mut st: libc::stat = unsafe { std::mem::zeroed() };
+            assert_eq!(unsafe { libc::fstat(libc::STDERR_FILENO, &mut st) }, 0);
+            (st.st_dev, st.st_ino)
+        };
+        let own = stat();
+        let drawing = std::thread::spawn(|| {
+            for n in 0..200 {
+                let _ = render(&format!(r"x^{{{n}}} + \frac{{a}}{{{n}}}"), false, INK, 20.0);
+            }
+        });
+        let mut looked = 0;
+        while !drawing.is_finished() {
+            assert_eq!(stat(), own, "standard error pointed away after {looked} looks");
+            looked += 1;
+        }
+        drawing.join().unwrap();
     }
 
     /// **Nothing reaches the screen** (2026-11-08): RaTeX says which font it

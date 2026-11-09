@@ -98,6 +98,44 @@ pub struct PageTarget {
     /// The buffer and its revision, so a new edit is told from an old one.
     pub buffer: u64,
     pub revision: u64,
+    /// **The place tinymist is asked to show**, line and character, from 0:
+    /// see [`follow_place`].
+    pub follow: (usize, usize),
+}
+
+/// How many lines from a blank one [`follow_place`] looks for text.
+const FOLLOW_REACH: usize = 1000;
+
+/// **The place a page is asked to follow** for the cursor at `line`,
+/// `character` of `rope`.
+///
+/// **The place after the character the cursor stands on**: tinymist looks at
+/// what comes before the place it is given, and at the start of a line that
+/// is the line break, which is on no page (0.15.12 gives no jump at character
+/// 0). **On a blank line, the nearest line with text**: a blank line is on no
+/// page either, and `:N`, `{` and `}` land on them all the time. The line
+/// above is taken at its end, the place on the page just before the blank;
+/// the one below at its first character; the nearer wins, the one above when
+/// they are as near.
+pub fn follow_place(rope: &ropey::Rope, line: usize, character: usize) -> (usize, usize) {
+    let length = |k: usize| rope.line(k).chars().take_while(|c| *c != '\n' && *c != '\r').count();
+    let blank = |k: usize| rope.line(k).chars().all(char::is_whitespace);
+    let lines = rope.len_lines();
+    if line >= lines || !blank(line) {
+        return (line, (character + 1).min(length(line.min(lines.saturating_sub(1)))));
+    }
+    for d in 1..=FOLLOW_REACH {
+        if let Some(above) = line.checked_sub(d).filter(|&k| !blank(k)) {
+            return (above, length(above));
+        }
+        if let Some(below) = Some(line + d).filter(|&k| k < lines && !blank(k)) {
+            return (below, 1.min(length(below)));
+        }
+        if d > line && line + d >= lines {
+            break;
+        }
+    }
+    (line, 0)
 }
 
 /// A path as the language server was handed it, made absolute.
@@ -486,6 +524,7 @@ impl Editor {
             line_length,
             buffer: buffer.id(),
             revision: buffer.revision(),
+            follow: follow_place(rope, line, at - rope.line_to_char(line)),
         })
     }
 
@@ -621,5 +660,30 @@ impl Editor {
         };
         self.page_steps.push(step);
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// **The page follows the cursor onto a blank line**: the place after
+    /// the cursor's character on a line with text; on a blank one, the
+    /// nearest line with text, the one above at its end, the one below at
+    /// its first character.
+    #[test]
+    fn a_blank_line_follows_the_nearest_text() {
+        let rope = ropey::Rope::from_str("= 第一章\n\n第一段。\n\n\n\n第二段。\n   \n");
+        assert_eq!(follow_place(&rope, 0, 0), (0, 1), "after the character");
+        assert_eq!(follow_place(&rope, 2, 3), (2, 4), "at the end, the end");
+        assert_eq!(follow_place(&rope, 1, 0), (0, 5), "the line above, at its end");
+        assert_eq!(follow_place(&rope, 3, 0), (2, 4), "above, the nearer");
+        assert_eq!(follow_place(&rope, 5, 0), (6, 1), "below, the nearer");
+        assert_eq!(follow_place(&rope, 4, 0), (2, 4), "as near: the one above");
+        assert_eq!(follow_place(&rope, 7, 2), (6, 4), "spaces are blank");
+        assert_eq!(follow_place(&rope, 8, 0), (6, 4), "the empty last line");
+        let rope = ropey::Rope::from_str("\n\n\n標題\n");
+        assert_eq!(follow_place(&rope, 0, 0), (3, 1), "nothing above");
+        assert_eq!(follow_place(&ropey::Rope::from_str("\n\n"), 1, 0), (1, 0), "no text at all");
     }
 }

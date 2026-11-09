@@ -281,6 +281,18 @@ fn formulas_kept_are_bounded() {
     assert_eq!(p.kept().0, crate::layout::FORMULAS_KEPT);
 }
 
+/// **Big formulas are kept to a budget in bytes**: each version of one
+/// edited key by key is a new picture, and a few are kept, not a thousand.
+#[test]
+fn big_formulas_kept_are_bounded_in_bytes() {
+    let mut p = Preview::new(options(800), Box::new(Boxes));
+    for k in 0..60 {
+        p.set_text(&format!("$${}{k}$$\n", "x+".repeat(1200)));
+    }
+    let kept = p.kept().0;
+    assert!((1..40).contains(&kept), "{kept}");
+}
+
 #[test]
 fn every_block_kind_lays_out_and_draws() {
     let text = "---\ntitle: x\n---\n\n# H\n\npara **b** *i* `c` ==h== ~~s~~ [l](x) <kbd>K</kbd> <ruby>漢<rt>hàn</rt></ruby>[^1]\n\n\
@@ -420,4 +432,61 @@ fn quotes_follow_the_language_when_the_page_turns_vertical() {
     // A narrow font can break the line inside the quote.
     let all: String = p.visible_text(0.0, p.size().1).replace('\n', "");
     assert!(all.contains("“走吧”") && !all.contains('『'), "{all}");
+}
+
+/// **No depth of nesting takes the preview down**: a line of 3000 `>`, a
+/// list 600 deep, containers and notes nested 1000 deep are laid out across
+/// and down a page on a thread with the preview's own stack, and the words
+/// at the bottom are shown.
+#[test]
+fn deep_nesting_is_drawn_and_never_overflows() {
+    let quotes = format!("{} 最深處\n", ">".repeat(3000));
+    let list: String = (0..600).map(|k| format!("{}- 第{k}層\n", "  ".repeat(k))).collect();
+    let mixed = format!("{}最深處\n", "> - ".repeat(1500));
+    let fenced = format!("{}最深處\n{}", "::: tip\n".repeat(1000), ":::\n".repeat(1000));
+    let notes: String = std::iter::once("引[^0]\n\n[^0]: 甲\n".to_string()).chain((1..1000).map(|k| format!("  [^{k}]: 乙\n"))).collect();
+    for (text, deepest) in [(quotes, "最深處"), (list, "第599層"), (mixed, "最深處"), (fenced, "最深處"), (notes, "乙")] {
+        let found = std::thread::Builder::new()
+            .stack_size(2 << 20)
+            .spawn(move || {
+                let mut p = Preview::new(options(600), Box::new(NoFormulas));
+                p.set_height(800);
+                p.set_text(&text);
+                let across = p.visible_text(0.0, p.size().1);
+                p.render(0.0, 400);
+                p.set_vertical(Some(Vertical { latin: yumete_core::export::Latin::Turn, hanging: false }));
+                p.render(0.0, 400);
+                across.contains(deepest)
+            })
+            .expect("a thread")
+            .join()
+            .expect("no overflow");
+        assert!(found, "{deepest}");
+    }
+}
+
+/// **A long paragraph is laid out in time it is long**, across and down the
+/// page: single line breaks make a whole manuscript one paragraph, and each
+/// character's style, each run's reading and each reading's place are found
+/// without walking the paragraph again. Here 3000 lines with a reading and
+/// a code span on each.
+#[test]
+fn a_long_paragraph_with_readings_is_laid_out_in_one_pass() {
+    let line = "那年冬天<ruby>大雪<rt>dà xuě xuě</rt></ruby>，`code` 下得很大。";
+    let text = format!("{}\n", vec![line; 3000].join("\n"));
+    for vertical in [false, true] {
+        let mut p = Preview::new(options(800), Box::new(NoFormulas));
+        p.set_height(800);
+        if vertical {
+            p.set_vertical(Some(Vertical { latin: yumete_core::export::Latin::Turn, hanging: false }));
+        }
+        let began = std::time::Instant::now();
+        p.set_text(&text);
+        p.set_text(&text.replacen("很大", "很小", 1));
+        let took = began.elapsed();
+        eprintln!("vertical {vertical}: {took:?}");
+        assert!(took < std::time::Duration::from_secs(20), "vertical {vertical}: {took:?}");
+        let shown = p.visible_text(0.0, p.size().1);
+        assert!(shown.contains("那年冬天") && shown.contains("很小"), "{}", &shown[..200.min(shown.len())]);
+    }
 }

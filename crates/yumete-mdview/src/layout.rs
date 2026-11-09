@@ -135,14 +135,31 @@ pub(crate) struct Ctx {
     pub size: f32,
 }
 
-/// How many formulas are kept drawn.
+/// How many formulas are kept drawn, at most.
 pub(crate) const FORMULAS_KEPT: usize = 1024;
+/// How many bytes of formulas are kept drawn: each costs its pixels, or a
+/// share of this as if [`FORMULAS_KEPT`] filled it, whichever is more, so a
+/// big formula edited key by key keeps a few of its versions, not a thousand.
+pub(crate) const FORMULA_BYTES_KEPT: usize = 32 << 20;
 /// How many bytes of pictures are kept: two thirds for the pictures as read,
 /// one third for them scaled to the column.
 pub(crate) const IMAGE_BYTES_KEPT: usize = 96 << 20;
 
 /// When a picture's file last changed.
 pub(crate) type Stamp = u64;
+
+/// A styled stretch of a paragraph's text: its bytes, its marks, its colour
+/// if it has one of its own, and whether it is set small (a superscript).
+pub(crate) type Ranged = (std::ops::Range<usize>, Marks, Option<Rgba>, bool);
+
+/// **The stretch byte `at` is in**, if any. The stretches are pushed as the
+/// text grows, so they are in order and never overlap, and one is found by
+/// halving: asked at every character of a paragraph, a walk over all of them
+/// would make a long paragraph quadratic to lay out.
+pub(crate) fn ranged_at(ranges: &[Ranged], at: usize) -> Option<&Ranged> {
+    let k = ranges.partition_point(|(r, ..)| r.end <= at);
+    ranges.get(k).filter(|(r, ..)| r.contains(&at))
+}
 
 /// A formula, drawn: its picture, size and baseline (from its top).
 #[derive(Clone)]
@@ -176,7 +193,8 @@ pub(crate) struct Engine {
     font_list: String,
     /// Whether adjacent full-width marks are squeezed.
     pub squeeze: bool,
-    /// Formulas drawn, at most [`FORMULAS_KEPT`] of them.
+    /// Formulas drawn, at most [`FORMULAS_KEPT`] of them and
+    /// [`FORMULA_BYTES_KEPT`] of their pixels.
     formula_cache: Lru<(String, bool, Rgba, u32), Option<FormulaPic>>,
     /// Pictures read from disk, with the file's stamp when read, and those
     /// pictures scaled to the column: each kept to a budget in bytes.
@@ -207,7 +225,7 @@ impl Engine {
             squeeze: true,
             families: [Han::Simplified, Han::Traditional, Han::Japanese].map(|h| Arc::new(families(h, ""))),
             font_list: String::new(),
-            formula_cache: Lru::new(FORMULAS_KEPT),
+            formula_cache: Lru::new(FORMULA_BYTES_KEPT),
             images: Lru::new(IMAGE_BYTES_KEPT / 3 * 2),
             scaled: Lru::new(IMAGE_BYTES_KEPT / 3),
             sizes: std::collections::HashMap::new(),
@@ -255,7 +273,8 @@ impl Engine {
             let (w, h) = (pix.width() as f32, pix.height() as f32);
             Some(FormulaPic { pix: Arc::new(pix), width: w, height: h, baseline: f.baseline })
         });
-        self.formula_cache.put(key, made.clone(), 1);
+        let pixels = made.as_ref().map_or(0, |f| f.pix.width() as usize * f.pix.height() as usize * 4);
+        self.formula_cache.put(key, made.clone(), pixels.max(FORMULA_BYTES_KEPT / FORMULAS_KEPT));
         made
     }
 
@@ -339,7 +358,7 @@ impl Engine {
     /// **Lay `runs` out** in style `st`, `width` wide (or unbroken).
     pub(crate) fn text(&mut self, runs: &[Inline], st: Style, width: Option<f32>, align: Alignment) -> Text {
         let mut text = String::new();
-        let mut ranges: Vec<(std::ops::Range<usize>, Marks, Option<Rgba>, bool)> = Vec::new(); // marks, colour, superscript
+        let mut ranges: Vec<Ranged> = Vec::new(); // marks, colour, superscript
         let mut boxes: Vec<InlineBox> = Vec::new();
         let mut attach: Vec<Attach> = Vec::new();
         let mut src: Vec<(usize, usize)> = Vec::new();
@@ -474,12 +493,12 @@ impl Engine {
         if !st.mono && self.squeeze {
             let chars: Vec<(usize, char)> = text.char_indices().collect();
             let han_at = |at: usize| -> Han {
-                match ranges.iter().find(|(r, ..)| r.contains(&at)).map_or(0, |(_, m, _, _)| m.lang) {
+                match ranged_at(&ranges, at).map_or(0, |(_, m, _, _)| m.lang) {
                     0 => self.han,
                     n => [Han::Simplified, Han::Traditional, Han::Japanese][(n as usize - 1).min(2)],
                 }
             };
-            let plain = |at: usize| !ranges.iter().any(|(r, m, _, sup)| r.contains(&at) && (m.code || m.kbd || m.sup || m.sub || *sup));
+            let plain = |at: usize| !ranged_at(&ranges, at).is_some_and(|(_, m, _, sup)| m.code || m.kbd || m.sup || m.sub || *sup);
             for pair in chars.windows(2) {
                 let ((at, first), (_, second)) = (pair[0], pair[1]);
                 let han = han_at(at);
@@ -495,13 +514,13 @@ impl Engine {
             let chars: Vec<(usize, char)> = text.char_indices().collect();
             let wide = |c: char| yumete_cjk::char_width(c) == 2 && !cjk_punctuation(c);
             for (k, &(at, c)) in chars.iter().enumerate() {
-                if !cjk_punctuation(c) || ranges.iter().any(|(r, m, _, _)| r.contains(&at) && (m.code || m.kbd)) {
+                if !cjk_punctuation(c) || ranged_at(&ranges, at).is_some_and(|(_, m, _, _)| m.code || m.kbd) {
                     continue;
                 }
                 let before = chars[..k].iter().rev().map(|p| p.1).find(|c| !cjk_punctuation(*c) && !c.is_whitespace());
                 let after = chars[k + 1..].iter().map(|p| p.1).find(|c| !cjk_punctuation(*c) && !c.is_whitespace());
                 if before.is_some_and(wide) || after.is_some_and(wide) {
-                    let lang = ranges.iter().find(|(r, ..)| r.contains(&at)).map_or(0, |(_, m, _, _)| m.lang);
+                    let lang = ranged_at(&ranges, at).map_or(0, |(_, m, _, _)| m.lang);
                     b.push(StyleProperty::FontFamily(FontFamily::from(fam_of(lang).cjk_first.as_str())), at..at + c.len_utf8());
                 }
             }

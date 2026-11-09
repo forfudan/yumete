@@ -503,17 +503,15 @@ impl Talk {
         if self.task == Task::Running {
             if let Some(path) = target.as_ref().and_then(|t| t.path.as_ref()) {
                 let target = target.as_ref().expect("a target with a path");
-                // **The place after the character the cursor stands on**:
-                // tinymist looks at what comes before the place it is given,
-                // and at the start of a line that is the line break, which is
-                // on no page (measured with 0.15.12: no jump at character 0).
-                let character = (target.character + 1).min(target.line_length);
-                let place = (path.clone(), target.line, character);
+                // The place after the cursor's character, or on a blank line
+                // the nearest text (`follow_place`).
+                let (line, character) = target.follow;
+                let place = (path.clone(), line, character);
                 match &self.seen {
                     Some((seen, at)) if *seen == place => {
                         let settled = now.saturating_duration_since(*at) >= FOLLOW_AFTER;
                         if settled && self.told.as_ref() != Some(&place) && server_has_it(editor, servers) {
-                            let arguments = preview::scroll_preview_arguments(&self.task_id, path, target.line, character);
+                            let arguments = preview::scroll_preview_arguments(&self.task_id, path, line, character);
                             if servers.execute("tinymist.scrollPreview", &arguments, false).is_some() {
                                 self.told = Some(place);
                             }

@@ -1,6 +1,5 @@
 //! **A cache with a budget**: the least recently used entries go once what
-//! is kept costs more than it may. Formulas cost one each; pictures cost
-//! their bytes.
+//! is kept costs more than it may. Pictures and formulas cost their bytes.
 
 use std::collections::HashMap;
 use std::hash::Hash;

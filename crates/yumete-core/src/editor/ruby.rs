@@ -507,6 +507,26 @@ mod brace_tests {
         ed
     }
 
+    /// **A spelling typed alone is turned round from whether it is read**,
+    /// at 中階 too, where nothing is drawn: the first bare `:ruby-markdown`
+    /// or `:ruby-html` turns its spelling off, the next on and drawn.
+    #[test]
+    fn a_bare_spelling_turns_round_what_is_read() {
+        let mut ed = Editor::new();
+        ed.current_buffer_mut().set_syntax_by_hand(crate::syntax::Syntax::Markdown);
+        let _ = ed.current_buffer_mut().replace(0..0, "山顶的{气象站|qìxiàngzhàn}。");
+        ed.execute(":ruby-render basic").unwrap();
+        assert!(ed.ruby_configured().contains(Dialect::Markdown) && ed.ruby().is_empty());
+        for dialect in [Dialect::Markdown, Dialect::Html] {
+            ed.execute(&format!(":ruby-{}", dialect.name())).unwrap();
+            assert!(!ed.ruby_configured().contains(dialect), "{dialect:?} off: {}", ed.status());
+            assert!(ed.ruby().is_empty(), "nothing drawn");
+            ed.execute(&format!(":ruby-{}", dialect.name())).unwrap();
+            assert!(ed.ruby().contains(dialect), "{dialect:?} on and drawn: {}", ed.status());
+            ed.execute(":ruby-render basic").unwrap();
+        }
+    }
+
     /// **The brace form is read in a Markdown file, and elsewhere when asked**
     /// (2026-11-08): `:ruby-markdown` on, off, and bare to flip.
     #[test]

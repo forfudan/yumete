@@ -527,6 +527,11 @@ fn wrapper_line(body: &str) -> bool {
 }
 
 /// Reads blocks, numbering footnotes as they are cited.
+/// How deep quotes, lists, containers and notes nest before what is in them
+/// is read as paragraphs: more than any page shows, each level being
+/// indented.
+const DEEPEST: usize = 32;
+
 #[derive(Default)]
 struct Reader {
     cited: Vec<String>,
@@ -538,6 +543,9 @@ struct Reader {
     new: std::collections::HashMap<u64, Vec<Inline>>,
     /// The ruby spellings read.
     ruby: yumete_core::ruby::Dialects,
+    /// How many quotes, lists, containers and notes the lines being read
+    /// are inside.
+    depth: usize,
 }
 
 impl Reader {
@@ -573,6 +581,27 @@ impl Reader {
             _ => BlockKind::Paragraph(runs),
         };
         out.push(Block { lines: span, kind });
+    }
+
+    /// **The blocks inside a quote, a list item, a container or a note.**
+    ///
+    /// **Past [`DEEPEST`] levels the lines are paragraphs**, their markers
+    /// shown as written. Reading, laying out and every walk over the blocks
+    /// recurse once a level, on the preview's thread, whose stack overflowing
+    /// would take the editor and its unsaved work down with it; nothing is
+    /// deeper than `DEEPEST`, so nothing recurses further, whatever the text.
+    fn nested(&mut self, lines: &[Line]) -> Vec<Block> {
+        if self.depth >= DEEPEST {
+            let mut out = Vec::new();
+            for para in lines.split(|l| l.1.trim().is_empty()) {
+                self.paragraph(para, &mut out);
+            }
+            return out;
+        }
+        self.depth += 1;
+        let blocks = self.blocks(lines);
+        self.depth -= 1;
+        blocks
     }
 
     /// **Read `lines` into blocks**; footnotes are taken out of the flow.
@@ -660,7 +689,7 @@ impl Reader {
                         inner.push((*k, text.clone()));
                     }
                     let title = title.map(|t| self.inlines(&[(no, t)]));
-                    let body = self.blocks(&inner);
+                    let body = self.nested(&inner);
                     out.push(Block {
                         lines: (no, last),
                         kind: BlockKind::Callout { kind, name: name.to_string(), title, fenced: true, body },
@@ -718,7 +747,7 @@ impl Reader {
                         last = *k;
                         i += 1;
                     }
-                    let body = self.blocks(&text);
+                    let body = self.nested(&text);
                     self.notes.push(Note { number: 0, name: name.to_string(), lines: (no, last), body });
                     continue;
                 }
@@ -821,11 +850,11 @@ impl Reader {
                 match inner.first().and_then(|first| alert(&first.1)) {
                     Some((kind, name, title)) => {
                         let title = title.map(|t| self.inlines(&[(no, t)]));
-                        let body = self.blocks(&inner[1..]);
+                        let body = self.nested(&inner[1..]);
                         out.push(Block { lines: span, kind: BlockKind::Callout { kind, name, title, fenced: false, body } });
                     }
                     None => {
-                        let body = self.blocks(&inner);
+                        let body = self.nested(&inner);
                         out.push(Block { lines: span, kind: BlockKind::Quote(body) });
                     }
                 }
@@ -917,7 +946,7 @@ impl Reader {
                 held[0].1 = held[0].1.get(3..).unwrap_or_default().trim_start().to_string();
             }
             let last = held.iter().rev().find(|l| !l.1.trim().is_empty()).map_or(opener, |l| l.0);
-            let body = self.blocks(&held);
+            let body = self.nested(&held);
             // A loose item's blank line between two blocks makes the list loose.
             items.push(Item { task, lines: (opener, last), body });
             let mut at = *i;
@@ -1034,13 +1063,33 @@ impl Reader {
             m.link |= url;
             m
         };
+        // **Each construct's formula and closing marker, and the next ruby
+        // group, are found once**, not over every span and every group at
+        // every character: a paragraph may be a whole manuscript.
+        let mut maths_of: std::collections::HashMap<usize, markdown::Span> = std::collections::HashMap::new();
+        let mut closer_of: std::collections::HashMap<usize, markdown::Span> = std::collections::HashMap::new();
+        for s in &spans {
+            match s.kind {
+                SpanKind::Math => {
+                    maths_of.entry(s.construct).or_insert(*s);
+                }
+                SpanKind::Marker => {
+                    closer_of.insert(s.construct, *s);
+                }
+                _ => {}
+            }
+        }
+        let mut next_group = 0;
         let mut out: Vec<Inline> = Vec::new();
         let mut html = Marks::default();
         let mut spans_open: Vec<u8> = Vec::new();
         let mut i = 0;
         while i < chars.len() {
             let line = line_at(i);
-            if let Some(group) = groups.iter().find(|g| g.start == i) {
+            while groups.get(next_group).is_some_and(|g| g.start < i) {
+                next_group += 1;
+            }
+            if let Some(group) = groups.get(next_group).filter(|g| g.start == i) {
                 let base = group.base_of(&chars);
                 let reading = group.reading_of(&chars);
                 let marks = marks_at(i, html, false);
@@ -1059,8 +1108,8 @@ impl Reader {
                 i = group.end.max(i + 1);
                 continue;
             }
-            let owner = |construct: usize, kind: SpanKind| spans.iter().find(|s| s.construct == construct && s.kind == kind);
-            let last_marker = |construct: usize| spans.iter().rfind(|s| s.construct == construct && s.kind == SpanKind::Marker);
+            let maths = |construct: usize| maths_of.get(&construct);
+            let last_marker = |construct: usize| closer_of.get(&construct);
             match hides[i].map(|k| &spans[k]) {
                 None => {
                     let c = chars[i];
@@ -1095,8 +1144,8 @@ impl Reader {
                         }
                     }
                     // `$…$`: the formula.
-                    SpanKind::Marker | SpanKind::Math if chars.get(i) == Some(&'$') && span.start == i && owner(span.construct, SpanKind::Math).is_some() => {
-                        let body = owner(span.construct, SpanKind::Math).copied();
+                    SpanKind::Marker | SpanKind::Math if chars.get(i) == Some(&'$') && span.start == i && maths(span.construct).is_some() => {
+                        let body = maths(span.construct).copied();
                         let close = last_marker(span.construct).filter(|c| c.start > i);
                         match (body, close) {
                             (Some(body), Some(close)) => {

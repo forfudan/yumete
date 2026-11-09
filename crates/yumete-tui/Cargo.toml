@@ -28,6 +28,9 @@ ratex-layout = "0.1.15"
 ratex-parser = "0.1.15"
 ratex-render = { version = "0.1.15", features = ["embed-fonts"] }
 ratex-types = "0.1.15"
+# Where RaTeX finds a font for a 漢字, asked for here once under a quiet
+# standard error, so that no later render has to point it away (`tex.rs`).
+ratex-unicode-font = "0.1.15"
 
 # **The preview's page in the theme's colours** (2026-11-08,
 # `:preview-theme`): the PNG tinymist hands over is read, each pixel

@@ -443,9 +443,10 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::RenderRuby { dialect, on } => {
-                // Turned round from what the page draws, not what was asked
-                // for: at 中階 nothing is drawn, so the toggle shows it.
-                self.render_ruby(dialect, on.over(self.ruby().contains(dialect)));
+                // Turned round from whether the spelling is read, as a
+                // switch typed alone turns its setting round: at 中階, where
+                // nothing is drawn, a spelling that is read is turned off.
+                self.render_ruby(dialect, on.over(self.ruby_configured().contains(dialect)));
                 let listed_names: Vec<String> =
                     self.ruby_configured().iter().map(|d| d.name().to_string()).collect();
                 self.status = if listed_names.is_empty() {

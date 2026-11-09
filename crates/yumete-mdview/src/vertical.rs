@@ -38,7 +38,7 @@ use parley::{FontData, FontFamily, FontStyle, FontWeight, LineHeight, StylePrope
 use vello_cpu::kurbo::Affine;
 use yumete_core::export::{Latin, Orientation, CODE_HANG, CODE_HOOK};
 
-use crate::layout::{closing_mark, ink_of, opening_mark, push_marks, rect, Ctx, Engine, Ink, Item, Laid, Out, Pix, Run, Style};
+use crate::layout::{closing_mark, ink_of, opening_mark, push_marks, ranged_at, rect, Ctx, Engine, Ink, Item, Laid, Out, Pix, Ranged, Run, Style};
 use crate::parse::{Align, Block, BlockKind, Callout, Inline, InlineKind, Marks};
 use crate::theme::Rgba;
 
@@ -289,7 +289,7 @@ impl Engine {
         let latin = self.vertical.map_or(Latin::Turn, |v| v.latin);
         let mut text = String::new();
         // Each range's marks, its own colour, and whether it is small.
-        let mut ranges: Vec<(Range<usize>, Marks, Option<Rgba>, bool)> = Vec::new();
+        let mut ranges: Vec<Ranged> = Vec::new();
         let mut atoms: Vec<(usize, Look, f32, f32)> = Vec::new();
         let mut rubies: Vec<(Range<usize>, String)> = Vec::new();
         let mut src: Vec<(usize, usize)> = Vec::new();
@@ -360,10 +360,11 @@ impl Engine {
         if src.is_empty() {
             src.push((0, 0));
         }
-        let code_at = |at: usize| ranges.iter().any(|(r, m, ..)| r.contains(&at) && (m.code || m.kbd));
-        let small_at = |at: usize| ranges.iter().any(|(r, _, _, small)| r.contains(&at) && *small);
+        // Found by halving, not by walking every stretch at every character.
+        let code_at = |at: usize| ranged_at(&ranges, at).is_some_and(|(_, m, ..)| m.code || m.kbd);
+        let small_at = |at: usize| ranged_at(&ranges, at).is_some_and(|(_, _, _, small)| *small);
         // Code is verbatim: turned whole, 漢字 and all (2026-11-08).
-        let verbatim_at = |at: usize| st.mono || ranges.iter().any(|(r, m, ..)| r.contains(&at) && m.code);
+        let verbatim_at = |at: usize| st.mono || ranged_at(&ranges, at).is_some_and(|(_, m, ..)| m.code);
 
         // **The text as shown**: curly quotes as corner brackets in Chinese,
         // never in code. Each is three bytes, as its bracket is. Chinese is
@@ -721,17 +722,33 @@ impl Engine {
 
         // **Ruby**: the reading read into units of half the size; a reading
         // longer than its base spaces the base out to its length.
+        //
+        // **Each unit's group is found by halving, and the pads are put in in
+        // one pass**, not by walking every unit for every group and inserting
+        // into the middle of them, which a paragraph with a reading on each
+        // of its thousands of lines would make quadratic. The groups are in
+        // order and never overlap, as the text they cover was pushed.
         let mut readings = Vec::new();
-        for (r, reading) in rubies {
+        let mut inside: Vec<Vec<usize>> = vec![Vec::new(); rubies.len()];
+        for (n, u) in units.iter().enumerate() {
+            let k = rubies.partition_point(|(r, _)| r.end <= u.text.start);
+            if rubies.get(k).is_some_and(|(r, _)| r.contains(&u.text.start)) {
+                inside[k].push(n);
+            }
+        }
+        // The pads to go before and after a unit.
+        let mut before: HashMap<usize, Unit> = HashMap::new();
+        let mut after: HashMap<usize, Unit> = HashMap::new();
+        for (k, (r, reading)) in rubies.into_iter().enumerate() {
             let id = readings.len() as u16;
             let small = Style { size: st.size * 0.5, weight: 400.0, color: st.color, ..st };
             let run = [Inline { line: 0, kind: InlineKind::Text { text: reading, marks: Marks::default() } }];
             let read = self.units(&run, small, f32::MAX);
             let length = read.length();
             readings.push(read.units);
-            let inside: Vec<usize> = (0..units.len()).filter(|&n| r.contains(&units[n].text.start)).collect();
+            let inside = &inside[k];
             let (Some(&a), Some(&z)) = (inside.first(), inside.last()) else { continue };
-            for &n in &inside {
+            for &n in inside {
                 units[n].ruby = Some(id);
                 units[n].glue = n != a;
             }
@@ -744,10 +761,19 @@ impl Engine {
                     u.glue = glue;
                     u
                 };
-                units.insert(z + 1, pad(true));
+                after.insert(z, pad(true));
                 units[a].glue = true;
-                units.insert(a, pad(false));
+                before.insert(a, pad(false));
             }
+        }
+        if !before.is_empty() {
+            let mut padded = Vec::with_capacity(units.len() + before.len() + after.len());
+            for (n, u) in units.into_iter().enumerate() {
+                padded.extend(before.remove(&n));
+                padded.push(u);
+                padded.extend(after.remove(&n));
+            }
+            units = padded;
         }
 
         // **Two full-width marks side by side give up the blank half between
@@ -1375,6 +1401,25 @@ impl Engine {
         let mut b = Out::default();
         let mut y = 0.0;
         self.block(block, 0.0, room, &mut y, &mut b, cx);
+        // **Front matter is framed as wide as its lines**, as the export's
+        // page sets it (`max-inline-size`, no wider than its text): framed
+        // the whole of `room`, a few short lines would take most of the
+        // first screen across.
+        if let BlockKind::FrontMatter(_) = block.kind {
+            let words = |i: &Item| match i {
+                Item::Text { x, text, .. } => Some((*x, x + text.layout.width())),
+                _ => None,
+            };
+            let pad = b.items.iter().filter_map(words).map(|(x, _)| x).fold(f32::MAX, f32::min);
+            let end = b.items.iter().filter_map(words).map(|(_, end)| end).fold(0.0, f32::max);
+            if pad < f32::MAX {
+                for item in &mut b.items {
+                    if let Item::Frame { r, .. } = item {
+                        r.x1 = r.x1.min(r.x0 + f64::from(end + pad));
+                    }
+                }
+            }
+        }
         let w = b.items.iter().map(|i| match i {
             Item::Text { x, text, .. } => x + text.layout.width(),
             Item::Rect { r, .. } | Item::Frame { r, .. } => r.x1 as f32,
@@ -2130,6 +2175,18 @@ mod tests {
         assert_eq!(p.placed.len(), 1, "the caption is the table's");
     }
 
+    /// **Front matter down the page is framed as wide as its lines**, not
+    /// across most of the screen, and the columns of the text follow it.
+    #[test]
+    fn front_matter_down_the_page_is_framed_as_wide_as_its_lines() {
+        let p = page("---\ntitle: 樣張\ndate: 1958\n---\n\n# 標題\n\n那年冬天，雪下得很大。\n", Latin::Turn, 600);
+        let frame = p.placed[0].laid.items.iter().find_map(|i| if let Item::Frame { r, .. } = i { Some(*r) } else { None });
+        let frame = frame.expect("the frame");
+        assert!(frame.width() < 200.0, "{} of 800 across", frame.width());
+        let cols = columns_of(&p);
+        assert!(cols.iter().any(|c| c.contains("標題")), "{cols:?}");
+    }
+
     /// **Ruby** (2026-11-08): the reading is drawn beside its base, and a
     /// reading longer than its base spaces the base out.
     #[test]
@@ -2140,6 +2197,19 @@ mod tests {
         let reading: f32 = u.readings[0].iter().map(Unit::eff).sum();
         let base: f32 = u.units.iter().filter(|x| x.ruby == Some(0)).map(|x| x.adv).sum();
         assert!(base + 0.5 >= reading, "the base spaced out to {reading}: {base}");
+        // Several, each spaced out by a pad before and after its own base
+        // and nowhere else.
+        let u = e.units(&runs("{这些|zhèxiēzhèxiē}字{那|nànànànà}，{雨|yǔ}。"), body(), 1000.0);
+        assert_eq!(u.readings.len(), 3);
+        for id in 0..2u16 {
+            let at: Vec<usize> = (0..u.units.len()).filter(|&n| u.units[n].ruby == Some(id)).collect();
+            assert!(at.windows(2).all(|w| w[1] == w[0] + 1), "{id}: {at:?}");
+            let (a, z) = (&u.units[at[0]], &u.units[*at.last().unwrap()]);
+            assert!(matches!(a.look, Look::Gap) && !a.glue && matches!(z.look, Look::Gap) && z.glue, "{id}");
+            assert!(at[1..at.len() - 1].iter().all(|&n| !matches!(u.units[n].look, Look::Gap) && u.units[n].glue), "{id}");
+        }
+        let short: Vec<&Unit> = u.units.iter().filter(|x| x.ruby == Some(2)).collect();
+        assert!(short.len() == 1 && !matches!(short[0].look, Look::Gap) && !short[0].glue, "a short reading puts in no pad");
         let p = page("{这些|zhèxiē}字。\n", Latin::Turn, 400);
         let glyphs = p.placed[0].laid.items.iter().filter(|i| matches!(i, Item::Glyphs(_))).count();
         assert!(glyphs >= 2, "the base and the reading: {glyphs}");
