@@ -413,6 +413,7 @@ def main():
         help="截圖前先按哪幾個鍵（`--shot` 的寫法）",
     )
     ap.add_argument("--file", default="local/manual_tc.md", help="截圖用哪個檔（手冊已出倉，中文那一份在 local/）")
+    ap.add_argument("--image", help="用這張截圖（png／jpg／webp）代替現拍的那一幀")
     a = ap.parse_args()
 
     # **版心定字號，字號定每行幾個字。** 版心 ＝ 頁寬減兩邊的內邊距（`.card` 的
@@ -437,15 +438,22 @@ def main():
     # 一幀真畫面。Warning: **用倉根那個 `./yumete`**（`scripts/build.sh` 鏈的就是它），
     # 不是 `target/release/`——見記事本裏「跑的是哪個 yumete」。
     binary = HERE / "yumete"
-    if not binary.exists():
+    if a.image:
+        # **一張給定的截圖**：原樣嵌進頁面，寬度鋪滿那個框。
+        import base64
+        picture = pathlib.Path(a.image)
+        kind = {"jpg": "jpeg"}.get(picture.suffix.lstrip(".").lower(), picture.suffix.lstrip(".").lower())
+        data = base64.b64encode(picture.read_bytes()).decode()
+        shot = f'<img src="data:image/{kind};base64,{data}" style="display:block;width:100%;height:auto">'
+    if not a.image and not binary.exists():
         sys.exit(f"找不到 {binary}——先 cargo build --release 並拷過去")
-    shot = shell([str(binary), f"--shot={a.size}", f"--keys={a.keys}",
+    shot = shot if a.image else shell([str(binary), f"--shot={a.size}", f"--keys={a.keys}",
                   "--html", a.file], cwd=HERE)
     # Warning: **末尾那一行版本號去掉**：`--shot` 每幀都落一句
     # 「-- yumete 0.3.0-dev.2026…+8494074.dirty」，而發布卡片上寫着 dev 和 dirty
     # 是在說「這不是你下載的那一版」。
     shot = re.sub(r"\n?<span[^>]*>-- yumete [^<]*</span>", "", shot)
-    shot, off = pin(shot, int(a.size.split("x")[0]))
+    shot, off = (shot, []) if a.image else pin(shot, int(a.size.split("x")[0]))
     if off:
         print("Warning: 這幾行寬度對不上，圖上會歪：" + "；".join(off), file=sys.stderr)
 
