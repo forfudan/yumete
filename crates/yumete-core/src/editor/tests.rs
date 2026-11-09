@@ -28005,6 +28005,10 @@ fn vims_visual_dollar_takes_the_line_break() {
     let mut ed = typed_vim("abcdef\nxyz\n");
     press(&mut ed, "jlv$d");
     assert_eq!(text(&ed), "abcdef\nx\n", "the last break stays");
+    // …and is not yanked (2026-11-09, review: nvim gives `abcdefyz\nxyz\n`).
+    let mut ed = typed_vim("abcdef\nxyz\n");
+    press(&mut ed, "jlv$ygg$p");
+    assert_eq!(text(&ed), "abcdefyz\nxyz\n", "the last break is not copied");
     // Normal mode's `$` and `l` still stop on the last character.
     let mut ed = typed_vim("abcdef\nxyz\n");
     press(&mut ed, "$x");
