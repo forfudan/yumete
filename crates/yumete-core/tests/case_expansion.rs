@@ -1,8 +1,8 @@
 //! A case change may be more than one character (#325).
 //!
 //! `ﬁ` upper-cases to `FI` and `ß` to `SS`. Taking only the first of them —
-//! which a `char -> char` signature forces — deleted the rest in silence, so
-//! `ﬁ` came back `F` and `ß` came back `S`. Ligatures pasted out of a PDF and
+//! which a `char -> char` signature forces — would delete the rest in silence,
+//! so `ﬁ` would come back `F` and `ß` `S`. Ligatures pasted out of a PDF and
 //! German `ß` are ordinary in an English manuscript.
 
 use yumete_core::{editor::Editor, Key};

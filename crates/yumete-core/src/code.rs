@@ -2190,7 +2190,7 @@ mod tests {
     /// 所以「相同的字節數」會停在一個字的中間，而那不是一個位置。
     #[test]
     fn an_edit_never_starts_or_ends_inside_a_character() {
-        // 報來的那一下：「的名字」删成「的字」，前綴數到 4 個字節。
+        // 「的名字」删成「的字」，前綴數到 4 個字節。
         let edit = what_changed("的名字", "的字").expect("they differ");
         assert!("的名字".is_char_boundary(edit.start_byte), "start");
         assert!("的名字".is_char_boundary(edit.old_end_byte), "old end");

@@ -2,9 +2,10 @@
 //!
 //! GFM splits a row into cells **before** it looks for inline anything, so a
 //! code span is no shelter: `` `a|b` `` is two cells on GitHub too, and `\|`
-//! is the one escape a Markdown table has. The split is right. What was wrong
-//! was laying the table out afterwards — a three-column table came back four
-//! columns wide, and every row that was *not* torn had grown an empty cell.
+//! is the one escape a Markdown table has. The split is right. What must not
+//! happen is laying the table out afterwards — a three-column table would
+//! come back four columns wide, and every row that was *not* torn would grow
+//! an empty cell.
 
 use yumete_core::mdtable;
 

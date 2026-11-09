@@ -213,8 +213,8 @@ en = "delete the character after the cursor"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
-# Warning: **2026-10-08 這四句換了主人，一個字都没改。** 從前 `delete_selection`
-# 掛的是「不動寄存器」那一句，而它真按的是 `d`——`d` 自 2026-09-28 起進寄存器。
+# Warning: **這四句各掛在它真按的那個動作上。** `delete_selection` 真按的是 `d`，
+# 而 `d` 進寄存器，所以它不掛「不動寄存器」那一句。
 key = "action.delete-selection"
 zhs = "剪切选区"
 en = "cut the selection"

@@ -1005,8 +1005,8 @@ mod tests {
         assert_eq!(reformat("no ruby here", Dialect::Html, EVERY), None);
     }
 
-    /// #332: a quote in an English annotation used to write a Typst file
-    /// that did not compile, and read back cut in the wrong place.
+    /// #332: a quote in an English annotation must not write a Typst file
+    /// that does not compile, or read back cut in the wrong place.
     #[test]
     fn a_typst_call_holds_a_quote_as_a_string_literal() {
         let written = Dialect::Typst.write("桜", r#"say "hi""#);

@@ -63,7 +63,7 @@ en = "cursor hint: off, shown only at the right of the status line"
 # ── ime ───────────────────────────────────────────────────────────────
 
 [[message]]
-# 命令行空着的時候：把浮着的這一則送進邊欄(#426，2026-09-30 寫的字)
+# 命令行空着的時候：把浮着的這一則送進邊欄(#426)
 key = "info.into-the-sidebar"
 zhs = "{0} 在侧栏显示"
 en = "{0} shows it in the sidebar"
@@ -81,7 +81,7 @@ zhs = "跟随光标：{0}"
 en = "following the cursor: {0}"
 
 [[message]]
-# 浮窗底邊右端：這一則翻得動(#426，2026-09-30 寫的字)
+# 浮窗底邊右端：這一則翻得動(#426)
 key = "info.page-it"
 zhs = "PgUp/PgDn 翻页"
 en = "PgUp/PgDn to page"
@@ -165,13 +165,13 @@ zhs = "文件"
 en = "Explorer"
 
 [[message]]
-# 標籤：信息——五種內容共用那一格，空着的時候寫這個(#426，2026-09-30 定)
+# 標籤：信息——五種內容共用那一格，空着的時候寫這個(#426)
 key = "label.panel.info"
 zhs = "信息"
 en = "Info"
 
 [[message]]
-# 標籤：鏈接那一扇面板的名字（2026-10-30 定：叫「鏈接」不叫「雙鏈」）
+# 標籤：鏈接那一扇面板的名字（叫「鏈接」不叫「雙鏈」）
 key = "label.panel.links"
 zhs = "链接"
 en = "Links"
@@ -464,8 +464,8 @@ zhs = "窗口太窄，无法打开选择器"
 en = "the window is too narrow for the picker"
 
 [[message]]
-# 挑選器開不了：窗口矮過六行。從前它照舊開着、照舊
-# 吃掉每一個鍵，而一格都不畫——打完查詢按 Enter 真會開一個檔。
+# 挑選器開不了：窗口矮過六行。照舊開着的話，它照舊吃掉每一個鍵，而一格都不畫
+# ——打完查詢按 Enter 真會開一個檔。
 key = "picker.window-too-short"
 zhs = "窗口太矮，无法打开选择器"
 en = "the window is too short for the picker"
@@ -774,8 +774,8 @@ zhs = "{0} 字"
 en = "{0} word"
 
 [[message]]
-# 空格 i：光標不在任何一行數據上(2026-09-30 報的：非表格的地方按下去，
-# 回的是字典那一句「光標下没有字可查」，説的是另一件事)
+# 空格 i：光標不在任何一行數據上(非表格的地方按下去，不回字典那一句
+# 「光標下没有字可查」，那説的是另一件事)
 key = "ui.cursor-is-not-in-a-table"
 zhs = "光标不在表格中"
 en = "the cursor is not in a table"

@@ -99,8 +99,8 @@ pub fn step_for(typed: &str, grain: Grain, told: Option<char>) -> Option<Step> {
         ("M", _) => step(Motion::Screen { which: 'M' }, Reach::Linewise),
         ("L", _) => step(Motion::Screen { which: 'L' }, Reach::Linewise),
         // **`(` 和 `)` 也是句子**。vim 的句子動作就是這一對；這個
-        // 編輯器把句子放在 `H`/`L` 上（#404），可一個 vim 的手按的是這一對，而
-        // `d)` 從前什麼都不做。兩個拼法同一件事。
+        // 編輯器把句子放在 `H`/`L` 上（#404），可一個 vim 的手按的是這一對，
+        // `d)` 不能什麼都不做。兩個拼法同一件事。
         ("(", _) => step(Motion::Sentence { forward: false }, Reach::Exclusive),
         (")", _) => step(Motion::Sentence { forward: true }, Reach::Exclusive),
         // ---- Find, which is told a character ------------------------------
@@ -143,8 +143,8 @@ pub fn step_for(typed: &str, grain: Grain, told: Option<char>) -> Option<Step> {
 /// `iw` / `i(` — the object a character names.
 fn object(c: char, around: bool) -> Option<Motion> {
     let what = match c {
-        // Warning: **`w` 和 `W` 分開了**：`iw` 走分詞器，`iW` 是 vim 那個
-        // 「一串非空白」。從前兩個折成同一個，於是 `diW` 和 `diw` 一模一樣。
+        // Warning: **`w` 和 `W` 是兩樣**：`iw` 走分詞器，`iW` 是 vim 那個
+        // 「一串非空白」。折成同一個的話，`diW` 和 `diw` 一模一樣。
         'w' => crate::motion::Object::Word { big: false },
         'W' => crate::motion::Object::Word { big: true },
         'p' => crate::motion::Object::Paragraph,

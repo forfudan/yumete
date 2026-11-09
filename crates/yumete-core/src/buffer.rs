@@ -3091,7 +3091,7 @@ fn tmp() -> std::path::PathBuf {
         let dir = tmp().join(format!("yumete-noroom-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).expect("fixture dir");
-        // `.yumete` 不存在——報的那一下就是這個形狀。
+        // `.yumete` 不存在。
         let path = dir.join(".yumete").join("config.toml");
 
         fs::write(dir.join("在.md"), "").expect("seed");

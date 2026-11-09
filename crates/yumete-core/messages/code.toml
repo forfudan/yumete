@@ -399,13 +399,13 @@ zhs = "已重命名 {0} 处（{1} 个文件）"
 en = "renamed {0} place(s) in {1} file(s)"
 
 [[message]]
-# gd 問出去之前，服務器還在讀項目(#431，2026-10-01 寫的)
+# gd 問出去之前，服務器還在讀項目(#431)
 key = "lsp.server-starting"
 zhs = "语言服务器正在启动，请稍候"
 en = "the language server is starting; please wait"
 
 [[message]]
-# 打 `(` 那一下浮出來的那一扇的名字。2026-10-08 定：它與「文檔」(空格 k)本質不同
+# 打 `(` 那一下浮出來的那一扇的名字。它與「文檔」(空格 k)本質不同
 # ——同一個地方兩種問題，名字要分得開。回退到 hover 的時候框裏是一段文檔，
 # 標題仍寫這個：它説的是「你剛打了一個括號」這個場合，不是框裏裝的是什麼。
 key = "lsp.signature"

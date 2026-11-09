@@ -58,7 +58,7 @@ pub fn alike(query: char, text: char, fold_case: bool, glyphs: bool) -> bool {
 /// 一個理由做同一件事。
 ///
 /// `reach` 是**整處命中最多跨多少個字**，`None` ＝ 不限。面板限（見 [`window`]：
-/// 「他説」要找得到「他輕輕地説」，但不許跨句），挑選器從前不限。
+/// 「他説」要找得到「他輕輕地説」，但不許跨句），挑選器也限。
 pub fn one(
     hay: &[char],
     needle: &[char],
