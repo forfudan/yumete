@@ -8,23 +8,22 @@ use super::*;
 /// **那份「我在哪裏」的檔名**，放在數據目錄裏（全局一份）。
 const PLACES_FILE: &str = "places.txt";
 /// **What this reader chose for each table file** — delimiter, header, hidden
-/// columns — one line a file: `path⇥delimiter⇥header⇥hidden` (2026-10-30, as
-/// decided). In the data directory and never beside the data: these are ways
+/// columns — one line a file: `path⇥delimiter⇥header⇥hidden`. In the data directory and never beside the data: these are ways
 /// of looking at a file, not facts about it, and a project should not gain a
 /// file because somebody looked.
 const TABLES_FILE: &str = "tables.txt";
 
-/// **The encoding the reader chose for each file** (2026-11-04), one line a
+/// **The encoding the reader chose for each file**, one line a
 /// file: `path⇥encoding⇥bytes`. Only choices, never what was detected: the
 /// same bytes detect the same way every time. The size is how a file that
 /// changed under the choice is told apart — converted to UTF-8 elsewhere, it
 /// may still decode in the old encoding, and its size gives it away.
 const ENCODINGS_FILE: &str = "encodings.txt";
 
-/// **那份「我在哪些項目裏幹過活」**，同一個目錄，同一種形狀（2026-10-18）。
+/// **那份「我在哪些項目裏幹過活」**，同一個目錄，同一種形狀。
 ///
-/// Warning: **為什麽不寫進會話檔自己的頭一行。** 提案的時候我傾向那樣——一份數據
-/// 一個地方。寫的時候改了主意，兩條理由：`restore_session` 把每一行都當
+/// Warning: **為什麽不寫進會話檔自己的頭一行。** 一份數據一個地方固然好，可是有
+/// 兩條理由：`restore_session` 把每一行都當
 /// `路徑⇥行號` 讀，而一個真的以 `#` 開頭的路徑就會被讀成那一行的注解；而且改了
 /// 會話檔的格式，舊版 yumete 讀新會話就要多一條「這一行是什麽」的判斷。這一份
 /// 和 `places.txt` 形狀一模一樣（`路徑⇥次數`，新的在前），兩份一起讀、一起寫、
@@ -34,7 +33,7 @@ const PROJECTS_FILE: &str = "projects.txt";
 /// **記多少個項目。** 比檔少一位數：一個人同時在手的項目是幾十個，不是幾千個。
 const PROJECTS: usize = 100;
 
-/// **記多少個檔**（2026-10-05 定）。vim 的 viminfo 出廠是一百；一千行純文本幾十
+/// **記多少個檔**。vim 的 viminfo 出廠是一百；一千行純文本幾十
 /// KB，一本長篇的全部章節加筆記都裝得下。
 const PLACES: usize = 1000;
 
@@ -58,15 +57,13 @@ impl Editor {
     /// loop may then wait for a key with no timeout at all. `Some(d)` is how
     /// long the throttle still has to run; `Some(ZERO)` means now.
     ///
-    /// **This is the trailing edge the throttle never had.** `autosave_tick`
-    /// used to be called only after a keystroke, and it writes at most once
-    /// every [`SWAP_INTERVAL`] — so the last few seconds of typing were only
-    /// ever written by the *next* key. Stop typing and that key never comes:
-    /// the writer pauses to think, the machine dies, and the sentence they
-    /// were looking at was never insured. The old note here said 「nothing is
-    /// being written while nothing is being typed, so there is nothing to
-    /// insure」, which is true of everything except the one window that
-    /// matters.
+    /// **This is the throttle's trailing edge.** `autosave_tick` writes at
+    /// most once every [`SWAP_INTERVAL`] — called only after a keystroke, the
+    /// last few seconds of typing would only ever be written by the *next*
+    /// key. Stop typing and that key never comes: the writer pauses to think,
+    /// the machine dies, and the sentence they were looking at was never
+    /// insured. 「Nothing is being typed, so there is nothing to insure」 is
+    /// true of everything except the one window that matters.
     pub fn autosave_due_in(&self) -> Option<std::time::Duration> {
         if !self.autosave || !self.buffers.iter().any(|b| b.draft_is_stale()) {
             return None;
@@ -110,13 +107,12 @@ impl Editor {
     /// of the others as [`SWAP_BUDGET`] buys (#317).
     ///
     /// This runs **in the input thread**, between one keystroke and the next,
-    /// so what it costs is what the writer feels. It used to write every
-    /// modified buffer every time: a hundred chapters left dirty by a
-    /// whole-book `:replace` was a hundred serialisations and two hundred
-    /// fsyncs, 1.593 s, and then 1.367 s five seconds later, for ever — the
-    /// old loop asked `is_modified`, which stays true after the copy is
-    /// written, so the same hundred files were rewritten on every round with
-    /// nothing having changed in any of them.
+    /// so what it costs is what the writer feels. Writing every modified
+    /// buffer every time, a hundred chapters left dirty by a whole-book
+    /// `:replace` would be a hundred serialisations and two hundred fsyncs,
+    /// 1.593 s, and then 1.367 s five seconds later, for ever — `is_modified`
+    /// stays true after the copy is written, so the same hundred files would
+    /// be rewritten on every round with nothing having changed in any of them.
     ///
     /// Two answers, and both are needed. `draft_is_stale` instead of
     /// `is_modified` means a buffer is copied once per edit rather than once
@@ -140,8 +136,8 @@ impl Editor {
         }
         self.last_swap = Some(now);
         // **The session is written when the open files change**, not only on
-        // a clean exit (2026-10-30: after a crash or a kill, `-r` reopened
-        // nothing, or the list from the run before).
+        // a clean exit, so after a crash or a kill `-r` reopens this run's
+        // files.
         let names: Vec<std::path::PathBuf> =
             self.buffers.iter().filter_map(|b| b.path().map(std::path::Path::to_path_buf)).collect();
         if names != self.session_names {
@@ -209,11 +205,10 @@ impl Editor {
         if self.current_buffer().is_modified() && !force {
             return Err(EditorError::UnsavedChanges);
         }
-        // Warning: **讀失敗了就不許說「重讀了」**（2026-10-09 審出來的）。從前這一句
-        // 無條件蓋在 `reread_now` 剛寫的那一則上，於是 `:reload!` 一個不存在的檔，狀
-        // 態欄說「重讀了 ghost.md」而緩衝區還是原來那一份、還掛着 `[+]`。連帶的是
-        // `reload.failed` 這一則**只有自動重讀那一路到得了**，人按出來的那一路永遠
-        // 看不見它。而被告知「重讀了」的人會以為自己和磁碟同步了。
+        // Warning: **讀失敗了就不許說「重讀了」**。這一句要是無條件蓋在
+        // `reread_now` 剛寫的那一則上，`:reload!` 一個不存在的檔，狀態欄就說「重讀
+        // 了 ghost.md」而緩衝區還是原來那一份、還掛着 `[+]`；`reload.failed` 這一則
+        // 也就**只有自動重讀那一路到得了**。而被告知「重讀了」的人會以為自己和磁碟同步了。
         if !self.reread_now() {
             return Ok(());
         }
@@ -224,7 +219,7 @@ impl Editor {
     /// Take what is on disk, and put the editor back in step with it.
     ///
     /// Three caches answer questions *about the whole document* and every one
-    /// of them is now about a document that is no longer here.
+    /// of them is then about a document that is no longer here.
     ///
     /// Returns whether it worked — the caller may not say 「re-read」 over a
     /// failure (see [`Self::reload`]).
@@ -246,7 +241,7 @@ impl Editor {
         if self.modeline {
             self.current_buffer_mut().read_modelines();
         }
-        // The one list, not the three caches this used to clear: a re-read is
+        // The one list, not three caches: a re-read is
         // a new document, and `md_cache`, `fold_cache` and `key_index` all
         // described the old one. It also puts the warning latch back.
         self.forget_the_document();
@@ -262,14 +257,12 @@ impl Editor {
     /// on most keys: `changed_underneath` costs a `stat` on the cheap path and
     /// a whole read on the expensive one, and a held-down `j` would pay it per
     /// row.
-    /// **還有多久該看一眼磁碟**，`None` ＝ 没開自動重載（2026-10-11）。
+    /// **還有多久該看一眼磁碟**，`None` ＝ 没開自動重載。
     ///
-    /// Warning: **這一支是從前端那個 `continue` 裏救出來的。** 循環從前對自動重載
-    /// 開一條自己的路：`recv_timeout(兩秒)`，超時就 `continue`——而那一下**跳過了
-    /// 底下算所有鬧鐘最小值的那一段**。於是自動重載一開（它是出廠默認），別的
-    /// 鬧鐘全被壓成兩秒一次：跟着光標那一問要等它停穩三百毫秒纔發得出去，發出去
-    /// 之後答案又要等一次醒來纔收得到——量出來三到五秒，而 `空格 k` 立刻就出來
-    /// （按鍵本身把循環叫醒了）。磁碟這一眼不是另一條路，它就是又一個鬧鐘。
+    /// Warning: **磁碟這一眼不是另一條路，它就是又一個鬧鐘。** 循環要是對自動重載
+    /// 開一條自己的路——`recv_timeout(兩秒)`，超時就 `continue`——那一下就**跳過
+    /// 底下算所有鬧鐘最小值的那一段**，自動重載一開（它是出廠默認），別的鬧鐘全被
+    /// 壓成兩秒一次：跟着光標那一問要三到五秒纔有答案。
     pub fn disk_due_in(&self) -> Option<std::time::Duration> {
         if !self.reload_auto {
             return None;
@@ -357,13 +350,11 @@ impl Editor {
     /// **開場屏畫不畫。**
     ///
     /// Warning: **一有字就不畫了，不必誰去清它**——問的是「緩衝區還空着嗎」，所以
-    /// 打第一個字它自己就没了（2026-10-05 定：「打一個字就消失」）。按 `j`
+    /// 打第一個字它自己就没了。按 `j`
     /// 這種不改稿子的鍵它照舊在，同 vim。
     ///
-    /// Warning: **改過一次就再也不回來**（2026-10-14 報的：「The opening texts now
-    /// appears when you clear the buffer to empty. Vim did this in a different
-    /// way, it only displays when you create a new file.」）。從前只問「現在空不
-    /// 空」，於是打了字再全刪掉，那一屏又浮上來——而那時候人是在寫東西，不是剛
+    /// Warning: **改過一次就再也不回來**，同 vim：只在新開的時候畫。只問「現在空不
+    /// 空」的話，打了字再全刪掉，那一屏又浮上來——而那時候人是在寫東西，不是剛
     /// 進來。nvim 量過（`--clean`，重畫一次再看）：**打一個字之後刪空不回來，
     /// undo 也不回來**。
     ///
@@ -510,7 +501,7 @@ impl Editor {
     ///
     /// Warning: **和會話是兩件事。** 會話按工作路徑分檔，答的是「上次開着哪幾個」；
     /// 這一份是全局一份，答的是「不管從哪裏打開，這個檔我上次停在哪」——`ye 某個檔`
-    /// 要的是後者（2026-10-05 一個用的人報的：「打开文件时没有跳到上次光标处」）。
+    /// 要的是後者：打開檔就跳到上次光標處。
     fn where_i_was(&self, path: &Path) -> Option<usize> {
         let text = std::fs::read_to_string(self.places_file()?).ok()?;
         let want = path.to_string_lossy();
@@ -522,7 +513,7 @@ impl Editor {
 
     /// **記下「我在這個檔的第幾行」**，最近用的排在前面。
     ///
-    /// Warning: **一千個封頂，滿了把最舊的撈掉**（2026-10-05 定）。純文本一行一個，
+    /// Warning: **一千個封頂，滿了把最舊的撈掉**。純文本一行一個，
     /// 一千行幾十 KB——一本長篇的全部章節都裝得下，而一個人一輩子也開不了幾萬個檔。
     fn remember_where_i_was(&self, fresh: &[(String, usize)]) {
         let Some(file) = self.places_file() else { return };
@@ -547,15 +538,14 @@ impl Editor {
         let _ = std::fs::write(&file, out.join("\n") + "\n");
     }
 
-    /// **The files this editor has opened, newest first** (2026-10-18 作者定).
+    /// **The files this editor has opened, newest first**.
     ///
-    /// `places.txt` has been an MRU list since 2026-10-05 — it is written on
-    /// the way out of every session so that `ye 某個檔` can go back to the
-    /// line you left. Nothing ever showed it to the reader. This is that
-    /// list, which is why 「最近開過的檔」 needed no new storage at all.
+    /// `places.txt` is an MRU list — it is written on the way out of every
+    /// session so that `ye 某個檔` can go back to the line you left. This is
+    /// that list, which is why 「最近開過的檔」 needs no storage of its own.
     ///
-    /// `under` keeps only what lives inside that directory — 「one for this
-    /// project/directory, and another one for global files」. A file that has
+    /// `under` keeps only what lives inside that directory: one list for this
+    /// project or directory, another for every file. A file that has
     /// since been moved or deleted is left out: a list of things you cannot
     /// open is not a list.
     pub fn recent_files(&self, under: Option<&Path>) -> Vec<PathBuf> {
@@ -591,7 +581,7 @@ impl Editor {
             .collect()
     }
 
-    /// **幹過活的那些項目，最近的在前**（2026-10-18 作者定）。
+    /// **幹過活的那些項目，最近的在前**。
     ///
     /// 會話檔是按項目根的**哈希**命名的（`0a91fa3b….txt`），所以單看那個目錄
     /// 反推不出項目叫什麽——這一份補的就是那個名字。不存在了的目錄不列：列出
@@ -642,19 +632,17 @@ impl Editor {
     /// thing that reads it is the next hour of this editor, and a person
     /// looking at it should be able to see what it says.
     ///
-    /// **Paths only, not lines** (2026-10-27). It used to be `path\tline`,
-    /// and every line number in it was also in `places.txt`, written by the
-    /// same call a moment earlier — two files saying the same thing, as a
-    /// reader noticed. The line is `places.txt`'s, which `open_file` already
+    /// **Paths only, not lines**: every line number is in `places.txt`,
+    /// written by the same call a moment earlier, and two files must not say
+    /// the same thing. The line is `places.txt`'s, which `open_file` already
     /// goes back to.
     pub fn save_session(&mut self) {
         let here = self.sel.head();
         self.buffers[self.current].save_cursor(here);
-        // **「我在哪裏」先記，它不靠會話**（2026-10-06 修）。
+        // **「我在哪裏」先記，它不靠會話**。
         //
-        // Warning: **這一句本來排在底下那道閘後面**，於是没有會話檔的時候——`:w` 之後
-        // 直接 `:q`、或者 `[editor] session` 關着——它一次都没寫過，而我拿 `--shot`
-        // 驗的正是那一種。會話答的是「這個工作路徑上次開着哪幾個」，這一份答的是
+        // Warning: **這一句要排在底下那道閘前面**，不然没有會話檔的時候——`:w` 之後
+        // 直接 `:q`、或者 `[editor] session` 關着——它一次都不寫。會話答的是「這個工作路徑上次開着哪幾個」，這一份答的是
         // 「這個檔我上次停在哪」，兩件事不該綁在一起。
         let places: Vec<(String, usize)> = self
             .buffers
@@ -686,16 +674,16 @@ impl Editor {
             let Some(path) = buffer.path() else { continue };
             out.push_str(&format!("{}\n", path.display()));
         }
-        // **The preview tabs** (2026-11-08), by the file each typesets: the
+        // **The preview tabs**, by the file each typesets: the
         // page is made again when one is shown.
         for buffer in &self.buffers {
             if let (Some(kind), Some(main)) = (buffer.preview_kind(), buffer.preview_main()) {
                 out.push_str(&format!("preview\t{}\t{}\n", kind.name(), main.display()));
             }
         }
-        // **No file open, so the last session stays** (2026-10-28). A run that
-        // only typed into a scratch buffer and left with `:q!` used to delete
-        // it, and the next `ye -r` had nothing to bring back. persistence.nvim
+        // **No file open, so the last session stays**: a run that only typed
+        // into a scratch buffer and left with `:q!` must not delete it, or the
+        // next `ye -r` has nothing to bring back. persistence.nvim
         // does the same with `need = 1`: fewer file buffers than that, and it
         // does not save.
         if out.is_empty() {
@@ -716,7 +704,7 @@ impl Editor {
                 let _ = std::fs::write(&windows, lines.join("\n") + "\n");
             }
         }
-        // The folds likewise (2026-11-03), gone when there are none.
+        // The folds likewise, gone when there are none.
         let folds = Self::folds_file(&file);
         match self.folds_to_keep() {
             lines if lines.is_empty() => {
@@ -740,14 +728,14 @@ impl Editor {
         }
     }
 
-    /// **The windows this session keeps** (2026-10-31): the tree, each
+    /// **The windows this session keeps**: the tree, each
     /// window's file and place, which region has the keys, and which
     /// sidebars are open. Nothing to keep — one window, no sidebar — is an
     /// empty list.
     ///
     /// One line a node, first half first: `below` or `beside` for a split
-    /// (`beside⇥rtl` for one laid out from the right; a session from before
-    /// 2026-11-08 has none, and its splits read left to right), then its
+    /// (`beside⇥rtl` for one laid out from the right; a session without it
+    /// reads its splits left to right), then its
     /// two halves; `window⇥path⇥cursor⇥anchor` for a window, the
     /// path empty for a buffer with no file, and `⇥preview` after it for a
     /// window showing the preview of that file. Then `keys⇥n` (the n-th
@@ -800,7 +788,7 @@ impl Editor {
         out
     }
 
-    /// **The folds this session keeps** (2026-11-03, decided by popup), each
+    /// **The folds this session keeps**, each
     /// window's in each file, the window by its place in the tree:
     /// `manual⇥n⇥path⇥first⇥last⇥closed` for a fold made with `zf` (lines
     /// from 0), `heading⇥n⇥path⇥nth⇥text` for a closed heading fold (found
@@ -900,7 +888,7 @@ impl Editor {
         file.with_extension("windows.txt")
     }
 
-    /// **Lay the windows out as the session left them** (2026-10-31), after
+    /// **Lay the windows out as the session left them**, after
     /// [`Self::restore_session`] has opened its files — only on the way in,
     /// with no file named, so `:resume` adds files and leaves the windows.
     ///
@@ -959,8 +947,7 @@ impl Editor {
             self.grow(self.live, shape, &mut placed);
             let mut keys_in = None;
             // The kept folds name a window by its place in the tree as it
-            // was saved; one dropped above shifts the others (review,
-            // 2026-11-03).
+            // was saved; one dropped above shifts the others.
             self.windows_restored = placed.iter().map(|(id, leaf)| (leaf.nth, *id)).collect();
             for (id, leaf) in placed {
                 let Some(index) = found.get(&(leaf.path.clone(), leaf.preview)).and_then(|&b| self.buffer_with(b)) else {
@@ -1029,7 +1016,7 @@ impl Editor {
         }
     }
 
-    /// **The view this session keeps** (2026-10-28): the `:` commands, without
+    /// **The view this session keeps**: the `:` commands, without
     /// the colon, that set the layout, the `:view-*` settings and the theme
     /// where they differ from the config. The front end works them out, since
     /// the theme is its; written by the next [`Self::save_session`].
@@ -1095,7 +1082,7 @@ impl Editor {
             opened += 1;
         }
         // The preview tabs after the files, so the empty buffer the editor
-        // starts with is the first file's to take (2026-11-08).
+        // starts with is the first file's to take.
         for line in text.lines().filter_map(|line| line.strip_prefix("preview\t")) {
             let Some((kind, main)) = line.split_once('\t') else { continue };
             let main = PathBuf::from(main);
@@ -1115,12 +1102,11 @@ impl Editor {
     /// Named late, and only once there is something to lose: an empty scratch
     /// buffer that is never typed into should leave nothing behind.
     ///
-    /// Warning: **按號取名，不許按它排在第幾個**（2026-10-03 一輪審查報來的，會丟字）。
-    /// 名字是**黏住的**（[`crate::Buffer::keep_drafts_at`] 只設一次），而下標不是
-    /// ——關掉前面一份，後面的就往前挪。於是第一份草稿還記着 `-1` 這個名字，而
-    /// 新開的那一份正好也落在下標 1 上：**兩份緩衝往同一個檔上寫**，後存的蓋掉
-    /// 先存的，先打的那幾百字哪裏都不存在了。重現過，連 `kill -9` 和重開都走了
-    /// 一遍。`Buffer::id` 自己的文檔早就寫着「下標會變，號不會」。
+    /// Warning: **按號取名，不許按它排在第幾個**（會丟字）。名字是**黏住的**
+    /// （[`crate::Buffer::keep_drafts_at`] 只設一次），而下標不是——關掉前面一份，
+    /// 後面的就往前挪。按下標取名的話，第一份草稿還記着 `-1` 這個名字，而新開的
+    /// 那一份正好也落在下標 1 上：**兩份緩衝往同一個檔上寫**，後存的蓋掉先存的，
+    /// 先打的那幾百字哪裏都不存在了。`Buffer::id` 的文檔寫着「下標會變，號不會」。
     fn name_scratch_drafts(&mut self) {
         let Some(dir) = self.drafts_dir.clone() else {
             return;
@@ -1140,11 +1126,9 @@ impl Editor {
     /// belonging to a *live* other session is listed too: offering it costs
     /// nothing, because taking it copies the text into a new buffer.
     ///
-    /// Warning: **它說「leaves the file alone」說了八天，而底下那一句在刪檔**
-    /// （2026-10-10 報的）。拿走孤兒那一支寫完替代的草稿就把原件刪了，於是一個
-    /// 還在跑、打了字還没存的 yumete 的唯一保險被別人清掉了——而它只要不再敲鍵
-    /// 就不會重寫。現在刪之前問一句
-    /// [`crate::buffer::owner_still_running`]。
+    /// Warning: **拿走孤兒那一支寫完替代的草稿會刪原件**，所以刪之前問一句
+    /// [`crate::buffer::owner_still_running`]：一個還在跑、打了字還没存的 yumete
+    /// 的唯一保險不許被別人清掉——它只要不再敲鍵就不會重寫。
     pub fn orphan_drafts(&self) -> Vec<PathBuf> {
         let Some(dir) = &self.drafts_dir else {
             return Vec::new();
@@ -1161,13 +1145,13 @@ impl Editor {
                     .and_then(|n| n.to_str())
                     .is_some_and(|n| n.starts_with("scratch-") && !n.starts_with(&mine))
             })
-            // **主人還開着的那一份不是孤兒**（2026-10-11 報的）。
+            // **主人還開着的那一份不是孤兒**。
             //
-            // 判準從前只是「不是我這個行程的」，於是**另一扇開着的 yumete** 裏一個
+            // 判準只是「不是我這個行程的」的話，**另一扇開着的 yumete** 裏一個
             // 没名字的緩衝，就讓這一扇在啓動時說「有 1 份没存的草稿」——那句話說
             // 的是崩潰留下的東西，而什麼都没崩，他的編輯器就開在旁邊。
             //
-            // `owner_still_running` 本來就在（問 `kill(pid, 0)`），只是這一支没問。
+            // `owner_still_running` 問的是 `kill(pid, 0)`。
             // 那一扇真的崩了之後，pid 没了，這一份當場又算孤兒——話晚說，不會不說。
             .filter(|p| !crate::buffer::owner_still_running(p))
             .collect();
@@ -1203,12 +1187,13 @@ impl Editor {
             // the file behind would offer it again on the next launch — and it
             // is written again immediately, because the buffer is modified.
             //
-            // Warning: **Written again by whom.** That sentence was true only with
+            // Warning: **Written again by whom.** That sentence is true only with
             // `autosave` on: `autosave_tick` returns on its first line when it
             // is off, and `[editor] autosave = false` is a documented setting.
-            // With it off this deleted the only copy of a crashed session's
-            // work and left the text in memory alone — one more crash, or one
-            // closed terminal, and yumete had destroyed it itself.
+            // With it off, deleting here would delete the only copy of a crashed
+            // session's work and leave the text in memory alone — one more
+            // crash, or one closed terminal, and yumete would have destroyed it
+            // itself.
             //
             // So the copy is written *here* before its file goes, and if that
             // write fails the old file stays. A crash between the two costs
@@ -1219,11 +1204,10 @@ impl Editor {
             // unnamed buffer somewhere to write — so that runs first, and the
             // proof is `recovery_copy()`, not the return value.
             //
-            // Warning: **從前這一句是 `self.autosave || { … }`**（2026-10-02 查出來的）。
-            // 自動存檔出廠開着，於是那個 `||` 一路短路：**替代的那一份根本没寫，
-            // 而底下照樣把舊的刪了**。靠的是「待會兒自動存檔那一拍會寫」——而那
-            // 一拍最遠在五秒之後（`SWAP_INTERVAL`），這五秒裏那段文字一份都没有。
-            // 上面那三行寫的正是不許有這個窗口。
+            // Warning: **不許寫成 `self.autosave || { … }`**。自動存檔出廠開着，那個
+            // `||` 會一路短路：**替代的那一份根本没寫，而底下照樣把舊的刪了**。靠
+            // 「待會兒自動存檔那一拍會寫」不行——那一拍最遠在五秒之後
+            // （`SWAP_INTERVAL`），這五秒裏那段文字一份都没有。
             let kept = {
                 self.name_scratch_drafts();
                 match self.buffers.last_mut() {
@@ -1239,10 +1223,9 @@ impl Editor {
         taken
     }
 
-    /// **開檔時那一問**：恢復/丟棄恢復文件/暫時不管（2026-10-02 定）。
+    /// **開檔時那一問**：恢復/丟棄恢復文件/暫時不管。
     ///
-    /// 原話：「recover 必須在用戶重新打開這個文件的時候立刻決定。用戶打了 800
-    /// 個字之後再按 recover 這是不對的。」
+    /// 恢復要在重新打開這個檔的時候立刻決定，不是打了 800 個字之後。
     ///
     /// Warning: **只問眼前這一個。** 面板一次只站一個問題（[`Query`] 的文檔寫着
     /// 没有隊列），而恢復上一次的會話可能一口氣開十章。所以問的是正在看的那一
@@ -1324,17 +1307,15 @@ impl Editor {
         if self.refuse_readonly() {
             return;
         }
-        // **救回來的字在盤上没有第二份**（2026-10-03 一輪審查報來的，會丟字）。
+        // **救回來的字在盤上没有第二份**（不撥髒標記會丟字）。
         //
-        // 上面那句「`u` 把盤上那一份放回來，所以恢復是收得回的決定」只說對了一半：
+        // 上面那句「`u` 把盤上那一份放回來，所以恢復是收得回的決定」只對了一半：
         // 底下 `adopt_draft` 會把草稿檔刪掉，而撤回一步正好退到棧底——棧底的深度
         // 就是 `saved_depth`，於是緩衝報「乾淨」，`[+]` 不亮，`:q` 一聲不響地走人。
-        // 那一刻**救回來的字只在重做棧裏**，而退出把重做棧扔了。重現過，看着盤上
-        // 的字節没的。
+        // 那一刻**救回來的字只在重做棧裏**，而退出把重做棧扔了。
         //
         // Warning: **要在 `snapshot()` 之前撥**。撤回那一支恢復的是**快照裏記着的**那個
-        // 髒標記（`EditSnapshot::modified`），所以在快照之後撥等於没撥——我第一
-        // 遍就是撥在後面，測試當場紅了。[`Buffer::mark_modified`] 順帶把「哪裏算
+        // 髒標記（`EditSnapshot::modified`），所以在快照之後撥等於没撥。[`Buffer::mark_modified`] 順帶把「哪裏算
         // 乾淨」也作廢，這正是它自己的文檔寫的用途。
         self.current_buffer_mut().mark_modified();
         self.snapshot();
@@ -1356,9 +1337,8 @@ impl Editor {
         if orphans > 0 {
             self.status = say!("recover.drafts-waiting", orphans);
         }
-        // Warning: **不列別的檔**（2026-10-02 定）。從前這裏把每一個有草稿的檔
-        // 名拼成一句話擺在狀態欄上——原話：「你管別的文件做什麼？如果有十幾個
-        // 文件你寫得完嗎？」十幾個檔名一行放不下，而每一份自己有面板：翻到它那
+        // Warning: **不列別的檔**。把每一個有草稿的檔名拼成一句話擺在狀態欄上
+        // 没有用：十幾個檔名一行放不下，而每一份自己有面板：翻到它那
         // 一刻就問（[`Self::ask_about_the_draft`]），檔名後面那個 `[draft]` 一直
         // 掛着。
         self.ask_about_the_draft();
@@ -1375,10 +1355,9 @@ impl Editor {
         // 西：没答過的那一份不算「暫時不管」，翻回去自己會再問。
         //
         // 別的問題（`:w` 那個大小核驗）不碰——那一問問的是一條還没做完的命令。
-        // Warning: **兩問都要收，不只第一問**（2026-10-10 報的，會丟字）。從前這
-        // 一句只認 `RecoverDraft`，而真正換掉正文的是第二問；於是第二問站着的時候
-        // 點一下標籤，面板原封不動留着問 `b.md`，按 `y` 換掉的卻是 `a.md`。
-        // 「是不是上一份的」現在由問題自己記的那一格答（`Query::about`），不是猜。
+        // Warning: **兩問都要收，不只第一問**（會丟字）。真正換掉正文的是第二問；
+        // 只認 `RecoverDraft` 的話，第二問站着的時候點一下標籤，面板原封不動留着
+        // 問 `b.md`，按 `y` 換掉的卻是 `a.md`。「是不是上一份的」由問題自己記的那一格答（`Query::about`），不是猜。
         let elsewhere = self
             .query
             .as_ref()
@@ -1393,7 +1372,7 @@ impl Editor {
 
     /// `:recover` — **把開檔時那一問再擺一次**。
     ///
-    /// Warning: **没有 `:recover!` 了**（2026-10-02 定）。刪草稿在面板裏是
+    /// Warning: **没有 `:recover!`**。刪草稿在面板裏是
     /// 「丟棄恢復文件」那一格，而一個不問就刪的拼法等於在那條規矩上開後門。
     pub(super) fn recover(&mut self) -> Result<CommandOutcome, EditorError> {
         if self.current_buffer().recovered_draft().is_none() {
@@ -1408,7 +1387,7 @@ impl Editor {
             };
             return Ok(CommandOutcome::Continue);
         }
-        // Warning: **`:recover` 自己不換，它把那一問再擺一次**（2026-10-02 定）。
+        // Warning: **`:recover` 自己不換，它把那一問再擺一次**。
         // 「暫時不管」之後還回得來，而回來看見的是同樣三個選項——決定没有
         // 因為拖了一會兒就變成一個無聲的鍵。真正換上去的那一步在
         // [`Self::take_the_draft`]，而它要走完兩問纔到得了。
@@ -1476,13 +1455,13 @@ impl Editor {
         self.show_word_diff(&old, &against);
     }
 
-    /// `:git-diff [提交]` — **這一份跟 git 裏那一份，逐詞**（2026-09-25）。
+    /// `:git-diff [提交]` — **這一份跟 git 裏那一份，逐詞**。
     ///
-    /// 原話：「除了 :diff，也需要一個命令來直觀顯示 git diff。」和 `:diff` 是同
+    /// 和 `:diff` 是同
     /// 一支比較、同一種報告，只換了「跟誰比」：磁碟上那一份 → `git show
     /// <提交>:<檔>`。不帶參數就是 `HEAD`。
     ///
-    /// **比的是編輯器裏這一份，含還没存的**（定的）：問的是「我這次坐下來改了
+    /// **比的是編輯器裏這一份，含還没存的**：問的是「我這次坐下來改了
     /// 什麼」，而手上還熱的那幾筆也是這次改的。所以它和 `git diff` 命令行給的
     /// 結果不一定逐字相同——那是有意的。
     ///
@@ -1508,7 +1487,7 @@ impl Editor {
     }
 
     /// **`:git-show [commit]`: the committed draft, read-only, in the other
-    /// work area** (#518, 2026-10-29) — vim-fugitive's `:Gsplit HEAD:%`, the
+    /// work area** (#518) — vim-fugitive's `:Gsplit HEAD:%`, the
     /// "two files" way of reading a change that §5.12.66 left for later. It
     /// opens on the line the caret is on, near enough to read across; the
     /// keys stay in the draft being written. Asking again replaces the copy
@@ -1555,10 +1534,8 @@ impl Editor {
 
     /// 兩份正文，比出來，畫成那一份報告。`against` 是「跟誰比」的名字。
     ///
-    /// **一條改動三行**（2026-10-16 改，原話：「It first list the paragraph
-    /// before and after, than mark the words changed in brighter colors」）：
-    /// `檔:行:` 一行，舊稿一行，新稿一行。從前只有一行，而那一行是兩稿的混合
-    /// 句——改得多了讀到的是一句從來沒有人寫過的話。
+    /// **一條改動三行**：`檔:行:` 一行，舊稿一行，新稿一行，改了的詞亮一些。
+    /// 一行兩稿的混合句不行——改得多了讀到的是一句從來沒有人寫過的話。
     ///
     /// 行頭那個 `-`/`+` 是記號，畫不出來（`diff::spans`）；留在文字裏是為了這
     /// 一份報告拿出去還是一份讀得懂的 diff。
@@ -1576,9 +1553,7 @@ impl Editor {
             self.status = say!("diff.same", against);
             return;
         }
-        // **檔名只在緩衝區的名字上寫一次**（2026-10-16 定）。從前每一行都帶一
-        // 份，而整份報告說的就是這一個檔——原話：「why `文.md:` is needed if the
-        // `git-diff` shows the diff for only one file」。長檔名一行吃掉二十幾
+        // **檔名只在緩衝區的名字上寫一次**：整份報告說的就是這一個檔。長檔名一行吃掉二十幾
         // 格，而這幾行是長段落，讀的人正要把兩句話對着看。
         let name = self
             .current_buffer()

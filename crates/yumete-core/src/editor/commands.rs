@@ -20,7 +20,7 @@ impl Editor {
     pub fn open_report(&mut self, name: &str, text: &str) {
         let mut buffer = Buffer::from_text(text);
         buffer.name_as(name);
-        // **生成出來的頁面是只讀的**（2026-10-08 定）。它没有檔案，改了存不到任何
+        // **生成出來的頁面是只讀的**。它没有檔案，改了存不到任何
         // 地方，而改一下就掛上「改過没存」那個 `+`，`:q` 於是攔着不讓走——為一份
         // 編輯器自己算出來的東西。`:readonly` (off) 照舊解得開。
         buffer.set_readonly(true);
@@ -36,34 +36,27 @@ impl Editor {
     pub fn execute(&mut self, line: &str) -> Result<CommandOutcome, EditorError> {
         // **The line belongs to this command.** A command that fails says so
         // through its error, and the status is where the *last* command's
-        // answer was: a failed `:export` used to leave 「存了 ch1.md」 standing,
-        // which reads as an export that worked.
+        // answer was: a failed `:export` must not leave 「存了 ch1.md」
+        // standing, which reads as an export that worked.
         self.status.clear();
-        // Warning: **`:/` 和 `:?` 這裏一個字都不做**（2026-10-08 定）。
+        // Warning: **`:/` 和 `:?` 這裏一個字都不做**。做成 `/` 和 `?` 的別名的話
+        // **它和 vim 不是同一件事**，而像到足以讓人以為是——vim 的 `:/式子` 是一個
+        // **行地址**（`:/foo/d` 是「跳到配得上的那一行，刪掉它」），別名做的是
+        // 「跳到匹配那一格」。vim 有的就對齊它；寧可没有，也不讓人有錯誤的預期。
         //
-        // 2026-10-06 到 10-08 之間它們是 `/` 和 `?` 的別名：`:/冬天` 真的跳到下一
-        // 處。拿掉的理由是**它和 vim 不是同一件事**，而像到足以讓人以為是——
-        // vim 的 `:/式子` 是一個**行地址**（`:/foo/d` 是「跳到配得上的那一行，刪
-        // 掉它」），這裏做的是「跳到匹配那一格」。判詞：
-        //
-        // > vim 有的話就对齐它。不要让用户有 unexpected。两步走，先删掉当前实现
-        // > （宁可没有不能让人有错误预期），然后再实现行地址。
-        //
-        // 所以現在 `:/foo` 答的是「没有這條命令」，和別的打錯的名字一樣。行地址
+        // 所以 `:/foo` 答的是「没有這條命令」，和別的打錯的名字一樣。行地址
         // 那一套（`:/a/,/b/s/…`）要整套 Ex 文法，記在 §5.80 第 5 條底下。
         // What this command needs before it can mean anything (Feature #170).
-        // A setting whose prerequisite is missing used to be *set* and then
-        // read by nobody: `:view-hanging on` on a horizontal page turned a flag on,
-        // changed nothing, and said 「標點旁置：開」, which is three kinds of
+        // A setting whose prerequisite is missing must not be *set* and then
+        // read by nobody: `:view-hanging on` on a horizontal page turning a flag
+        // on, changing nothing, and saying 「標點旁置：開」 is three kinds of
         // wrong at once.
-        // **「前提一併補上」就是那一下 `!`**（2026-10-07 定）。判詞：「I think that
-        // force should not be a parameter but should be a part of the command
-        // function.」
+        // **「前提一併補上」就是那一下 `!`**：強制是命令的一部分，不是一個參數。
         //
-        // Warning: 從前它是行末一個 `force` 字，而那個字是**無條件**削掉的——於是任何
-        // 末一格吃整行的命令都把它丟掉：`:open force` 開的是挑選器而不是那個叫
-        // `force` 的檔（實測），`:run`、`:sh`、`:grep`、`:table-jump` 同病。一個
-        // 參數位能被另一件事徵用，這就是代價。
+        // Warning: 不許是行末一個 `force` 字：那個字要**無條件**削掉，於是任何
+        // 末一格吃整行的命令都會把它丟掉——`:open force` 開的會是挑選器而不是那個叫
+        // `force` 的檔，`:run`、`:sh`、`:grep`、`:table-jump` 同病。一個參數位不許
+        // 被另一件事徵用。
         //
         // 行**原樣**往下傳：`!` 在名字上，`parse` 自己認得，所以 `:convert!` 讀
         // 得到它自己的那一格 `p.force`，不必再有人把它接回去。
@@ -101,12 +94,12 @@ impl Editor {
         }
         match command::parse(line)? {
             // `:open` with nothing to open is the picker — the command line
-            // takes no 中文, and a chapter's name is 中文 (2026-09-16).
+            // takes no 中文, and a chapter's name is 中文.
             Command::OpenPicker => {
                 self.open_file_picker();
                 Ok(CommandOutcome::Continue)
             }
-            // **`:cd`/`:pwd`**（2026-10-01）。照 helix 與 vim：不帶參數回家目
+            // **`:cd`/`:pwd`**。照 helix 與 vim：不帶參數回家目
             // 錄，`-` 回上一個。改的是[工作路徑][`Editor::working_dir`]這一格，
             // **不是進程的 cwd**——真去 `chdir` 會悄悄改掉別處七八個讀
             // `current_dir()` 的地方。
@@ -136,8 +129,8 @@ impl Editor {
                         self.working_dir()
                     }
                 };
-                // Warning: **換了工作路徑就換了項目，跟着項目走的那幾樣要重算**
-                // （2026-10-01 審出來的，是這一改自己帶出來的）。`root()` 是當
+                // Warning: **換了工作路徑就換了項目，跟着項目走的那幾樣要重算**。
+                // `root()` 是當
                 // 場算的，所以**問**它的地方自動對；而詞表與百科是**裝在手上
                 // 的**，文件樹記的是開樹那一刻的根——不重算就還是上一個項目的。
                 self.reload_project_words();
@@ -157,7 +150,7 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::Open(path) => {
-                // **`++enc=big5` first, as vim writes it** (2026-11-04): open
+                // **`++enc=big5` first, as vim writes it**: open
                 // in that encoding; with no file, read this one again in it.
                 let (told, path) = match path.strip_prefix("++enc=") {
                     Some(rest) => {
@@ -184,9 +177,9 @@ impl Editor {
                     }
                     return Ok(CommandOutcome::Continue);
                 }
-                // **相對路徑按[工作路徑][`Editor::working_dir`]算**（2026-10-01）。
-                // 從前它原樣交給 `Buffer::open`，由作業系統按**進程的 cwd** 解
-                // ——於是 `:pwd` 報的那個目録 `:open` 不認，`:cd` 改了也没用。
+                // **相對路徑按[工作路徑][`Editor::working_dir`]算**。原樣交給
+                // `Buffer::open` 的話，作業系統按**進程的 cwd** 解——`:pwd` 報的那個
+                // 目録 `:open` 不認，`:cd` 改了也没用。
                 self.open_file_as(self.here_path(path.as_ref()), told).map_err(EditorError::Io)?;
                 // A file opened mid-session can carry a draft just as one named
                 // on the command line can.
@@ -197,7 +190,7 @@ impl Editor {
                 self.new_buffer();
                 Ok(CommandOutcome::Continue)
             }
-            // **A preview has no file** (2026-11-08): the saves say so and
+            // **A preview has no file**: the saves say so and
             // write nothing, as in a sidebar; `:x` and `ZZ` are `:q` there.
             Command::Write(_) | Command::WriteForce(_) | Command::Update | Command::SaveAs { .. }
                 if !self.settings_open && self.page_window_has_the_keys() =>
@@ -346,9 +339,9 @@ impl Editor {
                 glyphs,
                 rows,
             } => {
-                // **範圍寫反了就問一句**（2026-10-09 作者定，照 vim）。
+                // **範圍寫反了就問一句**（照 vim）。
                 //
-                // 從前 `substitution_rows` 默默 `a.min(b)..a.max(b)` 就改了，而「我寫
+                // `substitution_rows` 不許默默 `a.min(b)..a.max(b)` 就改：「我寫
                 // 反了」和「我故意寫反」在屏幕上長得一樣。對調過的那一條存起來，`y`
                 // 再跑——它走的是正向那一枝，不會問第二次。
                 if let Some((first, second)) = self.a_backwards_range(&rows) {
@@ -400,7 +393,7 @@ impl Editor {
                     self.status = say!("table.vertical-not-allowed");
                     return Ok(CommandOutcome::Continue);
                 }
-                // **程序文件不竪排**（2026-09-21）。Refused here rather than in
+                // **程序文件不竪排**。Refused here rather than in
                 // `set_layout`, because the setting itself is not the problem:
                 // the reader may well be 竪排 in the novel in the next buffer,
                 // and switching it off for them would be answering a question
@@ -599,7 +592,7 @@ impl Editor {
             Command::SetTabInserts(want) => {
                 if let Some(spaces) = want {
                     // A typed setting is this buffer's too: a modeline's
-                    // `et` gives way to it (2026-11-04).
+                    // `et` gives way to it.
                     self.set_tab_spaces(spaces);
                     self.current_buffer_mut().local_mut().tab_spaces = None;
                 }
@@ -708,15 +701,11 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::GotoLine(n) => {
-                // Warning: **`:40` is the file's line 40, in a grid as anywhere else**,
-                // and that is older than the grid. 2026-10-20 I read the rule
-                // at `table_row_base` — 「inside the window the gutter, the
-                // status line and `␣t20g` all mean one number」 — as covering
-                // this too and made it a row; two tests that had pinned the
-                // old meaning for months said otherwise
-                // (`a_quoted_field_is_read_as_the_one_field_it_is` uses `:3`
-                // for the third **line**). Whether it should become a row is
-                // the author's to decide, not a comment's.
+                // Warning: **`:40` is the file's line 40, in a grid as anywhere
+                // else**. The rule at `table_row_base` — 「inside the window the
+                // gutter, the status line and `␣t20g` all mean one number」 —
+                // does not cover it (`a_quoted_field_is_read_as_the_one_field_it_is`
+                // uses `:3` for the third **line**).
                 self.fold_stays_closed = true;
                 self.goto_line(n);
                 Ok(CommandOutcome::Continue)
@@ -785,14 +774,13 @@ impl Editor {
                         }
                     }
                     // …and bare reports, the rule for a command that takes an
-                    // argument (2026-11-07).
+                    // argument.
                     None => {}
                 }
                 self.status = self.outline_report();
                 Ok(CommandOutcome::Continue)
             }
-            // **`:resume` — 把這個目錄上次開着的那幾個加進來**（2026-10-18
-            // 作者定）。只加不關，所以按下去丟不了任何東西。
+            // **`:resume` — 把這個目錄上次開着的那幾個加進來**。只加不關，所以按下去丟不了任何東西。
             Command::Resume => {
                 let opened = self.restore_session();
                 self.status = match opened {
@@ -872,7 +860,7 @@ impl Editor {
                 self.show_the_build();
                 Ok(CommandOutcome::Continue)
             }
-            // **`:yuhao` 開官網**（2026-10-06 定）。走的是跟着鏈接那條路
+            // **`:yuhao` 開官網**。走的是跟着鏈接那條路
             // （`open_request`），所以它和 `gx` 同一個機制：前端把網址當**一個
             // 參數**交給 `open`/`xdg-open`，這一側從不拼命令行。
             Command::Yuhao => {
@@ -884,7 +872,7 @@ impl Editor {
             Command::ListActions => {
                 let mut listing = String::new();
                 listing.push_str(&say!("keys.actions-head"));
-                // **helix | vim | yours** (2026-11-04): each keymap's keys at
+                // **helix | vim | yours**: each keymap's keys at
                 // the flavour in force, the one in force in bold, the
                 // flavour's own marked `*`; then the reader's own lines.
                 let vim_now = self.vim_keymap();
@@ -969,7 +957,7 @@ impl Editor {
                     say!("keys.actions-what"),
                     say!("keys.actions-key")
                 );
-                // A prompt's, a picker's and a sidebar's (2026-11-01), each
+                // A prompt's, a picker's and a sidebar's, each
                 // under the name of its table.
                 for place in yumete_cjk::actions::Place::ALL {
                     listing.push_str(&format!("\n### [keys.{}]\n\n{head}", place.name()));
@@ -990,8 +978,7 @@ impl Editor {
                 self.show_listing(listing, say!("keys.actions-title"));
                 Ok(CommandOutcome::Continue)
             }
-            // **vim's `:set` and `:setf`** (2026-11-07, from the 0.20.0
-            // reviews): read as a modeline is read, so they take exactly what
+            // **vim's `:set` and `:setf`**: read as a modeline is read, so they take exactly what
             // a modeline takes (`ft`, `ts`, `sw`, `et`, `tw`) into this
             // buffer, and the file type as one set by hand.
             //
@@ -1117,7 +1104,7 @@ impl Editor {
                 self.scheme_request = Some(format!("commit:{}", mode.unwrap_or_default()));
                 Ok(CommandOutcome::Continue)
             }
-            // 字集過濾、排序與整句字集軌 are the engine's too (2026-11-04).
+            // 字集過濾、排序與整句字集軌 are the engine's too.
             Command::YumeCharset(word) => {
                 self.scheme_request = Some(format!("charset:{}", word.unwrap_or_default()));
                 Ok(CommandOutcome::Continue)
@@ -1137,7 +1124,7 @@ impl Editor {
                 self.scheme_request = Some(format!("panel:{}", mode.unwrap_or_default()));
                 Ok(CommandOutcome::Continue)
             }
-            // 正在打的那一段寫在哪，同上（2026-09-27）。
+            // 正在打的那一段寫在哪，同上。
             Command::YumeInlinePreedit(mode) => {
                 self.scheme_request =
                     Some(format!("inline-preedit:{}", mode.unwrap_or_default()));
@@ -1198,8 +1185,8 @@ impl Editor {
                         }
                     },
                     // Every shell verb's command is the previous one for the
-                    // next `!` (2026-10-29, review: after `:sh make`, `:!!` said
-                    // there was none while the ghost offered `make`).
+                    // next `!`: after `:sh make`, `:!!` runs `make`, as the
+                    // ghost offers.
                     false => {
                         self.last_bang = Some(line.clone());
                         line
@@ -1212,7 +1199,7 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::Pipe(line) => {
-                // Warning: **鎖住就別跑那條命令**（2026-10-02 查出來的）。`!` 是把選區
+                // Warning: **鎖住就別跑那條命令**。`!` 是把選區
                 // 過一遍外面的程序再**換回來**，而換回來那一下繩子會拒絕——可
                 // 命令那時已經跑完了。`!sed -i`、`!git checkout` 這一類有副作用
                 // 的，鎖着也照樣生效，而屏幕上寫的是「只讀」。
@@ -1226,7 +1213,7 @@ impl Editor {
                 self.ask_the_shell(line, crate::editor::Put::Replace);
                 Ok(CommandOutcome::Continue)
             }
-            // **helix 那四個裏的另外三個**（2026-10-06）：`!` 插在前面、`A-!` 接在
+            // **helix 那四個裏的另外三個**：`!` 插在前面、`A-!` 接在
             // 後面、`A-|` 不收輸出。
             Command::Fold => {
                 self.fold_selection();
@@ -1256,8 +1243,7 @@ impl Editor {
                 }
                 // The name goes into the error, as vim's E484 has it: a bare
                 // "No such file or directory" does not say which.
-                // In this buffer's encoding first, then as it looks
-                // (2026-11-04): a Big5 note read into a Big5 chapter.
+                // In this buffer's encoding first, then as it looks: a Big5 note read into a Big5 chapter.
                 let encoding = self.current_buffer().encoding();
                 let text = crate::encoding::read_file(&self.here_path(&path), encoding, true).map_err(|e| {
                     EditorError::Io(std::io::Error::new(e.kind(), format!("{path}: {e}")))
@@ -1288,7 +1274,7 @@ impl Editor {
             // shows this document's tab beside the text, falling back to the
             // browser when a picture cannot be drawn, and turned off it closes
             // the tab and stops the browser's. Bare is `on` unless this
-            // document's preview is on the screen (2026-11-08).
+            // document's preview is on the screen.
             Command::Preview(how) => {
                 let window = self.preview_here_on_screen();
                 let running = self.preview_at.is_some();
@@ -1375,10 +1361,8 @@ impl Editor {
                 // **The three it writes**, not four. `:indent` reports itself
                 // — it is not `:render`'s to set, so saying its level here
                 // would read as a claim that it is. All three have three
-                // levels since 2026-09-06: ruby used to have two states and an
-                // N-to-1 mapping onto the three names, and the state it was
-                // missing is the one the law asks for — know a reading without
-                // drawing it.
+                // levels, ruby too: its middle one is the one the law asks for
+                // — know a reading without drawing it.
                 let level = |how: Render| match how {
                     Render::Off => TableLevel::Off,
                     Render::Basic => TableLevel::Basic,
@@ -1470,11 +1454,11 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::ShowDetail(want) => {
-                // Warning: **Flip what the reader said, not what is drawn.** The
-                // flip used to read `!self.detail_visible()`, and that also asks
-                // whether this cell has a record to draw: on the header or the
-                // `| --- |` row it has none, so it was always false and the
-                // switch only ever went one way.
+                // Warning: **Flip what the reader said, not what is drawn.**
+                // `!self.detail_visible()` also asks whether this cell has a
+                // record to draw: on the header or the `| --- |` row it has
+                // none, so it is always false there and the switch would only
+                // ever go one way.
                 //
                 // So it turns round what the reader said (`show_detail`), and
                 // with nothing said, whether this cell opens it by itself.
@@ -1693,12 +1677,11 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::SetMeasure(Some(measure)) => {
-                // **給一個寬度就是折，`0` 也算**（2026-10-05 定）。
+                // **給一個寬度就是折，`0` 也算**。
                 //
-                // Warning: **從前這裏是 `if measure.is_some()`**，於是 `0`（＝按窗口
-                // 寬折）是唯一一個「給了寬度卻可能什麼都不發生」的參數：從不折
-                // 出發給 `0`，屏幕一點反應都没有。一位 vim 用戶就是在這裏斷定
-                // 「不能禁止 wrap」的（給 `500` 同樣一聲不響）。
+                // Warning: **不是 `if measure.is_some()`**：那樣 `0`（＝按窗口寬折）
+                // 是唯一一個「給了寬度卻可能什麼都不發生」的參數——從不折出發給 `0`，
+                // 屏幕一點反應都没有，像是不能禁止折行。
                 //
                 // **給一個寬度就是折（`0` ＝ 窗口寬）**；`:view-wrap` 翻折與不折，
                 // 接着用上次那個寬度。
@@ -1707,9 +1690,8 @@ impl Editor {
                 self.refresh_goal_column();
                 Ok(CommandOutcome::Continue)
             }
-            // **竖排那一個自己一條命令**（2026-10-09 作者定）。從前 `:view-wrap` 兩種
-            // 排版共用一個數：橫排是行寬，竖排是一列幾個字。原話：「一个东西怎么能有
-            // 两个命令……view-wrap 只在横排生效，view-wrap-vertical 只在竖排生效」。
+            // **竖排那一個自己一條命令**：一個數不許有兩個意思（橫排的行寬、竖排的
+            // 一列幾個字）。`view-wrap` 只在橫排生效，`view-wrap-vertical` 只在竖排生效。
             Command::SetZongMeasure(None) => {
                 self.status = match self.zong_measure() {
                     Some(m) => say!("layout.zong-measure", m),
@@ -1722,7 +1704,7 @@ impl Editor {
                 self.refresh_goal_column();
                 Ok(CommandOutcome::Continue)
             }
-            // **裸寫報現狀**，同別的開關（2026-10-09 立的規矩）。
+            // **裸寫報現狀**，同別的開關。
             Command::WhichWrap(None) => {
                 let now = match self.which_wrap().is_empty() {
                     true => say!("cmd.which-wrap.none"),
@@ -1734,7 +1716,7 @@ impl Editor {
             Command::WhichWrap(Some(written)) => {
                 // 校驗和配置檔那一邊是同一句（`yumete_cjk::read_which_wrap`）。
                 // **`off` 清空。** vim 那邊是 `:set whichwrap=`，而一條命令的參數
-                // 寫不出空串（2026-10-10 定）。
+                // 寫不出空串。
                 let (kept, bad) = match written.trim() {
                     "off" => (String::new(), Vec::new()),
                     word => yumete_cjk::read_which_wrap(word),
@@ -1830,7 +1812,7 @@ impl Editor {
             return;
         }
         match asked.what {
-            // **`R` 動得太多那一問**（2026-10-03 定）。没有「看一眼」那一格：
+            // **`R` 動得太多那一問**。没有「看一眼」那一格：
             // 要看的名單就在旁邊，人正站在上面。
             Asking::ReplaceEverywhere => match answer {
                 'y' => self.replace_what_was_asked(),
@@ -1839,8 +1821,7 @@ impl Editor {
                     self.status = say!("search.replace-all-stopped");
                 }
             },
-            // **撤回一次跨檔替換，也要先問**（2026-10-09 定）。原話：「whenever we
-            // changed more than one buffer/files, we do a confirm」。
+            // **撤回一次跨檔替換，也要先問**：改動不止一個緩衝或檔，就要確認。
             Asking::UndoTheReplace => match answer {
                 'y' => self.take_the_replacement_back(None),
                 // 「只撤銷這一個」＝眼前這一份（`Editor::this_file_in_the_batch`）。
@@ -1851,7 +1832,7 @@ impl Editor {
                 // 不撤銷：那一批留在案上，下一下 `u` 還撤得回來。
                 _ => {}
             },
-            // **替換做到一半按了 `Esc`**（2026-10-11 定）。三條路：留着、全撤回、
+            // **替換做到一半按了 `Esc`**。三條路：留着、全撤回、
             // 接着做。`Esc` 本身在這裏是「不中止」——`answer_query` 把 `Esc` 讀成
             // `n`，而這一扇的 `n` 正是「繼續替換」，所以按順手了也不會把一趟做了
             // 一半的替換丟在那裏。
@@ -1862,8 +1843,8 @@ impl Editor {
             },
             // 一顆按鈕的窗，按了就關——它不問什麼，只是不讓那句話從狀態欄滑過去。
             Asking::ReplaceUndoneInPart => {}
-            // **A character the file's encoding cannot hold** (2026-11-04): the
-            // three answers asked for, `u` UTF-8, `w` write anyway, `n` not.
+            // **A character the file's encoding cannot hold**: three answers,
+            // `u` UTF-8, `w` write anyway, `n` not.
             Asking::Unencodable { how, force, then } => {
                 let references = match answer {
                     'u' => false,
@@ -1907,15 +1888,15 @@ impl Editor {
                 'd' => self.diff_against(None),
                 _ => self.status = say!("write.oversize-stopped"),
             },
-            // **恢復分兩問**（2026-10-02 定）。第一問在開檔那一刻擺出來，
+            // **恢復分兩問**。第一問在開檔那一刻擺出來，
             // 「暫時不管」之後 `:recover` 再擺一次同樣三個；選了「恢復」就接第
             // 二問——`answer_query` 已經 `take()` 走了第一問，所以這裏直接把第
             // 二問放上去就接得上，不必另加機關。
             Asking::RecoverDraft => match answer {
                 'y' => self.query = self.recover_confirm_query(),
-                // Warning: **鎖住的時候這一格也不許按**（2026-10-10 報的）。
-                // `y` 那一條路有 `refuse_readonly`，而這一條從前一個字都没問，於是
-                // 鎖着的那一趟裏**唯一按得動的是毀掉那一格**——被告知「只讀，撿不
+                // Warning: **鎖住的時候這一格也不許按**。`y` 那一條路有
+                // `refuse_readonly`，這一條也要問，不然鎖着的那一趟裏**唯一按得動的是
+                // 毀掉那一格**——被告知「只讀，撿不
                 // 了」的人去按 `d` 清掉那個提醒，是很順的一步。§5.61 把「鎖住」定
                 // 成「這一趟不寫盤」，而刪一個檔比寫一個檔更算。
                 'd' if self.refuse_readonly() => {}
@@ -1924,8 +1905,7 @@ impl Editor {
                     self.status = say!("recover.draft-dropped");
                 }
                 // 暫時不管：草稿原封不動。**不重說一遍「有草稿」**——面板剛
-                // 說過，而人家正是答了那一句纔到這裏的（2026-10-02 原話：
-                // 「不是人家都已經選擇了 n 了嗎？」）。只說怎麼回得去。
+                // 說過，而人家正是答了那一句（選了 `n`）纔到這裏的。只說怎麼回得去。
                 _ => {
                     self.current_buffer_mut().leave_the_draft_alone();
                     self.status = say!("recover.left-for-now");
@@ -2044,7 +2024,7 @@ impl Editor {
     }
 
     /// The question a save asks when the file's encoding cannot hold some of
-    /// its characters (2026-11-04).
+    /// its characters.
     fn unencodable_query(&self, found: &crate::encoding::Unencodable, how: Saving, force: bool) -> Query {
         let name = crate::encoding::name(found.encoding);
         let (line, col, c) = found.first;
@@ -2092,9 +2072,9 @@ impl Editor {
 
     /// `:wq [path]` and `:x [path]` — save, then leave.
     ///
-    /// **`:wq <名字>` means 「save it as this, I am done」.** Left as `:w
-    /// <path>` it wrote a *copy* and then refused to quit, because the chapter
-    /// itself was still unsaved — and a writer with vi's muscle memory reads
+    /// **`:wq <名字>` means 「save it as this, I am done」.** As `:w <path>`
+    /// it would write a *copy* and then refuse to quit, because the chapter
+    /// itself would still be unsaved — and a writer with vi's muscle memory reads
     /// that refusal and reaches for `:q!`. So it rebinds, exactly as
     /// `:write-as` does, and the file that is saved is the one the name says.
     ///
@@ -2107,9 +2087,9 @@ impl Editor {
         only_if_changed: bool,
         force: bool,
     ) -> Result<CommandOutcome, EditorError> {
-        // **A sidebar has no file** (vim's, measured 2026-11-03): `:x` and
-        // `ZZ` close it, writing nothing; `:wq` refuses, as vim's E32. They
-        // used to save the window's file behind it, unseen.
+        // **A sidebar has no file** (vim's, measured): `:x` and `ZZ` close
+        // it, writing nothing; `:wq` refuses, as vim's E32. None of them saves
+        // the window's file behind it, unseen.
         if self.panel_focus().is_some() {
             if only_if_changed && path.is_none() {
                 self.close_this_region(false);
@@ -2119,7 +2099,7 @@ impl Editor {
             return Ok(CommandOutcome::Continue);
         }
         // A preview likewise, except that `:x` is `:q` there, and so leaves
-        // when no text window is left (2026-11-08).
+        // when no text window is left.
         if self.page_window_has_the_keys() {
             if only_if_changed && path.is_none() {
                 return self.quit(false);
@@ -2193,11 +2173,8 @@ impl Editor {
     /// The same, and `force` writes over a file that changed on disk (`:w!`).
     ///
     /// Returns **what it did**, because the three are different things and the
-    /// caller has to be able to tell them apart. It used to return `()` and the
-    /// caller sniffed the rendered status line for a Chinese character to find
-    /// out — which in English said 「saved ch1.md」 about a chapter that had not
-    /// been saved, and in Chinese left a stale 「抄了一份」 standing over a save
-    /// that had happened.
+    /// caller has to be able to tell them apart — not by sniffing the rendered
+    /// status line, which differs by language and can be stale.
     pub(super) fn write_forcing(&mut self, path: Option<&str>, force: bool) -> Result<Wrote, EditorError> {
         // **The gate belongs on the path every write takes**, not on one arm of
         // the command match (#306). It was built on `:write` alone and left
@@ -2224,9 +2201,9 @@ impl Editor {
         let saved: Result<Wrote, EditorError> = match path {
             // `:w path` writes a **copy** and stays here; `:w! path` writes it
             // over whatever is already there. Rebinding this buffer to another
-            // name is `:write-as`, which says so — `:w chapter-copy.md` used to
-            // rebind silently, and every save after it went to the copy while
-            // the chapter itself stayed at the version before.
+            // name is `:write-as`, which says so — `:w chapter-copy.md` must not
+            // rebind silently, or every save after it goes to the copy while
+            // the chapter itself stays at the version before.
             Some(p) => {
                 let target = self.here_path(p);
                 match self.buffer_holding(&target) {
@@ -2270,7 +2247,7 @@ impl Editor {
                     .map_err(EditorError::Io)
             }
         };
-        // **A character the encoding cannot hold** (2026-11-04): nothing was
+        // **A character the encoding cannot hold**: nothing was
         // written; ask what to do, in the central window.
         if let Err(EditorError::Io(err)) = &saved {
             if self.asked_about_encoding(err, how, force) {
