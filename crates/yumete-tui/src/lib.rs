@@ -25989,7 +25989,8 @@ fn squeezed(text: &str) -> String {
     /// 卡在詞裏不動。`1997` 是四個落腳點，四幀要各不相同。
     #[test]
     fn the_caret_inside_a_緃中横_group_marks_one_character() {
-        let config = vertical_config();
+        let mut config = vertical_config();
+        config.editor.tatechuyoko = 4;
         let reversed = |buf: &ratatui::buffer::Buffer, w: u16, h: u16| -> Vec<(u16, u16, String)> {
             (0..w)
                 .flat_map(|x| (0..h).map(move |y| (x, y)))

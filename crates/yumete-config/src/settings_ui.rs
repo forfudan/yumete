@@ -546,7 +546,7 @@ pub const SETTINGS: &[Setting] = &[
         kind: Kind::Count { low: 2, high: 8, zero: Some("settings.zero.off") },
         label: "settings.editor.tatechuyoko",
         hint: "settings.editor.tatechuyoko.hint",
-        factory: "4",
+        factory: "0",
     },
     Setting {
         table: "editor",
