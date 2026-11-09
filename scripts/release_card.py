@@ -12,7 +12,7 @@ Warning: **沒有 markdown 庫，也不裝一個。** 發布說明只用到列�
 塊這幾樣，而一個只認這幾樣的解析器是三十行的事（同 `Editor::outline`：標題就是行首那
 幾個井號，不需要 parser）。真要用到別的語法，改這裏比裝一個依賴便宜。
 
-要 Chrome：`/Applications/Google Chrome.app`。
+要一個 Chromium 系的瀏覽器：Chrome，沒有就用 Edge。
 """
 import argparse
 import html
@@ -21,9 +21,20 @@ import re
 import unicodedata
 import subprocess
 import sys
+import tempfile
 
 HERE = pathlib.Path(__file__).resolve().parent.parent
-CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+CHROME = next(
+    (path for path in (
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+    ) if pathlib.Path(path).exists()),
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+)
+# **一個用完就丟的瀏覽器**：不碰鑰匙圈、不讀使用者的設定檔，所以不彈任何系統對話框。
+PROFILE = tempfile.mkdtemp(prefix="release-card-")
+HEADLESS = [CHROME, "--headless", "--disable-gpu", "--use-mock-keychain",
+            "--password-store=basic", f"--user-data-dir={PROFILE}"]
 
 # **字體**。
 #
@@ -90,7 +101,7 @@ def inline(text):
 def render(md):
     """那幾樣語法 → HTML。段落、`---`、代碼塊、列表（含一層縮進）、標題。
 
-    **列表項的第二段**（2026-10-23）：緊跟在列表項下面、縮進兩格、又不是列表記號的
+    **列表項的第二段**：緊跟在列表項下面、縮進兩格、又不是列表記號的
     那一行，接進同一項，另起一段。0.11.0 的中文稿有五條是兩段的，不認的話第二段掉
     出列表，頂格成了一個没有記號的段落。
     """
@@ -161,15 +172,14 @@ def cells(ch, nxt=""):
 
     Warning: **Ambiguous 算一格，不算兩格。** `─ │ · – → ±` 這一族在 UAX #11 裏是
     「看終端」，而 yumete 出的那一幀按一格排——量出來的：一條 `─────` 的分隔線
-    24 個字符正好 24 格，按兩格算會多出 24 格（2026-09-26 自檢報的就是這一行）。
+    24 個字符正好 24 格，按兩格算會多出 24 格。
 
     Warning: **變體選擇符本身零格，可它把前一個字撐成兩格。** `Warning: ` 是兩個 char
     （U+26A0 ＋ U+FE0F）：`Warning: ` 單獨是一格，跟上 VS16 就成了 emoji 呈現，終端給兩格
     （`unicode-width` 的 `width_cjk` 就是這麼算的）。所以要往後看一個字。
 
-    Warning: **2026-09-26 這一條漏了兩次。** 第一次是整條沒想到；第二次是自檢只查了
-    「超出」沒查「不足」，於是短一格的行靜悄悄地過——畫出來就是那一行的金框往前
-    縮了一格，而一眼就被看出來了。**自檢要查兩頭。**
+    Warning: **自檢要查兩頭**：只查「超出」不查「不足」，短一格的行就靜悄悄地過，
+    畫出來是那一行的金框往前縮了一格。
 
     Warning: **這支函數是在複述 yumete 的算法**（`yumete_cjk::char_width`），兩邊有可能
     走散。所以 `pin` 每一行都對一次總格數，對不上就當場喊出來——複述不可靠，自檢
@@ -194,7 +204,7 @@ DOWN = "│┃┆┇┊┋╎╏├┤┼╭╮╰╯┌┐└┘┝┞┟┠┡
 def pin(shot, wide):
     """把 `--shot --html` 那一串重排成**一格一個盒子**。
 
-    Warning: **不能讓瀏覽器自己排這串 span**，哪怕字體是嚴格兩倍寬的。2026-09-26 量過，
+    Warning: **不能讓瀏覽器自己排這串 span**，哪怕字體是嚴格兩倍寬的：
     88×22 那一幀裏有四個字符終端和字體各說各的：
 
         ·  U+B7    終端 2 格，字體 1 格
@@ -248,10 +258,9 @@ def pin(shot, wide):
 def page(version, body, shot, url, width=1080, pad=64, base=19.0):
     """一張卡片。
 
-    Warning: **每行幾個字，是「正文字號」和「頁寬」的比，不是頁寬本身**（2026-10-04
-    報上來的：上一版「每行差不多 20 到 30 個字比較好，否則手機看起來吃力」）。
-    第一版正文 19px、版心 952px，於是一行排得下 **50 個漢字**；縮窄頁面會把 88 欄
-    的終端截圖擠爆，所以動的是字號——版心與內邊距不變，字放大一倍。
+    Warning: **每行幾個字，是「正文字號」和「頁寬」的比，不是頁寬本身**。每行 20 到 30
+    個字，手機上纔不吃力；正文 19px、版心 952px 一行排得下 50 個漢字，而縮窄頁面會把
+    88 欄的終端截圖擠爆，所以動的是字號——版心與內邊距不變，字放大一倍。
 
     `base` 是正文字號，別的字號都是它的倍數（原來那一版的比例原樣留着），所以
     `--chars` 撥一下，整張卡片跟着走。
@@ -301,7 +310,7 @@ b {{ color: #FFF6DD; font-weight: 600 }}
 code {{ font: .9em {MONO}; color: {GOLD};
   background: {CHROME_RUNG}; padding: 1px {px(6)}px; border-radius: 3px }}
 a {{ color: #8FC9E8; text-decoration: none }}
-/* **折行，不切**（2026-10-23）：`scoop bucket add … scoop-bucket` 一行 66 字，框裏
+/* **折行，不切**：`scoop bucket add … scoop-bucket` 一行 66 字，框裏
    放得下 57 個，`pre` 的默認是把多出來的切掉。圖上的命令没人複製，折一行比少半個網址好。 */
 pre.sh {{ background: {CHROME_RUNG}; color: {TEXT}; padding: {px(16)}px {px(20)}px;
   border-radius: 5px; margin: 0 0 {px(18)}px;
@@ -324,7 +333,7 @@ hr {{ border: 0; border-top: 1px solid {CHROME_RUNG}; margin: {px(26)}px 0 }}
   <div class=foot><span>{html.escape(url)}</span><span>Apache-2.0</span></div>
 </div>
 <script>
-// **格子是權威，字形迁就格子**（2026-09-26 定的）。每一格已經釘在
+// **格子是權威，字形迁就格子**。每一格已經釘在
 // `left = 欄號 × 格寬` 上，所以誰也推不動誰；剩下的是**一格裝不下的字形**——
 // 讓它溢出去就會蓋住鄰居。量一量，寬了就橫向壓扁。
 //
@@ -332,7 +341,7 @@ hr {{ border: 0; border-top: 1px solid {CHROME_RUNG}; margin: {px(26)}px 0 }}
 // 不同，而頁面自己知道它實際排成了多寬（`scrollWidth`）。
 // Warning: 框綫字是反過來的：它們比格子**窄**，要拉滿，不然一列 `─` 是虛綫。那一組在
 // `pin` 裏已經給了 `scaleX`/`scaleY`，這裏不碰它們。
-// Warning: **量的是「步進寬度」，不是墨跡外框。** 兩個都試過（2026-09-26）：
+// Warning: **量的是「步進寬度」，不是墨跡外框。** 兩個都試過：
 //   * `scrollWidth` 取整——7.5px 的字形報 8，每個半角字都成了「超出」；
 //   * `Range.getBoundingClientRect()` 量的是**墨跡**——楷體的筆畫本來就略微溢出
 //     字身框（漢字 16 對 15），於是幾乎每個字都被判越界，照它壓會把整幅字壓扁。
@@ -340,7 +349,7 @@ hr {{ border: 0; border-top: 1px solid {CHROME_RUNG}; margin: {px(26)}px 0 }}
 const pen = document.createElement("canvas").getContext("2d");
 // Warning: **字體要寫死，別從 `getComputedStyle` 拿。** 那裏回來的帶着行高
 // （`15px/22.5px …`），canvas 解析不了，靜靜地回落到一個**比例**字體——量出來
-// `M` 是 14.2px 而 `1` 是 8px，於是每一個字都成了「超出」（2026-09-26 踩到）。
+// `M` 是 14.2px 而 `1` 是 8px，於是每一個字都成了「超出」。
 pen.font = '{SHOT_PX}px "LXGW WenKai Mono GB", monospace';
 for (const cell of document.querySelectorAll(".shot i")) {{
   if (cell.style.transform) continue;          // 框綫字，已經處理過
@@ -357,15 +366,13 @@ def shoot(work, out, scale=1.0, width=1080):
     """截一張**剛好那麼高**的圖。
 
     Warning: **`--screenshot` 截的是窗口，不是內容**——`--window-size=1080,4000` 出來的
-    是一張下面拖着兩千像素黑地的圖。而這裏沒有 PIL 可以裁（系統 python 沒有，
-    2026-09-26 查過）。
+    是一張下面拖着兩千像素黑地的圖。而這裏沒有 PIL 可以裁（系統 python 沒有）。
 
     辦法是跑兩遍：`--dump-dom` 印的是**腳本跑完之後**的 DOM，所以讓頁面把自己的高度
     寫進一個屬性，第一遍讀出來，第二遍按它截。多一次 Chrome 啓動，一秒的事。
     """
     high = subprocess.run(
-        [CHROME, "--headless", "--disable-gpu", "--virtual-time-budget=2000",
-         "--dump-dom", str(work)],
+        [*HEADLESS, "--virtual-time-budget=2000", "--dump-dom", str(work)],
         capture_output=True, text=True,
     ).stdout
     found = re.search(r'data-h="(\d+)"', high)
@@ -374,7 +381,7 @@ def shoot(work, out, scale=1.0, width=1080):
     # 1080 的頁面出來就是 1080 的圖——在手機上放大看就是糊的。
     # `--force-device-scale-factor=2` 出 2160，版面一格不動。
     subprocess.run(
-        [CHROME, "--headless", "--disable-gpu", "--hide-scrollbars",
+        [*HEADLESS, "--hide-scrollbars",
          f"--force-device-scale-factor={scale}",
          f"--screenshot={out}", f"--window-size={width},{tall}", str(work)],
         check=True, capture_output=True,
@@ -390,7 +397,7 @@ def main():
     ap.add_argument("--size", default="88x22", help="截那一幀畫面多大")
     ap.add_argument(
         "--chars", type=float, default=25.0,
-        help="正文一行排幾個漢字（2026-10-04 定：20–30，手機上纔讀得動）",
+        help="正文一行排幾個漢字",
     )
     ap.add_argument(
         "--scale", type=float, default=2.0,
