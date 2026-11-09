@@ -134,7 +134,7 @@ English.
      screen.
 
 `:vertical` sets the page vertically, the way a Chinese book is set;
-`:horizontal` comes back.
+`:vertical off` comes back.
 
 ────────────────────────────────────────────────────────────
 

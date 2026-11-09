@@ -453,8 +453,8 @@ en = "vertical writing"
 [[message]]
 # 竪排幫助：轉成竪排
 key = "help.vertical.turn-vertical"
-zhs = "转成竖排；:horizontal 转回来"
-en = "turn the page vertical; :horizontal turns it back"
+zhs = "转成竖排；:vertical off 转回来"
+en = "turn the page vertical; :vertical off turns it back"
 
 [[message]]
 # 竪排幫助：所見即所得

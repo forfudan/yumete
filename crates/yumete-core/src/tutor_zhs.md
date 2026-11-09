@@ -102,7 +102,7 @@
 现在是**竖排**。`h` `l` 换纵（纵从右往左排），`j` `k` 沿着这一纵走。
 `:view-wrap-height 24` 定一纵多少字，`:view-pages-vertical 2` 把一页分成上下两段。
 `:view-hanging on` 让标点挂到字旁边，像印刷的书。
-输入 `:horizontal` 回到横排。
+输入 `:vertical off` 回到横排。
 
   ⇒ 输入 `:indent full`，按 Enter。段首缩进两格，段间空行隐藏了，
      但文件没有变，变的只是显示。`:indent basic` 只缩进、保留空行，

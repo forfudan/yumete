@@ -172,10 +172,9 @@ const DISOWNED: &[&str] = &[
     // 連那個不帶參數的互換也一併沒了：「沒有人想互換，想的是轉成竪排」。
     ":layout",
     ":lay",
-    // Warning: **`:vertical` 和 `:horizontal` 是命令**，和 `:grep` 一樣不在這張
-    // 單子上。這不違反「舊名字一律刪掉」那條規矩：有了 `:vertical-keys`，
-    // `vertical` 就是它的唯一前綴，一個想轉頁的人打 `:vertical` 會靜靜地撥到
-    // `hjkl` 那個設置上。把這兩個詞定成命令，那條路就封住了。
+    // Warning: **`:vertical` 是命令**，和 `:grep` 一樣不在這張單子上：有了
+    // `:vertical-keys`，`vertical` 就是它的唯一前綴，不是命令的話，一個想轉頁
+    // 的人打 `:vertical` 會靜靜地撥到 `hjkl` 那個設置上。
     ":nowrap",
     ":markup",
     ":wysiwyg",

@@ -298,13 +298,6 @@ en = "open a blank window below (as C-w n s)"
 find = "分窗 分屏 新建 空白 split window 窗口 上下 below hnew"
 
 [[message]]
-# `:horizontal` ——`:layout horizontal` 的一個字的寫法
-key = "cmd.commands.horizontal"
-zhs = "把这一页改为横排"
-en = "lay this page out horizontally"
-find = "橫排 横排 橫書 横书 排版 方向 layout horizontal across"
-
-[[message]]
 # : 命令選單裏 hsplit 那一項的説明
 key = "cmd.commands.hsplit"
 zhs = "在下方分出窗口（同 C-w s）；可带文件名"
@@ -746,11 +739,11 @@ en = "version, and where config, data and logs live"
 find = "版本 version ver 配置 config 路徑 路径 path"
 
 [[message]]
-# `:vertical` ——`:layout vertical` 的一個字的寫法
+# `:vertical` ——竪排的開關：on 竪排，off 橫排，不帶詞就翻轉（草稿）
 key = "cmd.commands.vertical"
-zhs = "把这一页改为竖排"
-en = "lay this page out vertically"
-find = "竪排 竖排 縱書 纵书 直排 排版 方向 layout vertical down"
+zhs = "竖排开关：on 竖排，off 横排，单用则切换"
+en = "vertical layout: on, off for across, alone to turn it round"
+find = "竪排 竖排 縱書 纵书 直排 橫排 横排 排版 方向 layout vertical horizontal down across"
 
 [[message]]
 # `:vertical-keys` 這條命令自己

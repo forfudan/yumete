@@ -384,6 +384,10 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::SetLayout(direction) => {
+                let direction = direction.unwrap_or(match self.layout() {
+                    Layout::Vertical => Layout::Horizontal,
+                    _ => Layout::Vertical,
+                });
                 // A grid runs across and down; a 縱書 page runs down and to the
                 // left. There is no honest way to draw one as the other, so the
                 // command is refused rather than quietly doing something else —

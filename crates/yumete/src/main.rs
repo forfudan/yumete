@@ -2846,7 +2846,7 @@ KEYS (Normal mode, Helix-style):
               :buffer  :buffer-next  :buffer-previous  :buffer-close
               :search-project  :outline  across the project / this file's headings
               :export html|typst|epub|csv|tsv   write it out
-              :vertical  :horizontal    :view-margin [never|dense|loose|always]
+              :vertical [on|off]        :view-margin [never|dense|loose|always]
               :yume-annotation  the annotation beside candidates:
                               off, next, or a mode (multi, double)
               :yume-where     the six places 碼表 and 字料 are looked

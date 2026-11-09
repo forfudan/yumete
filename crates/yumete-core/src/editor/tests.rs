@@ -12561,7 +12561,7 @@ fn wrap_on_and_off_are_refused_in_vertical_and_say_why() {
     assert_eq!(ed.zong_measure(), Some(12));
 
     // Horizontally it works as it always did.
-    ed.execute("horizontal").unwrap();
+    ed.execute("vertical off").unwrap();
     ed.execute("view-wrap").unwrap();
     assert!(!ed.soft_wrap());
 }
@@ -38553,7 +38553,7 @@ fn the_vertical_preview_is_a_switch_and_follows_the_page() {
     ed.execute(":preview-vertical on").unwrap();
     assert_eq!(ed.status(), say!("preview.vertical-on"));
     assert!(ed.markdown_preview_vertical());
-    ed.execute(":horizontal").unwrap();
+    ed.execute(":vertical off").unwrap();
     assert!(!ed.markdown_preview_vertical());
     assert!(ed.execute(":preview-vertical sideways").is_err());
 }
@@ -38829,7 +38829,7 @@ fn window_columns(ed: &Editor) -> Vec<(crate::window::WindowId, u16)> {
 }
 
 /// **Switching the layout moves no window**: a Markdown file with its
-/// preview on the right stays so through `:vertical` and `:horizontal` in
+/// preview on the right stays so through `:vertical` on and off in
 /// the text — the screen is not laid out by the page the keys are on. A
 /// preview opens to the right from a 縱書 page too, and `C-w h` `l` go to the
 /// window drawn there.
@@ -38844,8 +38844,8 @@ fn switching_the_layout_moves_no_window() {
     assert_eq!(ed.layout(), crate::zong::Layout::Vertical);
     assert_eq!(ed.live_window(), text);
     assert_eq!(window_columns(&ed), [(text, 0), (page, 41)], "`:vertical` moves neither");
-    ed.execute(":horizontal").unwrap();
-    assert_eq!(window_columns(&ed), [(text, 0), (page, 41)], "nor `:horizontal`");
+    ed.execute(":vertical off").unwrap();
+    assert_eq!(window_columns(&ed), [(text, 0), (page, 41)], "nor `:vertical off`");
     // Opened from a 縱書 page, the preview is on the right all the same.
     ed.execute(":vertical").unwrap();
     ed.execute(":preview-window").unwrap();
@@ -38859,7 +38859,7 @@ fn switching_the_layout_moves_no_window() {
     ed.on_key(Key::Ctrl('w'));
     ed.on_key(Key::Char('h'));
     assert_eq!(ed.live_window(), text, "`C-w h` comes back");
-    ed.execute(":horizontal").unwrap();
+    ed.execute(":vertical off").unwrap();
     assert_eq!(window_columns(&ed), [(text, 0), (page, 41)]);
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -38909,8 +38909,8 @@ fn a_split_opens_on_the_right_on_any_page() {
     let two = ed.live_window();
     assert_ne!(one, two);
     assert_eq!(window_columns(&ed), [(one, 0), (two, 41)], "縱書 too: the new window on the right");
-    ed.execute(":horizontal").unwrap();
-    assert_eq!(window_columns(&ed), [(one, 0), (two, 41)], "`:horizontal` moves neither");
+    ed.execute(":vertical off").unwrap();
+    assert_eq!(window_columns(&ed), [(one, 0), (two, 41)], "`:vertical off` moves neither");
     ed.on_key(Key::Ctrl('w'));
     ed.on_key(Key::Char('h'));
     assert_eq!(ed.live_window(), one, "`C-w h` goes to the window on the left");

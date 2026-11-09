@@ -296,7 +296,8 @@ pub enum Command {
     ///
     /// **一件事一種說法**：兩個方向各自一條命令，不是 `:layout` 的兩個參數，也没有
     /// 不帶參數的互換。
-    SetLayout(Layout),
+    /// The page's direction; `None` turns it round.
+    SetLayout(Option<Layout>),
     /// `:vertical-keys [logical|visual]` — 竪排時 `hjkl` 走行文還是走版面。
     /// `None` 是互換。
     SetVerticalKeys(Option<yumete_cjk::VerticalKeys>),
@@ -3914,21 +3915,20 @@ pub const COMMANDS: &[Entry] = &[
     // Warning: **是替換，不是加別名。** 倉裏那條規矩寫着舊拼法刪掉不留別名，而手冊那一節自己說「keeping two spellings would
     // mean this philosophy was only talk」。互換那一條也一併刪了——没有人想「互
     // 換」，想的是「轉成竪排」。
+    // **One switch**: `on` vertical, `off` across, alone it turns round.
     Entry {
         name: "vertical",
         aliases: &[],
         help: "cmd.commands.vertical",
         needs: &[],
-        params: &[],
-        build: Some(|_| Ok(Command::SetLayout(Layout::Vertical))),
-    },
-    Entry {
-        name: "horizontal",
-        aliases: &[],
-        help: "cmd.commands.horizontal",
-        needs: &[],
-        params: &[],
-        build: Some(|_| Ok(Command::SetLayout(Layout::Horizontal))),
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| {
+            Ok(match switched(p) {
+                Switch::To(true) => Command::SetLayout(Some(Layout::Vertical)),
+                Switch::To(false) => Command::SetLayout(Some(Layout::Horizontal)),
+                Switch::Flip => Command::SetLayout(None),
+            })
+        }),
     },
     Entry {
         name: "vertical-keys",
@@ -5821,7 +5821,8 @@ const RENAMED: &[(&str, &str)] = &[
     ("dense", "view-margin"),
     ("di", "clipboard"),
     ("display", "clipboard"),
-    ("layout", "vertical horizontal"),
+    ("layout", "vertical"),
+    ("horizontal", "vertical"),
     ("ls", "buffer"),
     // **The three that were values of one thing** — the fold they came out of
     // is `:render off|basic|full`, so the thing is what the signpost names.
@@ -7285,14 +7286,10 @@ mod tests {
 
     #[test]
     fn parses_layout_commands() {
-        // **一件事一種說法**。`:layout` 只剩互換，兩個方向各自
-        // 是一條命令——而不是 `:layout` 的兩個參數**加上**兩條同名命令，那就成
-        // 了兩種拼法說同一件事，正是手冊那一節自己要去掉的東西。
-        //
-        // 起因是 `:vertical-keys`：它一加，`vertical` 成了唯一前綴，打
-        // `:vertical` 的人會靜靜地撥到 `hjkl` 那個設置上去。
-        assert_eq!(parse(":vertical"), Ok(Command::SetLayout(Layout::Vertical)));
-        assert_eq!(parse(":horizontal"), Ok(Command::SetLayout(Layout::Horizontal)));
+        // **一件事一種說法**：方向是 `:vertical` 這一個開關。`vertical` 是命令，
+        // 所以不會被當成 `:vertical-keys` 的前綴。
+        assert_eq!(parse(":vertical on"), Ok(Command::SetLayout(Some(Layout::Vertical))));
+        assert!(parse(":horizontal").is_err());
         // **`:layout` 整條没了**，連同它那個不帶參數的互換。
         assert!(parse(":layout").is_err());
         assert!(parse(":layout vertical").is_err());
@@ -8281,10 +8278,9 @@ mod tests {
         // line ends up sayable rather than clever.
         //
         // **`vert` 不往下挖**：`:vertical` 和 `:vertical-keys` 都是頂層的真命令，
-        // 而深搜的前提是「頂層一條都找不着」。`horiz` 還是
-        // 往下挖的那一種——`:horizontal` 是頂層一條，所以它答的是那一條。
+        // 而深搜的前提是「頂層一條都找不着」。`horiz` 頂層没有，往下挖到兩處。
         assert_eq!(written("vert"), ["vertical", "vertical-keys"]);
-        assert_eq!(written("horiz"), ["horizontal"]);
+        assert_eq!(written("horiz"), ["view-pages-horizontal", "export horizontal"]);
 
         // And the fallback reaches past the first level: a scheme's name is
         // two words below `:yume`.
@@ -8384,9 +8380,8 @@ mod tests {
             "yume",
             "buffer",
             "clipboard-yank",
-            // 没有 `:layout`，兩個方向各自一條。
+            // 没有 `:layout`；方向是 `:vertical` 這一個開關。
             "vertical",
-            "horizontal",
             "view-wrap",
             "wheel",
             "table",
@@ -8528,6 +8523,16 @@ mod tests {
                 "`{was}` should be answered from RENAMED, not by the walk"
             );
         }
+    }
+
+    /// **`:vertical` is one switch**: alone it turns the page round, `on` and
+    /// `off` name the way, and `:horizontal` says where it went.
+    #[test]
+    fn vertical_is_one_switch() {
+        assert_eq!(parse(":vertical"), Ok(Command::SetLayout(None)));
+        assert_eq!(parse(":vertical on"), Ok(Command::SetLayout(Some(Layout::Vertical))));
+        assert_eq!(parse(":vertical off"), Ok(Command::SetLayout(Some(Layout::Horizontal))));
+        assert_eq!(moved_to("horizontal").as_deref(), Some("`:vertical`"));
     }
 
     /// **`:preview` is the preview's own group**, and `:view-preview` says

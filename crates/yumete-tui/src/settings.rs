@@ -281,8 +281,8 @@ fn view_lines(editor: &Editor) -> Vec<String> {
         // drawn table is horizontal whatever the reader chose: quitting on a
         // `.rs` must not keep `horizontal` over a vertical config.
         match editor.layout_chosen() {
-            Layout::Vertical => "vertical".to_string(),
-            Layout::Horizontal => "horizontal".to_string(),
+            Layout::Vertical => "vertical on".to_string(),
+            Layout::Horizontal => "vertical off".to_string(),
         },
         format!("view-wrap-width {}", editor.measure().unwrap_or(0)),
         format!("view-wrap {}", on(editor.soft_wrap())),
@@ -835,9 +835,9 @@ mod config_watch_tests {
         ed.execute(":view-focus").unwrap();
         ed.execute(":view-pages-vertical 2").unwrap();
         ed.execute(":vertical").unwrap();
-        assert_eq!(view(&ed), ["vertical", "view-pages-vertical 2", "view-focus on"]);
+        assert_eq!(view(&ed), ["vertical on", "view-pages-vertical 2", "view-focus on"]);
         ed.execute(":view-focus").unwrap();
-        assert_eq!(view(&ed), ["vertical", "view-pages-vertical 2"], "put back, not kept");
+        assert_eq!(view(&ed), ["vertical on", "view-pages-vertical 2"], "put back, not kept");
 
         // `:reload-config` puts the rest back too.
         ed.execute(":view-hud off").unwrap();
