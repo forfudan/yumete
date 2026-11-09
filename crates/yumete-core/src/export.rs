@@ -1860,9 +1860,14 @@ pub fn latin_runs(chars: &[char], latin: Latin) -> Vec<(std::ops::Range<usize>, 
     runs.into_iter()
         .map(|(run, one)| match latin {
             Latin::Turn => (run, Orientation::Turned),
+            // The letter with the marks that combine with it (`e` and U+0301
+            // written apart) is one character as a reader sees it: cut by its
+            // grapheme cluster, not by `char` (review, 2026-11-09).
             Latin::Jlreq if one && single(&run) => {
                 let at = run.start + chars[run.clone()].iter().position(|c| c.is_alphabetic()).unwrap_or(0);
-                (at..at + 1, Orientation::Upright)
+                let rest: String = chars[at..run.end].iter().collect();
+                let cluster = yumete_cjk::grapheme::graphemes(&rest).next().map_or(1, |g| g.chars().count()).max(1);
+                (at..at + cluster, Orientation::Upright)
             }
             Latin::Jlreq => {
                 let how = jlreq_orientation(&chars[run.clone()]);
@@ -2077,6 +2082,7 @@ pub(crate) fn stylesheet(style: &Style, lang: &str, book: bool) -> String {
             "table { margin: 0 1em; }\n\
              th, td { overflow-wrap: anywhere; }\n\
              .short { white-space: nowrap; }\n\
+             th img.math, td img.math { max-inline-size: 100%; }\n\
              img.math { vertical-align: middle; }\n\
              img.math.display { margin-block: 0.5em; margin-inline: 2em 0; max-inline-size: calc(100% - 2em); }\n\
              figure { margin: 0 1em; }\n\
@@ -2118,10 +2124,115 @@ pub(crate) fn html_body(text: &str, style: &Style, lang: &str) -> String {
         }
         body.push_str("</ol>\n</section>\n");
     }
+    let body = heading_ids(&body);
     match style.settings.vertical && lang != "en" {
         true => vertical_text(&body, style.settings.latin, corners_quotes(lang)),
         false => body,
     }
+}
+
+/// **Each heading given an `id` from its words** (review, 2026-11-09:
+/// `[第二章](#第二章)` led nowhere, and epubcheck refused the book, RSC-012),
+/// as GitHub gives one, so a link written for GitHub or VS Code finds it:
+/// the words in small letters, a space as `-`, letters (a Chinese character
+/// is one), digits, `-` and `_` kept and every other mark left out; a second
+/// heading of the same words takes `-1`, a third `-2`. A footnote's number
+/// in a heading is not its words. The HTML page and the EPUB alike, and the
+/// EPUB's table of contents points at these.
+fn heading_ids(body: &str) -> String {
+    let mut out = String::with_capacity(body.len() + 64);
+    let mut taken: std::collections::HashSet<String> = std::collections::HashSet::new();
+    // The footnotes' own anchors are taken already.
+    let reserved = |id: &str| {
+        id.strip_prefix("fn-").or_else(|| id.strip_prefix("fnref-")).is_some_and(|n| n.parse::<usize>().is_ok())
+    };
+    for line in body.split_inclusive('\n') {
+        let depth = line.strip_prefix("<h").and_then(|rest| rest.chars().next()).filter(|d| ('1'..='6').contains(d));
+        let Some(depth) = depth.filter(|_| line.as_bytes().get(3) == Some(&b'>')) else {
+            out.push_str(line);
+            continue;
+        };
+        let close = format!("</h{depth}>");
+        let inner = line[4..].split(close.as_str()).next().unwrap_or_default();
+        let base = match slug(&plain_words(&without_note_marks(inner))) {
+            slug if slug.is_empty() => "heading".to_string(),
+            slug => slug,
+        };
+        let mut id = base.clone();
+        let mut n = 0;
+        while taken.contains(&id) || reserved(&id) {
+            n += 1;
+            id = format!("{base}-{n}");
+        }
+        out.push_str(&format!("<h{depth} id=\"{id}\">"));
+        out.push_str(&line[4..]);
+        taken.insert(id);
+    }
+    out
+}
+
+/// A heading's markup without the footnote marks in it.
+fn without_note_marks(markup: &str) -> String {
+    const OPEN: &str = "<sup class=\"fn\">";
+    let mut out = String::with_capacity(markup.len());
+    let mut rest = markup;
+    while let Some(at) = rest.find(OPEN) {
+        out.push_str(&rest[..at]);
+        rest = match rest[at..].find("</sup>") {
+            Some(end) => &rest[at + end + "</sup>".len()..],
+            None => "",
+        };
+    }
+    out.push_str(rest);
+    out
+}
+
+/// **GitHub's anchor for a heading's words** (github-slugger): in small
+/// letters, each space a `-`, and only letters, digits, the marks that go
+/// with a letter, `-` and `_` kept.
+pub(crate) fn slug(words: &str) -> String {
+    let combining = |c: char| matches!(c as u32, 0x300..=0x36F | 0x1AB0..=0x1AFF | 0x1DC0..=0x1DFF | 0x20D0..=0x20FF | 0xFE20..=0xFE2F);
+    words
+        .trim()
+        .to_lowercase()
+        .chars()
+        .filter_map(|c| match c {
+            ' ' => Some('-'),
+            '-' | '_' => Some(c),
+            c if c.is_alphanumeric() || combining(c) => Some(c),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The words of a run of markup: its tags dropped, and in a `<ruby>` the
+/// reading too, so a heading reads as its text in a table of contents or
+/// an anchor. Entities are read back into characters.
+pub(crate) fn plain_words(markup: &str) -> String {
+    let mut out = String::new();
+    let mut in_tag = false;
+    let mut reading = false;
+    let mut tag = String::new();
+    for c in markup.chars() {
+        match (in_tag, c) {
+            (false, '<') => {
+                in_tag = true;
+                tag.clear();
+            }
+            (true, '>') => {
+                in_tag = false;
+                let name = tag.trim_start_matches('/');
+                if name.starts_with("rt") || name.starts_with("rp") {
+                    reading = !tag.starts_with('/');
+                }
+            }
+            (true, c) => tag.push(c),
+            (false, c) if !reading => out.push(c),
+            _ => {}
+        }
+    }
+    // Back to characters, so an `&amp;` is not escaped twice.
+    out.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"").replace("&#160;", "\u{a0}").replace("&nbsp;", "\u{a0}").replace("&amp;", "&")
 }
 
 /// How long a table cell is, in squares: a half-width character is half one.
@@ -2652,7 +2763,12 @@ fn typst_blocks(blocks: &[Block], style: &Style, out: &mut String) {
                 let (mark, run) = fence_of(opening).unwrap_or(('`', 3));
                 let inner = code_inside(lines);
                 let longest = inner.iter().flat_map(|l| l.split(|c| c != '`')).map(str::len).max().unwrap_or(0);
-                if mark == '`' && run > longest {
+                // **A block left open is closed** (review, 2026-11-09): Markdown
+                // ends it with the document or the quotation it stands in, and
+                // Typst's raw text would run on over the rest — the `]` of a
+                // `#quote` too — so its fence is written.
+                let closed = inner.len() + 2 == lines.len();
+                if mark == '`' && run > longest && closed {
                     for text in lines {
                         out.push_str(text);
                         out.push('\n');
@@ -2992,7 +3108,7 @@ mod tests {
         );
         assert!(out.contains("writing-mode: vertical-rl"), "{out}");
         assert!(out.contains("hanging-punctuation"), "{out}");
-        assert!(out.contains("<h1>第一章</h1>"), "{out}");
+        assert!(out.contains("<h1 id=\"第一章\">第一章</h1>"), "{out}");
         assert!(
             out.contains("<ruby>永<rt>ㄩㄥˇ</rt></ruby>和九年。"),
             "{out}"
@@ -3696,6 +3812,57 @@ mod tests {
         assert_eq!(vertical_text("变量 x, y", Latin::Turn, true), "变量 <span class=\"yoko\">x, y</span>");
     }
 
+    /// **A letter written with a combining mark stands whole** (review,
+    /// 2026-11-09): `e` and U+0301 are one character to a reader, so under
+    /// jlreq the upright square holds both.
+    #[test]
+    fn under_jlreq_a_letter_with_a_combining_mark_stands_whole() {
+        let set = |text: &str| vertical_text(text, Latin::Jlreq, true);
+        assert_eq!(set("又 e\u{301} 写"), "又 <span class=\"tate\">e\u{301}</span> 写");
+        assert_eq!(set("又 (e\u{301}). 写"), "又 (<span class=\"tate\">e\u{301}</span>). 写");
+        assert_eq!(set("又 é 写"), "又 <span class=\"tate\">é</span> 写");
+    }
+
+    /// **Headings take GitHub's anchors** (review, 2026-11-09), on the HTML
+    /// page as in the book: the words in small letters, a space as `-`,
+    /// marks left out, Chinese kept, the same words again numbered.
+    #[test]
+    fn headings_take_github_s_anchors() {
+        let mut s = style();
+        s.settings.vertical = false;
+        let out = export("# 第一章：雪\n\n## Hello, World!\n\n# 第一章：雪\n\n## “引号” 与 **粗**[^1]\n\n[^1]: 注。\n", Format::Html, &s);
+        assert!(out.contains("<h1 id=\"第一章雪\">"), "{out}");
+        assert!(out.contains("<h2 id=\"hello-world\">"), "{out}");
+        assert!(out.contains("<h1 id=\"第一章雪-1\">"), "{out}");
+        assert!(out.contains("<h2 id=\"引号-与-粗\">"), "{out}");
+        assert_eq!(slug("  A_b-c  d "), "a_b-c--d");
+        assert_eq!(slug("！？"), "");
+        let out = export("# ！？\n", Format::Html, &s);
+        assert!(out.contains("<h1 id=\"heading\">"), "{out}");
+    }
+
+    /// **A code block left open is closed in Typst** (review, 2026-11-09):
+    /// Markdown ends it with the document or the quotation, and Typst's raw
+    /// text would run on, over a `#quote`'s `]` too.
+    #[test]
+    fn a_code_block_left_open_is_closed_in_typst() {
+        let s = style();
+        let out = export("甲。\n\n```\n未闭\n", Format::Typst, &s);
+        assert!(out.trim_end().ends_with("```\n未闭\n```"), "{out}");
+        let out = export("> 引文\n> ```\n> 代码 ]\n\n乙。\n", Format::Typst, &s);
+        assert!(out.contains("```\n代码 ]\n```\n]"), "{out}");
+        let out = export("```rust\nlet x = 1;\n```\n", Format::Typst, &s);
+        assert!(out.contains("```rust\nlet x = 1;\n```\n") && !out.contains("```\n```"), "{out}");
+    }
+
+    /// **A formula in a vertical table's cell is held to the cell** (review,
+    /// 2026-11-09), so a turned one does not run past its band.
+    #[test]
+    fn a_formula_in_a_vertical_cell_is_held_to_the_cell() {
+        let css = stylesheet(&style(), "zh", false);
+        assert!(css.contains("th img.math, td img.math { max-inline-size: 100%; }"), "{css}");
+    }
+
     /// **A picture with no words is drawn** (2026-11-09, reported:
     /// `![](a.png)` came out as nothing), with an empty `alt`.
     #[test]
@@ -3724,7 +3891,7 @@ mod tests {
         assert!(out.contains("<pre><code>let x = 1;\n# 不是标题</code></pre>"), "{out}");
         assert!(out.contains("<pre><code>```\n# 缩进围栏\n```</code></pre>"), "{out}");
         assert!(out.contains("<pre><code>let y = 2;</code></pre>"), "a tab: {out}");
-        assert!(!out.contains("<h1>") && out.contains("<p>丙段。</p>"), "{out}");
+        assert!(!out.contains("<h1") && out.contains("<p>丙段。</p>"), "{out}");
         let typ = export(text, Format::Typst, &s);
         assert!(typ.contains("````\n```\n# 缩进围栏\n```\n````"), "{typ}");
         assert!(!typ.contains("= 不是标题"), "{typ}");

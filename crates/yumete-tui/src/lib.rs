@@ -14204,15 +14204,21 @@ fn draw_status(
     let (status, mode) = if editor.sidebar_focused() && !command_row {
         (say!("ui.sidebar-mode", editor.sidebar_keys()), String::new())
     } else if let (false, Some(_)) = (command_row, editor.prompt()) {
-        let text = &editor.prompt_drawn();
-        let prefix = editor.prompt_label().unwrap_or_default();
+        // A value line is fitted as on its own row ([`prompt_view`]), where
+        // the caret is put, and stops short of the tag.
+        let (prefix, skip) = prompt_view(editor, ime, status_area.width).unwrap_or_default();
+        let text = &editor.prompt_drawn().chars().skip(skip).collect::<String>();
         // The composition in progress belongs at the caret, so a search reads as
         // the pattern being typed rather than jumping into place on commit. The
         // 中/英 tag is pushed to the right edge, where it cannot be mistaken for
         // part of the pattern.
         let line = format!("{prefix}{text}{}", prompt_preedit(editor, ime));
         let drawn = editor.prompt_ghost();
-        let tag = language_tag(editor, ime);
+        let tag = value_line_tag(editor, ime, status_area.width);
+        let line = match editor.mode() == Mode::Value {
+            true => cut_to_width(&line, (status_area.width as usize).saturating_sub(tag_room(&tag))),
+            false => line,
+        };
         let used = yumete_cjk::str_width(&line)
             + yumete_cjk::str_width(&drawn)
             + yumete_cjk::str_width(&tag);
@@ -14972,12 +14978,16 @@ fn indent_span(indent: usize, editor: &Editor, ink: crate::theme::Palette) -> Sp
 /// **What the IME is composing is part of the line** (2026-11-09, reported:
 /// a long reading being composed ran off the right edge of a narrow
 /// window): it is drawn after the line, and the caret after it.
+///
+/// **The 中/英 tag at the right has its own room** (review, 2026-11-09: a
+/// long value ran under `[中 靈明]`, the caret too): the line is fitted to
+/// the row less the tag and a space before it ([`value_line_tag`]).
 fn prompt_view(editor: &Editor, ime: &ImeSession, width: u16) -> Option<(String, usize)> {
     let label = editor.prompt_label()?;
     if editor.mode() != Mode::Value {
         return Some((label, 0));
     }
-    let width = width as usize;
+    let width = (width as usize).saturating_sub(tag_room(&value_line_tag(editor, ime, width)));
     let preedit = yumete_cjk::str_width(&prompt_preedit(editor, ime));
     // A cell for the caret after the line.
     let text = yumete_cjk::str_width(&editor.prompt_drawn()) + preedit + 1;
@@ -14995,6 +15005,49 @@ fn prompt_view(editor: &Editor, ime: &ImeSession, width: u16) -> Option<(String,
         skip += 1;
     }
     Some((label, skip))
+}
+
+/// **The 中/英 tag a prompt's row stands at its right**: [`language_tag`],
+/// but on a value line only while the row holds it beside the line's least
+/// — a space, the caret and what stands just before it (up to four cells),
+/// the reading being composed. The value's view gives way first
+/// ([`prompt_view`]: the label, then the start of the line); only a row
+/// too narrow for even that loses the tag.
+fn value_line_tag(editor: &Editor, ime: &ImeSession, width: u16) -> String {
+    let tag = language_tag(editor, ime);
+    if tag.is_empty() || editor.mode() != Mode::Value {
+        return tag;
+    }
+    let before = yumete_cjk::str_width(&editor.prompt_before_caret()).min(4);
+    let least = before + yumete_cjk::str_width(&prompt_preedit(editor, ime)) + 1;
+    match tag_room(&tag) + least <= width as usize {
+        true => tag,
+        false => String::new(),
+    }
+}
+
+/// The cells a value line leaves for `tag`: the tag and a space before it.
+fn tag_room(tag: &str) -> usize {
+    match tag.is_empty() {
+        true => 0,
+        false => yumete_cjk::str_width(tag) + 1,
+    }
+}
+
+/// `text` cut to `width` cells, a wide character that would straddle the
+/// edge left out.
+fn cut_to_width(text: &str, width: usize) -> String {
+    let mut out = String::new();
+    let mut wide = 0;
+    for g in yumete_cjk::graphemes(text) {
+        let w = yumete_cjk::grapheme_width(g);
+        if wide + w > width {
+            break;
+        }
+        out.push_str(g);
+        wide += w;
+    }
+    out
 }
 
 /// The bottom row: what you are typing, what just happened, or what you can
@@ -15049,8 +15102,14 @@ fn draw_command(
         let guess = page.fg(ink.at(yumete_config::rung::RULE));
         let drawn = editor.prompt_ghost();
         // The 中/英 tag is pushed to the right edge, where it cannot be
-        // mistaken for part of the pattern.
-        let tag = language_tag(editor, ime);
+        // mistaken for part of the pattern. A value line stops short of it
+        // (review, 2026-11-09), so the two never overlap.
+        let tag = value_line_tag(editor, ime, area.width);
+        let value = editor.mode() == Mode::Value;
+        let right = match value {
+            true => right.saturating_sub(tag_room(&tag) as u16).max(area.x),
+            false => right,
+        };
         let used = yumete_cjk::str_width(&line)
             + yumete_cjk::str_width(&drawn)
             + yumete_cjk::str_width(&tag);
@@ -15113,6 +15172,14 @@ fn draw_command(
         }
         put_text(buf, x, area.y, right, &drawable(&drawn), guess);
         x += yumete_cjk::str_width(&drawn) as u16;
+        if value {
+            if !tag.is_empty() {
+                let edge = area.x + area.width;
+                let at = edge.saturating_sub(yumete_cjk::str_width(&tag) as u16).max(area.x);
+                put_text(buf, at, area.y, edge, &drawable(&tag), news);
+            }
+            return;
+        }
         let tail = format!("{}{tag}", " ".repeat(gap));
         put_text(buf, x, area.y, right, &drawable(&tail), news);
         return;
@@ -16886,6 +16953,44 @@ fn squeezed(text: &str) -> String {
             let used = yumete_cjk::str_width(&label) + yumete_cjk::str_width(&before) + preedit + 1;
             assert!(used <= w as usize, "{w}: {label:?} {before:?} + {preedit}");
             assert!(!before.is_empty(), "{w}: something of the line shows");
+        }
+    }
+
+    /// **A value line leaves room for the 中/英 tag** (review, 2026-11-09:
+    /// a long value ran under `[中 靈明]`, the caret too): the value's view
+    /// gives way, the tag stands whole at the right edge with a space before
+    /// it, and the caret is left of that space; on a row too narrow for both
+    /// the tag goes and the value stays in sight. On its own row and on the
+    /// status line alike.
+    #[test]
+    fn a_value_line_leaves_room_for_the_language_tag() {
+        let mut ed = editor_with("那年冬天。\n");
+        ed.open_value_line("paragraph mark symbol: ", &"abcdefghij".repeat(4));
+        let page = yumete_config::panel::Panel::open(None, None);
+        let config = Config::default();
+        crate::theme::settle(&config, None);
+        let ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧\n");
+        let tag = language_tag(&ed, &ime);
+        assert!(!tag.is_empty(), "the IME is on for a value");
+        let tw = yumete_cjk::str_width(&tag);
+        for h in [2u16, 12] {
+            for w in 6..60u16 {
+                let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+                let mut viewport = Seats::default();
+                terminal.draw(|frame| draw(frame, &ed, &config, &ime, &mut viewport, Some(&page))).unwrap();
+                let text = buffer_to_text(terminal.backend().buffer());
+                let caret = caret_of(&mut terminal, &config);
+                let row: String = text.lines().nth(caret.y as usize).unwrap_or_default().to_string();
+                assert!(row.contains("hij"), "{w}x{h}: the value's end shows: {row:?}");
+                if w as usize > tw + 1 + 4 {
+                    assert!(row.trim_end().ends_with(tag.as_str()), "{w}x{h}: {row:?}");
+                    assert!(caret.x as usize + 1 + tw < w as usize, "{w}x{h}: the caret {caret:?} is under the tag: {row:?}");
+                    let line: String = row.trim_end().strip_suffix(tag.as_str()).unwrap_or_default().to_string();
+                    assert!(line.ends_with(' '), "{w}x{h}: a space before the tag: {row:?}");
+                } else {
+                    assert!(caret.x < w, "{w}x{h}: {caret:?}");
+                }
+            }
         }
     }
 

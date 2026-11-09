@@ -122,7 +122,7 @@ fn parts(text: &str, style: &Style) -> Parts {
     let body = pictures_in(&body, style.base.as_deref());
     let (body, images) = pictures_out(&body);
     let body = links_kept_in(&body);
-    let (body, headings) = anchored(&xhtml(&body));
+    let (body, headings) = anchored(&well_formed(&xhtml(&body)));
     let title = headings
         .first()
         .map(|(_, words)| words.clone())
@@ -163,6 +163,8 @@ fn media_type(name: &str) -> Option<&'static str> {
 /// a picture in a line its text, since a book that points outside itself
 /// does not open in a reader that checks.
 fn pictures_in(body: &str, base: Option<&std::path::Path>) -> String {
+    let body = written_pictures_in(body, base);
+    let body = body.as_str();
     const TAGS: [&str; 2] = ["<img class=\"figure\" src=\"", "<img class=\"inline\" src=\""];
     let mut out = String::with_capacity(body.len());
     let mut rest = body;
@@ -190,6 +192,61 @@ fn pictures_in(body: &str, base: Option<&std::path::Path>) -> String {
             // A picture in a line leaves its words, as the preview shows
             // them when it has no picture.
             (false, false) => out.push_str(&alt_of(tag)),
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// **A picture the writer wrote as HTML**, `<img src="a.png" alt="…">`
+/// (review, 2026-11-09: it stayed pointing out of the book, RSC-007), taken
+/// into the book as a picture written in Markdown is, its other attributes
+/// kept; one that cannot be read leaves its `alt`. The page's own pictures,
+/// a figure's, one in a line and a drawn formula, are [`pictures_in`]'s and
+/// [`pictures_out`]'s.
+fn written_pictures_in(body: &str, base: Option<&std::path::Path>) -> String {
+    let mut out = String::with_capacity(body.len());
+    let mut rest = body;
+    while let Some(at) = rest.find("<img") {
+        out.push_str(&rest[..at]);
+        let tag = read_tag(&rest[at..]).filter(|tag| tag.name == "img" && !tag.closing);
+        let Some(tag) = tag else {
+            out.push_str("<img");
+            rest = &rest[at + 4..];
+            continue;
+        };
+        let written = &rest[at..at + tag.len];
+        rest = &rest[at + tag.len..];
+        let value = |name: &str| tag.attributes.iter().find(|(n, _)| n == name).and_then(|(_, v)| v.clone());
+        let src = value("src").unwrap_or_default();
+        let ours = value("class").is_some_and(|c| matches!(c.as_str(), "figure" | "inline") || c.starts_with("math"));
+        if ours || src.starts_with("data:") {
+            out.push_str(written);
+            continue;
+        }
+        let path = crate::markdown::percent_decoded(&src.replace("&amp;", "&"));
+        let read = base
+            .filter(|_| !path.contains("://") && !path.is_empty())
+            .and_then(|base| Some((media_type(&path)?, std::fs::read(base.join(&path)).ok()?)));
+        match read {
+            Some((kind, bytes)) => {
+                let data = format!("data:{kind};base64,{}", crate::preview::base64(&bytes));
+                let attributes: Vec<(String, Option<String>)> = tag
+                    .attributes
+                    .iter()
+                    .map(|(n, v)| match n.as_str() {
+                        "src" => (n.clone(), Some(data.clone())),
+                        _ => (n.clone(), v.clone()),
+                    })
+                    .collect();
+                let has_alt = attributes.iter().any(|(n, _)| n == "alt");
+                let mut kept = Tag { attributes, ..tag };
+                if !has_alt {
+                    kept.attributes.push(("alt".to_string(), Some(String::new())));
+                }
+                out.push_str(&kept.xml(true).unwrap_or_default());
+            }
+            None => out.push_str(&value("alt").map(|alt| xml_text(&crate::export::plain_words(&alt))).unwrap_or_default()),
         }
     }
     out.push_str(rest);
@@ -251,7 +308,9 @@ fn pictures_out(body: &str) -> (String, Vec<(String, Vec<u8>)>) {
 /// reported: `[x](x.html)` made the book one epubcheck refuses, RSC-007,
 /// the file not in the book): a link to the web or to a place in the page
 /// stays a link; one to a file beside the manuscript, which the book does
-/// not hold, keeps its words, the target in their `title`.
+/// not hold, keeps its words, the target in their `title`. So does one in
+/// any scheme but `http`, `https` and `mailto` (review, 2026-11-09: a
+/// `file:` link, RSC-030), which a reader cannot follow from inside a book.
 fn links_kept_in(body: &str) -> String {
     const OPEN: &str = "<a href=\"";
     let mut out = String::with_capacity(body.len());
@@ -264,10 +323,8 @@ fn links_kept_in(body: &str) -> String {
             return out;
         };
         let href = &after[..end];
-        let scheme = href.split_once(':').is_some_and(|(s, _)| {
-            s.len() > 1 && s.starts_with(|c: char| c.is_ascii_alphabetic()) && s.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '.' | '-'))
-        });
-        if scheme || href.starts_with('#') {
+        let scheme = href.split_once(':').is_some_and(|(s, _)| ["http", "https", "mailto"].iter().any(|k| s.eq_ignore_ascii_case(k)));
+        if scheme || href.starts_with('#') || href.starts_with("//") {
             out.push_str(&rest[at..at + OPEN.len() + close + 1]);
             rest = &after[close + 1..];
             continue;
@@ -298,55 +355,257 @@ fn xhtml(body: &str) -> String {
     VOID.replace_all(&body, "<${1}${2}/>").replace("&nbsp;", "&#160;")
 }
 
-/// Every `<h1>`–`<h3>` given an `id`, and the list of them with their words
-/// for the table of contents.
+/// Every `<h1>`–`<h3>` with the `id` the page gave it from its words
+/// (`export::heading_ids`), and the list of them with their words for the
+/// table of contents.
 fn anchored(body: &str) -> (String, Vec<(String, String)>) {
-    let mut out = String::with_capacity(body.len() + 64);
     let mut headings = Vec::new();
-    let mut rest = body;
-    loop {
-        let next = ["<h1>", "<h2>", "<h3>"].iter().filter_map(|tag| rest.find(tag).map(|at| (at, *tag))).min();
-        let Some((at, tag)) = next else { break };
-        out.push_str(&rest[..at]);
-        let anchor = format!("h{}", headings.len() + 1);
-        let _ = write!(out, "{} id=\"{anchor}\">", &tag[..3]);
-        rest = &rest[at + tag.len()..];
-        let close = format!("</{}", &tag[1..3]);
-        let words = rest.find(&close).map(|end| plain(&rest[..end])).unwrap_or_default();
-        headings.push((anchor, words));
+    for line in body.lines() {
+        let Some(rest) = ["<h1 id=\"", "<h2 id=\"", "<h3 id=\""].iter().find_map(|tag| line.strip_prefix(tag)) else { continue };
+        let Some((anchor, rest)) = rest.split_once("\">") else { continue };
+        let close = format!("</{}", &line[1..3]);
+        let words = rest.find(&close).map(|end| crate::export::plain_words(&rest[..end])).unwrap_or_default();
+        headings.push((anchor.to_string(), words));
     }
-    out.push_str(rest);
-    (out, headings)
+    (body.to_string(), headings)
 }
 
-/// The words of a run of markup: its tags dropped, and in a `<ruby>` the
-/// reading too, so a heading reads as its text in a table of contents. The
-/// entities stay, since the result goes back into XML.
-fn plain(markup: &str) -> String {
-    let mut out = String::new();
-    let mut in_tag = false;
-    let mut reading = false;
-    let mut tag = String::new();
-    for c in markup.chars() {
-        match (in_tag, c) {
-            (false, '<') => {
-                in_tag = true;
-                tag.clear();
-            }
-            (true, '>') => {
-                in_tag = false;
-                let name = tag.trim_start_matches('/');
-                if name.starts_with("rt") || name.starts_with("rp") {
-                    reading = !tag.starts_with('/');
+/// **Inline HTML the writer typed, made XML** (review, 2026-11-09: a
+/// `<span>` left open made the page one a reader refuses, RSC-016). A
+/// browser closes what is left open and an XML reader does not, so here a
+/// tag that is closed in its place stays a tag; an attribute with no value
+/// (`<details open>`) or with an unquoted one is written out in full, and an
+/// `&` in a value that starts no entity is escaped; a tag left open, a
+/// closing tag with nothing to close and a tag XML cannot read go into the
+/// page as the words they were typed as. The page's own markup is closed
+/// where it opens, so only the writer's is ever touched.
+///
+/// **And where HTML allows it**: what is typed stands in a line of text, a
+/// paragraph's or a heading's, where only phrasing goes (`<span>`, `<b>`,
+/// `<kbd>`…); a block typed there (`<div>`, `<details>`) is words too, and
+/// a closing tag never closes past the paragraph it stands in.
+fn well_formed(body: &str) -> String {
+    const VOID: &[&str] = &["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"];
+    // What may stand in a line of text (HTML's phrasing content, and a
+    // ruby's reading), and what holds nothing else.
+    const PHRASING: &[&str] = &[
+        "a", "abbr", "area", "audio", "b", "bdi", "bdo", "br", "button", "canvas", "cite", "code", "data", "datalist", "del", "dfn", "em",
+        "embed", "i", "iframe", "img", "input", "ins", "kbd", "label", "map", "mark", "meter", "object", "output", "picture", "progress",
+        "q", "ruby", "rt", "rp", "s", "samp", "select", "slot", "small", "span", "strong", "sub", "sup", "template", "textarea", "time",
+        "u", "var", "video", "wbr",
+    ];
+    const LINES: &[&str] = &["p", "h1", "h2", "h3", "h4", "h5", "h6", "pre"];
+    let in_a_line = |open: &[(String, usize)]| open.iter().any(|(n, _)| PHRASING.contains(&n.as_str()) || LINES.contains(&n.as_str()));
+    /// What becomes of one tag.
+    enum Fate {
+        Keep,
+        Words,
+        Written(String),
+    }
+    let mut tags: Vec<(usize, usize, Fate)> = Vec::new();
+    // The tags open, innermost last: their name and their place in `tags`.
+    let mut open: Vec<(String, usize)> = Vec::new();
+    let mut at = 0;
+    while let Some(found) = body[at..].find('<') {
+        let from = at + found;
+        if body[from..].starts_with("<!--") {
+            match body[from..].find("-->") {
+                Some(end) => at = from + end + 3,
+                None => {
+                    tags.push((from, from + 1, Fate::Words));
+                    at = from + 1;
                 }
             }
-            (true, c) => tag.push(c),
-            (false, c) if !reading => out.push(c),
-            _ => {}
+            continue;
+        }
+        let Some(tag) = read_tag(&body[from..]) else {
+            tags.push((from, from + 1, Fate::Words));
+            at = from + 1;
+            continue;
+        };
+        let to = from + tag.len;
+        let name = tag.name.clone();
+        let void = VOID.contains(&name.as_str());
+        let fate = match tag.xml(void) {
+            Some(written) if written == body[from..to] => Fate::Keep,
+            Some(written) => Fate::Written(written),
+            None => Fate::Words,
+        };
+        // A closing tag looks no further out than the line it stands in.
+        let reach = open.iter().rposition(|(n, _)| LINES.contains(&n.as_str()) && *n != name).map_or(0, |k| k + 1);
+        if !tag.closing && in_a_line(&open) && !PHRASING.contains(&name.as_str()) {
+            tags.push((from, to, Fate::Words));
+            at = to;
+            continue;
+        }
+        match (tag.closing, void || tag.closed) {
+            (true, _) if void => tags.push((from, to, Fate::Words)),
+            (true, _) => match open[reach..].iter().rposition(|(n, _)| *n == name).map(|k| k + reach) {
+                Some(k) => {
+                    // What was opened inside it and never closed is words.
+                    for (_, place) in open.drain(k..).skip(1) {
+                        tags[place].2 = Fate::Words;
+                    }
+                    tags.push((from, to, fate));
+                }
+                None => tags.push((from, to, Fate::Words)),
+            },
+            (false, true) => tags.push((from, to, fate)),
+            (false, false) => {
+                open.push((name, tags.len()));
+                tags.push((from, to, fate));
+            }
+        }
+        at = to;
+    }
+    for (_, place) in open {
+        tags[place].2 = Fate::Words;
+    }
+    let mut out = String::with_capacity(body.len() + 16);
+    let mut at = 0;
+    for (from, to, fate) in tags {
+        out.push_str(&body[at..from]);
+        match fate {
+            Fate::Keep => out.push_str(&body[from..to]),
+            Fate::Written(written) => out.push_str(&written),
+            Fate::Words => out.push_str(&attribute_text(&body[from..to])),
+        }
+        at = to;
+    }
+    out.push_str(&body[at..]);
+    out
+}
+
+/// One tag as [`read_tag`] reads it.
+struct Tag {
+    closing: bool,
+    /// Its name, in small letters.
+    name: String,
+    /// Each attribute and its value, `None` for a bare one.
+    attributes: Vec<(String, Option<String>)>,
+    /// Written `<br/>`.
+    closed: bool,
+    /// How long it is, in bytes.
+    len: usize,
+}
+
+impl Tag {
+    /// The tag as XML: a bare attribute given its own name as its value,
+    /// every value in double quotes, an `&` that starts no entity escaped,
+    /// a void element closed. `None` when an attribute is there twice.
+    fn xml(&self, void: bool) -> Option<String> {
+        if self.closing {
+            return Some(format!("</{}>", self.name));
+        }
+        let mut out = format!("<{}", self.name);
+        let mut seen: Vec<&str> = Vec::new();
+        for (name, value) in &self.attributes {
+            if seen.contains(&name.as_str()) {
+                return None;
+            }
+            seen.push(name);
+            let value = value.as_deref().unwrap_or(name);
+            let _ = write!(out, " {name}=\"{}\"", attribute_text(value));
+        }
+        out.push_str(if void || self.closed { "/>" } else { ">" });
+        Some(out)
+    }
+}
+
+/// An attribute's value for a double-quoted XML attribute: `<` and `"`
+/// escaped, and an `&` that starts no entity XML knows.
+fn attribute_text(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    for (at, c) in value.char_indices() {
+        match c {
+            '<' => out.push_str("&lt;"),
+            '"' => out.push_str("&quot;"),
+            '&' if !entity_at(&value[at..]) => out.push_str("&amp;"),
+            c => out.push(c),
         }
     }
-    // Back to characters, so `xml_text` does not escape an `&amp;` twice.
-    out.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"").replace("&amp;", "&")
+    out
+}
+
+/// Whether `text` starts with an entity XML reads: one of its five, or a
+/// character's number.
+fn entity_at(text: &str) -> bool {
+    let Some(end) = text.find(';') else { return false };
+    let name = &text[1..end];
+    matches!(name, "amp" | "lt" | "gt" | "quot" | "apos")
+        || name.strip_prefix("#x").or_else(|| name.strip_prefix("#X")).is_some_and(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_hexdigit()))
+        || name.strip_prefix('#').is_some_and(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()))
+}
+
+/// **The tag at the start of `text`**, read as HTML reads one: a name,
+/// then attributes, each with a value in double or single quotes, a value
+/// with no quotes, or none. `None` when it is not a tag.
+fn read_tag(text: &str) -> Option<Tag> {
+    let bytes = text.as_bytes();
+    let mut at = 1;
+    let closing = bytes.get(at) == Some(&b'/');
+    at += usize::from(closing);
+    let name_at = at;
+    if !bytes.get(at)?.is_ascii_alphabetic() {
+        return None;
+    }
+    while bytes.get(at).is_some_and(|b| b.is_ascii_alphanumeric() || *b == b'-') {
+        at += 1;
+    }
+    let name = text[name_at..at].to_ascii_lowercase();
+    let mut attributes = Vec::new();
+    let space = |at: &mut usize| {
+        while bytes.get(*at).is_some_and(u8::is_ascii_whitespace) {
+            *at += 1;
+        }
+    };
+    loop {
+        let before = at;
+        space(&mut at);
+        match bytes.get(at)? {
+            b'>' => return Some(Tag { closing, name, attributes, closed: false, len: at + 1 }),
+            b'/' if bytes.get(at + 1) == Some(&b'>') && !closing => {
+                return Some(Tag { closing, name, attributes, closed: true, len: at + 2 });
+            }
+            _ if closing || at == before => return None,
+            _ => {}
+        }
+        let attribute_at = at;
+        if !bytes[at].is_ascii_alphabetic() && !matches!(bytes[at], b'_' | b':') {
+            return None;
+        }
+        while bytes.get(at).is_some_and(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b':' | b'-')) {
+            at += 1;
+        }
+        let attribute = text[attribute_at..at].to_ascii_lowercase();
+        let mut after = at;
+        space(&mut after);
+        if bytes.get(after) != Some(&b'=') {
+            attributes.push((attribute, None));
+            continue;
+        }
+        at = after + 1;
+        space(&mut at);
+        let value = match bytes.get(at)? {
+            &quote @ (b'"' | b'\'') => {
+                let end = at + 1 + text[at + 1..].find(quote as char)?;
+                let value = &text[at + 1..end];
+                at = end + 1;
+                value
+            }
+            _ => {
+                let from = at;
+                while bytes.get(at).is_some_and(|b| !b.is_ascii_whitespace() && !matches!(b, b'>' | b'"' | b'\'' | b'<' | b'=' | b'`')) {
+                    at += 1;
+                }
+                if at == from {
+                    return None;
+                }
+                &text[from..at]
+            }
+        };
+        attributes.push((attribute, Some(value.to_string())));
+    }
 }
 
 /// `&`, `<` and `>` escaped for XML text, and nothing in it XML refuses.
@@ -545,10 +804,10 @@ mod tests {
         assert!(opf.contains("properties=\"nav\""), "{opf}");
         assert!(opf.contains("<meta property=\"dcterms:modified\">"), "{opf}");
         let nav = read(3);
-        assert!(nav.contains("<a href=\"text.xhtml#h1\">第一章</a>"), "{nav}");
-        assert!(nav.contains("<a href=\"text.xhtml#h2\">第2节</a>"), "{nav}");
+        assert!(nav.contains("<a href=\"text.xhtml#第一章\">第一章</a>"), "{nav}");
+        assert!(nav.contains("<a href=\"text.xhtml#第2节\">第2节</a>"), "{nav}");
         let page = read(4);
-        assert!(page.contains("<h1 id=\"h1\">第一章</h1>"), "{page}");
+        assert!(page.contains("<h1 id=\"第一章\">第一章</h1>"), "{page}");
         assert!(page.contains("<span class=\"yoko\">1997</span>年"), "{page}");
         assert!(page.contains("『走吧。』<br/>"), "{page}");
         assert!(read(5).contains("-epub-writing-mode: vertical-rl"));
@@ -670,5 +929,78 @@ mod tests {
         assert!(!page.contains("href=\"ch2.html\""), "{page}");
         assert!(page.contains("<a href=\"https://example.com\">") && page.contains("<a href=\"mailto:a@example.com\">"), "{page}");
         assert!(page.contains("href=\"#fn-1\""), "{page}");
+    }
+
+    /// **Only the web and mail are followed from a book** (review,
+    /// 2026-11-09: a `file:` link made epubcheck refuse it, RSC-030): a link
+    /// in any other scheme keeps its words, as one to a file beside the
+    /// manuscript does.
+    #[test]
+    fn a_link_a_book_cannot_follow_keeps_its_words() {
+        let text = "见[文件](file:///etc/hosts)与[电话](tel:123)与[网页](HTTPS://example.com)与[协议相对](//example.com/x)。\n";
+        let files = entries(&book(text, &style()));
+        let page = String::from_utf8(files[4].1.clone()).unwrap();
+        assert!(page.contains("<span class=\"link\" title=\"file:///etc/hosts\">文件</span>"), "{page}");
+        assert!(page.contains("<span class=\"link\" title=\"tel:123\">电话</span>"), "{page}");
+        assert!(page.contains("<a href=\"HTTPS://example.com\">") && page.contains("<a href=\"//example.com/x\">"), "{page}");
+    }
+
+    /// **A link to a heading finds it** (review, 2026-11-09: `[锚点](#第二章)`
+    /// pointed at nothing, RSC-012): each heading's `id` is made from its
+    /// words as GitHub makes it, and the table of contents points there.
+    #[test]
+    fn a_link_to_a_heading_finds_it_and_so_does_the_contents() {
+        let text = "# 第一章\n\n见[锚点](#第二章)与[同名](#第一章-1)。\n\n# 第二章\n\n## Hello, World!\n\n# 第一章\n";
+        let files = entries(&book(text, &style()));
+        let page = String::from_utf8(files[4].1.clone()).unwrap();
+        for id in ["第一章", "第二章", "hello-world", "第一章-1"] {
+            assert!(page.contains(&format!(" id=\"{id}\">")), "{id}: {page}");
+        }
+        assert!(page.contains("<a href=\"#第二章\">") && page.contains("<a href=\"#第一章-1\">"), "{page}");
+        let nav = String::from_utf8(files[3].1.clone()).unwrap();
+        assert!(nav.contains("<a href=\"text.xhtml#第二章\">第二章</a>"), "{nav}");
+        assert!(nav.contains("<a href=\"text.xhtml#hello-world\">Hello, World!</a>"), "{nav}");
+        assert!(nav.contains("<a href=\"text.xhtml#第一章-1\">第一章</a>"), "{nav}");
+    }
+
+    /// **The writer's own HTML is made XML** (review, 2026-11-09: a `<span>`
+    /// left open made the page one a reader refuses, RSC-016): a tag closed
+    /// in its place stays, written out in full; one left open or with
+    /// nothing to close, or a block typed in a line of text, is its words.
+    #[test]
+    fn inline_html_left_open_does_not_break_the_book() {
+        let text = "行内 <span>未闭合 与 <b>粗</b> 与 </i> 与 <details open>开</details> 与 <abbr title=a&b>缩</abbr> 与 <span hidden>藏</span>。\n";
+        let files = entries(&book(text, &style()));
+        let page = String::from_utf8(files[4].1.clone()).unwrap();
+        assert!(page.contains("&lt;span>未闭合"), "{page}");
+        assert!(page.contains("<b>粗</b>"), "{page}");
+        assert!(page.contains("&lt;/i>"), "{page}");
+        assert!(page.contains("&lt;details open>开&lt;/details>"), "a block in a line: {page}");
+        assert!(page.contains("<span hidden=\"hidden\">藏</span>"), "{page}");
+        assert!(page.contains("<abbr title=\"a&amp;b\">缩</abbr>"), "{page}");
+        assert!(!page.contains("<span>"), "{page}");
+    }
+
+    /// **A picture written as HTML goes into the book** (review, 2026-11-09:
+    /// `<img src="x.png">` pointed out of it, RSC-007), as one written in
+    /// Markdown does; one that is not there leaves its `alt`.
+    #[test]
+    fn a_picture_written_as_html_goes_into_the_book() {
+        let dir = std::env::temp_dir().join(format!("yumete-epub-raw-img-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("a.png"), [1u8, 2, 3]).unwrap();
+        let mut s = style();
+        s.settings.vertical = false;
+        s.base = Some(dir.clone());
+        let text = "图 <img src=\"a.png\" width=40> 与 <img src='gone.png' alt='不在'> 与 <img src=\"a.png\" alt=\"再\"> 了。\n";
+        let files = entries(&book(text, &s));
+        let _ = std::fs::remove_dir_all(&dir);
+        let page = String::from_utf8(files[4].1.clone()).unwrap();
+        assert!(page.contains("<img src=\"images/f1.png\" width=\"40\" alt=\"\"/>"), "{page}");
+        assert!(page.contains("与 不在 与"), "{page}");
+        assert!(page.contains("<img src=\"images/f1.png\" alt=\"再\"/>"), "{page}");
+        assert!(!page.contains("gone.png") && !page.contains("\"a.png\""), "{page}");
+        assert!(files.contains(&("OEBPS/images/f1.png".to_string(), vec![1, 2, 3])));
+        assert_eq!(files.iter().filter(|(name, _)| name.starts_with("OEBPS/images/")).count(), 1);
     }
 }
