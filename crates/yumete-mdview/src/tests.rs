@@ -495,3 +495,19 @@ fn a_long_paragraph_with_readings_is_laid_out_in_one_pass() {
         assert!(long < short * 6, "vertical {vertical}: 1000 lines {short:?}, 3000 lines {long:?}");
     }
 }
+
+/// **A line's span is that line's, not its block's**: two items of one
+/// list, and two lines of one code block, each have their own, one after
+/// the other.
+#[test]
+fn a_line_span_is_one_line_not_its_block() {
+    let mut p = Preview::new(options(800), Box::new(NoFormulas));
+    p.set_height(600);
+    p.set_text("- 第一項\n- 第二項\n\n```\nlet a = 1;\nlet b = 2;\n```\n");
+    let (a0, a1) = p.line_span_of(0).unwrap();
+    let (b0, b1) = p.line_span_of(1).unwrap();
+    assert!(a0 < a1 && a1 <= b0 && b0 < b1, "{a0} {a1} {b0} {b1}");
+    let (c0, c1) = p.line_span_of(4).unwrap();
+    let (d0, d1) = p.line_span_of(5).unwrap();
+    assert!(c0 < c1 && c1 <= d0 + 0.5 && d0 < d1, "{c0} {c1} {d0} {d1}");
+}

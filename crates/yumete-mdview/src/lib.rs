@@ -515,13 +515,24 @@ impl Preview {
         out
     }
 
-    /// **Where the top-level block holding source line `line` lies along the
-    /// page**: its start and end.
-    pub fn block_span_of(&self, line: usize) -> Option<(f32, f32)> {
-        self.placed
-            .iter()
-            .find(|p| p.lines.0 <= line && line <= p.lines.1)
-            .map(|p| (p.y, p.y + p.laid.height))
+    /// **Where source line `line` lies along the page**: from the top of the
+    /// first visual line it starts to the end of its last, so a paragraph,
+    /// one list item or one line of code, never the whole list or block.
+    /// The end is the next visual line's top, less the gap between blocks,
+    /// read off the line's own height.
+    pub fn line_span_of(&self, line: usize) -> Option<(f32, f32)> {
+        // A list item's marker and its words both mark the same top.
+        let mut tops: Vec<f32> = self.marks.iter().filter(|m| m.1 == line).map(|m| m.0).collect();
+        tops.sort_by(f32::total_cmp);
+        tops.dedup_by(|a, b| (*a - *b).abs() < 0.5);
+        let (&first, &last) = (tops.first()?, tops.last()?);
+        let next = self.marks.iter().map(|m| m.0).filter(|&y| y > last).fold(f32::INFINITY, f32::min);
+        let next = if next.is_finite() { next } else { self.size().1 };
+        let height = match tops.len() {
+            1 => next - last,
+            n => (last - first) / (n - 1) as f32,
+        };
+        Some((first, last + height.min(next - last)))
     }
 
     /// The bar's colour, from the theme.
