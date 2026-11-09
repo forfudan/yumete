@@ -524,11 +524,13 @@ fn apply_to_editor(config: &Config, editor: &mut Editor, layout: Option<yumete_c
     editor.set_place_inheritance(config.keys.inherit);
     editor.set_which_wrap(config.editor.which_wrap.clone());
     editor.set_layout(layout.unwrap_or(config.editor.layout));
-    // Warning: **這四個是「寫了纔算」**，不是「寫了零就當零」：出廠值在 `Editor` 那一
-    // 頭，而配置裏的 0 是「沒說」。照抄啓動時的判準，一個字都不改。
-    if config.editor.indent > 0 {
-        editor.set_indent(config.editor.indent);
-    }
+    // **0 is a value here, not 「unset」** (2026-11-09, review: `measure` set to
+    // 0 in the panel, or `editor.indent` reset with `r`, was written to the
+    // file and the old width stayed until a restart). The factory values in
+    // `Editor` are the config's own 0 — no indent, the window's width — so
+    // pushing the 0 is pushing the factory value; a guard only kept the last
+    // number alive across the reload that was meant to drop it.
+    editor.set_indent(config.editor.indent);
     // Warning: **1 is a page count now, not 「unset」** (2026-10-29, review: set
     // back to 1 in the panel, two pages stayed).
     if config.editor.pages_vertical > 0 {
@@ -538,12 +540,14 @@ fn apply_to_editor(config: &Config, editor: &mut Editor, layout: Option<yumete_c
     if config.editor.pages_horizontal > 0 {
         editor.set_pages_horizontal(config.editor.pages_horizontal);
     }
+    // The 縱 length keeps its guard: the event loop works it out from the
+    // config before every key and every frame (`vertical::zong_length_for`,
+    // where 0 is the window's), so a 0 here would only be a one-縱 grid until
+    // then.
     if config.editor.zong_length > 0 {
         editor.set_zong_length(config.editor.zong_length);
     }
-    if config.editor.measure > 0 {
-        editor.set_measure(Some(config.editor.measure));
-    }
+    editor.set_measure((config.editor.measure > 0).then_some(config.editor.measure));
     editor.set_hard_wrap(config.editor.hard_wrap);
     editor.set_line_numbers_baseline(match config.editor.line_numbers {
         yumete_config::LineNumbers::Absolute => yumete_core::editor::LineNumbers::Absolute,
@@ -850,6 +854,24 @@ mod config_watch_tests {
         ed.execute(":view-hud off").unwrap();
         super::view_back_to_config(&mut ed, &config);
         assert!(view(&ed).is_empty(), "{:?}", view(&ed));
+    }
+
+    /// **A 0 is applied by the reload** (2026-11-09, review): the panel wrote
+    /// `measure = 0` and `indent = 0`, and the 40 and the 2 stayed on screen.
+    #[test]
+    fn a_zero_in_the_config_is_applied_by_the_reload() {
+        let mut config = yumete_config::Config::default();
+        config.editor.measure = 40;
+        config.editor.indent = 2;
+        let mut ed = yumete_core::Editor::new();
+        super::apply_to_editor(&config, &mut ed, None);
+        assert_eq!(ed.measure(), Some(40));
+        assert_eq!(ed.paragraph_indent(), 2);
+        config.editor.measure = 0;
+        config.editor.indent = 0;
+        super::apply_to_editor(&config, &mut ed, None);
+        assert_eq!(ed.measure(), None, "the window's width again");
+        assert_eq!(ed.paragraph_indent(), 0, "no indent again");
     }
 
     /// **The session and the reload after the review** (2026-10-29): the
