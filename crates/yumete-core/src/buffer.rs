@@ -35,7 +35,7 @@ fn digest(text: &str) -> u64 {
     hasher.finish()
 }
 
-/// The same digest, asked of a rope **without物化它**（2026-10-13）。
+/// The same digest, asked of a rope **without物化它**。
 ///
 /// Warning: **逐塊寫位元組，最後補一個 `0xff`**——那正是 `impl Hash for str` 做的事
 /// （`state.write(self.as_bytes()); state.write_u8(0xff)`），所以這一支和
@@ -45,14 +45,12 @@ fn digest_of(rope: &Rope) -> u64 {
     digest_of_written(rope, "")
 }
 
-/// 這一次**寫出去的那一份**的 digest —— 連補上的那個行尾一起算（2026-10-13 報的）。
+/// 這一次**寫出去的那一份**的 digest —— 連補上的那個行尾一起算。
 ///
 /// Warning: **不算它就等於替自己埋一個「被外部改過」。** 存檔之後 `read_as` 記的是
 /// 「盤上那一份長什麼樣」，而 `changed_underneath` 拿它和盤上的檔逐字比。補行尾那一步
 /// 只動寫出去的位元組、不動繩子，於是記下繩子的 digest 就和盤上對不上——下一個心跳
-/// 當場判「文件被外部修改」，自動重載把剛刪掉的那個空行又帶回來。報的原話：「The
-/// command line first shows 存了…, then it shows 文件被外部修改，已同步加載…And a new
-/// empty line appears」。
+/// 當場判「文件被外部修改」，自動重載把剛刪掉的那個空行又帶回來。
 fn digest_of_written(rope: &Rope, tail: &str) -> u64 {
     use std::hash::Hasher;
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -101,7 +99,7 @@ fn next_edit() -> u64 {
     EDIT_CLOCK.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1
 }
 
-/// **Settings this buffer holds for itself** (2026-11-04), over the
+/// **Settings this buffer holds for itself**, over the
 /// editor's: what a vim modeline in the file says. `None` is the editor's.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Local {
@@ -140,7 +138,7 @@ pub struct Buffer {
     /// here instead. For prose it is three bytes nobody misses; for a `.csv`
     /// it is how the next program decides the file is UTF-8.
     marked: bool,
-    /// **The encoding this file is written back in** (2026-11-04): UTF-8, or
+    /// **The encoding this file is written back in**: UTF-8, or
     /// the GB18030, Big5 or Shift-JIS it was read in. The rope holds the text
     /// either way; only the read and the write know.
     encoding: &'static crate::encoding::Encoding,
@@ -167,7 +165,7 @@ pub struct Buffer {
     /// `:recover` — read once, because the status line asks about it every
     /// frame and the answer cannot change under us.
     pending_draft: Option<String>,
-    /// Where that draft was found. Kept because it is no longer always the
+    /// Where that draft was found. Kept because it is not always the
     /// canonical name: a second session, or a session that reopened a file
     /// after a crash, keeps its own copy beside it (#305).
     pending_swap: Option<PathBuf>,
@@ -187,7 +185,7 @@ pub struct Buffer {
     /// 「two yumetes on one chapter」 is exactly what this field exists for.
     /// Digits only: [`read_draft`] finds drafts by a digit suffix.
     draft_tag: String,
-    /// **問過了，答的是「暫時不管」**（2026-10-02）。
+    /// **問過了，答的是「暫時不管」**。
     ///
     /// 那一問在開檔和換檔的時候自己站出來，而說過「暫時不管」之後每翻回來一次
     /// 就再問一次是**煩**，不是安全。`:recover` 不看這一格——明打那個命令就是
@@ -207,7 +205,7 @@ pub struct Buffer {
     /// and otherwise by reading it. A guess that changed as the writer typed
     /// would change what comes off the page under them.
     ///
-    /// **Except in a scratch** (2026-11-06): it opens with nothing to read, so
+    /// **Except in a scratch**: it opens with nothing to read, so
     /// it is guessed again as it is written, until it has a name
     /// ([`Self::sniffs_as_typed`]).
     syntax: crate::syntax::Syntax,
@@ -227,7 +225,7 @@ pub struct Buffer {
     /// code fence, say — be worked out once per edit instead of once per frame.
     revision: u64,
     /// When the text last changed, on one clock for every buffer (helix's
-    /// `gm` asks which file was changed last, 2026-11-02). `0`: never.
+    /// `gm` asks which file was changed last). `0`: never.
     edited: u64,
     /// **How many times the text has been written to disk.**
     ///
@@ -238,8 +236,7 @@ pub struct Buffer {
     saves: u64,
     /// **撤回棧有多深的時候存的檔**——`None` ＝ 這一份没有一個「和盤上一樣」的位置。
     ///
-    /// Warning: **没有它，`:w` 之後按一下 `u`，緩衝區就說自己是乾淨的**（2026-10-02 查
-    /// 出來的，會丟字）。每一個撤回點記着「拍它的時候改過没有」，而 `undo` 把那
+    /// Warning: **没有它，`:w` 之後按一下 `u`，緩衝區就說自己是乾淨的**，會丟字。每一個撤回點記着「拍它的時候改過没有」，而 `undo` 把那
     /// 一格原樣寫回來——存檔之前拍的那些點記的都是 `false`。於是：改一個字、
     /// `:w`、按 `u`，屏幕回到原樣、盤上是改過的那一版、狀態欄**不寫 `[+]`**，
     /// `:q` 一聲不吭就退出去了。救命稿也不寫（它問的也是 `is_modified`）。
@@ -262,24 +259,24 @@ pub struct Buffer {
     /// ones that swap the whole thing (a re-read, an undo, a redo), where
     /// nothing about the old answer can be trusted.
     edit: Option<(usize, isize)>,
-    /// **Every change while a caller is listening** (2026-10-29): `(at,
+    /// **Every change while a caller is listening**: `(at,
     /// removed, inserted)` in character counts, in the order made. A caller
     /// moving other selections through an edit sets it to `Some(empty)` and
     /// takes it back after; a change that swaps the whole text (a re-read, an
     /// undo, a redo) sets it to `None`, which says 「the list cannot be
     /// trusted」. See `Editor::edit_each_from`.
     pub(crate) journal: Option<Vec<(usize, usize, usize)>>,
-    /// **The recent edits, each with the revision it made** (2026-11-02):
+    /// **The recent edits, each with the revision it made**:
     /// `(revision, at, removed, inserted)`, so a place noted at one revision
     /// can be carried to this one ([`Self::carried`]). Bounded; the oldest go.
     edit_log: std::collections::VecDeque<(u64, usize, usize, usize)>,
-    /// **這一份稿子最後改在哪**（`g.`，2026-09-28）。字符下標，没改過就是 `None`。
+    /// **這一份稿子最後改在哪**（`g.`）。字符下標，没改過就是 `None`。
     ///
     /// Warning: **不是撤銷歷史裏那個 `cursor`。** 那一格記的是「報撤銷點的那一刻光標在哪」，
     /// 也就是改**之前**；`g.` 要的是改**之後**落在哪。兩者在 `ciw` 這種先刪後寫的動作
     /// 上差得很遠。
     last_edit: Option<usize>,
-    /// **改動表**（vim 的 `g;`/`g,`，2026-10-06）：改過的地方，舊的在前。
+    /// **改動表**（vim 的 `g;`/`g,`）：改過的地方，舊的在前。
     ///
     /// 一行只記一條——vim 也是這樣（`:h changelist`：「only one position is
     /// remembered for each line」），不然打一段話就攢出幾十條，`g;` 要按半天才
@@ -289,13 +286,13 @@ pub struct Buffer {
     changes_at: usize,
     /// **Where the last Insert in this buffer stopped** (vim's `'^` mark, used
     /// by `gi`). Kept here so it is per buffer and moves with the text before
-    /// it, as vim's marks do (2026-10-30).
+    /// it, as vim's marks do.
     insert_stop: Option<usize>,
-    /// **Each window's folds in this buffer** (2026-11-03), moved by every
+    /// **Each window's folds in this buffer**, moved by every
     /// edit and kept in the undo points; see [`crate::fold`].
     folds: crate::fold::FoldMap,
-    /// **Lines taken and put by each edit since the editor last asked**
-    /// (2026-11-04): `(line, taken, put, at the line's start)`, so a server's diagnostics move with
+    /// **Lines taken and put by each edit since the editor last asked**:
+    /// `(line, taken, put, at the line's start)`, so a server's diagnostics move with
     /// the text until it says again. Only edits that change the line count.
     line_edits: Vec<(usize, usize, usize, bool)>,
     /// Settings of its own, over the editor's ([`Local`]).
@@ -319,7 +316,7 @@ pub struct Buffer {
     /// itself when the file's permissions say so — which until now was only
     /// discovered at `:w`, after an afternoon of typing.
     readonly: bool,
-    /// **Whether the editor wrote this, rather than a disk** (2026-10-16).
+    /// **Whether the editor wrote this, rather than a disk**.
     ///
     /// `:git-diff`, `:diff`, `:check-punct`, `:count-progress` and the `:write`
     /// verification all open one. They are read-only like a locked file, but
@@ -327,10 +324,10 @@ pub struct Buffer {
     /// look up, and no markup to reveal — the markers in them are the report's
     /// own and they are drawn, not read.
     ///
-    /// 原話（2026-10-16）：「It just be a rendered, readonly, fixed, clean
-    /// buffer for checking diffs. Anything beyond this would become noise.」
+    /// A rendered, read-only, fixed, clean buffer for checking diffs; anything
+    /// beyond that would be noise.
     computed: bool,
-    /// **The file this tab shows the typeset page of, and how** (2026-11-08):
+    /// **The file this tab shows the typeset page of, and how**:
     /// a preview is a tab like a file, listed and switched to like one, and
     /// drawn by the front end as the page instead of as text. The path is
     /// absolute, as the typesetter knows it. A preview holds no text, is
@@ -346,10 +343,10 @@ pub struct Buffer {
     /// reflex and then types it at the real one too. So when the stamp says
     /// "maybe", this says whether it actually did.
     read_as: Option<u64>,
-    /// 上一次替 [`Buffer::is_modified`] 算的那個答案，連它算的是哪一版
-    /// （2026-10-11）。只有撤回棧分了叉之後纔用得上。
+    /// 上一次替 [`Buffer::is_modified`] 算的那個答案，連它算的是哪一版。
+    /// 只有撤回棧分了叉之後纔用得上。
     clean_at: std::cell::Cell<Option<(u64, bool)>>,
-    /// **這一份的字不是從盤上那一份來的**（2026-10-11）。
+    /// **這一份的字不是從盤上那一份來的**。
     ///
     /// 救回來的草稿就是這一種：`adopt_draft` 把草稿檔刪了，於是在存檔之前它是
     /// **唯一的一份**，和盤上那一份一樣不一樣都不算數。[`Buffer::is_modified`]
@@ -359,7 +356,7 @@ pub struct Buffer {
 
 }
 
-/// **What a preview tab shows** (2026-11-08).
+/// **What a preview tab shows**.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PreviewKind {
     /// tinymist's page of a Typst file.
@@ -420,16 +417,16 @@ struct EditSnapshot {
     /// The folds as they were, for `u` to bring back one an edit took.
     folds: crate::fold::FoldMap,
     cursor: usize,
-    /// **Every selection, when the editor gave them** (2026-10-27): helix
+    /// **Every selection, when the editor gave them**: helix
     /// brings back every cursor on `u`, and one `usize` holds one of them.
     selections: Option<crate::selection::Selections>,
     modified: bool,
-    /// **The selections at the step's other end** (2026-10-29, measured
+    /// **The selections at the step's other end** (measured
     /// against helix 25.07.1): on an undo point, where the cursors stood when
     /// the change was done, which is where helix's redo puts them; on a redo
     /// point, where they stood before it, for the undo after that.
     far: Option<(usize, Option<crate::selection::Selections>)>,
-    /// **When the step out of this point was taken** (2026-10-29), which is
+    /// **When the step out of this point was taken**, which is
     /// when the state on its far side began: `:earlier 5m` and `:later` find
     /// their point by it, as helix's revisions are found by their timestamp.
     at: SystemTime,
@@ -550,7 +547,7 @@ impl Buffer {
     pub fn mark_modified(&mut self) {
         self.modified = true;
         self.beyond_the_file = true;
-        // Warning: **連「哪裏算乾淨」一起作廢**（2026-10-02 補）。這一支是給救回來的
+        // Warning: **連「哪裏算乾淨」一起作廢**。這一支是給救回來的
         // 草稿用的：它的字從一個崩掉的 session 來，盤上没有任何一份和它一樣。
         // 不作廢的話撤回棧走回棧底就會報「乾淨」——而棧底正是那段救回來的字。
         self.saved_depth = None;
@@ -559,12 +556,10 @@ impl Buffer {
     /// Create a buffer holding `text`, not yet associated with any file.
     ///
     /// **The ending is read off the text, the way [`Buffer::open`] reads it off
-    /// the file** (丟字第二輪, 2026-10-07). It used to be a hard `"\n"` here, so
-    /// a buffer built from CRLF text reported LF and every line the editor
-    /// added to it came out LF — and, worse, almost every test fixture in the
-    /// crate is built this way, so no test could express a CRLF file at all.
-    /// The only harness that could was `tests/byte_fidelity.rs`, because it
-    /// goes through a real file.
+    /// the file**. A hard `"\n"` here would make a buffer built from CRLF text
+    /// report LF and every line the editor adds to it come out LF — and almost
+    /// every test fixture in the crate is built this way, so no test could
+    /// express a CRLF file at all except through a real file.
     pub fn from_text(text: &str) -> Self {
         let rope = Rope::from_str(text);
         let ending = dominant_ending(&rope);
@@ -638,19 +633,19 @@ impl Buffer {
         path: P,
         forced: Option<&'static crate::encoding::Encoding>,
     ) -> io::Result<Self> {
-        // **一份檔只許有一個名字**（2026-10-10 一輪審查報來的，LSP 整個靜靜地死）。
+        // **一份檔只許有一個名字**，不然 LSP 整個靜靜地死。
         //
-        // 從前這裏原樣收下人打的那一個，於是 `yumete src/main.rs` 存的是
-        // `src/main.rs`，而 `lsp::uri_of` 只在前面貼 `file://`——告訴服務器的是
-        // `file:///src/main.rs`，一個根本不存在的檔。服務器回話用的是它自己算出
-        // 來的真路徑，於是診斷存在一個鍵上、緩衝區問的是另一個鍵：行號槽不標、
+        // 原樣收下人打的那一個的話，`yumete src/main.rs` 存的是 `src/main.rs`，而
+        // `lsp::uri_of` 只在前面貼 `file://`——告訴服務器的是 `file:///src/main.rs`，
+        // 一個根本不存在的檔。服務器回話用的是它自己算出來的真路徑，於是診斷存在
+        // 一個鍵上、緩衝區問的是另一個鍵：行號槽不標、
         // `空格 d` 說這一行没有診斷，而 `:diagnostics-all` 列得出來（它不按緩衝區
         // 路徑查），所以看着像「服務器在跑，只是這一行没事」。
         //
         // macOS 上軟鏈接讓同一件事在**絕對路徑**下也會發生：`/var` 是
         // `/private/var` 的鏈接，所以 `$TMPDIR` 裏的檔必中。
         //
-        // Warning: **軟鏈接也要解析**（2026-10-11）。macOS 的 `/var` 是
+        // Warning: **軟鏈接也要解析**。macOS 的 `/var` 是
         // `/private/var` 的鏈接，所以 `$TMPDIR` 底下必中：我們說 `/var/…`，服務器
         // 答 `/private/var/…`，兩個名字指同一個檔而編輯器認不出來。`gd` 於是答
         // 「未查到定義位置」。
@@ -671,8 +666,7 @@ impl Buffer {
         // Before the read, not after it — see [`Buffer::reread`] for why a
         // stamp taken afterwards can pin a half-written file down as current.
         let seen = stamp_of(path);
-        // Warning: **邊讀邊建，不要先把整個檔讀成一個 `Vec<u8>`**（2026-10-13 報
-        // 的：3.91 GB 的檔佔 40 GB）。`fs::read` 那一份和 rope 同時活着，峰值就是
+        // Warning: **邊讀邊建，不要先把整個檔讀成一個 `Vec<u8>`**。`fs::read` 那一份和 rope 同時活着，峰值就是
         // 兩份；而且 macOS 的 malloc 釋放之後不把頁還給系統，所以「峰值」就是住下
         // 來的那個數。量過：361 MB 的檔，兩份是 775 MB，一份是 420 MB。
         let rope = match fs::File::open(path) {
@@ -816,7 +810,7 @@ impl Buffer {
         self.computed = on;
     }
 
-    /// **A preview tab of `main`** (2026-11-08), of `kind`, under `label`:
+    /// **A preview tab of `main`**, of `kind`, under `label`:
     /// no text, no file, locked, computed.
     pub fn preview_of(kind: PreviewKind, main: PathBuf, label: &str) -> Self {
         let mut buffer = Buffer::from_text("");
@@ -855,7 +849,7 @@ impl Buffer {
     /// a writer who locks a buffer they had already changed still owns those
     /// changes and may still save them.
     pub fn set_readonly(&mut self, on: bool) {
-        // A preview has no text to unlock (2026-11-08).
+        // A preview has no text to unlock.
         self.readonly = on || self.preview.is_some();
     }
 
@@ -925,8 +919,8 @@ impl Buffer {
         }
     }
 
-    /// Read the file again in `encoding` (`:open ++enc=big5` with no file,
-    /// 2026-11-04). A file that does not decode in it leaves the buffer as it
+    /// Read the file again in `encoding` (`:open ++enc=big5` with no file).
+    /// A file that does not decode in it leaves the buffer as it
     /// was.
     pub fn reread_as(&mut self, encoding: &'static crate::encoding::Encoding) -> io::Result<()> {
         let was = self.encoding;
@@ -977,7 +971,7 @@ impl Buffer {
         self.journal = None;
         self.cursor = self.cursor.min(self.rope.len_chars());
         // A fresh read is a fresh start: the undo stack described a document
-        // that is no longer here.
+        // that is not here.
         self.history = History::default();
         Ok(())
     }
@@ -1035,9 +1029,9 @@ impl Buffer {
         self.syntax_by_hand = true;
     }
 
-    /// **Read this file's modelines** (2026-11-04): its settings of its own
+    /// **Read this file's modelines**: its settings of its own
     /// ([`Local`]) from what they say, and its syntax, which is then the
-    /// file's own word and no longer a guess. What they said before goes.
+    /// file's own word and not a guess. What they said before goes.
     pub fn read_modelines(&mut self) {
         // The empty "line" after a final line break is not one.
         let mut n = self.rope.len_lines();
@@ -1146,15 +1140,15 @@ impl Buffer {
 
     /// Whether the buffer has unsaved modifications.
     ///
-    /// Warning: **撤回棧分了叉之後，這一問只有正文答得了**（2026-10-11 報的）。
+    /// Warning: **撤回棧分了叉之後，這一問只有正文答得了**。
     /// 「乾淨」平時是按**深度**認的：存檔那一刻記下棧有多深，走回那個深度就乾淨
     /// 了。撤回幾步再改一個字，重做那一支整個没了——存檔那個深度從此走不回去，
     /// `saved_depth` 作廢，於是 `[+]` 再也落不下來。而正文完全可能又和盤上一樣：
-    /// 報的原話是 `:diff` 說「一個字都不差」而 `:q` 說「還有没存的改動」，兩句話
-    /// 都照着自己的判準說了實話。
+    /// `:diff` 說「一個字都不差」而 `:q` 說「還有没存的改動」，兩句話都照着自己的
+    /// 判準說實話。
     ///
     /// 盤上那一份的指紋本來就在手上（`read_as`，存檔和讀檔各記一次），所以深度
-    /// 認不出來的時候改問它。兩句話從此問的是同一件事。
+    /// 認不出來的時候改問它。兩句話問的是同一件事。
     ///
     /// Warning: **答案按 `revision` 存着。** 這一句每一幀都要問（狀態欄那個 `[+]`），
     /// 而算一次指紋要把整條繩子攤成字符串——三十一兆的稿子上那是每幀三十毫秒。
@@ -1191,14 +1185,13 @@ impl Buffer {
     /// moves, so no path — a table reflow, `:s`, a filter, a feature written
     /// next year — can change the text without meeting the lock.
     ///
-    /// It used to return in silence, on the grounds that the editor refuses
-    /// earlier and says why. Three separate edit paths were then written that
-    /// did not refuse earlier: they moved the cursor past text that had not
-    /// been inserted, and the screen and the rope disagreed until something
-    /// redrew. **The state around the text is exactly what a silent refusal
-    /// cannot protect**, and the `Err` is what lets a caller protect it — see
-    /// [`Buffer::replace`] for the two-step case, where half an edit is the
-    /// hazard. Decided 2026-09-08: 「閘搬進 Buffer，回 Result」.
+    /// It does not return in silence on the grounds that the editor refuses
+    /// earlier: an edit path that does not refuse earlier would move the cursor
+    /// past text that was not inserted, and the screen and the rope would
+    /// disagree until something redrew. **The state around the text is exactly
+    /// what a silent refusal cannot protect**, and the `Err` is what lets a
+    /// caller protect it — see [`Buffer::replace`] for the two-step case, where
+    /// half an edit is the hazard.
     #[must_use = "a read-only buffer refuses the edit; the caller has to say so"]
     pub fn insert(&mut self, char_idx: usize, text: &str) -> Edit {
         if self.readonly {
@@ -1215,7 +1208,7 @@ impl Buffer {
             journal.push((char_idx, 0, text.chars().count()));
         }
         self.log_edit(char_idx, 0, text.chars().count());
-        // **最後改動在哪**（`g.`，#405 之外，2026-09-28）。插入記的是**寫完之後的那一
+        // **最後改動在哪**（`g.`，#405 之外）。插入記的是**寫完之後的那一
         // 頭**，和 vi 的 `'.` 一樣：剛打完一段話按 `g.` 回來，要回到的是話的末尾。
         self.last_edit = Some(char_idx + text.chars().count());
         self.note_change(char_idx + text.chars().count());
@@ -1300,7 +1293,7 @@ impl Buffer {
         }
     }
 
-    /// **A place noted at `revision`, carried to now** (2026-11-02, the jump
+    /// **A place noted at `revision`, carried to now** (the jump
     /// list): each insert, delete or replace since moves it, as helix moves
     /// its jumps through every change; a place inside what was taken lands
     /// where the edit began. A re-read, an undo or a redo swaps the whole
@@ -1325,8 +1318,7 @@ impl Buffer {
     /// go to the diagnostics as an edit would.
     ///
     /// Compared line by line on the ropes from both ends, never copied out:
-    /// an undo in a long manuscript costs its changed lines, not the book
-    /// (review, 2026-11-04).
+    /// an undo in a long manuscript costs its changed lines, not the book.
     fn note_lines_changed(&mut self, before: &Rope) {
         let (was, now) = (before.len_lines(), self.rope.len_lines());
         if was == now || self.path.is_none() {
@@ -1469,8 +1461,8 @@ impl Buffer {
 
     // ---- Crash recovery (Feature #79) -------------------------------------
 
-    /// The recovery copy's name from before 2026-10-31, `chapter.md` →
-    /// `.chapter.md.yumete` — still read and still removed by a discard, never
+    /// The recovery copy's old name, `chapter.md` → `.chapter.md.yumete` —
+    /// still read and still removed by a discard, never
     /// written; a scratch buffer's copy in the data directory. A session
     /// writes [`Self::session_swap_path`].
     ///
@@ -1481,10 +1473,9 @@ impl Buffer {
     pub fn swap_path(&self) -> Option<PathBuf> {
         match &self.path {
             Some(path) => swap_path_for(path),
-            // A buffer with no file has nowhere of its own to put a copy, which
-            // is why it used to get none — and `yumete` with no argument and an
-            // hour of typing is an ordinary way to start a scene. So it is
-            // given a place in the data directory instead; the editor hands it
+            // A buffer with no file has nowhere of its own to put a copy — and
+            // `yumete` with no argument and an hour of typing is an ordinary way
+            // to start a scene. So it is given a place in the data directory instead; the editor hands it
             // one, because only the front end knows where that is.
             None => self.scratch_swap.clone(),
         }
@@ -1532,12 +1523,12 @@ impl Buffer {
     /// yumetes on one chapter writing over each other, because ownership was a
     /// field in a process and the other process cannot see a field.
     ///
-    /// Warning: **每個進程一份，永遠**（2026-10-02 定「救命稿按 pid 分家」）。
-    /// 從前只有「來的時候already有別人的草稿」那一種情形纔分家，於是兩個 yumete
-    /// 同時開一個乾淨的檔，兩邊寫的是同一個名字：誰後寫誰贏，而任一邊按 `:w`
-    /// 就把那一份刪掉——另一邊没存的工作連救命稿都没有了。實測 6/6 丟。
+    /// Warning: **每個進程一份，永遠**：救命稿按 pid 分家。只在「來的時候已經有別人的
+    /// 草稿」時纔分家的話，兩個 yumete 同時開一個乾淨的檔，兩邊寫的是同一個名字：
+    /// 誰後寫誰贏，而任一邊按 `:w` 就把那一份刪掉——另一邊没存的工作連救命稿都没有
+    /// 了。實測 6/6 丟。
     ///
-    /// 分了家之後，`clear_swap` 拿走的只會是 `wrote_at`（自己這一份），刪不到別
+    /// 分了家，`clear_swap` 拿走的只會是 `wrote_at`（自己這一份），刪不到別
     /// 人的；開檔時 `read_draft` 本來就掃整個 `.<名字>.yumete*`，所以撿得回來。
     fn session_swap_path(&self) -> Option<PathBuf> {
         let swap = self.swap_path()?;
@@ -1569,8 +1560,7 @@ impl Buffer {
             self.swapped_at = Some(self.revision);
             return Ok(());
         };
-        // **空的草稿不是草稿**（2026-10-07 定，作者同意：「an empty buffer probably
-        // shouldn't earn a draft」）。
+        // **空的草稿不是草稿**。
         //
         // 没有名字的那一份打過字又清空了——`is_modified` 照樣是真，於是每一趟
         // 都往盤上寫一個 **0 字節**的檔；下一次開編輯器它就報「有 1 份没存的草稿」，
@@ -1583,11 +1573,11 @@ impl Buffer {
             self.swapped_at = Some(self.revision);
             return Ok(());
         }
-        // Warning: **pid 會重用，而這個名字是用 pid 綴的**（2026-10-10 報的）。
+        // Warning: **pid 會重用，而這個名字是用 pid 綴的**。
         // 重啓之後 pid 從小號重發，於是「我的名字」偶爾正好是上一回崩掉、**還没
-        // 人撿**的那一份草稿。從前這裏無條件往那個名字寫，崩的那一回的字當場没了
+        // 人撿**的那一份草稿。無條件往那個名字寫的話，崩的那一回的字當場没了
         // ——而狀態欄還掛着 `[draft]` 說「有一份等你撿」，再崩一次撿回來的是自己。
-        // #305 那條「不許蓋掉没人撿的草稿」從前是靠「名字不會撞」成立的。
+        // #305 那條「不許蓋掉没人撿的草稿」不能靠「名字不會撞」成立。
         //
         // 撞上了就說明**原主人一定走了**（這個號現在是我的），所以把那一份挪到旁
         // 邊一個空名字上，照舊端出來。不改自己的名字：名字裏那個 pid 正是別的
@@ -1659,12 +1649,12 @@ impl Buffer {
         self.pending_draft.as_deref()
     }
 
-    /// **那一份草稿是什麼時候的，檔是什麼時候存的**（2026-10-10 報的）。
+    /// **那一份草稿是什麼時候的，檔是什麼時候存的**。
     ///
-    /// 開檔那一問從前一律說「比文件新」，而別人那一份是**不看時間**就端出來的
-    /// （故意的，`read_draft` 的 `someone_elses`：没人救過的活不該漏掉）。於是一
-    /// 份兩小時前的草稿也被說成新的，人照那句話按 `y` 就是用舊字換掉正文。現在
-    /// 把兩個時間都說出來，新舊由讀者自己看。檔還没存過的時候回 `None`。
+    /// 別人那一份是**不看時間**就端出來的（故意的，`read_draft` 的 `someone_elses`：
+    /// 没人救過的活不該漏掉），所以開檔那一問不能一律說「比文件新」——一份兩小時前
+    /// 的草稿也會被說成新的，人照那句話按 `y` 就是用舊字換掉正文。兩個時間都說出來，
+    /// 新舊由讀者自己看。檔還没存過的時候回 `None`。
     pub fn draft_and_file_times(&self) -> Option<(String, Option<String>)> {
         let at = self.pending_swap.as_ref()?;
         let draft = fs::metadata(at).and_then(|m| m.modified()).ok()?;
@@ -1679,15 +1669,13 @@ impl Buffer {
     /// Take the draft over: this session's text is what the copy should hold
     /// from now on. Called once the writer has loaded it.
     pub fn adopt_draft(&mut self) {
-        // Warning: **別刪還活着的那一個進程的保險**（2026-10-10 報的）。見
+        // Warning: **別刪還活着的那一個進程的保險**。見
         // [`owner_still_running`]：A 打了字没存、B 開同一個檔按下恢復，A 那一份
         // 草稿就從盤上没了，而 A 只要不再敲鍵就不會重寫——那段字一份都不剩。
-        // 撿它的文字一直是對的，刪它不是。
-        // Warning: **收下了就把那一份刪掉**（2026-10-02，跟着「按 pid 分家」一起
-        // 改的）。從前這裏刪的是自己那一份——那時收下草稿等於接手**正名**，於是
-        // 下一次 `write_swap` 寫的就是草稿原來那個檔，把它蓋掉。分了家之後自己
-        // 永遠寫自己那個名字，蓋不到它；不刪的話那一份會一直被當成「還没人撿的
-        // 草稿」，每次開檔都再問一遍。自己這一份照舊留着——它是現在的保險。
+        // 撿它的文字是對的，刪它不是。
+        // Warning: **收下了就把那一份刪掉**。按 pid 分了家，自己永遠寫自己那個名字，
+        // 蓋不到它；不刪的話那一份會一直被當成「還没人撿的草稿」，每次開檔都再問一
+        // 遍。自己這一份照舊留着——它是現在的保險。
         if let Some(theirs) = self.pending_swap.take() {
             if !owner_still_running(&theirs) {
                 let _ = fs::remove_file(theirs);
@@ -1712,23 +1700,23 @@ impl Buffer {
     ///
     /// **The one silent way to lose a day's work.** A file open in yumete and
     /// changed underneath it — by git, by a sync folder, by `:!sed -i`, by the
-    /// same file open in another editor — used to be written over without a
-    /// word, and the other version was simply gone. So the file is stamped when
+    /// same file open in another editor — must not be written over without a
+    /// word, the other version simply gone. So the file is stamped when
     /// it is read and when it is written, and a stamp that no longer matches
     /// stops the save and says so. `:e!` is how you take the other version;
     /// `:w!` is how you keep yours.
     /// `finish` ＝ 缺的那個行尾補不補（`[editor] insert_final_newline`）。
     pub fn save_forcing(&mut self, force: bool, finish: bool) -> io::Result<()> {
-        // Warning: **鎖住的那一份，連寫都不寫**（2026-10-02 查出來的）。從前只有繩子
-        // 上了鎖——`insert`/`remove`/`replace`/`undo`/`redo` 五支都攔着，而
-        // 存檔這一支一個字都没問。三種後果，都實測過：
+        // Warning: **鎖住的那一份，連寫都不寫**。只鎖繩子——`insert`/`remove`/
+        // `replace`/`undo`/`redo` 五支都攔着——而存檔這一支不問的話，三種後果，
+        // 都實測過：
         //
         // ① `--readonly` 開着、一個字没改，`:w` 照樣把檔重寫一遍（inode 都換了）
         //    ——而重寫那一下順手 `clear_swap()`，**把別人的救命稿刪了**。
         // ② 先改、再 `:readonly` (on)、再 `:w`：改動照樣落盤。面板那一句
         //    `readonly.on-with-unsaved` 明說「還有没存的改動」，然後放它過去。
         // ③ `--help` 上寫着「Open locked: nothing this run opens can be typed
-        //    into」，而這一支讓它變成只對內存成立。
+        //    into」，而那只對內存成立。
         //
         // `force`（`:w!`）不開這道鎖：那個驚嘆號說的是「外面改過了，用我的」，
         // 和「這一份鎖着」是兩件事。解鎖的話屏幕上一直寫着——`:readonly` (off)。
@@ -1768,7 +1756,7 @@ impl Buffer {
     pub fn save_as<P: Into<PathBuf>>(&mut self, path: P, force: bool, finish: bool) -> io::Result<()> {
         // `old_path` 只為了失敗時放回去；舊名字那一份救命稿不必在這裏管——
         // `save_forcing` 末尾的 `clear_swap` 拿的是 `wrote_at`，而那時它指的
-        // 正是舊名字底下自己寫的那一份（2026-10-02 按 pid 分家之後成立）。
+        // 正是舊名字底下自己寫的那一份（按 pid 分家）。
         let old_path = self.path.clone();
         let old_owns = self.owns_swap;
         let old_seen = self.seen.take();
@@ -1785,7 +1773,7 @@ impl Buffer {
             return Err(why);
         }
         // Writing over a file that is already there is a decision, not a
-        // typo's consequence: `:w other.md` used to replace it without a word.
+        // typo's consequence: `:w other.md` must not replace it without a word.
         if !force && target.exists() {
             self.seen = old_seen;
             self.read_as = old_read_as;
@@ -1828,9 +1816,8 @@ impl Buffer {
     /// The buffer's own state — its path, its stamps, its recovery copy, and
     /// whether it is modified — is untouched, because none of it is about this
     /// file. Exactly as in vi.
-    /// Warning: **鎖住的時候一份都不許寫出去**（2026-10-03 一輪審查報來的）。`:export!`
-    /// 那一邊早就擋着（`files.rs`），而隔壁這一支没有：`--readonly` 開着的時候
-    /// `:w! 別的檔` 照樣把內容寫了出去，蓋掉一個毫不相干的檔。鎖說的是「這一輪
+    /// Warning: **鎖住的時候一份都不許寫出去**，同 `:export!`（`files.rs`）：不擋的話，
+    /// `--readonly` 開着的時候 `:w! 別的檔` 照樣把內容寫出去，蓋掉一個毫不相干的檔。鎖說的是「這一輪
     /// 不寫盤」，不是「這一輪不改這一個檔」。
     pub fn write_copy(&self, path: &Path, force: bool, finish: bool) -> io::Result<()> {
         if self.readonly {
@@ -1843,8 +1830,8 @@ impl Buffer {
         self.write_atomically(path, finish)
     }
 
-    /// [`Self::write_copy`] for a copy that the buffer's encoding cannot hold
-    /// (2026-11-04): in UTF-8, or with `&#NNNN;` for what it cannot. The
+    /// [`Self::write_copy`] for a copy that the buffer's encoding cannot hold:
+    /// in UTF-8, or with `&#NNNN;` for what it cannot. The
     /// buffer is left as it is.
     pub fn write_copy_spilling(&self, path: &Path, force: bool, finish: bool, references: bool) -> io::Result<()> {
         if self.readonly {
@@ -1863,9 +1850,9 @@ impl Buffer {
         write_bytes_atomically_like(path, None, |file| file.write_all(&bytes))
     }
 
-    /// **父目錄不在就不寫**，`force`（`:w!`）＝ 把它建出來（2026-10-11 報的）。
+    /// **父目錄不在就不寫**，`force`（`:w!`）＝ 把它建出來。
     ///
-    /// 從前一路落到 `File::create` 上，於是在一個没有 `.yumete/` 的項目裏
+    /// 一路落到 `File::create` 上的話，在一個没有 `.yumete/` 的項目裏
     /// `ye .yumete/config.toml` 再 `:w`，狀態欄回的是一句光禿禿的
     /// `No such file or directory (os error 2)`——哪個檔、哪一級不在、怎麼辦，
     /// 三件事一件都没說。
@@ -1878,9 +1865,9 @@ impl Buffer {
     /// 就在；而一份草稿不該有權力替人建目錄。
     ///
     /// Warning: **A folder is not a target, with or without the bang.** `:w 某目錄`
-    /// used to answer 「那個文件已經存在——`:w!` 才蓋掉它」 (a folder called a
-    /// file, and a bang that could never work), and `:w! 某目錄` dropped the
-    /// raw `Is a directory (os error 21)` into a Chinese status bar. Helix
+    /// must not answer 「那個文件已經存在——`:w!` 才蓋掉它」 (a folder called a
+    /// file, and a bang that could never work), nor `:w! 某目錄` drop the raw
+    /// `Is a directory (os error 21)` into a Chinese status bar. Helix
     /// 25.07.1 says that OS error for both (measured); the refusal here is the
     /// same refusal, in this editor's own words.
     fn room_for(path: &Path, force: bool) -> io::Result<()> {
@@ -1893,7 +1880,7 @@ impl Buffer {
         if parent.is_dir() {
             return Ok(());
         }
-        // **The schema folder is always made** (2026-10-30): a schema opened
+        // **The schema folder is always made**: a schema opened
         // by `Space t e` lives under `.yumete/tables/` and is written with a
         // plain `:w`, so that folder cannot be a typo. The rest of `.yumete/`
         // still asks for `:w!`, as any other missing folder does.
@@ -1940,7 +1927,7 @@ impl Buffer {
         self.write_body(path, like, self.marked, finish)
     }
 
-    /// **The file in the encoding it came in** (2026-11-04). Every character
+    /// **The file in the encoding it came in**. Every character
     /// is checked before anything touches the disk: one the encoding cannot
     /// hold stops the save, and the error carries where it is
     /// ([`crate::encoding::Unencodable`]) for the front end to ask what to do.
@@ -1988,7 +1975,7 @@ impl Buffer {
             for chunk in self.rope.chunks() {
                 file.write_all(chunk.as_bytes())?;
             }
-            // **一存就以行尾結尾**（2026-10-13 定，照 vim）。
+            // **一存就以行尾結尾**（照 vim）。
             //
             // vim 的模型是「每一行都以行尾結束」，而它**只有 `:set binary` 時**纔保住
             // 「原檔沒有末尾換行」這件事（`:h 'endofline'`：「When writing a file and
@@ -2003,9 +1990,8 @@ impl Buffer {
             // 盤上沒有的檔 `:wq` 建出來也是 0 位元組。一個只有行尾的檔和一個空檔是兩
             // 件事。
             //
-            // 原話：「就算是老档案，當你按下 `:w` 的时候，你就应该預期到文檔发生了变
-            // 化……其他任何时候只要文件不是空的，`:w` 都会加行尾」。§309 的「逐位元組
-            // 往返」於是只剩 CRLF 與混行尾兩條，缺末尾換行那一條作廢。
+            // 老檔案也一樣：按下 `:w` 就預期文檔會變，只要檔不是空的，`:w` 都會加行尾。
+            // §309 的「逐位元組往返」因此只管 CRLF 與混行尾兩條。
             let tail = tail_for(&self.rope, self.ending, finish);
             if !tail.is_empty() {
                 file.write_all(tail.as_bytes())?;
@@ -2037,7 +2023,7 @@ impl Buffer {
     /// was already in the file is never rewritten: the rope holds the bytes
     /// that were read, mixed endings and all, and that is what makes reading
     /// and writing a file back an exact round trip.
-    /// **這個檔是帶 BOM 來的嗎** —— `:export` 問它（2026-10-07）。
+    /// **這個檔是帶 BOM 來的嗎** —— `:export` 問它。
     ///
     /// 散文裏那三個字節没人在意，`.csv` 裏它是下一個程序判定 UTF-8 的依據。
     pub fn marked(&self) -> bool {
@@ -2048,7 +2034,7 @@ impl Buffer {
         self.ending
     }
 
-    /// The encoding this file is written back in (2026-11-04).
+    /// The encoding this file is written back in.
     pub fn encoding(&self) -> &'static crate::encoding::Encoding {
         self.encoding
     }
@@ -2132,8 +2118,8 @@ impl Buffer {
         }
     }
 
-    /// **Say where the change really begins**, before anything was typed
-    /// (2026-10-27): `A` announces its undo point and then moves to the line's
+    /// **Say where the change really begins**, before anything was typed:
+    /// `A` announces its undo point and then moves to the line's
     /// end, and helix's `u` comes back to that end, where the typing began —
     /// so the announced point takes the selections as they stand now. Does
     /// nothing once the point is earned, or when none is announced.
@@ -2146,7 +2132,7 @@ impl Buffer {
 
     /// Stop announcing undo points until [`Self::end_undo_group`], and say what
     /// the setting was — a group opened inside a group is still one group.
-    /// **撤銷棧上現在有幾個點**（2026-10-09）。
+    /// **撤銷棧上現在有幾個點**。
     ///
     /// `R` 動一個檔的時候記下這個數，撤回的時候比一次：對不上就是這個檔**後來又
     /// 改過**，那一步撤銷不再是那次替換，而是讀者自己寫的東西。IntelliJ 攔的是同
@@ -2185,8 +2171,7 @@ impl Buffer {
                 self.history.undo.push(point);
                 self.history.redo.clear();
             }
-            // Warning: **繩子動了而深度没動，那個深度就不認得內容了**（2026-10-02
-            // 一輪自查報來的，`saved_depth` 自己的洞）。
+            // Warning: **繩子動了而深度没動，那個深度就不認得內容了**。
             //
             // `saved_depth` 記的是深度，靠的是「一條線性的歷史上，深度認得出一個
             // 位置」。分組裏 `snapshot` 不報點（`grouping`），於是**改了一串字而
@@ -2312,7 +2297,7 @@ impl Buffer {
 
     /// **How many steps back (negative) or forward reach the state nearest
     /// `span` before or after this one** — helix's `jump_duration_backward` /
-    /// `_forward` over a history that is a line (2026-10-29). A state's time
+    /// `_forward` over a history that is a line. A state's time
     /// is when the change that made it was made. The oldest state has none:
     /// a target before the first change goes all the way back to it.
     pub fn steps_for_span(&self, span: std::time::Duration, back: bool) -> isize {
@@ -2378,7 +2363,7 @@ fn dominant_ending(rope: &Rope) -> &'static str {
     let mut crlf = 0usize;
     let mut lf = 0usize;
     let mut last = 0u8;
-    // Warning: **走塊裏的位元組，別走 `rope.chars()`**（2026-10-13）。答案逐字相同
+    // Warning: **走塊裏的位元組，別走 `rope.chars()`**。答案逐字相同
     // ——換行和回車都是 ASCII，不會是別的字的一截——而每一個字過一次樹是貴的：量
     // 過，3.91 GB 的檔上 5.34 秒對 0.96 秒。開一個檔走兩趟這種掃描（這一支和
     // `units_in_rope`），佔了 17 秒裏的十秒。
@@ -2459,7 +2444,7 @@ fn decode<'a>(bytes: &'a [u8], path: &Path) -> io::Result<std::borrow::Cow<'a, s
     })
 }
 
-/// **The recovery copy's ending** (2026-10-31): its own word, so the
+/// **The recovery copy's ending**: its own word, so the
 /// ignore line people write first, `*.yumete-swp`, can never take the
 /// project's `.yumete/` folder or `.yumete.toml` with it — `*.yumete` did.
 /// The changing part comes before it, as Kate's `.file.kate-swp`, so one
@@ -2468,7 +2453,7 @@ pub const DRAFT_ENDING: &str = ".yumete-swp";
 
 /// **The ending of a file being written** — a save's temporary file, a
 /// settings write — removed by the write itself and left only by a crash in
-/// the middle of one (2026-10-31).
+/// the middle of one.
 pub const TEMP_ENDING: &str = ".yumete-tmp";
 
 /// Where a session writes the recovery copy of `path`: a dotfile beside it,
@@ -2484,8 +2469,8 @@ fn draft_path_for(path: &Path, tag: &str) -> Option<PathBuf> {
 }
 
 /// The session's number in a recovery copy of the file called `name`, in
-/// either spelling: `.ch1.md.4321.yumete-swp`, or `.ch1.md.yumete.4321` from
-/// before 2026-10-31. Digits only, so a file the writer keeps beside the
+/// either spelling: `.ch1.md.4321.yumete-swp`, or the old
+/// `.ch1.md.yumete.4321`. Digits only, so a file the writer keeps beside the
 /// chapter is never mistaken for a copy.
 fn draft_tag<'a>(file: &'a str, name: &str) -> Option<&'a str> {
     let tag = match file.strip_suffix(DRAFT_ENDING) {
@@ -2506,7 +2491,7 @@ pub fn temp_path_for(target: &Path) -> PathBuf {
     let tail = format!(".{}-{nanos}{TEMP_ENDING}", std::process::id());
     // The name is only a reader's clue, and a file name has 255 bytes: a
     // long one is cut so the temporary still fits, or a file that saved in
-    // 0.15.0 would say "File name too long" (2026-11-02).
+    // 0.15.0 would say "File name too long".
     let mut name = name.trim_start_matches('.').to_string();
     let room = 255usize.saturating_sub(1 + tail.len());
     if name.len() > room {
@@ -2519,8 +2504,8 @@ pub fn temp_path_for(target: &Path) -> PathBuf {
     dir.join(format!(".{name}{tail}"))
 }
 
-/// The recovery copy's name before 2026-10-31, `chapter.md` →
-/// `.chapter.md.yumete`: read, never written.
+/// The recovery copy's old name, `chapter.md` → `.chapter.md.yumete`: read,
+/// never written.
 fn swap_path_for(path: &Path) -> Option<PathBuf> {
     let name = path.file_name()?.to_string_lossy();
     let dir = match path.parent() {
@@ -2569,8 +2554,8 @@ fn read_draft(path: &Path, rope: &Rope, tag: &str) -> Option<(String, PathBuf)> 
     let mine = draft_path_for(path, tag)?.file_name()?.to_string_lossy().into_owned();
     let mut consider = |at: PathBuf| {
         let Ok(draft) = fs::read_to_string(&at) else { return };
-        // A copy written before 2026-09-14 carries the document's BOM, which
-        // the rope does not — so it could never compare equal, and recovering
+        // An old copy may carry the document's BOM, which the rope does not —
+        // so it could never compare equal, and recovering
         // it would put `\u{feff}` at the head of the manuscript. Strip it on
         // the way in: the copy is a picture of the rope, not of the file.
         let draft = draft.strip_prefix(BOM).unwrap_or(&draft).to_string();
@@ -2578,13 +2563,13 @@ fn read_draft(path: &Path, rope: &Rope, tag: &str) -> Option<(String, PathBuf)> 
             return;
         }
         let Ok(stamped) = fs::metadata(&at).and_then(|m| m.modified()) else { return };
-        // **別人那一份，存檔時間說明不了什麼**（2026-10-03 一輪審查報來的，會丟字）。
+        // **別人那一份，存檔時間說明不了什麼**，不然會丟字。
         //
         // 「比盤上那一份新纔算數」這條規矩對的是**自己**這一輪的草稿：存過檔之
         // 後它就只是一份舊照片。可每個進程現在各有一份草稿（#305），而別的進程
-        // 崩掉留下的那一份是**没人救過的活兒**——我這邊按一次 `:w`，它就永遠不
-        // 再被提起了，既不在開檔那一問裏，也不在 `:recover` 裏。重現過：A 崩了、
-        // B 存了檔，`.a.md.yumete.<pidA>` 還躺在盤上，而編輯器答「這個文件没有
+        // 崩掉留下的那一份是**没人救過的活兒**——按存檔時間判的話，我這邊按一次
+        // `:w`，它就永遠不再被提起，既不在開檔那一問裏，也不在 `:recover` 裏：A 崩
+        // 了、B 存了檔，`.a.md.yumete.<pidA>` 還躺在盤上，而編輯器答「這個文件没有
         // 搶救稿」。
         // 「別人那一份」＝ 帶 pid 後綴、而那個 pid 不是我。不帶後綴的那一個是
         // #305 之前的老名字，不是別人的，照舊按時間判。
@@ -2592,8 +2577,8 @@ fn read_draft(path: &Path, rope: &Rope, tag: &str) -> Option<(String, PathBuf)> 
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
             .is_some_and(|n| n != plain && n != mine);
-        // **A copy whose yumete is still running is not left behind**
-        // (2026-10-30): offering it as a crashed run's work let `d` delete a
+        // **A copy whose yumete is still running is not left behind**:
+        // offering it as a crashed run's work would let `d` delete a
         // live session's only copy, and that session, unchanged since, did not
         // write it again. It is that session's to keep; it gets offered once
         // the process is gone.
@@ -2670,7 +2655,7 @@ pub fn write_file_atomically(path: &Path, text: &str) -> io::Result<()> {
     write_binary_atomically(path, text.as_bytes())
 }
 
-/// The same for bytes that are not text: an EPUB is a zip (2026-11-08).
+/// The same for bytes that are not text: an EPUB is a zip.
 pub fn write_binary_atomically(path: &Path, bytes: &[u8]) -> io::Result<()> {
     write_bytes_atomically(path, |file| file.write_all(bytes))
 }
@@ -2799,12 +2784,11 @@ fn write_bytes_with_model(
     write: impl FnOnce(&mut fs::File) -> io::Result<()>,
 ) -> io::Result<()> {
     // Through the link, not over it: a chapter that is a symlink into a sync
-    // folder used to become a regular file here, and everything downstream
-    // went on reading the stale copy it pointed at.
+    // folder must not become a regular file here, with everything downstream
+    // reading the stale copy it pointed at.
     //
-    // Warning: **指不到東西的連結要拒掉，不許退回原路**（2026-10-09 審出來的）。
-    // `canonicalize` 在目標不存在的時候是失敗的，而那一句 `unwrap_or_else` 退回了連
-    // 結自己的路徑——於是重命名把臨時檔蓋在**連結上面**：連結没了，變成一個普通檔，
+    // Warning: **指不到東西的連結要拒掉，不許退回原路**。`canonicalize` 在目標不存在
+    // 的時候是失敗的，退回連結自己的路徑的話，重命名把臨時檔蓋在**連結上面**：連結没了，變成一個普通檔，
     // 字寫進了本地這一份，而所有照真路徑讀的人什麽都看不見，狀態欄照舊說「存了」。
     // 真會發生的那一幕：章節連到一個外置卷或者同步目錄，而那個目錄這會兒没掛上。
     // 連結還在、目標不在，就說出來——這不是編輯器該替人決定的事。
@@ -2834,7 +2818,7 @@ fn write_bytes_with_model(
             ));
         }
     }
-    // **A file with a second hard link is written in place** (#312, 2026-10-24).
+    // **A file with a second hard link is written in place** (#312).
     // The rename below gives the path a new file, so the other name went on
     // holding the old text, and the attributes on the file (Finder tags,
     // ownership) stayed behind with it. Measured: nvim, vim and helix all keep
@@ -2849,9 +2833,9 @@ fn write_bytes_with_model(
         }
     }
     let tmp = temp_path_for(&path);
-    // Every way out of the write leaves the directory as it found it. Only the
-    // rename used to clean up after itself, so a disk-full `:w` on a 9.6 MB
-    // novel left a temporary file beside the manuscript, once per attempt.
+    // Every way out of the write leaves the directory as it found it, not only
+    // the rename: a disk-full `:w` on a 9.6 MB novel must not leave a temporary
+    // file beside the manuscript, once per attempt.
     let written = (|| -> io::Result<()> {
         let mut file = fs::File::create(&tmp)?;
         // The manuscript's own permissions, kept: `File::create` takes the
@@ -2871,12 +2855,11 @@ fn write_bytes_with_model(
             //
             // 只讀的稿子照樣打得開、`:readonly` (off) 照樣寫得動（寫的時候另有一道
             // 閘問人），而副本是**我們自己**的東西，没有理由跟着只讀。
-            // 2026-09-24 審出來的。
             // Warning: **只補「自己」那一位，不許用 `set_readonly(false)`。** 那一支在
             // Unix 上是 `mode |= 0o222`——**把寫權限一併給了組和其他人**：一份
             // 0o600 的日記，它的搶救副本會是 0o622。
             // `a_recovery_copy_is_as_private_as_the_manuscript` 當場逮到
-            // （2026-09-24，那條測試就是為這件事寫的）。clippy 也有一條
+            // （那條測試就是為這件事寫的）。clippy 也有一條
             // `permissions_set_readonly_false` 說同一件事。
             #[cfg(unix)]
             {
@@ -2968,12 +2951,12 @@ fn draft_moved_aside(swap: &Path) -> Option<PathBuf> {
     None
 }
 
-/// **那一份草稿的主人還在跑嗎**（2026-10-10 報的）。
+/// **那一份草稿的主人還在跑嗎**。
 ///
-/// 草稿的名字帶着寫它的那個進程：有檔名的是 `.卷一.md.<pid>.yumete-swp`（10-31
-/// 以前是 `.卷一.md.yumete.<pid>`），没檔名的是 `scratch-<pid>-<序號>.yumete-swp`。崩掉的那一回留下的没人收，**可還活着的那一個
+/// 草稿的名字帶着寫它的那個進程：有檔名的是 `.卷一.md.<pid>.yumete-swp`（舊名
+/// `.卷一.md.yumete.<pid>`），没檔名的是 `scratch-<pid>-<序號>.yumete-swp`。崩掉的那一回留下的没人收，**可還活着的那一個
 /// 進程留下的是它此刻唯一的保險**——它打了字還没存，而只要它不再敲鍵就不會重寫
-/// （`draft_is_stale` 是假的）。從前收下草稿與撿孤兒兩條路都無條件把那個檔刪了。
+/// （`draft_is_stale` 是假的）。收下草稿與撿孤兒兩條路都不許無條件把那個檔刪掉。
 ///
 /// Warning: **pid 會重用**，所以這一問偶爾會把一個不相干的進程當成主人、於是
 /// 多留一份草稿在盤上。多留一份只是下次開檔多問一句；刪錯一份是把字丟了。
@@ -2987,7 +2970,7 @@ pub(crate) fn owner_still_running(draft: &std::path::Path) -> bool {
 /// 草稿的名字裏那個 pid——認不出來、或者那個號不可能是另一個 yumete，就没有。
 ///
 /// 名字怎麼拼與怎麼問是**兩件事**，所以分成兩支：下面問的那一半每個平臺一種寫
-/// 法，而這一半是同一個（2026-10-12 補 Windows 那一支時分開的）。
+/// 法，而這一半是同一個。
 fn owner_pid(draft: &std::path::Path) -> Option<u32> {
     let name = draft.file_name()?.to_string_lossy().into_owned();
     let tag = match name.strip_prefix("scratch-") {
@@ -3019,7 +3002,7 @@ pub(crate) fn pid_is_running(pid: u32) -> bool {
     }
 }
 
-/// **這個號此刻還在跑嗎**——Windows 那一種問法（2026-10-12）。
+/// **這個號此刻還在跑嗎**——Windows 那一種問法。
 ///
 /// 没有信號可借，所以是「開個把手，問它退了没有」：`OpenProcess` 要的權限是
 /// `PROCESS_QUERY_LIMITED_INFORMATION`（最小的那一檔，別人的進程也開得了），
@@ -3027,9 +3010,9 @@ pub(crate) fn pid_is_running(pid: u32) -> bool {
 /// 的 `EPERM` 同一回事，照樣算在。開得了就 `GetExitCodeProcess`：`STILL_ACTIVE`
 /// 纔算在跑。
 ///
-/// Warning: **從前這一支是一句 `false`**，於是 2026-10-10 修的那一條（還活着的另
-/// 一個 yumete 留下的草稿不許當無主的）在 Windows 上整個没修：兩個 yumete 開着，
-/// 各自把對方的救命稿報成「上次没存好」，收下來就把對方正在打的字蓋掉。
+/// Warning: **這一支不是一句 `false`**：那樣的話「還活着的另一個 yumete 留下的草稿
+/// 不許當無主的」在 Windows 上整個不成立——兩個 yumete 開着，各自把對方的救命稿報
+/// 成「上次没存好」，收下來就把對方正在打的字蓋掉。
 ///
 /// Warning: **`STILL_ACTIVE` 是 259，而一個進程也可以拿 259 退出。** 真撞上就是多
 /// 留一份草稿——與上面 pid 重用那一條同一個方向，而那是安全的那一邊。
@@ -3093,7 +3076,7 @@ mod tests {
     ///
     /// It matters beyond a missed reload: the same answer is what stops `:w`
     /// writing over a file somebody else changed.
-    /// **`$TMPDIR`，照編輯器的說法拼**（2026-10-11）。
+    /// **`$TMPDIR`，照編輯器的說法拼**。
 ///
 /// `Buffer::open` 解析軟鏈接，而 macOS 的 `std::env::temp_dir()` 回的是
 /// `/var/folders/…`——`/private/var/folders/…` 的鏈接。測試拿前者作比較就永遠對不
@@ -3126,12 +3109,11 @@ fn tmp() -> std::path::PathBuf {
         let _ = fs::remove_dir_all(&dir);
     }
 
-    /// **文件夾不是存檔的去處，帶不帶 `!` 都一樣**（2026-10-20）。
+    /// **文件夾不是存檔的去處，帶不帶 `!` 都一樣**。
     ///
-    /// 從前 `:w 某目錄` 答的是 [`say!`]`("buffer.file-already-exists")`——把目錄叫成
-    /// 文件，還指了一條 `:w!` 的路，而那條路落到 `File::create` 上，回的是一句
-    /// 英文的 `Is a directory (os error 21)`。helix 25.07.1 兩種都說後面那一句
-    /// （2026-10-20 用 pty 量的）。
+    /// `:w 某目錄` 不許答 [`say!`]`("buffer.file-already-exists")`——把目錄叫成文件，
+    /// 還指一條 `:w!` 的路，而那條路落到 `File::create` 上，回的是一句英文的
+    /// `Is a directory (os error 21)`。helix 25.07.1 兩種都說後面那一句（用 pty 量過）。
     #[test]
     fn a_folder_is_never_somewhere_to_save() {
         let dir = tmp().join(format!("yumete-saveondir-{}", std::process::id()));
@@ -3160,7 +3142,7 @@ fn tmp() -> std::path::PathBuf {
         let _ = fs::remove_dir_all(&dir);
     }
 
-    /// **兩種算法要給同一個數**（2026-10-13）。開檔記的那個 digest 現在是逐塊算
+    /// **兩種算法要給同一個數**。開檔記的那個 digest 現在是逐塊算
     /// 的（[`digest_of`]，不物化整份正文），而存檔前後比的那幾處算的是
     /// [`digest`]。不一樣的話，「這個檔在盤上被别人改過了嗎」每次都答錯。
     #[test]
@@ -3208,10 +3190,10 @@ fn tmp() -> std::path::PathBuf {
 
     /// A BOM file's recovery copy holds the rope, not the file.
     ///
-    /// `open` strips the BOM into `marked`; the copy used to get it written
-    /// back, which meant the copy could never compare equal to the document
-    /// (so every BOM file was offered a stale draft forever) and `:recover`,
-    /// which pushes the copy's bytes into the buffer, made `\u{feff}` the
+    /// `open` strips the BOM into `marked`; written back into the copy, it
+    /// would keep the copy from ever comparing equal to the document (so every
+    /// BOM file would be offered a stale draft forever) and `:recover`, which
+    /// pushes the copy's bytes into the buffer, would make `\u{feff}` the
     /// first character of the manuscript — with a second BOM written in front
     /// of it on the next `:w`. #310's mark belongs on the document alone.
     #[test]
@@ -3240,7 +3222,7 @@ fn tmp() -> std::path::PathBuf {
         assert!(fs::read_to_string(&path).expect("read").starts_with(BOM));
 
         // A copy identical to the document is not offered as a draft — the
-        // check that a stray BOM used to defeat.
+        // check that a stray BOM would defeat.
         let clean = Buffer::open(&path).expect("reopen");
         clean.write_body(&swap, None, false, false).expect("rewrite the copy");
         assert!(
@@ -3351,7 +3333,7 @@ fn tmp() -> std::path::PathBuf {
         assert_eq!(b.revision(), was + 1, "one edit, one revision");
     }
 
-    /// **分組裏存了一次檔，那個「乾淨位置」就不算數了**（2026-10-02 自查出來的）。
+    /// **分組裏存了一次檔，那個「乾淨位置」就不算數了**。
     ///
     /// `saved_depth` 記的是深度，靠的是「一條線性的歷史上，深度認得出一個位置」。
     /// 分組裏不報撤回點，於是改了一串字而深度一格没動——那一串裏夾着的那次存檔，
@@ -3391,7 +3373,7 @@ fn tmp() -> std::path::PathBuf {
         fs::remove_dir_all(&dir).ok();
     }
 
-    /// **救回來的草稿，撤到棧底也不算乾淨**（2026-10-02 補）。
+    /// **救回來的草稿，撤到棧底也不算乾淨**。
     ///
     /// 那段字從一個崩掉的 session 來，盤上没有任何一份和它一樣。棧底不是「和盤上
     /// 一樣」的那個位置，所以 `mark_modified` 要把那個位置一起作廢。
@@ -3408,7 +3390,7 @@ fn tmp() -> std::path::PathBuf {
         assert!(b.is_modified(), "撤回到棧底，那一段還是没有一份在盤上");
     }
 
-    /// **`:w` 之後按一下 `u`，緩衝區不許說自己是乾淨的**（2026-10-02 查出來的，會丟字）。
+    /// **`:w` 之後按一下 `u`，緩衝區不許說自己是乾淨的**，會丟字。
     ///
     /// 每一個撤回點記着「拍它的時候改過没有」，而存檔之前拍的那些點記的都是
     /// `false`。於是改一個字、`:w`、按 `u`：屏幕回到原樣、盤上是改過的那一版、
@@ -3450,10 +3432,10 @@ fn tmp() -> std::path::PathBuf {
         fs::remove_dir_all(&dir).ok();
     }
 
-    /// **鎖住的那一份，`:w` 連碰都不碰那個檔**（2026-10-02 查出來的）。
+    /// **鎖住的那一份，`:w` 連碰都不碰那個檔**。
     ///
-    /// 繩子上了鎖，而存檔那一支從前一個字都没問：`--readonly` 開着、一個字没改，
-    /// `:w` 照樣把檔重寫一遍（inode 都換了），順手把救命稿刪了。
+    /// 只鎖繩子、存檔那一支不問的話：`--readonly` 開着、一個字没改，`:w` 照樣把檔
+    /// 重寫一遍（inode 都換了），順手把救命稿刪了。
     #[test]
     fn a_locked_buffer_refuses_to_be_written_at_all() {
         let dir = tmp().join(format!("yumete-lockedsave-{}", std::process::id()));
@@ -3481,7 +3463,7 @@ fn tmp() -> std::path::PathBuf {
     /// Warning: **`set_readonly` and not the mode bits.** 0o444 is a unix
     /// sentence; the question — 「can a manuscript the filesystem is protecting
     /// be written over」 — is every platform's, and `std::fs` has one word for
-    /// it (on Windows it is the read-only attribute). 2026-10-12.
+    /// it (on Windows it is the read-only attribute).
     #[test]
     fn a_read_only_manuscript_is_not_written_over() {
         let locked = |path: &std::path::Path, yes: bool| {
@@ -3601,7 +3583,7 @@ fn tmp() -> std::path::PathBuf {
         let mut b = Buffer::open(&path).unwrap();
         b.insert(0, "改了：").expect("the fixture buffer is writable");
         b.write_swap().unwrap();
-        // 每個進程寫自己那一個名字（2026-10-02 定「按 pid 分家」）。
+        // 每個進程寫自己那一個名字（按 pid 分家）。
         let swap = b.recovery_copy().expect("a copy was written").to_path_buf();
         assert_eq!(
             swap.file_name().unwrap().to_string_lossy(),
@@ -3623,10 +3605,10 @@ fn tmp() -> std::path::PathBuf {
 
     #[test]
     fn the_session_after_a_crash_still_keeps_a_draft() {
-        // **The run that most needs a recovery copy used to be the one without
-        // one** (#305). Refusing to write over a draft nobody had recovered was
-        // right; refusing to write at all was not, and it meant: crash once,
-        // reopen, work all day, crash again — and the day is gone.
+        // **The run that most needs a recovery copy is not left without one**
+        // (#305). Refusing to write over a draft nobody has recovered is right;
+        // refusing to write at all is not: crash once, reopen, work all day,
+        // crash again — and the day is gone.
         let dir = tmp().join(format!("yumete-after-crash-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
@@ -3658,9 +3640,9 @@ fn tmp() -> std::path::PathBuf {
         fs::remove_dir_all(&dir).ok();
     }
 
-    /// **打過字又清空的那一份不留草稿**（2026-10-07 定）。
+    /// **打過字又清空的那一份不留草稿**。
     ///
-    /// `is_modified` 照樣是真，於是從前每一趟都寫一個 0 字節的檔，下一次開編輯器
+    /// `is_modified` 照樣是真，只問它的話每一趟都寫一個 0 字節的檔，下一次開編輯器
     /// 就報「有 1 份没存的草稿」——而取回來的是一張白紙。
     #[test]
     fn an_empty_scratch_buffer_keeps_no_draft() {
@@ -3721,7 +3703,7 @@ fn tmp() -> std::path::PathBuf {
         assert_eq!(fs::read_to_string(&ja).unwrap(), "甲底稿\n", "A's draft is still A's");
         assert_eq!(fs::read_to_string(&yi).unwrap(), "乙底稿\n");
 
-        // Warning: **而且 `:w` 只拿走自己那一份**（2026-10-02 定）。這是當初
+        // Warning: **而且 `:w` 只拿走自己那一份**。這是當初
         // 報上來的那條——甲按一下存檔，乙没存的工作連救命稿都没有了，實測 6/6。
         a.save(true).unwrap();
         assert!(!ja.exists(), "甲存檔，拿走的是甲自己那一份");
@@ -3730,7 +3712,7 @@ fn tmp() -> std::path::PathBuf {
         fs::remove_dir_all(&dir).ok();
     }
 
-    /// **A running yumete's copy is not offered** (2026-10-30): a second
+    /// **A running yumete's copy is not offered**: a second
     /// session offered it as crashed work, and `d` deleted the live one's only
     /// copy. Here the parent process (the test runner) stands in for it.
     #[cfg(unix)]
@@ -3772,8 +3754,7 @@ fn tmp() -> std::path::PathBuf {
         fs::remove_dir_all(&dir).ok();
     }
 
-    /// **別人崩掉留下的那一份，我存一次檔不該把它埋掉**（2026-10-03 一輪審查
-    /// 報來的，會丟字）。
+    /// **別人崩掉留下的那一份，我存一次檔不該把它埋掉**，會丟字。
     ///
     /// 「比盤上那一份新纔算數」對的是自己這一輪的草稿；別的進程崩掉留下的是没
     /// 人救過的活兒，和我什麼時候存檔没有關係。
@@ -3836,8 +3817,8 @@ fn tmp() -> std::path::PathBuf {
         fs::remove_dir_all(&dir).ok();
     }
 
-    /// **A Big5 manuscript opens as Big5, and goes back as Big5** (2026-11-04;
-    /// it used to be refused with a hint to convert it).
+    /// **A Big5 manuscript opens as Big5, and goes back as Big5**, rather than
+    /// being refused with a hint to convert it.
     #[test]
     fn a_big5_manuscript_opens_and_saves_as_it_came() {
         use crate::encoding::{BIG5, UTF_8};
@@ -3911,9 +3892,9 @@ fn tmp() -> std::path::PathBuf {
         let err = b.save(true).unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::NotFound);
     }
-    /// **一份檔只許有一個名字**（2026-10-10 一輪審查報來的）。
+    /// **一份檔只許有一個名字**。
     ///
-    /// `yumete src/main.rs` 從前存的是 `src/main.rs`，而 `lsp::uri_of` 只在前面貼
+    /// `yumete src/main.rs` 存成 `src/main.rs` 的話，`lsp::uri_of` 只在前面貼
     /// `file://`——發給服務器的是 `file:///src/main.rs`，一個不存在的檔，於是整個
     /// LSP 靜靜地什麼都不說。
     #[test]
@@ -3944,7 +3925,7 @@ fn tmp() -> std::path::PathBuf {
         fs::remove_dir_all(&dir).ok();
     }
 
-    /// **pid 撞號不許蓋掉那一份没人撿的草稿**（2026-10-10 報的）。
+    /// **pid 撞號不許蓋掉那一份没人撿的草稿**。
     ///
     /// 重啓之後 pid 從小號重發，於是這一輪的名字正好是上一回崩掉那一份的名字。
     #[test]
@@ -3984,7 +3965,7 @@ fn tmp() -> std::path::PathBuf {
         fs::remove_dir_all(&dir).ok();
     }
 
-    /// The recovery copy's name (2026-10-31): the session's number, then
+    /// The recovery copy's name: the session's number, then
     /// `.yumete-swp`, so `*.yumete-swp` ignores every copy and nothing else.
     /// Copies under the two older names are still found; a file beside the
     /// chapter that only looks like one is not.
@@ -4023,7 +4004,7 @@ fn tmp() -> std::path::PathBuf {
         fs::remove_dir_all(&dir).ok();
     }
 
-    /// **還活着的那個進程留下的草稿不許刪**（2026-10-10 報的）。
+    /// **還活着的那個進程留下的草稿不許刪**。
     #[test]
     fn a_draft_whose_owner_is_still_running_is_not_an_orphan() {
         use std::path::Path;
@@ -4032,10 +4013,9 @@ fn tmp() -> std::path::PathBuf {
         assert!(!owner_still_running(Path::new(&format!(".a.md.yumete.{me}"))));
         // **起一個真的子進程，問它，殺掉它，再問一次。**
         //
-        // Warning: **從前這裏問的是 `getppid`**，那是 unix 獨有的問法，於是
-        // Windows 上這一半整個驗不到——而那一端 `pid_is_running` 2026-10-12 之前
-        // 就是一句 `false`。現在換成一個兩邊都能起、而且**兩個方向都驗**的寫法：
-        // 活着要說活着，收屍之後要說走了。後一半從前一次都没驗過。
+        // Warning: **不問 `getppid`**：那是 unix 獨有的問法，Windows 上這一半就驗不
+        // 到。用一個兩邊都能起、而且**兩個方向都驗**的寫法：活着要說活着，收屍之後
+        // 要說走了。
         //
         // 子進程是一個等在 stdin 上的殼（unix 的 `sh`、Windows 的 `cmd`）：管子在
         // 我們手裏不關，它就一直等，所以問得到。
@@ -4058,7 +4038,7 @@ fn tmp() -> std::path::PathBuf {
             owner_still_running(Path::new(&format!("scratch-{pid}-3.yumete"))),
             "没檔名那一種的名字也要認得出 pid"
         );
-        // The names written since 2026-10-31, the number before the ending.
+        // The current names, the number before the ending.
         assert!(owner_still_running(Path::new(&format!(".a.md.{pid}.yumete-swp"))));
         assert!(owner_still_running(Path::new(&format!("scratch-{pid}-3.yumete-swp"))));
         let _ = child.kill();
