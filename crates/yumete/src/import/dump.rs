@@ -118,7 +118,7 @@ pub(super) struct Dumped {
     pub json: serde_json::Value,
     pub said: Option<String>,
     /// Neovim said a Lua file or function stopped at an error (`E5108`,
-    /// `E5112`, `E5113`): what it would have set after that was never set.
+    /// `E5112`, `E5113`): what it would set after that is not set.
     pub stopped: bool,
 }
 
@@ -169,11 +169,10 @@ impl Sandbox {
             .map(|d| d.as_nanos())
             .unwrap_or(0);
         let root = base.join(format!("yumete-run-{}-{stamp}", std::process::id()));
-        // **The reader's alone, and new** (review, 2026-11-09): it holds a
-        // copy of their config under the shared temporary directory, so it
-        // is made 0700, and a directory already there by that name is
-        // refused rather than used (and, refused before the sandbox exists,
-        // never removed either).
+        // **The reader's alone, and new**: it holds a copy of their config
+        // under the shared temporary directory, so it is made 0700, and a
+        // directory already there by that name is refused rather than used
+        // (and, refused before the sandbox exists, never removed either).
         #[cfg_attr(not(unix), allow(unused_mut))]
         let mut made = std::fs::DirBuilder::new();
         #[cfg(unix)]
@@ -228,11 +227,11 @@ impl Sandbox {
     /// - and it gives up past [`MOST_ENTRIES`] files and directories,
     ///   [`DEEPEST`] levels, or the sandbox's time.
     ///
-    /// Warning (review, 2026-11-09): **a copy only ever writes inside the
-    /// sandbox.** A target outside it, or a config that holds the sandbox,
-    /// is refused before anything is written, and a file is never copied
-    /// onto itself: `NVIM_APPNAME=/abs/myconf` once made the target the
-    /// reader's config, and each file copied onto itself was emptied.
+    /// Warning: **a copy only ever writes inside the sandbox.** A target
+    /// outside it, or a config that holds the sandbox, is refused before
+    /// anything is written, and a file is never copied onto itself, which
+    /// would empty it: a target that is the reader's config by some other
+    /// path (an absolute `NVIM_APPNAME`) stops here too.
     pub(super) fn copy(&mut self, from: &Path, to: &Path, left_out: &[&str]) -> Result<(), Failed> {
         // The top is followed: `~/.config/nvim` is often a link into dotfiles.
         let Ok(top) = std::fs::canonicalize(from) else { return Ok(()) };
@@ -387,8 +386,8 @@ impl Sandbox {
             .env("XDG_STATE_HOME", self.home.join(".local").join("state"))
             .env("XDG_CACHE_HOME", self.home.join(".cache"))
             // Neovim's own temporary directory (`nvim.$USER`) and whatever a
-            // plugin makes there go with the copy, a killed run's included
-            // (review, 2026-11-09: each one was left in `$TMPDIR`).
+            // plugin makes there go with the copy, a killed run's included,
+            // rather than staying in `$TMPDIR`.
             .env("TMPDIR", self.root.join("tmp"))
             .env("YUMETE_DUMP_SCRIPT", &script_path)
             .env("YUMETE_DUMP", &out)
@@ -468,9 +467,9 @@ impl Sandbox {
         // The error's own line (`E5113: …`) before the line that leads to it,
         // with the copy's home written as the reader's `~`.
         let stderr = std::fs::read_to_string(&err).unwrap_or_default();
-        // **An error part way through a Lua file stops the file** (review,
-        // 2026-11-09): a colour scheme that was not installed in the copy
-        // took the five maps after it, and nothing said they were missing.
+        // **An error part way through a Lua file stops the file**: a colour
+        // scheme not installed in the copy takes every map after it, and the
+        // file has to say they are missing.
         let stopped = ["E5108:", "E5112:", "E5113:"].iter().any(|e| stderr.contains(e));
         let said = Some(stderr).and_then(|text| {
             let lines: Vec<&str> = text.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
@@ -479,9 +478,9 @@ impl Sandbox {
             let line = line.replace(&self.home.display().to_string(), "~");
             Some(line.chars().take(200).collect::<String>())
         });
-        // Read as UTF-8 where it is not (review, 2026-11-09): Neovim writes
-        // a description's bytes as they are, and one byte that was not
-        // UTF-8 made the whole dump unreadable.
+        // Read as UTF-8 where it is not: Neovim writes a description's bytes
+        // as they are, and one byte that is not UTF-8 would make the whole
+        // dump unreadable.
         let read = std::fs::read(&out).ok().map(|bytes| String::from_utf8_lossy(&bytes).into_owned());
         let Some(json) = read.and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok()) else {
             return Err(Failed::NoOutput(said));
@@ -524,9 +523,8 @@ fn kill_group(child: &std::process::Child) {
 }
 
 /// **Windows: the editor and every process under it**, while it still
-/// runs (review, 2026-11-09), with the system's own `taskkill`: Windows has
-/// no process group, and only the editor itself was killed at the time
-/// limit. The `Child` holds the process open, so its id is not yet anyone
+/// runs, with the system's own `taskkill`: Windows has no process group to
+/// kill. The `Child` holds the process open, so its id is not yet anyone
 /// else's.
 fn kill_tree(child: &std::process::Child) {
     #[cfg(windows)]
@@ -542,9 +540,9 @@ fn kill_tree(child: &std::process::Child) {
     let _ = child;
 }
 
-/// **Windows: `vim.bat` when there is no `vim.exe`** on `PATH` (review,
-/// 2026-11-09): Vim's installer puts the batch file there, and `Command`
-/// looks for an `.exe` alone.
+/// **Windows: `vim.bat` when there is no `vim.exe`** on `PATH`: Vim's
+/// installer puts the batch file there, and `Command` looks for an `.exe`
+/// alone.
 #[cfg(windows)]
 fn on_path(program: &str) -> String {
     let path = std::env::var_os("PATH").unwrap_or_default();

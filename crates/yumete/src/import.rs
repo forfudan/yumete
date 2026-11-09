@@ -184,9 +184,8 @@ fn not_carried(skipped: &[String]) -> String {
 }
 
 /// A comment cannot hold a line break; a path or a value might. Nor any
-/// other control character (review, 2026-11-09): a map's description with
-/// an escape in it went into a comment, and the editor refused the whole
-/// file it was in.
+/// other control character: TOML refuses one in a comment, and the editor
+/// would refuse the whole file over a map's description with an escape.
 fn one_line(text: &str) -> String {
     text.chars().map(|c| if c.is_control() { ' ' } else { c }).collect()
 }
@@ -984,8 +983,8 @@ fn lazyvim(nvim: &Path, sign: &Path, when: &str, beside: bool, own: Result<&vim:
     // **The reader's `[editor]` lines go inside the page's**, which ends the
     // config (a test holds it there): TOML has one table of a name. Where
     // the page sets the same key, the reader's own value takes the page's
-    // line (review, 2026-11-09: a reader who turned LazyVim's flash on yank
-    // off got the page's `yank_flash = true`); the same value is the page's.
+    // line, so a reader who turned LazyVim's flash on yank off keeps it off;
+    // the same value is the page's.
     let (keys_part, editor_part) = LAZYVIM.split_at(LAZYVIM.find("\n[editor]\n").map_or(LAZYVIM.len(), |at| at + 1));
     let key_of = |line: &str| line.split(" = ").next().unwrap_or("").to_string();
     let value_of = |line: &str| line.split_once(" = ").map(|(_, v)| v.split("  #").next().unwrap_or("").trim().to_string());
@@ -1028,9 +1027,9 @@ fn lazyvim(nvim: &Path, sign: &Path, when: &str, beside: bool, own: Result<&vim:
     Imported { text, carried: carried + carried_own - overlap, skipped: skipped.len() }
 }
 
-/// **What a config that stopped at an error lost**, for the header
-/// (review, 2026-11-09): Neovim stops a Lua file at its first error, so
-/// whatever the file set after it is neither carried nor listed.
+/// **What a config that stopped at an error lost**, for the header:
+/// Neovim stops a Lua file at its first error, so whatever the file sets
+/// after it is neither carried nor listed.
 const STOPPED_LINES: &str = "# Your config stopped at an error, so what it sets after the error was\n\
                              # not read: it is neither below nor in the list at the end.\n";
 
@@ -1192,11 +1191,11 @@ fn inline(value: &toml::Value) -> String {
 /// **`$NVIM_APPNAME`, or `nvim`**; `Err` with the name when Neovim would
 /// refuse it.
 ///
-/// Warning (review, 2026-11-09): **the name is joined onto the copy's
-/// directory**, and `PathBuf::join` with an absolute path drops what it is
-/// joined to. `NVIM_APPNAME=/abs/myconf` (or `~/.config/nvim`, which the
-/// shell expands) made the copy's target the reader's config itself, and
-/// copying each file onto itself emptied it. Neovim takes a name or a
+/// Warning: **the name is joined onto the copy's directory**, and
+/// `PathBuf::join` with an absolute path drops what it is joined to:
+/// `NVIM_APPNAME=/abs/myconf` (or `~/.config/nvim`, which the shell
+/// expands) would make the copy's target the reader's config itself, and
+/// copying each file onto itself empties it. Neovim takes a name or a
 /// relative path below its config directory and refuses the rest ("must be
 /// a name or relative path": an absolute path, `..`, `.` alone, a leading
 /// `~`), so the import refuses the same names before anything runs.
@@ -1363,7 +1362,7 @@ pub fn run(which: &str) -> ExitCode {
     let dir = yumete_config::config_dir();
     let (path, beside) = target(&dir);
     let when = now();
-    // Before anything runs or is copied (review, 2026-11-09; see `nvim_app`).
+    // Before anything runs or is copied (see `nvim_app`).
     if matches!(which, "lazyvim" | "nvim" | "neovim") {
         if let Err(app) = nvim_app(&env) {
             eprintln!("yumete: {}. Nothing was read or written.", bad_app(&app));
@@ -1916,8 +1915,8 @@ language-servers = ["gopls", "golangci-lint-lsp"]
         assert!(out.contains("[keys.vim.normal.space]\nw = { run = \":write\", label = \"Save file\" }\n"), "{out}");
         assert!(out.contains("[keys.vim.normal.space.f]\nf = { run = \"file_picker\", label = \"Find files\" }\n"), "{out}");
         assert!(out.contains("C-s = \":write\"\n"), "{out}");
-        // `vnoremap > >gv` keeps the selection, as yumete's `indent` does
-        // (review, 2026-11-09: the run `@>gv` lost it).
+        // `vnoremap > >gv` keeps the selection, as yumete's `indent` does;
+        // the run `@>gv` would lose it.
         assert!(out.contains("[keys.vim.select]\n\"<\" = \"unindent\"\n\">\" = \"indent\"\n"), "{out}");
         assert!(out.contains("C-d = \"@C-dzz\"  # Down [1m and centre\n"), "a control character in a comment: {out}");
         assert!(out.contains("# Your config stopped at an error"), "{out}");
@@ -2130,8 +2129,8 @@ put(vim.fn.expand("~/written-by-the-config"), "x")
             });
             assert!(gone, "the {name} nvim started outlived it");
         }
-        // Neovim's own temporary directory went with the copy, though the
-        // run was killed (review, 2026-11-09: each one was left in $TMPDIR).
+        // Neovim's own temporary directory goes with the copy, though the
+        // run was killed: it is inside the copy, not in $TMPDIR.
         let tempname = std::fs::read_to_string(pids.join("tempname")).unwrap();
         let nvim_tmp = Path::new(&tempname).parent().unwrap();
         assert!(!nvim_tmp.exists(), "{} outlived the run", nvim_tmp.display());
@@ -2141,8 +2140,7 @@ put(vim.fn.expand("~/written-by-the-config"), "x")
         assert!(said.as_deref().is_some_and(|s| s.contains("E5113") || s.contains("no.such.module")), "{said:?}");
         let own = vim::translate(&user, &base, vim::Source::Neovim);
         assert!(own.editor.contains(&"tab_width = 3".to_string()), "{:?}", own.editor);
-        // What came after the error was lost, and the file says so (review,
-        // 2026-11-09).
+        // What comes after the error is lost, and the file says so.
         assert!(!own.editor.iter().any(|l| l.starts_with("indent_width")), "{:?}", own.editor);
         assert!(own.stopped);
         let out = vim_file("Neovim", "nvim", &home, &user.version, "t", false, &own).text;
@@ -2330,9 +2328,9 @@ put(vim.fn.expand("~/written-by-the-config"), "x")
     }
 
     /// **A `$NVIM_APPNAME` Neovim refuses is refused before anything runs,
-    /// and a copy writes nowhere but into its sandbox** (review, 2026-11-09):
-    /// `NVIM_APPNAME=/abs/myconf` made the copy's target the config itself,
-    /// and every file of it was emptied.
+    /// and a copy writes nowhere but into its sandbox**:
+    /// `NVIM_APPNAME=/abs/myconf` would make the copy's target the config
+    /// itself, and empty every file of it.
     #[test]
     fn a_copy_never_writes_to_the_config_it_copies() {
         let app = |v: &str| {
@@ -2397,9 +2395,9 @@ put(vim.fn.expand("~/written-by-the-config"), "x")
         let _ = std::fs::remove_dir_all(&home);
     }
 
-    /// **A LazyVim reader's own "off" beats the page's "on"** (review,
-    /// 2026-11-09): the page's `yank_flash = true` and `indent_guides = true`
-    /// won over a config that took both away.
+    /// **A LazyVim reader's own "off" beats the page's "on"**: a config
+    /// that takes LazyVim's flash on yank and indent guides away gets
+    /// `false` for both, not the page's `true`.
     #[test]
     fn a_lazyvim_reader_s_own_off_is_kept() {
         let base = nvim_dump(" ", "", "", r#", "autocmds": [ { "event": "TextYankPost", "group": "lazyvim_highlight_yank" } ], "loaded": ["ibl"]"#);
@@ -2421,10 +2419,10 @@ put(vim.fn.expand("~/written-by-the-config"), "x")
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// **Odd bytes in what Neovim says, and a Neovim too old** (review,
-    /// 2026-11-09): a description with a byte that is not UTF-8 failed the
-    /// whole import as "stopped before it could be read", and a Neovim older
-    /// than 0.7 waited out the time limit instead of saying it was too old.
+    /// **Odd bytes in what Neovim says, and a Neovim too old**: a
+    /// description with a byte that is not UTF-8 is read as far as it can
+    /// be, and a Neovim older than 0.7 is told too old at once rather than
+    /// waiting out the time limit.
     #[test]
     fn a_neovim_that_says_odd_things_is_read() {
         if !installed("nvim") {

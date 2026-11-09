@@ -372,8 +372,8 @@ fn options(user: &Dump, base: &Dump, from: Source, own: &mut Own) {
     if yank {
         set(own, "yank_flash = true  # from your TextYankPost autocommand".to_string());
     } else if base.autocmds.iter().any(flashes) && !user.autocmds.iter().any(flashes) {
-        // **The reader's own "off"** (review, 2026-11-09): LazyVim flashes
-        // a yank, and a reader who took its autocommand away wants none.
+        // **The reader's own "off"**: LazyVim flashes a yank, and a reader
+        // who takes its autocommand away wants none.
         set(own, "yank_flash = false  # your config took the flash on yank away".to_string());
     }
     if ibl(user) && !ibl(base) {
@@ -381,9 +381,9 @@ fn options(user: &Dump, base: &Dump, from: Source, own: &mut Own) {
     } else if ibl(base) && !ibl(user) {
         set(own, "indent_guides = false  # your config left indent-blankline out".to_string());
     }
-    // **A TextYankPost autocommand that says nothing of a yank** (review,
-    // 2026-11-09): kickstart's has a description; one with a bare Lua
-    // function was neither read nor listed.
+    // **A TextYankPost autocommand that says nothing of a yank** is
+    // listed: kickstart's has a description, but one with a bare Lua
+    // function cannot be told from any other.
     for a in user.autocmds.iter().filter(new).filter(|a| a.event == "TextYankPost" && !flashes(a)) {
         let what = [&a.desc, &a.group, &a.command]
             .into_iter()
@@ -741,11 +741,11 @@ fn vim_ex(line: &str) -> Result<String, String> {
     if let Some((_, to)) = PLUGIN_COMMANDS.iter().find(|(from, _)| *from == words) {
         return Ok(to.to_string());
     }
-    // **vim reads `%`, `#` and `!` in a line as something else** (review,
-    // 2026-11-09): `%` and `#` are the file's and the other file's names,
-    // `!` in a shell command is the last one, and `:w !cmd` and `:r !cmd`
-    // pipe through a shell. yumete takes them as written: `:w !sudo tee %`
-    // made a file named `!sudo tee %`, `:e #` looked for a file named `#`.
+    // **vim reads `%`, `#` and `!` in a line as something else**: `%` and
+    // `#` are the file's and the other file's names, `!` in a shell command
+    // is the last one, and `:w !cmd` and `:r !cmd` pipe through a shell.
+    // yumete takes them as written: `:w !sudo tee %` would make a file named
+    // `!sudo tee %`, and `:e #` look for a file named `#`.
     if let Some(shell) = line.strip_prefix('!') {
         if shell.contains(['%', '#', '!']) {
             return Err(format!("vim reads % # and ! in :{line} as file names and the last command; yumete does not"));
@@ -945,11 +945,11 @@ fn vim_rhs(map: &Map, table: Table, keymap: &Keymap) -> Result<Vec<String>, Stri
     if let Some(name) = keymap.action(table, &internal) {
         return Ok(vec![name.to_string()]);
     }
-    // **`vnoremap > >gv`, one of the commonest vimrc lines** (review,
-    // 2026-11-09): written as the run `@>gv` it indented once and then
-    // said "nothing has been selected yet", as the run's `gv` does not find
-    // the selection its own `>` just left. yumete's `indent` and `unindent`
-    // keep the selection and Visual mode, which is what the map is for.
+    // **`vnoremap > >gv`, one of the commonest vimrc lines**: as the run
+    // `@>gv` it would indent once and then say "nothing has been selected
+    // yet", as the run's `gv` does not find the selection its own `>` just
+    // left. yumete's `indent` and `unindent` keep the selection and Visual
+    // mode, which is what the map is for.
     if table == Table::Select {
         match spelt.iter().map(String::as_str).collect::<Vec<_>>().as_slice() {
             [">", "g", "v"] => return Ok(vec!["indent".to_string()]),
@@ -1114,10 +1114,9 @@ fn keys(user: &Dump, base: &Dump, from: Source, own: &mut Own) {
             }
         };
         // The Space key itself: the Space menu stays (decision 13). Asked
-        // of the key, not the spelling (review, 2026-11-09): Neovim gives it
-        // back as " ", Vim's `maplist()` as `<Space>`, and Vim's
-        // `nnoremap <Space> za` was written as Space's binding, which
-        // switched the whole menu off without a word.
+        // of the key, not the spelling: Neovim gives it back as " ", Vim's
+        // `maplist()` as `<Space>`, and either written as Space's binding
+        // would switch the whole menu off without a word.
         if spelt == [" "] {
             let nop = map.callback.is_none() && (map.rhs.is_empty() || map.rhs.eq_ignore_ascii_case("<nop>"));
             if !(nop && space_leader) {
@@ -1154,7 +1153,7 @@ fn keys(user: &Dump, base: &Dump, from: Source, own: &mut Own) {
                     path.extend(spelt[1..spelt.len() - 1].iter().cloned());
                     let line = match &map.desc {
                         // A control character drawn in the menu would
-                        // reach the terminal (review, 2026-11-09).
+                        // reach the terminal.
                         Some(desc) => format!("{{ run = {value}, label = {} }}", quote(&one_line(desc))),
                         None => value,
                     };
@@ -1279,8 +1278,8 @@ mod tests {
         // Written out, these would be read as one key by yumete.
         assert!(spelt("C-x").is_err());
         assert!(spelt("<lt>enter>").is_err());
-        // `>gv` and `<gv` keep the selection, as `indent` and `unindent` do
-        // (review, 2026-11-09: the run `@>gv` lost it).
+        // `>gv` and `<gv` keep the selection, as `indent` and `unindent` do;
+        // the run `@>gv` would lose it.
         assert_eq!(rhs(Table::Select, "<lt>gv"), ok("unindent"));
         assert_eq!(rhs(Table::Select, "<gv"), ok("unindent"));
         assert_eq!(rhs(Table::Select, ">gv"), ok("indent"));
@@ -1326,8 +1325,8 @@ mod tests {
         assert!(one(":noh<CR>").is_err());
         assert!(one(":ls<CR>x").is_err());
         assert!(one(":bn<Bar>bd #<CR>").is_err());
-        // vim reads `%`, `#` and `!` as names and shell commands (review,
-        // 2026-11-09): `:w !sudo tee %` made a file named `!sudo tee %`.
+        // vim reads `%`, `#` and `!` as names and shell commands, which
+        // yumete does not: these are listed, not carried.
         for side in [":w !sudo tee %<CR>", "<Cmd>!chmod +x %<CR>", ":e #<CR>", ":r !date<CR>", ":cd %:p:h<CR>", ":!!<CR>"] {
             assert!(one(side).is_err(), "{side}: {:?}", one(side));
         }
@@ -1335,10 +1334,9 @@ mod tests {
         assert_eq!(one(":e notes.md<CR>"), ok(":open notes.md"));
     }
 
-    /// **Vim's Space key is the Space key** (review, 2026-11-09): Vim's
-    /// `maplist()` gives it as `<Space>`, Neovim as " ", and Vim's
-    /// `nnoremap <Space> za` was written as Space's binding, which took the
-    /// whole Space menu away.
+    /// **Vim's Space key is the Space key**: Vim's `maplist()` gives it as
+    /// `<Space>`, Neovim as " ", and either leaves the Space menu where it
+    /// is.
     #[test]
     fn a_map_of_vim_s_space_key_leaves_the_space_menu() {
         let vim_dump = |leader: &str, rhs: &str| {

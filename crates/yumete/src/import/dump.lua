@@ -120,9 +120,9 @@ local function after_start()
   end)
 end
 
--- Older than 0.9: said at once, with what every Neovim has (review,
--- 2026-11-09: nvim_create_autocmd below is 0.7's, and an older one stopped
--- here with an error and waited out the import's 10 s).
+-- Older than 0.9: said at once, with what every Neovim has.
+-- nvim_create_autocmd below is 0.7's; an older one would stop there with an
+-- error and wait out the import's 10 s.
 if vim.fn.has("nvim-0.9") == 0 then
   local f = assert(io.open(out_path, "w"))
   f:write(vim.fn.json_encode({ nvim = vim.fn.matchstr(vim.fn.execute("version"), [[NVIM v\zs[0-9A-Za-z.+-]\+]]), error = "too old" }))
