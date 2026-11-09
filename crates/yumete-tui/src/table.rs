@@ -43,14 +43,13 @@ pub struct Viewport {
 /// recognisable; a ceiling because one long cell must not push every column
 /// after it off the window.
 ///
-/// **The ceiling is `t w`'s to lift** (#283, 2026-09-07). It used to be the
-/// law here, with no key against it: a cell wider than 32 was cut off with
-/// nothing to say it had been, no width the reader could ask for, and — since
-/// the grid draws a cell and not a line — no way to walk into the tail even in
-/// Insert. So the cap is what folding *means* in the grid, `t w` turns it off,
-/// and the cell the caret stands in is measured whole whichever way the switch
-/// is set. That is [`yumete_core::editor::Editor::cell_folds`]'s other half:
-/// the prose page folds by hiding characters, the grid by drawing narrow.
+/// **The ceiling is `t w`'s to lift** (#283). As a law with no key against it, a cell wider than 32
+/// would be cut off with nothing to say it had been, no width the reader could ask for, and — since
+/// the grid draws a cell and not a line — no way to walk into the tail even in Insert. So the cap is
+/// what folding *means* in the grid, `t w` turns it off, and the cell the caret stands in is
+/// measured whole whichever way the switch is set. That is
+/// [`yumete_core::editor::Editor::cell_folds`]'s other half: the prose page folds by hiding
+/// characters, the grid by drawing narrow.
 const MIN_COLUMN: usize = 3;
 const MAX_COLUMN: usize = 32;
 
@@ -60,34 +59,31 @@ const GAP: usize = 1;
 /// Measure the rows this frame draws and say how wide each column should be
 /// drawn, settling `left` — where the columns start — on the way.
 ///
-/// Warning: **The visible rows, on purpose — not a bug to fix**
-/// (2026-09-17). Measuring the whole table lets one very long cell a thousand
+/// Warning: **The visible rows, on purpose — not a bug to fix**.
+/// Measuring the whole table lets one very long cell a thousand
 /// rows away widen its column on every screen, and push the other columns off
 /// the right edge. The price — columns narrowing and widening as that row
-/// scrolls in and out — is the one chosen. A 2026-09-15 review
-/// logged it as 「列寬跟着可見範圍變，滾動時整表橫跳」; it was answered, and
-/// the answer is this.
+/// scrolls in and out (「列寬跟着可見範圍變，滾動時整表橫跳」) — is the one
+/// chosen.
 ///
-/// **Visible means drawn** (2026-10-23). This used to measure the next `rows`
-/// lines of the file, which is the page only while every row is one line tall.
-/// Under 折行 a page of 26 lines held six records and twenty more voted that
-/// nobody could see: one ragged line thirteen rows below the last drawn one
-/// widened column 1 to the cap, pushed a column of long notes off the right
-/// edge, and the rows on screen collapsed from eleven lines to one — all on one
-/// `j`. So the records are taken from the top one at a time, each
-/// measured, until the page is full **at the widths measured so far**. A wider
-/// column only makes a row shorter, so the page can only take more; the loop
-/// ends when it is full or the table is.
+/// **Visible means drawn**, not the next `rows` lines of the file, which is the page only while
+/// every row is one line tall. Under 折行 a page of 26 lines holds six records, and twenty more
+/// would vote that nobody could see: one ragged line thirteen rows below the last drawn one would
+/// widen column 1 to the cap, push a column of long notes off the right edge, and collapse the rows
+/// on screen from eleven lines to one — all on one `j`. So the records are taken from the top one at
+/// a time, each measured, until the page is full **at the widths measured so far**. A wider column
+/// only makes a row shorter, so the page can only take more; the loop ends when it is full or the
+/// table is.
 ///
-/// **A ragged row does not vote** (2026-10-23). It is drawn — in 朱, cut at
+/// **A ragged row does not vote**. It is drawn — in 朱, cut at
 /// its column's edge — because hiding it would hide the damage; but a line that
 /// is not a record of this table says nothing about how wide its columns are.
 /// The one exception is the cell being typed in, which is measured whole
 /// wherever it is, so that mending a ragged row is not done blind.
 ///
-/// `last` is the table's last row, not the file's: since 2026-09-05 the widget
-/// is given `|` tables that are three lines of a chapter, and measuring the
-/// chapter under them would make every column as wide as the prose.
+/// `last` is the table's last row, not the file's: the widget is given `|` tables that are three
+/// lines of a chapter, and measuring the chapter under them would make every column as wide as the
+/// prose.
 #[allow(clippy::too_many_arguments)]
 fn layout(
     editor: &Editor,
@@ -188,17 +184,13 @@ fn vote(
         // as `␊`, so the column is as wide as what is on the page.
         let cell = editor.cell_shown(&text, span);
         // **The cell being typed in is not folded** — the prose page's own
-        // rule (`folds_open_at`), and now kept the same way here: measure
-        // that one cell against the window instead of the cap.
+        // rule (`folds_open_at`), kept the same way here: measure that one
+        // cell against the window instead of the cap.
         //
-        // It used to open for the caret in Normal too, and that was the
-        // page's rule read one word too widely. 2026-09-11:
-        // 「我觉得这个有一个问题就是列宽容易跳。所以我建议这个和 tf 保持
-        // 一致（光标不自动展开，insert 模式展开这个格子），这样我们的逻辑
-        // 更简洁、一致，而且不用每个单元格都重算这一列的列宽。」Right on
-        // all three counts: every `l` across a row of long cells was a new
-        // width for that column, so the grid shifted sideways under a key
-        // that only meant 「next cell」 — and reading a cell whole is what
+        // Only in Insert, as `t f` does: opening for the caret in Normal
+        // too would make every `l` across a row of long cells a new width
+        // for that column, so the grid would shift sideways under a key
+        // that only means 「next cell」 — and reading a cell whole is what
         // the panel down the right is for, which needs no width at all.
         //
         // **And not under 折行** even then, where nothing is cut in the
@@ -210,7 +202,7 @@ fn vote(
         };
         // A cell the writer broke into lines is as wide as its widest
         // line, not as wide as all of them run together — **and every line
-        // but the last carries the `␊` that says so** (2026-10-22). Without
+        // but the last carries the `␊` that says so**. Without
         // that column the cell was charged for 「頭一行」 and drawn as
         // 「頭一行␊」, so the page cut the writer's own last character and
         // marked it `>` as if there were more of it off to the right.
@@ -356,11 +348,11 @@ fn cell_fits(
     used + cell + under.min(scrolloff) <= rows
 }
 
-/// **A cell's drawn lines** (2026-10-20 作者定).
+/// **A cell's drawn lines.**
 ///
 /// One per line the writer wrote. The break that ended each of them is drawn
 /// as `␊` and then honoured — a soft wrap is a consequence of a narrow window
-/// and a hard newline is the author's own, so `t a` governs the first and has
+/// and a hard newline is the writer's own, so `t a` governs the first and has
 /// no say over the second. Each written line is then soft-wrapped on its own
 /// when `t a` is on.
 fn cell_lines(shown: &str, width: usize, wrap: bool) -> Vec<String> {
@@ -477,7 +469,7 @@ pub fn char_at(
             .collect()
     };
     let tall_of = |parts: &[Vec<String>]| -> usize {
-        // **A hard break counts whether `t a` is on or not** (2026-10-20): the
+        // **A hard break counts whether `t a` is on or not**: the
         // soft wrap is a consequence of a narrow window and `t a` governs it,
         // while a line break the writer typed is the writer's. With `t a` off
         // a cell written over two lines still takes two rows — dropping the
@@ -505,7 +497,7 @@ pub fn char_at(
     let on;
     loop {
         let tall = tall_of(&parts) as u16;
-        // **The bottom row is inside the loop too** (2026-10-22). `while line
+        // **The bottom row is inside the loop too**. `while line
         // < bottom` left it out, so a click anywhere in the last row of a
         // table answered 「the first of its drawn lines」 — invisible for as
         // long as a row was one line tall, and wrong for every wrapped cell of
@@ -539,7 +531,7 @@ pub fn char_at(
             // because that is what was drawn, and from the line of the cell
             // the pointer is on rather than from its first.
             let want = mouse.column.saturating_sub(x) as usize;
-            // **Counted inside the value** (2026-10-22). `held` holds the
+            // **Counted inside the value**. `held` holds the
             // lines `cell_shown` drew, and a quoted field's two `"` are off
             // the page — so a click counted from the source start answered one
             // character to the left of the one it was pointed at, and
@@ -582,7 +574,7 @@ pub fn char_at(
     Some((start + cells.last().map_or(0, |&(a, _)| a)).min(rope.len_chars().saturating_sub(1)))
 }
 
-// Warning: **`for i in 視窗左邊..widths.len()` 不改成 `enumerate`**（2026-10-01）：
+// Warning: **`for i in 視窗左邊..widths.len()` 不改成 `enumerate`**：
 // 走的是**一段**欄（從橫向捲到的那一欄起），而 `i` 本身就是欄號——標尺與欄名
 // 都要拿它去對 `cursor_cell`。`enumerate` 只會多一次 `skip` 再多一個偏移量。
 #[allow(clippy::needless_range_loop)]
@@ -597,7 +589,7 @@ pub fn draw(
     let Some(view) = editor.table() else {
         return (area.x, area.y);
     };
-    // **The table's own lines, not the file's** (2026-09-05). `t t` now hands
+    // **The table's own lines, not the file's**. `t t` hands
     // this widget a `|` table that is three lines of a chapter, and the rows
     // below are the chapter — measured, scrolled through and clicked on, they
     // would be the chapter drawn as a grid.
@@ -614,7 +606,7 @@ pub fn draw(
     // **A table can have no rows at all** — a header and nothing under it,
     // which is what a `.csv` looks like one `␣t d` past its last row. The head
     // is still the table and still worth drawing; what is below it is empty,
-    // so nothing here may scroll and the row loop must not run (2026-10-23).
+    // so nothing here may scroll and the row loop must not run.
     let span = editor.table_row_span_at(anchor);
     let rowless = span.is_none() && editor.table_is_rowless();
     let Some((top_row, bottom_row)) = span.or(rowless.then_some((1, 0))) else {
@@ -660,12 +652,12 @@ pub fn draw(
         true => top_row,
         false => viewport.top.min(bottom_row).max(first_data.min(bottom_row)),
     };
-    // **The page starts at a record, never inside one** (2026-10-20 作者報的).
-    // The scroll counts records, so stepping down past a record that holds a
-    // line break must not land `top` on its continuation line — every row
-    // from there was read from the middle of a record: the cell's second line
-    // became column 1, the detail panel showed it as the row, and the first
-    // column's width was measured against it.
+    // **The page starts at a record, never inside one.** The scroll counts
+    // records, so stepping down past a record that holds a line break must
+    // not land `top` on its continuation line — every row from there would be
+    // read from the middle of a record: the cell's second line would become
+    // column 1, the detail panel would show it as the row, and the first
+    // column's width would be measured against it.
     viewport.top = editor.table_row_start(viewport.top);
 
     // **The gutter numbers this table's rows**, not the file's lines: the
@@ -688,15 +680,15 @@ pub fn draw(
     // **Where the cursor sits on a page is the editor's answer**, not this
     // surface's: a row off the page is a jump and lands in the middle, a step
     // off an edge scrolls by as little as it takes, and typewriter mode keeps
-    // the row in the middle whatever it was. This used to be a third copy of
-    // that rule, and it was the copy that never heard of `:view-typewriter`.
+    // the row in the middle whatever it was. A copy of that rule here would
+    // be the copy that never heard of `:view-typewriter`.
     //
-    // **Asked in lines of the window, not of the file** (2026-10-23). Under
+    // **Asked in lines of the window, not of the file**. Under
     // 折行 a record can be eleven lines tall, and a `scrolloff` of five file
-    // lines then meant five records — fifty lines of context the page did not
-    // have — so a `k` that stayed well inside the page pushed it down nine
-    // lines. The distance, the inset and `scrolloff` are all counted on the
-    // page now, and the page still starts at a record.
+    // lines would mean five records — fifty lines of context the page does
+    // not have — so a `k` that stayed well inside the page would push it down
+    // nine lines. The distance, the inset and `scrolloff` are all counted on
+    // the page, and the page still starts at a record.
     let distance = screen_distance(
         editor,
         viewport.top,
@@ -714,14 +706,12 @@ pub fn draw(
             // above it; anything else — a step down, a jump, `zz`, the
             // typewriter — at most `inset`.
             //
-            // Warning: **Not 「at least whenever the cursor is above `inset`」**
-            // (2026-10-24 作者報的: after `60G` the page swapped between two
-            // tops every redraw, for as long as nobody pressed a key). A jump
-            // asks for the middle on every frame until the next key, and with
-            // rows two lines tall the middle can be one line out of reach:
-            // 「at least」 from one top and 「at most」 from the other then
-            // answered each other for ever. Only the margin case may depend on
-            // where the page was; every other answer is the cursor's alone.
+            // Warning: **Not 「at least whenever the cursor is above `inset`」**, or after `60G` the
+            // page swaps between two tops every redraw, for as long as nobody presses a key. A jump
+            // asks for the middle on every frame until the next key, and with rows two lines tall
+            // the middle can be one line out of reach: 「at least」 from one top and「at most」 from
+            // the other then answer each other for ever. Only the margin case may depend on where
+            // the page was; every other answer is the cursor's alone.
             let up = distance.is_some_and(|d| d < scrolloff);
             let mut seen = Vec::new();
             let mut top =
@@ -771,14 +761,14 @@ pub fn draw(
         }
     }
     // **The cursor's cell is kept whole on the page**, and `scrolloff` lines
-    // of what follows it (2026-10-23). The page starts at a record, and under
+    // of what follows it. The page starts at a record, and under
     // 折行 one record can be eleven lines of the window, so the page starts
     // low enough that the cell the cursor is in still fits.
     //
-    // It used to be the cursor's whole **record**. One `j` onto a record whose
-    // note ran to eleven lines then scrolled the page eight rows at once, and
-    // the row landed in the middle of the window with the cursor's one-line
-    // cell at its top — the page moved for a column nobody was in. A cell is
+    // Not the cursor's whole **record**: one `j` onto a record whose note runs
+    // to eleven lines would scroll the page eight rows at once, and the row
+    // would land in the middle of the window with the cursor's one-line cell
+    // at its top — the page moving for a column nobody is in. A cell is
     // what this grid is walked by, so a cell is what is kept: the rest of a
     // tall record runs off the bottom edge and comes up as the walk goes on.
     //
@@ -834,18 +824,16 @@ pub fn draw(
     // which row you are in**: the column's number, the column's name, the
     // row's number.
     let head_style = gutter_style.fg(ink.gold()).add_modifier(Modifier::BOLD);
-    // A column's name while it is not the one you are in. It used to be 金 as
-    // well, with the current one picked out by REVERSED (2026-10-22 作者報的:
-    // 「the highlight on the column name is more obvious than the highlight on
-    // the cell itself. So it give me a feeling that I am in the column name
-    // cell instead of a content cell」).
+    // A column's name while it is not the one you are in. Not 金 with the
+    // current one picked out by REVERSED: that makes the column name a louder
+    // mark than the cell, and reads as standing in the name rather than in
+    // the content.
     //
-    // Two things were wrong with that. Reverse video is the loudest mark a
-    // terminal has, and it was spent on **furniture** while the cell the
-    // caret is in is marked by two rules in a seam; and the row of numbers
-    // one line above already says the same thing another way — it changes
-    // colour. Now both rows say it the one way: quiet, and 金 for the one you
-    // are in. 金 on seventeen names at once is not worth looking at; on one
+    // Reverse video is the loudest mark a terminal has, and it would be spent
+    // on **furniture** while the cell the caret is in is marked by two rules
+    // in a seam; and the row of numbers one line above already says the same
+    // thing — it changes colour. Both rows say it the one way: quiet, and 金
+    // for the one you are in. 金 on seventeen names at once is not worth looking at; on one
     // it is.
     //
     // Not `White`: the ladder's own ink, so the light mood gets black here.
@@ -853,20 +841,20 @@ pub fn draw(
     // apart — ruler, name, 金.
     let name_style = gutter_style.fg(ink.text()).add_modifier(Modifier::BOLD);
     // A ground, and only a ground: the ink under it is left alone, so a torn
-    // cell is still torn while you stand on it to mend it. It used to be
-    // `fg(White)`, which is brighter than the ink and flattened every colour
-    // underneath at the moment the writer was looking hardest.
+    // cell is still torn while you stand on it to mend it. Not `fg(White)`,
+    // which is brighter than the ink and flattens every colour underneath at
+    // the moment the writer is looking hardest.
     //
-    // Warning: **This is the selection now, not the cell** (2026-09-12). It used to
-    // paint the whole cell the caret was in — and since it painted it with the
-    // *selection's* rung, a selection inside that cell had no colour left to
-    // be drawn in: press `w` in a grid and the word you just took looked
-    // exactly like the cell around it. There is no room on the ladder for a
+    // Warning: **This is the selection, not the cell**. Painting the whole
+    // cell the caret is in with the *selection's* rung would leave a
+    // selection inside that cell no colour to be drawn in: press `w` in a
+    // grid and the word you just took would look exactly like the cell
+    // around it. There is no room on the ladder for a
     // third ground either (`HEAD` 第 73 and `SELECTION` 第 63 measure 1.26:1
     // apart at the paper end in 莫蘭迪's light mood, and two flat grounds need
     // 1.24 between them to be told apart).
     //
-    // The cell is still a box; the box just moved off the ground and into the
+    // The cell is still a box; the box stands off the ground, in the
     // seam beside it — two 金 rules, drawn further down where `here` is known.
     // Which cell the caret is in was already said twice besides (the column's
     // number and its heading are both lit at the top of the grid), while *what
@@ -891,14 +879,14 @@ pub fn draw(
     };
     // The seam, and the ground of anything that is not a cell.
     let page = ink.page();
-    // Warning: **光標那一行沒有底色了**（2026-10-17 作者報的）。從前它鋪一層
-    // `rung::HEAD`，而選中的那一塊鋪的是它隔壁那一鬥——量出來：選中在平常那幾
-    // 行上是 1.98:1，落在這一條帶子上只剩 1.37:1，而這個檔自己的註釋寫着
-    // 1.11–1.20 就是看不見。正在編輯的那一行恰恰是看不清選中的那一行。
+    // Warning: **光標那一行沒有底色**。鋪一層 `rung::HEAD` 的話，選中的那一塊鋪
+    // 的是它隔壁那一鬥——量出來：選中在平常那幾行上是 1.98:1，落在這一條帶子上
+    // 只剩 1.37:1，而這個檔自己的註釋寫着 1.11–1.20 就是看不見。正在編輯的那一
+    // 行恰恰會是看不清選中的那一行。
     //
     // 梯子上擠不出第三層（`HEAD` 第 73 檔 與 `SELECTION` 第 63 檔 在紙那一頭只差
     // 1.26:1，而兩塊平底色要分得開需要 1.24），
-    // 所以照 2026-09-12 給**格**的那一刀再切一次：底色歸選中一個人，「在哪一
+    // 所以照給**格**的那一刀再切一次：底色歸選中一個人，「在哪一
     // 行」挪到邊上去說——行號點成金的，和欄的標題同一種說法。試算表都是這麼
     // 分的（Excel／Numbers／Sheets：選中吃底色，當前格靠兩頭的表頭點亮）。
     // **Every other row** (#449). The columns are banded, and banding the
@@ -912,21 +900,20 @@ pub fn draw(
     // 色应该是统一的参数」.
     //
     // The row number comes from the block scanner — the same count the page
-    // renderer bands by — rather than from `line - base + 2`, which assumed
+    // renderer bands by — rather than from `line - base + 2`, which assumes
     // every table has a `---` rule under its header. A pipe table written
-    // without one had its parity inverted here and nowhere else.
+    // without one would have its parity inverted here and nowhere else.
     let banded = |line: usize, plain: Style| {
         let nth = match editor.block_of(line) {
             yumete_core::markdown::Block::Table { nth, .. } => nth,
             // Not a `|` table at all — a delimited file has no header rule and
             // no scanner to ask, so the base row is row 0 of its body.
             //
-            // Warning: **the record's number, not the line's** (2026-10-21 作者報的:
-            // 「the background color of this row and the next two rows are
-            // indifferent」). A record that runs over three lines moves every
-            // row after it three lines down and only one row down, so counting
-            // lines put the stripes out of step from there to the end of the
-            // file — and two rows in a row came out the same colour.
+            // Warning: **the record's number, not the line's**. A record that
+            // runs over three lines moves every row after it three lines down
+            // and only one row down, so counting lines would put the stripes
+            // out of step from there to the end of the file — and two rows in
+            // a row would come out the same colour.
             _ => editor.table_row_index(line) + 2,
         };
         match crate::table_row_depth(nth) {
@@ -1034,7 +1021,7 @@ pub fn draw(
         }
     }
 
-    // **A row is as tall as its tallest cell** (`t a`, 2026-09-07). 摺起 takes
+    // **A row is as tall as its tallest cell** (`t a`). 摺起 takes
     // the tail off the page and stands a `>` where it stopped; 折行 draws it
     // **underneath**, inside the cell's own column, so a row grows downwards
     // and the rows under it move down with it. Only the grid can offer this:
@@ -1091,9 +1078,8 @@ pub fn draw(
         let ragged = editor.row_is_ragged(line);
         let (cells, parts) = lines_of(line);
         let tall = height_of(&parts).min((floor - y) as usize).max(1);
-        // **A record's continuation lines are not rows of their own**
-        // (2026-10-20 作者定): a field holding a line break is one record over
-        // several lines, so the step is the record's height and the gutter
+        // **A record's continuation lines are not rows of their own**: a field holding a line break
+        // is one record over several lines, so the step is the record's height and the gutter
         // numbers it once — the same rule a 折行 row already follows above.
         let step = editor.record_height(line).max(1);
         for k in 0..tall {
@@ -1105,7 +1091,7 @@ pub fn draw(
             // would say they were not.
             if gutter > 0 {
                 let n = match k {
-                    // **Counted in records, not in lines** (2026-10-20): a
+                    // **Counted in records, not in lines**: a
                     // field holding a line break is one row, so the row after
                     // it is the next number and not the next line.
                     0 => crate::gutter_text(
@@ -1124,9 +1110,8 @@ pub fn draw(
                     (false, true, true) => {
                         gutter_style.fg(ink.mark()).add_modifier(Modifier::BOLD)
                     }
-                    // **哪一行，和哪一欄同一種說法**（2026-10-17）。欄早就這麽
-                    // 說了——它的號和它的標題都點成金的；行從前只有底色，而底
-                    // 色是選中的那一塊的（見 `band` 那一段的註釋）。
+                    // **哪一行，和哪一欄同一種說法**：它的號和它的標題都點成
+                    // 金的。底色是選中的那一塊的（見 `band` 那一段的註釋）。
                     (false, false, true) => head_style,
                     _ => gutter_style,
                 };
@@ -1136,20 +1121,16 @@ pub fn draw(
                     }
                 }
                 put_text(buf, area.x, y, area.x + gutter, &n, style);
-                // **The margin before the first cell belongs to the row, not
-                // to the numbers** (2026-10-21 作者報的). The gutter ends in a
-                // blank column that the numbers never reach, and painting it
-                // the numbers' colour left a sliver of chrome down the left
-                // edge of every band — the row looked as though it began one
-                // column late. It is the same argument #473 made about the
-                // seams between columns: the gap is *inside* the table.
+                // **The margin before the first cell belongs to the row, not to the numbers**. The
+                // gutter ends in a blank column that the numbers never reach, and painting it the
+                // numbers' colour would leave a sliver of chrome down the left edge of every band —
+                // the row would look as though it began one column late. It is the same argument
+                // #473 made about the seams between columns: the gap is *inside* the table.
                 //
-                // **And it carries the grid's own rule** (2026-10-21 作者報的),
-                // so the numbers are fenced off from the first column the way
-                // every other column is fenced off from its neighbour. It is
-                // the same `stroke` the seams use, which is what makes
-                // `:table-rules off` take this line away too — one answer to
-                // 「does this grid draw rules」, not two.
+                // **And it carries the grid's own rule**, so the numbers are fenced off from the
+                // first column the way every other column is fenced off from its neighbour. It is
+                // the same `stroke` the seams use, which is what makes `:table-rules off` take this
+                // line away too — one answer to「does this grid draw rules」, not two.
                 if gutter > 0 {
                     if let Some(cell) = buf.cell_mut((area.x + gutter - 1, y)) {
                         let ground = banded(line, page);
@@ -1201,7 +1182,7 @@ pub fn draw(
                 // `None` unless the caret is in this cell and on this one of
                 // its lines.
                 //
-                // Warning: **Clamped into the cell** (2026-10-17). The caret's file
+                // Warning: **Clamped into the cell**. The caret's file
                 // offset is not always inside the cell the row says it is in:
                 // `x` selects the whole line and leaves the head on the row's
                 // last `|`, which is past the last cell's content. Counting
@@ -1224,9 +1205,9 @@ pub fn draw(
                 // front. The caret is translated by `window_at`; the selection
                 // band has to be translated by the same amount or it paints
                 // the columns the selected characters *would* have been in
-                // (2026-10-17, found in review: with the caret at the end of a
-                // 36-character cell, `v` + nine `h` lit `01234` and the `>`
-                // while the nine selected characters were off screen).
+                // (with the caret at the end of a 36-character cell, `v` +
+                // nine `h` would light `01234` and the `>` while the nine
+                // selected characters are off screen).
                 let mut slid = 0u16;
                 let (shown, step_here) = match step_here.filter(|_| peek.is_none()) {
                     Some(step) => {
@@ -1263,21 +1244,19 @@ pub fn draw(
                         style.fg(ink.gold()).add_modifier(Modifier::BOLD),
                     );
                 }
-                // **Every cell the selection reaches, not just the caret's**
-                // (2026-10-17). The test used to be `here`, so a selection
-                // wider than one cell was painted on one cell: `x` lit the
-                // last cell of the row and left the rest of the record
-                // looking untouched, and a selection standing on a wall was
-                // drawn nowhere at all (§5.12.69).
-                // **A caret is a point, not a selection** (2026-10-20 作者報的:
-                // 「the selection is wrong when the cursor is on an empty
-                // cell」). An empty cell is a single offset, so a zero-width
-                // selection standing on it satisfies 「covers this cell
-                // whole」 — and so does the cell on the **other side of the
-                // wall**, which shares that offset. Both lit, and 「whole」
-                // then lights every line of the row: beside a 折行 cell that
-                // is twelve rows of grey, two columns wide, over a cell the
-                // reader had merely walked into.
+                // **Every cell the selection reaches, not just the caret's**.
+                // Testing `here` would paint a selection wider than one cell
+                // on one cell: `x` would light the last cell of the row and
+                // leave the rest of the record looking untouched, and a
+                // selection standing on a wall would be drawn nowhere at all
+                // (§5.12.69).
+                // **A caret is a point, not a selection.** An empty cell is a
+                // single offset, so a zero-width selection standing on it
+                // satisfies 「covers this cell whole」 — and so does the cell
+                // on the **other side of the wall**, which shares that offset.
+                // Both would light, and 「whole」 then lights every line of the
+                // row: beside a 折行 cell that is twelve rows of grey, two
+                // columns wide, over a cell the reader has merely walked into.
                 let bare = {
                     let (a, b) = editor.selection();
                     // Warning: **not `a == b`.** The caret here *covers* the character
@@ -1289,19 +1268,16 @@ pub fn draw(
                 let lit = editor
                     .cell_span(line, i)
                     // **The value's span, because `parts` are the value's
-                    // lines** (2026-10-22 報的:「In NOR mode, cursor
-                    // additionally covers the char after the current char」).
-                    // `cell_shown` takes a quoted field's two `"` off the
-                    // page, so counting the band from the source start painted
-                    // it one character along — the caret's own block sat on
-                    // the right character and the band lit the one after it,
-                    // which reads as a cursor two characters wide. Third place
-                    // in this family, after the caret and the hit test.
+                    // lines.** `cell_shown` takes a quoted field's two `"` off
+                    // the page, so counting the band from the source start
+                    // would paint it one character along — the caret's own
+                    // block on the right character and the band on the one
+                    // after it, which reads as a cursor two characters wide.
+                    // The same rule holds for the caret and the hit test.
                     .map(|(a, b)| editor.value_span(a, b))
                     .filter(|_| peek.is_none())
-                    // **At the top layer a standing caret lights nothing**
-                    // (2026-10-21 作者定: 「Can we first do not use background
-                    // colour but only the border?」). The whole cell is the
+                    // **At the top layer a standing caret lights nothing**:
+                    // only the border marks it. The whole cell is the
                     // unit there and its mark is the two 金 edges; the band a
                     // caret leaves is one character wide and sits in the
                     // middle of the cell, which says the wrong thing twice —
@@ -1333,12 +1309,12 @@ pub fn draw(
                     let (la, ca) = caret_in(&parts[i], a - from);
                     let (lb, cb) = caret_in(&parts[i], b - from);
                     // **A cell the selection covers whole is lit on every
-                    // line of the row** (2026-10-17, found in review). The
-                    // line test below asks which of *this cell's* lines the
-                    // selection touches, and a one-line cell has no second
-                    // line — so on a wrapped row the short cells went dark
-                    // while the seams between them stayed lit, and the band
-                    // came out as holes with bridges. A record is one thing on
+                    // line of the row**. The line test below asks which of
+                    // *this cell's* lines the selection touches, and a
+                    // one-line cell has no second line — so on a wrapped row
+                    // the short cells would go dark while the seams between
+                    // them stayed lit, and the band would come out as holes
+                    // with bridges. A record is one thing on
                     // every line it occupies.
                     // …and a caret lights the cell's box on **its own line**,
                     // not on all of them: 「covers it whole」 is about a
@@ -1356,18 +1332,16 @@ pub fn draw(
                         // row selection that stopped at each cell's last 字
                         // came out as stripes with gaps where the padding is.
                         //
-                        // Warning: **Past it, not up to it** (2026-10-17 作者報的:
-                        // 「I press `w` on 拼, the word is selected but also
-                        // the empty region after it」). The test was `b >= to`
-                        // against the *clipped* end, which every selection
-                        // that stops at a cell's last character satisfies —
-                        // so `w` on the tail of a cell lit the padding behind
-                        // it as though the selection ran on into the wall.
-                        // Warning: **a caret runs past nothing** (2026-10-21). An
+                        // Warning: **Past it, not up to it.** `b >= to` against
+                        // the *clipped* end is satisfied by every selection
+                        // that stops at a cell's last character — so `w` on
+                        // the tail of a cell would light the padding behind it
+                        // as though the selection ran on into the wall.
+                        // Warning: **a caret runs past nothing**. An
                         // empty cell is a single offset, and the caret covers
                         // the character it stands on, so `b` is always one
-                        // beyond it — which read as 「the selection carries on
-                        // into the next cell」 and lit the whole box.
+                        // beyond it — which would read as 「the selection
+                        // carries on into the next cell」 and light the whole box.
                         let runs_on = past && !bare;
                         let c1 = match (lb == k, runs_on, whole_cell) {
                             // **An empty cell under a caret is lit one column
@@ -1376,9 +1350,7 @@ pub fn draw(
                             // something must be drawn; painting its whole box
                             // says 「this cell is selected」 about a cell the
                             // reader has merely walked into, and beside a
-                            // second empty cell the two bands read as one
-                            // (2026-10-21 作者報的: 「a cursor can still
-                            // highlight two cells if it is empty」).
+                            // second empty cell the two bands read as one.
                             (true, false, false) if bare && from == to => c0 + 1,
                             (true, false, false) => (cb as u16).saturating_sub(slid),
                             _ => w,
@@ -1413,8 +1385,8 @@ pub fn draw(
                 // across. The seam is *inside* the table.
                 let seam = if w == 0 { 0 } else { GAP as u16 };
                 let ground = banded(line, page);
-                // **And it takes the selection when the selection crosses it**
-                // (2026-10-17), for the same reason the band does: a record
+                // **And it takes the selection when the selection crosses it**,
+                // for the same reason the band does: a record
                 // the reader selected is one thing, and a gap of page colour
                 // every few columns says it is several.
                 let crossed = editor
@@ -1422,13 +1394,12 @@ pub fn draw(
                     .zip(editor.cell_span(line, i + 1))
                     .is_some_and(|((_, to), (next, _))| {
                         let (a, b) = editor.selection();
-                        // Warning: **a caret crosses nothing** (2026-10-20 作者報的).
-                        // Two empty cells share the offset their wall sits on,
-                        // so a caret standing on one of them read as a
-                        // selection reaching across the seam — and the seam
-                        // then took the lit ground down **every** line of a
-                        // 折行 row, which is the grey ribbon that was left
-                        // after the cells themselves stopped lighting.
+                        // Warning: **a caret crosses nothing.** Two empty cells
+                        // share the offset their wall sits on, so a caret
+                        // standing on one of them would read as a selection
+                        // reaching across the seam — and the seam would take
+                        // the lit ground down **every** line of a 折行 row, a
+                        // grey ribbon beside cells that are not lit.
                         peek.is_none() && !bare && a <= to && next <= b
                     });
                 let ground = match crossed {
@@ -1443,29 +1414,26 @@ pub fn draw(
                         };
                     }
                 }
-                // **The caret's cell, bracketed** (#407). The box used to be
-                // the cell's whole ground, painted in the *selection's* rung —
-                // which left a selection inside it no colour to be drawn in.
-                // The ladder has no room for a third ground (HEAD 第 73 and
-                // SELECTION 第 63 are 1.26:1 apart at the paper end), so the box
-                // moved off the ground and into the seam the page already
+                // **The caret's cell, bracketed** (#407). The cell's whole
+                // ground painted in the *selection's* rung would leave a
+                // selection inside it no colour to be drawn in. The ladder has
+                // no room for a third ground (HEAD 第 73 and SELECTION 第 63 are
+                // 1.26:1 apart at the paper end), so the box stands off the
+                // ground, in the seam the page already
                 // keeps between columns: two thin rules in 金, the one colour
                 // on the grid that is not a quantity of ink. A spreadsheet's
                 // active cell — and it costs the selection nothing.
                 if here {
-                    // **A 金 ground, and the two rules stand on it** (2026-10-21
-                    // 作者定: 「I think it might be good to use golden
-                    // background for the CEL highlighted cell to highlight
-                    // it.」 then 「Can you make this background also covering
-                    // the border?」). The mark is one block, edges included —
+                    // **A 金 ground, and the two rules stand on it.** The mark
+                    // is one block, edges included —
                     // a tint that stopped short of its own rules read as
                     // three things side by side instead of one cell.
                     //
                     // Only while the whole cell is the unit: the moment you
                     // are typing in it this goes, because then the cell is
                     // not what is selected. **It is the whole of the
-                    // difference now** — the edges are the same two marks in
-                    // either layer (2026-10-22), so the ground is what says
+                    // difference** — the edges are the same two marks in
+                    // either layer, so the ground is what says
                     // 「the cell is the unit, and there is no caret because
                     // there is nothing inside it to stand on」.
                     //
@@ -1488,13 +1456,11 @@ pub fn draw(
                         }
                     }
                     // **The seam keeps its own glyph and turns 金** — the #407
-                    // rule, and now the only rule (2026-10-22 作者定:
-                    // 「the CEL mode, the highlighted border can use the same
-                    // style as NOR mode (dashed and golden). It does not need
-                    // to be normal line.」). Inside a cell this is an ordinary
+                    // rule, the same in CEL mode as in NOR (dashed and golden),
+                    // not a plain line. Inside a cell this is an ordinary
                     // page drawn as a grid, and at the top layer it is the
-                    // same grid — so the grid should look like the one it was
-                    // either way. The two blocks below stand in only where
+                    // same grid — so the grid looks like the one it is either
+                    // way. The two blocks below stand in only where
                     // the grid draws no rule of its own.
                     let mut wall = |bx: u16, glyph: &str| {
                         if let Some(cell) = buf.cell_mut((bx, y)) {
@@ -1569,15 +1535,14 @@ pub fn draw_detail(
     let left = area.x + 2;
     // **標題由框畫，這裏只接自己那一句**（同文件樹接根目錄名）：那張表叫什麼。
     //
-    // Warning: **用 `shell.head`，別自己調一個**（2026-09-30 報的：「line
-    // index in the title has a wrong background colour」）。有焦點的時候那一行
+    // Warning: **用 `shell.head`，別自己調一個**，不然標題裏的行號底色不對。有焦點的時候那一行
     // 整條是金底，而自己調的那一個帶着 CHROME 的底色——寫上去就是金條上一塊
-    // 別的顏色。框交出 `head` 正是為了這件事，文件樹那一支一直用的就是它。
+    // 別的顏色。框交出 `head` 正是為了這件事，文件樹那一支用的也是它。
     put_text(buf, shell.head_at + 2, area.y, right, &detail.title, shell.head);
     let mut y = area.y + 2;
-    // The 部件 list first, because it is what the panel is *read for* — and it
-    // used to be drawn last, under twenty-eight mostly-blank fields, which on
-    // any real window meant not drawn at all.
+    // The 部件 list first, because it is what the panel is *read for* — drawn
+    // last, under twenty-eight mostly-blank fields, it would on any real
+    // window not be drawn at all.
     if !detail.links.is_empty() {
         put_text(buf, left, y, right, &say!("detail.components"), name);
         y += 1;
@@ -1607,7 +1572,7 @@ pub fn draw_detail(
         }
         y += 2;
     }
-    // **Scrolled to the field you are in.** Every column is listed now, empty
+    // **Scrolled to the field you are in.** Every column is listed, empty
     // ones included, so a 28-column row is longer than the panel — and the one
     // field that must never be off the bottom is the one the cursor is in.
     // Scrolled by the panel itself, from where the cursor is, rather than by a
@@ -1619,8 +1584,8 @@ pub fn draw_detail(
         .position(|(field, _)| *field == detail.here)
         .unwrap_or(0);
     // **The values line up past the longest name**, rather than at a fixed
-    // ten cells: the names carry their column number now (「12 pinyin」),
-    // and a name longer than the guess ran straight into its own value.
+    // ten cells: the names carry their column number (「12 pinyin」), and a
+    // name longer than the guess would run straight into its own value.
     // Capped, so one long name does not push every value off the panel.
     let column = detail
         .rows
@@ -1630,10 +1595,9 @@ pub fn draw_detail(
         .unwrap_or(10)
         .clamp(10, 20);
     let indent = left + column;
-    // **A value too long for the panel is wrapped, not cut** (#283,
-    // 2026-09-07). This panel is the way to read a cell the grid folded, so a
-    // panel that folds it again answers nothing: 「信息面板也没有换行功能来显
-    // 示这个单元格的全部信息」. Wrapped by the editor's own line breaker, so
+    // **A value too long for the panel is wrapped, not cut** (#283). This
+    // panel is the way to read a cell the grid folded, so a panel that folds
+    // it again answers nothing. Wrapped by the editor's own line breaker, so
     // 禁則 holds here as it does on the page.
     let width = right.saturating_sub(indent) as usize;
     let drawn: Vec<Vec<String>> = detail
@@ -1660,16 +1624,15 @@ pub fn draw_detail(
         first -= 1;
         used += height(first);
     }
-    // **鍵進來了就換成鍵說了算**（2026-09-30 補）。跟着光標那一套是 2026-09-07
-    // 定的，理由沒錯——「a reading surface with a scrollbar is a surface with a
-    // mode」——可那是**鍵在正文裏**的時候：那時光標一走，這一格自己跟上。
+    // **鍵進來了就換成鍵說了算**。跟着光標那一套的理由沒錯——「a reading
+    // surface with a scrollbar is a surface with a mode」——可那是**鍵在正文裏**
+    // 的時候：那時光標一走，這一格自己跟上。
     //
-    // Warning: **鍵一進來，光標就不動了**，於是跟着光標那一套當場凍住，而底邊
+    // Warning: **鍵一進來，光標就不動了**，只跟着光標的話這一格當場凍住，而底邊
     // 提示行還寫着 `j k J K g G 上下`——一扇拿走了鍵卻不認那幾個鍵的面板。
     // 「拿走鍵的那一半有義務」。
     if editor.panel_focus() == Some(side) {
-        // Warning: **最多翻到「最後一屏」**（2026-09-30 報的：「pressing will
-        // scroll down even though it is not necessary」）。夾在 `rows.len()-1`
+        // Warning: **最多翻到「最後一屏」**，不必翻的時候不翻。夾在 `rows.len()-1`
         // 上的話，`j` 一路按得到只剩最後一格，下面全是空的——那不是翻頁，那是
         // 把東西推出去。
         // 從最後一格往回數，數到這一屏裝不下為止——那就是翻得到的最遠一格。
@@ -1701,7 +1664,7 @@ pub fn draw_detail(
         let style = if *field == detail.here { here } else { name };
         put_text(buf, left, y, right, field, style);
         // **A field the row does not have**, said in 朱 and in words: a blank
-        // here used to mean either 「this cell is empty」 or 「this row is short
+        // here would mean either 「this cell is empty」 or 「this row is short
         // by twenty-four columns」, and telling those apart is most of what
         // this panel is for.
         let style = match (text.is_some(), *field == detail.here) {
@@ -1729,45 +1692,43 @@ pub fn draw_detail(
 ///
 /// A column is only as wide as the page can give it, and a cell can be longer.
 /// Drawn always from its first character, the tail — which is where the typing
-/// is — falls off the right edge and the caret with it: it stopped at the
-/// column's last cell and stayed there however much more was typed, so neither
-/// the characters nor the cursor moved (reported 2026-10-09: 「The cursor
-/// location in the table is incorrect (insert mode)」). So the cell scrolls
+/// is — falls off the right edge and the caret with it: it would stop at the
+/// column's last cell and stay there however much more was typed, so neither
+/// the characters nor the cursor would move. So the cell scrolls
 /// inside itself, which is what a spreadsheet's active cell does — and what
 /// this editor's own query boxes already do ([`crate::window_on`]).
 ///
 /// A cell is reserved at each end: [`HEAD_MARK`] in front, and the room
 /// [`FOLD_MARK`] needs behind, so the caret is never standing on a mark.
 ///
-/// Warning: **Both marks earn their column** — see [`HEAD_MARK`], which was taken
-/// out on 2026-10-17 and put back the same day once a real frame showed what
-/// `>` alone cannot say.
+/// Warning: **Both marks earn their column** — see [`HEAD_MARK`] for what `>`
+/// alone cannot say.
 /// **Where the caret stands inside a cell** — which of the cell's drawn lines
 /// it is on, and how far into that line, in the cell's own characters.
 ///
 /// One answer, because two things need it and they have to agree: the page
 /// scrolls the caret's own cell by it ([`window_at`]), and [`char_at`] has to
-/// take the same amount back off a click. They did not agree — the hit test
-/// had never heard of the scroll, so a click in a long cell the caret had
-/// scrolled landed on a character that was off the left edge (2026-10-19,
-/// caught by `the_caret_reads_back` the hour it was armed).
+/// take the same amount back off a click. A hit test that has not heard of the
+/// scroll lands a click in a long cell the caret has scrolled on a character
+/// that is off the left edge (`the_caret_reads_back` pins this).
 ///
-/// Warning: **Clamped into the cell** (2026-10-17). The caret's file offset is not
+/// Warning: **Clamped into the cell**. The caret's file offset is not
 /// always inside the cell the row says it is in: `x` selects the whole line
 /// and leaves the head on the row's last `|`, which is past the last cell's
-/// content. Counting from the cell's start then gave a step beyond its text,
-/// and `window_at` read that as 「the caret has been carried past the column」
-/// and scrolled the cell — `dog` drew as `<g` for a row nobody was typing in.
+/// content. Counting from the cell's start then gives a step beyond its text,
+/// and `window_at` would read that as 「the caret has been carried past the
+/// column」 and scroll the cell — `dog` drawn as `<g` for a row nobody is
+/// typing in.
 /// 全窗 is a view of the content, so a caret anywhere else is drawn at the
 /// nearest place in the content.
 ///
-/// Warning: **`to` is inside only while appending** (2026-10-17, found in review).
+/// Warning: **`to` is inside only while appending.**
 /// It is the content's *exclusive* end, so in Normal a caret resting there is
-/// one past the last character — `x` in a `.csv` drew the cursor on the
+/// one past the last character — `x` in a `.csv` would draw the cursor on the
 /// padding after the last cell's `1` instead of on the `1`. In Insert it is
 /// the place appending happens and must be drawn.
 fn caret_step_in(editor: &Editor, line: usize, cell: usize, parts: &[String]) -> (usize, usize) {
-    // **The value's span, because `parts` are the value's lines** (2026-10-22).
+    // **The value's span, because `parts` are the value's lines**.
     // `cell_shown` takes a quoted field's two `"` off the page, so counting the
     // caret from the source start put it one character further along than it
     // stands — and a field with a line break in it is always a quoted one, so
@@ -1809,7 +1770,7 @@ fn slid_by(editor: &Editor, line: usize, cell: usize, on: usize, parts: &[String
 fn window_at(line: &str, caret: usize, room: usize) -> (String, usize, bool) {
     let head = yumete_cjk::str_width(yumete_core::mdtable::HEAD_MARK);
     let fold = yumete_cjk::str_width(yumete_core::mdtable::FOLD_MARK);
-    // **A cell that fits is never scrolled** (2026-10-17). The two tests
+    // **A cell that fits is never scrolled**. The two tests
     // below are about the caret, and both say yes for a caret on the last
     // character of a cell exactly as wide as its column — so `reads` in a
     // five-wide column scrolled to `<ads` the moment the caret stood on its
@@ -1817,13 +1778,12 @@ fn window_at(line: &str, caret: usize, room: usize) -> (String, usize, bool) {
     if yumete_cjk::str_width(line) <= room {
         return (line.to_string(), caret, false);
     }
-    // **The caret's own glyph is one column or two** (2026-10-17, found in
-    // review). `caret` is where it *starts*, so a 漢字 reaches `caret + 1`;
-    // measured against `caret` alone, a wide glyph sitting in the last column
-    // before the mark's reserved one counted as 「still inside」 and the caret
-    // was then drawn **on** the `>` — which this function's own promise says
-    // can never happen. ASCII was right all along, which is why it took a
-    // 漢字 column to show.
+    // **The caret's own glyph is one column or two.** `caret` is where it
+    // *starts*, so a 漢字 reaches `caret + 1`; measured against `caret` alone,
+    // a wide glyph sitting in the last column before the mark's reserved one
+    // would count as 「still inside」 and the caret would be drawn **on** the
+    // `>` — which this function's own promise says can never happen. ASCII
+    // alone never shows it; a 漢字 column does.
     let caret_end = caret
         + yumete_cjk::graphemes(line)
             .scan(0usize, |at, g| {

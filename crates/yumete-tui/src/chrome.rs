@@ -69,10 +69,10 @@ pub fn draw(frame: &mut Frame, rect: Rect, ring: &Ring) -> Rect {
         .border_style(ring.border)
         .style(ring.ground);
     if let Some((text, style)) = &ring.title {
-        // **One cell in from the corner**, so the title lines up. The ring's contents start one cell past the
-        // wall; a title written hard against the corner sits a cell to their
-        // left, and the two left edges being nearly-but-not-quite the same is
-        // worse than either alignment on its own.
+        // **One cell in from the corner**, so the title lines up. The ring's contents start one cell
+        // past the wall; a title written hard against the corner sits a cell to their left, and the
+        // two left edges being nearly-but-not-quite the same is worse than either alignment on its
+        // own.
         block = block.title(Span::styled(format!(" {text}"), *style));
     }
     let inner = block.inner(rect);
@@ -237,9 +237,9 @@ pub enum Anchor {
 
 /// Fit a box `want` cells big into `area`, or `None` when there is no room.
 ///
-/// Warning: **A caret-anchored box is held to [`room`]** — two thirds by one
-/// third, two ninths of the page, which keeps it small and reads well. A centred one has the keys, so the page
-/// behind it is not being read and the cap does not apply.
+/// Warning: **A caret-anchored box is held to [`room`]** — two thirds by one third, two ninths of
+/// the page, which keeps it small and reads well. A centred one has the keys, so the page behind it
+/// is not being read and the cap does not apply.
 pub fn place(area: Rect, want: (u16, u16), anchor: Anchor) -> Option<Rect> {
     let (width, height) = want;
     if width < 8 || width > area.width || height > area.height {

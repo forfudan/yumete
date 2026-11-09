@@ -1,10 +1,9 @@
 //! One floating panel, for everything of that shape (#299).
 //!
-//! A ring, a gold name in its top-left, and something inside — the shape #273
-//! gave the `:` menu. Four things on the screen are this shape: the `空格` which-key, the footnote and `%%註釋%%` strip
-//! (#294), `:write`'s safety check (#295), and the command row. What they differ
-//! in is four parameters — **title, body, a tag, and where it stands** — so
-//! that is what this takes.
+//! A ring, a gold name in its top-left, and something inside — the shape #273 gave the `:` menu.
+//! Four things on the screen are this shape: the `空格` which-key, the footnote and `%%註釋%%` strip
+//! (#294), `:write`'s safety check (#295), and the command row. What they differ in is four
+//! parameters — **title, body, a tag, and where it stands** — so that is what this takes.
 
 use ratatui::layout::Rect;
 use ratatui::style::Style;
@@ -206,11 +205,11 @@ fn table_zong(block: &[&str], tall: usize) -> Vec<String> {
     // is cut**: with room, everything is drawn; without, it folds, and the
     // whole height is filled.
     //
-    // Dividing the height evenly by the number of columns would fold a short
-    // column away while the box below it stood empty. What it asks is the question every fair share asks: **is there a depth
-    // `k` such that no band needs more than it gets?** Raise `k` until the
-    // bands that fit under it, plus the ones capped at it, fill the room — the
-    // deep ones are cut and the shallow ones are left whole.
+    // Dividing the height evenly by the number of columns would fold a short column away while the
+    // box below it stood empty. What it asks is the question every fair share asks: **is there a
+    // depth `k` such that no band needs more than it gets?** Raise `k` until the bands that fit
+    // under it, plus the ones capped at it, fill the room — the deep ones are cut and the shallow
+    // ones are left whole.
     let want: Vec<usize> = (0..columns)
         .map(|c| {
             rows.iter()
@@ -385,10 +384,10 @@ pub(crate) fn clip(text: &str, cells: usize) -> String {
 /// **A table, drawn as a table** — the 橫排 float's half: not wrapped, and
 /// elided where it must be.
 ///
-/// A grid wrapped like prose is not a grid: the tail of every row lands under
-/// the head of the next one and the columns are gone. So a table is laid out at the width it is given and **never
-/// wrapped** — what does not fit is cut, and the cut is said out loud with a
-/// 「…」, cell by cell and then column by column.
+/// A grid wrapped like prose is not a grid: the tail of every row lands under the head of the next
+/// one and the columns are gone. So a table is laid out at the width it is given and **never
+/// wrapped** — what does not fit is cut, and the cut is said out loud with a 「…」, cell by cell and
+/// then column by column.
 pub(crate) fn table_rows(block: &[&str], budget: usize) -> Vec<String> {
     let rows: Vec<Vec<String>> = block
         .iter()
@@ -649,9 +648,9 @@ pub fn draw(
     // used by everything below: the key table's depth, and the cut a body too
     // tall for the room takes.
     let cap = room_h.saturating_sub(2).max(1) as usize;
-    // **框上寫得下什麽，纔由什麽定寬**，不然竪排那一扇左邊會空一大片。下面三道底綫——名字、那一句話、讀到第幾——量的都是**畫在框綫上**
-    // 的東西，而竪排一樣都不畫在那兒：名字是第一縱，數字順着左框往下走。照橫排
-    // 的尺寸撐出來的那二十幾格會全是空的。
+    // **框上寫得下什麽，纔由什麽定寬**，不然竪排那一扇左邊會空一大片。下面三道底綫——名字、那一句話、
+    // 讀到第幾——量的都是**畫在框綫上**的東西，而竪排一樣都不畫在那兒：名字是第一縱，數字順着左框往
+    // 下走。照橫排的尺寸撐出來的那二十幾格會全是空的。
     //
     // 所以這裏量的不是「有沒有」，是「這一扇畫不畫它」——同一個問題問一次，
     // 寬度和下面那幾支畫的人讀的是同一個答案。
@@ -687,8 +686,8 @@ pub fn draw(
     // left column is the alignment, and an indent only pushes it off centre.
     let pad: usize = match panel.body {
         Body::Prose(_) => 1,
-        // Warning: **讀的那幾扇兩邊都留一格**：最長那一行貼着框，看着像被裁了。鍵表不留——它自己那一列就是對齊綫，往裏縮一
-        // 格反而把它推離中間。
+        // Warning: **讀的那幾扇兩邊都留一格**：最長那一行貼着框，看着像被裁了。鍵表不留——它自己那一
+        // 列就是對齊綫，往裏縮一格反而把它推離中間。
         Body::Keys(_) if panel.reading => 1,
         Body::Keys(_) => 0,
         Body::Tinted(_) => 1,
@@ -1065,11 +1064,10 @@ pub fn draw(
             )
         }),
     });
-    // Warning: **The body sets no ground of its own**: text's ground is
-    // transparent, whatever is under it. The ring has already painted the
-    // panel; text that carried its own copy of that colour would drag a patch
-    // of the *old* one behind every line the day the panel's ground moved. `Cell::set_style` patches, so a style with no `bg` keeps
-    // whatever is under it.
+    // Warning: **The body sets no ground of its own**: text's ground is transparent, whatever is
+    // under it. The ring has already painted the panel; text that carried its own copy of that
+    // colour would drag a patch of the *old* one behind every line the day the panel's ground moved.
+    // `Cell::set_style` patches, so a style with no `bg` keeps whatever is under it.
     let ground = Style::default();
     // 三色，一條規矩，橫竪通用：名字是金，章節行是灰，其餘是墨。
     let ink_of = |n: usize| match n {
@@ -1391,8 +1389,8 @@ mod tests {
         let head = said(&first);
         assert!(!head.contains('…'), "省略號去掉了：還有多少由數字說");
 
-        // **數字竪着寫在左邊那條框綫上**（「10 / 36」）。竪書從右往左讀，所以「讀到哪了」屬於左邊那一頭——和橫排擺在底
-        // 邊左端是同一個位置。半角，因為框綫只有一格寬。
+        // **數字竪着寫在左邊那條框綫上**（「10 / 36」）。竪書從右往左讀，所以「讀到哪了」屬於左邊那
+        // 一頭——和橫排擺在底邊左端是同一個位置。半角，因為框綫只有一格寬。
         let down: String = (1..rect.height)
             .map(|y| first[(rect.x, rect.y + y)].symbol().to_string())
             .collect();

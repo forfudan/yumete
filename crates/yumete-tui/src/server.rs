@@ -49,8 +49,8 @@ use yumete_core::lsp::{self, Notice};
 ///
 /// Warning: **這是節流，不是防抖。** 計時從「發現正文變了」那一刻起算，按鍵不重置它
 /// （全樹寫 `touched` 的只有清和設兩處）——所以連續打字是**每 300 毫秒發一次，
-/// 發在詞的中間**，不是「停手 300 毫秒」。這樣更好而不是更差：補全那一半正是靠打字中間發出去
-/// 的那一條 `didChange` 纔問得出東西；真正的語言服務器客戶端多半連節流都沒有，
+/// 發在詞的中間**，不是「停手 300 毫秒」。這樣更好而不是更差：補全那一半正是靠
+/// 打字中間發出去的那一條 `didChange` 纔問得出東西；真正的語言服務器客戶端多半連節流都沒有，
 /// 每一次改動都發。
 const SETTLE: std::time::Duration = std::time::Duration::from_millis(300);
 
@@ -674,8 +674,8 @@ impl Servers {
                         // event, and repeating it every keystroke would bury
                         // every other thing the status line has to say.
                         //
-                        // Warning: **記在語言上，所以一個起不來就不再試這一種
-                        // 語言的任何一個**——多服務器下它偏保守：寧可少起一個，也不要每一幀重試一個起不來的。
+                        // Warning: **記在語言上，所以一個起不來就不再試這一種語言的任何一個**——多服
+                        // 務器下它偏保守：寧可少起一個，也不要每一幀重試一個起不來的。
                         self.failed.insert(language.to_string());
                         self.says = Some(say!("lsp.cannot-start", named.command, why));
                     }
@@ -1795,8 +1795,8 @@ const NESTED: &[&str] = &[".pixi/envs", ".direnv"];
 ///
 /// Warning: **爬到最外層那個 `.git` 為止**，不是碰到第一個就停。像
 /// `yuhao-ime/yumete/scripts/x.py` 這樣的樹，`yumete` 自己是一個倉，pixi 的環境在
-/// **上一級**的 `yuhao-ime`，停在第一個正好把答案關在門外。嵌套的倉全穿過去，停在最外面那一層倉上：再往上就真是別人的
-/// 項目了。
+/// **上一級**的 `yuhao-ime`，停在第一個正好把答案關在門外。嵌套的倉全穿過去，停在
+/// 最外面那一層倉上：再往上就真是別人的項目了。
 ///
 /// Warning: **helix 不做這件事。** 它只 `which`（`helix-lsp/src/client.rs:228`），
 /// 文檔明說「Binaries must be in `$PATH`」；vim 根本沒有內建 LSP。這一條是我們自
@@ -2036,8 +2036,8 @@ mod tests {
         /// machine, and in no time at all.
         fn pretend(language: &str) -> (Servers, Receiver<String>, Sender<Notice>) {
             let mut servers = Servers { settle: std::time::Duration::ZERO, ..Default::default() };
-            // Warning: **要用出廠配置裏那個命令名**。`running` 按**命令名**存，而 `follow` 的判準是「這個命令還沒
-            // 跑着就起一個」——假服務器掛在語言名下面的話它看不見，於是測試裏
+            // Warning: **要用出廠配置裏那個命令名**。`running` 按**命令名**存，而 `follow` 的判準是
+            // 「這個命令還沒跑着就起一個」——假服務器掛在語言名下面的話它看不見，於是測試裏
             // **真的把機器上的 rust-analyzer 起了起來**：慢，而且多出一個誰都
             // 沒答的服務器，把「全都答空了纔說沒有」那一條卡在半路上。
             let (heard, tell) = servers.pretend_one(language, &Self::findable());

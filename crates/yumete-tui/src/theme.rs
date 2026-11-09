@@ -288,8 +288,8 @@ pub fn ask_the_terminal() -> Option<bool> {
     // **在循環跑起來之後還會被叫**：`settings.rs` 的「每一項設定，推一遍」在
     // `ambiguous_width = auto`／`theme mode = auto` 底下就走到這裏——無條件關的話，
     // `:settings` 裏改一項再 `:w`，探針問完就把正在用的 raw mode 關了。症狀是
-    // **終端開始回顯，而 Kitty 鍵盤協議那一層還挂着**，於是每一鍵顯示成 `^[[104u`、鼠標點擊顯示成一串報告，看着像輸入法壞了。
-    // `enable_raw_mode` 不計數，所以配對只能靠自己先問一句。
+    // **終端開始回顯，而 Kitty 鍵盤協議那一層還挂着**，於是每一鍵顯示成 `^[[104u`、鼠標點擊顯示成一
+    // 串報告，看着像輸入法壞了。`enable_raw_mode` 不計數，所以配對只能靠自己先問一句。
     let was_raw = ratatui::crossterm::terminal::is_raw_mode_enabled().unwrap_or(false);
     let raw = was_raw || ratatui::crossterm::terminal::enable_raw_mode().is_ok();
     let answer = (|| {
