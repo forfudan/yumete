@@ -7,9 +7,8 @@
 //! so it is parsed on its own, and the answer is handed back line by line in
 //! the same [`Span`] shape every other colour on the page already travels in.
 //!
-//! **Seven grammars ship** (measured 2026-09-16, release + LTO): json, toml,
-//! html, css, yaml, javascript and python, 1.34 MB between them. A fence in any
-//! other language, or none, keeps the one colour a fence has always had.
+//! **Grammars ship for the languages [`Language`] lists**; a fence in any
+//! other language, or none, keeps a fence's one colour.
 
 use std::sync::OnceLock;
 
@@ -34,8 +33,8 @@ pub enum Token {
     Builtin,
     /// A function or method, defined or called.
     Function,
-    /// A function the language gives you — `print`, `len` (2026-10-25: One
-    /// Dark colours it apart from the rest, so the token has to say it).
+    /// A function the language gives you — `print`, `len` (One Dark colours
+    /// it apart from the rest, so the token has to say it).
     BuiltinFunction,
     /// A type, a class, a constructor.
     Type,
@@ -51,10 +50,10 @@ pub enum Token {
     Escape,
     /// A named constant, `None`.
     Constant,
-    /// A number or a boolean (2026-10-25: Zed colours them apart from a named
-    /// constant; this editor's own themes still do not).
+    /// A number or a boolean (Zed colours them apart from a named constant;
+    /// this editor's own themes do not).
     Number,
-    /// A function's parameter (2026-10-25, same reason).
+    /// A function's parameter (same reason).
     Parameter,
     /// A comment.
     Comment,
@@ -68,10 +67,10 @@ pub enum Token {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Language {
     C,
-    /// C++ (2026-10-29).
+    /// C++.
     Cpp,
     Ada,
-    /// Shell scripts: bash, sh, zsh (2026-10-29).
+    /// Shell scripts: bash, sh, zsh.
     Bash,
     Css,
     /// GAS（`.s`）——與 [`Language::Nasm`] 共用一套通用匯編語法，分家分的是註釋記號。
@@ -81,9 +80,9 @@ pub enum Language {
     Java,
     JavaScript,
     Json,
-    /// Lua (2026-10-29).
+    /// Lua.
     Lua,
-    /// Mojo（`.mojo` `.🔥`）——語法是這個倉作者自己寫的，見
+    /// Mojo（`.mojo` `.🔥`）——語法是我們自己的，見
     /// <https://github.com/forfudan/tree-sitter-mojo>。
     Mojo,
     /// NASM（`.asm` `.S` `.nasm`）——見 [`Language::Gas`]。
@@ -93,13 +92,13 @@ pub enum Language {
     R,
     Rust,
     Toml,
-    /// TypeScript, and TSX, which is TypeScript with JSX in it (2026-10-29).
+    /// TypeScript, and TSX, which is TypeScript with JSX in it.
     Tsx,
     TypeScript,
-    /// Typst (2026-11-08) — a raw block tagged ```` ```typ ````, and the
+    /// Typst — a raw block tagged ```` ```typ ````, and the
     /// colours of a Typst manuscript itself. Never a file's syntax: a `.typ`
     /// is [`crate::syntax::Syntax::Typst`], whose prose the block scanner
-    /// reads. Grammar by this repository's author:
+    /// reads. The grammar is ours:
     /// <https://github.com/forfudan/tree-sitter-typst>.
     Typst,
     Yaml,
@@ -179,7 +178,7 @@ impl Language {
     /// The language a file's extension says it is in. Narrower than
     /// [`Self::from_info`]: a file called `node` is not JavaScript.
     ///
-    /// Warning: **收的是原樣的副檔名，轉小寫在這一支裏面**（2026-10-08 定）。幾乎
+    /// Warning: **收的是原樣的副檔名，轉小寫在這一支裏面**。幾乎
     /// 所有副檔名不分大小寫，但**匯編分**：`.s` 是 GAS（註釋 `#`），`.S` 是要
     /// 走預處理的那一種，照 helix 歸 NASM（註釋 `;`）。轉小寫放在呼叫端的話，
     /// 這一層永遠再也分不出兩者——所以先看原樣的，再轉小寫查其餘。
@@ -194,7 +193,7 @@ impl Language {
         Some(match extension.as_str() {
             "adb" | "ads" | "ada" => Language::Ada,
             "asm" | "nasm" => Language::Nasm,
-            // **`.h` 走 C**（2026-10-09 作者定，helix 也是這麼分的）。
+            // **`.h` 走 C**（helix 也是這麼分的）。
             //
             // 一份 C++ 的頭文件於是也走 C 的語法：絕大部分構造判得對，`template`／
             // `class` 那幾個詞判不對。代價說明白了還是比「一個顏色都没有」好——而
@@ -286,10 +285,10 @@ impl Language {
         }
     }
 
-    /// **一條追加的規則，讓調用看起來像調用**（2026-10-09 作者定的那件事）。
+    /// **一條追加的規則，讓調用看起來像調用**。
     ///
-    /// 他要的是「同一個構造在十六種語言裏同一個顏色」。報來的辦法是「照 helix，改成
-    /// 第一條規則贏」，而那個前提查不實：
+    /// 要的是「同一個構造在十六種語言裏同一個顏色」。「照 helix，改成第一條規則贏」
+    /// 那個辦法的前提查不實：
     ///
     /// | | `@function.method` 在第幾行 | 兜底的 `@property` | 最後一條贏 | 第一條贏 |
     /// | --- | --- | --- | --- | --- |
@@ -315,7 +314,7 @@ impl Language {
             Language::Python => {
                 "\n(call (attribute attribute: (identifier) @function.method))\n"
             }
-            // **What the page already said, kept** (2026-11-08). The
+            // **What the page already said, kept**. The
             // `#` before code takes the colour of what follows it — Typst's
             // own highlighter does this (`highlight_hash`), and so did the
             // scanner this grammar replaced; `#name` is drawn as a call, as that
@@ -323,12 +322,11 @@ impl Language {
             // here has); the `*` and `_` of strong and
             // emphasis are the markers 所見即所得 hides; a `$` is the maths', and a
             // raw block's tag is the raw block's, as Typst draws it. In maths,
-            // as Typst's highlighter has it (the author chose its look,
-            // 2026-11-08): a number is text, and `^` `_` `/` `'` `√` `&` are
+            // as Typst's highlighter has it: a number is text, and `^` `_` `/` `'` `√` `&` are
             // operators.
             //
-            // **And the rest as typst-syntax 0.15's `highlight` has it**
-            // (review, 2026-11-09), where nothing above says otherwise. Typst
+            // **And the rest as typst-syntax 0.15's `highlight` has it**,
+            // where nothing above says otherwise. Typst
             // gives what it calls interpolated — a name after `#`, and a
             // symbol in maths — a colour of its own, the same blue as a call
             // in its own theme; this page draws it as a call, as `#name`
@@ -389,12 +387,10 @@ impl Language {
 
     fn highlights(self) -> &'static str {
         match self {
-            // **Ada 與 Pascal 這兩份是我們自己寫的**（2026-10-08 定：「我們自己寫，最
-            // 安全」）。
+            // **Ada 與 Pascal 這兩份是我們自己寫的**：最安全。
             //
-            // Pascal 那一份 2026-10-09 補了 `@function`／`@type`（作者定）：從前只認
-            // 關鍵詞，於是 `function Add(A: Integer): Integer;` 裏 `Add`／`A`／
-            // `Integer` 全是素色。節點名是從語法自己的 `src/node-types.json` 讀出來的
+            // Pascal 那一份帶 `@function`／`@type`：只認關鍵詞的話，
+            // `function Add(A: Integer): Integer;` 裏 `Add`／`A`／`Integer` 全是素色。節點名是從語法自己的 `src/node-types.json` 讀出來的
             // ——那是**生成的 API 描述**，不是那份 `.scm`。
             //
             // 兩個 crate 包裏有 `queries/highlights.scm` 這個**檔**，可
@@ -434,9 +430,9 @@ impl Language {
                       ">>" "|"
                     ] @operator
 "##,
-            // **Mojo 那一份也是自己寫的**（2026-10-11）——它的語法就是這個倉作者
-            // 寫的（`forfudan/tree-sitter-mojo`），所以根本没有別人的 `.scm` 可
-            // 抄，也没有授權那一層事。節點名與詞表是從它自己的
+            // **Mojo 那一份也是自己寫的**——它的語法是我們自己的
+            // （`forfudan/tree-sitter-mojo`），所以根本没有別人的 `.scm` 可抄，
+            // 也没有授權那一層事。節點名與詞表是從它自己的
             // `src/node-types.json` 讀出來的。
             //
             // `__generator_type`／`__match`／`__mlir_region` 這幾個帶雙下劃線的
@@ -524,7 +520,7 @@ impl Language {
 "#,
             // Warning: **C 那一個叫 `HIGHLIGHT_QUERY`**，單數——同一族 crate 兩種拼法。
             Language::C => tree_sitter_c::HIGHLIGHT_QUERY,
-            // **Written to sit on top of another's** (2026-10-29): C++'s
+            // **Written to sit on top of another's**: C++'s
             // queries extend C's and TypeScript's extend JavaScript's, as the
             // grammars' own READMEs say — so each is read with its base.
             Language::Cpp => inherited(&CPP, tree_sitter_c::HIGHLIGHT_QUERY, tree_sitter_cpp::HIGHLIGHT_QUERY),
@@ -556,7 +552,7 @@ impl Language {
     /// The compiled query and what each of its captures means. Compiled once
     /// per process: a query is parsed from its source text, and that is not
     /// something to do per frame.
-    /// **語法樹裏那些「一個定義」的查詢**（`]f`/`mi f` 那一族，2026-10-06）。
+    /// **語法樹裏那些「一個定義」的查詢**（`]f`/`mi f` 那一族）。
     ///
     /// Warning: **用語法本身帶的 `TAGS_QUERY`，不抄 helix 的 `textobjects.scm`。**
     /// helix 把文本對象寫成自己 runtime 裏的查詢檔，而那些檔是 **MPL-2.0**，這個
@@ -576,8 +572,8 @@ impl Language {
             Language::Java => tree_sitter_java::TAGS_QUERY,
             Language::JavaScript => tree_sitter_javascript::TAGS_QUERY,
             Language::Python => tree_sitter_python::TAGS_QUERY,
-            // **這一份的 `tags.scm` 是我們自己寫的**（2026-10-11）——語法是這個倉
-            // 作者的，所以没有別人的可用，也没有授權那一層事。函數、結構、特徵、
+            // **這一份的 `tags.scm` 是我們自己寫的**——語法是我們自己的，
+            // 所以没有別人的可用，也没有授權那一層事。函數、結構、特徵、
             // 擴展四種；`alias` 捕不到，那是語法那一頭的事（見那個檔的註釋）。
             Language::Mojo => tree_sitter_mojo::TAGS_QUERY,
             // Headings and `#let` bindings, ours too.
@@ -599,8 +595,7 @@ impl Language {
         })
     }
 
-    /// **我們自己寫的那份文本對象查詢**（2026-10-06 定：「自己写比较好，不要
-    /// 抄」）。
+    /// **我們自己寫的那份文本對象查詢**，不抄。
     ///
     /// Warning: **不抄 helix 的 `textobjects.scm`**——那些檔是 MPL-2.0，這個倉是
     /// Apache-2.0（見 [`Language::tags`]）。自己寫還有一層好處：helix 那份要照顧
@@ -613,7 +608,7 @@ impl Language {
     ///
     /// 節點名是從語法自己的 `src/node-types.json` 裏讀出來的，不是記的。
     fn objects(self) -> Option<&'static str> {
-        // **`@test` / `@entry` / `@element`** (2026-10-27, helix's `T` `e` `x`):
+        // **`@test` / `@entry` / `@element`** (helix's `T` `e` `x`):
         // a test is told by its name or its attribute — `#[test]`, `def test_…`,
         // `func Test…`, `it(…)`/`test(…)`/`describe(…)`, `@Test` — and an
         // entry is one key with its value, or one field. Node and field names
@@ -776,9 +771,9 @@ impl Language {
             .as_ref()
     }
 
-    /// **哪些節點開一級縮進，哪些把自己退回去**（2026-10-08，第一期）。
+    /// **哪些節點開一級縮進，哪些把自己退回去**（第一期）。
     ///
-    /// 由來：作者問「行尾是一個 `(`，下一行該不該再縮一級」。查過三家——
+    /// 問題是「行尾是一個 `(`，下一行該不該再縮一級」。查過三家——
     ///
     /// | | 縮嗎 |
     /// | --- | --- |
@@ -938,7 +933,7 @@ impl Language {
     }
 }
 
-/// **一個定義是哪一種**（`]f`/`]c`，2026-10-06）。
+/// **一個定義是哪一種**（`]f`/`]c`）。
 ///
 /// `tags.scm` 的捕獲名分得比這細（`definition.method`、`definition.interface`、
 /// `definition.module`…）；這裏只收兩種，因為鍵只有兩個，而「方法」在讀稿子的人
@@ -961,7 +956,7 @@ fn define_of(capture: &str) -> Option<Define> {
     }
 }
 
-/// **What the syntax tree can name for `mi`** — `mi a`/`mi c` (2026-10-06), and `mi T`/`mi e`/`mi x` (2026-10-27).
+/// **What the syntax tree can name for `mi`** — `mi a`/`mi c`, and `mi T`/`mi e`/`mi x`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Object {
     /// 一個參數（`mi a`）。
@@ -1029,7 +1024,7 @@ pub fn definitions(language: Language, source: &str, tree: &Tree) -> Vec<(usize,
 
 /// What a capture does to the characters it covers: `None` leaves them to
 /// whatever else names them. A token for code; for Typst's markup the run it
-/// is, a heading or an emphasis (2026-11-08).
+/// is, a heading or an emphasis.
 type Paint = Option<Kind>;
 
 /// 一套語法編好的查詢，連着它每一格捕獲上什麼色——按捕獲的次序。
@@ -1078,7 +1073,7 @@ fn token_of(capture: &str) -> Option<Token> {
     })
 }
 
-/// **What a Typst capture is, in this page's colours** (2026-11-08).
+/// **What a Typst capture is, in this page's colours**.
 ///
 /// The grammar names its captures as helix does (`constant.numeric.integer`,
 /// `variable.other.member`, `markup.heading.2`), which [`token_of`] reads
@@ -1131,7 +1126,7 @@ pub fn joined(lines: &[String]) -> String {
     source
 }
 
-/// **這一個位置開着幾級縮進**（2026-10-08，第一期）。
+/// **這一個位置開着幾級縮進**（第一期）。
 ///
 /// 算法照 helix 的 `indent.rs`，取它最頂上那一層：從 `byte` 那個節點往上走，每遇
 /// 到一個 `@indent` 的祖先就加一級——**而且那個祖先要是在前面某一行開的**。同一
@@ -1192,10 +1187,10 @@ pub fn open_levels(
     // `arguments` 也是這麼合成一級的。
     //
     // **`before_line` 是「正在算哪一行」**——只數開在它**之前**的那些。這一格分得
-    // 出兩種問法（2026-10-08 寫的時候兩次撞在它上面）：
+    // 出兩種問法：
     //
     // - 按 Enter 要算的是**新開的那一行**，所以傳光標那一行 ＋ 1：`go(` 這種「這一
-    //   行剛開的括號」算數，而它正是作者問的那一條。
+    //   行剛開的括號」算數。
     // - 拿上一行當基準的時候傳**那一行自己**：`call_expression` 就開在那一行的第一
     //   個字上，算進去的話兩頭一樣多，差就成了零——那正是這個功能整個不生效的樣子。
     let mut lines: Vec<usize> = Vec::new();
@@ -1236,7 +1231,7 @@ pub fn what_changed(was: &str, now: &str) -> Option<tree_sitter::InputEdit> {
         return None;
     }
     let (a, b) = (was.as_bytes(), now.as_bytes());
-    // **A block at a time, then a byte at a time** (2026-11-08): comparing
+    // **A block at a time, then a byte at a time**: comparing
     // slices is a `memcmp`, comparing bytes in a loop is not, and on a 1.6 MB
     // book the loop was 0.7 ms of every keystroke.
     const BLOCK: usize = 4096;
@@ -1246,10 +1241,9 @@ pub fn what_changed(was: &str, now: &str) -> Option<tree_sitter::InputEdit> {
         head += BLOCK;
     }
     head += a[head..shorter].iter().zip(&b[head..shorter]).take_while(|(x, y)| x == y).count();
-    // Warning: **數的是字節，而一個字的中間也可以對得上**（2026-10-06 按 `d` 删
-    // 到「名」當場崩的那一下）。「的名字」删成「的字」：名 是 `E5 90 8D`、
+    // Warning: **數的是字節，而一個字的中間也可以對得上**。「的名字」删成「的字」：名 是 `E5 90 8D`、
     // 字 是 `E5 AD 97`，兩個都以 `E5` 開頭，於是前綴數到 4 個字節——正落在那個
-    // 字裏面。下面 `point` 的 `&text[..byte]` 當場 panic，而就算不 panic，
+    // 字裏面。不退回字的邊界的話，下面 `point` 的 `&text[..byte]` 當場 panic，而就算不 panic，
     // 交給 tree-sitter 的也是一個不存在的位置。
     //
     // **退到字的邊界上**。前綴那一段兩邊字節相同，所以邊界也相同；退一步只會讓
@@ -1291,13 +1285,13 @@ pub fn what_changed(was: &str, now: &str) -> Option<tree_sitter::InputEdit> {
     })
 }
 
-/// **解析一份源碼，樹交出去**（#423，2026-09-30）。
+/// **解析一份源碼，樹交出去**（#423）。
 ///
 /// `was` 是上一棵樹（`Tree::edit` 過的）：給了它就走增量，一個字的改動七百多微
 /// 秒，從頭解析要五十毫秒。
 ///
-/// Warning: **樹要有人存着。** 從前 `highlight` 每叫一次解析一次，於是滾一屏也
-/// 付一次全份解析——量過 20,368 行的 `lib.rs` 是 50 毫秒。
+/// Warning: **樹要有人存着。** `highlight` 每叫一次解析一次的話，滾一屏也付一次
+/// 全份解析——量過 20,368 行的 `lib.rs` 是 50 毫秒。
 pub fn parse(language: Language, source: &str, was: Option<&Tree>) -> Option<Tree> {
     let mut parser = Parser::new();
     parser.set_language(&language.grammar()).ok()?;
@@ -1366,7 +1360,7 @@ fn captured(
     found
 }
 
-/// **A Typst manuscript's colours, one line at a time, nested** (2026-11-08).
+/// **A Typst manuscript's colours, one line at a time, nested**.
 ///
 /// [`paint`] flattens, one token a byte, which is right for code and wrong
 /// for markup: a `*strong*` word in a heading is both, and `*_both_*` is
@@ -1447,8 +1441,7 @@ pub fn paint_typst(
 /// a missing token that runs to the last byte, as an unclosed `[`, raw block
 /// or comment leaves it. A stray `)` mid-paragraph is not.
 ///
-/// Warning: **an unclosed `/*` is no error to tree-sitter-typst** (review,
-/// 2026-11-09): it is a `block_comment` that runs to the end, in a tree with
+/// Warning: **an unclosed `/*` is no error to tree-sitter-typst**: it is a `block_comment` that runs to the end, in a tree with
 /// no error in it. So a comment that ends the source is read for its `*/`s,
 /// nested as Typst nests them.
 pub fn open_at_end(tree: &Tree, source: &str) -> bool {
@@ -1525,8 +1518,8 @@ fn line_in<'s>(source: &'s str, starts: &[usize], n: usize) -> &'s str {
     line.strip_suffix('\r').unwrap_or(line)
 }
 
-/// **Compile `language`'s queries on a thread of their own**, once a process
-/// (2026-11-08): a query is built from its source text, and Typst's takes
+/// **Compile `language`'s queries on a thread of their own**, once a process:
+/// a query is built from its source text, and Typst's takes
 /// milliseconds — time the first page need not wait for if the file was
 /// opened a moment before it is drawn. Whoever asks for the query meanwhile
 /// waits for that thread rather than compiling it twice.
@@ -1628,12 +1621,11 @@ fn paint_the_rows(
     found.retain(|f| !(f.3 == Kind::Token(Token::String) && named.contains(&(f.0, f.1))));
     found.sort_by(|a, b| a.0.cmp(&b.0).then(b.1.cmp(&a.1)).then(a.2.cmp(&b.2)));
 
-    // Warning: **A window over the captures, not a pass over them** (2026-09-20).
-    // This used to walk the whole of `found` for every line and skip what did
-    // not overlap — O(lines × captures), and a capture per few bytes means
-    // both grow together: measured 600 lines 10 ms, 2400 lines 20 ms, **4800
-    // lines 60 ms**, which is where 「the colours just stop」 came from (the
-    // 5000-line cap in `fences.rs` was the bandage).
+    // Warning: **A window over the captures, not a pass over them**.
+    // Walking the whole of `found` for every line and skipping what does not
+    // overlap is O(lines × captures), and a capture per few bytes means both
+    // grow together: measured 600 lines 10 ms, 2400 lines 20 ms, **4800 lines
+    // 60 ms** — 「the colours just stop」.
     //
     // `found` is sorted by where a capture starts and the lines are walked in
     // order, so one index is enough: everything that can open on this line has
@@ -1643,7 +1635,7 @@ fn paint_the_rows(
     // 那一種。`found` 按起點排過，而查詢只交回**與這一窗相交**的捕獲，所以這
     // 一趟只走 `found`，不走檔子的前半。
     //
-    // Warning: **別改回「從第 0 行掃起」**（2026-09-30 量出來的）。那樣走的是
+    // Warning: **別「從第 0 行掃起」**（量出來的）。那樣走的是
     // `O(窗口在第幾行)`：同一份 `lib.rs`，第 9,000 行那一塊 2.7 毫秒，第
     // 15,000 行那一塊 6.4 毫秒——愈往下愈慢，而那正是讀長檔的人待的地方。
     let mut next = 0usize;
@@ -1744,7 +1736,7 @@ pub struct CommentTag {
     pub user: Option<std::ops::Range<usize>>,
 }
 
-/// **The tags in a comment's text** (2026-11-07): `TODO:`, `FIXME(ann):`,
+/// **The tags in a comment's text**: `TODO:`, `FIXME(ann):`,
 /// a bare `NOTE`, as helix marks them through its comment grammar, with its
 /// word lists. A name is a whole word in capitals, matched exactly; a
 /// `(user)` before the colon is helix's `@constant`. helix's issue numbers,
@@ -1815,14 +1807,14 @@ mod tests {
 
     use super::*;
 
-    /// **自己寫的那份查詢，每一種語言各釘一格**（2026-10-06）。
+    /// **自己寫的那份查詢，每一種語言各釘一格**。
     ///
     /// ⚠ 這一格就是「自己寫不抄 helix」的全部代價。查詢裏的節點名是寫死的，
     /// `tree-sitter-*` 升一版把某個節點改了名，查詢**靜悄悄地不匹配**——不報錯、
     /// 不編譯失敗，`mi a` 就是没反應。所以這裏逐種語言餵一段真代碼，數它找到
     /// 幾個。**看見這一格紅，先去看那一版的 `src/node-types.json`。**
-    /// **The test, entry and element queries still match** (2026-10-27,
-    /// helix's `T` `e` `x`): one sample per language, counting what each finds.
+    /// **The test, entry and element queries still match** (helix's `T` `e`
+    /// `x`): one sample per language, counting what each finds.
     /// A node or field renamed upstream makes a query quietly match nothing,
     /// and this is the only thing that would say so.
     #[test]
@@ -1921,7 +1913,7 @@ mod tests {
         }
     }
 
-    /// **行尾一個 `(`，下一行開着一級**（2026-10-08，作者問的那一條）。
+    /// **行尾一個 `(`，下一行開着一級**。
     ///
     /// 查過的三家寫在 [`Language::indents`] 上：vim 的 `autoindent` 不縮、
     /// `smartindent` 只認 `{`、`cindent` 和 helix 都縮。這裏照 helix。
@@ -1945,7 +1937,7 @@ mod tests {
         // 塊外頭：零級。
         assert_eq!(at(source, 0, None), 0);
 
-        // **行尾一個 `(`，而括號還開着：兩級**（塊一級、調用一級）——作者問的就是它。
+        // **行尾一個 `(`，而括號還開着：兩級**（塊一級、調用一級）。
         let source = "fn f() {\n    go(\n        1,\n    );\n}\n";
         let after_paren = source.find("go(").expect("在") + 3;
         assert_eq!(at(source, after_paren, None), 2, "塊一級、括號一級");
@@ -1960,14 +1952,14 @@ mod tests {
         let source = "fn f() {\n    let x = 1;\n}\n";
         assert_eq!(at(source, in_block, Some('}')), 0);
 
-        // Warning: **半截的源碼問不出東西來**（2026-10-08 量的）：`fn f() {` 自己一份檔，
+        // Warning: **半截的源碼問不出東西來**（量過）：`fn f() {` 自己一份檔，
         // tree-sitter 給的是 `(source_file (ERROR …))`——**一個 block 節點都没有**，
-        // 所以這一支答 0。那一刻靠的是上一行的真實縮進（見上面那一段），和從前一樣。
+        // 所以這一支答 0。那一刻靠的是上一行的真實縮進（見上面那一段）。
         assert_eq!(at("fn f() {\n", 9, None), 0, "半截的源碼：答不出來，不是答錯");
     }
 
-    /// **每一門的縮進查詢都編得起來，而且真數得出級**。2026-10-08 加 C／Java／R
-    /// 那一輪的教訓：查詢編不起來是 `None`，**不報錯**——節點名寫錯了只是
+    /// **每一門的縮進查詢都編得起來，而且真數得出級**。查詢編不起來是 `None`，
+    /// **不報錯**——節點名寫錯了只是
     /// 「那一門永遠不縮」，没人會知道。
     #[test]
     fn every_indent_query_opens_a_level_where_a_bracket_opens_one() {
@@ -1997,7 +1989,7 @@ mod tests {
                 language.name(),
             );
         }
-        // Mojo 1.2 (2026-11-04): a `case` line sits a level under `match`,
+        // Mojo 1.2: a `case` line sits a level under `match`,
         // which is itself a level in from the `def`.
         let source = "def f(x: Int):\n    match x:\n        case 1:\n            pass\n";
         let tree = parse(Language::Mojo, source, None).expect("parses");
@@ -2005,7 +1997,7 @@ mod tests {
         assert_eq!(open_levels(Language::Mojo, source, &tree, byte, 2, None), 2);
     }
 
-    /// **`.s` 與 `.S` 不是同一門語言**（2026-10-08 定）。
+    /// **`.s` 與 `.S` 不是同一門語言**。
     ///
     /// 分家分的是 `空格 c` 寫哪一個記號。其餘副檔名照舊不分大小寫。
     #[test]
@@ -2048,11 +2040,10 @@ mod tests {
         })
     }
 
-    /// Warning: **說出編不過的那一句話**（2026-10-09 補）。從前它只印語言的名字，而
-    /// 那是最没用的一半——手寫的查詢（Ada、Pascal）和追加的那幾條
+    /// Warning: **說出編不過的那一句話**，不只印語言的名字——那是最没用的一半：手寫的查詢（Ada、Pascal）和追加的那幾條
     /// （[`Language::extra_highlights`]）都是人寫的，寫壞的時候要知道壞在哪一個節點
-    /// 名上。當天自己踩了一次：`(declArg type: (typeref) …)` 裏那一格收的是 `type`，
-    /// 而測試只說「pascal」。
+    /// 名上（`(declArg type: (typeref) …)` 裏那一格收的是 `type`，只說「pascal」
+    /// 是找不到的）。
     #[test]
     fn every_shipped_grammar_compiles_its_own_query() {
         for language in Language::ALL {
@@ -2074,8 +2065,7 @@ mod tests {
             ("yml", Some(Language::Yaml)),
             ("jsonc", Some(Language::Json)),
             ("htm", Some(Language::Html)),
-            // 2026-09-19 加的兩種（朋友寫 go 和 rust）。`rust` 從前正是這裏
-            // 「這個 build 認不出來」的例子——現在換成一種真的認不出來的。
+            // `rust` 認得出來；「這個 build 認不出來」的例子要用一種真的認不出來的。
             ("rust", Some(Language::Rust)),
             ("rs", Some(Language::Rust)),
             ("ts", Some(Language::TypeScript)),
@@ -2109,7 +2099,7 @@ mod tests {
         assert_eq!((one.start, one.kind), (26, Kind::Token(Token::Number)), "{:?}", got[2]);
     }
 
-    /// **我們自己寫的那兩份查詢真的會匹配**（2026-10-08）。
+    /// **我們自己寫的那兩份查詢真的會匹配**。
     ///
     /// Warning: **「編得起來」與「匹配得上」是兩件事。**`Query::new` 只檢查節點名
     /// 存不存在；寫對了名字卻搭錯了形狀，查詢照樣編得過、一個字也不上色。
@@ -2134,7 +2124,7 @@ mod tests {
         assert_eq!(at(&got, 2, 0), Some(Token::Keyword), "begin：{:?}", got[2]);
         assert_eq!(at(&got, 3, 10), Some(Token::String), "{:?}", got[3]);
 
-        // Mojo（2026-10-11）。`fn`／`struct` 是關鍵詞，名字是函數與類型，`#` 起
+        // Mojo。`fn`／`struct` 是關鍵詞，名字是函數與類型，`#` 起
         // 的那一行是註釋，三引號那一種**不是**——它是字符串。
         let got = highlight(
             Language::Mojo,
@@ -2151,7 +2141,7 @@ mod tests {
         assert_eq!(at(&got, 3, 8), Some(Token::Function), "print：{:?}", got[3]);
         assert_eq!(at(&got, 3, 15), Some(Token::String), "{:?}", got[3]);
 
-        // Mojo 1.2 (2026-11-04): bare `match`, `__enum` and its cases.
+        // Mojo 1.2: bare `match`, `__enum` and its cases.
         let got = highlight(
             Language::Mojo,
             &lines("__enum Shape:\n    case circle(Float64)\ndef f(s: Shape):\n    match s:\n        case circle(r):\n            pass"),
@@ -2162,7 +2152,7 @@ mod tests {
         assert_eq!(at(&got, 4, 8), Some(Token::Keyword), "case：{:?}", got[4]);
     }
 
-    /// The two token kinds the borrowed themes added (2026-10-25) come out of
+    /// The two token kinds the borrowed themes added come out of
     /// real grammars, not only out of tests that build them by hand: a theme
     /// that colours a built-in or a parameter needs the grammar to say which.
     #[test]
@@ -2193,7 +2183,7 @@ mod tests {
         let got = highlight(Language::Python, &lines("def (\n# 註\nreturn"));
         assert_eq!(at(&got, 1, 0), Some(Token::Comment), "{:?}", got);
     }
-    /// **掐頭去尾不許切進一個字裏**（2026-10-06，按 `d` 删到「名」當場崩的那一
+    /// **掐頭去尾不許切進一個字裏**（按 `d` 删到「名」當場崩的那一
     /// 下，`code.rs:451` 的 `&text[..byte]`）。
     ///
     /// 漢字在 UTF-8 裏三個字節，開頭常常一樣：名 `E5 90 8D`、字 `E5 AD 97`。
@@ -2233,7 +2223,7 @@ mod tests {
         painted[row].iter().rfind(|s| s.start <= at && at < s.end).map(|s| s.kind)
     }
 
-    /// **A Typst manuscript is coloured by its grammar** (2026-11-08): code
+    /// **A Typst manuscript is coloured by its grammar**: code
     /// as code, markup as the runs the page already draws, the `#` in the
     /// colour of what follows it, and a raw block in its tag's language.
     #[test]
@@ -2288,7 +2278,7 @@ mod tests {
     }
 
     /// **Where Typst's own highlighter is followed** (typst-syntax 0.15,
-    /// `highlight`; review, 2026-11-09), its interpolated colour drawn as a
+    /// `highlight`; review), its interpolated colour drawn as a
     /// call's: the `#` before a field access, a string, a number or a
     /// keyword value takes what follows; the names of a field access after
     /// `#` are interpolated; `none`, `auto`, `true` and `false` are
@@ -2543,7 +2533,7 @@ struct 三 { 甲: u8 }
     #[test]
     #[ignore = "報數用的，不是斷言；要跑加 --release --nocapture"]
     fn the_three_numbers_behind_423() {
-        // Warning: **出廠那個路徑要從倉根算起，不是從當前目録**（2026-10-01）：
+        // Warning: **出廠那個路徑要從倉根算起，不是從當前目録**：
         // `cargo test` 跑在**這個 crate 的目録**裏，相對路徑於是找不到檔，一跑就
         // `NotFound`。帶 `#[ignore]` 的不進閘，所以没人發現。
         let path = std::env::var("YUMETE_BENCH").unwrap_or_else(|_| {
