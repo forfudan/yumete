@@ -452,3 +452,29 @@ fn deep_nesting_is_drawn_and_never_overflows() {
         assert!(found, "{deepest}");
     }
 }
+
+/// **A long paragraph is laid out in time it is long**, across and down the
+/// page: single line breaks make a whole manuscript one paragraph, and each
+/// character's style, each run's reading and each reading's place are found
+/// without walking the paragraph again. Here 3000 lines with a reading and
+/// a code span on each.
+#[test]
+fn a_long_paragraph_with_readings_is_laid_out_in_one_pass() {
+    let line = "那年冬天<ruby>大雪<rt>dà xuě xuě</rt></ruby>，`code` 下得很大。";
+    let text = format!("{}\n", vec![line; 3000].join("\n"));
+    for vertical in [false, true] {
+        let mut p = Preview::new(options(800), Box::new(NoFormulas));
+        p.set_height(800);
+        if vertical {
+            p.set_vertical(Some(Vertical { latin: yumete_core::export::Latin::Turn, hanging: false }));
+        }
+        let began = std::time::Instant::now();
+        p.set_text(&text);
+        p.set_text(&text.replacen("很大", "很小", 1));
+        let took = began.elapsed();
+        eprintln!("vertical {vertical}: {took:?}");
+        assert!(took < std::time::Duration::from_secs(20), "vertical {vertical}: {took:?}");
+        let shown = p.visible_text(0.0, p.size().1);
+        assert!(shown.contains("那年冬天") && shown.contains("很小"), "{}", &shown[..200.min(shown.len())]);
+    }
+}
