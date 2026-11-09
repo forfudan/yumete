@@ -27982,6 +27982,32 @@ fn vims_count_percent_goes_that_far_down_the_file() {
     assert_eq!(left("v50%d"), "ine 5,6,7,8,9,10", "Visual: charwise, to line 5");
 }
 
+/// **`{count}%` under an operator is exclusive, to the column wanted**
+/// (2026-11-09, review, each case measured against nvim 0.12 on indented
+/// lines): from the indent it takes the lines short of the far one and lands
+/// on the first non-blank; past the indent it is charwise; onto its own
+/// line `c` still enters Insert.
+#[test]
+fn vims_count_percent_under_an_operator_is_exclusive() {
+    let ten: String = (1..=10).map(|n| format!("  line {n} text\n")).collect();
+    let run = |keys: &str| {
+        let mut ed = typed_vim(&ten);
+        press(&mut ed, keys);
+        ed
+    };
+    let first = |ed: &Editor| ed.current_buffer().text().lines().next().unwrap_or("").to_string();
+    let ed = run("0d50%x");
+    assert_eq!(first(&ed), "  ine 5 text", "lines 1 to 4, then the first non-blank");
+    let ed = run("0llllllld50%x");
+    assert_eq!(first(&ed), "  line  text", "charwise: `  line ` and line 5's `5 text`, the cursor on the `5`");
+    assert_eq!(ed.current_buffer().text().lines().count(), 6);
+    let mut ed = run("4j0llc50%X");
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.current_buffer().text().lines().nth(4), Some("  Xline 5 text"), "an empty change still types");
+    let ed = run("G0lllllld50%x");
+    assert_eq!(ed.current_buffer().text().lines().nth(4), Some("  line10 text"), "upward, charwise");
+}
+
 /// **vim's charwise Visual reaches the line break** (2026-11-07, measured
 /// against nvim): `v$` and `l` stand on it, `d` joins the next line, a copy
 /// that ends in a break pastes inside the line, and the file's last break is
