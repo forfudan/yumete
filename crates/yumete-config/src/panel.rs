@@ -671,6 +671,18 @@ impl Panel {
             .unwrap_or(0);
     }
 
+    /// **A search's rows, the cursor on the best of them** (2026-11-09,
+    /// review: `/theme` left it on 「page window in theme colours」, the first
+    /// in list order, and the next Enter flipped that one and wrote it).
+    /// `best` is an index into [`all_rows`]; without one, [`Self::narrow`].
+    pub fn narrow_to(&mut self, found: Option<Vec<usize>>, best: Option<usize>) {
+        self.narrow(found);
+        let all = all_rows();
+        if let Some(at) = best.and_then(|b| all.get(b)).and_then(|b| self.rows().iter().position(|s| s.path() == b.path())) {
+            self.row = at;
+        }
+    }
+
     /// **Go to a setting by name** (`:settings editor.scrolloff`): its TOML
     /// path, its key alone when only one setting has it, or its name as the
     /// panel shows it — `names` gives it in every language the front end

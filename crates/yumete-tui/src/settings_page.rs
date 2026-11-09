@@ -736,7 +736,8 @@ impl Seat {
                 page.typing = None;
                 page.search = answer.unwrap_or_default();
                 let found = found(&page.search);
-                page.narrow(found);
+                let best = best_found(&page.search, found.as_deref());
+                page.narrow_to(found, best);
             }
             (Some(_), None) if editor.mode() != yumete_core::input::Mode::Value => {
                 page.typing = None;
@@ -751,7 +752,8 @@ impl Seat {
                 if text != page.search {
                     page.search = text.to_string();
                     let found = found(&page.search);
-                    page.narrow(found);
+                    let best = best_found(&page.search, found.as_deref());
+                    page.narrow_to(found, best);
                 }
             }
         }
@@ -807,6 +809,25 @@ fn found(text: &str) -> Option<Vec<usize>> {
             .map(|(i, _)| i)
             .collect(),
     )
+}
+
+/// **The row a search lands on** (2026-11-09, review): the setting the text
+/// names — its name as drawn, or its key — then the first of the table it
+/// names, then one whose name begins with it, then the first in list order.
+fn best_found(text: &str, found: Option<&[usize]>) -> Option<usize> {
+    let text = text.trim().to_lowercase();
+    let all = all_rows();
+    found?.iter().copied().min_by_key(|&i| {
+        let s = all[i];
+        let name = said(s.label).trim().to_lowercase();
+        let rank = match () {
+            _ if name == text || s.key == text || s.path() == text => 0,
+            _ if s.table == text => 1,
+            _ if name.starts_with(&text) || s.key.starts_with(&text) => 2,
+            _ => 3,
+        };
+        (rank, i)
+    })
 }
 
 /// Pasted text made one line: a break is one space, with the spaces either
@@ -2086,6 +2107,22 @@ mod tests {
         page_mut(&mut seat).go_to("editor.soft_wrap", |_| Vec::new());
         keys(&mut seat, &mut ed, &[Key::Char('p')]);
         assert_eq!(ed.status(), say!("settings.paste-nowhere"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// **A search lands on the setting it names** (2026-11-09, review:
+    /// `/theme` Enter Enter flipped 「page window in theme colours」, the first
+    /// match in list order, and wrote it).
+    #[test]
+    fn a_search_lands_on_the_setting_it_names() {
+        let dir = scratch("search-best");
+        let (mut ed, mut seat) = seated(&dir, "", "editor.layout");
+        keys(&mut seat, &mut ed, &[Key::Char('/')]);
+        keys(&mut seat, &mut ed, &chars("theme"));
+        keys(&mut seat, &mut ed, &[Key::Enter]);
+        assert_eq!(page(&seat).here().map(|s| s.path()).as_deref(), Some("theme.name"));
+        keys(&mut seat, &mut ed, &[Key::Enter]);
+        assert!(!file(&dir).contains("preview_theme"), "{}", file(&dir));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
