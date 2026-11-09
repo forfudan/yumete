@@ -5,16 +5,15 @@
 //! un-copyable line in an example voids the whole file of whoever copies it,
 //! and every other setting they had silently stops applying.
 //!
-//! Found by this walk on 2026-10-20, in the section on rebinding prefix keys:
+//! The kind of block this walk catches, from the section on rebinding prefix keys:
 //!
 //! ```text
 //! "<0x08>" = "@h"  # backspace moves left (a control character, written as its code point)
 //! ```
 //!
 //! — a **raw** control character inside a basic string, which TOML forbids
-//! (`invalid basic string`); the comment claiming it was 「written as its code
-//! point」 was describing something the line did not do; and four paragraphs
-//! above, the manual had already said that a named key goes in angle brackets.
+//! (`invalid basic string`), while the comment says 「written as its code
+//! point」, which the line does not do; a named key goes in angle brackets.
 //! Measured both ways: the raw form takes the whole file down, and
 //! `"<backspace>" = "@h"` binds and works.
 

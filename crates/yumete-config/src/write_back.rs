@@ -1,4 +1,4 @@
-//! **把一項設定寫回 toml，而不動旁邊的任何一個字**（2026-09-23）。
+//! **把一項設定寫回 toml，而不動旁邊的任何一個字**。
 //!
 //! 那扇設置面板要存盤，而使用者的 `config.toml` 是**他自己寫的**：帶着他的註釋、
 //! 他排的次序、他留的空行，而且多半在 git 裏。所以判準只有一條：
@@ -17,10 +17,10 @@
 //!
 //! # 不認得的鍵
 //!
-//! **原樣留着**（2026-11-08）。從前存盤會把面板不認得的鍵註釋掉、挪到表頭底下，
-//! 理由是 `deny_unknown_fields` 讓一個打錯的鍵名作廢整份配置；可那是改了使用者没
-//! 叫改的行——他只改了 `scrolloff`，存完 `typo_key` 被註釋掉、次序也變了。現在
-//! 一份讀不進去的檔面板頂上就說出來，`:w` 不寫它，要改請 `e` 打開那個檔
+//! **原樣留着。** 不把面板不認得的鍵註釋掉、挪到表頭底下：`deny_unknown_fields`
+//! 固然讓一個打錯的鍵名作廢整份配置，可那樣是改了使用者没叫改的行——他只改了
+//! `scrolloff`，存完 `typo_key` 被註釋掉、次序也變了。一份讀不進去的檔，面板頂上
+//! 就說出來，`:w` 不寫它，要改請 `e` 打開那個檔
 //! （[`crate::panel::Panel::save`]）。
 
 use toml_edit::{DocumentMut, InlineTable, Item, Table, TableLike, Value};
@@ -40,7 +40,7 @@ pub enum Change {
     /// 的那條路走得通。這是 `toml_edit` 的第二個硬理由。
     Drop,
     /// …the value **as it was written**, a TOML value such as `"dense"`,
-    /// `8` or `'Songti SC'` (2026-11-08): what `u` puts back, in the very
+    /// `8` or `'Songti SC'`: what `u` puts back, in the very
     /// spelling the file had.
     Written(String),
 }
@@ -104,8 +104,8 @@ pub fn rewrite(text: &str, changes: &[(String, Change)]) -> Result<String, Strin
     let mut doc: DocumentMut = text.parse().map_err(|e| format!("{e}"))?;
 
     for (path, change) in changes {
-        // `表.鍵`, or `表.子表.鍵` for a table inside a table (2026-11-02:
-        // `keys.flavor_items.esc_collapses`).
+        // `表.鍵`, or `表.子表.鍵` for a table inside a table
+        // (`keys.flavor_items.esc_collapses`).
         let Some((tables, key)) = path.rsplit_once('.') else {
             return Err(format!("{path} 不是「表.鍵」"));
         };
@@ -298,9 +298,9 @@ fn positions(t: &Table, at: &mut Vec<String>, out: &mut Vec<(usize, Vec<String>)
     }
 }
 
-/// **A top-level table with nothing left in it goes, header and all**
-/// (2026-11-08, reported: dropping the only key of a project file left
-/// `[editor]` alone in it). The comment lines above its header are the
+/// **A top-level table with nothing left in it goes, header and all**:
+/// dropping the only key of a project file does not leave `[editor]` alone
+/// in it. The comment lines above its header are the
 /// writer's and stay: they move to the table after it, or to the end of the
 /// file when it was the last.
 fn drop_if_empty(doc: &mut DocumentMut, name: &str) {
@@ -378,9 +378,8 @@ soft_wrap = true    # 行尾這一句也是我寫的
         assert!(after.contains("line_numbers"), "{after}");
     }
 
-    /// **A key yumete does not know stays where it is, as it is**
-    /// (2026-11-08, reported: changing `scrolloff` commented `typo_key` out
-    /// and moved it). Changing a neighbour is a byte-for-byte edit of that
+    /// **A key yumete does not know stays where it is, as it is**: changing
+    /// `scrolloff` does not comment `typo_key` out or move it. Changing a neighbour is a byte-for-byte edit of that
     /// one line; everything else, order and comments included, is the file's.
     #[test]
     fn a_key_the_panel_does_not_know_is_left_as_it_is() {
@@ -403,8 +402,8 @@ name = \"paper\"
         assert_eq!(after, before.replace("scrolloff = 8", "scrolloff = 9"), "only that value moved");
     }
 
-    /// **The only key of a table dropped, the header goes too** (2026-11-08,
-    /// reported: `[editor]` was left alone in `.yumete/config.toml`), and the
+    /// **The only key of a table dropped, the header goes too** (`[editor]` is
+    /// not left alone in `.yumete/config.toml`), and the
     /// comment above it stays, on the table after it or at the end.
     #[test]
     fn dropping_the_last_key_of_a_table_drops_its_header() {

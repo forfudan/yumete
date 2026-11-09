@@ -1,4 +1,4 @@
-//! **What a key can be bound to, by name** (#429, 2026-09-18).
+//! **What a key can be bound to, by name** (#429).
 //!
 //! Layer one (#428) let `[keys.normal]` say 「when I press this, press that
 //! instead」 — an alias from one key sequence to another. It is what the vim
@@ -23,14 +23,14 @@
 
 /// How an action is carried out.
 ///
-/// Every key is a command now (2026-10-31, step 3 of the keymap plan), so
-/// no action presses keys any more: the last of them, the keys inside the
-/// groups (`gh`, `空格 f`), became commands of their own.
+/// Every key is a command (step 3 of the keymap plan), so no action presses
+/// keys: the keys inside the groups (`gh`, `空格 f`) are commands of their
+/// own too.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum How {
     /// Run this command line, without the `:`.
     Command(&'static str),
-    /// **A Normal command, by this action's own name** (2026-10-31): the
+    /// **A Normal command, by this action's own name**: the
     /// editor's command list (`yumete-core`'s `editor/normal.rs`) holds the
     /// code, and the key it is on is the keymap's to say.
     Normal,
@@ -46,7 +46,7 @@ pub struct Action {
     pub how: How,
 }
 
-/// **Alt 的內部拼法**：`A-d` 存成這個字 ＋ `d`（2026-10-08）。
+/// **Alt 的內部拼法**：`A-d` 存成這個字 ＋ `d`。
 ///
 /// 一串按鍵在這個倉裏是一個 `String`——控制鍵用的是真的控制字節（`C-o` 就是
 /// `\u{f}`），而 Alt 没有這樣一個字節。所以借一個私用區的碼位當前綴：存着的時候
@@ -56,10 +56,10 @@ pub struct Action {
 /// 翻，中間那一段纔是這個字。
 pub const ALT: char = '\u{e000}';
 
-/// **`C-j` and `C-i` have code points of their own** (found in review,
-/// 2026-11-02): their control bytes are `\n` and `\t`, which are Enter and
-/// Tab here, so `[keys.picker] "C-j" = "next_entry"` took Enter too. A
-/// terminal sends `C-j` apart from Enter; the table keeps them apart.
+/// **`C-j` and `C-i` have code points of their own**: their control bytes
+/// are `\n` and `\t`, which are Enter and Tab here, so with those bytes
+/// `[keys.picker] "C-j" = "next_entry"` would take Enter too. A terminal
+/// sends `C-j` apart from Enter; the table keeps them apart.
 pub const CTRL_J: char = '\u{e00c}';
 pub const CTRL_I: char = '\u{e00d}';
 
@@ -76,7 +76,7 @@ pub fn ctrl(letter: char) -> char {
 ///
 /// Warning: **左邊那一串是「一串按鍵」**（`"dj" = …` 是 d 跟 j 兩下），所以鍵名不能
 /// 光着寫——`"tab"` 的意思是 t、a、b 三下。尖括號是 vim 的辦法，和一串按鍵永遠
-/// 不會撞（2026-10-12 定）。
+/// 不會撞。
 ///
 /// 有自己字節的就用那個字節（Tab 是 `\t`、Enter 是 `\n`、空格就是空格），没有的
 /// 借私用區一個碼位，同 [`ALT`]。於是一個鍵在表裏仍然是一兩個 `char`，查表那一層
@@ -119,16 +119,16 @@ fn key_name(c: char) -> Option<&'static str> {
 
 /// **把人寫的那一串翻成內部拼法**：`A-d` → [`ALT`] ＋ `d`，`C-o` → `\u{f}`。
 ///
-/// `[keys.normal]` 的左邊和預設表都走這一支。從前它不存在，於是配置裏寫
-/// `"A-d" = …` 綁的是 **`A`、`-`、`d` 三個鍵連按**——編譯照過、配置照收，而那個鍵
-/// 永遠按不出來（2026-10-08 查出來的）。
+/// `[keys.normal]` 的左邊和預設表都走這一支。Warning: **繞過它就錯**——配置裏寫
+/// `"A-d" = …` 會綁成 **`A`、`-`、`d` 三個鍵連按**：編譯照過、配置照收，而那個鍵
+/// 永遠按不出來。
 ///
 /// Warning: **`C-` 只翻字母。** `C-[`、`C-]` 那幾個在舊終端上和數字鍵撞車（見
 /// `Config::language_key` 的註釋），這裏不替它們猜。
 pub fn written(spelled: &str) -> String {
     let mut out = String::new();
     let mut rest = spelled;
-    // **`<名字>` 先認**（2026-10-12）：認不得的原樣留着，於是一個真的 `<` 照舊是
+    // **`<名字>` 先認**：認不得的原樣留着，於是一個真的 `<` 照舊是
     // 它自己。
     while let Some(at) = rest.find('<') {
         let Some(shut) = rest[at..].find('>').map(|n| at + n) else { break };
@@ -189,7 +189,7 @@ pub fn spell(keys: &str) -> String {
             CTRL_I => out.push_str("C-i"),
             '\u{1b}' => out.push_str("Esc"),
             // 有名字的那幾個鍵寫回名字——`\t` 畫出來是一段空白，讀的人看不出
-            // 那是 Tab（2026-10-12）。
+            // 那是 Tab。
             c if key_name(c).is_some() => {
                 out.push('<');
                 out.push_str(key_name(c).unwrap_or_default());
@@ -200,7 +200,7 @@ pub fn spell(keys: &str) -> String {
                 if let Some(next) = chars.next() {
                     out.push(next);
                 }
-                // **A chord is a word of its own** (2026-11-04): `C-w w`,
+                // **A chord is a word of its own**: `C-w w`,
                 // not `C-ww`, which reads as one chord with two letters.
                 if chars.clone().next().is_some() {
                     out.push(' ');
@@ -241,17 +241,15 @@ pub enum Bound<'a> {
 
 /// Read a right-hand side, or `None` when it names nothing (#429).
 ///
-/// Warning: **keys used to be the *fallback*, and that is what made a typo
-/// dangerous.** `x = "delete_slection"` was pressed — d, e, l, e, t, e… straight
-/// into the manuscript — because an unknown name fell through to 「then it must
-/// be keys」. The guard against it asked whether the name held an underscore,
-/// and 2026-10-19 an audit found the hole that leaves: `"zz" = "save"` is a
-/// misspelling of `save_file` with no underscore in it, so it went in and typed
-/// `s`, `a`, `v`, `e` — the `s` opening the search panel and `ave` landing in
-/// it. Fourteen of the eighty names have no underscore either, so the shape of
-/// a word cannot answer this.
+/// Warning: **keys are never the *fallback*, or a typo is dangerous.** If an
+/// unknown name fell through to 「then it must be keys」, `x = "delete_slection"`
+/// would be pressed — d, e, l, e, t, e… straight into the manuscript. Guessing
+/// by shape does not help: `"zz" = "save"` is a misspelling of `save_file` with
+/// no underscore in it, and it would type `s`, `a`, `v`, `e` — the `s` opening
+/// the search panel and `ave` landing in it. Fourteen of the eighty names have
+/// no underscore either, so the shape of a word cannot answer this.
 ///
-/// So the kind is **said, not guessed** (2026-10-19 作者定). Measured on the two
+/// So the kind is **said, not guessed**. Measured on the two
 /// editors this one follows: helix takes a bare string as a command name only —
 /// `X = "xxd"` is refused with 「No command named 'xxd'」 — and writes keys with
 /// an `@`, which is the spelling borrowed here; vim has no name kind at all, so
@@ -273,10 +271,9 @@ const fn normal(help: &'static str, cmd: NormalCmd) -> Action {
     Action { name: cmd.name(), help, how: How::Normal }
 }
 
-/// **Every Normal command, named once** (2026-11-01, the review's
-/// decoupling): the config reads the names, the editor's tables hold the
-/// variants, so a misspelt name in a keymap or a group row no longer
-/// compiles. The order is the manual's, as [`ALL`] lists them.
+/// **Every Normal command, named once**: the config reads the names, the
+/// editor's tables hold the variants, so a misspelt name in a keymap or a
+/// group row does not compile. The order is the manual's, as [`ALL`] lists them.
 macro_rules! normal_commands {
     ($($variant:ident = $name:literal,)*) => {
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -860,9 +857,9 @@ pub const ALL: &[Action] = &[
     // ---- Moving ---------------------------------------------------------
     normal("action.move-char-left", NormalCmd::MoveCharLeft),
     normal("action.move-char-right", NormalCmd::MoveCharRight),
-    // **helix's names for what `k`/`j` do** (2026-10-31): these were called
+    // **helix's names for what `k`/`j` do**: one line on screen. They are not
     // `move_line_up`/`move_line_down`, which in helix are `gk`/`gj`, a whole
-    // line of the file. The behaviour is the one they always had, on screen.
+    // line of the file.
     normal("action.move-visual-line-up", NormalCmd::MoveVisualLineUp),
     normal("action.move-visual-line-down", NormalCmd::MoveVisualLineDown),
     normal("action.move-next-word-start", NormalCmd::MoveNextWordStart),
@@ -876,41 +873,32 @@ pub const ALL: &[Action] = &[
     normal("action.goto-first-nonwhitespace", NormalCmd::GotoFirstNonwhitespace),
     normal("action.goto-file-start", NormalCmd::GotoFileStart),
     normal("action.goto-file-end", NormalCmd::GotoFileEnd),
-    // **Not `G`** (2026-10-31): under the helix preset a bare `G` does
-    // nothing, as in helix, and actions play helix's keys — so this one did
-    // nothing at all. `ge` then `gh` is helix's `goto_last_line`: the last
-    // line, at its start.
+    // **Not `G`**: under the helix preset a bare `G` does nothing, as in
+    // helix. `ge` then `gh` is helix's `goto_last_line`: the last line, at
+    // its start.
     normal("action.goto-last-line", NormalCmd::GotoLastLine),
     normal("action.goto-prev-sentence", NormalCmd::GotoPrevSentence),
     normal("action.goto-next-sentence", NormalCmd::GotoNextSentence),
-    // helix's `[p`/`]p` (2026-10-31): these pressed `gk`/`gj`, one file line.
+    // helix's `[p`/`]p`: a paragraph, not `gk`/`gj`'s one file line.
     normal("action.goto-prev-paragraph", NormalCmd::GotoPrevParagraph),
     normal("action.goto-next-paragraph", NormalCmd::GotoNextParagraph),
     normal("action.half-page-down", NormalCmd::PageCursorHalfDown),
     normal("action.half-page-up", NormalCmd::PageCursorHalfUp),
     normal("action.jump-backward", NormalCmd::JumpBackward),
     // ---- Selecting ------------------------------------------------------
-    // helix's names (2026-11-01): these were `extend_mode`, `select_line`
-    // and `join_lines`, and helix's own names could not be bound.
+    // helix's names, so helix's own names can be bound.
     normal("action.extend-mode", NormalCmd::SelectMode),
     normal("action.select-line", NormalCmd::ExtendLineBelow),
     normal("action.extend-to-line-bounds", NormalCmd::ExtendToLineBounds),
     normal("action.select-all", NormalCmd::SelectAll),
-    // Warning: **`;`, not Esc** (2026-10-06). Esc used to collapse the selection as
-    // well as leave 延伸 mode; it leaves the selection alone now, the way
-    // helix's does, and `;` is the key whose whole job is collapsing.
+    // Warning: **`;`, not Esc.** Esc leaves 延伸 mode and leaves the selection
+    // alone, the way helix's does; `;` is the key whose whole job is collapsing.
     normal("action.collapse-selection", NormalCmd::CollapseSelection),
     // ---- Changing -------------------------------------------------------
-    // Warning: **這四個 2026-10-08 改了名，也改了指向的鍵。**
-    //
-    // 從前是 `delete_selection`→`d`、`cut_selection`→`D`，而文案說的是「刪除選區
-    // （不動寄存器）」「剪切選區（進寄存器）」——**和它們真做的事相反**：`d` 自
-    // 2026-09-28 起就進寄存器了，而 `D` 在 helix 鍵位下根本没綁。於是這四行寫進
-    // 配置一行都不生效，`::` 那張單子照着四句錯文案列了十天。
-    //
-    // 名字改成 helix 的（這個模組開頭那條規矩：helix 有同一個動作就用它的名字）。
-    // 從前我們同名而意思相反——一個 helix 使用者寫 `d = "delete_selection"` 會得
-    // 到和他家裏相反的行為，這是最壞的一種。
+    // Warning: **這四個的名字與意思都是 helix 的**（這個模組開頭那條規矩：helix
+    // 有同一個動作就用它的名字）：`delete_selection` 進寄存器，`_noyank` 那兩個
+    // 不進。同名而意思相反是最壞的一種——一個 helix 使用者
+    // 寫 `d = "delete_selection"` 會得到和他家裏相反的行為。
     normal("action.delete-selection", NormalCmd::DeleteSelection),
     normal("action.delete-selection-noyank", NormalCmd::DeleteSelectionNoyank),
     normal("action.change-selection", NormalCmd::ChangeSelection),
@@ -945,7 +933,7 @@ pub const ALL: &[Action] = &[
     normal("action.follow-link", NormalCmd::FollowLink),
     // `gx`, vim's: the link under the cursor, handed to the system.
     normal("action.open-link", NormalCmd::OpenLink),
-    // helix's `gD` `gy` `gi` `gm` (2026-11-02).
+    // helix's `gD` `gy` `gi` `gm`.
     normal("hint.goto.declaration", NormalCmd::GotoDeclaration),
     normal("hint.goto.type-definition", NormalCmd::GotoTypeDefinition),
     normal("hint.goto.implementation", NormalCmd::GotoImplementation),
@@ -958,8 +946,7 @@ pub const ALL: &[Action] = &[
     normal("action.buffer-picker", NormalCmd::BufferPicker),
     normal("action.next-buffer", NormalCmd::GotoNextBuffer),
     normal("action.prev-buffer", NormalCmd::GotoPreviousBuffer),
-    // `空格 s` became helix's symbol picker on 2026-10-31; the outline
-    // sidebar is a command now.
+    // `空格 s` is helix's symbol picker; the outline sidebar is a command.
     command("outline", "action.outline", "sidebar-outline"),
     normal("action.dictionary", NormalCmd::Dictionary),
     normal("action.next-region", NormalCmd::RotateView),
@@ -993,7 +980,7 @@ pub const ALL: &[Action] = &[
     command("save_file", "action.save-file", "write"),
     command("save_and_quit", "action.save-and-quit", "wq"),
     command("count_progress", "action.count-progress", "count-progress"),
-    // ---- Every other Normal key (2026-10-31): each a command by name ----
+    // ---- Every other Normal key: each a command by name ----------------
     normal("action.move-line-up", NormalCmd::MoveLineUp),
     normal("action.move-line-down", NormalCmd::MoveLineDown),
     normal("action.goto-next-line-nonwhitespace", NormalCmd::GotoNextLineNonwhitespace),
@@ -1056,7 +1043,7 @@ pub const ALL: &[Action] = &[
     normal("action.delete-to-line-end-noyank", NormalCmd::DeleteToLineEndNoyank),
     // vim's `x`: the character under the cursor, never the line break.
     normal("action.vim-delete-char-forward", NormalCmd::VimDeleteCharForward),
-    // ---- Flavour commands (2026-11-02): what the flavour's keys run ------
+    // ---- Flavour commands: what the flavour's keys run -----------------
     normal("action.extend-line-above", NormalCmd::ExtendLineAbove),
     normal("action.move-selected-lines-down", NormalCmd::MoveSelectedLinesDown),
     normal("action.move-selected-lines-up", NormalCmd::MoveSelectedLinesUp),
@@ -1101,7 +1088,7 @@ pub const ALL: &[Action] = &[
     normal("action.goto-line", NormalCmd::GotoLine),
     normal("action.vim-repeat-last-change", NormalCmd::VimRepeatLastChange),
     normal("action.repeat-last-motion", NormalCmd::RepeatLastMotion),
-    // ---- The groups' keys (2026-10-31): `g`, `Space`, `[` `]`, `z`, `m`,
+    // ---- The groups' keys: `g`, `Space`, `[` `]`, `z`, `m`,
     // `C-w`, the backtick group, `Space t` and the rest, each by name ----
     normal("action.jump-prev-word-end", NormalCmd::JumpPrevWordEnd),
     normal("action.jump-prev-long-word-end", NormalCmd::JumpPrevLongWordEnd),
@@ -1332,7 +1319,7 @@ pub const ALL: &[Action] = &[
     normal("hint.table.fold-wide-cells", NormalCmd::TableCellWidth),
     normal("hint.table.search-columns", NormalCmd::TableSearchColumns),
     normal("hint.table.go-to-cell", NormalCmd::TableGotoCell),
-    // ---- A table's grid (2026-11-01): the four keys whose table meaning is
+    // ---- A table's grid: the four keys whose table meaning is
     // its own; every other key there is its Normal command, done to a cell.
     normal("action.table-enter-cell", NormalCmd::TableEnterCell),
     normal("action.table-leave-cell", NormalCmd::TableLeaveCell),
@@ -1367,7 +1354,7 @@ pub const ALL: &[Action] = &[
     normal("action.convert-table-to-tsv", NormalCmd::ConvertTableToTsv),
     normal("action.paste-table-as-tsv", NormalCmd::PasteTableAsTsv),
     normal("action.no-op", NormalCmd::NoOp),
-    // ---- Select mode (2026-10-31): each a motion, extending the selection ----
+    // ---- Select mode: each a motion, extending the selection ----
     normal("action.extend-char-left", NormalCmd::ExtendCharLeft),
     normal("action.extend-char-right", NormalCmd::ExtendCharRight),
     normal("action.extend-visual-line-up", NormalCmd::ExtendVisualLineUp),
@@ -1392,7 +1379,7 @@ pub const ALL: &[Action] = &[
     normal("action.extend-to-file-end", NormalCmd::ExtendToFileEnd),
     normal("action.extend-to-last-line", NormalCmd::ExtendToLastLine),
     normal("action.extend-to-word", NormalCmd::ExtendToWord),
-    // ---- Insert mode (2026-10-31): each key a command by name ----
+    // ---- Insert mode: each key a command by name ----
     normal("action.insert-newline", NormalCmd::InsertNewline),
     normal("action.delete-char-forward", NormalCmd::DeleteCharForward),
     normal("action.delete-word-forward", NormalCmd::DeleteWordForward),
@@ -1405,7 +1392,7 @@ pub const ALL: &[Action] = &[
     normal("action.commit-undo-checkpoint", NormalCmd::CommitUndoCheckpoint),
     normal("action.insert-tab", NormalCmd::InsertTab),
     normal("action.insert-other-tab", NormalCmd::InsertOtherTab),
-    // ---- vim's own versions (2026-11-01): the vim keymap's keys run these ----
+    // ---- vim's own versions: the vim keymap's keys run these ----
     normal("action.vim-normal-mode", NormalCmd::VimNormalMode),
     normal("action.vim-goto-line-end", NormalCmd::VimGotoLineEnd),
     normal("action.vim-insert-mode", NormalCmd::VimInsertMode),
@@ -1441,8 +1428,8 @@ pub const ALL: &[Action] = &[
     normal("action.vim-goto-first-nonwhitespace", NormalCmd::VimGotoFirstNonwhitespace),
 ];
 
-/// **The places that take keys and are not modes of the text** (2026-11-01,
-/// step 9 of the keymap plan): a prompt (`:`, `/`, `::`, a reading, and a
+/// **The places that take keys and are not modes of the text** (step 9 of
+/// the keymap plan): a prompt (`:`, `/`, `::`, a reading, and a
 /// picker's query), a picker's list (and the `::` palette's), a sidebar, and
 /// a box of a panel's form. helix hard-codes these keys; here each place has
 /// a table in the config (`[keys.prompt]`, `[keys.picker]`, `[keys.sidebar]`,
@@ -1523,10 +1510,9 @@ impl Place {
     }
 }
 
-/// **Every command of the four places, named once** (2026-11-01, the
-/// review's decoupling): the config and the docs read the names, the
-/// editor matches on the variants, so a misspelt name in a handler no
-/// longer compiles into an arm that never runs.
+/// **Every command of the four places, named once**: the config and the
+/// docs read the names, the editor matches on the variants, so a misspelt
+/// name in a handler does not compile into an arm that never runs.
 macro_rules! place_commands {
     ($($variant:ident = $name:literal,)*) => {
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -1670,9 +1656,9 @@ pub const SIDEBAR: &[Action] = &[
 mod no_two_alike {
     use super::*;
 
-    /// **No two actions share a name, or a command line** (2026-10-30, when
-    /// `next_region` pressed `outline`'s keys and binding it opened the
-    /// outline: a second name for one thing is a slip, never a feature).
+    /// **No two actions share a name, or a command line**: a second name for
+    /// one thing is a slip, never a feature (`next_region` pressing
+    /// `outline`'s keys would make binding it open the outline).
     #[test]
     fn every_action_is_its_own() {
         let mut names = std::collections::HashSet::new();
@@ -1686,7 +1672,7 @@ mod no_two_alike {
     }
 
     /// The same in each of the three places, and a place reads only its
-    /// own names (2026-11-01).
+    /// own names.
     #[test]
     fn every_place_action_is_its_own() {
         for place in Place::ALL {
@@ -1717,7 +1703,7 @@ mod control_keys_of_their_own {
     use super::*;
 
     /// `C-j` is not Enter and `C-i` is not Tab in a binding table, and each
-    /// spells back as written (found in review, 2026-11-02).
+    /// spells back as written.
     #[test]
     fn c_j_and_c_i_are_their_own_keys() {
         assert_ne!(written("C-j"), written("<enter>"));

@@ -1,9 +1,10 @@
 //! **`ye --grep` from a subdirectory prints paths you can open.**
 //!
-//! 2026-10-30: run in `proj/sub` with no place named, it searched `sub` but
-//! joined each hit to the project root, so `proj/sub/a.txt` was printed as
-//! `a.txt` one level up, a file that does not exist. With `.` named it was
-//! right, so the two spellings of "here" disagreed.
+//! Run in `proj/sub` with no place named, it searches `sub` and prints each
+//! hit relative to `sub`, as it does with `.` named, so the two spellings of
+//! "here" agree. Warning: joined to the project root instead,
+//! `proj/sub/a.txt` would print as `a.txt` one level up, a file that does
+//! not exist.
 
 use std::process::Command;
 

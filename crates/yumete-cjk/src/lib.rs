@@ -44,7 +44,7 @@ pub mod vertical;
 pub mod width;
 pub mod word;
 
-/// **Whether the editor speaks English** (2026-10-30), set once by the front
+/// **Whether the editor speaks English**, set once by the front
 /// end from the language it settled on. Kept here, below every crate, so a
 /// config complaint can be worded in the reader's language without the
 /// config crate depending on the messages table.

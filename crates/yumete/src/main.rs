@@ -23,8 +23,8 @@ use yumete_ime::{CommitStrategy, ImeSession, Scheme};
 const VERSION: &str = env!("YUMETE_VERSION");
 
 /// Warning: **`--files` 只認得走檔那幾個。** 別的是給式子用的，而檔名那一邊用的是
-/// 挑選器的模糊匹配，根本沒有式子。從前它們**悄悄不生效**，而 `--help` 說「下面
-/// 每一個都還管用」——說了假話比少一個功能壞。
+/// 挑選器的模糊匹配，根本沒有式子。給了就要說，不許**悄悄不生效**：`--help` 說
+/// 「下面每一個都還管用」，說了假話比少一個功能壞。
 ///
 /// 讀兩處：`--files` 還欠着詞的時候（那一句話要說對原因），與參數讀完之後。
 const FOR_GREP_ONLY: [&str; 8] = [
@@ -77,15 +77,14 @@ fn write_the_first_config() {
     let _ = std::fs::write(&path, import::FIRST_CONFIG);
 }
 
-/// **Start again in `there`** — the other half of `空格 o p` (2026-10-18).
+/// **Start again in `there`** — the other half of `空格 o p`.
 ///
 /// Only ever returns on failure: on success this process either *is* the new
 /// one or has already waited for it and exited.
 ///
-/// Warning: **`exec` is Unix-only**, and writing it without a `cfg` is how this
-/// shipped a tree that could not compile on Windows at all (2026-10-18 — CI
-/// caught it, four local gates did not, because none of them is a Windows
-/// build). Windows has no call that replaces the running image, so there the
+/// Warning: **`exec` is Unix-only**, so it stays behind a `cfg`: none of the
+/// local gates is a Windows build, and only CI sees a tree that does not
+/// compile there. Windows has no call that replaces the running image, so there the
 /// editor starts as a child and this process waits for it and leaves with its
 /// status: one extra process in the table, and the same thing seen from the
 /// shell that typed it.
@@ -113,17 +112,17 @@ mod import;
 mod md_render;
 
 fn main() -> ExitCode {
-    // **The font 漢字 in a TeX formula are set in** (2026-11-08): RaTeX reads
+    // **The font 漢字 in a TeX formula are set in**: RaTeX reads
     // it from the environment, which may only be changed while this is the
     // one thread — so first, before anything starts another.
     yumete_tui::tex::choose_cjk_font();
-    // **The rendered Markdown preview, without the editor** (2026-11-08): a
+    // **The rendered Markdown preview, without the editor**: a
     // developer's door, not in `--help`.
     let args: Vec<String> = std::env::args().collect();
     if args.get(1).map(String::as_str) == Some("--md-render") {
         return md_render::run(&args[2..]);
     }
-    // **The tables this binary carries** (2026-11-04): handed to the IME
+    // **The tables this binary carries**: handed to the IME
     // before anything asks it for a scheme, so the scan and every load see
     // them behind whatever is installed.
     yumete_ime::carry(yumete_ime::Carried {
@@ -138,7 +137,7 @@ fn main() -> ExitCode {
     let mut force_preview = false;
     let mut force_layout: Option<Layout> = None;
     let mut force_table = false;
-    // `--timing` answers「開個檔案怎麼要三秒」 without guessing: it runs the
+    // `--timing` answers why a launch is slow without guessing: it runs the
     // whole of a launch and prints what each part of it cost.
     let mut timing = false;
     // Which markup the files named on this line are written in. The config's
@@ -147,11 +146,11 @@ fn main() -> ExitCode {
     // called `.txt` and you know what is in it.
     let mut force_syntax: Option<String> = None;
     // `--encoding=big5`: what the files named are written in, for files that
-    // cannot be told (2026-11-04), as `:open ++enc=big5` says it inside.
+    // cannot be told, as `:open ++enc=big5` says it inside.
     let mut force_encoding: Option<String> = None;
     // `--export FMT`: write the files named out as html, typst, epub, csv, tsv
     // or pdf and exit — the editor's own `:export`, with `typst compile` for the
-    // last (2026-10-30). `--out` is where; one file only, then.
+    // last. `--out` is where; one file only, then.
     let mut export: Option<String> = None;
     let mut out: Option<String> = None;
     // `--shot` prints one frame — the page as it would be drawn — and exits.
@@ -174,7 +173,7 @@ fn main() -> ExitCode {
     let mut fresh = false;
     // `--private`: this run neither reads nor writes where you have been —
     // the line each file was left on, the recent lists, the session
-    // (2026-10-27, vim's `-i NONE`). `[editor] remember = false` is the
+    // (vim's `-i NONE`). `[editor] remember = false` is the
     // standing answer.
     let mut private = false;
     // `-c`: reopen last time's files even though `session` is off (the default).
@@ -182,45 +181,44 @@ fn main() -> ExitCode {
     let mut tutor = false;
     // Keys to press before the picture is taken. A panel that only opens after
     // three keystrokes — the `:` menu, `::`, which-key, the候選 list — could
-    // not be looked at without a terminal and a pair of hands, and 「動了前端
-    // 就出一張圖看看」 is the rule that catches what no assertion does.
+    // not be looked at without a terminal and a pair of hands, and a picture
+    // of every front-end change catches what no assertion does.
     let mut keys: Option<String> = None;
     // **The language the editor says things in, for one run** (#494). The
     // config's `[editor] language` is the standing answer; this is the flag,
     // because 「打開編輯器，然後去找哪個設定能改語言」 is exactly the loop a
     // reader who cannot read the current language is stuck in.
     let mut force_language: Option<yumete_core::messages::Language> = None;
-    // **管道那一邊**（2026-10-03 定：「先做管道吧」）。`ye --grep 霜` 把
+    // **管道那一邊**。`ye --grep 霜` 把
     // `檔:行:列:文字` 印到 stdout 就退出——找到回 0，一處都沒有回 1，所以
     // `if ye --grep …` 在腳本裏是一句話。
     let mut grep: Option<String> = None;
     // `ye --files jia` 列出名字配得上的檔——走檔是 fd 那一半，配名字是 fzf 那一半，
     // 而它也認拼音。
     let mut listing: Option<String> = None;
-    // `--import helix` or `--import lazyvim` (2026-11-06), `vim` and `nvim`
-    // (2026-11-08): another editor's config written once into ours, then
-    // exit. See `import.rs`.
+    // `--import helix`, `lazyvim`, `vim` or `nvim`: another editor's config
+    // written once into ours, then exit. See `import.rs`.
     let mut import: Option<String> = None;
     let mut g = Grep::default();
-    // **還欠着一個值的那個旗標**（2026-10-03 一輪審查報來的）。
+    // **還欠着一個值的那個旗標**。
     //
-    // Warning: **值收不到要當場死**，而且三處從前都不會。`want_syntax`/`want_grep` 那
-    // 幾個閂只在下一輪循環裏看一眼，走完就沒人問了：`ye --grep` 於是悄悄落空，
-    // 退出碼 0，而且**開起了編輯器**。這一格記着「誰在等」，循環走完還在等就是
+    // Warning: **值收不到要當場死**。只在下一輪循環裏看一眼的閂，走完就沒人問了：
+    // `ye --grep` 會悄悄落空，退出碼 0，而且**開起了編輯器**。這一格記着「誰在
+    // 等」，循環走完還在等就是
     // 使用者少打了一個詞。
     let mut owed: Option<&'static str> = None;
     // **這幾個開關只有配上 `--grep`/`--files` 纔有意義。** 單獨給是打錯了，不是
-    // 「沒關係」——`ye --hidden` 從前悄悄開了編輯器。
+    // 「沒關係」——`ye --hidden` 不許悄悄開起編輯器。
     let mut modifiers: Vec<&'static str> = Vec::new();
-    // **`-u` 是一把梯子，不是一個勾**（2026-10-03 定，照 rg 原樣）。數的是它一共出
+    // **`-u` 是一把梯子，不是一個勾**（照 rg 原樣）。數的是它一共出
     // 現幾次，所以 `-u -u` 和 `-uu` 是同一句話，同 rg。一級＝連被忽略的一起搜，
     // 二級＝再加上點文件。rg 還有三級（連二進制一起搜），我們沒有那一檔。
     let mut unrestricted = 0usize;
 
     for arg in std::env::args().skip(1) {
         if let Some(which) = owed.take() {
-            // Warning: **值不許長得像旗標。** `ye --grep --hidden alpha` 從前把
-            // `--hidden` 當成了要找的詞，再把 `alpha` 當成目錄——然後說
+            // Warning: **值不許長得像旗標。** 否則 `ye --grep --hidden alpha` 會把
+            // `--hidden` 當成要找的詞，再把 `alpha` 當成目錄——然後說
             // 「alpha 不是一個目錄」。少打一個詞的人看不懂那句話。
             if arg.starts_with('-') && arg != "-" {
                 // Warning: **先說真正的毛病。** `ye --files --heading` 的問題不是少打
@@ -257,7 +255,7 @@ fn main() -> ExitCode {
                 println!("yumete {VERSION}");
                 return ExitCode::SUCCESS;
             }
-            // **The site's generated tables** (2026-10-29): `ye --docgen=<dir>`.
+            // **The site's generated tables**: `ye --docgen=<dir>`.
             s if s.starts_with("--docgen=") => {
                 let dir = &s["--docgen=".len()..];
                 return match docgen::write(std::path::Path::new(dir)) {
@@ -268,32 +266,27 @@ fn main() -> ExitCode {
                     }
                 };
             }
-            // Warning: **舊的那八個短名撤了**（2026-10-03 定：「舊的讓位……等到全
-            // 部弄好了再看哪些值得 short alias」）。字母留給了搜索那一邊：今天
-            // 有 `-G`（`--grep`）與 `-O`（`--open`），串得起來（見底下那一條分支），
+            // Warning: **這幾個長選項沒有短名**：哪些值得短名，等全部弄好了再看。
+            // 字母留給搜索那一邊：`-G`（`--grep`）與 `-O`（`--open`），串得起來（見底下那一條分支），
             // 加上 `-h`、`-V` 這兩個所有命令行的通例。
             "--preview" => force_preview = true,
             "--table" => force_table = true,
             "--readonly" => readonly = true,
             "--new" => fresh = true,
             "--private" => private = true,
-            // **`-r` 是 `--resume` 的短名**（2026-10-18 作者定：「make an alias
-            // for resume for cli so that we can do ye -r easily」）。
+            // **`-r` 是 `--resume` 的短名**，好讓 `ye -r` 一下就接着上次做。
             //
             // Warning: **它排在那一簇串得起來的短名前面**，否則 `-r` 長度大於一，會被
             // 讀成「第一個字母帶值、後面貼着要找的詞」。
             //
             // 選它而不選 `-R`（按下面那一簇的規矩，入口該用大寫）是因為 `-R`
-            // 從前是 `--readonly`：讓它改口是把一個「只讀」默默變成「可寫」，
-            // 而 `-r` 在這個倉裏從來没有過意思。
+            // 讀起來是 `--readonly`（vim 的 `-R` 正是只讀）：讓它當「接着做」是把
+            // 一個「只讀」默默變成「可寫」，而 `-r` 在這個倉裏沒有別的意思。
             //
             // rg 的 `-r` 是 `--replace`，這裏把它花掉了——**而那不是一條反對的
-            // 理由**（2026-10-18 作者定）：「although we implement some
-            // functionalities of ripgrep, but we are finally a text editor, so
-            // we should make a balance. We should only give short alias for
-            // very common commands for cli grep, and then align with helix for
-            // some other important functionalities.」字母表是編輯器的，rg 只在
-            // 它那幾個**最常用的搜索**開關上說得上話。
+            // 理由**：rg 的功能實現了一些，但這終究是文字編輯器，要取平衡——
+            // 只給命令行搜索裏最常用的那幾個開關短名，其餘重要的功能向 helix
+            // 看齊。字母表是編輯器的，rg 只在它那幾個**最常用的搜索**開關上說得上話。
             "-r" | "--resume" => resume = true,
             // **管道那一邊。** 開關的名字照 rg，因為那是肌肉記憶所在。
             "--grep" => owed = Some("--grep"),
@@ -330,9 +323,8 @@ fn main() -> ExitCode {
                 g.fuzzy = true;
                 modifiers.push("--fuzzy");
             }
-            // **兩件事，兩個開關**（2026-10-03 定），字母與語意都同 rg。
-            // 從前它們是一個，於是一個想搜 `.gitignore` 裏那幾個目錄的人要去撥
-            // 一個名叫 `--hidden` 的旗標。
+            // **兩件事，兩個開關**，字母與語意都同 rg：想搜 `.gitignore` 裏那幾個
+            // 目錄的人，不必去撥一個名叫 `--hidden` 的旗標。
             "--hidden" => {
                 g.hidden = true;
                 modifiers.push("--hidden");
@@ -446,16 +438,15 @@ fn main() -> ExitCode {
             }
             "--vertical" => force_layout = Some(Layout::Vertical),
             "--horizontal" => force_layout = Some(Layout::Horizontal),
-            // Warning: **「要一個值」和「不認得」是兩句話**（2026-10-03 一輪審查報來的）。
-            // `ye --grep 霜 --chinese off` 從前答「unknown option '--chinese'」
-            // ——那個旗標認得，不認得的是這個寫法。連倉裏的文檔自己都寫過
-            // `--chinese off`。
+            // Warning: **「要一個值」和「不認得」是兩句話**。`ye --grep 霜 --chinese off`
+            // 不許答「unknown option '--chinese'」——那個旗標認得，不認得的是這個
+            // 寫法，而 `--chinese off` 是很自然的一種寫法。
             "--chinese" | "--glob" | "--exclude" | "--color" | "--lang" | "--keys" => {
                 eprintln!("yumete: {arg} is written with an equals sign, as in {arg}=…");
                 eprintln!("try 'yumete --help'");
                 return ExitCode::from(2);
             }
-            // 今天撤掉的那八個短名——說出它變成了什麼，別只說「不認得」。
+            // 這八個短名只有長名——說出它的長名，別只說「不認得」。
             "-t" | "-v" | "-R" | "-c" | "-n" | "-p" | "-s" | "-H" => {
                 let long = match arg.as_str() {
                     "-t" => "--table",
@@ -471,7 +462,7 @@ fn main() -> ExitCode {
                 eprintln!("single letters are being saved for the search flags");
                 return ExitCode::from(2);
             }
-            // **短名串得起來，帶值的那個把值留給下一個詞**（2026-10-03 定）。
+            // **短名串得起來，帶值的那個把值留給下一個詞**。
             //
             // `-G zhongguo` 找詞、`-GO zhongguo` 找完直接開編輯器。能這麼串，靠的
             // 正是那條「參數必須空一格」：getopt 的規矩裏值可以貼在字母後面，於
@@ -479,7 +470,7 @@ fn main() -> ExitCode {
             // 只可能是另一個字母**，`-GO` 再沒有第二種讀法。代價兩個，都在下面
             // 當場報錯：貼着寫（`-Gzhongguo`），以及一串裏兩個帶值的。
             //
-            // Warning: **入口用大寫，小寫那一整排留着**（2026-10-03 定）。
+            // Warning: **入口用大寫，小寫那一整排留着**。
             // `-g` 在 rg 與 fd 裏都是 `--glob`、`-o` 在 rg 裏是 `--only-matching`
             // ——花掉它們，將來這幾個開關就沒有天然的字母了。這兩個又不是開關：
             // 它們決定整個程序問哪一個問題。大寫把這個區別寫在臉上，將來
@@ -581,13 +572,13 @@ fn main() -> ExitCode {
         }
     }
 
-    // **參數層的四道閘**（2026-10-03 一輪審查報來的，四條都真按得出來）。
+    // **參數層的四道閘**，四條都真按得出來。
     if let Some(which) = owed {
         eprintln!("yumete: {which} wants a word after it");
         eprintln!("try 'yumete --help'");
         return ExitCode::from(2);
     }
-    // **`--import` does one thing and leaves** (2026-11-06): files or a
+    // **`--import` does one thing and leaves**: files or a
     // search beside it would be quietly dropped, so they are refused.
     if let Some(which) = import {
         if !files.is_empty() || grep.is_some() || listing.is_some() || export.is_some() {
@@ -601,7 +592,7 @@ fn main() -> ExitCode {
         return ExitCode::from(2);
     }
     if grep.as_ref().or(listing.as_ref()).is_some_and(|p| p.trim().is_empty()) {
-        // 空的詞從前一邊回「什麼都沒有」、一邊回「每一個檔」——兩種答案，都不是答案。
+        // 空的詞一邊會回「什麼都沒有」、一邊會回「每一個檔」——兩種答案，都不是答案。
         eprintln!("yumete: the pattern is empty");
         return ExitCode::from(2);
     }
@@ -623,8 +614,7 @@ fn main() -> ExitCode {
     // **`--open` 之外纔印到 stdout 就退出。** 帶了 `--open` 的那一條往下走，等編輯
     // 器建好、配置載好、檔開好之後再把面板擺出來（底下那一處）。
     if !g.open {
-        // **管道那一邊說英文**（2026-10-03 定：「cli 搜索结果我建议用英文而不是
-        // 中文……和 rg 稍微对齐一下，这样比较方便（pipe 的 tool 比较容易复用）」）。
+        // **管道那一邊說英文**，和 rg 對齊：管道裏的工具好復用。
         //
         // 編輯器裏的話是給寫書的人看的；這裏印出來的多半是給**另一個程序**看的，
         // 或者給一個正在拼管道的人看的——那一群詞的通用語是英文。明寫了
@@ -641,7 +631,7 @@ fn main() -> ExitCode {
     }
 
     let mut editor = Editor::new();
-    // **Formulas in an HTML export are drawn by RaTeX** (2026-11-08), which
+    // **Formulas in an HTML export are drawn by RaTeX**, which
     // lives in the front end: `:export html`, `ye --export html` and the
     // browser preview all go through the editor's export.
     editor.set_formula_painter(yumete_tui::tex::for_export);
@@ -655,12 +645,12 @@ fn main() -> ExitCode {
 
     // Load global + per-project config and apply the keymap.
     //
-    // Warning: **從命令行說的那個地方往上找項目配置，不從 shell 站的地方**
-    // （2026-10-01）。從前它無條件走 `current_dir()`，於是在 `/tmp` 敲
-    // `ye ~/書/三體/卷一/第一章.md`，編輯器的根算出來是 `~/書/三體`，而
-    // `.yumete/config.toml` 一個都沒載——配置與根各認各的地方。
-    // Warning: **只有「給了一個文件夾」纔算**（2026-10-01 撤回當天那個 deviation
-    // 之後）。給一個檔不動工作路徑——照 helix。見 `Editor::set_root`。
+    // Warning: **從命令行說的那個地方往上找項目配置，不從 shell 站的地方**。
+    // 無條件走 `current_dir()` 的話，在 `/tmp` 敲 `ye ~/書/三體/卷一/第一章.md`，
+    // 編輯器的根算出來是 `~/書/三體`，而 `.yumete/config.toml` 一個都載不到——
+    // 配置與根各認各的地方。
+    // Warning: **只有「給了一個文件夾」纔算**。給一個檔不動工作路徑——照 helix。
+    // 見 `Editor::set_root`。
     let said_where = files.first().and_then(|first| {
         let at = std::path::PathBuf::from(yumete_config::expand_tilde(first));
         let full = match at.is_absolute() {
@@ -668,9 +658,8 @@ fn main() -> ExitCode {
             false => std::env::current_dir().unwrap_or_default().join(at),
         };
         let here = full.is_dir().then_some(full)?;
-        // Warning: **規範化**（2026-10-01 審出來的）。`Editor::set_root` 規範化而
-        // 這裏從前不——於是 `ye ../書/一.md` 與 `ye /repo/書/一.md` 指同一個項
-        // 目，卻哈希出兩份會話，正是這一改要消滅的那件事。
+        // Warning: **規範化**，同 `Editor::set_root`——不然 `ye ../書/一.md` 與
+        // `ye /repo/書/一.md` 指同一個項目，卻哈希出兩份會話。
         Some(std::fs::canonicalize(&here).unwrap_or(here))
     });
     // 遞進去的是**項目根**，不是工作路徑——同 helix 的
@@ -720,9 +709,9 @@ fn main() -> ExitCode {
     {
         yumete_core::messages::set_language(language);
     }
-    // **每一項設定推一遍，一處**（`yumete_tui::settings::apply`）。從前這裏攤着
-    // 一百多行 `editor.set_…`；抽出去是因為 `:reload-config` 要叫同一支——否則
-    // 「啓動時認這個設定、重載時忘了它」是遲早的事。
+    // **每一項設定推一遍，一處**（`yumete_tui::settings::apply`），不在這裏攤着
+    // 一百多行 `editor.set_…`：`:reload-config` 要叫同一支——否則「啓動時認這個
+    // 設定、重載時忘了它」是遲早的事。
     yumete_tui::settings::apply(&config, &mut editor, force_layout, force_language);
     // `--syntax` outranks the config and the extension both: it is this run's
     // answer about these files, and there is nothing further to guess from.
@@ -775,15 +764,14 @@ fn main() -> ExitCode {
     // …and somewhere to remember which files were open. **Keyed by the
     // project**, so a novel and a codebase do not share one.
     //
-    // **Always kept, whatever `session` says** (2026-09-17). `session` only
+    // **Always kept, whatever `session` says**. `session` only
     // decides whether a bare `yumete` reopens it; `-c` reopens it on the day
     // it is off, and it can only do that if the files were written down.
     //
-    // Warning: **按項目，不按 cwd**（2026-10-01）。從前它拿 `current_dir()` 做
-    // 鑰匙，而工作區是命令行參數定的——**同一個項目從兩個目録打開得到兩份會
-    // 話，兩個項目從同一個目録打開共用一份**。
-    // Warning: **沒給路徑的那一支也要走 `book_root_of`**（2026-10-01 審出來
-    // 的）。只有一支走、另一支用生的 cwd 的話，`cd 卷一 && ye` 和 `ye .` 還是
+    // Warning: **按項目，不按 cwd**。拿 `current_dir()` 做鑰匙的話，工作區又是
+    // 命令行參數定的——**同一個項目從兩個目録打開得到兩份會話，兩個項目從同一
+    // 個目録打開共用一份**。
+    // Warning: **沒給路徑的那一支也要走 `book_root_of`**。只有一支走、另一支用生的 cwd 的話，`cd 卷一 && ye` 和 `ye .` 還是
     // 兩份會話。
     editor.set_remembering(config.editor.remember && !private);
     let session_key = config_root.clone();
@@ -823,18 +811,17 @@ fn main() -> ExitCode {
             }
         }
     }
-    // **The first file named is the one shown**, as helix and vim open it
-    // (review, 2026-11-03): `ye a.md b.md` opened on b.md.
+    // **The first file named is the one shown**, as helix and vim open it:
+    // `ye a.md b.md` opens on a.md, not b.md.
     let mut first_opened: Option<usize> = None;
     for file in &files {
-        // **`ye 稿/` 開的是那本書，不是一個檔**（2026-09-27）。從前它走到
-        // `Buffer::open` 上報「不是一個檔案」，而「打開一本書」正是這個編輯器
-        // 最常做的事。文件夾只定根，不開緩衝——文件樹會把它攤開。
+        // **`ye 稿/` 開的是那本書，不是一個檔**：不走到 `Buffer::open` 上報「不是
+        // 一個檔案」，「打開一本書」正是這個編輯器最常做的事。文件夾只定根，不開緩衝——文件樹會把它攤開。
         if std::path::Path::new(&yumete_config::expand_tilde(file)).is_dir() {
             continue;
         }
         if let Err(err) = editor.open_file_guessing(file, guess) {
-            // **Asked, not refused** (2026-11-04): a file too short to tell
+            // **Asked, not refused**: a file too short to tell
             // has the picker open on it, and the editor starts to show it.
             let asked = err
                 .get_ref()
@@ -846,9 +833,9 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
         first_opened.get_or_insert(editor.buffer_position().0.saturating_sub(1));
-        // **`--syntax` outranks the extension** (2026-10-30), as `--help`
-        // says: the default above only decides where the name says nothing,
-        // so `ye --syntax=text notes.md` was still read as Markdown.
+        // **`--syntax` outranks the extension**, as `--help` says: the default
+        // above only decides where the name says nothing, so `ye --syntax=text
+        // notes.md` is read as text, not Markdown.
         if let Some(syntax) = named_syntax {
             editor.set_syntax(syntax);
         }
@@ -857,7 +844,7 @@ fn main() -> ExitCode {
         editor.show_buffer_at(first);
     }
     // **`ye 稿/` 開的是那本書，所以開完要看得見它。** 沒有一個檔可開的時候，
-    // 那扇文件樹就是這一趟的答案（2026-09-27）。
+    // 那扇文件樹就是這一趟的答案。
     if let Some(root) = &opened_a_folder {
         editor.open_sidebar_at(root);
     }
@@ -887,8 +874,8 @@ fn main() -> ExitCode {
     } else {
         0
     };
-    // **`-v` / `--horizontal` win over the layout a session kept** (2026-10-29,
-    // review: the session's view was replayed after the flag and undid it).
+    // **`-v` / `--horizontal` win over the layout a session kept**: the
+    // session's view is replayed first, so the flag is applied after it.
     if let (true, Some(layout)) = (restored > 0, force_layout) {
         editor.set_layout(layout);
     }
@@ -902,21 +889,20 @@ fn main() -> ExitCode {
     if files.is_empty() && drawing && restored == 0 {
         editor.opened_with_nothing();
     }
-    // **第一次打開，機器上有 vim 的痕跡就直接換成 vim 鍵位**（2026-10-05 定）。
+    // **第一次打開，機器上有 vim 的痕跡就直接換成 vim 鍵位**。
     //
-    // 一位用 vim 的朋友試用之後報的第一條：「第一次启动时建议提示下选择什么 keymap，
-    // 目前好像默认是 helix，而用 vim 的人远多于 helix。」⚠ **他報壞的 `ZZ`、`*`
-    // 其實在 vim 鍵位下都是好的**——他只是從頭到尾沒切過去，而我們從沒告訴他可以切。
+    // 出廠是 helix 鍵位，而用 vim 的人遠多於用 helix 的。⚠ **一個 vim 讀者會以為
+    // `ZZ`、`*` 壞了**，其實在 vim 鍵位下都是好的——只是他沒切過去，也沒人告訴他
+    // 可以切。
     //
     // Warning: **只在第一次，而且只在偵測到的時候寫檔。** 沒偵測到就一個字都不動
-    // 他的硬盤（定的）——yumete 在這之前**從來不寫配置文件**，所以建一個是一件
-    // 新行為，得有由頭。
+    // 他的硬盤——yumete 平時**不寫配置文件**，建一個得有由頭。
     //
-    // **A config already there says the keymap itself** (2026-11-06): one
+    // **A config already there says the keymap itself**: one
     // synced from another machine, or written by `--import` before the first
     // start. Switching this session to vim over it would contradict the file.
     //
-    // **The note names `--import` when it would help** (2026-11-06): LazyVim
+    // **The note names `--import` when it would help**: LazyVim
     // or a helix config seen, read only to know they are there.
     let configured = yumete_config::config_dir().join("config.toml").exists();
     if brand_new && drawing && !configured {
@@ -925,7 +911,7 @@ fn main() -> ExitCode {
         let helix = import::helix_config_path(&env).is_some_and(|path| path.is_file());
         // Warning: **鍵名要寫成字面量。** 那條「文案網」測試掃的是 `say!("…")` 的寫
         // 法；把鍵名存進變量再傳給 `messages::say`，它就掃不到，於是報「在
-        // messages.toml 裏可沒人說它」（寫完當場紅了一次）。
+        // messages.toml 裏可沒人說它」。
         let note = match (looks_like_a_vim_reader() || lazyvim, lazyvim, helix) {
             (true, lazyvim, _) => {
                 editor.set_key_preset(yumete_core::KeyPreset::Vim);
@@ -938,7 +924,7 @@ fn main() -> ExitCode {
             (false, _, true) => yumete_core::say!("start.now-helix-config"),
             (false, _, false) => yumete_core::say!("start.now-helix"),
         };
-        // **有開場屏就寫在屏上，沒有就寫命令行**（定的）。一句話只出一次。
+        // **有開場屏就寫在屏上，沒有就寫命令行**。一句話只出一次。
         match editor.intro() {
             true => editor.says_at_the_start(note),
             false => editor.set_status(note),
@@ -976,7 +962,7 @@ fn main() -> ExitCode {
     // is cheap enough to do before anything is drawn — and it has to be, since
     // `--shot` and `--timing` both run the whole launch and would otherwise
     // draw a menu of schemes this build does not have. Nothing found leaves the
-    // built-in five standing, which is every install today.
+    // built-in five standing.
     if yumete_ime::discover(&yumete_config::data_search_dirs()) > 0 {
         let found: Vec<(&str, &str)> = Scheme::all()
             .into_iter()
@@ -984,8 +970,8 @@ fn main() -> ExitCode {
             .collect();
         yumete_core::command::set_schemes(&found);
     }
-    // `:settings <name>` completes the panel's settings by their TOML paths
-    // (2026-11-08); the core cannot read the table, so it is handed over.
+    // `:settings <name>` completes the panel's settings by their TOML paths;
+    // the core cannot read the table, so it is handed over.
     let settings: Vec<(String, &'static str)> =
         yumete_config::panel::all_rows().iter().map(|s| (s.path(), s.label)).collect();
     yumete_core::command::set_setting_names(&settings.iter().map(|(p, l)| (p.as_str(), *l)).collect::<Vec<_>>());
@@ -1005,9 +991,9 @@ fn main() -> ExitCode {
     // 候選面板 (Feature #211) — the other axis, and a plain value: `full` is a
     // real answer, not「ask the scheme」.
     let panel = config.panel.display;
-    // 正在打的那一段寫在哪——面板畫不畫之外的另一格（2026-09-27）。
+    // 正在打的那一段寫在哪——面板畫不畫之外的另一格。
     let preedit = config.panel.inline_preedit;
-    // 字集過濾、排序與整句字集軌 (2026-11-04), Yume's defaults unless said.
+    // 字集過濾、排序與整句字集軌, Yume's defaults unless said.
     let charsets = yumete_ime::Charsets::from_words(
         &config.ime.charset,
         &config.ime.charset_sort,
@@ -1055,7 +1041,7 @@ fn main() -> ExitCode {
         false => Some(Box::new(load)),
     };
 
-    // **拆分表在不在，和方案無關**（2026-10-12）。它嵌在二進制裏，載不載碼表都
+    // **拆分表在不在，和方案無關**。它嵌在二進制裏，載不載碼表都
     // 答得出——所以這一格撥在這裏，不跟着 `set_ime_available` 走：那一支只在
     // 真去載方案的那幾條路上叫得到，而 `空格 n` 一開始就按得動。
     editor.set_chaifen_available(ime.chaifen_available());
@@ -1080,7 +1066,7 @@ fn main() -> ExitCode {
     // Warning: **`-v` on a program file is not an error, and not silent either.**
     // The setting is kept — the next buffer may well be a manuscript — but the
     // page in front of the reader is across, and a flag that appears to do
-    // nothing is worse than one that says why (2026-09-21).
+    // nothing is worse than one that says why.
     if force_layout == Some(Layout::Vertical) && editor.writes_code() {
         editor.set_status(yumete_core::say!("layout.code-is-horizontal"));
     } else {
@@ -1099,14 +1085,13 @@ fn main() -> ExitCode {
 
     // `-t` is the writer saying "this is a table" about a file no schema names.
     //
-    // **Here, not up with the other setup.** It used to run right after the
-    // files were opened — and `enter_table` answers on the status line, which
-    // `set_status(String::new())` above wipes on the way out of setup so none
-    // of the installation chatter reaches the first frame. So a file `-t`
-    // refused («「x.csv」不像表格——每行要有同樣多的欄») had its refusal wiped
-    // before anything was drawn: `-t` looked like it had simply ignored you,
-    // while `t t` on the same file explained itself. Same message, same code
-    // path, and one of the two callers could never be heard (#388).
+    // **Here, not up with the other setup.** `enter_table` answers on the
+    // status line, which `set_status(String::new())` above wipes on the way
+    // out of setup so none of the installation chatter reaches the first
+    // frame. Run right after the files were opened, a file `-t` refused
+    // («「x.csv」不像表格——每行要有同樣多的欄») would have its refusal wiped
+    // before anything was drawn: `-t` would look like it had simply ignored
+    // you, while `t t` on the same file explained itself (#388).
     if force_table {
         editor.enter_table();
     }
@@ -1114,14 +1099,13 @@ fn main() -> ExitCode {
     // A config file that does not parse is worth one line: silence is how a
     // typo comes to look like a setting that does not work. **After `-t`**,
     // because a broken config outranks a file that is not a grid.
-    // **再加上那幾格只有前端判得了的**（2026-10-10）：`syntax`／`table_rules`／
+    // **再加上那幾格只有前端判得了的**：`syntax`／`table_rules`／
     // `indent_hint`／`[sidebar]` 的判準在 `yumete-core` 裏，而 `yumete-config` 是
     // 它的兄弟、看不見它。見 [`yumete_tui::settings::complaints`]。
     let mut config_problems = config_problems;
     config_problems.extend(yumete_tui::settings::complaints(&config));
     // What is wrong in the key tables, at every start-up; the keys a table
-    // took from a command, at the first start-up after they change
-    // (2026-11-06).
+    // took from a command, at the first start-up after they change.
     let mistakes = editor.key_mistakes();
     if !mistakes.is_empty() {
         config_problems.push(mistakes.join(" · "));
@@ -1135,13 +1119,11 @@ fn main() -> ExitCode {
         }
         editor.set_status(config_problems.join(&yumete_core::say!("label.comma")));
     }
-    // **恢復那一問要在按鍵之前擺出來**，因為它就是開檔那一刻的事（2026-10-02
-    // 定）。
+    // **恢復那一問要在按鍵之前擺出來**，因為它就是開檔那一刻的事。
     //
-    // Warning: **而且要在 `--shot` 那一支之前**。從前這一句在下面第 680 行附近，
-    // 而 `--shot` 在第 520 行就把圖印出來走人了——於是離屏**永遠拍不到**開檔時
-    // 的任何通知，救命稿那一問、「接着上次」那一句都在圖外。§5.55 記過同一個形
-    // 狀：拍照的工具看不見人看得見的東西，比 bug 還糟。
+    // Warning: **而且要在 `--shot` 那一支之前**，不然 `--shot` 先把圖印出來走人，
+    // 離屏**永遠拍不到**開檔時的任何通知，救命稿那一問、「接着上次」那一句都在
+    // 圖外。§5.55：拍照的工具看不見人看得見的東西，比 bug 還糟。
     if restored > 0 {
         editor.set_status(yumete_core::say!("cli.picked-up-where-you-left-off", restored));
     }
@@ -1154,11 +1136,10 @@ fn main() -> ExitCode {
     yumete_tui::set_build(VERSION);
     let mut settings_page = None;
     if let Some(pressed) = &keys {
-        // Warning: **`\{ime}` 之後那幾個鍵走輸入法**（2026-09-28）。從前 `--keys` 一律直接叫
-        // `editor.on_key`，於是**離屏拍不到任何 preedit**——而輸入法是這個編輯器最不一樣
-        // 的那一塊，這個倉的審查方法又是截圖。共用記事本上記過同一個形狀的坑：離屏
-        // `--figure` 繞開控制器，於是「前端在把鍵交給引擎之前派掉的那幾個鍵」那一整族
-        // bug 一個都拍不到。
+        // Warning: **`\{ime}` 之後那幾個鍵走輸入法**。`--keys` 一律直接叫
+        // `editor.on_key` 的話，**離屏拍不到任何 preedit**——而輸入法是這個編輯器最不一樣
+        // 的那一塊，這個倉的審查方法又是截圖。同一個形狀的坑：離屏繞開控制器，
+        // 「前端在把鍵交給引擎之前派掉的那幾個鍵」那一整族 bug 一個都拍不到。
         //
         // Warning: **數據要先載進來。** `--shot` 下它本來是推遲到第一幀之後的（見
         // `yumete_tui::Deferred`），而 `--keys` 跑在那之前。只有真的要用輸入法的時候纔
@@ -1172,7 +1153,7 @@ fn main() -> ExitCode {
             if !said.is_empty() {
                 editor.set_status(said);
             }
-            // Warning: **讀音表要跟着換過來**（2026-10-02 一輪掃查報來的）。
+            // Warning: **讀音表要跟着換過來**。
             // `switch_scheme_at_startup` 是整個 `*ime = full` 換掉的，而
             // `Editor` 手上那份 reader 是**上一個會話的快照**（`ime.reader()`
             // 拷的是注解表）。不補這一句，`available()` 永遠是 false：狀態欄寫着
@@ -1183,12 +1164,12 @@ fn main() -> ExitCode {
             // 互動那一支在它自己那次延遲載入之後緊跟着就補了（`yumete-tui`
             // 的 `editor.set_reader(Box::new(ime.reader()))`），這裏照抄。
             editor.set_reader(Box::new(ime.reader()));
-            // Warning: **那三個配置也要補上**（2026-10-03 一輪審查報來的）。`load` 那一支
+            // Warning: **那三個配置也要補上**。`load` 那一支
             // 在換完方案之後緊跟着撥這三格，而這裏是另一條路——不撥的話
             // `[ime] commit`、`[panel] display`、`[panel] inline_preedit` 離屏整
             // 個不生效：六種 `inline_preedit × display` 的組合畫出來**逐字節相
             // 同**，而真機各
-            // 畫各的。配置那一族的畫面從此離屏審不了。
+            // 畫各的。配置那一族的畫面就離屏審不了。
             ime.set_charsets(charsets.clone());
             ime.set_commit_strategy(commit);
             ime.set_panel_display(panel);
@@ -1199,7 +1180,7 @@ fn main() -> ExitCode {
             // 寫着 `[中 靈明]`。互動那一支每一輪都撥一次。
             editor.set_ime_available(ime.available());
         }
-        // **設定檔的毛病，離屏也要看得見**（2026-10-20）。它不開進程、不碰磁碟、
+        // **設定檔的毛病，離屏也要看得見**。它不開進程、不碰磁碟、
         // 不等人，算一遍就答得出——所以它歸這一支，同 `settings_request` 那一族；
         // 真的語言服務器留給循環，那一種要等一個程序回話。
         //
@@ -1221,7 +1202,7 @@ fn main() -> ExitCode {
         let _ = editor.execute(":tutor");
     }
     // **`--grep … --open` / `--files … --open`**：詞在命令行上已經打過了，進去就
-    // 該是「已經找完」的那個樣子（2026-10-03 定）。
+    // 該是「已經找完」的那個樣子。
     if g.open {
         let scope = match g.project {
             true => Where::Project,
@@ -1247,9 +1228,8 @@ fn main() -> ExitCode {
                 true => editor.project_root(),
                 false => editor.working_dir(),
             };
-            // **走檔那四個開關進編輯器那條路也真的生效**（2026-10-08 修）。印出來那
-            // 條路 2026-10-03 就接上了篩子，而 `--open` 這一條走的是寫死的
-            // `Sieve::default()`——於是 `ye --files --hidden --open` 開出來的挑選器
+            // **走檔那四個開關進編輯器那條路也真的生效**，同印出來那條路：寫死
+            // `Sieve::default()` 的話，`ye --files --hidden --open` 開出來的挑選器
             // 裏一個點文件都沒有，而 `--help` 說它管用。進去之後 `A-h` 就從這一格
             // 往下轉。
             //
@@ -1277,8 +1257,8 @@ fn main() -> ExitCode {
         // enters. A `:yume …` leaves its request on the editor for that loop to
         // pick up — so a request still sitting here is one nobody will ever
         // act on, and the frame below is of a session where the command did
-        // nothing at all. It used to be drawn without a word, which is how a
-        // reviewer comes away certain the input method is simply blank (#385).
+        // nothing at all. Drawn without a word, it leaves a reviewer certain the
+        // input method is simply blank (#385).
         //
         // Standard error, not standard out: the picture itself stays a picture.
         //
@@ -1297,11 +1277,10 @@ fn main() -> ExitCode {
         take_the_colours(&mut editor, &config);
         let mut unheard: Vec<String> = Vec::new();
         if let Some(asked) = editor.take_scheme_request() {
-            // Warning: **印出去的要是打得出來的那一行**（2026-10-02 一輪掃查報來的）。
-            // `asked` 是核心和前端之間的暗號，不是命令：`:yume-which` 傳的是 `?`，
-            // 於是這裏印「`:yume ?` did nothing」，而 `:yume ?` 這一行輸進去是被
-            // 拒的。這一族 2026-09 加了連字符（`:yume-which`、`:yume-installed`
-            // ……），而暗號留在了那之前。
+            // Warning: **印出去的要是打得出來的那一行**。`asked` 是核心和前端之間的
+            // 暗號，不是命令：`:yume-which` 傳的是 `?`，照印就成了「`:yume ?` did
+            // nothing」，而 `:yume ?` 這一行輸進去是被拒的。這一族的命令帶連字符
+            // （`:yume-which`、`:yume-installed`……），暗號不帶。
             //
             // 認得出的就還原成真名字，認不出的（方案標籤）本來就是 `:yume-scheme`
             // 的參數。
@@ -1323,12 +1302,11 @@ fn main() -> ExitCode {
             };
             unheard.push(line);
         }
-        // Warning: **the names here are names, and they rot** (2026-10-20). These two
-        // were the spellings of 2026-09: `:chaifen` is `:yume-annotation` and
-        // `:preview` is `:preview`, and both folds happened without this
-        // list hearing about it — so the one notice whose whole job is to say
-        // 「what you typed did nothing」 was naming a command that does not
-        // exist. `tests/inert_notice.rs` holds the printed names to the table.
+        // Warning: **the names here are names, and they rot.** A command renamed
+        // without this list hearing about it leaves the one notice whose whole
+        // job is to say 「what you typed did nothing」 naming a command that
+        // does not exist. `tests/inert_notice.rs` holds the printed names to the
+        // table.
         if editor.take_annotation_request().is_some() {
             unheard.push(":yume-annotation".into());
         }
@@ -1347,9 +1325,9 @@ fn main() -> ExitCode {
         if editor.take_screenshot_request().is_some() {
             unheard.push(":shot".into());
         }
-        // 語言服務器是循環裏的一個進程，一幀畫不出它來。2026-09-23 補：這兩個
-        // 從前不在名單上，於是 `空格 k` 拍出來永遠是「問問這是什麽……」，看着
-        // 像功能壞了。字典不在這裏——它是 `frame_to` 自己答得了的。
+        // 語言服務器是循環裏的一個進程，一幀畫不出它來。不在名單上的話 `空格 k`
+        // 拍出來永遠是「問問這是什麽……」，看着像功能壞了。字典不在這裏——它是
+        // `frame_to` 自己答得了的。
         if editor.take_hover_query().is_some() {
             unheard.push("空格 k / 空格 K".into());
         }
@@ -1359,10 +1337,9 @@ fn main() -> ExitCode {
         if editor.take_completion_query().is_some() {
             unheard.push("C-n".into());
         }
-        // Warning: **四個 2026-10-02 補的**（一輪掃查報來的）。上面那句話說「a tenth
-        // added tomorrow shows up here the day somebody uses it」——沒有，它們就這
-        // 麼悄悄做了無事可做的事。看得最清楚的是剪貼板：`␣y`（寫）印了那句提示，
-        // `␣p`（讀）什麼都不印，同一塊板子兩種待遇。
+        // Warning: **底下四個也要在名單上**，不會自己冒出來：漏了就悄悄做了無事可
+        // 做的事。看得最清楚的是剪貼板：`␣y`（寫）印那句提示而 `␣p`（讀）什麼都
+        // 不印，就是同一塊板子兩種待遇。
         if editor.take_language_run().is_some() {
             unheard.push(":format / :run".into());
         }
@@ -1411,7 +1388,7 @@ fn main() -> ExitCode {
         // `| grep -q`, closes the pipe as soon as it has what it came for, and
         // `print!` *panics* on that — a Rust backtrace printed where the frame
         // should be. `--grep` and `--files` have always answered a closed pipe
-        // with a quiet success; the frame answers the same way (2026-10-19).
+        // with a quiet success; the frame answers the same way.
         let mut sink = io::stdout();
         match write!(sink, "{picture}").and_then(|()| sink.flush()) {
             Ok(()) => {}
@@ -1463,12 +1440,12 @@ fn main() -> ExitCode {
     };
     // **Closed from outside** (SIGHUP, SIGTERM) or the terminal gone: every
     // dirty buffer gets its recovery copy now, not at the next five-second
-    // tick that will never come (2026-10-30).
+    // tick that will never come.
     if yumete_tui::hung_up() || outcome.is_err() {
         editor.rescue_drafts();
     }
     // A PDF still being typeset for `:export-as-preview` is given up, its
-    // compiler stopped and its draft removed (2026-11-09): `空格 o p` below
+    // compiler stopped and its draft removed: `空格 o p` below
     // replaces this process without dropping anything.
     editor.stop_typesetting();
     // Written on the way out, whichever way out it was: an editor that only
@@ -1477,9 +1454,9 @@ fn main() -> ExitCode {
     // from is not to be trusted, and the last kept view stays.
     editor.keep_view(yumete_tui::settings::view_to_keep(&editor, &config));
     editor.save_session();
-    // **`空格 o p` — 換個項目接着幹**（2026-10-18 作者定）。
+    // **`空格 o p` — 換個項目接着幹**。
     //
-    // 作者問的是「能不能不用按回車」。能，而且不必印一條命令讓人自己貼：這一趟
+    // 不用按回車，也不必印一條命令讓人自己貼：這一趟
     // 的會話剛寫過、終端已經還原，剩下的就是**走過去，把自己換成那邊的
     // yumete**。`exec` 不開第二個進程，所以終端上看不出中間有過一步。
     //
@@ -1532,24 +1509,24 @@ fn take_the_colours(editor: &mut Editor, config: &yumete_config::Config) {
 /// Warning: **`:settings` 之後的鍵歸那扇面板**，和主循環一樣。不接這一下，
 /// `--shot --keys=':settings\nljj '` 拍到的永遠是面板剛開的樣子——而這個倉審前端
 /// 就是靠拍照，一扇按不動的面板等於一扇沒法審的面板。回來的是那扇面板（要畫它）。
-/// **主循環在兩個鍵之間做的事**，這裏一件都不許少（#406，2026-10-02）。
+/// **主循環在兩個鍵之間做的事**，這裏一件都不許少（#406）。
 ///
 /// `--keys` 一口氣餵完整串鍵，而真的循環在每一下之間畫一幀、收一批、把欠着的那幾
 /// 件慢事做掉。少做一件，拍到的面板和人按出來的面板就不是同一扇——而這個倉審前端
 /// 靠的就是拍照。
 ///
-/// Warning: **每一個鍵之前叫一次，整串鍵之後再叫一次。** 2026-10-09 撞上的正是漏掉的
-/// 那第二次：`--keys='\{space}f'` 的最後一下開了挑選器，而它的走查跑在旁邊，於是
-/// 後面沒有鍵替它收——照片上 `0/0`，一條都沒有。同一個洞搜索那一族也有，只是它總
-/// 有鍵跟在後面，所以一直沒露出來。
+/// Warning: **每一個鍵之前叫一次，整串鍵之後再叫一次。** 少了第二次：
+/// `--keys='\{space}f'` 的最後一下開了挑選器，而它的走查跑在旁邊，後面沒有鍵替它
+/// 收——照片上 `0/0`，一條都沒有。搜索那一族也一樣，只是它總有鍵跟在後面，看不
+/// 出來。
 fn catch_up_with_the_loop(
     editor: &mut Editor,
     config: &yumete_config::Config,
     ime: &mut ImeSession,
 ) {
-    // **設置那幾句，這一支自己答得出**（2026-10-16）。從前整個 `:yume-…` 家族
-    // 被當成「要事件循環」丟掉，於是 `--keys=':yume-panel bottom\ni\{ime}dk'`
-    // 拍出來的是候選框——三檔候選欄一張照片都拍不成，而這個倉審前端就是靠拍照。
+    // **設置那幾句，這一支自己答得出**。整個 `:yume-…` 家族當成「要事件循環」
+    // 丟掉的話，`--keys=':yume-panel bottom\ni\{ime}dk'` 拍出來的是候選框——三檔
+    // 候選欄一張照片都拍不成，而這個倉審前端就是靠拍照。
     // 答得出的那幾句只動會話上的一格（`yumete_tui::settings_request`）；答不出
     // 的原樣放回去，末了那一段照舊報「沒人接這一句」。
     if let Some(asked) = editor.take_scheme_request() {
@@ -1561,23 +1538,23 @@ fn catch_up_with_the_loop(
     if editor.take_owed_search() {
         editor.run_owed_search();
     }
-    // **主題那兩格也是一鍵一收**（2026-10-09 審出來的）。
+    // **主題那兩格也是一鍵一收**。
     //
-    // 它們是**一格**，不是一個隊列：`--keys=':theme bw\n:theme-mode light\n'` 從前
-    // 整串鍵跑完纔收一次，於是第一句被第二句頂掉——畫出來是出廠主題的淺色，而
+    // 它們是**一格**，不是一個隊列：`--keys=':theme bw\n:theme-mode light\n'` 要是
+    // 整串鍵跑完纔收一次，第一句就被第二句頂掉——畫出來是出廠主題的淺色，而
     // `:theme bw` 一聲不吭地沒了。
     take_the_colours(editor, config);
-    // **而且要等它跑完**（§5.93，2026-10-06）。走磁碟那一趟現在跑在旁邊，主循環每一
+    // **而且要等它跑完**（§5.93）。走磁碟那一趟跑在旁邊，主循環每一
     // 幀收一批；這裏沒有循環可等，所以就地等到底。按完 `Enter` 名單是空的，後面每
-    // 一個 `j` 都走在空名單上，而拍出來的照片卻是全的（拍的時候早收完了）。
+    // 一個 `j` 都會走在空名單上，而拍出來的照片卻是全的（拍的時候早收完了）。
     while editor.still_searching() {
         if !editor.collect_search_results() {
             std::thread::sleep(std::time::Duration::from_millis(2));
         }
     }
-    // 挑選器的名單同理（2026-10-09）：它也搬到旁邊去了。
+    // 挑選器的名單同理：它也跑在旁邊。
     editor.wait_for_the_picker();
-    // **全部替換也是欠着做的**（2026-10-03）：主循環一批八十毫秒、中間畫一幀報進
+    // **全部替換也是欠着做的**：主循環一批八十毫秒、中間畫一幀報進
     // 度，而這裏沒有循環可畫——一口氣做完就是。不補這一下，`--shot` 拍到的是「按
     // 了 `y`，什麼都沒發生」。
     while editor.replacing_a_batch() {
@@ -1598,34 +1575,33 @@ fn press(
     let mut composing = false;
     let mut chars = keys.chars().peekable();
     while let Some(c) = chars.next() {
-        // **兩個鍵之間補上主循環會畫的那一幀**（2026-10-02 查出來的）。
+        // **兩個鍵之間補上主循環會畫的那一幀**。
         //
         // 走磁碟的那一趟搜索是**欠着的**：`Enter` 只記一筆，主循環先畫一幀
         // 「正在找…」再去跑（`run_owed_search`）。而 `--keys` 是一口氣餵完的，
-        // 從前整串鍵都跑在那一趟之前——於是 `--keys='\{space}/霜\n66jjjj'` 裏
-        // 的每一個 `j` 走的都是**本文件那一檔的舊名單**，走完自己這一份就到頭，
-        // 別的檔一處也去不了；而畫的時候那一趟已經跑完了，照片上名單是全的。
-        // 看起來像「名單走不動」，其實是這支工具自己落後了一幀。
+        // 整串鍵都跑在那一趟之前的話，`--keys='\{space}/霜\n66jjjj'` 裏的每一個
+        // `j` 走的都是**本文件那一檔的舊名單**，走完自己這一份就到頭，別的檔一處
+        // 也去不了；而畫的時候那一趟已經跑完了，照片上名單是全的。看起來像「名單
+        // 走不動」，其實是這支工具自己落後了一幀。
         //
         // 和底下 `gw` 那一處同一族（#406），也和這支函數開頭說的 `:settings`
         // 同一族：**主循環在兩個鍵之間做的事，這裏一件都不許少**，不然拍到的
         // 面板和人按出來的面板不是同一扇。只是這一件便宜，不必真畫一幀。
         catch_up_with_the_loop(editor, config, ime);
-        // Warning: **按鍵之前先把頁夾好**（#516，2026-10-02）。互動的循環是
+        // Warning: **按鍵之前先把頁夾好**（#516）。互動的循環是
         // 「畫一幀、讀一個鍵、再畫一幀」，所以按鍵那一刻用的是上一幀量出來的高
         // 度；離屏這一支沒有循環。不補這一下，`--keys='…wo3'` 在六行的窗口上照
         // 樣上屏那個從沒畫出來的字——**而那正是要驗的那個 bug**。
         //
-        // Warning: **每一個鍵之前都要答，不是整串之前答一次**（2026-10-13）。
-        // `:vertical` 本身就是一個鍵，而版面一換，一縱多長就變了——從前這一句
-        // 站在迴圈外面，於是 `--keys=':vertical\n…h'` 裏的 `h` 走的是橫排留下
+        // Warning: **每一個鍵之前都要答，不是整串之前答一次**。
+        // `:vertical` 本身就是一個鍵，而版面一換，一縱多長就變了——這一句站在
+        // 迴圈外面的話，`--keys=':vertical\n…h'` 裏的 `h` 走的是橫排留下
         // 的格子（出廠縱長 32），在折了兩縱的段落上跳過整整一縱，而照片是按窗
         // 口高度畫的。量到的和拍到的不是同一頁。
         //
-        // Warning: **不能靠「先白畫一幀」把高度量出來。** 試過，`多選區` 那張金
-        // 樣當場變了：`frame_to_text` 收的是 `&mut Editor`，白畫那一幀給了編輯
-        // 器一個它本來沒有的視口，於是後面那幾個動作落在了别的地方。算出來，别
-        // 畫出來。
+        // Warning: **不能靠「先白畫一幀」把高度量出來。** `frame_to_text` 收的是
+        // `&mut Editor`，白畫那一幀給了編輯器一個它本來沒有的視口，後面那幾個動作
+        // 就落在别的地方（`多選區` 那張金樣會變）。算出來，别畫出來。
         if let Some((w, h)) = shot {
             yumete_tui::fit_the_page(ime, editor, config, w, h);
         }
@@ -1640,11 +1616,10 @@ fn press(
                 Some('l') => Key::Left,
                 Some('r') => Key::Right,
                 // **`\^x` is Control-x**, caret notation, the way a terminal
-                // has written it since teletypes. Added 2026-09-11: without it
-                // a whole family of keys both tutors teach — `C-o` `C-i` `C-r`
-                // `C-w` `C-a` `C-d` — could not be pressed offscreen at all,
-                // and #382's `End` bug slipped through review for exactly that
-                // reason: nobody could send the key.
+                // has written it since teletypes. Without it a whole family of
+                // keys both tutors teach — `C-o` `C-i` `C-r` `C-w` `C-a` `C-d` —
+                // could not be pressed offscreen at all, and a bug on a key
+                // nobody can send slips through review (#382's `End`).
                 Some('^') => match chars.next() {
                     Some(c) => Key::Ctrl(c.to_ascii_lowercase()),
                     None => break,
@@ -1658,7 +1633,7 @@ fn press(
                         }
                         name.push(c);
                     }
-                    // **`\{ime}` 撥一下「往後走不走輸入法」**（2026-09-28）。
+                    // **`\{ime}` 撥一下「往後走不走輸入法」**。
                     if name == "ime" {
                         composing = !composing;
                         // Warning: **撥開關的時候順手把它打開。** `:yume` (on) 走的是請求/回應
@@ -1675,7 +1650,7 @@ fn press(
                     // `\{alt-.}` for the Meta chords. helix's tutor leans on
                     // them — `Alt-s` `Alt-.` `Alt-,` `Alt-;` `Alt-\`` — and
                     // without this none of that family could be pressed
-                    // offscreen (2026-09-11).
+                    // offscreen.
                     if let Some(rest) = name.strip_prefix("alt-") {
                         match rest.chars().next() {
                             Some(c) if rest.chars().count() == 1 => Key::Alt(c),
@@ -1704,11 +1679,10 @@ fn press(
                         "pgdn" => Key::PageDown,
                         "del" => Key::Delete,
                         "backtab" => Key::BackTab,
-                        // **四個方向鍵與 `Tab`、`Enter`、`Esc`、退格**（2026-10-03 補）。
-                        // 這張表從前缺它們，而 `Key` 一直有——於是離屏驗不了「面板
-                        // 裏按下去會怎樣」那一整族：面板的提示行寫着「↑ ↓ 上下移
-                        // 動」，而寫腳本的人（包括我）伸手去拿 `\{down}` 拿不到。
-                        // `\n` `\e` `\b` 一直認得，這裏多給一個寫得出名字的拼法。
+                        // **四個方向鍵與 `Tab`、`Enter`、`Esc`、退格**。缺了它們，
+                        // 離屏驗不了「面板裏按下去會怎樣」那一整族：面板的提示行
+                        // 寫着「↑ ↓ 上下移動」，寫腳本的人伸手就去拿 `\{down}`。
+                        // `\n` `\e` `\b` 也認得，這裏多給一個寫得出名字的拼法。
                         "up" => Key::Up,
                         "down" => Key::Down,
                         "left" => Key::Left,
@@ -1717,18 +1691,15 @@ fn press(
                         "enter" => Key::Enter,
                         "esc" => Key::Esc,
                         "bs" => Key::Backspace,
-                        // **`\{space}` 也認**（2026-10-02）。字面的空格一直管用，
-                        // 可一串鍵裏的空格看不見，所以寫腳本的人（包括我）伸手就
-                        // 去拿這個名字——而它從前不存在。
+                        // **`\{space}` 也認**。字面的空格也管用，可一串鍵裏的空格
+                        // 看不見，所以寫腳本的人伸手就去拿這個名字。
                         "space" => Key::Char(' '),
-                        // Warning: **認不得的名字就地死掉，不是打一行就往下走**
-                        // （2026-10-02 修）。從前它 `break`，於是這一串鍵**從這裏
-                        // 整個截斷**而退出碼仍然是 0——`frames.sh` 裏兩個場景因此
-                        // 拍了不知多久的錯誤信息，而金樣比對一直是綠的（它比的是
-                        // 「和上次一樣嗎」，上次也可以是錯的）。
-                        // **`\{A-j}` 與 `\{C-d}`**（2026-10-12 補，同上一條的
-                        // 理由）。`Key` 一直有這兩族，而這張表沒有——於是離屏驗
-                        // 不了任何一個 Alt 或 Ctrl 綁的鍵，包括搜索行上那個
+                        // Warning: **認不得的名字就地死掉，不是打一行就往下走**。
+                        // `break` 的話這一串鍵**從這裏整個截斷**而退出碼仍然是 0
+                        // ——`frames.sh` 的場景拍的就是錯誤信息，而金樣比對照樣是
+                        // 綠的（它比的是「和上次一樣嗎」，上次也可以是錯的）。
+                        // **`\{A-j}` 與 `\{C-d}`**，同上面那幾條的理由：沒有它們，
+                        // 離屏驗不了任何一個 Alt 或 Ctrl 綁的鍵，包括搜索行上那個
                         // 繁簡拼音通配。大小寫原樣留着：`A-j` 和 `A-J` 是兩個鍵。
                         other if other.len() == 3 && other.as_bytes()[1] == b'-' => {
                             let c = other.chars().nth(2).expect("三個字符");
@@ -1757,10 +1728,9 @@ fn press(
         // whole behaviour (§5.2.3 ②): the IME hands the editor a *string*,
         // which may be two 字 long. Gather the run and commit it, so a picture
         // of `r` 打中文 shows what a reader would actually see.
-        // Warning: **問的要和真編輯器同一個問題**（2026-10-04）。離屏這一支從前問
-        // 「吃不吃一個字符」，而互動迴圈問的是「要不要開輸入法」——`mi`/`ma` 之後
-        // 兩者的答案現在不同，照舊問就會在圖上畫出一個真編輯器裏不會出現的候選框。
-        // 離屏路徑和真路徑分家，這個倉裏已經咬過四次。
+        // Warning: **問的要和真編輯器同一個問題**：互動迴圈問的是「要不要開輸入法」，
+        // 不是「吃不吃一個字符」——`mi`/`ma` 之後兩者的答案不同，問後者就會在圖上
+        // 畫出一個真編輯器裏不會出現的候選框。離屏路徑和真路徑不許分家。
         if editor.wants_the_ime() {
             if let Key::Char(c) = key {
                 let mut text = String::from(c);
@@ -1776,21 +1746,20 @@ fn press(
             }
         }
         // 面板開着：鍵歸它（`:` 除外——那是命令行，`:w`/`:q` 在那上面打）。
-        // Warning: **和主循環同一支** `Seat`，不是抄一遍：抄本當天就分岔過（那一份漏了
-        // 「有改動不許一下走」的閘，又把存盤的錯 `let _ =` 吞掉）。
+        // Warning: **和主循環同一支** `Seat`，不是抄一遍：抄本會分岔（漏掉「有改動
+        // 不許一下走」的閘，把存盤的錯 `let _ =` 吞掉）。
         if settings.took(editor, Some(key)) {
             continue;
         }
-        // **走輸入法的那一段**（`\{ime}` 之間，2026-09-28）。
+        // **走輸入法的那一段**（`\{ime}` 之間）。
         //
-        // Warning: **這裏不許自己寫一份派發**（2026-10-03 一輪審查報來的，改掉了）。從前
-        // 這一段是手抄的「打字要用的那幾個鍵」——碼、空格、Enter、退格、選重
-        // 數字、Esc——而真正那一支一直在長。分岔出來的是：離屏按 `;` 出「；」而
-        // 真機出「辶」（靈明的選二）、`=` 離屏出 `=` 而真機翻頁、方向鍵離屏把光標
-        // 移走並把字上到別處、`\t` 離屏插一個製表符而真機開面板。**這個倉審前端
-        // 靠的就是這張照片，而它在輸入法這一塊照的是另一個程序。**
+        // Warning: **這裏不許自己寫一份派發**。手抄一份「打字要用的那幾個鍵」——碼、
+        // 空格、Enter、退格、選重數字、Esc——而真正那一支一直在長，就會分岔：離屏
+        // 按 `;` 出「；」而真機出「辶」（靈明的選二）、`=` 離屏出 `=` 而真機翻頁、
+        // 方向鍵離屏把光標移走並把字上到別處、`\t` 離屏插一個製表符而真機開面板。
+        // **這個倉審前端靠的就是這張照片，那樣它在輸入法這一塊照的是另一個程序。**
         //
-        // 現在叫的是互動循環叫的那一支（`yumete_tui::offline_ime_key`），連
+        // 叫的是互動循環叫的那一支（`yumete_tui::offline_ime_key`），連
         // 「這一鍵歸不歸輸入法」那三個判準都是同一份。
         if composing && yumete_tui::offline_ime_key(ime, editor, key) {
             continue;
@@ -1802,8 +1771,8 @@ fn press(
         // 先畫一幀丟掉——不然 `--keys='gwf'` 裏那個 `f` 落到正文上當成別的鍵，而
         // 這個倉審前端就是靠拍照。
         // Warning: **`go`/`gu` 和 `gw` 同病，所以同一道門**（§5.73）。少了它，
-        // `--keys='gudo'` 裏那個 `d` 落到正文上**當成刪除**——第一次試就把一個字
-        // 刪掉了。離屏路徑和真路徑分家，這個倉咬過四次。
+        // `--keys='gudo'` 裏那個 `d` 落到正文上**當成刪除**。離屏路徑和真路徑不許
+        // 分家。
         if editor.owes_a_jump() || editor.owes_a_seek() {
             if let Some((w, h)) = shot {
                 let _ = yumete_tui::frame_to_text(editor, config, ime, w, h, settings.panel.as_ref());
@@ -1811,13 +1780,12 @@ fn press(
         }
     }
     // **最後一個鍵欠下的那幾件也要做完**：迴圈頂上那一下只補得了鍵**之間**的，
-    // 而 `R y` 正是按在最後，`\{space}f` 也是（2026-10-09 補齊的那一半，見
-    // [`catch_up_with_the_loop`]）。不補這一下，照片上是「按了 `y`，什麼都沒發生」。
+    // 而 `R y` 正是按在最後，`\{space}f` 也是（見 [`catch_up_with_the_loop`]）。不補這一下，照片上是「按了 `y`，什麼都沒發生」。
     catch_up_with_the_loop(editor, config, ime);
     settings.panel
 }
 
-/// **管道那一邊的那幾個開關**（`ye --grep`，2026-10-03 定）。
+/// **管道那一邊的那幾個開關**（`ye --grep`）。
 ///
 /// 出廠值就是面板的出廠值，只有一處不同：**名單不封頂**。面板封在 500 條，因為
 /// 名單是拿來走的；管道印給別的程序看，少印一條就是錯一條。
@@ -1831,8 +1799,8 @@ struct Grep {
     ignored: bool,
     include: String,
     exclude: String,
-    /// **繁簡、拼音**。出廠兩個都開——那是這個工具存在的理由
-    /// （2026-10-03 定：`ye --grep zhongguo` 開箱就搜得到「中國」）。
+    /// **繁簡、拼音**。出廠兩個都開——那是這個工具存在的理由：
+    /// `ye --grep zhongguo` 開箱就搜得到「中國」。
     chinese: (bool, bool),
     /// 往上搜到項目的根，而不是當前目錄。
     project: bool,
@@ -1840,16 +1808,14 @@ struct Grep {
     colour: Option<bool>,
     /// **按檔分組印，還是一行一條**：`None` ＝ 跟着終端機走，同 `colour`。
     ///
-    /// 2026-10-03 看過平鋪那一版之後定：「能不能像 rg 这样按照文件分组？看起来
-    /// 好看多了」。分組是**給人看的排版**，所以進了管道照樣一行一條自足的
+    /// 像 rg 那樣按檔分組，好看得多。分組是**給人看的排版**，所以進了管道照樣一行一條自足的
     /// `檔:行:列:文字`——`xargs`、`awk` 那一頭讀的還是原來那個形狀。
     heading: Option<bool>,
-    /// **開編輯器，別印到 stdout**（2026-10-03 定）。`--grep … --open` 開起來
+    /// **開編輯器，別印到 stdout**。`--grep … --open` 開起來
     /// 面板已經在跑，`--files … --open` 開起來挑選器已經打好。
     ///
     /// 做成一個修飾旗標而不是另一對名字：所有別的開關（`--hidden`、`--project`、
-    /// `--chinese=`…）白拿，只有一套詞彙要記。原話：「其实 open 更好。未来可以
-    /// -go 来 grep + open，短别名是可以连缀的」。
+    /// `--chinese=`…）白拿，只有一套詞彙要記；短名還串得起來（`-GO`）。
     open: bool,
 }
 
@@ -1880,8 +1846,8 @@ impl Default for Grep {
 /// 退出碼照 grep 的規矩：找到 0、一處都沒有 1、說不通 2。
 ///
 /// Warning: **這裏不另寫一個 grep。** 它撥的是面板撥的那一份狀態、跑的是面板跑的那一
-/// 支（`Editor::run_the_search`）。另寫一份一定會和面板分岔——同一天上午剛修過
-/// 一個：離屏拍照那一支手抄了一份輸入法派發，照出來的是另一個程序。
+/// 支（`Editor::run_the_search`）。另寫一份一定會和面板分岔——同一個形狀：離屏拍照
+/// 那一支要是手抄一份輸入法派發，照出來的就是另一個程序。
 ///
 /// Warning: **正文那一欄是命中前後各六十個字，不是整行。** 小說的一行是一整段，動輒幾
 /// 千字——rg 印整行是因為代碼的一行是一行。要整行的話那是另一個開關的事。
@@ -1890,10 +1856,10 @@ impl Default for Grep {
 /// 一個都沒給就是當前目錄——命令行的整個模型就是「我站在哪」，而
 /// `ls`/`grep`/`rg`/`fd` 沒有一個例外。
 ///
-/// Warning: **給了幾個就搜幾個**（2026-10-03 一輪審查報來的）。從前只看 `first()`，
-/// 後面的一聲不吭地丟掉——`ye --grep alpha d1 d2` 只搜了 `d1`。
+/// Warning: **給了幾個就搜幾個**，不是只看 `first()`、把後面的一聲不吭地丟掉——
+/// `ye --grep alpha d1 d2` 搜 `d1` 也搜 `d2`。
 ///
-/// Warning: **`~` 要展開。** 倉裏別處都走 `expand_tilde`，就這兩支沒走，於是
+/// Warning: **`~` 要展開**，同倉裏別處，走 `expand_tilde`——不然
 /// `ye --grep 霜 '~/書'` 答「`~` 不是一個目錄」。
 ///
 /// Warning: **給一個檔也算數。** `rg pat file` 是最常見的用法。檔案交給它所在的目錄
@@ -1923,9 +1889,8 @@ fn places(what: &str, given: &[String], cwd: &std::path::Path) -> Result<Vec<(st
 
 /// **問題本身說不通**——一個字都不印，退出碼 2。
 ///
-/// Warning: **「安安靜靜地說沒找到」是這支工具唯一不許犯的錯**（2026-10-03 一輪審查
-/// 報來的）：式子寫壞從前交退出碼 1，和「真的一處都沒有」分不開，腳本於是分不出
-/// 打錯字和沒結果。
+/// Warning: **「安安靜靜地說沒找到」是這支工具唯一不許犯的錯**：式子寫壞要是交退出
+/// 碼 1，就和「真的一處都沒有」分不開，腳本分不出打錯字和沒結果。
 fn the_question_will_not_parse(editor: &Editor, what: &str) -> Option<ExitCode> {
     let search = editor.search();
     if search.broken {
@@ -1955,7 +1920,7 @@ fn what_was_not_looked_at(editor: &Editor, what: &str) -> bool {
     }
     // **The file this output is going to was not searched** — it cannot be,
     // and reading it would feed the search its own answers until the disk
-    // filled (2026-10-19: one such line reached 315 GB). Said, not silent: a
+    // filled (one such line can reach 315 GB). Said, not silent: a
     // search that skips a file and keeps quiet is the one thing this tool may
     // not do. It does not make the answer incomplete in the sense above — the
     // skipped file holds nothing but this run's own output — so the exit code
@@ -1989,7 +1954,7 @@ fn run_export(
         eprintln!("yumete: --export takes html, typst, epub, csv, tsv or pdf, not '{format}'");
         return ExitCode::from(2);
     }
-    // **The export's words** (2026-11-08), as `:export` takes them:
+    // **The export's words**, as `:export` takes them:
     // `ye --export epub vertical jlreq page=A5 book.md`. A word misspelt is
     // said, not opened as a file; a file really named `vertical` is
     // `./vertical`.
@@ -2253,33 +2218,32 @@ fn run_grep(pattern: &str, where_: &[String], g: &Grep) -> ExitCode {
             s.exclude = g.exclude.clone();
             (s.glyphs, s.pinyin) = g.chinese;
         }
-        // **印出來的路徑照你給的那個拼法**（2026-10-03 一輪審查報來的）。搜索的
+        // **印出來的路徑照你給的那個拼法**。搜索的
         // 根是 canonicalize 過的，照它拼出來 `ye --grep x alias` 會答
         // `realdir/f.md`——問的是 `alias`，拿回來的是別的名字，`cd` 過去落在別處。
         // `--project` 沒有「你給的拼法」可依，那時纔退回真路徑。
         //
-        // Warning: **要在搜之前算好**（2026-10-03）：邊搜邊印，第一條命中來的時候
+        // Warning: **要在搜之前算好**：邊搜邊印，第一條命中來的時候
         // 路徑就得印得出來了。`search().root` 那時還沒填——它是走完纔填的，所以
         // `--project` 這一支自己先問一次 `project_root()`。
         //
         // Without `--project` the search runs from `at`, whether or not a place
-        // was named (2026-10-30: from a subdirectory with none named, hits were
-        // joined to the project root and printed as files that do not exist).
+        // was named: from a subdirectory with none named, hits joined to the
+        // project root would print as files that do not exist.
         let root = match g.project {
             false => at.clone(),
             true => editor.project_root(),
         };
         // Warning: **讀的人半路走了不算出錯。** `ye --grep 霜 | head -2` 關掉管道那一頭，
         // 而 Rust 的 `println!` 遇上 EPIPE 是 **panic**——六千條命中的時候它當場吐
-        // 一段堆棧。每一個 Unix 工具在這裏都是安安靜靜地收攤。現在它還**當場收**：
+        // 一段堆棧。每一個 Unix 工具在這裏都是安安靜靜地收攤。它還**當場收**：
         // 回 `false`，搜索自己停下，不接着走完整棵樹。
         let mut quit: Option<ExitCode> = None;
-        // **走查走到哪了，寫在 stderr 上**（§5.101，2026-10-07 定）。原話：「This
-        // status can also be used in CLI so that users do not see a flinking
-        // cursor.」那個資料夾 `-uu` 開着是 239,125 個檔，頭 30 秒一行都不印。
+        // **走查走到哪了，寫在 stderr 上**（§5.101），不讓人對着一個閃爍的光標
+        // 乾等：一個 `-uu` 開着的資料夾可以有二十多萬個檔，頭 30 秒一行都不印。
         //
         // Warning: **只在 stderr 是終端機的時候畫**，而且一個字節都不進 stdout：
-        // `ye -G x > out.txt` 和 `ye -G x | head` 要和從前逐字節相同。
+        // `ye -G x > out.txt` 和 `ye -G x | head` 要和不畫的時候逐字節相同。
         // 一支筆兩個人用（`pen`）：命中那一下先把這一行抹掉再印，不然半行進度
         // 會跟結果擠在同一行上。
         let telling = std::io::stderr().is_terminal();
@@ -2300,10 +2264,10 @@ fn run_grep(pattern: &str, where_: &[String], g: &Grep) -> ExitCode {
                     if at.is_empty() {
                         continue;
                     }
-                    // Warning: **一行要裝得下，不然原地重寫就不成立**（2026-10-07 報
-                    // 的）。超過終端機寬度的那一行自己折到下一行去，於是 `\r`
-                    // 回到的是**折出來那一截**的行首，`\x1b[2K` 擦掉的也只有那
-                    // 一截——屏幕上於是攢出一長串「747 files searched, searching
+                    // Warning: **一行要裝得下，不然原地重寫就不成立**。超過終端機
+                    // 寬度的那一行自己折到下一行去，於是 `\r` 回到的是**折出來
+                    // 那一截**的行首，`\x1b[2K` 擦掉的也只有那一截——屏幕上就
+                    // 攢出一長串「747 files searched, searching
                     // .pixi/…2703 files searched, searching .pixi/…」。
                     //
                     // 路徑從左邊摺，留住檔名：那是「走到哪了」裏唯一認得出來的
@@ -2444,8 +2408,8 @@ fn run_files(pattern: &str, where_: &[String], g: &Grep) -> ExitCode {
             (false, true) => root.clone(),
             _ => root.clone(),
         };
-        // **走檔那三個開關真的生效**（2026-10-03 修）：從前這裏寫死
-        // `Sieve::default()`，於是 `--hidden`/`--glob=`/`--exclude=` 全是死的。
+        // **走檔那三個開關真的生效**：寫死 `Sieve::default()` 的話，
+        // `--hidden`/`--glob=`/`--exclude=` 全是死的。
         let sieve = yumete_core::editor::Sieve {
             hidden: g.hidden,
             ignored: g.ignored,
@@ -2475,7 +2439,7 @@ fn run_files(pattern: &str, where_: &[String], g: &Grep) -> ExitCode {
     }
 }
 
-/// **管道那一邊的顏色**（2026-10-03 定：「染色这一块也可以做一下」）。
+/// **管道那一邊的顏色**。
 ///
 /// 照 rg 的缺省配色，因為肌肉記憶和眼睛的習慣都在那兒：路徑洋紅、行號綠、命中的
 /// 那幾個字紅而且粗。`auto` 的判準也和它一樣——**接着終端機就染，進管道就不染**，
@@ -2502,9 +2466,8 @@ impl Ink {
 
 /// `full` 相對於 `from` 怎麼寫——走不到就原樣交絕對路徑。
 fn pathdiff(full: &std::path::Path, from: &std::path::Path) -> std::path::PathBuf {
-    // Warning: **不許 canonicalize 要印的那一個**（2026-10-03 一輪審查報來的）。
-    // `ye --grep alpha alias` 從前印 `realdir/f.md`——使用者問的是 `alias`，拿回
-    // 來的是別的名字，`cd` 過去落在別處；連着的目錄指到樹外面的話還會印出一串
+    // Warning: **不許 canonicalize 要印的那一個**。不然 `ye --grep alpha alias`
+    // 印 `realdir/f.md`——使用者問的是 `alias`，拿回來的是別的名字，`cd` 過去落在別處；連着的目錄指到樹外面的話還會印出一串
     // `../../..`。**問什麼就答什麼。**
     let a = full.to_path_buf();
     let b = std::fs::canonicalize(from).unwrap_or_else(|_| from.to_path_buf());
@@ -2518,8 +2481,8 @@ fn pathdiff(full: &std::path::Path, from: &std::path::Path) -> std::path::PathBu
         ours.next();
         theirs.next();
     }
-    // Warning: **只有在底下纔寫成相對的**（2026-10-03 改）。爬出去的那一種寫成
-    // `../` 本來是想讓人看見「它上去過」，可從一個深目錄搜 `~` 印出來的是七層
+    // Warning: **只有在底下纔寫成相對的**。爬出去的那一種寫成 `../` 固然讓人看見
+    // 「它上去過」，可從一個深目錄搜 `~` 印出來的是七層
     // `../../../..`——那不是提示，是噪音。rg 在這裏印的是你給它的那個路徑，所以
     // 不在底下就原樣交絕對路徑：一眼看得出搜到了別處去。
     match theirs.next().is_none() {
@@ -2531,12 +2494,11 @@ fn pathdiff(full: &std::path::Path, from: &std::path::Path) -> std::path::PathBu
 /// `WIDTHxHEIGHT`, for `--shot`. Anything unreadable is the default page.
 /// `WxH` for `--shot`, or why it is not that.
 ///
-/// **It used to fall back rather than refuse** — every one of the three steps
-/// below silently produced the default instead — so `--shot=40,10` drew a
-/// 100×30 frame and said nothing, exit code and all. That is a bad trade for a
-/// diagnostic tool: a picture that is quietly of the wrong thing is worse than
-/// no picture, and in 2026-09-11's review it wasted a whole afternoon of six
-/// reviewers' terminal-size findings before anyone noticed (#389).
+/// **It refuses rather than falls back.** Were each of the three steps below
+/// to produce the default silently, `--shot=40,10` would draw a 100×30 frame
+/// and say nothing, exit code and all. That is a bad trade for a diagnostic
+/// tool: a picture that is quietly of the wrong thing is worse than no
+/// picture, and every terminal-size finding drawn from it is wasted (#389).
 ///
 /// A comma is taken as well as an `x`, because it is what everyone tries first
 /// — and the whole list is [`yumete_core::command::BETWEEN_TWO_NUMBERS`],
@@ -2548,13 +2510,12 @@ fn parse_size(text: &str) -> Result<(u16, u16), String> {
             "--shot wants a size like 100x30, not {text:?} (`x`, `X`, `×`, `*` or `,` between them)"
         ));
     };
-    // Warning: **Both ends are refused, and both used to get through.** Zero is not
-    // a small terminal, it is no terminal: `--shot=100x0` panicked in the
-    // renderer (`index outside of buffer: the area is Rect { width: 100,
-    // height: 0 }`) and `--shot=0x30` subtracted past zero drawing a menu. And
-    // the old ceiling was `u16::MAX`, which is not a size either —
-    // `--shot=20000x20000` allocated **56 GB** before it got anywhere, and
-    // `65535x65535` never came back. A real terminal cannot reach `MAX_CELLS`;
+    // Warning: **Both ends are refused.** Zero is not a small terminal, it is
+    // no terminal: `--shot=100x0` panics in the renderer (`index outside of
+    // buffer: the area is Rect { width: 100, height: 0 }`) and `--shot=0x30`
+    // subtracts past zero drawing a menu. And `u16::MAX` is not a size either
+    // — `--shot=20000x20000` allocates **56 GB** before it gets anywhere, and
+    // `65535x65535` never comes back. A real terminal cannot reach `MAX_CELLS`;
     // a typo can.
     const MAX_CELLS: u32 = 2_000;
     let read = |part: &str, which: &str| -> Result<u16, String> {
@@ -2952,7 +2913,7 @@ fn preview(editor: &Editor, config: &yumete_config::Config) {
     };
 
     // Written through a locked handle rather than `println!`, which *panics*
-    // when the reader goes away: `yumete -p 稿.md | less`, then `q`, used to
+    // when the reader goes away: `yumete -p 稿.md | less`, then `q`, would
     // print a Rust backtrace. `?` here means "the pipe closed", and the only
     // right answer to that is to stop.
     let mut out = io::stdout().lock();
@@ -2964,7 +2925,7 @@ fn preview(editor: &Editor, config: &yumete_config::Config) {
             "── {name}{modified} — {lines} line(s), {chars} char(s){extra} ──",
             name = buf.display_name(),
             // The text's lines, not the empty one after its last line ending
-            // (2026-10-30: a three-line file said four).
+            // (a three-line file is three lines, not four).
             lines = {
                 let rope = buf.rope();
                 let ends = rope.len_chars() > 0 && rope.char(rope.len_chars() - 1) == '\n';
@@ -3062,10 +3023,10 @@ mod tests {
 
     /// **`--keys` 在兩個鍵之間要補上主循環那一幀**，否則走磁碟的名單走不動。
     ///
-    /// 2026-10-02 一輪黑盒審查報來的：`--keys='␣/霜\n66jjjj'` 在工作路徑那一檔
-    /// 只走得到眼前這一份自己的那幾處，往後按多少下 `j` 都不動。核心裏同一串鍵
-    /// 走得好好的——差的是這支工具：那一趟搜索是欠着的，而整串鍵都餵在它還清
-    /// 之前，於是每一個 `j` 走的都是本文件那一檔的舊名單。
+    /// 不補的話 `--keys='␣/霜\n66jjjj'` 在工作路徑那一檔只走得到眼前這一份自己
+    /// 的那幾處，往後按多少下 `j` 都不動。核心裏同一串鍵走得好好的——差的是這支
+    /// 工具：那一趟搜索是欠着的，整串鍵都餵在它還清之前，每一個 `j` 走的就都是
+    /// 本文件那一檔的舊名單。
     #[test]
     fn keys_pressed_offscreen_wait_for_the_search_the_way_a_frame_would() {
         let dir = std::env::temp_dir().join(format!("yumete-press-walk-{}", std::process::id()));
@@ -3095,10 +3056,10 @@ mod tests {
 
     /// **A size it cannot read is a refusal, not a default** (#389).
     ///
-    /// Every step of this used to fall back: an unrecognised separator, a
-    /// width that is not a number, a height that is not a number. So
-    /// `--shot=40,10` drew 100×30 and said nothing — and a picture quietly of
-    /// the wrong thing is worse for a diagnostic tool than no picture at all.
+    /// No step of this falls back: an unrecognised separator, a width that is
+    /// not a number, a height that is not a number. Otherwise `--shot=40,10`
+    /// would draw 100×30 and say nothing — and a picture quietly of the wrong
+    /// thing is worse for a diagnostic tool than no picture at all.
     #[test]
     fn a_shot_size_is_read_or_refused_never_guessed() {
         assert_eq!(parse_size("40x10"), Ok((40, 10)));

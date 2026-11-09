@@ -1,7 +1,8 @@
-//! **Ctrl-C, `kill` or a closed terminal during `ye --import nvim`** (review,
-//! 2026-11-09). Neovim runs in a process group of its own, so the signal
-//! reached yumete alone: yumete died, Neovim ran on, the 10 s kill never came,
-//! and the copy of the reader's config stayed in the temporary directory.
+//! **Ctrl-C, `kill` or a closed terminal during `ye --import nvim`.** Neovim
+//! runs in a process group of its own, so the signal reaches yumete alone:
+//! unless yumete passes it on and cleans up, Neovim runs on, the 10 s kill
+//! never comes, and the copy of the reader's config stays in the temporary
+//! directory.
 //!
 //! Driven through the real binary, because what is tested is a signal and
 //! the process dying of it. The home and the temporary directory are this

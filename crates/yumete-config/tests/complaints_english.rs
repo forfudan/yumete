@@ -4,7 +4,7 @@
 //! process-wide switch (`yumete_cjk::set_speaks_english`), and a test that
 //! flips it inside the library's test binary turns a neighbour red whenever
 //! the scheduler runs the two side by side — `a_misspelled_key_is_reported…`
-//! was that neighbour on 2026-10-30.
+//! is such a neighbour.
 
 use yumete_config::faults::faults_in;
 

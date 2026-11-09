@@ -14,9 +14,9 @@ pub enum KeyPreset {
     Vim,
 }
 
-/// **A keymap's behaviour, one switch each** (2026-11-01). Each was a
-/// `vim_keymap()` check somewhere in the editor; named, a keymap is the
-/// set it picks, and each switch says what it changes where it is read.
+/// **A keymap's behaviour, one switch each**: no `vim_keymap()` check in the
+/// editor; a keymap is the set it picks, and each switch says what it
+/// changes where it is read.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Rules {
     /// The keymap's own Normal and Insert tables are vim's (`VIM_NORMAL`,
@@ -129,9 +129,9 @@ impl KeyPreset {
         }
     }
 
-    /// **What the preset's cursor, motions and registers do**, by name
-    /// (2026-11-01, the review's decoupling): the editor asks a rule, never
-    /// 「is this vim?」, so a third keymap is a set of these and a table.
+    /// **What the preset's cursor, motions and registers do**, by name: the
+    /// editor asks a rule, never 「is this vim?」, so a third keymap is a set
+    /// of these and a table.
     pub fn rules(self) -> Rules {
         match self {
             KeyPreset::Helix => Rules::HELIX,
@@ -141,12 +141,12 @@ impl KeyPreset {
 
     /// The preset's lines, in `[keys.normal]`'s own shape.
     ///
-    /// Warning: **the keys carry their `@`, like anyone else's** (2026-10-19). These
+    /// Warning: **the keys carry their `@`, like anyone else's.** These
     /// go into the same map a reader's own bindings do and are dispatched by the
     /// same `run_binding`, so they are spelled the way a reader would have to
     /// spell them — `("D", "@d$")` is keys, `("ZZ", ":x")` is a command line.
     /// Exempting the table would mean the dispatcher had to guess again for one
-    /// of its two callers, which is the whole thing being removed.
+    /// of its two callers, which is the whole thing `@` exists to avoid.
     pub fn table(self) -> &'static [(&'static str, &'static str)] {
         match self {
             KeyPreset::Helix => &[],
@@ -156,22 +156,21 @@ impl KeyPreset {
             // cursor.
             KeyPreset::Vim => &[
                 ("x", "vim_delete_char_forward"),
-                // Warning: **`s` 是一筆，不是「剪掉 ＋ 插入」兩筆**（2026-10-13 報
-                // 的：「使用 2s 替換輸入時，會把 redo 動作變成兩步」）。從前它拼成
-                // `;{n}Di`，兩筆編輯就是兩次撤銷；vim 的 `s` 就是 `cl`（`:h s`：
-                // 「synonym for `cl`」），而 `c` 在這一端本來就是一個算子、一筆。
+                // Warning: **`s` 是一筆，不是「剪掉 ＋ 插入」兩筆。** 拼成 `;{n}Di`
+                // 就是兩筆編輯、兩次撤銷，`2s` 的 redo 也成了兩步；vim 的 `s` 就是
+                // `cl`（`:h s`：「synonym for `cl`」），而 `c` 在這一端是一個算子、
+                // 一筆。
                 //
-                // 2026-09-19 那一版寫成 `;c` 是錯的（`c` 成了算子之後 `;c` 會停下
-                // 來等一個動作），而 `c{n}l` 把動作一起給了它，不等。
+                // 不能寫成 `;c`（`c` 是算子，`;c` 會停下來等一個動作）；`c{n}l`
+                // 把動作一起給了它，不等。
                 ("s", "@c{n}l"),
-                // Warning: **`dd` `dw` `cw` `yy` `cc` `yw` are not in this table
-                // any more** (#429, 2026-09-18). They were six lines of a
-                // grammar that has hundreds, and a table cannot spell the rest
-                // — `d$`, `de`, `dG`, `df,`, `di(`. `d`, `c` and `y` are
-                // operators now ([`VIM_MOTIONS`]), and all six fall out of the
-                // general rule.
+                // Warning: **`dd` `dw` `cw` `yy` `cc` `yw` are not in this
+                // table** (#429). They are six lines of a grammar that has
+                // hundreds, and a table cannot spell the rest — `d$`, `de`,
+                // `dG`, `df,`, `di(`. `d`, `c` and `y` are operators
+                // ([`VIM_MOTIONS`]), and all six fall out of the general rule.
                 // **The three that mean 「next line, where its writing
-                // begins」** (B4, 2026-09-20). `Enter` is the same motion and
+                // begins」** (B4). `Enter` is the same motion and
                 // cannot be spelled in this table — it has a key arm of its
                 // own — but `+` and `-` are characters and belong here.
                 ("+", "@jgs"),
@@ -187,40 +186,36 @@ impl KeyPreset {
                 // jumps to the matching bracket), `D` and `C` cut the
                 // selection (vim takes the rest of the line).
                 //
-                // Warning: **`J`/`K` 2026-10-05 讓出來了，翻的是 2026-09-18 自己那
-                // 一條**（原話：「J 合併行我們和 helix 也不一樣，我覺得這個應該保持
-                // gJ」，理由是 `J`/`K` 在這裏是翻半頁，讀一本小說按得最多的一對）。
-                //
-                // **翻案的理由是那個代價只落在 helix 那一邊**：`C-f`/`C-b`/`C-d`/
-                // `C-u` 兩套鍵位下都綁着，一個明確選了 vim 鍵位的人本來就用它們翻
-                // 頁，在 vim 裏也從不用 `J`。helix 出廠那一套一個字不動。
+                // Warning: **`J`/`K` 在 vim 鍵位下讓給 vim**，雖然它們在這裏是翻
+                // 半頁、讀一本小說按得最多的一對。代價只落在 vim 鍵位那一邊，而且
+                // 不重：`C-f`/`C-b`/`C-d`/`C-u` 兩套鍵位下都綁着，一個明確選了 vim
+                // 鍵位的人本來就用它們翻頁，在 vim 裏也從不用 `J`。helix 出廠那一套
+                // 一個字不動。
                 //
                 // `K` 給的是「查光標下這個東西」——Neovim 掛着 LSP 時 `K` 就是
                 // `vim.lsp.buf.hover()`（`lsp.txt`：「K is mapped to
                 // vim.lsp.buf.hover()」），和 `空格 k` 是同一件事。
-                // **`q` 錄、`Q` 播，和這個編輯器正好反着**（2026-10-06）。helix 的
-                // 規矩是 `Q` 錄、`q` 播，這個倉跟的是它；而一個 vim 的手按 `q`
-                // 本來是「開始錄」，在這裏當場把上一個巨集放了一遍——倉裏自己
-                // 寫過「一對調換了的鍵是最壞的一種分歧」（`keys.rs` 的 `Q` 那一
-                // 段），那句話正是說這個。
+                // **`q` 錄、`Q` 播，和這個編輯器正好反着。** helix 的規矩是 `Q`
+                // 錄、`q` 播，這個倉跟的是它；而一個 vim 的手按 `q` 是「開始錄」，
+                // 照 helix 的鍵就會當場把上一個巨集放一遍——「一對調換了的鍵是最
+                // 壞的一種分歧」（`keys.rs` 的 `Q` 那一段）。
                 //
                 // Warning: **展開出來的鍵不再過別名層**，所以這兩行不會互相咬。
                 // `q{a-z}` waits for its letter (`vim_record_macro`, a row of
-                // the vim table, 2026-11-01); `Q` plays the register last
-                // recorded into, as Neovim's does (2026-11-03).
+                // the vim table); `Q` plays the register last recorded into,
+                // as Neovim's does.
                 ("Q", "vim_replay_last_macro"),
                 ("K", "hover"),
                 ("%", "vim_match_brackets"),
-                // **`(`/`)` 是句子**（2026-10-06）。這裏它們本來是「換主選區」，
-                // 而 vim 的手按的是上一句/下一句——這個編輯器把句子放在 `H`/
-                // `L` 上（#404）。換主選區在 vim 鍵位下没有鍵，多選區那一族本來
+                // **`(`/`)` 是句子**，不是 helix 的「換主選區」：vim 的手按的是
+                // 上一句/下一句——這個編輯器把句子放在 `H`/`L` 上（#404）。換主選區在 vim 鍵位下没有鍵，多選區那一族本來
                 // 就不是 vim 的東西。
-                // **`m` 讓給設標記這件事不在這張表上**（2026-10-06）：它從前寫成
-                // `("m", "M")`，而 `M` 當天讓給了「屏幕中間」，換出來的 `M` 又分不出
-                // 是誰按的。改成編輯器自己一支 vim 專用的 `m`（`keys.rs`）。
+                // **`m` 讓給設標記這件事不在這張表上**：寫成 `("m", "M")` 不行，
+                // `M` 是「屏幕中間」，換出來的 `M` 又分不出是誰按的。所以是編輯器
+                // 自己一支 vim 專用的 `m`（`keys.rs`）。
                 ("D", "@d$"),
                 ("C", "@c$"),
-                // **`Y` ＝ `y$`，跟 nvim**（2026-10-06 定「我傾向 nvim」）。
+                // **`Y` ＝ `y$`，跟 nvim。**
                 // nvim 0.6 起的出廠值，理由是和 `D`（`d$`）`C`（`c$`）成一套。
                 // **一個鍵都没丟**：`yy` 一直是「複製整行」，兩種寫法都在。
                 ("Y", "@y$"),
@@ -233,7 +228,7 @@ impl KeyPreset {
     }
 }
 
-/// **How a `[keys.<mode>]` table was written** (2026-11-05), beside the runs
+/// **How a `[keys.<mode>]` table was written**, beside the runs
 /// it reads into: which keys are groups (a table under a key), the order
 /// the lines are in, and the menu text a command row gives itself. The
 /// config reads it, and the editor lays its key tree from it.
@@ -272,7 +267,7 @@ pub struct KeyShapes {
     pub table: KeyShape,
 }
 
-/// **What may follow a vim operator** (`d`, `c`, `y`) — #429, 2026-09-18.
+/// **What may follow a vim operator** (`d`, `c`, `y`) — #429.
 ///
 /// A translation table could give a vim hand `dw` and `dd`; it could not give
 /// it `d$`, `de`, `dG` or `di(`, because those are an *operator waiting for a
@@ -340,23 +335,23 @@ pub const VIM_MOTIONS: &[(&str, VimMotion)] = &[
     ("k", line("{n}k")),
     ("G", line("{n}G")),
     ("gg", line("{n}gg")),
-    // Warning: **`ge` is not among them** (2026-09-19). vim's `ge` is 「the end of
-    // the previous word」 — a short backward step — while this editor's `ge`
-    // goes to the end of the **file**, so `dge` deleted the whole document
-    // where vim would have taken back half a word. A motion that means two
+    // Warning: **`ge` is not among them.** vim's `ge` is 「the end of the
+    // previous word」 — a short backward step — while this editor's `ge` goes
+    // to the end of the **file**, so `dge` would delete the whole document
+    // where vim takes back half a word. A motion that means two
     // wildly different things is worse under an operator than no motion at
     // all: `d` + an unknown key does nothing and says so.
     ("}", m("{n}}")),
     ("{", m("{n}{")),
-    // vim 的句子動作是這一對。Warning: **`H`/`L` 2026-10-06 從這裏撤了**——它們在
-    // vim 裏是屏幕的頂/中/底，不是句子（§5.94：兼容第一）。
+    // vim 的句子動作是這一對。Warning: **`H`/`L` 不是句子**——它們在 vim 裏是
+    // 屏幕的頂/中/底（§5.94：兼容第一），見下面那三行。
     //
     // 右邊這兩個按鍵串**没人讀**：算子後面那一格問的是 [`crate::vim::step_for`]，
-    // 它自己認得 `(`/`)`；這張表今天只剩兩個用處，一是算子提示那一行的鍵名
+    // 它自己認得 `(`/`)`；這張表只有兩個用處，一是算子提示那一行的鍵名
     // （`hint.rs` 的 `vim_motion_list`），二是 `linewise`/`wants` 這幾格。
     ("(", m("{n}(")),
     (")", m("{n})")),
-    // 屏幕的頂/中/底，整行整行地取（2026-10-06）。
+    // 屏幕的頂/中/底，整行整行地取。
     ("H", line("{n}H")),
     ("M", line("{n}M")),
     ("L", line("{n}L")),
@@ -384,7 +379,7 @@ pub fn vim_motion_ahead(typed: &str) -> bool {
 /// 方向鍵、`~`。
 ///
 /// Warning: **`s` 不在裏面。** vim 出廠的 `b,s` 裏那個 `s` 是普通模式的空格，而空格
-/// 在這個編輯器裏是菜單引導鍵（2026-10-10 定）。
+/// 在這個編輯器裏是菜單引導鍵。
 pub const WHICH_WRAP: &str = "bhl<>~";
 
 /// 讀一串 `whichwrap`：留下的字母，和說不通的那幾個。

@@ -1,12 +1,10 @@
-//! **那扇設置面板的狀態** —— Feature #421（2026-09-24）。
+//! **那扇設置面板的狀態** —— Feature #421。
 //!
-//! 原話：
-//!
-//! > 這樣的話用戶（特別是寫小説的），不需要面對 toml 和一堆 key 發呆不知道他們
-//! > 都是幹啥的，也不需要查詢到底有哪些 key 可以用。
+//! 用戶（特別是寫小説的）不必面對 toml 和一堆 key、不知道它們是幹啥的，也不必
+//! 去查到底有哪些 key 可以用。
 //!
 //! 整頁一扇：一張單子，八組的名字是單子裏的分隔標題，左邊那一欄是它們的目録。
-//! 鍵在每一行上只有一個意思（2026-11-08 作者定）：`jk` `gg` `G` 走、`/` 搜、
+//! 鍵在每一行上只有一個意思：`jk` `gg` `G` 走、`/` 搜、
 //! `Enter` 改、空格撥、`r` 回到下一層、`u` / `C-r` 撤銷與重做、`Tab` 換寫哪一份、
 //! `q` 關。
 //!
@@ -26,10 +24,9 @@
 //!
 //! # 即改即存，`u` 反悔
 //!
-//! 2026-09-23 定的是 `:w`（「即時生效不好，改錯了都没辦法反悔」）；2026-11-08 改成
 //! **每一次確認的改動當場寫進檔裏並生效**，而反悔是 `u`：撤銷把檔寫回去。「改了」
-//! 和「存了」從此是同一件事，没有「未保存」，也没有走的時候那一問——審出來的毛病
-//! 有一半是那兩個狀態分不清。改動先落在 [`Sheet::edits`]，[`Panel::flush`] 隨即
+//! 和「存了」是同一件事，没有「未保存」，也没有走的時候那一問——兩個狀態分得開，
+//! 就有分不清的時候。改動先落在 [`Sheet::edits`]，[`Panel::flush`] 隨即
 //! 寫下去，落完由 `:reload-config` 那條同一支推進編輯器。
 
 use std::collections::BTreeMap;
@@ -53,12 +50,11 @@ pub enum Layer {
 /// 一層，和它的名字。
 ///
 /// Warning: **寫成 `label:` 字段，不是一支 `match`** —— 同 [`crate::settings_ui::Named`]，
-/// 同一個理由，而這一處 2026-09-24 就照着 `match` 寫過一遍、當場被
-/// `messages.rs` 那張網逮住（三則文案「没人說」）。那張網讀源碼找 `label:`/
-/// `hint:`/`say!(`，**看不見 `match` 的返回值**。
+/// 同一個理由：`messages.rs` 那張網讀源碼找 `label:`/`hint:`/`say!(`，**看不見
+/// `match` 的返回值**，寫成 `match` 的三則文案會被當成「没人說」。
 ///
 /// Warning: 更壞的不是紅，是它**紅得像另一件事**：那條 assert 說的是「a renamed or
-/// deleted tag」，照着做就把三則好好的文案刪了，面板第三欄從此逐行寫着
+/// deleted tag」，照着做就把三則好好的文案刪了，面板第三欄就逐行寫着
 /// `set.layer.factory`。
 pub struct LayerName {
     pub layer: Layer,
@@ -116,7 +112,7 @@ pub struct Sheet {
     /// Warning: **本項目那一份多半還不存在，而路徑照樣給得出來** —— 面板頂上寫着
     /// 「還没有這個文件——存盤時建」，那句話得兌現。給 `None` 的話 `save()` 會
     /// 回一句 `Local 那一層没有檔`，一個**没翻譯的 Rust Debug 字串**出現在界面
-    /// 上，而改動還掛着。2026-09-24 審出來的。
+    /// 上，而改動還掛着。
     pub path: Option<PathBuf>,
     /// 那個檔此刻在不在磁碟上。面板拿它決定說路徑還是說「存盤時建」。
     pub there: bool,
@@ -129,13 +125,13 @@ pub struct Sheet {
     /// 從 [`text`](Self::text) 算出來的，開面板時算一次。Warning: **不是每一幀重算**：
     /// 一幀要問幾十次，而 toml 解析一次是幾十微秒——乘起來就是打字時看得見的頓。
     declared: BTreeMap<String, String>,
-    /// **The loader cannot read this file** (2026-11-08): the line, 0 起算,
+    /// **The loader cannot read this file**: the line, 0 起算,
     /// and the parser's message. A TOML error, or a name or a type the
     /// config does not take — either way yumete runs as if the file were not
     /// there, so what it says is not in force and the panel does not show it
     /// as if it were; `:w` will not write it.
     pub unread: Option<(usize, String)>,
-    /// **When the file was last seen and how long it was** (2026-11-09):
+    /// **When the file was last seen and how long it was**:
     /// another time or length on the disk is a change made outside, and the
     /// file is read again ([`Panel::refresh`]). `None` ＝ not there.
     stamp: Option<(std::time::SystemTime, u64)>,
@@ -148,8 +144,8 @@ fn stamp(path: &std::path::Path) -> Option<(std::time::SystemTime, u64)> {
 }
 
 /// **What the disk holds now**: the text, `None` when the file is not there
-/// (2026-11-09, reported: a file deleted outside was written back whole from
-/// the text the panel had read), an error when it cannot be read.
+/// (so a file deleted outside is not written back whole from the text the
+/// panel had read), an error when it cannot be read.
 fn read_disk(path: &std::path::Path) -> Result<Option<String>, SaveError> {
     match std::fs::read_to_string(path) {
         Ok(text) => Ok(Some(text)),
@@ -269,8 +265,8 @@ fn declared_in(text: &str) -> BTreeMap<String, String> {
     out
 }
 
-/// One table's values, and the tables inside it, all the way down
-/// (2026-11-02): `[keys.flavor_items]` and `[ime.annotation_modes.double]`
+/// One table's values, and the tables inside it, all the way down:
+/// `[keys.flavor_items]` and `[ime.annotation_modes.double]`
 /// are pages of the panel, and `[keys.normal]` says which keys a binding
 /// took.
 fn declare(out: &mut BTreeMap<String, String>, at: &str, t: &toml_edit::Table) {
@@ -278,7 +274,7 @@ fn declare(out: &mut BTreeMap<String, String>, at: &str, t: &toml_edit::Table) {
         match (value.as_table(), value.as_inline_table()) {
             (Some(inner), _) => declare(out, &format!("{at}.{key}"), inner),
             // `flavor_items = { tables = false }` is the same table, written
-            // on one line (found in review, 2026-11-02).
+            // on one line.
             (_, Some(inline)) => {
                 let inner = inline.clone().into_table();
                 declare(out, &format!("{at}.{key}"), &inner);
@@ -317,12 +313,11 @@ fn written(change: &Change) -> String {
 
 /// 兩個寫法說的是不是同一個值。
 ///
-/// Warning: **不能逐字節比寫法**（2026-10-01）。同一個值 toml 有好幾種寫法，而兩
+/// Warning: **不能逐字節比寫法**。同一個值 toml 有好幾種寫法，而兩
 /// 頭挑的不一樣：`toml_edit::Value::from("a\"b\\c")` 挑的是**字面串**
-/// `'a"b\c'`，而檔裏人手寫的多半是**基本串** `"a\"b\\c"`。`settle` 從前拿
-/// [`written`] 的結果去比 `declared_in` 的原樣寫法，於是一旦值裏有 `"` 或
-/// `\`，「改回原值」就永遠判不出來——那一行掛着「改了還没存」，每存一次還
-/// 往檔裏重寫一遍。
+/// `'a"b\c'`，而檔裏人手寫的多半是**基本串** `"a\"b\\c"`。拿 [`written`] 的
+/// 結果逐字節去比 `declared_in` 的原樣寫法，一旦值裏有 `"` 或 `\`，「改回原值」
+/// 就永遠判不出來——那一行掛着「改了還没存」，每存一次還往檔裏重寫一遍。
 ///
 /// 寫法不同不算不同；解析不出來的（面板不認得的寫法）退回逐字節比。
 fn same_value(a: &str, b: &str) -> bool {
@@ -340,11 +335,10 @@ fn same_value(a: &str, b: &str) -> bool {
 
 /// 檔裏那個寫法還原成一段字——[`written`] 的反函數。
 ///
-/// Warning: **`trim_matches('"')` 不是它的反函數**（2026-10-01）。這一頭一直在用
-/// 那一句，而 [`declared_in`] 交出來的是 `toml_edit` 的**原樣寫法**（「面板要照
-/// 原樣顯示」），於是：
+/// Warning: **`trim_matches('"')` 不是它的反函數**。[`declared_in`] 交出來的是
+/// `toml_edit` 的**原樣寫法**（面板要照原樣顯示），拿那一句去剝引號就會：
 ///
-/// | 檔裏 | 從前畫成/編輯成 | 存回去變成 |
+/// | 檔裏 | 畫成/編輯成 | 存回去變成 |
 /// | --- | --- | --- |
 /// | `"a\"b"` | `a\"b` | `"a\\\"b"`，反斜線每存一次多一根 |
 /// | `"a\\b"` | `a\\b` | `"a\\\\b"`，同上 |
@@ -352,7 +346,7 @@ fn same_value(a: &str, b: &str) -> bool {
 /// | `'a"b'`（字面串） | `'a"b'`，連引號一起 | `"'a\"b'"` |
 ///
 /// 而 `settle` 拿 `written(改)` 去比 `declared_in` 那一份，一旦值裏有 `"` 或
-/// `\` 就永遠比不上：那一行從此掛着「改了還没存」，每存一次再多一根反斜線。
+/// `\` 就永遠比不上：那一行掛着「改了還没存」，每存一次再多一根反斜線。
 /// 兩頭都走 `toml_edit` 就對得上了——`unwritten(written(s)) == s`。
 pub fn unwritten(repr: &str) -> String {
     repr.parse::<toml_edit::Value>()
@@ -381,19 +375,19 @@ pub struct Panel {
     /// 改動落到哪一份上。
     pub into: Which,
     /// **The rows a search left**, as places in [`Panel::all_rows`]: `None`
-    /// is every row (2026-11-08). The front end works it out, because the
+    /// is every row. The front end works it out, because the
     /// names a search reads are in the reader's language.
     pub found: Option<Vec<usize>>,
     /// The row the cursor is on, of [`Panel::rows`].
     pub row: usize,
-    /// **A page is open**, on this row of it (2026-11-02). Which page is the
+    /// **A page is open**, on this row of it. Which page is the
     /// row it was opened from ([`Panel::subpage`]). `None` is the ordinary
     /// list.
     pub page: Option<usize>,
-    /// **The list a choice is picked from** (2026-11-08): `Enter` on a choice
+    /// **The list a choice is picked from**: `Enter` on a choice
     /// opens it, each value with what it means.
     pub popup: Option<Popup>,
-    /// **Why the value typed was not taken** (2026-11-08): `Enter` on a value
+    /// **Why the value typed was not taken**: `Enter` on a value
     /// the config would refuse writes nothing, and this is drawn under the
     /// row while the value is typed again.
     pub refusal: Option<Refusal>,
@@ -401,7 +395,7 @@ pub struct Panel {
     /// see: `None` takes any name.
     pub schemes: Option<Names>,
     /// **What is being typed on the command row for the panel**, if anything:
-    /// a value, or the search (2026-11-08). The front end opens the line and
+    /// a value, or the search. The front end opens the line and
     /// says so here, so the page can draw what goes with it.
     pub typing: Option<Typing>,
     /// The search in force, or being typed: empty is none.
@@ -414,10 +408,10 @@ pub struct Panel {
 /// **One change as written**, for `u` and `C-r`: each file it wrote.
 type Step = Vec<Stepped>;
 
-/// **One file's part of a change** (2026-11-09, reported: `u` after `r`
-/// lost the comment after the line, and a table emptied and taken back came
-/// back bare). The file as it was just before and just after, whole, so
-/// taking the change back writes back exactly what was there; and the keys,
+/// **One file's part of a change**. The file as it was just before and just
+/// after, whole, so taking the change back writes back exactly what was
+/// there — the comment after a line `r` took, a table emptied and taken back
+/// with all it held; and the keys,
 /// for a file changed outside since, where writing the whole text back
 /// would undo that change too.
 #[derive(Debug, Clone)]
@@ -440,10 +434,9 @@ pub enum Typing {
     Value,
     /// The search: the list narrows as it is typed.
     Search,
-    /// **What follows a `:`** (2026-11-09, reported: the keys of `:e
-    /// notes.md` ran as the panel's own, and `e` opened the config file and
-    /// took the rest as typing). The line takes everything up to Enter or
-    /// Esc; `q` and its kin close the panel, and anything else is said not
+    /// **What follows a `:`**: the keys of `:e notes.md` are the line's, not
+    /// the panel's own (or `e` would open the config file and take the rest
+    /// as typing). The line takes everything up to Enter or Esc; `q` and its kin close the panel, and anything else is said not
     /// to be taken.
     Command,
 }
@@ -468,9 +461,9 @@ pub struct Names {
 }
 
 /// **Why a value cannot be set** — the config's own rules, checked on
-/// `Enter` (2026-11-08). Reported: `nosuch` as a theme and `ZZZ` as a page
-/// were saved and said to be in force, and only the next start said they
-/// were not; `99` became `64` and `abc` vanished without a word.
+/// `Enter`, so a value the config would refuse (`nosuch` as a theme, `ZZZ`
+/// as a page, `99` past `64`, `abc` for a number) is neither saved and said
+/// to be in force nor changed or dropped without a word.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Refusal {
     /// Not a number. The domain is `low` to `high`, and `0` beside it when
@@ -520,8 +513,8 @@ pub enum SaveError {
     LinkToNothing(PathBuf),
 }
 
-/// **Where the panel stands**, to tell whether a key moved anything
-/// (2026-11-08): a message about a row goes stale when this changes.
+/// **Where the panel stands**, to tell whether a key moved anything: a
+/// message about a row goes stale when this changes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Spot {
     row: usize,
@@ -686,9 +679,8 @@ impl Panel {
     /// **Go to a setting by name** (`:settings editor.scrolloff`): its TOML
     /// path, its key alone when only one setting has it, or its name as the
     /// panel shows it — `names` gives it in every language the front end
-    /// has, so 首行缩进 finds the row whichever script the panel is drawn in
-    /// (2026-11-09). Quotes around the name are let go, and case is not
-    /// asked. Gives whether it was found; a search in force is let go.
+    /// has, so 首行缩进 finds the row whichever script the panel is drawn in.
+    /// Quotes around the name are let go, and case is not asked. Gives whether it was found; a search in force is let go.
     pub fn go_to(&mut self, name: &str, names: impl Fn(&Setting) -> Vec<String>) -> bool {
         let name = name.trim();
         let name = ['"', '\'']
@@ -716,7 +708,7 @@ impl Panel {
         }
     }
 
-    /// **三層各自說了什麼** —— 出廠、全局、本項目，照面板上那一塊的次序（2026-10-13）。
+    /// **三層各自說了什麼** —— 出廠、全局、本項目，照面板上那一塊的次序。
     ///
     /// `None` ＝ 那一層沒有說話。出廠那一層永遠有話說，所以它那一格永遠是 `Some`。
     pub fn layers(&self, setting: &Setting) -> [(Layer, Option<String>); 3] {
@@ -751,7 +743,7 @@ impl Panel {
         }
     }
 
-    /// **面板顯示的要是編輯器真用的那個值**（2026-10-09 作者定）。
+    /// **面板顯示的要是編輯器真用的那個值**。
     ///
     /// 檔是人手改的：`zong_length = 2` 寫進去，`into_config` 按下界排版——面板顯示
     /// 的值不是編輯器用的值，而這扇面板存在的理由就是終結這件事。鉗的依據是這一項
@@ -786,10 +778,9 @@ impl Panel {
         }
     }
 
-    /// **A file changed outside since the panel last looked** (2026-11-09,
-    /// reported: changed outside from 3 to 9, then set to 5 in the panel,
-    /// `u` wrote 3): read again, so the panel shows what it says now and a
-    /// change starts from it. A file gone is an empty one. Gives the files
+    /// **A file changed outside since the panel last looked**: read again, so
+    /// the panel shows what it says now and a change starts from it (changed
+    /// outside from 3 to 9, then set to 5 in the panel, `u` writes 9, not 3). A file gone is an empty one. Gives the files
     /// read again, for the front end to say once.
     pub fn refresh(&mut self) -> Vec<PathBuf> {
         let mut moved = Vec::new();
@@ -1029,7 +1020,7 @@ impl Panel {
         self.settle(setting, Change::Text(word.clone()));
     }
 
-    /// **The value typed, on `Enter`** (2026-11-08): taken when the config
+    /// **The value typed, on `Enter`**: taken when the config
     /// would take it; otherwise nothing is set and [`Panel::refusal`] says
     /// why, naming what is taken. A number out of range is refused, not
     /// pulled into it, and a word that is not a number is refused, not
@@ -1101,10 +1092,9 @@ impl Panel {
         }
     }
 
-    /// **`r` —— 把這一項從切着的那一份裏拿掉，回去跟下面那一層**（2026-11-08：
-    /// 從前叫 `d`，而它有三個名字）。
+    /// **`r` —— 把這一項從切着的那一份裏拿掉，回去跟下面那一層**。
     ///
-    /// Gives whether anything was there to take (2026-11-08). On a row this
+    /// Gives whether anything was there to take. On a row this
     /// file does not set, the row already follows the layer below, and the
     /// front end says so rather than leaving a key to do nothing on screen.
     pub fn reset(&mut self) -> Option<bool> {
@@ -1154,7 +1144,7 @@ impl Panel {
         crate::faults::line_for(&self.sheet().text, &format!("[{table}] {key}"))
     }
 
-    // ---- The flavour's page (2026-11-02) ---------------------------------
+    // ---- The flavour's page ----------------------------------------------
 
     fn setting(path: &str) -> &'static Setting {
         SETTINGS.iter().find(|s| s.path() == path).expect("a row the panel has")
@@ -1387,7 +1377,7 @@ impl Panel {
         }
     }
 
-    // ---- The annotation page (2026-11-02) ----------------------------------
+    // ---- The annotation page ---------------------------------------------
 
     fn field_path(row: &AnnotationRow) -> String {
         format!("ime.annotation_modes.{}.{}", row.mode, row.field)
@@ -1505,9 +1495,8 @@ impl Panel {
         self.global.dirty() || self.local.dirty()
     }
 
-    /// **Write what was just changed** (2026-11-08, the save model the
-    /// author chose: every confirmed change is written at once and takes
-    /// effect; `u` takes it back). `Ok(None)` when there was nothing to
+    /// **Write what was just changed** — the save model: every confirmed
+    /// change is written at once and takes effect; `u` takes it back. `Ok(None)` when there was nothing to
     /// write. A change that cannot be written is let go, so the panel shows
     /// the files as they are.
     pub fn flush(&mut self) -> Result<Option<Saved>, SaveError> {
@@ -1526,7 +1515,7 @@ impl Panel {
     }
 
     /// **One step of `u` (`back`) or `C-r`**, written and handed to the
-    /// other stack (2026-11-09). A file the disk still holds as that step
+    /// other stack. A file the disk still holds as that step
     /// left it gets its other text back exactly, comments and order and all;
     /// a file changed outside since gets the step's keys set again on what
     /// it holds now, so the change outside stays.
@@ -1581,11 +1570,11 @@ impl Panel {
     /// what the step will take it back to next.
     ///
     /// Warning: **a file changed outside since gets the step's keys set on
-    /// what it holds now, and so does the way back** (2026-11-09, reported:
-    /// set to 5, changed outside to 7, `u` wrote 3 over the 7 and `C-r` then
-    /// wrote the 7 back, not the 5). The way back was the text the disk held
-    /// before `u`, which is the change outside, not the step's; it is now
-    /// what `u` wrote with the step's keys set again — and a file deleted
+    /// what it holds now, and so does the way back**: set to 5, changed outside
+    /// to 7, `u` writes 3 and `C-r` writes the 5, not the 7. The way back
+    /// is not the text the disk held before `u`, which is the change outside,
+    /// not the step's; it is what `u` wrote with the step's keys set again —
+    /// and a file deleted
     /// outside, taken back by `u`, comes back from `C-r` with the change in
     /// it rather than gone again.
     fn replan(&self, step: &Step, back: bool) -> Result<Vec<Replanned>, SaveError> {
@@ -1632,11 +1621,11 @@ impl Panel {
 
     /// **兩份各寫各的，寫完把改動清掉**，記下這一步給 `u`。
     ///
-    /// Warning: **A file the loader cannot read is not written** (2026-11-08),
-    /// and then nothing is: both are asked before either is touched. Writing
-    /// into it would leave it as unread as before and say the settings were
-    /// in force (reported: a TOML error came back as a raw, truncated English
-    /// line inside the Chinese panel).
+    /// Warning: **A file the loader cannot read is not written**, and then
+    /// nothing is: both are asked before either is touched. Writing into it
+    /// would leave it as unread as before and say the settings were in force;
+    /// the panel says why instead, in its own words, not as the parser's raw,
+    /// truncated English line.
     fn write(&mut self) -> Result<Option<Saved>, SaveError> {
         if !self.dirty() {
             return Ok(None);
@@ -1660,8 +1649,8 @@ impl Panel {
             }
             let sheet = self.sheet_mut_of(which);
             // Warning: **"before" is what the disk held just now**, not what the
-            // panel read at opening (2026-11-09, reported: changed outside from
-            // 3 to 9, set to 5 here, and `u` wrote 3).
+            // panel read at opening, or changed outside from 3 to 9 and set to 5
+            // here, `u` would write 3.
             let was = declared_in(now.as_deref().unwrap_or(""));
             let keys: Vec<(String, Option<String>, Option<String>)> = std::mem::take(&mut sheet.edits)
                 .into_iter()
@@ -1709,10 +1698,10 @@ impl Panel {
             // 這段時間裏那個檔可能被外面改了，拿舊正文改完整份寫回去會把人家改的
             // 別的鍵一起頂掉。改的那幾項是「鍵 → 新值」，套在哪一份正文上都成立。
             //
-            // Warning: **A file deleted outside is an empty one** (2026-11-09,
-            // reported: it was written back whole from the text the panel had
-            // read, every line the deletion took coming back). One that cannot
-            // be read is not written at all.
+            // Warning: **A file deleted outside is an empty one**, not written
+            // back whole from the text the panel had read, every line the
+            // deletion took coming back. One that cannot be read is not written
+            // at all.
             let now = read_disk(&path)?;
             let text = now.as_deref().unwrap_or("");
             if let Some((line, said)) = crate::faults::unread(text) {
@@ -1756,14 +1745,13 @@ fn write_atomically(path: &std::path::Path, text: &str) -> std::io::Result<()> {
     // 常常是一條指向 dotfiles 的軟鏈（chezmoi/stow/yadm），而 `rename` 換的是
     // **目録項**——不穿過去的話，存一次就把那條鏈接換成一個普通檔，dotfiles 裏
     // 那一份從此原封不動地被甩掉，而 `git status` 裏什麽都看不見。
-    // 2026-09-24 審出來的，實測。
     let path = &std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
     let dir = path.parent().unwrap_or(std::path::Path::new("."));
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    // The same shape as yumete-core's temporary files (2026-10-31), so one
+    // The same shape as yumete-core's temporary files, so one
     // ignore line, `*.yumete-tmp`, covers a crash in the middle of either.
     let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     let tmp = dir.join(format!(".{}.{}-{}.yumete-tmp", name.trim_start_matches('.'), std::process::id(), nanos));
@@ -1843,7 +1831,7 @@ mod tests {
         assert_eq!((shown.value.as_str(), shown.from, shown.under), ("0", Layer::Factory, None));
     }
 
-    /// **面板顯示的要是編輯器真用的那個值**（2026-10-09 作者定）。
+    /// **面板顯示的要是編輯器真用的那個值**。
     #[test]
     fn the_panel_shows_what_the_editor_takes_not_what_the_file_says() {
         let p = panel("[editor]\nzong_length = 2\npages_vertical = 99\n\n[panel]\nmarkers = \"\"\n", "");
@@ -1854,7 +1842,7 @@ mod tests {
         assert_eq!(zero.shown(find("editor.zong_length")).value, "0", "0 ＝與窗口同高");
     }
 
-    /// **One list, the groups its headings** (2026-11-08): `j` walks from
+    /// **One list, the groups its headings**: `j` walks from
     /// the last row of a group to the first of the next, `gg` and `G` go to
     /// the ends, and a click on a group's name goes to its first row.
     #[test]
@@ -1970,11 +1958,11 @@ mod tests {
         assert!(!p.dirty());
     }
 
-    /// **檔裏帶引號或反斜線的一段字，來回一趟要一個字不差**（2026-10-01）。
+    /// **檔裏帶引號或反斜線的一段字，來回一趟要一個字不差**。
     #[test]
     fn a_quote_in_a_setting_survives_the_round_trip() {
-        // One character each since 2026-11-09, when a paragraph mark became
-        // one character: a quote, and a backslash.
+        // One character each, as the symbol is one character: a quote, and a
+        // backslash.
         for (file, value) in [("\"\\\"\"", "\""), ("\"\\\\\"", "\\")] {
             let mut p = on(panel(&format!("[editor]\nindent_symbol = {file}\n"), ""), "editor.indent_symbol");
             assert_eq!(p.typing_from(), value, "還原成值本身，不是它的寫法");
@@ -2013,7 +2001,7 @@ mod tests {
 
     /// **Every change is written at once**, a byte-for-byte edit of its own
     /// line: comments, order and keys the panel does not know stay, and no
-    /// temporary file is left (2026-11-08).
+    /// temporary file is left.
     #[test]
     fn a_change_is_written_at_once_and_only_its_line() {
         let dir = scratch("write");
@@ -2091,8 +2079,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// 打了個不是數的東西 —— **不收，說為什麽**（2026-11-08；從前是一聲不吭地
-    /// 當没改），不是撥成 0。
+    /// 打了個不是數的東西 —— **不收，說為什麽**，不是一聲不吭地當没改，也不是撥成 0。
     #[test]
     fn typing_something_that_is_not_a_number_is_refused() {
         let mut p = on(panel("[editor]\nindent = 4\n", ""), "editor.indent");
@@ -2105,8 +2092,8 @@ mod tests {
         assert_eq!(p.shown(find("editor.indent")).value, "2");
     }
 
-    /// **A number out of range is refused, not pulled in** (2026-11-08,
-    /// reported: `99` became `64` without a word); a `0` that means
+    /// **A number out of range is refused, not pulled in** (`99` does not
+    /// become `64` without a word); a `0` that means
     /// something of its own is taken.
     #[test]
     fn a_number_out_of_range_is_refused_not_pulled_in() {
@@ -2121,8 +2108,8 @@ mod tests {
         assert_eq!(p.check(find("editor.zong_length"), "4"), Err(Refusal::OutOfRange { low: 8, high: 64, zero: true }));
     }
 
-    /// **A name is one the config takes** (2026-11-08, reported: `nosuch`
-    /// as a theme was saved and said to be in force).
+    /// **A name is one the config takes**: `nosuch` as a theme is not saved
+    /// and said to be in force.
     #[test]
     fn a_theme_a_scheme_and_an_annotation_mode_must_be_ones_there_are() {
         let mut p = panel("[ime.annotation_modes.mine]\nunicode = true\n", "");
@@ -2143,8 +2130,8 @@ mod tests {
         assert_eq!(p.choices(annotation), ["off", "multi", "double", "mine"]);
     }
 
-    /// **A piece of text is what the loader takes** (2026-11-08, reported:
-    /// a page of `ZZZ` and an empty one were saved).
+    /// **A piece of text is what the loader takes**: a page of `ZZZ` or an
+    /// empty one is not saved.
     #[test]
     fn a_piece_of_text_is_checked_by_the_loader_itself() {
         let p = panel("", "");
@@ -2166,7 +2153,7 @@ mod tests {
 
     /// **A file the loader cannot read**: what it says is not shown as in
     /// force, and a change to either file writes nothing and says why — a
-    /// TOML error, or a name the config does not take (2026-11-08).
+    /// TOML error, or a name the config does not take.
     #[test]
     fn a_file_the_loader_cannot_read_is_not_written() {
         let dir = scratch("unread");
@@ -2256,7 +2243,7 @@ mod tests {
         assert_eq!(p.line_here(), 0, "not in the file");
     }
 
-    /// **The flavour's page** (2026-11-02): a tick written into
+    /// **The flavour's page**: a tick written into
     /// `[keys.flavor_items]`, flipped back to what the level gives and the
     /// line goes, and a binding of one of its keys is said.
     #[test]
@@ -2296,7 +2283,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// **The annotation modes' page** (2026-11-02): a field ticked is written
+    /// **The annotation modes' page**: a field ticked is written
     /// under `[ime.annotation_modes.<mode>]`, ticked back the line goes and
     /// the emptied table with it, and a mode the file adds has its fields.
     #[test]
@@ -2325,8 +2312,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// Found in review (2026-11-02): an item written in an inline table, or
-    /// with a comment after it, is what the file says, and writing works.
+    /// An item written in an inline table, or with a comment after it, is what the file says, and writing works.
     #[test]
     fn an_inline_table_and_a_trailing_comment_are_read_as_written() {
         use yumete_cjk::FlavorItem;
@@ -2420,10 +2406,10 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// **`u` writes back the file exactly as it was** (2026-11-09, reported:
-    /// `u` after `r` lost `# a` after `scrolloff = 3`, and the last key of a
-    /// table taken away and taken back came back without the table's
-    /// comments); `C-r` writes the change exactly again.
+    /// **`u` writes back the file exactly as it was**: `u` after `r` keeps
+    /// `# a` after `scrolloff = 3`, and the last key of a table taken away and
+    /// taken back comes back with the table's comments; `C-r` writes the
+    /// change exactly again.
     #[test]
     fn undo_writes_back_the_exact_text() {
         let dir = scratch("exact");
@@ -2453,8 +2439,8 @@ mod tests {
 
     /// **A file changed outside after the change**: `u` sets the key back on
     /// what the disk holds now, so the change outside stays; and **"before"
-    /// is the disk's, not the panel's** (2026-11-09, reported: changed
-    /// outside from 3 to 9, set to 5 here, and `u` wrote 3).
+    /// is the disk's, not the panel's**: changed outside from 3 to 9, set to 5
+    /// here, and `u` writes 9, not 3.
     #[test]
     fn undo_keeps_a_change_made_outside() {
         let dir = scratch("outside-undo");
@@ -2481,8 +2467,8 @@ mod tests {
     }
 
     /// **`C-r` after a `u` that had to take in a change made outside** puts
-    /// the step's change back on what `u` wrote (2026-11-09, reported: set
-    /// to 5, changed outside to 7, `u` wrote 3 and `C-r` wrote the 7 back).
+    /// the step's change back on what `u` wrote: set to 5, changed outside to
+    /// 7, `u` writes 3 and `C-r` writes the 5, not the 7.
     /// A file deleted outside comes back from `C-r` with the change in it.
     #[test]
     fn redo_after_a_merged_undo_puts_the_change_back() {
@@ -2514,7 +2500,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// **A file changed outside is read again** (2026-11-09) — another value,
+    /// **A file changed outside is read again** — another value,
     /// or the file gone — and a file deleted outside is written with the
     /// new line only, not back from the text read before.
     #[test]

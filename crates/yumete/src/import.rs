@@ -1,14 +1,14 @@
-//! **`yumete --import helix` and `yumete --import lazyvim`** (2026-11-06):
+//! **`yumete --import helix` and `yumete --import lazyvim`**:
 //! another editor's configuration, written once into yumete's `config.toml`.
 //!
-//! Decided that day, after the survey in `local/survey-0.20/import.md`:
+//! The design, from the survey in `local/survey-0.20/import.md`:
 //!
 //! - **helix runs nothing.** Its `config.toml` is read as TOML. LazyVim is
 //!   *recognised* (`lazyvim.json`, `lazy-lock.json`, `lua/config/lazy.lua`),
 //!   and what is written is the config on the docs site's LazyVim page.
 //! - **vim, Neovim and LazyVim run the reader's own editor, headless**
-//!   (2026-11-08, `--import vim` and `nvim` new, `lazyvim` reading the
-//!   reader's own keys and options on top of the page's config): only the
+//!   (`lazyvim` reads the reader's own keys and options on top of the
+//!   page's config): only the
 //!   editor can say what a config sets. It runs on a copy of the config, in
 //!   a home of its own, and never writes to the reader's files ([`dump`]);
 //!   what it says is translated in [`vim`], only where that is certain.
@@ -29,7 +29,7 @@ use std::process::ExitCode;
 mod dump;
 mod vim;
 
-// **The LazyVim config, one copy** (2026-11-06), kept in `yumete-config`.
+// **The LazyVim config, one copy**, kept in `yumete-config`.
 // The docs site's `from/lazyvim.md` shows the same TOML, and a test below
 // holds the page to it, so the page and the importer cannot drift apart.
 use yumete_config::LAZYVIM;
@@ -102,8 +102,8 @@ pub const FIRST_CONFIG: &str = "[keys]\npreset = \"vim\"\n";
 /// it, `config.imported.toml` (then `-2`, `-3`…, so an earlier import the
 /// reader may have edited is not written over either). The flag says which.
 ///
-/// The one-line file the first start wrote counts as none (review,
-/// 2026-11-06): that start tells a LazyVim reader to run `--import
+/// The one-line file the first start writes counts as none: that start
+/// tells a LazyVim reader to run `--import
 /// lazyvim`, and the import should then become their config. A name taken by
 /// anything, a link to nowhere included, counts as taken.
 pub fn target(dir: &Path) -> (PathBuf, bool) {
@@ -374,7 +374,7 @@ fn option_command(helix: &str, rest: &str) -> Result<String, String> {
         (true, None, Some(how @ ("relative" | "absolute"))) if option == "line-number" => {
             format!(":line-numbers {how}")
         }
-        // `:view-wrap` takes `on｜off` and flips when bare (2026-11-07), so
+        // `:view-wrap` takes `on｜off` and flips when bare, so
         // both of helix's verbs have a yumete spelling.
         (true, Some(("soft-wrap", "enable")), Some("true")) => ":view-wrap on".to_string(),
         (true, Some(("soft-wrap", "enable")), Some("false")) => ":view-wrap off".to_string(),
@@ -830,11 +830,11 @@ pub fn helix(source: &str, from: &Path, when: &str, beside: bool, languages: Opt
 }
 
 /// helix's names for the servers yumete starts, where the name is not the
-/// program (helix `languages.toml` of 2026-07-23).
+/// program (helix's `languages.toml`).
 const HELIX_SERVER_COMMANDS: &[(&str, &str)] =
     &[("jedi", "jedi-language-server"), ("r", "R"), ("ada-language-server", "ada_language_server")];
 
-/// **helix's `languages.toml`: each server's `config`** (2026-11-07), for
+/// **helix's `languages.toml`: each server's `config`**, for
 /// the servers yumete starts. Nothing else in it is carried, and each thing
 /// left is listed.
 ///
@@ -952,7 +952,7 @@ fn lazyvim(nvim: &Path, sign: &Path, when: &str, beside: bool, own: Result<&vim:
         .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
         .and_then(|json| json.get("extras").and_then(|e| e.as_array()).cloned())
         .unwrap_or_default();
-    // **mini.surround's extra lands on yumete's own surround** (2026-11-07):
+    // **mini.surround's extra lands on yumete's own surround**:
     // its `gsa` `gsd` `gsr` are vim-surround's `ys` `ds` `cs` with another
     // prefix, and visual `gsa` is helix's `ms`. nvim's `gs` sleeps and
     // yumete's does nothing, so nothing is taken.
@@ -1661,7 +1661,7 @@ j = { k = "normal_mode" }
         assert!(helix("[editor\nscrolloff = 3", Path::new("x"), "t", false, None).is_err());
     }
 
-    /// **helix's `languages.toml` gives its servers' `config`** (2026-11-07),
+    /// **helix's `languages.toml` gives its servers' `config`**,
     /// written as whole `[[lsp.<language>]]` lists the editor takes as they
     /// are; everything else in it is listed.
     #[test]
@@ -1832,7 +1832,7 @@ language-servers = ["gopls", "golangci-lint-lsp"]
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// **The docs page shows this file** (2026-11-06): the TOML blocks of
+    /// **The docs page shows this file**: the TOML blocks of
     /// `from/lazyvim.md`, one after another, are [`LAZYVIM`]. Skipped when
     /// the docs site is not checked out beside this repository.
     #[test]
@@ -2036,7 +2036,7 @@ language-servers = ["gopls", "golangci-lint-lsp"]
         move |name: &str| (name == "HOME").then(|| home.display().to_string())
     }
 
-    /// **The author's hard rule** (decision 2): an import writes nothing
+    /// **A hard rule** (decision 2): an import writes nothing
     /// to the reader's Neovim config, data or state, though their config
     /// and its plugins write to all three, and to `~`, as they start.
     #[test]
@@ -2192,8 +2192,9 @@ put(vim.fn.expand("~/written-by-the-config"), "x")
         let _ = std::fs::remove_dir_all(&home);
     }
 
-    /// **A link round the config is not a tree without end** (review,
-    /// 2026-11-09: `lua/loop/{a,b} -> .` made 357,928 directories in 30 s).
+    /// **A link round the config is not a tree without end**: copied as a
+    /// directory, `lua/loop/{a,b} -> .` would make directories until the
+    /// disk is full.
     /// A link to a directory the copy is in comes over as a link into the
     /// copy; one to a directory outside the config is left out and named;
     /// one to a file is copied; and the config still runs.
@@ -2255,10 +2256,10 @@ put(vim.fn.expand("~/written-by-the-config"), "x")
         let _ = std::fs::remove_dir_all(&home);
     }
 
-    /// **git stays in the copy** (review, 2026-11-09): with the temporary
-    /// directory inside a repository, a config's `git config` in its own
-    /// directory, which has no `.git` in the copy, wrote the outer
-    /// repository's `.git/config`.
+    /// **git stays in the copy**: with the temporary directory inside a
+    /// repository, a config's `git config` in its own directory, which has
+    /// no `.git` in the copy, would otherwise write the outer repository's
+    /// `.git/config`.
     #[test]
     fn git_run_by_the_config_stays_in_the_copy() {
         if !installed("nvim") || !installed("git") {
@@ -2289,9 +2290,9 @@ put(vim.fn.expand("~/written-by-the-config"), "x")
         let _ = std::fs::remove_dir_all(&repo);
     }
 
-    /// **A detached job goes with the run** (review, 2026-11-09): Neovim's
-    /// `jobstart(…, {detach = true})` leaves the editor's group, and wrote
-    /// into the copy 6 s after the import had returned.
+    /// **A detached job goes with the run**: Neovim's
+    /// `jobstart(…, {detach = true})` leaves the editor's group, and could
+    /// otherwise write into the copy after the import has returned.
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[test]
     fn a_detached_job_does_not_outlive_the_import() {

@@ -1,4 +1,4 @@
-//! Which characters a plain-Annex-#11 renderer leaves a cell short (2026-10-19).
+//! Which characters a plain-Annex-#11 renderer leaves a cell short.
 //!
 //! Its own file, and one test in it, because `set_ambiguous_wide` is a
 //! process-wide setting: a test that flips it beside two hundred others is a
@@ -9,8 +9,7 @@ use yumete_cjk::{char_width, needs_a_second_cell, set_ambiguous_wide};
 #[test]
 fn the_padding_follows_the_width_this_editor_counted() {
     // A 字根 from Yuniversus. Two cells here whatever Annex #11 says, and
-    // ratatui reads the whole private-use area as one — padded since
-    // 2026-10-16.
+    // ratatui reads the whole private-use area as one, so it is padded.
     let zigen = '\u{e100}';
     // East-Asian Ambiguous, and the kind an English manuscript is full of.
     let dash = '—';

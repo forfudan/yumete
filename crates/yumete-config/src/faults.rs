@@ -1,16 +1,15 @@
-//! **What is wrong with a config file, line by line** (2026-10-20 作者定).
+//! **What is wrong with a config file, line by line.**
 //!
-//! The start-up line has said 「{本地|全局}配置檔出錯，使用出廠設置」 since
-//! 2026-10-10, and that is the whole of what a reader got: one sentence, at
-//! launch, about a file they were not looking at. 原話 that day, written down
-//! as asked-for-and-not-built (§5.155 ②): 「LSP-shaped diagnostics over that
-//! file — an *error* on the line that makes the whole file invalid, a
-//! *warning* on a key or value that parses but is never applied.」
+//! The start-up line 「{本地|全局}配置檔出錯，使用出廠設置」 is one sentence, at
+//! launch, about a file the reader is not looking at. This is LSP-shaped
+//! diagnostics over that file (§5.155 ②): an *error* on the line that makes
+//! the whole file invalid, a *warning* on a key or value that parses but is
+//! never applied.
 //!
-//! This is that, and it needs no language server: the checks already exist
-//! ([`Config::from_toml_saying`]), the editor already draws other people's
-//! complaints ([`yumete_core::editor::Editor::set_problems`]), and the only
-//! thing missing was **which line** each one is about.
+//! It needs no language server: the checks are [`Config::from_toml_saying`],
+//! the editor draws other people's complaints
+//! ([`yumete_core::editor::Editor::set_problems`]), and what this adds is
+//! **which line** each one is about.
 //!
 //! Warning: **the line comes from the document, not from the sentence.** Every
 //! complaint this crate writes opens with the key it is about, spelt the way
@@ -69,9 +68,9 @@ pub fn faults_in(text: &str) -> Vec<Fault> {
 }
 
 /// **Why the loader cannot read this file at all**, if it cannot: the line
-/// (0 起算) and the parser's whole message, its lines joined (2026-11-08,
-/// for the settings panel, which says it at the top and will not write
-/// such a file). `None` when the file is read, warnings or not.
+/// (0 起算) and the parser's whole message, its lines joined (for the
+/// settings panel, which says it at the top and will not write such a
+/// file). `None` when the file is read, warnings or not.
 pub fn unread(text: &str) -> Option<(usize, String)> {
     let err = toml::from_str::<RawConfig>(text).err()?;
     let line = err.span().map_or(0, |at| line_at(text, at.start));
@@ -81,7 +80,7 @@ pub fn unread(text: &str) -> Option<(usize, String)> {
 
 /// The complaints of the loader about one key, `[table] key`, in a file
 /// that holds that key alone: what the loader would say of that value
-/// (2026-11-08, for the settings panel's check on `Enter`).
+/// (for the settings panel's check on `Enter`).
 pub fn said_of(table: &str, key: &str, value: &toml_edit::Value) -> Vec<String> {
     let mut doc = toml_edit::DocumentMut::new();
     let mut parts = table.split('.');
@@ -111,7 +110,7 @@ pub fn said_of(table: &str, key: &str, value: &toml_edit::Value) -> Vec<String> 
 /// same shape; they would otherwise have to guess.
 pub fn line_for(text: &str, said: &str) -> usize {
     let Some((table, key)) = addressed(said) else { return 0 };
-    // Warning: **`ImDocument`, not `DocumentMut`** (measured 2026-10-20): the mutable
+    // Warning: **`ImDocument`, not `DocumentMut`** (measured): the mutable
     // document drops every span on the way in, so `Key::span()` is `None` for
     // all of them and every warning would land on line 0 — which looks like
     // 「this whole file」 and is the one thing a warning must not say.

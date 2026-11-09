@@ -101,16 +101,15 @@ pub trait Segmenter {
 pub enum WordMark {
     /// A hair of colour under every other word.
     ///
-    /// Warning: **Not the default any more** (#456). 「tint 模糊却嘈杂」: a ground is
-    /// a rectangle, so it marks the *space* a word takes rather than the word,
+    /// Warning: **Not the default** (#456): blurry and noisy at once. A ground
+    /// is a rectangle, so it marks the *space* a word takes rather than the word,
     /// and a paragraph of them is a row of blocks the eye has to look past to
     /// read the writing. It is still the right answer for a reader who wants
     /// the boundary to be unmissable.
     Tint,
     /// Every other word's characters in a second ink, the paper untouched.
     ///
-    /// Warning: **Not the default any more** (#509, and this line said it was
-    /// until 2026-10-06). The mark is on the writing itself, which is right,
+    /// Warning: **Not the default** (#509). The mark is on the writing itself, which is right,
     /// but it alternates *how dark* a word is — see [`Color`](WordMark::Color),
     /// which carries the same one bit without making every other word look
     /// emphasised.
@@ -144,10 +143,10 @@ pub enum WordMark {
     /// underlines only each word's **last** cell, which draws one short rule
     /// across the column exactly where the word ends.
     ///
-    /// Warning: **線, not 分界線.** It was called `separator` until the picture
-    /// settled it: down a column the mark really is a rule *between* two words,
-    /// but across a line it is a rule *under* one — 「在横排里本质上不是
-    /// separator」. The shorter name is true on both pages.
+    /// Warning: **線, not 分界線.** Down a column the mark really is a rule
+    /// *between* two words, but across a line it is a rule *under* one, so
+    /// `separator` is wrong on the 橫排 page. The shorter name is true on both
+    /// pages.
     Line,
 }
 
@@ -159,10 +158,10 @@ impl WordMark {
     pub fn parse(value: &str) -> Option<WordMark> {
         match value.trim().to_ascii_lowercase().as_str() {
             "tint" | "bg" | "background" | "底色" | "背景" => Some(WordMark::Tint),
-            // Warning: `colour`/`color` used to mean this one and now names the mode
-            // below (#501): 明度 is what `ink` varies, and 顏色 is what the new
-            // one varies. Leaving the old spelling here would put the reader on
-            // the mode they did not ask for.
+            // Warning: `colour`/`color` name the mode below (#501), not this
+            // one: 明度 is what `ink` varies, and 顏色 is what `color` varies.
+            // Taking that spelling here would put the reader on the mode they
+            // did not ask for.
             "ink" | "fg" | "字色" | "文字" | "明度" => Some(WordMark::Ink),
             "color" | "colour" | "hue" | "色相" | "顏色" | "颜色" => Some(WordMark::Color),
             "line" | "rule" | "sep" | "separator" | "underline" | "線" | "线" => {
@@ -280,13 +279,12 @@ impl WordLevel {
     /// `full`: the particle stays glued (做的 as one), and further down changes
     /// nothing — the plateau starts at −1.5 on this sentence.
     ///
-    /// Warning: **This table was re-measured 2026-10-06, on a new word model.**
-    /// It used to be read off 「那年冬天他抬頭看了看那片天，山路已經看不見了。」,
-    /// and on that sentence the new model joins everything at 0.0 already —
-    /// `full` has nowhere left to loosen and the two levels answer the same.
-    /// The model got better, not worse; the probe sentence moved. Warning: **Re-read
-    /// the table before touching these three numbers**, because a model change
-    /// moves the plateau under them (§5.83).
+    /// Warning: **This table is measured on the current word model.** A probe
+    /// sentence the model already joins at 0.0 is no use — on 「那年冬天他抬頭看
+    /// 了看那片天，山路已經看不見了。」 `full` has nowhere left to loosen and the
+    /// two levels answer the same — so the probe is one where the levels differ.
+    /// Warning: **Re-read the table before touching these three numbers**,
+    /// because a model change moves the plateau under them (§5.83).
     pub fn split_bias(self) -> f64 {
         match self {
             WordLevel::Off => 0.0,
@@ -455,8 +453,8 @@ impl DictionarySegmenter {
     }
 
     /// No words at all: every 漢字 is a word of its own. What `w` walks by
-    /// before the language layer is loaded (2026-11-04: the bundled list is
-    /// gone, since the binary carries 宇浩's own word list in full).
+    /// before the language layer is loaded. There is no bundled list: the
+    /// binary carries 宇浩's own word list in full.
     pub fn one_character_at_a_time() -> Self {
         DictionarySegmenter::from_text("", 0)
     }
@@ -701,12 +699,12 @@ impl SegmentMemo {
 
 /// A segmenter that remembers the lines it has already cut — #321.
 ///
-/// `w` asks for the word boundaries of the line it stands on, and used to get
-/// them by cutting that line from scratch every time: a copy of the text, a
-/// Viterbi pass over each run of 漢字 in it, then a linear scan for the first
-/// boundary past the cursor. Held down, `w` paid for all of it again on every
-/// repeat — fifty presses along one two-thousand-segment line of mixed 中英
-/// cost 11.9 ms — and not one of those answers had changed since the first.
+/// `w` asks for the word boundaries of the line it stands on. Cutting that
+/// line from scratch every time costs a copy of the text, a Viterbi pass over
+/// each run of 漢字 in it, then a linear scan for the first boundary past the
+/// cursor. Held down, `w` would pay for all of it again on every repeat —
+/// fifty presses along one two-thousand-segment line of mixed 中英 cost
+/// 11.9 ms — and not one of those answers changes between presses.
 ///
 /// The answers are kept against **the text that was cut**, not against a line
 /// number or a buffer revision. Ranges are relative to the string, so a key
@@ -775,7 +773,7 @@ impl Segmenter for Memo {
 // Warning: **測試模組一律擺在檔尾。** `yumete-core/tests/messages.rs` 那張「每個標籤都
 // 有條目」的網把源碼切在**第一個**頂格的 `#[cfg(test)]\nmod ` 處——擺在檔案中間，
 // 它後面的生產代碼就整段從網裏消失，於是那裏加一則文案，面板上直接印標籤而測試
-// 全綠。這一支從前擺在中間，後面壓着 258 行（2026-09-24 審出來的）。
+// 全綠。
 #[cfg(test)]
 mod tests {
     use super::*;

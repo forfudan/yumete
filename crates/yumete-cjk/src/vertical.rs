@@ -31,13 +31,11 @@ pub const DEFAULT_ZONG_LENGTH: usize = 32;
 
 /// The default gap between two 縱, in half-width cells.
 ///
-/// Warning: **Zero, and it always was on the page.** This said 1 while `:view-dense`
-/// was on out of the box and forced the gap to nothing, so the factory page
-/// never had one and the constant described a page nobody saw. When the gap
-/// stopped being one of `dense`'s five jobs (2026-09-16, [`Margin`]) the
-/// constant had to start telling the truth, or the factory page would have
-/// widened by a cell a 縱 on the day it changed name. A 縱 that carries
-/// something in its margin still buys that cell for itself — see `place`.
+/// Warning: **Zero, as the factory page is.** The constant says what the page
+/// shows: the gap is its own setting, apart from the margin ([`Margin`]), and
+/// any other value here would widen the factory page by a cell a 縱. A 縱
+/// that carries something in its margin still buys that cell for itself —
+/// see `place`.
 pub const DEFAULT_ZONG_GAP: usize = 0;
 
 /// How many half-width characters a 緃中横 group holds at the classic setting.
@@ -61,18 +59,17 @@ pub const TATECHUYOKO_CLASSIC: usize = 2;
 /// itself the way a 縱 with a reading buys its lane. That is what carries the
 /// limit past four, and what ends it at eight — a group of eight is four 字
 /// across, so three whole 字 of it hang in the gap and the next 縱 is pushed a
-/// column and a half away (2026-09-21).
+/// column and a half away.
 pub const TATECHUYOKO_MAX: usize = 8;
 
 /// Whether each 縱 — or each row, across — keeps the narrow lane beside it for
 /// what is written *about* the text: readings, hung 句讀, 着重號, 平仄 and the
-/// 稿紙 ticks (`:view-margin`, 2026-09-16).
+/// 稿紙 ticks (`:view-margin`).
 ///
-/// **One question, four answers, both layouts.** It replaced `:view-dense`,
-/// which was two answers to a question it did not name and meant different
-/// things across and down: packed down the page it hid the margin, packed
-/// across it *removed air* — and in each layout it covered a different pair of
-/// the four. From tightest to loosest:
+/// **One question, four answers, both layouts** — not a two-way packing
+/// switch, which would mean different things across and down (down the page
+/// hiding the margin, across it *removing air*) and cover a different pair of
+/// the four in each layout. From tightest to loosest:
 ///
 /// | | 縱書 | 橫排 |
 /// | --- | --- | --- |
@@ -81,9 +78,8 @@ pub const TATECHUYOKO_MAX: usize = 8;
 /// | `loose` | every 縱 of a paragraph buys it if **any** of them does | every row of a line, likewise |
 /// | `always` | every 縱 | a row of air above every row |
 ///
-/// `dense` is the factory setting — the first framing, 「只對存在注釋
-/// 的**視覺**縱出現」. `loose` is what the page did for 着重號 before, and the
-/// reason given then still holds for anyone who prefers it: a paragraph does
+/// `dense` is the factory setting: the lane shows only on a **visual** 縱 that
+/// carries something. `loose` is for anyone who prefers that a paragraph does
 /// not change width as it is scrolled through.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Margin {
@@ -126,7 +122,7 @@ impl Margin {
     }
 }
 
-/// **竪排時 `hjkl` 依照行文邏輯還是視覺方向**（2026-10-12 定）。
+/// **竪排時 `hjkl` 依照行文邏輯還是視覺方向**。
 ///
 /// 橫排下兩者是同一件事——行往右跑，`l` 既是「下一個字」也是「往右」。竪排下它
 /// 們分家，而四個鍵只能挑一邊：
@@ -139,7 +135,7 @@ impl Margin {
 ///   k    上一行        上一行          上一個字（往上）
 /// ```
 ///
-/// **出廠是視覺**（2026-10-13 改，原本是邏輯）。代價留在這裏備查：視覺那一套下
+/// **出廠是視覺**。代價留在這裏備查：視覺那一套下
 /// `3h` 在橫排是三個字、在竪排是三行，於是同一個巨集、同一條 `[keys.normal]`、手
 /// 冊上同一張表，換一次排版就換了意思；邏輯那一套没有這個代價，每一個數目、每一
 /// 個操作符在兩種排版下說同一句話。換回去是 `:vertical-keys logical`。
@@ -382,8 +378,8 @@ pub fn vertical_form(c: char) -> Option<char> {
 /// the original text in the common case. Only single-character clusters are
 /// substituted: a base character carrying combining marks or an ideographic
 /// variation selector keeps the variation, which is what the reader chose.
-/// The vertical form of a curly quote, drawn only at `:render full`
-/// (2026-10-30, as decided): a double quote becomes the 『』 pair and a single
+/// The vertical form of a curly quote, drawn only at `:render full`: a
+/// double quote becomes the 『』 pair and a single
 /// one the 「」 pair, as a typesetter sets them in a vertical column.
 pub fn vertical_quote_form(c: char) -> Option<char> {
     match c {

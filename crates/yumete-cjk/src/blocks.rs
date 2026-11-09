@@ -2,7 +2,7 @@
 //!
 //! A writer setting a rare 漢字 wants to know *what* it is: `U+2B740` alone
 //! says nothing, but "CJK Unified Ideographs Extension D" says this character
-//! is in a plane most fonts do not carry, which is why it came out as a box.
+//! is in a plane most fonts do not carry, which is why it comes out as a box.
 //! For a 拆分表 the same question is the difference between a character that
 //! belongs in the table and one that does not.
 //!
