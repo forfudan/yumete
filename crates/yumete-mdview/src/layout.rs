@@ -178,6 +178,9 @@ pub(crate) struct Engine {
     /// pictures scaled to the column: each kept to a budget in bytes.
     images: Lru<String, (Stamp, Option<Arc<image::RgbaImage>>)>,
     scaled: Lru<(String, u32, Stamp), Pix>,
+    /// Each picture's size in pixels, read from its file's header, with the
+    /// file's stamp when read.
+    sizes: std::collections::HashMap<String, (Stamp, Option<(u32, u32)>)>,
     /// Set vertically, and how (`:view-preview-vertical`).
     pub vertical: Option<crate::vertical::Vertical>,
     /// Characters shaped down a column, by face: each one's glyph, advance
@@ -202,6 +205,7 @@ impl Engine {
             formula_cache: Lru::new(FORMULAS_KEPT),
             images: Lru::new(IMAGE_BYTES_KEPT / 3 * 2),
             scaled: Lru::new(IMAGE_BYTES_KEPT / 3),
+            sizes: std::collections::HashMap::new(),
             vertical: None,
             upright: std::collections::HashMap::new(),
             shapers: std::collections::HashMap::new(),
@@ -287,6 +291,26 @@ impl Engine {
         let pix = Arc::new(Pixmap::from_parts(resized.into_raw(), w as u16, h as u16, meta));
         self.scaled.put(key, pix.clone(), w as usize * h as usize * 4);
         Some(pix)
+    }
+
+    /// **How large the picture at `src` is drawn at its own size** (a CSS
+    /// pixel a pixel), in device pixels (2026-11-09): read from the file's
+    /// header, without decoding the picture, and kept until the file
+    /// changes. `None` for one that cannot be read.
+    pub(crate) fn image_size(&mut self, src: &str) -> Option<(f32, f32)> {
+        if src.contains("://") || src.is_empty() {
+            return None;
+        }
+        let stamp = self.image_stamp(src);
+        let size = match self.sizes.get(src) {
+            Some(&(was, size)) if was == stamp => size,
+            _ => {
+                let size = image::image_dimensions(self.base_dir.join(percent_decoded(src))).ok();
+                self.sizes.insert(src.to_string(), (stamp, size));
+                size
+            }
+        }?;
+        Some((size.0 as f32 * self.scale, size.1 as f32 * self.scale))
     }
 
     /// **When the picture at `src` last changed**: its file's modification

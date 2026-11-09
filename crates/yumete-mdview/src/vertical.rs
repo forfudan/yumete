@@ -377,7 +377,7 @@ impl Engine {
         // says, under either `vertical_latin`, as a turned Latin word is (it
         // is never set upright or 縱中橫); a key's half-width runs turned
         // whole; small type across, or turned when long; a lone half-width
-        // mark turned, as `text-orientation: mixed` sets it.
+        // mark turned or upright, as `text-orientation: mixed` sets it.
         let masked: Vec<char> = chars.iter().map(|&(at, c)| if code_at(at) || small_at(at) || st.mono { '\u{3000}' } else { c }).collect();
         let mut latin_runs: Vec<LatinRun> = Vec::new();
         let mut seg = vec![Seg::Up; chars.len()];
@@ -428,9 +428,11 @@ impl Engine {
                 latin_runs.push(LatinRun { bytes: byte(from)..byte(k), how, small });
                 continue;
             }
+            // A mark UAX #50 stands upright (`×`, `±`) stands, as
+            // `text-orientation: mixed` leaves it in the export (2026-11-09).
             if c == ' ' || c == '\u{a0}' || c == '\t' {
                 seg[k] = Seg::Gap;
-            } else if half_width(c) {
+            } else if half_width(c) && !yumete_core::export::upright_mark(c) {
                 seg[k] = Seg::Run(latin_runs.len());
                 latin_runs.push(LatinRun { bytes: at..at + c.len_utf8(), how: Orientation::Turned, small: false });
             }
@@ -1499,8 +1501,10 @@ impl Engine {
     #[allow(clippy::too_many_arguments)]
     fn vfigure(&mut self, src: &str, alt: &str, line: usize, u: &mut f32, top: f32, len: f32, out: &mut Out, cx: Ctx, page: Page) -> bool {
         let em = cx.size;
-        let Some(natural) = self.image(src, f32::MAX) else { return false };
-        let (w0, h0) = (natural.width() as f32, natural.height() as f32);
+        // Its size from its header (2026-11-09): it was drawn at full size
+        // first only to be measured, 4000 × 3000 pixels a few hundred
+        // megabytes on every layout of the block.
+        let Some((w0, h0)) = self.image_size(src) else { return false };
         let room = (page.width * 0.45).min(w0 * len / h0.max(1.0)).max(1.0);
         let Some(pix) = self.image(src, room) else { return false };
         let (w, h) = (pix.width() as f32, pix.height() as f32);
@@ -1606,6 +1610,28 @@ impl Engine {
         let nband = align.len().max(head.len()).max(rows.iter().map(|r| r.1.len()).max().unwrap_or(0)).max(1);
         let empty: Vec<Inline> = Vec::new();
         let pad = 0.4 * em;
+        // **More columns than a column of the page holds at a square each**
+        // (2026-11-09): the table goes on in a second band to the left, and a
+        // third, each with every row, so that no cell is past the foot.
+        let per = (((len - px) / (em + 2.0 * pad + px)).floor() as usize).max(1);
+        if nband > per {
+            let parts = nband.div_ceil(per);
+            let size = nband.div_ceil(parts);
+            let cut = |row: &[Vec<Inline>], from: usize| -> Vec<Vec<Inline>> {
+                (from..(from + size).min(nband)).map(|b| row.get(b).cloned().unwrap_or_default()).collect()
+            };
+            for (k, from) in (0..nband).step_by(size).enumerate() {
+                if k > 0 {
+                    *u += em;
+                }
+                let part_align: Vec<Align> = (from..(from + size).min(nband)).map(|b| align.get(b).copied().unwrap_or_default()).collect();
+                let part_head = cut(head, from);
+                let part_rows: Vec<(usize, Vec<Vec<Inline>>)> = rows.iter().map(|(line, row)| (*line, cut(row, from))).collect();
+                // The caption is down already, beside the first band.
+                self.vtable(&part_align, &part_head, &part_rows, first, None, u, top, len, out, cx, page);
+            }
+            return;
+        }
         let pitch = 1.6 * em;
         let body = self.body(&cx);
         let all: Vec<(usize, &[Vec<Inline>])> = std::iter::once((first, head)).chain(rows.iter().map(|r| (r.0, r.1.as_slice()))).collect();
@@ -1631,6 +1657,21 @@ impl Engine {
             let long: f32 = natural.iter().filter(|n| !short(**n)).sum::<f32>().max(1.0);
             let left = (room - kept).max(0.0);
             natural.iter().map(|&n| if short(n) { n } else { (n * left / long).max(3.0 * em + 2.0 * pad) }).collect()
+        };
+        // **Still too long** (2026-11-09): with many columns even the short
+        // cells did not fit, and the last of them ran off the foot of the
+        // page, where nothing could bring them back. Every band then gives
+        // way down to a square, its cells wrapping as a long one does, so
+        // the table is never longer than the column, as the export has it.
+        let least = em + 2.0 * pad;
+        let given: f32 = bands.iter().sum();
+        let floor = nband as f32 * least;
+        let bands: Vec<f32> = match given > room && given > floor {
+            true => {
+                let k = ((room - floor) / (given - floor)).clamp(0.0, 1.0);
+                bands.iter().map(|&b| least + (b - least).max(0.0) * k).collect()
+            }
+            false => bands,
         };
         let table_len: f32 = bands.iter().sum::<f32>() + (nband + 1) as f32 * px;
         // Each cell in its band, and each row as thick as its fullest cell.
@@ -2001,5 +2042,88 @@ mod tests {
         assert!(!p.vertical());
         assert!(p.visible_text(0.0, 400.0).contains("那一年秋天"));
         assert_ne!(p.size().1, long);
+    }
+
+    /// **A table wider than the column holds goes on in a second band**
+    /// (2026-11-09): twelve columns down a short page all stand above its
+    /// foot, every cell's words drawn.
+    #[test]
+    fn a_table_longer_than_the_column_stays_above_its_foot() {
+        let mut e = engine(Latin::Turn, false);
+        let text = "| 一 | 二 | 三 | 四 | 五 | 六 | 七 | 八 | 九 | 十 | 十一 | 十二 |\n|---|---|---|---|---|---|---|---|---|---|---|---|\n| 甲 | 乙 | 丙 | 丁 | 戊 | 己 | 庚 | 辛 | 壬 | 癸 | 子 | 丑 |\n";
+        let block = crate::parse::parse(text).into_iter().next().unwrap();
+        for len in [120.0f32, 200.0, 400.0] {
+            let laid = e.vtop(&block, None, Page { top: 0.0, len, width: 800.0 });
+            for item in &laid.items {
+                if let Item::Rect { r, .. } = item {
+                    assert!(r.y1 <= f64::from(len) + 1.0, "a line ends at {} on a column {len} long", r.y1);
+                }
+            }
+            let words: String = laid.cols.iter().map(|c| c.1.as_str()).collect();
+            for cell in ["一", "十", "十一", "十二", "甲", "癸", "子", "丑"] {
+                assert!(words.contains(cell), "{cell} at {len}: {words}");
+            }
+        }
+        // Where it fits, it is one table, as before.
+        let laid = e.vtop(&block, None, Page { top: 0.0, len: 2000.0, width: 800.0 });
+        let lines = laid.items.iter().filter(|i| matches!(i, Item::Rect { .. })).count();
+        assert_eq!(lines, 13 + 3, "a line between each two of twelve bands and round them, and three across");
+    }
+
+    /// **A figure is measured from its picture's header** (2026-11-09), not
+    /// drawn at full size first: what is kept is the picture read and the
+    /// picture at the size shown, not a full-size copy besides.
+    #[test]
+    fn a_figure_is_measured_without_drawing_it_at_full_size() {
+        let dir = std::env::temp_dir().join(format!("yumete-vfigure-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        image::RgbaImage::from_pixel(2000, 1500, image::Rgba([200, 100, 50, 255])).save(dir.join("big pic.png")).unwrap();
+        let mut e = Engine::new(Theme::light(), 1.0, dir.clone(), Box::new(Boxes));
+        e.vertical = Some(Vertical { latin: Latin::Turn, hanging: false });
+        assert_eq!(e.image_size("big%20pic.png"), Some((2000.0, 1500.0)));
+        let block = crate::parse::parse("![一张大图](big%20pic.png)\n").into_iter().next().unwrap();
+        let laid = e.vtop(&block, None, Page { top: 0.0, len: 300.0, width: 800.0 });
+        let _ = std::fs::remove_dir_all(&dir);
+        let pic = laid.items.iter().find_map(|i| if let Item::Pic { r, .. } = i { Some(*r) } else { None }).expect("a picture");
+        // As wide as most of the window allows, 360 of 800, and as tall as that makes it.
+        assert!((pic.width() - 360.0).abs() < 1.5 && (pic.height() - 270.0).abs() < 1.5, "{pic:?}");
+        let raw = 2000 * 1500 * 4;
+        assert!(e.kept().1 < raw + raw / 4, "kept {} bytes, the picture is {raw}", e.kept().1);
+    }
+
+    /// **Quotes round Western words stay curly** (2026-11-09), as the export
+    /// keeps them; a pair holding Chinese turns.
+    #[test]
+    fn quotes_round_western_words_stay_curly_as_in_the_export() {
+        let p = page("He said “go” and ‘stay’, the end of it.\n", Latin::Turn, 600);
+        let all = columns_of(&p).concat();
+        assert!(all.contains("“go”") && all.contains("‘stay’") && !all.contains('『'), "{all}");
+        let p = page("他说“go”，又说“走”。\n", Latin::Turn, 600);
+        let all = columns_of(&p).concat();
+        assert!(all.contains("“go”") && all.contains("『走』"), "{all}");
+    }
+
+    /// **Under jlreq a single small letter stands upright** (2026-11-09), as
+    /// a capital and `$x$` do; a word of small letters is turned.
+    #[test]
+    fn under_jlreq_a_single_small_letter_stands_upright() {
+        let mut e = engine(Latin::Jlreq, false);
+        let l = looks(&mut e, "变量 x 和 A，用 xy 写，又写 $x$。");
+        assert_eq!(how(&l, "x"), ["across"], "upright, one to a square: {l:?}");
+        assert_eq!(how(&l, "A"), ["across"], "{l:?}");
+        assert_eq!(how(&l, "xy"), ["turned"], "{l:?}");
+        assert_eq!(l.iter().filter(|x| x.1 == "pic upright").count(), 1, "{l:?}");
+    }
+
+    /// **A lone mark stands as the export's page stands it** (2026-11-09):
+    /// `×` and `±` upright, as UAX #50 has them, `·` and `/` turned.
+    #[test]
+    fn a_lone_mark_stands_as_the_export_stands_it() {
+        let mut e = engine(Latin::Turn, false);
+        let l = looks(&mut e, "甲×乙±丙·丁/戊");
+        assert_eq!(how(&l, "×"), ["up"], "{l:?}");
+        assert_eq!(how(&l, "±"), ["up"], "{l:?}");
+        assert_eq!(how(&l, "·"), ["turned"], "{l:?}");
+        assert_eq!(how(&l, "/"), ["turned"], "{l:?}");
     }
 }
