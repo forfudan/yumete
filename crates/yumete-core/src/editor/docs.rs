@@ -1,4 +1,4 @@
-//! **The keymap pages, read off the keymap** (`ye --docgen`, 2026-11-02).
+//! **The keymap pages, read off the keymap** (`ye --docgen`).
 //!
 //! The site has a page for helix's keymap, one for vim's and one for the
 //! flavour. Each page's tables come from an editor laid with that keymap and

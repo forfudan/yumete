@@ -1,9 +1,4 @@
 //! Merge conflicts: walking them, and keeping one side (#249, #296).
-//!
-//! It sat in the middle of the table code, between 「go to the next `|` table」
-//! and 「type in a cell」, because that is where it happened to be written — one
-//! `// ----` marker away from anything about it. Moved out on 2026-09-08 as
-//! `editor.rs` was taken apart; the code is untouched.
 
 use super::*;
 

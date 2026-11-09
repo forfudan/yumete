@@ -15,18 +15,17 @@ impl Editor {
     /// would throw away work the editor never warned about.
     /// `:q` — close **this region**; in the last window, leave.
     ///
-    /// helix's and vim's (measured 2026-11-03): a tab is an open file and a
+    /// helix's and vim's: a tab is an open file and a
     /// window a view of one, so closing a window closes no file, and the
     /// last window closing is the editor closing. `:q` there refuses while a
     /// tab is unsaved and shows it, as `:qa` does; `:q!` leaves regardless.
-    /// From 2026-09-06 `:q` on the last window closed *a file* while others
-    /// were open, on the belief that vim did so — it does not; `:bc` is that.
+    /// `:q` on the last window does not close *a file* while others are open
+    /// — vim does not either; `:bc` is that.
     pub(super) fn quit(&mut self, force: bool) -> Result<CommandOutcome, EditorError> {
         // **With the window split, `:q` and `:q!` close this region only**
-        // (2026-10-30, as helix and vim close a view): the file stays open with
-        // its changes, since the other region may be showing it. They used to
-        // close the file, or the whole editor with one file open, and `:q!`
-        // then threw the changes away. From a focused sidebar they close the
+        // (as helix and vim close a view): the file stays open with its
+        // changes, since the other region may be showing it, and `:q!` throws
+        // no changes away. From a focused sidebar they close the
         // sidebar, as `:q` in vim's file-tree window does.
         // A preview is a window: `:q` beside one closes this window, and
         // leaves only from the last window of any kind.
@@ -80,18 +79,18 @@ impl Editor {
         self.current_buffer_mut().snapshot_with(at, Some(every));
     }
 
-    /// **Put back the selections an undo point kept** (2026-10-27, measured
-    /// against helix 25.07.1: after `C` `A` `X` `Esc` `u`, helix has both
-    /// cursors back where the typing began and this editor kept one).
+    /// **Put back the selections an undo point kept** (measured against helix
+    /// 25.07.1: after `C` `A` `X` `Esc` `u`, helix has both cursors back where
+    /// the typing began).
     ///
     /// Warning: **the helix keymap only.** vim's `u` leaves one cursor at the
     /// start of the change, and the vim keymap keeps doing that.
     fn come_back_to(&mut self, cursor: usize, every: Option<crate::selection::Selections>) {
         self.selections_restored = true;
         match every {
-            // **Several cursors come back as several under the vim keymap too**
-            // (2026-10-29, review: only the primary was put back and the others
-            // stayed at their post-edit places). vim has one cursor and its
+            // **Several cursors come back as several under the vim keymap too**,
+            // not only the primary with the others left at their post-edit
+            // places. vim has one cursor and its
             // rule for where it lands stays for one; several are yumete's own.
             Some(every) if self.keymap_rules().undo_restores_every_cursor || every.is_plural() => {
                 let len = self.current_buffer().rope().len_chars();
@@ -120,7 +119,7 @@ impl Editor {
         match self.current_buffer_mut().undo_with(at, Some(every)) {
             Some((cursor, kept)) => {
                 self.come_back_to(cursor, kept);
-                // **A step back can move a record's boundary** (2026-10-21):
+                // **A step back can move a record's boundary**:
                 // undoing the line break typed into a cell leaves the grid's
                 // record map claiming a record two lines long, and then the
                 // row is read as the next row's text joined to its own —
@@ -131,7 +130,7 @@ impl Editor {
         }
     }
 
-    /// **vim 的 `U`：把這一行上最近那一串改動一次撤完**（2026-10-06，`:h U`）。
+    /// **vim 的 `U`：把這一行上最近那一串改動一次撤完**（`:h U`）。
     ///
     /// vim 說的是「undo all latest changes on one line」。這裏照着做：一步一步撤，
     /// 每撤一步問一句「剛纔那一步動的還是這一行嗎」——`code::what_changed` 掐頭
@@ -175,7 +174,7 @@ impl Editor {
         }
     }
 
-    /// **helix's `:earlier` and `:later`** (2026-10-29): so many steps, or to
+    /// **helix's `:earlier` and `:later`**: so many steps, or to
     /// the change nearest a span of time back or ahead
     /// ([`crate::buffer::Buffer::steps_for_span`]). A walk that goes nowhere
     /// says so, as helix's 「Already at oldest change」 does.

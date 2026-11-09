@@ -1,4 +1,4 @@
-//! **helix's syntax-tree keys** (2026-11-02): `A-o` `A-i` grow and shrink
+//! **helix's syntax-tree keys**: `A-o` `A-i` grow and shrink
 //! the selection by the tree, `A-n` `A-p` step to the next and previous
 //! node, `A-a` selects every sibling, `A-I` every child, and `A-e` `A-b` go
 //! to the end and the start of the node around the cursor. Each follows

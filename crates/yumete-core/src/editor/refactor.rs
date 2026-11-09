@@ -1,8 +1,8 @@
 //! **What a language server can change, and where else a name is used**
-//! (#54, 2026-10-29): helix's `gr` (references), `空格 r` (rename) and
+//! (#54): helix's `gr` (references), `空格 r` (rename) and
 //! `空格 a` (code actions). The questions are put down here and taken by the
-//! front end, which sends them and hands back the answers, the way `gd` has
-//! worked since #53.
+//! front end, which sends them and hands back the answers, the way `gd`
+//! works (#53).
 
 use super::*;
 use crate::lsp::{Action, Place, TextEdit};
@@ -24,7 +24,7 @@ impl Editor {
     /// **`gr`: where else is this used?**
     pub(super) fn ask_references(&mut self) {
         // A Markdown file has no server; what it has is `[[links]]`, and
-        // 「where is this used」 is 「what links here」 (2026-10-30).
+        // 「where is this used」 is 「what links here」.
         if self.current_buffer().syntax() == crate::syntax::Syntax::Markdown {
             return self.show_backlinks();
         }
@@ -105,8 +105,8 @@ impl Editor {
     }
 
     /// **`gd` `gD` `gy` `gi` found their places**: one is gone to, several
-    /// are offered in a picker, as helix's `goto_impl` does (2026-11-03; a
-    /// trait's implementations were cut to the first one until then).
+    /// are offered in a picker, as helix's `goto_impl` does (a trait's
+    /// implementations are not cut to the first one).
     pub fn show_places(&mut self, places: Vec<Place>) {
         if places.len() < 2 {
             return match places.first() {

@@ -1,8 +1,8 @@
-//! Words and paths offered while writing (2026-10-28).
+//! Words and paths offered while writing.
 //!
-//! Two requests from writers: 「德語、英語的單詞太長了，最好打兩個字母，就會在補全
-//! 裏跳出當前文件裏之前打過的單詞」, and 「Markdown 和代碼中的 `[]()` 語法中，如果
-//! 是本地路徑，最好也能補齊」. Both are what helix does out of the box (its word
+//! German and English words are long, so two letters typed offer the words
+//! already written in the open files; and a local path in a `[]()` link or in
+//! code is completed too. Both are what helix does out of the box (its word
 //! completion and path completion), and both reuse the list code completion
 //! already has: the float under the caret, Tab, `C-n`/`C-p`, Esc.
 //!
@@ -12,14 +12,14 @@
 //!   the segmenter cuts them, offered only when longer than what was typed
 //!   and starting with it, so what comes up is a name or a phrase of the
 //!   project, not one more character. **A simplified character finds its
-//!   traditional forms and the other way round** (2026-10-29, the glyph sets
-//!   search uses): `书` offers `書齋` as it is written in the file.
-//! - **Full pinyin, on `C-n` only** (2026-10-29): letters that spell the
+//!   traditional forms and the other way round** (the glyph sets search
+//!   uses): `书` offers `書齋` as it is written in the file.
+//! - **Full pinyin, on `C-n` only**: letters that spell the
 //!   first characters of a 漢字 word syllable by syllable offer it, after
 //!   the Latin words that start with them, as search reads `shuzhai`. Not
 //!   while typing, where Latin words already come up by themselves.
 //! - **When**: after `[editor] word_completion` Latin letters (4 by default,
-//!   `0` off), or after ⌈N/2⌉ 漢字 — the rule as set on 2026-10-28: N = 3 or 4
+//!   `0` off), or after ⌈N/2⌉ 漢字 — N = 3 or 4
 //!   gives 2, N = 1 or 2 gives 1. `C-n` / `C-x` asks at any length.
 //! - **Paths**: a word with a `/` in it, or anything right after `](`, read
 //!   relative to the file's own folder — helix's rule, plus the Markdown link.
@@ -29,14 +29,13 @@
 
 use super::*;
 
-/// **`word` as a completion of `typed`, in the case typed** (2026-10-28), or
+/// **`word` as a completion of `typed`, in the case typed**, or
 /// `None` when it does not start with `typed` (case aside).
 ///
 /// vim's `'infercase'`: a lowercase letter typed makes the rest lowercase, so
 /// `w` gives `when` even when the buffers only hold `When`; two or more
 /// letters typed with no lowercase among them make it uppercase, `WH` →
-/// `WHEN`; a lone `W` gives `When`. One change to vim's rule, asked for on the
-/// same day: **a word with a capital after its first letter is a name and is
+/// `WHEN`; a lone `W` gives `When`. One change to vim's rule: **a word with a capital after its first letter is a name and is
 /// offered as written** — `java` gives `JavaScript`, `ht` gives `HTML`.
 fn in_the_case_typed(word: &str, typed: &str) -> Option<String> {
     let mut letters = word.chars();
@@ -51,7 +50,7 @@ fn in_the_case_typed(word: &str, typed: &str) -> Option<String> {
         return Some(word.to_string());
     }
     // `ß` has no capital of its own in common use: it neither breaks a
-    // shout nor becomes `SS` in one, as vim's 'infercase' keeps it (review).
+    // shout nor becomes `SS` in one, as vim's 'infercase' keeps it.
     let lower = |c: char| c.is_lowercase() && c != 'ß';
     let shouting = typed.chars().count() >= 2
         && typed.chars().any(char::is_uppercase)
@@ -72,7 +71,7 @@ fn in_the_case_typed(word: &str, typed: &str) -> Option<String> {
 }
 
 /// **Whether `word` starts with `typed`, any form of each character
-/// counting** (2026-10-29): `书` starts `書齋`. The typed character is widened,
+/// counting**: `书` starts `書齋`. The typed character is widened,
 /// as search widens it, so `发` reaches `髮` and `發` does not.
 fn starts_as_typed(word: &str, typed: &str) -> bool {
     let mut letters = word.chars();
@@ -189,10 +188,10 @@ impl Editor {
         if !token.contains('/') && !(in_a_link && !token.is_empty()) {
             return None;
         }
-        // **A slash alone is not a path** (2026-10-29, review; decided against
-        // helix, which lists the root here too): `//` opening a comment, `</`
-        // closing a tag and ` / ` dividing listed `/`, and Tab after `//`
-        // wrote `//Applications/` into the file. A path names something
+        // **A slash alone is not a path** (unlike helix, which lists the root
+        // here too): `//` opening a comment, `</` closing a tag and ` / `
+        // dividing would list `/`, and Tab after `//` would write
+        // `//Applications/` into the file. A path names something
         // (`src/`, `/usr/l`) or starts `./` `../` `~/`; `C-n` still asks.
         let names_something = token.chars().any(|c| c != '/' && c != '.')
             || token.starts_with("./")
@@ -200,7 +199,7 @@ impl Editor {
         if !by_hand && !in_a_link && !names_something {
             return None;
         }
-        // **A link's path is written as a URL** (2026-10-29, review), as VS
+        // **A link's path is written as a URL**, as VS
         // Code's Markdown completion writes it: `%` as `%25` and a space as
         // `%20`, so `my file.md` does not end the link at its space. What was
         // typed is read back the same way.
@@ -232,8 +231,8 @@ impl Editor {
                 let name = entry.file_name().into_string().ok()?;
                 let shown = base.starts_with('.') || !name.starts_with('.');
                 let folder = entry.path().is_dir();
-                // A folder typed in full still offers its `/` (review: `src`
-                // never offered `src/`).
+                // A folder typed in full still offers its `/`: `src` offers
+                // `src/`.
                 (shown && name.starts_with(base) && (name != base || folder)).then(|| {
                     let slash = if folder { "/" } else { "" };
                     let name = match in_a_link {
@@ -278,7 +277,7 @@ impl Editor {
                 return None;
             }
             self.read_the_open_buffers();
-            // **Completion first, fuzzy after** (2026-10-28). A word that starts
+            // **Completion first, fuzzy after**. A word that starts
             // with what was typed is offered in the case typed (see
             // [`in_the_case_typed`]), so `When` and `when` are one row; then the
             // words that only hold the letters in order, as written.
@@ -437,9 +436,9 @@ impl Editor {
             index.revision = Some(revision);
             self.word_index.insert(id, index);
         }
-        // **The cache of cut lines is pruned, never dropped** (2026-10-29,
-        // review: dropped whole past 400,000 lines, it was rebuilt and dropped
-        // again on every key once the open buffers alone held that many).
+        // **The cache of cut lines is pruned, never dropped**: dropped whole
+        // past 400,000 lines, it would be rebuilt and dropped again on every
+        // key once the open buffers alone held that many.
         // What no open buffer has any more goes, once the cache is twice what
         // they hold; what they hold stays, so the next reading is still a diff.
         let live: usize = self.word_index.values().map(|index| index.lines.len()).sum();

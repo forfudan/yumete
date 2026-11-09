@@ -1,4 +1,4 @@
-//! **helix's four pickers on `空格 s` `S` `d` `D`** (2026-10-31): this file's
+//! **helix's four pickers on `空格 s` `S` `d` `D`**: this file's
 //! symbols, the project's symbols, this file's diagnostics, the project's.
 //!
 //! Measured against helix 25.07.1 with rust-analyzer: the symbol picker's
@@ -6,8 +6,8 @@
 //! is asked again as the query changes; the diagnostics pickers' are
 //! severity, source, code and message, the project one with the path before
 //! the message. helix refuses the symbol pickers where no language server
-//! answers; here they fall back to what yumete reads itself (decided
-//! 2026-10-31): this file's outline — headings, or tree-sitter's definitions
+//! answers; here they fall back to what yumete reads itself: this file's
+//! outline — headings, or tree-sitter's definitions
 //! in code — and the headings of every Markdown and Typst file in the
 //! project.
 

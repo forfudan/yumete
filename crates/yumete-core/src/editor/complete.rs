@@ -21,7 +21,7 @@ use super::*;
 /// are narrowing by typing anyway.
 const MOST: usize = 24;
 
-/// **A path as a wiki link spells it: `/`, on every platform** (2026-10-12).
+/// **A path as a wiki link spells it: `/`, on every platform**.
 ///
 /// Warning: **this one goes into the manuscript.** Windows spells its own paths
 /// with a backslash, and a link typed there would not resolve on the machine
@@ -51,7 +51,7 @@ pub enum Refers {
     Anchor,
     /// `[[` — another file near this one (#418 三).
     File,
-    /// `[@` — a citation key, Pandoc's syntax in Markdown (2026-10-29).
+    /// `[@` — a citation key, Pandoc's syntax in Markdown.
     Cite,
     /// `@` in Typst — a citation key, or a label the document sets.
     Label,
@@ -120,7 +120,7 @@ pub(super) struct Walking {
     pub(super) choices: Vec<Candidate>,
     pub(super) index: usize,
     /// Closers that were already there, which the caret stepped past after
-    /// the pick (2026-10-29, review: auto-pairs had written them).
+    /// the pick (auto-pairs wrote them).
     pub(super) past: usize,
 }
 
@@ -265,11 +265,11 @@ impl Editor {
     /// 「find a word anywhere in the book」 and 「point at this stack on my
     /// desk」 are different questions (#419, `[^361]`).
     fn file_choices(&self, typed: &str) -> Vec<Candidate> {
-        // **The whole project, nearest first** (2026-10-30, reversing #419's
-        // 「near here」): what `[[` offers is what `gd` can follow, and
-        // `gd` now looks across the project. Nearness keeps 「this stack on
-        // my desk」 at the top of the list; the rest is below it. Until the
-        // index has been read once, the old walk of this folder answers.
+        // **The whole project, nearest first** (not only #419's 「near here」):
+        // what `[[` offers is what `gd` can follow, and `gd` looks across the
+        // project. Nearness keeps 「this stack on my desk」 at the top of the
+        // list; the rest is below it. Until the index has been read once, the
+        // walk of this folder answers.
         let Some(index) = self.links.as_ref() else {
             return self.file_choices_nearby(typed);
         };
@@ -304,11 +304,11 @@ impl Editor {
             .collect()
     }
 
-    /// The folder this file is in and what is under it — what `[[` offered
-    /// before the project index existed, and still does until it is read.
+    /// The folder this file is in and what is under it — what `[[` offers
+    /// until the project index is read.
     fn file_choices_nearby(&self, typed: &str) -> Vec<Candidate> {
         let close = self.closes_with_n(']', 2);
-        // 同 `here_folder`：相對的緩衝區路徑按工作路徑算（2026-10-01）。
+        // 同 `here_folder`：相對的緩衝區路徑按工作路徑算。
         let here = self.working_dir();
         let Some(root) = self
             .current_buffer()
@@ -377,7 +377,7 @@ impl Editor {
             .collect()
     }
 
-    /// **The keys a citation can name** (2026-10-29): the bibliography's,
+    /// **The keys a citation can name**: the bibliography's,
     /// with each entry's title beside it, and in Typst the labels the
     /// document sets too. Matched from the start of the key, case aside.
     fn cite_choices(&self, typed: &str, typst: bool) -> Vec<Candidate> {

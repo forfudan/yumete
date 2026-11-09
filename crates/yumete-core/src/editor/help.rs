@@ -90,8 +90,7 @@ impl Editor {
 
 ");
         out.push_str(&format!("{}\n\n", say!("help.self-reported")));
-        // **窗口要多大**（2026-10-03 定：「就说推荐窗口大小 80*24，这个先放在
-        // help」）。擺不下側面板的時候 `空格 /` 會當場退回行內搜索並說一句，而那一句
+        // **窗口要多大**：推薦窗口大小 80×24，寫在 help 裏。擺不下側面板的時候 `空格 /` 會當場退回行內搜索並說一句，而那一句
         // 說的是此刻；這一行說的是往後。
         out.push_str(&format!("{}\n\n", say!("help.common.window-size")));
         out.push_str(&format!("## {}\n\n", say!("help.common.motion-title")));
@@ -176,9 +175,9 @@ impl Editor {
             ("h j k l", say!("help.table.step-by-cell")),
             ("Tab S-Tab", say!("help.table.next-previous-cell")),
             ("i a c d", say!("help.table.type-in-cell")),
-            // Warning: **這一組要寫 `␣t…`**（2026-10-02 更正）。表格那一組 2026-09-21
-            // 搬進了空格選單（`t`/`T` 還給 vi 的 till），而這一頁没跟着搬——
-            // 上面寫的 `t r`、`t s` 按下去一個都不管用，`t` 當場成了 till。
+            // Warning: **這一組要寫 `␣t…`**。表格那一組在空格選單裏（`t`/`T` 是 vi
+            // 的 till）——寫成 `t r`、`t s` 的話按下去一個都不管用，`t` 當場成了
+            // till。
             ("␣t/", say!("help.table.who-uses-this")),
             ("␣to ␣tb ␣tt ␣tq", say!("help.table.four-surfaces")),
             ("␣ti ␣tw", say!("help.table.detail-and-folds")),
@@ -219,19 +218,17 @@ impl Editor {
     }
 }
 
-/// **The keys `:help` names first, in order** (2026-10-29: data, so the site's
-/// generated keymap page lists the same rows — `ye --docgen`).
+/// **The keys `:help` names first, in order** (data, so the site's generated
+/// keymap page lists the same rows — `ye --docgen`).
 pub const COMMON_MOTION: &[(&str, &str)] = &[
     ("h j k l", "help.common.hjkl"),
     ("w b e", "help.common.word-motions"),
     ("3w 5j", "help.common.count-first"),
     ("g30g / 30G", "help.common.go-to-line"),
     // Warning: **這一頁開頭寫着「每一節都是這個編輯器自己報上來的」，而下面
-    // 這幾行是手抄的。** 2026-09-24 審出來四條錯的：`L H` 說成整頁（其實
-    // 是上下一句，整頁是 `C-f`/`C-b`）、`gw`（没綁，編輯器自己會說「是
-    // gD 了」）、`) (`（没綁，它自己會說「一句一句走是 H/L」）、`}} {{`
-    // （是 `}` `{`——大括號當成 `format!` 的轉義寫了兩遍，而這裏不是格式
-    // 串，於是屏幕上真就印出兩個）。
+    // 這幾行是手抄的。** 抄的時候要逐個按過：`L H` 是上下一句（整頁是
+    // `C-f`/`C-b`）；`}` `{` 只寫一遍——這裏不是 `format!` 的格式串，寫成
+    // `}} {{` 屏幕上就真印出兩個。
     //
     // Warning: **`documented_keys` 那張網看不見這裏**：它只讀兩份手冊
     // 與教程，不讀這一頁。手抄的鍵表就是這麽爛掉的。
@@ -257,7 +254,7 @@ pub const COMMON_EDITING: &[(&str, &str)] = &[
     ("y p", "help.common.yank-put"),
     ("u U", "help.common.undo-redo"),
     (".", "help.common.repeat-edit"),
-    // Warning: **`Q` 先，`q` 後**（2026-10-02 更正）。這張表是**按位置**讀的
+    // Warning: **`Q` 先，`q` 後**。這張表是**按位置**讀的
     // （`u U` 撤銷/重做、`> <` 縮進/退縮進），而那一句是「錄一段按鍵/
     // 放一遍」——寫成 `q Q` 就是教人用 `q` 開錄。真的綁法是 `Q` 錄、`q`
     // 放（`keys.rs`），而那兩個鍵的註釋自己寫着「**調換了的一對是最糟的

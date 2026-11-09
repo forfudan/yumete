@@ -1,7 +1,7 @@
-//! **vim's blockwise visual mode, `C-v`** (2026-10-27, step 5 of the
-//! multi-selection work in `local/development.md §5.13.14`).
+//! **vim's blockwise visual mode, `C-v`** (step 5 of the multi-selection
+//! work in `local/development.md §5.13.14`).
 //!
-//! The vim keymap had no `C-v` at all. A block is two corners and a flag for
+//! A block is two corners and a flag for
 //! `$`; what is drawn is one selection per line, so the multi-selection
 //! renderer paints it with nothing added. The operators follow vim 9.1, as
 //! documented in `visual.txt` (`v_b_I`, `v_b_A`, `v_b_c`, `v_b_r`, `v_b_>`) and
@@ -15,7 +15,7 @@
 //! - `c` deletes the block, then writes as `I` does. `d` `y` `r` `~` `u` `U`
 //!   `>` `<` `J` work on the block; `o` and `O` change corners.
 //! - **What `I`, `A` and `c` type is copied to the other lines on `Esc`**, as
-//!   vim does (decided 2026-10-27, 「Like vim: copy on Esc」), and not when a
+//!   vim does, and not when a
 //!   line break was typed.
 //! - `.` repeats the last block change from the cursor, the same number of
 //!   lines and columns, as vim's `visual-repeat` says.
@@ -32,8 +32,8 @@ pub(super) struct Block {
     pub cursor: usize,
     pub to_line_end: bool,
     /// The column `j` and `k` aim the moving corner at, kept across a line
-    /// too short for it, as vim's `curswant` (2026-10-29: `C-v l j j` through
-    /// a tab or a short line came out at that line's column).
+    /// too short for it, as vim's `curswant`, so `C-v l j j` through
+    /// a tab or a short line does not come out at that line's column.
     pub goal: Option<usize>,
 }
 
@@ -82,10 +82,9 @@ enum Rewrite {
 
 /// The cells of a line: each character's position, display column and width.
 ///
-/// **A tab runs to the next stop and a combining mark takes no column**
-/// (2026-10-29, review: both counted one, so `C-v j d` past a tab deleted
-/// eight characters on the line below, and a block could cut `é` from its
-/// accent). A mark of width 0 takes its base's column and width, so a block
+/// **A tab runs to the next stop and a combining mark takes no column**:
+/// counting either as one, `C-v j d` past a tab would delete eight characters
+/// on the line below, and a block could cut `é` from its accent. A mark of width 0 takes its base's column and width, so a block
 /// that takes the letter takes the mark too.
 fn cells(rope: &crate::Rope, tab: usize, line: usize) -> Vec<(usize, usize, usize)> {
     let start = rope.line_to_char(line);
@@ -139,7 +138,7 @@ fn at_column(rope: &crate::Rope, tab: usize, line: usize, column: usize) -> usiz
 
 /// **The text of one line's piece, as a block yank takes it**: a wide
 /// character or a tab the block's edge cuts is taken as spaces, one for each
-/// of its columns inside the block (2026-10-29, nvim 0.12.5: `ll C-v l j y` on
+/// of its columns inside the block (as nvim 0.12.5 does: `ll C-v l j y` on
 /// `abcd` over `a中b` takes `cd` and ` b`). A mark on a cut letter goes with
 /// it. `right` is inclusive, `usize::MAX` after `$`.
 fn piece_text(rope: &crate::Rope, tab: usize, line: usize, piece: std::ops::Range<usize>, left: usize, right: usize) -> String {
@@ -238,7 +237,7 @@ impl super::Editor {
                 self.extend = false;
                 self.vim_lines = false;
                 // The column the cursor was already aiming at comes along
-                // (2026-10-29, review: `j` onto a short line, then `C-v j`).
+                // (`j` onto a short line, then `C-v j`).
                 let goal = self.sel.primary().goal;
                 self.block = Some(Block { anchor: at, cursor: at, to_line_end: false, goal });
                 self.show_block();
@@ -410,7 +409,7 @@ impl super::Editor {
     /// Take every line's piece out, bottom line first.
     ///
     /// **A wide character the block's edge cuts in half leaves a space for
-    /// the half outside** (2026-10-29, review; nvim 0.12.5: `ll C-v j ll d`
+    /// the half outside** (as nvim 0.12.5 does: `ll C-v j ll d`
     /// on `xyzw` over `a漢bc` leaves `a `), so the text after the block keeps
     /// its column.
     fn block_delete(&mut self, block: Block) {
@@ -553,7 +552,7 @@ impl super::Editor {
             false => String::new(),
         };
         // The closers auto-pairs wrote after the caret are part of what was
-        // typed (2026-10-29, review: `A(x` copied `(x` to the other lines).
+        // typed: `A(x` copies `(x` to the other lines.
         let typed = {
             let owed = self.closers_owed(&typed);
             let after: String = rope.chars_at(caret.min(rope.len_chars())).take(owed.chars().count()).collect();
@@ -632,9 +631,9 @@ impl super::Editor {
         };
         self.snapshot();
         let grouping = self.current_buffer_mut().begin_undo_group();
-        // **Top down** (2026-10-29, review: bottom up, the first piece past the
-        // file's end became its last line, and the next one up was then
-        // pasted into that line instead of onto its own). Each round reads the
+        // **Top down**: bottom up, the first piece past the file's end would
+        // become its last line, and the next one up would then be pasted into
+        // that line instead of onto its own. Each round reads the
         // text afresh, so the order costs nothing.
         for (i, piece) in pieces.iter().enumerate() {
             let target = line + i;
