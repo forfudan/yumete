@@ -65,7 +65,7 @@ fn every_key() -> BTreeSet<String> {
 /// Warning: [`every_key`] 走的是一張**手抄**的表名單子，而那個模組的文檔自己寫着「一張
 /// 手抄的字段名單正是這條測試要防的東西」。手抄的表名單子是同一件事，只是矮了一層：
 /// 加一個 `RawFoo` 進 `RawConfig` 而忘了加進那張單子，它底下每一個鍵都没人管，而
-/// 「每個設定都有着落」那條照樣綠。2026-09-24 審出來的。
+/// 「每個設定都有着落」那條照樣綠。
 ///
 /// Warning: **鍵集開放的表不算**（`syntax`/`sidebar`/`language`/`lsp`，都是
 /// `HashMap`）：它們的鍵是擴展名、面板名、語言名——任意的，數不出一張名單來，所以
@@ -223,11 +223,10 @@ fn a_value_that_is_not_the_factory_one_actually_lands() {
                     false => low.to_string(),
                 }
             }
-            // Warning: **每一個詞都要試，不是只試第一個。** 從前是 `find(|w| *w != now)`
-            // ——取排在最前面的那個非出廠詞，於是十六組幾選一裏**四十六個詞只有
-            // 十六個被試過**。而這條測試逮到的那一次（`ime.system` 寫了兩個不存在
-            // 的詞）純屬運氣：壞詞正好排第二。排第三就逃掉了。
-            // 2026-09-24 審出來的。
+            // Warning: **每一個詞都要試，不是只試第一個。** `find(|w| *w != now)`
+            // 只取排在最前面的那個非出廠詞，十六組幾選一裏**四十六個詞只有十六個
+            // 被試過**：一個不存在的詞（比如 `ime.system` 寫錯的那種）排第二還逮得
+            // 到，排第三就逃掉了。
             Kind::Pick(choices) | Kind::PickOr(choices) => {
                 let now = setting.factory.trim_matches('"');
                 for choice in choices.iter().filter(|c| c.word != now) {
@@ -261,7 +260,7 @@ fn a_value_that_is_not_the_factory_one_actually_lands() {
 /// Warning: **這一條是「面板顯示的值不是編輯器用的值」那一族的網。** `into_config` 有幾
 /// 處的域是**斷的**——`zong_length` 是「0，或者 4 到 64」，`tatechuyoko` 是「0，或者
 /// 2 到 8」。把 `low` 寫成 0，面板就停得到 1/2/3，寫進檔裏而編輯器按 4 排版，**編譯
-/// 照過、別的測試照綠**。2026-09-24 審出來的，兩項都中。
+/// 照過、別的測試照綠**。
 ///
 /// 判準不用反射也說得出來：**域裏相鄰的兩個值，讀回來的 `Config` 必須不同**。
 /// 一樣就說明其中一個被鉗掉了——它不在域裏，而面板讓人停在了那裏。
@@ -300,7 +299,7 @@ fn every_value_the_panel_can_set_is_its_own() {
 /// 而不是 `"horizontal"`）→ toml 解析失敗 → `from_toml` 走 `unwrap_or_default()`
 /// → **和空配置逐位元組相同** → 第一條綠；第二條自己拼 `format!("\"{other}\"")`，
 /// 永遠帶引號 → 也綠。而面板會拿 `horizontal` 去和 `written()` 出來的
-/// `"horizontal"` 比，`settle` 從此判不出「轉回原值」。2026-09-24 審出來的。
+/// `"horizontal"` 比，`settle` 就判不出「轉回原值」。
 #[test]
 fn every_factory_value_parses_as_the_kind_it_says_it_is() {
     use yumete_config::settings_ui::{Kind, SETTINGS};
@@ -336,7 +335,7 @@ fn every_factory_value_parses_as_the_kind_it_says_it_is() {
     }
 }
 
-/// **每一個撥得到的主題都真的建得出來**（2026-10-10）。
+/// **每一個撥得到的主題都真的建得出來**。
 ///
 /// 面板那一圈是一張手抄的名單（`THEME_NAMES`），而真正認得主題的是
 /// `ThemeConfig::named`。抄錯一個字，面板撥過去就是一個不存在的主題名寫進
@@ -376,12 +375,12 @@ fn every_theme_the_panel_can_turn_to_is_one_the_editor_knows() {
     );
 }
 
-/// **每一行聲明的數域，配置那一頭也要攔得住**（2026-10-10 報的）。
+/// **每一行聲明的數域，配置那一頭也要攔得住**。
 ///
-/// 域寫在 `Kind::Count` 上，面板照它畫、照它停；而 `into_config` 從前另手寫一遍，
-/// 於是 `indent_width` 從配置檔進來只有 `.max(1)`——`999` 靜靜收下，一下 `>` 把
+/// 域寫在 `Kind::Count` 上，面板照它畫、照它停；`into_config` 要是另手寫一遍，
+/// `indent_width` 從配置檔進來就只有 `.max(1)`——`999` 靜靜收下，一下 `>` 把
 /// 正文推到第 1008 欄推出屏幕，而同一個數從 `:indent-width` 打進去是拒的。
-/// `tab_width`、`wheel_step` 的上界與 `scrolloff` 的整個域同病。
+/// `tab_width`、`wheel_step` 的上界與 `scrolloff` 的整個域也一樣。
 #[test]
 fn every_count_the_panel_declares_is_held_coming_in() {
     use yumete_config::settings_ui::{Kind, SETTINGS};

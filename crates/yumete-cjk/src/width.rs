@@ -25,10 +25,9 @@ use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 ///
 /// **Narrow until something says otherwise**, which is the same answer the
 /// front end reaches when it asks the terminal and the terminal will not say
-/// (`ambiguous_width = "auto"`, the default). The two used to disagree — this
-/// said wide, `main.rs` said narrow — so anything that measured before start-up
-/// finished, or that never ran `main` at all, laid the page out one way and
-/// drew it the other.
+/// (`ambiguous_width = "auto"`, the default). The two must agree, or anything
+/// that measures before start-up finishes, or never runs `main` at all, lays
+/// the page out one way and draws it the other.
 ///
 /// Set once at startup from `[editor] ambiguous_width`: a process-wide setting,
 /// because width is asked for in a hundred places that have no business knowing
@@ -51,7 +50,7 @@ pub fn ambiguous_is_wide() -> bool {
 /// CJK) and fullwidth characters, `1` otherwise. East-Asian Ambiguous
 /// characters follow [`ambiguous_is_wide`].
 ///
-/// Warning: **Never in a loop over a run of text** (#422, 2026-09-27). 「How wide is
+/// Warning: **Never in a loop over a run of text** (#422). 「How wide is
 /// this character」 and 「how wide is this piece of writing」 are different
 /// questions, and adding the first one up does not answer the second: `Warning: ` is
 /// `U+26A0` plus VS16 — one cell and nothing, added up **1**, while the
@@ -81,7 +80,7 @@ pub fn char_width(c: char) -> usize {
 }
 
 /// **Whether a renderer laying this out by plain Annex #11 will reserve one
-/// cell where this editor counted two** (2026-10-19).
+/// cell where this editor counted two**.
 ///
 /// [`char_width`] is the editor's answer and every measurement here agrees with
 /// it — the wrap, the caret's column, the click map. `ratatui` lays its spans
@@ -91,12 +90,11 @@ pub fn char_width(c: char) -> usize {
 /// paints over its neighbour.
 ///
 /// Two blocks answer yes. The private-use area always does (see
-/// [`is_private_use`] — that mismatch was found 2026-10-16 and the front end
-/// has padded for it since). The rest of the Ambiguous block does whenever
-/// [`ambiguous_is_wide`] is in force, and that half went unpadded until an
-/// audit measured it: with `ambiguous_width = "wide"`, walking `l` along
-/// `a—b—c—d` put the caret's block one cell right of the character the status
-/// line named, drifting a further cell per `—` on the row.
+/// [`is_private_use`]). The rest of the Ambiguous block does whenever
+/// [`ambiguous_is_wide`] is in force; unpadded, with `ambiguous_width =
+/// "wide"`, walking `l` along `a—b—c—d` puts the caret's block one cell right
+/// of the character the status line names, drifting a further cell per `—` on
+/// the row. The front end pads both.
 ///
 /// Warning: **the answer moves with the setting**, because the layout's does. Asking
 /// it per character rather than per block is what keeps the two in step.
@@ -109,7 +107,7 @@ pub fn needs_a_second_cell(c: char) -> bool {
 pub const DOTTED_CIRCLE: char = '\u{25cc}';
 
 /// The picture of a line feed, for the one place a line break is **not** what
-/// ends the row: inside a table cell (2026-10-20 作者定).
+/// ends the row: inside a table cell.
 ///
 /// From the same Control Pictures block [`control_picture`] draws from, so it
 /// is one cell by the same reckoning — and not `↵`, which is East Asian
@@ -132,16 +130,15 @@ pub fn is_combining_mark(c: char) -> bool {
     UnicodeWidthChar::width(c) == Some(0) && crate::grapheme_count(&format!("a{c}")) == 1
 }
 
-/// The picture to draw a combining mark that has nothing to combine with
-/// (2026-10-20).
+/// The picture to draw a combining mark that has nothing to combine with.
 ///
-/// [`grapheme_width`] charges such a cluster one cell — `.max(1)`, there since
-/// a kana 濁點 split off its base drew nothing at all and `が` came out as
-/// `か`, one codepoint of the manuscript simply gone from the page. The
-/// renderer disagrees: `ratatui` lays out by plain Annex #11, gives the mark
-/// zero, and leaves the charged cell blank — so the row came out a cell short,
-/// everything after it sat a cell left, and the caret's block landed on the
-/// character beside the one the status line named.
+/// [`grapheme_width`] charges such a cluster one cell — `.max(1)`, so a kana
+/// 濁點 split off its base is not drawn as nothing, `が` coming out as `か`,
+/// one codepoint of the manuscript simply gone from the page. The renderer
+/// disagrees: `ratatui` lays out by plain Annex #11, gives the mark zero, and
+/// leaves the charged cell blank — so without a picture the row comes out a
+/// cell short, everything after it sits a cell left, and the caret's block
+/// lands on the character beside the one the status line names.
 ///
 /// Same question as [`control_picture`], same answer: what is invisible gets
 /// treated as absent, so the codepoint stays in the buffer and gets a face.
@@ -156,17 +153,15 @@ pub fn orphan_mark_picture(c: char) -> Option<char> {
 
 /// Whether `c` is in a Private Use Area.
 ///
-/// **These are two cells here, whatever Annex #11 says** (2026-10-16). The
+/// **These are two cells here, whatever Annex #11 says**. The
 /// standard calls the whole PUA Ambiguous, which means 「ask the environment」,
 /// and the environment this editor is written for has one answer: every
 /// private-use code point it ever sees comes from Yuniversus, the font that
 /// carries 宇浩's 字根, and **every glyph in that font is 1000 units — full
 /// width, by construction**.
 ///
-/// Reported as 「Yuniversus.ttf 每個字符都是 1000 width，爲什麽這裏被畫成了半
-/// 角？」 — a 字根 in a 縱 was hung against the right half of its slot (a
-/// half-width character's place) and its ink then painted over the 縱 beside
-/// it.
+/// Counted as one cell, a 字根 in a 縱 hangs against the right half of its slot
+/// (a half-width character's place) and its ink paints over the 縱 beside it.
 ///
 /// Warning: **The font's advance is not what decides this.** A terminal is a grid and
 /// the cells a character gets come from its width property, not from the font;
@@ -183,9 +178,9 @@ pub fn is_private_use(c: char) -> bool {
 /// East-Asian Ambiguous — `→ ± ※ ① — “ ”` — is one cell in some terminals and
 /// two in others, and [`ambiguous_is_wide`] follows whichever this one said.
 /// That is right for drawing and wrong for writing: a table lined up with
-/// those characters in it came out **582 bytes on one terminal and 578 on
-/// another**, so two people editing one file, or one person moving between
-/// ssh and home, made git churn a whole table between them for nothing. And
+/// those characters in it would come out **582 bytes on one terminal and 578
+/// on another**, so two people editing one file, or one person moving between
+/// ssh and home, would make git churn a whole table between them for nothing. And
 /// it is not a 中文 problem — those characters are all over English prose.
 ///
 /// So the file gets the narrow answer, always. The screen squares itself up at
@@ -281,7 +276,7 @@ pub fn tab_width_at(visual_x: usize, tab_width: usize) -> usize {
 mod tests {
     use super::*;
 
-    /// **私用區算兩格**（2026-10-16 報的）。
+    /// **私用區算兩格**。
     #[test]
     fn a_private_use_character_is_two_cells() {
         for cp in [0xE000u32, 0xE4E0, 0xF8FF, 0xF_0000, 0x10_FFFD] {
@@ -353,7 +348,7 @@ mod tests {
 
     /// **A mark with no base is charged a cell and drawn in none of it.**
     ///
-    /// 2026-10-20: the editor says 「列 1 · U+0301」 and the renderer puts the
+    /// Otherwise the editor says 「列 1 · U+0301」 and the renderer puts the
     /// next character in that very cell, so the row comes out short and the
     /// caret lands beside the character the status line names.
     #[test]

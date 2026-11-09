@@ -84,8 +84,8 @@ fn a_good_file_is_quiet() {
 
 /// Warning: **spans come from `ImDocument`, not `DocumentMut`** — the mutable
 /// document drops every one of them, and the whole walk then answers 0 for
-/// everything, which reads as 「the file as a whole」. Measured 2026-10-20;
-/// this is the guard.
+/// everything, which reads as 「the file as a whole」. Measured; this is the
+/// guard.
 #[test]
 fn a_key_that_is_not_in_the_file_falls_back_rather_than_lying() {
     // Found: the key is there, and its line is not 0.
@@ -99,7 +99,7 @@ fn a_key_that_is_not_in_the_file_falls_back_rather_than_lying() {
 }
 
 /// **A bad key line, and a mode that does not exist, are marked on their
-/// own lines** (2026-10-31), and the rest of the file is not at fault.
+/// own lines**, and the rest of the file is not at fault.
 #[test]
 fn a_bad_key_line_is_marked_where_it_is() {
     let text = "[keys.normal]\nx = \"delete_selection\"\n\n[keys.normal.z]\nq = 3\n\n[keys.visual]\nx = \"y\"\n";
@@ -110,8 +110,8 @@ fn a_bad_key_line_is_marked_where_it_is() {
     assert!(faults.iter().all(|f| !f.fatal), "nothing voids the file");
 }
 
-/// **The flavour is a level** (2026-11-01): `flavor = true`, the switch it
-/// was, is said with the word that does what it did, and an item written by
+/// **The flavour is a level**: `flavor = true`, written as a switch, is
+/// answered with the level's word that does what it means, and an item written by
 /// name is read apart from the level.
 #[test]
 fn the_flavor_reads_a_level_and_items_by_name() {
@@ -129,8 +129,8 @@ fn the_flavor_reads_a_level_and_items_by_name() {
     assert!(config.keys.flavor.on(item, yumete_config::KeyPreset::Helix));
 }
 
-/// **A guide and a paragraph mark are one character each** (2026-11-09,
-/// reported: `""` and `"ab"` were taken): the loader says so on the line and
+/// **A guide and a paragraph mark are one character each** (`""` and `"ab"`
+/// are not taken): the loader says so on the line and
 /// keeps the factory's; a wide mark is one character, a wide guide is not.
 #[test]
 fn a_single_character_setting_takes_one_character() {
