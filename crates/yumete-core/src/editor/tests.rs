@@ -34380,10 +34380,10 @@ fn an_extend_command_extends_from_normal_mode() {
     assert_eq!(a.selection(), b.selection());
 }
 
-/// **A key added to a group keeps the group** (2026-10-31, step 5 of the
-/// keymap plan): with `[keys.normal.space] q = …`, `Space` still opens its
-/// menu (now with `q` in it), its own keys still work, a `no_op` takes a
-/// key out of it, and a group of the reader's own is titled with its label.
+/// **A key added to a group keeps the group**: with `[keys.normal.space]
+/// q = …`, `Space` still opens its menu (with `q` in it), its own keys still
+/// work, a `no_op` takes a key out of it, and a group of the reader's own is
+/// titled with its label.
 #[test]
 fn a_key_added_to_a_group_keeps_the_group() {
     let mut ed = typed("one\n");
@@ -34422,7 +34422,7 @@ fn a_key_added_to_a_group_keeps_the_group() {
 }
 
 /// **A list runs in order, and select mode reads `[keys.select]` over
-/// `[keys.normal]`** (2026-10-31).
+/// `[keys.normal]`.**
 #[test]
 fn a_list_runs_in_order_and_select_mode_has_its_own_lines() {
     let mut ed = typed("one two\n");
@@ -34446,9 +34446,9 @@ fn a_list_runs_in_order_and_select_mode_has_its_own_lines() {
     assert_eq!(ed.current_buffer().text(), "", "select_all, then delete");
 }
 
-/// **Insert mode's keys are commands, and `[keys.insert]` binds them**
-/// (2026-10-31, step 6 of the keymap plan): helix's `jk` to leave, a key of
-/// one's own for a line break, and a `j` not followed by `k` typed after all.
+/// **Insert mode's keys are commands, and `[keys.insert]` binds them**:
+/// helix's `jk` to leave, a key of one's own for a line break, and a `j` not
+/// followed by `k` typed after all.
 #[test]
 fn insert_mode_keys_can_be_bound() {
     let mut ed = typed("\n");
@@ -34473,9 +34473,8 @@ fn insert_mode_keys_can_be_bound() {
     assert_eq!(ed.current_buffer().text(), "ajx\nb\n", "j without k was typed; C-l broke the line");
 }
 
-/// **`Space ?` is helix's command palette** (2026-11-01, step 7 of the
-/// keymap plan): the list of every command and key's command, searched by
-/// what each does, where it used to be an empty `:` line.
+/// **`Space ?` is helix's command palette**: the list of every command and
+/// key's command, searched by what each does.
 #[test]
 fn space_question_mark_opens_the_palette() {
     let mut ed = typed("one\n");
@@ -34483,10 +34482,10 @@ fn space_question_mark_opens_the_palette() {
     assert_eq!(ed.mode(), Mode::Lookfor);
 }
 
-/// **A name means one command under either keymap** (2026-11-01, step 8 of
-/// the keymap plan): under the vim keymap `I` runs `vim_insert_at_line_start`
-/// (on a blank line, after its spaces), while a key bound to
-/// `insert_at_line_start` does helix's (the line's start).
+/// **A name means one command under either keymap**: under the vim keymap
+/// `I` runs `vim_insert_at_line_start` (on a blank line, after its spaces),
+/// while a key bound to `insert_at_line_start` does helix's (the line's
+/// start).
 #[test]
 fn a_helix_name_is_helix_under_the_vim_keymap() {
     let run = |bound: bool| {
@@ -34503,9 +34502,9 @@ fn a_helix_name_is_helix_under_the_vim_keymap() {
     assert_eq!(run(true), "z   \nx\n", "helix's insert_at_line_start");
 }
 
-/// **A key bound to a motion is that motion after an operator** (2026-11-01,
-/// step 8 of the keymap plan, Zed's way): under the vim keymap, with
-/// `Q` bound to `jump_next_word_end`, `dQ` deletes to the word's end.
+/// **A key bound to a motion is that motion after an operator** (Zed's way):
+/// under the vim keymap, with `Q` bound to `jump_next_word_end`, `dQ` deletes
+/// to the word's end.
 #[test]
 fn an_operator_takes_a_bound_motion() {
     let mut ed = typed("one two\n");
@@ -34517,13 +34516,13 @@ fn an_operator_takes_a_bound_motion() {
     assert_eq!(ed.current_buffer().text(), " two\n", "de, not a d of nothing");
 }
 
-/// **A picker's, a prompt's and a sidebar's keys are bound by name**
-/// (2026-11-01, step 9 of the keymap plan): `[keys.picker]`, `[keys.prompt]`
+/// **A picker's, a prompt's and a sidebar's keys are bound by name**:
+/// `[keys.picker]`, `[keys.prompt]`
 #[test]
 fn a_hint_names_a_key_that_is_another_commands_default() {
-    // Found in review, 2026-11-02: a key the reader bound was left off the
-    // hint when the place chain had it as a default of some other command
-    // (`C-a` goes to the line's start on a picker's query).
+    // A key the reader bound stays on the hint even when the place chain has
+    // it as a default of some other command (`C-a` goes to the line's start
+    // on a picker's query).
     use yumete_cjk::actions::{Place, PlaceCmd};
     let mut ed = Editor::new();
     let lines: HashMap<String, String> = [("C-a".to_string(), "next_entry".to_string())].into_iter().collect();
@@ -34591,9 +34590,9 @@ fn the_three_places_take_their_own_bindings() {
     assert_eq!(at(&ed), Some(2), "the other defaults stay");
 }
 
-/// **The outline's fold keys belong to the outline's own panel** (2026-11-01).
-/// With the outline on the left and the keys in the right sidebar, `h` there
-/// used to fold the heading highlighted on the left.
+/// **The outline's fold keys belong to the outline's own panel.** With the
+/// outline on the left and the keys in the right sidebar, `h` there does not
+/// fold the heading highlighted on the left.
 #[test]
 fn h_in_the_other_sidebar_leaves_the_outline_alone() {
     use crate::sidebar::Side;
@@ -34612,11 +34611,10 @@ fn h_in_the_other_sidebar_leaves_the_outline_alone() {
     assert_eq!(rows(&ed), Some(2), "in its own panel `h` folds it");
 }
 
-/// **A binding's command reaches the cursors its own key reaches**
-/// (2026-11-01, found in review): with two cursors, `"zx" =
-/// "delete_selection"` deleted at the first and sent a plain `x` to the
-/// other, because `x` alone moves every cursor. A list does the same, each
-/// command in turn.
+/// **A binding's command reaches the cursors its own key reaches**: with two
+/// cursors, `"zx" = "delete_selection"` deletes at both, not at the first
+/// with a plain `x` sent to the other because `x` alone moves every cursor.
+/// A list does the same, each command in turn.
 #[test]
 fn a_two_key_binding_reaches_every_cursor() {
     let two_cursors = |bound: &str, to: &[&str]| {
@@ -34640,10 +34638,9 @@ fn a_two_key_binding_reaches_every_cursor() {
 }
 
 /// **The reader's own keys follow them into the places** (`[keys]
-/// inherit`, 2026-11-01): a `[keys.normal]` line of one key naming a
-/// command the sidebar has walks the sidebar too, a `[keys.insert]` one
-/// edits a prompt, and the place's own table still wins. Off, nothing
-/// follows.
+/// inherit`): a `[keys.normal]` line of one key naming a command the sidebar
+/// has walks the sidebar too, a `[keys.insert]` one edits a prompt, and the
+/// place's own table still wins. Off, nothing follows.
 #[test]
 fn the_readers_own_keys_follow_them_into_the_places() {
     use crate::sidebar::Side;
@@ -34684,10 +34681,9 @@ fn the_readers_own_keys_follow_them_into_the_places() {
     assert_eq!(ed.prompt(), Some((":", "aXb")), "an Insert line edits the prompt");
 }
 
-/// **A hint row names the keys as they are bound now** (2026-11-01): a
-/// default key taken for something else leaves the row, and the reader's
-/// own key for the command joins it; with the defaults the row is as it
-/// always was.
+/// **A hint row names the keys as they are bound now**: a default key taken
+/// for something else leaves the row, and the reader's own key for the
+/// command joins it; with the defaults the row is the default row.
 #[test]
 fn the_hint_row_follows_the_bindings() {
     use crate::sidebar::Side;
@@ -34720,9 +34716,9 @@ fn the_hint_row_follows_the_bindings() {
     assert_eq!(row(&ed)[1], "Tab S-Tab ↑ ↓ C-y");
 }
 
-/// **The palette and `:keymap-actions` show the key a command is on now**
-/// (2026-11-01): vim's under the vim keymap, the reader's own where they
-/// moved it. Both showed helix's default before.
+/// **The palette and `:keymap-actions` show the key a command is on now**:
+/// vim's under the vim keymap, the reader's own where they moved it, not
+/// helix's default.
 #[test]
 fn the_palette_shows_the_key_in_force() {
     let mut ed = Editor::new();
@@ -34739,8 +34735,8 @@ fn the_palette_shows_the_key_in_force() {
 }
 
 /// **The sidebar's keys on the status line, when the hint row is off, are
-/// the sentence they always were** (2026-11-01: the keys now come from the
-/// table, the words from the message files).
+/// the same sentence**: the keys come from the table, the words from the
+/// message files.
 #[test]
 fn the_sidebar_sentence_reads_as_before() {
     use crate::sidebar::Side;
@@ -34763,10 +34759,10 @@ fn the_sidebar_sentence_reads_as_before() {
     assert_eq!(ed.sidebar_keys(), want);
 }
 
-/// **The search panel's boxes and moving keys are bound by name**
-/// (2026-11-01): a box reads `[keys.field]`, then the prompt's table, so
-/// `C-w` and `C-a` work in it as on the `:` line; the panel's moving keys
-/// are the sidebar's, so `[keys.sidebar]` reaches them.
+/// **The search panel's boxes and moving keys are bound by name**: a box
+/// reads `[keys.field]`, then the prompt's table, so `C-w` and `C-a` work in
+/// it as on the `:` line; the panel's moving keys are the sidebar's, so
+/// `[keys.sidebar]` reaches them.
 #[test]
 fn the_search_panel_takes_the_sidebar_and_field_tables() {
     use crate::search_panel::Field;
@@ -34797,11 +34793,10 @@ fn the_search_panel_takes_the_sidebar_and_field_tables() {
     assert_eq!(ed.search().field, Field::Query, "[keys.sidebar] reaches the search panel");
 }
 
-/// **A name means its table action however it is reached** (2026-11-01):
-/// in the `␣tt` grid `l` steps a cell, and so does a key bound to
-/// `move_char_right`, which moved one character there before. A
-/// `[keys.table]` line holds only in a table, and `table_next_cell` is the
-/// step `Tab` takes while typing in a cell.
+/// **A name means its table action however it is reached**: in the `␣tt`
+/// grid `l` steps a cell, and so does a key bound to `move_char_right`, not
+/// one character. A `[keys.table]` line holds only in a table, and
+/// `table_next_cell` is the step `Tab` takes while typing in a cell.
 #[test]
 fn a_bound_name_does_its_table_action_in_the_grid() {
     let grid = || {
@@ -34850,9 +34845,9 @@ fn a_bound_name_does_its_table_action_in_the_grid() {
     assert_ne!(ed.cell_position(), before, "table_next_cell steps while typing");
 }
 
-/// **The count panel and the way back to the hits name the keys in
-/// force** (2026-11-01): one table of commands for both keymaps, where it
-/// was a hand-written table per keymap.
+/// **The count panel and the way back to the hits name the keys in force**:
+/// one table of commands for both keymaps, not a hand-written table per
+/// keymap.
 #[test]
 fn the_count_panel_names_the_keys_of_the_keymap_in_use() {
     let rows = |ed: &Editor| match ed.hint() {
@@ -34877,10 +34872,10 @@ fn the_count_panel_names_the_keys_of_the_keymap_in_use() {
     assert_eq!(rows(&ed)[0], "Q", "the reader's own key");
 }
 
-/// **On a vertical page a bound name walks the screen as its key does**
-/// (2026-11-01): with the letters walking the screen (the default), `h`
-/// is one 縱 onward, and a key bound to `move_char_left` moved one
-/// character back instead. Both ways of setting the letters agree now.
+/// **On a vertical page a bound name walks the screen as its key does**:
+/// with the letters walking the screen (the default), `h` is one 縱 onward,
+/// and so is a key bound to `move_char_left`, not one character back. Both
+/// ways of setting the letters agree.
 #[test]
 fn a_bound_name_walks_a_vertical_page_as_its_key_does() {
     for logical in [false, true] {
@@ -34912,7 +34907,7 @@ fn a_bound_name_walks_a_vertical_page_as_its_key_does() {
         }
     }
     // `extend_char_left` by name walks the screen as `v h` does, its head
-    // where `h`'s goes (found in review, 2026-11-02).
+    // where `h`'s goes.
     let head = |bind: bool| {
         let mut ed = typed("一二三四五\n六七八九十\n甲乙丙丁戊\n");
         ed.set_layout(crate::zong::Layout::Vertical);
@@ -34929,11 +34924,11 @@ fn a_bound_name_walks_a_vertical_page_as_its_key_does() {
     assert_eq!(head(true), head(false));
 }
 
-/// **Step 1 of the flavour plan: keys that did not match their editor**
-/// (2026-11-01). helix's `ge` is the start of the last line; under vim,
-/// `]p` pastes, `C-n`/`C-p` move a line, `_` is the first non-blank a count
-/// of lines down, `&` does nothing, `q`/`@` take their register letter, and
-/// the fold keys `zn` and the `gt`/`gs` pair are not helix's motions.
+/// **Keys that match their editor.** helix's `ge` is the start of the last
+/// line; under vim, `]p` pastes, `C-n`/`C-p` move a line, `_` is the first
+/// non-blank a count of lines down, `&` does nothing, `q`/`@` take their
+/// register letter, and the fold keys `zn` and the `gt`/`gs` pair are not
+/// helix's motions.
 #[test]
 fn keys_that_did_not_match_their_editor_now_do() {
     let line_col = |ed: &Editor| {
@@ -34967,7 +34962,7 @@ fn keys_that_did_not_match_their_editor_now_do() {
     let mut ed = vim("a\n  b\n");
     press(&mut ed, "2_");
     assert_eq!(line_col(&ed), (1, 2));
-    // `&` does nothing (helix's align used to run).
+    // `&` does nothing (helix's align does not run).
     let mut ed = vim("a b\n");
     press(&mut ed, "&");
     assert_eq!(ed.current_buffer().text(), "a b\n");
@@ -34986,10 +34981,9 @@ fn keys_that_did_not_match_their_editor_now_do() {
     assert_eq!(ed.current_buffer().text(), "a!\nb!\nc\n", "@a replays the one macro");
 }
 
-/// **vim's Normal `C-^` is the previous file** (2026-11-01). While typing
-/// it switches 中/英 (vim's own `i_CTRL-^`), which the front end handles;
-/// in Normal mode it reaches the keymap. A terminal sends it as `C-^` or
-/// as `C-6`.
+/// **vim's Normal `C-^` is the previous file.** While typing it switches
+/// 中/英 (vim's own `i_CTRL-^`), which the front end handles; in Normal mode
+/// it reaches the keymap. A terminal sends it as `C-^` or as `C-6`.
 #[test]
 fn vims_normal_ctrl_caret_is_the_previous_file() {
     let dir = tmp().join(format!("yumete-ctrl-caret-{}", std::process::id()));
@@ -35008,9 +35002,9 @@ fn vims_normal_ctrl_caret_is_the_previous_file() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// **The flavour's keys at the factory level, and gone with it off**
-/// (2026-11-02, step 3 of the flavour plan): `X` the line above, a bare `G`
-/// the last line, `0 ^ $` the line's ends, `A-j`/`A-k` move the lines.
+/// **The flavour's keys at the factory level, and gone with it off**: `X`
+/// the line above, a bare `G` the last line, `0 ^ $` the line's ends,
+/// `A-j`/`A-k` move the lines.
 #[test]
 fn the_basic_flavour_keys_and_helix_without_them() {
     // `X` selects the line above; again, one more.
@@ -35036,7 +35030,7 @@ fn the_basic_flavour_keys_and_helix_without_them() {
     press(&mut ed, "2G");
     assert_eq!(ed.cursor_line(), 1, "a count's line, as helix's");
 
-    // `0 ^`; `$` is helix's `shell_keep_pipe` (2026-11-02), not the line's end.
+    // `0 ^`; `$` is helix's `shell_keep_pipe`, not the line's end.
     let mut ed = typed("  甲乙\n");
     ed.goto_line(1);
     press(&mut ed, "gl");
@@ -35118,8 +35112,8 @@ fn esc_ctrl_c_and_the_backtick() {
     assert_eq!(ed.current_buffer().text(), "AB\n", "and A-` uppercases");
 }
 
-/// **vim's `x` is a command now** (`vim_delete_char_forward`, 2026-11-02),
-/// and a count before it still takes that many characters, never the break.
+/// **vim's `x` is a command** (`vim_delete_char_forward`), and a count
+/// before it still takes that many characters, never the break.
 #[test]
 fn vim_x_is_a_name_and_takes_its_count() {
     let mut ed = typed_vim("甲乙丙丁\n");
@@ -35131,9 +35125,9 @@ fn vim_x_is_a_name_and_takes_its_count() {
     assert!(ed.current_buffer().text().contains("丙丁"), "x fills the register");
 }
 
-/// **The `g` group's jumps and links** (2026-11-02): `gz` by first letters,
-/// `gZ` by pinyin, `gx` a web address to the browser (vim's), `gf` a file
-/// link or an address (helix's), and `gL` whichever of them the link is.
+/// **The `g` group's jumps and links**: `gz` by first letters, `gZ` by
+/// pinyin, `gx` a web address to the browser (vim's), `gf` a file link or an
+/// address (helix's), and `gL` whichever of them the link is.
 #[test]
 fn the_g_jumps_and_the_link_keys() {
     let mut ed = typed("那年冬天。\n");
@@ -35163,10 +35157,10 @@ fn the_g_jumps_and_the_link_keys() {
     assert_eq!(ed.cursor_line(), 0, "{}", ed.status());
 }
 
-/// **Under vim, the keys are vim's** (2026-11-02): `gw` formats, the labels
-/// are `gW`; `]c` is the next change; Insert `C-c` leaves and `C-d` takes an
-/// indent off. `Space` opens the menu while `vim_space_menu` is on, and
-/// moves right with it off, the menu then on `\`.
+/// **Under vim, the keys are vim's**: `gw` formats, the labels are `gW`;
+/// `]c` is the next change; Insert `C-c` leaves and `C-d` takes an indent
+/// off. `Space` opens the menu while `vim_space_menu` is on, and moves right
+/// with it off, the menu then on `\`.
 #[test]
 fn under_vim_the_keys_are_vims() {
     let mut ed = typed_vim("甲乙\n");
@@ -35207,10 +35201,10 @@ fn under_vim_the_keys_are_vims() {
     assert!(!ed.sel.is_plural(), "off: vim has no A-C");
 }
 
-/// **The small alignment batch** (2026-11-02): helix's `C-c` comments and
-/// `gm` goes to the file changed last; vim's `C-e` `C-y` scroll, `''` goes
-/// back where the last jump came from and again, and Insert `C-y` `C-e`
-/// type the character above and below.
+/// **Small alignments**: helix's `C-c` comments and `gm` goes to the file
+/// changed last; vim's `C-e` `C-y` scroll, `''` goes back where the last
+/// jump came from and again, and Insert `C-y` `C-e` type the character above
+/// and below.
 #[test]
 fn the_small_alignment_batch() {
     // helix `C-c`: the line's comment, as `Space c`.
@@ -35275,9 +35269,9 @@ fn gm_goes_to_the_file_changed_last() {
     assert_eq!(ed.current_buffer().id(), first, "the newest edit is this one, so the one before");
 }
 
-/// **`gD` `gy` `gi` ask the language server** (2026-11-02, helix's keys):
-/// the same question as `gd`, for the declaration, the type and an
-/// implementation; a file no server serves says so.
+/// **`gD` `gy` `gi` ask the language server** (helix's keys): the same
+/// question as `gd`, for the declaration, the type and an implementation; a
+/// file no server serves says so.
 #[test]
 fn gd_capital_gy_and_gi_ask_for_their_place() {
     let dir = tmp().join(format!("yumete-goto-{}", std::process::id()));
@@ -35350,7 +35344,7 @@ fn every_cursor_takes_vim_x_put_and_insert_bindings() {
 }
 
 /// A bare URL keeps the brackets it opened, and drops a `)` the text
-/// around it closed (found in review, 2026-11-02).
+/// around it closed.
 #[test]
 fn a_bare_url_keeps_its_own_brackets() {
     for (line, want) in [
@@ -35379,11 +35373,11 @@ fn the_palette_names_the_keys_vim_really_has() {
     assert!(ed.keys_now("file_picker").is_some_and(|k| k.starts_with('\\')), "{:?}", ed.keys_now("file_picker"));
 }
 
-/// **vim's `]p` adjusts the indent** (`:h ]p`, 2026-11-03; every case
-/// measured in nvim): the first line put in that is not empty takes the
-/// cursor line's indent, the others keep their place against it, none goes
-/// below zero, and empty lines stay empty. `[p` and `]P` put before. Text
-/// within a line keeps its first line where it lands.
+/// **vim's `]p` adjusts the indent** (`:h ]p`; every case measured in nvim):
+/// the first line put in that is not empty takes the cursor line's indent,
+/// the others keep their place against it, none goes below zero, and empty
+/// lines stay empty. `[p` and `]P` put before. Text within a line keeps its
+/// first line where it lands.
 #[test]
 fn vim_bracket_p_pastes_with_the_cursor_lines_indent() {
     let vim = |text: &str| {
@@ -35440,11 +35434,11 @@ fn vim_bracket_p_pastes_with_the_cursor_lines_indent() {
     assert_eq!(ed.current_buffer().text(), "ab\n a   x\n");
 }
 
-/// **vim's `C-w` keys** (2026-11-03, each measured in nvim on three
-/// windows stacked): `W` `t` `b` `p` and a count go to a window, `x`
-/// leaves the keys where they were on the screen, `r` `R` keep them with
-/// their window, `K` takes the top, `c` never closes the last window, and
-/// `q` there is `:q`, as in helix.
+/// **vim's `C-w` keys** (each measured in nvim on three windows stacked):
+/// `W` `t` `b` `p` and a count go to a window, `x` leaves the keys where
+/// they were on the screen, `r` `R` keep them with their window, `K` takes
+/// the top, `c` never closes the last window, and `q` there is `:q`, as in
+/// helix.
 #[test]
 fn vims_window_keys_go_rearrange_and_close() {
     let mut ed = typed("one\n");
@@ -35502,8 +35496,8 @@ fn vims_window_keys_go_rearrange_and_close() {
 }
 
 /// **A new window opens above or to the left under vim** (`nosplitbelow`,
-/// `nosplitright`; nvim 2026-11-04), below or to the right under helix,
-/// and the keys go to it either way.
+/// `nosplitright`; nvim), below or to the right under helix, and the keys go
+/// to it either way.
 #[test]
 fn a_new_window_opens_on_the_side_each_keymap_opens_it() {
     for (vim, want) in [(false, 1), (true, 0)] {
@@ -35524,8 +35518,8 @@ fn a_new_window_opens_on_the_side_each_keymap_opens_it() {
 }
 
 /// **vim's `"A` adds to `a`, and `""` follows the register written**
-/// (2026-11-04, measured in nvim): lines to lines, text to text, text and
-/// lines make lines; `"ayy` then `p` puts that line, `"Ap` reads `a`.
+/// (measured in nvim): lines to lines, text to text, text and lines make
+/// lines; `"ayy` then `p` puts that line, `"Ap` reads `a`.
 #[test]
 fn vims_capital_register_adds_and_the_unnamed_one_follows() {
     let mut ed = typed_vim("one two\nthree four\nfive\n");
@@ -35548,12 +35542,11 @@ fn vims_capital_register_adds_and_the_unnamed_one_follows() {
     assert!(ed.picker.is_some());
 }
 
-/// **Named macros** (2026-11-03): a macro is recorded into a register as
-/// text, as helix and vim keep one (`ihello<esc>`, helix's way of writing
-/// it, under both keymaps), so `"ap` shows it and a line yanked into a
-/// register plays. helix: `"aQ` … `Q`, `"aq`; `Q` alone uses `@`. vim:
-/// `qa` … `q`, `@a`, `qA` adds, `@@` plays the last played, `Q` the last
-/// recorded.
+/// **Named macros**: a macro is recorded into a register as text, as helix
+/// and vim keep one (`ihello<esc>`, helix's way of writing it, under both
+/// keymaps), so `"ap` shows it and a line yanked into a register plays.
+/// helix: `"aQ` … `Q`, `"aq`; `Q` alone uses `@`. vim: `qa` … `q`, `@a`,
+/// `qA` adds, `@@` plays the last played, `Q` the last recorded.
 #[test]
 fn macros_live_in_registers() {
     // helix.
@@ -35597,11 +35590,11 @@ fn macros_live_in_registers() {
     assert_eq!(ed.current_buffer().rope().char_to_line(ed.cursor()), 2, "Enter went down a line");
 }
 
-/// **vim's folds** (2026-11-03, each measured in nvim): `zf{motion}` makes
-/// a closed fold; `j` `k` step over it as one line; `zo` `zc` open and
-/// close it with the cursor kept; an operator takes it whole and `u`
-/// brings it back; `G` into it leaves it closed and `zo` then finds the
-/// place; a search into it opens it; `o` opens a line after it.
+/// **vim's folds** (each measured in nvim): `zf{motion}` makes a closed
+/// fold; `j` `k` step over it as one line; `zo` `zc` open and close it with
+/// the cursor kept; an operator takes it whole and `u` brings it back; `G`
+/// into it leaves it closed and `zo` then finds the place; a search into it
+/// opens it; `o` opens a line after it.
 #[test]
 fn vims_folds_are_one_line_and_open_as_vim_opens_them() {
     let vim = |text: &str| {
@@ -35666,10 +35659,10 @@ fn vims_folds_are_one_line_and_open_as_vim_opens_them() {
     assert_eq!(ed.current_buffer().text(), "a\nb\nc\na\nd\n");
 }
 
-/// **A closed fold under vim, as nvim keeps it** (2026-11-04, typed keys):
-/// a cursor it hides keeps its line, a sideways move opens it, a word
-/// motion steps past it, `j` in `zfj` goes on from its end, `>>` opens it,
-/// and `J` above it pulls its first line out.
+/// **A closed fold under vim, as nvim keeps it** (typed keys): a cursor it
+/// hides keeps its line, a sideways move opens it, a word motion steps past
+/// it, `j` in `zfj` goes on from its end, `>>` opens it, and `J` above it
+/// pulls its first line out.
 #[test]
 fn a_closed_fold_under_vim_is_as_nvim_keeps_it() {
     let lines: String = (1..=20).map(|n| format!("a{n}\n")).collect();
@@ -35708,9 +35701,9 @@ fn a_closed_fold_under_vim_is_as_nvim_keeps_it() {
     assert!(ed.fold_head(0) && ed.line_is_folded(4) && !ed.line_is_folded(5), "zfj from the fold reaches line 5");
 }
 
-/// **The column on a closed fold is the text's** (2026-11-04, nvim): `~`
-/// and `J` move the cursor along the fold's first line and the ruler says
-/// where (`2,2-1`, `2,10-1`), though the fold is drawn from column 1.
+/// **The column on a closed fold is the text's** (nvim): `~` and `J` move
+/// the cursor along the fold's first line and the ruler says where (`2,2-1`,
+/// `2,10-1`), though the fold is drawn from column 1.
 #[test]
 fn the_column_on_a_closed_fold_is_the_texts() {
     let text = "one\ntwo alpha\nthree beta\nfour gamma\nfive\n";
@@ -35726,8 +35719,8 @@ fn the_column_on_a_closed_fold_is_the_texts() {
     assert_eq!(ed.cursor_visual_column(), 9, "nvim: 2,10");
 }
 
-/// **`zR` and `zr` leave a hidden cursor on its own line**, as `zo` does
-/// and nvim's do (2026-11-04 review: `zR` put it on the fold's first line).
+/// **`zR` and `zr` leave a hidden cursor on its own line**, as `zo` does and
+/// nvim's do, not on the fold's first line.
 #[test]
 fn opening_every_fold_keeps_a_hidden_cursors_line() {
     for keys in ["zR", "zr"] {
@@ -35746,10 +35739,10 @@ fn opening_every_fold_keeps_a_hidden_cursors_line() {
     assert_eq!(ed.grapheme_at_cursor().as_deref(), Some("h"), "line 3's second character");
 }
 
-/// **An edit at a cursor a closed fold hides acts on its own line**
-/// (2026-11-04, nvim, the cursor `:3` in a fold of lines 2 to 4): `~`, `J`,
-/// `gJ` and `r` change line 3 and leave the fold closed, `a` and `A` type
-/// there; `x` and `dd` still take the fold whole.
+/// **An edit at a cursor a closed fold hides acts on its own line** (nvim,
+/// the cursor `:3` in a fold of lines 2 to 4): `~`, `J`, `gJ` and `r` change
+/// line 3 and leave the fold closed, `a` and `A` type there; `x` and `dd`
+/// still take the fold whole.
 #[test]
 fn an_edit_at_a_hidden_cursor_acts_on_its_line() {
     let text = "one\ntwo alpha\nthree beta\nfour gamma\nfive\nsix\n";
@@ -35789,9 +35782,8 @@ fn an_edit_at_a_hidden_cursor_acts_on_its_line() {
     }
 }
 
-/// **Typing opens the folds every cursor is in** (2026-11-04, review of
-/// 0.17.0): a second cursor on a line a closed fold hides used to type
-/// into it unseen.
+/// **Typing opens the folds every cursor is in**: a second cursor on a line
+/// a closed fold hides must not type into it unseen.
 #[test]
 fn typing_opens_the_fold_any_cursor_is_in() {
     let mut ed = typed("a1\na2\na3\na4\na5\n");
@@ -35863,10 +35855,10 @@ fn vims_fold_keys_and_a_folds_line() {
     assert_eq!(yumete_cjk::str_width(&said), 30);
 }
 
-/// **Heading folds** (2026-11-03, the flavour's `heading_folds`, basic): a
-/// Markdown heading folds its section, every one open at first; the keys
-/// close and open them, each window keeps its own, a split copies them,
-/// and with the item off there are only `zf`'s folds, as in vim.
+/// **Heading folds** (the flavour's `heading_folds`, basic): a Markdown
+/// heading folds its section, every one open at first; the keys close and
+/// open them, each window keeps its own, a split copies them, and with the
+/// item off there are only `zf`'s folds, as in vim.
 #[test]
 fn headings_fold_their_sections_per_window() {
     let doc = "# 一\n\n甲。\n\n## 二\n\n乙。\n\n# 三\n\n丙。\n";
@@ -35905,9 +35897,9 @@ fn headings_fold_their_sections_per_window() {
     assert_eq!(ed.status(), say!("fold.none-here"));
 }
 
-/// **A closed heading is the one at its place** (2026-11-04, review of
-/// 0.17.0): a heading with the same text typed above it closes nothing,
-/// it moves with what is put in above it, and `u` keeps it closed.
+/// **A closed heading is the one at its place**: a heading with the same
+/// text typed above it closes nothing, it moves with what is put in above
+/// it, and `u` keeps it closed.
 #[test]
 fn a_closed_heading_is_the_one_at_its_place() {
     let doc = "# 甲\n\n一。\n\n# 乙\n\n二。\n";
@@ -35925,8 +35917,8 @@ fn a_closed_heading_is_the_one_at_its_place() {
     assert!(ed.fold_head(4) && ed.line_is_folded(6), "u keeps it closed");
 }
 
-/// **The session keeps the folds** (2026-11-03): each window's, a fold
-/// made with `zf` by its lines, a closed heading by its text.
+/// **The session keeps the folds**: each window's, a fold made with `zf` by
+/// its lines, a closed heading by its text.
 #[test]
 fn the_session_keeps_the_folds() {
     let dir = tmp().join(format!("yumete-session-folds-{}", std::process::id()));
@@ -35958,10 +35950,10 @@ fn the_session_keeps_the_folds() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// **A window dropped on the way back takes no folds with it** (2026-11-04,
-/// review of 0.17.0): the folds are kept by each window's place in the
-/// tree, and the window above whose file went used to hand its place, and
-/// the next window's folds, to the wrong one.
+/// **A window dropped on the way back takes no folds with it**: the folds are
+/// kept by each window's place in the tree, and the window above whose file
+/// went must not hand its place, and the next window's folds, to the wrong
+/// one.
 #[test]
 fn the_session_gives_each_window_its_own_folds_when_one_is_dropped() {
     let dir = tmp().join(format!("yumete-session-folds-dropped-{}", std::process::id()));
@@ -36001,9 +35993,9 @@ fn the_session_gives_each_window_its_own_folds_when_one_is_dropped() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// **`zm` and `zr`** (2026-11-03): one level more folded or less, vim's
-/// 'foldlevel' worked out from the folds as they stand. With the headings,
-/// `zM` then `zr` is the chapters with their sections folded.
+/// **`zm` and `zr`**: one level more folded or less, vim's 'foldlevel'
+/// worked out from the folds as they stand. With the headings, `zM` then `zr`
+/// is the chapters with their sections folded.
 #[test]
 fn zm_and_zr_fold_by_levels() {
     let doc = "# 一\n## 甲\n子\n## 乙\n丑\n# 二\n## 丙\n寅\n";
@@ -36021,8 +36013,8 @@ fn zm_and_zr_fold_by_levels() {
     assert!(!ed.fold_head(1) && !ed.line_is_folded(2));
 }
 
-/// **`:view-fold`** (2026-11-03): the helix keymap's way to make a fold,
-/// and `::` its way to open and close one.
+/// **`:view-fold`**: the helix keymap's way to make a fold, and `::` its way
+/// to open and close one.
 #[test]
 fn fold_commands_work_under_helix() {
     let mut ed = typed("a\nb\nc\nd\n");
@@ -36040,9 +36032,9 @@ fn fold_commands_work_under_helix() {
     assert_eq!(ed.cursor_line(), line, "zj scrolls under helix");
 }
 
-/// **The outline shows the page's folds** (2026-11-03): a closed section's
-/// row is marked and the headings inside it are hidden; `Enter` on it goes
-/// there and leaves it closed, opening only what hides it.
+/// **The outline shows the page's folds**: a closed section's row is marked
+/// and the headings inside it are hidden; `Enter` on it goes there and leaves
+/// it closed, opening only what hides it.
 #[test]
 fn the_outline_shows_which_sections_the_page_folded() {
     use crate::sidebar::InText::{Closed, Hidden};
@@ -36079,10 +36071,10 @@ fn the_outline_shows_which_sections_the_page_folded() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// **A count goes through `z`** (2026-11-03, measured in nvim and helix):
-/// vim's `20zt` puts line 20 at the top, the column kept, and `3zF` folds
-/// three lines; helix's `3zj` scrolls three, and so do `z3j` and `Z3j`,
-/// where a count before `Z` is dropped.
+/// **A count goes through `z`** (measured in nvim and helix): vim's `20zt`
+/// puts line 20 at the top, the column kept, and `3zF` folds three lines;
+/// helix's `3zj` scrolls three, and so do `z3j` and `Z3j`, where a count
+/// before `Z` is dropped.
 #[test]
 fn a_count_goes_through_z() {
     let text: String = (0..40).map(|n| format!("第{n:02}行。\n")).collect();
@@ -36127,10 +36119,10 @@ fn a_count_goes_through_z() {
     assert_eq!(row(&ed), 9, "a count before Z is dropped");
 }
 
-/// **A page scrolls the view and pushes the cursor in by scrolloff**
-/// (2026-11-03), on numbers measured in nvim (22 rows, scrolloff 5) and in
-/// helix: vim's `C-f` is the height less two lines, `count` times, the
-/// column kept; helix's is the height, the cursor at the line's start.
+/// **A page scrolls the view and pushes the cursor in by scrolloff**, on
+/// numbers measured in nvim (22 rows, scrolloff 5) and in helix: vim's `C-f`
+/// is the height less two lines, `count` times, the column kept; helix's is
+/// the height, the cursor at the line's start.
 #[test]
 fn a_page_scrolls_the_view_and_pushes_the_cursor_by_scrolloff() {
     let text: String = (1..=200).map(|n| format!("    line {n}\n")).collect();
@@ -36170,11 +36162,11 @@ fn a_page_scrolls_the_view_and_pushes_the_cursor_by_scrolloff() {
     assert_eq!(at(&ed).0, 6, "helix: zj at the top pushes the cursor to top + scrolloff");
 }
 
-/// **A page counted short is not the file's end** (0.18.1, reported
-/// 2026-11-05): when the rows this side counts on the drawn page fell short
-/// of the window (an indented front matter wrapped with its hanging
-/// indent), vim's `C-d` read it as the end of the file, never scrolled, and
-/// sent the cursor back to the page's first line.
+/// **A page counted short is not the file's end**: when the rows this side
+/// counts on the drawn page fall short of the window (an indented front
+/// matter wrapped with its hanging indent), vim's `C-d` must not read it as
+/// the end of the file, refuse to scroll, and send the cursor back to the
+/// page's first line.
 #[test]
 fn vims_half_page_scrolls_a_page_counted_short() {
     let text: String = (1..=100).map(|n| format!("line {n}\n")).collect();
@@ -36191,12 +36183,11 @@ fn vims_half_page_scrolls_a_page_counted_short() {
     assert!(top > 1 && line > 1, "C-d scrolls on: top {top}, cursor {line}");
 }
 
-/// **vim's `C-d` `C-u` and the ends of the file** (2026-11-04, numbers
-/// from nvim on 10 rows of 100 lines): a count is 'scroll' from then on,
-/// the cursor moves as far as the view would whatever the view does, and
-/// scrolloff is kept in from the edges but not past the file's ends. `C-f`
-/// with the last line in view shows it alone at the top. helix's `C-d`
-/// takes no count.
+/// **vim's `C-d` `C-u` and the ends of the file** (numbers from nvim on 10
+/// rows of 100 lines): a count is 'scroll' from then on, the cursor moves as
+/// far as the view would whatever the view does, and scrolloff is kept in
+/// from the edges but not past the file's ends. `C-f` with the last line in
+/// view shows it alone at the top. helix's `C-d` takes no count.
 #[test]
 fn vims_half_page_keeps_its_count_and_the_ends_of_the_file() {
     let text: String = (1..=100).map(|n| format!("line {n}\n")).collect();
@@ -36261,10 +36252,9 @@ fn vims_half_page_keeps_its_count_and_the_ends_of_the_file() {
     assert_eq!(line(&ed), 6, "helix: half the view, the count not read");
 }
 
-/// **vim's margin below the cursor rounds up** (2026-11-04, nvim's
-/// `cursor_correct`): with scrolloff at least half the window, `C-b`, `C-y`
-/// and `L` leave the cursor on the upper of the two middle rows, as `C-f`
-/// and `H` do.
+/// **vim's margin below the cursor rounds up** (nvim's `cursor_correct`):
+/// with scrolloff at least half the window, `C-b`, `C-y` and `L` leave the
+/// cursor on the upper of the two middle rows, as `C-f` and `H` do.
 #[test]
 fn vims_margin_below_the_cursor_rounds_up() {
     let text: String = (1..=100).map(|n| format!("line {n}\n")).collect();
@@ -36298,11 +36288,11 @@ fn vims_margin_below_the_cursor_rounds_up() {
     assert_eq!(line(&ed), 68, "C-f was right already: top 64, the fifth row");
 }
 
-/// **Where vim's page puts a cursor that left it** (2026-11-04, nvim's
-/// `update_topline` on 100 numbered lines): a step just past the top
-/// scrolls by scrolloff unless that is half the window, and then the
-/// cursor is centred with the page filled to the file's end; a page `C-f`
-/// left at the end stays until the cursor moves.
+/// **Where vim's page puts a cursor that left it** (nvim's `update_topline`
+/// on 100 numbered lines): a step just past the top scrolls by scrolloff
+/// unless that is half the window, and then the cursor is centred with the
+/// page filled to the file's end; a page `C-f` left at the end stays until
+/// the cursor moves.
 #[test]
 fn vims_page_follows_a_cursor_above_it_as_nvim_does() {
     use crate::editor::Landing;
@@ -36327,11 +36317,11 @@ fn vims_page_follows_a_cursor_above_it_as_nvim_does() {
     assert_eq!(ed.page_inset(None, false, 9, 3), Some(4), "a move does");
 }
 
-/// **helix's page centres only some moves off it** (hx 25.07.1, 2026-11-04,
-/// 200 lines on 22 rows, scrolloff 5): a search hit and the jump list land in
-/// the middle (`ensure_cursor_in_view_center`); `ge`, `gg`, `30j` scroll as
-/// little as scrolloff allows (`ensure_cursor_in_view`). vim's other
-/// surfaces centre them all, as before.
+/// **helix's page centres only some moves off it** (hx 25.07.1, 200 lines on
+/// 22 rows, scrolloff 5): a search hit and the jump list land in the middle
+/// (`ensure_cursor_in_view_center`); `ge`, `gg`, `30j` scroll as little as
+/// scrolloff allows (`ensure_cursor_in_view`). vim's other surfaces centre
+/// them all.
 #[test]
 fn helix_centres_a_search_and_the_jump_list_and_nothing_else() {
     let text: String = (1..=200).map(|n| format!("line {n}\n")).collect();
@@ -36370,9 +36360,8 @@ fn helix_centres_a_search_and_the_jump_list_and_nothing_else() {
 }
 
 /// **helix's `gd` centres even a place on the page** (`align_view`, hx
-/// 25.07.1 2026-11-04: `gd` from line 104 to line 100 on a page from line
-/// 88 leaves line 90 at the top), until the cursor moves on. vim's leaves
-/// the page.
+/// 25.07.1: `gd` from line 104 to line 100 on a page from line 88 leaves line
+/// 90 at the top), until the cursor moves on. vim's leaves the page.
 #[test]
 fn helix_centres_a_definition_even_on_the_page() {
     let dir = tmp().join(format!("yumete-centred-definition-{}", std::process::id()));
@@ -36397,11 +36386,10 @@ fn helix_centres_a_definition_even_on_the_page() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// **vim's page below the cursor** (2026-11-04, nvim, ten rows, 100
-/// lines): near, the page scrolls as far as scrolloff asks; far enough
-/// that the rows fill the window, the cursor is centred one row low on an
-/// even window (`20G` from the top: the sixth row); further than the
-/// window, one row high.
+/// **vim's page below the cursor** (nvim, ten rows, 100 lines): near, the
+/// page scrolls as far as scrolloff asks; far enough that the rows fill the
+/// window, the cursor is centred one row low on an even window (`20G` from
+/// the top: the sixth row); further than the window, one row high.
 #[test]
 fn vims_page_follows_a_cursor_below_it_as_nvim_does() {
     use crate::editor::Landing;
@@ -36421,14 +36409,13 @@ fn vims_page_follows_a_cursor_below_it_as_nvim_does() {
     assert_eq!(Editor::vim_landing_row(10, 0, Landing::Below(None), 0), 9, "G: the last row");
     assert_eq!(Editor::vim_landing_row(10, 3, Landing::Below(Some(10)), 1), 8, "j onto line 99: top 91");
     // scrolloff half an even window (the default 5 on ten rows): `17G`
-    // from the top lands on the fifth row, top 13, as nvim's (review,
-    // 2026-11-04).
+    // from the top lands on the fifth row, top 13, as nvim's.
     assert_eq!(row(10, 5, 16), 4, "17G, scrolloff 5: top 13");
 }
 
-/// **vim's `H` `M` `L` keep the column** (2026-11-04): nvim's default is
-/// 'nostartofline', so the cursor keeps the column it wants, `$`'s end of
-/// line too; helix's `gt` `gc` `gb` go to the first non-blank.
+/// **vim's `H` `M` `L` keep the column**: nvim's default is 'nostartofline',
+/// so the cursor keeps the column it wants, `$`'s end of line too; helix's
+/// `gt` `gc` `gb` go to the first non-blank.
 #[test]
 fn vims_h_m_l_keep_the_column() {
     let text: String = (1..=100)
@@ -36476,10 +36463,10 @@ fn vims_h_m_l_keep_the_column() {
     assert_eq!(at(&ed), (15, 5), "helix: the first non-blank");
 }
 
-/// **vim's `G` and `gg` keep the column** (2026-11-04): nvim's default is
+/// **vim's `G` and `gg` keep the column**: nvim's default is
 /// 'nostartofline', so `G`, `gg` and `{count}G` land at the column the
-/// cursor wants, `$`'s end of line too. helix's `gg` and `ge` still go to
-/// the line's start.
+/// cursor wants, `$`'s end of line too. helix's `gg` and `ge` go to the
+/// line's start.
 #[test]
 fn vims_g_and_gg_keep_the_column() {
     let text: String = (1..=100)
@@ -36513,11 +36500,11 @@ fn vims_g_and_gg_keep_the_column() {
     assert_eq!(at(&ed), (100, 1), "helix: ge");
 }
 
-/// **vim's line jumps count a tab to its stop** (nvim 0.12, measured
-/// 2026-11-07 with `scripts/oracle/vim_sweep.py`): a wanted column inside a
-/// tab lands on the tab, one inside a wide character on it, and a cursor
-/// standing on a tab wants the tab's last column. They used to count a tab
-/// as one column, landing past it.
+/// **vim's line jumps count a tab to its stop** (nvim 0.12, measured with
+/// `scripts/oracle/vim_sweep.py`): a wanted column inside a tab lands on the
+/// tab, one inside a wide character on it, and a cursor standing on a tab
+/// wants the tab's last column — never past it, as counting a tab as one
+/// column would.
 #[test]
 fn vims_line_jumps_count_a_tab_to_its_stop() {
     let text = "  he said (no) then;\n\t你也是人類, ok\nz\n\ntail 段\n";
@@ -36539,11 +36526,11 @@ fn vims_line_jumps_count_a_tab_to_its_stop() {
     }
 }
 
-/// **vim's linewise operators keep the column** (2026-11-04, nvim's
-/// 'nostartofline'): `d` leaves the cursor on the line after what it took,
-/// `y`, `gU`, `>` and `zf` on the first line taken, all at the column the
-/// cursor wants; `gUU` goes to the line's start. A count on `G` or `gg`
-/// after an operator, or before it, names the line.
+/// **vim's linewise operators keep the column** (nvim's 'nostartofline'):
+/// `d` leaves the cursor on the line after what it took, `y`, `gU`, `>` and
+/// `zf` on the first line taken, all at the column the cursor wants; `gUU`
+/// goes to the line's start. A count on `G` or `gg` after an operator, or
+/// before it, names the line.
 #[test]
 fn vims_linewise_operators_keep_the_column() {
     let text: String = (1..=100)
@@ -36584,9 +36571,9 @@ fn vims_linewise_operators_keep_the_column() {
     }
 }
 
-/// **A scrolloff over half the window and vim's `zb`** (2026-11-04, nvim,
-/// six rows, scrolloff 5): `zb` leaves the cursor on the third row, as
-/// `zt` does, where scrolloff halved said the fourth.
+/// **A scrolloff over half the window and vim's `zb`** (nvim, six rows,
+/// scrolloff 5): `zb` leaves the cursor on the third row, as `zt` does, not
+/// the fourth that scrolloff halved would say.
 #[test]
 fn vims_zb_with_a_scrolloff_over_half_the_window() {
     let text: String = (1..=100).map(|n| format!("line {n}\n")).collect();
@@ -36604,11 +36591,11 @@ fn vims_zb_with_a_scrolloff_over_half_the_window() {
 }
 
 /// **vim's `zt` `zz` `zb` near the ends of the file with scrolloff at least
-/// half the window** (nvim 0.12, measured 2026-11-07 with
-/// `scripts/oracle/view_sweep.py`): they land where vim's scrolling
-/// functions count them to, which was a line or two off. `zt` on the
-/// second line from the end keeps scrolloff above, the lines below not
-/// being there; `zz` is corrected for scrolloff while the page is full.
+/// half the window** (nvim 0.12, measured with `scripts/oracle/view_sweep.py`):
+/// they land where vim's scrolling functions count them to, not a line or two
+/// off. `zt` on the second line from the end keeps scrolloff above, the lines
+/// below not being there; `zz` is corrected for scrolloff while the page is
+/// full.
 #[test]
 fn vims_z_near_the_ends_with_a_scrolloff_of_half_the_window() {
     let text: String = (1..=200).map(|n| format!("line {n}\n")).collect();
@@ -36635,10 +36622,10 @@ fn vims_z_near_the_ends_with_a_scrolloff_of_half_the_window() {
     }
 }
 
-/// **vim's `z` is vim's** (2026-11-03): helix's view keys had leaked into
-/// it (`z␣` `z⌫` `z/` …), and `Z` with the flavour off went into helix's
-/// sticky view through the held `Z` of `ZZ`. With the flavour on, the
-/// sticky view is helix's whole: `j` scrolls there.
+/// **vim's `z` is vim's**: no helix view keys in it (`z␣` `z⌫` `z/` …), and
+/// `Z` with the flavour off does not go into helix's sticky view through the
+/// held `Z` of `ZZ`. With the flavour on, the sticky view is helix's whole:
+/// `j` scrolls there.
 #[test]
 fn vims_z_is_vims_and_its_sticky_z_is_helixs() {
     let text: String = (0..40).map(|n| format!("第{n:02}行。\n")).collect();
@@ -36662,9 +36649,9 @@ fn vims_z_is_vims_and_its_sticky_z_is_helixs() {
     ed.on_key(Key::Esc);
 }
 
-/// **vim's other `z` keys** (2026-11-03, numbers from nvim on 22 rows):
-/// `z<CR>` `z.` `z-` put the cursor past the indent, `z+` `z^` turn a
-/// page, `zx` `zX` put the folds back to the level, `zp` `zy` are `p` `y`.
+/// **vim's other `z` keys** (numbers from nvim on 22 rows): `z<CR>` `z.`
+/// `z-` put the cursor past the indent, `z+` `z^` turn a page, `zx` `zX` put
+/// the folds back to the level, `zp` `zy` are `p` `y`.
 #[test]
 fn vims_other_z_keys() {
     use crate::editor::Aim;
@@ -36718,8 +36705,8 @@ fn vims_other_z_keys() {
     assert!(!ed.fold_head(4), "zx: back to the level, then open to the cursor");
 }
 
-/// **The flavour's fold keys under helix** (2026-11-03): `za` `zR` `zM`
-/// as vim's, `zf` the selection's lines; off, the keys are unbound.
+/// **The flavour's fold keys under helix**: `za` `zR` `zM` as vim's, `zf` the
+/// selection's lines; off, the keys are unbound.
 #[test]
 fn helix_flavour_fold_keys() {
     let doc = "# 一\n\n甲。\n\n## 二\n\n乙。\n\n# 三\n\n丙。\n";
@@ -36739,9 +36726,9 @@ fn helix_flavour_fold_keys() {
     assert!(!ed.fold_head(0), "off: za is not a key");
 }
 
-/// **The view sideways** with wrapping off (2026-11-03, numbers from nvim
-/// on 80 columns): vim's `zh` `zl` `zH` `zL` `zs` `ze`, helix's `zm`; the
-/// view stops at the cursor line's last character and pushes the cursor in.
+/// **The view sideways** with wrapping off (numbers from nvim on 80
+/// columns): vim's `zh` `zl` `zH` `zL` `zs` `ze`, helix's `zm`; the view
+/// stops at the cursor line's last character and pushes the cursor in.
 #[test]
 fn the_view_goes_sideways_with_wrapping_off() {
     let long: String = (0..300).map(|i| (b'a' + (i % 26) as u8) as char).collect();
@@ -36787,9 +36774,9 @@ fn the_view_goes_sideways_with_wrapping_off() {
     assert_eq!(ed.take_side_aim(), None, "wrapped: nothing to the side");
 }
 
-/// **Closing a tab leaves the windows** (2026-11-03): another window that
-/// showed it goes back to the file it showed before, as helix's views do,
-/// and the tab bar marks the tab another window shows.
+/// **Closing a tab leaves the windows**: another window that showed it goes
+/// back to the file it showed before, as helix's views do, and the tab bar
+/// marks the tab another window shows.
 #[test]
 fn closing_a_tab_sends_other_windows_back_and_tabs_say_where_they_are() {
     let dir = tmp().join(format!("yumete-tabs-{}", std::process::id()));
@@ -36814,9 +36801,9 @@ fn closing_a_tab_sends_other_windows_back_and_tabs_say_where_they_are() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// **A sidebar is a window with no file** (2026-11-03, vim's answers):
-/// `:x` and `ZZ` close it writing nothing, `:wq` refuses; `:close` never
-/// closes the last window; `:only` keeps this one.
+/// **A sidebar is a window with no file** (vim's answers): `:x` and `ZZ`
+/// close it writing nothing, `:wq` refuses; `:close` never closes the last
+/// window; `:only` keeps this one.
 #[test]
 fn a_sidebar_has_no_file_and_close_and_only_are_vims() {
     use crate::sidebar::Side;
@@ -36846,9 +36833,9 @@ fn a_sidebar_has_no_file_and_close_and_only_are_vims() {
 }
 
 
-/// **A page is counted in rows** (2026-11-03, review): a paragraph wrapped
-/// over many rows is paged through, not jumped over, and a closed fold's
-/// hidden lines take none, so a scroll or `gc` never lands inside one.
+/// **A page is counted in rows**: a paragraph wrapped over many rows is
+/// paged through, not jumped over, and a closed fold's hidden lines take
+/// none, so a scroll or `gc` never lands inside one.
 #[test]
 fn a_page_is_rows_so_wrapped_paragraphs_and_folds_are_not_skipped() {
     let long = "字".repeat(300);
@@ -36884,10 +36871,9 @@ fn a_page_is_rows_so_wrapped_paragraphs_and_folds_are_not_skipped() {
     assert!(!ed.line_is_folded(ed.cursor_line()));
 }
 
-/// **`u` and the folds made or deleted since** (2026-11-03, review): a fold
-/// made after the undone edit stays, moved with the text; one deleted with
-/// `zE` stays deleted; and taking a fold's empty last line does not pull
-/// the next line in.
+/// **`u` and the folds made or deleted since**: a fold made after the undone
+/// edit stays, moved with the text; one deleted with `zE` stays deleted; and
+/// taking a fold's empty last line does not pull the next line in.
 #[test]
 fn undo_keeps_later_folds_and_deletions_and_an_empty_last_line_goes() {
     let mut ed = typed_vim("one\ntwo\nthree\nfour\nfive\n");
@@ -36908,10 +36894,9 @@ fn undo_keeps_later_folds_and_deletions_and_an_empty_last_line_goes() {
     assert!(!ed.line_is_folded(five), "five stays out of the fold");
 }
 
-/// **Three vim findings from the pre-release review** (2026-11-03): `Esc`
-/// leaves the reader's own split alone, `/` lands on the match's first
-/// character, and `zX` with no level set closes the folds (vim's
-/// 'foldlevel' starts at 0).
+/// **Three vim rules**: `Esc` leaves the reader's own split alone, `/` lands
+/// on the match's first character, and `zX` with no level set closes the
+/// folds (vim's 'foldlevel' starts at 0).
 #[test]
 fn vims_esc_search_and_zx_as_nvim() {
     let mut ed = typed_vim("foo bar\nbaz\n");
@@ -36932,8 +36917,8 @@ fn vims_esc_search_and_zx_as_nvim() {
     assert!(ed.fold_head(0), "zX closes it again");
 }
 
-/// **A sidebar opened again shows the panel it was closed on** (2026-11-04):
-/// `C-w e` and the tab line's block both brought back the first panel.
+/// **A sidebar opened again shows the panel it was closed on**, by `C-w e`
+/// and by the tab line's block alike, not the first panel.
 #[test]
 fn a_sidebar_reopens_on_its_last_panel() {
     use crate::sidebar::{Side, View};
@@ -36951,17 +36936,17 @@ fn a_sidebar_reopens_on_its_last_panel() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// **A few words, written here** (2026-11-04), for the tests that need a
-/// line to cut into more than single 漢字. They used the bundled list, which
-/// the binary no longer carries, and which only machines with 宇浩 installed
-/// had, so on CI they cut one 漢字 at a time.
+/// **A few words, written here**, for the tests that need a line to cut into
+/// more than single 漢字. The binary carries no bundled list, and an
+/// installed 宇浩 is not on every machine, so without these CI would cut one
+/// 漢字 at a time.
 fn some_words() -> DictionarySegmenter {
     DictionarySegmenter::from_text("今天\n天氣\n很好\n山路\n你好\n世界\n那年\n冬天\n", 0)
 }
 
-/// **A character the file's encoding cannot hold** (2026-11-04): the save
-/// stops and asks in the central window; `u` saves as UTF-8, `w` writes
-/// `&#NNNN;` (and the buffer says so, undoably), `n` writes nothing.
+/// **A character the file's encoding cannot hold**: the save stops and asks
+/// in the central window; `u` saves as UTF-8, `w` writes `&#NNNN;` (and the
+/// buffer says so, undoably), `n` writes nothing.
 #[test]
 fn saving_what_big5_cannot_hold_asks_what_to_do() {
     use crate::encoding::BIG5;
@@ -37017,9 +37002,9 @@ fn saving_what_big5_cannot_hold_asks_what_to_do() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// **A file too short to tell opens a picker of encodings** (2026-11-04),
-/// each previewed; the choice opens it and is remembered for the file, while
-/// it keeps its size. `:open ++enc=` says it outright.
+/// **A file too short to tell opens a picker of encodings**, each previewed;
+/// the choice opens it and is remembered for the file, while it keeps its
+/// size. `:open ++enc=` says it outright.
 #[test]
 fn a_short_legacy_file_asks_once_and_is_remembered() {
     use crate::encoding::{BIG5, GB18030};
@@ -37072,8 +37057,8 @@ fn a_short_legacy_file_asks_once_and_is_remembered() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// **`:read` reads in the buffer's encoding** (2026-11-04): a Big5 note read
-/// into a Big5 chapter is text.
+/// **`:read` reads in the buffer's encoding**: a Big5 note read into a Big5
+/// chapter is text.
 #[test]
 fn reading_a_big5_note_into_a_big5_chapter() {
     use crate::encoding::BIG5;
@@ -37093,9 +37078,9 @@ fn reading_a_big5_note_into_a_big5_chapter() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// **The answers to the encoding question** (2026-11-04 review): a copy's
-/// answer changes the copy only, the `!` is kept, `:wa` goes on with the
-/// rest, and `:write-as` asks too.
+/// **The answers to the encoding question**: a copy's answer changes the
+/// copy only, the `!` is kept, `:wa` goes on with the rest, and `:write-as`
+/// asks too.
 #[test]
 fn the_encoding_answers_touch_only_what_was_being_written() {
     use crate::encoding::BIG5;
@@ -37156,10 +37141,9 @@ fn the_encoding_answers_touch_only_what_was_being_written() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// **What is remembered of an encoding stays true** (2026-11-04 review):
-/// a save keeps the size, a UTF-8 file is never read in a remembered or
-/// guessed legacy encoding, and two files that cannot be told are asked
-/// about one after the other.
+/// **What is remembered of an encoding stays true**: a save keeps the size,
+/// a UTF-8 file is never read in a remembered or guessed legacy encoding, and
+/// two files that cannot be told are asked about one after the other.
 #[test]
 fn remembered_and_guessed_encodings_stay_out_of_the_way() {
     use crate::encoding::{BIG5, GB18030};
@@ -37217,10 +37201,10 @@ fn remembered_and_guessed_encodings_stay_out_of_the_way() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// **A key listed for an action is a key that reaches it** (2026-11-04):
-/// under vim `gn` selects the next match, `ge` is the previous word's end and
-/// `[p` pastes, so the vim column named them for next-buffer, the last line
-/// and the previous paragraph by mistake, and so did `:keymap-actions`.
+/// **A key listed for an action is a key that reaches it**: under vim `gn`
+/// selects the next match, `ge` is the previous word's end and `[p` pastes,
+/// so neither the vim column nor `:keymap-actions` names them for
+/// next-buffer, the last line and the previous paragraph.
 #[test]
 fn the_vim_column_names_only_keys_that_reach_the_action() {
     let docs = Editor::commands_for_docs();
@@ -37253,10 +37237,10 @@ fn the_vim_column_names_only_keys_that_reach_the_action() {
     assert!(!cells[4].contains("`g n`"), "not vim's: {row}");
 }
 
-/// **The key lists follow the flavour and every place a row applies**
-/// (2026-11-04 review): a Select-mode row is listed, Space under vim is the
-/// menu's, vim's sticky `Z` is listed as it answers, and a key the reader
-/// has bound to something else leaves the column in force.
+/// **The key lists follow the flavour and every place a row applies**: a
+/// Select-mode row is listed, Space under vim is the menu's, vim's sticky `Z`
+/// is listed as it answers, and a key the reader has bound to something else
+/// leaves the column in force.
 #[test]
 fn the_key_lists_follow_the_flavour_and_the_readers_lines() {
     let docs = Editor::commands_for_docs();
@@ -37285,8 +37269,7 @@ fn the_key_lists_follow_the_flavour_and_the_readers_lines() {
     assert!(row.trim_end_matches('|').trim_end().ends_with("`x`"), "{row}");
 }
 
-/// **A keymap's own group name titles its menu under that keymap only**
-/// (2026-11-04 review).
+/// **A keymap's own group name titles its menu under that keymap only.**
 #[test]
 fn a_keymaps_own_label_is_that_keymaps() {
     let mut ed = typed("一\n");
@@ -37300,10 +37283,10 @@ fn a_keymaps_own_label_is_that_keymaps() {
     assert_eq!(ed.key_label_for(" x"), None);
 }
 
-/// **A file's vim modeline is its own** (2026-11-04): the type, tab stop and
-/// indent width it names hold for that file, not the next, give way to a
-/// typed `:indent-width`, are read again by `:reload`, and are left alone
-/// with `[editor] modeline` off.
+/// **A file's vim modeline is its own**: the type, tab stop and indent width
+/// it names hold for that file, not the next, give way to a typed
+/// `:indent-width`, are read again by `:reload`, and are left alone with
+/// `[editor] modeline` off.
 #[test]
 fn a_modeline_sets_this_file_and_no_other() {
     let dir = tmp().join(format!("yumete-modeline-{}", std::process::id()));
@@ -37337,9 +37320,9 @@ fn a_modeline_sets_this_file_and_no_other() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// **Diagnostics follow every edit, once** (2026-11-04 review): a paste is
-/// not held over to move a fresher word later, a whole-file replacement
-/// moves only the lines it changed, and an undo takes them back.
+/// **Diagnostics follow every edit, once**: a paste is not held over to move
+/// a fresher word later, a whole-file replacement moves only the lines it
+/// changed, and an undo takes them back.
 #[test]
 fn diagnostics_follow_pastes_replacements_and_undo_once() {
     let dir = tmp().join(format!("yumete-diag-follow-{}", std::process::id()));
@@ -37390,8 +37373,8 @@ fn diagnostics_follow_pastes_replacements_and_undo_once() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// **A reload keeps a syntax chosen by hand** (2026-11-04 review), and an
-/// `sw=0` modeline follows the tab stop.
+/// **A reload keeps a syntax chosen by hand**, and an `sw=0` modeline
+/// follows the tab stop.
 #[test]
 fn a_reload_keeps_the_syntax_chosen_by_hand() {
     let dir = tmp().join(format!("yumete-ml-hand-{}", std::process::id()));
@@ -37409,8 +37392,8 @@ fn a_reload_keeps_the_syntax_chosen_by_hand() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// **A binding for one keymap holds under that keymap only** (2026-11-04):
-/// `<tab>` to the next buffer under vim leaves helix's Tab as it was.
+/// **A binding for one keymap holds under that keymap only**: `<tab>` to the
+/// next buffer under vim leaves helix's Tab as it was.
 #[test]
 fn a_keymaps_own_binding_stays_in_that_keymap() {
     let mut ed = typed("一\n");
@@ -37428,8 +37411,8 @@ fn a_keymaps_own_binding_stays_in_that_keymap() {
     assert_eq!(ed.buffer_position().0, before, "under helix, Tab is helix's own");
 }
 
-/// **`:keymap-actions` lists helix | vim | yours** (2026-11-04): the
-/// reader's own lines in their column, flavour keys marked `*`.
+/// **`:keymap-actions` lists helix | vim | yours**: the reader's own lines in
+/// their column, flavour keys marked `*`.
 #[test]
 fn the_action_list_has_a_column_for_each_keymap_and_one_for_yours() {
     let mut ed = typed("一\n");
@@ -37453,8 +37436,8 @@ fn the_action_list_has_a_column_for_each_keymap_and_one_for_yours() {
     assert!(listing.contains('*'), "a flavour key is marked");
 }
 
-/// **`>` leaves a line with nothing on it alone** (2026-11-04 review): vim
-/// skips an empty line, helix a blank one too.
+/// **`>` leaves a line with nothing on it alone**: vim skips an empty line,
+/// helix a blank one too.
 #[test]
 fn indenting_skips_empty_lines() {
     let mut ed = typed_vim("a\n\n  \nb\n");
@@ -37465,8 +37448,8 @@ fn indenting_skips_empty_lines() {
     assert_eq!(ed.current_buffer().text(), "    a\n\n  \n    b\n", "helix: blank lines too");
 }
 
-/// **`:wq!` is helix's `write-quit!`** (2026-11-04 review): it saves this
-/// file and leaves with another still unsaved, where `:wq` refuses.
+/// **`:wq!` is helix's `write-quit!`**: it saves this file and leaves with
+/// another still unsaved, where `:wq` refuses.
 #[test]
 fn write_quit_bang_leaves_with_others_unsaved() {
     let dir = tmp().join(format!("yumete-wq-bang-{}", std::process::id()));
@@ -37502,10 +37485,10 @@ fn keyed(ed: &mut Editor, keys: &str) {
     }
 }
 
-/// **vim's `:` from Visual leaves Visual** (`:h v_:`, measured in nvim
-/// 2026-11-04): the command still takes the selected lines; the cursor goes
-/// where the command put it, else to the start of the Visual area, and
-/// Esc on the `:` line ends Visual too.
+/// **vim's `:` from Visual leaves Visual** (`:h v_:`, measured in nvim): the
+/// command still takes the selected lines; the cursor goes where the command
+/// put it, else to the start of the Visual area, and Esc on the `:` line
+/// ends Visual too.
 #[test]
 fn vims_colon_line_from_visual_leaves_visual() {
     let lines: String = (1..=8).map(|n| format!("a{n} aa\n")).collect();
@@ -37540,9 +37523,9 @@ fn vims_colon_line_from_visual_leaves_visual() {
 }
 
 /// **vim's `cc`, `S` and linewise `c` keep the first line's indent in code**
-/// (autoindent, measured in nvim 2026-11-04), and the indent goes again
-/// when nothing is typed after it, after `o`, `O` and Enter too. Not in a
-/// text file: no autoindent in prose.
+/// (autoindent, measured in nvim), and the indent goes again when nothing is
+/// typed after it, after `o`, `O` and Enter too. Not in a text file: no
+/// autoindent in prose.
 #[test]
 fn vims_linewise_change_keeps_the_indent_in_code() {
     let code = "fn main() {\n    let a = 1;\n      \n\n\tb();\n}\n";
@@ -37578,9 +37561,8 @@ fn vims_linewise_change_keeps_the_indent_in_code() {
     assert_eq!(ed.current_buffer().text(), "a\nq\n");
 }
 
-/// **`j`/`k` onto a closed fold keep the column wanted** (nvim,
-/// 2026-11-04): they used to land at the end of the fold's first line, and
-/// `x` then took its last character.
+/// **`j`/`k` onto a closed fold keep the column wanted** (nvim): not the end
+/// of the fold's first line, where `x` would then take its last character.
 #[test]
 fn j_and_k_onto_a_closed_fold_keep_the_column() {
     let lines: String = (1..=10).map(|n| format!("w{n}_0 w{n}_1 w{n}_2\n")).collect();
@@ -37598,8 +37580,8 @@ fn j_and_k_onto_a_closed_fold_keep_the_column() {
 }
 
 /// **vim's `:s` leaves the cursor on the last line substituted**, on its
-/// first non-blank (`:h :s`, measured in nvim 2026-11-04); with nothing
-/// found it stays. Helix has no `:s`, and its users keep the cursor.
+/// first non-blank (`:h :s`, measured in nvim); with nothing found it stays.
+/// Helix has no `:s`, and its users keep the cursor.
 #[test]
 fn vims_substitute_leaves_the_cursor_on_the_last_line_changed() {
     let text = "  a1\n    a2\nb3\n  a4\nb5\n";
@@ -37618,10 +37600,10 @@ fn vims_substitute_leaves_the_cursor_on_the_last_line_changed() {
     assert_eq!(ed.cursor_line(), 0, "helix untouched");
 }
 
-/// **vim's `>`/`<` and Insert Tab with `ts=4 sw=6 noet`** (nvim,
-/// 2026-11-04): `>>` writes the indent afresh as a TAB and two spaces;
-/// Tab in the indent goes to the next multiple of `sw` the same way
-/// ('smarttab'), Backspace there back to the last; Tab after text is a TAB.
+/// **vim's `>`/`<` and Insert Tab with `ts=4 sw=6 noet`** (nvim): `>>`
+/// writes the indent afresh as a TAB and two spaces; Tab in the indent goes
+/// to the next multiple of `sw` the same way ('smarttab'), Backspace there
+/// back to the last; Tab after text is a TAB.
 #[test]
 fn vims_shift_and_tab_write_tabs_when_tab_types_tabs() {
     let vim = |text: &str, keys: &str| {
@@ -37664,9 +37646,9 @@ fn lines_of(pairs: &[(&str, &str)]) -> HashMap<String, Vec<String>> {
     pairs.iter().map(|(k, v)| (k.to_string(), vec![v.to_string()])).collect()
 }
 
-/// **A group is one node however it is opened** (2026-11-05, the key
-/// tree): a key under `Space w` is `C-w`'s too, and `Space w` still lists
-/// `C-w`'s own keys beside it.
+/// **A group is one node however it is opened** (the key tree): a key under
+/// `Space w` is `C-w`'s too, and `Space w` still lists `C-w`'s own keys
+/// beside it.
 #[test]
 fn space_w_and_ctrl_w_are_one_group() {
     let mut ed = typed("one\n");
@@ -37681,8 +37663,8 @@ fn space_w_and_ctrl_w_are_one_group() {
     assert_eq!(ed.selection(), (0, 4), "C-w z is the same key");
 }
 
-/// **A group moved to another key keeps the reader's keys** (2026-11-05):
-/// `;` opens Space with `q` in it, by the run `"@ "` or by `space_mode`.
+/// **A group moved to another key keeps the reader's keys**: `;` opens Space
+/// with `q` in it, by the run `"@ "` or by `space_mode`.
 #[test]
 fn a_moved_group_keeps_the_readers_keys() {
     for opener in ["@ ", "space_mode"] {
@@ -37696,10 +37678,10 @@ fn a_moved_group_keeps_the_readers_keys() {
     }
 }
 
-/// **Under vim with Space moving right, `\` is the Space group, the
-/// reader's keys in it** (2026-11-05): `[keys.normal.space]` names the
-/// group, and Space itself moves without drawing a menu. Written flat,
-/// `"<space>b"` is the Space key, held for its `b` as in 0.18.
+/// **Under vim with Space moving right, `\` is the Space group, the reader's
+/// keys in it**: `[keys.normal.space]` names the group, and Space itself
+/// moves without drawing a menu. Written flat, `"<space>b"` is the Space
+/// key, held for its `b`.
 #[test]
 fn backslash_reaches_the_readers_space_keys() {
     let mut flat = typed_vim("一二三\n");
@@ -37731,7 +37713,7 @@ fn backslash_reaches_the_readers_space_keys() {
 
 /// **A count before a group reaches the reader's key in it**, and a key
 /// that does not go on with a run held there lets the reader's own key for
-/// what was held act first (2026-11-05).
+/// what was held act first.
 #[test]
 fn a_held_run_in_a_group_lets_the_readers_prefix_act() {
     let mut ed = typed("abcdef\n");
@@ -37747,9 +37729,9 @@ fn a_held_run_in_a_group_lets_the_readers_prefix_act() {
     assert_eq!(ed.selection(), (0, 7), "Space b d");
 }
 
-/// **A run four keys deep keeps the keys before it** (2026-11-05):
-/// `gggg` goes to the last line, and `gg` then a key that does not go on
-/// is still the first line.
+/// **A run four keys deep keeps the keys before it**: `gggg` goes to the
+/// last line, and `gg` then a key that does not go on is still the first
+/// line.
 #[test]
 fn a_run_four_keys_deep() {
     let mut ed = typed("a\nb\nc\n");
@@ -37760,9 +37742,9 @@ fn a_run_four_keys_deep() {
     assert_eq!(ed.current_buffer().rope().char_to_line(ed.cursor()), 1, "gg, then j");
 }
 
-/// **A `[keys.table]` group has a menu in the grid** (2026-11-05): its
-/// table is a group of the reader's there, titled with its label, and
-/// outside a table the key is what it always was.
+/// **A `[keys.table]` group has a menu in the grid**: its table is a group of
+/// the reader's there, titled with its label, and outside a table the key is
+/// what it is everywhere else.
 #[test]
 fn a_table_grids_group_draws_a_menu() {
     let bind = |ed: &mut Editor| {
@@ -37797,7 +37779,7 @@ fn a_table_grids_group_draws_a_menu() {
 }
 
 /// Typst's `/* … */` over several lines is a comment on every one of them,
-/// as Markdown's `<!-- -->` is (2026-11-05).
+/// as Markdown's `<!-- -->` is.
 #[test]
 fn a_typst_block_comment_over_several_lines_is_a_comment() {
     use crate::markdown::{Block, Kind};
@@ -37830,9 +37812,9 @@ fn only_a_line_with_a_slash_star_is_read_for_a_typst_comment() {
     assert!(opens_a_block_comment(rope(&long).slice(..)));
 }
 
-/// **`:config-open` and `:config-open-workspace`** (helix's, 2026-11-06):
-/// the global file the frontend named, even before it exists, and the
-/// project's `.yumete/config.toml`; `:config-reload` is `:reload-config`.
+/// **`:config-open` and `:config-open-workspace`** (helix's): the global file
+/// the frontend named, even before it exists, and the project's
+/// `.yumete/config.toml`; `:config-reload` is `:reload-config`.
 #[test]
 fn config_open_opens_the_global_and_the_project_files() {
     let dir = tmp().join(format!("yumete-config-open-{}", std::process::id()));
@@ -37872,10 +37854,10 @@ fn config_open_opens_the_global_and_the_project_files() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// **A scratch is plain text until what is written in it says otherwise**
-/// (2026-11-06). It used to open as Markdown and stay so: a scratch of Typst
-/// had its `$…$` set as LaTeX. Guessed again on leaving Insert, not between
-/// letters; `:syntax` and a name end the guessing.
+/// **A scratch is plain text until what is written in it says otherwise**,
+/// not Markdown from the start — a scratch of Typst must not have its `$…$`
+/// set as LaTeX. Guessed again on leaving Insert, not between letters;
+/// `:syntax` and a name end the guessing.
 #[test]
 fn a_scratch_is_text_until_its_writing_says_otherwise() {
     use crate::syntax::Syntax;
@@ -37914,7 +37896,7 @@ fn a_scratch_is_text_until_its_writing_says_otherwise() {
     let _ = std::fs::remove_dir_all(&dir);
 
     // A project that names a syntax gets it in every new buffer, `:new`
-    // included, and the guess does not overrule it (review, 2026-11-06).
+    // included, and the guess does not overrule it.
     let mut ed = Editor::new();
     ed.set_default_syntax(Some(Syntax::Typst));
     press(&mut ed, ":new");
@@ -37928,11 +37910,10 @@ fn a_scratch_is_text_until_its_writing_says_otherwise() {
     assert_eq!(ed.syntax(), Syntax::Typst, "not guessed over");
 }
 
-/// **Typst is code where it is code** (2026-11-06): in a served `.typ`, the
-/// caret on `#footnotes` asks the server (`Space k`, `gd`, completion,
-/// signature help); on writing it asks the wiki and the words, as before.
-/// It used to be decided by the file, so tinymist was never asked anything
-/// and a friend took it for broken.
+/// **Typst is code where it is code**: in a served `.typ`, the caret on
+/// `#footnotes` asks the server (`Space k`, `gd`, completion, signature
+/// help); on writing it asks the wiki and the words. It is decided by where
+/// the caret is, not by the file, or tinymist would never be asked anything.
 #[test]
 fn typst_asks_the_server_on_code_and_the_wiki_on_writing() {
     let dir = tmp().join(format!("yumete-typst-spot-{}", std::process::id()));
@@ -38090,11 +38071,10 @@ fn the_preview_commands_ask_for_the_window_or_the_browser() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// **A preview is a tab** (2026-11-08): opened beside the text with the keys
-/// left there, it is in the tab line under its own name, in the buffer
-/// picker, and `gn` and `gp` reach it like any file. `C-w w` walks into it,
-/// its keys scroll the page, and `:q` in it closes the window and leaves the
-/// tab.
+/// **A preview is a tab**: opened beside the text with the keys left there,
+/// it is in the tab line under its own name, in the buffer picker, and `gn`
+/// and `gp` reach it like any file. `C-w w` walks into it, its keys scroll
+/// the page, and `:q` in it closes the window and leaves the tab.
 #[test]
 fn a_preview_is_a_tab_shown_in_a_window() {
     let (mut ed, dir) = a_typst_book("tab");
@@ -38144,9 +38124,9 @@ fn a_preview_is_a_tab_shown_in_a_window() {
         vec![PageStep::Rows(1), PageStep::Halves(1), PageStep::Rows(-1), PageStep::Bottom]
     );
     assert_eq!(ed.take_page_steps(), Vec::new(), "taken once");
-    // A PDF reader's keys under vim (2026-11-07): `gg`, `J` and `K` a whole
-    // page, and a count before `G` or `gg` the page of that number. `0` on
-    // its own is no count.
+    // A PDF reader's keys under vim: `gg`, `J` and `K` a whole page, and a
+    // count before `G` or `gg` the page of that number. `0` on its own is no
+    // count.
     for key in "gg5GJ2K12gg0G".chars() {
         ed.on_key(Key::Char(key));
     }
@@ -38195,9 +38175,9 @@ fn a_preview_is_a_tab_shown_in_a_window() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// **Nothing in a preview is text** (2026-11-08): no Insert, no edit, no
-/// save, no draft, no file for a language server, nothing for `:wa` or
-/// `:q` to stop on, and `:readonly off` does not unlock it.
+/// **Nothing in a preview is text**: no Insert, no edit, no save, no draft,
+/// no file for a language server, nothing for `:wa` or `:q` to stop on, and
+/// `:readonly off` does not unlock it.
 #[test]
 fn a_preview_cannot_be_edited_or_written() {
     let (mut ed, dir) = a_typst_book("locked");
@@ -38230,9 +38210,9 @@ fn a_preview_cannot_be_edited_or_written() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// **Opening a file in a preview's window shows the file there** (2026-11-08):
-/// the preview stays a tab, off the screen, and `ga`, `C-o`, `:b` and
-/// `:preview` bring it back. The tab line tells the truth throughout.
+/// **Opening a file in a preview's window shows the file there**: the
+/// preview stays a tab, off the screen, and `ga`, `C-o`, `:b` and `:preview`
+/// bring it back. The tab line tells the truth throughout.
 #[test]
 fn a_file_opened_in_a_preview_window_shows_there() {
     let (mut ed, dir) = a_typst_book("open-in");
@@ -38335,9 +38315,9 @@ fn bc_closes_the_preview_and_q_closes_its_window() {
     std::fs::remove_dir_all(&dir2).ok();
 }
 
-/// **A preview follows its own book only** (2026-11-08): the cursor in the
-/// main file or a chapter under its folder; not in a Typst file elsewhere,
-/// which never becomes its main file.
+/// **A preview follows its own book only**: the cursor in the main file or a
+/// chapter under its folder; not in a Typst file elsewhere, which never
+/// becomes its main file.
 #[test]
 fn a_preview_follows_its_own_book_only() {
     let (mut ed, dir) = a_typst_book("book");
@@ -38360,8 +38340,8 @@ fn a_preview_follows_its_own_book_only() {
     std::fs::remove_dir_all(&elsewhere).ok();
 }
 
-/// **Two previews at once** (2026-11-08), one a document, each a tab of its
-/// own with a task of its own in tinymist.
+/// **Two previews at once**, one a document, each a tab of its own with a
+/// task of its own in tinymist.
 #[test]
 fn two_documents_have_two_previews() {
     let (mut ed, dir) = a_typst_book("two-a");
@@ -38389,10 +38369,9 @@ fn two_documents_have_two_previews() {
     std::fs::remove_dir_all(&dir_b).ok();
 }
 
-/// **A chapter's new preview typesets its book** (2026-11-08): from a
-/// chapter, the open file that `#include`s it is the preview's main file,
-/// since a chapter alone lacks what its book sets up. With no such file
-/// open it is the chapter, as it always was.
+/// **A chapter's new preview typesets its book**: from a chapter, the open
+/// file that `#include`s it is the preview's main file, since a chapter alone
+/// lacks what its book sets up. With no such file open it is the chapter.
 #[test]
 fn a_chapter_s_preview_typesets_the_book_that_includes_it() {
     let (mut ed, dir) = a_typst_book("chapter");
@@ -38419,10 +38398,10 @@ fn a_chapter_s_preview_typesets_the_book_that_includes_it() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// **Saving and leaving from a preview** (2026-11-08): `:w`, `:wq`, `:up`
-/// and `:write-as` write nothing and say why; `:x` and vim's `ZZ` are `:q`,
-/// closing the window or, from the last one, leaving. A preview tab off the
-/// screen changes nothing for `:w`, `:wa` and `:qa`.
+/// **Saving and leaving from a preview**: `:w`, `:wq`, `:up` and `:write-as`
+/// write nothing and say why; `:x` and vim's `ZZ` are `:q`, closing the
+/// window or, from the last one, leaving. A preview tab off the screen
+/// changes nothing for `:w`, `:wa` and `:qa`.
 #[test]
 fn saving_in_a_preview_writes_nothing_and_leaving_works() {
     let (mut ed, dir) = a_typst_book("save");
@@ -38468,8 +38447,8 @@ fn saving_in_a_preview_writes_nothing_and_leaving_works() {
     std::fs::remove_dir_all(&dir2).ok();
 }
 
-/// **The buffer picker says what a preview is** (2026-11-08) rather than
-/// showing its empty text.
+/// **The buffer picker says what a preview is** rather than showing its
+/// empty text.
 #[test]
 fn the_buffer_picker_says_what_a_preview_is() {
     let (mut ed, dir) = a_typst_book("picker");
@@ -38525,8 +38504,8 @@ fn the_vertical_preview_is_a_switch_and_follows_the_page() {
     assert!(ed.execute(":preview-vertical sideways").is_err());
 }
 
-/// **A session keeps the preview tabs** (2026-11-08), and which window
-/// showed one; the page is made again when it is shown.
+/// **A session keeps the preview tabs**, and which window showed one; the
+/// page is made again when it is shown.
 #[test]
 fn a_session_keeps_the_preview_tabs() {
     let (mut ed, dir) = a_typst_book("session");
@@ -38580,10 +38559,10 @@ fn a_markdown_note(name: &str) -> (Editor, std::path::PathBuf) {
     (ed, dir)
 }
 
-/// **A Markdown file's preview is a tab of its own** (2026-11-08):
-/// `:preview` asks for it beside the text, a Markdown preview and not
-/// a typeset page; on the screen `on` says so, bare and `off` close the tab,
-/// `:q` in its window closes only the window; the picker says what it is.
+/// **A Markdown file's preview is a tab of its own**: `:preview` asks for it
+/// beside the text, a Markdown preview and not a typeset page; on the screen
+/// `on` says so, bare and `off` close the tab, `:q` in its window closes only
+/// the window; the picker says what it is.
 #[test]
 fn a_markdown_file_has_a_preview_tab_of_its_own() {
     let (mut ed, dir) = a_markdown_note("tab");
@@ -38686,9 +38665,9 @@ fn a_markdown_preview_s_keys_scroll_and_nothing_is_text() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// **A Typst preview and a Markdown one at once** (2026-11-08): each a tab
-/// of its own kind, each following only its own file; a Typst chapter
-/// beside a Markdown file is not the Markdown file's.
+/// **A Typst preview and a Markdown one at once**: each a tab of its own
+/// kind, each following only its own file; a Typst chapter beside a Markdown
+/// file is not the Markdown file's.
 #[test]
 fn a_typst_preview_and_a_markdown_one_side_by_side() {
     let (mut ed, dir) = a_typst_book("with-md");
@@ -38717,8 +38696,7 @@ fn a_typst_preview_and_a_markdown_one_side_by_side() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// **A session keeps a Markdown preview** (2026-11-08), by its kind, tab
-/// and window alike.
+/// **A session keeps a Markdown preview**, by its kind, tab and window alike.
 #[test]
 fn a_session_keeps_a_markdown_preview() {
     let (mut ed, dir) = a_markdown_note("session");
@@ -38760,11 +38738,11 @@ fn a_markdown_preview_reads_the_open_buffer() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// **A template's `#let style(body) = { … }` is code on every line**
-/// (2026-11-08), past its blank lines, each line read from the brackets it
-/// begins inside: a rule is code, a note in it a comment, and the writing in
-/// its `[…]` writing. The body was one purple down to the first blank line
-/// and plain text after it. The same text as Markdown has no code in it.
+/// **A template's `#let style(body) = { … }` is code on every line**, past
+/// its blank lines, each line read from the brackets it begins inside: a rule
+/// is code, a note in it a comment, and the writing in its `[…]` writing —
+/// not one purple down to the first blank line and plain text after it. The
+/// same text as Markdown has no code in it.
 #[test]
 fn a_typst_code_block_is_coloured_as_code_on_every_line() {
     use crate::markdown::{Block, Kind};
@@ -38796,11 +38774,11 @@ fn window_columns(ed: &Editor) -> Vec<(crate::window::WindowId, u16)> {
     placed.iter().map(|p| (p.id, p.area.x)).collect()
 }
 
-/// **Switching the layout moves no window** (2026-11-08, the author's
-/// report): a Markdown file with its preview on the right, `:vertical` in
-/// the text swapped the two, and `:horizontal` swapped them back — the
-/// screen was laid out by the page the keys were on. A preview opens to the
-/// right from a 縱書 page too, and `C-w h` `l` go to the window drawn there.
+/// **Switching the layout moves no window**: a Markdown file with its
+/// preview on the right stays so through `:vertical` and `:horizontal` in
+/// the text — the screen is not laid out by the page the keys are on. A
+/// preview opens to the right from a 縱書 page too, and `C-w h` `l` go to the
+/// window drawn there.
 #[test]
 fn switching_the_layout_moves_no_window() {
     let (mut ed, dir) = a_markdown_note("sides");
@@ -38832,9 +38810,9 @@ fn switching_the_layout_moves_no_window() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// A split made on a 縱書 page opens as it always has, its new window on
-/// the left, and **keeps that side** when the page turns horizontal; the
-/// keys follow what is drawn (2026-11-08).
+/// A split made on a 縱書 page opens with its new window on the left, and
+/// **keeps that side** when the page turns horizontal; the keys follow what
+/// is drawn.
 #[test]
 fn a_split_made_on_a_vertical_page_keeps_its_side() {
     let mut ed = typed("那年冬天。\n");
@@ -38867,9 +38845,9 @@ fn a_split_made_on_a_vertical_page_keeps_its_side() {
     assert_eq!(at(&ed, three), x);
 }
 
-/// **A session keeps the side of a split** (2026-11-08): a split from the
-/// right is written `beside⇥rtl` and comes back on the same side; a session
-/// written before has plain `beside` lines, read left to right.
+/// **A session keeps the side of a split**: a split from the right is
+/// written `beside⇥rtl` and comes back on the same side; a plain `beside`
+/// line is read left to right.
 #[test]
 fn a_session_keeps_the_side_of_a_split() {
     let (mut ed, dir) = a_markdown_note("session-sides");
@@ -38918,9 +38896,9 @@ fn a_session_keeps_the_side_of_a_split() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// **A Typst manuscript's colours come from its tree, reparsed on each edit**
-/// (2026-11-08), and only its colours: the runs the page hides and shows are
-/// the block scanner's, as before.
+/// **A Typst manuscript's colours come from its tree, reparsed on each
+/// edit**, and only its colours: the runs the page hides and shows are the
+/// block scanner's.
 #[test]
 fn a_typst_manuscript_is_coloured_by_its_tree() {
     use crate::markdown::Kind;
@@ -38952,9 +38930,9 @@ fn a_typst_manuscript_is_coloured_by_its_tree() {
     assert!(ed.typst_colours(0).is_none(), "not Typst");
 }
 
-/// **A manuscript read in pieces is coloured as it would be read whole**
-/// (2026-11-08), before and after edits — one in a piece, one opening a raw
-/// block across pieces and closing it again, one deleting across pieces.
+/// **A manuscript read in pieces is coloured as it would be read whole**,
+/// before and after edits — one in a piece, one opening a raw block across
+/// pieces and closing it again, one deleting across pieces.
 #[test]
 fn a_typst_manuscript_in_pieces_is_coloured_as_it_would_be_whole() {
     let mut text = String::new();
@@ -39078,11 +39056,11 @@ fn typst_lines_unlike_the_whole(ed: &Editor, rows: std::ops::Range<usize>) -> Ve
     unlike
 }
 
-/// **A comment inside a comment, across a cut** (review, 2026-11-09).
-/// Typst's comments nest, so a chapter put inside `/* … */` with an old
-/// `/* note */` at its head is all comment down to the last `*/`. The scan
-/// closed it at the note's `*/`, allowed cuts below, and every line from the
-/// next cut down was drawn as writing.
+/// **A comment inside a comment, across a cut.** Typst's comments nest, so a
+/// chapter put inside `/* … */` with an old `/* note */` at its head is all
+/// comment down to the last `*/`. The scan must not close it at the note's
+/// `*/` and allow cuts below, or every line from the next cut down is drawn
+/// as writing.
 #[test]
 fn a_nested_comment_across_a_typst_cut_is_one_comment() {
     let mut text = String::new();
@@ -39137,10 +39115,10 @@ fn an_unclosed_typst_comment_is_open_at_its_end() {
 }
 
 /// **The Typst block scan, taken up where the text changed, says what a
-/// scan from the top says** (2026-11-09): random edits over a book — a
-/// fence, a comment, a bracket opened and closed, maths, a merge marker,
-/// lines added and taken away, undone and redone — and after each, every
-/// line's block, frames and cut against a fresh editor's.
+/// scan from the top says**: random edits over a book — a fence, a comment,
+/// a bracket opened and closed, maths, a merge marker, lines added and taken
+/// away, undone and redone — and after each, every line's block, frames and
+/// cut against a fresh editor's.
 #[test]
 fn the_typst_scan_from_an_edit_reads_as_a_scan_from_the_top() {
     let snippets = [
@@ -39197,9 +39175,9 @@ fn the_typst_scan_from_an_edit_reads_as_a_scan_from_the_top() {
     }
 }
 
-/// **A piece joined for a moment is cut again** (review, 2026-11-09): a
-/// fence typed and closed again joined every piece drawn so far into one,
-/// and it stayed one until the buffer was left.
+/// **A piece joined for a moment is cut again**: a fence typed and closed
+/// again joins every piece drawn so far into one, and it must not stay one
+/// until the buffer is left.
 #[test]
 fn a_joined_typst_piece_is_cut_again() {
     let mut ed = Editor::new();
@@ -39231,9 +39209,8 @@ fn a_joined_typst_piece_is_cut_again() {
 
 /// **A Typst book drawn in pieces is coloured as the whole file parsed at
 /// once**, through random edits — backticks anywhere among them, as Typst's
-/// raw text closes at a run of backticks mid-line (review, 2026-11-09) —
-/// whenever the whole file parses without an error. A few seeds here; the
-/// review ran 150:
+/// raw text closes at a run of backticks mid-line — whenever the whole file
+/// parses without an error. A few seeds here; a thorough run takes 150:
 ///
 ///     YUMETE_TYPST_SEEDS=150 cargo test --release -p yumete-core typst_pieces_are_coloured_as_the_whole_file
 #[test]
