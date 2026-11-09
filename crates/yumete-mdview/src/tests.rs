@@ -232,7 +232,7 @@ fn images_are_drawn_scaled_to_the_column() {
     image::RgbaImage::from_pixel(800, 400, image::Rgba([200, 30, 30, 255])).save(dir.join("wide.png")).unwrap();
     let mut p = Preview::new(Options { base_dir: dir.clone(), ..options(500) }, Box::new(NoFormulas));
     p.set_text("![寬圖](wide.png)\n\n![沒有](missing.png)\n");
-    // A picture alone in its paragraph is a figure (2026-11-08).
+    // A picture alone in its paragraph is a figure.
     let laid = &p.placed[0].laid;
     let pic = laid.items.iter().find_map(|it| match it {
         Item::Pic { r, .. } => Some((r.width() as f32, r.height() as f32)),
@@ -396,7 +396,7 @@ fn code_keeps_its_indent_and_its_lines() {
 }
 
 /// **Across the page a table has its caption and a picture alone in its
-/// paragraph is a figure** (2026-11-08), as the vertical page and the export
+/// paragraph is a figure**, as the vertical page and the export
 /// set them: the caption's words over the table, the picture's text under it.
 #[test]
 fn across_the_page_a_caption_heads_its_table_and_a_figure_has_its_text() {
@@ -416,7 +416,7 @@ fn across_the_page_a_caption_heads_its_table_and_a_figure_has_its_text() {
 }
 
 /// **A page set vertically after its text turns quotes by the export's
-/// rule too** (2026-11-09): the language is read when the page turns, from
+/// rule too**: the language is read when the page turns, from
 /// the text it was given across.
 #[test]
 fn quotes_follow_the_language_when_the_page_turns_vertical() {

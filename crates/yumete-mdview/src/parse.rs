@@ -178,7 +178,7 @@ pub struct Cache {
 }
 
 impl Cache {
-    /// **Which ruby spellings are read** (2026-11-08): `[export] ruby_html`,
+    /// **Which ruby spellings are read**: `[export] ruby_html`,
     /// `ruby_typst` and `ruby_markdown`, the preview being publication as an
     /// export is. A change reads every paragraph again.
     pub fn set_ruby(&mut self, ruby: yumete_core::ruby::Dialects) {
@@ -1425,7 +1425,7 @@ mod tests {
         }
     }
 
-    /// **The brace form is ruby too** (2026-11-08), one group a character
+    /// **The brace form is ruby too**, one group a character
     /// where the bars give a reading each, and not in a code span; and the
     /// spellings read are the export's.
     #[test]

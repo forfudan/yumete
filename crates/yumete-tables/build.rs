@@ -1,12 +1,9 @@
 //! Put the full 宇浩拼音, 靈明 and 星陳 tables into the binary, compressed.
 //!
-//! **Why the full tables now.** Until 0.17.0 the binary carried 靈明精華版
-//! only, to keep it small (2026-10-07). On 2026-11-04 the choice was made the
-//! other way: 拼音 is the scheme most people type with, and it needs its
-//! language layer, so the binary carries the full tables of three schemes and
-//! 拼音 is the default. The sentence model goes in whole, and every file is
-//! zstd-compressed (pinyin's four files measured 54.1 MB raw, 26.2 MB packed,
-//! 61 ms to unpack).
+//! **Why the full tables.** Not a 精華版 to keep the binary small: 拼音 is the scheme most people
+//! type with, and it needs its language layer, so the binary carries the full tables of three
+//! schemes and 拼音 is the default. The sentence model goes in whole, and every file is
+//! zstd-compressed (pinyin's four files measured 54.1 MB raw, 26.2 MB packed, 61 ms to unpack).
 //!
 //! **Where they come from: the macOS package of the current Yume release**
 //! (`forfudan/yume-release`, tag `yuhao`), the one Yume itself ships. The
