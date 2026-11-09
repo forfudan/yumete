@@ -60,6 +60,9 @@ struct Autocmd {
 #[derive(Debug, Default)]
 pub(super) struct Dump {
     pub version: String,
+    /// A Lua file or function of the config stopped at an error
+    /// ([`super::dump::Dumped::stopped`]).
+    pub stopped: bool,
     leader: Option<String>,
     colorscheme: Option<String>,
     /// Vim's `$VIMRUNTIME`: options and maps set from under it are Vim's.
@@ -127,6 +130,7 @@ impl Dump {
             .collect();
         Dump {
             version: text(json, "nvim").or_else(|| text(json, "vim")).unwrap_or_default(),
+            stopped: false,
             leader: text(json, "leader"),
             colorscheme: text(json, "colorscheme"),
             runtime: text(json, "runtime").filter(|r| !r.is_empty()),
@@ -179,6 +183,8 @@ pub(super) struct Own {
     pub runs: bool,
     /// The editor's first word on stderr while starting.
     pub said: Option<String>,
+    /// The config stopped part way at an error ([`Dump::stopped`]).
+    pub stopped: bool,
 }
 
 // ---- options -------------------------------------------------------------
@@ -357,15 +363,35 @@ fn options(user: &Dump, base: &Dump, from: Source, own: &mut Own) {
     }
     // A highlight on yank (decision 10), and indent-blankline.
     let new = |a: &&Autocmd| !base.autocmds.contains(a);
-    let yank = user.autocmds.iter().filter(new).any(|a| {
+    let flashes = |a: &Autocmd| {
         a.event == "TextYankPost"
             && [&a.desc, &a.group, &a.command].iter().any(|t| t.to_ascii_lowercase().contains("yank"))
-    });
+    };
+    let yank = user.autocmds.iter().filter(new).any(&flashes);
+    let ibl = |d: &Dump| d.loaded.iter().any(|m| m == "ibl");
     if yank {
         set(own, "yank_flash = true  # from your TextYankPost autocommand".to_string());
+    } else if base.autocmds.iter().any(flashes) && !user.autocmds.iter().any(flashes) {
+        // **The reader's own "off"**: LazyVim flashes a yank, and a reader
+        // who takes its autocommand away wants none.
+        set(own, "yank_flash = false  # your config took the flash on yank away".to_string());
     }
-    if user.loaded.iter().any(|m| m == "ibl") && !base.loaded.iter().any(|m| m == "ibl") {
+    if ibl(user) && !ibl(base) {
         set(own, "indent_guides = true  # indent-blankline was loaded".to_string());
+    } else if ibl(base) && !ibl(user) {
+        set(own, "indent_guides = false  # your config left indent-blankline out".to_string());
+    }
+    // **A TextYankPost autocommand that says nothing of a yank** is
+    // listed: kickstart's has a description, but one with a bare Lua
+    // function cannot be told from any other.
+    for a in user.autocmds.iter().filter(new).filter(|a| a.event == "TextYankPost" && !flashes(a)) {
+        let what = [&a.desc, &a.group, &a.command]
+            .into_iter()
+            .find(|t| !t.trim().is_empty())
+            .map_or_else(|| "a Lua function with no description or group".to_string(), |t| one_line(t.trim()));
+        own.skipped.push(format!(
+            "TextYankPost autocommand ({what}): yumete cannot tell what it does; its own flash on yank is yank_flash = true"
+        ));
     }
     for a in user.autocmds.iter().filter(new) {
         let command = a.command.trim_start();
@@ -715,13 +741,27 @@ fn vim_ex(line: &str) -> Result<String, String> {
     if let Some((_, to)) = PLUGIN_COMMANDS.iter().find(|(from, _)| *from == words) {
         return Ok(to.to_string());
     }
+    // **vim reads `%`, `#` and `!` in a line as something else**: `%` and
+    // `#` are the file's and the other file's names, `!` in a shell command
+    // is the last one, and `:w !cmd` and `:r !cmd` pipe through a shell.
+    // yumete takes them as written: `:w !sudo tee %` would make a file named
+    // `!sudo tee %`, and `:e #` look for a file named `#`.
     if let Some(shell) = line.strip_prefix('!') {
+        if shell.contains(['%', '#', '!']) {
+            return Err(format!("vim reads % # and ! in :{line} as file names and the last command; yumete does not"));
+        }
         return checked(format!(":!{}", shell.trim()), line);
     }
     let (word, rest) = match line.split_once(char::is_whitespace) {
         Some((word, rest)) => (word, rest.trim()),
         None => (line, ""),
     };
+    if rest.starts_with('!') {
+        return Err(format!("vim's :{line} goes through a shell command; yumete's does not"));
+    }
+    if rest.contains(['%', '#']) {
+        return Err(format!("vim reads % and # in :{line} as file names; yumete does not"));
+    }
     let (base, bang) = match word.strip_suffix('!') {
         Some(base) if !base.is_empty() => (base, "!"),
         _ => (word, ""),
@@ -905,6 +945,18 @@ fn vim_rhs(map: &Map, table: Table, keymap: &Keymap) -> Result<Vec<String>, Stri
     if let Some(name) = keymap.action(table, &internal) {
         return Ok(vec![name.to_string()]);
     }
+    // **`vnoremap > >gv`, one of the commonest vimrc lines**: as the run
+    // `@>gv` it would indent once and then say "nothing has been selected
+    // yet", as the run's `gv` does not find the selection its own `>` just
+    // left. yumete's `indent` and `unindent` keep the selection and Visual
+    // mode, which is what the map is for.
+    if table == Table::Select {
+        match spelt.iter().map(String::as_str).collect::<Vec<_>>().as_slice() {
+            [">", "g", "v"] => return Ok(vec!["indent".to_string()]),
+            ["<", "g", "v"] => return Ok(vec!["unindent".to_string()]),
+            _ => {}
+        }
+    }
     if table == Table::Insert {
         return Err("keys in Insert mode, which yumete types rather than presses".to_string());
     }
@@ -974,8 +1026,10 @@ impl Written {
 
 /// A map's mode and left side as the reader wrote them, `<leader>` put back.
 fn left(map: &Map, leader: Option<&str>) -> String {
+    // Vim's `maplist()` writes a Space leader `<Space>`.
     let lhs = match leader.filter(|l| !l.is_empty()) {
         Some(leader) if map.lhs.starts_with(leader) => format!("<leader>{}", &map.lhs[leader.len()..]),
+        Some(" ") if map.lhs.starts_with("<Space>") => format!("<leader>{}", &map.lhs["<Space>".len()..]),
         _ => map.lhs.clone(),
     };
     format!("{} {}", if map.mode == " " { "nvo" } else { map.mode.as_str() }, lhs.replace(' ', "<Space>"))
@@ -1052,14 +1106,6 @@ fn keys(user: &Dump, base: &Dump, from: Source, own: &mut Own) {
                 continue;
             }
         };
-        // The Space key itself: the Space menu stays (decision 13).
-        if map.lhs == " " {
-            let nop = map.callback.is_none() && (map.rhs.is_empty() || map.rhs.eq_ignore_ascii_case("<nop>"));
-            if !(nop && space_leader) {
-                say(own, "the Space key itself: yumete keeps its Space menu there");
-            }
-            continue;
-        }
         let (spelt, internal) = match presses(&map.lhs) {
             Ok(keys) => keys,
             Err(why) => {
@@ -1067,6 +1113,17 @@ fn keys(user: &Dump, base: &Dump, from: Source, own: &mut Own) {
                 continue;
             }
         };
+        // The Space key itself: the Space menu stays (decision 13). Asked
+        // of the key, not the spelling: Neovim gives it back as " ", Vim's
+        // `maplist()` as `<Space>`, and either written as Space's binding
+        // would switch the whole menu off without a word.
+        if spelt == [" "] {
+            let nop = map.callback.is_none() && (map.rhs.is_empty() || map.rhs.eq_ignore_ascii_case("<nop>"));
+            if !(nop && space_leader) {
+                say(own, "the Space key itself: yumete keeps its Space menu there");
+            }
+            continue;
+        }
         // yumete's left side is read by its own reader: the spelling must
         // come back as these keys.
         let flat = spelt.concat();
@@ -1095,7 +1152,9 @@ fn keys(user: &Dump, base: &Dump, from: Source, own: &mut Own) {
                     let mut path = vec![table.name().to_string(), "space".to_string()];
                     path.extend(spelt[1..spelt.len() - 1].iter().cloned());
                     let line = match &map.desc {
-                        Some(desc) => format!("{{ run = {value}, label = {} }}", quote(desc)),
+                        // A control character drawn in the menu would
+                        // reach the terminal.
+                        Some(desc) => format!("{{ run = {value}, label = {} }}", quote(&one_line(desc))),
                         None => value,
                     };
                     // A key of yumete's Space menu, taken (decision 16): said
@@ -1173,7 +1232,7 @@ fn keys(user: &Dump, base: &Dump, from: Source, own: &mut Own) {
 
 /// **The reader's own settings and keys**: `user` less `base`.
 pub(super) fn translate(user: &Dump, base: &Dump, from: Source) -> Own {
-    let mut own = Own::default();
+    let mut own = Own { stopped: user.stopped, ..Own::default() };
     options(user, base, from, &mut own);
     keys(user, base, from, &mut own);
     own
@@ -1219,7 +1278,12 @@ mod tests {
         // Written out, these would be read as one key by yumete.
         assert!(spelt("C-x").is_err());
         assert!(spelt("<lt>enter>").is_err());
-        assert_eq!(rhs(Table::Select, "<lt>gv"), ok("@<gv"));
+        // `>gv` and `<gv` keep the selection, as `indent` and `unindent` do;
+        // the run `@>gv` would lose it.
+        assert_eq!(rhs(Table::Select, "<lt>gv"), ok("unindent"));
+        assert_eq!(rhs(Table::Select, "<gv"), ok("unindent"));
+        assert_eq!(rhs(Table::Select, ">gv"), ok("indent"));
+        assert_eq!(rhs(Table::Normal, ">gv"), ok("@>gv"));
         assert_eq!(rhs(Table::Normal, "y$"), ok("@y$"));
         // One key of yumete's with a name: the name.
         assert_eq!(rhs(Table::Normal, "<C-W>h"), ok("jump_view_left"));
@@ -1261,6 +1325,37 @@ mod tests {
         assert!(one(":noh<CR>").is_err());
         assert!(one(":ls<CR>x").is_err());
         assert!(one(":bn<Bar>bd #<CR>").is_err());
+        // vim reads `%`, `#` and `!` as names and shell commands, which
+        // yumete does not: these are listed, not carried.
+        for side in [":w !sudo tee %<CR>", "<Cmd>!chmod +x %<CR>", ":e #<CR>", ":r !date<CR>", ":cd %:p:h<CR>", ":!!<CR>"] {
+            assert!(one(side).is_err(), "{side}: {:?}", one(side));
+        }
+        assert_eq!(one(":!make<CR>"), ok(":!make"));
+        assert_eq!(one(":e notes.md<CR>"), ok(":open notes.md"));
+    }
+
+    /// **Vim's Space key is the Space key**: Vim's `maplist()` gives it as
+    /// `<Space>`, Neovim as " ", and either leaves the Space menu where it
+    /// is.
+    #[test]
+    fn a_map_of_vim_s_space_key_leaves_the_space_menu() {
+        let vim_dump = |leader: &str, rhs: &str| {
+            let json = format!(
+                r#"{{ "vim": "9.1", "leader": "{leader}", "options": {{}},
+                   "keymaps": [ {{ "mode": "n", "lhs": "<Space>", "rhs": "{rhs}", "script": "/home/me/.vimrc", "line": 3 }},
+                                {{ "mode": "n", "lhs": "<Space>w", "rhs": ":w<CR>", "script": "/home/me/.vimrc", "line": 4 }} ] }}"#
+            );
+            Dump::from_json(&serde_json::from_str(&json).unwrap())
+        };
+        let none = Dump::from_json(&serde_json::from_str(r#"{ "vim": "9.1", "options": {}, "keymaps": [] }"#).unwrap());
+        let own = translate(&vim_dump(" ", "za"), &none, Source::Vim);
+        assert!(!own.keys.contains("\" \" ="), "{}", own.keys);
+        assert_eq!(own.skipped, ["n <leader>, .vimrc:3: the Space key itself: yumete keeps its Space menu there"]);
+        assert!(own.keys.contains("[keys.vim.normal.space]\nw = \":write\"\n"), "{}", own.keys);
+        // The leader on `<Nop>` is left without a word (decision 13).
+        let own = translate(&vim_dump(" ", "<Nop>"), &none, Source::Vim);
+        assert!(!own.keys.contains("\" \" ="), "{}", own.keys);
+        assert!(own.skipped.is_empty(), "{:?}", own.skipped);
     }
 
     /// **Every name the tables translate to is yumete's.**

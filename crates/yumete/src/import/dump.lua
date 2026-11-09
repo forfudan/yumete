@@ -120,6 +120,17 @@ local function after_start()
   end)
 end
 
+-- Older than 0.9: said at once, with what every Neovim has.
+-- nvim_create_autocmd below is 0.7's; an older one would stop there with an
+-- error and wait out the import's 10 s.
+if vim.fn.has("nvim-0.9") == 0 then
+  local f = assert(io.open(out_path, "w"))
+  f:write(vim.fn.json_encode({ nvim = vim.fn.matchstr(vim.fn.execute("version"), [[NVIM v\zs[0-9A-Za-z.+-]\+]]), error = "too old" }))
+  f:close()
+  vim.cmd("qall!")
+  return
+end
+
 -- -c runs before VimEnter: wait for it, after the config's own handlers.
 if vim.v.vim_did_enter == 1 then
   after_start()

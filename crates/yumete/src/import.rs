@@ -65,8 +65,10 @@ pub fn helix_config_path(env: Env) -> Option<PathBuf> {
 /// **Neovim's config directory**, as Neovim finds it: `$NVIM_APPNAME` (or
 /// `nvim`) under `$XDG_CONFIG_HOME`, `%LOCALAPPDATA%` on Windows, or
 /// `~/.config`.
+///
+/// `None` too for a `$NVIM_APPNAME` Neovim refuses ([`nvim_app`]).
 pub fn nvim_dir(env: Env) -> Option<PathBuf> {
-    let app = env("NVIM_APPNAME").filter(|v| !v.is_empty()).unwrap_or_else(|| "nvim".to_string());
+    let app = nvim_app(env).ok()?;
     if let Some(dir) = dir_of(env, "XDG_CONFIG_HOME") {
         return Some(dir.join(app));
     }
@@ -181,9 +183,11 @@ fn not_carried(skipped: &[String]) -> String {
     out
 }
 
-/// A comment cannot hold a line break; a path or a value might.
+/// A comment cannot hold a line break; a path or a value might. Nor any
+/// other control character: TOML refuses one in a comment, and the editor
+/// would refuse the whole file over a map's description with an escape.
 fn one_line(text: &str) -> String {
-    text.replace(['\n', '\r'], " ")
+    text.chars().map(|c| if c.is_control() { ' ' } else { c }).collect()
 }
 
 // ---- helix ---------------------------------------------------------------
@@ -977,19 +981,31 @@ fn lazyvim(nvim: &Path, sign: &Path, when: &str, beside: bool, own: Result<&vim:
     }
     text.push('\n');
     // **The reader's `[editor]` lines go inside the page's**, which ends the
-    // config (a test holds it there): TOML has one table of a name.
-    let mut config = LAZYVIM.to_string();
+    // config (a test holds it there): TOML has one table of a name. Where
+    // the page sets the same key, the reader's own value takes the page's
+    // line, so a reader who turned LazyVim's flash on yank off keeps it off;
+    // the same value is the page's.
+    let (keys_part, editor_part) = LAZYVIM.split_at(LAZYVIM.find("\n[editor]\n").map_or(LAZYVIM.len(), |at| at + 1));
+    let key_of = |line: &str| line.split(" = ").next().unwrap_or("").to_string();
+    let value_of = |line: &str| line.split_once(" = ").map(|(_, v)| v.split("  #").next().unwrap_or("").trim().to_string());
+    let mut editor: Vec<String> = editor_part.lines().map(str::to_string).collect();
     let mut carried_own = 0;
+    let mut overlap = 0;
     if let Ok(own) = own {
         for line in &own.editor {
-            let key = line.split(" = ").next().unwrap_or("");
-            if !LAZYVIM.lines().any(|l| l.split(" = ").next() == Some(key)) {
-                config.push_str(line);
-                config.push('\n');
+            match editor.iter().position(|l| key_of(l) == key_of(line)) {
+                Some(at) => {
+                    overlap += 1;
+                    if value_of(&editor[at]) != value_of(line) {
+                        editor[at] = line.clone();
+                    }
+                }
+                None => editor.push(line.clone()),
             }
         }
         carried_own = own.carried;
     }
+    let config = format!("{keys_part}{}\n", editor.join("\n"));
     let config = match surround {
         true => with_mini_surround(&config),
         false => config,
@@ -1008,7 +1024,20 @@ fn lazyvim(nvim: &Path, sign: &Path, when: &str, beside: bool, own: Result<&vim:
         skipped.extend(own.skipped.iter().cloned());
     }
     text.push_str(&not_carried(&skipped));
-    Imported { text, carried: carried + carried_own, skipped: skipped.len() }
+    Imported { text, carried: carried + carried_own - overlap, skipped: skipped.len() }
+}
+
+/// **What a config that stopped at an error lost**, for the header:
+/// Neovim stops a Lua file at its first error, so whatever the file sets
+/// after it is neither carried nor listed.
+const STOPPED_LINES: &str = "# Your config stopped at an error, so what it sets after the error was\n\
+                             # not read: it is neither below nor in the list at the end.\n";
+
+/// The same, for the terminal.
+fn said_stopped(own: &vim::Own) {
+    if own.stopped {
+        println!("yumete: your config stopped at an error, so what it sets after the error was not read");
+    }
 }
 
 /// What the editor said while starting, and the note on `@` runs, as
@@ -1017,6 +1046,9 @@ fn said_lines(editor: &str, own: &vim::Own) -> String {
     let mut out = String::new();
     if let Some(said) = &own.said {
         out.push_str(&format!("# {editor} said while starting: {}\n", one_line(said)));
+    }
+    if own.stopped {
+        out.push_str(STOPPED_LINES);
     }
     if own.runs {
         out.push_str(
@@ -1156,9 +1188,35 @@ fn inline(value: &toml::Value) -> String {
 
 // ---- vim and Neovim --------------------------------------------------------
 
-/// `$NVIM_APPNAME`, or `nvim`.
-fn nvim_app(env: Env) -> String {
-    env("NVIM_APPNAME").filter(|v| !v.is_empty()).unwrap_or_else(|| "nvim".to_string())
+/// **`$NVIM_APPNAME`, or `nvim`**; `Err` with the name when Neovim would
+/// refuse it.
+///
+/// Warning: **the name is joined onto the copy's directory**, and
+/// `PathBuf::join` with an absolute path drops what it is joined to:
+/// `NVIM_APPNAME=/abs/myconf` (or `~/.config/nvim`, which the shell
+/// expands) would make the copy's target the reader's config itself, and
+/// copying each file onto itself empties it. Neovim takes a name or a
+/// relative path below its config directory and refuses the rest ("must be
+/// a name or relative path": an absolute path, `..`, `.` alone, a leading
+/// `~`), so the import refuses the same names before anything runs.
+fn nvim_app(env: Env) -> Result<String, String> {
+    use std::path::Component;
+    let Some(app) = env("NVIM_APPNAME").filter(|v| !v.is_empty()) else { return Ok("nvim".to_string()) };
+    let parts: Vec<Component> = Path::new(&app).components().collect();
+    let plain = parts.iter().all(|c| matches!(c, Component::Normal(_) | Component::CurDir));
+    let named = parts.iter().any(|c| matches!(c, Component::Normal(_)));
+    match plain && named && !app.starts_with('~') {
+        true => Ok(app),
+        false => Err(app),
+    }
+}
+
+/// What the terminal is told for a `$NVIM_APPNAME` Neovim refuses.
+fn bad_app(app: &str) -> String {
+    format!(
+        "$NVIM_APPNAME is {}, and Neovim takes only a name or a relative path below its config directory",
+        quote(app)
+    )
 }
 
 /// The name of Neovim's data directory: Windows adds `-data`, so that it is
@@ -1173,7 +1231,7 @@ fn nvim_data_name(app: &str) -> String {
 /// **Neovim's data directory**, where lazy.nvim keeps the plugins:
 /// `$XDG_DATA_HOME`, `%LOCALAPPDATA%` on Windows, or `~/.local/share`.
 fn nvim_data_dir(env: Env) -> Option<PathBuf> {
-    let name = nvim_data_name(&nvim_app(env));
+    let name = nvim_data_name(&nvim_app(env).ok()?);
     if let Some(dir) = dir_of(env, "XDG_DATA_HOME") {
         return Some(dir.join(name));
     }
@@ -1196,8 +1254,8 @@ fn said_left_out(sandbox: &dump::Sandbox) {
 /// **Run the reader's Neovim and a baseline**, each on the same copy:
 /// `--clean` for `--import nvim`, LazyVim alone for `--import lazyvim`.
 fn read_nvim(program: &str, env: Env, lazyvim: bool, timeout: std::time::Duration) -> Result<(vim::Dump, vim::Dump, Option<String>), dump::Failed> {
+    let app = nvim_app(env).map_err(|app| dump::Failed::Copy(bad_app(&app)))?;
     let mut sandbox = dump::Sandbox::new(timeout)?;
-    let app = nvim_app(env);
     if let Some(config) = nvim_dir(env) {
         let to = sandbox.config().join(&app);
         sandbox.copy(&config, &to, &[])?;
@@ -1211,7 +1269,9 @@ fn read_nvim(program: &str, env: Env, lazyvim: bool, timeout: std::time::Duratio
     let user = sandbox.run(program, &dump::nvim_args(dump::Nvim::Own, &sandbox), script, timeout)?;
     let how = if lazyvim { dump::Nvim::LazyVimBase } else { dump::Nvim::Clean };
     let base = sandbox.run(program, &dump::nvim_args(how, &sandbox), script, timeout)?;
-    Ok((vim::Dump::from_json(&user.json), vim::Dump::from_json(&base.json), user.said))
+    let mut dumped = vim::Dump::from_json(&user.json);
+    dumped.stopped = user.stopped;
+    Ok((dumped, vim::Dump::from_json(&base.json), user.said))
 }
 
 /// The places vim may keep a vimrc, in `:h vimrc`'s order.
@@ -1275,6 +1335,7 @@ fn import_lazyvim(env: Env, nvim: &Path, sign: &Path, when: &str, beside: bool) 
         Ok((user, base, said)) => {
             let mut own = vim::translate(&user, &base, vim::Source::LazyVim);
             own.said = said;
+            said_stopped(&own);
             lazyvim(nvim, sign, when, beside, Ok(&own))
         }
         Err(failed) => {
@@ -1301,6 +1362,13 @@ pub fn run(which: &str) -> ExitCode {
     let dir = yumete_config::config_dir();
     let (path, beside) = target(&dir);
     let when = now();
+    // Before anything runs or is copied (see `nvim_app`).
+    if matches!(which, "lazyvim" | "nvim" | "neovim") {
+        if let Err(app) = nvim_app(&env) {
+            eprintln!("yumete: {}. Nothing was read or written.", bad_app(&app));
+            return ExitCode::FAILURE;
+        }
+    }
     let imported = match which {
         "helix" => {
             let Some(from) = helix_config_path(&env) else {
@@ -1353,6 +1421,7 @@ pub fn run(which: &str) -> ExitCode {
                     Ok((user, base, said)) => {
                         let mut own = vim::translate(&user, &base, vim::Source::Neovim);
                         own.said = said;
+                        said_stopped(&own);
                         vim_file("Neovim", which, &nvim, &user.version, &when, beside, &own)
                     }
                     Err(failed) => {
@@ -1824,14 +1893,17 @@ language-servers = ["gopls", "golangci-lint-lsp"]
                { "mode": "n", "lhs": "<C-S>", "rhs": "<Cmd>w<CR><Esc>" },
                { "mode": "n", "lhs": "K", "rhs": "", "callback": "vim.lsp.buf.hover" },
                { "mode": "v", "lhs": "<lt>", "rhs": "<lt>gv" },
+               { "mode": "v", "lhs": ">", "rhs": ">gv" },
+               { "mode": "n", "lhs": "<C-D>", "rhs": "<C-D>zz", "desc": "Down\u001b[1m and centre" },
                { "mode": "i", "lhs": "jk", "rhs": "<Esc>" },
                { "mode": "o", "lhs": "ie", "rhs": ":<C-U>normal! ggVG<CR>" },
                { "mode": "n", "lhs": "grn", "rhs": "", "callback": true }"#,
             r#", "colorscheme": "tokyonight-night",
-               "autocmds": [ { "event": "TextYankPost", "desc": "Highlight when yanking" } ]"#,
+               "autocmds": [ { "event": "TextYankPost", "desc": "Highlight when yanking" }, { "event": "TextYankPost" } ]"#,
         );
         let mut own = vim::translate(&user, &base, vim::Source::Neovim);
         own.said = Some("E5113: Error while calling lua chunk".to_string());
+        own.stopped = true;
         let imported = vim_file("Neovim", "nvim", Path::new("/home/me/.config/nvim"), "0.12.6", "2026-11-08 12:00", false, &own);
         let out = &imported.text;
         assert_eq!(complaints(out), Vec::<String>::new(), "{out}");
@@ -1843,13 +1915,18 @@ language-servers = ["gopls", "golangci-lint-lsp"]
         assert!(out.contains("[keys.vim.normal.space]\nw = { run = \":write\", label = \"Save file\" }\n"), "{out}");
         assert!(out.contains("[keys.vim.normal.space.f]\nf = { run = \"file_picker\", label = \"Find files\" }\n"), "{out}");
         assert!(out.contains("C-s = \":write\"\n"), "{out}");
-        assert!(out.contains("[keys.vim.select]\n\"<\" = \"@<gv\"\n"), "{out}");
+        // `vnoremap > >gv` keeps the selection, as yumete's `indent` does;
+        // the run `@>gv` would lose it.
+        assert!(out.contains("[keys.vim.select]\n\"<\" = \"unindent\"\n\">\" = \"indent\"\n"), "{out}");
+        assert!(out.contains("C-d = \"@C-dzz\"  # Down [1m and centre\n"), "a control character in a comment: {out}");
+        assert!(out.contains("# Your config stopped at an error"), "{out}");
         assert!(out.contains("[keys.vim.insert]\njk = \"normal_mode\"\n"), "{out}");
         assert!(out.contains("# Neovim said while starting: E5113"), "{out}");
         assert!(out.contains("# A run written with @ presses yumete's vim keys"), "{out}");
         let (_, list) = out.split_once("# Not carried over:\n").expect("the list");
         assert!(list.contains("n <leader>x (Say hi): a Lua function"), "{list}");
         assert!(list.contains("o ie: yumete has no Operator-pending table"), "{list}");
+        assert!(list.contains("TextYankPost autocommand (a Lua function with no description or group): "), "{list}");
         assert!(!list.contains("<leader>w"), "it was carried: {list}");
         let (_, takes) = out.split_once("# Takes over yumete's keys:\n").expect("the keys taken");
         let takes = takes.split("\n\n").next().unwrap();
@@ -2032,6 +2109,7 @@ put(vim.fn.expand("~/written-by-the-config"), "x")
                 "vim.opt.tabstop = 3\nvim.fn.jobstart({{ \"sh\", \"-c\", \"echo $$ > {0}/job && exec sleep 300\" }})\n\
                  vim.uv.spawn(\"sh\", {{ args = {{ \"-c\", \"echo $$ > {0}/spawned && exec sleep 300\" }} }})\n\
                  vim.uv.spawn(\"sh\", {{ args = {{ \"-c\", \"trap '' TERM; echo $$ > {0}/deaf; while true; do sleep 1; done\" }} }})\n\
+                 local f = io.open(\"{0}/tempname\", \"w\"); f:write(vim.fn.tempname()); f:close()\n\
                  local name = vim.fn.input(\"name? \")\n",
                 pids.display()
             ),
@@ -2051,12 +2129,23 @@ put(vim.fn.expand("~/written-by-the-config"), "x")
             });
             assert!(gone, "the {name} nvim started outlived it");
         }
+        // Neovim's own temporary directory goes with the copy, though the
+        // run was killed: it is inside the copy, not in $TMPDIR.
+        let tempname = std::fs::read_to_string(pids.join("tempname")).unwrap();
+        let nvim_tmp = Path::new(&tempname).parent().unwrap();
+        assert!(!nvim_tmp.exists(), "{} outlived the run", nvim_tmp.display());
         let _ = std::fs::remove_dir_all(&pids);
         let home = nvim_home("nvim-error", "vim.opt.tabstop = 3\nrequire(\"no.such.module\")\nvim.opt.shiftwidth = 5\n");
         let (user, base, said) = read_nvim("nvim", &env_of(&home), false, dump::TIMEOUT).unwrap();
         assert!(said.as_deref().is_some_and(|s| s.contains("E5113") || s.contains("no.such.module")), "{said:?}");
         let own = vim::translate(&user, &base, vim::Source::Neovim);
         assert!(own.editor.contains(&"tab_width = 3".to_string()), "{:?}", own.editor);
+        // What comes after the error is lost, and the file says so.
+        assert!(!own.editor.iter().any(|l| l.starts_with("indent_width")), "{:?}", own.editor);
+        assert!(own.stopped);
+        let out = vim_file("Neovim", "nvim", &home, &user.version, "t", false, &own).text;
+        assert!(out.contains("# Your config stopped at an error, so what it sets after the error was\n"), "{out}");
+        assert_eq!(complaints(&out), Vec::<String>::new(), "{out}");
         assert!(matches!(
             read_nvim("yumete-no-such-editor", &env_of(&home), false, dump::TIMEOUT),
             Err(dump::Failed::NotInstalled)
@@ -2235,6 +2324,133 @@ put(vim.fn.expand("~/written-by-the-config"), "x")
         }
         assert!(gone, "the detached job outlived the import");
         let _ = std::fs::remove_dir_all(&pids);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    /// **A `$NVIM_APPNAME` Neovim refuses is refused before anything runs,
+    /// and a copy writes nowhere but into its sandbox**:
+    /// `NVIM_APPNAME=/abs/myconf` would make the copy's target the config
+    /// itself, and empty every file of it.
+    #[test]
+    fn a_copy_never_writes_to_the_config_it_copies() {
+        let app = |v: &str| {
+            let v = v.to_string();
+            nvim_app(&move |n: &str| (n == "NVIM_APPNAME").then(|| v.clone()))
+        };
+        assert_eq!(app(""), Ok("nvim".to_string()));
+        for good in ["lazy", "foo/bar", "./x", "a..b"] {
+            assert_eq!(app(good), Ok(good.to_string()));
+        }
+        for bad in ["/abs/myconf", "..", "../nvim", "a/../b", ".", "~/.config/nvim", "~x"] {
+            assert_eq!(app(bad), Err(bad.to_string()));
+        }
+        let home = nvim_home("nvim-appname", "vim.opt.tabstop = 3\n");
+        let config = home.join(".config/nvim");
+        std::fs::create_dir_all(config.join("lua")).unwrap();
+        std::fs::write(config.join("lua/x.lua"), "return 1\n").unwrap();
+        // Nor into a sandbox the config holds (made there, it changes the
+        // directory's time, so before the snapshot).
+        let mut sandbox = dump::Sandbox::new_in(&config, dump::TIMEOUT).unwrap();
+        let to = sandbox.config().join("nvim");
+        let failed = sandbox.copy(&config, &to, &[]).unwrap_err();
+        assert!(matches!(&failed, dump::Failed::Copy(why) if why.contains("holds the import's own directory")), "{failed:?}");
+        drop(sandbox);
+        let before = snapshot(&home);
+        for name in [config.display().to_string(), "../.config/nvim".to_string()] {
+            let env = |n: &str| match n {
+                "HOME" => Some(home.display().to_string()),
+                "NVIM_APPNAME" => Some(name.clone()),
+                _ => None,
+            };
+            assert_eq!(nvim_dir(&env), None);
+            let failed = read_nvim("nvim", &env, false, dump::TIMEOUT).unwrap_err();
+            assert!(matches!(&failed, dump::Failed::Copy(why) if why.contains("$NVIM_APPNAME")), "{failed:?}");
+        }
+        // The second guard, in the copy itself: a target outside the
+        // sandbox, by name, through `..` or through a link, is refused.
+        let mut sandbox = dump::Sandbox::new(dump::TIMEOUT).unwrap();
+        #[cfg_attr(not(unix), allow(unused_mut))]
+        let mut outside = vec![config.clone(), sandbox.config().join("../../../elsewhere")];
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&sandbox.root).unwrap().permissions().mode();
+            assert_eq!(mode & 0o777, 0o700, "the sandbox is the reader's alone");
+            std::os::unix::fs::symlink(home.join(".config"), sandbox.config().join("out")).unwrap();
+            outside.push(sandbox.config().join("out/nvim"));
+        }
+        for to in outside {
+            let failed = sandbox.copy(&config, &to, &[]).unwrap_err();
+            assert!(matches!(&failed, dump::Failed::Copy(why) if why.contains("not inside")), "{}: {failed:?}", to.display());
+        }
+        // A file is never copied onto itself: a hard link to it inside the
+        // sandbox is the same file.
+        let to = sandbox.config().join("nvim");
+        std::fs::create_dir_all(&to).unwrap();
+        std::fs::hard_link(config.join("init.lua"), to.join("init.lua")).unwrap();
+        let failed = sandbox.copy(&config, &to, &[]).unwrap_err();
+        assert!(matches!(&failed, dump::Failed::Copy(why) if why.contains("onto itself")), "{failed:?}");
+        drop(sandbox);
+        assert_eq!(snapshot(&home), before, "the reader's files are as they were");
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    /// **A LazyVim reader's own "off" beats the page's "on"**: a config
+    /// that takes LazyVim's flash on yank and indent guides away gets
+    /// `false` for both, not the page's `true`.
+    #[test]
+    fn a_lazyvim_reader_s_own_off_is_kept() {
+        let base = nvim_dump(" ", "", "", r#", "autocmds": [ { "event": "TextYankPost", "group": "lazyvim_highlight_yank" } ], "loaded": ["ibl"]"#);
+        let user = nvim_dump(" ", "", "", "");
+        let own = vim::translate(&user, &base, vim::Source::LazyVim);
+        let dir = scratch("lazy-off");
+        let imported = lazyvim(&dir, &dir.join("lazyvim.json"), "t", false, Ok(&own));
+        let out = &imported.text;
+        assert_eq!(complaints(out), Vec::<String>::new(), "{out}");
+        assert!(out.contains("\n[editor]\nyank_flash = false  # your config took the flash on yank away\nindent_guides = false  #"), "{out}");
+        assert!(!out.contains("yank_flash = true") && !out.contains("indent_guides = true"), "{out}");
+        // A value the page has already is the page's line, counted once.
+        let same = vim::translate(&base, &user, vim::Source::LazyVim);
+        let again = lazyvim(&dir, &dir.join("lazyvim.json"), "t", false, Ok(&same));
+        assert!(again.text.contains("\n[editor]\nyank_flash = true\nindent_guides = true\n"), "{}", again.text);
+        let plain = lazyvim(&dir, &dir.join("lazyvim.json"), "t", false, Ok(&vim::Own::default()));
+        assert_eq!(again.carried, plain.carried);
+        assert_eq!(imported.carried, plain.carried);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// **Odd bytes in what Neovim says, and a Neovim too old**: a
+    /// description with a byte that is not UTF-8 is read as far as it can
+    /// be, and a Neovim older than 0.7 is told too old at once rather than
+    /// waiting out the time limit.
+    #[test]
+    fn a_neovim_that_says_odd_things_is_read() {
+        if !installed("nvim") {
+            return;
+        }
+        let home = nvim_home(
+            "nvim-bytes",
+            "vim.g.mapleader = \",\"\n\
+             vim.keymap.set(\"n\", \"<leader>z\", \"<Cmd>w<CR>\", { desc = \"caf\\233\" })\n\
+             vim.keymap.set(\"n\", \"<leader>y\", \"<Cmd>q<CR>\", { desc = \"quit\\27[1m now\" })\n",
+        );
+        let (user, base, _) = read_nvim("nvim", &env_of(&home), false, dump::TIMEOUT).unwrap();
+        let own = vim::translate(&user, &base, vim::Source::Neovim);
+        let out = vim_file("Neovim", "nvim", &home, &user.version, "t", false, &own).text;
+        assert_eq!(complaints(&out), Vec::<String>::new(), "{out}");
+        assert!(out.contains("\",z\" = \":write\"  # caf\u{FFFD}\n") && out.contains("\",y\" = \":quit\"  # quit [1m now\n"), "{out}");
+        let _ = std::fs::remove_dir_all(&home);
+        // An old Neovim, played by a config that takes away what 0.7 added.
+        let home = nvim_home(
+            "nvim-old",
+            "local has = vim.fn.has\n\
+             vim.fn.has = function(f) if f == \"nvim-0.9\" then return 0 end return has(f) end\n\
+             vim.api.nvim_create_autocmd = nil\n",
+        );
+        let started = std::time::Instant::now();
+        let failed = read_nvim("nvim", &env_of(&home), false, dump::TIMEOUT).unwrap_err();
+        assert!(matches!(&failed, dump::Failed::TooOld(v) if v.starts_with("0.") && !v.contains(char::is_whitespace)), "{failed:?}");
+        assert!(started.elapsed() < std::time::Duration::from_secs(5), "{:?}", started.elapsed());
         let _ = std::fs::remove_dir_all(&home);
     }
 
