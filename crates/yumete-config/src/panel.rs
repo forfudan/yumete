@@ -878,6 +878,23 @@ impl Panel {
         }
     }
 
+    /// `h` / `l` —— **the group before or after** the cursor's, as the left
+    /// column lists them (2026-11-09, asked for: "previously it was hl"): its
+    /// first row, skipping a group a search left empty. At either end it
+    /// stays.
+    pub fn step_group(&mut self, down: bool) {
+        let rows = self.rows();
+        let here = self.group();
+        let has = |g: usize| rows.iter().any(|s| s.group == GROUPS[g].group);
+        let next = match down {
+            true => (here + 1..GROUPS.len()).find(|&g| has(g)),
+            false => (0..here).rev().find(|&g| has(g)),
+        };
+        if let Some(group) = next {
+            self.to_group(group);
+        }
+    }
+
     /// The group the cursor is in, as a place in [`GROUPS`].
     pub fn group(&self) -> usize {
         self.here()

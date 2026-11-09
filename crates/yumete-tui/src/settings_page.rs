@@ -372,10 +372,11 @@ impl Seat {
                 page.press();
                 return self.write(editor);
             }
-            Key::Char('l') | Key::Right if !on_page && page.here().is_some_and(|s| s.kind == Kind::Page) => {
-                page.open_page()
-            }
             Key::Char('h') | Key::Left if on_page => page.close_page(),
+            // **`h` `l` walk the left column** (2026-11-09): a page's row
+            // opens on `Enter` or `Space`, so `l` means one thing in the list.
+            Key::Char('h') | Key::Left => page.step_group(false),
+            Key::Char('l') | Key::Right => page.step_group(true),
             Key::Char('r') => {
                 return match page.reset() {
                     Some(true) => self.write(editor),
@@ -2479,7 +2480,7 @@ mod tests {
     fn a_page_opens_from_its_row_and_esc_comes_back() {
         let dir = scratch("page");
         let (mut ed, mut seat) = seated(&dir, "", "keys.flavor_items");
-        keys(&mut seat, &mut ed, &[Key::Char('l')]);
+        keys(&mut seat, &mut ed, &[Key::Enter]);
         assert_eq!(page(&seat).page, Some(0));
         let drawn = shot(page(&seat), 110, 34);
         assert!(drawn.contains(&said("keys.flavor.item.tables")), "{drawn}");
@@ -2487,6 +2488,33 @@ mod tests {
         keys(&mut seat, &mut ed, &[Key::Esc]);
         assert_eq!(page(&seat).page, None);
         assert!(seat.panel.is_some(), "back on the row, not out");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// **`h` `l` go to the group before and after** (2026-11-09), as the left
+    /// column lists them, and a group a search left empty is passed over.
+    #[test]
+    fn h_and_l_walk_the_groups() {
+        let dir = scratch("groups");
+        let (mut ed, mut seat) = seated(&dir, "", "editor.scrolloff");
+        let at = page(&seat).group();
+        keys(&mut seat, &mut ed, &[Key::Char('l')]);
+        assert_eq!(page(&seat).group(), at + 1);
+        let first = page(&seat).rows().iter().position(|s| s.group == GROUPS[at + 1].group);
+        assert_eq!(Some(page(&seat).row), first, "on the group's first row");
+        keys(&mut seat, &mut ed, &[Key::Char('h'), Key::Char('h')]);
+        assert_eq!(page(&seat).group(), at.saturating_sub(1));
+        keys(&mut seat, &mut ed, &[Key::Char('g'), Key::Char('g'), Key::Left]);
+        assert_eq!(page(&seat).group(), 0, "the first group stays");
+        keys(&mut seat, &mut ed, &[Key::Char('G'), Key::Right]);
+        assert_eq!(page(&seat).group(), GROUPS.len() - 1, "the last group stays");
+        // A search that leaves two groups: `l` goes from one to the other.
+        let all = all_rows();
+        let a = all.iter().position(|s| s.group == GROUPS[0].group).unwrap();
+        let b = all.iter().position(|s| s.group == GROUPS[GROUPS.len() - 1].group).unwrap();
+        seat.panel.as_mut().unwrap().narrow(Some(vec![a, b]));
+        keys(&mut seat, &mut ed, &[Key::Char('g'), Key::Char('g'), Key::Char('l')]);
+        assert_eq!(page(&seat).group(), GROUPS.len() - 1);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

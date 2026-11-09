@@ -5953,7 +5953,7 @@ fn draw(
 
     draw_status(frame, editor, config, ime, status_area, tab_area, command_area.height == 1);
     if command_area.height == 1 {
-        draw_command(frame, editor, config, ime, command_area);
+        draw_command(frame, editor, config, ime, command_area, crate::theme::Palette::of(config).page());
     }
     // The floating panels stack upward from the status line, which is the top
     // of the footer: the command row is *below* it, so a panel that stopped at
@@ -6337,17 +6337,20 @@ fn draw(
             }
             foot => foot,
         };
+        // **On the panel's ground, not the page's** (2026-11-09, reported:
+        // the bottom row was a darker band under the panel).
+        let ink = crate::theme::Palette::of(config);
+        let ground = ink.ground(yumete_config::rung::CHROME).fg(ink.text());
         if let Some(foot) = foot {
             let talking = editor.prompt().is_some() || !editor.status().is_empty();
             match talking {
-                true => draw_command(frame, editor, config, ime, foot),
+                true => draw_command(frame, editor, config, ime, foot, ground),
                 // Silent, the row is blank: the editor's own key hints are
                 // about the document, which is not what the keys are on.
                 false => {
-                    let blank = crate::theme::Palette::of(config).page();
                     for x in foot.x..foot.x + foot.width {
                         if let Some(cell) = frame.buffer_mut().cell_mut((x, foot.y)) {
-                            cell.set_symbol(" ").set_style(blank);
+                            cell.set_symbol(" ").set_style(ground);
                         }
                     }
                 }
@@ -15063,6 +15066,7 @@ fn draw_command(
     config: &Config,
     ime: &ImeSession,
     area: Rect,
+    ground: Style,
 ) {
     use yumete_core::editor::Hint;
     let ink = crate::theme::Palette::of(config);
@@ -15070,7 +15074,8 @@ fn draw_command(
     // background at all, so on a light page over a dark terminal it came out
     // as a black band with the page's dark ink on it, which is to say
     // unreadable. A blank command row is part of the margin, not a hole in it.
-    let page = ink.page();
+    // Under the settings panel the ground is the panel's.
+    let page = ground;
     // News is the loud kind; keys are the quiet kind and read as furniture.
     let news = page.fg(ink.text());
     // The key is what the eye is hunting for, so it is the lit half; what it
@@ -16735,6 +16740,9 @@ fn squeezed(text: &str) -> String {
         // blank while nothing is said, and the page's keys stand above it.
         assert!(last.trim().is_empty(), "the command row is blank: {last:?}");
         assert!((2..5).any(|up| row(h - up).contains("jk")), "the keys above it");
+        // **On the panel's ground** (2026-11-09, reported: a darker band).
+        let panel_bg = buf.cell((w - 1, h - 2)).unwrap().bg;
+        assert!((0..w).all(|x| buf.cell((x, h - 1)).unwrap().bg == panel_bg), "the blank row is the panel's");
 
         // A message goes on the command row and leaves the keys alone.
         let mut ed = ed;
@@ -16748,6 +16756,8 @@ fn squeezed(text: &str) -> String {
         };
         assert!(row(h - 1).contains("saved"), "{:?}", row(h - 1));
         assert!((2..5).any(|up| row(h - up).contains("jk")), "the keys are still there");
+        assert!((0..w).all(|x| buf.cell((x, h - 1)).unwrap().bg == panel_bg), "a message is on the panel's ground");
+        assert_ne!(panel_bg, crate::theme::Palette::of(&config).paper(), "the panel's ground is not the page's");
     }
 
     /// **With no command row, what the settings page says is on its own
