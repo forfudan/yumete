@@ -1,5 +1,5 @@
 //! **Talking to a language server — the wire, not the process** (#53/#54,
-//! L2, 2026-09-20).
+//! L2).
 //!
 //! [`crate::problem`] holds what a server *said*; this holds **how it is
 //! said**. Everything in this module is a pure function over bytes and
@@ -14,7 +14,7 @@
 //!
 //! ## Why there is no `tower-lsp`, and no async
 //!
-//! 2026-09-20 定下的三條，寫在 `development.md` §5.4：**不要 async、不要
+//! 三條規矩，寫在 `development.md` §5.4：**不要 async、不要
 //! tokio、不要 `tower-lsp`**，新依賴只有 `serde_json`。The editor's event loop
 //! is a `mpsc::Receiver` with a timeout, and it has carried every background
 //! job this program has (the typesetter, git, the IME) without one. An async
@@ -105,16 +105,15 @@ fn find(hay: &[u8], needle: &[u8]) -> Option<usize> {
 /// compiler (rust-analyzer's `cargo check`) only re-runs it when the file is
 /// saved, and a client that never claims to send saves is never sent one.
 /// Without this line, an error stays on the screen after the line that caused
-/// it is deleted — 「我把錯的行刪了，錯誤信息還在」（2026-09-21）。
+/// it is deleted.
 /// Warning: **`contentFormat` 是一張按偏好排的單子，頭一個就是要的那一個。**
-/// 從前這裏寫 `["plaintext","markdown"]`，於是 pylsp 照單取頭一個，回的是
-/// `kind: "plaintext"` 的生 docstring——Python 的 docstring 慣例是
-/// reStructuredText，`Main API` 底下那一行 `======` 就這麼原樣畫了出來
-/// （2026-09-30 報的）。排 `markdown` 在前，pylsp 就走 `docstring-to-markdown`
+/// 寫成 `["plaintext","markdown"]`，pylsp 就照單取頭一個，回 `kind: "plaintext"`
+/// 的生 docstring——Python 的 docstring 慣例是 reStructuredText，`Main API`
+/// 底下那一行 `======` 會原樣畫出來。排 `markdown` 在前，pylsp 就走 `docstring-to-markdown`
 /// 把 reST/numpydoc 譯成 Markdown 再送（譯不動的原樣退回，不會更差）。
 ///
 /// `options` is the server's `config` (`[lsp.<language>] config = {...}`),
-/// sent as `initializationOptions` the way helix sends it (2026-11-07); with
+/// sent as `initializationOptions` the way helix sends it; with
 /// none the key is left out. `workspace.configuration` is claimed because
 /// the same table now answers `workspace/configuration` ([`read_with`]).
 pub fn initialize(id: i64, root: &Path, options: Option<&serde_json::Value>) -> String {
@@ -175,7 +174,7 @@ pub fn definition(id: i64, path: &Path, line: usize, utf16_column: usize) -> Str
     goto(id, Goto::Definition, path, line, utf16_column)
 }
 
-/// **Which place a `g` key asks for** (2026-11-02, helix's `gd` `gD` `gy`
+/// **Which place a `g` key asks for** (helix's `gd` `gD` `gy`
 /// `gi`): four requests with one shape, question and answer alike.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Goto {
@@ -207,8 +206,7 @@ pub fn goto(id: i64, kind: Goto, path: &Path, line: usize, utf16_column: usize) 
 }
 
 /// `textDocument/documentHighlight` — where the symbol at the caret stands
-/// in this file (helix's `Space h`, `select_references_to_symbol_under_cursor`,
-/// 2026-11-02).
+/// in this file (helix's `Space h`, `select_references_to_symbol_under_cursor`).
 pub fn document_highlight(id: i64, path: &Path, line: usize, utf16_column: usize) -> String {
     format!(
         r#"{{"jsonrpc":"2.0","id":{id},"method":"textDocument/documentHighlight","params":{{"textDocument":{{"uri":{uri}}},"position":{{"line":{line},"character":{utf16_column}}}}}}}"#,
@@ -216,8 +214,8 @@ pub fn document_highlight(id: i64, path: &Path, line: usize, utf16_column: usize
     )
 }
 
-/// `textDocument/rangeFormatting` — helix's `=` (`format_selections`,
-/// 2026-11-02): the server's edits for the span, as the file indents.
+/// `textDocument/rangeFormatting` — helix's `=` (`format_selections`):
+/// the server's edits for the span, as the file indents.
 pub fn range_formatting(id: i64, path: &Path, from: (usize, usize), to: (usize, usize), tab_size: usize, insert_spaces: bool) -> String {
     format!(
         r#"{{"jsonrpc":"2.0","id":{id},"method":"textDocument/rangeFormatting","params":{{"textDocument":{{"uri":{uri}}},"range":{{"start":{{"line":{},"character":{}}},"end":{{"line":{},"character":{}}}}},"options":{{"tabSize":{tab_size},"insertSpaces":{insert_spaces}}}}}}}"#,
@@ -229,7 +227,7 @@ pub fn range_formatting(id: i64, path: &Path, from: (usize, usize), to: (usize, 
     )
 }
 
-/// `textDocument/references` — 「where else is this used?」 (`gr`, 2026-10-29),
+/// `textDocument/references` — 「where else is this used?」 (`gr`),
 /// the declaration included, as helix asks it.
 pub fn references(id: i64, path: &Path, line: usize, utf16_column: usize) -> String {
     format!(
@@ -239,7 +237,7 @@ pub fn references(id: i64, path: &Path, line: usize, utf16_column: usize) -> Str
 }
 
 /// `textDocument/documentSymbol` — what this file defines (`空格 s`,
-/// 2026-10-31, helix's symbol picker).
+/// helix's symbol picker).
 pub fn document_symbol(id: i64, path: &Path) -> String {
     format!(
         r#"{{"jsonrpc":"2.0","id":{id},"method":"textDocument/documentSymbol","params":{{"textDocument":{{"uri":{uri}}}}}}}"#,
@@ -248,7 +246,7 @@ pub fn document_symbol(id: i64, path: &Path) -> String {
 }
 
 /// `workspace/symbol` — what the project defines that matches `query`
-/// (`空格 S`, 2026-10-31), asked again as the query changes, as helix does.
+/// (`空格 S`), asked again as the query changes, as helix does.
 pub fn workspace_symbol(id: i64, query: &str) -> String {
     format!(
         r#"{{"jsonrpc":"2.0","id":{id},"method":"workspace/symbol","params":{{"query":{query}}}}}"#,
@@ -335,7 +333,7 @@ fn symbols(result: Option<&serde_json::Value>) -> Vec<Symbol> {
 }
 
 /// `textDocument/rename` — the thing under the caret, called `new_name`
-/// wherever it is used (`:lsp-rename`, 2026-10-29).
+/// wherever it is used (`:lsp-rename`).
 pub fn rename(id: i64, path: &Path, line: usize, utf16_column: usize, new_name: &str) -> String {
     format!(
         r#"{{"jsonrpc":"2.0","id":{id},"method":"textDocument/rename","params":{{"textDocument":{{"uri":{uri}}},"position":{{"line":{line},"character":{utf16_column}}},"newName":{name}}}}}"#,
@@ -344,7 +342,7 @@ pub fn rename(id: i64, path: &Path, line: usize, utf16_column: usize, new_name: 
     )
 }
 
-/// `textDocument/codeAction` — what can be done here (`空格 a`, 2026-10-29).
+/// `textDocument/codeAction` — what can be done here (`空格 a`).
 ///
 /// `from` and `to` are (line, UTF-16 column). `diagnostics` are the server's
 /// own diagnostics over that range, as it sent them: a quick fix is found by
@@ -410,10 +408,9 @@ pub fn hover(id: i64, path: &Path, line: usize, utf16_column: usize) -> String {
     )
 }
 
-/// `textDocument/signatureHelp` —— **這個括號裏該填什麼**（2026-10-08）。
+/// `textDocument/signatureHelp` —— **這個括號裏該填什麼**。
 ///
-/// 報的原話：「In insert mode, when I type `(`, I expect that the function doc can
-/// appear without triggering, so that I can understand the function better.」
+/// 插入模式裏打 `(`，不必另按一鍵，函數的簽名與說明就浮出來。
 ///
 /// Warning: **它和 hover 是兩個請求。** hover 答的是「光標底下這個名字是什麼」，這一支
 /// 答的是「你正在填的這一次調用，簽名長什麼樣、填到第幾個參數了」——位置一樣，問題
@@ -495,10 +492,10 @@ pub enum Notice {
     /// [`initialized`] must go back before the server will work.
     ///
     /// `signature_triggers`: the characters it wants a `signatureHelp` asked
-    /// on (`signatureHelpProvider.triggerCharacters`, 2026-10-28), empty when
+    /// on (`signatureHelpProvider.triggerCharacters`), empty when
     /// it named none.
     ///
-    /// `name` and `version`: what its `serverInfo` says it is (2026-11-07),
+    /// `name` and `version`: what its `serverInfo` says it is,
     /// `None` when it says nothing. The page window needs a tinymist new
     /// enough to hand a page over in memory, and an old one says nothing.
     Ready { signature_triggers: Vec<String>, name: Option<String>, version: Option<String> },
@@ -511,9 +508,9 @@ pub enum Notice {
     /// stall a server** — `rust-analyzer` waits on its own registration — so
     /// the id comes back out to be answered with an empty result.
     ///
-    /// Warning: **號碼照 JSON 原樣帶着，不是 `i64`**（2026-10-07 審出來的）。協議說
-    /// `id` 可以是數字**也可以是字串**，而從前這裏是 `as_i64()`：字串號碼的請求
-    /// 讀成了 [`Notice::Nothing`]，於是**永遠没人答**，而那正是這一格存在的理由
+    /// Warning: **號碼照 JSON 原樣帶着，不是 `i64`**。協議說 `id` 可以是數字
+    /// **也可以是字串**；讀成 `as_i64()` 的話，字串號碼的請求就成了
+    /// [`Notice::Nothing`]，**永遠没人答**，而那正是這一格存在的理由
     /// ——等自己註冊回音的服務器就停在那裏。`"3"` 原樣回 `"3"`，數字原樣回數字。
     Asked {
         id: String,
@@ -539,43 +536,42 @@ pub enum Notice {
         places: Vec<Place>,
         told: Option<Told>,
         offers: Vec<Offer>,
-        /// `isIncomplete` (2026-10-28): the server wants to be asked again as
+        /// `isIncomplete`: the server wants to be asked again as
         /// the word grows. A complete list is only narrowed here after that.
         incomplete: bool,
-        /// 簽名那一問的答案（2026-10-08）。同上：讀出來擺着，前端拿它要的那一格。
+        /// 簽名那一問的答案。同上：讀出來擺着，前端拿它要的那一格。
         signature: Option<Signature>,
-        /// A rename's answer: the edits it makes (2026-10-29).
+        /// A rename's answer: the edits it makes.
         edits: Vec<TextEdit>,
         /// A code action's answer: what is on offer.
         actions: Vec<Action>,
-        /// A `documentSymbol` or `workspace/symbol` answer (2026-10-31).
+        /// A `documentSymbol` or `workspace/symbol` answer.
         symbols: Vec<Symbol>,
         /// A `documentHighlight` answer: spans in the file asked about.
         spans: Vec<Span>,
         /// What the server said when it refused (`error.message`), as a
         /// rename refuses a keyword.
         error: Option<String>,
-        /// A tinymist command's answer, read for the page window
-        /// (2026-11-07).
+        /// A tinymist command's answer, read for the page window.
         executed: Option<Executed>,
     },
     /// **The server asks us to change files** (`workspace/applyEdit`), the way
     /// a code action that is a command finishes.
     ApplyEdit { id: String, edits: Vec<TextEdit> },
-    /// **服務器說它在忙，或者忙完了**（`$/progress`，2026-10-01）。
+    /// **服務器說它在忙，或者忙完了**（`$/progress`）。
     ///
     /// `token` 是那一件活自己的號碼，`begin` 開一件、`end` 關一件（`report`
     /// 不算開也不算關）。轉圈那八個點數的就是**還開着幾件**。
     ///
     /// Warning: **一定要宣告 `window.workDoneProgress`，不然一條都收不到**
-    /// （2026-10-01 量的：宣告之前三十秒零條；宣告之後起一次 rust-analyzer 是
+    /// （量過：宣告之前三十秒零條；宣告之後起一次 rust-analyzer 是
     /// 221 條，`begin` 十五次 `end` 十五次，兩秒四收場）。
     Working { token: String, begin: bool, end: bool },
     /// Anything else: logs, an answer nobody is waiting for.
     Nothing,
 }
 
-/// **正在填的那一次調用，簽名長什麼樣**（`textDocument/signatureHelp`，2026-10-08）。
+/// **正在填的那一次調用，簽名長什麼樣**（`textDocument/signatureHelp`）。
 ///
 /// Warning: **只留一行。** 服務器可以給好幾個重載（`signatures`），這一頭取它說的那個
 /// 「正在用的」（`activeSignature`，不說就是第一個）——一行浮在光標旁邊，是打字當口
@@ -611,7 +607,7 @@ pub struct Offer {
     /// The type, the signature, the module it comes from — one short line the
     /// server offers *about* the item. `None` when it offered none.
     pub detail: Option<String>,
-    /// **What the server filters this item by** (`filterText`, 2026-10-28),
+    /// **What the server filters this item by** (`filterText`),
     /// when it is not the label. rust-analyzer's label for a function is
     /// `to_string()`, and a list narrowed by the label alone would lose items
     /// the server meant to match. See [`Offer::filter_text`].
@@ -619,12 +615,12 @@ pub struct Offer {
     /// **How much of what is already typed this replaces** — which line, and
     /// the two UTF-16 code-unit columns on it.
     ///
-    /// Warning: **The line is carried, not assumed** (2026-10-07). It used to read
-    /// `start.character` and `end.character` and drop both line numbers, and
-    /// the caller then applied those two columns to **whatever line the caret
-    /// was on**. A server whose range is one line up — a multi-line edit, or
-    /// an item computed against a stale copy — silently cut an arbitrary span
-    /// out of the line being typed. A range that spans two lines is refused
+    /// Warning: **The line is carried, not assumed.** Reading only
+    /// `start.character` and `end.character` would have the caller apply those
+    /// two columns to **whatever line the caret is on**, and a server whose
+    /// range is one line up — a multi-line edit, or an item computed against a
+    /// stale copy — would silently cut an arbitrary span out of the line being
+    /// typed. A range that spans two lines is refused
     /// here rather than flattened: this field's whole contract is 「how much of
     /// *this* word」, and nothing in the caller can honour more.
     ///
@@ -854,8 +850,8 @@ pub struct Span {
     pub to: (usize, usize),
 }
 
-/// **What a tinymist command answered**, read for the page window
-/// (2026-11-07). Typed here for the reason [`Notice::Answer`] is: the shape
+/// **What a tinymist command answered**, read for the page window.
+/// Typed here for the reason [`Notice::Answer`] is: the shape
 /// is this crate's business.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Executed {
@@ -940,14 +936,14 @@ fn places(result: Option<&serde_json::Value>) -> Vec<Place> {
 ///
 /// The value is Markdown, **and it stays Markdown** — this editor sets
 /// Markdown for a living, and the float draws it with the same inks the page
-/// does (2026-09-21 問：「它為什麼不能渲染 markdown 呢？我覺得完全可以呀。」).
+/// does.
 /// Only the block shapes a one-paragraph float cannot hold are rewritten, and
 /// each is rewritten into the Markdown that *means the same thing inline*:
 /// a fenced block becomes one `` `code` `` span a line, and a `---` rule
 /// becomes the blank line it was standing in for.
 fn told(result: Option<&serde_json::Value>) -> Option<Told> {
     // `(text, markdown)`. Warning: **`kind` is the server's own word for what it
-    // sent** (2026-09-30) — see [`Told::markdown`].
+    // sent** — see [`Told::markdown`].
     fn one(value: &serde_json::Value) -> Option<(String, bool)> {
         match value {
             // A bare `MarkedString`: the specification says Markdown.
@@ -996,13 +992,13 @@ fn told(result: Option<&serde_json::Value>) -> Option<Told> {
     }
 }
 
-/// **What a server said, and whether it said it in Markdown** (2026-09-30).
+/// **What a server said, and whether it said it in Markdown.**
 ///
-/// Warning: **The `kind` field is not decoration.** This used to read `value` out
-/// of a `MarkupContent` and throw the `kind` beside it away, and the float
-/// then set every answer with the Markdown inks — so a server that only
-/// speaks plain text had its `*` turned into emphasis and its `#` into a
-/// heading. `contentFormat` now asks for Markdown first (see [`initialize`]),
+/// Warning: **The `kind` field is not decoration.** Reading `value` out of a
+/// `MarkupContent` and throwing the `kind` beside it away would set every
+/// answer with the Markdown inks — a server that only speaks plain text would
+/// have its `*` turned into emphasis and its `#` into a heading.
+/// `contentFormat` asks for Markdown first (see [`initialize`]),
 /// which is what most servers will then send; this is for the ones that
 /// cannot.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -1010,7 +1006,7 @@ pub struct Told {
     pub text: String,
     /// Whether [`Self::text`] is Markdown and should be set with its inks.
     pub markdown: bool,
-    /// **這一則說的是哪一段**（LSP 的 `Hover.range`，2026-10-11）。
+    /// **這一則說的是哪一段**（LSP 的 `Hover.range`）。
     ///
     /// 協議說它是可選的，而兩家都給：量過，rust-analyzer 與 mojo-lsp-server
     /// 回的都正好是光標底下那個名字的起訖。給了它，「光標還在同一個東西上」
@@ -1042,9 +1038,9 @@ impl From<&str> for Told {
 
 /// A hover answer's Markdown, in the shapes a one-paragraph float can set.
 /// See [`told`].
-/// **把 HTML 實體還原成字**（2026-10-11 報的）。
+/// **把 HTML 實體還原成字**。
 ///
-/// 報的是 hover 面板上畫着 `&nbsp;&nbsp;A string showing…`。那兩個實體是**服務器
+/// hover 面板上不許畫出 `&nbsp;&nbsp;A string showing…`。那種實體是**服務器
 /// 自己寫的**——`mojo-lsp-server` 把文檔字符串的縮進寫成了 `&nbsp;`，而
 /// VS Code 把 hover 當 HTML 畫，所以在那邊看不出來。
 ///
@@ -1132,7 +1128,7 @@ fn inline(raw: &str) -> String {
             // from the documentation. One blank line says the same thing.
             "---" | "***" | "___" => out.push(String::new()),
             // **一個空標題**：`mojo-lsp-server` 在簽名和正文之間寫一行光禿禿的
-            // `###`（2026-10-11 從真的答覆裏量出來的）。它一個字都没說，而畫出
+            // `###`（從真的答覆裏量出來的）。它一個字都没說，而畫出
             // 來是一行灰色的井號，佔一行。當成空行。
             _ if start.trim_end_matches('#').is_empty() && start.starts_with('#') => {
                 out.push(String::new())
@@ -1197,8 +1193,7 @@ fn one_offer(item: &serde_json::Value) -> Option<Offer> {
         (None, Some(text)) => text.to_string(),
         (None, None) => label.clone(),
     };
-    // **`insertTextFormat: 2` 是片段，照字面插進去就是往稿子裏寫 `${1:}`**
-    // （2026-10-07 審出來的）。
+    // **`insertTextFormat: 2` 是片段，照字面插進去就是往稿子裏寫 `${1:}`**。
     //
     // 這一頭報的是 `snippetSupport: false`（見 [`initialize`]），所以守規矩的服務
     // 器不會送片段來——可「不會送」靠的是對方守規矩，而這一條錯的代價是**在人的
@@ -1255,7 +1250,7 @@ fn one_offer(item: &serde_json::Value) -> Option<Offer> {
 /// Warning: **這不是片段引擎**——它不給跳轉，只保證插進去的是字，不是語法。真要做
 /// 跳轉是另一件事（報 `snippetSupport: true`、存一列洞、`Tab` 走），而那件事没做
 /// 之前，這一支是那條「稿子裏不許出現没打過的字」的底線。
-/// **一段 hover 裏的「正文第一段」**（2026-10-08 定）。
+/// **一段 hover 裏的「正文第一段」**。
 ///
 /// 簽名回空時那一句回退用的（見 `Editor::show_signature_from_doc`）。三家都不在
 /// 插入態冒整段文檔，所以最多一段，後面還有就單排一個 `…`。
@@ -1282,12 +1277,12 @@ pub fn first_paragraph(told: &str) -> Option<String> {
         if fenced {
             continue;
         }
-        // **那一對圍欄這一路上早被拆過了**（2026-10-09 補）。
+        // **那一對圍欄這一路上早被拆過了**。
         //
         // Warning: 這一支收的是 [`Told::text`]，而 `Told` 裏那段字已經過了
-        // [`inline`]——圍欄一行不剩，裏面那幾行各自裹上了一對反引號。於是上面那道
-        // 跳圍欄的閘一次也没開過，`println!` 的 hover 交出來的是 `` `std::macros` ``
-        // 而不是「Prints to the standard output」。整行就是一段行內代碼的，在散文
+        // [`inline`]——圍欄一行不剩，裏面那幾行各自裹上了一對反引號。上面那道
+        // 跳圍欄的閘碰不到它們；不另外跳，`println!` 的 hover 交出來的就是
+        // `` `std::macros` `` 而不是「Prints to the standard output」。整行就是一段行內代碼的，在散文
         // 開始之前一律當簽名跳掉；反引號只有首尾那兩個纔算，不然「`甲` 和 `乙`」
         // 這種真散文也會被當成簽名。
         let only_code = trimmed.len() >= 2
@@ -1389,11 +1384,8 @@ fn without_the_holes(snippet: &str) -> String {
     out
 }
 
-/// **The server's list, narrowed by the half word already typed** (2026-10-08).
-///
-/// Reported: 「I typed "unwrap", the function hint (autocompletion), however, still
-/// show the prediction using the original order. … items with exact prefix go first;
-/// fuzzy matching is nice-to-have but should go at bottoms.」
+/// **The server's list, narrowed by the half word already typed.** Items
+/// with the typed word as an exact prefix go first; fuzzy matches go below.
 ///
 /// **Why the server does not do it.** A list with `isIncomplete: false` means
 /// 「this is all of it; filter it yourself as they type」: rust-analyzer gives
@@ -1401,12 +1393,11 @@ fn without_the_holes(snippet: &str) -> String {
 /// order, and does not hear about the letters typed after. VS Code and helix
 /// filter on their side.
 ///
-/// **Narrowed, not only re-ranked** (2026-10-28). An item that does not hold
-/// the typed letters in order leaves the list, as in helix (whose matcher only
-/// keeps what matches), so the list shrinks as the word grows. The 2026-10-08
-/// version kept them at the bottom because it matched the label while the
-/// server filters by `filterText`; it matches [`Offer::filter_text`] now, so
-/// what is dropped is what the server would drop too.
+/// **Narrowed, not only re-ranked.** An item that does not hold the typed
+/// letters in order leaves the list, as in helix (whose matcher only keeps
+/// what matches), so the list shrinks as the word grows. It matches
+/// [`Offer::filter_text`], not the label, because the server filters by
+/// `filterText`: what is dropped is what the server would drop too.
 ///
 /// Four tiers, each **in the server's own order** (its relevance, which knows
 /// the language better than this end does):
@@ -1498,9 +1489,8 @@ fn signature(result: Option<&serde_json::Value>) -> Option<Signature> {
 }
 
 /// The answer that says nothing to a request: `null`, except for
-/// `workspace/configuration`, which is answered item for item (review,
-/// 2026-11-06: a bare `null` broke the spec, and the factory now starts
-/// servers that ask). Each item is read from the server's `config` when it
+/// `workspace/configuration`, which is answered item for item (a bare
+/// `null` breaks the spec, and the factory starts servers that ask). Each item is read from the server's `config` when it
 /// has one (see [`read_with`]).
 ///
 /// Warning: **An empty `section` is the whole table**, as one with none:
@@ -1672,7 +1662,7 @@ fn json_string(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     /// `documentSymbol` answers come as a tree or a flat list, and
-    /// `workspace/symbol` answers flat with their files (2026-10-31): all
+    /// `workspace/symbol` answers flat with their files: all
     /// flattened, a child's container its parent's name, kinds as helix
     /// names them.
     #[test]
@@ -1691,7 +1681,7 @@ mod tests {
         assert_eq!((symbols[0].line, symbols[0].utf16_column), (3, 15));
     }
 
-    /// A diagnostic's code is kept, a number or a string (2026-10-31).
+    /// A diagnostic's code is kept, a number or a string.
     #[test]
     fn a_diagnostics_code_is_kept() {
         let message = r#"{"method":"textDocument/publishDiagnostics","params":{"uri":"file:///a","diagnostics":[{"range":{"start":{"line":0,"character":0},"end":{"line":0,"character":1}},"message":"m","code":"E0308"},{"range":{"start":{"line":1,"character":0},"end":{"line":1,"character":1}},"message":"n","code":7}]}}"#;
@@ -1800,8 +1790,7 @@ mod tests {
             Notice::Ready { signature_triggers: Vec::new(), name: Some("tinymist".into()), version: Some("0.15.12".into()) }
         );
         // Warning: **Every other answer comes back with its id** (#53 ②), because
-        // only the front end knows which id it sent for what. It used to be
-        // dropped here as 「nobody's business」; now `gd` has business.
+        // only the front end knows which id it sent for what (`gd` waits on one).
         assert_eq!(
             read(r#"{"jsonrpc":"2.0","id":7,"result":{}}"#, 1),
             Notice::Answer {
@@ -1839,9 +1828,9 @@ mod tests {
             read(r#"{"jsonrpc":"2.0","id":2,"method":"client/registerCapability"}"#, 1),
             Notice::Asked { id: "2".into(), result: "null".into() }
         );
-        // Warning: **號碼也可以是字串**（協議兩種都許，2026-10-07 審出來的）。從前這一
-        // 條讀成 `Nothing`：没人答，而等自己註冊回音的服務器就停在那裏。回去的號
-        // 碼要和來的那個逐字節相同，所以引號也帶着。
+        // Warning: **號碼也可以是字串**（協議兩種都許）。讀成 `Nothing` 就没人答，
+        // 而等自己註冊回音的服務器就停在那裏。回去的號碼要和來的那個逐字節相同，
+        // 所以引號也帶着。
         assert_eq!(
             read(r#"{"jsonrpc":"2.0","id":"abc","method":"client/registerCapability"}"#, 1),
             Notice::Asked { id: "\"abc\"".into(), result: "null".into() }
@@ -1857,7 +1846,7 @@ mod tests {
     }
 
     /// **A server's `config`** goes out three ways, as helix sends it
-    /// (2026-11-07): `initializationOptions`, the push after `initialized`,
+    /// `initializationOptions`, the push after `initialized`,
     /// and the answer to `workspace/configuration`.
     #[test]
     fn a_server_s_config_is_its_initialization_options_and_its_settings() {
@@ -1971,8 +1960,8 @@ mod tests {
         }
     }
 
-    /// **`kind` 說純文本，就不能拿 Markdown 的墨去畫**（2026-09-30 報的：
-    /// Python 的 docstring 裏 `Main API` 底下那一行 `======` 原樣畫了出來）。
+    /// **`kind` 說純文本，就不能拿 Markdown 的墨去畫**（Python 的 docstring
+    /// 裏 `Main API` 底下那一行 `======` 不許當成標題記號）。
     ///
     /// 兩件事：`Told::markdown` 要跟着服務器說的走，而純文本**不許過
     /// [`inline`]**——它會把一行三個減號吃掉，把 ASCII 畫的表格每一行包進反
@@ -2024,7 +2013,7 @@ mod tests {
         assert_eq!(inline(raw), "let x = `y`;\n`fn f()`");
     }
 
-    /// **HTML 實體還原成字，空標題當空行**（2026-10-11 報的）。
+    /// **HTML 實體還原成字，空標題當空行**。
     ///
     /// 這一則是 `mojo-lsp-server` 對 `internal_representation` 真的答覆，一字未改。
     #[test]
@@ -2044,7 +2033,7 @@ mod tests {
     }
 
 
-    /// **片段不許照字面插進稿子裏**（2026-10-07 審出來的）。
+    /// **片段不許照字面插進稿子裏**。
     ///
     /// 這一頭報的是 `snippetSupport: false`，所以這是一道底線：對方不守規矩的時
     /// 候，進稿子的也得是字，不是 `${1:}`。
@@ -2066,7 +2055,7 @@ mod tests {
         assert_eq!(without_the_holes("${1:${2:裏}}"), "裏", "洞裏還有洞");
     }
 
-    /// **簽名那一答的兩種參數寫法**（2026-10-08）。
+    /// **簽名那一答的兩種參數寫法**。
     ///
     /// 協議說 `parameters[].label` 可以是一對 UTF-16 下標，也可以是一個名字
     /// ——rust-analyzer 給下標，pylsp 給名字，兩種都要認。
@@ -2187,7 +2176,7 @@ mod tests {
         assert_eq!(parsed["params"]["textDocument"]["text"], "a\u{1}b");
     }
 
-    /// **回退那一段：跳過圍欄與分隔線，只取第一段**（2026-10-08）。
+    /// **回退那一段：跳過圍欄與分隔線，只取第一段**。
     #[test]
     fn the_first_paragraph_of_a_hover_is_the_prose_not_the_signature() {
         // rust-analyzer 對 `println!` 的 hover，形狀是量出來的。
@@ -2209,9 +2198,9 @@ mod tests {
         // 只有簽名，没有散文：什麼都不畫。
         assert_eq!(first_paragraph("```rust\nfn f()\n```\n"), None);
 
-        // **真正遞進來的是過了 `inline` 的那一份**（2026-10-09）。上面那幾格餵的是
-        // 服務器原話，而 `Told::text` 早被 `inline` 拆過圍欄了——這幾格走的是產線
-        // 上那條路，不走一遍就看不見「跳圍欄」那道閘一次也没開過。
+        // **真正遞進來的是過了 `inline` 的那一份**。上面那幾格餵的是服務器
+        // 給的原文，而 `Told::text` 早被 `inline` 拆過圍欄了——這幾格走的是產線
+        // 上那條路，不走一遍就看不見「跳圍欄」那道閘有沒有開。
         assert_eq!(
             first_paragraph(&inline(told)).as_deref(),
             Some("Prints to the standard output, with a newline.\n…"),
@@ -2226,8 +2215,8 @@ mod tests {
         );
     }
 
-    /// **A rename's edits in both of the protocol's shapes** (#54,
-    /// 2026-10-29): `changes`, a map of URI to edits, and `documentChanges`,
+    /// **A rename's edits in both of the protocol's shapes** (#54):
+    /// `changes`, a map of URI to edits, and `documentChanges`,
     /// a list of per-file edits — rust-analyzer sends the second.
     #[test]
     fn a_workspace_edit_is_read_in_both_shapes() {
@@ -2283,7 +2272,7 @@ mod tests {
         assert!(asked.contains(r#""diagnostics":[{"#) && asked.contains("unused"), "{asked}");
     }
 
-    /// **tinymist's two answers the page window reads** (2026-11-07), in the
+    /// **tinymist's two answers the page window reads**, in the
     /// shapes 0.15.12 sent them: a page in memory, a page past the end, and
     /// the preview task's data plane. A compile error is an `error`.
     #[test]

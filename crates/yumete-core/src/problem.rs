@@ -1,7 +1,5 @@
-//! **What a language server says is wrong** — LSP, first step (#53/#54,
-//! 2026-09-20).
+//! **What a language server says is wrong** — LSP, first step (#53/#54).
 //!
-//! 2026-09-19：「yumete 太好了，如果能編程就更好」——說這話的人寫 go 和 rust。
 //! The four steps are in `development.md` §5.4; this is the first,
 //! and it is the one that is useful on its own: **a server's complaints, on
 //! the page**. No jumping, no hovering, no completion yet.
@@ -96,7 +94,7 @@ pub struct Problem {
     /// Which server said it (`rust-analyzer`, `gopls`), when it says.
     pub source: Option<String>,
     /// The server's code for it (`E0308`), when it gives one: a column of the
-    /// diagnostics pickers, as in helix (2026-10-31).
+    /// diagnostics pickers, as in helix.
     pub code: Option<String>,
 }
 
@@ -132,10 +130,10 @@ pub fn utf16_column(line: &str, chars: usize) -> usize {
 /// Every server's complaints, by the file they are about.
 #[derive(Debug, Default)]
 pub struct Problems {
-    /// **每一個服務器各存各的**，鍵是（檔，哪一個服務器）——#425，2026-09-30。
+    /// **每一個服務器各存各的**，鍵是（檔，哪一個服務器）——#425。
     ///
     /// Warning: **`publishDiagnostics` 是「這個檔此刻的全部真相，由我說」。**
-    /// 「由我說」那一半從前没記：一個檔只存一份，於是一種語言跑兩個服務器的時
+    /// 「由我說」那一半要記：一個檔只存一份的話，一種語言跑兩個服務器的時
     /// 候，ruff 推一次抹掉 pylsp 說的，pylsp 推一次抹掉 ruff 說的，屏幕上永遠
     /// 只剩最後推的那一個。
     ///
@@ -185,10 +183,10 @@ impl Problems {
         }
     }
 
-    /// **Move what was said about `path` with an edit** (2026-11-04): at
+    /// **Move what was said about `path` with an edit**: at
     /// `line`, `taken` lines went and `put` came. A complaint below moves by
     /// the difference; one on a line that went sits on the edit's line, until
-    /// the server says again. Without this a message stayed on its old line
+    /// the server says again. Without this a message would stay on its old line
     /// number, now another line's.
     ///
     /// `at_start` says the edit began at the very start of `line`, so that
@@ -249,7 +247,7 @@ impl Problems {
 mod tests {
     use super::*;
 
-    /// **Complaints move with the lines** (2026-11-04).
+    /// **Complaints move with the lines**.
     #[test]
     fn a_complaint_moves_with_its_line() {
         let path = PathBuf::from("/a.rs");
@@ -323,12 +321,11 @@ mod tests {
         }
     }
 
-    /// **兩個服務器說的話不互相抹掉**（#425，2026-09-30）。
+    /// **兩個服務器說的話不互相抹掉**（#425）。
     ///
     /// Warning: **`publishDiagnostics` 是「這個檔此刻的全部真相，由我說」。**
-    /// 「由我說」那一半從前没記——一個檔只存一份，於是 ruff 推一次抹掉 pylsp 說
-    /// 的，pylsp 推一次抹掉 ruff 說的，屏幕上永遠只剩最後推的那一個。這一條就
-    /// 是釘那個。
+    /// 「由我說」那一半要記——一個檔只存一份的話，ruff 推一次抹掉 pylsp 說
+    /// 的，pylsp 推一次抹掉 ruff 說的，屏幕上永遠只剩最後推的那一個。
     #[test]
     fn two_servers_do_not_erase_each_other() {
         let mut all = Problems::default();

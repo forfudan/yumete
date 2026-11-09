@@ -1,9 +1,9 @@
-//! **用拼音找漢字**，給搜索用（2026-09-25 提的）。
+//! **用拼音找漢字**，給搜索用。
 //!
-//! 原話：「在中文状态下，模糊查询其实可以应用到繁简体、拼音的范畴。比如「書齋」
-//! 可以搜到「书斋」，shuzhai也可以搜到「书斋」「書齋」」。
+//! 模糊查詢在中文裏管到繁簡與拼音：`書齋` 搜得到「书斋」，`shuzhai` 也搜得到
+//! 「书斋」「書齋」。
 //!
-//! ## 只認全拼（2026-09-25 定）
+//! ## 只認全拼
 //!
 //! 每一個字要吃掉**一整個音節**。`shuzhai` 找得到「書齋」，`sz` 和 `shuzh` 找不
 //! 到。首字母那一路噪音太大——`sz` 在一本書裏是幾百處，而讀者要的是那一處。
@@ -74,18 +74,16 @@ fn syllables() -> &'static (std::collections::HashSet<&'static str>, usize) {
     })
 }
 
-/// **這一串字母讀得出來嗎**（2026-10-07 定）。
+/// **這一串字母讀得出來嗎**。
 ///
-/// 原話：「拼音搜索的時候不允許英文/拼音混合。也就是説如果一串[a-zA-Z]+不是合法
-/// 的漢字拼音音節組合（而是可能混雜了拼音和英文），那么我們就直接不開啓拼音搜索。
-/// `renman` 是合法的拼音音節組合，故而它開啓拼音搜索。`daxue3` 是合法拼音音節加數
-/// 字，所以我們允許它進行拼音搜索。`for3hao` 含有非法拼音音節，所以不開啓拼音搜
-/// 索。`shurufa.zhuyuhao` 的字母部分是合法拼音音節，我們可以開啓拼音搜索。
-/// `forfudan.com` 含有 `com` 這個非法拼音音節，因此不開啓拼音搜索。」
+/// 拼音搜索不許英文與拼音混合：一串 `[a-zA-Z]+` 不是合法的漢字拼音音節組合（可能
+/// 混雜了拼音和英文），就不開拼音搜索。`renman` 是合法的音節組合，開；`daxue3` 是
+/// 合法音節加數字，開；`for3hao` 含非法音節，不開；`shurufa.zhuyuhao` 的字母部分
+/// 都是合法音節，開；`forfudan.com` 含 `com` 這個非法音節，不開。
 ///
 /// **每一串都要整整齊齊切成音節，末一串也一樣。** 打了一半的那一個音節不給通融，
 /// 而這一條**一個命中都不會丟**：[`say`] 只吃得下**整個**音節（`q + n > said.len()`
-/// 就跳過），所以 `zhongg` 這種半截的查詢從前走完整趟慢路，一處也配不上。逐鍵
+/// 就跳過），所以 `zhongg` 這種半截的查詢就算走完整趟慢路，也一處配不上。逐鍵
 /// 搜的時候這一路於是自己開關：打到 `zhong` 纔開，`zhongg` 又關上。
 ///
 /// 切分用的是一張「到第幾個字母為止讀得通」的表，從左往右填，所以 `xian` 這種
@@ -113,19 +111,18 @@ fn sayable(letters: &[char]) -> bool {
     reached[n]
 }
 
-/// **查詢切成的一段一段**（2026-10-03 定）。
+/// **查詢切成的一段一段**。
 ///
-/// 從前這一支只收「整條全是字母」的查詢，於是**字母和漢字混不起來**：`zhongguo`
-/// 找得到「中國」，而 `zhongguo很大`、`zhong国`、`di120`、`juan03` 一個都找不着
-/// ——`as_query` 看見一個非字母就整條回 `None`。可真實的查詢幾乎都是混的：找第
-/// 一百二十章打的是 `di120`，找那一卷打的是 `juan03`。
+/// **字母和漢字混得起來**：`zhongguo很大`、`zhong国`、`di120`、`juan03` 都找得
+/// 着，不只「整條全是字母」的那一種（`as_query` 看見一個非字母就整條回 `None`）。
+/// 真實的查詢幾乎都是混的：找第一百二十章打的是 `di120`，找那一卷打的是 `juan03`。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Atom {
     /// 一串 ASCII 字母。**兩種配法**：照字面，或者當成一串字的讀音。
     ///
     /// 存兩份：`said` 是小寫的（讀音表是小寫的），`typed` 是打進來的原樣——
-    /// 照字面那一路在「大小寫要緊」的時候比的是後者（2026-10-03 修，從前只存
-    /// 小寫，於是 `--case-sensitive` 對混着寫的查詢是**死的**）。
+    /// 照字面那一路在「大小寫要緊」的時候比的是後者（只存小寫的話，
+    /// `--case-sensitive` 對混着寫的查詢就是**死的**）。
     Said { said: Vec<char>, typed: Vec<char> },
     /// 別的任何一個字——漢字、數字、標點。照字面配。
     Just(char),
@@ -174,9 +171,9 @@ pub fn atoms(text: &str) -> Option<Vec<Atom>> {
     if !out.iter().any(|a| matches!(a, Atom::Said { .. })) {
         return None;
     }
-    // **一串讀不出來，整條就不走拼音這一路**（2026-10-07 定，見 [`sayable`]）。
+    // **一串讀不出來，整條就不走拼音這一路**（見 [`sayable`]）。
     //
-    // 這同時是這一路最大的一筆提速：從前任何一條帶字母的查詢都要在**每一個字的
+    // 這同時是這一路最大的一筆提速：不然任何一條帶字母的查詢都要在**每一個字的
     // 位置**上查一次讀音表，而 `forfudan.com` 那樣的查詢一處也配不上。量出來
     // （794 MB 的中文語料，熱緩存）：`ye -G forfudan.com` **10.44 秒 → 0.9 秒**。
     let ok = out.iter().all(|atom| match atom {
@@ -212,18 +209,17 @@ pub fn spans_cased(text: &str, atoms: &[Atom], fold: bool, fold_case: bool) -> V
     if atoms.is_empty() {
         return Vec::new();
     }
-    // **一整條都是字母的查詢，整行都是 ASCII 就不必問**（2026-10-03 量出來的）。
+    // **一整條都是字母的查詢，整行都是 ASCII 就不必問**（量出來的）。
     //
     // 這一檔裏 `eat` 的 `literal_ok` 是假的（`atoms.len() > 1` 不成立），於是每一段
     // 都只能走 `say`——而 `say` 查的是讀音表，**表裏一個 ASCII 字符都没有**
     // （`no_ascii_character_has_a_reading` 把整張表掃過）。所以整行都是 ASCII 的
-    // 時候，這一趟**不可能**配上任何東西，而從前它照樣要 `chars().collect()` 一個
-    // Vec、再從每一個位置試一遍。`is_ascii` 是按字節掃的，還會向量化。
+    // 時候，這一趟**不可能**配上任何東西，不必 `chars().collect()` 一個 Vec、再從
+    // 每一個位置試一遍。`is_ascii` 是按字節掃的，還會向量化。
     //
-    // Warning: **判準只能是 ASCII，不能是「有没有漢字」。** 先寫的是後者，而
-    // `every_character_with_a_reading_is_a_han_character` 當場把它否了：讀音表裏有
-    // 假名、注音符號、康熙部首——搜 `ka` 配得上「か」，而那道閘會把只有假名的行
-    // 整行跳掉，真會丟命中。
+    // Warning: **判準只能是 ASCII，不能是「有没有漢字」。** 讀音表裏有假名、注音
+    // 符號、康熙部首——搜 `ka` 配得上「か」，而「有没有漢字」那道閘會把只有假名的
+    // 行整行跳掉，真會丟命中（`a_reading_does_not_mean_a_han_character` 守着）。
     //
     // Warning: **混着寫的那一檔套不上這條。** `zhong-guo` 的 `zhong` 是許照字面配
     // ASCII 的（`literal_ok` 為真），稿子裏真有 `zhong-guo` 這七個字母就該中。
@@ -235,7 +231,7 @@ pub fn spans_cased(text: &str, atoms: &[Atom], fold: bool, fold_case: bool) -> V
     }
     let hay: Vec<char> = text.chars().collect();
     let mut out = Vec::new();
-    // **先問篩子，再走深度優先**（2026-10-07）。頭一段配不上這個字，`eat` 一定
+    // **先問篩子，再走深度優先**。頭一段配不上這個字，`eat` 一定
     // 回 `None`——而問篩子是一次位測試，問 `eat` 是一次讀音表查找。量出來
     // （794 MB 的中文語料）：`ye -G zhongguo` 12.9 秒 → 1.6 秒。
     sifted(atoms, fold, fold_case, |sieve| {
@@ -258,10 +254,10 @@ pub fn spans_cased(text: &str, atoms: &[Atom], fold: bool, fold_case: bool) -> V
     out
 }
 
-/// **哪些字可能起頭**——走查的篩子（2026-10-07）。
+/// **哪些字可能起頭**——走查的篩子。
 ///
 /// 一張 BMP 的位圖（1024 個 `u64`，8 KB）加一個收容基本多文種平面以外那幾個字的
-/// 集合。問一次是兩次取數加一次位移，而從前每一個位置問的是讀音表那張 HashMap。
+/// 集合。問一次是兩次取數加一次位移，比每一個位置問讀音表那張 HashMap 省。
 struct Starts {
     bits: Vec<u64>,
     far: std::collections::HashSet<char>,
@@ -395,12 +391,12 @@ fn eat(
             // 混着寫就不一樣了：`zhong-guo` 裏那個 `zhong` 既可以是「中」的讀音，
             // 也可以就是稿子裏真的那五個字母。
             //
-            // Warning: **`ch第3` 那種不再走到這裏**（2026-10-07）：`ch` 不成音節，
+            // Warning: **`ch第3` 那種走不到這裏**：`ch` 不成音節，
             // 整條查詢根本不問讀音了（[`sayable`]）。這一路留給的是**每一串都讀
             // 得出來**而稿子裏偏偏寫着那幾個字母的那一種。
             let literal_ok = atoms.len() > 1;
-            // **大小寫要緊的時候比打進來的那一份。** 從前一律比小寫，於是
-            // `--case-sensitive` 對混着寫的查詢是死的（`Alpha中` 中了 `alpha中`）。
+            // **大小寫要緊的時候比打進來的那一份。** 一律比小寫的話，
+            // `--case-sensitive` 對混着寫的查詢是死的（`Alpha中` 會中 `alpha中`）。
             let want: &[char] = match fold_case {
                 true => said,
                 false => typed,
@@ -459,17 +455,16 @@ fn say(
 mod tests {
     use super::*;
 
-    /// 舊那幾條測試寫的是「整條全是字母」那一種，留着它們——那一種照舊要對。
+    /// 那幾條測試寫的是「整條全是字母」那一種——那一種照樣要對。
     fn spans(text: &str, said: &[char]) -> Vec<(usize, usize)> {
         let atoms = vec![Atom::Said { said: said.to_vec(), typed: said.to_vec() }];
         spans_of(text, &atoms, true)
     }
 
-    /// **字母和漢字混得起來了**（2026-10-03 定）。
+    /// **字母和漢字混得起來**。
     ///
-    /// 從前查詢要麼整條是拼音、要麼整條是字面：`zhongguo` 找得到「中國」，而
-    /// `zhongguo很大`、`zhong国`、`di120`、`juan03` 一個都找不着。可真實的查詢
-    /// 幾乎都是混的——找第一百二十章打的是 `di120`。
+    /// 查詢不必整條是拼音或整條是字面：`zhongguo很大`、`zhong国`、`di120`、
+    /// `juan03` 都找得着。真實的查詢幾乎都是混的——找第一百二十章打的是 `di120`。
     #[test]
     fn letters_and_漢字_mix_in_one_query() {
         let look = |text: &str, query: &str| spans_of(text, &atoms(query).unwrap_or_default(), true);
@@ -488,11 +483,11 @@ mod tests {
         assert!(atoms("很大").is_none());
         assert!(atoms("").is_none());
 
-        // **有一串讀不出來，整條就不問讀音了**（2026-10-07 定，判詞在 [`sayable`]）。
-        // `md` 不成音節，所以 `di120章.md` 這一條整條走字面——`di` 那一半不再換
-        // 得到「第」。這是那一條規矩明碼標價的代價，作者過目定下的。
+        // **有一串讀不出來，整條就不問讀音了**（判詞在 [`sayable`]）。
+        // `md` 不成音節，所以 `di120章.md` 這一條整條走字面——`di` 那一半換不
+        // 到「第」。這是那一條規矩明碼標價的代價，有意如此。
         assert!(look("卷03/第120章.md", "di120章.md").is_empty());
-        // **整條都是字母的那一種照舊只問讀音**，字面歸字面那一路——見
+        // **整條都是字母的那一種只問讀音**，字面歸字面那一路——見
         // `letters_in_the_prose_are_not_read_as_readings`。
         assert!(look("卷03/第120章.md", "md").is_empty());
     }
@@ -510,9 +505,9 @@ mod tests {
 
     /// **判準不許換成「有没有漢字」。**
     ///
-    /// 2026-10-03 先寫的就是那一版，而這一條當場把它否了：讀音表裏有假名、注音符
-    /// 號、康熙部首——搜 `ka` 配得上「か」，可「か」不是漢字（`is_han` 的註釋寫得
-    /// 明白：假名與標點有意不收）。那道閘會把只有假名的行整行跳掉。
+    /// 讀音表裏有假名、注音符號、康熙部首——搜 `ka` 配得上「か」，可「か」不是
+    /// 漢字（`is_han` 的註釋寫得明白：假名與標點有意不收）。那道閘會把只有假名的
+    /// 行整行跳掉。
     #[test]
     fn a_reading_does_not_mean_a_han_character() {
         assert!(readings('か').any(|s| s == "ka"), "假名有讀音");
@@ -522,7 +517,7 @@ mod tests {
         assert_eq!(spans_of("這一行有個 か 字", &one, true), [(6, 7)], "一樣要找得到");
     }
 
-    /// **整行都是 ASCII 的時候，整條都是字母的查詢直接跳過**（2026-10-03 量出來的）。
+    /// **整行都是 ASCII 的時候，整條都是字母的查詢直接跳過**。
     ///
     /// 這是一道提速的閘（`ye --grep zhuyuhao -uu` 在帶 `target/` 的倉上 12.74 秒 →
     /// 2.46 秒），所以這裏驗的是**它没有順手扔掉任何東西**：混着寫的那一檔照字面
@@ -577,7 +572,7 @@ mod tests {
     fn a_whole_syllable_each_and_nothing_less() {
         let text = "那年書齋下起了大雪";
         assert_eq!(spans(text, &as_query("shuzhai").unwrap()), [(2, 4)]);
-        // 只認全拼：首字母和半個音節都不算（2026-09-25 定）。
+        // 只認全拼：首字母和半個音節都不算。
         assert!(spans(text, &as_query("sz").unwrap()).is_empty());
         assert!(spans(text, &as_query("shuzh").unwrap()).is_empty());
     }
@@ -623,13 +618,10 @@ mod tests {
 mod can_it_be_read {
     use super::*;
 
-    /// **讀不出來的那一串，整條查詢就不走拼音**（2026-10-07 定）。
+    /// **讀不出來的那一串，整條查詢就不走拼音**。
     ///
-    /// 判詞與例子都是作者的：「`renman` 是合法的拼音音節組合，故而它開啓拼音搜
-    /// 索。`daxue3` 是合法拼音音節加數字，所以我們允許它進行拼音搜索。`for3hao`
-    /// 含有非法拼音音節，所以不開啓拼音搜索。`shurufa.zhuyuhao` 的字母部分是合法
-    /// 拼音音節，我們可以開啓拼音搜索。`forfudan.com` 含有 `com` 這個非法拼音音
-    /// 節，因此不開啓拼音搜索。」
+    /// 例子同 [`sayable`]：`renman`、`daxue3`、`shurufa.zhuyuhao` 開拼音搜索，
+    /// `for3hao`、`forfudan.com` 不開。
     #[test]
     fn a_query_that_cannot_be_read_does_not_ask_the_readings() {
         for yes in ["renman", "daxue3", "shurufa.zhuyuhao", "zhongguo", "di120", "juan03"] {
@@ -642,7 +634,8 @@ mod can_it_be_read {
 
     /// **半截的音節這一路自己關掉，而且一個命中都不會丟。**
     ///
-    /// [`say`] 只吃得下整個音節，所以 `zhongg` 從前走完整趟慢路、一處也配不上。
+    /// [`say`] 只吃得下整個音節，所以 `zhongg` 就算走完整趟慢路，也一處配不上。
+
     /// 逐鍵搜的時候這一路於是自己開關：打到 `zhong` 纔開，`zhongg` 又關上，而
     /// 關着的那幾鍵本來就没有拼音命中可給。
     #[test]

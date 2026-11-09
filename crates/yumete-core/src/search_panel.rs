@@ -65,13 +65,13 @@ pub enum Where {
     /// `.yumete` (or `.yumete.toml`); failing that, the nearest holding `.git`;
     /// failing both, the working directory itself.
     ///
-    /// Warning: **`.jj` 和 `.svn` 不算**（2026-10-02 更正）。這行從前把它們也列上
-    /// 了，而 [`crate::editor::book_root`] 從來只找那兩樣。兩道是分開找的，所以
+    /// Warning: **`.jj` 和 `.svn` 不算**：[`crate::editor::book_root`] 只找那兩樣。
+    /// 兩道是分開找的，所以
     /// 上面某一層的 `.yumete` 贏過更近的一層 `.git`——書根是寫稿的人標的，版本
     /// 庫是工具標的。
     ///
     /// Warning: **Reckoned from the working directory, never from the file being
-    /// edited** (2026-10-01 定). The two part company exactly when `gd` has
+    /// edited**. The two part company exactly when `gd` has
     /// jumped somewhere else — into homebrew, say — and a scope that followed
     /// the cursor would then search homebrew rather than the project the
     /// reader is writing. helix's one cursor-following root is the no-LSP
@@ -80,16 +80,14 @@ pub enum Where {
     Project,
     /// A folder named outright: `:search ../稿`.
     ///
-    /// Warning: **Not in the `0` cycle, and not editable in the panel** (2026-10-01
-    /// 定). A typed path is not something 「next」 can reach, and the cycle used
-    /// to wipe it on the way past.
+    /// Warning: **Not in the `0` cycle, and not editable in the panel.** A typed
+    /// path is not something 「next」 can reach, and a cycle through it would
+    /// wipe it on the way past.
     Named(std::path::PathBuf),
 }
 
 impl Where {
-    /// **下一個範圍**——`0` 在面板裏按一下走一格（2026-09-26 原話：「如何在搜索
-    /// 侧栏切换 github directory, working directory, present directory？现在位置
-    /// 只能输入路径」）。
+    /// **下一個範圍**——`0` 在面板裏按一下走一格，範圍不必打路徑就換得了。
     ///
     /// 本文件 → 緩衝區 → 工作路徑 → 項目路徑 → 回到本文件。Warning: **指名道姓那一種
     /// 不在圈裏**：它是使用者自己打的一個路徑，輪到它就回本文件——一個「下一個」
@@ -100,8 +98,8 @@ impl Where {
             Where::Buffers => Where::Working,
             Where::Working => Where::Project,
             Where::Project => Where::Buffer,
-            // **指定文件夾只能用命令進來**（2026-10-01 定）。從前它是圈上的第四
-            // 檔兼輸入框，於是 `0` 繞一圈就把打好的路徑清掉了。
+            // **指定文件夾只能用命令進來**。它要是圈上的一檔兼輸入框，`0` 繞
+            // 一圈就會把打好的路徑清掉。
             Where::Named(_) => Where::Buffer,
         }
     }
@@ -118,7 +116,7 @@ impl Where {
     }
 
     /// **Whether this scope walks the disk** — and so whether 包含, 排除 and
-    /// 搜索隱藏和忽略 mean anything (2026-10-01 定).
+    /// 搜索隱藏和忽略 mean anything.
     ///
     /// 本文件 and 緩衝區 are a list already in front of the reader; narrowing
     /// it by a path glob is not a thing anyone wants, and a hidden file you
@@ -139,22 +137,21 @@ pub enum Field {
     /// **哪裏找** —— 四選一：本文件、緩衝區、工作路徑、項目路徑。第五檔「指定
     /// 文件夾」只能 `:search 某目錄` 進來，不在輪替上。
     ///
-    /// Warning: **2026-09-29 從查詢框上面挪到了開關那一列裏**（畫在上面的時候那個鍵
-    /// 在屏幕上一個字都没有）；**2026-10-01 又挪到了那一列的末尾**，和包含/排
-    /// 除、不搜合成「搜哪裏、搜哪些」一組，號碼跟着變成 `6`。
+    /// Warning: **畫在開關那一列的末尾，不畫在查詢框上面**（畫在上面，那個鍵在
+    /// 屏幕上一個字都没有）：它和包含/排除、不搜合成「搜哪裏、搜哪些」一組，
+    /// 號碼是 `6`。
     Scope,
     /// The pattern.
     #[default]
     Query,
-    /// **中文匹配**——簡繁異體與拼音合成一行（2026-10-01 定，原話：「中文匹配
-    /// [拼音+繁簡]」）。
+    /// **中文匹配**——簡繁異體與拼音合成一行。
     ///
     /// 四態：`[繁簡+拼音]` → `[繁簡]` → `[拼音]` → `[ ]`。兩個說的是同一件事——
     /// **字面不同的寫法算不算同一個**——所以合在一行。
     ///
-    /// Warning: **合得成，是因為它們同一天都變成了「永遠有效」。** 從前繁簡在正則和模糊
-    /// 底下都失效，合成一行就有一半是假的；`glyphs::widen_pattern` 與
-    /// `nearby::spans` 的字形折疊補上之後兩者再無例外。
+    /// Warning: **合得成，是因為兩者都「永遠有效」。** 繁簡在正則和模糊底下也折
+    /// （`glyphs::widen_pattern` 與 `nearby::spans` 的字形折疊），兩者都没有
+    /// 例外；有一個失效的話，合成一行就有一半是假的。
     ///
     /// 拼音只在查詢全是 ASCII 字母的時候纔真的跑（[`crate::pinyin::as_query`]），
     /// 所以搜 `hello` 一點不受它影響。
@@ -163,9 +160,9 @@ pub enum Field {
     Replace,
     /// 大小寫, three ways.
     Case,
-    /// **匹配模式**——字面/正則/模糊，三選一（2026-10-01 定）。
+    /// **匹配模式**——字面/正則/模糊，三選一。
     ///
-    /// 三個互斥的答案回答同一個問題：**這串字怎麼讀**。從前是兩個獨立的勾，而
+    /// 三個互斥的答案回答同一個問題：**這串字怎麼讀**。不做成兩個獨立的勾：那樣
     /// 「兩個都關」纔是默認——那一檔没有名字，只能從兩個空方框去推。
     Matching,
     /// 西文整詞匹配 — ASCII `\b` on both ends.
@@ -173,21 +170,21 @@ pub enum Field {
     /// Warning: **不併進 [`Field::Matching`]**：它和 正則 疊得起來（`\b<式子>\b`），
     /// 只和 模糊 互斥——模糊底下畫灰。
     Whole,
-    /// **替換 —— 一行三態**（2026-10-01 定，原話：「替換那一行做成 cycle」）。
+    /// **替換 —— 一行三態**，按一下轉一格。
     ///
-    /// 關 → 字面替換 → 智能大小寫。從前它是兩行：一個勾（替換）加一個只在勾上
-    /// 之後纔畫得出來的勾（跟原文的大小寫）。合成一行省一行，而且没勾替換的時候
-    /// 不再有一個灰着的號碼。
+    /// 關 → 字面替換 → 智能大小寫。一行而不是兩個勾（替換，加一個只在勾上之後
+    /// 纔畫得出來的「跟原文的大小寫」）：省一行，而且没勾替換的時候没有一個灰着
+    /// 的號碼。
     ///
     /// 「字面替換」就是出廠那一檔：打什麼就寫什麼。「智能大小寫」是換上去的那一
     /// 段跟着原文走——VS Code 把它畫成替換行上的 `AB`，和搜索行上的 `Aa` 分開。
     ///
-    /// 從前只有 `:replace` 開得出替換行，於是 `:search` 進來的人想改一個詞，得
-    /// 退出去重按一個命令。它是個開關而不是另一扇面板：面板是同一扇，開上說的
+    /// `:search` 進來的人想改一個詞，不必退出去重按 `:replace`。它是個開關而不是
+    /// 另一扇面板：面板是同一扇，開上說的
     /// 是「這些我要改」，不是「剛纔找到的不算了」。
     Replacing,
     /// **只搜哪些文件** —— a glob, or several separated by commas
-    /// (2026-10-01 定, VS Code's 「files to include」).
+    /// (VS Code's 「files to include」).
     ///
     /// Warning: **Only means anything for a scope that walks the disk.** 本文件 and
     /// 緩衝區 are a list already in front of the reader; see
@@ -195,17 +192,15 @@ pub enum Field {
     Include,
     /// **哪些文件不搜** —— the same, the other way round.
     Exclude,
-    /// **不搜哪些**——隱藏文件、`.gitignore` 裏的，兩件事分開撥（2026-10-03 定）。
+    /// **不搜哪些**——隱藏文件、`.gitignore` 裏的，兩件事分開撥。
     ///
     /// 按 `7` 轉一格，四態：`[隱藏+忽略]`（出廠）→`[隱藏]`→`[忽略]`→`[無]`。
     /// 方框裏列的是**不搜哪些**，所以 `[隱藏]` 是「點文件仍然跳過，`.gitignore`
     /// 裏的那些現在搜」——那一步排在第一，因為想找回來的多半是被忽略的目錄，
     /// 不是點文件。
     ///
-    /// Warning: **從前這是一個勾，一撥五道閘**。2026-10-03 定要分開：「我们把
-    /// hidden 和 ignore 合到一起，我觉得可以考虑分开一下」。起因是在一個工作區
-    /// 根上搜，`.gitignore` 裏寫着 `/yu/`，於是整個子倉没搜到，而要撥的那個開
-    /// 關名叫「隱藏」。
+    /// Warning: **兩件事不併成一個勾。** 在一個工作區根上搜，`.gitignore` 裏寫着
+    /// `/yu/`，整個子倉就搜不到，而一個合併的開關名叫「隱藏」，誰也想不到去撥它。
     ///
     /// 出廠兩個都關：跳過隱藏文件、尊重 `.gitignore`，同 helix 與 telescope 的默認。
     /// vim 的默認 `grepprg` 是 `rg --vimgrep -uu`，故意關掉這兩道閘來跟傳統
@@ -224,7 +219,7 @@ impl Field {
     /// Warning: **這個次序就是畫出來的次序**（`draw_search`）。走的和看的不是一回事
     /// 的時候，`Tab` 會在一張看不見的表上跳，而那是没人能學會的。
     ///
-    /// 大小寫排在頭一個（2026-09-23 定）：它是三態的那一個，擺在最上面，讀者第
+    /// 大小寫排在頭一個：它是三態的那一個，擺在最上面，讀者第
     /// 一眼看見的就是「這一格裏寫着狀態」，下面三個 `[x]`/`[ ]` 自然照這個讀法。
     pub const ALL: [Field; 12] = [
         Field::Query,
@@ -234,9 +229,8 @@ impl Field {
         Field::Matching,
         Field::Whole,
         Field::Replacing,
-        // **「搜哪裏、搜哪些」四格攢在最下面**（2026-10-01 定，原話：「位置放到
-        // 『包含和排除』上方」）。位置從前畫在開關那一列的頭上、號碼是 `0`，
-        // 可它說的是範圍，和底下三格是一夥的。現在四格一組，號碼接着往下排。
+        // **「搜哪裏、搜哪些」四格攢在最下面**，位置在包含和排除上方。位置說的
+        // 是範圍，和底下三格是一夥的，所以四格一組，號碼接着往下排。
         Field::Scope,
         Field::Include,
         Field::Exclude,
@@ -259,7 +253,7 @@ impl Field {
         Field::Matching,
         Field::Whole,
         Field::Replacing,
-        // **位置也按號碼到**（2026-10-01 起是 `6`，從前是 `0`）。它不是一個勾，是
+        // **位置也按號碼到**（`6`）。它不是一個勾，是
         // 四選一，可按法和上面幾個一樣：不必先把光標走上去。
         Field::Scope,
         Field::Hidden,
@@ -272,16 +266,12 @@ impl Field {
 
     /// **`jk` 走不上去的那幾格**——按號碼到，不是走過去。
     ///
-    /// Warning: **位置那一格看它是哪一檔**（2026-09-29）。四選一的頭三檔没有字可改，
-    /// 停上去没有用處，`0` 換檔就夠了——它 2026-09-29 挪到開關那一列的頭上、號碼
-    /// 寫成 `0` 之後，和底下七個就是同一種東西。
-    ///
-    /// Warning: **位置那一格再也停不住了**（2026-10-01 定）。它是四選一，按號碼換一檔；
-    /// 指定文件夾只能 `:search 某目錄` 進來，進來之後面板裏改不了，所以那一格
-    /// 没有任何可以打字的狀態了。
+    /// Warning: **位置那一格停不住。** 它是四選一，按號碼換一檔，和開關那一列裏
+    /// 別的幾格是同一種東西；指定文件夾只能 `:search 某目錄` 進來，進來之後面板
+    /// 裏改不了，所以那一格没有任何可以打字的狀態。
     ///
     /// Warning: **包含/排除看範圍走不走磁碟。** 選到 本文件 或 緩衝區 的時候它們整行
-    /// 不畫（2026-10-01 定），自然也停不住。
+    /// 不畫，自然也停不住。
     pub fn walked_past(self, on_disk: bool) -> bool {
         match self {
             Field::Include | Field::Exclude => !on_disk,
@@ -292,7 +282,7 @@ impl Field {
     /// Whether this cell is typed into at all (so `i` and the IME belong here).
     ///
     /// Warning: **包含/排除是有條件的**，問 [`Search::takes_text`] 纔算數：範圍不走
-    /// 磁碟的時候那兩格畫灰，打不了字。位置那一格從 2026-10-01 起永遠打不了。
+    /// 磁碟的時候那兩格畫灰，打不了字。位置那一格永遠打不了。
     pub fn takes_text(self) -> bool {
         matches!(self, Field::Query | Field::Replace | Field::Include | Field::Exclude)
     }
@@ -300,27 +290,25 @@ impl Field {
     /// The next cell in that direction, wrapping — **the boxes and the list,
     /// never a switch**, and the replace box only while the panel is replacing.
     ///
-    /// Warning: **The five switches are walked past, not walked into** (2026-09-24,
-    /// 原話：「中间五行选项，在normal状态下不是移动上去按空格，而是直接通过一个
-    /// 字母来选择……这样的话，我们就可以通过 jk 在结果和搜索框之間移動（跳过五行
-    /// 设置），避免用户要从他们上面经过浪费 jk」). They are pressed by number;
+    /// Warning: **The switches are walked past, not walked into**, so `jk` moves
+    /// between the boxes and the results without spending keys on the rows of
+    /// settings in between. They are pressed by number;
     /// what the cursor walks is 範圍 → 找什麼 →（換成什麼）→ 結果, which is the
     /// path anybody actually takes through this form.
     ///
-    /// Warning: **模糊 and replacing never show together** (2026-09-20). A loose
+    /// Warning: **模糊 and replacing never show together.** A loose
     /// match covers characters nobody typed, so 「replace them all」 would hand
     /// the manuscript to a range the writer cannot predict. 模糊 is for
     /// finding; when it has found the place, `Esc` and change it there.
-    /// Warning: **從一個走不上去的格子出發也要對**（2026-09-29 修）。按了 `0` 或者
-    /// `3`，鍵就落在那一格上了，而它不在可走的名單裏——從前是拿「名單第 0 格」
-    /// 頂替，於是按完 `0` 再按 `k` 跳到了名單最底下的結果。所以走的是**畫出來
-    /// 的那張全表**，一格一格往那個方向找，碰到第一個停得住的就停。
+    /// Warning: **從一個走不上去的格子出發也要對。** 按了 `6` 或者 `3`，鍵就落在
+    /// 那一格上了，而它不在可走的名單裏——拿「名單第 0 格」頂替的話，按完號碼
+    /// 再按 `k` 就會跳到名單最底下的結果。所以走的是**畫出來的那張全表**，一格
+    /// 一格往那個方向找，碰到第一個停得住的就停。
     pub fn step(self, back: bool, replacing: bool, on_disk: bool, any_hits: bool) -> Field {
         let stops = |f: Field| match f {
             Field::Replace => replacing,
-            // **一行都没有的名單不是一個落腳點**（2026-10-04 報的）。空名單什麼
-            // 都不畫，於是鍵走進去就**看不見了**——原話：「如果按 j，光標不知道
-            // 去哪里了」。往回繞也撞得上：從「搜」按 `k` 繞過隊尾那個空名單纔到
+            // **一行都没有的名單不是一個落腳點**。空名單什麼都不畫，鍵走進去
+            // 就**看不見了**，按 `j` 之後不知道光標去了哪裏。往回繞也撞得上：從「搜」按 `k` 繞過隊尾那個空名單纔到
             // 「排除」，看着就是「消失一下再出現在別處」。
             Field::Results => any_hits,
             f => !f.walked_past(on_disk),
@@ -373,7 +361,7 @@ pub struct Hit {
     pub file: Option<std::path::PathBuf>,
     /// Which line of the buffer, counting from zero.
     pub line: usize,
-    /// **第幾個字**，從這一行的行首數起、從零起（2026-10-03）。
+    /// **第幾個字**，從這一行的行首數起、從零起。
     ///
     /// Warning: [`Self::mark`] 答不了這個：它是命中落在**摘錄**裏的位置，而摘錄是命中
     /// 前後各六十個字——命中靠後的時候前面還會多一個 `…`。管道那一邊要印的是
@@ -396,7 +384,7 @@ pub struct Hit {
     /// opened since may have moved everything after the first edit.
     pub nth: usize,
     /// **Which buffer it is in**, when the answer is a buffer rather than a
-    /// file — the 緩衝區 scope (2026-10-01 定).
+    /// file — the 緩衝區 scope.
     ///
     /// Warning: **An unnamed draft has no path to reach it by**, and two of them
     /// have the same `[scratch]` label, so a path cannot say which. Only the
@@ -439,9 +427,9 @@ pub const AROUND: usize = 60;
 pub enum Row {
     /// A file, with how many hits are in it and whether they are folded away.
     ///
-    /// Warning: **名字不夠認出一個檔**（2026-10-02 查出來的）。緩衝區那一檔裏
-    /// `path` 放的是**給人看的名字**，而没有名字的草稿一律叫 `[scratch]`——兩份
-    /// 草稿於是併成一行，標題寫着「2 處」，`r` 按下去只換得掉第一份裏的那一處。
+    /// Warning: **名字不夠認出一個檔。** 緩衝區那一檔裏 `path` 放的是**給人看的
+    /// 名字**，而没有名字的草稿一律叫 `[scratch]`——只認名字，兩份草稿就併成
+    /// 一行，標題寫着「2 處」，`r` 按下去只換得掉第一份裏的那一處。
     /// 所以認一個檔要名字加號碼這一對，和 [`Hit`] 一樣。
     File {
         path: std::path::PathBuf,
@@ -490,23 +478,23 @@ pub struct Search {
     pub hidden: bool,
     /// 連 `.gitignore` 裏的一起搜。出廠關着，見 [`Field::Hidden`]。
     pub ignored: bool,
-    /// **名單不封頂**（2026-10-03）。
+    /// **名單不封頂**。
     ///
     /// [`MOST`] 是給**面板**定的：「的」在一本小說裏是兩萬處，而名單是拿來走的，
     /// 没人走兩萬行。管道那一邊不是拿來走的——`ye --grep` 印給別的程序看，少印
-    /// 一條就是錯一條。出廠是封頂的，所以編輯器一切照舊。
+    /// 一條就是錯一條。出廠是封頂的，編輯器裏的名單就是封頂的那一種。
     pub uncapped: bool,
-    /// **包含或排除裏有一條寫錯了** —— 這一趟根本没跑（2026-10-02 審出來的）。
+    /// **包含或排除裏有一條寫錯了** —— 這一趟根本没跑。
     ///
     /// Warning: **數目那一格不許因此說「無結果」。** 零那一格最像「真的没有」，而這一
     /// 次連找都没找——狀態欄說了，標題也不能反着說。同 [`Search::cut`] 那一條。
     pub bad_glob: bool,
-    /// **這一趟没走完就停了** —— 數目那一格要說出來（2026-10-01 定）。
+    /// **這一趟没走完就停了** —— 數目那一格要說出來。
     ///
     /// 見 `editor::WALK_GRACE`：走查有一個地板加一隻錶，碰到頭就交出半截的答
-    /// 案。從前它一聲不吭，於是一張短清單看着像是全部。
+    /// 案。不說的話，一張短清單看着像是全部。
     pub cut: bool,
-    /// **一個檔没搜，因為它就是這一趟輸出要去的地方**，名字在這裏（2026-10-19）。
+    /// **一個檔没搜，因為它就是這一趟輸出要去的地方**，名字在這裏。
     /// 同 [`Search::cut`]：漏掉一個檔，呼叫方有義務說出來。`ye --grep` 說在
     /// stderr 上；編輯器裏開不出這一種（它的輸出不是檔）。
     pub own_output: Option<String>,
@@ -522,8 +510,7 @@ pub struct Search {
     /// answer to what is in the box now.
     pub stale: bool,
     /// **哪一版正文跑出來的這張名單**——`(當前緩衝區的號, 所有緩衝區的改動次數
-    /// 之和)`，没跑過就是 `None`（2026-09-25 報的：「我如果修改了buffer，然後回到
-    /// 搜索，按enter，搜索結果没有刷新」）。
+    /// 之和)`，没跑過就是 `None`。改過緩衝區再回到搜索按 `Enter`，名單要刷新。
     ///
     /// 對不上就是過期，`Editor::search_is_stale` 由它算出來。Warning: **不存「過期」這
     /// 個結論，存的是那一版的指紋**：結論要有人在正文改完的那一刻去改它，而改正文
@@ -535,9 +522,8 @@ pub struct Search {
     /// （見 `search_now` 裏「An open file is read from its buffer」那一段）。
     pub looked_at: Option<Mark>,
 
-    // **這裏從前有三格 `mine` / `mine_total` / `mine_is`**（2026-10-19 刪）：名單開頭
-    // 有幾處是「開搜索那一刻寫着的那一份」的。只重搜一份從此按**檔名**在名單上
-    // 找那一段（`Editor::the_run_of`），於是哪一份都換得了，也不必記着它是誰。
+    // 只重搜一份是按**檔名**在名單上找那一段（`Editor::the_run_of`），所以哪一份
+    // 都換得了，也不必記着開搜索那一刻寫着的是哪一份。
     /// Where the caret is in it, in characters.
     pub caret: usize,
     /// **記着的那個詞，畫成灰字**——`空格 /` 什麼都没選中的時候留下的。
@@ -545,31 +531,29 @@ pub struct Search {
     /// 框**是空的**，這一串只是寫在那裏給人看：接着打字它自己就没了，按 `Tab`
     /// 把它收進框裏。和 `/` 那一行一個樣（`modes.rs` 的 `prompt_ghost`）。
     ///
-    /// Warning: **從前這裏是 `all_selected: bool`，框裏真的站着一段選中的文字**
-    /// （2026-10-04 換掉）。原話：「這個其實會讓我感到疑惑的（這是什麼意思）。」
-    /// 整條反白在這個倉裏別處是「這一整段被選上了」，而那一刻它想說的是「上次
-    /// 搜的是這個」——同一個樣子說了兩件事。
+    /// Warning: **不是框裏真的站着一段選中的文字。** 整條反白在這個倉裏別處是
+    /// 「這一整段被選上了」，而這一刻要說的是「上次搜的是這個」——同一個樣子
+    /// 說兩件事，讀的人會看不懂。
     pub ghost: String,
     /// Which cell has the keys.
     pub field: Field,
-    /// **簡繁異字形**：「書齋」找得到「书斋」（2026-09-25，見 [`crate::glyphs`]）。
+    /// **簡繁異字形**：「書齋」找得到「书斋」（見 [`crate::glyphs`]）。
     ///
     /// Warning: **出廠開着**，所以 `Search` 要走 [`Search::new`] 而不是 `default()`——
     /// `derive(Default)` 給不出「這一項是 true」。`default()` 留給測試。
     ///
-    /// Warning: **2026-10-01 起正則底下也折**（這一行從前寫的是「和正則互斥」，
-    /// 2026-10-02 更正）。整串改寫確實會把使用者寫的 `.`、`*`、`[` 一起吃掉，所以
+    /// Warning: **正則底下也折。** 整串改寫確實會把使用者寫的 `.`、`*`、`[` 一起吃掉，所以
     /// 正則那一路走 [`crate::glyphs::widen_pattern`]：先把式子解析一遍，只動「原
     /// 樣打出來的那些字」。見 `Editor::search_pattern`。
     pub glyphs: bool,
     /// **拼音**：`shuzhai` 找得到「書齋」。出廠開着，見 [`Field::Pinyin`]。
     pub pinyin: bool,
-    /// **`/` 那一行的「繁簡拼音通配」**（2026-10-12 定，`A-j` 翻它）。
+    /// **`/` 那一行的「繁簡拼音通配」**（`A-j` 翻它）。
     ///
     /// 開着的時候 `/` 的式子折一道字形、再掛上讀音那一路——與這張面板上那兩個
     /// 勾同一套機制，只是面板分得開而那一行只有一個鍵。
     ///
-    /// Warning: **出廠是關的，而面板上那兩個勾出廠是開的**（作者 2026-10-12 定）。
+    /// Warning: **出廠是關的，而面板上那兩個勾出廠是開的。**
     /// 兩個數不一樣不是忘了對齊：`/` 是最常按的那一個鍵，而拼音通配會讓
     /// `/de`、`/shi` 這種英文短詞連帶配上一堆漢字。那一行要的是「按一下才通配」。
     pub wild: bool,
@@ -593,11 +577,10 @@ pub struct Search {
     pub total: usize,
     /// **每一個有命中的檔，一個不落**——`(檔名, 緩衝區號)`，和 [`Hit`] 同一對。
     ///
-    /// Warning: **`R` 要的是這一張，不是 `hits`**（2026-10-02 查出來的）。`hits` 封頂
-    /// [`MOST`] 條，而 `total` 不封頂；`R` 從前拿 `hits` 推出要動哪幾個檔，於是
-    /// 一本大書裏**排在第 500 處之後的那幾個檔一個都没動**，而問句照着 `total`
-    /// 問「把這 602 處全部換掉？」，換完說「共替換 600 處」。一聲不吭地換了一半，
-    /// 正是 `R` 最不該犯的錯。
+    /// Warning: **`R` 要的是這一張，不是 `hits`。** `hits` 封頂 [`MOST`] 條，而
+    /// `total` 不封頂；拿 `hits` 推要動哪幾個檔的話，一本大書裏**排在第 500 處
+    /// 之後的那幾個檔一個都不動**，而問句照着 `total` 問「把這 602 處全部換掉？」，
+    /// 換完說「共替換 600 處」。一聲不吭地換了一半，正是 `R` 最不該犯的錯。
     ///
     /// 這張表按**檔**算，不按處算，所以它的長度是這棵樹裏有命中的檔數——封頂没有
     /// 意義，也不會大到哪裏去。

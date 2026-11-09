@@ -95,11 +95,10 @@ impl Syntax {
 
 /// What a file's *name* says, when it says anything.
 ///
-/// Warning: **副檔名原樣往下傳，轉小寫是查表那一步自己的事**（2026-10-08 定）。
-/// 從前這一步就把 `.S` 捲成了 `.s`，於是下游再也分不出兩者——而汇編正好
-/// 靠這一個字母的大小寫分家（`.S` 是要走預處理的那一種）。原話：「我觉得根本的
-/// 方法是副檔名不轉小寫？或者先轉小寫再查，但是看到 `.s` 這樣有歧義的再看一下原始
-/// 到底是大寫还是小寫」。
+/// Warning: **副檔名原樣往下傳，轉小寫是查表那一步自己的事**。
+/// 這一步若先把 `.S` 捲成 `.s`，下游就再也分不出兩者——而汇編正好
+/// 靠這一個字母的大小寫分家（`.S` 是要走預處理的那一種）。查表先轉小寫，
+/// 碰到 `.s` 這樣有歧義的，再看原始那個字母是大寫還是小寫。
 pub fn from_extension(name: &str) -> Option<Syntax> {
     let raw = name.rsplit_once('.')?.1;
     match raw.to_ascii_lowercase().as_str() {
@@ -133,11 +132,11 @@ const ENOUGH: i32 = 3;
 /// commonest thing a `.txt` holds, and it is the reading that adds nothing to
 /// the page. A tie above the bar goes to Markdown, which is the friendlier of
 /// the two to be wrong about.
-/// Same question, asked of a rope — **and只切它真正要看的那一截**（2026-10-13）。
+/// Same question, asked of a rope — **and只切它真正要看的那一截**。
 ///
-/// [`sniff`] 只讀頭 [`SAMPLE`] 行，而開檔那一處從前餵給它的是 `rope.to_string()`：
-/// 一份 `.txt` 就為了猜一次文體把整份正文複製一遍（`.txt` 不在副檔名表裏，所以**每
-/// 一份稿子都走這條路**）。量過：361 MB 的 `.txt`，這一句一個人佔 360 MB。
+/// [`sniff`] 只讀頭 [`SAMPLE`] 行，所以開檔那一處不許餵它 `rope.to_string()`：
+/// 那是為了猜一次文體把整份正文複製一遍（`.txt` 不在副檔名表裏，所以**每
+/// 一份稿子都走這條路**）。量過：361 MB 的 `.txt`，那一句一個人佔 360 MB。
 ///
 /// 兩道閘：頭 `SAMPLE` 行，再夾一個字符上限——「一行就是全文」的檔是有的，一個幾
 /// GB 的 JSON 可以只有一行。
@@ -153,8 +152,8 @@ const SNIFF_CHARS: usize = 64 * 1024;
 pub fn sniff(text: &str) -> Syntax {
     let mut typst = 0i32;
     let mut markdown = 0i32;
-    // **Code is neither** (review, 2026-11-06): a C snippet pasted into a
-    // scratch has `#include <…>` and `//` comments, and was read as Typst.
+    // **Code is neither**: a C snippet pasted into a scratch has
+    // `#include <…>` and `//` comments, and is not Typst.
     // Lines ending in `;` and C's preprocessor count against both, and with
     // them in the file a `//` is a comment of the code's.
     let mut code = 0i32;
@@ -256,8 +255,8 @@ mod tests {
         // The ones that say nothing are what the sniffing is for.
         assert_eq!(from_extension("ch01.txt"), None);
         assert_eq!(from_extension("ch01"), None);
-        // The four grammars of 2026-10-29: `.cpp` used to be sniffed, and a
-        // `#include` line read as Typst.
+        // Code is named by its extension, not sniffed: a `#include` line
+        // would read as Typst.
         use crate::code::Language;
         assert_eq!(from_extension("main.cpp"), Some(Syntax::Code(Language::Cpp)));
         assert_eq!(from_extension("app.ts"), Some(Syntax::Code(Language::TypeScript)));
@@ -285,7 +284,7 @@ mod tests {
             sniff("那年冬天，雪下得比往常都早。\n屋簷下掛滿了冰稜。\n"),
             Syntax::Text
         );
-        // **問一棵樹，答案要和問整份正文一樣**（2026-10-13）：`sniff_rope` 只切
+        // **問一棵樹，答案要和問整份正文一樣**：`sniff_rope` 只切
         // 頭幾行出來，而那正是 `sniff` 唯一讀得到的部分。
         for text in [
             "#import \"a\"\n= 題\n",
@@ -324,7 +323,7 @@ mod tests {
         assert_eq!(sniff("// 待補\n// 再補\n"), Syntax::Typst);
     }
 
-    /// **A snippet of code is not markup** (review, 2026-11-06).
+    /// **A snippet of code is not markup**.
     #[test]
     fn code_pasted_into_a_scratch_is_neither() {
         assert_eq!(sniff("#include <stdio.h>\nint main() {\n  printf(\"$x$\");\n}\n"), Syntax::Text);

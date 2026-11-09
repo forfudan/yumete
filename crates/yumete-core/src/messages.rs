@@ -32,14 +32,14 @@
 //! ## The languages
 //!
 //! `en` and `zhs` 简体 (alias `sc`) are written for every message; `zht` 繁體
-//! (aliases `tc`, `zh`) only where the conversion gets it wrong (2026-11-07).
+//! (aliases `tc`, `zh`) only where the conversion gets it wrong.
 //! `build.rs` makes every other `zht` from `zhs` as `:convert s c` does
 //! (OpenCC `s2t`, then the 大陸通規 glyph table) and warns when a written
 //! `zht` does not convert back to its `zhs`. Traditional is what the editor
 //! shows by default; English and Simplified fall back to it when empty, so a
 //! missing translation is a missing *translation*, never a missing message.
 //!
-//! **A message is composed in `zhs`, in 大陆用语** (since 2026-09-08): the
+//! **A message is composed in `zhs`, in 大陆用语**: the
 //! reason is vocabulary rather than characters — 檔案 and 文件 are the same
 //! file, 預設 and 默认 the same default, and a sentence drafted in 繁體 picks
 //! the 港臺 word for both. Converting runs over the characters; the words
@@ -82,7 +82,7 @@ impl Language {
     }
 }
 
-/// **The language a locale asks for** (2026-10-29), for a config that does
+/// **The language a locale asks for**, for a config that does
 /// not say: `zh_TW`, `zh_HK`, `zh_MO` or a `Hant` script is 繁體, any other
 /// `zh` is 简体, and everything else — `C` and `POSIX` among them — English.
 pub fn of_locale(locale: &str) -> Language {
@@ -137,9 +137,8 @@ pub fn language() -> Language {
 }
 
 /// The table: one file per area under `messages/`, each holding the tags of
-/// the prefixes its first line names (2026-10-31; it was one file of 14,000
-/// lines), read from the copies `build.rs` writes, where every message has its
-/// `zht` (2026-11-07: made from `zhs` unless written by hand).
+/// the prefixes its first line names, read from the copies `build.rs` writes,
+/// where every message has its `zht` (made from `zhs` unless written by hand).
 const TABLES: &[&str] = &[
     include_str!(concat!(env!("OUT_DIR"), "/messages/action.toml")),
     include_str!(concat!(env!("OUT_DIR"), "/messages/cmd.toml")),
@@ -316,7 +315,7 @@ macro_rules! say {
 
 #[cfg(test)]
 mod tests {
-    /// **What a locale asks for** (2026-10-29).
+    /// **What a locale asks for**.
     #[test]
     fn a_locale_picks_the_script() {
         assert_eq!(of_locale("zh_TW.UTF-8"), Language::Traditional);
@@ -372,7 +371,7 @@ mod tests {
         assert_eq!(fill("{7}", &["x"]), "{7}");
     }
 
-    /// **A value holds no `"` and no `\`** (2026-11-03): the reader takes
+    /// **A value holds no `"` and no `\`**: the reader takes
     /// what is between the line's first and last quote and knows no escapes,
     /// so either would be read through, and the file would stop being TOML
     /// for every other tool (`cmd.commands.clipboard` was, with a `␣"`).
@@ -388,9 +387,9 @@ mod tests {
 
     #[test]
     fn every_message_is_written_in_the_simplified_first() {
-        // The rule of 2026-09-08: a message is composed in `zhs` and converted
+        // The rule: a message is composed in `zhs` and converted
         // into `zht`. `zht` cannot be checked here because the parser already
-        // drops a block without it; `zhs` can, and a missing one is now the
+        // drops a block without it; `zhs` can, and a missing one is the
         // shape of the mistake — a message drafted in the second language.
         let table = super::table();
         let missing: Vec<&str> = table

@@ -6,7 +6,7 @@
 //! 人物.md, 地理.md, 門派.md without a new idea. Everything here is a function
 //! of files and text; the editor decides when to read and what to do with it.
 //!
-//! **A folder of entries** (2026-10-30, the Obsidian shape): `.yumete/wiki/`
+//! **A folder of entries** (the Obsidian shape): `.yumete/wiki/`
 //! is read when it is there, every file in it one entry named by the file;
 //! a `[yumete] 百科/` line (trailing slash) or `wiki: 百科/` in `wiki.md`'s
 //! front matter names another such folder — `..` from `.yumete/wiki.md` is
@@ -36,7 +36,7 @@ const WIKI_TXT: &str = "wiki.txt";
 pub enum Mark {
     /// Not at all.
     Off,
-    /// 金 ink, in both layouts — the factory answer (2026-09-17).
+    /// 金 ink, in both layouts — the factory answer.
     #[default]
     Color,
     /// A dotted underline across; a ground (第 80 檔) down a 縱, where an
@@ -70,11 +70,11 @@ pub enum Source {
     /// Named by a directive and not there.
     Missing { path: PathBuf },
     /// There, and unreadable — no permission, or not UTF-8. Warning: **Not the same
-    /// as missing** (2026-09-19, caught in review): `read_to_string` folds
-    /// ENOENT, EACCES and invalid UTF-8 into one `Err`, so a `wiki.md` in
-    /// GB18030 — plausible for this audience — was reported as 「there is no
-    /// such file」 about a file plainly sitting there. This is the feature's
-    /// error channel; it has to name what really happened.
+    /// as missing**: `read_to_string` folds ENOENT, EACCES and invalid UTF-8
+    /// into one `Err`, and a `wiki.md` in GB18030 — plausible for this
+    /// audience — must not come back as 「there is no such file」 while it
+    /// plainly sits there. This is the feature's error channel; it has to name
+    /// what really happened.
     Unreadable { path: PathBuf, why: String },
     /// Outside the book, absolute, or through a link that leaves it.
     Refused { named: String, from: PathBuf },
@@ -94,9 +94,9 @@ pub struct Wiki {
     pub by_name: HashMap<String, Vec<usize>>,
     pub sources: Vec<Source>,
     /// [`Self::files`], canonicalised — worked out **once, here**, because
-    /// [`Self::came_from`] is asked every frame (2026-09-19). It used to
-    /// canonicalise both sides of every comparison on the spot: two syscalls
-    /// per wiki file per frame, ≈2.8 ms a frame on a book with sixty includes.
+    /// [`Self::came_from`] is asked every frame. Canonicalising both sides
+    /// of every comparison on the spot would cost two syscalls per wiki file
+    /// per frame, ≈2.8 ms a frame on a book with sixty includes.
     canonical: Vec<PathBuf>,
 }
 
@@ -110,17 +110,15 @@ impl Wiki {
             let Some(path) = found(root) else { continue };
             // Includes stay under the directory holding `.yumete/` — or, for
             // the global wiki, the directory it is kept in.
-            // Warning: **Canonicalise the wiki's own path first** (2026-09-19,
-            // caught in review). The bound is 「the directory holding
-            // `.yumete/`」, taken as two parents up — and when the book was
+            // Warning: **Canonicalise the wiki's own path first**. The bound is
+            // 「the directory holding `.yumete/`」, taken as two parents up — and when the book was
             // opened by a *relative* path (`yumete ch.md`, which is how one is
             // usually opened) that is the empty path, `canonicalize("")` fails,
-            // and `Path::starts_with("")` is true of everything. The same file
-            // opened by an absolute path refused an include pointing out of the
-            // book; opened by a relative one it read it. One of those two
-            // answers had to be wrong, and it was the permissive one.
+            // and `Path::starts_with("")` is true of everything: the same file
+            // would refuse an include pointing out of the book when opened by
+            // an absolute path and read it when opened by a relative one.
             //
-            // An empty bound now **refuses everything** rather than admitting
+            // An empty bound **refuses everything** rather than admitting
             // it: a sandbox that cannot say where its wall is has no wall.
             let here = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
             let bound = match is_global {
@@ -741,9 +739,7 @@ mod tests {
     ///
     /// The include is written in the book's own `wiki.md` and points out of the
     /// `.yumete` directory; the file it names has its own `#` title, so the
-    /// entries under it sit at depth 2 and 3. This began as a scratch test that
-    /// printed what it found and asserted nothing — which is a test that passes
-    /// whatever happens (tidied 2026-09-19).
+    /// entries under it sit at depth 2 and 3.
     #[test]
     fn a_folder_of_files_is_one_entry_each_with_aliases_and_groups() {
         let dir = book(&[

@@ -1,10 +1,9 @@
-//! **The manual is not a development log** (2026-10-09).
+//! **The manual is not a development log.**
 //!
-//! Found by the author searching his own manual and hitting a wall of
-//! 「（2026-09-25 定）」: 「你这个是用户手册还是开发记录？？？？」. He was right. The cause
-//! was a habit of mine — I maintained the manual append-only, adding a paragraph for
-//! every behaviour change instead of editing the paragraph that describes the
-//! behaviour, in the register of a code comment: date, 原話, reason.
+//! A manual maintained append-only — a paragraph added for every behaviour change
+//! instead of editing the paragraph that describes the behaviour — ends up in the
+//! register of a code comment: date, quotation, reason. A reader searching it hits a
+//! wall of decision dates.
 //!
 //! Measured against vim, nvim, emacs, helix, kakoune, micro, nano and zed: across
 //! 212,000 words of those eight manuals there is **not one decision date**, and the five
@@ -108,13 +107,13 @@ fn regex_lite_hit(mark: &str, text: &str) -> bool {
     }
 }
 
-/// **A manual with 155 warnings has none** (2026-10-09).
+/// **A manual with 155 warnings has none.**
 ///
-/// `Warning:` had become an emphasis marker: 23.1 per 1000 lines, against 0.9–7.6 across
-/// vim, nvim, emacs, helix, kakoune, micro, nano and zed. 137 of them were ordinary
-/// sentences wearing a label, and dropping the label cost the prose nothing. What is left
-/// is data loss, a silently wrong result, or a limitation the reader walks into: `[^書]`
-/// excluding `书`, `$1` working only on the regex path, a config file yumete overwrites.
+/// `Warning:` is not an emphasis marker: vim, nvim, emacs, helix, kakoune, micro, nano
+/// and zed use 0.9–7.6 per 1000 lines. An ordinary sentence wearing the label loses
+/// nothing when the label goes. What earns one is data loss, a silently wrong result, or
+/// a limitation the reader walks into: `[^書]` excluding `书`, `$1` working only on the
+/// regex path, a config file yumete overwrites.
 ///
 /// The ceiling is a **ratchet, with a little headroom**. It is not a law of nature — if a
 /// genuine new hazard turns up, raise it in the same commit that adds the warning, which
