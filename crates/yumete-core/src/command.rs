@@ -1180,7 +1180,9 @@ impl Param {
 
     /// Whether it takes the whole of what is left rather than one word.
     fn takes_the_rest(&self) -> bool {
-        matches!(self, Param::Path | Param::Free(_) | Param::Options(_))
+        // A setting's name as the panel shows it may hold spaces
+        // (`first-line indent`, 2026-11-09).
+        matches!(self, Param::Path | Param::Free(_) | Param::Options(_) | Param::Settings)
     }
 
     /// Whether a word this parameter does not list is still taken — the
@@ -1554,6 +1556,19 @@ fn read_params(
             // here would hand it a different command.
             args.push(match matches!(param, Param::Path) {
                 false if matches!(param, Param::Options(_)) => spelt_out(left, param.words().unwrap_or_default()),
+                // A path by its shortest unambiguous spelling, as a word is;
+                // anything else whole, its quotes off, for the panel to find.
+                false if matches!(param, Param::Settings) => {
+                    let name = ['"', '\'']
+                        .iter()
+                        .find_map(|q| left.strip_prefix(*q).and_then(|n| n.strip_suffix(*q)))
+                        .unwrap_or(left)
+                        .trim();
+                    match pick(name, param.words().unwrap_or_default()) {
+                        Some(word) => word.name.to_string(),
+                        None => name.to_string(),
+                    }
+                }
                 true => match unquote(left) {
                     Some(path) => path,
                     None => {

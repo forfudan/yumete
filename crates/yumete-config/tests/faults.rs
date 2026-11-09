@@ -128,3 +128,26 @@ fn the_flavor_reads_a_level_and_items_by_name() {
     let item = yumete_config::FlavorItem::DeleteKeepsRegister;
     assert!(config.keys.flavor.on(item, yumete_config::KeyPreset::Helix));
 }
+
+/// **A guide and a paragraph mark are one character each** (2026-11-09,
+/// reported: `""` and `"ab"` were taken): the loader says so on the line and
+/// keeps the factory's; a wide mark is one character, a wide guide is not.
+#[test]
+fn a_single_character_setting_takes_one_character() {
+    for (key, bad) in [
+        ("indent_guides_character", "\"\""),
+        ("indent_guides_character", "\"ab\""),
+        ("indent_guides_character", "\"字\""),
+        ("indent_symbol", "\"\""),
+        ("indent_symbol", "\"ab\""),
+    ] {
+        let text = format!("[editor]\nindent = 2\n{key} = {bad}\n");
+        let faults = faults_in(&text);
+        assert_eq!(faults.len(), 1, "{text}: {faults:?}");
+        assert_eq!((faults[0].line, faults[0].fatal), (2, false), "{text}");
+        assert!(faults[0].said.contains(key), "{faults:?}");
+    }
+    for (key, good) in [("indent_guides_character", "\"┆\""), ("indent_symbol", "\"¶\""), ("indent_symbol", "\"〇\"")] {
+        assert!(faults_in(&format!("[editor]\n{key} = {good}\n")).is_empty(), "{key} = {good}");
+    }
+}

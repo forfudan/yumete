@@ -135,6 +135,46 @@ pub struct Sheet {
     /// there, so what it says is not in force and the panel does not show it
     /// as if it were; `:w` will not write it.
     pub unread: Option<(usize, String)>,
+    /// **When the file was last seen and how long it was** (2026-11-09):
+    /// another time or length on the disk is a change made outside, and the
+    /// file is read again ([`Panel::refresh`]). `None` ＝ not there.
+    stamp: Option<(std::time::SystemTime, u64)>,
+}
+
+/// A file's time and length, or `None` when it is not there.
+fn stamp(path: &std::path::Path) -> Option<(std::time::SystemTime, u64)> {
+    let meta = std::fs::metadata(path).ok()?;
+    Some((meta.modified().ok()?, meta.len()))
+}
+
+/// **What the disk holds now**: the text, `None` when the file is not there
+/// (2026-11-09, reported: a file deleted outside was written back whole from
+/// the text the panel had read), an error when it cannot be read.
+fn read_disk(path: &std::path::Path) -> Result<Option<String>, SaveError> {
+    match std::fs::read_to_string(path) {
+        Ok(text) => Ok(Some(text)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(SaveError::Io(format!("{}: {e}", path.display()))),
+    }
+}
+
+/// **Write `text` as the file, or take the file away for `None`** — what
+/// `u` puts back when the file was not there before.
+fn put(path: &std::path::Path, text: Option<&str>) -> Result<(), SaveError> {
+    match text {
+        Some(text) => {
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| SaveError::Io(format!("{}: {e}", parent.display())))?;
+            }
+            write_atomically(path, text).map_err(|e| SaveError::Io(format!("{}: {e}", path.display())))
+        }
+        None => match std::fs::remove_file(path) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+                Err(SaveError::Io(format!("{}: {e}", path.display())))
+            }
+            _ => Ok(()),
+        },
+    }
 }
 
 impl Sheet {
@@ -143,7 +183,17 @@ impl Sheet {
         let read = path.as_ref().and_then(|p| std::fs::read_to_string(p).ok());
         let there = read.is_some();
         let text = read.unwrap_or_default();
-        Sheet::of_text(path, there, text)
+        let seen = path.as_deref().and_then(stamp);
+        Sheet { stamp: seen, ..Sheet::of_text(path, there, text) }
+    }
+
+    /// **What the disk holds now, taken in**: the text, whether it is there,
+    /// what it says, and the stamp the next change outside is told by.
+    fn took(&mut self, read: Option<String>) {
+        let edits = std::mem::take(&mut self.edits);
+        let fresh = Sheet::of_text(self.path.clone(), read.is_some(), read.unwrap_or_default());
+        let seen = self.path.as_deref().and_then(stamp);
+        *self = Sheet { edits, stamp: seen, ..fresh };
     }
 
     /// A sheet of `text`, as if read from `path`.
@@ -160,6 +210,7 @@ impl Sheet {
             there,
             text,
             edits: BTreeMap::new(),
+            stamp: None,
         }
     }
 
@@ -348,9 +399,27 @@ pub struct Panel {
     redo: Vec<Step>,
 }
 
-/// **One change as written**, for `u` and `C-r`: which file, which key,
-/// what it said before (`None` ＝ not there) and after.
-type Step = Vec<(Which, String, Option<String>, Option<String>)>;
+/// **One change as written**, for `u` and `C-r`: each file it wrote.
+type Step = Vec<Stepped>;
+
+/// **One file's part of a change** (2026-11-09, reported: `u` after `r`
+/// lost the comment after the line, and a table emptied and taken back came
+/// back bare). The file as it was just before and just after, whole, so
+/// taking the change back writes back exactly what was there; and the keys,
+/// for a file changed outside since, where writing the whole text back
+/// would undo that change too.
+#[derive(Debug, Clone)]
+struct Stepped {
+    which: Which,
+    path: PathBuf,
+    /// The text read from the disk just before the change; `None` ＝ not
+    /// there.
+    before: Option<String>,
+    /// The text written.
+    after: Option<String>,
+    /// `表.鍵`, what it said before and after (`None` ＝ not written).
+    keys: Vec<(String, Option<String>, Option<String>)>,
+}
 
 /// What the command row is typing for the panel.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -359,6 +428,12 @@ pub enum Typing {
     Value,
     /// The search: the list narrows as it is typed.
     Search,
+    /// **What follows a `:`** (2026-11-09, reported: the keys of `:e
+    /// notes.md` ran as the panel's own, and `e` opened the config file and
+    /// took the rest as typing). The line takes everything up to Enter or
+    /// Esc; `q` and its kin close the panel, and anything else is said not
+    /// to be taken.
+    Command,
 }
 
 /// The list `Enter` opens on a choice.
@@ -571,17 +646,25 @@ impl Panel {
 
     /// **Go to a setting by name** (`:settings editor.scrolloff`): its TOML
     /// path, its key alone when only one setting has it, or its name as the
-    /// panel shows it (`label`, the front end translates). Gives whether it
-    /// was found; a search in force is let go.
-    pub fn go_to(&mut self, name: &str, label: impl Fn(&Setting) -> String) -> bool {
+    /// panel shows it — `names` gives it in every language the front end
+    /// has, so 首行缩进 finds the row whichever script the panel is drawn in
+    /// (2026-11-09). Quotes around the name are let go, and case is not
+    /// asked. Gives whether it was found; a search in force is let go.
+    pub fn go_to(&mut self, name: &str, names: impl Fn(&Setting) -> Vec<String>) -> bool {
         let name = name.trim();
+        let name = ['"', '\'']
+            .iter()
+            .find_map(|q| name.strip_prefix(*q).and_then(|n| n.strip_suffix(*q)))
+            .unwrap_or(name)
+            .trim();
         let all = all_rows();
         let by_path = all.iter().position(|s| s.path() == name);
         let by_key = || {
             let keyed: Vec<usize> = (0..all.len()).filter(|i| all[*i].key == name).collect();
             (keyed.len() == 1).then(|| keyed[0])
         };
-        let by_label = || all.iter().position(|s| label(s) == name);
+        let folded = name.to_lowercase();
+        let by_label = || all.iter().position(|s| names(s).iter().any(|n| n.trim().to_lowercase() == folded));
         match by_path.or_else(by_key).or_else(by_label) {
             Some(at) => {
                 self.found = None;
@@ -653,10 +736,45 @@ impl Panel {
 
     /// 改動要落到的那一份。
     fn sheet_mut(&mut self) -> &mut Sheet {
-        match self.into {
+        self.sheet_mut_of(self.into)
+    }
+
+    /// 指名那一份，要改的。
+    fn sheet_mut_of(&mut self, which: Which) -> &mut Sheet {
+        match which {
             Which::Global => &mut self.global,
             Which::Local => &mut self.local,
         }
+    }
+
+    /// **A file changed outside since the panel last looked** (2026-11-09,
+    /// reported: changed outside from 3 to 9, then set to 5 in the panel,
+    /// `u` wrote 3): read again, so the panel shows what it says now and a
+    /// change starts from it. A file gone is an empty one. Gives the files
+    /// read again, for the front end to say once.
+    pub fn refresh(&mut self) -> Vec<PathBuf> {
+        let mut moved = Vec::new();
+        for which in [Which::Global, Which::Local] {
+            let sheet = self.sheet_mut_of(which);
+            let Some(path) = sheet.path.clone() else { continue };
+            if stamp(&path) == sheet.stamp {
+                continue;
+            }
+            // Not readable just now: asked again next time.
+            let Ok(read) = read_disk(&path) else { continue };
+            let same = read.as_deref().unwrap_or("") == sheet.text && read.is_some() == sheet.there;
+            sheet.took(read);
+            if !same {
+                moved.push(path);
+            }
+        }
+        if !moved.is_empty() {
+            // An annotation mode may have come or gone with the file.
+            if let Some(at) = self.page {
+                self.page = Some(at.min(self.page_len().saturating_sub(1)));
+            }
+        }
+        moved
     }
 
     /// 改動要落到的那一份（只讀）。
@@ -1338,7 +1456,7 @@ impl Panel {
     /// write. A change that cannot be written is let go, so the panel shows
     /// the files as they are.
     pub fn flush(&mut self) -> Result<Option<Saved>, SaveError> {
-        self.write(true)
+        self.write()
     }
 
     /// **`u`**: the last change written, written back. `Ok(None)` when
@@ -1352,48 +1470,100 @@ impl Panel {
         self.replay(false)
     }
 
-    /// One step of `u` (`back`) or `C-r`, staged and written, and handed to
-    /// the other stack.
+    /// **One step of `u` (`back`) or `C-r`**, written and handed to the
+    /// other stack (2026-11-09). A file the disk still holds as that step
+    /// left it gets its other text back exactly, comments and order and all;
+    /// a file changed outside since gets the step's keys set again on what
+    /// it holds now, so the change outside stays.
     fn replay(&mut self, back: bool) -> Result<Option<Saved>, SaveError> {
-        let step = match back {
+        let popped = match back {
             true => self.undo.pop(),
             false => self.redo.pop(),
         };
-        let Some(step) = step else { return Ok(None) };
-        for (which, path, before, after) in &step {
-            let want = match back {
-                true => before,
-                false => after,
-            };
-            let sheet = match which {
-                Which::Global => &mut self.global,
-                Which::Local => &mut self.local,
-            };
-            let change = match want {
-                Some(repr) => Change::Written(repr.clone()),
-                None => Change::Drop,
-            };
-            sheet.edits.insert(path.clone(), change);
+        let Some(mut step) = popped else { return Ok(None) };
+        let keep = |panel: &mut Panel, step: Step| match back {
+            true => panel.undo.push(step),
+            false => panel.redo.push(step),
+        };
+        // Every file is asked before any is written.
+        let plan = match self.replan(&step, back) {
+            Ok(plan) => plan,
+            Err(err) => {
+                keep(self, step);
+                return Err(err);
+            }
+        };
+        let mut saved = Saved::default();
+        for (entry, (disk, want, moved)) in step.iter_mut().zip(plan) {
+            if let Err(err) = put(&entry.path, want.as_deref()) {
+                keep(self, step);
+                return Err(err);
+            }
+            // The step now says what this write did, so the way back is exact
+            // again, a change made outside meanwhile included.
+            match back {
+                true => (entry.before, entry.after) = (want.clone(), disk),
+                false => (entry.before, entry.after) = (disk, want.clone()),
+            }
+            self.sheet_mut_of(entry.which).took(want);
+            if moved {
+                saved.changed_underneath.push(entry.path.clone());
+            }
+            saved.wrote.push(entry.path.clone());
         }
-        let wrote = self.write(false);
-        match (&wrote, back) {
-            (Ok(_), true) => self.redo.push(step),
-            (Ok(_), false) => self.undo.push(step),
-            // Not written: the step stays where it was, to be tried again.
-            (Err(_), true) => self.undo.push(step),
-            (Err(_), false) => self.redo.push(step),
+        match back {
+            true => self.redo.push(step),
+            false => self.undo.push(step),
         }
-        wrote
+        Ok(Some(saved))
     }
 
-    /// **兩份各寫各的，寫完把改動清掉**；`record` 記下這一步給 `u`。
+    /// What each file of a step will hold after `u` (`back`) or `C-r`: what
+    /// the disk holds now, what it will hold, and whether it had been
+    /// changed outside since.
+    #[allow(clippy::type_complexity)]
+    fn replan(&self, step: &Step, back: bool) -> Result<Vec<(Option<String>, Option<String>, bool)>, SaveError> {
+        step.iter()
+            .map(|entry| {
+                let disk = read_disk(&entry.path)?;
+                let (from, want) = match back {
+                    true => (&entry.after, &entry.before),
+                    false => (&entry.before, &entry.after),
+                };
+                if disk == *from {
+                    return Ok((disk, want.clone(), false));
+                }
+                let now = disk.as_deref().unwrap_or("");
+                if let Some((line, said)) = crate::faults::unread(now) {
+                    return Err(SaveError::Unread { path: entry.path.clone(), line, said });
+                }
+                let changes: Vec<(String, Change)> = entry
+                    .keys
+                    .iter()
+                    .map(|(key, before, after)| {
+                        let to = if back { before } else { after };
+                        (key.clone(), to.clone().map_or(Change::Drop, Change::Written))
+                    })
+                    .collect();
+                let fresh = rewrite(now, &changes).map_err(SaveError::Io)?;
+                // A file gone, and nothing to put in it: it stays gone.
+                let want = match disk.is_none() && fresh.trim().is_empty() {
+                    true => None,
+                    false => Some(fresh),
+                };
+                Ok((disk, want, true))
+            })
+            .collect()
+    }
+
+    /// **兩份各寫各的，寫完把改動清掉**，記下這一步給 `u`。
     ///
     /// Warning: **A file the loader cannot read is not written** (2026-11-08),
     /// and then nothing is: both are asked before either is touched. Writing
     /// into it would leave it as unread as before and say the settings were
     /// in force (reported: a TOML error came back as a raw, truncated English
     /// line inside the Chinese panel).
-    fn write(&mut self, record: bool) -> Result<Option<Saved>, SaveError> {
+    fn write(&mut self) -> Result<Option<Saved>, SaveError> {
         if !self.dirty() {
             return Ok(None);
         }
@@ -1408,50 +1578,50 @@ impl Panel {
         };
         let mut saved = Saved::default();
         let mut step: Step = Vec::new();
-        for (which, path, moved, fresh) in plan {
-            if let Some(parent) = path.parent() {
-                if let Err(e) = std::fs::create_dir_all(parent) {
-                    self.global.edits.clear();
-                    self.local.edits.clear();
-                    return Err(SaveError::Io(format!("{}: {e}", parent.display())));
-                }
-            }
-            if let Err(e) = write_atomically(&path, &fresh) {
+        for (which, path, now, fresh) in plan {
+            if let Err(err) = put(&path, Some(&fresh)) {
                 self.global.edits.clear();
                 self.local.edits.clear();
-                return Err(SaveError::Io(format!("{}: {e}", path.display())));
+                return Err(err);
             }
-            let sheet = match which {
-                Which::Global => &mut self.global,
-                Which::Local => &mut self.local,
-            };
-            for (key, change) in std::mem::take(&mut sheet.edits) {
-                let before = sheet.declared.get(&key).cloned();
-                let after = match change {
-                    Change::Drop => None,
-                    other => Some(written(&other)),
-                };
-                if before != after {
-                    step.push((which, key, before, after));
-                }
+            let sheet = self.sheet_mut_of(which);
+            // Warning: **"before" is what the disk held just now**, not what the
+            // panel read at opening (2026-11-09, reported: changed outside from
+            // 3 to 9, set to 5 here, and `u` wrote 3).
+            let was = declared_in(now.as_deref().unwrap_or(""));
+            let keys: Vec<(String, Option<String>, Option<String>)> = std::mem::take(&mut sheet.edits)
+                .into_iter()
+                .map(|(key, change)| {
+                    let after = match change {
+                        Change::Drop => None,
+                        other => Some(written(&other)),
+                    };
+                    (key.clone(), was.get(&key).cloned(), after)
+                })
+                .filter(|(_, before, after)| before != after)
+                .collect();
+            let moved = now.as_deref().unwrap_or("") != sheet.text || now.is_some() != sheet.there;
+            if now.as_deref() != Some(fresh.as_str()) {
+                step.push(Stepped { which, path: path.clone(), before: now, after: Some(fresh.clone()), keys });
             }
-            sheet.text = fresh;
-            sheet.declared = declared_in(&sheet.text);
-            sheet.there = true;
+            sheet.took(Some(fresh));
             if moved {
                 saved.changed_underneath.push(path.clone());
             }
             saved.wrote.push(path);
         }
-        if record && !step.is_empty() {
+        if !step.is_empty() {
             self.undo.push(step);
             self.redo.clear();
         }
         Ok(Some(saved))
     }
 
-    /// What each file with a change will say, read afresh from the disk.
-    fn plan(&self) -> Result<Vec<(Which, PathBuf, bool, String)>, SaveError> {
+    /// What each file with a change will say, read afresh from the disk:
+    /// the file, what the disk holds now (`None` ＝ not there), and the new
+    /// text.
+    #[allow(clippy::type_complexity)]
+    fn plan(&self) -> Result<Vec<(Which, PathBuf, Option<String>, String)>, SaveError> {
         let mut plan = Vec::new();
         for which in [Which::Global, Which::Local] {
             let sheet = self.sheet_of(which);
@@ -1465,16 +1635,19 @@ impl Panel {
             // 這段時間裏那個檔可能被外面改了，拿舊正文改完整份寫回去會把人家改的
             // 別的鍵一起頂掉。改的那幾項是「鍵 → 新值」，套在哪一份正文上都成立。
             //
-            // Warning: 讀不到就用手上這一份（檔剛被刪掉/權限没了）：那時
-            // `write_atomically` 自己會報。
-            let now = std::fs::read_to_string(&path).unwrap_or_else(|_| sheet.text.clone());
-            if let Some((line, said)) = crate::faults::unread(&now) {
+            // Warning: **A file deleted outside is an empty one** (2026-11-09,
+            // reported: it was written back whole from the text the panel had
+            // read, every line the deletion took coming back). One that cannot
+            // be read is not written at all.
+            let now = read_disk(&path)?;
+            let text = now.as_deref().unwrap_or("");
+            if let Some((line, said)) = crate::faults::unread(text) {
                 return Err(SaveError::Unread { path, line, said });
             }
             let changes: Vec<(String, Change)> =
                 sheet.edits.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
-            let fresh = rewrite(&now, &changes).map_err(SaveError::Io)?;
-            plan.push((which, path, now != sheet.text, fresh));
+            let fresh = rewrite(text, &changes).map_err(SaveError::Io)?;
+            plan.push((which, path, now, fresh));
         }
         Ok(plan)
     }
@@ -1571,7 +1744,7 @@ mod tests {
 
     /// A panel on `path`, the cursor on it.
     fn on(mut p: Panel, path: &str) -> Panel {
-        assert!(p.go_to(path, |_| String::new()), "{path}");
+        assert!(p.go_to(path, |_| Vec::new()), "{path}");
         p
     }
 
@@ -1655,13 +1828,13 @@ mod tests {
     #[test]
     fn go_to_finds_a_setting_by_path_key_or_name() {
         let mut p = panel("", "");
-        assert!(p.go_to("export.page", |_| String::new()));
+        assert!(p.go_to("export.page", |_| Vec::new()));
         assert_eq!(p.here().map(|s| s.path()), Some("export.page".into()));
-        assert!(p.go_to("scrolloff", |_| String::new()));
+        assert!(p.go_to("scrolloff", |_| Vec::new()));
         assert_eq!(p.here().map(|s| s.key), Some("scrolloff"));
-        assert!(!p.go_to("editor", |_| String::new()), "a table is not a setting");
-        assert!(p.go_to("光標邊距", |s| if s.key == "scrolloff" { "光標邊距".into() } else { String::new() }));
-        assert!(!p.go_to("nosuch", |_| String::new()));
+        assert!(!p.go_to("editor", |_| Vec::new()), "a table is not a setting");
+        assert!(p.go_to("光標邊距", |s| if s.key == "scrolloff" { vec!["光標邊距".into()] } else { Vec::new() }));
+        assert!(!p.go_to("nosuch", |_| Vec::new()));
     }
 
     /// Space: a tick flips, a choice moves on; a number waits for the editor.
@@ -1726,10 +1899,14 @@ mod tests {
     /// **檔裏帶引號或反斜線的一段字，來回一趟要一個字不差**（2026-10-01）。
     #[test]
     fn a_quote_in_a_setting_survives_the_round_trip() {
-        let mut p = on(panel("[editor]\nindent_symbol = \"a\\\"b\\\\c\"\n", ""), "editor.indent_symbol");
-        assert_eq!(p.typing_from(), "a\"b\\c", "還原成值本身，不是它的寫法");
-        assert!(p.commit_value("a\"b\\c"));
-        assert!(!p.dirty(), "一個字没改，不算改過：{:?}", p.global.edits);
+        // One character each since 2026-11-09, when a paragraph mark became
+        // one character: a quote, and a backslash.
+        for (file, value) in [("\"\\\"\"", "\""), ("\"\\\\\"", "\\")] {
+            let mut p = on(panel(&format!("[editor]\nindent_symbol = {file}\n"), ""), "editor.indent_symbol");
+            assert_eq!(p.typing_from(), value, "還原成值本身，不是它的寫法");
+            assert!(p.commit_value(value));
+            assert!(!p.dirty(), "一個字没改，不算改過：{:?}", p.global.edits);
+        }
     }
 
     /// **轉一圈回到原來那個值，就不算改過**；檔裏寫着的值撥回來也不算。
@@ -2108,5 +2285,128 @@ mod tests {
         assert_eq!(unwritten(&again.shown(find("export.font_family")).value), typed);
         assert_eq!(p.value_here().as_deref(), Some(typed), "what `y` copies");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// **`u` writes back the file exactly as it was** (2026-11-09, reported:
+    /// `u` after `r` lost `# a` after `scrolloff = 3`, and the last key of a
+    /// table taken away and taken back came back without the table's
+    /// comments); `C-r` writes the change exactly again.
+    #[test]
+    fn undo_writes_back_the_exact_text() {
+        let dir = scratch("exact");
+        let path = dir.join("config.toml");
+        let before = "# top\n[editor]\nscrolloff = 3 # a\nindent = 2 # b\n\n# about the theme\n[theme]\nname = \"ink\"   # dark\n";
+        std::fs::write(&path, before).unwrap();
+        let mut p = on(Panel::open(Some(path.clone()), None), "editor.scrolloff");
+        assert_eq!(p.reset(), Some(true));
+        p.flush().unwrap();
+        let after_r = std::fs::read_to_string(&path).unwrap();
+        assert!(!after_r.contains("scrolloff"), "{after_r}");
+        p.undo().unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), before, "the comment after the line is back");
+        p.redo().unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), after_r);
+        p.undo().unwrap();
+        // The last key of a table.
+        let mut p = on(p, "theme.name");
+        assert_eq!(p.reset(), Some(true));
+        p.flush().unwrap();
+        assert!(!std::fs::read_to_string(&path).unwrap().contains("[theme]"));
+        p.undo().unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), before, "the table with its comments");
+        assert_eq!(p.shown(find("theme.name")).value, "\"ink\"", "the panel reads it back");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// **A file changed outside after the change**: `u` sets the key back on
+    /// what the disk holds now, so the change outside stays; and **"before"
+    /// is the disk's, not the panel's** (2026-11-09, reported: changed
+    /// outside from 3 to 9, set to 5 here, and `u` wrote 3).
+    #[test]
+    fn undo_keeps_a_change_made_outside() {
+        let dir = scratch("outside-undo");
+        let path = dir.join("config.toml");
+        std::fs::write(&path, "[editor]\nscrolloff = 3 # a\nindent = 2\n").unwrap();
+        let mut p = on(Panel::open(Some(path.clone()), None), "editor.scrolloff");
+        // Changed outside, and not yet seen by the panel.
+        std::fs::write(&path, "[editor]\nscrolloff = 9 # a\nindent = 2\n").unwrap();
+        assert!(p.commit_value("5"));
+        let saved = p.flush().unwrap().unwrap();
+        assert_eq!(saved.changed_underneath, vec![path.clone()]);
+        p.undo().unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "[editor]\nscrolloff = 9 # a\nindent = 2\n");
+        // Set again, then a line added outside: `u` keeps it.
+        assert!(p.commit_value("4"));
+        p.flush().unwrap();
+        std::fs::write(&path, "[editor]\nscrolloff = 4 # a\nindent = 2\nruler = 72 # mine\n").unwrap();
+        let saved = p.undo().unwrap().unwrap();
+        assert_eq!(saved.changed_underneath, vec![path.clone()]);
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "[editor]\nscrolloff = 9 # a\nindent = 2\nruler = 72 # mine\n");
+        p.redo().unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "[editor]\nscrolloff = 4 # a\nindent = 2\nruler = 72 # mine\n", "exact again");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// **A file changed outside is read again** (2026-11-09) — another value,
+    /// or the file gone — and a file deleted outside is written with the
+    /// new line only, not back from the text read before.
+    #[test]
+    fn a_file_changed_or_deleted_outside_is_read_again() {
+        let dir = scratch("refresh");
+        let path = dir.join("config.toml");
+        std::fs::write(&path, "[editor]\nscrolloff = 3\nindent = 2\n").unwrap();
+        let mut p = on(Panel::open(Some(path.clone()), None), "editor.scrolloff");
+        assert!(p.refresh().is_empty(), "nothing changed");
+        std::fs::write(&path, "[editor]\nscrolloff = 9\nindent = 2\nruler = 80\n").unwrap();
+        assert_eq!(p.refresh(), vec![path.clone()]);
+        assert_eq!(p.shown(find("editor.scrolloff")).value, "9");
+        assert!(p.refresh().is_empty(), "said once");
+        std::fs::remove_file(&path).unwrap();
+        assert_eq!(p.refresh(), vec![path.clone()]);
+        assert!(!p.global.there && p.shown(find("editor.ruler")).from == Layer::Factory);
+        assert!(p.commit_value("7"));
+        p.flush().unwrap();
+        let after = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(after.trim(), "[editor]\nscrolloff = 7", "only the new line");
+        // Deleted and not yet seen: the same.
+        std::fs::remove_file(&path).unwrap();
+        let mut p = on(p, "editor.indent");
+        assert!(p.commit_value("4"));
+        let saved = p.flush().unwrap().unwrap();
+        assert_eq!(saved.changed_underneath, vec![path.clone()]);
+        assert_eq!(std::fs::read_to_string(&path).unwrap().trim(), "[editor]\nindent = 4");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// **A file the panel made is taken away again by `u`**, exactly as it
+    /// was: not there.
+    #[test]
+    fn undo_takes_away_a_file_the_panel_made() {
+        let dir = scratch("made");
+        let local = dir.join(".yumete").join("config.toml");
+        let mut p = on(Panel::open(None, Some(local.clone())), "editor.soft_wrap");
+        p.flip_into();
+        p.press();
+        p.flush().unwrap();
+        assert!(local.exists());
+        p.undo().unwrap();
+        assert!(!local.exists() && !p.local.there);
+        p.redo().unwrap();
+        assert!(std::fs::read_to_string(&local).unwrap().contains("soft_wrap = false"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// `:settings` finds a name with its quotes off, in any case.
+    #[test]
+    fn go_to_lets_quotes_and_case_go() {
+        let names = |s: &Setting| match s.key == "indent" && s.table == "editor" {
+            true => vec!["首行縮進".to_string(), "首行缩进".to_string(), "first-line indent".to_string()],
+            false => Vec::new(),
+        };
+        for typed in ["\"first-line indent\"", "'首行缩进'", "First-Line Indent ", "首行縮進"] {
+            let mut p = panel("", "");
+            assert!(p.go_to(typed, names), "{typed}");
+            assert_eq!(p.here().map(|s| s.key), Some("indent"));
+        }
     }
 }
