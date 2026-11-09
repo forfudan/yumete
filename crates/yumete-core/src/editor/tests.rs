@@ -27950,6 +27950,15 @@ fn vims_set_setf_ene_and_tabnew() {
     assert!(ed.status().contains("nu"), "says what it does not take: {}", ed.status());
     ed.execute(":se tw=60").unwrap();
     assert_eq!(ed.current_buffer().local().text_width, Some(60));
+    // …and `gq` fills to it, as vim's does (2026-11-09, review; nvim gives
+    // these three lines on `:set tw=20` and `gqq`).
+    let mut tw = typed_vim("the quick brown fox jumps over the lazy dog again\n");
+    tw.execute(":set tw=20").unwrap();
+    press(&mut tw, "gqq");
+    assert_eq!(tw.current_buffer().text(), "the quick brown fox\njumps over the lazy\ndog again\n");
+    tw.execute(":set tw=0").unwrap();
+    press(&mut tw, "gqip");
+    assert_eq!(tw.current_buffer().text(), "the quick brown fox jumps over the lazy dog again\n", "0 is the factory 79");
 
     let tabs = ed.buffer_count();
     ed.execute(":tabnew").unwrap();

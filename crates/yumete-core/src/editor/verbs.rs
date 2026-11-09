@@ -407,7 +407,8 @@ impl Editor {
         self.clamp_cursor();
     }
 
-    /// **vim's `gq`**: the selected lines filled to vim's width (see
+    /// **vim's `gq`**: the selected lines filled to vim's width, or this
+    /// file's `tw` (see
     /// [`crate::reflow::fill_like_vim`]), and the cursor on the first non-blank
     /// of the last line written, where vim leaves it. The caller has taken the
     /// undo point.
@@ -420,7 +421,11 @@ impl Editor {
         let first = rope.char_to_line(start);
         let last = rope.char_to_line(end.saturating_sub(1).max(start));
         let lines: Vec<String> = (first..=last).map(|n| motion::line_text(rope, n)).collect();
-        let filled = crate::reflow::fill_like_vim(&lines, VIM_TEXT_WIDTH, self.writes_code());
+        // **This file's `tw` is vim's `textwidth`** (2026-11-09, review:
+        // `:set tw=20` was accepted and `gq` went on filling to 79). A modeline's
+        // or `:set`'s width, and 0 is vim's 0: the factory width.
+        let width = self.current_buffer().local().text_width.filter(|w| *w > 0).unwrap_or(VIM_TEXT_WIDTH);
+        let filled = crate::reflow::fill_like_vim(&lines, width, self.writes_code());
         let from = rope.line_to_char(first);
         let to = motion::line_end(rope, rope.line_to_char(last));
         let text = filled.join(self.current_buffer().ending());
