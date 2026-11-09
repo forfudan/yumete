@@ -165,8 +165,7 @@ impl Editor {
     /// 走得了、`Enter` 跳得過去。
     ///
     /// Warning: **撥的是面板撥的那幾格、走的是面板走的那幾支**（`open_search_in` 與
-    /// `stand_on_and_look`），不另開一條路。同一天上午修過一個反例：離屏拍照那
-    /// 一支手抄了一份輸入法派發，照出來的是另一個程序。
+    /// `stand_on_and_look`），不另開一條路——手抄一份派發，照出來的就是另一個程序。
     pub fn open_search_with(&mut self, query: &str, scope: crate::search_panel::Where) {
         self.open_search_in(scope, false, false);
         self.search.query = query.to_string();
@@ -2877,7 +2876,7 @@ fn look_in_one_file(
     each: &mut dyn FnMut(Found) -> bool,
 ) -> bool {
     let Hunt { sniff, root, look, unsaved, here, going } = *hunt;
-    // 探頭挪到了這裏（並行那一條上就是每雙手自己探自己的）。
+    // 在這裏探頭（並行那一條上就是每雙手自己探自己的）。
     if sniff && crate::editor::looks_binary(path) {
         return true;
     }

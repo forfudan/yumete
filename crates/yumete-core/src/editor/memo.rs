@@ -3,11 +3,11 @@
 //!
 //! Five things on the page are worked out a line at a time and asked for again
 //! every frame: the words in it, its 平仄, the marks it got wrong, its Markdown
-//! runs, and the readings laid over it. Each one used to keep its own map, and
-//! each map decided for itself what went in the key, how big it was allowed to
-//! get and when it was thrown away — so three of them said 「line 3」 without
-//! saying which file's line 3, and two of them had no bound at all and grew an
-//! entry per line for as long as the reader kept scrolling.
+//! runs, and the readings laid over it. Each keeping its own map, each map
+//! would decide for itself what goes in the key, how big it may get and when it
+//! is thrown away — a 「line 3」 that does not say which file's line 3, or no
+//! bound at all and an entry per line for as long as the reader keeps
+//! scrolling.
 //!
 //! This is that decision made once. What a caller still says for itself is the
 //! **stamp**: the one value that changes when the answer would. Two are in use

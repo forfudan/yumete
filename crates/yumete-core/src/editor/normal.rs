@@ -1273,8 +1273,7 @@ impl Editor {
         });
     }
 
-    // Warning: **上面那一支要排在這兩個前面**（寫的時候當場撞的，當天第二
-    // 次）。`match` 從上往下挑，句子那兩個在前面就把它整個遮住了。
+    // Warning: **上面那一支要排在這兩個前面**。`match` 從上往下挑，句子那兩個在前面就把它整個遮住了。
     #[allow(unused_variables)]
     pub(super) fn cmd_goto_next_sentence(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
