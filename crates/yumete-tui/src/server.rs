@@ -167,8 +167,9 @@ struct Server {
     /// out. The page window asks this of tinymist.
     said_it_is: Option<(Option<String>, Option<String>)>,
     /// The commands asked for the page window whose answers are still out
-    /// (`workspace/executeCommand`, 2026-11-07).
-    asked_exec: HashSet<i64>,
+    /// (`workspace/executeCommand`): the id each was asked under, and the
+    /// ticket [`Servers::execute`] handed out for it.
+    asked_exec: HashMap<i64, i64>,
     /// **How many times it has been handed a buffer's text** (`didOpen` and
     /// `didChange`), so a new count is new text in its hands: the page window
     /// asks for the page again when this moves.
@@ -449,11 +450,21 @@ pub struct Servers {
     /// Only answers ring: `$/progress` and diagnostics can come by the hundred
     /// a second, and those still wait for the next look.
     doorbell: Option<Doorbell>,
-    /// **The page window's answers**, by the id it asked under, until it
+    /// **The page window's answers**, by the ticket it asked under, until it
     /// takes them ([`Servers::take_executed`]): what the command answered,
-    /// or what the server said in refusing.
+    /// or what the server said in refusing. At most [`EXECUTED_KEPT`], the
+    /// oldest let go: a window closed while its page was being made never
+    /// takes its answer, and each is a page's picture.
     executed: HashMap<i64, Result<Option<lsp::Executed>, String>>,
+    /// The next ticket [`Servers::execute`] hands out. Not the request's id,
+    /// which starts again with each server: a ticket is never handed out
+    /// twice, so an answer kept from a server that has since restarted
+    /// cannot answer a request made of the new one.
+    next_ticket: i64,
 }
+
+/// How many of the page window's answers are kept untaken.
+const EXECUTED_KEPT: usize = 8;
 
 /// See [`Servers::ring_on_answers`].
 pub type Doorbell = std::sync::Arc<dyn Fn() + Send + Sync>;
@@ -479,6 +490,7 @@ impl Default for Servers {
             says: None,
             filled: false,
             executed: HashMap::new(),
+            next_ticket: 1,
         }
     }
 }
@@ -1316,11 +1328,15 @@ impl Servers {
                     Ok(Notice::Answer { id, places, told, offers, incomplete, signature, edits, actions, error, symbols, spans, executed }) => {
                         // A command asked for the page window (2026-11-07),
                         // kept for it to take ([`Servers::take_executed`]).
-                        if server.asked_exec.remove(&id) {
-                            self.executed.insert(id, match error {
+                        if let Some(ticket) = server.asked_exec.remove(&id) {
+                            self.executed.insert(ticket, match error {
                                 Some(why) => Err(why),
                                 None => Ok(executed),
                             });
+                            while self.executed.len() > EXECUTED_KEPT {
+                                let Some(&oldest) = self.executed.keys().min() else { break };
+                                self.executed.remove(&oldest);
+                            }
                             anything = true;
                         } else if server.asked_symbols == Some(id) {
                             server.asked_symbols = None;
@@ -1678,23 +1694,25 @@ impl Servers {
 
     /// **Ask tinymist to run a command** (`workspace/executeCommand`), with
     /// `arguments` as a JSON array. With `keep` the answer is kept for
-    /// [`Servers::take_executed`] under the id this returns; without it, it
-    /// is let go. `None` when no tinymist is through its handshake.
+    /// [`Servers::take_executed`] under the ticket this returns; without it,
+    /// it is let go. `None` when no tinymist is through its handshake.
     pub fn execute(&mut self, command: &str, arguments: &str, keep: bool) -> Option<i64> {
+        let ticket = self.next_ticket;
         let server = self.tinymist_mut().filter(|s| s.ready)?;
         let id = server.next_ask;
         server.next_ask += 1;
         if keep {
-            server.asked_exec.insert(id);
+            server.asked_exec.insert(id, ticket);
         }
         server.say_now(lsp::execute_command(id, command, arguments));
-        Some(id)
+        self.next_ticket += 1;
+        Some(ticket)
     }
 
-    /// **The answer to the command asked under `id`**, once, when it has
+    /// **The answer to the command asked under `ticket`**, once, when it has
     /// come: what it answered, or what tinymist said in refusing.
-    pub fn take_executed(&mut self, id: i64) -> Option<Result<Option<lsp::Executed>, String>> {
-        self.executed.remove(&id)
+    pub fn take_executed(&mut self, ticket: i64) -> Option<Result<Option<lsp::Executed>, String>> {
+        self.executed.remove(&ticket)
     }
 
     /// How many times tinymist has been handed a buffer's text — a new count
@@ -1989,7 +2007,7 @@ fn start(
         asked_next: None,
         configured: named.config.as_ref().map(lsp::did_change_configuration),
         said_it_is: None,
-        asked_exec: HashSet::new(),
+        asked_exec: HashMap::new(),
         told: 0,
     };
     server.say_now(lsp::initialize(HELLO, &editor.lsp_root(), named.config.as_ref()));
@@ -2104,7 +2122,7 @@ mod tests {
                     asked_next: None,
                     configured: None,
                     said_it_is: Some((None, None)),
-                    asked_exec: HashSet::new(),
+                    asked_exec: HashMap::new(),
                     told: 0,
                 },
             );
@@ -3165,13 +3183,18 @@ mod tests {
         assert_eq!(servers.typesetter(&config, &editor), Typesetter::Ready);
         let _: Vec<String> = std::iter::from_fn(|| heard.try_recv().ok()).collect();
 
-        let id = servers.execute("tinymist.exportPng", r#"["/a.typ"]"#, true).expect("asked");
+        // The id a request went out under, read off what was sent.
+        let id_of = |sent: &str| -> i64 {
+            let at = sent.find(r#""id":"#).expect("an id") + 5;
+            sent[at..].chars().take_while(char::is_ascii_digit).collect::<String>().parse().unwrap()
+        };
+        let ticket = servers.execute("tinymist.exportPng", r#"["/a.typ"]"#, true).expect("asked");
         let sent = heard.try_recv().unwrap();
         assert!(sent.contains(r#""method":"workspace/executeCommand""#) && sent.contains(r#""command":"tinymist.exportPng""#), "{sent}");
         assert!(servers.due_in().is_some(), "an answer owed keeps the loop looking");
         let page = lsp::Executed::Pages { total: Some(2), pages: vec![(0, "iVBO".into())] };
         tell.send(Notice::Answer {
-            id,
+            id: id_of(&sent),
             places: Vec::new(),
             told: None,
             offers: Vec::new(),
@@ -3186,12 +3209,14 @@ mod tests {
         })
         .unwrap();
         assert!(servers.collect(&mut editor), "an answer is news");
-        assert_eq!(servers.take_executed(id), Some(Ok(Some(page))));
-        assert_eq!(servers.take_executed(id), None, "taken once");
+        assert_eq!(servers.take_executed(ticket), Some(Ok(Some(page))));
+        assert_eq!(servers.take_executed(ticket), None, "taken once");
         // One not kept is let go; a refusal is kept as what was said.
         let quiet = servers.execute("tinymist.scrollPreview", "[]", false).unwrap();
+        let quiet_id = id_of(&heard.try_recv().unwrap());
         let refused = servers.execute("tinymist.exportPng", "[]", true).unwrap();
-        for (id, error) in [(quiet, None), (refused, Some("failed to compile".to_string()))] {
+        let refused_id = id_of(&heard.try_recv().unwrap());
+        for (id, error) in [(quiet_id, None), (refused_id, Some("failed to compile".to_string()))] {
             tell.send(Notice::Answer {
                 id,
                 places: Vec::new(),
@@ -3211,6 +3236,41 @@ mod tests {
         servers.collect(&mut editor);
         assert_eq!(servers.take_executed(quiet), None);
         assert_eq!(servers.take_executed(refused), Some(Err("failed to compile".into())));
+
+        // **Answers nobody takes are kept to a few**, the oldest let go, and
+        // **one kept from before a restart answers nothing asked after**,
+        // although the new server's ids start again.
+        let answer = |id: i64, error: &str| Notice::Answer {
+            id,
+            places: Vec::new(),
+            told: None,
+            offers: Vec::new(),
+            incomplete: false,
+            signature: None,
+            edits: Vec::new(),
+            actions: Vec::new(),
+            symbols: Vec::new(),
+            spans: Vec::new(),
+            error: Some(error.to_string()),
+            executed: None,
+        };
+        let restarted_at = servers.tinymist_mut().unwrap().next_ask;
+        let mut tickets = Vec::new();
+        for n in 0..EXECUTED_KEPT + 3 {
+            tickets.push(servers.execute("tinymist.exportPng", "[]", true).unwrap());
+            tell.send(answer(id_of(&heard.try_recv().unwrap()), &format!("old {n}"))).unwrap();
+        }
+        servers.collect(&mut editor);
+        assert_eq!(servers.executed.len(), EXECUTED_KEPT);
+        assert_eq!(servers.take_executed(tickets[0]), None, "the oldest let go");
+        servers.tinymist_mut().unwrap().next_ask = restarted_at;
+        let new = servers.execute("tinymist.exportPng", "[]", true).unwrap();
+        let new_id = id_of(&heard.try_recv().unwrap());
+        assert_eq!(new_id, restarted_at, "the same id as an old answer's");
+        assert_eq!(servers.take_executed(new), None, "not answered yet");
+        tell.send(answer(new_id, "new")).unwrap();
+        servers.collect(&mut editor);
+        assert_eq!(servers.take_executed(new), Some(Err("new".into())));
 
         // Each text handed over counts.
         let before = servers.typst_told();
