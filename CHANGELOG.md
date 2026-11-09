@@ -12,7 +12,7 @@ in `docs/development.md` §5.2.
 ### Changed
 
 - **The word list for completion is read once each time you enter Insert mode**, not on every key, so typing in a long book no longer reads the whole book per keystroke; a word typed now is offered from the next time you enter Insert mode.
-- **The status line says `PRV` while the keys are in a preview**, which has no caret to show it.
+- **A preview is drawn in a frame**: thick and gold while the keys are in it, thin and quiet otherwise, so with two previews side by side the one with the keys is plain to see; the status line says `PRV` there too. The window's title line stays where it is.
 - **纵中横 (`[editor] tatechuyoko`) is off by default**, so every run of half-width characters on a vertical page is set the same way; set it to 2–8 to stand short numbers across in one cell.
 
 ### Fixed

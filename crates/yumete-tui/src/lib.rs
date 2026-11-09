@@ -45,7 +45,7 @@ use ratatui::crossterm::terminal::supports_keyboard_enhancement;
 use ratatui::layout::{Position, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Clear, Paragraph};
+use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph, Widget};
 use ratatui::Frame;
 
 use yumete_config::{Config, LineNumbers};
@@ -5807,9 +5807,28 @@ fn draw(
         // **A window showing a preview draws the page, not text.**
         if let Some(&id) = leaves.get(which).filter(|&&id| editor.is_page_window(id)) {
             let kind = editor.preview_in(id).and_then(|p| editor.preview_kind_of(p));
+            // **A frame round the picture says which preview has the keys**:
+            // a picture has no caret to show it. Thick and gold for the one
+            // with the keys, thin and quiet for the rest; the window's title
+            // line stays where it is, whatever the window shows.
+            let inside = match rect.width > 2 && rect.height > 2 {
+                true => {
+                    let ink = crate::theme::Palette::of(config);
+                    let focused = which == live;
+                    let ring = Block::default()
+                        .borders(Borders::ALL)
+                        .border_type(if focused { BorderType::Thick } else { BorderType::Plain })
+                        .border_style(ink.page().fg(if focused { ink.gold() } else { ink.quiet() }))
+                        .style(ink.page());
+                    let inside = ring.inner(*rect);
+                    ring.render(*rect, frame.buffer_mut());
+                    inside
+                }
+                false => *rect,
+            };
             match kind {
-                Some(yumete_core::buffer::PreviewKind::Markdown) => crate::md_window::draw(frame, editor, config, *rect, id),
-                _ => crate::page_window::draw(frame, editor, config, *rect, id),
+                Some(yumete_core::buffer::PreviewKind::Markdown) => crate::md_window::draw(frame, editor, config, inside, id),
+                _ => crate::page_window::draw(frame, editor, config, inside, id),
             }
             if which == live {
                 cursor = (rect.x, rect.y);

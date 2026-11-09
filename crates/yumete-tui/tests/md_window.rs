@@ -120,6 +120,18 @@ fn a_markdown_preview_is_drawn_and_follows_the_cursor() {
     frame(&mut editor, &config);
     md.follow(&mut editor, &config);
 
+    // **The frame says which window has the keys**: thin while the text
+    // has them, thick once the preview does.
+    let shown = frame(&mut editor, &config);
+    assert!(shown.contains('┌') && !shown.contains('┏'), "{shown}");
+    editor.on_key(yumete_core::input::Key::Ctrl('w'));
+    editor.on_key(yumete_core::input::Key::Char('w'));
+    let shown = frame(&mut editor, &config);
+    assert!(shown.contains('┏') && !shown.contains('┌'), "{shown}");
+    editor.on_key(yumete_core::input::Key::Ctrl('w'));
+    editor.on_key(yumete_core::input::Key::Char('w'));
+    md.follow(&mut editor, &config);
+
     // **The cursor followed**: line 100 a third of the way down.
     editor.execute(":100").unwrap();
     until(&mut editor, &config, &mut md, |_| top_of(preview).is_some_and(|t| t > 0.0));
