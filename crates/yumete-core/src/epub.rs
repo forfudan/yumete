@@ -1046,7 +1046,6 @@ mod tests {
 
     /// **A picture written as HTML goes into the book** (`<img src="x.png">`
     /// pointing out of it is RSC-007), as one written in
-
     /// Markdown does; one that is not there leaves its `alt`.
     #[test]
     fn a_picture_written_as_html_goes_into_the_book() {
