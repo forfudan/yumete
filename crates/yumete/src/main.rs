@@ -2029,11 +2029,18 @@ fn run_export(
         eprintln!("get it from https://github.com/typst/typst/releases, or `brew install typst`");
         return ExitCode::from(1);
     }
+    let sources: Vec<std::path::PathBuf> =
+        files.iter().map(|f| std::path::PathBuf::from(yumete_config::expand_tilde(f))).collect();
+    let clashes = clashes_in_the_batch(&sources, &format, out);
     let mut failed = false;
-    for file in files {
-        let source = std::path::PathBuf::from(yumete_config::expand_tilde(file));
+    for (source, clash) in sources.into_iter().zip(clashes) {
         if !source.is_file() {
             eprintln!("yumete: {}: not a file", source.display());
+            failed = true;
+            continue;
+        }
+        if let Some(why) = clash {
+            eprintln!("yumete: {}: {why}", source.display());
             failed = true;
             continue;
         }
@@ -2058,6 +2065,54 @@ fn run_export(
         true => ExitCode::FAILURE,
         false => ExitCode::SUCCESS,
     }
+}
+
+/// **Every output of the batch against every input and every other output,
+/// before anything is written.** The editor's own guard knows only the files
+/// opened so far, so on its own `ye --export typst ch1.md ch1.typ` (which is
+/// what `ye --export typst *` runs) would write `ch1.md`'s export over the
+/// finished `ch1.typ` before it refused the second file, and `a.md` beside
+/// `a.typ` would both go to `a.html`, the second over the first.
+/// A source whose output is another source named here, or the output of
+/// another source too, is refused — all of the sources that share an
+/// output, not the later ones, as which one is "later" is the shell's
+/// sorting, not the writer's intent. A file exported onto itself is left
+/// to the export, which says so in its own words.
+fn clashes_in_the_batch(
+    sources: &[std::path::PathBuf],
+    format: &str,
+    out: Option<&str>,
+) -> Vec<Option<String>> {
+    use yumete_core::buffer::{same_file, write_target};
+    let real: Vec<bool> = sources.iter().map(|s| s.is_file()).collect();
+    let targets: Vec<std::path::PathBuf> = sources.iter().map(|s| written_path(s, format, out)).collect();
+    let resolved: Vec<std::path::PathBuf> = targets.iter().map(|t| write_target(t)).collect();
+    let inputs: Vec<std::path::PathBuf> = sources.iter().map(|s| write_target(s)).collect();
+    // Spelling resolved for a file not written yet, identity for a hard link.
+    let onto_input = |i: usize, j: usize| resolved[i] == inputs[j] || same_file(&targets[i], &sources[j]);
+    let onto_output = |i: usize, j: usize| resolved[i] == resolved[j] || same_file(&targets[i], &targets[j]);
+    (0..sources.len())
+        .map(|i| {
+            if !real[i] || onto_input(i, i) {
+                return None;
+            }
+            let onto = (0..sources.len()).find(|&j| j != i && real[j] && onto_input(i, j));
+            if let Some(j) = onto {
+                return Some(format!(
+                    "not exported: its export would be written over {}, which is named here too",
+                    sources[j].display()
+                ));
+            }
+            let shared = (0..sources.len()).find(|&j| j != i && real[j] && !onto_input(j, j) && onto_output(i, j));
+            shared.map(|j| {
+                format!(
+                    "not exported: it and {} would both be written to {}; export them one at a time with --out",
+                    sources[j].display(),
+                    targets[i].display()
+                )
+            })
+        })
+        .collect()
 }
 
 /// One file through the editor's own export, **judged by the file**: the
@@ -2102,6 +2157,14 @@ fn export_pdf(
     out: Option<&str>,
 ) -> Result<std::path::PathBuf, String> {
     let target = written_path(source, "pdf", out);
+    // **Never through a link onto the source**: `typst compile` writes
+    // wherever it is told, so `--out out.pdf` with `out.pdf` a link to the
+    // source would turn the source into a PDF. The other formats are asked
+    // this by the editor's own guard; this one goes round it.
+    use yumete_core::buffer::{same_file, write_target};
+    if write_target(&target) == write_target(source) || same_file(&target, source) {
+        return Err(yumete_core::say!("export.same-as-the-manuscript"));
+    }
     let is_typst = editor.current_buffer().syntax() == yumete_core::syntax::Syntax::Typst;
     // A Typst file compiles as it is; anything else goes through the
     // editor's Typst export first, into a file beside the source.
