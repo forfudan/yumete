@@ -1,4 +1,4 @@
-//! **The tables the binary carries** (2026-11-04): the full 宇浩拼音, 靈明 and
+//! **The tables the binary carries**: the full 宇浩拼音, 靈明 and
 //! 星陳, with the language layer.
 //!
 //! A binary of its own, because what is carried is set once per process: in
@@ -55,7 +55,7 @@ fn each_carried_scheme_types_with_nothing_installed() {
 }
 
 /// Pinyin's sentence model is carried too: without it the sentence below
-/// came out in traditional characters (measured 2026-11-04).
+/// comes out in traditional characters.
 #[test]
 fn carried_pinyin_has_its_language_model() {
     if !carry() {
@@ -70,7 +70,7 @@ fn carried_pinyin_has_its_language_model() {
 }
 
 /// Switching goes through the same loader as starting, so it reaches the
-/// carried tables too (the gap measured 2026-10-12).
+/// carried tables too.
 #[test]
 fn switching_scheme_reaches_the_carried_tables() {
     if !carry() {
@@ -109,7 +109,7 @@ fn a_character_answers_from_the_carried_divisions() {
     assert!(got.divided, "{got:?}");
 }
 
-/// **Yume's 字集 lanes are on by default** (2026-11-04): a 拼音 sentence stays
+/// **Yume's 字集 lanes are on by default**: a 拼音 sentence stays
 /// in one script, and the other script comes as a sentence of its own. With
 /// no lanes this came out as 數学教授在講臺上讲课.
 #[test]
@@ -137,7 +137,7 @@ fn a_pinyin_sentence_keeps_to_one_script() {
     assert_eq!(ime.top_candidate(), "數學教授在講臺上講課");
 }
 
-/// **The word list the binary carries reads both scripts** (2026-11-04). It
+/// **The word list the binary carries reads both scripts**. It
 /// replaces the compact bundled list, whose test this was: `w` must not step
 /// one 漢字 at a time through a 繁體 manuscript, nor through a 简体 one.
 #[test]
@@ -160,9 +160,9 @@ fn the_carried_words_join_in_both_scripts() {
     }
 }
 
-/// **An installed file this build cannot read is passed over** (2026-11-04
-/// review): an older Yume's `pinyin.yflb` used to take 宇浩拼音 down, and the
-/// editor started in 靈明 with nothing said.
+/// **An installed file this build cannot read is passed over**: an older
+/// Yume's `pinyin.yflb` must not take 宇浩拼音 down and start the editor in
+/// 靈明 with nothing said.
 #[test]
 fn an_installed_file_this_build_refuses_falls_back_to_the_carried_one() {
     if !carry() {
@@ -181,8 +181,8 @@ fn an_installed_file_this_build_refuses_falls_back_to_the_carried_one() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// **A new engine keeps the writer's 中/ABC and 輸入預測** (2026-11-04
-/// review): a scheme switch and `:yume-builtin` used to put both back.
+/// **A new engine keeps the writer's 中/ABC and 輸入預測**: a scheme switch
+/// and `:yume-builtin` do not put either back.
 #[test]
 fn a_scheme_switch_keeps_abc_and_prediction() {
     if !carry() {

@@ -1,4 +1,4 @@
-//! **One Dark has no light half, and says so** (2026-10-25).
+//! **One Dark has no light half, and says so**.
 //!
 //! Warning: **its own test binary.** The theme and the mood in force are
 //! process-globals (`theme::choose`, `theme::choose_mood`), so a test that sets
@@ -26,7 +26,7 @@ fn one_dark_stays_dark_and_says_so_when_light_is_asked_for() {
     assert_eq!(light.text(), Palette::of_theme(&theme, true).text());
 
     // **And its code colours and accents, which is what a light mood would
-    // actually lose** (2026-10-26 review). The ladder above is the same in
+    // actually lose**. The ladder above is the same in
     // both slots, so it passes with or without the dark-only rule; the pinned
     // table and the accents are what come from the mood.
     for name in ["one-dark", "monokai", "dracula"] {

@@ -1,5 +1,5 @@
-//! **The "Coming from LazyVim" page's config is one a reader can paste**
-//! (2026-11-04): it loads with nothing to say about it, and its keys reach
+//! **The "Coming from LazyVim" page's config is one a reader can paste**:
+//! it loads with nothing to say about it, and its keys reach
 //! what the page says they reach.
 //!
 //! A binary of its own: applying a config sets process-wide things (the

@@ -289,7 +289,7 @@ pub fn char_at(
     let drawn = |line: usize| editor.drawn_runs_on_line(line);
     // 「這一行是不是一條轉過來的表格行」——渲染、折行、藏字三處同一個答案。
     let turned = |line: usize| editor.line_is_table_row(line);
-    // A closed fold's line fills one 縱 (2026-11-03).
+    // A closed fold's line fills one 縱.
     editor.note_fold_width(metrics.zong_len);
     let grid = editor
         .grid_with(&hidden, &folded, &drawn, &turned)
@@ -422,8 +422,7 @@ impl<'a> Markup<'a> {
 /// **這一頁，加上「這塊螢幕放得下幾縱」**。
 ///
 /// 後面那個數和文章有多長**無關**——它是版面的性質，不是內容的。分開交出來，是
-/// 因為 2026-10-12 報上來的那一族 bug 就是把兩者當成了一個數，見
-/// [`how_many_fit`]。
+/// 因為把兩者當成一個數會出一整族 bug，見 [`how_many_fit`]。
 struct Laid {
     page: Page,
     /// 這塊地方放得下幾縱，當作後面還有字。`page.len()` 是它和「文章還剩幾縱」
@@ -456,9 +455,9 @@ fn layout_page(
     //   asked for first — 「只對存在注釋的視覺縱出現」 — and the page it costs
     //   is one whose 縱 are not all the same width.
     // * `loose` asks **the paragraph**: any 縱 of it carrying something buys
-    //   the cell for all of them. This is how a 着重號 was always asked, for
-    //   the reason still worth having — the page does not change shape as it
-    //   scrolls through a paragraph — and now readings can be asked it too.
+    //   the cell for all of them. This is how a 着重號 is asked, for the
+    //   reason worth having — the page does not change shape as it scrolls
+    //   through a paragraph — and readings can be asked it too.
     // * `never` asks nothing; `always` keeps the cell empty.
     //
     // A paragraph's other 縱 may be off the page, so `loose` lays the whole
@@ -577,23 +576,20 @@ fn found_at_cursor(
 
 /// **這塊地方放得下幾縱**，當作文章後面還有字。
 ///
-/// Warning: **這不是 `page.len()`**（2026-10-12 報的那一族 bug 的根）。`page.len()` 是
-/// 「從這個視口起畫得出幾縱」，文章快到頭的時候它自己變小——而視口那一層拿它當
-/// 「這一頁有多大」來算 `scrolloff`，於是：末尾那幾縱觸發一次捲動，捲完
-/// `page.len()` 更小，下一幀再觸發一次……原話是「**閃三四下直到左邊空白越來越
-/// 多**」，量出來是 9 → 6 → 4 → 3 縱，每約一秒半一下。
+/// Warning: **這不是 `page.len()`**。`page.len()` 是「從這個視口起畫得出幾縱」，文章
+/// 快到頭的時候它自己變小——視口那一層要是拿它當「這一頁有多大」來算 `scrolloff`，
+/// 末尾那幾縱觸發一次捲動，捲完 `page.len()` 更小，下一幀再觸發一次……畫面**閃三
+/// 四下直到左邊空白越來越多**：9 → 6 → 4 → 3 縱，每約一秒半一下。
 ///
 /// 已經排好的那幾縱用它們自己的邊欄，後面補的用出廠寬度：一塊地方放得下幾縱和
 /// 文章在哪兒結束無關，和**眼前這幾縱有多寬**有關。
 ///
-/// Warning: **Every band, not the first** (2026-10-28, reported: with two
-/// bands the cursor walked the top band to its left edge and never went on
-/// into the lower one). `place` lays out one band; this answered with one
-/// band's count, so the page thought it held half its 縱 and scrolled one
-/// 縱 at a time instead of letting the cursor move to the band below. It
-/// has always counted one band; the `zb` fix of 2026-10-12, which let a step
-/// off the page's edge scroll by one 縱, is what made it show. The bands are
-/// counted the way [`layout_page`] fills them.
+/// Warning: **Every band, not the first.** `place` lays out one band; with
+/// one band's count the page would think it held half its 縱 and, since a
+/// step off the page's edge scrolls by one 縱, scroll one 縱 at a time
+/// instead of letting the cursor move to the band below — the cursor would
+/// walk the top band to its left edge and never go on into the lower one.
+/// The bands are counted the way [`layout_page`] fills them.
 fn how_many_fit(
     metrics: &Metrics,
     area: Rect,
@@ -679,9 +675,8 @@ pub(crate) fn number_rows(mode: LineNumbers, total_lines: usize) -> u16 {
 /// motions that depend on it run.
 pub fn zong_length_for(config: &Config, height: u16, total_lines: usize, look: Look) -> usize {
     // `height` is the page's own, already free of the status line, the hint
-    // row, the tab bar and the detail panel — so nothing is subtracted here.
-    // It used to take one off for the status line and know about none of the
-    // rest, which made the 縱 the cursor moved on longer than the drawn one.
+    // row, the tab bar and the detail panel — so nothing is subtracted here,
+    // or the 縱 the cursor moves on would be longer than the drawn one.
     Metrics::new(config, height, total_lines, look).zong_len
 }
 
@@ -692,7 +687,7 @@ pub fn zong_length_for(config: &Config, height: u16, total_lines: usize, look: L
 /// the tick column are all worked out from them at once.
 #[derive(Debug, Clone, Copy)]
 pub struct Look {
-    /// How lines are numbered, from the editor (2026-10-31).
+    /// How lines are numbered, from the editor.
     pub numbers: LineNumbers,
     /// Whether readings are laid out beside the 縱.
     pub ruby: bool,
@@ -700,10 +695,9 @@ pub struct Look {
     pub hanging: bool,
     /// **一列寫幾個字**（`:view-wrap-height`），if the writer asked.
     ///
-    /// Warning: **橫排那個 measure 不在這裏**（2026-10-09 作者定）。從前這一格就是
-    /// `editor.measure()`，於是 `:view-wrap 40` 在橫排是行寬、切到竖排同一個 40 就
-    /// 成了一列的長度——一條命令兩件事。現在各管各的，這一格只有
-    /// `:view-wrap-height` 填得出來。
+    /// Warning: **橫排那個 measure 不在這裏**。這一格要是 `editor.measure()`，
+    /// `:view-wrap 40` 在橫排是行寬、切到竖排同一個 40 就成了一列的長度——一條命令
+    /// 兩件事。各管各的，這一格只有 `:view-wrap-height` 填得出來。
     pub zong: Option<usize>,
     /// The gap between 縱 the writer asked for, if any.
     pub gap: Option<usize>,
@@ -715,9 +709,8 @@ pub struct Look {
     pub diff: bool,
     /// 平仄畫着沒有（`:meter`）。
     ///
-    /// 和 `ruby`、`hanging` 同一族：它們說的都是「這一頁要不要那條邊欄」。
-    /// 2026-10-02 從 `layout_page` 的第八個參數挪進來——那個參數一路從畫面
-    /// 頂上傳到邊欄那三支 `match`，而問的恰好是這件事。
+    /// 和 `ruby`、`hanging` 同一族：它們說的都是「這一頁要不要那條邊欄」，所以它
+    /// 在這裏，不是 `layout_page` 的一個參數一路從畫面頂上傳到邊欄那三支 `match`。
     pub metered: bool,
 }
 
@@ -866,8 +859,8 @@ fn packed(text: &str) -> Vec<String> {
 
 /// The character candidate `i` is numbered with.
 ///
-/// Taken from the configured list — **full-width digits `１２３` by default**
-/// (2026-09-27; 帶圈中文數字 ㊀㊁㊂ before that). Whatever is in the list has to
+/// Taken from the configured list — **full-width digits `１２３` by default**.
+/// Whatever is in the list has to
 /// be two cells wide or the column comes apart: a half-width `1` in a 縱 sits in
 /// the left cell and the candidate under it does not, five cells adrift by the
 /// time the panel is three wide. That also rules out the circled Arabic ①②③,
@@ -889,9 +882,9 @@ fn put_number(buf: &mut Buffer, x: u16, top: u16, rows: u16, digits: &str, style
     // instead of four. On an eighty-row terminal that is two rows of every
     // column given back to the writing.
     //
-    // This was tried once and taken out again: 「119」「118」 in neighbouring
-    // 縱 read as 「11」「11」 over 「9」「8」, a wall of digits. The reason it
-    // stands now is that the *neighbours* are told apart — every other 縱's
+    // Alone it would not work: 「119」「118」 in neighbouring 縱 read as
+    // 「11」「11」 over 「9」「8」, a wall of digits. It stands because the
+    // *neighbours* are told apart — every other 縱's
     // number is drawn a rung back — so two numbers side by side are two
     // colours, not one run. Position could never separate them here (the
     // number sits above the text, in the text's own columns), and colour is
@@ -997,19 +990,19 @@ pub fn draw(
         capacity,
         &|line, from, to| markup.dotted(line, from, to),
     );
-    // **一頁有多大，問的是螢幕，不是文章**（2026-10-12 報的）。
+    // **一頁有多大，問的是螢幕，不是文章**。
     //
-    // 從前這兩行數的是 `page.len()` ——「從這個視口起畫得出幾縱」。文章快到頭的
-    // 時候它自己變小，而這一頁的「末端」跟着往前挪，於是末尾那幾縱無限觸發捲
-    // 動：捲一下 `page.len()` 更小，下一幀再捲一下。報上來的三種樣子是同一個根：
+    // 數 `page.len()`——「從這個視口起畫得出幾縱」——不行：文章快到頭的時候它
+    // 自己變小，這一頁的「末端」跟着往前挪，末尾那幾縱就無限觸發捲動：捲一下
+    // `page.len()` 更小，下一幀再捲一下。同一個根有三種樣子：
     //
     // * 短檔按 `G` 或 `o`：整篇只有六縱、螢幕放得下二十幾縱，而它照樣把前面兩
-    //   縱推出右邊，左半片空着（「左側又被整個浪費掉」）；
-    // * 「移至 5 縱時左右各 2、3 縱；移至 6 縱時各 1、2 縱；移至 7 縱時右側只
-    //   有 1 縱」——末三縱逐格複現；
+    //   縱推出右邊，左半片空着；
+    // * 移至 5 縱時左右各 2、3 縱；移至 6 縱時各 1、2 縱；移至 7 縱時右側只
+    //   有 1 縱——末三縱逐格複現；
     // * 長文按 `ge`／`G` 之後**沒有按鍵也自己動**，9 → 6 → 4 → 3 縱，每約一秒
-    //   半一下（「過半秒向右閃移一縱，大概閃三四下」）。
-    // Warning: **從光標那一縱量，不從視口量**（2026-10-12 的第二道）。`holds` 算的
+    //   半一下。
+    // Warning: **從光標那一縱量，不從視口量**。`holds` 算的
     // 是眼前這幾縱有多寬，而「眼前」在跳轉那一幀是**舊的**那一頁——跳完之後畫
     // 的是另一批縱，寬度不同，於是下一幀量出另一個 `holds`、又挪一下。跳轉之後
     // 畫的就是光標周圍那幾縱，從那裏量，兩幀量的是同一批，落在哪就停在哪。
@@ -1023,14 +1016,13 @@ pub fn draw(
     // **Where the cursor sits on a page is the editor's answer** — the same
     // one the horizontal page and the grid ask, so a jump lands in the middle
     // whichever way the text runs and `:view-typewriter` means something here too.
-    // This used to be a second copy of that rule, and it was the copy that had
-    // never heard of typewriter mode.
+    // A second copy of that rule would be the copy that never heard of
+    // typewriter mode.
     //
     // `capacity` is the *bound* — the most 縱 that could fit were every one of
     // them flush. With a gap, or with 稿紙 ticks, the page holds fewer, so
-    // centring on the bound pushed the cursor's 縱 off the left edge. 夾一道，
-    // Warning: **夾在 `holds` 上，不是 `page.len()` 上**——這裏是上面那條規矩的第
-    // 二份抄件（2026-10-12 修完上面纔露出來的）。`:6` 是一次跳轉，跳轉落在正
+    // centring on the bound would push the cursor's 縱 off the left edge. 夾一道，
+    // Warning: **夾在 `holds` 上，不是 `page.len()` 上**——同上面那條規矩。`:6` 是一次跳轉，跳轉落在正
     // 中，而「正中」照 `page.len()` 算就是「剩下這幾縱的正中」：整篇七縱的時候
     // 它是第四縱，於是跳到第六縱照樣往左退兩縱。照 `holds` 算是螢幕的正中，退
     // 到頭就停在開頭，一縱都不動。
@@ -1038,14 +1030,12 @@ pub fn draw(
     let cursor_column = match editor.page_inset(found, cursor_anchor < *viewport, last_column, scrolloff) {
         None => found.unwrap_or(0),
         Some(inset) => {
-            // Warning: **沒有「不許超過半頁」這一道**（2026-10-12 報的兩條都是它）。
-            // 從前這裏寫 `inset.min(visible / 2)`，於是**每一個落位都被夾進半頁以
-            // 內**：`zb` 要的是 `last - scrolloff`（30 縱的頁上是 26），夾完成了
-            // 15，正中；走出左邊那一下要的也是 26，同樣成了正中——報上來的原話是
-            // 「the next j will also move this zong to the middle」與「`zb` put the
-            // zong in the middle」。
+            // Warning: **沒有「不許超過半頁」這一道**。`inset.min(visible / 2)` 會把
+            // **每一個落位都夾進半頁以內**：`zb` 要的是 `last - scrolloff`（30 縱的
+            // 頁上是 26），夾完成了 15，正中；走出左邊那一下要的也是 26，同樣成了
+            // 正中——下一個 `j` 和 `zb` 都會把那一縱挪到正中。
             //
-            // 而那道夾子本來想防的是跳轉：跳轉落在正中，`page_inset` 自己就回
+            // 那道夾子能防的只有跳轉：跳轉落在正中，`page_inset` 自己就回
             // `last / 2`，本來就不超過半頁。所以它對跳轉是空操作，對其餘一律是錯
             // 的。退到頭停在開頭那一條由 `zong::retreat` 自己管，不靠這裏。
             let inset = inset.max(match found {
@@ -1134,11 +1124,11 @@ pub fn draw(
         None => editor.has_selection(),
         Some(pane) => pane.highlight.is_some(),
     };
-    // A ground, and only a ground: `fg(White)` used to flatten every colour
+    // A ground, and only a ground: `fg(White)` would flatten every colour
     // underneath — a heading, a reading, a hung mark — at the moment the writer
-    // was looking hardest at them.
+    // is looking hardest at them.
     let sel_style = Style::default().bg(ink.selection());
-    // **次選區用同一塊底色**（#405，2026-09-28 定，理由與橫排同一條：灰梯子上沒有第三檔
+    // **次選區用同一塊底色**（#405，理由與橫排同一條：灰梯子上沒有第三檔
     // 可退）。竪排這邊主次分得更開一些——主選區的光標是畫進頁面的反白方塊，深底淺字，
     // 和灰底不是一回事。只在自己這一半畫，`peek` 那一半沒有光標。
     let secondary = match peek {
@@ -1146,12 +1136,12 @@ pub fn draw(
         Some(_) => Vec::new(),
     };
     // What a yank just copied, lit on the same ground for a moment
-    // (`[editor] yank_flash`, 2026-11-07), as the horizontal page does.
+    // (`[editor] yank_flash`), as the horizontal page does.
     let flashed = match peek.is_none() && config.editor.yank_flash {
         true => editor.yank_flash(),
         false => Vec::new(),
     };
-    // **光標停在括號上的時候，另一半那一格塗成金的**（2026-10-08）——竪排這一頁
+    // **光標停在括號上的時候，另一半那一格塗成金的**——竪排這一頁
     // 也有，理由與規矩全在 `lib.rs` 的 `partner` 那一段：只畫遠那一半，金，不換
     // 底色。兩頁同形，不然同一份稿子換個版面就少一個記號。
     let partner = match peek {
@@ -1164,18 +1154,17 @@ pub fn draw(
     // says which cell Insert is confined to. `HEAD`, one rung quieter than a
     // selection, so a selection inside the cell still reads first.
     //
-    // Warning: **竪排的格子沒有底色了**（2026-10-17 作者提）。原話：「the vertical
-    // tables are all readonly, so we do not need to show a wall? The cursor
-    // itself is enough?」——對，而且理由比「夠用」更硬：
+    // Warning: **竪排的格子沒有底色**：竪排的表都是只讀的，光標本身就夠了。理由
+    // 比「夠用」更硬：
     //
-    // 一、**這一頭的表本來就是只讀的**（2026-09-19 作者定，見
-    //    `Editor::table_view_opens_itself` 那一段：「進入表格後還是只讀狀態，
-    //    必須 tt 才能編輯」，而 `t t` 把頁面轉平了纔編）。那層底說的是「改動
+    // 一、**這一頭的表本來就是只讀的**（見 `Editor::table_view_opens_itself`
+    //    那一段：進入表格後還是只讀狀態，必須 `t t` 才能編輯，而 `t t` 把頁面
+    //    轉平了纔編）。那層底說的是「改動
     //    會落在這裏」，而這裏不落。
     // 二、**這一頭的表自己畫格線**（`│` 與 `────┼───`），每一格四邊都圍着，
     //    不像橫排那一頭要靠兩道金牆說。
     // 三、它和選中那一塊擠在梯子相鄰的兩鬥上，量出來選中落在格子裏只剩
-    //    1.37:1——同橫排 2026-10-17 那一刀的理由。
+    //    1.37:1——同橫排那一刀的理由。
     //
     // 所以這裏不必像橫排那樣「底換成牆」，直接沒有：底色歸選中一個人，位置由
     // 光標說（竪排的光標是頁面自己畫的方塊，看得見）。
@@ -1185,12 +1174,10 @@ pub fn draw(
     let numbers = crate::numbers(editor, config);
     let tail = crate::tail_row(rope);
 
-    // Warning: **問算出來的那一格，不是配置**（2026-10-02 一輪掃查報來的）。
-    // [`Metrics::ticks`] 自己的註釋寫着「Ticks live in the lane; with no lane
-    // there is nowhere to rule」，而這一句從前直接讀配置——於是
-    // `:view-margin never` 底下沒有邊欄，點照樣畫，而那時 `x + SLOT_WIDTH`
+    // Warning: **問算出來的那一格，不是配置**。[`Metrics::ticks`] 自己的註釋寫着
+    // 「Ticks live in the lane; with no lane there is nowhere to rule」；直接讀配置
+    // 的話，`:view-margin never` 底下沒有邊欄，點照樣畫，而那時 `x + SLOT_WIDTH`
     // **是右邊那一縱自己的那一格**：它那裏沒字的時候，點就落在人家的字欄裏。
-    // 掃了 23,328 幀，帶野點的 1,188 幀全是 `never` ＋ `paper_ticks > 0`。
     let ticks = match metrics.ticks {
         true => config.editor.paper_ticks,
         false => 0,
@@ -1221,7 +1208,7 @@ pub fn draw(
     let mut wiki_names: Option<(usize, Vec<(usize, usize)>)> = None;
     let mut marked: Option<(usize, Vec<yumete_core::markdown::Span>)> = None;
     // The marked line's colours from its syntax tree, kept beside it: a Typst
-    // manuscript's (2026-11-08), `None` where the runs colour themselves.
+    // manuscript's, `None` where the runs colour themselves.
     let mut colours: Option<Vec<yumete_core::markdown::Span>> = None;
     // The tags in the line's comments (`TODO:`), as the horizontal page draws them.
     let mut tags: Vec<(usize, usize, Style)> = Vec::new();
@@ -1253,9 +1240,9 @@ pub fn draw(
         // down a 縱. That is the flagship of this editor and its only
         // separation was an attribute several terminals drop.
         let reading_style = Style::default().fg(ink.quiet());
-        // A rule, on the ladder's own rung for one. It used to be drawn in the
-        // ruler's *tint* — a ground colour used as a foreground — and measured
-        // 1.11:1 against the page, which is to say it has never been seen.
+        // A rule, on the ladder's own rung for one, not the ruler's *tint* — a
+        // ground colour used as a foreground measures 1.11:1 against the page,
+        // which is to say it is never seen.
         let tick_style = Style::default().fg(ink.rule());
         // A hung 句讀 *is* the sentence, set beside the character it follows,
         // so it keeps the writing's own colour and is told apart by position.
@@ -1288,16 +1275,14 @@ pub fn draw(
             // Set vertically the numbers sit *above* the 縱, in the text's own
             // columns — position separates nothing, so colour does the whole
             // job. Both halves of it: the band is a real ground and the digits
-            // are a real rung. They used to be the terminal's own foreground on
-            // a band at 1.04:1, which made the cursor's number the brightest
-            // thing on a page of somebody's novel.
+            // are a real rung. The terminal's own foreground on a band at
+            // 1.04:1 would make the cursor's number the brightest thing on a
+            // page of somebody's novel.
             // Warning: **Every other 縱's number stands a rung back** (#512). Two
-            // numbers now sit two cells apart with nothing between them, so
-            // 「23」「24」 would read as 「2324」 — the very objection that kept
-            // the numbers one digit to a row for so long. This is the answer
-            // settled on: 「相邻的纵号会混在一起，建议每隔一纵序号用不同的
-            // 颜色/色阶区分」, and it is the device the table's own banding
-            // already uses. The *line* number decides the parity, not the 縱's
+            // numbers sit two cells apart with nothing between them, so
+            // 「23」「24」 would read as 「2324」. Every other 縱's number is told
+            // apart by its rung, the device the table's own banding already
+            // uses. The *line* number decides the parity, not the 縱's
             // place on the screen, so scrolling does not make the pattern
             // crawl.
             let style = band_ground;
@@ -1348,21 +1333,21 @@ pub fn draw(
         }
 
         let line_start = rope.line_to_char(zong.line);
-        // Warning: **Which `|` is a wall, worked out once for the 縱** (2026-09-20).
-        // The glyph swap below used to fire on *any* pipe in a table row, and
-        // Markdown's one escape is `\|` — a pipe the cell holds. So a cell
-        // written `a \| b` was cut in two: a band drawn through the middle of
-        // it, and the rest of the row shifted off its bands.
+        // Warning: **Which `|` is a wall, worked out once for the 縱**.
+        // The glyph swap below must not fire on *any* pipe in a table row:
+        // Markdown's one escape is `\|` — a pipe the cell holds. A cell
+        // written `a \| b` would be cut in two: a band drawn through the middle
+        // of it, and the rest of the row shifted off its bands.
         let walls = editor.table_walls_on_line(zong.line);
         // Asked once per 縱, not once per glyph: each answer re-reads the whole
-        // line, and a long `|` line took seconds a frame (2026-10-30: 40,000
+        // line, and a long `|` line would take seconds a frame (40,000
         // characters, 12.8 s).
         let (table_row, table_rule) = (editor.line_is_table_row(zong.line), editor.line_is_table_rule(zong.line));
         // **A block's ground is a rectangle, and it is laid before the
-        // writing** (2026-09-20). It used to be painted with each slot, and a
-        // slot exists only where there is writing — so a `::: tip` lost a step
-        // off its side wherever a 縱 was shorter than its neighbour, and a
-        // half-width glyph (hung right) left the other cell of its own 縱 bare.
+        // writing**. Painted with each slot — and a slot exists only where
+        // there is writing — a `::: tip` would lose a step off its side wherever
+        // a 縱 is shorter than its neighbour, and a half-width glyph (hung
+        // right) would leave the other cell of its own 縱 bare.
         // Horizontally the ground runs to the window's edge on every row of the
         // block; turned, it runs to the foot of the page. The glyphs carry the
         // same ground themselves, so drawing over this changes nothing.
@@ -1483,7 +1468,7 @@ pub fn draw(
             // terminal as itself it draws nothing, and a 縱 with a NUL in it
             // looked like a 縱 with a gap. One cell either way, which is the
             // cell the slot was measured for.
-            // …and so does a combining mark with no base (2026-10-20): the
+            // …and so does a combining mark with no base: the
             // same cell, the same reason, and the same dotted circle the
             // horizontal page draws, so the two never show a slot differently.
             let symbol: String = {
@@ -1495,15 +1480,15 @@ pub fn draw(
                 yumete_cjk::show_orphan_marks(&mut chars);
                 chars.into_iter().collect()
             };
-            // **A table's walls turn with it** (2026-09-19). A row is one
+            // **A table's walls turn with it**. A row is one
             // 縱 (the core refuses to wrap one), so the grid is the page's own
             // grid turned a quarter turn — and the walls have to turn too or
             // the reader is handed a column of loose pipes. A `|` between two
             // columns is a band **across** the 縱, two cells wide so it reaches
             // the next one; the `---` under the header is a wall **down** it.
             //
-            // Warning: **The crossings are the rule row's own pipes**
-            // (2026-09-19: 「爲什麽沒有用十字交叉來表達綫的穿插？」). Turned,
+            // Warning: **The crossings are the rule row's own pipes**, drawn as
+            // crosses where the lines meet. Turned,
             // the `---` row *is* the wall and the `|` in it are exactly the
             // places a band rule runs into it — so those, and only those, are
             // `┼`. Elsewhere a `|` is a band and a `-` is wall.
@@ -1568,12 +1553,12 @@ pub fn draw(
             // one — and none of the layers below, every one of which describes
             // characters the file actually holds.
             if let Some(kind) = row.ink {
-                // Warning: **Virtual text takes the block's ground, not the page's**
-                // (2026-09-19: 「表格隔行的底色沒有正確繪製」). A table's
-                // rows are banded, and what squares a row up is *padding* —
-                // virtual text. Painting it on the page's own ground cut every
-                // stripe off where its cell's writing ended, so the band read
-                // as a smear behind the words rather than as a row. The ink is
+                // Warning: **Virtual text takes the block's ground, not the page's.**
+                // A table's rows are banded, and what squares a row up is
+                // *padding* — virtual text. Painting it on the page's own
+                // ground would cut every stripe off where its cell's writing
+                // ended, so the band would read as a smear behind the words
+                // rather than as a row. The ink is
                 // this branch's business; the ground below it is not.
                 let under = crate::block_style(markup.block(zong.line), ink).unwrap_or(ink.page());
                 let style = match kind {
@@ -1603,9 +1588,6 @@ pub fn draw(
             // A slot is one display unit and may hold several characters — a
             // ruby group, or a 緃中横 pair — so it takes the style of any run it
             // overlaps. `runs` is empty when markup is not being rendered.
-            //
-            // 從前這裏還記一格「這一格上有沒有 `==標記==`」，給格子的底色讓
-            // 路；格子沒有底色了（見上面那一段），讓路的那一方也就沒有了。
             let painted = colours.as_deref().unwrap_or(runs);
             for run in painted.iter().filter(|r| r.end > column && r.start < column + len) {
                 let ch = symbol.chars().next();
@@ -1750,7 +1732,7 @@ pub fn draw(
                 false => put_slot_wide(buf, x, y, &symbol, style),
             }
         }
-        // **A cursor on the line break is drawn there** (2026-10-27), one
+        // **A cursor on the line break is drawn there**, one
         // slot past the 縱's last character, as the horizontal page draws it
         // one cell past the row's: otherwise `C` from the end of a line, or
         // `A` on several lines, makes cursors nobody sees.
@@ -1806,7 +1788,7 @@ pub fn draw(
     let cursor_x = at_cursor.map(|p| p.x).unwrap_or(area.x);
     let cursor_y = (at_cursor.map(|p| p.top).unwrap_or(text_top) + cursor_pos.slot as u16)
         .min((area.y + area.height).saturating_sub(1));
-    // **插入態的那條橫線自己畫，終端光標只當輸入法的錨**（2026-10-16 定）。
+    // **插入態的那條橫線自己畫，終端光標只當輸入法的錨**。
     //
     // The rule is the bar of a horizontal editor turned the quarter turn the
     // text turned, and it goes on the boundary the text arrives at: typing
@@ -1814,15 +1796,14 @@ pub fn draw(
     // boundary is that character's **top** edge — drawn here as an underline on
     // the slot above it.
     //
-    // Warning: **它從前是終端自己的下劃線光標，擺在上面那一格**。線畫對了，而光標
-    // **格**就落在上面那個字上——macOS 的系統輸入法把 inline preedit 畫在光標格
-    // 上，於是蓋住了上面那個字，而該蓋的是下面那個（文字就出現在它那裏）。原話：
-    // 「在「餅」上按 i 鍵，cursor 應該在「餅」上，實際在「蛋」上……終端會在
-    // cursor 的位置畫 inline preedit，於是把「蛋」蓋住了」。
+    // Warning: **不用終端自己的下劃線光標擺在上面那一格**。那樣線畫對了，而光標
+    // **格**落在上面那個字上——macOS 的系統輸入法把 inline preedit 畫在光標格
+    // 上，於是蓋住上面那個字，而該蓋的是下面那個（文字就出現在它那裏）：在「餅」
+    // 上按 `i`，preedit 會蓋住它上面的「蛋」。
     //
     // 沒有「上劃線」這種光標形狀，所以兩件事拆開：線是我們的筆，光標交給輸入法，
-    // 並且**藏起來**（[`crate::backend::keep_the_cursor_hidden`]）。`caret_y` 從此
-    // 就是光標自己那一格。
+    // 並且**藏起來**（[`crate::backend::keep_the_cursor_hidden`]）。`caret_y` 就是
+    // 光標自己那一格。
     let caret_y = cursor_y;
     if cursor_column < visible && editor.mode() == Mode::Insert {
         let rule_y = cursor_y.saturating_sub(1).max(area.y);
@@ -1849,21 +1830,19 @@ pub fn draw(
             }
         }
     }
-    // Warning: **光標不重畫已經有標籤的那一格**（#406，2026-09-28 報的：「竪排的 aa 為什麽
-    // 不是金色底色？」）。竪排的光標是**畫進頁面**的一塊反白（橫排那頭是終端自己的
-    // 硬件光標，碰不到這裏），而第一個落腳點常常正是光標站的那一格——`REVERSED`
-    // 把金底深字翻成了深底金字，於是滿屏標籤裏有一個長得不一樣。
+    // Warning: **光標不重畫已經有標籤的那一格**（#406）。竪排的光標是**畫進頁面**的一塊反白（橫排那
+    // 頭是終端自己的硬件光標，碰不到這裏），而第一個落腳點常常正是光標站的那一格——`REVERSED` 會把金
+    // 底深字翻成深底金字，於是滿屏標籤裏有一個長得不一樣。
     //
     // **所有標籤必須長得一樣**：不一樣的那一個會被讀成另一種東西。光標照畫，只是
     // 讓開這一格——標籤亮着的那一瞬間，你正要離開光標所在的地方。
     let under_a_label = labelled.contains(&(cursor_x, cursor_y));
-    // **站在吊出去的句讀上，反白要跟到旁邊那一欄去**（2026-10-03 修；2026-10-02 一輪
-    // 掃查報來的，34,840 幀裏 179 處不一致全是這一種）。
+    // **站在吊出去的句讀上，反白要跟到旁邊那一欄去**。
     //
     // 標點旁置把 `。` 掛在它跟着的那個字旁邊，而那個字和它**共用一個 slot**——
     // `line_slots` 把前一格的 `end` 往後拉了一個字。於是光標走到 `。` 上時 slot 沒
-    // 變，反白照舊畫在正文那兩格上，而讀者看見的是「光標蓋着前一個字，句讀在旁邊
-    // 亮着不動」。問正文那一格不夠，要問這一格到底站在哪一個字上。
+    // 變，只看 slot 的話反白照舊畫在正文那兩格上，讀者看見的是「光標蓋着前一個字，
+    // 句讀在旁邊亮着不動」。問正文那一格不夠，要問這一格到底站在哪一個字上。
     let on_the_hung_mark = at_cursor
         .and_then(|p| p.slots.get(cursor_pos.slot))
         .is_some_and(|row| {
@@ -1899,16 +1878,14 @@ pub fn draw(
             }
             return (cursor_x, caret_y);
         }
-        // **長的緃中横是一格，而光標只站在它裏頭的一個字上**（2026-10-12 報的）。
+        // **長的緃中横是一格，而光標只站在它裏頭的一個字上**。
         //
-        // 這裏從前把整組一起反白，理由寫着「The cursor stands on the group, not
-        // on its last two digits」（2026-09-21）——那個前提不成立：`1997` 是**四
-        // 個**落腳點（狀態列逐步走 字 4→5→6→7），而四格一起反白，畫面逐像素
-        // 相同。原話：「按 j/k 调整时没有任何反馈，体验上就是一直按 j 时 cursor
-        // 卡在单词里不动」「视觉上需要调整 cursor 着色以便能看清位置」。
+        // 不把整組一起反白：`1997` 是**四個**落腳點（狀態列逐步走 字 4→5→6→7），
+        // 四格一起反白的話畫面逐像素相同，按 `j`/`k` 沒有任何反饋，光標看着卡在
+        // 詞裏不動。
         //
-        // 那句老話擔心的是「只畫右半格」那種幾何殘影——一個漢字兩格，畫半格就
-        // 像把它劈開了。一個字母本來就占一格，畫它自己那一格不會有那個毛病。
+        // 要防的是「只畫右半格」那種幾何殘影——一個漢字兩格，畫半格就像把它劈
+        // 開了。一個字母本來就占一格，畫它自己那一格不會有那個毛病。
         let here = at_cursor.and_then(|p| p.slots.get(cursor_pos.slot));
         let cells = here.map_or(SLOT_WIDTH, |row| zong::slot_cells(&row.text) as u16);
         if cells > SLOT_WIDTH {
@@ -1954,15 +1931,14 @@ pub fn draw(
     (cursor_x, caret_y)
 }
 
-/// **The candidate panel's colours, taken from the theme** (2026-10-29: 「update
-/// the skin of integrated yume IME so that the candidate panel or candidate bar
-/// is aligned with the yumete theme」). It used to carry its own `[panel] ink`
-/// and `paper`, 墨香 dark at the factory, so on a light theme it stayed a dark
-/// box. Now it is drawn as the other floats are, the completion list among
-/// them: their ground and ring, candidates in the text's ink, the code a step
-/// back (the vertical panel's numbers too). The highlighted candidate is
-/// inverted, the text's ink as its ground: the selection's colour stood only
-/// 1.6–2.2:1 off the ground, too faint in a one-line strip (2026-10-29). The box, the strips and the vertical panel all read this.
+/// **The candidate panel's colours, taken from the theme**, so the candidate
+/// panel and bar match the editor's theme. Its own `[panel] ink` and `paper`
+/// would stay a dark box on a light theme. It is drawn as the other floats
+/// are, the completion list among them: their ground and ring, candidates in
+/// the text's ink, the code a step back (the vertical panel's numbers too).
+/// The highlighted candidate is inverted, the text's ink as its ground: the
+/// selection's colour stands only 1.6–2.2:1 off the ground, too faint in a
+/// one-line strip. The box, the strips and the vertical panel all read this.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Skin {
     paper: Color,
@@ -2034,7 +2010,7 @@ pub fn draw_candidate_panel(
     // only in this panel, and a panel that vanishes leaves the writer nothing
     // to see and nothing to know to backspace.
     //
-    // Warning: **除非編碼這一幀寫進了正文**（2026-09-27）：那時它有地方待，而一個只裝
+    // Warning: **除非編碼這一幀寫進了正文**：那時它有地方待，而一個只裝
     // 着一列碼、沒有一個候選的框是白遮一片稿子。
     if candidates.is_empty() && (!show_code || ime.display_buffer().is_empty()) {
         return;
@@ -2051,7 +2027,7 @@ pub fn draw_candidate_panel(
     // of half-width letters goes two to a row (緃中横), the way a year does in
     // 縱書. `Dyu_Do_Ne` set one letter to a row is nine rows of nothing, and
     // with 拆分 on it made the panel taller than the page it was covering.
-    // 編碼那一列：內嵌的時候不畫，那一段已經在正文裏了（2026-09-27）。
+    // 編碼那一列：內嵌的時候不畫，那一段已經在正文裏了。
     let header = match show_code {
         true => packed(&ime.display_buffer()),
         false => Vec::new(),
@@ -2080,7 +2056,7 @@ pub fn draw_candidate_panel(
             column
         })
         .collect();
-    // **The annotations start on one row** (2026-11-02), after the longest
+    // **The annotations start on one row**, after the longest
     // candidate, as they start at one column in the box; what the panel's
     // height cannot hold goes a field at a time, with `…`.
     let at = heads.iter().map(Vec::len).max().unwrap_or(0) + 1;
@@ -2184,23 +2160,22 @@ pub fn draw_candidate_panel(
     }
 }
 
-/// **行中那一條，竪排的樣子**（2026-10-16 定）。
+/// **行中那一條，竪排的樣子**。
 ///
-/// 原話：「For vertical layout, it is just vertical.」橫排的行中是光標下面那一
-/// 行，竪排的行中就是光標**左邊那一縱**——竪排的下一行往左走——而候選在那一縱
+/// 橫排的行中是光標下面那一行，竪排的行中就是光標**左邊那一縱**——竪排的下一行往左走——而候選在那一縱
 /// 裏自上往下排，一條候選的編號在它自己的字上面，同候選框裏那一列。
 ///
 /// 一縱寬，一頁高：蓋住的正是那一整縱稿子，和橫排那一條蓋住一整行是同一筆帳。
 /// 擺不下（光標已經在最左那一縱）就翻到右邊去，同 [`draw_candidate_panel`]。
 ///
-/// 一條候選只有編號和字，拆分與注解不進來——那是 `Tab` 查字典的事（2026-10-16）。
+/// 一條候選只有編號和字，拆分與注解不進來——那是 `Tab` 查字典的事。
 /// 編碼這一幀沒寫進正文的時候，它打頭，打包成緃中横，同面板那一列。
 pub fn candidate_slots(cand: &Candidate) -> usize {
     // 編號一格，字各一格。
     1 + graphemes(&cand.text).count()
 }
 
-/// **這一縱裝得下幾條候選**（2026-10-16）。
+/// **這一縱裝得下幾條候選**。
 ///
 /// 同 `candidates_across` 的竪排對偶：量的是真的候選，`[panel] page_size` 仍是
 /// 上限。至少一條，擺不下就由畫那一頭切掉——一頁一條都沒有是打不了字的。

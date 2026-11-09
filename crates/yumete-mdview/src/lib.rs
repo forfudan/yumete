@@ -1,4 +1,4 @@
-//! **A Markdown file drawn as pictures** (2026-11-08), the way VS Code's
+//! **A Markdown file drawn as pictures**, the way VS Code's
 //! Markdown preview shows one: proportional type in the system's fonts, real
 //! heading sizes, tables with lines, code on its ground, formulas and images
 //! as pictures.
@@ -177,7 +177,7 @@ impl Preview {
             self.cache.clear();
         }
         // Whether quotes turn into corner brackets down a vertical page: the
-        // export's own rule, read off the same text (2026-11-09). Reading it
+        // export's own rule, read off the same text. Reading it
         // costs some milliseconds in a long book, so a page across, where it
         // does not matter, keeps the text for when it is set vertically.
         match self.engine.vertical {
@@ -222,7 +222,7 @@ impl Preview {
         (self.width, self.height)
     }
 
-    /// **Set the page vertically** (2026-11-08), or across with `None`:
+    /// **Set the page vertically**, or across with `None`:
     /// columns read right to left, the page going on to the left. Every
     /// block is laid out again.
     pub fn set_vertical(&mut self, vertical: Option<Vertical>) -> Stats {
@@ -244,7 +244,7 @@ impl Preview {
         self.engine.vertical.is_some()
     }
 
-    /// **The window's height** (2026-11-08), which a vertical page's columns
+    /// **The window's height**, which a vertical page's columns
     /// fill: a new one lays a vertical page out again.
     pub fn set_height(&mut self, height: u32) -> Stats {
         if self.view_height == height {
@@ -257,14 +257,14 @@ impl Preview {
         }
     }
 
-    /// **The ruby spellings read** (2026-11-08): `[export] ruby_html`,
+    /// **The ruby spellings read**: `[export] ruby_html`,
     /// `ruby_typst` and `ruby_markdown`; takes effect at the next
     /// [`set_text`](Preview::set_text).
     pub fn set_ruby(&mut self, ruby: yumete_core::ruby::Dialects) {
         self.parse_cache.set_ruby(ruby);
     }
 
-    /// **The fonts the writing is set in** (2026-11-08): `[export]
+    /// **The fonts the writing is set in**: `[export]
     /// font_family`, the list the HTML and EPUB exports ask for, so the
     /// preview and the page agree. A new list lays every block out again.
     pub fn set_fonts(&mut self, list: &str) -> Stats {
@@ -327,7 +327,7 @@ impl Preview {
         let mut k = 0;
         while k < self.blocks.len() {
             // A table and the caption paragraph just before or after it,
-            // laid out together as the vertical page lays them (2026-11-08).
+            // laid out together as the vertical page lays them.
             let (main, caption, span) = self.captioned(k);
             let block = &self.blocks[main];
             let lines = (self.blocks[span.0].lines.0, self.blocks[span.1].lines.1);

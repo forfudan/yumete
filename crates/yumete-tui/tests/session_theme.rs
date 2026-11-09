@@ -1,4 +1,4 @@
-//! **The session keeps only the theme the config would not give** (2026-10-29).
+//! **The session keeps only the theme the config would not give**.
 //!
 //! Warning: **its own test binary.** The theme and the mood in force are
 //! process-globals (`theme::choose`, `theme::choose_mood`), so a test that sets

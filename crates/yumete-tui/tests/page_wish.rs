@@ -2,12 +2,12 @@
 //!
 //! The size the user asks for is clamped to the window by
 //! [`yumete_tui::fit_the_page`], which runs before the *next* frame — and the
-//! status line is written now. So the command used to report the size it was
-//! replacing: 2026-10-19 `:yume-menu-size 3` answered 「候選面板一頁 6 條」,
-//! and only a second, bare `:yume-menu-size` said 3.
+//! status line is written now. So the command must not report the size it is
+//! replacing — `:yume-menu-size 3` answering 「候選面板一頁 6 條」, and only a
+//! second, bare `:yume-menu-size` saying 3.
 //!
 //! Warning: **its own test binary.** 「每頁幾個」 is a process-global
-//! (`PAGE_WISH`, and now the window height beside it), so a test that sets it
+//! (`PAGE_WISH`, and the window height beside it), so a test that sets it
 //! beside two hundred others is a test that sets it *under* them.
 
 use yumete_config::Config;

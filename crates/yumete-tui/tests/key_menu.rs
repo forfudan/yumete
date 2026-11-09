@@ -1,4 +1,4 @@
-//! **The `Space` menu on an 80 × 24 page reads whole** (2026-11-04).
+//! **The `Space` menu on an 80 × 24 page reads whole**.
 //!
 //! A binary of its own: the interface language is process-wide.
 
@@ -40,7 +40,7 @@ fn menu_rows(page: &str) -> Vec<String> {
 }
 
 /// Every meaning of the `Space` menu fits, in Chinese and in English: 43 keys at half the page
-/// used to be five columns of 「文件挑選…」.
+/// would be five columns of 「文件挑選…」.
 #[test]
 fn the_space_menu_is_not_cut_at_80_by_24() {
     for language in [Language::Traditional, Language::English] {

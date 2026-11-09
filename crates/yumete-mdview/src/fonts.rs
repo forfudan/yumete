@@ -125,7 +125,7 @@ pub(crate) fn kai(han: Han) -> &'static str {
     }
 }
 
-/// **The writing's own fonts, split from the generic ones** (2026-11-08):
+/// **The writing's own fonts, split from the generic ones**:
 /// `[export] font_family`, the list the HTML and EPUB exports ask for,
 /// written as VS Code's `markdown.preview.fontFamily` is. The named faces
 /// (and `system-ui`, which `-apple-system` and `BlinkMacSystemFont` are
@@ -154,8 +154,7 @@ fn split_list(list: &str) -> Option<(String, String)> {
 }
 
 /// The faces a writing system is set in. `list` is `[export] font_family`;
-/// with an empty one the system's own faces are asked for, as before there
-/// was a setting.
+/// with an empty one the system's own faces are asked for.
 pub(crate) fn families(han: Han, list: &str) -> Families {
     let (latin, latin_mono, emoji) = if cfg!(target_os = "macos") {
         ("system-ui", "'SF Mono', Menlo, Monaco", "'Apple Color Emoji'")
@@ -208,7 +207,7 @@ mod tests {
         assert!(s.emphasis.contains("Kai") && !j.emphasis.contains("Kai"));
     }
 
-    /// **The export's font list sets the writing** (2026-11-08): its named
+    /// **The export's font list sets the writing**: its named
     /// faces first, the writing system's CJK face next, its generic families
     /// after that; Safari's and Chrome's names for the system face are read
     /// as `system-ui`.

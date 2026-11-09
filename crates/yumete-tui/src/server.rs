@@ -1,5 +1,4 @@
-//! **Running a language server** — the process half of #53/#54 (L2,
-//! 2026-09-20).
+//! **Running a language server** — the process half of #53/#54 (L2).
 //!
 //! [`yumete_core::lsp`] is the wire: pure functions over strings, every one of
 //! them tested without a server. This is everything that is *not* pure — a
@@ -50,9 +49,8 @@ use yumete_core::lsp::{self, Notice};
 ///
 /// Warning: **這是節流，不是防抖。** 計時從「發現正文變了」那一刻起算，按鍵不重置它
 /// （全樹寫 `touched` 的只有清和設兩處）——所以連續打字是**每 300 毫秒發一次，
-/// 發在詞的中間**，不是「停手 300 毫秒」。註釋從前寫的是後者
-/// （2026-09-23 審出來的）。這樣更好而不是更差：補全那一半正是靠打字中間發出去
-/// 的那一條 `didChange` 纔問得出東西；真正的語言服務器客戶端多半連節流都沒有，
+/// 發在詞的中間**，不是「停手 300 毫秒」。這樣更好而不是更差：補全那一半正是靠
+/// 打字中間發出去的那一條 `didChange` 纔問得出東西；真正的語言服務器客戶端多半連節流都沒有，
 /// 每一次改動都發。
 const SETTLE: std::time::Duration = std::time::Duration::from_millis(300);
 
@@ -70,10 +68,9 @@ const HELLO: i64 = 1;
 
 /// The `id` of the `shutdown` request, and always this.
 ///
-/// Warning: **Not [`FIRST_ASK`].** It used to be a literal `2`, which is the id the
-/// first `gd`/hover/completion of the session wears — 「two requests must
-/// never wear the same one」, and this one broke it (2026-09-23 審出來的).
-/// Nobody reads the answer at exit, so it never showed; the rule is the point.
+/// Warning: **Not [`FIRST_ASK`],** nor any id a `gd`/hover/completion of the
+/// session can wear: two requests must never wear the same one. Nobody reads
+/// the answer at exit, so a clash would never show; the rule is the point.
 const GOODBYE: i64 = 0;
 
 /// Where the ids for everything else start.
@@ -107,11 +104,11 @@ struct Server {
     ///
     /// Warning: **Only diagnostics.** A request's answer is owed as long as its id
     /// is in one of the three slots below — that is what [`Server::owed`]
-    /// reads. Putting both in this one flag is what made `gd` wait for the
+    /// reads. Putting both in this one flag would make `gd` wait for the
     /// next keypress: diagnostics arrive unasked, all the time, and the first
-    /// one to land after the question cleared the flag, so [`Servers::due_in`]
-    /// said 「nothing outstanding」 and the loop went back to blocking while
-    /// the answer sat in the channel. 2026-09-23 審出來的。
+    /// one to land after the question would clear the flag, so [`Servers::due_in`]
+    /// would say 「nothing outstanding」 and the loop would go back to blocking
+    /// while the answer sat in the channel.
     waiting: bool,
     /// The next id to put on a request.
     next_ask: i64,
@@ -126,31 +123,30 @@ struct Server {
     /// answer carries only an id — one slot would make a hover answer look
     /// like a definition that had somehow lost its place.
     asked_what: Option<i64>,
-    /// **簽名那一問發出去的號碼**（2026-10-08）。同 `asked_what`：答案回來要對得上
+    /// **簽名那一問發出去的號碼**。同 `asked_what`：答案回來要對得上
     /// 號，不然是上一問的殘響。
     asked_signature: Option<i64>,
-    /// 簽名回空之後那一句補問的 hover（2026-10-08）。
+    /// 簽名回空之後那一句補問的 hover。
     asked_signature_doc: Option<i64>,
     /// `gr`, `:lsp-rename` and `空格 a` now out, and a code action's command
-    /// (#54, 2026-10-29). Each its own slot, for the reason `asked_what` has one.
+    /// (#54). Each its own slot, for the reason `asked_what` has one.
     asked_refs: Option<i64>,
-    /// `Space h`'s question (2026-11-02).
+    /// `Space h`'s question.
     asked_highlights: Option<i64>,
-    /// `空格 s`/`S`'s question (2026-10-31).
+    /// `空格 s`/`S`'s question.
     asked_symbols: Option<i64>,
     asked_rename: Option<i64>,
-    /// `=`'s question (2026-11-02).
+    /// `=`'s question.
     asked_format: Option<i64>,
     asked_actions: Option<i64>,
     /// **What this server last said was wrong, as it wrote it**, by file: a
     /// code action is asked with the ones over its span.
     raw: HashMap<PathBuf, Vec<(usize, usize, String)>>,
-    /// **這一個服務器此刻開着幾件活**（`$/progress`，2026-10-01）。
+    /// **這一個服務器此刻開着幾件活**（`$/progress`）。
     ///
-    /// Warning: **數的是服務器自己說的，不是我們猜的。** 從前轉圈那八個點問的是
-    /// 「我告訴過它的檔裏還有沒回診斷的」——而一個**工作區之外**的檔
-    /// （homebrew、rustup 裏的源碼）rust-analyzer 根本不檢查，於是那一格永遠不
-    /// 清，點就一直轉（2026-10-01 報的）。`$/progress` 的 `begin` 與 `end`
+    /// Warning: **數的是服務器自己說的，不是我們猜的。** 不能問「我告訴過它的檔裏
+    /// 還有沒回診斷的」——一個**工作區之外**的檔（homebrew、rustup 裏的源碼）
+    /// rust-analyzer 根本不檢查，那一格會永遠不清，點就一直轉。`$/progress` 的 `begin` 與 `end`
     /// 是成對的（量過：起一次 rust-analyzer，15 開 15 關，兩秒四收場），所以它
     /// 不會卡住。
     working: HashSet<String>,
@@ -159,10 +155,10 @@ struct Server {
     /// `working` 從空變成非空的那一刻，空了就清。
     working_since: Option<std::time::Instant>,
     /// **The entry's `config` as a `workspace/didChangeConfiguration`**
-    /// (2026-11-07), said right after `initialized`, as helix does. The
+    /// said right after `initialized`, as helix does. The
     /// `initialize` and the reader thread have the table itself.
     configured: Option<String>,
-    /// **What it said it is** (`serverInfo`, 2026-11-07): `None` until the
+    /// **What it said it is** (`serverInfo`): `None` until the
     /// handshake, then its name and version, either of which it may leave
     /// out. The page window asks this of tinymist.
     said_it_is: Option<(Option<String>, Option<String>)>,
@@ -176,7 +172,7 @@ struct Server {
     told: u64,
 }
 
-/// **一個服務器是怎麼走的**（2026-10-11）——說出口的那一句不一樣。
+/// **一個服務器是怎麼走的**——說出口的那一句不一樣。
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Gone {
     /// 管子斷了，或者進程自己退了。
@@ -186,7 +182,7 @@ enum Gone {
 }
 
 impl Server {
-    /// **此刻在不在忙，從什麽時候起**（2026-10-01）。
+    /// **此刻在不在忙，從什麽時候起**。
     ///
     /// 兩段：握手完成之前是「啓動中」；之後看服務器自己報的 `$/progress`。
     /// 兩段都一定會結束，所以那八個點不會卡住。
@@ -201,9 +197,9 @@ impl Server {
 /// Every server, and the one rule about when to talk to them.
 /// **這一輪各服務器答了什麽**，攢着，等迴圈走完再一起交給編輯器（#425）。
 ///
-/// Warning: **一個問題現在發給這種語言的每一個服務器。** 於是「沒什麽可說的」
-/// 這句話不能誰先答空誰說——2026-09-29 量過，**ruff 宣稱 `hoverProvider: true`
-/// 而實際回 `null`**，照舊那樣寫的話它每次都搶在 pylsp 前面把「沒有」說出口。
+/// Warning: **一個問題發給這種語言的每一個服務器。** 於是「沒什麽可說的」
+/// 這句話不能誰先答空誰說——**ruff 宣稱 `hoverProvider: true` 而實際回
+/// `null`**，誰先答空誰說的話它每次都搶在 pylsp 前面把「沒有」說出口。
 /// 規矩是 helix 那一條：**第一個非空的答案算數，全都答空了纔說沒有。**
 #[derive(Default)]
 struct Heard {
@@ -214,7 +210,7 @@ struct Heard {
     /// The items, and whether any server said its list is incomplete.
     offers: Option<(Vec<lsp::Offer>, bool)>,
     signature: Option<Option<lsp::Signature>>,
-    /// 簽名回空之後那一句補問的 hover（2026-10-08）。
+    /// 簽名回空之後那一句補問的 hover。
     signature_doc: Option<Option<lsp::Told>>,
     /// `gr`'s places, the first server's that found any (#54).
     refs: Option<Vec<lsp::Place>>,
@@ -316,7 +312,7 @@ impl Heard {
                 editor.show_places(places);
             }
             Some(_) if !waiting(|s| s.asked_where) => {
-                // **還在建索引的時候那句空答案不算數**（2026-10-11 量出來的）。
+                // **還在建索引的時候那句空答案不算數**。
                 // rust-analyzer 在 `rustAnalyzer/Fetching` 期間對
                 // `textDocument/definition` 回的是一個**空數組**，而它和「這個
                 // 東西哪兒都沒寫」長得一模一樣。`ask` 那一頭的閘攔不住第一問：
@@ -381,11 +377,11 @@ pub struct Servers {
     /// **The code actions gathered so far** (#54): every server is asked, and
     /// the picker opens once the last one has answered, with all of them.
     gathered: Vec<lsp::Action>,
-    /// The prose kinds the config names a server for (2026-10-29).
+    /// The prose kinds the config names a server for.
     prose: HashSet<&'static str>,
     /// A `空格 a` is out and its picker not yet shown.
     asking_actions: bool,
-    /// **命令名 → 那個服務器**（#425，2026-09-30 從「語言名 →」改的）。
+    /// **命令名 → 那個服務器**（#425），不是語言名。
     ///
     /// 一種語言跑得了好幾個：Python 常見的是 `ruff` 挑毛病、`pylsp` 講文檔。
     /// 哪幾個歸哪一種語言記在 [`Servers::serving`]。
@@ -405,9 +401,9 @@ pub struct Servers {
     ///
     /// A save is news the text alone does not carry: rust-analyzer answers out
     /// of two mouths, its own analysis (which follows every keystroke) and
-    /// `cargo check` (which runs on `didSave` and nothing else). 2026-09-21
-    /// 報的「我把錯的行刪了，錯誤信息還在」就是第二張嘴從來沒被叫醒——刪掉的
-    /// 那一行的 `(rustc)` 診斷一直是上一次 check 的舊帳。
+    /// `cargo check` (which runs on `didSave` and nothing else). Without the
+    /// save the second mouth is never woken, and a deleted line's `(rustc)`
+    /// diagnostic stays on the page as the last check's stale answer.
     saved: HashMap<PathBuf, u64>,
     /// **Which server each file was told to.**
     ///
@@ -415,7 +411,7 @@ pub struct Servers {
     /// 少了這一格，rust-analyzer 一崩就會把 `.go` 的診斷也從頁面上抹掉，把
     /// gopls 的 `sent` 也清空（於是下一趟白發一條 `didSave`，讓它整跑一次
     /// 檢查），而 `waiting_on` 裏那個死掉的服務器的路徑永遠清不掉——「分析中」
-    /// 這一整場就再也收不回去了。2026-09-23 審出來的。
+    /// 這一整場就再也收不回去了。
     whose: HashMap<PathBuf, &'static str>,
     /// When the current buffer last changed, for the settle above.
     touched: Option<std::time::Instant>,
@@ -423,8 +419,8 @@ pub struct Servers {
     ///
     /// That gap is the cold start: `rust-analyzer` reads the whole crate
     /// before it says anything, which on a real project is ten or twenty
-    /// seconds of an editor that looks broken. 2026-09-21：「在等的這段時間能
-    /// 不能在狀態欄出現個提示？」
+    /// seconds of an editor that looks broken, so the status line says so
+    /// while it waits.
     ///
     /// Warning: **Only until the first answer**, and per file. After that a re-read
     /// is milliseconds, and a line that flickered 「分析中」 on every keystroke
@@ -439,14 +435,14 @@ pub struct Servers {
     settle: std::time::Duration,
     /// What to put on the status line, once.
     pub says: Option<String>,
-    /// **The editor was given something to draw without a server's answer**
-    /// (2026-10-31): a symbol picker's fallback rows. The loop draws again,
+    /// **The editor was given something to draw without a server's answer**:
+    /// a symbol picker's fallback rows. The loop draws again,
     /// as it does after an answer, or they wait for the next key.
     pub filled: bool,
-    /// **Rung by a server's reader thread when an answer arrives** (2026-10-28).
+    /// **Rung by a server's reader thread when an answer arrives.**
     ///
-    /// The loop used to look every [`LOOK_IN`] while something was owed, so a
-    /// completion list came up as much as 120 ms after the server had sent it.
+    /// Looking only every [`LOOK_IN`] while something is owed would bring a
+    /// completion list up as much as 120 ms after the server had sent it.
     /// Only answers ring: `$/progress` and diagnostics can come by the hundred
     /// a second, and those still wait for the next look.
     doorbell: Option<Doorbell>,
@@ -526,8 +522,8 @@ impl Servers {
     /// **這臺機器上，這種語言配了而且找得到的**那幾個，按配置的次序（#425）。
     ///
     /// Warning: **不是「頭一個」。** 一種語言跑得了好幾個，各答各的一半：
-    /// Python 常見的是 `ruff` 挑毛病、`pylsp` 講文檔。從前這裏 `.find()` 只取
-    /// 第一個，於是配了兩個也只起得來一個——2026-09-29 報的就是這件事。
+    /// Python 常見的是 `ruff` 挑毛病、`pylsp` 講文檔。只取第一個的話，配了兩個
+    /// 也只起得來一個。
     fn all_named<'a>(
         config: &'a yumete_config::Config,
         language: &str,
@@ -581,7 +577,7 @@ impl Servers {
         use yumete_core::syntax::Syntax;
         match editor.current_buffer().syntax() {
             Syntax::Code(language) => Some(language.name()),
-            // **Prose only when asked for** (2026-10-29): a writer who names a
+            // **Prose only when asked for**: a writer who names a
             // server for Markdown, Typst or plain text — harper-ls, ltex —
             // gets its spelling and grammar; nobody else hears a word about
             // servers on a manuscript.
@@ -601,11 +597,10 @@ impl Servers {
             .collect();
         let Some(language) = self.language_of(editor) else { return };
         let Some(_named) = Self::named(config, language, Some(&Self::look_from(editor))) else {
-            // **打開的那一刻就說，別等人問**（2026-09-29 報的：「为什么不是在打开
-            // 文件的时候就检查 LSP 并且显示消息」）。從前這裏是默默 `return`，於是
-            // 讀者打開 `.py` 什麽都不知道，一直到按 `空格 k` 纔撞上。
+            // **打開的那一刻就說，別等人問**。默默 `return` 的話，讀者打開 `.py`
+            // 什麽都不知道，一直到按 `空格 k` 纔撞上。
             //
-            // Warning: **每個語言只說一次**（定的）。這是一件關於這臺機器的事實，
+            // Warning: **每個語言只說一次**。這是一件關於這臺機器的事實，
             // 不是一個事件——一個項目裏切五個 `.py` 就罵五遍，會把狀態欄上別的話
             // 全蓋掉。同 `lsp.cannot-start` 那一條的理由。
             // A text file with only the factory's list says nothing: a writer
@@ -615,8 +610,7 @@ impl Servers {
                 && !(matches!(language, "markdown" | "typst" | "text")
                     && config.lsp.get(language) == yumete_config::factory_servers().get(language))
             {
-                // The factory's list was nobody's spelling to check
-                // (2026-11-06).
+                // The factory's list is nobody's spelling to check.
                 let factory = config.lsp.get(language) == yumete_config::factory_servers().get(language);
                 self.says = Some(match config.lsp.get(language).filter(|v| !v.is_empty()) {
                     Some(wanted) if factory => say!("lsp.not-installed-factory", Self::the_names(wanted)),
@@ -630,7 +624,7 @@ impl Servers {
             // An unsaved buffer has no URI, and a server answers about files.
             return;
         };
-        // A prose file with a server gets the diagnostics lane (2026-10-30).
+        // A prose file with a server gets the diagnostics lane.
         if matches!(language, "markdown" | "typst" | "text") {
             editor.mark_served(path.clone());
         }
@@ -643,7 +637,7 @@ impl Servers {
                 }
                 let from = from_the_project(language).then_some(here.as_path());
                 let Some(at) = found_here(&named.command, from) else { continue };
-                // **用的是項目裏那一個就說一句**（2026-09-29 定）。Warning: 不
+                // **用的是項目裏那一個就說一句**。Warning: 不
                 // 寫目錄——狀態欄那一行很貴，完整路徑在 `:diagnostics-all` 頂上
                 // 那一行。
                 let mine = !std::env::var_os("PATH")
@@ -680,9 +674,8 @@ impl Servers {
                         // event, and repeating it every keystroke would bury
                         // every other thing the status line has to say.
                         //
-                        // Warning: **記在語言上，所以一個起不來就不再試這一種
-                        // 語言的任何一個**——那和從前一樣，而多服務器下它偏保
-                        // 守：寧可少起一個，也不要每一幀重試一個起不來的。
+                        // Warning: **記在語言上，所以一個起不來就不再試這一種語言的任何一個**——多服
+                        // 務器下它偏保守：寧可少起一個，也不要每一幀重試一個起不來的。
                         self.failed.insert(language.to_string());
                         self.says = Some(say!("lsp.cannot-start", named.command, why));
                     }
@@ -716,8 +709,8 @@ impl Servers {
         // **Wait for the typing to stop.** `touched` is reset by every change,
         // so this fires once, 300 ms after the last one.
         //
-        // Warning: **有一句補全的問題等著的時候不節流**（2026-10-08 報的：「this
-        // autocompletion should be instant (not as delayed by 300ms as docs)」）。
+        // Warning: **有一句補全的問題等著的時候不節流**：補全要即時出來，不能像
+        // 文檔那樣晚三百毫秒。
         // 補全與簽名那兩問要等服務器先收到剛打的那一個字母（見 [`Self::ask_next`]），
         // 所以節流的那三百毫秒整條加在單子前面。這一句是「人剛打了一個字母、
         // 正等著單子」的唯一時刻，而真正的語言服務器客戶端本來就每一次改動都發
@@ -766,9 +759,8 @@ impl Servers {
             // the first one that counts.
             self.saved.insert(path.clone(), saves);
             self.waiting_on.insert(path.clone());
-            // Warning: **這裏從前還順手開一格「在忙」給那八個點**（2026-09-30
-            // 加的），2026-10-01 拿掉了：那一格要等這個檔的診斷纔清，而工作區
-            // 之外的檔永遠等不到。見 [`Servers::busy_since`]。
+            // Warning: **這裏不給那八個點開「在忙」**：那一格要等這個檔的診斷纔清，
+            // 而工作區之外的檔永遠等不到。見 [`Servers::busy_since`]。
         }
         self.whose.insert(path.clone(), language);
         self.sent.insert(path, revision);
@@ -779,18 +771,18 @@ impl Servers {
     ///
     /// 給轉圈那八個點用（`crate::spinner`）。
     ///
-    /// Warning: **2026-10-01 整個換了判準。** 從前問的是「我告訴過服務器的檔裏
-    /// 還有沒回診斷的」，而且是**全局一格**。兩個毛病都撞上了：
+    /// Warning: **不能問「我告訴過服務器的檔裏還有沒回診斷的」，也不能是全局一格。**
+    /// 兩個毛病：
     ///
     /// 1. **永遠不清。** 一個**工作區之外**的檔（`gd` 跳進 homebrew 或 rustup
     ///    裏的源碼）rust-analyzer 根本不檢查，它那一份診斷永遠不來——那一格
     ///    於是永遠開着，點一直轉。
-    /// 2. **串到了每一個緩衝區。** 一格全局的旗子，一個檔卡住，別的檔全跟着轉。
+    /// 2. **串到每一個緩衝區。** 一格全局的旗子，一個檔卡住，別的檔全跟着轉。
     ///
-    /// 現在問的是服務器自己說的 `$/progress`（helix 也是這一條），外加「握手還
+    /// 所以問的是服務器自己說的 `$/progress`（helix 也是這一條），外加「握手還
     /// 沒完成」那一小段；兩段都一定會結束。而且只算**這個緩衝區那種語言**的服
     /// 務器。
-    /// **哪幾個服務器在看着眼前這一份**，以及各自起來了沒有（2026-10-08，`:info`）。
+    /// **哪幾個服務器在看着眼前這一份**，以及各自起來了沒有（`:info`）。
     ///
     /// 名字是**命令名**，不是語言名：一種語言跑得了好幾個（#425），而「誰在服務
     /// 這一份」問的就是那幾個程序。`ready` ＝ 握完手了，問得了問題。
@@ -814,7 +806,7 @@ impl Servers {
             .min()
     }
 
-    /// **握手等這麼久就不等了**（2026-10-11）。見 `collect` 裏那一段的理由。
+    /// **握手等這麼久就不等了**。見 `collect` 裏那一段的理由。
     ///
     /// Warning: **這個數寫進了 `lsp.no-answer` 那句話裏**（當參數傳，不是另寫一遍），
     /// 所以改它不會讓屏幕上那句話說謊。
@@ -822,9 +814,9 @@ impl Servers {
 
     /// **A file that is not open any more is not our business any more.**
     ///
-    /// Warning: 從前 `lsp::did_close` 全樹一處都没調用（2026-09-23 審出來的）。關掉
-    /// 一個檔，服務器照舊分析它、照舊推它的診斷，而 `Problems` 是按路徑存
-    /// 的——`:diagnostics-all` 會一直列着一個早就關掉的檔。
+    /// Warning: 關掉的檔要 `lsp::did_close`。不說的話，服務器照舊分析它、照舊
+    /// 推它的診斷，而 `Problems` 是按路徑存的——`:diagnostics-all` 會一直列着
+    /// 一個早就關掉的檔。
     ///
     /// 走在 [`Self::follow`] 之後：那一支剛把當前這個檔說出去，這一支再看還有
     /// 誰不在了。
@@ -904,12 +896,12 @@ impl Servers {
         // settle（300 毫秒）時 `follow` 一個字都還沒發出去，這時候問，服務器
         // 按**上一版**正文去數第幾行第幾列——指到的是別的東西，或者乾脆說
         // 「哪兒都沒寫」。所以問題**留着不取**，下一輪正文發出去了再問，同
-        // [`Self::ask_next`] 一個道理。2026-09-23 補。
-        // **服務器還在忙就先別問**（#431，2026-10-01）。rust-analyzer 讀項目要
-        // 兩秒多，而這期間它對 `textDocument/definition` 回的是 `null`——從前
-        // 我們當場把話說死（「未查到定義位置」），而問話已經被取走，**再也不會
-        // 重問**。現在留着那句問話，等它忙完（`$/progress` 的最後一個 `end`）
-        // 再發出去，期間照實說一句「啓動中」。
+        // [`Self::ask_next`] 一個道理。
+        // **服務器還在忙就先別問**（#431）。rust-analyzer 讀項目要兩秒多，而這
+        // 期間它對 `textDocument/definition` 回的是 `null`——當場把話說死
+        // （「未查到定義位置」）而問話被取走，就**再也不會重問**。所以留着那句
+        // 問話，等它忙完（`$/progress` 的最後一個 `end`）再發出去，期間照實說
+        // 一句「啓動中」。
         if self.busy_since(editor).is_some() {
             if editor.definition_query_is_pending() {
                 editor.set_status(say!("lsp.server-starting"));
@@ -935,7 +927,7 @@ impl Servers {
     }
 
     /// **`gr`, `:lsp-rename`, `空格 a` and a picked action's command**
-    /// (#54, 2026-10-29). Taken when sent: their answers are not retried, as
+    /// (#54). Taken when sent: their answers are not retried, as
     /// a definition's is, because none of them is asked while typing.
     fn ask_the_other_questions(&mut self, language: &str, editor: &mut Editor) {
         // A live query typed while the last is still out waits its turn, in
@@ -1024,12 +1016,12 @@ impl Servers {
         }
     }
 
-    /// **同一個問題，發給這種語言的每一個服務器**（#425，2026-09-30）。
+    /// **同一個問題，發給這種語言的每一個服務器**（#425）。
     ///
     /// `mark` 把新發的那個 id 記在對的那一格上（`asked_what` 等），`ask` 造那
     /// 一句話。
     ///
-    /// Warning: **不能只問「宣稱有這個能力」的那一個。** 2026-09-29 量過：
+    /// Warning: **不能只問「宣稱有這個能力」的那一個。**
     /// **ruff 宣稱 `hoverProvider: true`，實際回 `null`**。所以問給每一個，
     /// 第一個非空的答案算數（收口在 `Heard`）——helix 也是這一條。
     fn ask_them_all(
@@ -1057,7 +1049,7 @@ impl Servers {
             .join(if yumete_cjk::speaks_english() { ", " } else { "、" })
     }
 
-    /// **為什麽這一問發不出去**，`None` ＝ 發得出去（2026-09-29）。
+    /// **為什麽這一問發不出去**，`None` ＝ 發得出去。
     ///
     /// 五種，一種一句話。判準就是啓動那條路上的五道閘（見 [`Servers::follow`]），
     /// 按同樣的次序問一遍——所以屏幕上說的和真正卡住的地方一定是同一處。
@@ -1073,9 +1065,9 @@ impl Servers {
         };
         // 二、寫了，可這臺機器上一個都找不到。
         //
-        // Warning: **把找過的全列出來**（2026-09-29 報的）。python 出廠配了四個
-        // 候選（`ty`/`ruff`/`pylsp`/`jedi-language-server`，抄的 helix），而
-        // 從前這句話只說第一個——讀者於是只會去裝 `ty`，其實裝哪一個都行。
+        // Warning: **把找過的全列出來**。python 出廠配了四個候選（`ty`/`ruff`/
+        // `pylsp`/`jedi-language-server`，抄的 helix），只說第一個的話讀者只會
+        // 去裝 `ty`，其實裝哪一個都行。
         if Self::named(config, language, Some(&Self::look_from(editor))).is_none() {
             let word = match config.lsp.get(language) == yumete_config::factory_servers().get(language) {
                 true => say!("lsp.not-installed-factory", Self::the_names(wanted)),
@@ -1108,22 +1100,21 @@ impl Servers {
     /// wants an answer, and only this side knows which id it sent for what.
     pub fn ask_what(&mut self, editor: &mut Editor, config: &yumete_config::Config) {
         let Some(language) = self.language_of(editor) else { return };
-        // **問不出去的話，說清楚是哪一種問不出去**（2026-09-29 報的：「这句话的
-        // 意思是服务器没有开启，还是服务器开启了但是没有找到相关文档？」）。
+        // **問不出去的話，說清楚是哪一種問不出去**：服務器沒有起來，和起來了
+        // 卻沒有相關文檔，是兩回事。
         //
-        // Warning: **從前這五種只有一句話**：`no_hover()` 的「服務器對這個沒什麽
-        // 可說的」。那句話字面的意思是「它答了，說沒有」，而服務器根本沒起來的
-        // 時候說的也是它——隔壁註釋還寫着「照實說」。原話：「现在太含混了。」
+        // Warning: **這五種不能共用一句話**。`no_hover()` 的「服務器對這個沒什麽
+        // 可說的」字面的意思是「它答了，說沒有」，服務器根本沒起來的時候說它
+        // 就是說謊。
         if let Some(cannot) = self.why_it_cannot_ask(editor, config, language) {
             // Warning: **只有人按了鍵纔說**。跟着光標走的那一問（`:docs on`）是編
             // 輯器自己發的，每走到一個標點就罵一句不是人要的。
             //
-            // Warning: **問不出去是暫時的那一種，問話要留着**（2026-10-10 一輪審查
-            // 報來的）。從前這裏一律 `take`，於是開檔頭一兩秒按 `空格 k`——握手還
-            // 沒完，正是人最想看一眼「這是什麼」的那一刻——那一問當場被毀掉，之後
-            // 按任何鍵都補不回來；而 `ask_for_info` 已經把那一格佔住了，狀態欄報
-            // 「浮窗在」而屏幕上什麼都沒畫。隔壁 `busy_since` 那道閘早就是留着的
-            //（#431），只是這一道排在它前面，先把話毀了。
+            // Warning: **問不出去是暫時的那一種，問話要留着**。一律 `take` 的話，
+            // 開檔頭一兩秒按 `空格 k`——握手還沒完，正是人最想看一眼「這是什麼」
+            // 的那一刻——那一問當場被毀掉，之後按任何鍵都補不回來；而
+            // `ask_for_info` 已經把那一格佔住了，狀態欄報「浮窗在」而屏幕上什麼都
+            // 沒畫。這一道排在隔壁 `busy_since` 那道閘（#431）前面，所以它也得留着。
             match cannot.for_now {
                 true => {
                     if editor.hover_query_is_pending() {
@@ -1138,9 +1129,9 @@ impl Servers {
             }
             return;
         }
-        // **還在忙就先別問**，同 [`Self::ask`]（#431，2026-10-01 報的：
-        // 「在 LSP 加载的时候（八点转圈），按 _k，还是显示『此处没有找到相关
-        // 文档』」）。那句話的意思是「它答了，說沒有」——而它其實還沒讀完項目。
+        // **還在忙就先別問**，同 [`Self::ask`]（#431）。八個點還在轉的時候說
+        // 「此處沒有找到相關文檔」，意思是「它答了，說沒有」——而它其實還沒讀完
+        // 項目。
         //
         // Warning: **只有人按了鍵纔說那一句。** 跟着光標走的那一問（`:docs on`）
         // 是編輯器自己發的，每走一步罵一句不是人要的。
@@ -1154,11 +1145,11 @@ impl Servers {
         // settle（300 毫秒）時 `follow` 一個字都還沒發出去，這時候問，服務器
         // 按**上一版**正文去數第幾行第幾列——指到的是別的東西，或者乾脆說
         // 「哪兒都沒寫」。所以問題**留着不取**，下一輪正文發出去了再問，同
-        // [`Self::ask_next`] 一個道理。2026-09-23 補。
+        // [`Self::ask_next`] 一個道理。
         if !self.told_the_latest(editor) {
             return;
         }
-        // **跟着光標的那一問**（2026-09-29）：`空格 K` 開着的時候編輯器自己發，
+        // **跟着光標的那一問**：`空格 K` 開着的時候編輯器自己發，
         // 走的是同一條路——它只在光標停穩了三百毫秒之後纔交得出一個問題。
         if let Some((path, line, column)) = editor.docs_owed() {
             self.ask_them_all(
@@ -1176,7 +1167,7 @@ impl Servers {
         );
     }
 
-    /// **「這個括號裏該填什麼」**（`textDocument/signatureHelp`，2026-10-08）。
+    /// **「這個括號裏該填什麼」**（`textDocument/signatureHelp`）。
     ///
     /// 插入態打 `(` 或 `,` 就問一次（`Editor::signature_owed`）。同 `ask_what`：
     /// 服務器得先收到這一份的新正文，不然它照着上一版答。
@@ -1196,7 +1187,7 @@ impl Servers {
         );
     }
 
-    /// **簽名回空之後補問的那一句 hover**（2026-10-08 定）。
+    /// **簽名回空之後補問的那一句 hover**。
     ///
     /// 量出來的：rust-analyzer 對**宏**的 `signatureHelp` 一律回 `null`（`println!(`
     /// 就是），可同一處的 `hover` 答得好好的——兩個是兩種請求，前者問的是「你站在
@@ -1322,11 +1313,11 @@ impl Servers {
                     // **The answer to `gd`** — anything else with an id is an
                     // answer nobody is waiting for any more.
                     // Warning: **答案先收着，出了這個迴圈再說**（#425）。一個
-                    // 問題現在發給了這種語言的每一個服務器，所以「沒什麽可說
+                    // 問題發給這種語言的每一個服務器，所以「沒什麽可說
                     // 的」這句話要等**全都**答完了纔說得出口——而在迴圈裏借着
                     // 一個 server，動不了別人的 `asked_*`。
                     Ok(Notice::Answer { id, places, told, offers, incomplete, signature, edits, actions, error, symbols, spans, executed }) => {
-                        // A command asked for the page window (2026-11-07),
+                        // A command asked for the page window,
                         // kept for it to take ([`Servers::take_executed`]).
                         if let Some(ticket) = server.asked_exec.remove(&id) {
                             self.executed.insert(ticket, match error {
@@ -1367,7 +1358,7 @@ impl Servers {
                             anything = true;
                             heard.signature(signature);
                         } else if server.asked_signature_doc == Some(id) {
-                            // 簽名回空之後補問的那一句（2026-10-08）。
+                            // 簽名回空之後補問的那一句。
                             server.asked_signature_doc = None;
                             anything = true;
                             heard.signature_doc(told);
@@ -1386,7 +1377,7 @@ impl Servers {
                             heard.where_is_it(places);
                         }
                     }
-                    // **服務器自己說它在忙**（2026-10-01）。開一件記一件，關
+                    // **服務器自己說它在忙**。開一件記一件，關
                     // 一件去一件；`report` 兩頭都不動。
                     Ok(Notice::Working { token, begin, end }) => {
                         if begin {
@@ -1418,7 +1409,7 @@ impl Servers {
             if ended && !gone.contains(whose) {
                 gone.push(whose.clone());
             }
-            // **起來了卻一直不回 `initialize`**（2026-10-11）。進程活着、管子也
+            // **起來了卻一直不回 `initialize`**。進程活着、管子也
             // 沒斷，所以上面兩條都看不見它；而 [`Server::busy_since`] 在握手完成
             // 之前一律答「還在啓動」，於是 `gd` 永遠停在「語言服務器啟動中，請稍
             // 候」——那句話是真的，只是永遠不會變成別的。
@@ -1462,13 +1453,13 @@ impl Servers {
 
     /// **把那個子進程收走**，然後交出那條記錄。
     ///
-    /// Warning: 從前這裏只有 `self.running.remove(command)`——而扔掉一個
+    /// Warning: 只 `self.running.remove(command)` 不夠——扔掉一個
     /// `std::process::Child` **既不殺它也不收它**（Rust 明文如此）。死法有兩種：
     /// 它自己退了而沒人 `wait`，於是留一個僵屍；或者它還活着、只是管子斷了（這一
     /// 支正是「管子斷了」那條路叫的），於是留一個沒人管的程序，手裏還攥着那根管
-    /// 子和它那幾百兆（2026-10-07 審出來的）。
+    /// 子和它那幾百兆。
     ///
-    /// [`Servers::stop`] 一直是殺完再收的，這一支照它辦。
+    /// [`Servers::stop`] 是殺完再收的，這一支照它辦。
     fn bury(&mut self, command: &str) -> Option<Server> {
         let mut server = self.running.remove(command)?;
         if let Some(child) = server.child.as_mut() {
@@ -1484,7 +1475,7 @@ impl Servers {
     /// errors from a program that is no longer watching, and every one of them
     /// would stay until the session ended.
     fn lost(&mut self, command: &str, editor: &mut Editor, why: Gone) {
-        // Warning: **進來的是命令名，不是語言名**（#425，2026-09-30）。一種語言
+        // Warning: **進來的是命令名，不是語言名**（#425）。一種語言
         // 跑得了好幾個，死的是其中一個——別的還在聽。
         let Some(language) = self
             .serving
@@ -1508,9 +1499,9 @@ impl Servers {
             .map(|(path, _)| path.clone())
             .collect();
         for path in &its {
-            // Warning: **只抹掉它自己說的那一份**（#425）。從前一個服務器崩掉會
-            // 把那個檔上所有的診斷都抹了——旁邊那一個還在好好聽着，它說的話沒
-            // 有理由跟着陪葬。
+            // Warning: **只抹掉它自己說的那一份**（#425）。一個服務器崩掉不許把
+            // 那個檔上所有的診斷都抹了——旁邊那一個還在好好聽着，它說的話沒有
+            // 理由跟着陪葬。
             editor.set_problems(path.clone(), command.to_string(), Vec::new());
         }
         // 這種語言還剩着別的服務器，那就只是少了一個，不是整個沒了。
@@ -1540,12 +1531,12 @@ impl Servers {
             // whole of the 「restart without taking the editor down」 rule.
             true => say!("lsp.stopped", language),
             // Warning: **One that never答上話 is written off**, or the editor spawns
-            // one per turn of the loop, for ever. This machine 2026-09-20:
-            // `~/.cargo/bin/rust-analyzer` is a rustup shim whose component is
-            // not installed — it starts, prints one line to stderr and exits,
-            // so `spawn()` succeeds and `try_wait` immediately says it is
-            // gone. That looked exactly like a working server that had just
-            // stopped, and the retry made it a fork bomb in slow motion.
+            // one per turn of the loop, for ever. A rustup shim
+            // (`~/.cargo/bin/rust-analyzer`) whose component is not installed
+            // starts, prints one line to stderr and exits, so `spawn()`
+            // succeeds and `try_wait` immediately says it is gone. That looks
+            // exactly like a working server that has just stopped, and a retry
+            // would make it a fork bomb in slow motion.
             false => {
                 self.failed.insert(language.to_string());
                 say!("lsp.never-started", language)
@@ -1563,10 +1554,10 @@ impl Server {
             || self.asked_where.is_some()
             || self.asked_what.is_some()
             || self.asked_next.is_some()
-            // Warning: **簽名那兩句從前不算「欠著」**（2026-10-08 報的：「`println!(` 還是
-            // 沒有簽名」）。這一支決定事件迴圈睡多久：沒人欠著就一直阻塞在鍵盤上。
-            // 於是問出去的簽名答回來也沒人收，**要等你下一次按鍵**——而那時候正文
-            // 已經改了。回退那一句（`asked_signature_doc`）更是永遠排不上。
+            // Warning: **簽名那兩句也算「欠著」**。這一支決定事件迴圈睡多久：沒人
+            // 欠著就一直阻塞在鍵盤上。不算的話，問出去的簽名答回來也沒人收，**要等
+            // 你下一次按鍵**——而那時候正文已經改了。回退那一句
+            // （`asked_signature_doc`）更是永遠排不上。
             || self.asked_signature.is_some()
             || self.asked_signature_doc.is_some()
             || !self.asked_exec.is_empty()
@@ -1596,7 +1587,7 @@ impl Servers {
             // Warning: **這兩句多半來不及出門。** `say_now` 只是塞進 channel，而下面
             // 立刻就 `kill`——中間沒有任何同步，writer 綫程搶不過。留着它們是
             // 因為一條走得出去的路比沒有好（關得慢的終端就走得出去），但**不要
-            // 讀成「先禮後兵」**：實際發生的幾乎一律是兵。2026-09-23 記。
+            // 讀成「先禮後兵」**：實際發生的幾乎一律是兵。
             //
             // A server that will not go is killed: this runs while the
             // terminal is being handed back, and a lingering child would hold
@@ -1629,7 +1620,7 @@ impl Server {
     }
 }
 
-/// **Where the Typst server stands, for the page window** (2026-11-07).
+/// **Where the Typst server stands, for the page window.**
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Typesetter {
     /// No tinymist here: not installed, not configured, or it would not start.
@@ -1727,7 +1718,7 @@ impl Servers {
     }
 }
 
-/// **Whose servers may come from inside the project** (2026-11-06): Python's
+/// **Whose servers may come from inside the project**: Python's
 /// and Mojo's, which need the project's own environment and are why the
 /// lookup exists. Every other language's come from `PATH`, as helix's do:
 /// with servers filled in for JSON, YAML and the rest, opening the
@@ -1750,13 +1741,13 @@ fn on_the_path(command: &str, from: Option<&Path>) -> bool {
     found_here(command, from).is_some()
 }
 
-/// **項目自己帶的那幾個 `bin`**，按這個次序看（2026-09-29）。
+/// **項目自己帶的那幾個 `bin`**，按這個次序看。
 ///
 /// 一個包管理器裝的工具躺在項目裏，不在 `PATH` 上——`pixi add python-lsp-server`
-/// 之後 `pylsp` 只有 `pixi run` 進得去。原話：「我们很多时候会使用包管理且装
-/// 在项目文件夹中。比如 pixi uv 还有 .env 这种文件夹。都值得搜索。」
+/// 之後 `pylsp` 只有 `pixi run` 進得去。包管理器把工具裝在項目文件夾裏（pixi、
+/// uv、`.env` 這一類）是常事，這幾處都值得搜。
 ///
-/// Warning: **Windows 把它們擺在 `Scripts`**（2026-10-12）：`python -m venv` 在那邊
+/// Warning: **Windows 把它們擺在 `Scripts`**：`python -m venv` 在那邊
 /// 建的是 `.venv\Scripts\pylsp.exe`，conda／pixi 同理。`node_modules/.bin` 兩邊同
 /// 名，只是裏面躺的是 `.cmd` 殼。
 const BINS: &[&str] =
@@ -1766,12 +1757,11 @@ const BINS: &[&str] =
 /// 而有些東西直接躺在環境根上。unix 上那兩層本來就沒有執行檔，問一下不要錢。
 const LEAVES: &[&str] = &["bin", "Scripts", ""];
 
-/// **這個命令在這個目錄裏嗎**——帶上 Windows 那幾個後綴（2026-10-12）。
+/// **這個命令在這個目錄裏嗎**——帶上 Windows 那幾個後綴。
 ///
 /// Warning: **Windows 的 `PATH` 上沒有一個叫「`rust-analyzer`」的檔**，有的是
-/// `rust-analyzer.exe`。從前這裏只問裸名字，於是那一端**一個語言服務器都找不到**：
-/// 配了也照樣說「這臺機器上沒裝」，而 `--lib` 那九條 LSP 測試在 Windows 的 runner
-/// 上全紅，說的就是這件事。
+/// `rust-analyzer.exe`。只問裸名字的話，那一端**一個語言服務器都找不到**：
+/// 配了也照樣說「這臺機器上沒裝」。
 ///
 /// 後綴照 `PATHEXT`（那是系統自己說的那張表），讀不到就用慣常那幾個。命令自己已經
 /// 帶了後綴就照原樣問。**unix 不加後綴**：那邊一個檔叫什麽就是什麽。
@@ -1803,18 +1793,17 @@ const NESTED: &[&str] = &[".pixi/envs", ".direnv"];
 /// 從 `from`（被編輯的那個檔所在的目錄）起一級一級往上，每一級看 [`BINS`] 與
 /// [`NESTED`]，都沒有纔看 `PATH`。
 ///
-/// Warning: **爬到最外層那個 `.git` 為止**，不是碰到第一個就停（2026-09-29 當天
-/// 改的）。第一版停在第一個，而這個項目的樹是 `yuhao-ime/yumete/scripts/x.py`——
-/// `yumete` 自己是一個倉，pixi 的環境在**上一級**的 `yuhao-ime`，於是那一停正好
-/// 把答案關在門外。嵌套的倉全穿過去，停在最外面那一層倉上：再往上就真是別人的
-/// 項目了。
+/// Warning: **爬到最外層那個 `.git` 為止**，不是碰到第一個就停。像
+/// `yuhao-ime/yumete/scripts/x.py` 這樣的樹，`yumete` 自己是一個倉，pixi 的環境在
+/// **上一級**的 `yuhao-ime`，停在第一個正好把答案關在門外。嵌套的倉全穿過去，停在
+/// 最外面那一層倉上：再往上就真是別人的項目了。
 ///
 /// Warning: **helix 不做這件事。** 它只 `which`（`helix-lsp/src/client.rs:228`），
 /// 文檔明說「Binaries must be in `$PATH`」；vim 根本沒有內建 LSP。這一條是我們自
 /// 己加的，理由是包管理器把工具裝在項目裏已經是常態。代價是起服務器那一次多幾十
 /// 個 `stat`——只在啓動那一次，不是每一幀。
 ///
-/// Warning: **項目裏的優先於 `PATH`**（2026-09-29 定）。項目裏那一個跟這個項
+/// Warning: **項目裏的優先於 `PATH`**。項目裏那一個跟這個項
 /// 目的解釋器、依賴對得上，全局那一個不一定。
 fn found_here(command: &str, from: Option<&Path>) -> Option<PathBuf> {
     let named = Path::new(command);
@@ -1865,15 +1854,14 @@ fn found_here(command: &str, from: Option<&Path>) -> Option<PathBuf> {
     std::env::split_paths(&path).find_map(|dir| executable_in(&dir, command))
 }
 
-/// **一個裝在 pixi 環境裏的服務器要拿到那個環境**（2026-10-11 報的）。
+/// **一個裝在 pixi 環境裏的服務器要拿到那個環境**。
 ///
-/// 報的是「打開 `.mojo` 說未指定語言服務器」，而補上出廠那一行之後冒出第二件事：
-/// `mojo-lsp-server` 起得來、答得出話，答的是 **138 條假診斷**——`unable to locate
-/// module 'std'`、`use of unknown declaration 'Int'`，整份檔從頭紅到尾。比沒有服務
-/// 器還糟。
+/// 沒有環境的 `mojo-lsp-server` 起得來、答得出話，答的是 **138 條假診斷**——
+/// `unable to locate module 'std'`、`use of unknown declaration 'Int'`，整份檔從頭紅
+/// 到尾。比沒有服務器還糟。
 ///
 /// 原因是它找不到自己那套標準庫：`pixi run` 會設 `MODULAR_HOME`，而我們是直接
-/// 拿絕對路徑起的，什麼都沒設。量過：`MODULAR_HOME` 一加，138 → **0**。
+/// 拿絕對路徑起的。量過：`MODULAR_HOME` 一加，138 → **0**。
 ///
 /// Warning: **這一支不特判 Mojo，判的是「它住在哪」。** 路徑長成
 /// `…/.pixi/envs/<環境>/bin/<命令>` 就是「這個二進制屬於那個環境」，而一個環境裏
@@ -1916,7 +1904,7 @@ fn start(
     doorbell: Option<Doorbell>,
 ) -> std::io::Result<Server> {
     // Warning: **起的是找到的那一個絕對路徑**，不是配置裏那個名字——不然 `Command`
-    // 自己又去問一遍 `PATH`，項目裏那一個白找了（2026-09-29）。
+    // 自己又去問一遍 `PATH`，項目裏那一個白找了。
     let mut command = Command::new(at);
     in_its_environment(&mut command, at);
     let mut child = command
@@ -2032,7 +2020,7 @@ pub(crate) fn trace(way: &str, message: &str) {
 // Warning: **測試模組一律擺在檔尾。** `yumete-core/tests/messages.rs` 那張「每個標籤都
 // 有條目」的網把源碼切在**第一個**頂格的 `#[cfg(test)]\nmod ` 處——擺在檔案中間，
 // 它後面的生產代碼就整段從網裏消失，於是那裏加一則文案，面板上直接印標籤而測試
-// 全綠。這一支從前擺在中間，後面壓着 15 行（2026-09-24 審出來的）。
+// 全綠。
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2048,9 +2036,8 @@ mod tests {
         /// machine, and in no time at all.
         fn pretend(language: &str) -> (Servers, Receiver<String>, Sender<Notice>) {
             let mut servers = Servers { settle: std::time::Duration::ZERO, ..Default::default() };
-            // Warning: **要用出廠配置裏那個命令名**（2026-09-30 抓到的）。`running`
-            // 2026-09-30 起按**命令名**存，而 `follow` 的判準是「這個命令還沒
-            // 跑着就起一個」——假服務器掛在語言名下面的話它看不見，於是測試裏
+            // Warning: **要用出廠配置裏那個命令名**。`running` 按**命令名**存，而 `follow` 的判準是
+            // 「這個命令還沒跑着就起一個」——假服務器掛在語言名下面的話它看不見，於是測試裏
             // **真的把機器上的 rust-analyzer 起了起來**：慢，而且多出一個誰都
             // 沒答的服務器，把「全都答空了纔說沒有」那一條卡在半路上。
             let (heard, tell) = servers.pretend_one(language, &Self::findable());
@@ -2059,15 +2046,14 @@ mod tests {
 
         /// **一個一定找得到的命令名**：測試自己那個執行檔的絕對路徑。
         ///
-        /// Warning: **自測不許問機器上裝了什麽。** 從前這裏用出廠配置裏那個
-        /// `rust-analyzer`，於是 `why_it_cannot_ask` 第二關問的是「這臺機器上裝
-        /// 了沒有」——作者的 Mac 上有，所以綠；Windows 的 runner 上沒有，所以這
-        /// 一族九條一起紅（2026-10-12）；而換一臺沒裝 rust-analyzer 的 Mac 同樣
-        /// 會紅。要驗的是**規則**，不是這臺機器裝了什麽。
+        /// Warning: **自測不許問機器上裝了什麽。** 用出廠配置裏那個
+        /// `rust-analyzer` 的話，`why_it_cannot_ask` 第二關問的是「這臺機器上裝
+        /// 了沒有」——裝了的機器上綠，沒裝的機器上紅。要驗的是**規則**，不是
+        /// 這臺機器裝了什麽。
         ///
         /// 絕對路徑，`found_here` 照「帶着路徑寫下來的」那一支答，所以永遠在。而
         /// 它同時還是 `running` 裏那個假服務器的名字，於是 `follow` 看得見它已經
-        /// 跑着，一個真的服務器都不會被起起來（那是 2026-09-30 抓到的另一件事）。
+        /// 跑着，一個真的服務器都不會被起起來。
         fn findable() -> String {
             std::env::current_exe().expect("測試自己的執行檔").display().to_string()
         }
@@ -2142,7 +2128,7 @@ mod tests {
         (editor, path)
     }
 
-    /// **一個命令按這個平臺的規矩找**（2026-10-12）：Windows 上問 `foo` 要找得到
+    /// **一個命令按這個平臺的規矩找**：Windows 上問 `foo` 要找得到
     /// `foo.exe`，unix 上一個檔叫什麽就是什麽。
     ///
     /// Warning: **Windows 上別比完整路徑。** `PATHEXT` 裏寫的是 `.EXE`，拼出來的
@@ -2175,7 +2161,7 @@ mod tests {
         value["method"].as_str().unwrap_or_default().to_string()
     }
 
-    /// `$TMPDIR`，照編輯器的說法拼——`Buffer::open` 解析軟鏈接（2026-10-11）。
+    /// `$TMPDIR`，照編輯器的說法拼——`Buffer::open` 解析軟鏈接。
     fn tmp() -> std::path::PathBuf {
         let dir = std::env::temp_dir();
         std::fs::canonicalize(&dir).unwrap_or(dir)
@@ -2202,11 +2188,10 @@ mod tests {
         assert_eq!(method(&heard.try_recv().unwrap()), "textDocument/didChange");
     }
 
-    /// **有一張補全單子等著的時候，那一發不等節流**（2026-10-08 報的）。
+    /// **有一張補全單子等著的時候，那一發不等節流**。
     ///
     /// 上一支測的是平常那條路：第一趡起表、第二趡才發。補全單子要等這一發
-    /// 才問得出去，所以那三百毫秒整條加在單子前面——「this autocompletion should
-    /// be instant」。
+    /// 才問得出去，節流的話那三百毫秒整條加在單子前面，而補全要即時。
     #[test]
     fn a_waiting_completion_sends_the_text_at_once() {
         let config =
@@ -2225,11 +2210,11 @@ mod tests {
         assert_eq!(method(&heard.try_recv().unwrap()), "textDocument/didChange");
     }
 
-    /// **問不出去的五種，一種一句話**（2026-09-29 報的：「这句话的意思是服务器
-    /// 没有开启，还是服务器开启了但是没有找到相关文档？」）。
+    /// **問不出去的五種，一種一句話**：服務器沒有起來，和起來了卻沒有相關文檔，
+    /// 是兩回事。
     ///
-    /// Warning: **從前這五種只有一句話。** `no_hover()` 的「服務器對這個沒什麽可
-    /// 說的」字面上是「它答了，說沒有」，而服務器根本沒起來的時候說的也是它。
+    /// Warning: **這五種不能共用一句話。** `no_hover()` 的「服務器對這個沒什麽可
+    /// 說的」字面上是「它答了，說沒有」，服務器根本沒起來的時候說它就是說謊。
     #[test]
     fn a_question_that_cannot_be_asked_says_which_of_the_five_it_is() {
         let none = yumete_config::Config::default();
@@ -2285,8 +2270,8 @@ mod tests {
         let (ready, _heard, _tell) = Servers::pretend("rust");
         assert!(ready.why_it_cannot_ask(&editor, &stocked, "rust").is_none(), "問得出去");
 
-        // **只有「正在起」那一種是暫時的**，而只有暫時的那一種纔留着問話
-        //（2026-10-10）。前四種再等多久都不會變。
+        // **只有「正在起」那一種是暫時的**，而只有暫時的那一種纔留着問話。
+        // 前四種再等多久都不會變。
         let (mut starting, _h, _t) = Servers::pretend("rust");
         for server in starting.running.values_mut() {
             server.ready = false;
@@ -2300,11 +2285,10 @@ mod tests {
         );
     }
 
-    /// **項目自己帶的那個可執行檔找得到，而且贏過 `PATH`**（2026-09-29 定）。
+    /// **項目自己帶的那個可執行檔找得到，而且贏過 `PATH`**。
     ///
-    /// 原話：「我们很多时候会使用包管理且装在项目文件夹中。比如 pixi uv 还有
-    /// .env 这种文件夹。都值得搜索。而且我们应该从文件所在或者项目所在的位置搜索，
-    /// 没有就想上提级直到出现合适的。不行就用 PATH 的。」
+    /// 包管理器把工具裝在項目文件夾裏（pixi、uv、`.env` 這一類）是常事。從檔所在
+    /// 的目錄起往上一級一級找，直到找到合適的；都沒有纔用 `PATH` 上的。
     ///
     /// Warning: **helix 不做這件事**（只 `which`，`helix-lsp/src/client.rs:228`），
     /// vim 沒有內建 LSP。這一條是我們自己加的。
@@ -2334,10 +2318,10 @@ mod tests {
             "更近的那一級先答",
         );
 
-        // Warning: **嵌套的倉要穿過去，停在最外那一層**（2026-09-29 當天改的）。
-        // 這個項目的樹是 `yuhao-ime/yumete/scripts/x.py`：`yumete` 自己是一個倉，而
-        // pixi 的環境在上一級的 `yuhao-ime`。第一版停在第一個 `.git` 上，正好把
-        // 答案關在門外。
+        // Warning: **嵌套的倉要穿過去，停在最外那一層**。
+        // 像 `yuhao-ime/yumete/scripts/x.py` 這樣的樹：`yumete` 自己是一個倉，而
+        // pixi 的環境在上一級的 `yuhao-ime`。停在第一個 `.git` 上正好把答案關在
+        // 門外。
         let inner = dir.join("crates/one");
         std::fs::create_dir_all(inner.join(".git")).unwrap();
         std::fs::remove_dir_all(&venv).unwrap();
@@ -2356,8 +2340,8 @@ mod tests {
         // 找不到就回 `PATH` 上那一個：`sh` 哪臺機器都有。
         assert!(found_here("sh", Some(&deep)).is_some(), "退回 PATH");
 
-        // **Only Python's and Mojo's servers come from the project**
-        // (2026-11-06): a clone's `node_modules/.bin` is not run for its JSON.
+        // **Only Python's and Mojo's servers come from the project**:
+        // a clone's `node_modules/.bin` is not run for its JSON.
         let node = dir.join("node_modules/.bin");
         std::fs::create_dir_all(&node).unwrap();
         std::fs::write(node.join("vscode-json-language-server"), "#!/bin/sh\n").unwrap();
@@ -2372,8 +2356,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&above);
     }
 
-    /// **打開程序文件的那一刻就說沒有，而且每個語言只說一次**（2026-09-29 報的：
-    /// 「为什么不是在打开文件的时候就检查 LSP 并且显示消息」）。
+    /// **打開程序文件的那一刻就說沒有，而且每個語言只說一次**。
     #[test]
     fn opening_a_file_says_once_that_this_machine_has_no_server_for_it() {
         // 出廠給 python 配了四個候選，而這臺跑測試的機器上多半一個都沒有。
@@ -2399,10 +2382,9 @@ mod tests {
         assert!(servers.says.is_none(), "說過就不再說：{:?}", servers.says);
     }
 
-    /// **Prose takes helix's lists, and says nothing without them**
-    /// (2026-11-04): Markdown's servers start when installed; on a machine
-    /// with none, a manuscript opens without a word about servers. It used
-    /// to start nothing at all.
+    /// **Prose takes helix's lists, and says nothing without them**:
+    /// Markdown's servers start when installed; on a machine with none, a
+    /// manuscript opens without a word about servers.
     #[test]
     fn a_manuscript_without_its_servers_says_nothing() {
         let config = Servers::stocked("rust");
@@ -2453,7 +2435,7 @@ mod tests {
         assert!(servers.failed.is_empty(), "崩了不等於這臺機器沒有它");
     }
 
-    /// **一個死掉的服務器，它那個子進程要收走**（2026-10-07 審出來的）。
+    /// **一個死掉的服務器，它那個子進程要收走**。
     ///
     /// 扔掉一個 `Child` 既不殺它也不收它：管子斷了那條路留下的是一個沒人管的程
     /// 序，手裏還攥着那根管子和它那幾百兆。
@@ -2495,7 +2477,7 @@ mod tests {
         assert_eq!(answer["id"], 7, "Warning: 不答，服務器可能就在那兒等着");
     }
 
-    /// **A server's `config` is pushed once it is ready** (2026-11-07), right
+    /// **A server's `config` is pushed once it is ready**, right
     /// after `initialized`, as helix does.
     #[test]
     fn a_server_s_config_is_pushed_once_it_is_ready() {
@@ -2512,7 +2494,7 @@ mod tests {
         assert_eq!(said[1]["params"]["settings"], serde_json::json!({ "provideFormatter": true }));
     }
 
-    /// **A started server is given its `config`** (2026-11-07): it is in the
+    /// **A started server is given its `config`**: it is in the
     /// `initialize` that goes down the pipe, and a `workspace/configuration`
     /// it asks is answered from it. Unix only: the fake server is a shell
     /// script, which says one request and keeps what it is sent.
@@ -2578,7 +2560,7 @@ mod tests {
         assert!(servers.running.is_empty(), "關掉了就不起");
     }
 
-    /// **一串候選，用 PATH 上第一個裝了的**（2026-09-21）。
+    /// **一串候選，用 PATH 上第一個裝了的**。
     ///
     /// Warning: **一串名字表達不了**：helix 給 python 列的五個各有各的參數
     /// （`ruff server`、`ty server`，而 `jedi-language-server` 不帶參數），所以
@@ -2616,12 +2598,11 @@ mod tests {
         assert!(Servers::named(&none, "rust", None).is_none());
     }
 
-    /// Warning: **One that never got up is written off** — 2026-09-20, found against
-    /// a real `rust-analyzer`: `~/.cargo/bin/rust-analyzer` on this machine is
-    /// a rustup shim whose component is not installed, so it starts, prints
-    /// one line to stderr and exits. `spawn()` succeeds, `try_wait` says it is
-    /// gone, and「a working server that has just stopped」is the wrong reading:
-    /// retrying made one process per turn of the event loop.
+    /// Warning: **One that never got up is written off.** A rustup shim
+    /// (`~/.cargo/bin/rust-analyzer`) whose component is not installed starts,
+    /// prints one line to stderr and exits. `spawn()` succeeds, `try_wait` says
+    /// it is gone, and「a working server that has just stopped」is the wrong
+    /// reading: retrying would make one process per turn of the event loop.
     #[test]
     fn a_server_that_dies_before_it_ever_answers_is_not_started_again() {
         let (mut editor, _path) = editor_on("f.rs", "fn main() {}\n");
@@ -2638,7 +2619,7 @@ mod tests {
         assert!(servers.running.is_empty());
     }
 
-    /// **pixi 環境裏的服務器拿得到那個環境**（2026-10-11 報的）。
+    /// **pixi 環境裏的服務器拿得到那個環境**。
     ///
     /// 判的是路徑的形狀，不是命令的名字——`.pixi/envs/<名>/bin/<命令>`。
     #[test]
@@ -2679,7 +2660,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// **起來了卻不回 `initialize`，十秒之後就不等了**（2026-10-11）。
+    /// **起來了卻不回 `initialize`，十秒之後就不等了**。
     ///
     /// 和上一條的分別是進程還活着：管子沒斷，`try_wait` 說它在跑，所以那兩條路
     /// 都看不見它。看不見的代價是 `gd` 永遠停在「啓動中，請稍候」。
@@ -2722,9 +2703,9 @@ mod tests {
         assert_eq!(servers.due_in(), None);
     }
 
-    /// 2026-09-23 審出來的：診斷是**不請自來**的，一秒好幾條。從前它落地就
-    /// 把「還欠着」那一格抹掉，於是 `gd` 的答案還在管子裏，事件迴圈已經回去
-    /// 阻塞在鍵盤上了——答案要等下一次按鍵纔畫出來。
+    /// 診斷是**不請自來**的，一秒好幾條。它落地要是把「還欠着」那一格抹掉，
+    /// `gd` 的答案還在管子裏，事件迴圈已經回去阻塞在鍵盤上了——答案要等下一次
+    /// 按鍵纔畫出來。
     #[test]
     fn a_question_still_out_keeps_the_loop_awake_when_a_diagnostic_lands() {
         let (mut servers, _heard, tell) = Servers::pretend("rust");
@@ -2735,10 +2716,9 @@ mod tests {
         assert_eq!(servers.due_in(), Some(LOOK_IN), "問出去的還沒答，就不許睡死");
     }
 
-    /// **一種語言跑兩個服務器，兩個都聽得見、兩個說的都算數**（#425，2026-09-30）。
+    /// **一種語言跑兩個服務器，兩個都聽得見、兩個說的都算數**（#425）。
     ///
-    /// 2026-09-29 提的：「ruff 的 lint 和 pylsp 的文檔本來該同時有，現在只
-    /// 起得了第一個。」兩件事要同時成立：
+    /// ruff 的 lint 和 pylsp 的文檔要同時有。兩件事要同時成立：
     ///
     /// 一、**正文發給每一個**——少發一個，那一個就按舊正文去數行列，指到的是別
     /// 的東西。
@@ -2793,9 +2773,9 @@ mod tests {
         let _ = std::fs::remove_file(&path);
     }
 
-    /// **一個服務器答「沒有」，不許把另一個的答案蓋掉**（#425，2026-09-30）。
+    /// **一個服務器答「沒有」，不許把另一個的答案蓋掉**（#425）。
     ///
-    /// Warning: **這一條釘的是 ruff 那個坑。** 2026-09-29 量過：ruff 宣稱
+    /// Warning: **這一條釘的是 ruff 那個坑。** ruff 宣稱
     /// `hoverProvider: true`，問它卻回 `null`。所以「誰先答空誰說了算」是錯
     /// 的——它每次都搶在 pylsp 前面把「沒什麽可說的」說出口。規矩是 helix 那一
     /// 條：**第一個非空的答案算數，全都答空了纔說沒有。**
@@ -2886,10 +2866,10 @@ mod tests {
         let _ = std::fs::remove_file(&path);
     }
 
-    /// **只配一個的時候，一切和從前逐字相同**（#425 的安全綫）。
+    /// **只配一個的時候，一切和單服務器的行為逐字相同**（#425 的安全綫）。
     ///
-    /// Warning: **這一條是防回歸的，不是防 bug 的。** 多服務器那一套鋪開之後，
-    /// 最要緊的不是它多會做事，而是**只有一個 rust-analyzer 的人一點都不受影
+    /// Warning: **這一條是防回歸的，不是防 bug 的。** 多服務器那一套最要緊的
+    /// 不是它多會做事，而是**只有一個 rust-analyzer 的人一點都不受影
     /// 響**——那是每天都在用的那條路。
     #[test]
     fn one_server_behaves_exactly_as_before() {
@@ -2917,7 +2897,7 @@ mod tests {
         tell.send(Notice::Said { path: path.clone(), said: vec![one], raw: Vec::new() }).unwrap();
         servers.collect(&mut editor);
         assert_eq!(editor.problems_listed().len(), 1);
-        // 推一份空的就清乾淨——單服務器下這一條從前就是這樣。
+        // 推一份空的就清乾淨——和單服務器下一樣。
         tell.send(Notice::Said { path: path.clone(), said: Vec::new(), raw: Vec::new() }).unwrap();
         servers.collect(&mut editor);
         assert!(editor.problems_listed().is_empty(), "空的一推就清乾淨");
@@ -2925,7 +2905,7 @@ mod tests {
         let _ = std::fs::remove_file(&path);
     }
 
-    /// **An answer wakes the loop; a log line does not** (2026-10-28).
+    /// **An answer wakes the loop; a log line does not.**
     ///
     /// The fake server says one `window/logMessage` and then answers request 7.
     /// Only the answer rings, and it rings once. Unix only: the fake server
@@ -2969,11 +2949,11 @@ mod tests {
     }
 
     /// **`gr`, `:lsp-rename` and `空格 a` reach the server and come back**
-    /// (#54, 2026-10-29): two references open a picker, a rename's edit is
+    /// (#54): two references open a picker, a rename's edit is
     /// applied, the code-action request carries the diagnostics over its span,
     /// and a picked command goes to the server that offered it, whose edit is
     /// then applied and answered.
-    /// **`gi` with several answers offers them** (2026-11-03), as helix's
+    /// **`gi` with several answers offers them**, as helix's
     /// `goto_impl` does; one is gone to.
     #[test]
     fn several_implementations_open_a_picker() {
@@ -3123,7 +3103,7 @@ mod tests {
         let _ = std::fs::remove_file(&path);
     }
 
-    /// **Prose has a server only when the config names one** (2026-10-29):
+    /// **Prose has a server only when the config names one**:
     /// with `[lsp.markdown]` a chapter is opened to it, and plain text goes as
     /// `plaintext`; with nothing named, not a word is sent.
     #[test]
@@ -3159,7 +3139,7 @@ mod tests {
         let _ = std::fs::remove_file(&plain);
     }
 
-    /// **The page window's half of the Typst server** (2026-11-07): whether
+    /// **The page window's half of the Typst server**: whether
     /// tinymist can draw it, from what it said it is; a command out and its
     /// answer kept by id; the text handed over counted.
     #[test]

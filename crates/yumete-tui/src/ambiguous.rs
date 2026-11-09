@@ -3,8 +3,7 @@
 //! **This is the asker, not the authority** (#349). What a character measures
 //! is [`yumete_cjk::width`](../../yumete_cjk/width/index.html)'s to say, and
 //! everything that lays out or draws a line asks it; this module runs once at
-//! start-up and tells it the one thing only the terminal knows. The two used
-//! to be a `width.rs` each, which said nothing about which was which.
+//! start-up and tells it the one thing only the terminal knows.
 //!
 //! East-Asian **Ambiguous** characters — `—` `…` `“” ‘’` `·` `※` `▓` — are one
 //! cell in a Latin font and two in a CJK one, and Annex #11 says the
@@ -14,12 +13,11 @@
 //! by one cell for **every one of them on the line**, and a Chinese paragraph
 //! has dozens.
 //!
-//! The config used to answer this, wide by default, and a writer whose terminal
-//! draws them narrow had no way to know that was the setting that had the
-//! cursor sitting two cells past the character it was on. So the terminal is
-//! asked instead — it is the only thing that knows, and it can be asked in a
-//! tenth of a second: print one ambiguous character, ask where the cursor
-//! ended up (CPR, `\x1b[6n`), and count.
+//! A config answer, wide by default, would leave a writer whose terminal draws them narrow no way to
+//! know that was the setting that had the cursor sitting two cells past the character it was on. So
+//! the terminal is asked instead — it is the only thing that knows, and it can be asked in a tenth
+//! of a second: print one ambiguous character, ask where the cursor ended up (CPR, `\x1b[6n`), and
+//! count.
 
 /// The character the question is asked with.
 ///
@@ -30,7 +28,7 @@
 const ASK_WITH: &str = "—";
 
 /// **Whether the terminal draws an ambiguous character in two cells**,
-/// asked once a run and remembered (2026-10-31).
+/// asked once a run and remembered.
 ///
 /// The probe writes on the screen behind the frame's back: a `—` where the
 /// cursor stands, then a wiped row in the terminal's own colour. At start-up
@@ -67,13 +65,12 @@ fn probe() -> Option<bool> {
     }
     // Raw, or the terminal echoes the reply onto the screen and hands it over a
     // line at a time — which is to say, never.
-    // Warning: **還原原來那個狀態，不是無條件關掉**（2026-10-10 報的）。從前這裏是
-    // `enable_raw_mode()` 開、結束 `disable_raw_mode()` 關——啓動時對（那會兒編輯器
-    // 還沒進 raw mode），而這一支**在循環跑起來之後還會被叫**：`settings.rs` 的
-    // 「每一項設定，推一遍」在 `ambiguous_width = auto`／`theme mode = auto` 底下就
-    // 走到這裏，於是 `:settings` 裏改一項再 `:w`，探針問完就把正在用的 raw mode
-    // 關了。症狀是**終端開始回顯，而 Kitty 鍵盤協議那一層還挂着**，於是每一鍵顯示
-    // 成 `^[[104u`、鼠標點擊顯示成一串報告，看着像輸入法壞了。
+    // Warning: **還原原來那個狀態，不是無條件關掉**。`enable_raw_mode()` 開、結束
+    // `disable_raw_mode()` 關只在啓動時對（那會兒編輯器還沒進 raw mode），而這一支
+    // **在循環跑起來之後還會被叫**：`settings.rs` 的「每一項設定，推一遍」在
+    // `ambiguous_width = auto`／`theme mode = auto` 底下就走到這裏——無條件關的話， `:settings` 裏改
+    // 一項再 `:w`，探針問完就把正在用的 raw mode 關了。症狀是**終端開始回顯，而 Kitty 鍵盤協議那一
+    // 層還挂着**，於是每一鍵顯示成 `^[[104u`、鼠標點擊顯示成一串報告，看着像輸入法壞了。
     // `enable_raw_mode` 不計數，所以配對只能靠自己先問一句。
     let was_raw = ratatui::crossterm::terminal::is_raw_mode_enabled().unwrap_or(false);
     let raw = was_raw || ratatui::crossterm::terminal::enable_raw_mode().is_ok();

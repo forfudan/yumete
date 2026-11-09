@@ -1,4 +1,4 @@
-//! **A vertical page** (2026-11-08): the preview set in 縱 from the right
+//! **A vertical page**: the preview set in 縱 from the right
 //! edge, columns read right to left, the page going on to the left, when the
 //! text window is vertical and `:preview-vertical` is on.
 //!
@@ -317,11 +317,11 @@ impl Engine {
                     match self.formula(tex, *display, st.color, size) {
                         Some(f) => {
                             let pad = 0.1 * st.size;
-                            // **Never longer than the column it is set in**
-                            // (review, 2026-11-09): in a table's cell that is
-                            // the band, and a turned formula wider than the
-                            // band ran out of its cell; it is scaled down to
-                            // fit, as a picture is.
+                            // **Never longer than the column it is set in**:
+                            // in a table's cell that is the band, and a
+                            // turned formula wider than the band would run
+                            // out of its cell; it is scaled down to fit, as a
+                            // picture is.
                             let long = if upright { f.height } else { f.width };
                             let k = ((len - 2.0 * pad) / long.max(1.0)).clamp(0.05, 1.0);
                             let (w, h) = (f.width * k, f.height * k);
@@ -363,12 +363,12 @@ impl Engine {
         // Found by halving, not by walking every stretch at every character.
         let code_at = |at: usize| ranged_at(&ranges, at).is_some_and(|(_, m, ..)| m.code || m.kbd);
         let small_at = |at: usize| ranged_at(&ranges, at).is_some_and(|(_, _, _, small)| *small);
-        // Code is verbatim: turned whole, 漢字 and all (2026-11-08).
+        // Code is verbatim: turned whole, 漢字 and all.
         let verbatim_at = |at: usize| st.mono || ranged_at(&ranges, at).is_some_and(|(_, m, ..)| m.code);
 
         // **The text as shown**: curly quotes as corner brackets in Chinese,
         // never in code. Each is three bytes, as its bracket is. Chinese is
-        // what the export calls Chinese (2026-11-09): the same rule, not the
+        // what the export calls Chinese: the same rule, not the
         // writing system the faces are chosen by.
         let typed: Vec<(usize, char)> = text.char_indices().collect();
         let quotes = self.quotes && !st.mono;
@@ -439,9 +439,9 @@ impl Engine {
                 continue;
             }
             // A mark UAX #50 stands upright (`×`, `±`) stands, as
-            // `text-orientation: mixed` leaves it in the export (2026-11-09).
-            // **A curly quote that stays curly is turned** (2026-11-09,
-            // reported: `“go”` stood its quotes upright): UAX #50 gives it R,
+            // `text-orientation: mixed` leaves it in the export.
+            // **A curly quote that stays curly is turned**, not stood upright
+            // (`“go”`): UAX #50 gives it R,
             // and a browser turns it, as the export's page shows it.
             if c == ' ' || c == '\u{a0}' || c == '\t' {
                 seg[k] = Seg::Gap;
@@ -1431,7 +1431,7 @@ impl Engine {
         *u += w;
     }
 
-    /// **A code block down the page** (2026-11-08): the block as it is set
+    /// **A code block down the page**: the block as it is set
     /// across — its colours, its ground — turned a quarter turn clockwise
     /// whole, every character with its line, 漢字 too: code is verbatim, and
     /// its columns line up only if nothing in it stands up. Each line runs
@@ -1564,9 +1564,9 @@ impl Engine {
     #[allow(clippy::too_many_arguments)]
     fn vfigure(&mut self, src: &str, alt: &str, line: usize, u: &mut f32, top: f32, len: f32, out: &mut Out, cx: Ctx, page: Page) -> bool {
         let em = cx.size;
-        // Its size from its header (2026-11-09): it was drawn at full size
-        // first only to be measured, 4000 × 3000 pixels a few hundred
-        // megabytes on every layout of the block.
+        // Its size from its header: drawing it at full size only to be
+        // measured would cost 4000 × 3000 pixels a few hundred megabytes on
+        // every layout of the block.
         let Some((w0, h0)) = self.image_size(src) else { return false };
         let room = (page.width * 0.45).min(w0 * len / h0.max(1.0)).max(1.0);
         let Some(pix) = self.image(src, room) else { return false };
@@ -1673,8 +1673,8 @@ impl Engine {
         let nband = align.len().max(head.len()).max(rows.iter().map(|r| r.1.len()).max().unwrap_or(0)).max(1);
         let empty: Vec<Inline> = Vec::new();
         let pad = 0.4 * em;
-        // **More columns than a column of the page holds at a square each**
-        // (2026-11-09): the table goes on in a second band to the left, and a
+        // **More columns than a column of the page holds at a square each**:
+        // the table goes on in a second band to the left, and a
         // third, each with every row, so that no cell is past the foot.
         let per = (((len - px) / (em + 2.0 * pad + px)).floor() as usize).max(1);
         if nband > per {
@@ -1721,17 +1721,17 @@ impl Engine {
             let left = (room - kept).max(0.0);
             natural.iter().map(|&n| if short(n) { n } else { (n * left / long).max(3.0 * em + 2.0 * pad) }).collect()
         };
-        // **Still too long** (2026-11-09): with many columns even the short
-        // cells did not fit, and the last of them ran off the foot of the
-        // page, where nothing could bring them back. Every band then gives
+        // **Still too long**: with many columns even the short cells may not
+        // fit, and the last of them would run off the foot of the page, where
+        // nothing could bring them back. Every band then gives
         // way down to a square, its cells wrapping as a long one does, so
         // the table is never longer than the column, as the export has it.
         //
         // Warning: **only a band longer than a square gives way, and the floor
-        // counts a shorter one as it is** (2026-11-09, reported: a table with
-        // empty cells still ran past the foot): the floor was a square for
-        // every band, and a short band was stretched up to a square while the
-        // long ones were shrunk to fit the floor that did not count it.
+        // counts a shorter one as it is**, or a table with empty cells still
+        // runs past the foot: with a square floor for every band, a short band
+        // is stretched up to a square while the long ones are shrunk to fit a
+        // floor that does not count it.
         let least = em + 2.0 * pad;
         let given: f32 = bands.iter().sum();
         let floor: f32 = bands.iter().map(|&b| b.min(least)).sum();
@@ -1747,11 +1747,11 @@ impl Engine {
         let mut laid: Vec<Vec<VText>> = Vec::with_capacity(cells.len());
         let mut thick: Vec<f32> = Vec::with_capacity(cells.len());
         //
-        // **A word longer than its band is cut** (2026-11-09, reported: a URL
-        // in a cell ran past the foot of the page): a cell was read with the
-        // page's column length, so a word that fitted the page and not the
-        // band stood out of its cell. Such a cell is read again at the band's
-        // length, the word cut anywhere, as the export breaks it.
+        // **A word longer than its band is cut**, or a URL in a cell runs past
+        // the foot of the page: read with the page's column length, a word
+        // that fits the page and not the band stands out of its cell. Such a
+        // cell is read again at the band's length, the word cut anywhere, as
+        // the export breaks it.
         for (ri, row) in cells.into_iter().enumerate() {
             let mut r: Vec<VText> = Vec::with_capacity(nband);
             for (b, cell) in row.into_iter().enumerate() {
@@ -1895,7 +1895,7 @@ mod tests {
         looks.iter().filter(|l| l.0 == text).map(|l| l.1).collect()
     }
 
-    /// **`turn`** (2026-11-08): every run of letters and digits turned
+    /// **`turn`**: every run of letters and digits turned
     /// whole, its marks with it; every inline formula turned.
     #[test]
     fn under_turn_every_latin_run_lies_down() {
@@ -1909,7 +1909,7 @@ mod tests {
         assert_eq!(how(&l, "我"), ["up"]);
     }
 
-    /// **`jlreq`** (2026-11-08): a word turned whole, capitals upright one to
+    /// **`jlreq`**: a word turned whole, capitals upright one to
     /// a square, one digit upright, two across in one square, more turned, a
     /// number with its unit one way; `$x$` and `\frac12` upright, a longer
     /// formula turned.
@@ -1929,7 +1929,7 @@ mod tests {
         assert_eq!(l.iter().filter(|x| x.1 == "pic turned").count(), 1, "{l:?}");
     }
 
-    /// **Corner brackets for curly quotes** in Chinese (2026-11-08); an
+    /// **Corner brackets for curly quotes** in Chinese; an
     /// apostrophe stays, and code keeps what it says.
     #[test]
     fn curly_quotes_become_corner_brackets_in_chinese() {
@@ -1944,8 +1944,8 @@ mod tests {
         assert_eq!(how(&l, "“"), ["turned"], "a Japanese text keeps its quotes, turned: {l:?}");
     }
 
-    /// **A curly quote that stays curly is turned** (2026-11-09, reported:
-    /// it stood upright): orientation R, as a browser sets it in the export,
+    /// **A curly quote that stays curly is turned**, not stood upright:
+    /// orientation R, as a browser sets it in the export,
     /// and it still breaks as a quote, never ending a column.
     #[test]
     fn a_curly_quote_that_stays_is_turned() {
@@ -1960,7 +1960,7 @@ mod tests {
         assert_eq!(open.cls, Cls::Open);
     }
 
-    /// **The preview turns quotes exactly when the export does** (2026-11-09):
+    /// **The preview turns quotes exactly when the export does**:
     /// the page's language as the export decides it, not its writing
     /// system; an English page quoting Chinese keeps its quotes.
     #[test]
@@ -1974,7 +1974,7 @@ mod tests {
     }
 
     /// **Under jlreq a letter with marks joined to it stands as the letter
-    /// alone** (2026-11-09), the marks turned beside it as the export's page
+    /// alone**, the marks turned beside it as the export's page
     /// sets them; `x, y` are two letters.
     #[test]
     fn under_jlreq_a_letter_with_its_marks_stands_upright() {
@@ -1986,9 +1986,9 @@ mod tests {
         assert_eq!(how(&l, "."), ["turned"], "{l:?}");
     }
 
-    /// **A letter with a combining mark stands whole** (review, 2026-11-09):
+    /// **A letter with a combining mark stands whole**:
     /// `e` and U+0301 typed apart are one square under `jlreq`, as `é` is;
-    /// the mark used to be cut off and turned on its own.
+    /// the mark is not cut off and turned on its own.
     #[test]
     fn under_jlreq_a_letter_with_a_combining_mark_stands_whole() {
         let mut e = engine(Latin::Jlreq, false);
@@ -1998,7 +1998,7 @@ mod tests {
         assert!(how(&l, "\u{301}").is_empty(), "{l:?}");
     }
 
-    /// **A vertical table never runs past the foot** (2026-11-09, reported):
+    /// **A vertical table never runs past the foot**:
     /// empty and short bands keep their length while the long ones give way
     /// to fit, and a long word or an address in a cell is cut to its band.
     #[test]
@@ -2028,9 +2028,8 @@ mod tests {
         }
     }
 
-    /// **A turned formula in a cell is held to its band** (review,
-    /// 2026-11-09): one wider than the band ran out of its cell and past the
-    /// foot; it is scaled down to fit, as a picture is, and a short one keeps
+    /// **A turned formula in a cell is held to its band**: one wider than the band would run out of
+    /// its cell and past the foot; it is scaled down to fit, as a picture is, and a short one keeps
     /// its size.
     #[test]
     fn a_turned_formula_in_a_cell_is_scaled_to_its_band() {
@@ -2055,7 +2054,7 @@ mod tests {
     const LONG: &str = "那一年秋天，我们走了很远的路，看见一座山。山上有树，树下有人，他说：“雨要来了。”我们没有回答——只是看着他。\
         后来天黑了，我们在山脚下的小屋里坐着，听外面的风声（很大的风），一直到天亮……";
 
-    /// **禁則** (2026-11-08): at every column length no closing mark or stop
+    /// **禁則**: at every column length no closing mark or stop
     /// begins a column, no opening mark ends one, and a doubled dash or
     /// ellipsis is never split.
     #[test]
@@ -2078,7 +2077,7 @@ mod tests {
         }
     }
 
-    /// **Justified** (2026-11-08): every column of a paragraph but its last
+    /// **Justified**: every column of a paragraph but its last
     /// ends at the column's foot.
     #[test]
     fn every_column_but_the_last_reaches_the_foot() {
@@ -2097,7 +2096,7 @@ mod tests {
         }
     }
 
-    /// **A stop that does not fit** (2026-11-08): it takes the character
+    /// **A stop that does not fit**: it takes the character
     /// before it on to the next column; with `[export] hanging` it hangs
     /// below the column instead.
     #[test]
@@ -2113,7 +2112,7 @@ mod tests {
         assert_eq!(words[0], "一二三四五六七八九十。", "hung: {words:?}");
     }
 
-    /// **A vertical page runs to the left** (2026-11-08): the line map grows
+    /// **A vertical page runs to the left**: the line map grows
     /// from the right edge, each block's line comes back from its place, and
     /// a screen is the window's size.
     #[test]
@@ -2141,7 +2140,7 @@ mod tests {
         assert!(!shown.contains("第2段"), "{shown}");
     }
 
-    /// **A display formula** (2026-11-08): turned, on a column of its own,
+    /// **A display formula**: turned, on a column of its own,
     /// two squares from the column's head.
     #[test]
     fn a_display_formula_turns_two_squares_from_the_head() {
@@ -2161,7 +2160,7 @@ mod tests {
         assert!(r.height() > r.width(), "turned: {r:?}");
     }
 
-    /// **A vertical table** (2026-11-08): its caption first, then the head
+    /// **A vertical table**: its caption first, then the head
     /// row as the rightmost column, each body row a column after it.
     #[test]
     fn a_table_is_set_as_a_nianbiao() {
@@ -2187,7 +2186,7 @@ mod tests {
         assert!(cols.iter().any(|c| c.contains("標題")), "{cols:?}");
     }
 
-    /// **Ruby** (2026-11-08): the reading is drawn beside its base, and a
+    /// **Ruby**: the reading is drawn beside its base, and a
     /// reading longer than its base spaces the base out.
     #[test]
     fn a_reading_stands_beside_its_base() {
@@ -2215,7 +2214,7 @@ mod tests {
         assert!(glyphs >= 2, "the base and the reading: {glyphs}");
     }
 
-    /// **A code block is turned whole** (2026-11-08): no text set across,
+    /// **A code block is turned whole**: no text set across,
     /// every glyph turned a quarter turn clockwise, a line to a column, 漢字
     /// too; a line longer than the column wraps at its foot onto the next,
     /// with nothing lost, and the hook in its hang.
@@ -2240,7 +2239,7 @@ mod tests {
         assert!(cols.windows(2).all(|w| w[1].0 > w[0].0), "{cols:?}");
     }
 
-    /// **Inline code is turned whole** (2026-11-08), 漢字 in it too, under
+    /// **Inline code is turned whole**, 漢字 in it too, under
     /// either `vertical_latin`: never upright, never across in one square.
     #[test]
     fn inline_code_is_turned_whole_under_both_latins() {
@@ -2253,7 +2252,7 @@ mod tests {
         }
     }
 
-    /// **Across again** (2026-11-08): the page is the horizontal one.
+    /// **Across again**: the page is the horizontal one.
     #[test]
     fn set_across_again_the_page_is_horizontal() {
         let mut p = page(&format!("{LONG}\n"), Latin::Turn, 400);
@@ -2264,8 +2263,8 @@ mod tests {
         assert_ne!(p.size().1, long);
     }
 
-    /// **A table wider than the column holds goes on in a second band**
-    /// (2026-11-09): twelve columns down a short page all stand above its
+    /// **A table wider than the column holds goes on in a second band**:
+    /// twelve columns down a short page all stand above its
     /// foot, every cell's words drawn.
     #[test]
     fn a_table_longer_than_the_column_stays_above_its_foot() {
@@ -2290,7 +2289,7 @@ mod tests {
         assert_eq!(lines, 13 + 3, "a line between each two of twelve bands and round them, and three across");
     }
 
-    /// **A figure is measured from its picture's header** (2026-11-09), not
+    /// **A figure is measured from its picture's header**, not
     /// drawn at full size first: what is kept is the picture read and the
     /// picture at the size shown, not a full-size copy besides.
     #[test]
@@ -2311,7 +2310,7 @@ mod tests {
         assert!(e.kept().1 < raw + raw / 4, "kept {} bytes, the picture is {raw}", e.kept().1);
     }
 
-    /// **Quotes round Western words stay curly** (2026-11-09), as the export
+    /// **Quotes round Western words stay curly**, as the export
     /// keeps them; a pair holding Chinese turns.
     #[test]
     fn quotes_round_western_words_stay_curly_as_in_the_export() {
@@ -2323,7 +2322,7 @@ mod tests {
         assert!(all.contains("“go”") && all.contains("『走』"), "{all}");
     }
 
-    /// **Under jlreq a single small letter stands upright** (2026-11-09), as
+    /// **Under jlreq a single small letter stands upright**, as
     /// a capital and `$x$` do; a word of small letters is turned.
     #[test]
     fn under_jlreq_a_single_small_letter_stands_upright() {
@@ -2335,7 +2334,7 @@ mod tests {
         assert_eq!(l.iter().filter(|x| x.1 == "pic upright").count(), 1, "{l:?}");
     }
 
-    /// **A lone mark stands as the export's page stands it** (2026-11-09):
+    /// **A lone mark stands as the export's page stands it**:
     /// `×` and `±` upright, as UAX #50 has them, `·` and `/` turned.
     #[test]
     fn a_lone_mark_stands_as_the_export_stands_it() {

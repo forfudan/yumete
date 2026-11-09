@@ -35,9 +35,8 @@ pub const DOTTED: Modifier = Modifier::from_bits_retain(1 << 9);
 /// macOS input method draws its inline preedit on. Those two want different
 /// cells. The rule belongs on the boundary *above* the character the text goes
 /// in front of; the preedit belongs **on that character**, because that is
-/// where the text it is composing will appear (2026-10-16: 「在「餅」上按 i
-/// 鍵，cursor 應該在「餅」上，實際在「蛋」上……終端會在 cursor 的位置畫 inline
-/// preedit，於是把「蛋」蓋住了」).
+/// where the text it is composing will appear: `i` on 「餅」 must not have the
+/// preedit cover the 「蛋」 above it.
 ///
 /// So the cursor goes on the character and this flag hides it, leaving the rule
 /// the only caret on the page.
@@ -118,7 +117,7 @@ impl<W: Write> Backend for Dotted<W> {
         I: Iterator<Item = (u16, u16, &'a Cell)>,
     {
         // **A picture's upload goes ahead of the cells that show it**
-        // (2026-11-06, `graphics.rs`): the placeholders below are only text
+        // (`graphics.rs`): the placeholders below are only text
         // until the terminal has the picture they name.
         let owed = crate::graphics::take_pending();
         if !owed.is_empty() {

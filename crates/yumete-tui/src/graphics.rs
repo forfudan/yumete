@@ -1,15 +1,13 @@
-//! **Pictures in the text, through the kitty graphics protocol** (2026-11-06).
+//! **Pictures in the text, through the kitty graphics protocol**.
 //!
-//! Two uses — the formula float ([`crate::maths`]) and, since 2026-11-07,
-//! the preview ([`crate::page_window`], two slots a preview) — and one route,
-//! the protocol's **Unicode placeholders**: the PNG goes to the terminal once
-//! (`a=T,U=1`, a *virtual placement*), and after that the picture is ordinary
-//! text. Each of its cells holds U+10EEEE with two combining marks that say
-//! which row and column of the picture it is, and the cell's foreground colour
-//! carries the picture's id. ratatui's diff then moves, covers and erases it
-//! like any other cell, and the picture survives tmux, since the cells are
-//! plain text. Modelled on yazi's `kgp.rs` and ratatui-image's `kitty.rs`; the
-//! survey is `local/survey-0.20/graphics.md`.
+//! Two uses — the formula float ([`crate::maths`]) and the preview ([`crate::page_window`], two
+//! slots a preview) — and one route, the protocol's **Unicode placeholders**: the PNG goes to the
+//! terminal once (`a=T,U=1`, a *virtual placement*), and after that the picture is ordinary text.
+//! Each of its cells holds U+10EEEE with two combining marks that say which row and column of the
+//! picture it is, and the cell's foreground colour carries the picture's id. ratatui's diff then
+//! moves, covers and erases it like any other cell, and the picture survives tmux, since the cells
+//! are plain text. Modelled on yazi's `kgp.rs` and ratatui-image's `kitty.rs`; the survey is
+//! `local/survey-0.20/graphics.md`.
 //!
 //! **Decided by the terminal's name, not by asking it.** Konsole answers the
 //! protocol's query and then ignores placeholders, and the protocol has no
@@ -54,7 +52,7 @@ pub struct Tmux {
     pub passthrough: bool,
 }
 
-/// **Which terminal this is, from its environment** (2026-11-06).
+/// **Which terminal this is, from its environment**.
 ///
 /// `var` reads one environment variable; `tmux` is asked only inside tmux,
 /// where the environment names tmux and not the terminal around it.
@@ -72,10 +70,9 @@ pub fn support_from(var: impl Fn(&str) -> Option<String>, tmux: impl FnOnce() ->
     }
     let draws = |term: &str| matches!(term, "xterm-ghostty" | "xterm-kitty");
     let inherited = || set("GHOSTTY_RESOURCES_DIR") || set("KITTY_WINDOW_ID");
-    // **In tmux only tmux's word for the client counts** (review,
-    // 2026-11-06): the pane's environment is the tmux server's, from
-    // whichever terminal started it, and a session begun in Ghostty and
-    // attached from iTerm2 still carries Ghostty's variables.
+    // **In tmux only tmux's word for the client counts**: the pane's environment is the tmux
+    // server's, from whichever terminal started it, and a session begun in Ghostty and attached from
+    // iTerm2 still carries Ghostty's variables.
     if set("TMUX") {
         let Some(said) = tmux() else {
             return Support::None;
@@ -262,7 +259,7 @@ pub fn put_picture(buf: &mut Buffer, area: Rect, id: u32) {
 }
 
 /// [`put_picture`], starting at the picture's row `first_row` and column
-/// `first_column` (2026-11-07): the part of a tall picture a window scrolled
+/// `first_column`: the part of a tall picture a window scrolled
 /// down shows. The terminal draws only the part whose cells are there.
 pub fn put_picture_from(buf: &mut Buffer, area: Rect, id: u32, first_row: u16, first_column: u16) {
     let area = area.intersection(buf.area);
@@ -417,14 +414,14 @@ pub fn release_all() -> Vec<u8> {
     out
 }
 
-/// **A preview's two pictures** (2026-11-07), apart from the formulas'
+/// **A preview's two pictures**, apart from the formulas'
 /// shelf: a page is megabytes in the terminal (an A5 page at 144 ppi is 4 MB
 /// of pixels), so it does not take sixteen places, and it is not dropped to
 /// make room for a formula. Two ids in turn: a new page goes into the one not
 /// on screen, the cells move over to it in the same frame, and the next page
 /// overwrites the one left behind — no frame shows half a page.
 ///
-/// **Two a preview** (2026-11-08): several previews may be on the screen at
+/// **Two a preview**: several previews may be on the screen at
 /// once, each with its page, and each holds a pair of its own, numbered
 /// `n` in the ids.
 struct Slots {

@@ -1,4 +1,4 @@
-//! **The formula under the cursor, typeset** (2026-11-06).
+//! **The formula under the cursor, typeset**.
 //!
 //! When the cursor is in a `$…$` — Markdown's `$`/`$$`, Typst's `$` — a
 //! float under it shows the formula set as maths, in a terminal that draws
@@ -14,11 +14,10 @@
 //! it shows — the formula, its ink and its size — so walking the cursor back
 //! over a formula does not run typst again.
 //!
-//! **Markdown's maths is TeX, drawn by RaTeX** ([`crate::tex`], 2026-11-08),
+//! **Markdown's maths is TeX, drawn by RaTeX** ([`crate::tex`]),
 //! in the process, in well under a millisecond, so it is drawn when asked
 //! (and kept, [`crate::tex::picture`]) and needs no
-//! `typst` at all. (Until then it went through typst and the `mitex`
-//! package, which was bundled for it.)
+//! `typst` at all.
 
 use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
@@ -247,7 +246,7 @@ impl Place {
         #[cfg(not(unix))]
         let me = std::env::var("USERNAME").unwrap_or_default();
         let base = std::env::temp_dir().join(format!("yumete-maths-{me}"));
-        // **This user's own, and nobody else's** (review, 2026-11-06): on
+        // **This user's own, and nobody else's**: on
         // Linux the temporary folder is the shared `/tmp`, where anyone could
         // make this folder first and plant a package or a link in it. It is
         // made private, and used only if it is a real folder of ours.
@@ -308,7 +307,7 @@ pub fn document(key: &Key) -> String {
     let mut out = String::new();
     out.push_str("#set page(width: auto, height: auto, margin: 2pt, fill: none)\n");
     out.push_str(&format!("#set text(size: {size}pt, fill: rgb(\"#{r:02x}{g:02x}{b:02x}\"))\n"));
-    // **The page is as tall as the ink, not the line** (2026-11-06): by
+    // **The page is as tall as the ink, not the line**: by
     // default a line runs from cap height to baseline, and a page of
     // `height: auto` cut an inline `1/2` or `sqrt` off at both edges.
     out.push_str("#set text(top-edge: \"bounds\", bottom-edge: \"bounds\")\n");
@@ -420,8 +419,8 @@ static LAST: Mutex<Option<Shown>> = Mutex::new(None);
 type Shown = ((u64, usize), u64, Arc<Picture>);
 
 /// **No `typst` is said at one formula only**, the first one stood in;
-/// every other formula draws nothing, as in a terminal without pictures
-/// (review, 2026-11-06: it was said at every formula, for good).
+/// every other formula draws nothing, as in a terminal without pictures,
+/// rather than saying it at every formula for good.
 static TOLD_NO_TYPST: Mutex<Option<(u64, usize)>> = Mutex::new(None);
 
 /// **The formula float**, if the cursor is in a formula and this terminal
@@ -438,7 +437,7 @@ pub fn float(
     vertical: bool,
     composing: bool,
 ) -> Option<Option<ratatui::layout::Rect>> {
-    // A page window has no text to stand in (2026-11-07).
+    // A page window has no text to stand in.
     if !config.editor.maths_preview
         || composing
         || crate::graphics::support() == crate::graphics::Support::None
@@ -643,7 +642,7 @@ mod tests {
         assert!(typ.contains("block: false"), "{typ}");
     }
 
-    /// **Markdown's TeX is drawn by RaTeX** (2026-11-08), there and then,
+    /// **Markdown's TeX is drawn by RaTeX**, there and then,
     /// with no `typst` anywhere, and kept for the next time it is asked.
     #[test]
     fn a_tex_formula_is_drawn_by_ratex() {
@@ -658,7 +657,7 @@ mod tests {
         assert!(matches!(ask(&key(r"\frac{1}{", true, false)), Answer::Failed(_)));
     }
 
-    /// **An inline fraction is not cut off** (2026-11-06): the page is as
+    /// **An inline fraction is not cut off**: the page is as
     /// tall as the ink. With the line's own edges, `1/2` came out exactly as
     /// tall as `x`, its numerator and denominator outside the picture.
     #[test]

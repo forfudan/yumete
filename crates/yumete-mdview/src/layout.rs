@@ -183,8 +183,8 @@ pub(crate) struct Engine {
     pub formulas: Box<dyn Formulas>,
     /// The document's writing system, and the faces of each.
     pub han: Han,
-    /// **Whether curly quotes become corner brackets down a vertical page**
-    /// (2026-11-09): the export's rule, the document in Chinese as
+    /// **Whether curly quotes become corner brackets down a vertical page**:
+    /// the export's rule, the document in Chinese as
     /// [`yumete_core::export::document_language`] decides it.
     pub quotes: bool,
     families: [Arc<Families>; 3],
@@ -318,7 +318,7 @@ impl Engine {
     }
 
     /// **How large the picture at `src` is drawn at its own size** (a CSS
-    /// pixel a pixel), in device pixels (2026-11-09): read from the file's
+    /// pixel a pixel), in device pixels: read from the file's
     /// header, without decoding the picture, and kept until the file
     /// changes. `None` for one that cannot be read.
     pub(crate) fn image_size(&mut self, src: &str) -> Option<(f32, f32)> {
@@ -549,7 +549,7 @@ impl Engine {
     // ── Blocks ──────────────────────────────────────────────────────────────
 
     /// **Lay a top-level block out** in a column `width` wide from `x`,
-    /// with the caption a table takes over it (2026-11-08), in the type the
+    /// with the caption a table takes over it, in the type the
     /// vertical page sets one in.
     pub(crate) fn top(&mut self, block: &Block, caption: Option<&[Inline]>, x: f32, width: f32) -> Laid {
         let cx = Ctx { color: self.theme.text, depth: 0, tight: false, size: self.base() };
@@ -629,7 +629,7 @@ impl Engine {
             BlockKind::Paragraph(runs) => {
                 // A picture alone in its paragraph is a figure, its text the
                 // caption under it, as the vertical page and the export set
-                // one (2026-11-08).
+                // one.
                 if let Some((src, alt)) = crate::vertical::figure_of(runs) {
                     if self.figure(src, alt, first, x, w, y, out, cx) {
                         return;

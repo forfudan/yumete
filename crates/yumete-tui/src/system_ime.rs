@@ -29,20 +29,20 @@
 //! answer in this file and not four. The row is the tag the status line stands
 //! (`standing_language_tag`), which is exactly `available && engaged`.
 //!
-//! Warning: **Both halves were got wrong once, and each cost an evening.** The first
-//! version asked only `engaged`: `[ime] start` is `false` out of the box, so a
-//! fresh session is engaged with **no 碼表**, and the rule took the system's
-//! input method away from a writer whose yumete could not type 漢字 either —
-//! 「你把输入法切走了，我 i 进入 insert 模式用什么？」 The second asked
-//! `mode != Normal`, which hands the keyboard back on the **command line** too
-//! — and there the command *name* is ASCII, so `:w` had its `w` composed by
-//! the system's input method and the file was never written.
+//! Warning: **Both halves are needed.** Asking only `engaged` is wrong: `[ime]
+//! start` is `false` out of the box, so a fresh session is engaged with **no
+//! 碼表**, and the rule would take the system's input method away from a writer
+//! whose yumete cannot type 漢字 either — leaving Insert mode with no input
+//! method at all. Asking `mode != Normal` is wrong too: it hands the keyboard
+//! back on the **command line** — and there the command *name* is ASCII, so
+//! `:w` would have its `w` composed by the system's input method and the file
+//! would never be written.
 //!
 //! So the bottom row — no marker, whether from `:yume` (off) or from a 碼表 that
 //! was never loaded — is where the system's input method is exactly what is
 //! wanted, and somebody writing Japanese in yumete lives there.
 //!
-//! ## What is actually done — and what was tried first
+//! ## What is done, and what does not work
 //!
 //! yume's own input method already has 模態掛起 (`ModalSuspend.swift`), built
 //! for exactly this and for exactly these editors: 「讓 helix/vim 這類模態編輯
@@ -55,11 +55,9 @@
 //! cannot** — the fcitx5 addon has no 模態掛起 upstream yet, so there is no
 //! signal to send and this module does nothing there (see `backend` below).
 //!
-//! **The first version of this module switched the input source instead**
-//! (`TISSelectInputSource`, the way `im-select` does for vim) on the theory
-//! that it would cover every input method rather than only yume. It is left
-//! written down here because the measurement cost a whole evening: **that road
-//! does not work on macOS.** A background process re-selecting an **IMK** input
+//! **Switching the input source instead** (`TISSelectInputSource`, the way
+//! `im-select` does for vim) would cover every input method rather than only
+//! yume, but **that road does not work on macOS.** A background process re-selecting an **IMK** input
 //! method fails to re-engage roughly one time in three — the keys then arrive
 //! in the buffer as plain letters. Measured with System Events typing into a
 //! real window, 漢字 = engaged, letter = not:
@@ -73,14 +71,13 @@
 //! Two IMK input methods, the same failure rate, a random round, and **it fails
 //! with no editor and no terminal in the picture at all**. Warning: 蘋果全拼 passing
 //! that same test proves nothing — SCIM is built in and does not go through the
-//! IMK session protocol, which is why it was the control that pointed the
-//! finger at the wrong place for an hour.
+//! IMK session protocol, so it is the wrong control.
 //!
 //! **And the terminal cannot help.** The kitty keyboard protocol's
 //! `REPORT_ALL_KEYS_AS_ESCAPE_CODES` is not a bypass: with it on, the input
 //! method still swallows the key *presses* and only the *releases* leak through
-//! as escape codes, while the commit is destroyed (that is the 「上屏出來一排
-//! 空格」 the manual has always warned about). A control run with a plain
+//! as escape codes, while the commit is destroyed (the 「上屏出來一排空格」 the
+//! manual warns about). A control run with a plain
 //! ASCII layout received both press and release for every key, so the reading
 //! is clean. Zed can do this — stay on the Chinese input method and simply not
 //! route keys to it — because Zed owns its NSView. A program inside a terminal
@@ -97,15 +94,14 @@
 //! put itself back. yumete *is* the editor: `Mode::Search`, `Mode::Command` and
 //! `Mode::Field` are its own state and it knows the moment each one ends.
 //!
-//! **A signal used to be a gap, and no longer is.** The resume is sent by
-//! [`Drop`], so every ordinary way out of the editor's loop restores it, a
-//! panic included — but SIGHUP from a closed terminal window runs no
-//! destructor. So the suspend carries `{"pid": …}`, and yume drops a suspension
-//! whose owner has gone (upstream `18b43cc`, asked for and built the same
-//! evening). The same upstream commit also stopped the **first** suspend being
-//! swallowed: it used to be discarded without a word when the terminal's input
-//! session had not been handed over yet, which is a race yumete wins at every
-//! start-up, and yumete then believed it was suspended and never said so again.
+//! **A lost signal is covered.** The resume is sent by [`Drop`], so every
+//! ordinary way out of the editor's loop restores it, a panic included — but
+//! SIGHUP from a closed terminal window runs no destructor. So the suspend
+//! carries `{"pid": …}`, and yume drops a suspension whose owner has gone
+//! (upstream `18b43cc`). yume also keeps the **first** suspend when the
+//! terminal's input session has not been handed over yet, a race yumete wins
+//! at every start-up; discarded, yumete would believe it was suspended and
+//! never say so again.
 
 use yumete_config::{OtherImePolicy, SystemImePolicy};
 
@@ -149,7 +145,7 @@ pub struct SystemIme {
     /// Whether a suspension is outstanding. Only ever changed alongside the
     /// signal that causes it, so the two cannot drift.
     suspended: bool,
-    /// **Other input methods** (2026-11-04): whether to switch them to
+    /// **Other input methods**: whether to switch them to
     /// English, and back. See [`OtherImePolicy`].
     others: OtherImePolicy,
     /// What was switched away from, while it is: `Some` from the switch until
@@ -213,21 +209,21 @@ impl SystemIme {
         }
     }
 
-    /// **說一遍不算數的時候，再說一遍**（2026-09-22 報的）。
+    /// **說一遍不算數的時候，再說一遍**。
     ///
-    /// 報的情形：在別的窗口用系統輸入法打了字，切回 yumete（Normal 模式），輸入
-    /// 法還開着，於是鍵被吞掉。
+    /// 在別的窗口用系統輸入法打了字，切回 yumete（Normal 模式），輸入法可能還開着，
+    /// 於是鍵被吞掉。
     ///
     /// 根子在 [`Self::suspended`] 是一個**信念**：想要鍵而且還没挂起，纔發信號。
     /// 輸入法在別處自己恢復了，這一頭卻還記着「已經挂着了」——於是它再也不說第二
-    /// 次。Warning: **同一族的坑源碼裏記着**（見本檔開頭：開機那一次的挂起被丟掉，
-    /// yumete 就此相信自己挂着了）。
+    /// 次。Warning: **同一族的坑**見本檔開頭（開機那一次的挂起被丟掉，yumete 就此
+    /// 相信自己挂着了）。
     ///
     /// 信念會漂，就得有一條重新聲明的路。抹掉信念就夠了：下一輪 [`Self::want`]
     /// 自己會把信號重發一次，而它本來就是冪等的。
     ///
     /// Warning: **不做成「焦點回來自動重發」**——那條保險絲的反面（焦點離開自動解挂）
-    /// 試過、撤了，代價是一天幾十次。由人按一下，該重發的時候纔重發。
+    /// 代價是一天幾十次。由人按一下，該重發的時候纔重發。
     pub fn say_it_again(&mut self) {
         log(|| "-> say it again".to_string());
         self.suspended = false;
@@ -249,7 +245,7 @@ impl SystemIme {
         }
     }
 
-    /// **Other input methods, aside or back** (2026-11-04).
+    /// **Other input methods, aside or back**.
     ///
     /// Aside: whatever is current, unless it is 宇浩 (its own signal above
     /// serves it, and selecting 宇浩 by input source is the road that fails)
@@ -526,12 +522,9 @@ mod backend {
     pub fn resume() {}
 }
 
-/// **Other input methods: the input source itself** (2026-11-04).
+/// **Other input methods: the input source itself**.
 ///
-/// The code is the first version of this module (`24116fdc`, 2026-09-16),
-/// which switched the input source for 宇浩 too and was replaced by the
-/// signal two hours later. For 宇浩 the signal is the better road and stays;
-/// for every other input method this is the only road there is, and it is
+/// For 宇浩 the signal is the better road; for every other input method this is the only road there is, and it is
 /// taken only when `[ime] others` asks for it.
 ///
 /// Warning: **On macOS the switch to English is reliable and the switch back is
@@ -721,7 +714,7 @@ mod source {
     thread_local! {
         /// One switch's whole budget: `take` may run five commands, and a
         /// D-Bus that does not answer costs the switch half a second, not
-        /// five halves (review, 2026-11-04).
+        /// five halves.
         static BUDGET: std::cell::Cell<Option<std::time::Instant>> = const { std::cell::Cell::new(None) };
     }
 
@@ -816,7 +809,7 @@ mod tests {
         assert!(!ime.suspended);
     }
 
-    /// **Other input methods are left alone by default** (2026-11-04): with
+    /// **Other input methods are left alone by default**: with
     /// `[ime] others` off, wanting the keys never touches the input source.
     /// The switch itself is not run here, since it would move this machine's.
     #[test]

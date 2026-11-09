@@ -1,4 +1,4 @@
-//! **One test against a real language server** (#53/#54, 2026-09-20).
+//! **One test against a real language server** (#53/#54).
 //!
 //! Everything else about the LSP work is tested without a server — the wire in
 //! `yumete_core::lsp`, the rule in `yumete_tui::server` — and that is the right
@@ -23,11 +23,11 @@ use std::time::{Duration, Instant};
 
 /// A throwaway crate with one deliberate mistake in it.
 ///
-/// Warning: **`whose` is not decoration.** Two tests call this, and the path used to
-/// be the same for both (`yumete-ra-<pid>`) while the first thing it does is
-/// `remove_dir_all` — so running them together, which is what the command at
-/// the top of this file does, had one pull the file out from under the other:
-/// 「這個文件在外面被改過了」. 2026-09-23 審出來的。
+/// Warning: **`whose` is not decoration.** Two tests call this, and the first
+/// thing it does is `remove_dir_all` — so with one path for both
+/// (`yumete-ra-<pid>`), running them together, which is what the command at
+/// the top of this file does, would have one pull the file out from under the
+/// other: 「這個文件在外面被改過了」.
 fn a_broken_crate(whose: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("yumete-ra-{whose}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
@@ -83,7 +83,7 @@ fn rust_analyzer_really_answers() {
     );
 }
 
-/// **`gd` really jumps** (#53 ②, 2026-09-21).
+/// **`gd` really jumps** (#53 ②).
 ///
 /// Warning: **Only a live server can check this one.** The three answer shapes
 /// (`Location`, `Location[]`, `LocationLink[]`) are a fact about the program
@@ -118,10 +118,9 @@ fn rust_analyzer_says_where_a_function_is_written() {
     };
     let mut servers = yumete_tui::server::Servers::default();
 
-    // Warning: **這裏沒有「讀完了」的信號可等。** 從前這一段寫成「等到有診斷為止」，
-    // 而這一份是編得過的——一條診斷都不會有，於是它每一趟都燒滿九十秒，那句
-    // 「先等它讀完項目」描述的是一條不存在的規則（2026-09-23 審出來的）。真正
-    // 頂用的是下面那個「問不到就再問一次」的圈。
+    // Warning: **這裏沒有「讀完了」的信號可等。** 不能「等到有診斷為止」：這一份
+    // 是編得過的——一條診斷都不會有，那樣每一趟都燒滿九十秒。真正頂用的是下面
+    // 那個「問不到就再問一次」的圈。
     //
     // 光標走到那一次**調用**上（第 6 行，0 起算）：`println!("{}", counted(…)`。
     // 一直按 `l` 直到真站在 `counted` 上，而不是數空格——數出來的那個數字錯了，
@@ -161,8 +160,8 @@ fn rust_analyzer_says_where_a_function_is_written() {
     assert_eq!(landed, 1, "跳到了 `counted` 寫着的那一行（狀態：{}）", editor.status());
 }
 
-/// **Deleting the bad line really takes the mark away** (2026-09-21 報的：
-/// 「我把之前的一個錯誤的行刪掉了，但是錯誤信息還在，這個行還是紅色的」)。
+/// **Deleting the bad line really takes the mark away**: the error goes with
+/// the line, and nothing stays red.
 ///
 /// Warning: **This one is about `didSave`, and only a live server shows it.**
 /// rust-analyzer answers out of two mouths: its own analysis, which follows
@@ -209,8 +208,8 @@ fn a_mistake_that_is_deleted_and_saved_stops_being_reported() {
     editor.execute(":w").unwrap();
 
     // Warning: **三分鐘，不是九十秒。** 存盤之後收回那條話要等 `cargo check` 跑完，
-    // 而冷快取下那一趟本身就是九十秒往上——2026-09-23 在一臺乾淨機器上實測
-    // 紅過一次（`left: 1, right: 0`），重跑（快取熱了）就綠。那不是協議的
+    // 而冷快取下那一趟本身就是九十秒往上——乾淨機器上九十秒會紅
+    // （`left: 1, right: 0`），快取熱了纔綠。那不是協議的
     // 預算，是編譯的預算，所以這個數要按後者給。
     let gave_up = Instant::now() + Duration::from_secs(180);
     while Instant::now() < gave_up && editor.problem_count() > 0 {
@@ -224,7 +223,7 @@ fn a_mistake_that_is_deleted_and_saved_stops_being_reported() {
     assert_eq!(still, 0, "存了之後錯誤要跟着没（180 秒）");
 }
 
-/// **`空格 k` 真的問得出「這是什麽」**（#53 ③，2026-09-21）。
+/// **`空格 k` 真的問得出「這是什麽」**（#53 ③）。
 ///
 /// Warning: **回答的形狀是那個程序的事。** rust-analyzer 送的是 `MarkupContent`，
 /// 裏面是一段 Markdown：一個 ```rust 圍欄裝着簽名，一條 `---`，然後文檔註釋。
@@ -301,7 +300,7 @@ fn rust_analyzer_says_what_a_function_is() {
 }
 
 /// **`C-n` 真的問得出「接下來能打什麽」，而且打進去的是對的那個字串**
-/// （#53 ④，2026-09-21）。
+/// （#53 ④）。
 ///
 /// Warning: **這一條是拿來驗兩件只有真服務器能驗的事：**
 /// ① `snippetSupport: false` 真的讓 rust-analyzer 送 `counted` 而不是
@@ -391,7 +390,7 @@ fn rust_analyzer_offers_what_comes_next_and_it_goes_in_clean() {
     );
 }
 
-/// **打着字，單子自己出來**（#53 ④ 的自動那一半，2026-09-21）。
+/// **打着字，單子自己出來**（#53 ④ 的自動那一半）。
 ///
 /// Warning: **這一條驗的是次序。** 補全的問題必須排在 `didChange` 後面——服務器手上要
 /// 是上一版正文，它答的就是「上一個字母之前那個詞後面能接什麽」。這裏不按
@@ -431,11 +430,10 @@ fn typing_alone_brings_the_list_up() {
     const WORD: &str = "coun";
     let gave_up = Instant::now() + Duration::from_secs(120);
     let mut typed = false;
-    // Warning: **`Instant::now().elapsed()` 恆為零。** 從前那句重打的條件寫的是
-    // `Instant::now().elapsed().as_secs() % 3 == 0`——從這一納秒到現在，永遠是
-    // 0，於是**每一輪**都重打一次整個 `coun` 而只退一個字母，正文成了
-    // `coucoucoucou…coun`（2026-09-23 插探針印出來的）。這條測試說的是「只打
-    // 四個字母」，而那個情形一次都沒跑到。
+    // Warning: **`Instant::now().elapsed()` 恆為零。** 拿
+    // `Instant::now().elapsed().as_secs() % 3 == 0` 當重打的條件，從這一納秒到
+    // 現在永遠是 0，於是**每一輪**都重打一次整個 `coun` 而只退一個字母，正文成了
+    // `coucoucoucou…coun`。這條測試說的是「只打四個字母」。
     let mut retried = Instant::now();
     while Instant::now() < gave_up && editor.offers_here().is_none() {
         if !typed {
@@ -478,11 +476,10 @@ fn typing_alone_brings_the_list_up() {
 /// 在一臺沒有工具鏈的機器上報的是「過了」。
 ///
 /// 所以留一個開關：`YUMETE_LSP_TESTS=1` 的時候，找不到工具就**紅**。CI 或者
-/// 真要驗協議的那一趟帶上它，平常照舊跳過。2026-09-23 加的。
-/// **Mojo 的服務器真的答得上話**（2026-10-11 報的：打開 `.mojo` 說「未爲 mojo 文件
-/// 指定語言服務器」）。
+/// 真要驗協議的那一趟帶上它，平常照舊跳過。
+/// **Mojo 的服務器真的答得上話**：打開 `.mojo` 不說「未爲 mojo 文件指定語言服務器」。
 ///
-/// 缺的是出廠那張表上的一行，不是找路那一半——`mojo-lsp-server` 和 `mojo` 一起裝
+/// 靠的是出廠那張表上的一行，不是找路那一半——`mojo-lsp-server` 和 `mojo` 一起裝
 /// 在 pixi 環境的 `bin/` 底下，而 `found_here` 本來就展開 `.pixi/envs/*/bin`。
 ///
 /// Warning: **這一支要 `mojo-lsp-server` 在 `PATH` 上。** 它平常不在——它在項目的
@@ -531,12 +528,11 @@ fn the_mojo_server_really_answers() {
     assert!(editor.problem_on_line(1).is_some(), "錯處標在第 2 行上");
 }
 
-/// **一份真的 Mojo 檔上不許冒出假診斷**（2026-10-11 報的第二件事）。
+/// **一份真的 Mojo 檔上不許冒出假診斷**。
 ///
-/// 補上出廠那一行之後服務器起來了，而它報了 **138 條**
-/// `unable to locate module 'std'`——它找不到自己那套標準庫，整份檔從頭紅到尾。
-/// `pixi run` 會設 `MODULAR_HOME`，直接拿絕對路徑起的不會；`in_its_environment`
-/// 補上之後 138 → 0。這一條驗的就是那個 0。
+/// 沒有環境的服務器報 **138 條** `unable to locate module 'std'`——它找不到自己
+/// 那套標準庫，整份檔從頭紅到尾。`pixi run` 會設 `MODULAR_HOME`，直接拿絕對路徑
+/// 起的不會；`in_its_environment` 給了它，138 → 0。這一條驗的就是那個 0。
 ///
 /// Warning: **這一支要一個 pixi 環境**，`PATH` 上那個 `mojo-lsp-server` 不算數——它
 /// 要的是 `.pixi/envs/<名>/bin/` 底下的那一個，因為判準正是那條路徑。指一個項目：

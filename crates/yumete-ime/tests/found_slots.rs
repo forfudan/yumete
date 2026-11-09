@@ -1,6 +1,6 @@
-//! 自定義方案 are found where yume put them, not where the manifest looks
-//! (2026-09-08: 「yume 現在重構之後，分爲內置方案和自定義方案兩個文件
-//! 夾……只要掃到這兩個文件夾就能得到這些方案的碼表和設置信息了」).
+//! 自定義方案 are found where yume put them, not where the manifest looks:
+//! yume keeps 內置方案 and 自定義方案 in two folders, and scanning both gives
+//! every scheme's tables and settings.
 //!
 //! The built-in half of that is `found_schemes.rs`: a `schemes/<tag>.toml` any
 //! data directory holds. This is the other half, and it is found a different
@@ -44,7 +44,7 @@ fn slot(root: &Path, id: &str, name: &str, codes: &str) {
 fn a_slot_yume_compiled_is_a_scheme_yumete_can_type() {
     let dir = std::env::temp_dir().join(format!("yumete-slots-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    // Where macOS keeps them today. Windows still writes `data/custom`, and
+    // Where macOS keeps them. Windows writes `data/custom`, and
     // both are scanned; one of them is enough to prove the scan.
     slot(&dir.join("installed"), "a1b2c3d4", "試驗方案", "a 啊\nb 吧 八\n");
     // Not a slot: a directory whose name is not eight hex digits, and a slot

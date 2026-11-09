@@ -1,4 +1,4 @@
-//! **The formula float** (2026-11-06): drawn only where the terminal can
+//! **The formula float**: drawn only where the terminal can
 //! show a picture and the setting is on, and then as placeholder cells.
 //!
 //! A binary of its own: whether pictures can be shown is process-wide
@@ -45,7 +45,7 @@ fn the_float_is_drawn_only_where_it_can_be() {
     assert!(!plain.contains(PLACEHOLDER), "{plain}");
     assert!(graphics::take_pending().is_empty(), "nothing uploaded");
 
-    // Markdown's TeX is drawn by RaTeX (2026-11-08), there and then, with
+    // Markdown's TeX is drawn by RaTeX, there and then, with
     // no typst: as many cells as its picture takes at the guessed 10 × 20
     // cell. The ink is read after a frame, which settles the mood the page
     // is drawn in.

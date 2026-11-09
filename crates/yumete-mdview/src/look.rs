@@ -1,4 +1,4 @@
-//! **How this preview draws a document, said for a web page** (2026-11-08):
+//! **How this preview draws a document, said for a web page**:
 //! the [`yumete_core::as_preview::Look`] `:export-as-preview` writes into
 //! its HTML — the faces a document is set in (`[export] font_family`, then
 //! the CJK face of its writing system, as [`crate::Preview::set_text`]

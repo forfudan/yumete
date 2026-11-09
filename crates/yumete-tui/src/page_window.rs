@@ -1,4 +1,4 @@
-//! **The preview, drawn** (2026-11-07; a tab of its own since 2026-11-08).
+//! **The preview, drawn**, in a tab of its own.
 //!
 //! The editor keeps the preview tabs and which windows show them
 //! (`editor/page_preview.rs`); this asks tinymist for each one's page and
@@ -75,11 +75,10 @@ impl Page {
     }
 }
 
-/// **One pixel of the page in the theme's colours** (2026-11-08,
-/// `:preview-theme`): its lightness, from black ink to white paper,
-/// taken from the theme's text colour to its background, and whatever
-/// colour it had over its grey carried across, so a red heading stays red
-/// and a blue link blue in light themes and dark alike.
+/// **One pixel of the page in the theme's colours** (`:preview-theme`): its lightness, from black
+/// ink to white paper, taken from the theme's text colour to its background, and whatever colour it
+/// had over its grey carried across, so a red heading stays red and a blue link blue in light themes
+/// and dark alike.
 pub fn recolour(pixel: [u8; 3], paper: [u8; 3], ink: [u8; 3]) -> [u8; 3] {
     let [r, g, b] = pixel.map(f32::from);
     let grey = 0.2126 * r + 0.7152 * g + 0.0722 * b;
@@ -188,8 +187,8 @@ impl Board {
     }
 }
 
-/// **Every preview's board**, by its tab's id (2026-11-08: one a preview,
-/// where there was one for the editor).
+/// **Every preview's board**, by its tab's id: one a preview, not one for
+/// the editor.
 static BOARDS: Mutex<Option<HashMap<u64, Board>>> = Mutex::new(None);
 
 /// **The page `J`, `K` or `5G` turns to** from page `now`: never before
@@ -705,7 +704,7 @@ pub fn ppi_for(fit: PreviewFit, cells: Option<(u16, u16)>, cell: (u16, u16), inc
     ppi.clamp(24.0, most.max(24.0)).round() as u32
 }
 
-/// **The ppi to ask for, holding on to the one shown** (2026-11-08): the page
+/// **The ppi to ask for, holding on to the one shown**: the page
 /// size is read back from a PNG Typst rounded to whole pixels, so near a
 /// half-integer the ideal ppi came out P from P+1 and P+1 from P, and the
 /// window asked for one and then the other forever, the page shaking between
@@ -768,7 +767,7 @@ pub fn draw(frame: &mut ratatui::Frame, editor: &Editor, config: &yumete_config:
     board.cells = Some((room.width, room.height));
     let can = crate::graphics::support() != crate::graphics::Support::None;
     let page = board.page.clone().filter(|_| can);
-    // **In the theme's colours** (2026-11-08): the paper the page's ground
+    // **In the theme's colours**: the paper the page's ground
     // and the ink its writing, made once a page.
     let page = match page {
         Some(page) if editor.preview_theme() => {
@@ -1059,7 +1058,7 @@ mod tests {
         std::fs::remove_dir_all(&elsewhere).ok();
     }
 
-    /// **The page in the theme's colours** (2026-11-08): white paper becomes
+    /// **The page in the theme's colours**: white paper becomes
     /// the background and black ink the text colour, a grey falls between,
     /// and a colour keeps its hue — in a light theme and a dark one.
     #[test]
@@ -1134,7 +1133,7 @@ mod tests {
         assert!(!Arc::ptr_eq(&one, &other));
     }
 
-    /// **`J`, `K` and `5G` turn pages** (2026-11-07): never before the first,
+    /// **`J`, `K` and `5G` turn pages**: never before the first,
     /// nor past the last once the total is known.
     #[test]
     fn a_page_turns_within_the_book() {
@@ -1147,7 +1146,7 @@ mod tests {
         assert_eq!(turn(3, None, PageStep::Goto(50)), 50, "the total is not known yet");
     }
 
-    /// **The asked ppi settles** (2026-11-08): with Typst rounding the PNG to
+    /// **The asked ppi settles**: with Typst rounding the PNG to
     /// whole pixels, an A5 page 47 columns of 8 px wide asked for 65 and 64
     /// in turn forever, and the page shook between the two sizes.
     #[test]

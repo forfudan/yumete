@@ -1,12 +1,12 @@
-//! **One ring, drawn one way** (2026-09-18).
+//! **One ring, drawn one way.**
 //!
 //! Everything this front end floats over the page is a box with the same
 //! four parts: the ground it clears, the ring around it, a name in the
-//! top-left, and — the part nobody remembers — the 漢字 half-cell rule. That
-//! was written out eight times: the 浮框 (`panel.rs`), the 鍵表 and 命令選單
+//! top-left, and — the part nobody remembers — the 漢字 half-cell rule. Eight
+//! things draw it: the 浮框 (`panel.rs`), the 鍵表 and 命令選單
 //! (`draw_list`), the 問句 (`draw_query`), the 挑選器 and its preview, and the
-//! 候選欄's two (`vertical.rs`, `draw_candidates`). Eight copies of a rule is
-//! seven places for it to be forgotten, and 「竪排提示框缺一角」 is what being
+//! 候選欄's two (`vertical.rs`, `draw_candidates`). Eight copies of a rule would
+//! be seven places for it to be forgotten, and 「竪排提示框缺一角」 is what being
 //! forgotten looks like.
 //!
 //! The colours come in as [`Style`]s rather than as a palette, because the two
@@ -25,7 +25,7 @@ pub struct Ring {
     /// `[panel] rounded` — the reader's own answer, asked of the config by the
     /// caller so this file never reads settings.
     pub rounded: bool,
-    /// **只畫上下兩道牆**（2026-10-11）。
+    /// **只畫上下兩道牆**。
     ///
     /// 行內 diff 那一條帶子要「看着像正文的一部分」：通欄、左右不收口，上下兩道
     /// 橫綫把它和上下文隔開就夠。左右畫了反而像一扇飄在上面的窗。
@@ -37,9 +37,9 @@ pub struct Ring {
     /// The name in the top-left corner, in whatever ink names are drawn in
     /// here — 金 for the editor's panels. `None` for a ring with no name.
     pub title: Option<(String, Style)>,
-    /// **A word on the bottom wall**, where the title is on the top one
-    /// (2026-10-06 定：「can cover the border (at the left side of the bottom
-    /// border, just like other temp panels) to save one line」).
+    /// **A word on the bottom wall**, where the title is on the top one: at
+    /// the left of the bottom border, as on the other temporary panels, so it
+    /// saves a line.
     ///
     /// The counter 「1/47」 lives here. It is about the panel rather than about
     /// anything in it, which is what a frame is for — and it costs no row.
@@ -69,11 +69,10 @@ pub fn draw(frame: &mut Frame, rect: Rect, ring: &Ring) -> Rect {
         .border_style(ring.border)
         .style(ring.ground);
     if let Some((text, style)) = &ring.title {
-        // **One cell in from the corner** (2026-09-18: 「能不能往右移一格
-        // 半角，這樣就能對齊」). The ring's contents start one cell past the
-        // wall; a title written hard against the corner sits a cell to their
-        // left, and the two left edges being nearly-but-not-quite the same is
-        // worse than either alignment on its own.
+        // **One cell in from the corner**, so the title lines up. The ring's contents start one cell
+        // past the wall; a title written hard against the corner sits a cell to their left, and the
+        // two left edges being nearly-but-not-quite the same is worse than either alignment on its
+        // own.
         block = block.title(Span::styled(format!(" {text}"), *style));
     }
     let inner = block.inner(rect);
@@ -101,19 +100,18 @@ pub fn draw(frame: &mut Frame, rect: Rect, ring: &Ring) -> Rect {
     inner
 }
 
-/// **Where a floating thing stands** (2026-09-18).
+/// **Where a floating thing stands.**
 ///
 /// Two answers, and the difference is whether the reader is still writing:
 /// something to glance at keeps out of the caret's way, and something that has
 /// taken the keys stands in the middle, where it cannot be missed.
-/// **How much of the page a floating box may take** (2026-09-18 定).
+/// **How much of the page a floating box may take.**
 ///
 /// 橫排 two thirds wide and one third tall; 竪排 the transpose. Two numbers,
 /// and each of them answers a different question:
 ///
 /// - **The short side protects the caret.** A box one third tall stands in
-///   the top third or the bottom third, and the caret is in neither — which is
-///   what the old 「half and half」 rule was really buying. Once the height
+///   the top third or the bottom third, and the caret is in neither. Once the height
 ///   does that job the width is free to be chosen for reading.
 /// - **The long side is the measure.** Two thirds of a 118-column page is 39
 ///   漢字 to a line, which is what prose wants; the whole width would be 59,
@@ -121,25 +119,22 @@ pub fn draw(frame: &mut Frame, rect: Rect, ring: &Ring) -> Rect {
 ///   rows away from the manuscript **whole** rather than by halves.
 ///
 /// 竪排 turns both round, and for the same reason: there a wide box cuts the
-/// tops off many 縱 at once (「這樣不會打破行文」).
+/// tops off many 縱 at once, breaking the run of the text.
 ///
 /// **A key table is scanned once rather than read**, so neither argument above
 /// is about it: there is no measure to keep to, and a third of a 24-row
 /// terminal is six rows inside the ring — which the 23 items of the `空格`
-/// menu did not fit into at any column count (measured 2026-10-09). So it
+/// menu do not fit into at any column count. So it
 /// takes the whole width and **half** the page — and half is where it
 /// *starts*, not where it must stop.
 ///
 /// A key menu grows past this room, one row at a time, while its meanings
 /// would otherwise be cut, and never over the caret's line (`panel::draw`).
-/// 2026-11-04, chosen from pictures: `空格` had 43 keys by then, and going
-/// wider no longer fitted them — on an 80-column page five columns cut 29 of
-/// the 43 meanings to 「文件挑選…」. Covering more of the text for the moment a
-/// menu is open costs less than a menu nobody can read, as long as the line
-/// being written stays in sight.
-///
-/// History: half-plus-one until 2026-10-09, then half, on 「超過一半確實危險，
-/// 寧可更寬」.
+/// Going wider does not fit `空格`'s 43 keys — on an 80-column page five
+/// columns cut 29 of the 43 meanings to 「文件挑選…」. Covering more of the
+/// text for the moment a menu is open costs less than a menu nobody can read,
+/// as long as the line being written stays in sight. More than half is
+/// dangerous as a starting point; wider is better.
 /// **A field list sits between the two.** 記錄 and the five 信息 panels are
 /// read, so the measure applies to their width — but a column of
 /// `name  value` pairs is not a paragraph, and a third of a short terminal is
@@ -159,11 +154,9 @@ pub fn room(area: Rect, vertical: bool, what: Use) -> (u16, u16) {
 
 /// **What a float is for**, which is the whole of what its size depends on.
 ///
-/// Three kinds, and before 2026-10-09 they were three expressions in three
-/// places: the reading room here, `area.height / 2 + 1` in `panel::draw`, and
-/// `(area.height - 2) / 2` beside the key table — the last two spellings of
-/// one intent, kept in step by hand, and the field list silently taking one
-/// from each.
+/// Three kinds, answered in one place: three expressions in three places
+/// would be spellings of one intent kept in step by hand, and the field list
+/// would silently take one from each.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Use {
     /// Prose: a 百科 entry, a footnote, a note about the text.
@@ -176,7 +169,7 @@ pub enum Use {
     Scan,
 }
 
-/// **光標那一點，連同要讓開的那一段**（2026-10-12）。
+/// **光標那一點，連同要讓開的那一段**。
 ///
 /// `keep` 是 `(光標之前幾格, 從光標起算幾格)`——浮動的面板要讓開的是**那個詞**，
 /// 不是光標站的那一格：一個漢字就佔兩格，而面板在講的那個詞條常常好幾個字。
@@ -195,7 +188,7 @@ impl Spot {
 }
 
 pub enum Anchor {
-    /// **通欄，貼着某幾行**——行內 diff 那一條帶子（2026-10-11）。
+    /// **通欄，貼着某幾行**——行內 diff 那一條帶子。
     ///
     /// 它不是一扇飄在正文上的窗，而是「這幾行**此刻**換一種畫法」：寬度就是整個
     /// 編輯區（連行號槽一起），所以上下兩道橫綫一拉，看着就像正文裏多出來的一
@@ -203,36 +196,34 @@ pub enum Anchor {
     /// 的 item 248）；蓋一層在觀感上沒有分別，而它本來就是臨時的——`Esc` 或者光
     /// 標走開就收。
     ///
-    /// **落點只有上下兩個**（2026-10-11 定）：「因为他的宽度是整个编辑区，所以
-    /// 右下 -> 右上 就等于下方和上方显示」——通欄之後 [`Anchor::Caret`] 那四個角
-    /// 塌成兩個，規矩還是同一條（先站不擋光標的那一個）。跟着光標走過一版，收
-    /// 了：帶子蓋的那幾行裏光標一動它就跳。
+    /// **落點只有上下兩個**：寬度是整個編輯區，所以「右下、右上」就是「下、上」
+    /// ——通欄之後 [`Anchor::Caret`] 那四個角塌成兩個，規矩還是同一條（先站不擋
+    /// 光標的那一個）。不跟着光標走：帶子蓋的那幾行裏光標一動它就跳。
     Band { at: (u16, u16), bottom: u16 },
-    /// **One side is fixed, the other flips** (2026-10-09 定).
+    /// **One side is fixed, the other flips.**
     ///
-    /// 橫排 the box stands at the **right** and moves only up and down:
-    /// 「we always write from left to right, so the line start can always be
-    /// visible」. What a float may cover is the tail of the lines it sits on,
-    /// never their beginnings — and a float that also slid left and right
-    /// jumped across the page as the caret passed the middle column, for no
-    /// reason the reader could see.
+    /// 橫排 the box stands at the **right** and moves only up and down: we
+    /// write from left to right, so the line start must always be visible.
+    /// What a float may cover is the tail of the lines it sits on, never their
+    /// beginnings — and a float that also slid left and right would jump
+    /// across the page as the caret passed the middle column, for no reason
+    /// the reader could see.
     ///
     /// 竪排 is the same argument turned: there the 縱 run top to bottom and
-    /// right to left, so the box stands at the **bottom** and flips left and
-    /// right, 「面板永遠在下而不是在右」, defaulting to the left — the side
+    /// right to left, so the box stands at the **bottom** (never at the right)
+    /// and flips left and right, defaulting to the left — the side
     /// the writing has not reached yet.
     ///
     /// `bottom` is the row the floats stack up from — the top of the footer;
     /// `vertical` picks which way [`room`] is turned, and which side is fixed.
     ///
     /// `keep` 是**要讓開的那一段**，不是光標那一格：`(光標之前幾格, 從光標起算
-    /// 幾格)`。橫排往左右量，竪排往上下量。從前這裏只有一個格子，於是一個漢字
-    /// 被蓋掉右半邊，而一個好幾個字的詞條被蓋掉大半——2026-10-12 報的。
+    /// 幾格)`。橫排往左右量，竪排往上下量。只讓一個格子的話，一個漢字會被蓋掉
+    /// 右半邊，而一個好幾個字的詞條被蓋掉大半。
     Caret { at: (u16, u16), keep: (u16, u16), bottom: u16, vertical: bool },
-    /// **貼着光標，畫在它下面那一行**（2026-10-08 定）。
+    /// **貼着光標，畫在它下面那一行**。
     ///
-    /// 補全那張單子用的是這一個，而不是「光標不在的那個角」。原話：「this
-    /// autocompletion seems to be better below the cursor (as the best practice)」——
+    /// 補全那張單子用的是這一個，而不是「光標不在的那個角」——光標底下是慣例，
     /// 三家都這樣（VS Code、helix 的 `completion`、nvim-cmp），理由是這張單子
     /// 說的是「你剛打的那半個詞接下來是什麼」，眼睛要在詞與單子之間來回；
     /// 擺到屏幕角上就是把那一來回拉成半個屏幕。
@@ -246,10 +237,9 @@ pub enum Anchor {
 
 /// Fit a box `want` cells big into `area`, or `None` when there is no room.
 ///
-/// Warning: **A caret-anchored box is held to [`room`]** — 2026-09-17 「面板不應該
-/// 超過頁面的四分之一」, refined 2026-09-18 to two thirds by one third, which
-/// is two ninths and reads better. A centred one has the keys, so the page
-/// behind it is not being read and the cap does not apply.
+/// Warning: **A caret-anchored box is held to [`room`]** — two thirds by one third, two ninths of
+/// the page, which keeps it small and reads well. A centred one has the keys, so the page behind it
+/// is not being read and the cap does not apply.
 pub fn place(area: Rect, want: (u16, u16), anchor: Anchor) -> Option<Rect> {
     let (width, height) = want;
     if width < 8 || width > area.width || height > area.height {
@@ -289,9 +279,9 @@ pub fn place(area: Rect, want: (u16, u16), anchor: Anchor) -> Option<Rect> {
         }
         Anchor::Caret { at, keep, bottom, vertical } => {
             // Warning: **The policy caps belong to the caller, this only asks
-            // whether it physically fits** (2026-09-18). A 竪書 note is two
-            // thirds of the page *tall* by design — half-page refusal here
-            // threw it away and nothing was drawn at all.
+            // whether it physically fits.** A 竪書 note is two thirds of the
+            // page *tall* by design — a half-page refusal here would throw it
+            // away and nothing would be drawn at all.
             if bottom < area.y + height {
                 return None;
             }
@@ -310,7 +300,7 @@ pub fn place(area: Rect, want: (u16, u16), anchor: Anchor) -> Option<Rect> {
             // right of the page, and a float that moved for it would be
             // moving for nothing.
             //
-            // Warning: **問的是整個詞，不是光標那一格**（2026-10-12 報的）。一個
+            // Warning: **問的是整個詞，不是光標那一格**。一個
             // 漢字佔兩格，而面板說的那個詞條常常好幾個字——只問一格的話，箱子
             // 從那一格的右邊起畫，蓋掉的正是它在講的那個詞。`keep` 把那一段攤
             // 開：橫排往左右，竪排往上下，因為讓開的方向就是行文的方向。
@@ -332,12 +322,12 @@ pub fn place(area: Rect, want: (u16, u16), anchor: Anchor) -> Option<Rect> {
     }
 }
 
-/// **The ground everything that floats stands on** — 第 85 檔 (2026-09-18).
+/// **The ground everything that floats stands on** — 第 85 檔.
 ///
 /// One function rather than a constant spelled at each call, because the
-/// mistake this exists to prevent is *half* a panel changing: the ring was
-/// moved off the paper's colour first and the rows inside it were not, so every
-/// line of the `:` menu dragged a patch of the old colour behind it. The ring
+/// mistake this exists to prevent is *half* a panel changing: a ring moved off
+/// the paper's colour without the rows inside it has every line of the `:`
+/// menu dragging a patch of the old colour behind it. The ring
 /// and its contents read this.
 pub fn panel_ground(ink: crate::theme::Palette) -> ratatui::style::Color {
     ink.at(yumete_config::rung::FLOAT)
@@ -347,11 +337,10 @@ pub fn panel_ground(ink: crate::theme::Palette) -> ratatui::style::Color {
 mod tests {
     use super::*;
 
-    /// **浮動的窗讓開整個詞，不只是光標那一格**（2026-10-12 報的）。
+    /// **浮動的窗讓開整個詞，不只是光標那一格**。
     ///
-    /// 原話：「the char under the cursor is a full-width char, so the panel still
-    /// cover half of it … the word to show wiki may be several characters, so the
-    /// floating panel can still cover the word」。
+    /// 光標下的字是全角的，只讓一格會蓋掉它的一半；詞條常常好幾個字，只讓光標
+    /// 那一格照樣蓋掉那個詞。
     #[test]
     fn a_float_stands_clear_of_the_whole_word() {
         let page = Rect::new(0, 0, 80, 24);
@@ -364,8 +353,8 @@ mod tests {
         };
 
         // 「文高曲」在一行的末尾，光標停在中間那個字上：詞佔 46..52，而光標只在 48。
-        // 箱子站右邊、站那一行所在的那一半，從前只問 48 一格，於是從 49 起畫，蓋掉
-        // 「曲」——現在四個角都讓開 46..52。
+        // 箱子站右邊、站那一行所在的那一半；只問 48 一格的話會從 49 起畫，蓋掉
+        // 「曲」——四個角都讓開 46..52。
         let wide = put((48, 12), (2, 4), (30, 8));
         assert!(!hits(wide, 46, 52, 12), "蓋住了詞：{wide:?}");
 
@@ -378,7 +367,7 @@ mod tests {
         assert_eq!((huge.width, huge.height), (80, 20), "放不下也要畫出來");
     }
 
-    /// **帶子只有上下兩個落點，先下，光標在裏頭纔翻上**（2026-10-11）。
+    /// **帶子只有上下兩個落點，先下，光標在裏頭纔翻上**。
     #[test]
     fn a_band_stands_clear_of_the_caret() {
         let page = Rect::new(0, 0, 80, 24);
@@ -396,7 +385,7 @@ mod tests {
         assert_eq!(band((12, 15), 6).y, 16, "差一行，不用翻");
     }
 
-    /// **貼着光標那一種：下面放得下就放下面，放不下翻到上面**（2026-10-08）。
+    /// **貼着光標那一種：下面放得下就放下面，放不下翻到上面**。
     #[test]
     fn a_box_under_the_caret_stands_on_the_next_line() {
         let page = Rect::new(0, 0, 80, 24);
@@ -416,7 +405,7 @@ mod tests {
         assert_eq!((it.x, it.y), (60, 4), "靠右就推回來");
     }
 
-    /// **一邊釘死，另一邊翻**（2026-10-09 定）。橫排釘右邊，竪排釘下邊；
+    /// **一邊釘死，另一邊翻**。橫排釘右邊，竪排釘下邊；
     /// 只有當那個角真的壓在光標上纔換一個角。
     #[test]
     fn a_caret_anchored_box_keeps_its_fixed_side_and_flips_on_the_other() {
@@ -432,7 +421,7 @@ mod tests {
         // 光標在左上 —— 右下那個角本來就不壓它。
         assert_eq!(at(small, (2, 2), false), (40, 14), "右下");
         // 光標在**左下**：行還是那幾行，可盒子在右半邊，壓不到它。
-        // 從前這一格會翻到上面去，而那一翻什麽也沒買到。
+        // 不翻到上面去：那一翻什麽也買不到。
         assert_eq!(at(small, (2, 18), false), (40, 14), "左下的光標不讓它動");
         // 光標在右下 —— 這纔是真的壓上了，翻到右上。
         assert_eq!(at(small, (60, 18), false), (40, 0), "右上");

@@ -160,10 +160,10 @@ impl Segmenter for YumeSegmenter {
 
     /// Non-CJK stretches keep the category rules; only the runs of 漢字 and
     /// kana need the dictionary. Which is which is
-    /// [`yumete_cjk::ranges_around_cjk`]'s to say, not this file's (#349):
-    /// the copy that used to live here dropped every 標點 instead of giving it
-    /// a range, so `w` stopped before 「 with the bundled dictionary loaded
-    /// and stepped straight over it with 宇浩's.
+    /// [`yumete_cjk::ranges_around_cjk`]'s to say, not this file's (#349): a
+    /// copy here that dropped every 標點 instead of giving it a range would
+    /// make `w` stop before 「 with the bundled dictionary loaded and step
+    /// straight over it with 宇浩's.
     fn segment(&self, s: &str) -> Vec<(usize, usize)> {
         yumete_cjk::ranges_around_cjk(s, |run| self.segment_run(run))
     }

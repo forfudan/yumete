@@ -57,7 +57,7 @@ pub use yume_core::key_bindings::{FuncKey, ModifierTap};
 /// **A tag, not a variant per scheme** (#169). The four 宇浩 schemes and 拼音
 /// are what a build with no scheme files finds, but they are a fallback and not
 /// a definition: a `schemes/<tag>.toml` in any data directory is a scheme too,
-/// and yume-core has shipped 冰雪四拼 and 三拼 that way since 2026-09-04. The
+/// and yume-core ships 冰雪四拼 and 三拼 that way. The
 /// tag is `&'static str` because the command table it feeds is `&'static`; a
 /// found tag is leaked once, at discovery, and there are single digits of them.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -68,7 +68,7 @@ pub struct Scheme(&'static str);
 /// `None` and `Some(empty)` are different answers: the first means no directory
 /// was ever scanned (a unit test, a `--help` run) and the built-in five stand;
 /// the second means a directory was scanned and holds no scheme file, which is
-/// every install today and also stands. Only a non-empty find replaces them.
+/// most installs and also stands. Only a non-empty find replaces them.
 static FOUND: std::sync::OnceLock<Vec<(&'static str, String)>> = std::sync::OnceLock::new();
 
 /// One 自定義方案 the writer imported into yume, as [`discover_slots`] found it.
@@ -91,7 +91,7 @@ struct Slot {
     dir: PathBuf,
     /// The parameters `custom.yscm` holds — 最大碼長, 終止鍵, 反查引導鍵, the
     /// two 隱藏 ticks, and the rest. Kept from the scan rather than read again
-    /// at load time: `scheme_slots::list` would not have reported the slot at
+    /// at load time: `scheme_slots::list` would not have listed the slot at
     /// all if this had not parsed, so a second read can only agree, and a
     /// scheme whose parameters went missing between the two would silently
     /// fall back to the engine's defaults — a 最大碼長 of the wrong length is
@@ -104,8 +104,8 @@ static SLOTS: std::sync::OnceLock<Vec<Slot>> = std::sync::OnceLock::new();
 
 /// Under a data directory, where yume keeps its slots.
 ///
-/// Three, because yume has moved them: macOS puts them in `installed/` today,
-/// Windows still writes `data/custom/`, and an installation older than 方案管理
+/// Three, because yume keeps them in different places: macOS in `installed/`,
+/// Windows in `data/custom/`, and an installation older than 方案管理
 /// has a bare `custom/` holding one scheme with no slot directory at all (that
 /// last is `scheme_slots::migrate`'s business, and it is listed here only so a
 /// yumete that meets it before yume does still finds nothing rather than
@@ -143,7 +143,7 @@ impl Scheme {
     /// 拼音 — the phonetic, fluency-only scheme.
     pub const PINYIN: Scheme = Scheme("pinyin");
 
-    /// **出廠那五家給人看的名字**（2026-10-08）。
+    /// **出廠那五家給人看的名字**。
     ///
     /// 和 [`Scheme::from_tag`] 認的那幾個中文名是同一組字。裝好的數據在手的時候
     /// `data_manifest::factory_scheme_name` 也答得出來——可問這一支的那個場合
@@ -440,7 +440,7 @@ impl Candidate {
 }
 
 /// **As many whole fields as fit in `room` cells**, joined as the engine
-/// joins them, and `…` after them when some were left out (2026-11-02).
+/// joins them, and `…` after them when some were left out.
 ///
 /// Cut at a field, never inside one: `U+6C` says nothing, and the fields
 /// come in the engine's order, 拆分 first, so what stays is what matters
@@ -495,15 +495,12 @@ const FITS: usize = u8::MAX as usize;
 
 /// Drop the rows a code table cannot hold, and say how many.
 ///
-/// **Looked at before the file is handed over, not after** (#344). `:yume-table`
-/// takes any path, and a path is easy to get wrong: pointing it at a file that
-/// is not a 碼表 at all used to walk the compiled blob's index off its end and
-/// take the editor — every unsaved buffer with it — along. Upstream now clamps
-/// that length byte, so the crash is gone; what is left is the quieter half.
-/// A truncated code matches nothing, so the row is a phantom: it is counted,
-/// it is indexed, and it can never be typed. Weeding it here means the count
-/// the panel reports is the count that can answer, and the front end has a
-/// number to say instead of loading a file full of nonsense without a word.
+/// **Looked at before the file is handed over, not after** (#344). `:yume-table` takes any path, and
+/// a path is easy to get wrong: a file that is not a 碼表at all must not take the editor down.
+/// Upstream clamps the length byte, so the crash is upstream's; what is left is the quieter half. A
+/// truncated code matches nothing, so the row is a phantom: it is counted, it is indexed, and it can
+/// never be typed. Weeding it here means the count the panel reports is the count that can answer,
+/// and the front end has a number to say instead of loading a file full of nonsense without a word.
 ///
 /// **Whitespace-separated fields, either order, either separator.** The format
 /// auto-detects `text<TAB>code`, `code<SPACE>text` and their reverses, so this
@@ -533,7 +530,7 @@ pub struct ImeSession {
     scheme: Scheme,
     data_dirs: Vec<PathBuf>,
     available: bool,
-    /// The annotation modes by name, in the engine's order (2026-11-02). The
+    /// The annotation modes by name, in the engine's order. The
     /// engine knows them by index, as in yume; the names are ours.
     annotation_modes: Vec<AnnotationMode>,
     /// The mode the writer asked for, which is not always the one in force:
@@ -564,8 +561,8 @@ pub struct ImeSession {
     /// same question as [`Self::page_size`] — how this session offers what it
     /// has found — and the front end asks it once per frame.
     display: PanelDisplay,
-    /// Where the composition in progress is shown, and what it says
-    /// (2026-09-27). Its own dial: the panel being drawn and the code being
+    /// Where the composition in progress is shown, and what it says.
+    /// Its own dial: the panel being drawn and the code being
     /// written into the text are two questions, and every one of the six
     /// combinations is a state somebody asks for.
     preedit: InlinePreedit,
@@ -580,7 +577,7 @@ pub struct ImeSession {
     /// Shift visible is the same flag that stops macOS's input method from
     /// composing: it can be held exactly while this is true.
     engaged: bool,
-    /// **這扇窗畫得下一個候選嗎**，前端每一幀報一次（2026-10-03）。
+    /// **這扇窗畫得下一個候選嗎**，前端每一幀報一次。
     ///
     /// 頁的大小已經按窗口縮過了（`page_for_window`），可它最後那一下「至少一個」
     /// 是硬的——三行高的窗口上兩行框加一行編碼就把高度用完，一個候選都畫不出來，
@@ -594,7 +591,7 @@ pub struct ImeSession {
     charsets: Charsets,
 }
 
-/// **字集過濾、字集排序與整句字集軌** (2026-11-04), as Yume's own front ends
+/// **字集過濾、字集排序與整句字集軌**, as Yume's own front ends
 /// keep them. The defaults are Yume's: every character, common ones first,
 /// and three lanes, so a 拼音 sentence stays in one script and the other
 /// script is offered as a sentence of its own.
@@ -745,8 +742,7 @@ impl ImeSession {
     /// 進制裏這張舊、也可能根本不是你要的那張。沒有它，想回到一張已知能用的
     /// 表，只能離開編輯器去磁碟上挪檔案。
     ///
-    /// `None` ＝ 這個方案在這一份二進制裏沒有表（2026-10-07 加星陳之前寫死的是
-    /// 靈明，於是多嵌一張也走不到）。
+    /// `None` ＝ 這個方案在這一份二進制裏沒有表。不寫死哪一個方案：多嵌一張就走得到。
     pub fn builtin(scheme: Scheme) -> Option<Self> {
         carries_scheme(scheme).then(|| Self::builtin_made(scheme))
     }
@@ -810,9 +806,9 @@ impl ImeSession {
     /// Where the 碼表 in use came from, for `:yume` to say; the front end
     /// puts it in words ([`TableSource`]).
     pub fn table_source(&self) -> Option<TableSource> {
-        // Warning: **沒有碼表就回 `None`，不回一句中文**（2026-10-08）。這個 crate 沒有
-        // 文案表，所以從前那句寫死的「沒有碼表」在英文界面上也是中文，而且改一個
-        // 字要動代碼。說這句話的是呼叫方（`yume.where.no-table`）。
+        // Warning: **沒有碼表就回 `None`，不回一句中文**。這個 crate 沒有
+        // 文案表，寫死一句「沒有碼表」的話在英文界面上也是中文，而且改一個字要動
+        // 代碼。說這句話的是呼叫方（`yume.where.no-table`）。
         if !self.available {
             return None;
         }
@@ -975,8 +971,8 @@ impl ImeSession {
     ///
     /// Warning: **「挂上了」不等於「在用」。** 會話一建出來 `engaged` 就是 `true`，
     /// 而碼表是第一次切到中文纔載的，所以開機那一刻 `engaged() == true` 而屏幕上
-    /// 一個字都沒有。2026-10-10 報的：`空格 空格` 只問了 `engaged`，於是開機第一下
-    /// 讀成「開着」，去把它關了一次——「必须再按两下 space 才可以开启」。
+    /// 一個字都沒有。`空格 空格` 只問 `engaged` 的話，開機第一下會讀成「開着」，去把
+    /// 它關一次——於是要再按兩下纔開得起來。
     ///
     /// 這一句是前端判斷「yume 收不收這一鍵」用的同一句（四處），問的也是狀態欄那
     /// 一格畫不畫得出東西。要問「開着沒有」，問這一句。
@@ -1041,8 +1037,8 @@ impl ImeSession {
         let mode = self.annotation_wanted.clone();
         // 中/ABC and 輸入預測 live in the engine, and are the writer's too.
         let (chinese, prediction) = (self.is_chinese(), self.prediction_enabled());
-        // Warning: **換方案也要退得到出廠表**（2026-10-12 量到的）：`new` 與這一支
-        // 走同一個 `build_engine`，內嵌的那一層在 `locate` 裏，兩條路不會再分家。
+        // Warning: **換方案也要退得到出廠表**：`new` 與這一支走同一個
+        // `build_engine`，內嵌的那一層在 `locate` 裏，兩條路不會分家。
         let (mut engine, available, problems, builtin) = build_engine(scheme, &self.data_dirs);
         self.charsets.apply(&mut engine);
         self.builtin = builtin;
@@ -1124,9 +1120,9 @@ impl ImeSession {
     /// one thing. On an empty buffer its factory value is 中/英 toggle; while
     /// composing it is 「commit the raw code, then go English」, because the
     /// reason to reach for Shift mid-code is that this stretch is English —
-    /// and the code already typed is text the writer meant. yumete used to
-    /// call `set_chinese(false)` straight, whose job is to *clear* the buffer:
-    /// a half-typed 拆分 disappeared with no commit and no undo entry.
+    /// and the code already typed is text the writer meant. Calling
+    /// `set_chinese(false)` straight would *clear* the buffer: a half-typed 拆分
+    /// would disappear with no commit and no undo entry.
     ///
     /// `false` means the action is the frontend's to do (a panel to open, or a
     /// key whose own character the action needs — a modifier has none).
@@ -1139,9 +1135,9 @@ impl ImeSession {
     /// `/` — and say whether the engine took it.
     ///
     /// The binding table is yume's, not yumete's: 靈明 puts 選二 on `;` and 選三
-    /// on `'`, which a 形碼 writer presses hundreds of times a day, and yumete
-    /// used to send them straight to the engine's punctuation path — committing
-    /// the first candidate and dropping a `；` into the manuscript. Asking
+    /// on `'`, which a 形碼 writer presses hundreds of times a day; sent straight
+    /// to the engine's punctuation path they would commit the first candidate
+    /// and drop a `；` into the manuscript. Asking
     /// `key_action` also hands us the scheme-deference rule for free: a custom
     /// 碼表 that uses `-` as a code key gets its `-` back.
     ///
@@ -1164,7 +1160,7 @@ impl ImeSession {
             }
             KeyAction::Native => false,
             KeyAction::Noop => true,
-            // yume's `/` while typing (2026-11-02): the next annotation mode.
+            // yume's `/` while typing: the next annotation mode.
             KeyAction::CycleComment => {
                 self.cycle_annotation();
                 true
@@ -1362,16 +1358,15 @@ impl ImeSession {
     /// 拆分 and a code and nothing else. This is the same knowledge with the
     /// room to say all of it, as `(名, 值)` pairs a panel can draw.
     ///
-    /// **兩層，而只有上面那一層要方案**（2026-10-12 定）。全息拆分表不分方案，
+    /// **兩層，而只有上面那一層要方案**。全息拆分表不分方案，
     /// 所以「這個字怎麼拆、怎麼讀、在哪幾個字集裏、碼位是多少」四行**沒載方案也
     /// 答得出**（[`shared_divisions`]）；方案拆分・編碼・分節編碼那三行要方案的
-    /// 字根表，載了纔加在最上面。報的原話：「When scheme is not loaded, show only
-    /// the fields of the chaifen table」。
+    /// 字根表，載了纔加在最上面。方案沒載的時候只畫拆分表那幾行。
     ///
-    /// **拆分只畫一行**（2026-10-12 定）。核心交兩份：`decomposition` 是字根表編
+    /// **拆分只畫一行**。核心交兩份：`decomposition` 是字根表編
     /// 碼時真用到的那幾個根（帶省略號），`own_decomposition` 是自定義碼表自己那
-    /// 張拆分表的全串——後者只在字根表**編不出碼**的時候是獨一份的消息。原話：
-    /// 「能不能這兩個同時存在的時候只取第一個，還是叫『方案拆分』？」
+    /// 張拆分表的全串——後者只在字根表**編不出碼**的時候是獨一份的消息。兩個都在的時候
+    /// 只取第一個，仍叫「方案拆分」。
     ///
     /// **A character with more than one 拆法 answers more than once.** 陸、臺、
     /// 港 disagree about a few thousand characters, and which one you are
@@ -1380,9 +1375,8 @@ impl ImeSession {
     /// than the first one winning silently.
     ///
     /// **Never empty**: a character always has a code point, and that is worth
-    /// saying about a character the 拆分表 has never heard of. 2026-10-13:
-    /// 「the space n functionality can be applied to all characters, even not
-    /// in the chaifen table, e.g., symbols」. [`Lookup::divided`] is how the
+    /// saying about a character the 拆分表 has never heard of: `空格 n` works on
+    /// every character, symbols included. [`Lookup::divided`] is how the
     /// caller still tells 「a symbol, which has no 拆法」 from 「the table is
     /// not loaded」 — two different findings, and two different sentences.
     pub fn glosses(&self, ch: &str) -> Lookup {
@@ -1412,7 +1406,7 @@ impl ImeSession {
                 true => &a.own_decomposition,
                 false => &a.decomposition,
             };
-            // **分隔符改成空格**（2026-10-12 報的）。核心用 `_` 串讀音、用 `-`
+            // **分隔符是空格**。核心用 `_` 串讀音、用 `-`
             // 接字集與區塊，那是**存**的寫法；讀的人看見的該是幾個並列的東西，
             // 而不是一個帶標點的長詞。核心是另一個倉的，所以改在這裏。
             let reading = a.reading.replace('_', " ");
@@ -1436,7 +1430,7 @@ impl ImeSession {
         // from the character itself rather than read off a table row. That is
         // what lets them stand under a symbol the table has never heard of.
         //
-        // **一個字簇可以有好幾個碼位**（2026-10-12）：`🈚️` 是 U+1F21A ＋ U+FE0F，
+        // **一個字簇可以有好幾個碼位**：`🈚️` 是 U+1F21A ＋ U+FE0F，
         // 逐個寫 `U+`——`U+1F21A+FE0F` 讀起來像一個碼位加了條尾巴。
         let points: Vec<String> = ch.chars().map(yumete_cjk::blocks::codepoint).collect();
         if !points.is_empty() {
@@ -1445,7 +1439,7 @@ impl ImeSession {
         // 區塊問的是**底字**：一個異體字選擇符自己在 Variation Selectors
         // Supplement 裏，而讀者要知道的是那個漢字在哪一區。同狀態欄那一格。
         //
-        // 名字照英文寫，和狀態欄一致（2026-10-13 定）：Unicode 的區塊名本來就是
+        // 名字照英文寫，和狀態欄一致：Unicode 的區塊名本來就是
         // 標準英文術語，拿它去別處查也是查英文。
         if let Some(block) = ch.chars().next().and_then(yumete_cjk::blocks::block_of) {
             out.push(("統一碼區塊".to_string(), block.to_string()));
@@ -1454,7 +1448,7 @@ impl ImeSession {
     }
 
     /// **查一個字答得出東西嗎**——`空格 n` 空手回來時，說的是「表裏沒有這個
-    /// 字」還是「根本沒有表」（2026-10-12）。
+    /// 字」還是「根本沒有表」。
     ///
     /// 不建表，只問在不在：換一次方案就問一次，而建那一張要解析 3.2 MB。
     pub fn chaifen_available(&self) -> bool {
@@ -1468,7 +1462,7 @@ impl ImeSession {
         self.engine.comments_available()
     }
 
-    /// **The annotation modes** (2026-11-02), pushed to the engine as yume's
+    /// **The annotation modes**, pushed to the engine as yume's
     /// front ends push theirs: one profile per mode, by index. A mode with
     /// no field is kept, so the indices stay put, but left out of the round.
     pub fn set_annotation_modes(&mut self, modes: &[AnnotationMode]) {
@@ -1660,7 +1654,7 @@ impl ImeSession {
     /// Whether the bordered box is drawn on **this** frame.
     ///
     /// `false` does not mean the candidates are nowhere: with the box off they
-    /// are drawn across the command row instead (2026-10-16). This question is
+    /// are drawn across the command row instead. This question is
     /// the session's rather than the renderer's because it settles two things
     /// at once — which of the two shapes the candidates take, and where the
     /// code has left to stand.
@@ -1689,13 +1683,11 @@ impl ImeSession {
 
     /// **內嵌的那一段**——要寫進正文的字，或者空的（不內嵌）。
     ///
-    /// 三檔（2026-09-27 定，原話：「inline-preedit: 候选面板的 header（編碼栏）不
-    /// 显示，而是直接在编辑区显示。分为两种，一种是显示編碼，一种是显示首个候选」）：
-    /// [`InlinePreedit::Off`] 不內嵌，[`InlinePreedit::Composition`] 寫編碼，[`InlinePreedit::Preview`] 寫
-    /// 首選。
+    /// 三檔——候選面板的編碼欄不顯示，直接寫在編輯區，寫的是編碼或首選，或者不寫：
+    /// [`InlinePreedit::Off`] 不內嵌，[`InlinePreedit::Composition`] 寫編碼，
+    /// [`InlinePreedit::Preview`] 寫首選。
     ///
-    /// Warning: **與面板畫不畫無關。** 面板照畫而正文裏站着首選，是一個合法的組合，也正
-    /// 是 2026-09-27 報的那個缺口。
+    /// Warning: **與面板畫不畫無關。** 面板照畫而正文裏站着首選，是一個合法的組合。
     pub fn inline_text(&self) -> String {
         if !self.is_composing() {
             return String::new();
@@ -1718,7 +1710,7 @@ impl ImeSession {
 /// Resolve one manifest entry's relative path (`charsets/common.ycs`) against
 /// the search path, first directory wins.
 /// **Where one manifest file could be, inside one data directory** — in the
-/// order they are tried (2026-09-22).
+/// order they are tried.
 ///
 /// The manifest names its files with a `data/` in front (`data/symbols.ytab`,
 /// `data/charsets/tonggui.ycs`), which is the layout of 宇浩's own source tree
@@ -1726,11 +1718,11 @@ impl ImeSession {
 /// puts `symbols.ytab`, `lang.ywtb`, `pinyin.yflb` and a `charsets/` directory
 /// straight into `~/.local/share/yume/`. Same files, one level up.
 ///
-/// 2026-09-22 報的就是這個：那個目錄裏**明明有文件**，而 `:yume-where` 一路寫着
+/// 只找帶 `data/` 的那一份，那個目錄裏**明明有文件**，而 `:yume-where` 一路寫着
 /// 「（沒有）」——找的是 `~/.local/share/yume/data/symbols.ytab`，那一份不在。
 ///
-/// So the `data/` in front is tried first (nothing that works today changes)
-/// and then stripped. Warning: **Only the leading `data/`**: `data/charsets/x.ycs`
+/// So the `data/` in front is tried first (every layout that has it is found
+/// as before) and then stripped. Warning: **Only the leading `data/`**: `data/charsets/x.ycs`
 /// becomes `charsets/x.ycs`, which is exactly where the flat layout keeps it.
 pub fn data_paths_in(dir: &Path, relative: &str) -> Vec<PathBuf> {
     let joined = |rel: &str| {
@@ -1780,7 +1772,7 @@ fn find_file(dirs: &[PathBuf], relative: &str) -> Option<PathBuf> {
     None
 }
 
-/// **The tables the binary carries** (2026-11-04): the full 宇浩拼音, 靈明 and
+/// **The tables the binary carries**: the full 宇浩拼音, 靈明 and
 /// 星陳, with the language layer, packed by `yumete-tables`. Only the `yumete`
 /// binary links that crate, so they are handed over at startup rather than
 /// named here.
@@ -1854,7 +1846,7 @@ impl Found {
 
 /// `relative` on disk, in the order of `dirs`, else in the binary.
 ///
-/// **The disk wins, file by file** (2026-11-04): an installed Yume is newer
+/// **The disk wins, file by file**: an installed Yume is newer
 /// than the snapshot this binary was built with, and a data set that lacks
 /// one file (the sentence model, say) still gets that one from here.
 fn locate(dirs: &[PathBuf], relative: &str) -> Option<Found> {
@@ -1882,7 +1874,7 @@ pub struct Lookup {
 }
 
 
-/// **沒有方案也查得出一個字**（2026-10-12 定）。
+/// **沒有方案也查得出一個字**。
 ///
 /// 全息拆分表不分方案——每一個方案讀的都是這一張，而「這個字怎麼拆、怎麼讀、
 /// 在哪幾個字集裏」是一個**還沒載碼表**的人也會問的問題。所以它和引擎分開住。
@@ -1952,8 +1944,8 @@ pub fn has_builtin_table() -> bool {
     !builtin_tables().is_empty()
 }
 
-/// **Which schemes this binary can type with on its own** (2026-11-04: 宇浩拼音,
-/// 靈明 and 星陳, in full).
+/// **Which schemes this binary can type with on its own** (宇浩拼音, 靈明 and
+/// 星陳, in full).
 pub fn builtin_tables() -> Vec<Scheme> {
     [Scheme::PINYIN, Scheme::LINGMING, Scheme::XINGCHEN]
         .into_iter()
@@ -1972,11 +1964,11 @@ pub fn builtin_version() -> Option<&'static str> {
 
 /// Why one entry of the factory data set is not in the engine (Feature #220).
 ///
-/// It used to be a `bool`, and that made 「不在」 and 「在，而核心不收」 the
-/// same answer. The second one is the one worth saying out loud: when a binary
-/// format changes its magic — `.ydiv` did, on 2026-09-04 — an older data
-/// directory keeps every file in place and quietly stops answering. Nothing in
-/// the editor looked wrong; the 拆分 comments simply were not there any more.
+/// Not a `bool`, which would make 「不在」 and 「在，而核心不收」 the same
+/// answer. The second one is the one worth saying out loud: when a binary
+/// format changes its magic, an older data directory keeps every file in place
+/// and quietly stops answering. Nothing in the editor looks wrong; the 拆分
+/// comments simply are not there.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DataFault {
     /// In none of the search directories. The ordinary case for optional data,
@@ -2148,14 +2140,13 @@ fn slot_data_set(slot: &Slot) -> Vec<DataFile> {
 
 /// The magic this kind of file should begin with, when the format has one.
 ///
-/// **The core's own answer** (`DataKind::magic`, 2026-09-05), not a table here:
+/// **The core's own answer** (`DataKind::magic`), not a table here:
 /// a copy would rot on exactly the day the constant changes, which is the day
-/// it matters — the `.ydiv` move from `YDV20260828` to `YDV20260904` showed up
-/// as the annotations silently vanishing. A text format has no head to check
+/// it matters, and a stale magic shows up only as the annotations silently
+/// vanishing. A text format has no head to check
 /// and answers `None`, and the reason from the loader stands on its own.
-///
-/// This used to name each format's constant one by one, which meant the two
-/// kinds that gained a magic later (a charset, a 固頂表) were never checked.
+/// Naming each format's constant one by one would leave a kind that gains a
+/// magic later unchecked.
 pub fn expected_magic(kind: DataKind) -> Option<&'static [u8]> {
     Some(kind.magic().as_bytes()).filter(|m| !m.is_empty())
 }
@@ -2192,8 +2183,8 @@ fn magic_mismatch(path: &Path, kind: DataKind) -> Option<MagicMismatch> {
 /// unrecognised `kind` is skipped rather than treated as an error, so a yumete
 /// built against an older `yume-core` still starts against newer data.
 ///
-/// The error carries the core's own reason (Feature #220). yume-core has always
-/// returned one; this function used to throw it away.
+/// The error carries the core's own reason (Feature #220), which yume-core
+/// returns.
 fn load_data_file(
     engine: &mut Engine,
     dirs: &[PathBuf],
@@ -2201,7 +2192,7 @@ fn load_data_file(
 ) -> Result<bool, DataProblem> {
     match load_data_file_in(engine, dirs, file) {
         // **An installed file this build cannot read is passed over for the
-        // binary's copy** (2026-11-04 review): an older Yume's format, or a
+        // binary's copy**: an older Yume's format, or a
         // newer one's, would otherwise take a carried scheme down with it.
         Err(problem)
             if matches!(problem.fault, DataFault::Rejected { .. })
@@ -2318,7 +2309,7 @@ fn load_data_file_in(
             // The 字根表 is the *second* half of this entry, and losing it must
             // not cost the first: 拆分・讀音・字集 all come off the divisions,
             // and only 編碼 comes off the 字根表. So the annotations go in
-            // either way, and a refused 字根表 is reported afterwards.
+            // either way, and a refused 字根表 is said afterwards.
             let divisions = Arc::new(divisions);
             let zigen_found = locate(dirs, &file.aux);
             let zigen = match zigen_found.as_ref() {
@@ -2522,8 +2513,7 @@ mod tests {
         ImeSession::from_engine(Engine::new(table), Scheme::LINGMING)
     }
 
-    /// **沒有方案也查得出一個字**（2026-10-12 報的：「space-n does not work
-    /// because the yume-scheme is not loaded. This is inconvenient.」）。
+    /// **沒有方案也查得出一個字**：`空格 n` 不等方案。
     ///
     /// 全息拆分表不分方案，所以字料層那幾行不等方案。驗的是一個**空會話**——
     /// 和剛啓動、`[yume] start = false` 的那一刻逐字節相同。
@@ -2541,7 +2531,7 @@ mod tests {
         let named = |n: &str| got.rows.iter().find(|(name, _)| name == n).map(|(_, v)| v.as_str());
         assert_eq!(named("宇浩全息拆分"), Some("彳亍"), "{got:?}");
         assert_eq!(named("統一碼"), Some("U+884C"), "{got:?}");
-        // **分隔符是空格，不是 `_` 和 `-`**（2026-10-12 定）：核心那兩個記號是
+        // **分隔符是空格，不是 `_` 和 `-`**：核心那兩個記號是
         // 存的寫法，讀的人看見的該是幾個並列的東西。
         assert_eq!(named("讀音"), Some("háng xíng héng xìng hàng"), "{got:?}");
         assert!(named("字集").is_some_and(|s| !s.contains('-')), "{got:?}");
@@ -2551,7 +2541,7 @@ mod tests {
         }
     }
 
-    /// **一個字簇可以有好幾個碼位**（2026-10-12）——`㐂󠄁` 是 U+3402 ＋ 一個
+    /// **一個字簇可以有好幾個碼位**——`㐂󠄁` 是 U+3402 ＋ 一個
     /// Plane-14 的異體字選擇符，而拆分表裏它自成一條（和光禿禿的 `㐂` 拆得不
     /// 一樣）。按碼位問只問得到頭一個。
     #[test]
@@ -2566,11 +2556,10 @@ mod tests {
         assert!(named("宇浩全息拆分").is_some(), "{got:?}");
     }
 
-    /// **碼位和區塊答得了每一個字，不只是表裏那些**（2026-10-13 定）。
+    /// **碼位和區塊答得了每一個字，不只是表裏那些**。
     ///
-    /// 原話：「the unicode and the Unicode block can be calculated and mapped
-    /// without chaifen table……Thus, the space n functionality can be applied
-    /// to all characters, even not in the chaifen table, e.g., symbols.」
+    /// 碼位和 Unicode 區塊不靠拆分表也算得出來，所以 `空格 n` 對每一個字都有用，
+    /// 拆分表裏沒有的符號也一樣。
     #[test]
     fn every_character_has_a_code_point_and_a_block_even_a_symbol() {
         let ime = ImeSession::empty(Scheme::LINGMING);
@@ -2632,7 +2621,7 @@ mod tests {
         assert_eq!(ime.inline_text(), "");
     }
 
-    /// **三檔各寫各的，而且和面板畫不畫無關**（2026-09-27 定）。
+    /// **三檔各寫各的，而且和面板畫不畫無關**。
     #[test]
     fn the_preedit_is_its_own_dial() {
         let mut ime = synthetic_session();
@@ -2652,8 +2641,8 @@ mod tests {
         assert!(ime.panel_is_full());
     }
 
-    /// 2026-10-16: with the box off the candidates are on the command row, so
-    /// there is nothing left for a key to summon — `Tab` is the 字典 now.
+    /// With the box off the candidates are on the command row, so there is
+    /// nothing left for a key to summon — `Tab` is the 字典.
     #[test]
     fn the_box_is_the_setting_and_nothing_else() {
         let mut ime = synthetic_session();
@@ -2772,9 +2761,9 @@ mod data_faults {
     }
 
     /// The whole point of #220: a file **left over from an older Yume** is
-    /// present, is refused, and used to be indistinguishable from one that was
-    /// never installed. `.ydiv` changed its magic on 2026-09-04 and every old
-    /// data directory lost its 拆分 comments without a word.
+    /// present, is refused, and must be distinguishable from one that was never
+    /// installed. When a format changes its magic, every old data directory
+    /// loses its 拆分 comments without a word.
     #[test]
     fn an_old_file_says_which_version_it_is() {
         let entry = entry(DataKind::Annotations);
@@ -2842,8 +2831,8 @@ mod data_faults {
         // still carries those — quietly.
         assert!(ime.problems().len() > 1);
     }
-    /// #220: the manifest's two halves overlap, and the overlap used to be
-    /// loaded twice — 13 MB of 讀音表 parsed a second time to arrive at the
+    /// #220: the manifest's two halves overlap, and the overlap is loaded once,
+    /// not twice — 13 MB of 讀音表 parsed a second time would arrive at the
     /// same table.
     #[test]
     fn the_data_set_names_每一份_once() {
@@ -2913,12 +2902,11 @@ mod data_faults {
 mod holding {
     use super::*;
 
-    /// **「挂上了」不等於「在用」**（2026-10-10 報的）。
+    /// **「挂上了」不等於「在用」**。
     ///
-    /// 原話：「ye 打开编辑器，两下空格，它提是『输入法交还给系统了』，yume 輸入法
-    /// 引擎并没有开启。必须再按两下 space 才可以开启。」成因：會話一建出來
-    /// `engaged` 就是 `true`，而碼表要第一次切到中文纔載——於是開機那一刻
-    /// `engaged()` 答「開着」而屏幕上一個字都沒有，`空格 空格` 照它去關了一次。
+    /// 打開編輯器按兩下空格，要開起 yume，而不是說「輸入法交還給系統了」。會話一建
+    /// 出來 `engaged` 就是 `true`，而碼表要第一次切到中文纔載——於是開機那一刻
+    /// `engaged()` 答「開着」而屏幕上一個字都沒有，`空格 空格` 照它會去關一次。
     ///
     /// 要問「開着沒有」只許問 [`ImeSession::holding_the_keys`]。
     #[test]
