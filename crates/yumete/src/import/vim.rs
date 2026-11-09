@@ -1,10 +1,10 @@
-//! **vim's and Neovim's settings and keys, as yumete's** (2026-11-08),
+//! **vim's and Neovim's settings and keys, as yumete's**,
 //! from what the editor itself said it had ([`super::dump`]).
 //!
 //! Each run is read against a baseline run of the same editor with nothing
 //! of the reader's (`nvim --clean`, `vim -u NONE`, LazyVim alone), so what
-//! is left is what the reader changed (decision 4). The author's rule for
-//! the rest: **carry only what is certain; less is better than wrong**.
+//! is left is what the reader changed (decision 4). The rule for the rest:
+//! **carry only what is certain; less is better than wrong**.
 //! Whatever is not certain goes to the list at the end, one line a map.
 //!
 //! - **Maps go to `[keys.vim.normal|select|insert]`** (decision 1): a run
@@ -197,11 +197,11 @@ const NOISE: &[&str] = &[
     "maxmemtot", "syntax", "filetype", "modified", "buftype", "background", "encoding", "compatible", "cpoptions",
     "lines", "columns", "window", "term", "ttytype", "termencoding", "fileformat", "modelineexpr",
     // Drawn by plugins (lualine, bufferline) on a timer of their own, so two
-    // runs of one config can differ (seen on a real LazyVim, 2026-11-08).
+    // runs of one config can differ (as on a real LazyVim).
     "statusline", "tabline", "winbar", "statuscolumn",
 ];
 
-/// Options whose value is a set of one-letter flags: `shortmess` came back
+/// Options whose value is a set of one-letter flags: `shortmess` can read
 /// `WTlOoCtFIc` from one run and `tlTWcFoIOC` from the other (real LazyVim).
 const FLAGS: &[&str] = &["shortmess", "cpoptions", "formatoptions", "mouse", "guioptions", "complete"];
 

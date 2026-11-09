@@ -1,4 +1,4 @@
-//! **The yumete flavour** (2026-11-01) — what yumete adds to or changes in
+//! **The yumete flavour** — what yumete adds to or changes in
 //! a keymap, laid over whichever one is in use. The helix and vim keymaps
 //! are their upstreams on every key those editors bind; everything that is
 //! yumete's own is an item here, so it can be named, listed, and switched
@@ -9,7 +9,7 @@
 //!
 //! An item belongs here only when it is needed, improves the experience, or
 //! adds a feature. A key that simply does not match its upstream is a bug in
-//! the base keymap, not an item (`ge`, 2026-11-01).
+//! the base keymap, not an item (`ge`).
 
 use std::collections::BTreeMap;
 
@@ -248,8 +248,7 @@ flavor_items! {
         label: "keys.flavor.item.sidebars",
         hint: "keys.flavor.item.sidebars.hint",
     },
-    /// The `g` group's jumps (2026-11-02, every key free in vim, Neovim and
-    /// helix): `gz` jumps to a word by its first letters (z as in
+    /// The `g` group's jumps (every key free in vim, Neovim and helix): `gz` jumps to a word by its first letters (z as in
     /// easymotion), `gZ` to a Chinese character by its pinyin (Z for 中),
     /// `g/` searches the word, `gL` follows any link (it hands the work to
     /// `gx`, `gf` or `gd`, whichever the link is). Under helix `gx` opens a
@@ -265,7 +264,7 @@ flavor_items! {
         label: "keys.flavor.item.goto-extras",
         hint: "keys.flavor.item.goto-extras.hint",
     },
-    /// mini.splitjoin's `gS` (2026-11-07): the brackets round the cursor,
+    /// mini.splitjoin's `gS`: the brackets round the cursor,
     /// one item per line, or back onto one line. Free in helix and vim.
     SplitJoin => ItemInfo {
         id: "split_join",
@@ -334,7 +333,7 @@ flavor_items! {
     },
     /// `0` `^`, the line's start and its first character, as vim's; both
     /// free in helix. `$` is helix's (`shell_keep_pipe`), and the line's end
-    /// is helix's `gl` (2026-11-02).
+    /// is helix's `gl`.
     LineStartKeys => ItemInfo {
         id: "line_start_keys",
         level: FlavorLevel::Basic,
@@ -357,8 +356,8 @@ flavor_items! {
         hint: "keys.flavor.item.d-to-line-end.hint",
     },
     /// `Space C` over whole lines in Markdown, Typst or HTML puts one pair of
-    /// marks on lines of their own at the lines' indent (yumete's shape of
-    /// 2026-10-07, kept 2026-11-02); off, helix's: the marks inline at the
+    /// marks on lines of their own at the lines' indent (yumete's shape); off,
+    /// helix's: the marks inline at the
     /// first line's start and the last line's end. Code is helix's either way.
     BlockCommentLines => ItemInfo {
         id: "block_comment_lines",
@@ -371,7 +370,7 @@ flavor_items! {
         hint: "keys.flavor.item.block-comment-lines.hint",
     },
     /// Every Markdown and Typst heading is a fold over its section, all
-    /// open at first (2026-11-03, after a writer's review); off, vim's own
+    /// open at first; off, vim's own
     /// default: folds are only those made with `zf`.
     HeadingFolds => ItemInfo {
         id: "heading_folds",
@@ -383,10 +382,10 @@ flavor_items! {
         label: "keys.flavor.item.heading-folds",
         hint: "keys.flavor.item.heading-folds.hint",
     },
-    /// vim's `za` `zR` `zM` `zf` under helix (2026-11-03), on `z` keys helix
-    /// leaves free: helix has no folds, and the heading folds came with no
-    /// keys there. `zf` folds the selection's lines, helix's way round.
-    /// `zc` `zm` `zj` `zk` stay helix's; `zo` was left out as `za` does it.
+    /// vim's `za` `zR` `zM` `zf` under helix, on `z` keys helix
+    /// leaves free: helix has no folds, and the heading folds have no keys
+    /// there otherwise. `zf` folds the selection's lines, helix's way round.
+    /// `zc` `zm` `zj` `zk` stay helix's; `zo` is not bound, as `za` does it.
     HelixFoldKeys => ItemInfo {
         id: "helix_fold_keys",
         level: FlavorLevel::Basic,
@@ -398,7 +397,7 @@ flavor_items! {
         hint: "keys.flavor.item.helix-fold-keys.hint",
     },
     /// vim's `gc{motion}`, `gcc` and Visual `gc`, as vim 9.1's comment package
-    /// and Neovim have them (2026-11-02): the lines, commented as
+    /// and Neovim have them: the lines, commented as
     /// `Space A-c` comments them. Off, vim has no comment key but `\c`.
     VimCommentKeys => ItemInfo {
         id: "vim_comment_keys",
@@ -410,7 +409,7 @@ flavor_items! {
         label: "keys.flavor.item.vim-comment-keys",
         hint: "keys.flavor.item.vim-comment-keys.hint",
     },
-    /// The Space menu under vim, on vim's `Space` (2026-11-01); off, `Space`
+    /// The Space menu under vim, on vim's `Space`; off, `Space`
     /// moves right as vim's and the menu is on `\`, vim's leader.
     VimSpaceMenu => ItemInfo {
         id: "vim_space_menu",
@@ -422,8 +421,8 @@ flavor_items! {
         label: "keys.flavor.item.vim-space-menu",
         hint: "keys.flavor.item.vim-space-menu.hint",
     },
-    /// helix's keys under vim, on keys vim and Neovim leave free (2026-11-02,
-    /// measured against `index.txt` and Neovim's default mappings): the Alt
+    /// helix's keys under vim, on keys vim and Neovim leave free (measured
+    /// against `index.txt` and Neovim's default mappings): the Alt
     /// keys, `C-s`, `Z`'s sticky view, `gb` `gy` `g.`, `]g` `[g`, `;` `,`
     /// with no `f` to repeat, Insert `C-k` and `A-d`. Off, vim has only
     /// vim's. Under helix they are helix's own, so this item is always on
@@ -439,7 +438,7 @@ flavor_items! {
         label: "keys.flavor.item.helix-keys-under-vim",
         hint: "keys.flavor.item.helix-keys-under-vim.hint",
     },
-    /// `d` and `c` delete without filling the register, and `A-d`/`A-c` are the pair that cut — in the text and in a table's grid. helix only: vim has `"_d` (2026-11-01, after looking at what vim users write).
+    /// `d` and `c` delete without filling the register, and `A-d`/`A-c` are the pair that cut — in the text and in a table's grid. helix only: vim has `"_d`, and that is what vim users write.
     DeleteKeepsRegister => ItemInfo {
         id: "delete_keeps_register",
         level: FlavorLevel::Full,

@@ -1,4 +1,4 @@
-//! **`ye --md-render`** (2026-11-08): a Markdown file drawn by
+//! **`ye --md-render`**: a Markdown file drawn by
 //! `yumete-mdview` into PNG pictures, one a screen, without the editor — to
 //! look at the renderer and to time it. A developer's door, kept out of
 //! `--help`.
@@ -22,7 +22,7 @@
 //!
 //! `--export-html` also writes the page `:export-as-preview` makes of the
 //! file in the same colours, direction and Latin setting, to lay beside the
-//! pictures (2026-11-08).
+//! pictures.
 //!
 //! `--width` and `--height` are the picture's, in device pixels; `--scale`
 //! is device pixels to a CSS pixel. `--at-line` starts the first screen at

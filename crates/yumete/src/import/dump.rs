@@ -1,7 +1,7 @@
 //! **Running the reader's vim or Neovim, headless, on a copy of its
-//! config** (2026-11-08), for `--import vim`, `nvim` and `lazyvim`.
+//! config**, for `--import vim`, `nvim` and `lazyvim`.
 //!
-//! The author's hard rule: **an import never writes to the reader's vim or
+//! The hard rule: **an import never writes to the reader's vim or
 //! Neovim config, data, state or cache.** So the editor never sees them:
 //!
 //! - **It runs in a home of its own**, a new directory under the system's
@@ -582,8 +582,8 @@ fn signal_group(child: &std::process::Child, signal: Signal) {
 /// **Kill every process the run left behind outside its group**: one that
 /// carries the run's [`MARK`] in its environment, or works in a directory
 /// inside the copy. Neovim's `jobstart(…, {detach = true})` runs its job in
-/// a session of its own that nothing else reaches, and that job wrote into
-/// the copy 6 s after the import had returned (review, 2026-11-09).
+/// a session of its own that nothing else reaches, and that job can write
+/// into the copy seconds after the import has returned.
 ///
 /// A process inherits its parent's environment and directory, so one or the
 /// other is on everything the editor started, at any remove: the mark unless
@@ -728,11 +728,11 @@ mod processes {
 }
 
 
-/// **Ctrl-C, `kill` and a closed terminal, during an import** (review,
-/// 2026-11-09). The editor leads a process group of its own, so the
-/// terminal's SIGINT reaches yumete alone, and yumete dying of it left
-/// Neovim running and the copy of the reader's config in the temporary
-/// directory. So for as long as a [`Sandbox`] lives, SIGINT, SIGTERM and
+/// **Ctrl-C, `kill` and a closed terminal, during an import**. The editor
+/// leads a process group of its own, so the terminal's SIGINT reaches yumete
+/// alone, and yumete dying of it would leave Neovim running and the copy of
+/// the reader's config in the temporary directory. So for as long as a
+/// [`Sandbox`] lives, SIGINT, SIGTERM and
 /// SIGHUP kill the editor's group at once and only mark that the import is
 /// to stop; the copy and the run notice, return, and the sandbox, dropped,
 /// kills what is left, removes itself, and ends yumete by the same signal.

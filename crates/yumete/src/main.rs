@@ -23,8 +23,8 @@ use yumete_ime::{CommitStrategy, ImeSession, Scheme};
 const VERSION: &str = env!("YUMETE_VERSION");
 
 /// Warning: **`--files` 只認得走檔那幾個。** 別的是給式子用的，而檔名那一邊用的是
-/// 挑選器的模糊匹配，根本沒有式子。從前它們**悄悄不生效**，而 `--help` 說「下面
-/// 每一個都還管用」——說了假話比少一個功能壞。
+/// 挑選器的模糊匹配，根本沒有式子。給了就要說，不許**悄悄不生效**：`--help` 說
+/// 「下面每一個都還管用」，說了假話比少一個功能壞。
 ///
 /// 讀兩處：`--files` 還欠着詞的時候（那一句話要說對原因），與參數讀完之後。
 const FOR_GREP_ONLY: [&str; 8] = [
@@ -77,15 +77,14 @@ fn write_the_first_config() {
     let _ = std::fs::write(&path, import::FIRST_CONFIG);
 }
 
-/// **Start again in `there`** — the other half of `空格 o p` (2026-10-18).
+/// **Start again in `there`** — the other half of `空格 o p`.
 ///
 /// Only ever returns on failure: on success this process either *is* the new
 /// one or has already waited for it and exited.
 ///
-/// Warning: **`exec` is Unix-only**, and writing it without a `cfg` is how this
-/// shipped a tree that could not compile on Windows at all (2026-10-18 — CI
-/// caught it, four local gates did not, because none of them is a Windows
-/// build). Windows has no call that replaces the running image, so there the
+/// Warning: **`exec` is Unix-only**, so it stays behind a `cfg`: none of the
+/// local gates is a Windows build, and only CI sees a tree that does not
+/// compile there. Windows has no call that replaces the running image, so there the
 /// editor starts as a child and this process waits for it and leaves with its
 /// status: one extra process in the table, and the same thing seen from the
 /// shell that typed it.
@@ -113,17 +112,17 @@ mod import;
 mod md_render;
 
 fn main() -> ExitCode {
-    // **The font 漢字 in a TeX formula are set in** (2026-11-08): RaTeX reads
+    // **The font 漢字 in a TeX formula are set in**: RaTeX reads
     // it from the environment, which may only be changed while this is the
     // one thread — so first, before anything starts another.
     yumete_tui::tex::choose_cjk_font();
-    // **The rendered Markdown preview, without the editor** (2026-11-08): a
+    // **The rendered Markdown preview, without the editor**: a
     // developer's door, not in `--help`.
     let args: Vec<String> = std::env::args().collect();
     if args.get(1).map(String::as_str) == Some("--md-render") {
         return md_render::run(&args[2..]);
     }
-    // **The tables this binary carries** (2026-11-04): handed to the IME
+    // **The tables this binary carries**: handed to the IME
     // before anything asks it for a scheme, so the scan and every load see
     // them behind whatever is installed.
     yumete_ime::carry(yumete_ime::Carried {
@@ -138,7 +137,7 @@ fn main() -> ExitCode {
     let mut force_preview = false;
     let mut force_layout: Option<Layout> = None;
     let mut force_table = false;
-    // `--timing` answers「開個檔案怎麼要三秒」 without guessing: it runs the
+    // `--timing` answers why a launch is slow without guessing: it runs the
     // whole of a launch and prints what each part of it cost.
     let mut timing = false;
     // Which markup the files named on this line are written in. The config's
@@ -147,11 +146,11 @@ fn main() -> ExitCode {
     // called `.txt` and you know what is in it.
     let mut force_syntax: Option<String> = None;
     // `--encoding=big5`: what the files named are written in, for files that
-    // cannot be told (2026-11-04), as `:open ++enc=big5` says it inside.
+    // cannot be told, as `:open ++enc=big5` says it inside.
     let mut force_encoding: Option<String> = None;
     // `--export FMT`: write the files named out as html, typst, epub, csv, tsv
     // or pdf and exit — the editor's own `:export`, with `typst compile` for the
-    // last (2026-10-30). `--out` is where; one file only, then.
+    // last. `--out` is where; one file only, then.
     let mut export: Option<String> = None;
     let mut out: Option<String> = None;
     // `--shot` prints one frame — the page as it would be drawn — and exits.
@@ -174,7 +173,7 @@ fn main() -> ExitCode {
     let mut fresh = false;
     // `--private`: this run neither reads nor writes where you have been —
     // the line each file was left on, the recent lists, the session
-    // (2026-10-27, vim's `-i NONE`). `[editor] remember = false` is the
+    // (vim's `-i NONE`). `[editor] remember = false` is the
     // standing answer.
     let mut private = false;
     // `-c`: reopen last time's files even though `session` is off (the default).
@@ -182,45 +181,44 @@ fn main() -> ExitCode {
     let mut tutor = false;
     // Keys to press before the picture is taken. A panel that only opens after
     // three keystrokes — the `:` menu, `::`, which-key, the候選 list — could
-    // not be looked at without a terminal and a pair of hands, and 「動了前端
-    // 就出一張圖看看」 is the rule that catches what no assertion does.
+    // not be looked at without a terminal and a pair of hands, and a picture
+    // of every front-end change catches what no assertion does.
     let mut keys: Option<String> = None;
     // **The language the editor says things in, for one run** (#494). The
     // config's `[editor] language` is the standing answer; this is the flag,
     // because 「打開編輯器，然後去找哪個設定能改語言」 is exactly the loop a
     // reader who cannot read the current language is stuck in.
     let mut force_language: Option<yumete_core::messages::Language> = None;
-    // **管道那一邊**（2026-10-03 定：「先做管道吧」）。`ye --grep 霜` 把
+    // **管道那一邊**。`ye --grep 霜` 把
     // `檔:行:列:文字` 印到 stdout 就退出——找到回 0，一處都沒有回 1，所以
     // `if ye --grep …` 在腳本裏是一句話。
     let mut grep: Option<String> = None;
     // `ye --files jia` 列出名字配得上的檔——走檔是 fd 那一半，配名字是 fzf 那一半，
     // 而它也認拼音。
     let mut listing: Option<String> = None;
-    // `--import helix` or `--import lazyvim` (2026-11-06), `vim` and `nvim`
-    // (2026-11-08): another editor's config written once into ours, then
-    // exit. See `import.rs`.
+    // `--import helix`, `lazyvim`, `vim` or `nvim`: another editor's config
+    // written once into ours, then exit. See `import.rs`.
     let mut import: Option<String> = None;
     let mut g = Grep::default();
-    // **還欠着一個值的那個旗標**（2026-10-03 一輪審查報來的）。
+    // **還欠着一個值的那個旗標**。
     //
-    // Warning: **值收不到要當場死**，而且三處從前都不會。`want_syntax`/`want_grep` 那
-    // 幾個閂只在下一輪循環裏看一眼，走完就沒人問了：`ye --grep` 於是悄悄落空，
-    // 退出碼 0，而且**開起了編輯器**。這一格記着「誰在等」，循環走完還在等就是
+    // Warning: **值收不到要當場死**。只在下一輪循環裏看一眼的閂，走完就沒人問了：
+    // `ye --grep` 會悄悄落空，退出碼 0，而且**開起了編輯器**。這一格記着「誰在
+    // 等」，循環走完還在等就是
     // 使用者少打了一個詞。
     let mut owed: Option<&'static str> = None;
     // **這幾個開關只有配上 `--grep`/`--files` 纔有意義。** 單獨給是打錯了，不是
-    // 「沒關係」——`ye --hidden` 從前悄悄開了編輯器。
+    // 「沒關係」——`ye --hidden` 不許悄悄開起編輯器。
     let mut modifiers: Vec<&'static str> = Vec::new();
-    // **`-u` 是一把梯子，不是一個勾**（2026-10-03 定，照 rg 原樣）。數的是它一共出
+    // **`-u` 是一把梯子，不是一個勾**（照 rg 原樣）。數的是它一共出
     // 現幾次，所以 `-u -u` 和 `-uu` 是同一句話，同 rg。一級＝連被忽略的一起搜，
     // 二級＝再加上點文件。rg 還有三級（連二進制一起搜），我們沒有那一檔。
     let mut unrestricted = 0usize;
 
     for arg in std::env::args().skip(1) {
         if let Some(which) = owed.take() {
-            // Warning: **值不許長得像旗標。** `ye --grep --hidden alpha` 從前把
-            // `--hidden` 當成了要找的詞，再把 `alpha` 當成目錄——然後說
+            // Warning: **值不許長得像旗標。** 否則 `ye --grep --hidden alpha` 會把
+            // `--hidden` 當成要找的詞，再把 `alpha` 當成目錄——然後說
             // 「alpha 不是一個目錄」。少打一個詞的人看不懂那句話。
             if arg.starts_with('-') && arg != "-" {
                 // Warning: **先說真正的毛病。** `ye --files --heading` 的問題不是少打
@@ -257,7 +255,7 @@ fn main() -> ExitCode {
                 println!("yumete {VERSION}");
                 return ExitCode::SUCCESS;
             }
-            // **The site's generated tables** (2026-10-29): `ye --docgen=<dir>`.
+            // **The site's generated tables**: `ye --docgen=<dir>`.
             s if s.starts_with("--docgen=") => {
                 let dir = &s["--docgen=".len()..];
                 return match docgen::write(std::path::Path::new(dir)) {
@@ -268,32 +266,27 @@ fn main() -> ExitCode {
                     }
                 };
             }
-            // Warning: **舊的那八個短名撤了**（2026-10-03 定：「舊的讓位……等到全
-            // 部弄好了再看哪些值得 short alias」）。字母留給了搜索那一邊：今天
-            // 有 `-G`（`--grep`）與 `-O`（`--open`），串得起來（見底下那一條分支），
+            // Warning: **這幾個長選項沒有短名**：哪些值得短名，等全部弄好了再看。
+            // 字母留給搜索那一邊：`-G`（`--grep`）與 `-O`（`--open`），串得起來（見底下那一條分支），
             // 加上 `-h`、`-V` 這兩個所有命令行的通例。
             "--preview" => force_preview = true,
             "--table" => force_table = true,
             "--readonly" => readonly = true,
             "--new" => fresh = true,
             "--private" => private = true,
-            // **`-r` 是 `--resume` 的短名**（2026-10-18 作者定：「make an alias
-            // for resume for cli so that we can do ye -r easily」）。
+            // **`-r` 是 `--resume` 的短名**，好讓 `ye -r` 一下就接着上次做。
             //
             // Warning: **它排在那一簇串得起來的短名前面**，否則 `-r` 長度大於一，會被
             // 讀成「第一個字母帶值、後面貼着要找的詞」。
             //
             // 選它而不選 `-R`（按下面那一簇的規矩，入口該用大寫）是因為 `-R`
-            // 從前是 `--readonly`：讓它改口是把一個「只讀」默默變成「可寫」，
-            // 而 `-r` 在這個倉裏從來没有過意思。
+            // 讀起來是 `--readonly`（vim 的 `-R` 正是只讀）：讓它當「接着做」是把
+            // 一個「只讀」默默變成「可寫」，而 `-r` 在這個倉裏沒有別的意思。
             //
             // rg 的 `-r` 是 `--replace`，這裏把它花掉了——**而那不是一條反對的
-            // 理由**（2026-10-18 作者定）：「although we implement some
-            // functionalities of ripgrep, but we are finally a text editor, so
-            // we should make a balance. We should only give short alias for
-            // very common commands for cli grep, and then align with helix for
-            // some other important functionalities.」字母表是編輯器的，rg 只在
-            // 它那幾個**最常用的搜索**開關上說得上話。
+            // 理由**：rg 的功能實現了一些，但這終究是文字編輯器，要取平衡——
+            // 只給命令行搜索裏最常用的那幾個開關短名，其餘重要的功能向 helix
+            // 看齊。字母表是編輯器的，rg 只在它那幾個**最常用的搜索**開關上說得上話。
             "-r" | "--resume" => resume = true,
             // **管道那一邊。** 開關的名字照 rg，因為那是肌肉記憶所在。
             "--grep" => owed = Some("--grep"),
@@ -330,9 +323,8 @@ fn main() -> ExitCode {
                 g.fuzzy = true;
                 modifiers.push("--fuzzy");
             }
-            // **兩件事，兩個開關**（2026-10-03 定），字母與語意都同 rg。
-            // 從前它們是一個，於是一個想搜 `.gitignore` 裏那幾個目錄的人要去撥
-            // 一個名叫 `--hidden` 的旗標。
+            // **兩件事，兩個開關**，字母與語意都同 rg：想搜 `.gitignore` 裏那幾個
+            // 目錄的人，不必去撥一個名叫 `--hidden` 的旗標。
             "--hidden" => {
                 g.hidden = true;
                 modifiers.push("--hidden");

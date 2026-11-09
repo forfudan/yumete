@@ -1,4 +1,4 @@
-//! **`ye --export` writes a file out and says where** (2026-10-30).
+//! **`ye --export` writes a file out and says where.**
 
 use std::process::Command;
 
@@ -43,7 +43,7 @@ fn html_and_typst_land_beside_the_file_and_the_path_is_printed() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
-/// **`--export epub` writes a book** (2026-11-08): a zip whose first entry is
+/// **`--export epub` writes a book**: a zip whose first entry is
 /// the stored `mimetype`, and a vertical one that turns right to left; and
 /// the HTML of a vertical page draws its formula with RaTeX. Vertical is the
 /// export's word, not the editor's `--vertical`, which is how the draft is

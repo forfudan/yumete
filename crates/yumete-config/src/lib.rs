@@ -33,7 +33,7 @@ pub use yumete_cjk::{
     TATECHUYOKO_MAX,
 };
 
-/// **LazyVim's keys laid out in yumete's config, one copy** (2026-11-06).
+/// **LazyVim's keys laid out in yumete's config, one copy**.
 /// `yumete --import lazyvim` writes it, and the docs site's
 /// `from/lazyvim.md` shows it: a test in the `yumete` crate holds the
 /// page's TOML blocks to this file, so the two cannot drift apart.
@@ -83,7 +83,7 @@ pub struct EditorConfig {
     pub tab_width: usize,
     /// How far `>` and `<` shift a line, in cells.
     ///
-    /// **Not the tab stop**, though one setting used to be both (#374). A tab
+    /// **Not the tab stop**, but a setting of its own (#374). A tab
     /// lands where a tab has landed since teletypes and a file written
     /// elsewhere is written to it; how far *this* editor shifts a line when
     /// asked is a preference, and four is the one nearly everybody has.
@@ -120,30 +120,30 @@ pub struct EditorConfig {
     ///
     /// 代價是開檔與存檔各多一個子進程；量過，見 `local/development.md`。
     pub diff_gutter: bool,
-    /// helix's end-of-line diagnostics (2026-11-04): the least severity a
+    /// helix's end-of-line diagnostics: the least severity a
     /// language server's message must have to be drawn after its line —
     /// `"hint"` (the default, as helix's), `"info"`, `"warning"`, `"error"`, or
     /// `"disable"`. In prose it follows the paragraph's last row.
     pub end_of_line_diagnostics: String,
     /// Whether a file's vim modelines (`vim: set ts=2 ft=python:` in its
     /// first or last five lines) are read: its file type, tab stop, indent
-    /// width, Tab, text width, and nothing else (2026-11-04).
+    /// width, Tab, text width, and nothing else.
     pub modeline: bool,
-    /// **The formula under the cursor, drawn** (2026-11-06): a float showing
+    /// **The formula under the cursor, drawn**: a float showing
     /// the `$…$` the cursor is in as typeset maths, in a terminal that can
     /// show a picture in its text (Ghostty, kitty), through the `typst`
     /// command. On; elsewhere it draws nothing either way.
     pub maths_preview: bool,
-    /// **How big the page window draws the page** (2026-11-07): `"width"`
+    /// **How big the page window draws the page**: `"width"`
     /// (the default), the page as wide as the window and scrolled to the
     /// cursor, or `"page"`, the whole page in the window.
     /// `:preview-fit` sets it for the session.
     pub preview_fit: String,
-    /// **The preview's page in the theme's colours** (2026-11-08): the
+    /// **The preview's page in the theme's colours**: the
     /// paper as the background, black as the text colour. Off: the page as
     /// printed. `:preview-theme` sets it for the session.
     pub preview_theme: bool,
-    /// **The Markdown preview set vertically when the text is** (2026-11-08):
+    /// **The Markdown preview set vertically when the text is**:
     /// while the text window's page is vertical (`:vertical`), the preview
     /// runs in columns from the right as the vertical export does. On.
     /// `:preview-vertical` sets it for the session.
@@ -154,12 +154,12 @@ pub struct EditorConfig {
     /// writer wants them apart (a screen face to read in, a book face to
     /// print in). `:export-as-preview` takes it too; `:export` never does.
     pub preview_font_family: String,
-    /// **What a yank copied, lit for a moment** (2026-11-07): nvim's
+    /// **What a yank copied, lit for a moment**: nvim's
     /// `vim.hl.on_yank`, 150 ms on the selection's ground. Off, as nvim has
     /// it; `--import lazyvim` turns it on, as LazyVim does. Under vim `yap`
     /// and `yis` copy what was never shown selected.
     pub yank_flash: bool,
-    /// **helix's indent guides** (2026-11-07, `[editor.indent-guides]`
+    /// **helix's indent guides** (`[editor.indent-guides]`
     /// there, flattened as `soft_wrap` is): a rule at each level of a code
     /// line's leading blanks. Off, as helix has it. Code files only; never
     /// in body text or the vertical layout.
@@ -168,8 +168,8 @@ pub struct EditorConfig {
     pub indent_guides_character: String,
     /// How many outer levels go undrawn (helix's `skip-levels`).
     pub indent_guides_skip_levels: usize,
-    /// The guide of the block the cursor is in, a rung darker (2026-11-07,
-    /// as LazyVim's snacks.indent and mini.indentscope draw it).
+    /// The guide of the block the cursor is in, a rung darker (as LazyVim's
+    /// snacks.indent and mini.indentscope draw it).
     pub indent_guides_scope: bool,
     /// The shell line `:shot` runs to photograph the screen.
     ///
@@ -178,7 +178,7 @@ pub struct EditorConfig {
     /// differently (`screencapture` on macOS, `grim` on Wayland, `import` on
     /// X11). The default is macOS's, and it takes the terminal's window.
     ///
-    /// **`$YUMETE_WINDOW` says which window** (2026-11-08): its `CGWindowID`,
+    /// **`$YUMETE_WINDOW` says which window**: its `CGWindowID`,
     /// found by the editor from the window server's list (the window an
     /// ancestor process owns), and `$YUMETE_WINDOW_RECT` the same window as
     /// `x,y,w,h` for a line that would rather crop the screen. Unset when no
@@ -187,9 +187,9 @@ pub struct EditorConfig {
     /// **`$YUMETE_SHOT` says where the picture goes.** `:shot` leaves it
     /// unset and wants the clipboard; `:shot png` sets it to a path and wants
     /// a file. One line answers both because they differ only in that tail —
-    /// the shipped one spends it as `"${YUMETE_SHOT:--c}"`. A line written
-    /// before `:shot png` existed still works for the clipboard, and `:shot
-    /// png` says plainly that it did not write the file.
+    /// the shipped one spends it as `"${YUMETE_SHOT:--c}"`. A line that never
+    /// reads `$YUMETE_SHOT` still works for the clipboard, and `:shot png`
+    /// says plainly that it did not write the file.
     pub screenshot: String,
     /// What is drawn in a paragraph's opening squares: `"none"` (default),
     /// `"color"`, `"symbol"`.
@@ -225,15 +225,15 @@ pub struct EditorConfig {
     pub language_key: String,
     /// Whether the word-segmentation overlay is shown at start-up (Feature #24).
     /// On by default so the CJK word grouping is visible. **Not a key of its
-    /// own any more** (2026-10-25): the file says `word_mark = "off"`, and
+    /// own**: the file says `word_mark = "off"`, and
     /// `:word-mark off` turns it off for the session.
     pub show_segmentation: bool,
     /// How readily characters join into words: `strict`, `balanced`, `full`
     /// (Feature #24), the same three `:word-level` names.
     ///
-    /// **Replaces `segmentation_threshold`**, which was a raw weight on a scale
-    /// only the bundled list had — it said nothing to a reader and nothing at
-    /// all to the language model, which most machines actually segment with.
+    /// **A level, not a raw weight**: a weight on a scale only the bundled
+    /// list has says nothing to a reader and nothing at all to the language
+    /// model, which most machines actually segment with.
     pub word_level: yumete_cjk::WordLevel,
     /// How the overlay marks a word — `color`, `ink`, `tint` or `line`, the
     /// same names `:word-mark` takes. In the file `off` is one of them, and
@@ -241,7 +241,7 @@ pub struct EditorConfig {
     pub word_mark: yumete_cjk::WordMark,
     /// Horizontal (default) or vertical layout (Feature #61).
     pub layout: Layout,
-    /// 竪排時 `hjkl` 依照行文邏輯還是視覺方向（2026-10-12）。方向鍵不歸它管。
+    /// 竪排時 `hjkl` 依照行文邏輯還是視覺方向。方向鍵不歸它管。
     pub vertical_keys: yumete_cjk::VerticalKeys,
     /// How many characters fit in one 縱 in vertical layout.
     ///
@@ -259,25 +259,24 @@ pub struct EditorConfig {
     /// How many pages the horizontal page is cut into, side by side. 1 to 4.
     pub pages_horizontal: usize,
     /// Whether `yumete` with no file opens again what was open last time.
-    /// Off: a bare `yumete` is a blank page, and `yumete -r` is last time
-    /// (2026-09-17, 「打 ye 應該建一個新的文檔」).
+    /// Off: a bare `yumete` is a new, blank page, and `yumete -r` is last time.
     pub session: bool,
-    /// Whether yumete keeps any memory of where it has been (2026-10-27):
+    /// Whether yumete keeps any memory of where it has been:
     /// the line each file was left on, the recent files and projects, and the
     /// session. Off, it neither reads nor writes `places.txt`, `projects.txt`
     /// or `sessions/` — vim's `viminfo=` and Neovim's `shada=""`. Recovery
     /// copies are another matter and keep their own switch.
     pub remember: bool,
     /// What language the editor says things in: `"auto"` (the default:
-    /// the locale's, 2026-10-29), `"zht"` (繁體), `"zhs"` (简体) or `"en"`.
+    /// the locale's), `"zht"` (繁體), `"zhs"` (简体) or `"en"`.
     pub language: String,
     /// The gap between two 縱, in half-width cells (0–4).
     pub zong_gap: usize,
     /// How many Latin letters before the words of the open files are offered
-    /// by themselves (2026-10-28); 漢字 take half as many, rounded up. 0 is
+    /// by themselves; 漢字 take half as many, rounded up. 0 is
     /// never (`C-n` still asks). 0 to 20.
     pub word_completion: usize,
-    /// **How many completion items show at once** (2026-10-29): the word,
+    /// **How many completion items show at once**: the word,
     /// code and shell lists alike. 6, as the input method's candidates.
     /// 1 to 20.
     pub completion_page_size: usize,
@@ -301,8 +300,8 @@ pub struct EditorConfig {
     /// [`TATECHUYOKO_MAX`] hangs out into the 行間. Anything above that is
     /// clamped, and `1` is no group at all and reads as `0`.
     ///
-    /// **Four out of the box** (2026-09-21 定：「我覺得可以改成 4，因為四位數很
-    /// 常見」). Four is the top of the range print allows itself — CSS is
+    /// **Four out of the box**, because four-digit numbers are common. Four is
+    /// the top of the range print allows itself — CSS is
     /// `digits <integer [2,4]>`, InDesign's 組數字 is 2/3/4 — and it is the
     /// one that covers the year and the chapter number, which is what a page of
     /// Chinese prose actually has half-width characters *for*.
@@ -317,7 +316,7 @@ pub struct EditorConfig {
     /// screen row (Feature #77). On by default: a Chinese paragraph is one long
     /// line, and unwrapped most of it cannot be seen at all.
     pub soft_wrap: bool,
-    /// **存檔時缺的那個行尾補不補**（2026-10-13，helix 叫 `insert-final-newline`）。
+    /// **存檔時缺的那個行尾補不補**（helix 叫 `insert-final-newline`）。
     ///
     /// 出廠開着，和 vim、helix 一致：vim 的 `'endofline'` 只在 `:set binary` 時算數，
     /// helix 這一格的預設也是 `true`。補的是**那個檔自己的行尾**（CRLF 檔補 `\r\n`），
@@ -335,20 +334,20 @@ pub struct EditorConfig {
     ///
     /// Warning: **`s` 這一檔没有。** vim 出廠的 `b,s` 裏那個 `s` 是普通模式的空格，
     /// 而空格在這裏是菜單引導鍵。出廠因此是 `b` 而不是 `b,s`——行為與 vim 出廠
-    /// 一模一樣，只是不擺一個做不了事的字母（2026-10-10 定）。
+    /// 一模一樣，只是不擺一個做不了事的字母。
     pub which_wrap: String,
     /// Whether a recovery copy is kept beside each document while it has
     /// unsaved changes (Feature #79). On by default, and removed on save and on
     /// quit, so in an ordinary session it is never seen.
     pub autosave: bool,
-    /// **盤上那一份變了就讀回來**（`:reload-auto`，2026-10-11 起出廠開着）。
+    /// **盤上那一份變了就讀回來**（`:reload-auto`，出廠開着）。
     ///
     /// vim 的 `autoread` 出廠是關的，而那是 1978 年的判斷：那時「檔在你底下變
     /// 了」多半是共享機器上**另一個人**動的。今天這件事幾乎全是自己幹的——切分
     /// 支、rebase、跑一遍格式化、或者另一個窗口開着同一個檔。helix 連這個選項都
     /// 没有，那不是一種設計選擇，是缺一個功能。
     ///
-    /// 危險的那一半早就切掉了（`Editor::disk_tick`）：稿子改過就只說一句、檔被刪
+    /// 危險的那一半另有處理（`Editor::disk_tick`）：稿子改過就只說一句、檔被刪
     /// 了不讀也只說一次、時間戳太新就改讀內容再比。
     pub reload_auto: bool,
     /// How wide East-Asian Ambiguous characters — `—` `…` `“” ‘’` `·` — are
@@ -371,7 +370,7 @@ pub struct EditorConfig {
     /// margin. `:view-wrap-width 50` sets it for one session (Feature #113).
     pub measure: usize,
     /// The width `:hard-wrap` fills to when given none, in cells; `0` for
-    /// unset, which makes the bare command say so (2026-10-30).
+    /// unset, which makes the bare command say so.
     pub hard_wrap: usize,
     /// Whether the status line names the character under the cursor
     /// (Feature #117).
@@ -381,12 +380,12 @@ pub struct EditorConfig {
     /// this" and "this is the wrong character"; for a 拆分表 it is the whole
     /// question. Given way to, right end first, when the line is crowded.
     pub char_info: bool,
-    /// **Which files show a live count on the status line** (2026-10-29):
+    /// **Which files show a live count on the status line**:
     /// `"text"` (default: Markdown, plain text, Typst — not code), `"all"`,
     /// `"off"`. Counted by
     /// Word's rule, the same as `:count` and the daily target.
     pub status_count: String,
-    /// **The Unicode alarm** (#252, 2026-10-29): tint the cells where a
+    /// **The Unicode alarm** (#252): tint the cells where a
     /// zero-width or bidi control hides, and spaces that are not U+0020.
     pub unicode_alarm: bool,
     /// Whether a search pattern with no capital in it ignores case (#301).
@@ -412,11 +411,10 @@ pub struct EditorConfig {
     /// sequence you have begun are listed. Turned off, all three fall back
     /// onto the status line and take turns with the position readout.
     pub command_line: bool,
-    /// **The name at the right end of the command line**, quiet (2026-11-04,
-    /// back as a setting, on: it was taken off 2026-10-27 as 「看着像广告」).
+    /// **The name at the right end of the command line**, quiet. On.
     pub signature: bool,
     /// **A block at each end of the tab line that opens and closes that
-    /// side's sidebar** when clicked (2026-11-04, on): the mouse's twin of
+    /// side's sidebar** when clicked (on): the mouse's twin of
     /// `C-w e` and `C-w i`, as a tab is of `:b`.
     pub sidebar_buttons: bool,
     /// Whether a 縱 — or a row, across — keeps the lane beside it for readings,
@@ -424,10 +422,8 @@ pub struct EditorConfig {
     /// (`:view-margin`, see [`Margin`]).
     ///
     /// `dense` out of the box: the lane is bought only where something is
-    /// written in it, so a terminal's few columns go to the writing. It
-    /// replaced `dense = true|false`, which was two answers to a question it
-    /// did not name — and the gap between 縱 is no longer one of its jobs:
-    /// that is `zong_gap`, which it used to force to nothing.
+    /// written in it, so a terminal's few columns go to the writing. The gap
+    /// between 縱 is not one of its jobs: that is `zong_gap`.
     pub margin: Margin,
     /// A tick every `paper_ticks` characters down a 縱; `0` for none
     /// (Feature #102).
@@ -455,14 +451,12 @@ pub struct EditorConfig {
     pub tabs: Tabs,
 }
 
-/// **The screenshot command this machine can actually run** (2026-09-19).
+/// **The screenshot command this machine can actually run**.
 ///
 /// macOS has one program and always has it. On Linux 「screenshot」 is
 /// Wayland's, X11's, or the desktop's own, and which of those is installed
 /// cannot be known when the binary is built — so the list is walked at start-up
-/// and the first one that is on `PATH` wins. The manual has promised this
-/// since the feature was written; until today the code said 「no screenshot
-/// command on this platform」 on every Linux there is.
+/// and the first one that is on `PATH` wins.
 ///
 /// Warning: **`${YUMETE_SHOT:?}` and not `:-`**: none of these programs can put a
 /// picture on the clipboard, so `:shot` with no path has to **fail and say so**
@@ -473,11 +467,11 @@ pub struct EditorConfig {
 /// where a window is and Wayland will not say at all; `:shot html` is the way
 /// to get exactly one page.
 ///
-/// Warning: **macOS: by window id, not through `System Events`** (2026-11-08).
-/// The line used to ask `osascript` for the frontmost window's position and
-/// size, which is Accessibility — a permission a terminal is rarely given —
-/// and its failure went into `| tr`, whose success let `screencapture -R ""`
-/// run anyway. The editor now finds the window itself, with no permission,
+/// Warning: **macOS: by window id, not through `System Events`.** Asking
+/// `osascript` for the frontmost window's position and size is
+/// Accessibility — a permission a terminal is rarely given — and its failure
+/// piped into `| tr` succeeds, so `screencapture -R ""` would run anyway.
+/// The editor finds the window itself, with no permission,
 /// and hands its id over; `-l` takes that one window, so what is in front of
 /// it is not in the picture either. Screen Recording for the terminal is all
 /// that is left to grant, and the editor names it when it is missing.
@@ -680,8 +674,8 @@ pub struct ImeConfig {
     /// 中/英, and records which application asked, so a quiet terminal does not
     /// mute the browser.
     ///
-    /// Warning: **Not the input source.** The first version of this switched the
-    /// keyboard input source the way `im-select` does, and that road is broken
+    /// Warning: **Not the input source.** Switching the keyboard input source
+    /// the way `im-select` does is broken
     /// on macOS: a background process re-selecting an IMK input method fails to
     /// re-engage about one time in three, for 宇浩 and 鼠鬚管 alike, with no
     /// editor and no terminal in the picture. The measurements are in
@@ -692,14 +686,14 @@ pub struct ImeConfig {
     /// macOS and Linux; never over SSH.
     pub others: OtherImePolicy,
     /// The annotation mode the candidates start in: `"off"`, or the name of
-    /// one of [`Self::annotation_modes`] (2026-11-02). `/` while typing and
+    /// one of [`Self::annotation_modes`]. `/` while typing and
     /// `:yume-annotation` move between them.
     pub annotation: String,
     /// The annotation modes, in the order `/` steps through them: yume's two
     /// (`multi`, `double`) first, then any the config adds, by name.
     pub annotation_modes: Vec<AnnotationMode>,
     /// 字集過濾, by yume's names: `all` (the default), `common`, `tonggui`
-    /// (simplified only) or `harmonic` (traditional only), 2026-11-04.
+    /// (simplified only) or `harmonic` (traditional only).
     pub charset: String,
     /// 字集排序: `original`, `common` (the default), `tonggui` or `harmonic`.
     /// It orders a 形碼 scheme's candidates; 拼音's come from the sentence.
@@ -718,7 +712,7 @@ pub const CHARSET_SORT_WORDS: &[&str] = &["original", "common", "tonggui", "harm
 pub const LANE_WORDS: &[&str] = &["tonggui", "tongfan", "tai", "common", "harmonic", "guji", "gang"];
 
 /// **One annotation mode**: a name and the fields it shows beside each
-/// candidate (2026-11-02). yume's own idea: a mode is a set of ticks, and
+/// candidate. yume's own idea: a mode is a set of ticks, and
 /// 二重 and 多重 are only the two sets that ship. The engine knows modes by
 /// index; the names are the front end's, as they are in yume.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -820,7 +814,7 @@ fn annotation_modes_from(table: &toml::Table) -> Vec<AnnotationMode> {
 /// The word lives here rather than beside the code that acts on it, because
 /// it is a word in a config file: the reader that checks it and the reader
 /// that obeys it have to agree about the list, and two lists is how a setting
-/// comes to be accepted, reported as fine, and then quietly ignored.
+/// comes to be accepted, declared fine, and then quietly ignored.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum SystemImePolicy {
     /// Move it aside while yumete wants the keys, and put it back.
@@ -849,13 +843,13 @@ impl SystemImePolicy {
 
 /// **Other input methods** in Normal mode — Squirrel, Sogou, Apple's,
 /// Kotoeri, fcitx5, ibus — as against 宇浩, which [`SystemImePolicy`] tells
-/// to step aside by its own signal (2026-11-04).
+/// to step aside by its own signal.
 ///
 /// They have no such signal, so the only way to stop them eating `j` is to
 /// switch the input source to the plain English layout. Switching *back* is
 /// the half that does not work reliably on macOS: a background process
 /// re-selecting an IMK input method fails to re-engage about one time in
-/// three, with no error (measured 2026-09-16, `yumete_tui::system_ime`). So
+/// three, with no error (measured; see `yumete_tui::system_ime`). So
 /// switching back is its own word, and the default is to touch nothing.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum OtherImePolicy {
@@ -913,14 +907,14 @@ impl Default for ImeConfig {
 pub struct PanelConfig {
     /// The characters candidates are numbered with, in order.
     ///
-    /// Each has to be **two cells wide**, or the columns come apart — measured
-    /// 2026-09-27 on the 竪書 panel: with `123` the number came out at column
-    /// 28 and the candidate under it at 33, five cells adrift, and the box's
-    /// right wall went ragged with it. The full-width digits `１２３` are two
+    /// Each has to be **two cells wide**, or the columns come apart — on the
+    /// 竪書 panel, `123` puts the number at column 28 and the candidate under
+    /// it at 33, five cells adrift, and the box's right wall goes ragged with
+    /// it. The full-width digits `１２３` are two
     /// cells, and so are the circled Chinese numerals ㊀㊁㊂; the circled
     /// Arabic ①②③ are East-Asian *ambiguous* and may be drawn either way.
     ///
-    /// **Factory is `１２３`** (2026-09-27). yume's desktop front end ships
+    /// **Factory is `１２３`**. yume's desktop front end ships
     /// plain numbers, and somebody arriving from it presses `2` and has to
     /// work out that `㊁` is the one they meant. Full-width keeps the column
     /// that a plain `2` would break.
@@ -948,10 +942,9 @@ pub struct PanelConfig {
 /// 本來就知道的事。所以關得掉，而 `Tab` 照舊能把面板為某一個詞叫出來。
 ///
 /// Warning: **這一格只管面板在不在，不管正在打的那一段寫在哪。** 那是
-/// [`InlinePreedit`] 的事，兩件事各走各的（2026-09-27 定，原話：「你搞错了 layout 和
-/// inline-preedit」）。從前這兩件事焊在一個 `bare` 裏，於是「有面板 ＋ 正在打的那
-/// 一段寫進正文」這個組合按不出來。
-/// 三種擺法（2026-10-16 定）：帶框的那一張、窗口最下面那一行、光標的下一行。
+/// [`InlinePreedit`] 的事，兩件事各走各的，所以「有面板 ＋ 正在打的那一段寫進
+/// 正文」這個組合也按得出來。
+/// 三種擺法：帶框的那一張、窗口最下面那一行、光標的下一行。
 /// 三種都畫得出全部候選，分別只在**擺在哪**與**蓋住什麼**。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum PanelDisplay {
@@ -1002,8 +995,8 @@ impl PanelDisplay {
 
 /// **正在打的那一段寫在哪、寫什麼**——yume 管這一格叫「內嵌輸入欄」。
 ///
-/// 2026-09-27 定，原話：「inline-preedit: 候选面板的 header（編碼栏）不显示，而是
-/// 直接在编辑区显示。分为两种，一种是显示編碼，一种是显示首个候选。」
+/// 內嵌的時候候選面板的頭（編碼欄）不畫，那一段直接寫在編輯區裏；寫的可以是
+/// 編碼，也可以是首個候選。
 ///
 /// 所以這一格有三檔，而不是一個布爾：不內嵌、內嵌寫編碼、內嵌寫首選。
 ///
@@ -1070,7 +1063,7 @@ impl Default for PanelConfig {
 /// runs 墨 → 紙 — **反主題色 → 主題色**. A raised strip steps back toward the
 /// ink; a sunken one carries on past the paper.
 ///
-/// Warning: **Reversal is not one of them, and was tried once** — see `draw_status`:
+/// Warning: **Reversal is not one of them** — see `draw_status`:
 /// a white bar under a dark page is the loudest thing on the screen saying the
 /// least.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -1092,9 +1085,7 @@ pub enum Ground {
     ///
     /// The default, because **a theme that does not own its ground cannot make
     /// any promise about contrast** — every tint would be measured against a
-    /// colour the editor has never seen. Until this existed, 墨香 dressed the
-    /// candidate panel and four other panes and left the manuscript itself in
-    /// the terminal's own ink on the terminal's own ground.
+    /// colour the editor has never seen.
     #[default]
     Paint,
     /// Leave the ground alone and set only the foregrounds, for a reader whose
@@ -1140,18 +1131,18 @@ impl Mode {
 /// piling nine tenths of the rungs into the light half and then falling off a
 /// cliff. The even ramp is the one you can place an interface on.
 ///
-/// Warning: **A light ladder is spaced by contrast instead** (2026-10-26). The
+/// Warning: **A light ladder is spaced by contrast instead.** The
 /// same sRGB steps that are even on a dark page come out a quarter closer on a
-/// light one, in the ratio the eye uses to tell two grounds apart: 墨香's
-/// selection was 2.16:1 off the paper in dark mood and 1.80:1 in light, and the
-/// three grounds that meet in a table (選區、光標行、欄底) fell under 1.24 on
-/// any light theme whose text was under about 9:1 — Tokyo Night Light and
+/// light one, in the ratio the eye uses to tell two grounds apart: in sRGB 墨香's
+/// selection is 2.16:1 off the paper in dark mood and 1.80:1 in light, and the
+/// three grounds that meet in a table (選區、光標行、欄底) fall under 1.24 on
+/// any light theme whose text is under about 9:1 — Tokyo Night Light and
 /// Catppuccin Latte both. Spacing the light rungs by equal contrast gives light
-/// mood the separation dark mood already had (2.12:1 for the same selection),
+/// mood the separation dark mood has (2.12:1 for the same selection),
 /// so the rungs mean the same thing in both, and any light theme whose text
 /// clears about 6.93:1 (1.24 to the ninth) passes, give or take a byte of
-/// rounding — Latte, at 7.06:1, passes the gate with 0.006 to spare. Dark ladders are
-/// untouched, byte for byte.
+/// rounding — Latte, at 7.06:1, passes the gate with 0.006 to spare. Dark ladders
+/// stay mixed in sRGB.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Ladder {
     pub ink: (u8, u8, u8),
@@ -1257,21 +1248,21 @@ pub mod rung {
     //! 的；檔號是給人說話用的（「第 90 檔」比「9000」好記），值是給眼睛用的。
     //!
     //! 一百零一檔裏現在只有十幾檔有名字，其餘空着——**要給某一檔起個名字，
-    //! 直接加一條常量就是**，不必先挪別人。從前只有 21 檔，每一檔之間隔五百
-    //! 步，於是像「比表格的底再沉一點點」這種量根本落不到格子上（那一條現在是
-    //! 第 87 檔）。
+    //! 直接加一條常量就是**，不必先挪別人。一檔一百步，所以像「比表格的底再沉
+    //! 一點點」這種量也落得到格子上。
     //!
-    //! Warning: **紙不在盡頭。** 從前紙就是梯子的末端，於是「比正文再沉一級」没有
-    //! 地方可以表達——狀態欄只能往墨的方向抬，而那是**反主題色**的方向。現在
-    //! 紙在第 90 檔，後面十檔留給比紙更主題色的東西。
+    //! Warning: **紙不在盡頭。** 紙在第 90 檔，後面十檔留給比紙更主題色的東西。
+    //! 紙若是梯子的末端，「比正文再沉一級」就没有地方可以表達——狀態欄只能往墨
+    //! 的方向抬，而那是**反主題色**的方向。
     /// **第 15 檔** — the writing, one small step back, for the *other* word in
     /// an alternated pair (`:word-mark ink`, #278).
     ///
     /// Warning: **Not [`ASIDE`].** That rung is 「read this, it is not the prose」 —
     /// a reading, a 拆分, a candidate's number — and at 第 25 it is far enough
-    /// back that alternating words looked like every other word had been
-    /// demoted. 分詞 is structure, not rank: 第 15 is 「有一定辨識度但又不會讓
-    /// 詞語之間差別太大」, and both members of the pair still read as prose.
+    /// back that alternating words on it look like every other word has been
+    /// demoted. 分詞 is structure, not rank: 第 15 is distinct enough to tell
+    /// without setting the words far apart, and both members of the pair still
+    /// read as prose.
     pub const WORD_INK: u16 = 1500; // 第 15 檔
     /// The writing, and anything that *is* the writing: a hung 句讀, the
     /// character a highlight covers.
@@ -1279,18 +1270,18 @@ pub mod rung {
     /// **旁註** — read it, but it is not the prose: a reading beside its base,
     /// a 拆分 annotation, a candidate's number, the tag at a panel's foot.
     ///
-    /// Warning: **It was `QUIET`** (#462), which said how loud it is and not what it
-    /// is for — and the name was borrowed on that reading by
-    /// [`WORD_INK`], where 「one shade back」 is a different idea entirely.
+    /// Warning: **Named for what it is for, not how loud it is** (#462): a name
+    /// like `QUIET` invites borrowing on that reading by [`WORD_INK`], where
+    /// 「one shade back」 is a different idea entirely.
     /// This one is a *category*: everything on this rung is something the
     /// reader may want and none of it is what the page is about.
     pub const ASIDE: u16 = 2500; // 第 25 檔
     /// **The ruler over a table's columns** — Feature #232.
     ///
-    /// Its own rung, and darker than the furniture it used to share, because
+    /// Its own rung, and darker than the furniture, because
     /// it is *read* rather than glanced at: `t3g` means counting to the third
     /// number, and a reader counting is reading. Warning: It is drawn on
-    /// [`CHROME`], not on the paper — measured there it was 3.15:1 at
+    /// [`CHROME`], not on the paper — measured there it would be 3.15:1 at
     /// [`FURNITURE`] on the worst of the twenty-one ladders, clearing the 3:1
     /// a border needs and missing the 4.5:1 small text does. At this rung the
     /// worst is 4.36.
@@ -1308,24 +1299,20 @@ pub mod rung {
     /// Chrome: a sidebar, a tab bar, a table's gutter and header, a detail
     /// panel, the status line.
     ///
-    /// **900, and it used to be 970.** The old rung was a hair off the page —
-    /// the reasoning being that the theme is 墨黑 and grey furniture flattens
-    /// the whole screen, so what separates a panel from the page should be its
-    /// rule and its 金墨 rather than a lighter ground. That held while a blank
-    /// hint row stood between the writing and the status line. With the command
-    /// row moved *below* the status line (#302) the last line of the writing
-    /// now touches it, and 970 against the page is a 1.03:1 ground: the bar the
-    /// eye is supposed to find at the bottom of the window read as part of the
-    /// page. A ground with no rule and no position of its own has to be seen.
+    /// **Well off the page.** The theme is 墨黑 and grey furniture flattens the
+    /// whole screen, which argues for a rung a hair off the page, separated by
+    /// its rule and its 金墨 instead. But with the command row *below* the
+    /// status line (#302) the last line of the writing touches the bar, and a
+    /// ground a hair off the page is 1.03:1: the bar the eye is supposed to
+    /// find at the bottom of the window reads as part of the page. A ground
+    /// with no rule and no position of its own has to be seen.
     pub const CHROME: u16 = 8100; // 第 81 檔
-    /// **空框上寫着的那一句**：搜索面板的「要找什麼」，以及上次搜過的那個詞
-    /// （2026-10-04 定）。
+    /// **空框上寫着的那一句**：搜索面板的「要找什麼」，以及上次搜過的那個詞。
     ///
     /// Warning: **它比旁註、比 markup 都還要退後**。別的提示字是「讀它，只是它不是
     /// 正文」；這一句要的是**看得見、可是一眼就知道那裏没有字**——它畫在輸入框
     /// 的底色上，而那一檔比紙還沉，所以同一個墨在這裏讀起來比在正文上更淡。
-    /// 一度用旁註那一檔（第 25 檔），原話：「這個不够灰，感覺還是像有個字在里
-    /// 面而不是提示……必須更淡更淡。」
+    /// 旁註那一檔（第 25 檔）不够灰，看起來還像框裏有個字，而不是提示。
     pub const GUESS: u16 = 8000; // 第 80 檔
     /// A ground that must not shout: a table's alternating columns, its cursor
     /// row, a code fence, a callout, the tint past the measure.
@@ -1335,10 +1322,10 @@ pub mod rung {
     /// Every other ground says 「this block is a different kind of thing」; this
     /// one says 「these two squares belong to the same word」, on *every* line of
     /// the page at once. It is a hair off the paper and carries **no hue at
-    /// all** — it used to be 朱 washed almost away, which put it in the same
-    /// family as `==marked==` (朱 washed rather less), and on a dark ground the
-    /// two were the same colour: the reader could not tell a word boundary from
-    /// a highlighter.
+    /// all** — 朱 washed almost away would put it in the same family as
+    /// `==marked==` (朱 washed rather less), and on a dark ground the two would
+    /// be the same colour: the reader could not tell a word boundary from a
+    /// highlighter.
     pub const WORD_TINT: u16 = 8600; // 第 86 檔
     /// A band that must be **seen**, because position is not separating it
     /// from the text: the 縱書 number band sits in the text's own columns, the
@@ -1352,7 +1339,7 @@ pub mod rung {
     /// 莫蘭迪's light mood — under the 1.24 the eye needs, and the reader can no
     /// longer see which row they are standing on. 第 73 leaves 1.26:1 at worst.
     /// Those are sRGB-ladder figures; with light ladders spaced by contrast
-    /// (2026-10-26) the tightest pair is Catppuccin Latte's, at 1.25 — see
+    /// the tightest pair is Catppuccin Latte's, at 1.25 — see
     /// [`SELECTION`]. `the_grounds_that_meet_are_a_rung_apart` is the test
     /// that says so.
     pub const HEAD: u16 = 7300; // 第 73 檔
@@ -1363,8 +1350,8 @@ pub mod rung {
     /// table's cursor row is two grounds one inside the other, and the three
     /// of them — 選區, 光標行, 欄底 — have to stay a visible step apart all the
     /// way up. At 第 65 against `HEAD`'s 第 73 this measures 1.20:1 in 莫蘭迪's
-    /// light mood; 第 63 leaves 1.26:1. Those are sRGB-ladder figures: since
-    /// light ladders are spaced by contrast (2026-10-26) 莫蘭迪 light has 1.31,
+    /// light mood; 第 63 leaves 1.26:1. Those are sRGB-ladder figures: with
+    /// light ladders spaced by contrast 莫蘭迪 light has 1.31,
     /// and the tightest pair is **Catppuccin Latte's, at 1.246** — 0.006 over
     /// the gate, with one-dark next at 1.26. Each channel is mixed and then
     /// rounded to a byte, so Latte's per-rung ratio wanders between 1.237 and
@@ -1373,12 +1360,12 @@ pub mod rung {
     pub const SELECTION: u16 = 6300; // 第 63 檔
     /// The page — **第 90 檔**, not the end of the ladder.
     pub const PAPER: u16 = 9000; // 第 90 檔
-    /// **第 85 檔 — what floats over the page** (2026-09-18 定).
+    /// **第 85 檔 — what floats over the page.**
     ///
-    /// A panel used to be drawn on the paper's own colour, with a rule around
-    /// it as the only thing saying where it began: 「我感覺他和正文還是有些混在
-    /// 一起」. A second ring was tried and cost four cells of content each way;
-    /// this costs none. Five rungs off the paper is enough to read as a sheet
+    /// A panel on the paper's own colour, with a rule around it as the only
+    /// thing saying where it begins, runs into the prose. A second ring would
+    /// cost four cells of content each way; this costs none. Five rungs off
+    /// the paper is enough to read as a sheet
     /// lifted off the page, and — being a rung, not a colour — it turns round
     /// by itself on a light theme, where 85 is darker than the paper.
     pub const FLOAT: u16 = 8500; // 第 85 檔
@@ -1431,8 +1418,8 @@ pub struct ThemeConfig {
     pub gold_light: (u8, u8, u8),
     /// 紫、綠、藍 — **官服品色**, and what they are for (#449).
     ///
-    /// 金 and 朱 were the whole of the page's colour, and everything else was
-    /// told apart by being one rung dimmer than the prose. That works for
+    /// With 金 and 朱 as the whole of the page's colour, everything else would
+    /// be told apart by being one rung dimmer than the prose. That works for
     /// emphasis, which *is* prose, and fails for the things that are **not
     /// prose at all**: a piece of code, a quotation, an address. Dim reads as
     /// 「less important」, and a run of code is usually the most exact thing on
@@ -1450,9 +1437,8 @@ pub struct ThemeConfig {
     /// | 八至九品 | 藍 | 鏈接：只是個地址 |
     ///
     /// All three sit **below the prose** in contrast (8.2–9.2:1 against 11.1),
-    /// so the writing is still the brightest thing on the page — the rule that
-    /// took the hues away in the first place is kept, and only its conclusion
-    /// about non-prose is reversed.
+    /// so the writing is still the brightest thing on the page — the prose
+    /// itself stays free of hue, and only non-prose takes one.
     pub purple_dark: (u8, u8, u8),
     pub purple_light: (u8, u8, u8),
     pub green_dark: (u8, u8, u8),
@@ -1462,15 +1448,15 @@ pub struct ThemeConfig {
     /// 黃 — **皇室, not 龍袍** (#483). The fifth callout wanted a colour and
     /// there was one rank left above 紫: 明黃 is the emperor's and 杏黃 the
     /// princes', so the page's 金 stays the emperor's and this sits under it.
-    /// 「黃色比金色看起來要更深一些」 — and it is: the same hue within six
+    /// 黃 reads deeper than 金: the same hue within six
     /// degrees, half again the saturation, and twenty-four points of lightness
     /// below, which is what tells the two apart at a glance.
     pub amber_dark: (u8, u8, u8),
     pub amber_light: (u8, u8, u8),
-    /// **變調** — the second tone of four of the ranks (2026-09-17).
+    /// **變調** — the second tone of four of the ranks.
     ///
     /// 金 already had one (黃). Code wanted more hues than five ranks give it,
-    /// and spending 朱 on a number made 「這裏不對」 mean something else as
+    /// and spending 朱 on a number would make 「這裏不對」 mean something else as
     /// well — so each rank gets a neighbour: 朱 → 橙, 紫 → 粉, 藍 → 青,
     /// 綠 → 黃綠. **A second tone never takes its rank's job**: 朱 still only
     /// says 「這裏不對」, and 橙 is the number in a fence.
@@ -1484,19 +1470,19 @@ pub struct ThemeConfig {
     pub lime_light: (u8, u8, u8),
     /// Whether a coloured run also gets a **ground** (`:theme-fill`).
     ///
-    /// Off. 「丙的视觉效果最『干净』，扰乱信息少……`` 本身就是边界」 — the
-    /// backtick is drawn, so the run's extent is already on the page and a
+    /// Off, the cleanest look with the least noise: the backtick is itself
+    /// the edge. It is drawn, so the run's extent is already on the page and a
     /// ground behind it is a second answer to a question nobody asked. On for
     /// whoever wants the code to sit in a box.
     pub fill: bool,
-    /// **How much of its ink a window you are not in keeps**, in percent
-    /// (2026-11-04): 95, a little, so two windows still compare; 100 is
-    /// vim's and helix's, which do not dim at all.
+    /// **How much of its ink a window you are not in keeps**, in percent:
+    /// 95, a little, so two windows still compare; 100 is vim's and helix's,
+    /// which do not dim at all.
     pub inactive: u16,
     /// **How much ink focus mode leaves the paragraphs you are not writing**,
-    /// in percent (2026-11-04): 50, so the one being written stands out.
+    /// in percent: 50, so the one being written stands out.
     pub focus: u16,
-    /// **A theme with no light half** (2026-10-25, One Dark). In a light mood
+    /// **A theme with no light half** (One Dark). In a light mood
     /// it is drawn dark all the same, and `:theme-mode light` says so.
     pub dark_only: bool,
     /// Colours a theme takes **from somewhere else, exactly** — the code and
@@ -1504,22 +1490,21 @@ pub struct ThemeConfig {
     /// its own accents. `None` for every theme that is this editor's own.
     pub pinned: Option<Pinned>,
     /// The light mood's pinned colours, for a borrowed theme that has one
-    /// (2026-10-26, GitHub). `pinned` is the dark mood's.
+    /// (GitHub). `pinned` is the dark mood's.
     pub pinned_light: Option<Pinned>,
     /// **Hues for the prose's own marks** — bold, italic, each heading level,
-    /// a list or task marker — one per mood (2026-11-04). `None` marks them by
+    /// a list or task marker — one per mood. `None` marks them by
     /// weight alone, as `bw` and `morandi` do; a borrowed theme's [`Pinned`]
     /// outranks it.
     pub prose_dark: Option<Prose>,
     pub prose_light: Option<Prose>,
 }
 
-/// **Bold, italic, headings and list markers in colour** (2026-11-04).
+/// **Bold, italic, headings and list markers in colour.**
 ///
-/// 墨香 used to mark bold and italic by weight alone and give every heading one
-/// gold, on the rule that writing is not decorated. Readers found Catppuccin
-/// livelier, and its pink bold was most of the difference; this palette was
-/// chosen from pictures of five candidates. The marks themselves (`**`, `#`)
+/// Bold and italic by weight alone, and every heading one gold, follow the
+/// rule that writing is not decorated, and read flat beside Catppuccin, whose
+/// pink bold is most of the difference. The marks themselves (`**`, `#`)
 /// stay the marker grey.
 ///
 /// A theme that sets it also reads Typst's `#` code as tokens and colours a
@@ -1573,7 +1558,7 @@ pub const INK_PROSE_LIGHT: Prose = Prose {
     list_mark: (0x73, 0x51, 0x0E),
 };
 
-/// **The colours a borrowed theme copies value for value** (2026-10-25).
+/// **The colours a borrowed theme copies value for value**.
 ///
 /// The page's other colours are worked out from ink, paper and the accents;
 /// these are not, because the point of a borrowed theme is that a reader who
@@ -1607,10 +1592,10 @@ pub struct Pinned {
     pub punctuation: (u8, u8, u8),
     // Markdown: each construct, and the marks that open and close it.
     /// A heading and its `#`s, one per level — Tokyo Night fades `#` to
-    /// `######` from cyan to grey (2026-10-26); the others give all six one.
+    /// `######` from cyan to grey; the others give all six one.
     pub headings: [(u8, u8, u8); 6],
     /// The `#`s, when they are not the heading's own colour — Gruvbox draws
-    /// them punctuation grey at every level (2026-10-26).
+    /// them punctuation grey at every level.
     pub heading_mark: Option<(u8, u8, u8)>,
     pub bold: (u8, u8, u8),
     pub bold_mark: (u8, u8, u8),
@@ -1635,12 +1620,12 @@ pub struct Pinned {
     pub deleted_mark: (u8, u8, u8),
 }
 
-/// **One Dark Pro**, read off `themes/OneDark-Pro.json` (2026-10-25).
+/// **One Dark Pro**, read off `themes/OneDark-Pro.json`.
 ///
 /// Each value is the `tokenColors` rule for the scope beside it. Variables
 /// are the text colour: with tree-sitter nearly every name is `@variable`,
-/// and One Dark Pro's red for `variable` would turn the page red (2026-10-25,
-/// helix and Zed draw them in the text colour too).
+/// and One Dark Pro's red for `variable` would turn the page red (helix and
+/// Zed draw them in the text colour too).
 pub const ONE_DARK_PRO: Pinned = Pinned {
     keyword: (0xC6, 0x78, 0xDD),          // keyword, storage
     function: (0x61, 0xAF, 0xEF),         // entity.name.function
@@ -1689,7 +1674,7 @@ pub const ONE_DARK_PRO: Pinned = Pinned {
 };
 
 /// **GitHub Dark Default**, read off the published extension's
-/// `themes/dark-default.json` (github-vscode-theme 6.3.5, 2026-10-26; MIT,
+/// `themes/dark-default.json` (github-vscode-theme 6.3.5; MIT,
 /// © Primer). The JSON is built at release time, so it is taken from the
 /// package, not the repository. Each value is the `tokenColors` rule for the
 /// scope beside it.
@@ -1793,7 +1778,7 @@ pub const GITHUB_LIGHT: Pinned = Pinned {
 };
 
 /// **Dracula**, read off the published extension's `theme/dracula.json`
-/// (theme-dracula 2.25.1, 2026-10-26; MIT, © Dracula Theme).
+/// (theme-dracula 2.25.1; MIT, © Dracula Theme).
 ///
 /// Dracula leans on TextMate's rule merging: `support.function` only says
 /// "upright" and takes its cyan from the broader `support`, and the Markdown
@@ -1849,13 +1834,13 @@ pub const DRACULA: Pinned = Pinned {
 };
 
 /// **Tokyo Night**, read off the published extension's
-/// `themes/tokyo-night-color-theme.json` (enkia.tokyo-night 1.1.2,
-/// 2026-10-26; MIT, © Enkia). Each value is what the `tokenColors` rules for
+/// `themes/tokyo-night-color-theme.json` (enkia.tokyo-night 1.1.2; MIT,
+/// © Enkia). Each value is what the `tokenColors` rules for
 /// the scope beside it add up to.
 ///
 /// Two things set it apart. A name in code is `variable`'s `#C0CAF5`, a step
-/// brighter than the text, and kept (2026-10-26: unlike One Dark's red it does
-/// not turn the page another colour). And every piece of punctuation is
+/// brighter than the text, and kept (unlike One Dark's red it does not turn
+/// the page another colour). And every piece of punctuation is
 /// `#89DDFF`, so the Markdown marks — a backtick, a bullet, a quotation's `>`,
 /// a link's brackets — are that cyan whatever they mark.
 ///
@@ -1972,7 +1957,7 @@ pub const TOKYO_NIGHT_LIGHT: Pinned = Pinned {
 };
 
 /// **Catppuccin Mocha**, read off the published extension's
-/// `themes/mocha.json` (Catppuccin.catppuccin-vsc 3.19.0, 2026-10-26; MIT,
+/// `themes/mocha.json` (Catppuccin.catppuccin-vsc 3.19.0; MIT,
 /// © Catppuccin). Each value is what the `tokenColors` rules for the scope
 /// beside it add up to.
 ///
@@ -2092,11 +2077,11 @@ pub const CATPPUCCIN_LATTE: Pinned = Pinned {
 };
 
 /// **Gruvbox Dark (Medium)**, read off the published extension's
-/// `themes/gruvbox-dark-medium.json` (jdinhlife.gruvbox 1.29.1, 2026-10-26;
-/// MIT, © 2017 JD). Each value is what the `tokenColors` rules for the scope
+/// `themes/gruvbox-dark-medium.json` (jdinhlife.gruvbox 1.29.1; MIT,
+/// © 2017 JD). Each value is what the `tokenColors` rules for the scope
 /// beside it add up to.
 ///
-/// One departure, asked for (2026-10-26): the extension paints every
+/// One departure: the extension paints every
 /// `variable` blue — names, parameters, fields, `self` — which turns most of
 /// a page of code blue; the original vim Gruvbox and helix leave them in the
 /// text colour, and so does this. A heading's `#`s are punctuation grey at
@@ -2212,7 +2197,7 @@ pub const GRUVBOX_LIGHT: Pinned = Pinned {
 };
 
 /// **Monokai, as VS Code ships it**, read off
-/// `extensions/theme-monokai/themes/monokai-color-theme.json` (2026-10-26).
+/// `extensions/theme-monokai/themes/monokai-color-theme.json`.
 ///
 /// VS Code's is "based on the original Monokai" (Wimer Hazenberg's TextMate
 /// theme, 2006) by way of Colorsublime; both are MIT. Each value is the
@@ -2360,12 +2345,12 @@ impl ThemeConfig {
     /// and every other shade on the page is a rung worked out from them — so
     /// a theme is eight colours and no more.
     ///
-    /// Seven are **borrowed** (2026-10-25/26): `one-dark`, `github`, `monokai`,
+    /// Seven are **borrowed**: `one-dark`, `github`, `monokai`,
     /// `dracula`, `tokyo-night`, `catppuccin` and `gruvbox` take their ink and
     /// paper from the theme they copy, and its code and Markdown colours
     /// exactly ([`Pinned`]); `github`, `tokyo-night`, `catppuccin` and
-    /// `gruvbox` have both moods, the other three are dark only. 琥珀, 陶窯,
-    /// 夜螢, 莫高, 藍曬, 靛橘 and 明度階 went to keep the set at ten.
+    /// `gruvbox` have both moods, the other three are dark only. The set is
+    /// kept at ten.
     /// **A theme's name is ASCII**, because a command line is: `:theme ink`
     /// has to be typeable with the IME off, which is where a reader who has
     /// just opened the editor is, and the pinyin is an alias for the hand that
@@ -2435,7 +2420,7 @@ impl ThemeConfig {
                 prose_light: None,
                 ..ThemeConfig::default()
             }),
-            // One Dark — Atom's palette as One Dark Pro paints it (2026-10-25).
+            // One Dark — Atom's palette as One Dark Pro paints it.
             // The page's ink and paper are One Dark's own text and ground, and
             // the rest of the ladder is this editor's; the code and the Markdown
             // take One Dark Pro's colours exactly (`ONE_DARK_PRO`). Dark only:
@@ -2474,7 +2459,7 @@ impl ThemeConfig {
                 prose_light: None,
                 ..ThemeConfig::default()
             }),
-            // Dracula — the purple-toned dark theme (2026-10-26), built as
+            // Dracula — the purple-toned dark theme, built as
             // `one-dark` is: its text and ground for the ink and paper, `DRACULA`
             // for the code and the Markdown, its own hues for the accents, its
             // `errorForeground` for 朱.
@@ -2507,16 +2492,17 @@ impl ThemeConfig {
                 prose_light: None,
                 ..ThemeConfig::default()
             }),
-            // Tokyo Night — Night and Light (2026-10-26), in place of 藍曬, built
+            // Tokyo Night — Night and Light, built
             // as `github` is: each mood's text and ground for the ink and paper,
             // `TOKYO_NIGHT` and `TOKYO_NIGHT_LIGHT` for the code and the
             // Markdown, its terminal colours for the accents. Its
             // `errorForeground` is a grey (it is for the UI's error text), so 朱
             // is `editorError.foreground`.
             //
-            // The light half was dropped once: on the sRGB ladder its grey paper
-            // (#E6E7ED) under #343B59 text left a selection in a table's cursor
-            // row 1.23:1 from the row. Spaced by contrast it has 1.28.
+            // The light half needs the contrast-spaced ladder: on the sRGB
+            // ladder its grey paper (#E6E7ED) under #343B59 text would leave a
+            // selection in a table's cursor row 1.23:1 from the row. Spaced by
+            // contrast it has 1.28.
             //
             // Source: enkia.tokyo-night 1.1.2 (MIT, © Enkia). Notice in
             // `licenses/`.
@@ -2556,7 +2542,7 @@ impl ThemeConfig {
                 prose_light: None,
                 ..ThemeConfig::default()
             }),
-            // Catppuccin — Mocha and Latte (2026-10-26), in place of 靛橘, built
+            // Catppuccin — Mocha and Latte, built
             // as `github` is: each flavour's text and base for the ink and
             // paper, `CATPPUCCIN_MOCHA` and `CATPPUCCIN_LATTE` for the code and
             // the Markdown, its named colours for the accents (yellow for 金,
@@ -2603,7 +2589,7 @@ impl ThemeConfig {
                 prose_light: None,
                 ..ThemeConfig::default()
             }),
-            // Gruvbox — Dark and Light, Medium (2026-10-26), in place of 明度階,
+            // Gruvbox — Dark and Light, Medium,
             // built as `github` is: each mood's text and ground for the ink and
             // paper, `GRUVBOX_DARK` and `GRUVBOX_LIGHT` for the code and the
             // Markdown, its palette for the accents. 朱 is its `errorForeground`,
@@ -2648,8 +2634,8 @@ impl ThemeConfig {
                 ..ThemeConfig::default()
             }),
             // 莫蘭迪 — the greyest grounds of the ten and muted accents, 朱 brought down to a
-            // dusty brick red. Not the lowest text contrast any more (9.2:1 dark, 12.2:1
-            // light, 2026-10-26): one-dark and Catppuccin Latte sit lower.
+            // dusty brick red. Not the lowest text contrast (9.2:1 dark, 12.2:1
+            // light): one-dark and Catppuccin Latte sit lower.
             "morandi" | "molandi" | "莫蘭迪" | "莫兰迪" => Some(ThemeConfig {
                 name: "morandi".to_string(),
                 dark: Ladder {
@@ -2678,7 +2664,7 @@ impl ThemeConfig {
                 prose_light: None,
                 ..ThemeConfig::default()
             }),
-            // Monokai — VS Code's, after Wimer Hazenberg's (2026-10-26). Built as
+            // Monokai — VS Code's, after Wimer Hazenberg's. Built as
             // `one-dark` is: its text and ground for the ink and paper, `MONOKAI`
             // for the code and the Markdown, its own hues for the accents, and
             // VS Code's default error red for 朱, since the theme sets none.
@@ -2712,8 +2698,8 @@ impl ThemeConfig {
                 ..ThemeConfig::default()
             }),
             // GitHub — Dark Default and Light Default, the most installed theme in
-            // VS Code (2026-10-26). The first borrowed theme with **both** moods,
-            // so it carries a pinned table for each. 朱 is GitHub's
+            // VS Code. A borrowed theme with **both** moods, so it carries a
+            // pinned table for each. 朱 is GitHub's
             // `errorForeground`; in the light mood that is its keyword red too,
             // which is GitHub's choice and kept.
             //
@@ -2769,7 +2755,7 @@ impl Default for ThemeConfig {
             status_bar: StatusBar::Sunken,
             // **The page is cool and the writing is near-white.** 墨香's own
             // pair — a bone ink on a warm near-black — is the right skin for a
-            // *panel*, where it has always been; laid over the whole page it
+            // *panel*, where it belongs; laid over the whole page it
             // makes every grey on the ladder a warm grey, and then the prose,
             // the headings and the furniture are all the same colour and the
             // page has no ranks in it. So the page keeps the ink 白 and the
@@ -2778,19 +2764,19 @@ impl Default for ThemeConfig {
             dark: Ladder {
                 // **Dimmer than white bone, on purpose.** #E8E4DA against this
                 // ground is 13.7:1, and past about 12:1 a light face on a dark
-                // page starts to bloom — 「太亮了刺眼有光暈」. 10:1 is the
+                // page starts to bloom: too bright, glaring, haloed. 10:1 is the
                 // comfortable end of the band for hours of prose.
                 //
                 // Warning: **11:1, not 10:1** — every rung below is a fraction of
                 // this one, so dimming the ink dims the whole page with it.
-                // At 10:1 行内代碼 — 第 27 檔 then, a 品色 now — fell to 5.5:1 against
-                // the paper and stopped reading as a mark at all; 11:1 puts it
-                // back over 6. The ink is the ceiling the ladder hangs from.
+                // At 10:1 a mark on 第 27 檔 falls to 5.5:1 against the paper
+                // and stops reading as a mark at all; 11:1 puts it back over 6.
+                // The ink is the ceiling the ladder hangs from.
                 ink: (0xD2, 0xCE, 0xC4),
-                // 松烟**黑**, not 松烟綠. The page carried a green cast for a
-                // day — G above R above B, which at this darkness reads as
-                // 「屎綠」 rather than as ink — and the whole ladder inherited
-                // it, because every rung is a step from 墨 to 紙. Neutral, a
+                // 松烟**黑**, not 松烟綠. G above R above B at this darkness
+                // reads as a muddy green rather than as ink, and the whole
+                // ladder would inherit it, because every rung is a step from 墨
+                // to 紙. Neutral, a
                 // shade cool: the warmth on this page is the ink's and 金's,
                 // and it is worth finding precisely because the ground is not
                 // warm.
@@ -2799,12 +2785,12 @@ impl Default for ThemeConfig {
             // 墨 on paper is darker than 墨 on a screen, which gives the light
             // mood the range its top rungs need to stay readable.
             //
-            // Warning: **The ink takes the paper's hue** (2026-10-26). It was
-            // #262A27, G above R above B — OKLCH hue 153°, a green — and every
-            // grey between it and the cream paper (hue 92°) passed through
-            // olive on the way: line numbers and markers at 107°. That is the
-            // cast the dark paper lost as 「屎綠」. #2A2923 sits at the paper's
-            // hue with the same 12.2:1, so the ladder is one hue from end to end.
+            // Warning: **The ink takes the paper's hue.** An ink with G above R
+            // above B (#262A27, OKLCH hue 153°, a green) sends every grey
+            // between it and the cream paper (hue 92°) through olive on the
+            // way: line numbers and markers at 107°, the same muddy cast the
+            // dark paper avoids. #2A2923 sits at the paper's hue with the same
+            // 12.2:1, so the ladder is one hue from end to end.
             light: Ladder {
                 ink: (0x2A, 0x29, 0x23),
                 paper: (0xF1, 0xEB, 0xD9),
@@ -2812,10 +2798,10 @@ impl Default for ThemeConfig {
             // A seal's red on paper; lighter in the dark, for the same reason
             // the ink is dimmer there.
             //
-            // Warning: **朱 is 朱, not orange** (2026-09-17). The dark one was
-            // #D2785A — OKLCH hue 39°, a washed terracotta that read as orange
-            // the moment a real orange stood beside it. Both moods now sit at
-            // 29–30°, the hue of sRGB's own red, and 橙 has a slot of its own.
+            // Warning: **朱 is 朱, not orange.** A washed terracotta such as
+            // #D2785A (OKLCH hue 39°) reads as orange the moment a real orange
+            // stands beside it. Both moods sit at 29–30°, the hue of sRGB's own
+            // red, and 橙 has a slot of its own.
             mark_light: (0xB3, 0x24, 0x1B),
             mark_dark: (0xEC, 0x5D, 0x4B),
             // 墨香's own bone, kept for the one job it is best at. On a light

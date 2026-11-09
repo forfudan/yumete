@@ -1,10 +1,10 @@
 //! **`ye --grep word . > out.txt`, run inside the directory it searches.**
 //!
-//! The search found `out.txt`, read what it had just written into it, wrote
-//! those lines again, and grew for as long as the disk lasted: 2026-10-19 one
-//! such line reached **315 GB** and took a 926 GB disk down to 1.6 GB free,
-//! in the background, without a word. GNU grep has refused this since forever
-//! (「input file X is also the output」) and this one did not.
+//! Warning: unguarded, the search finds `out.txt`, reads what it has just
+//! written into it, writes those lines again, and grows for as long as the
+//! disk lasts, in the background, without a word. So the output file is
+//! skipped and named on stderr, as GNU grep refuses it (「input file X is
+//! also the output」).
 //!
 //! Driven through the real binary, because what is being tested is the
 //! redirection: the guard asks `fstat(1)` for the device and inode behind this
@@ -67,8 +67,8 @@ fn a_search_does_not_read_the_file_its_own_output_is_going_to() {
 
     let (size, said) = grep_into(&dir, "g.txt");
 
-    // Two hits from the one file that has them, and nothing else. Before the
-    // guard this did not finish at all.
+    // Two hits from the one file that has them, and nothing else. Without
+    // the guard this would not finish at all.
     let out = std::fs::read_to_string(dir.join("g.txt")).unwrap();
     assert_eq!(out.lines().count(), 2, "two hits, in a.md only: {out:?}");
     assert!(out.lines().all(|l| l.contains("a.md")), "{out:?}");

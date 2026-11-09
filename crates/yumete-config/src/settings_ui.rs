@@ -1,9 +1,7 @@
-//! **每一項設定，說成一行** —— 那扇設置面板（#421）讀的就是這張表（2026-09-23）。
+//! **每一項設定，說成一行** —— 那扇設置面板（#421）讀的就是這張表。
 //!
-//! 原話：
-//!
-//! > 這樣的話用戶（特別是寫小説的），不需要面對 toml 和一堆 key 發呆不知道他們
-//! > 都是幹啥的，也不需要查詢到底有哪些 key 可以用。
+//! 用戶（特別是寫小説的）不必面對 toml 和一堆 key、不知道它們是幹啥的，也不必
+//! 去查到底有哪些 key 可以用。
 //!
 //! 所以這張表要說出 `RawConfig` 說不出的三件事：**這一項叫什麽**（給人看的名
 //! 字）、**它是什麽**（打勾/幾選一/數字/一段字）、**它歸哪一組**。類型與取值
@@ -110,14 +108,13 @@ pub enum Kind {
     Pick(&'static [Choice]),
     /// 幾選一，**可是別的也收**：撥得過這幾個，也可以自己打一個名字進去。
     ///
-    /// 主題與方案是這一種（2026-10-10 定）。原話：「It is limited to a set so I
-    /// should not manually type 『lingming』」——可它並不是真的只有那幾個：讀者
-    /// 自己裝的主題和碼表不在表裏，而 `:theme` 的參數也正是 `WordsOr` 不是
+    /// 主題與方案是這一種：有一個集合可撥，就不該要人手打 `lingming`——可它並不
+    /// 是真的只有那幾個：讀者自己裝的主題和碼表不在表裏，而 `:theme` 的參數也正是 `WordsOr` 不是
     /// `Words`。所以空格與 `Enter` 在出廠那幾個之間輪，`i` 永遠是「我自己打」。
     PickOr(&'static [Choice]),
     /// 一段自己打的字。
     Text,
-    /// **A row that opens a page of its own** (2026-11-02): the flavour's
+    /// **A row that opens a page of its own**: the flavour's
     /// items, one tick each, under `[keys.flavor_items]`, and the annotation
     /// modes' fields under `[ime.annotation_modes]`. `l`, Space, Enter and
     /// `i` go in; the page is [`crate::panel::Panel::page`].
@@ -272,7 +269,7 @@ const IME_COMMIT_WAYS: &[Choice] = &[
     Choice { word: "fluency", label: "commit.name.fluency" },
 ];
 
-/// 字集過濾, yume's words with Yume's own names (2026-11-04).
+/// 字集過濾, yume's words with Yume's own names.
 const IME_CHARSETS: &[Choice] = &[
     Choice { word: "all", label: "ime.charset.all" },
     Choice { word: "common", label: "ime.charset.common" },
@@ -326,7 +323,7 @@ const THEME_STATUS_BAR_WAYS: &[Choice] = &[
 
 /// Warning: **兩個詞，没有同義詞**（`SystemImePolicy::parse` 自己的註釋這麽寫）：別的
 /// 字一律讀成 `auto`。所以這裏不許多寫一個「看着像」的選項——面板上切過去、檔裏
-/// 寫下去，而編輯器當它是 `auto`。2026-09-24 那條「改一項要真的改得動」逮到的。
+/// 寫下去，而編輯器當它是 `auto`。「改一項要真的改得動」那條測試攔的就是這個。
 const KEYS_PRESET_WAYS: &[Choice] = &[
     Choice { word: "helix", label: "settings.pick.preset.helix" },
     Choice { word: "vim", label: "settings.pick.preset.vim" },
@@ -377,15 +374,15 @@ const EDITOR_AMBIGUOUS_WIDTH_WAYS: &[Choice] = &[
 
 /// **整張表。**
 ///
-/// Warning: **八組都有東西了**（2026-09-24）。[`LATER`] 裏剩下的是二十四個色位（收在
+/// Warning: **八組都有東西了**。[`LATER`] 裏剩下的是二十四個色位（收在
 /// 二級入口，見那張表自己的註釋）和幾項要新控件纔畫得出來的（列表、路徑）。
 /// 那張一致性測試讀的是三張表的**並集**，所以漏一項照樣紅。
 /// **一項設定自己聲明的數域**，`(最小、最大、`0` 另有意思嗎)`。
 ///
-/// 給 `into_config` 用的：鉗的規矩和面板畫的規矩必須是**同一個事實**。從前兩邊
-/// 各寫一遍，於是 `indent_width` 從配置檔進來没有上界（`999` 一下 `>` 把正文推
+/// 給 `into_config` 用的：鉗的規矩和面板畫的規矩必須是**同一個事實**。兩邊各寫
+/// 一遍就會分岔：`indent_width` 從配置檔進來没有上界（`999` 一下 `>` 把正文推
 /// 到第 1008 欄推出屏幕），而同一個數從 `:indent-width` 打進去是拒的；
-/// `tab_width`、`wheel_step` 的上界與 `scrolloff` 的整個域同病（2026-10-10 報的）。
+/// `tab_width`、`wheel_step` 的上界與 `scrolloff` 的整個域也一樣。
 pub fn counted(table: &str, key: &str) -> Option<(usize, usize, bool)> {
     SETTINGS.iter().find_map(|one| match one.kind {
         Kind::Count { low, high, zero } if one.table == table && one.key == key => {
@@ -422,11 +419,11 @@ pub const SETTINGS: &[Setting] = &[
         // Warning: **`low` 是「最小的非零值」，不是「最小值」。** `into_config` 寫的是
         // `if length == 0 {0} else {length.clamp(8,64)}`——真正的域是「0，或者
         // 8 到 64」。寫 `low: 0` 的時候面板停得到 1/2/3，寫進檔裏而編輯器按下界
-        // 排版。2026-09-24 審出來的。
+        // 排版。
         //
-        // Warning: **下界 2026-10-09 從 4 擡到 8**，和 `:view-wrap-height` 對齊：那一頭
-        // 用的是 `wrap::MIN_WRAP_WIDTH`，而比它窄會把一個全角字擠到自己那一行上。
-        // 從前面板說 4、命令說 8、檔案說 4——同一個設置三個下界。
+        // Warning: **下界是 8**，和 `:view-wrap-height` 對齊：那一頭用的是
+        // `wrap::MIN_WRAP_WIDTH`，而比它窄會把一個全角字擠到自己那一行上。面板、
+        // 命令、檔案三處要是同一個下界。
         kind: Kind::Count { low: 8, high: 64, zero: Some("settings.zero.as-tall-as-the-window") },
         label: "settings.editor.zong-length",
         hint: "settings.editor.zong-length.hint",
@@ -920,8 +917,8 @@ pub const SETTINGS: &[Setting] = &[
         hint: "settings.ime.scheme.hint",
         factory: r#""pinyin""#,
     },
-    // **上屏方式也有一行**（2026-10-16 補）。`[ime] commit` 從前只有命令與配置
-    // 檔，而設置頁是 `[ime]` 那一張表上唯一缺的一格。出廠「未設」，同
+    // **上屏方式也有一行**：`[ime]` 那一張表上的每一格設置頁上都有，`commit`
+    // 不只走命令與配置檔。出廠「未設」，同
     // `ImeConfig::commit` 是 `Option<String>`：不寫就由方案自己定。
     Setting {
         table: "ime",
@@ -977,14 +974,13 @@ pub const SETTINGS: &[Setting] = &[
         hint: "settings.ime.others.hint",
         factory: r#""off""#,
     },
-    // **候選欄那幾項歸「輸入法」，不歸「界面」**（2026-10-10 作者提）。原話：
-    // 「An English-speaking user who never use Yume IME will be at loss when
-    // they see these option in the Interface tab.」擺在 `ime.*` 後面，因為「用
+    // **候選欄那幾項歸「輸入法」，不歸「界面」**：一個從不用 Yume 輸入法的英文
+    // 用戶在「界面」那一頁看見它們會不知所云。擺在 `ime.*` 後面，因為「用
     // 哪一張碼表」是先問的那一句。
     //
     // Warning: **`panel.rounded` 没跟過來**，它不只管候選欄：`panel.rs` 那一支
     // 畫的是編輯器自己每一扇浮動面板（`空格` which-key、腳注、`:write` 核驗、
-    // 命令行、`:` 選單），候選欄只是它的第二個讀者。作者定的判準就是這一條。
+    // 命令行、`:` 選單），候選欄只是它的第二個讀者。判準就是這一條。
     Setting {
         table: "panel",
         key: "display",
@@ -1024,7 +1020,7 @@ pub const SETTINGS: &[Setting] = &[
     Setting {
         table: "ime",
         key: "annotation",
-        // **注解歸「輸入法」，不歸「標記」**（2026-10-16 定）。它只在打字的時候
+        // **注解歸「輸入法」，不歸「標記」**。它只在打字的時候
         // 說得上話，而且撐寬每一條候選——那是候選欄的事；「標記」問的是稿子自己
         // 畫出什麼（注音、詞界、縮排提示）。`PickOr`: a mode the config adds
         // is typed by name.
@@ -1151,7 +1147,7 @@ pub const SETTINGS: &[Setting] = &[
         hint: "settings.editor.remember.hint",
         factory: "true",
     },
-    // The export (2026-11-08): what only shows once a file is written out,
+    // The export: what only shows once a file is written out,
     // and nothing of the editing window's.
     Setting {
         table: "export",
@@ -1297,7 +1293,7 @@ pub const SETTINGS: &[Setting] = &[
 pub const LATER: &[&str] = &[
     // An ordered list of lanes, each on or off: Yume's panel has a row per
     // lane with up and down; this one has ticks and values only. `Space z g`
-    // and `:yume-lanes` put one first meanwhile (2026-11-04).
+    // and `:yume-lanes` put one first meanwhile.
     "ime.lanes",
     "editor.usage_groups",
     "editor.syntax",
@@ -1329,7 +1325,7 @@ pub const LATER: &[&str] = &[
     "theme.cyan_light",
     "theme.lime",
     "theme.lime_light",
-    // Read and dropped (2026-10-29): the candidate panel takes the theme's
+    // Read and dropped: the candidate panel takes the theme's
     // colours, and an old config that still writes these keeps working.
     "panel.ink",
     "panel.paper",
@@ -1351,25 +1347,25 @@ pub const LATER: &[&str] = &[
 pub const NOT_IN_THE_PANEL: &[&str] = &[
     "editor.screenshot",
     "editor.segmentation_threshold",
-    // Folded into `word_mark` as its `off` (2026-10-25); kept to say so.
+    // Folded into `word_mark` as its `off`; kept to say so.
     "editor.show_segmentation",
-    // Gone (2026-11-02): `[ime] annotation` took its place; kept to say so.
+    // Retired: `[ime] annotation` says this; kept to say so.
     "editor.show_chaifen",
-    // Gone (2026-10-30): both ruby syntaxes were always read; kept to say so.
+    // Retired: both ruby syntaxes are always read; kept to say so.
     "editor.ruby_dialects",
     // **一張表，面板畫不出來**：勾和數字說不完「哪個鍵配哪個動作」。
-    // 2026-10-18 定：不進面板的只有它，風味那一格進（它只是一個勾）。
+    // 不進面板的只有它，風味那一格進（它只是一個勾）。
     "keys.normal",
-    // The same, for select and Insert mode (2026-10-31).
+    // The same, for select and Insert mode.
     "keys.select",
     "keys.insert",
     "keys.table",
-    // And for a prompt, a picker and a sidebar (2026-11-01).
+    // And for a prompt, a picker and a sidebar.
     "keys.prompt",
     "keys.picker",
     "keys.sidebar",
     "keys.field",
-    // A keymap's own tables (2026-11-04), the same shape as the shared ones.
+    // A keymap's own tables, the same shape as the shared ones.
     "keys.helix",
     "keys.vim",
 ];

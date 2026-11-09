@@ -1,5 +1,5 @@
 //! **`ye --docgen <dir>`: the site's tables, written from the editor's own**
-//! (2026-10-29) — helix's `cargo xtask docgen`, for the commands, the keys,
+//! — helix's `cargo xtask docgen`, for the commands, the keys,
 //! the settings and the languages. Each is written once per language the
 //! interface speaks (`en`, `zht`, `zhs`), since every description here is
 //! already a message in all three. The site's pages include these files, and
@@ -118,7 +118,7 @@ fn select_mode(preset: KeyPreset) -> &'static str {
     }
 }
 
-/// **One keymap's page** (2026-11-02): its keys with the flavour off, so
+/// **One keymap's page**: its keys with the flavour off, so
 /// the page is helix's or vim's and nothing of yumete's on top.
 fn keymap(preset: KeyPreset) -> String {
     let DocKeymap { normal, select, insert, menus } = Editor::keymap_for_docs(preset, no_flavor());
@@ -316,7 +316,7 @@ fn item_changes(item: FlavorItem, preset: KeyPreset) -> Vec<[String; 4]> {
     out
 }
 
-/// **The flavour's page** (2026-11-02): each level's items with their keys
+/// **The flavour's page**: each level's items with their keys
 /// under each keymap, then what each item changes, key by key, so
 /// `[keys.flavor_items]` can be written from it.
 fn flavor() -> String {

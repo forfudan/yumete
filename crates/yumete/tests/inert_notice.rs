@@ -3,10 +3,9 @@
 //! `--shot` draws one frame and never enters the loop, so a command that needs
 //! the loop — a typesetter, a language server, a reload — is dropped, and the
 //! notice on stderr says which. Its whole job is to tell a reader that what
-//! they typed did nothing, and on 2026-10-20 two of its fourteen names were
-//! the spellings of a fold ago: it answered `:view-preview on` with 「so
-//! `:preview` did nothing here」, naming a command that did not exist then.
-//! `:chaifen` was `:yume-chaifen`'s.
+//! they typed did nothing, so a name in it that is a retired spelling (a
+//! `:preview` for `:view-preview`) points the reader at a command that does
+//! not exist.
 //!
 //! Driven through the real binary, like [`help_crib`](../help_crib.rs): what
 //! is checked is what a reader sees.

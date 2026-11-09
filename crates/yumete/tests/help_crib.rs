@@ -1,19 +1,18 @@
 //! **Every command `--help` teaches is one the editor has.**
 //!
-//! The docs and the tutor have had this test since #368
-//! (`yumete-core/tests/documented_keys.rs`), and `--help` never did — it is a
-//! string in this crate, not a document, so the walk over the documents could
-//! not see it. It rotted exactly as the manual would have: an audit on
-//! 2026-10-19 found **four** spellings it taught that the table refuses —
-//! `:layout [horizontal|vertical]` (retired, two commands now), `:replace
-//! <new>` (its retired meaning), `:table [off|basic|full|check]` (those levels
-//! are `:table-render`'s) and `:ruby [off|basic|full|<dialect>]` (`:ruby-render`'s).
-//! In each case the manual was right and the crib was the stale one.
+//! The docs and the tutor have the same test (#368,
+//! `yumete-core/tests/documented_keys.rs`); `--help` needs its own — it is a
+//! string in this crate, not a document, so the walk over the documents
+//! cannot see it, and it goes stale exactly as the manual would. Four kinds
+//! of stale spelling the table refuses: `:layout [horizontal|vertical]` (two
+//! commands), `:replace <new>` (a retired meaning), `:table
+//! [off|basic|full|check]` (those levels are `:table-render`'s) and `:ruby
+//! [off|basic|full|<dialect>]` (`:ruby-render`'s).
 //!
 //! Warning: **It catches three of those four, and the reach was measured, not assumed**
-//! (each stale line was put back and the test run). Caught: `:layout`, `:ruby
-//! [off|basic|full]`, and — since the hyphen guard became general on
-//! 2026-10-20 — the `check` in `:table [off|basic|full|check]`, which names
+//! (each stale line put back and the test run). Caught: `:layout`, `:ruby
+//! [off|basic|full]`, and — by the general hyphen guard — the `check` in
+//! `:table [off|basic|full|check]`, which names
 //! `:table-check`. Not caught: that line's `off|basic|full`, because
 //! `:table`'s parameter is `Param::Free` and therefore *does* accept those
 //! words by declaration; and `:replace <new>`, whose head and placeholder are
