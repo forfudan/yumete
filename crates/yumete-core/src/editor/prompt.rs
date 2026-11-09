@@ -12,21 +12,21 @@ const HISTORY: &[PlaceCmd] = &[PlaceCmd::HistoryPrev, PlaceCmd::HistoryNext];
 
 impl Editor {
     // Warning: **The list's arms are not folded into guards**
-    // (`collapsible_match`, 2026-10-01): `Key::Tab if self.take_the_offer()`
+    // (`collapsible_match`): `Key::Tab if self.take_the_offer()`
     // would be a guard with a side effect, which changes meaning when an arm
     // is put between.
     #[allow(clippy::collapsible_match)]
     pub(super) fn on_insert_key(&mut self, key: Key) {
         // Warning: **`Pending` 的分派只在 Normal 那一支跑**（`on_normal_key`），所以
-        // `C-g` 後面那個 `u` 得在這裏吞——放在那邊是吞不到的（2026-09-23 測出來
-        // 的：稿子裏留下了一個游離的「u」）。
+        // `C-g` 後面那個 `u` 得在這裏吞——放在那邊是吞不到的，稿子裏會留下一個
+        // 游離的「u」。
         if self.pending == Pending::UndoBreak {
             self.pending = Pending::None;
             if key == Key::Char('u') {
                 return;
             }
         }
-        // `C-r` 在等寄存器的名字（2026-09-28）。Warning: 和 `Pending::UndoBreak` 一樣，這一格
+        // `C-r` 在等寄存器的名字。Warning: 和 `Pending::UndoBreak` 一樣，這一格
         // 要在這裏吞：`Pending` 的分派只在 Normal 那一支跑。
         if self.pending == Pending::Register {
             self.pending = Pending::None;
@@ -46,8 +46,7 @@ impl Editor {
         // 收鍵；它不在，什麽都没變。
         //
         // Warning: **IME 開着的時候這裏一個鍵都收不到**：編碼串還在 IME 手裏，根本
-        // 不進這個函數。2026-09-21 定的模型：「只有當文字上屏才算字符落到屏幕
-        // 上」——所以候選欄與這張單子不會同時收同一個鍵，空格與 `2390` 一直是
+        // 不進這個函數。模型是「只有當文字上屏才算字符落到屏幕上」——所以候選欄與這張單子不會同時收同一個鍵，空格與 `2390` 一直是
         // IME 的。
         if self.offers_here().is_some() {
             match key {
@@ -66,19 +65,18 @@ impl Editor {
                         return;
                     }
                 }
-                // **`C-x` asks again, by hand**, over the list typing opened
-                // (2026-10-29, review): that list never holds the pinyin
+                // **`C-x` asks again, by hand**, over the list typing opened:
+                // that list never holds the pinyin
                 // offers, and `C-n` inside it only moves.
                 Key::Ctrl('x') => {
                     if self.offer_from_the_text(true) {
                         return;
                     }
                 }
-                // Warning: **`Esc` is not the list's** (2026-11-07, reported by
-                // a LazyVim user): it closes the list and leaves Insert in one
-                // press, as helix's popup (`ignore_escape_key`) and vim's
-                // menu (`i_<Esc>` ends completion) do. `leave_insert` puts the
-                // list away. It used to take the first Esc alone.
+                // Warning: **`Esc` is not the list's**: it closes the list and
+                // leaves Insert in one press, as helix's popup
+                // (`ignore_escape_key`) and vim's menu (`i_<Esc>` ends
+                // completion) do. `leave_insert` puts the list away.
                 // 別的鍵照舊：打字就該打進去，而打完這張單子就過期了（它記着
                 // 問的時候光標在哪）。
                 _ => {}
@@ -89,9 +87,8 @@ impl Editor {
             // **叫它出來。** 稿子裏没有服務器可問，那就什麽都不做——`C-n` 在
             // 這個編輯器裏還没有別的意思，無聲勝過一句用不上的抱怨。
             //
-            // `C-x` 是 helix 的拼法（`default.rs` 的插入態 `completion`），
-            // 2026-10-06 一併收下：兩個拼法開同一張單子，插入態裏 `C-x` 本來
-            // 什麼都不做。
+            // `C-x` 是 helix 的拼法（`default.rs` 的插入態 `completion`）：兩個
+            // 拼法開同一張單子，插入態裏 `C-x` 本來什麼都不做。
             if self.offer_from_the_text(true) || self.ask_what_comes_next(true) {
                 return;
             }
@@ -124,18 +121,17 @@ impl Editor {
                 // into the cell next door — off the end of a row, into the
                 // first cell of the next.
                 //
-                // **By grapheme and not by [`motion::right`]** (2026-10-22
-                // 報的). That one stops at the end of a *file* line, which was
-                // the same thing as the end of the cell until a cell could
-                // hold a line break of its own: the arrow then stopped at the
-                // break and the line under it could not be typed in. The
+                // **By grapheme and not by [`motion::right`]**. That one stops
+                // at the end of a *file* line, and a cell can hold a line break
+                // of its own: the arrow would stop at the break and the line
+                // under it could not be typed in. The
                 // cell's own two ends are what `start` and `end` are for.
                 Key::Left => {
                     match self.sel.head() > start {
                         true => self.move_horizontal(motion::prev_grapheme),
                         // **The same step Normal's `h` takes at the edge**
-                        // (2026-10-22 作者定,「往上對齊」): one function, so
-                        // the two modes cannot drift apart again — it is also
+                        // (aligned upwards): one function, so the two modes
+                        // cannot drift apart — it is also
                         // the one that knows not to walk onto the header.
                         false => {
                             self.step_into_the_next_cell(false);
@@ -164,9 +160,9 @@ impl Editor {
                 // two. **Which is why it has to ask the layer**: inside a cell
                 // that step walks the cell's own rows first and leaves it only
                 // at the last one, and typing does not change what a direction
-                // means (2026-10-22 報的: the arrow in Insert went straight to
-                // the next record and the second line of the field could not
-                // be reached). Typing from the top layer has no row inside a
+                // means, or the arrow in Insert would go straight to the next
+                // record and the second line of the field could not be
+                // reached. Typing from the top layer has no row inside a
                 // cell to walk, so there it is the cell below.
                 Key::Up | Key::Down => {
                     return match self.table_layer().walled() {
@@ -180,8 +176,8 @@ impl Editor {
         if self.table_here() {
             match key {
                 Key::Char(c) => {
-                    // **The three characters the quotes are for** (2026-10-21
-                    // 作者定: 「格子裏打什麽都行，引號歸編輯器管」). A quoted
+                    // **The three characters the quotes are for**: anything may
+                    // be typed in a cell, and the quotes are the editor's. A quoted
                     // field holds the delimiter and a quote as ordinary
                     // characters, so the keystroke that needs one puts the
                     // quotes there — and a `"` typed into the value is two in
@@ -213,8 +209,7 @@ impl Editor {
                     self.step_cell(key == Key::Tab, true);
                     return;
                 }
-                // **<kbd>Enter</kbd> inside a cell makes a line break**
-                // (2026-10-21 作者定) — in a delimited file, where a quoted
+                // **<kbd>Enter</kbd> inside a cell makes a line break** — in a delimited file, where a quoted
                 // field may hold one. A `|` table cannot: a row of it is one
                 // line by construction, and there is no quoting to lean on.
                 Key::Enter if self.cell_takes_a_line_break() && self.quote_the_cell() => {
@@ -249,8 +244,7 @@ impl Editor {
         }) {
             return;
         }
-        // **Insert mode's keys are a table too** (2026-10-31, step 6 of the
-        // keymap plan): `INSERT_KEYS` says which command each key runs, and
+        // **Insert mode's keys are a table too** (step 6 of the keymap plan): `INSERT_KEYS` says which command each key runs, and
         // the reader's `[keys.insert]` is asked before any of this (`on_key`).
         // A key no command answers types itself.
         if let Some(name) = self.insert_command_for(key) {
@@ -275,14 +269,13 @@ impl Editor {
     /// `jk`).
     pub(super) fn leave_insert(&mut self) {
         self.take_back_fresh_indent();
-        // **`5ix` spends its count here** (2026-10-06): what repeats is
+        // **`5ix` spends its count here**: what repeats is
         // the whole typing session, and nobody knows what that is until
         // now.
         let again = std::mem::take(&mut self.insert_again);
         let typed = std::mem::take(&mut self.insert_recording);
         if again > 0 && !typed.is_empty() {
-            // At every cursor (2026-10-29, review: `3iX` with two
-            // cursors repeated at the primary alone).
+            // At every cursor, not at the primary alone.
             let opened = self.insert_opened;
             self.edit_each_from(false, |e| {
                 e.insert_opened = opened;
@@ -310,19 +303,18 @@ impl Editor {
         self.completion_at = None;
         self.completion_query = None;
         self.completion_sent = None;
-        // **The quotes are the editor's, on the way out too**
-        // (2026-10-21): a cell typed into leaves the file written the
+        // **The quotes are the editor's, on the way out too**: a cell typed into leaves the file written the
         // way `quote_for` would have written it, so a pair that is no
         // longer earning its place goes away with the line break or
         // the comma that asked for it.
         self.tidy_the_cell();
         self.rescan_records();
-        // **And the caret back onto a character of the cell**
-        // (2026-10-22 報的). `step_back_out_of_insert` pulls it one
-        // grapheme the way vi does, which off the end of a cell lands
-        // on the cell's last character — but `a` at the end of a cell
-        // leaves it *on the delimiter*, and the status line read that
-        // out as 「this cell holds `,`」. The grid's walls are the
+        // **And the caret back onto a character of the cell**.
+        // `step_back_out_of_insert` pulls it one grapheme the way vi
+        // does, which off the end of a cell lands on the cell's last
+        // character — but `a` at the end of a cell leaves it *on the
+        // delimiter*, which the status line would read out as 「this
+        // cell holds `,`」. The grid's walls are the
         // cell's, so coming to rest is clamped by them.
         self.put_the_caret_in_the_cell();
         // A cell that grew while it was being typed in made its column
@@ -347,10 +339,8 @@ impl Editor {
             self.insert_recording.push_str(&typed);
             return;
         }
-        // **縮進跟着下來**（2026-10-08 報的：「In `go file`, pressing enter
-        // in a code block won't auto indent」）。vim 的 `autoindent`、helix
-        // 的 `insert_newline` 都做這件事，而這一頭一件都不做——代碼檔裏每
-        // 按一次 Enter 光標就回到第 0 列。
+        // **縮進跟着下來**，同 vim 的 `autoindent`、helix 的 `insert_newline`：
+        // 不然代碼檔裏每按一次 Enter 光標就回到第 0 列。
         //
         // 規矩與代價都在 [`Editor::indent_of_line`] 上：只帶光標前面那一截
         // 空白，所以一個字符都不是憑空長出來的；行首按下去什麼都不帶。
@@ -369,9 +359,8 @@ impl Editor {
         // **`C-h` is Backspace** and **`C-j` is Enter** — the two the
         // terminal has sent as those control codes since before vi, and
         // helix binds them in Insert as well (`default.rs`:
-        // `C-h` delete_char_backward, `C-j` insert_newline). Here they
-        // used to fall off the end into 「chords are not text」 and do
-        // nothing at all (2026-10-06).
+        // `C-h` delete_char_backward, `C-j` insert_newline), rather than
+        // falling off the end into 「chords are not text」.
     pub(super) fn insert_backspace(&mut self) {
         self.insert_recording.pop();
         // **覆寫模式的退格是「還回去」**，同 vim：往回走一格，把那個位置
@@ -389,7 +378,7 @@ impl Editor {
             return;
         }
         self.delete_before_cursor();
-        // The server's list widens again, as helix's does (2026-10-28).
+        // The server's list widens again, as helix's does.
         if self.sel.head() < before && self.narrow_the_server_list(before) == Some(true) {
             self.ask_what_comes_next(false);
         }
@@ -414,7 +403,7 @@ impl Editor {
     }
 
     /// **vim's Backspace in the indent goes back to the last multiple of
-    /// `sw`** (nvim's 'smarttab', measured 2026-11-04): blanks taken off the
+    /// `sw`** (nvim's 'smarttab', measured): blanks taken off the
     /// end until the column is no further, spaces put back to reach it.
     /// Answers whether it did.
     fn vim_backspace_in_the_indent(&mut self) -> bool {
@@ -445,7 +434,7 @@ impl Editor {
     /// `Shift-Tab` the other kind.
     pub(super) fn insert_indent(&mut self, the_files: bool) {
         // **vim's Tab in the indent writes the indent afresh** (nvim's
-        // 'smarttab', measured 2026-11-04): to the next multiple of `sw`, as
+        // 'smarttab', measured): to the next multiple of `sw`, as
         // TABs and spaces when Tab types TABs. After text, or when `sw` is
         // the tab stop, it is a TAB, as below.
         //
@@ -501,10 +490,9 @@ impl Editor {
         // Anything but ⇥ abandons the completion in progress, so the next one
         // starts from what is actually on the line.
         //
-        // Warning: **`C-n`/`C-p` are no longer in this list** (2026-10-13). They
-        // walked the completion from 2026-10-10 to then; they walk the history
-        // now, and a key that walks the history is a key that abandons the
-        // completion like any other.
+        // Warning: **`C-n`/`C-p` are not in this list**: they walk the
+        // history, and a key that walks the history is a key that abandons
+        // the completion like any other.
         if !runs(&[PlaceCmd::CompletionNext, PlaceCmd::CompletionPrev]) {
             self.completion = None;
         }
@@ -538,20 +526,16 @@ impl Editor {
     /// One of a prompt's commands, on the `:` line.
     fn command_line_command(&mut self, name: PlaceCmd) {
         match name {
-            // Warning: **⇥ 也要預覽**（2026-10-07 報的：「命令面板 tab 到主題的時候會暫時
-            // preview 這個主題，但是我發現没有效果」）。這兩個鍵自己一支，走不到
-            // 下面那個 `other` 分支——而那裏纔是喊預覽的地方。於是手打
-            // `:theme mogao` 預覽得了，⇥ 到同一個名字上一點反應都没有，而 ⇥ 正是
-            // 挑主題最順手的那條路（名字就在單子上）。
-            // Warning: **`C-n`/`C-p` 走歷史，不走這張單子**（2026-10-13 定，照 helix）。
+            // Warning: **⇥ 也要預覽**。這兩個鍵自己一支，走不到下面那個 `other`
+            // 分支——而那裏纔是喊預覽的地方。不在這裏喊的話，手打 `:theme mogao`
+            // 預覽得了，⇥ 到同一個名字上一點反應都没有，而 ⇥ 正是挑主題最順手的
+            // 那條路（名字就在單子上）。
+            // Warning: **`C-n`/`C-p` 走歷史，不走這張單子**（照 helix）。
             //
-            // 2026-10-10 它們接在這裏，因為「挑選器與插入態那張單子早就認這一對」。
-            // 可是命令行上這一對在 vim 和 helix 裏都歸歷史，而這個編輯器一按冒號就
-            // 把補全攤開，於是那一對永遠輪不到歷史——報上來的原話：「在 vim 中可以
-            // 用 c-n/c-p 上下翻命令歷史，但在 yumete 中一按冒號就彈出補全窗口，於是
-            // c-n/c-p 變成了翻找補全而不是歷史」。
+            // 命令行上這一對在 vim 和 helix 裏都歸歷史，而這個編輯器一按冒號就把
+            // 補全攤開——接在單子上的話，那一對永遠輪不到歷史。
             //
-            // helix 的分法（`helix-term/src/ui/prompt.rs:711`，讀過源碼）：
+            // helix 的分法（`helix-term/src/ui/prompt.rs:711`）：
             // `ctrl!('p') | key!(Up)` 和 `ctrl!('n') | key!(Down)` 在**同一個
             // arm** 裏走歷史，`Tab`/`S-Tab` 走補全。所以兩對鍵各管一樣東西，
             // 和命令行上打了什麼無關——「看得見的那張」始終是 ⇥ 走的那張。
@@ -590,7 +574,7 @@ impl Editor {
                 let line = std::mem::take(&mut self.command_line);
                 self.command_caret = 0;
                 self.mode = Mode::Normal;
-                // Not what is typed on the settings panel (2026-10-31): its
+                // Not what is typed on the settings panel: its
                 // `:w` and `:q` are the panel's, and walking back through the
                 // editor's history should not step on them.
                 if !self.settings_open {
@@ -615,7 +599,7 @@ impl Editor {
         }
     }
 
-    /// **命令行打到一半，照它先畫一次**（2026-10-07 定，照 helix 的三個事件）。
+    /// **命令行打到一半，照它先畫一次**（照 helix 的三個事件）。
     ///
     /// Warning: **還原歸這裏管，不歸命令管。** 每一條命令自己記一遍「退出去要放回
     /// 什麼」，就是每一條都有機會記錯；記在這一處，`:theme` 之外再加一條只要
@@ -675,14 +659,11 @@ impl Editor {
                 self.mode = Mode::Command;
                 self.lookfor_focus = 0;
             }
-            // **⇥ 走一格，Enter 纔拿**（2026-10-06 定：「Use Tab to cycle the
-            // results」）。
+            // **⇥ 走一格，Enter 纔拿**。
             //
-            // Warning: **從前 ⇥ 是「拿走這一條」，而挪高亮只有方向鍵**——於是第二條
-            // 根本没有辦法挑：腳注寫着 ⇥，按下去卻把第一條拿走了。作者的原話是
-            // 「Tab just fill the command line with the command, how can I choose
-            // the 2nd, 3rd one?」。`:` 那一行上的 ⇥ 一直是「走到下一條」，所以這
-            // 一改也把相鄰兩行上同一個鍵的兩種意思合回了一種。
+            // Warning: **⇥ 不是「拿走這一條」**：挪高亮只有方向鍵的話，第二條根本
+            // 没有辦法挑。`:` 那一行上的 ⇥ 是「走到下一條」，所以相鄰兩行上同一個
+            // 鍵是同一種意思。
             //
             // **走到頭繞回來**：這是一張排過序的短名單，不是一份目錄。
             PlaceCmd::NextEntry => self.walk_lookfor(1),
@@ -721,18 +702,15 @@ impl Editor {
             self.status = say!("lookfor.nothing-to-take");
             return;
         };
-        // **Enter 就做掉挑中的那一條**（2026-10-06 定：「Enter will execute the
-        // command」）。⇥ 和 ⇧⇥ 在單子上走，Enter 收尾——三個鍵各做一件事。
+        // **Enter 就做掉挑中的那一條**。⇥ 和 ⇧⇥ 在單子上走，Enter 收尾——三個鍵各做一件事。
         //
-        // 鍵就按下去，命令就跑。從前 Enter 是「把命令寫到 `:` 那一行上」，讓讀者
-        // 再看一眼、再按一次 Enter；而單子上那一行本來就看得見，兩次 Enter 是一次
-        // 多餘的。
+        // 鍵就按下去，命令就跑，不是「把命令寫到 `:` 那一行上」再按一次 Enter：
+        // 單子上那一行本來就看得見，兩次 Enter 是一次多餘的。
         let what = hit.what.clone();
         self.lookfor_focus = 0;
         self.close_prompt();
         match what {
-            // A command's answer is heard, as a binding's is (found in
-            // review, 2026-11-02): `save_and_quit` quits, a failure says why.
+            // A command's answer is heard, as a binding's is: `save_and_quit` quits, a failure says why.
             lookfor::What::Keys(action) => match action.how {
                 yumete_cjk::actions::How::Command(line) => self.run_bound_command(line.trim_start_matches(':')),
                 yumete_cjk::actions::How::Normal => {
@@ -758,7 +736,7 @@ impl Editor {
     }
 
     /// **Where vim's cursor goes when `:` leaves Visual** (`:h v_:`,
-    /// measured in nvim 2026-11-04): the start of the Visual area, which
+    /// measured in nvim): the start of the Visual area, which
     /// under `V` is the first line's start unless the cursor is the line
     /// above. `None` outside vim's Visual mode.
     fn visual_start_for_the_line(&self) -> Option<usize> {
@@ -831,9 +809,9 @@ impl Editor {
     /// mistype as a command, and the same fingers type them.
     pub(super) fn edit_prompt(&mut self, name: PlaceCmd) {
         let len = self.command_line.chars().count();
-        // **The caret stays after the `!` that `Shell:` stands for**
-        // (2026-10-29, review): it could go before it, unseen, and a letter
-        // typed there turned the shell line into a command.
+        // **The caret stays after the `!` that `Shell:` stands for**: before
+        // it, unseen, a letter typed there would turn the shell line into a
+        // command.
         let floor = self.prompt_hidden().min(len);
         self.command_caret = self.command_caret.clamp(floor, len);
         let byte = |line: &str, at: usize| -> usize {
@@ -905,27 +883,24 @@ impl Editor {
     /// `history` runs oldest first. Back is older, forward is newer, and from a
     /// prompt nobody has walked yet the two keys start at opposite ends: back
     /// at the newest, forward at the oldest. So one key reaches the whole list
-    /// going one way and the other reaches it going the other way, which is
-    /// what 2026-10-14 asked for: 「now only ctrl-p can cycle history from new
-    /// to old. But ctrl-n cannot cycle history from old to new……in helix, the
-    /// cycling can be done in both way (like rotating clockwise and
-    /// counterclockwise)」.
+    /// going one way and the other reaches it going the other way, as helix
+    /// cycles both ways.
     ///
     /// This is helix's `Prompt::change_history` exactly (`helix-term/src/ui/
-    /// prompt.rs:341`, read 2026-10-14) — one index, clamped at both ends:
+    /// prompt.rs:341`) — one index, clamped at both ends:
     ///
     /// ```text
     /// Forward  => history_pos.map_or(0, |i| i + 1)
     /// Backward => history_pos.unwrap_or(len).saturating_sub(1)
     /// ```
     ///
-    /// Warning: **It clamps, it does not come back empty.** Walking forward past
-    /// the newest used to clear the line, which is what vim does (`c_<Down>`
-    /// restores the line you were typing). The two references disagree here and
-    /// helix is the one followed, so the newest line is now the end of the road
-    /// — `C-u` is the way back to an empty prompt.
+    /// Warning: **It clamps, it does not come back empty.** vim clears the line
+    /// walking forward past the newest (`c_<Down>` restores the line you were
+    /// typing). The two references disagree here and helix is the one followed,
+    /// so the newest line is the end of the road — `C-u` is the way back to an
+    /// empty prompt.
     ///
-    /// **A shell line walks only shell lines** (2026-10-28), as helix's shell
+    /// **A shell line walks only shell lines**, as helix's shell
     /// prompts keep a history of their own: with `!` (or `pipe `…) typed, the
     /// other commands are passed over.
     fn walk_history(&mut self, back: bool, search: bool) {
@@ -952,8 +927,8 @@ impl Editor {
             (false, Some(h)) => fits.iter().copied().find(|&i| i > h).unwrap_or(last),
         };
         self.history_at = Some(at);
-        // **A shell walk keeps the verb it started on** (2026-10-29, review:
-        // `:!` + C-p brought back `pipe sort`, which edits the buffer). helix's
+        // **A shell walk keeps the verb it started on**: `:!` + C-p must not
+        // bring back `pipe sort`, which edits the buffer. helix's
         // shell prompts share one register holding the command alone.
         let verb_here = command::shell_start(&self.command_line).map(|v| self.command_line[..v].to_string());
         self.command_line = match (shell, verb_here, command::shell_start(&history[at])) {
@@ -991,11 +966,11 @@ impl Editor {
             // Tab takes the rest of the last pattern, so searching for the same
             // thing again is a keystroke rather than retyping it.
             PlaceCmd::CompletionNext => self.adopt_ghost(),
-            // **`A-j`：繁簡拼音通配**（2026-10-12 定）。`/` 收不了旗標（`:s` 的
+            // **`A-j`：繁簡拼音通配**。`/` 收不了旗標（`:s` 的
             // `y`／`j` 是那一頭的辦法），所以這一行用一個鍵。兩樣一起翻：這一行
             // 分不開也不必分，要分得開就開那扇面板。
             PlaceCmd::ToggleWideSearch => self.search.wild = !self.search.wild,
-            // **`C-p`/`C-n` 也走歷史**，同命令行那一扇（2026-10-13）。helix 的
+            // **`C-p`/`C-n` 也走歷史**，同命令行那一扇。helix 的
             // `/` 和 `:` 共用一支 prompt，所以那一對在兩扇裏是同一件事；這裏兩
             // 扇各一支，所以兩處都要寫——少一處就是「一扇認一扇不認」。
             PlaceCmd::HistoryPrev | PlaceCmd::HistoryNext => self.walk_history(name == PlaceCmd::HistoryPrev, true),
@@ -1023,7 +998,7 @@ impl Editor {
         }
     }
 
-    /// **Open the command row for a value a front end asks for** (2026-11-08):
+    /// **Open the command row for a value a front end asks for**:
     /// the settings panel's one-line editor and its search. The same line as
     /// `:` — its keys, the IME, a paste at the caret — with `label` before
     /// it; Enter and Esc hand back ([`Editor::take_value_answer`]).
@@ -1031,8 +1006,8 @@ impl Editor {
         self.open_line_for_a_value(label, text, false);
     }
 
-    /// **The command row for a command a front end takes** (2026-11-09,
-    /// reported: the settings panel's `:` line composed `q` with the IME):
+    /// **The command row for a command a front end takes**, so the settings
+    /// panel's `:` line does not compose `q` with the IME:
     /// [`Editor::open_value_line`], but keys go in as they are, as on the
     /// editor's own `:` line.
     pub fn open_value_command_line(&mut self, label: &str, text: &str) {

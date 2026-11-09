@@ -6,7 +6,7 @@
 
 use super::*;
 
-/// **A PDF being typeset for `:export-as-preview`** (2026-11-08): the
+/// **A PDF being typeset for `:export-as-preview`**: the
 /// compiler's answer to come, the compiler itself, the file it writes, the
 /// one that file becomes, and how many open files of the book had unsaved
 /// changes when it began.
@@ -18,10 +18,10 @@ pub(super) struct Typesetting {
     unsaved: usize,
 }
 
-/// **A typesetting given up ends with nothing left behind** (2026-11-09):
-/// the compiler stopped, if it still runs, and the file it was writing
-/// removed. Quitting mid-typeset left `typst` running on its own and a
-/// hidden `.book.pdf.yumete-<pid>.pdf` that nobody would rename or delete.
+/// **A typesetting given up ends with nothing left behind**: the compiler
+/// stopped, if it still runs, and the file it was writing removed — not
+/// `typst` running on its own and a hidden `.book.pdf.yumete-<pid>.pdf` that
+/// nobody would rename or delete.
 /// Once the answer is taken the draft is the target already, and removing
 /// it finds nothing.
 impl Drop for Typesetting {
@@ -43,7 +43,7 @@ fn draft_of(target: &Path, pid: u32) -> PathBuf {
     target.with_file_name(format!(".{name}.yumete-{pid}.pdf"))
 }
 
-/// **Drafts of `target` that a yumete no longer running left** (2026-11-09):
+/// **Drafts of `target` that a yumete no longer running left**:
 /// one that crashed or was killed mid-typeset never removed its draft. The
 /// next export to the same file removes those whose pid is gone; one
 /// another yumete is still writing is left to it.
@@ -63,7 +63,7 @@ fn remove_abandoned_drafts(target: &Path) {
     }
 }
 
-/// **拆注音只拆得動一本書**（2026-10-13）。拆是逐行的，而注音是稿子裏的東西——一份
+/// **拆注音只拆得動一本書**。拆是逐行的，而注音是稿子裏的東西——一份
 /// 語料檔裏偶爾出現的兩行 `<ruby` 不值那一趟。
 const BIGGEST_TO_COUNT_RUBY: usize = 16 * 1024 * 1024;
 
@@ -128,10 +128,9 @@ impl Editor {
         say!("count.report", what, self.units_in_text(&text), han, chars, paragraphs)
     }
 
-    /// **`:info`：這份檔案是什麼**（2026-10-08 定）。
+    /// **`:info`：這份檔案是什麼**。
     ///
-    /// 由來：`:info docs` 那個名字讓人以為是「查看這個文檔的信息」，所以那條改名
-    /// `:instant-info`，而這個名字讓給真正回答那件事的一頁。
+    /// 這個名字歸真正回答「這個文檔的信息」的一頁；即時信息那一條叫 `:instant-info`。
     ///
     /// `servers` 是**前端填的那一行**——哪幾個語言服務器在看着這一份，只有它知道
     /// （`Servers::watching`）。核心這一頭把整張表排好，留那一格給它，於是表的形
@@ -203,12 +202,10 @@ impl Editor {
     pub(super) fn counts_of(&self, text: &str) -> (usize, usize, usize) {
         let paragraphs = text.lines().filter(|l| !l.trim().is_empty()).count();
         let prose = self.without_markup(text);
-        // **一個字是一個字簇，不是一個碼位**（2026-10-09 作者定）。
+        // **一個字是一個字簇，不是一個碼位**。
         //
-        // 原話：「嚴格意義上 char 應該是 grapheme cluster 而不是 codepoint。」量出來的：
-        // `葛`＋U+E0100（異體字選擇符）是**一個**字，而從前這一句按碼位數，`:count`
-        // 報「漢字 1  字數 2」。列數一直是對的（它本來就按字簇算），於是同一幀裏兩個
-        // 數說的不是一件事。
+        // `葛`＋U+E0100（異體字選擇符）是**一個**字；按碼位數的話 `:count` 報「漢字 1
+        // 字數 2」，而列數按字簇算，同一幀裏兩個數說的就不是一件事。
         //
         // 漢字那一格不用改：選擇符不是漢字，`is_han` 本來就只數到基字那一個。
         let whole: String = prose.iter().collect();
@@ -270,10 +267,10 @@ impl Editor {
         chars[at..].iter().for_each(|&c| n.feed_char(c));
     }
 
-    /// **一整份稿子有幾個字，不抄一份出來數**（#343，2026-10-01）。
+    /// **一整份稿子有幾個字，不抄一份出來數**（#343）。
     ///
-    /// Warning: 從前是 `han_in(&rope.to_string())`——**每一次存檔**一次。八 MB 的稿
-    /// 子於是每存一次先抄一份八 MB 的 `String`，`without_markup` 再抄一份
+    /// Warning: 不許 `han_in(&rope.to_string())`——那是**每一次存檔**一次。八 MB 的
+    /// 稿子每存一次先抄一份八 MB 的 `String`，`without_markup` 再抄一份
     /// `Vec<char>`（一個 `char` 四字節，三十二 MB）。這一支按行走，峯值是最長
     /// 那一行；没有注音方言的時候連行都不抄。
     /// The same count over a piece of text, a selection's.
@@ -284,8 +281,8 @@ impl Editor {
     }
 
     pub(super) fn units_in_rope(&self, rope: &ropey::Rope) -> usize {
-        // **先問一句「這份正文裏到底有沒有注音」**（2026-10-13）。出廠的 `ruby` 是
-        // `Dialects::only(Html)`——**不是空的**——所以從前每一份稿子都走底下那一支：
+        // **先問一句「這份正文裏到底有沒有注音」**。出廠的 `ruby` 是
+        // `Dialects::only(Html)`——**不是空的**——不先問的話每一份稿子都走底下那一支：
         // 逐行 `to_string()` 再逐行 `Vec<char>`，412 萬行就是 824 萬次分配。量過，
         // 3.91 GB 的檔上 7.9 秒，而開一個檔必付一次（`add_buffer` 要記下「這一天從
         // 哪裏開始」）。
@@ -353,11 +350,10 @@ impl Editor {
     /// up for an existing log or for the `.yumete/` a book already has — a
     /// novel written as twenty files in one directory gets one ledger, and
     /// `第一章.md` opened from anywhere finds it.
-    /// Warning: **問[項目根][`Editor::root`]，不自己再走一趟**（2026-10-01）。從前
-    /// 它當前緩衝區排第一、再數別的緩衝區，認「已經有 `progress.tsv`」或「有
-    /// 一個 `.yumete/` 目録」——和項目根那一支的走法不一樣（那一支還認 `.git`）。
-    /// 五份各走各的「往上找 `.yumete`」，這是其中一份。順帶解決了那條註釋說的
-    /// 事：清單没有自己的檔名，而項目根本來就不問緩衝區。
+    /// Warning: **問[項目根][`Editor::root`]，不自己再走一趟**。自己按緩衝區走、認
+    /// 「已經有 `progress.tsv`」或「有一個 `.yumete/` 目録」的話，就和項目根那一支的
+    /// 走法不一樣（那一支還認 `.git`）。清單没有自己的檔名，而項目根本來就不問
+    /// 緩衝區。
     fn progress_path(&self) -> Option<PathBuf> {
         Some(self.root().join(".yumete").join("progress.tsv"))
     }
@@ -368,11 +364,11 @@ impl Editor {
     /// `:grep`, `Space f`, the sidebar and `:word-discover` all mean 「every
     /// file in this book」, and the book is where the manuscript is, not where
     /// the terminal happened to be standing when it started. Rooting them at
-    /// the working directory held only by coincidence — the coincidence that a
+    /// the working directory holds only by coincidence — the coincidence that a
     /// reader `cd`s to the book before opening a chapter. Opened from anywhere
-    /// else it searched the wrong tree, silently and plausibly: writing #308's
-    /// test, a `:grep` over sixty chapters in a temporary directory answered
-    /// out of this repository instead, 68 files and 179 hits.
+    /// else it would search the wrong tree, silently and plausibly: a `:grep`
+    /// over sixty chapters in a temporary directory would answer out of
+    /// whatever repository the shell stood in.
     ///
     /// The walk goes up from the file for a `.yumete` first — that is where a
     /// book already keeps its config, its `words.txt` and its `tables/` — then
@@ -389,11 +385,10 @@ impl Editor {
     /// 服務器的 `rootUri` 問的都是這一支——屏幕上那幾處說的必須是同一個地方，
     /// 否則樹裏看得見的和搜得到的不是一批檔。
     ///
-    /// Warning: **它是[工作路徑][`Editor::working_dir`]的函數，不存**（2026-10-01
-    /// 照 helix 重做）。從前有三個答案：一格釘死的 `workspace_root`、一支按打開
-    /// 的緩衝區現算的 `project_root`、再加一格 `working_dir`——而全樹只有七處
-    /// 問第一個，整個 TUI 一次都没問過它。helix 只有一個可變的東西（cwd），工作
-    /// 區是 `find_workspace()` 當場從它往上算出來的；這裏照辦。
+    /// Warning: **它是[工作路徑][`Editor::working_dir`]的函數，不存**（照 helix）。
+    /// 不許有三個答案（一格釘死的根、一支按打開的緩衝區現算的根、再加工作路徑）。
+    /// helix 只有一個可變的東西（cwd），工作區是 `find_workspace()` 當場從它往上
+    /// 算出來的；這裏照辦。
     ///
     /// 於是：`gd` 跳進別人的源碼它**不動**（工作路徑没動），`:cd` 一改它**跟着
     /// 改**。
@@ -415,21 +410,18 @@ impl Editor {
 
     /// 開頭那個 `~` 換成家目錄；没有 `~` 就原樣。
     ///
-    /// Warning: **只認 `~` 自己和 `~/`**（2026-10-01 審出來的）。從前它剝掉任何
-    /// 開頭的 `~`，於是 `~notyou/x.md`（別人的家目錄，shell 的寫法）成了
-    /// `$HOME/notyou/x.md`，而一個真的叫 `~草稿.md` 的檔成了 `$HOME/草稿.md`。
-    /// `yumete_config::expand_tilde` 早就是這條規矩（有一條測試釘着），這一支
-    /// 跟上。
+    /// Warning: **只認 `~` 自己和 `~/`**。剝掉任何開頭的 `~` 的話，
+    /// `~notyou/x.md`（別人的家目錄，shell 的寫法）成了 `$HOME/notyou/x.md`，而一個
+    /// 真的叫 `~草稿.md` 的檔成了 `$HOME/草稿.md`。`yumete_config::expand_tilde` 是
+    /// 同一條規矩（有一條測試釘着）。
     /// **一個打進來的路徑，解成實在的那一個**——`~` 展開，相對的按
     /// [工作路徑][`Editor::working_dir`]算。
     ///
-    /// Warning: **一條規矩，一處寫**（2026-10-02）。`:open` 2026-10-01 就改對了
-    /// （從前它原樣交給作業系統，按**進程的 cwd** 解，於是 `:pwd` 報的那個目録
-    /// `:open` 不認），可**寫出去的那幾個從來没改**：`:cd sub` 之後
-    /// `:write-as z.md` 把檔存進了上一層，而狀態欄說「存了 z.md」。同一個會話裏
-    /// 讀和寫對「相對於哪裏」給出兩種答案。
+    /// Warning: **一條規矩，一處寫**。讀的（`:open`）和寫出去的（`:write-as` 等）
+    /// 要是各算各的，`:cd sub` 之後 `:write-as z.md` 會把檔存進上一層，而狀態欄說
+    /// 「存了 z.md」——同一個會話裏讀和寫對「相對於哪裏」給出兩種答案。
     ///
-    /// `~` 也是這裏展開的：`:write-as ~` 從前真的造出一個**叫 `~` 的檔**。
+    /// `~` 也是這裏展開的，所以 `:write-as ~` 不會造出一個**叫 `~` 的檔**。
     pub(super) fn here_path(&self, path: &str) -> PathBuf {
         let full = Self::expand_tilde(path.trim());
         match full.is_absolute() {
@@ -449,7 +441,7 @@ impl Editor {
         }
     }
 
-    /// **工作路徑**——`空格 F` 搜的那個目錄（2026-10-01）。
+    /// **工作路徑**——`空格 F` 搜的那個目錄。
     ///
     /// 和[項目路徑][`Editor::root`]是兩件事：項目路徑是**從打開的那個檔往上找
     /// `.git`/`.yumete` 找到的那一層**，啓動時定一次；工作路徑是**你敲 `ye`
@@ -489,14 +481,13 @@ impl Editor {
     /// 給一個**檔**不動——照 helix（`helix-term/src/main.rs`：只有目錄參數與
     /// `-w` 設 cwd）。項目路徑不另存，[`Editor::root`] 當場從工作路徑往上算。
     ///
-    /// Warning: **2026-10-01 這裏「讓檔也動一格」過，當天撤了。** 當時想的是
-    /// `ye 卷一/一.md` 從 `/tmp` 敲時 `空格 f` 會列出 `/tmp`。可**那一改對項目
+    /// Warning: **給一個檔不讓工作路徑動一格。** 那樣只在「從項目外面敲一個項目裏
+    /// 的檔」時有用（`ye 卷一/一.md` 從 `/tmp` 敲時 `空格 f` 不列 `/tmp`），**對項目
     /// 路徑毫無幫助**：`cd /repo && ye docs/manual.md` 兩種規矩算出來的項目都是
-    /// `/repo`（往上走本來就會走過 `docs/`），它只在「從項目外面敲一個項目裏的
-    /// 檔」那一種纔有用。而代價是每一次從子目録啓動都要付：`:pwd` 報一個你没打
-    /// 過的目録、`:open README.md` 解到 `docs/` 底下去（那個檔不在就**一聲不吭
-    /// 地**開一個空緩衝，`:w` 在錯的地方造檔）、`!cargo test` 跑在 `docs/` 裏。
-    /// 判詞：撤回去。
+    /// `/repo`（往上走本來就會走過 `docs/`）。而代價是每一次從子目録啓動都要付：
+    /// `:pwd` 報一個你没打過的目録、`:open README.md` 解到 `docs/` 底下去（那個檔
+    /// 不在就**一聲不吭地**開一個空緩衝，`:w` 在錯的地方造檔）、`!cargo test` 跑在
+    /// `docs/` 裏。
     pub fn set_root(&mut self, at: &Path) {
         let full = match at.is_absolute() {
             true => at.to_path_buf(),
@@ -512,19 +503,17 @@ impl Editor {
 
     /// The same, told where 「here」 is.
     ///
-    /// Warning: **不看打開了哪幾個檔**（2026-10-01 改，照 helix 的
-    /// `find_workspace`）。從前它當前緩衝區排第一、再數別的緩衝區，於是 `gd`
-    /// 跳進 rustup 的源碼之後整個「項目」跟着跑。
+    /// Warning: **不看打開了哪幾個檔**（照 helix 的 `find_workspace`）。按緩衝區
+    /// 算的話，`gd` 跳進 rustup 的源碼之後整個「項目」跟着跑。
     fn project_root_from(&self, here: &Path) -> PathBuf {
         book_root(here)
     }
 
-    /// **這個檔屬於哪個項目**——從它自己往上找，不從 cwd 找（2026-10-10 一輪審查
-    /// 報來的）。
+    /// **這個檔屬於哪個項目**——從它自己往上找，不從 cwd 找。
     ///
-    /// 語言服務器要的是這一個：它既是 `rootUri`，也是子進程的工作目錄。從前那裏
-    /// 用的是 [`Self::project_root`]（＝從 cwd 往上找），於是**在別的目錄裏打開
-    /// 一個項目的檔，服務器被起在錯的根上**，一條診斷都不回。helix 分得很清楚：
+    /// 語言服務器要的是這一個：它既是 `rootUri`，也是子進程的工作目錄。用
+    /// [`Self::project_root`]（＝從 cwd 往上找）的話，**在別的目錄裏打開一個項目的
+    /// 檔，服務器被起在錯的根上**，一條診斷都不回。helix 分得很清楚：
     /// `find_workspace` 看 cwd，而 `find_lsp_workspace` 從那個檔往上爬。
     ///
     /// 没有檔名的緩衝回 `project_root()` —— 那時候 cwd 是唯一的線索。
@@ -538,11 +527,11 @@ impl Editor {
     /// [`Self::lsp_root`] of a file in `dir`: the root a language server
     /// would be started on for it.
     pub(super) fn lsp_root_of(&self, dir: &Path) -> PathBuf {
-        // **語言自己的根記號先問**（2026-10-11，照 helix 的 `roots`）。
+        // **語言自己的根記號先問**（照 helix 的 `roots`）。
         //
         // `book_root` 只認 `.yumete` 和 `.git`——那是**這本書**的根，而服務器要的
-        // 是**這個項目**的根。一個没有 `.git` 的 crate（`cargo new` 之後還没
-        // `git init`，測試的固定裝置也是）於是把 `src/` 本身當成根交出去，
+        // 是**這個項目**的根。不先問的話，一個没有 `.git` 的 crate（`cargo new`
+        // 之後還没 `git init`，測試的固定裝置也是）把 `src/` 本身當成根交出去，
         // rust-analyzer 找不到 `Cargo.toml`，`gd` 答「未查到定義位置」——而診斷和
         // hover 照樣有，因為那兩樣單檔也答得出來，所以看着像只有 `gd` 壞了。
         //
@@ -614,18 +603,14 @@ impl Editor {
             return;
         };
         let full = self.current_buffer().path().map(Path::to_path_buf);
-        // Warning: **只記這本書自己的檔**（2026-10-02 查出來的）。從前它只問「有没有
-        // 這本賬」，不問「這一份在不在這本書裏」——於是**在書開着的時候隨手存一
-        // 個別處的檔，那個檔名就進了寫稿人的寫作進度**。
+        // Warning: **只記這本書自己的檔**。只問「有没有這本賬」、不問「這一份在不在
+        // 這本書裏」的話，**在書開着的時候隨手存一個別處的檔，那個檔名就進了寫稿人
+        // 的寫作進度**——`cargo test` 在 `$TMPDIR` 裏存臨時檔而 cwd 在倉裏，
+        // `.yumete/progress.tsv` 就會攢下臨時檔名，混在真的章節中間。
         //
-        // 這個倉自己就中着：`cargo test` 在 `$TMPDIR` 裏存臨時檔，而測試進程的
-        // cwd 在倉裏，`root()` 於是算成這個倉——`.yumete/progress.tsv` 裏攢了一百
-        // 多行 `yumete-editor-write-97129.md`，混在真的章節中間，而「目標 2000」
-        // 那個數就是照這本賬算的。順帶：每跑一次測試工作區就髒一次。
-        //
-        // 上面那段註釋早就擔心過這件事（「a config file was edited in a directory
-        // that had never heard of yumete」），可它防的是「這本賬不存在」，不是
-        // 「這一份不屬於這本書」。和搜索那邊同一條規矩（`the_open_one_in_scope`）。
+        // 上面那段註釋防的是「這本賬不存在」（「a config file was edited in a
+        // directory that had never heard of yumete」），這一句防的是「這一份不屬於
+        // 這本書」。和搜索那邊同一條規矩（`the_open_one_in_scope`）。
         let here = full.as_deref().map(|p| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf()));
         let book = std::fs::canonicalize(self.root()).unwrap_or_else(|_| self.root());
         if !here.is_some_and(|p| p.starts_with(&book)) {
@@ -701,7 +686,7 @@ impl Editor {
         }
         // 本書 comes from the **ledger**, not from the buffer in front of the
         // reader: `:count-progress` opens a listing, and a second one read from
-        // inside that listing used to report the listing's own length.
+        // inside that listing must not report the listing's own length.
         let book = log.book();
         self.show_listing(listing, say!("progress.results"));
         self.status = match log.target {
@@ -781,7 +766,7 @@ impl Editor {
     }
 
     /// **`gm`: the file changed last**, other than this one (helix's
-    /// `goto_last_modified_file`, 2026-11-02).
+    /// `goto_last_modified_file`).
     pub fn goto_last_modified_file(&mut self) {
         let here = self.current;
         let last = (0..self.buffers.len())
@@ -808,19 +793,19 @@ impl Editor {
         if index == self.current || index >= self.buffers.len() {
             return;
         }
-        // **Every switch is a jump** (helix's `Editor::switch`, 2026-11-02):
+        // **Every switch is a jump** (helix's `Editor::switch`):
         // `C-o` comes back from a file reached by `ga`, a picker or a link.
         if !self.walking_jumps {
             self.note_where_we_came_from();
         }
         let at = self.sel.head();
         self.buffers[self.current].save_cursor(at);
-        // **剛纔看的是哪一份**（`ga`，helix 的 `goto_last_accessed_file`，2026-09-28）。
+        // **剛纔看的是哪一份**（`ga`，helix 的 `goto_last_accessed_file`）。
         // Warning: **記的是 id，不是下標**：關掉一個檔會把後面每一個的下標往前挪，記下標的話
-        // `ga` 會帶你去另一章。`Pane` 為同一個理由早就記 id 了。
+        // `ga` 會帶你去另一章。`Pane` 為同一個理由也記 id。
         self.last_file = Some(self.current_buffer().id());
         self.current = index;
-        // **翻到一份還没決定過的草稿，就在那一刻問**（2026-10-02 定）。開檔
+        // **翻到一份還没決定過的草稿，就在那一刻問**。開檔
         // 是一條路，換檔是另一條——而「第一次看見這一份」在兩條路上是同一件事。
         self.ask_about_the_draft();
         let restored = self.current_buffer().saved_cursor();
@@ -831,13 +816,11 @@ impl Editor {
         // one place. Whether this file is a grid is asked again there, so a
         // chapter opened next to a table cannot inherit the table's columns.
         //
-        // Warning: **the layer goes with it** (2026-10-21). The grain this
-        // replaced was carried across on the grounds that 「how you were
-        // reading it is a fact about you」, and that was right about a
-        // preference. A layer is not a preference, it is where you are
-        // standing: every grid opens at the top of its own, and arriving in a
-        // new table already inside a cell is the same stale state the layers
-        // were drawn to remove.
+        // Warning: **the layer goes with it**. 「How you were reading it is a
+        // fact about you」 is right about a preference, but a layer is not a
+        // preference, it is where you are standing: every grid opens at the
+        // top of its own, and arriving in a new table already inside a cell is
+        // the stale state the layers are drawn to remove.
         self.forget_the_document();
         // The `[n/total]` indicator is already on the status line; repeating it
         // here would print it twice on every switch.
@@ -960,7 +943,7 @@ impl Editor {
             .collect()
     }
 
-    /// **Which tabs another window is showing** (2026-11-03): a tab is
+    /// **Which tabs another window is showing**: a tab is
     /// current (the live window's), visible (on screen in another window)
     /// or in the background, as bufferline.nvim and barbar draw them.
     pub fn tabs_shown_elsewhere(&self) -> Vec<bool> {
@@ -983,7 +966,7 @@ impl Editor {
     /// and keeps pushing diagnostics for it, and `Problems` are kept by path —
     /// so `:diagnostics-all` goes on listing a file that was closed an hour ago.
     /// `textDocument/didClose` is what ends that, and this is how the front
-    /// end works out which one to send it for. 2026-09-23 補。
+    /// end works out which one to send it for.
     pub fn buffer_paths(&self) -> Vec<PathBuf> {
         self.buffers.iter().filter_map(|b| b.path().map(Path::to_path_buf)).collect()
     }
@@ -999,8 +982,7 @@ impl Editor {
     }
 
     /// Open `path`, in `told` when the reader said which encoding
-    /// (`:open ++enc=big5`, `--encoding=`, the picker), else as it looks
-    /// (2026-11-04).
+    /// (`:open ++enc=big5`, `--encoding=`, the picker), else as it looks.
     ///
     /// A choice is remembered for the file, and a remembered one is used
     /// while the file keeps the size it had. A file whose encoding cannot be
@@ -1101,20 +1083,20 @@ impl Editor {
                 buffer.set_syntax(syntax);
             }
         }
-        // **The file's own word, over the name's and the project's**
-        // (2026-11-04): a vim modeline. `--syntax` is applied after this.
+        // **The file's own word, over the name's and the project's**:
+        // a vim modeline. `--syntax` is applied after this.
         if self.modeline {
             buffer.read_modelines();
         }
         self.add_buffer(buffer);
-        // **Its grammar's queries compile on a thread now** (2026-11-08), so
+        // **Its grammar's queries compile on a thread**, so
         // the first page does not wait for them.
         match self.current_buffer().syntax() {
             crate::syntax::Syntax::Typst => crate::code::warm(crate::code::Language::Typst),
             crate::syntax::Syntax::Code(language) => crate::code::warm(language),
             _ => {}
         }
-        // **回到上次停的那一行**（2026-10-05 定）。不知道就不動。
+        // **回到上次停的那一行**。不知道就不動。
         //
         // Warning: **擺在這裏，所以誰都蓋得過它**：會話還原、`:open 檔:30`、`:replace`
         // 跳到命中——那些都在開檔之後纔挪光標，後說的算。
@@ -1159,7 +1141,7 @@ impl Editor {
 
     /// **把搜索面板為「看一眼」開出來的那一份還回去。**
     ///
-    /// 2026-09-27 定，原話：「真打开，但标成预览」。在結果名單裏 `jk` 走一遍一本
+    /// 真打開，但標成預覽。在結果名單裏 `jk` 走一遍一本
     /// 書，走一步開一份，走完緩衝區列表就滿了——所以同一時間只留一份，走到下一處
     /// 就把上一處那一份收走。`Enter` 把它釘住（`search_preview` 清空），從此它就
     /// 是一份普通的緩衝。
@@ -1212,7 +1194,7 @@ impl Editor {
     /// The last buffer is not closed but emptied: an editor with no buffer has
     /// nowhere to put the cursor.
     pub(super) fn close_buffer(&mut self, force: bool) -> Result<CommandOutcome, EditorError> {
-        // **A preview closes as a preview** (2026-11-08): its window goes
+        // **A preview closes as a preview**: its window goes
         // back to what it showed before, and the front end stops its task.
         if self.buffers[self.current].is_preview() {
             let id = self.buffers[self.current].id();
@@ -1228,10 +1210,9 @@ impl Editor {
             self.buffers[0] = Buffer::scratch();
             self.set_cursor(0);
             self.forget_the_document();
-            // Warning: **關掉一個緩衝區也要重畫那張單子**（2026-10-07 審出來的）。換
-            // 緩衝區那條路（[`Self::show_buffer`]）一直有這一句，關掉這一條没
-            // 有——而緩衝區那一扇面板的行是推進去存着的，不是每幀現算。於是
-            // `:bd` 之後單子上那一條還在，上面還標着「你在這裏」；按下去打開
+            // Warning: **關掉一個緩衝區也要重畫那張單子**，同換緩衝區那條路
+            // （[`Self::show_buffer`]）——緩衝區那一扇面板的行是推進去存着的，不是
+            // 每幀現算。不重畫的話 `:bd` 之後單子上那一條還在，上面還標着「你在這裏」；按下去打開
             // 的是一個已經不在的號碼。
             self.refresh_sidebar();
             self.status = say!("buffer.closed");
@@ -1251,10 +1232,9 @@ impl Editor {
     /// Let go of everything that was about the document you were just in.
     ///
     /// **One list, called from every place the document changes** — closing a
-    /// buffer, switching to another. Three sibling functions used to clear
-    /// three different subsets of this, which is how a grid stayed on after
-    /// its table was closed and a hit list went on answering `n` in a file it
-    /// had never seen.
+    /// buffer, switching to another. Three sibling functions clearing three
+    /// different subsets of this would leave a grid on after its table was
+    /// closed and a hit list answering `n` in a file it had never seen.
     pub(super) fn forget_the_document(&mut self) {
         // What was said about the last document's file, and when its disk was
         // last looked at, are not facts about this one: a warning latched on
@@ -1273,7 +1253,7 @@ impl Editor {
         self.drop_windows_showing(|buffer| !ids.contains(&buffer));
     }
 
-    /// **問服務器的那幾句，和它答的那一則**（2026-10-09 補）。
+    /// **問服務器的那幾句，和它答的那一則**。
     ///
     /// 它們記的是**字元下標**，而下標只在它自己那一份文檔裏有意思：`signature_on`
     /// 指着上一份裏那個左括號，換了檔之後拿它到這一份的 rope 上算坐標
@@ -1281,8 +1261,8 @@ impl Editor {
     ///
     /// Warning: **開檔與換檔是兩條路，所以這是一張單子而不是幾行**。
     /// [`Self::forget_the_document`] 走換檔與關檔，`Editor::add_buffer` 走開新檔，
-    /// 而那一支清的從來是另一個子集——`forget_the_document` 自己的註釋記着這個形狀
-    /// 怎麽出過事（「三支姊妹函數各清一個子集」）。兩條路都叫這一支。
+    /// 那一支清的是另一個子集——`forget_the_document` 的註釋說了「三支姊妹函數各清
+    /// 一個子集」會怎樣。兩條路都叫這一支。
     ///
     /// 那張補全單子不在裏面：`Offering::stands_here` 自己認緩衝區與下標，同搜索的
     /// 命中表——不在眼前就不算答案，回來還算。
@@ -1302,11 +1282,10 @@ impl Editor {
     ///
     /// The half of [`Self::forget_the_document`] that an edit too big for the
     /// ordinary revision check needs — a sort rebuilds the file out of its own
-    /// lines — and **only** that half. Calling the whole thing after a sort put
-    /// the grid away: `forget_the_document` ends by asking the file what table
-    /// it is, and a `.csv` with no schema beside it is not one, so `t1s` sorted
-    /// the rows and dropped the reader back into the source
-    /// (2026-09-05：「表格排序 t1s 會直接回到源碼視圖」).
+    /// lines — and **only** that half. Calling the whole thing after a sort
+    /// would put the grid away: `forget_the_document` ends by asking the file
+    /// what table it is, and a `.csv` with no schema beside it is not one, so
+    /// `t1s` would sort the rows and drop the reader back into the source.
     pub(super) fn forget_the_text(&mut self) {
         self.segment_memo.forget();
         self.markup_memo.forget();
@@ -1398,13 +1377,13 @@ impl Editor {
     /// standing question stops it all the same: the bang says 「use my
     /// version」, not 「a file many times its size is what I meant」.
     ///
-    /// **Unlike `:qa!`, it keeps the recovery copy of what it could not save**
-    /// (2026-10-26). `:qa!` is the writer saying 「not these changes」; `:wqa!`
+    /// **Unlike `:qa!`, it keeps the recovery copy of what it could not save**.
+    /// `:qa!` is the writer saying 「not these changes」; `:wqa!`
     /// says 「save them」, and a save that failed — a locked file, a full
     /// disk, a folder that went away — is not a change the writer threw away.
     /// The copy is written fresh first, so it holds the last keystroke, and
-    /// the next open offers it back. **A buffer with no file is let go**, as
-    /// was asked for (2026-10-26): there was never anywhere to save it, and
+    /// the next open offers it back. **A buffer with no file is let go**: there
+    /// was never anywhere to save it, and
     /// the bang is the writer saying so.
     pub(super) fn write_quit_all(&mut self, force: bool) -> Result<CommandOutcome, EditorError> {
         self.write_all_forcing(force)?;
@@ -1432,7 +1411,7 @@ impl Editor {
     /// The shape a grep result has, and the shape every compiler and every
     /// other grep prints — so it also works on a line pasted in from a shell.
     pub(super) fn goto_file_under_cursor(&mut self) {
-        // **A link to a file, or a web address, as helix's `gf`** (2026-11-02):
+        // **A link to a file, or a web address, as helix's `gf`**:
         // `[附錄](fu.md)` opens the chapter, an address goes to the browser.
         // A `[[page]]` and a `#heading` are `gd`'s.
         if let Some(link) = self.link_under_cursor().filter(|l| !l.wiki && !l.target.is_empty()) {
@@ -1449,19 +1428,17 @@ impl Editor {
         if self.open_wiki_include() {
             return;
         }
-        // **And so does a 百科 name** (2026-09-19: 「wiki 詞條 gf 跳轉定義
-        // 文件失效了」). `gd` has always opened the file an entry is written in
-        // — but 「open the file this names」 is exactly what `gf` is for, and a
-        // name on the page names one. Standing on 滕子京 and pressing `gf` used
-        // to answer 「這一行没寫文件名」, which is true of the line and false of
-        // the word under the cursor. `gd` is unchanged; this is the same door
-        // with the other handle.
+        // **And so does a 百科 name**. `gd` opens the file an entry is written
+        // in — but 「open the file this names」 is exactly what `gf` is for, and
+        // a name on the page names one. Standing on 滕子京, 「這一行没寫文件名」
+        // would be true of the line and false of the word under the cursor.
+        // This is `gd`'s door with the other handle.
         if self.follow_wiki() {
             return;
         }
-        // **一份報告自己說跳到哪**（2026-10-16）。`:git-diff` 的行上沒有檔名
+        // **一份報告自己說跳到哪**。`:git-diff` 的行上沒有檔名
         // ——整份報告說的就是那一個檔，每一行再寫一遍是把緩衝區的名字抄幾十
-        // 遍。舊稿那一行印的是它在 `HEAD` 裏的號，而那一行現在不在了，所以跳
+        // 遍。舊稿那一行印的是它在 `HEAD` 裏的號，而那一行已經不在了，所以跳
         // 的是「這一處改動現在在哪」（同 magit／fugitive）。
         if let Some((path, jumps)) = self.listing_jumps.clone() {
             let rope = self.current_buffer().rope();
@@ -1499,7 +1476,7 @@ impl Editor {
         }
 
         // **A path written in the text**, as helix's `gf` finds one around
-        // the cursor (2026-11-02): `~/a.txt`, `/etc/hosts`, `notes/b.md`,
+        // the cursor: `~/a.txt`, `/etc/hosts`, `notes/b.md`,
         // with `:12` after it for the line. Only a file that is there: a
         // word of prose is not a new file to make.
         if let Some((full, at)) = self.path_under_cursor() {
@@ -1560,9 +1537,8 @@ impl Editor {
     /// opened the same way:
     ///
     /// - **A page on the web** goes to whatever the reader browses with. Only
-    ///   `http` and `https` do. The row this was built from said 「a scheme we
-    ///   do not handle goes to the OS」, and that is the rule this deliberately
-    ///   does **not** follow: handing an unknown scheme to `open` hands a file
+    ///   `http` and `https` do. 「A scheme we do not handle goes to the OS」 is
+    ///   the rule this deliberately does **not** follow: handing an unknown scheme to `open` hands a file
     ///   in the manuscript the power to start any program registered for any
     ///   scheme on the machine, and a manuscript is a file that arrives by
     ///   email. What is not `http` or `https` is named and refused.
@@ -1582,7 +1558,7 @@ impl Editor {
     /// Warning: **`gd` follows one too** (#454), by the same route: a link is a
     /// definition, and the one a manuscript has most of.
     ///
-    /// **`gL` hands the work to the others** (2026-11-02): a web page is
+    /// **`gL` hands the work to the others**: a web page is
     /// `gx`'s ([`Self::open_web_link`]), a file, a `[[page]]` or a heading is
     /// what `gf` and `gd` follow ([`Self::follow_in_the_book`]). One code
     /// path each, so the catch-all cannot drift from the keys it stands for.
@@ -1600,7 +1576,7 @@ impl Editor {
     }
 
     /// **`gx`, vim's: the web address under the cursor, handed to the
-    /// browser** (2026-11-02) — in a Markdown link or written bare, in any
+    /// browser** — in a Markdown link or written bare, in any
     /// file. Only `http` and `https` leave the editor (see
     /// [`Self::follow_link`]'s first paragraph for why); a link to a file of
     /// the book is not a web address, and is said so.
@@ -1764,7 +1740,7 @@ impl Editor {
             return self.goto_heading_named(&anchor);
         }
         // `~/a.txt` and `/Users/…/a.txt` are followed as helix's `gf` follows
-        // them (2026-11-02): opening a file is a buffer, never a program, so
+        // them: opening a file is a buffer, never a program, so
         // a path outside the project is no more than `../` already reached.
         let named = Self::expand_tilde(&link.target);
         let named = named.as_path();
@@ -1776,7 +1752,7 @@ impl Editor {
         // A `[[wiki]]` names a page, it does not spell a file: the suffix is
         // this manuscript's, not the writer's to type again. The page is
         // looked for across the whole project, nearest first — the same
-        // resolver the links panel and completion use (2026-10-30).
+        // resolver the links panel and completion use.
         let mut tries = vec![here.join(named)];
         if link.wiki {
             if let Some(found) = self.resolve_link(&link.target) {
@@ -1834,7 +1810,7 @@ impl Editor {
 
     /// Which open buffer a write to `target` would land in, if any.
     ///
-    /// **Is this file open in any buffer?** (2026-09-22)
+    /// **Is this file open in any buffer?**
     ///
     /// Asked by the front end about the file a preview server is serving: a
     /// preview of a chapter nobody has open any more is a program holding a
@@ -1875,24 +1851,23 @@ impl Editor {
 
     /// Whether writing `target` is refused, having said why if it is.
     ///
-    /// **Never onto a manuscript.** `:export typst` on a `.typ` chapter used
-    /// to name its own source — an export keeps 標題、段落、注音 and nothing
-    /// else, so the figures, the tables and the raw Typst were gone from the
-    /// file on disk, and the message that followed pointed at `:e!`, which
-    /// throws the good copy in memory away too.
+    /// **Never onto a manuscript.** `:export typst` on a `.typ` chapter must
+    /// not name its own source — an export keeps 標題、段落、注音 and nothing
+    /// else, so the figures, the tables and the raw Typst would be gone from
+    /// the file on disk, and `:e!` throws the good copy in memory away too.
     ///
-    /// The guard used to compare the two paths as *strings*, while the writer
+    /// The guard compares resolved paths, not *strings*, since the writer
     /// resolves them: `main.typ` against `/…/main.typ`, or a symlink against
-    /// what it points at, walked straight past it. And the chapter in danger is
+    /// what it points at, would walk straight past a string compare. And the chapter in danger is
     /// not only this one — any file open in this editor is being held in memory
     /// and will be saved from there.
     ///
     /// **An existing file is replaced only when you say so**, which is the rule
-    /// `:w` keeps. The exporter is the other writer, and it did not.
+    /// `:w` keeps. The exporter is the other writer, and keeps it too.
     ///
     /// Every writer that is not `:w` asks this: `:export`, `:export csv`, and
-    /// `:shot`. They used to ask it in three byte-identical copies (#227 made
-    /// the third), which is three places for the next fix to miss two of.
+    /// `:shot` — one function, not three copies for the next fix to miss two
+    /// of.
     fn refuse_to_overwrite(&mut self, target: &Path, force: bool) -> bool {
         self.refuse_to_overwrite_as(target, force, "export")
     }
@@ -1923,7 +1898,7 @@ impl Editor {
     /// is what a writer means by "export this chapter"; a path given explicitly
     /// wins. A scratch buffer has no name to derive one from and must be told.
     /// `:export FORMAT [WORDS…] [PATH]`: the `[export]` settings, with the
-    /// words given for this one export over them (2026-11-08).
+    /// words given for this one export over them.
     pub(super) fn export(&mut self, format: &str, words: &str, force: bool) -> Result<CommandOutcome, EditorError> {
         let mut settings = self.export.clone();
         match settings.read_line(words) {
@@ -1942,11 +1917,10 @@ impl Editor {
         path: Option<&str>,
         force: bool,
     ) -> Result<CommandOutcome, EditorError> {
-        // Warning: **鎖住的那一份一個檔都不寫**（2026-10-02 定「鎖住就不導出」）。
-        // `--help` 上寫着「Open locked: nothing this run opens can be typed
-        // into」，而 `:export!` 從前在 `--readonly` 的會話裏照樣把一個**不相干**
-        // 的檔整個蓋掉。保護的是「這一趟開着的檔」還是「這一趟寫出去的字」，是
-        // 一個範圍問題；定下來的是後者——鎖住就什麼都不寫。
+        // Warning: **鎖住的那一份一個檔都不寫**：鎖住就不導出。`--help` 上寫着
+        // 「Open locked: nothing this run opens can be typed into」，而 `:export!`
+        // 在 `--readonly` 的會話裏不許把一個**不相干**的檔整個蓋掉。保護的是「這一趟
+        // 寫出去的字」，不只是「這一趟開着的檔」——鎖住就什麼都不寫。
         if self.refuse_readonly() {
             return Ok(CommandOutcome::Continue);
         }
@@ -1969,13 +1943,13 @@ impl Editor {
                 None => return Err(EditorError::NoFileName),
             },
         };
-        // Warning: **nothing of the editing window's** (2026-11-08): not
+        // Warning: **nothing of the editing window's**: not
         // `:vertical`, `:view-hanging`, the 縱 length nor `:ruby-html`. An
         // export is publication; how the writer sees the draft is theirs.
         let style = crate::export::Style {
             settings,
             title: self.current_buffer().display_name(),
-            // Warning: **讀的是這一份稿子的語法**，不是要寫成的格式（2026-09-28）。
+            // Warning: **讀的是這一份稿子的語法**，不是要寫成的格式。
             source: self.current_buffer().syntax(),
             base: self.current_buffer().path().and_then(|p| p.parent()).map(std::path::Path::to_path_buf),
             painter: self.formula_painter,
@@ -1999,7 +1973,7 @@ impl Editor {
         Ok(CommandOutcome::Continue)
     }
 
-    /// **`:export-as-preview [FORMAT] [PATH]`** (2026-11-08): the file the
+    /// **`:export-as-preview [FORMAT] [PATH]`**: the file the
     /// way its preview draws it — see what you get. A Markdown file as the
     /// HTML page of its preview ([`crate::as_preview`]), a Typst file as the
     /// PDF of the document its preview typesets. The format is the one this
@@ -2112,7 +2086,7 @@ impl Editor {
     /// the root a language server would be started on for it, as tinymist
     /// typesets it. Without `typst`, nothing is written.
     ///
-    /// **In the background** (2026-11-08): a book takes seconds to typeset,
+    /// **In the background**: a book takes seconds to typeset,
     /// and the editor goes on meanwhile. The compiler runs on a thread of its
     /// own, its input, output and errors its own and never the terminal's;
     /// the status line says it is typesetting, and the loop collects the
@@ -2186,14 +2160,14 @@ impl Editor {
         Ok(CommandOutcome::Continue)
     }
 
-    /// **Give up the PDF being typeset, if one is** (2026-11-09): the
+    /// **Give up the PDF being typeset, if one is**: the
     /// compiler stopped and its draft removed. Called on the way out, so
     /// quitting mid-typeset leaves neither behind.
     pub fn stop_typesetting(&mut self) {
         self.typesetting = None;
     }
 
-    /// **Take the PDF the compiler made, if it is done** (2026-11-08):
+    /// **Take the PDF the compiler made, if it is done**:
     /// renamed over the target, or the compiler's first line of complaint
     /// on the status line. Asked every frame; `true` when something was
     /// said.
@@ -2258,13 +2232,12 @@ impl Editor {
     ///
     /// A name that is not given is [`downloads_dir`] plus the document's own
     /// stem and the second it was taken —
-    /// `驚蟄_20260906143012.png`. Two reasons, both from the writer
-    /// (2026-09-06): a picture is a thing you send someone and then forget, so
+    /// `驚蟄_20260906143012.png`. Two reasons: a picture is a thing you send someone and then forget, so
     /// it has no business landing in the folder the manuscript lives in; and a
     /// dated name never collides, which is a better answer than asking about
     /// overwriting. The bang is kept for the name you spell out yourself,
     /// where a collision is still possible and still yours.
-    /// **`ye --export`** (2026-10-30): the same export as `:export!`, for the
+    /// **`ye --export`**: the same export as `:export!`, for the
     /// command line — writing over an existing target, as a compiler does,
     /// since a script runs it again and again. The answer is the status line
     /// the editor would have shown, or why nothing was written.
@@ -2410,9 +2383,9 @@ impl Editor {
         if self.refuse_to_overwrite(&target, force) {
             return Ok(CommandOutcome::Continue);
         }
-        // **導出的那一份跟着源文件走**（2026-10-07 定）：它帶 BOM 就寫 BOM，它是
-        // CRLF 就寫 CRLF。從前這裏寫死了 `\n`、也不寫 BOM——而一份 BOM ＋ CRLF 的
-        // `.csv` 導出來兩樣都没了，Excel 打開就是亂碼。那三個字節正是
+        // **導出的那一份跟着源文件走**：它帶 BOM 就寫 BOM，它是 CRLF 就寫 CRLF。
+        // 寫死 `\n`、不寫 BOM 的話，一份 BOM ＋ CRLF 的 `.csv` 導出來兩樣都没了，
+        // Excel 打開就是亂碼。那三個字節正是
         // `tests/byte_fidelity.rs` 存在的理由之一，它的註釋寫着「the thing Excel
         // reads to decide a `.csv` is UTF-8」。
         let ending = self.current_buffer().ending();
@@ -2484,7 +2457,7 @@ fn when_was(when: std::time::SystemTime) -> String {
 
 impl Editor {
     /// The encoding remembered for `path`, while the file keeps the size it
-    /// had when it was chosen (2026-11-04). A file whose size changed is one
+    /// had when it was chosen. A file whose size changed is one
     /// that may have been converted elsewhere: the memory goes, and it says
     /// so once.
     ///
@@ -2531,7 +2504,7 @@ mod tests {
         ed
     }
 
-    /// **`:export-as-preview` writes the preview's look** (2026-11-08): the
+    /// **`:export-as-preview` writes the preview's look**: the
     /// colours and faces the front end says the preview is drawn in, a
     /// formula in the preview's ink, beside the file as `.html`; and it is
     /// refused over an existing file as `:export` is, naming its own `!`.
@@ -2712,7 +2685,7 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// **Quitting mid-typeset leaves nothing behind** (2026-11-09): the
+    /// **Quitting mid-typeset leaves nothing behind**: the
     /// compiler is stopped and its draft removed; and a draft a yumete that
     /// is gone left is removed by the next export to the same file, while
     /// one of a running yumete's is left.
