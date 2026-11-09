@@ -3087,9 +3087,9 @@ impl Runner {
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_default();
         // **One pass, not three.** Chained `replace`s substitute into what the
-        // previous one just wrote: a manuscript called `{name}.md` came back as
-        // `{name}.md.md`, and the program was handed a path that is not the
-        // buffer's — which with `kind = "once"` means re-reading a file nobody
+        // previous one just wrote: a manuscript called `{name}.md` would come
+        // back as `{name}.md.md`, and the program would be handed a path that
+        // is not the buffer's — which with `kind = "once"` means re-reading a file nobody
         // formatted.
         let fill = |word: &str| -> String {
             let mut out = String::with_capacity(word.len());
@@ -3782,8 +3782,8 @@ impl Config {
     }
 
     // …and a setting that changed **shape** is said out loud too.
-    // `tatechuyoko` is a count, and a switch written for it is not taken: 「on」 no longer says how many half-width
-    // characters share the slot, and guessing two for it would quietly make
+    // `tatechuyoko` is a count, and a switch written for it is not taken:
+    // 「on」 does not say how many half-width characters share the slot, and guessing two for it would quietly make
     // that decision for a reader who asked for a longer group.
     if let Some(RawTatechuyoko::Switch(on)) = raw.editor.tatechuyoko {
         problems.push(said(
