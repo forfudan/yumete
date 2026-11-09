@@ -40,20 +40,18 @@ pub enum Engagement {
 
 /// 作品百科 (#287) 的每一件事 —— **一件一個命令**。
 ///
-/// Warning: **從前它們是 `:wiki` 的參數**，而它們是動作不是取值（2026-09-25 定，原話：
-/// 「他們都是函數不是參數，所以應該用hyphen連結，比如 wiki-reload, wiki-panel
-/// on/off, wiki-edit」）。參數那個位子空出來給真正的參數：**詞條名**。
+/// Warning: **它們不是 `:wiki` 的參數**：它們是動作不是取值，所以用連字號連成命令名
+/// （`wiki-reload`、`wiki-edit`）。參數那個位子留給真正的參數：**詞條名**。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WikiCommand {
     /// `:wiki` — which files were read, how many entries each, what could not
     /// be marked. **The feature's error channel.**
     Report,
-    /// `:wiki <詞條名>` — **look an entry up by name** (2026-09-25).
+    /// `:wiki <詞條名>` — **look an entry up by name**.
     ///
     /// Warning: **The name is an argument, and the settings are their own commands.**
-    /// `:wiki edit` used to mean 「open the file」 and anything else meant
-    /// 「reload」 — so `:wiki 朱宇浩` quietly re-read the wiki instead of
-    /// answering. 原話：「他們都是函數不是參數，所以應該用hyphen連結」.
+    /// Were `:wiki edit` to mean 「open the file」 and anything else 「reload」,
+    /// `:wiki 朱宇浩` would quietly re-read the wiki instead of answering.
     Find(String),
     /// `:wiki-edit` — open this book's `.yumete/wiki.md`, existing or not.
     Edit,
@@ -70,8 +68,7 @@ pub enum WikiCommand {
 ///
 /// **One subject, one command.** Where a word ends is decided by a dictionary,
 /// shown by a colour, tuned by a level, mined out of the book itself, and read
-/// back as 口頭禪; those were `:words`, `:segment` and a config key nobody could
-/// see, and nothing said they were the same question.
+/// back as 口頭禪 — the same question each time, so one command.
 // Warning: **Not `Copy` since #452.** The scope a 認詞 reads is [`Where`], which
 // carries a `PathBuf` in one of its arms — the same type `:search` uses, and
 // sharing it is the point: 「這一篇/這個文件夾/這個倉」 is one idea.
@@ -129,19 +126,19 @@ pub enum WordCommand {
 pub enum Command {
     /// `:cd [<path>|-]` — 換[工作路徑][`crate::editor::Editor::working_dir`]。
     ///
-    /// 照 helix 與 vim：不帶參數回家目錄，`-` 回上一個（2026-10-01 查過兩家）。
+    /// 照 helix 與 vim：不帶參數回家目錄，`-` 回上一個。
     ChangeDir(Option<String>),
     /// `:pwd` — 工作路徑在哪。
     ShowDir,
     /// `:open <path>` (aliases `:o`, `:edit`, `:e`) — open a file into a buffer.
     Open(String),
     /// `:open` with no path — the file picker, which is where a Chinese file
-    /// name is typed (2026-09-16).
+    /// name is typed.
     ///
     /// The command line takes no 中文 anywhere on it, so a path with 漢字 in it
     /// has to be named somewhere that does. The picker is that somewhere, and
-    /// it was the better way to open a file before this was true: it completes,
-    /// it cannot be mistyped, and it shows what is actually there.
+    /// the better way to open a file anyway: it completes, it cannot be
+    /// mistyped, and it shows what is actually there.
     OpenPicker,
     /// `:new` (alias `:enew`) — create a new, empty scratch buffer.
     NewBuffer,
@@ -150,7 +147,7 @@ pub enum Command {
     Write(Option<String>),
     /// `:quit` (alias `:q`) or `:quit!` / `:q!` — close **this region**,
     /// and leave the editor when it was the last window (a sidebar does not
-    /// count), as helix and vim do (measured 2026-11-03). The tabs stay
+    /// count), as helix and vim do (measured). The tabs stay
     /// open: `:bc` closes a file. `force` leaves with unsaved tabs.
     Quit {
         force: bool,
@@ -179,8 +176,8 @@ pub enum Command {
         force: bool,
     },
     /// `:exit` (aliases `:x`, `:xit`) — **save only if the file changed**, then
-    /// leave. vi's `:x` and helix's `:exit`, which `:x` used to be spelled as
-    /// here without the one thing that tells the two apart.
+    /// leave. vi's `:x` and helix's `:exit`, with the one thing that tells it
+    /// apart from `:wq`.
     Exit(Option<String>),
     /// `:update` (alias `:up`) — **save only if the file changed**, and stay.
     /// `:write` with the same gate: the timestamp of a file nobody touched is
@@ -218,32 +215,31 @@ pub enum Command {
     /// `:<n>` or `:goto <n>` — put the cursor on line `n`.
     GotoLine(usize),
     /// `:earlier [n|span]` / `:later [n|span]` — helix's: so many undo steps,
-    /// or to the change nearest a time span back or ahead (2026-10-29).
+    /// or to the change nearest a time span back or ahead.
     Earlier(UndoSpan),
     Later(UndoSpan),
     /// `:reflow [width]` — helix's: each selection refilled to `width`
-    /// columns, 80 when it is left off (2026-10-29).
+    /// columns, 80 when it is left off.
     /// mini.splitjoin's `gS`: the brackets round the cursor onto lines, or back.
     SplitJoin,
     Reflow(Option<usize>),
     /// mini.align: the selected lines lined up on a sign, `=` when none is given.
     Align(String),
     /// `:vsplit [file]` / `:hsplit [file]`: a new window beside or below the
-    /// live one, showing `file` when one is named (2026-10-30).
+    /// live one, showing `file` when one is named.
     SplitWindow { how: crate::window::Split, file: Option<String> },
     /// `:vnew` / `:hnew` — a new window beside or below, on a new empty
-    /// buffer (helix's commands, 2026-10-31).
+    /// buffer (helix's commands).
     NewWindow(crate::window::Split),
     /// `:hard-wrap [<columns>]`: the selection or the unit under the cursor
     /// re-filled under the syntax's own rules; `None` asks the setting
-    /// (2026-10-30, see [`crate::hardwrap`]).
+    /// (see [`crate::hardwrap`]).
     HardWrap(Option<usize>),
     /// `:recover` — **問要不要用那一份草稿**（Feature #79）。
     ///
-    /// Warning: **没有 `:recover!` 了**（2026-10-02 定）。它從前是「不問，直接把
-    /// 草稿刪掉」，而刪草稿這件事面板裏本來就有一格——原話：「recover! 這個命
-    /// 令不需要了，因為如果用戶想做的話，應該是在之前按 d」。留着它就是在「刪掉
-    /// 草稿之前一定看得見那三個選項」這條規矩上開一個後門。
+    /// Warning: **没有 `:recover!`**（「不問，直接把草稿刪掉」）：刪草稿這件事面板裏
+    /// 本來就有一格（`d`）。有它就是在「刪掉草稿之前一定看得見那三個選項」這條規矩上
+    /// 開一個後門。
     Recover,
     /// `:[range]s/pattern/replacement/[flags]` — substitute text.
     ///
@@ -281,32 +277,31 @@ pub enum Command {
     /// `:redo` (alias `:red`) — redo the last undone change.
     Redo,
     /// `:word …` — everything about **where one word ends and the next
-    /// begins**, which is one subject and used to be several commands
-    /// (`:segment` coloured the boundaries, `:words` weighed them).
+    /// begins**, which is one subject and so one command.
     Word(WordCommand),
     /// 作品百科 (#287) — the report, one entry, or one of the settings.
     Wiki(WikiCommand),
-    /// 雙鏈 (2026-10-30) — the links panel, the graph page, the index.
+    /// 雙鏈 — the links panel, the graph page, the index.
     Links(LinksCommand),
-    /// **`:info`：這份檔案是什麼**（2026-10-08）。
+    /// **`:info`：這份檔案是什麼**。
     ///
     /// 和 [`Command::YumeWhere`] 同一條路：答案是**一頁**，而且有一行只有前端答
     /// 得出來（哪幾個語言服務器在看着它）。
     FileInfo,
     /// `:keymap-yumete-flavor [off|basic|full]` — the yumete flavour's level
-    /// (three levels since 2026-11-01, a switch before). Bare, it reports
+    /// (three levels, not a switch). Bare, it reports
     /// the level and each item.
     KeymapYumeteFlavor(Option<yumete_cjk::FlavorLevel>),
     /// `:vertical` / `:horizontal` — 把這一頁轉過去（Feature #61）。
     ///
-    /// **一件事一種說法**（2026-10-12 定）：從前是 `:layout` 的兩個參數，加上一
-    /// 個不帶參數的 `:layout` 互換；現在兩個方向各自一條，互換那一條没了。
+    /// **一件事一種說法**：兩個方向各自一條命令，不是 `:layout` 的兩個參數，也没有
+    /// 不帶參數的互換。
     SetLayout(Layout),
     /// `:vertical-keys [logical|visual]` — 竪排時 `hjkl` 走行文還是走版面。
     /// `None` 是互換。
     SetVerticalKeys(Option<yumete_cjk::VerticalKeys>),
     /// `:yume-annotation [off|next|<mode>]` — the annotation beside the
-    /// candidates (2026-11-02). `None` asks which mode is in force; the
+    /// candidates. `None` asks which mode is in force; the
     /// front end knows the modes' names, so it settles the word.
     YumeAnnotation(Option<String>),
     /// `:scheme <tag>` — switch the input scheme (Feature #86).
@@ -318,7 +313,7 @@ pub enum Command {
     /// continues on the next screen row (Feature #77). The command flips it.
     SetSoftWrap(Switch),
     /// `:line-numbers [absolute|relative|none]`: how the gutter counts;
-    /// bare says which is on (2026-10-31).
+    /// bare says which is on.
     LineNumbers(Option<crate::editor::LineNumbers>),
     /// `:which-wrap`——哪些鍵走得出一行的兩頭。`None` ＝ 裸寫，報現狀。
     WhichWrap(Option<String>),
@@ -341,7 +336,7 @@ pub enum Command {
     KeepPipe(String),
     /// `:view-fold` — vim's `:fold`: the selection's lines made a fold,
     /// closed. In the `view-` family, as the command menu holds no more
-    /// families (2026-11-03).
+    /// families.
     Fold,
     /// `:read <file>` — a file's contents into this buffer, as vim's `:r` and
     /// helix's `:read`.
@@ -401,17 +396,17 @@ pub enum Command {
         /// `:replace!` — the panel may change how many cells a row has.
         ///
         /// Without it a replacement that reshapes a grid is refused, the same
-        /// way `:s` refuses one without its `t` flag. The bang was declared
-        /// [`FORCEABLE`] and read by nothing until 2026-10-20, so the refusal
-        /// named an escape (`:%s/…/…/gt`) that cannot be typed into a panel.
+        /// way `:s` refuses one without its `t` flag. The bang is what the refusal
+        /// names, since an escape like `:%s/…/…/gt` cannot be typed into a
+        /// panel.
         reshape: bool,
     },
     /// `:sidebar-explorer [on|off]`, `:sidebar-info`, … — one panel's switch.
     ///
-    /// **One command a panel, each a toggle** (2026-11-07). It was one
-    /// `:sidebar <panel>`, and a command that takes an argument reports when
-    /// it is typed bare, so the sidebar had no switch of its own. Where a
-    /// panel lives is still yumete's to decide (2026-10-20): the five lists
+    /// **One command a panel, each a toggle**, not one `:sidebar <panel>`: a
+    /// command that takes an argument reports when it is typed bare, so the
+    /// sidebar would have no switch of its own. Where a panel lives is yumete's
+    /// to decide: the five lists
     /// on the left, the info panel on the right. The five take the keys when
     /// they open; `:sidebar-info` leaves them in the text, as `空格 w i` does.
     Sidebar(crate::sidebar::Panel, Switch),
@@ -420,7 +415,7 @@ pub enum Command {
     SetTableHeader(Switch),
     /// `:table-schema` — how this table is read, on the status line; with
     /// `write`, this file's description into the `datapackage.json` beside
-    /// the data (2026-10-30, as decided).
+    /// the data.
     TableSchema { write: bool },
     /// `:table-delimiter tab` — read this file as a grid cut by that
     /// character, and remember the choice for this file.
@@ -438,20 +433,18 @@ pub enum Command {
     /// order. Empty sorts by the column the cursor is in.
     SortTable(Vec<(usize, bool)>),
     /// `:convert-table <格式> [<格式>]` — **把光標這裏的表寫成另一種樣子**
-    /// （#227；2026-10-02 定下這個名字和這個形狀）。
+    /// （#227）。
     ///
     /// 一個詞是**目標**，源自己嗅（`|` 表格、製表符、逗號、空格對齊）；兩個詞
     /// 是「從哪種轉成哪種」，最後那個永遠是目標。嗅源這一條照 org-mode 和
     /// markdown-mode——兩家都是看有没有 TAB、有没有逗號，要強制纔多給一個參數。
     ///
-    /// Warning: **從前這是兩條命令**（`:table-pipe` 和 `:table-csv`），而兩個都是
-    /// 名詞接名詞、**一個字都没說方向**：`table-csv` 讀起來像「從 CSV 做表」，
-    /// 正好反了。查過一圈，有反向命令的編輯器本來就少（org、markdown-mode、
+    /// Warning: **不是兩條名詞接名詞的命令**（`:table-pipe`、`:table-csv` 那種**一個字
+    /// 都没說方向**：`table-csv` 讀起來像「從 CSV 做表」，正好反了）。查過一圈，有反向命令的編輯器本來就少（org、markdown-mode、
     /// vim-table-mode、Obsidian 都只轉得進去），而把兩端都寫出來的那幾個
     /// （Word 的 Convert Text to Table、VS Code 那個擴展的 Convert Markdown
     /// table to CSV）正是因為有反向纔寫的。
-    /// `:paste-table <格式>` — **剪貼板裏那張表，轉成這一種再貼**
-    /// （2026-10-02 定）。
+    /// `:paste-table <格式>` — **剪貼板裏那張表，轉成這一種再貼**。
     ///
     /// 名字和 [`Command::ConvertTable`] 對稱，參數表也是同一張。查過一圈，貼那
     /// 一族通行的說法就是 `Paste as X`（VS Code 的 `Paste As...`、Google Docs 的
@@ -475,7 +468,7 @@ pub enum Command {
     /// changes (#55).
     SetDiffGutter(Switch),
     /// `:view-diagnostics hint|info|warning|error|off` — helix's end-of-line
-    /// diagnostics. `None` asks (2026-11-04).
+    /// diagnostics. `None` asks.
     SetEolDiagnostics(Option<String>),
     /// `:shot` — a picture of the page, drawn by the editor itself (#189).
     Screenshot { shot: Shot, force: bool },
@@ -524,7 +517,7 @@ pub enum Command {
     CheckTable,
     /// `:view-margin never|dense|loose|always` — whether a 縱 (or a row, across)
     /// keeps the lane beside it for readings, hung 句讀, 着重號, 平仄 and ticks.
-    /// Bare, it says which is in force. Replaced `:view-dense` (2026-09-16); see
+    /// Bare, it says which is in force. Replaced `:view-dense`; see
     /// [`yumete_cjk::Margin`].
     SetMargin(Option<yumete_cjk::Margin>),
     /// One 句 to a 縱 — a view of the page, not a change to the file.
@@ -541,22 +534,21 @@ pub enum Command {
     ReportHud,
     /// `:preview [on|off]` — hand the file to the real typesetter and
     /// show what it makes (Feature #128): on, the window, or the browser when
-    /// a window cannot be drawn; off, whichever is up (2026-11-07).
+    /// a window cannot be drawn; off, whichever is up.
     Preview(Switch),
     /// `:preview-window [on|off]` — the page beside the text, never the
-    /// browser (2026-11-07).
+    /// browser.
     PreviewWindow(Switch),
-    /// `:preview-browser [on|off]` — the page in the browser, as
-    /// `:preview` was before the window.
+    /// `:preview-browser [on|off]` — the page in the browser.
     PreviewBrowser(Switch),
     /// `:preview-fit width|page` — how big the page window draws the
     /// page; bare, which it is.
     PreviewFit(Option<crate::editor::PreviewFit>),
     /// `:preview-theme [on|off]` — the page in the theme's colours, or
-    /// as printed (2026-11-08).
+    /// as printed.
     PreviewTheme(Switch),
     /// `:preview-vertical [on|off]` — the Markdown preview set
-    /// vertically while the text window is (2026-11-08).
+    /// vertically while the text window is.
     PreviewVertical(Switch),
     /// `:w!` — write over a file that changed on disk since it was read.
     WriteForce(Option<String>),
@@ -564,16 +556,16 @@ pub enum Command {
     /// unsaved changes; without it a dirty buffer is refused (Feature #214).
     Reload { force: bool },
     /// `:encoding [name]` — the encoding the file is saved in (helix's
-    /// command, vim's `:set fenc`). `None` asks (2026-11-04).
+    /// command, vim's `:set fenc`). `None` asks.
     Encoding(Option<String>),
     /// `:reload-auto` — re-read a **clean** buffer by itself when the file
     /// changes on disk (Feature #214).
     ReloadAuto(Switch),
-    /// **把配置檔重讀一遍，推進來** —— 改完 `config.toml` 不必重啓（2026-09-23）。
+    /// **把配置檔重讀一遍，推進來** —— 改完 `config.toml` 不必重啓。
     ReloadConfig,
     /// `:config-open` and `:config-open-workspace`: open the global
     /// `config.toml`, or this project's `.yumete/config.toml` (helix's two
-    /// commands, 2026-11-06).
+    /// commands).
     ConfigOpen { workspace: bool },
     /// `:readonly` — lock this buffer against editing, or unlock it
     /// (Feature #213).
@@ -609,20 +601,19 @@ pub enum Command {
     /// 欄的頭上，還是寫進正文；寫進正文的時候寫編碼還是寫首選。`None` 是問現在
     /// 是哪一檔。
     ///
-    /// **和 [`Command::YumePanel`] 各管各的**（2026-09-27 定，原話：「你搞错了
-    /// layout 和 inline-preedit」）。從前這兩件事焊在一個 `bare` 裏，於是「有面
-    /// 板 ＋ 正文裏站着首選」這個組合按不出來。
+    /// **和 [`Command::YumePanel`] 各管各的**：版面和正文裏的首選是兩件事。焊在一個
+    /// `bare` 裏的話，「有面板 ＋ 正文裏站着首選」這個組合按不出來。
     YumeInlinePreedit(Option<String>),
     /// `:theme-fill` — whether a 品色 run also gets a ground.
     ///
     /// Off: the backtick and the `>` are drawn already, so the run's extent is
     /// on the page and a ground behind it says it a second time.
     ThemeFill(Switch),
-    /// **`:rules 80 100 120`：在那幾欄上鋪一道底紋**（#424，2026-09-30）。
+    /// **`:rules 80 100 120`：在那幾欄上鋪一道底紋**（#424）。
     ///
     /// 空的 `Vec` ＝ `off`，一道都不鋪。不帶參數的 `:rules` 送的是 `[80]`。
     Rules(Vec<usize>),
-    /// **`:info <名>`：即時顯示哪一種信息**（#426，2026-09-30）。
+    /// **`:info <名>`：即時顯示哪一種信息**（#426）。
     ///
     /// `None` ＝ 光打了 `:info`，回到按稿子算（散文百科、代碼診斷、表格數據）。
     Info(Option<crate::sidebar::Info>),
@@ -691,23 +682,23 @@ pub enum Command {
     ListBuffers,
     /// `:help [節]` — the keys and the commands, in a buffer.
     Help(Option<String>),
-    /// `:settings` —— 整頁那一扇設置面板（2026-09-23 提的）。
+    /// `:settings` —— 整頁那一扇設置面板。
     ///
     /// > 這樣的話用戶（特別是寫小説的），不需要面對 toml 和一堆 key 發呆不知道
     /// > 他們都是幹啥的。
     ///
-    /// **A setting's name opens the panel on it** (2026-11-08): `:settings
+    /// **A setting's name opens the panel on it**: `:settings
     /// editor.scrolloff`, completed from the panel's own list. Groups are
     /// still walked, not typed: a command remembers its own name, not eight
     /// group names.
     Settings(Option<String>),
     /// `:tutor` — a lesson, written into a file of the reader's own.
     Tutor,
-    /// **`:resume` — take up this directory's last session** (2026-10-18 作者定).
+    /// **`:resume` — take up this directory's last session.**
     ///
     /// The same thing `--resume` does at startup, from inside and without
-    /// restarting: 「This is particularly useful when we have to quit and
-    /// update the yumete during working.」 It **adds** — nothing open is
+    /// restarting — for when yumete has to be quit and updated in the middle
+    /// of work. It **adds** — nothing open is
     /// closed, so nothing can be lost by pressing it.
     Resume,
     /// `:recent-files` — the files opened under this project, newest first.
@@ -717,10 +708,10 @@ pub enum Command {
     /// `:recent-projects` — the directories a session was ever kept for.
     RecentProjects,
     /// `:changed-files` — the files git reports and the unsaved buffers
-    /// (`空格 g`, 2026-10-31).
+    /// (`空格 g`).
     ChangedFiles,
     /// `:outline [n]` — the outline down to level `n`; `0` closes it, and
-    /// bare reports (2026-11-07, which replaced `:toc` and its 「go to the
+    /// bare reports (which replaced `:toc` and its 「go to the
     /// nth heading」).
     Outline(Option<usize>),
     /// `:table-jump 木` — go to the row this table names by that character.
@@ -731,7 +722,7 @@ pub enum Command {
     /// `:diff [path]` — what changed, by 詞, against the file on disk or
     /// against another draft (Feature #235).
     Diff(Option<String>),
-    /// `:git-diff [提交]` — the same, against what git has (2026-09-25).
+    /// `:git-diff [提交]` — the same, against what git has.
     /// `None` is `HEAD`.
     GitDiff(Option<String>),
     /// `:git-show [commit]` — the committed draft, read-only, in the other
@@ -741,7 +732,7 @@ pub enum Command {
     /// language server wherever it is used (#54).
     LspRename(String),
     /// `:clipboard` — the 選擇器 over everything that could be pasted, which
-    /// `空格 "` also opens (2026-09-25).
+    /// `空格 "` also opens.
     PasteMenu,
     /// `:export html|typst|epub [path]`, and `:export!` over a file that is
     /// already there — write the manuscript out for a typesetter.
@@ -753,7 +744,7 @@ pub enum Command {
         force: bool,
     },
     /// `:export-as-preview [html|pdf] [path]`, and `!` over a file that is
-    /// already there — the file the way its preview draws it (2026-11-08).
+    /// already there — the file the way its preview draws it.
     ExportAsPreview {
         /// The format and the path, as typed, read by
         /// [`crate::as_preview::read_line`].
@@ -773,9 +764,8 @@ pub enum Command {
     ///
     /// **An override, not a level.** The three level words say how much of the
     /// reading dimension is drawn; this says *which spelling*, and naming one
-    /// is asking to see it. The bare `:ruby on` / `:ruby off` this grew out of
-    /// retired with #283 — they were the two-state vocabulary the entry
-    /// exists to replace.
+    /// is asking to see it. Not a bare `:ruby on` / `:ruby off` (#283): that
+    /// two-state vocabulary is what the entry exists to replace.
     RenderRuby {
         dialect: Dialect,
         on: Switch,
@@ -847,10 +837,9 @@ pub enum CommandError {
     /// A subcommand written with a space where this tree uses a hyphen.
     ///
     /// Warning: Only where obeying the typo would be **destructive**. `:write` takes
-    /// a path, so `:write all` was a perfectly legal request to copy the
-    /// manuscript into a file called `all` — and it did, silently, in the
-    /// working directory, while the writer believed every buffer had been
-    /// saved. The manual taught the spelling, which is how it got typed.
+    /// a path, so `:write all` is a perfectly legal request to copy the
+    /// manuscript into a file called `all` — silently, in the working
+    /// directory, while the writer believes every buffer has been saved.
     MeansTheHyphenatedOne {
         command: &'static str,
         word: String,
@@ -858,9 +847,9 @@ pub enum CommandError {
     /// All digits, but too many of them to be a line number.
     ///
     /// `:42` is a line, so `:9999999999999999999999` is a writer overshooting
-    /// — not a command, which is what both this and Helix 25.07.1 used to call
-    /// it (measured: `no such command: '18446744073709551616'`). The refusal
-    /// is the same refusal; only the reason it gives is true now.
+    /// — not a command, which is what Helix 25.07.1 calls it (measured: `no such
+    /// command: '18446744073709551616'`). The refusal is the same refusal, with
+    /// a true reason.
     LineTooBig(String),
     /// Something followed a word that takes nothing.
     ///
@@ -957,11 +946,10 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
     let word = resolve(parts.next().unwrap());
     let rest = parts.next().unwrap_or("").trim();
     // The prefix rule goes on past the command name. The menu prints the
-    // shortest unambiguous spelling of every word that may follow, and most of
-    // those spellings used to be lies: the arms below match whole words, so
-    // `:table-check` growing a `csv` sibling turned the menu's `check (ch)`
-    // into 「不認得」 — and `:render f`, `:buffer n`, `:clipboard y`, `:help t`
-    // and a dozen more had never worked at all.
+    // shortest unambiguous spelling of every word that may follow, and those
+    // spellings have to be true: arms that match whole words would turn the
+    // menu's `check (ch)` into 「不認得」 the moment `:table-check` grew a
+    // sibling, and leave `:render f`, `:buffer n` and the like never working.
     // **The table first** (#368). A command that declares what it takes is
     // read by the one walk every other one is read by; what is left below is
     // the families that have not been moved over yet.
@@ -1032,8 +1020,8 @@ pub struct Entry {
     /// Every other spelling that names it — the short form first, since that
     /// is the one shown. A list rather than one slot because the parser really
     /// does accept several (`:open` is also `:o`, `:edit`, `:e`), and a table
-    /// that could only declare one of them was a table that drifted from the
-    /// parser without anybody noticing.
+    /// that could only declare one of them would drift from the parser without
+    /// anybody noticing.
     pub aliases: &'static [&'static str],
     /// One line saying what it does — short enough to sit beside the name.
     pub help: &'static str,
@@ -1059,9 +1047,9 @@ pub struct Entry {
 /// frame cell by cell for `--shot`, so it works over ssh, on a headless
 /// machine, and in a test.
 ///
-/// The drawn page was the bare `:shot` for a while and should not have been
-/// (2026-09-06): what a person wants nine times out of ten is a picture they
-/// can paste, and the specialist is the one that should have to be named.
+/// The drawn page is not the bare `:shot`: what a person wants nine times out
+/// of ten is a picture they can paste, and the specialist is the one that
+/// should have to be named.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Shot {
     /// **The default.** Hand the screen to the platform's own screenshot
@@ -1071,10 +1059,10 @@ pub enum Shot {
     /// says where; without one the picture is named after the document and
     /// dated, in the downloads folder rather than beside the document.
     ///
-    /// The format used to be read off the extension of a name that had to be
-    /// given, which made 「plain text」 something you could only ask for by
-    /// spelling out a path, and left the argument a free string with nothing
-    /// to complete: `:shot ` opened an empty menu.
+    /// The format is not read off the extension of a name that has to be
+    /// given: that makes 「plain text」 something you can only ask for by
+    /// spelling out a path, and leaves the argument a free string with nothing
+    /// to complete.
     File {
         how: ShotFormat,
         path: Option<String>,
@@ -1112,10 +1100,9 @@ impl ShotFormat {
 ///
 /// **A command's name is one word and its parameters follow it**, the way a
 /// function's name is one word and its arguments follow it — `:view-wrap-width
-/// 40` is `view_wrap_width(40)`. The tree this replaced could not say that: `:view-wrap`
-/// and `:write-all` were the same shape as `:write 第三章.md`, so a word list
-/// that swallowed a path had to be spelled `Args::PathOr` and 中文 file names
-/// were nearly lost to it (#225).
+/// 40` is `view_wrap_width(40)`. Were `:view-wrap` and `:write-all` the same
+/// shape as `:write 第三章.md`, a word list that swallows a path would have to
+/// be spelled specially, and 中文 file names would be nearly lost to it (#225).
 #[derive(Clone, Copy)]
 pub enum Param {
     /// One of these words.
@@ -1134,8 +1121,8 @@ pub enum Param {
     ///
     /// Not a mixture for its own sake: `:view-wrap-width` takes `0` and it
     /// also takes a measure, and a reader who cannot see the word has to be
-    /// told it. This is what `Args::PathOr` was, said once for every
-    /// command that needs it rather than once for `:write`.
+    /// told it. Said once for every command that needs it rather than once for
+    /// `:write`.
     WordsOr {
         of: &'static [Word],
         default: Option<&'static str>,
@@ -1143,7 +1130,7 @@ pub enum Param {
     },
     /// A path, completed from the file system by the caller.
     Path,
-    /// **Words in any number and order, then a path** (2026-11-08): what
+    /// **Words in any number and order, then a path**: what
     /// `:export` takes after its format, `vertical jlreq page=A5 out.epub`.
     /// It takes the whole of what is left, as a path does, and hands it on as
     /// typed, quotes and all: the command reads it, words and path alike
@@ -1152,7 +1139,7 @@ pub enum Param {
     Options(&'static [Word]),
     /// One of the input schemes — **whichever ones are installed** (#169).
     Schemes,
-    /// A setting of the settings panel, by its TOML path (2026-11-08):
+    /// A setting of the settings panel, by its TOML path:
     /// the front end hands the list over ([`set_setting_names`]). Anything
     /// else is taken too, for the panel to answer.
     Settings,
@@ -1189,7 +1176,7 @@ impl Param {
     /// Whether it takes the whole of what is left rather than one word.
     fn takes_the_rest(&self) -> bool {
         // A setting's name as the panel shows it may hold spaces
-        // (`first-line indent`, 2026-11-09).
+        // (`first-line indent`).
         matches!(self, Param::Path | Param::Free(_) | Param::Options(_) | Param::Settings)
     }
 
@@ -1314,7 +1301,7 @@ pub fn schemes() -> &'static [Word] {
 }
 
 /// The settings panel's settings, by TOML path, or nothing until the front
-/// end has said (2026-11-08).
+/// end has said.
 static SETTING_NAMES: std::sync::OnceLock<&'static [Word]> = std::sync::OnceLock::new();
 
 /// Tell the command table what settings `:settings` completes: each a TOML
@@ -1410,9 +1397,9 @@ pub struct Word {
 
 /// A state a command needs before it can do what it says.
 ///
-/// **The editor used to answer these with silence.** `:hanging on` on a
-/// horizontal page set a flag that nothing read: the setting was on, the page
-/// did not change, and there was nowhere to find out why. A prerequisite is
+/// **The editor does not answer these with silence.** `:hanging on` on a
+/// horizontal page would set a flag that nothing reads: the setting on, the
+/// page unchanged, and nowhere to find out why. A prerequisite is
 /// part of what a command *is*, so it is declared beside it — and then it can
 /// be shown in the menu before the command is run, said plainly when it is,
 /// and satisfied on request with `force`.
@@ -1453,20 +1440,14 @@ impl Need {
 /// **What a switch was asked for.**
 ///
 /// **A switch takes `on｜off`, and flips when it is typed bare; a command
-/// whose argument is a value reports when typed bare** (2026-11-07, revised
-/// the same evening). A key, an import or a kept session has to name the
+/// whose argument is a value reports when typed bare**. A key, an import or a kept session has to name the
 /// state it wants, since it cannot look at the screen first; a hand typing
 /// wants the shortest way to turn it round. Emacs's minor modes, vim's `:set
-/// wrap`/`:set wrap!` and helix's `:set`/`:toggle` all keep both. 原話：
-/// 「改用我的模型，也是其他編輯器的共識」.
+/// wrap`/`:set wrap!` and helix's `:set`/`:toggle` all keep both.
 ///
-/// Warning: **this used to be `Option<bool>`, and that is one state short** — so the
-/// twenty-three of them each invented the missing one. An audit on 2026-10-19
-/// measured three different answers to the same bare command in the same
-/// table: `:view-diff` turned the bands **on** (its entry defaulted to
-/// `Some("on")`), `:theme-fill` **flipped**, `:view-numbers-fill` **reported**.
-/// `toggle` meanwhile was a word only six of them accepted, so for the other
-/// seventeen 「report」 and 「flip」 could not both be asked for. Three states
+/// Warning: **`Option<bool>` is one state short** — each switch would invent the
+/// missing one, and the same bare command would give three different answers
+/// (turn on, flip, report), with `toggle` a word only some accept. Three states
 /// and one word list is what makes the rule sayable.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Switch {
@@ -1499,11 +1480,10 @@ impl Switch {
 /// Read a line against what its command says it takes (#368).
 ///
 /// **One walk for every command**, so that what a parameter may be is declared
-/// once, checked once and refused once. Forty-four hand-written arms each
-/// invented their own answer to 「that is not one of the words」, and each one
-/// was a place the table could drift away from without anybody noticing — the
-/// menu printed `check (ch)` beside words `:table ch` did not accept, and had
-/// done for a year.
+/// once, checked once and refused once. Hand-written arms would each invent
+/// their own answer to 「that is not one of the words」, and each one would be a
+/// place the table could drift away from without anybody noticing — the menu
+/// printing `check (ch)` beside words `:table ch` does not accept.
 ///
 /// Read `on｜off`, or the bare command, which flips.
 fn switched(p: &Parsed) -> Switch {
@@ -1517,11 +1497,11 @@ fn switched(p: &Parsed) -> Switch {
 ///
 /// Warning: **the leftover guard in [`read_params`] cannot see this one.** It reads
 /// what no parameter took, and a parameter that takes the rest takes
-/// everything — so `:wiki panel on` looked up an entry named 「panel on」,
-/// `:write all` saved the page to a file called `all`, `:search project`
-/// searched a path of that name, and each of them looked like it had worked.
+/// everything — so `:wiki panel on` would look up an entry named 「panel on」,
+/// `:write all` save the page to a file called `all`, `:search project`
+/// search a path of that name, and each would look like it had worked.
 /// Nine commands have both a subcommand and a first parameter wide enough to
-/// swallow its name (measured 2026-10-20: `:indent`, `:pipe`, `:replace`,
+/// swallow its name (measured: `:indent`, `:pipe`, `:replace`,
 /// `:search`, `:table`, `:theme`, `:view-wrap`, `:wiki`, `:write`).
 ///
 /// **The parameter's own words win**, so a theme or a level that happens to be
@@ -1621,10 +1601,10 @@ fn read_params(
     }
     // Warning: **Text nobody asked for is a typo, not a decoration.** Every regular
     // command has read what it declared by now, and `rest` is read by nothing
-    // in the tree — so anything still standing here was silently dropped.
-    // `:word show off` printed the report and left the tinting on; `:buffer
-    // next` opened the picker and swallowed `next`; both look like the command
-    // worked. The manual taught those spellings, which is how they got typed.
+    // in the tree — so anything still standing here would be silently dropped.
+    // `:word show off` would print the report and leave the tinting on;
+    // `:buffer next` would open the picker and swallow `next`; both look like
+    // the command worked.
     if !left.is_empty() {
         // When the leftover's first word is this command's own subcommand
         // spelled with a space, say the spelling instead of just「多了」——
@@ -1656,9 +1636,9 @@ fn read_params(
 /// `3*4`, `3,4`.
 ///
 /// One list, because two parsers for the same shape with two different lists
-/// is the bug: `--shot=80,6` was taken and `:table 3,4` was refused with
-/// 「不認得「3,4」」, and the comma had been added to `--shot` for the reason
-/// that applies to both — it is what everyone tries first (§5.63).
+/// is the bug: `--shot=80,6` taken and `:table 3,4` refused with 「不認得「3,4」」.
+/// The comma is in for the reason that applies to both — it is what everyone
+/// tries first (§5.63).
 ///
 /// Whitespace is not in it, because the two differ there for a real reason:
 /// `:table 3 4` is two words on a command line, while `--shot` reads one
@@ -1669,7 +1649,7 @@ pub const BETWEEN_TWO_NUMBERS: &[char] = &['x', 'X', '×', '*', ','];
 /// was opened and never closed.
 ///
 /// **Measured against helix 25.07.1 rather than against the idea of a shell**
-/// (2026-10-20, in a pty, reading which file appeared on disk):
+/// (in a pty, reading which file appeared on disk):
 ///
 /// | typed | helix writes |
 /// | --- | --- |
@@ -1711,7 +1691,7 @@ fn unquote(raw: &str) -> Option<String> {
     Some(out)
 }
 
-/// **An `Options` parameter with its words written out** (2026-11-08): each
+/// **An `Options` parameter with its words written out**: each
 /// piece between spaces that the prefix rule turns into one of `list`'s words
 /// becomes that word, as the menu's short spellings promise (`:export html v`
 /// is `vertical`); the rest — a path, a value, a quoted font list — is left
@@ -1764,7 +1744,7 @@ fn resolve(word: &str) -> &str {
     {
         return word;
     }
-    // **A signposted old name is not a prefix** (2026-10-29): `:ls` points
+    // **A signposted old name is not a prefix**: `:ls` points
     // to `:buffer`, and once `:lsp-rename` existed it also began that name,
     // so the prefix rule ran a rename where the reader meant a list. The
     // signpost exists to answer that word; it answers it.
@@ -1776,11 +1756,11 @@ fn resolve(word: &str) -> &str {
     // working at exactly the moment they meant「yes, overwrite it」. The bang
     // belongs to the command, not to its spelling.
     //
-    // **The bang is read after the spelling, never during it** (2026-10-26).
+    // **The bang is read after the spelling, never during it**.
     // The stem names what it names without the bang, and the bang is then
     // either that command's or nothing. A walk over the forceable names alone
-    // used to narrow a spelling the bang had no business narrowing: `:e!` came
-    // out as `export!` (`e` is `open`'s), and `:write-q!` and `:write-!` as
+    // would narrow a spelling the bang has no business narrowing: `:e!` would
+    // come out as `export!` (`e` is `open`'s), and `:write-q!` and `:write-!` as
     // `write-quit-all!` — overwrite everything, drop what failed, leave —
     // because `write-quit` takes no bang and the other two `write-` commands
     // take none either.
@@ -1799,7 +1779,7 @@ fn resolve(word: &str) -> &str {
     // **A head is not ambiguous with its own family** (#368). `:tab` matches
     // `table` and the twelve `table-…` beside it, and it has always meant the
     // first of them: the hyphen says the others are *under* it — 「命令雖然
-    // 現在變成了 hyphen 連接的詞，但本質上還是有級別的」 (2026-09-10)
+    // 現在變成了 hyphen 連接的詞，但本質上還是有級別的」
     // — so a spelling that reaches the head reaches the head.
     let child_of = |head: &str, name: &str| {
         name.len() > head.len() + 1 && name.starts_with(head) && name.as_bytes()[head.len()] == b'-'
@@ -1818,11 +1798,9 @@ fn resolve(word: &str) -> &str {
 ///
 /// The commands that take a `!`, so a prefix of one can too — spelled the way
 /// `parse` reads them back, because that spelling is the other half of the
-/// answer and a second list of it goes stale.
-///
-/// It did: `recover` was in neither, so `:recover!` worked and `:rec!`
-/// `:recov!` `:recove!` were all 「没有這個命令」 while `:rec` was fine. One
-/// list cannot drift from itself.
+/// answer and a second list of it goes stale: a name missing from it would
+/// make `:recover!` work and `:rec!` `:recov!` `:recove!` all 「没有這個命令」
+/// while `:rec` is fine. One list cannot drift from itself.
 const FORCEABLE: &[&str] = &[
     // Spelled as a whole line, because the fold moved this bang off the head
     // and onto a word: `:bclose!` is now `:buffer-close!`, and a bang belongs
@@ -1830,11 +1808,11 @@ const FORCEABLE: &[&str] = &[
     "buffer-close!",
     "write!",
     "quit-all!",
-    // `:wqa!` (2026-10-26): overwrite what changed outside, as `:w!` does,
+    // `:wqa!`: overwrite what changed outside, as `:w!` does,
     // then leave, as `:qa!` does. The oversize question still stops it — a
     // bang never answers that one (see `write_forcing`).
     "write-quit-all!",
-    // `:wq!`, helix's `write-quit!` (2026-11-04).
+    // `:wq!`, helix's `write-quit!`.
     "write-quit!",
     "reload!",
     "quit!",
@@ -1848,10 +1826,8 @@ const FORCEABLE: &[&str] = &[
     "replace-working!",
     "replace-project!",
     "shot!",
-    // **前提一併補上，也是這一下**（2026-10-07 定）。從前它是行末一個 `force`
-    // 字，而那個詞吃掉了別人的參數（`:open force` 開的是挑選器）。判詞：
-    // 「I think that force should not be a parameter but should be a part of the
-    // command function.」兩個意思——「改過也要退」與「前提一併補上」——是同一個
+    // **前提一併補上，也是這一下**。不是行末一個 `force` 字——那個詞會吃掉別人的
+    // 參數（`:open force` 開的是挑選器）；它是命令本身的一部分。兩個意思——「改過也要退」與「前提一併補上」——是同一個
     // 手勢：別問了，做。所以它們共用同一個 `!`，倉裏本來就有的那一個。
     //
     // 這一串就是全樹聲明了 `needs:` 的那些（`:convert!` 另算，它那個 `force` 說
@@ -1873,7 +1849,7 @@ const FORCEABLE: &[&str] = &[
     "table-jump!",
 ];
 
-/// **這一行末尾那個 `!` 是說給命令聽的嗎**（2026-10-07）。
+/// **這一行末尾那個 `!` 是說給命令聽的嗎**。
 ///
 /// [`Editor::execute`] 要在解析**之前**知道這件事：它先算前提夠不夠，不夠而人
 /// 又說了「做」，就把前提一併補上再跑。
@@ -1928,9 +1904,8 @@ pub fn shortest(
 /// prefix names nothing rather than guessing: `:ruby t` could be `typst` and
 /// nothing else, but if a second `t` word were ever added it would stop
 /// working, loudly, instead of quietly meaning the older one.
-/// Warning: **大小寫不算數**（2026-10-02 一輪掃查報來的）。從前這一支逐字節比，而
-/// `Param::WordsOr` 那一路比不中就落到命令自己的解析器上，那些解析器多半折了大小寫
-/// ——於是 `:syntax MARKDOWN`、`:theme INK`、`:layout VERTICAL` 收得下，而
+/// Warning: **大小寫不算數**。逐字節比的話，`Param::WordsOr` 那一路比不中就落到命令
+/// 自己的解析器上，那些解析器多半折了大小寫——於是 `:syntax MARKDOWN`、`:theme INK`、`:layout VERTICAL` 收得下，而
 /// `:language ZH`、`:export HTML`、`:render FULL`、`:keymap VIM` 一概不認。
 /// **同一種參數兩種脾氣**，而讀者分不出哪個命令走哪一路。表裏的詞全是小寫 ASCII，
 /// 所以折一下没有別的影響。
@@ -1957,8 +1932,8 @@ pub fn pick<'a>(typed: &str, from: &'a [Word]) -> Option<&'a Word> {
 ///
 /// The bang belongs to the command, not to its spelling — without it, the line
 /// where a path is *most* likely to be Chinese, `:w! 第三章.md`, the one you
-/// type because the file is already there, was the one line that refused the
-/// IME. How far the bang is followed is the comment below.
+/// type because the file is already there, would be the one line that
+/// refused the IME. How far the bang is followed is the comment below.
 fn entry_named(head: &str) -> Option<&'static Entry> {
     let spelled = |word: &str| {
         COMMANDS
@@ -1976,9 +1951,9 @@ fn entry_named(head: &str) -> Option<&'static Entry> {
     // actually types. So the stem is resolved in its own right.
     //
     // **Only where the bang is really this command's**: `:o!` and `:e!` are
-    // retired outright, and an unconditional strip resurrected them — `:o!
-    // 第三章.md` became `open` and was offered the IME for a line that can only
-    // end in an error.
+    // retired outright, and an unconditional strip would resurrect them — `:o!
+    // 第三章.md` would become `open` and be offered the IME for a line that can
+    // only end in an error.
     let entry = spelled(resolve(head.strip_suffix('!')?))?;
     forceable(entry.name).map(|_| entry)
 }
@@ -1999,7 +1974,7 @@ pub struct Choice {
     /// The other spellings of this same command, joined for the brackets.
     ///
     /// **All of them, not the first.** `exit` answers to `:x` and to `:xit`,
-    /// and no alias has a line of its own in the menu (2026-10-26) — so a
+    /// and no alias has a line of its own in the menu — so a
     /// bracket showing only the first would be the only place the second
     /// could have been found, showing half.
     pub alias: Option<String>,
@@ -2053,7 +2028,7 @@ impl Choice {
 
     /// The **other** spellings worth printing beside this one, if any.
     ///
-    /// Not all of them (2026-09-10): a menu is read, and a column of
+    /// Not all of them: a menu is read, and a column of
     /// parentheses holding `(rec)` `(rel)` `(red)` `(lay)` `(sho)` is a column
     /// of noise. Two rules, and between them they keep only what a reader
     /// could not have worked out:
@@ -2102,7 +2077,7 @@ impl Choice {
 
 /// The words a command takes, shown under the command itself.
 ///
-/// Typing `:yume` used to answer with one entry — `:yume` — and a reader had
+/// Typing `:yume` must not answer with one entry — `:yume` — leaving a reader
 /// no way to find out from there that the input method's whole set of commands
 /// lives under that word. The list says so: the command, and then everything
 /// it takes, spelled the way you would type it.
@@ -2190,9 +2165,8 @@ fn deep_from_root(typed: &str) -> Vec<Choice> {
         // parameter may be; a mood is what `:theme-mode`'s may be, and a
         // reader typing `dark` means that just as plainly.
         //
-        // Warning: **從前這句寫的是「`:theme` 的*第二個*參數」**（2026-10-02 更正）。
-        // `:theme` 只有一個參數，`:theme ink dark` 是被拒的——明暗早就搬去
-        // `:theme-mode` 了。
+        // Warning: **不是「`:theme` 的*第二個*參數」**。`:theme` 只有一個參數，
+        // `:theme ink dark` 是被拒的——明暗在 `:theme-mode`。
         let before = out.len();
         for param in e.params {
             deep(param, &[e.name], typed, ":", &mut out);
@@ -2321,12 +2295,12 @@ const WRAP_WIDTH: &[Word] = &[Word {
 /// on macOS and Windows. `auto` is taken as 唯一 because that is what the
 /// habit calls it — 自動上屏.
 /// How much of 靈明 is answering — `:yume` on its own means the first of them.
-/// **引擎挂没挂上，兩檔**（2026-10-10 定）。
+/// **引擎挂没挂上，兩檔**。
 ///
-/// Warning: **`abc` 2026-10-10 從這裏拿掉了。** 它說的是另一根軸——引擎挂着而打的是
-/// 字母——而那一根由 Shift 管（`press_modifier`），和「挂没挂上」是兩件事。一句
-/// 命令同時動兩根軸，於是 `:y abc` 既是「開」又是「別出中文」，說不清它關掉了什麼。
-/// 原話：「两者是解耦的，所以 :yume 中应该只有 on off 两个选项（引擎开关）」。
+/// Warning: **没有 `abc`。** 它說的是另一根軸——引擎挂着而打的是字母——而那一根由
+/// Shift 管（`press_modifier`），和「挂没挂上」是兩件事。一句命令同時動兩根軸的話，
+/// `:y abc` 既是「開」又是「別出中文」，說不清它關掉了什麼。兩者解耦，所以 `:yume`
+/// 只有 on、off 兩個選項。
 /// `:yume-annotation`'s words: off, the next, and yume's two modes. A mode
 /// the config adds is typed by name.
 const ANNOTATIONS: &[Word] = &[
@@ -2337,11 +2311,11 @@ const ANNOTATIONS: &[Word] = &[
 ];
 
 const COMMITS: &[Word] = &[
-    // **`default` 是「算了，認方案的」**（2026-10-16 加）。從前撥過一次上屏方式
-    // 就回不去了：三個詞都是一個具體的方式，而「這個方案自己說了算」是配置不寫
+    // **`default` 是「算了，認方案的」**。没有它，撥過一次上屏方式就回不去了：
+    // 別的詞都是一個具體的方式，而「這個方案自己說了算」是配置不寫
     // 那一格的意思，命令行上說不出來。
     //
-    // Warning: `d` 從此認不出一個——`def` 與 `del` 纔分得開。
+    // Warning: `d` 認不出一個——`def` 與 `del` 纔分得開。
     Word {
         name: "default",
         help: "cmd.commits.default",
@@ -2364,7 +2338,7 @@ const COMMITS: &[Word] = &[
     },
 ];
 
-/// `:view-diagnostics`'s words: helix's levels, and `off` (2026-11-04).
+/// `:view-diagnostics`'s words: helix's levels, and `off`.
 const EOL_LEVELS: &[Word] = &[
     Word {
         name: "hint",
@@ -2393,7 +2367,7 @@ const EOL_LEVELS: &[Word] = &[
     },
 ];
 
-/// `:encoding`'s words, [`crate::encoding::NAMES`] (2026-11-04).
+/// `:encoding`'s words, [`crate::encoding::NAMES`].
 const ENCODINGS: &[Word] = &[
     Word {
         name: "utf-8",
@@ -2417,7 +2391,7 @@ const ENCODINGS: &[Word] = &[
     },
 ];
 
-/// 字集過濾——`:yume-charset` 的四個詞，yume 自己的名字（2026-11-04）。
+/// 字集過濾——`:yume-charset` 的四個詞，yume 自己的名字。
 const CHARSETS: &[Word] = &[
     Word {
         name: "all",
@@ -2441,7 +2415,7 @@ const CHARSETS: &[Word] = &[
     },
 ];
 
-/// 字集排序——`:yume-charset-sort` 的四個詞（2026-11-04）。
+/// 字集排序——`:yume-charset-sort` 的四個詞。
 const CHARSET_SORTS: &[Word] = &[
     Word {
         name: "original",
@@ -2465,8 +2439,7 @@ const CHARSET_SORTS: &[Word] = &[
     },
 ];
 
-/// 整句字集軌——`:yume-lanes` 的詞：一軌的名字提到首軌，`default` 回到宇夢的次序
-/// （2026-11-04）。
+/// 整句字集軌——`:yume-lanes` 的詞：一軌的名字提到首軌，`default` 回到宇夢的次序。
 const LANES: &[Word] = &[
     Word {
         name: "tonggui",
@@ -2510,7 +2483,7 @@ const LANES: &[Word] = &[
     },
 ];
 
-/// 候選擺在哪——`:yume-panel` 的三個詞（2026-10-16）。
+/// 候選擺在哪——`:yume-panel` 的三個詞。
 const PANELS: &[Word] = &[
     Word {
         name: "box",
@@ -2529,7 +2502,7 @@ const PANELS: &[Word] = &[
     },
 ];
 
-/// 正在打的那一段寫在哪、寫什麼——`:yume-inline-preedit` 的三個詞（2026-09-27）。
+/// 正在打的那一段寫在哪、寫什麼——`:yume-inline-preedit` 的三個詞。
 const PREEDITS: &[Word] = &[
     Word {
         name: "off",
@@ -2629,10 +2602,10 @@ const SYNTAXES: &[Word] = &[
         help: "cmd.syntaxes.code",
         needs: &[],
     },
-    // Warning: **這張表就是 `:syntax` 收得了什麼**（2026-10-10 報的）。前綴規則
-    // （`pick`）跑在它上面，而真正解析參數的 `Syntax::parse` 認二十幾個名字——
-    // 於是 `c` 在十個詞裏唯一命中 `css`、`java` 唯一命中 `javascript`，而 C 和
-    // Java 都是真語言，`:syntax` 卻**一個都選不到**。少寫一行不是少一條補全，
+    // Warning: **這張表就是 `:syntax` 收得了什麼**。前綴規則（`pick`）跑在它上面，
+    // 而真正解析參數的 `Syntax::parse` 認二十幾個名字——表裏少了的話，`c` 唯一命中
+    // `css`、`java` 唯一命中 `javascript`，而 C 和 Java 都是真語言，`:syntax` 卻
+    // **一個都選不到**。少寫一行不是少一條補全，
     // 是少一個答案。
     Word {
         name: "ada",
@@ -2739,17 +2712,16 @@ const HINTS: &[Word] = &[
 /// How much of a `|` table is drawn — the same three levels `:render` has,
 /// in this dimension's own words.
 /// The three levels `:table-render` takes — **and the `空格 t o|b|f` menu's own
-/// three lines**, read from the one entry each (2026-10-07: 「這樣的好處是文案寫
-/// 一份就夠了。目前快捷鍵的文案比命令+參數的文案更好」). The key and the
+/// three lines**, read from the one entry each, so the wording is written once.
+/// The key and the
 /// argument do the same thing, so a reader who has read one of them has read
 /// the other, and there is no second wording to keep true.
 const TABLE_LEVELS: &[Word] = &[
     Word { name: "off", help: "hint.table.back-to-prose", needs: &[] },
     Word { name: "basic", help: "hint.table.operate-it", needs: &[] },
-    // **全窗 is the third answer to the same question** (2026-10-07: 「_tt 可以
-    // 對應命令 `table-render window`，因爲他和另外三個 render 模式是不會
-    // overlap」). `空格 t q` stays a key with no command of its own — 「本質上只
-    // 對全窗模式生效。我建議暫時不用命令」.
+    // **全窗 is the third answer to the same question**: `␣tt` is
+    // `table-render window`, since it does not overlap the other levels.
+    // `空格 t q` stays a key with no command of its own — it acts only in 全窗.
     Word { name: "window", help: "hint.table.whole-window", needs: &[] },
 ];
 
@@ -2793,17 +2765,17 @@ const STROKES: &[Word] = &[
 /// Dark, light, or the terminal's answer.
 ///
 /// **A theme and an appearance are two questions**, and mixing them in one
-/// list made `:theme` offer 「moxiang、heibai、system、dark、light」 as though
-/// they were five of a kind. They are not: one says which set of inks, the
+/// list would make `:theme` offer 「moxiang、heibai、system、dark、light」 as
+/// though they were five of a kind. They are not: one says which set of inks, the
 /// other says which way round they go. `:theme` asks the second on its
 /// own, and `:theme moxiang dark` still asks both in one line.
 /// The mood words sit at both levels, so `:theme dark` and `:theme moxiang
 /// dark` are both sentences — the theme's name is worth saying and worth
 /// leaving out, and neither should be a special case.
 const THEMES: &[Word] = &[
-    // Warning: **The three moods are not here** (#449). They were, because `:theme`
-    // took them as well — and then 「主題」 meant both 「哪一套墨」 and
-    // 「深還是淺」 on one menu. They live under `:theme-mode` now ([`MOODS`]).
+    // Warning: **The three moods are not here** (#449): 「主題」 would mean both
+    // 「哪一套墨」 and 「深還是淺」 on one menu. They live under `:theme-mode`
+    // ([`MOODS`]).
     Word {
         // 墨香
         name: "ink",
@@ -2811,25 +2783,25 @@ const THEMES: &[Word] = &[
         needs: &[],
     },
     Word {
-        // One Dark, after One Dark Pro (2026-10-25), under 墨香 since 2026-10-26: the two most used.
+        // One Dark, after One Dark Pro, under 墨香: the two most used.
         name: "one-dark",
         help: "cmd.themes.one-dark",
         needs: &[],
     },
     Word {
-        // GitHub, light and dark (2026-10-26).
+        // GitHub, light and dark.
         name: "github",
         help: "cmd.themes.github",
         needs: &[],
     },
     Word {
-        // Monokai, as VS Code ships it (2026-10-26).
+        // Monokai, as VS Code ships it.
         name: "monokai",
         help: "cmd.themes.monokai",
         needs: &[],
     },
     Word {
-        // Dracula (2026-10-26).
+        // Dracula.
         name: "dracula",
         help: "cmd.themes.dracula",
         needs: &[],
@@ -2863,12 +2835,11 @@ const THEMES: &[Word] = &[
     },
 ];
 
-/// The table used to declare `Args::Free("<檔名>")` while `parse` read the
-/// format first, so `:export 第三章.md` was answered 「没有『第三章.md』這種
-/// 格式」 by a prompt that had just asked for a file name. And because a free
-/// argument has no words in it, `html` `typst` `csv` `tsv` were the only words
-/// this editor accepts that appeared nowhere in `::`'s corpus: four names you
-/// had to already know to find.
+/// The table declares the formats, not `Args::Free("<檔名>")`, because `parse`
+/// reads the format first: a prompt asking for a file name would answer
+/// `:export 第三章.md` with 「没有『第三章.md』這種格式」. And a free argument
+/// has no words in it, so `html` `typst` `csv` `tsv` would appear nowhere in
+/// `::`'s corpus: four names you would have to already know to find.
 const EXPORT_FORMATS: &[Word] = &[
     Word {
         name: "html",
@@ -2904,7 +2875,7 @@ const EXPORT_FORMATS: &[Word] = &[
     },
 ];
 
-/// **The words `:export` takes after its format** (2026-11-08), each the
+/// **The words `:export` takes after its format**, each the
 /// `[export]` setting of the same name for this one export; the same list
 /// `ye --export` reads ([`crate::export::WORDS`]).
 const EXPORT_WORDS: &[Word] = &[
@@ -2924,7 +2895,7 @@ const EXPORT_WORDS: &[Word] = &[
     Word { name: "font=", help: "cmd.export.font", needs: &[] },
 ];
 
-/// **What `:export-as-preview` writes** (2026-11-08): the Markdown
+/// **What `:export-as-preview` writes**: the Markdown
 /// preview as a page, the Typst preview's document as a PDF
 /// ([`crate::as_preview::Format`]).
 const PREVIEW_FORMATS: &[Word] = &[
@@ -2997,7 +2968,7 @@ const DIALECTS: &[Word] = &[
     Word { name: "markdown", help: "cmd.ruby.format.markdown", needs: &[] },
 ];
 
-/// What `:word-mark` may be given: `off` and the four ways (2026-10-25).
+/// What `:word-mark` may be given: `off` and the four ways.
 ///
 /// Every word the parser takes is listed (底色/字色 too, through
 /// `WordMark::parse`): a word the editor accepts and no reader can find is a
@@ -3033,10 +3004,10 @@ const WORD_MARKS: &[Word] = &[
 
 /// What `:wiki-mark` takes — **how** a wiki name is marked in the prose.
 ///
-/// Warning: **These are the only wiki words left, because they are the only ones
-/// that were ever values** (2026-09-25). `edit`, `panel` and `reload` are
-/// things to *do*, and they are now `:wiki-edit`, `:wiki-panel`, `:wiki-reload`.
-/// `hide` became `off`, so it reads as one family with `:wiki-panel on|off`.
+/// Warning: **These are the only wiki words, because they are the only ones that
+/// are values**. `edit`, `panel` and `reload` are things to *do*:
+/// `:wiki-edit`, `:wiki-panel`, `:wiki-reload`. `off`, not `hide`, so it reads
+/// as one family with `:wiki-panel on|off`.
 const WIKI_MARKS: &[Word] = &[
     Word { name: "color", help: "cmd.wikis.color", needs: &[] },
     Word { name: "line", help: "cmd.wikis.line", needs: &[] },
@@ -3167,7 +3138,7 @@ const INFO_KINDS: &[Word] = &[
 /// the price of the table being the one place that says what each one is *for*,
 /// which is what the user is reading when they cannot remember the name.
 pub const COMMANDS: &[Entry] = &[
-    // Warning: **名字就叫 `cd`，不叫 `change-current-directory`**（2026-10-01）。
+    // Warning: **名字就叫 `cd`，不叫 `change-current-directory`**。
     // helix 的全名是後者，而這一頭的 `:` 選單按第一個連字符摺家族——
     // `change-current-directory` 於是摺出一個只有一個成員的 `:change- +1`，
     // 旁邊再單列一個 `:cd`，同一條命令佔兩格還都看不懂。長名字進 `find`。
@@ -3244,7 +3215,7 @@ pub const COMMANDS: &[Entry] = &[
         params: &[],
         build: Some(|_| Ok(Command::NewBuffer)),
     },
-    // vim's `:tabnew` (2026-11-07): a tab here is a file, so it is a new
+    // vim's `:tabnew`: a tab here is a file, so it is a new
     // scratch, or the file it names.
     Entry {
         name: "tabnew",
@@ -3273,13 +3244,11 @@ pub const COMMANDS: &[Entry] = &[
             // and `as` commands of their own, the ambiguity is gone and so is
             // the shape that carried it.
             // Warning: `:write all` is not a path — and the guard that says so is
-            // [`means_the_hyphenated_one`], which every command now passes
-            // through. It was written here first, by hand, for `all` and `as`
-            // alone: a copy of the manuscript appeared in the working
-            // directory under the name `all`, the status line said 「抄了一份
-            // 到 all」, and every other modified buffer stayed unsaved. Eight
-            // other commands had the same hole. Naming a file `./all` still
-            // works.
+            // [`means_the_hyphenated_one`], which every command passes
+            // through: otherwise a copy of the manuscript would appear in the
+            // working directory under the name `all`, the status line say
+            // 「抄了一份到 all」, and every other modified buffer stay unsaved.
+            // Naming a file `./all` works.
             Ok(match p.force {
                 true => Command::WriteForce(p.arg(0).map(|s| s.to_string())),
                 false => Command::Write(p.arg(0).map(|s| s.to_string())),
@@ -3332,13 +3301,12 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|p| Ok(Command::Reload { force: p.force })),
     },
     Entry {
-        // **一個詞的參數表就是名字的一半**（2026-10-07 定）。旁邊就是
+        // **一個詞的參數表就是名字的一半**。旁邊就是
         // `:reload-auto`，而「再讀一遍設定」卻是 `:reload config`——同一族兩種
         // 拼法。
         //
-        // Warning: 2026-09-23 把它掛成參數，理由是選單的預算：「`:` 那張選單在 24 行
-        // 的窗口下裝得下 54 格，而命令已經 54 條」。那個理由在 #369 折疊同族之後
-        // 不成立了——`reload-config` 折進 `:reload` 那一行，頂層一格都不多佔。
+        // Warning: 選單的預算不是掛成參數的理由：#369 折疊同族，`reload-config` 折進
+        // `:reload` 那一行，頂層一格都不多佔。
         name: "reload-config",
         // helix's name for it.
         aliases: &["config-reload"],
@@ -3393,15 +3361,14 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "goto",
-        // Warning: **`:g` 這個別名 2026-10-06 拿掉了**（十三條的第五條）。`:20` 本來
-        // 就跳第 20 行，別名多餘；而 `:g` 在 vim 裏是 `:global`——「對每一條配得上
+        // Warning: **没有 `:g` 這個別名**。`:20` 本來就跳第 20 行，別名多餘；而 `:g` 在 vim 裏是 `:global`——「對每一條配得上
         // 的行做一件事」——佔着那個名字去做跳行，是這張單子上最容易出事的一種。
         aliases: &[],
         help: "cmd.commands.goto",
         needs: &[],
         params: &[Param::Free("<行號>")],
-        // Warning: **讀不懂的數字不是「没給」**（2026-10-02 一輪掃查報來的）。從前
-        // `:goto abc` 答的是「goto 後面要跟一個參數」——而參數明明給了。
+        // Warning: **讀不懂的數字不是「没給」**。`:goto abc` 不許答「goto 後面要跟
+        // 一個參數」——參數明明給了。
         // [`Parsed::number`] 手裏就有對的那一句（「goto：不認得「abc」」），
         // 丟掉它纔換來一句假話。`:wheel abc` 一直是對的，比一下就看得出來。
         build: Some(|p| p.number(0).map(Command::GotoLine)),
@@ -3448,7 +3415,7 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|_| Ok(Command::CheckUsage)),
     },
     Entry {
-        // **The config file's own check** (2026-10-20 作者定). In the `check-`
+        // **The config file's own check.** In the `check-`
         // family because that is what it is — one more 「look this over and
         // tell me what is wrong」 — and not under `config-`, which would fold
         // a family of one beside `:reload-config`.
@@ -3468,8 +3435,8 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|_| Ok(Command::CheckNames)),
     },
     Entry {
-        // 2026-09-29 從 `diagnostics-all` 改名：它和 `:diagnostics`（即時開關）是
-        // 一件事的兩半，跟那一家比跟 `check-*` 那一排更近。舊名不留別名。
+        // `diagnostics-all`：它和 `:diagnostics`（即時開關）是一件事的兩半，跟那一家
+        // 比跟 `check-*` 那一排更近。舊名不留別名。
         name: "diagnostics-all",
         // Warning: **別名會在 `:` 選單上自己佔一行。** `diagnostics` 當過別名，那張
         // 「一眼掃得完」的表當場從 54 漲到 55，一條滾出了窗口（#369）。要讓
@@ -3520,9 +3487,8 @@ pub const COMMANDS: &[Entry] = &[
             // editor runs is readable from what was typed. With neither, it
             // explains which ways it can go.
             //
-            // **那個 `force` 從前是第三個參數**（2026-10-07 收進 `!`）。它的壞處
-            // 在別處看得見：`execute` 為了讓前提那一路也認得這個詞，把行末的
-            // ` force` 無條件削掉，於是 `:open force` 開的是挑選器。
+            // **`force` 是 `!`，不是第三個參數**：那樣 `execute` 為了讓前提那一路也
+            // 認得這個詞，會把行末的 ` force` 無條件削掉，`:open force` 開的就是挑選器。
             let (Some(from), Some(to)) = (p.arg(0), p.arg(1)) else {
                 return Ok(Command::Convert(ConvertAsk::Explain));
             };
@@ -3617,8 +3583,7 @@ pub const COMMANDS: &[Entry] = &[
         params: &[],
         build: Some(|p| Ok(Command::WriteQuitAll { force: p.force })),
     },
-    // **`:x` is not `:wq`**, and it was an alias of it here. In vi and in helix
-    // both, `:x` writes *only when the file changed* — a file opened, read and
+    // **`:x` is not `:wq`**. In vi and in helix both, `:x` writes *only when the file changed* — a file opened, read and
     // left alone keeps its timestamp, which is what `make`, rsync and a sync
     // folder go by. `:update` is the same gate without the leaving.
     Entry {
@@ -3701,11 +3666,10 @@ pub const COMMANDS: &[Entry] = &[
             or: "字色｜墨色",
         }],
         build: Some(|p| {
-            // **One choice, `off` among the ways** (2026-10-25). It was
-            // `:word-show on|off` beside the ways — two settings in one argument:
-            // `on` meant「whichever way it was last」 and naming a way turned it
-            // on as well. Now every value says what the page will show, as
-            // `:wiki-mark` and `:render` do.
+            // **One choice, `off` among the ways**, not `on|off` beside the
+            // ways — two settings in one argument, where `on` would mean
+            // 「whichever way it was last」. Every value says what the page will
+            // show, as `:wiki-mark` and `:render` do.
             Ok(Command::Word(match p.arg(0) {
                 None => WordCommand::MarkReport,
                 Some("off") => WordCommand::Unmark,
@@ -3730,7 +3694,7 @@ pub const COMMANDS: &[Entry] = &[
         // 的話（「朱宇浩」「洞庭湖」），没有哪張表列得完。
         params: &[Param::Free("<詞條名>")],
         build: Some(|p| {
-            // **不帶名字也開那扇面板，空着查**（2026-09-25 定）：`:wiki` 就是
+            // **不帶名字也開那扇面板，空着查**：`:wiki` 就是
             // 「翻百科」，天天用的是這個。那一份報告挑走了，叫 `:wiki-where`。
             Ok(Command::Wiki(WikiCommand::Find(
                 p.arg(0).unwrap_or_default().to_string(),
@@ -3754,14 +3718,13 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|_| Ok(Command::Wiki(WikiCommand::Global))),
     },
     Entry {
-        // **一條命令管一個開關**（2026-10-08 定，原話：「我覺得他很好用欸」）。
+        // **一條命令管一個開關**。
         //
         // Warning: **它是個設置，不是往配置檔裏寫那四行。** `[keys.normal]` 裏寫得出同一
         // 件事（手冊那一節有那四行），可寫進去的是**鍵**：以後出廠值改了，那四行
         // 還壓着（§5.113）。
-        // **也不是第三套鍵位**（2026-10-18 定，§5.110 那一條隨之作廢）：一套預設
-        // 是整張表、要一直跟着 helix 上游走，而這是一張差異清單。10-08 那個
-        // `:yank-on-delete` 併進來成了集合裏的第一項。
+        // **也不是第三套鍵位**：一套預設是整張表、要一直跟着 helix 上游走，而這是一張
+        // 差異清單。`yank-on-delete` 是集合裏的第一項。
         name: "keymap-yumete-flavor",
         aliases: &[],
         help: "cmd.keymap-yumete-flavor",
@@ -3837,10 +3800,10 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|_| Ok(Command::Wiki(WikiCommand::Reload))),
     },
     Entry {
-        // **三個參數拆成三條命令**（2026-09-30 報的）。從前是 `:word-list edit`
-        // 開本書那一份、`:word-list global` 開全域那一份——兩件事**只差哪一個
-        // 檔**，可一個用動詞起名、一個用範圍起名，於是誰都猜不到另一個：知道
-        // `edit` 的人猜不出 `global`，反過來也一樣。
+        // **三條命令，不是三個參數**。`:word-list edit` 開本書那一份、
+        // `:word-list global` 開全域那一份的話——兩件事**只差哪一個檔**，可一個用
+        // 動詞起名、一個用範圍起名，誰都猜不到另一個：知道 `edit` 的人猜不出
+        // `global`，反過來也一樣。
         //
         // 隔壁那一家本來就是這個形狀（`:word-discover` / `-cd` / `-gd`），而
         // `:` 選單按連字號前綴併行（今天是 `:word (wd) +7`），所以多三條不多佔
@@ -3942,15 +3905,13 @@ pub const COMMANDS: &[Entry] = &[
         params: &[],
         build: Some(|_| Ok(Command::Word(WordCommand::Habit))),
     },
-    // **兩個方向各自一條命令，`:layout` 整條没了**（2026-10-12 定）。
+    // **兩個方向各自一條命令，`:layout` 整條没了**。
     //
-    // 從前是 `:layout [vertical|horizontal]`，外加一個不帶參數的 `:layout` 互
-    // 換。起因是 `:vertical-keys`：它一加，`vertical` 就成了它的唯一前綴——一個
-    // 想把頁轉過來而打 `:vertical` 的人，按下去是把 `hjkl` 那個設置互換了，頁没
-    // 轉而手下四個鍵全變了意思。把兩個方向定成命令，就是把那個詞佔住。
+    // 有了 `:vertical-keys`，`vertical` 就是它的唯一前綴——一個想把頁轉過來而打
+    // `:vertical` 的人，按下去是把 `hjkl` 那個設置互換了，頁没轉而手下四個鍵全變了
+    // 意思。把兩個方向定成命令，就是把那個詞佔住。
     //
-    // Warning: **是替換，不是加別名。** 原話：「我的意思是替换。」倉裏那條規矩
-    // 也寫着舊拼法刪掉不留別名，而手冊那一節自己說「keeping two spellings would
+    // Warning: **是替換，不是加別名。** 倉裏那條規矩寫着舊拼法刪掉不留別名，而手冊那一節自己說「keeping two spellings would
     // mean this philosophy was only talk」。互換那一條也一併刪了——没有人想「互
     // 換」，想的是「轉成竪排」。
     Entry {
@@ -3997,11 +3958,10 @@ pub const COMMANDS: &[Entry] = &[
             // unknown one is answered there, in a sentence, rather than refused
             // here.
             //
-            // Warning: **The mood is not here any more** (#449). `:theme light` used
-            // to work, and `:theme moxiang dark` too, which made 「主題」 mean
-            // two things on one line: the inks, and which way round they go.
-            // 「防止和其他的主题混淆」 — so the mood moved out to
-            // `:theme-mode`, and this command names a theme and nothing else.
+            // Warning: **The mood is not here** (#449): `:theme light` and
+            // `:theme moxiang dark` would make 「主題」 mean two things on one
+            // line, the inks and which way round they go. The mood is
+            // `:theme-mode`'s, and this command names a theme and nothing else.
             Ok(Command::Theme { name: p.arg(0).map(|w| w.to_string()), mood: None })
         }),
     },
@@ -4032,7 +3992,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &["lang"],
         help: "cmd.commands.language",
         needs: &[],
-        // `zht`, `zhs`, `en` are the names shown (2026-11-07); `zh`, `tc`,
+        // `zht`, `zhs`, `en` are the names shown; `zh`, `tc`,
         // `sc` and the other spellings `Language::parse` knows still work.
         params: &[Param::WordsOr { of: LANGUAGES, default: None, or: "<語言>" }],
         build: Some(|p| {
@@ -4047,10 +4007,8 @@ pub const COMMANDS: &[Entry] = &[
         }),
     },
     Entry {
-        // **`:version` 的重點不是版本號，是「東西都在哪」**（2026-10-05 一個用的人
-        // 報的：「這個命令很重要的一點是展示配置文件在哪里」）。人裝完軟件第一個
-        // 問題就是「我該去改哪個文件」，而在這之前**没有任何命令說得出來**——只有
-        // `:reload-config`，它重讀，可不說路徑。
+        // **`:version` 的重點不是版本號，是「東西都在哪」**：配置文件在哪裏。人裝完
+        // 軟件第一個問題就是「我該去改哪個文件」，而 `:reload-config` 重讀，可不說路徑。
         name: "version",
         aliases: &["ver"],
         help: "cmd.commands.version",
@@ -4067,12 +4025,12 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|p| Ok(Command::SetKeymap(p.arg(0).and_then(yumete_cjk::KeyPreset::parse)))),
     },
     Entry {
-        // **A name of its own, not a third word in `:keymap`** (2026-10-10 定：
-        // 「他不应该是 option 而是一个命令」). `helix` and `vim` are what a
+        // **A name of its own, not a third word in `:keymap`**: a command, not
+        // an option. `helix` and `vim` are what a
         // keymap *is*; listing what a key may be bound to is a different verb,
         // and a word that answers a different question is half a command name
-        // sitting in someone else's parameter list — the same shape
-        // `reload-config` and the other three were taken out of 2026-10-07.
+        // sitting in someone else's parameter list — the same reason
+        // `reload-config` is a command of its own.
         name: "keymap-actions",
         aliases: &[],
         help: "cmd.keymap.actions",
@@ -4081,8 +4039,8 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|_| Ok(Command::ListActions)),
     },
     Entry {
-        // **這個名字 2026-10-08 讓給了「這份檔案是什麼」**，即時顯示那一條改叫
-        // `:instant-info`（見下面那一條）。
+        // **這個名字說的是「這份檔案是什麼」**，即時顯示那一條叫 `:instant-info`（見
+        // 下面那一條）。
         name: "info",
         aliases: &[],
         help: "cmd.commands.file-info",
@@ -4091,14 +4049,12 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|_| Ok(Command::FileInfo)),
     },
     Entry {
-        // **「什麽時候問」與「畫在哪」分開**（2026-09-29 定，原話：「即时显示应该
-        // 做成一个命令开关而不使用快捷键……这样的话即时显示和在哪里显示就分开了，
-        // 不会混在一起」）。畫在哪是 `空格 k`/`空格 K` 與 `PageUp`/`PageDown`。
+        // **「什麽時候問」與「畫在哪」分開**：即時顯示是一個命令開關，不是快捷鍵。畫在
+        // 哪是 `空格 k`/`空格 K` 與 `PageUp`/`PageDown`。
         //
-        // Warning: **2026-10-08 從 `:info` 改名 `:instant-info`**。原話：「`:info docs`
-        // 這個命令讓人誤解是查看这个文档的信息（位置、大小、作者、编辑时间、元
-        // 数据、关联的LSP等等）。能不能改成 `:instant-info` 来强调「及時」的含
-        // 義。」這條命令管的從來就是**什麼時候問**，不是這份檔案是什麼。
+        // Warning: **叫 `:instant-info`，不叫 `:info`**：`:info docs` 讀起來像查看這份
+        // 文檔的信息（位置、大小、編輯時間、關聯的 LSP）。這條命令管的是**什麼時候
+        // 問**，「及時」兩個字要在名字裏。
         name: "instant-info",
         aliases: &[],
         help: "cmd.commands.info",
@@ -4114,9 +4070,8 @@ pub const COMMANDS: &[Entry] = &[
         params: &[Param::Free("<欄>…｜off")],
         build: Some(|p| {
             Ok(Command::Rules(match p.arg(0) {
-                // **光禿禿的 `:rules` ＝ 80 和 100**（2026-09-30 定）。原話：
-                // 「usually for python the limit of the docstring and the
-                // code」——文檔字串一道，代碼一道，本來就是兩條。
+                // **光禿禿的 `:rules` ＝ 80 和 100**：Python 的文檔字串一道，
+                // 代碼一道，本來就是兩條。
                 None => vec![80, 100],
                 Some("off" | "none" | "0") => Vec::new(),
                 // Warning: `Param::Free` 交回來的是**剩下的一整串**，不是一個
@@ -4184,18 +4139,18 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "yume",
-        // Warning: **`y` 是明寫的，不是前綴猜出來的**（2026-10-06）。`:yuhao` 一加
-        // 進來，`y` 就同時是兩條命令的前綴，而 `:y` 從前一直是這一條——明寫的別名
-        // 壓過前綴規則（見 `names_something`），所以它一個字没變。
+        // Warning: **`y` 是明寫的，不是前綴猜出來的**。`:yuhao` 一加
+        // 進來，`y` 就同時是兩條命令的前綴，而 `:y` 是這一條——明寫的別名
+        // 壓過前綴規則（見 `names_something`）。
         //
-        // Warning: **`:yu` 丟了**：它從前靠前綴走到這裏，現在兩邊都沾。`:y` 和 `:yum`
+        // Warning: **`:yu` 不通**：兩邊都沾。`:y` 和 `:yum`
         // 都通，`:yuhao` 自己最短是 `:yuh`。只明寫 `y` 不明寫 `yu`，是因為選單
         // 會把明寫的別名**全列出來**，`(y yu)` 比 `(y)` 吵而換不到什麼。
         aliases: &["y"],
         help: "cmd.commands.yume",
         needs: &[],
         params: &[Param::Words { of: YUME_WORDS, default: None }],
-        // **A switch** (2026-11-07): `on` goes straight to 中文, `off` hands
+        // **A switch**: `on` goes straight to 中文, `off` hands
         // the keyboard back, and bare turns it round as `Space z z` does;
         // 中文 or ABC is the lone Shift's.
         build: Some(|p| Ok(Command::Yume(switched(p)))),
@@ -4292,10 +4247,8 @@ pub const COMMANDS: &[Entry] = &[
         name: "yume-panel",
         aliases: &[],
         help: "cmd.yume.panel",
-        // Warning: **沒有 `needs:`**（2026-10-16 改）。從前整個 `:yume-…` 家族掛着同一
-        // 行 `Need::Scheme`，於是沒載碼表的時候這一條答「還不行，需要：載入碼
-        // 表」——原話：「我使用 `yume-panel` 爲什麽要載入碼表？」它不要：候選擺
-        // 在哪是會話上的一格，碼表在不在都有，而 `[panel] display` 開機就撥了
+        // Warning: **沒有 `needs:`**。掛着 `Need::Scheme` 的話，沒載碼表的時候這一條答
+        // 「還不行，需要：載入碼表」——而它不要碼表：候選擺在哪是會話上的一格，碼表在不在都有，而 `[panel] display` 開機就撥了
         // 它。加 `!` 更糟，那是為了挪一條候選欄去載一張碼表。
         //
         // 同一條理由放了 `:yume-inline-preedit` 與 `:yume-menu-size`。還掛着的
@@ -4470,8 +4423,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.view.wrap",
         needs: &[],
-        // A switch (2026-11-07); the width it used to take is
-        // `:view-wrap-width`'s.
+        // A switch; the width is `:view-wrap-width`'s.
         params: &[Param::Words { of: WRAP_WORDS, default: None }],
         build: Some(|p| Ok(Command::SetSoftWrap(switched(p)))),
     },
@@ -4492,8 +4444,8 @@ pub const COMMANDS: &[Entry] = &[
         }),
     },
     Entry {
-        // Was `:view-wrap-vertical` (renamed 2026-11-07, no alias): the
-        // horizontal one is a width, this one a height.
+        // `height`, not `vertical`: the horizontal one is a width, this one a
+        // height.
         name: "view-wrap-height",
         aliases: &[],
         help: "cmd.view.wrap-height",
@@ -4524,7 +4476,7 @@ pub const COMMANDS: &[Entry] = &[
             ))
         }),
     },
-    // **Two commands, a count each** (2026-10-28, renamed from `:view-bands`):
+    // **Two commands, a count each** (renamed from `:view-bands`):
     // one per layout, so two pages stacked in 縱書 do not bring two side by
     // side in 橫排. A count, not a switch: only 1–4, no `on`/`off`, which had
     // no meaning on a page already cut in three. Neither needs its layout to
@@ -4580,8 +4532,7 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|p| Ok(Command::SetHanging(switched(p)))),
     },
     Entry {
-        // `:view-numbers-fill` on its own said nothing about *what* of the numbers
-        // and refused; there was only ever one thing, so it is the command.
+        // There is only one thing of the numbers to fill, so it is the command.
         name: "view-numbers-fill",
         aliases: &[],
         help: "cmd.numbers.fill",
@@ -4633,7 +4584,7 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|p| Ok(Command::SetMeter(switched(p)))),
     },
     Entry {
-        // Was `:note`, which was never about footnotes (§5.2.3 ④).
+        // Not `:note`, which reads as footnotes (§5.2.3 ④).
         name: "view-punct",
         aliases: &[],
         help: "cmd.view.punct",
@@ -4650,7 +4601,7 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|p| Ok(Command::SetCode(switched(p)))),
     },
     Entry {
-        // **一行長過多少列就不上色**（2026-10-08 定）。vim 的 `synmaxcol`，同數
+        // **一行長過多少列就不上色**。vim 的 `synmaxcol`，同數
         // （3000），只是這裏管得寬一點——標記、語法、分詞三筆賬一起摔，所以名字
         // 說的是「長的行」而不是「語法」。裸的報告現在多少，同 `:view-hud`。
         name: "view-long-line",
@@ -4660,7 +4611,7 @@ pub const COMMANDS: &[Entry] = &[
         params: &[Param::WordsOr {
             of: OFF_ONLY,
             default: None,
-            // 數的是**字**，不是列（2026-10-09 作者定）：量一行有多少列要逐字量寬度，
+            // 數的是**字**，不是列：量一行有多少列要逐字量寬度，
             // 而那正是這道閘要省的開銷。見 `Editor::LONG_LINE`。
             or: "<幾字>",
         }],
@@ -4808,11 +4759,9 @@ pub const COMMANDS: &[Entry] = &[
         }),
     },
     Entry {
-        // Warning: **1–16, which is what `[editor] indent_width` declares** (2026-10-20).
-        // This said 1–8 and the manual said 1–8, while the settings panel
-        // declared 1–16 and a config file was clamped to it — so
-        // `indent_width = 12` was legal written down and refused typed in. The
-        // panel's declaration is the one fact (`settings_ui::counted`, which
+        // Warning: **1–16, which is what `[editor] indent_width` declares**, or
+        // `indent_width = 12` would be legal written down and refused typed in.
+        // The panel's declaration is the one fact (`settings_ui::counted`, which
         // is what `as_declared` reads), and no reference caps it anywhere near
         // 8: vim takes `tabstop` to 9999 and `shiftwidth` past 10000
         // (measured), helix's `indent.unit` is a string of whitespace with no
@@ -4900,12 +4849,12 @@ pub const COMMANDS: &[Entry] = &[
         help: "cmd.indent.hint",
         needs: &[],
         params: &[Param::Words { of: HINTS, default: None }],
-        // Warning: **光打 `:indent-hint` 要答「現在是哪一檔」**（2026-10-02 一輪掃查
-        // 報來的）。從前它把空字串交給 `parse`，解不出來，答的是「不認得「」」
-        // ——問的人連問了什麼都没說，而編輯器怪他說錯了。[`Param::Words`] 自己的
+        // Warning: **光打 `:indent-hint` 要答「現在是哪一檔」**。把空字串交給 `parse`
+        // 的話，解不出來，答的是「不認得「」」——問的人連問了什麼都没說，而編輯器怪
+        // 他說錯了。[`Param::Words`] 自己的
         // 註釋寫着一張值表「**幾乎總該**」有個缺省，理由是「a setting that cannot
         // answer 「which am I now」 is a setting with a hole in it」。這一支是全表
-        // 唯一一個没有的。隔壁 `:indent-tab` 一直是對的，照它寫。
+        // 唯一一個没有的。照隔壁 `:indent-tab` 寫。
         build: Some(|p| {
             let Some(given) = p.arg(0) else {
                 return Ok(Command::SetIndentHint(None));
@@ -4920,15 +4869,11 @@ pub const COMMANDS: &[Entry] = &[
         }),
     },
     Entry {
-        // **`:table` makes a table** (2026-10-07: 「現在的 :table 命令不是良定
-        // 義，我覺得可以直接删除。然后把 `table-new` 改成 `table`。換句話說，
-        // `table` 這個命令用來新建一個表格是很自然（用户馬上就能猜到）的行爲。
-        // 就像 `ruby` 新建/編輯注音一樣」). The door it used to be landed on two
-        // different views depending on the file, and the question 「which view」
-        // is `:table-render`'s — so walking in is what asking for a view does,
-        // and the bare name was free for the thing a reader guesses it means.
+        // **`:table` makes a table**, which is what a reader guesses it means,
+        // as `ruby` makes or edits a reading. 「Which view」 is `:table-render`'s
+        // question, so walking in is what asking for a view does.
         name: "table",
-        // Declared, so `:tabnew` (2026-11-07) leaves the short forms the
+        // Declared, so `:tabnew` leaves the short forms the
         // menu teaches where they were.
         aliases: &["ta", "tab"],
         help: "cmd.commands.table",
@@ -4944,9 +4889,9 @@ pub const COMMANDS: &[Entry] = &[
                 .split(|c: char| BETWEEN_TWO_NUMBERS.contains(&c) || c.is_whitespace())
                 .filter(|w| !w.is_empty());
             let first = numbers.next();
-            // Warning: **分隔符自己不是一個數**（2026-10-09 審出來的）。`:table x`、
-            // `:table ×`、`:table xXx` 切完一個數都不剩，於是兩個 `unwrap_or("3")`
-            // 一起開火，默默作一張出廠的 3×3——而那個 `x` 是人打出來的。理由同下面
+            // Warning: **分隔符自己不是一個數**。`:table x`、`:table ×`、`:table xXx`
+            // 切完一個數都不剩，兩個 `unwrap_or("3")` 會一起開火，默默作一張出廠的
+            // 3×3——而那個 `x` 是人打出來的。理由同下面
             // 那一條（第三個數是打錯了，不是可以丟掉的）。
             if first.is_none() && !spec.trim().is_empty() {
                 return Err(CommandError::InvalidArgument {
@@ -4956,9 +4901,9 @@ pub const COMMANDS: &[Entry] = &[
             }
             let rows = first.unwrap_or("3");
             let columns = numbers.next().unwrap_or("3");
-            // Warning: **第三個數是打錯了，不是可以丟掉的**（2026-10-03）。
-            // `:table-new 3 4 5` 從前默默作一張 3×4 的表，而那個 `5` 是人打出來
-            // 的——他要的多半不是 3×4。說一句，別自作主張。
+            // Warning: **第三個數是打錯了，不是可以丟掉的**。
+            // `:table 3 4 5` 不許默默作一張 3×4 的表：那個 `5` 是人打出來的——他要
+            // 的多半不是 3×4。說一句，別自作主張。
             if numbers.next().is_some() {
                 return Err(CommandError::InvalidArgument {
                     command: "table",
@@ -4989,10 +4934,9 @@ pub const COMMANDS: &[Entry] = &[
                 Some("off") => Command::SetTableLevel(crate::editor::TableLevel::Off),
                 Some("basic") => Command::SetTableLevel(crate::editor::TableLevel::Basic),
                 Some("window") => Command::TableWindow,
-                // **`full` 2026-10-21 併進 `basic`**：它只多把你打的 `|` 畫成
-                // 一道牆，而要一張畫好的網格是 `window` 的事。`full` 連同它那
-                // 一行從 `TABLE_LEVELS` 裏刪了，所以它現在和拼錯一樣被擋在門
-                // 外——不留別名，也不悄悄當成 `basic`。
+                // **没有 `full`**：它只多把你打的 `|` 畫成一道牆，而要一張畫好的
+                // 網格是 `window` 的事。`TABLE_LEVELS` 裏没有它，所以它和拼錯一樣
+                // 被擋在門外——不留別名，也不悄悄當成 `basic`。
                 _ => Command::SetTableLevel(crate::editor::TableLevel::Basic),
             })
         }),
@@ -5073,7 +5017,7 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "replace",
-        // `:r` pairs with `:s` for `:search` (2026-10-28). vim and helix spend
+        // `:r` pairs with `:s` for `:search`. vim and helix spend
         // it on `:read`, which yumete spells out in full; an alias is not
         // muscle memory the way a key is.
         aliases: &["r"],
@@ -5145,7 +5089,7 @@ pub const COMMANDS: &[Entry] = &[
             Some(line) => Ok(Command::PipeInto(line.to_string(), crate::editor::Put::After)),
         }),
     },
-    // `:read` (2026-10-28), what `:pipe-after cat <file>` did by way of a
+    // `:read`, what `:pipe-after cat <file>` did by way of a
     // shell. Its `:r` stays with `:replace`.
     Entry {
         name: "read",
@@ -5198,13 +5142,13 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "search",
-        // **`:s` 開這扇面板**（2026-09-26 定的）。`s` 在 vi 裏是 substitute，而
+        // **`:s` 開這扇面板**。`s` 在 vi 裏是 substitute，而
         // 這扇面板正是 substitute 的大號——找與換在同一張表上。
         // Warning: **`:s/找/換/` 還是 vi 那一行，不受影響**：`parse_substitution` 在命令
         // 表之前就攔下了帶分隔符的那一種，而它明說「光禿禿的 `:s` 是別的命令」
         // （那支函數開頭那段註釋）。所以兩者分得清：帶斜杠是一次性替換，不帶是
         // 開面板。
-        // **`:grep` 也開這扇面板**（2026-10-06，十三條的第五條）。vim 的 `:grep`
+        // **`:grep` 也開這扇面板**（十三條的第五條）。vim 的 `:grep`
         // 跑外部 grep、結果進 quickfix 列表；共同產出是一張走得了的列表，而這扇
         // 面板就是那張表。
         aliases: &["s", "grep"],
@@ -5220,7 +5164,7 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "search-buffers",
-        // Two letters, the verb's and the scope's (2026-10-26): `sb`/`sw`/`sp`,
+        // Two letters, the verb's and the scope's: `sb`/`sw`/`sp`,
         // and `rb`/`rw`/`rp` for the replace panel.
         aliases: &["sb"],
         help: "cmd.commands.search-buffers",
@@ -5297,8 +5241,8 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.table.detail",
         needs: &[Need::Table],
-        // Warning: **`<寬>` 那個參數没了**（2026-09-26）：寬度歸側欄，面板說不上話
-        // （原話：「面板自身不能改变侧栏的宽度，它只是借用了侧栏这个容器」）。
+        // Warning: **没有 `<寬>` 那個參數**：寬度歸側欄，面板說不上話——面板只是借用了
+        // 側欄這個容器。
         // 要寬要窄按 `w`，三檔。
         params: &[Param::Words { of: SWITCH, default: None }],
         build: Some(|p| Ok(Command::ShowDetail(switched(p)))),
@@ -5327,7 +5271,7 @@ pub const COMMANDS: &[Entry] = &[
         params: &[Param::Words { of: WRITE, default: None }],
         build: Some(|p| {
             // 「這張表到底是怎麼讀的」 is a line; writing it down is asked for
-            // by name (2026-10-30, as decided).
+            // by name.
             Ok(Command::TableSchema { write: p.arg(0) == Some("write") })
         }),
     },
@@ -5468,12 +5412,12 @@ pub const COMMANDS: &[Entry] = &[
         }),
     },
     Entry {
-        // Warning: **The range is declared once** (2026-10-20). `[editor] wheel_step`
+        // Warning: **The range is declared once**. `[editor] wheel_step`
         // in the settings panel says 1–10 and a config file is clamped to it
         // (`settings_ui::counted`, which exists so that 「鉗的規矩和面板畫的
-        // 規矩必須是同一個事實」) — and this command checked nothing at all:
-        // `:wheel 999999` answered 「滾輪：一格 999999 行」 while the same
-        // number written in `config.toml` came back as 10. The core cannot see
+        // 規矩必須是同一個事實」) — and this command checks the same range, or
+        // `:wheel 999999` would answer 「滾輪：一格 999999 行」 while the same
+        // number written in `config.toml` comes back as 10. The core cannot see
         // `yumete-config`, so the two are held together by a drift test over
         // there (`tests/settings_ui.rs`) rather than by one constant.
         name: "wheel",
@@ -5501,12 +5445,12 @@ pub const COMMANDS: &[Entry] = &[
         }),
     },
     Entry {
-        // **裸的那個開粘貼選單**（2026-09-25 提的），和 `:wiki`、`:buffer`
+        // **裸的那個開粘貼選單**，和 `:wiki`、`:buffer`
         // 同形：一個命令自己的意思就是有用的那一個，後面不必再跟一個詞。
         // `空格 "` 是同一扇。
         name: "clipboard",
-        // vim's `:reg` lists what could be put, as this menu does
-        // (2026-11-04); its longer spellings are signposts.
+        // vim's `:reg` lists what could be put, as this menu does;
+        // its longer spellings are signposts.
         aliases: &["reg"],
         help: "cmd.commands.clipboard",
         needs: &[],
@@ -5530,8 +5474,8 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|_| Ok(Command::Clipboard { yank: false })),
     },
     Entry {
-        // The bare word lists them, which is what `:buffer` was: a
-        // command whose own meaning is the useful one needs no word after it.
+        // The bare word lists them: a command whose own meaning is the useful
+        // one needs no word after it.
         name: "buffer",
         aliases: &[],
         help: "cmd.commands.buffer",
@@ -5738,7 +5682,7 @@ pub const COMMANDS: &[Entry] = &[
         help: "cmd.commands.ruby",
         needs: &[],
         // **注音 is something you *do* to a word**, and that reading of the
-        // name wins the whole name (2026-10-07, with `:table`): the three
+        // name wins the whole name (with `:table`): the three
         // levels went to `:ruby-render`, so this one is only the verb.
         params: &[],
         build: Some(|_| Ok(Command::Ruby)),
@@ -5852,19 +5796,17 @@ pub const COMMANDS: &[Entry] = &[
 /// and shown in its brackets like every other alias. This table is for
 /// the ones that stand for two words, which no alias can express.
 ///
-/// **`bc` and `wa` came back** (2026-09-10). The fold retired them along with
-/// `bclose` and `wall`, on the rule that a leaf keeps its name and the tree
-/// says the rest. That is right for the twenty commands a reader meets once;
-/// it was wrong for the four typed all day, whose short spellings are in every
-/// vi user's fingers. The long spellings still work and still say what they do
+/// **`bc` and `wa` are aliases**, though the fold retired `bclose` and `wall`
+/// on the rule that a leaf keeps its name and the tree says the rest. That is
+/// right for the twenty commands a reader meets once; it is wrong for the four
+/// typed all day, whose short spellings are in every vi user's fingers. The long spellings still work and still say what they do
 /// — these are a second way in, not a rename back.
-// Warning: `search` was here (it pointed at `table-find`) and is gone from it:
-// #419 gave the name to a live command, and a signpost may only point
-// *away* from a word nobody can type any more.
+// Warning: `search` is not here: #419 gave the name to a live command, and a
+// signpost may only point *away* from a word nobody can type.
 const RENAMED: &[(&str, &str)] = &[
     ("appearance", "theme"),
     ("bclose", "buffer-close"),
-    // **The short vi spellings** (2026-10-19). None of them shares a segment
+    // **The short vi spellings**. None of them shares a segment
     // with the name it became, so the search below cannot find them — and
     // `:cy` was worse than unfound: the prefix pass matched `cyanotype` in the
     // theme list and sent a vi hand that wanted the clipboard to the theme
@@ -5875,7 +5817,7 @@ const RENAMED: &[(&str, &str)] = &[
     ("conflicts", "check-merge"),
     ("cp", "clipboard-paste"),
     ("cy", "clipboard-yank"),
-    // Two answers to one question it did not name; four answers now (2026-09-16).
+    // Two answers to one question it did not name; four answers now.
     ("dense", "view-margin"),
     ("di", "clipboard"),
     ("display", "clipboard"),
@@ -5887,7 +5829,7 @@ const RENAMED: &[(&str, &str)] = &[
     ("note", "view-punct"),
     ("nowrap", "view-wrap"),
     ("view-wrap-vertical", "view-wrap-height"),
-    // **The four that said which side** (2026-10-20). Where a panel lives is
+    // **The four that said which side**. Where a panel lives is
     // yumete's to decide now, so `:panel-left` has nothing to point at but
     // the command that opens the thing.
     ("panel-left", "sidebar-explorer sidebar-info"),
@@ -5897,7 +5839,7 @@ const RENAMED: &[(&str, &str)] = &[
     ("sidebar", "sidebar-explorer sidebar-info"),
     ("sidebar-left", "sidebar-explorer sidebar-info"),
     ("sidebar-right", "sidebar-explorer sidebar-info"),
-    // One command a panel since 2026-11-07; `:toc` is `:outline`.
+    // One command a panel; `:toc` is `:outline`.
     ("toc", "outline"),
     ("wiki-panel", "sidebar-info"),
     ("sav", "write-as"),
@@ -5913,12 +5855,12 @@ const RENAMED: &[(&str, &str)] = &[
     ("view-dense", "view-margin"),
     ("view-preview", "preview"),
     ("wall", "write-all"),
-    // One choice now, `off` among the ways (2026-10-25).
+    // One choice now, `off` among the ways.
     ("word-show", "word-mark"),
     ("wysiwyg", "render"),
 ];
 
-/// Where a word that is no longer a command went, if it went anywhere (#283).
+/// Where a word that is not a command went, if it went anywhere (#283).
 ///
 /// **The point of folding a table into a tree is that the leaves keep their
 /// names**, so most of this is a search rather than a record: `bands` is still
@@ -5968,22 +5910,22 @@ fn moved_to(word: &str) -> Option<String> {
     let under_names_only = names_only;
     let mut found = under(|name, word| name == word);
     if found.is_empty() {
-        // **Only a name's own segments are matched by prefix** (2026-10-19).
+        // **Only a name's own segments are matched by prefix**.
         // An exact hit on a *value* is a real answer — 「where did `:cyanotype`
         // go」 is `:theme cyanotype` — but a prefix hit on one is a
-        // coincidence: `:cy` used to come back 「你要的是 `:theme cyanotype`」,
-        // and it had been `:clipboard-yank`. Two letters will prefix something
+        // coincidence: `:cy` must not come back 「你要的是 `:theme cyanotype`」
+        // when it was `:clipboard-yank`. Two letters will prefix something
         // in a long enough word list every time, and a signpost pointing the
         // wrong way is worse than a shrug.
         found = under_names_only(|name, word| name.starts_with(word));
     }
-    // Warning: **同一個去處只說一遍**（2026-09-26 報的：`:s` 答的是
-    // 「你要的是 `:convert s` `:convert s`」）。`:convert` 的兩個位置參數用的是
+    // Warning: **同一個去處只說一遍**：`:s` 不許答「你要的是 `:convert s`
+    // `:convert s`」。`:convert` 的兩個位置參數用的是
     // 同一張詞表（`SIDES`，「從哪一種轉到哪一種」），於是 `s` 在同一條命令上命中
     // 兩次。Warning: **去重要在數數之前**：底下那個「超過三個就別猜了」數的是**幾個去
     // 處**，不是幾次命中。
     found.dedup();
-    // **A family's head stands for the family** (2026-11-07): `preview` is a
+    // **A family's head stands for the family**: `preview` is a
     // segment of `:preview-window` and its two siblings too, and naming
     // `:preview` says where all four are.
     let heads = found.clone();
@@ -6010,9 +5952,9 @@ fn one_row(e: &'static Entry) -> Choice {
         alias: (!e.aliases.is_empty()).then(|| e.aliases.join(" ")),
         // **Among the aliases too.** `:table-jump` has no alias of its own and
         // no other *name* starts with `ro`, so the shortest walk over names
-        // alone offered `(ro)` — while `ro` is `:readonly`'s declared alias,
-        // and an exact alias beats a prefix in `resolve`. The menu was
-        // promising a spelling that did something else.
+        // alone would offer `(ro)` — while `ro` is `:readonly`'s declared alias,
+        // and an exact alias beats a prefix in `resolve`. The menu must not
+        // promise a spelling that does something else.
         short: shortest(
             e.name,
             COMMANDS
@@ -6037,11 +5979,10 @@ fn one_row(e: &'static Entry) -> Choice {
 /// in there somewhere」, and the caller puts these after the prefix rows so
 /// they are drawn as the guesses they are.
 ///
-/// Reported 2026-10-16: 「I search `:panel` but cannot see anything related to
-/// `:yume-panel`」. The guess layer below this one is scored, and `panel` is a
-/// low-information word in this table — it stands in `panel-left`,
-/// `panel-right` and both of their explanations — so `yume-panel` never
-/// cleared [`crate::lookfor::SURE_ENOUGH`]. A word in a name is not a thing to
+/// Searching `:panel` has to find `:yume-panel`. The guess layer below this
+/// one is scored, and `panel` is a low-information word in this table — it
+/// stands in `panel-left`, `panel-right` and both of their explanations — so
+/// `yume-panel` would never clear [`crate::lookfor::SURE_ENOUGH`]. A word in a name is not a thing to
 /// score: it is there or it is not.
 ///
 /// The first part is skipped: that one is [`complete`]'s, and offering it here
@@ -6060,7 +6001,7 @@ pub fn by_segment(line: &str) -> Vec<Choice> {
         .collect()
 }
 
-/// **Where the terminal's part of a shell line starts** (2026-10-28), or `None`
+/// **Where the terminal's part of a shell line starts**, or `None`
 /// when the line is not one. The verbs are `!` and the five words that hand a
 /// line to the terminal: `!ls` gives 1, `pipe sort` gives 5. A word still
 /// being typed (`pipe` with no space after it) is not a verb yet.
@@ -6072,13 +6013,13 @@ pub fn shell_start(line: &str) -> Option<usize> {
         return Some(lead + 1);
     }
     let (word, _) = body.split_once(char::is_whitespace)?;
-    // By the parser's rule (2026-10-29, review): `:pip sort` runs `:pipe`,
+    // By the parser's rule: `:pip sort` runs `:pipe`,
     // so it is a shell line too.
     let named = entry_named(word)?.name;
     VERBS.contains(&named).then(|| lead + word.len() + 1)
 }
 
-/// **vim's `!` in a `:!` line** (2026-10-28, `:help :!`): every `!` stands for
+/// **vim's `!` in a `:!` line** (`:help :!`): every `!` stands for
 /// the previous shell command, and `\!` is a `!` of its own. `None` when there
 /// is a `!` to replace and no previous command to replace it with.
 pub fn expand_bang(line: &str, previous: Option<&str>) -> Option<String> {
@@ -6116,7 +6057,7 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
 /// their head would answer 「没有『密排』這種東西」 about a command that is
 /// three keystrokes away.
 /// [`complete_within_stripped`], with the start counted in the caller's own
-/// line (2026-10-30): the range and the `:` it strips are put back, or a
+/// line: the range and the `:` it strips are put back, or a
 /// caller slicing its line at the answer cut into `:12s#漢` mid-character and
 /// panicked on every frame.
 fn complete_within(line: &str, folding: bool) -> (usize, Vec<Choice>) {
@@ -6128,10 +6069,10 @@ fn complete_within(line: &str, folding: bool) -> (usize, Vec<Choice>) {
 
 fn complete_within_stripped(line: &str, folding: bool) -> (usize, Vec<Choice>) {
     let line = line.strip_prefix(':').unwrap_or(line);
-    // **範圍不算名字的一部分**（2026-10-06 報的：`:s/` 畫得出那一行，`:%s/` 畫不出）。
+    // **範圍不算名字的一部分**：`:%s/` 和 `:s/` 一樣畫得出那一行。
     //
     // 替換那一條在表上叫 `s/pat/rep/`，而選單是拿打出來的那個詞去比前綴的——
-    // `%s/` 比不上 `s/pat/rep/`，於是整扇面板空着。範圍是 `:%s`、`:1-40s`、
+    // 不去掉範圍的話，`%s/` 比不上 `s/pat/rep/`，整扇面板空着。範圍是 `:%s`、`:1-40s`、
     // `:1,5,9s` 這幾種寫法，它們說的是「改哪幾行」，不是命令叫什麼。
     //
     // Warning: **只在前綴真的是一個範圍的時候剝**：`:set` 的 `s` 後面没有分隔符，
@@ -6140,9 +6081,9 @@ fn complete_within_stripped(line: &str, folding: bool) -> (usize, Vec<Choice>) {
         Some(at) => &line[at..],
         None => line,
     };
-    // **替換打到一半仍舊是替換**（2026-10-07 報的）。表上那一條叫 `s/pat/rep/`，
-    // 而選單比的是前綴：`s/` 比得上，`s/xa` 比不上——於是打到第三個字符，整扇
-    // 面板空了，再往下猜還猜出個 `:syntax` 來。斜杠一出現，名字就定了。
+    // **替換打到一半仍舊是替換**。表上那一條叫 `s/pat/rep/`，而選單比的是前綴：
+    // `s/` 比得上，`s/xa` 比不上——打到第三個字符，整扇面板就空了，再往下猜還猜出
+    // 個 `:syntax` 來。斜杠一出現，名字就定了。
     let line = match line.starts_with("s/") {
         true => "s/",
         false => line,
@@ -6187,11 +6128,11 @@ fn complete_within_stripped(line: &str, folding: bool) -> (usize, Vec<Choice>) {
         // spelling — and folding those together would answer one question
         // with the other.
         //
-        // **Nor what was found by a shortcut** (2026-10-26). `:x` reaches
+        // **Nor what was found by a shortcut**. `:x` reaches
         // `write-quit-all` through its `xa`, and counted as a `write-` match
-        // it folded into a bare `write-` row that sorted above `:exit` — so
-        // `:x` and Tab wrote `:write-`. A row reached by its shortcut was not
-        // reached through its family, and stands as itself.
+        // it would fold into a bare `write-` row that sorts above `:exit` — so
+        // `:x` and Tab would write `:write-`. A row reached by its shortcut is
+        // not reached through its family, and stands as itself.
         let by_name = |c: &Choice| c.under.is_empty() && c.name.starts_with(typed);
         let mut counted: Vec<(&str, usize)> = Vec::new();
         for c in choices.iter().filter(|c| by_name(c)) {
@@ -6206,8 +6147,8 @@ fn complete_within_stripped(line: &str, folding: bool) -> (usize, Vec<Choice>) {
         // choose, so `:b` opens `buffer-…` rather than making a reader type
         // the other five letters to see what they already know is there.
         //
-        // **A stem with one command under it is still a stem**
-        // (2026-09-10: 「未來 markdown 肯定還有別的命令」). `markdown-` names a
+        // **A stem with one command under it is still a stem**: `markdown-`
+        // will have more. It names a
         // group whether or not it has grown one yet, and a list that spelled
         // it out today would change shape the day it does.
         let a_family = |head: &str, n: usize| {
@@ -6252,7 +6193,7 @@ fn complete_within_stripped(line: &str, folding: bool) -> (usize, Vec<Choice>) {
                 true => {
                     standing.push(head);
                     out.push(Choice {
-                        // Warning: **「還有零個」不是一句話**（2026-10-09 審出來的）。`under`
+                        // Warning: **「還有零個」不是一句話**。`under`
                         // 數的是**篩過之後**還剩幾條，所以打到只剩它自己的時候
                         // （`:w` 只配得中 `:count`）這一格是 0，而那一行畫出來是
                         // 「:count (wc) +0」。没有別的了就別說。
@@ -6277,12 +6218,10 @@ fn complete_within_stripped(line: &str, folding: bool) -> (usize, Vec<Choice>) {
                 }
             }
         }
-        // **A shortcut is not a line of its own** (2026-10-26: 「sb sw sp rb rw
-        // rp does not show in the root command menu. They will be shown as the
-        // alias of corresponding commands in the parentheses」). They used to
-        // be listed under a folded family (2026-09-10: 「wq, bc 這種重要的別名
-        // 可以單開一行」), and the six scoped-panel names pushed that past what
-        // the first page holds. A shortcut is still found: typing it matches
+        // **A shortcut is not a line of its own**: `sb` `sw` `sp` `rb` `rw` `rp`
+        // show as aliases in their commands' brackets, since lines of their own
+        // would push the menu past what the first page holds. A shortcut is
+        // still found: typing it matches
         // its command, which then stands as its full row with it in brackets.
         out
     }
@@ -6364,9 +6303,9 @@ fn complete_within_stripped(line: &str, folding: bool) -> (usize, Vec<Choice>) {
                 // **A name's later segments are looked in too** (#373).
                 // `discover` is not a word after a command any more, it is the
                 // second half of one — `:word-discover` — and the reader who
-                // typed it named the thing just as plainly as when it was a
-                // word. Flattening the tree (#368) moved most of what this
-                // fallback used to find into names, and took it out of reach.
+                // typed it names the thing just as plainly. Flattening the tree
+                // (#368) moved these words into names, so this fallback looks
+                // there.
                 let mut out: Vec<Choice> = COMMANDS
                     .iter()
                     .filter(|e| {
@@ -6381,7 +6320,7 @@ fn complete_within_stripped(line: &str, folding: bool) -> (usize, Vec<Choice>) {
                 out
             }
             // **A command's own parameters are all there is below it.** The
-            // levels that used to hang here are in the names now, so what
+            // other levels are in the names, so what
             // `:vert` reaches from inside a command is that command's words
             // and nothing further down (#368).
             Some(_) => Vec::new(),
@@ -6398,8 +6337,8 @@ fn complete_within_stripped(line: &str, folding: bool) -> (usize, Vec<Choice>) {
                 .iter()
                 .find(|e| e.name == typed || e.aliases.contains(&typed))
                 .and_then(|e| e.params.first().map(|p| children(e.name, p))),
-            // **A word is a value now, and a value has nothing under it.**
-            // The levels a finished word used to open are in the names.
+            // **A word is a value, and a value has nothing under it.** The
+            // levels are in the names.
             Some(_) => None,
         };
         choices.extend(below.unwrap_or_default());
@@ -6486,9 +6425,8 @@ pub fn needs_of(line: &str) -> &'static [Need] {
 ///
 /// 一張靜態的詞表答的是「這一格收哪些詞」，而 `:convert` 的第二格收哪些詞
 /// **取決於第一格**：opencc 裝着 `t2jp.json` 與 `jp2t.json`，**没有
-/// `s2jp.json`**（2026-09-23 在本機 opencc 1.4.2 的 config 目錄裏數過）。於是
-/// `:convert s` 的選單從前列着一個它自己會拒絕的 `jp`——正是 §5.2.2 記着的那條
-/// 「幫助提供了一個命令不收的參數」。
+/// `s2jp.json`**（opencc 1.4.2 的 config 目錄裏數過）。靜態的表會讓 `:convert s`
+/// 的選單列出一個它自己會拒絕的 `jp`——§5.2.2 那條「幫助提供了一個命令不收的參數」。
 ///
 /// 判準從 [`crate::convert::destinations`] 來，而那一支是從 `plan` 算出來的：
 /// **選單與命令永遠說同一句話**，不是第二份手抄的表。
@@ -6537,7 +6475,7 @@ fn param_at(entry: &'static Entry, at: usize) -> Option<&'static Param> {
 /// stale names the word rather than the line. Walking stops where the words
 /// stop: under a path or free text what follows is the writer's own text, not
 /// this table's vocabulary.
-/// **這一行打到一半，看得見嗎**（2026-10-07 定）。
+/// **這一行打到一半，看得見嗎**。
 ///
 /// `None` ＝ 看不見：絕大多數命令都是這一種。白名單眼下只有 `:theme <名字>`。
 ///
@@ -6553,12 +6491,12 @@ pub fn preview_of(line: &str) -> Option<crate::editor::Shown> {
     }
 }
 
-/// **還在打命令名嗎**（2026-10-07）——猜與不猜、說明說誰的事，都問這一句。
+/// **還在打命令名嗎**——猜與不猜、說明說誰的事，都問這一句。
 ///
 /// 不是的有三種，每一種都不是「名字打了一半」：
 ///
 /// - **有空格了**：後面是參數，而參數是檔名、主題名、欄號。`:w draft` 按 ⇥
-///   從前好好地留着 `draft`，當成名字去猜就成了 `:w indent-width`。
+///   要留着 `draft`，當成名字去猜就成了 `:w indent-width`。
 /// - **替換的那個形狀**（`s/`、`%s/`、`1-40s/`）：斜杠後面是式子。`:s/xa` 當成
 ///   名字去猜，配出來的是 `:syntax`——而按下 Enter 根本不會跑 syntax。
 /// - **`!`、`/`、`?` 開頭**：整行交給別人，名字的事到第一個字符就結束了。
@@ -6577,14 +6515,11 @@ pub fn still_naming(line: &str) -> bool {
     !(head.starts_with("s/") || rows_before_a_substitution(line).is_some())
 }
 
-/// **按下 Enter 會做什麼**，給面板上面那一段用（2026-10-07）。
+/// **按下 Enter 會做什麼**，給面板上面那一段用。
 ///
-/// 原話：「我在命令行打任何東西的時候，横向上方的description都應該忠實反應我按下
-/// Enter時候會發生什麽，而不是顯示第一個command的描述」。
-///
-/// 從前那一段畫的是**單子上第一條**的說明：剛按下 `:` 什麼都没打，它說的是
-/// `:cd` 的事，而按下 Enter 什麼都不會發生；打了一個不存在的命令，它照樣說着別
-/// 人的事。
+/// 命令行上打任何東西的時候，上方那一段說明都忠實反映按下 Enter 會發生什麼，而
+/// 不是**單子上第一條**的說明：那樣的話剛按下 `:` 什麼都没打，它說的是 `:cd` 的事，
+/// 而按下 Enter 什麼都不會發生；打了一個不存在的命令，它照樣說着別人的事。
 ///
 /// `Err(None)` ＝ 什麼都没打，`Err(Some(名字))` ＝ 没有這個命令。
 pub fn about_the_line(line: &str) -> Result<Described, Option<String>> {
@@ -6601,9 +6536,9 @@ pub fn about_the_line(line: &str) -> Result<Described, Option<String>> {
         || head == "s"
         || head.starts_with("s/");
     if shaped {
-        // **旗標逐個寫出來，自成一行**（2026-10-09 作者定）。`word` 這一格的本意
+        // **旗標逐個寫出來，自成一行**。`word` 這一格的本意
         // 正是「命令的說明之外再加一行」，而替換没有參數詞表可挑，這一行就歸它。
-        // 說明那一句是作者寫的（範圍與分隔符都在裏面），一個字不動。
+        // 說明那一句（範圍與分隔符都在裏面）一個字不動。
         return Ok(Described {
             help: "cmd.commands.substitute",
             word: Some("cmd.substitute.flags"),
@@ -6625,11 +6560,10 @@ pub fn about_the_line(line: &str) -> Result<Described, Option<String>> {
         },
         needs: e.needs,
     };
-    // **參數打全了就說那個詞的事**（2026-10-07 報的）。
+    // **參數打全了就說那個詞的事**。
     //
-    // 原話：「我输入 :ruby 加空格的时候……描述区显示的是第一个参数的信息（off）。
-    // 但如果我按下回车，它其实触发的是裸命令」。所以末尾那個空格**不算**挑了
-    // 一個詞——`split_whitespace` 自己就不數它，於是 `:ruby ` 說的是裸 `:ruby`
+    // 打了 `:ruby` 加空格，按下回車觸發的是裸命令，不是第一個參數（off）。所以
+    // 末尾那個空格**不算**挑了一個詞——`split_whitespace` 自己就不數它，於是 `:ruby ` 說的是裸 `:ruby`
     // 的事，`:ruby off` 纔說 `off` 的事。
     //
     // 參數不是一張詞表的（`:view-wrap-width 10` 那個數目）就停下來，說命令自己的事：
@@ -6645,12 +6579,12 @@ pub fn about_the_line(line: &str) -> Result<Described, Option<String>> {
                 said.needs = w.needs;
                 said.spelt = None;
             }
-            // Warning: **`WordsOr` 的詞表配不中不是錯**（2026-10-09 審出來的）。那一種
+            // Warning: **`WordsOr` 的詞表配不中不是錯**。那一種
             // 參數的全部意思就是「詞表之外還收別的」——`:view-wrap-width 40` 的 40、
             // `:indent 4` 的 4、`:theme 某個名字`——配不中就落到命令自己的解析器上。
             // 上面那一段的本意寫着「參數不是一張詞表的就停下來」，可 `Param::words()`
-            // 對 `Words` 和 `WordsOr` 都交得出一張表，於是這一枝照樣走到了：面板上
-            // 寫着「view-wrap：不認得『40』」，而按下 Enter 是「寫到 40 欄寬」。
+            // 對 `Words` 和 `WordsOr` 都交得出一張表，不在這裏停的話，面板上寫着
+            // 「view-wrap：不認得『40』」，而按下 Enter 是「寫到 40 欄寬」。
             // **說的和做的不是一回事，而這一行存在的理由就是提前說出做的那件事。**
             None if param.takes_others() => break,
             // 這張表不認得這個詞——按下 Enter 報的就是這一句，提前說出來。
@@ -6666,7 +6600,7 @@ pub fn about_the_line(line: &str) -> Result<Described, Option<String>> {
 
 /// What [`about_the_line`] found: enough to describe it, and nothing else.
 ///
-/// **一條命令像一支函數**（2026-10-07 作者的說法）：`help` 是它的說明，`word` 是
+/// **一條命令像一支函數**：`help` 是它的說明，`word` 是
 /// 挑中那個參數的說明，`wrong` 是打錯了的時候的診斷。面板上面那一段就是這三樣
 /// 疊起來——說明、參數、哪裏不對。
 pub struct Described {
@@ -6674,13 +6608,11 @@ pub struct Described {
     pub help: &'static str,
     /// **挑中那個參數自己的說明**，命令的說明之外再加一行。
     ///
-    /// 原話：「it is better two show both the hint of `:ruby` and `off`（so both
-    /// the description for the "function" and the "parameter"）」。
+    /// 兩樣都說：`:ruby` 的說明是「函數」的，`off` 的說明是「參數」的。
     pub word: Option<&'static str>,
     /// **打了一個這條命令不認得的詞**——按下 Enter 會報的正是這一句。
     ///
-    /// 原話：「yumete failed to tell that a parameter is invalid, and that the
-    /// description does not match the real behaviour of pressing the enter key」。
+    /// 不說的話，說明就和按下 Enter 的真實行為對不上。
     pub wrong: Option<String>,
     /// Its other spellings, joined — `bc bclose`.
     pub spelt: Option<String>,
@@ -6717,7 +6649,7 @@ pub fn names_something(line: &str) -> Result<(), String> {
         // **A command that declares nothing takes nothing.** The parser says
         // so already (`CommandError::TakesNoArgument`), and this walk has to
         // say the same, or a document can print `:table off` — a spelling the
-        // editor refuses — and be told it names something (2026-10-07, when
+        // editor refuses — and be told it names something (when
         // the three levels left `:table` for `:table-render`).
         if entry.params.is_empty() {
             return Err(format!("{} {word}", entry.name));
@@ -6767,9 +6699,9 @@ pub enum Axis {
 /// Which lines a `:s` touches.
 ///
 /// **`-` is a span, `,` is a list** — the one range convention this editor has
-/// (§5.7), which `t2-10/` and `t1,5,9s` already spelled. `:s` was the last
-/// place where `,` meant a span, and a reader who had learnt the one had
-/// learnt the wrong thing about the other.
+/// (§5.7), which `t2-10/` and `t1,5,9s` spell too. Were `,` a span in `:s`, a
+/// reader who had learnt the one would have learnt the wrong thing about the
+/// other.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Rows {
     /// No range written: the lines the **selection** covers.
@@ -6821,7 +6753,7 @@ pub struct BadRange;
 /// **The two joints do not mix.** `1-40` is a span and `1,5,9` is a list, and
 /// one range is one of them or the other — `1-5,9` is refused rather than
 /// guessed at, exactly as a `t`/`g` sequence refuses it.
-/// **打到一半的 `:%s/` 裏，範圍佔了幾個字節**（2026-10-06）。
+/// **打到一半的 `:%s/` 裏，範圍佔了幾個字節**。
 ///
 /// `None` ＝ 前面那一段不是範圍，或者後面接的不是一個替換。只給選單用：真正
 /// 執行走的是 [`parse_substitution`]，它自己會再剝一次。
@@ -6884,10 +6816,8 @@ fn parse_rows(input: &str) -> (Result<Rows, BadRange>, &str) {
 /// its place. This is the only place that knows where the fields are, and it
 /// sits next to [`parse_substitution`] so the shapes they read stay together.
 ///
-/// Warning: **It is deliberately looser than that parser** (2026-10-06
-/// correction — this used to claim 「anything that parser refuses is not
-/// coloured either」, which is not true and could not be: see the next
-/// paragraph). A line with four fields or an unknown flag is painted and
+/// Warning: **It is deliberately looser than that parser**: not everything that
+/// parser refuses goes uncoloured. A line with four fields or an unknown flag is painted and
 /// then refused when Enter is pressed. Painting is about reading, not about
 /// running.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -6973,7 +6903,7 @@ fn split_escaped(body: &str, delim: char) -> Vec<String> {
 ///
 /// **The delimiter is whatever follows the `s`**, as it is in vi and sed: a
 /// pattern holding a `/` — a date, a path, a URL — is unreachable otherwise,
-/// and `:s` used to answer 「substitute requires an argument」 to one.
+/// and `:s` must not answer 「substitute requires an argument」 to one.
 fn parse_substitution(input: &str) -> Option<Result<Command, CommandError>> {
     let (rows, rest) = parse_rows(input);
     let rest = rest.strip_prefix('s')?;
@@ -6993,7 +6923,7 @@ fn parse_substitution(input: &str) -> Option<Result<Command, CommandError>> {
     }
     let flags = fields.get(2).cloned().unwrap_or_default();
     // Saying so beats doing the substitution the flag was meant to hold back:
-    // `n` in vi means "count, change nothing", and it used to *substitute*.
+    // `n` in vi means "count, change nothing", and must not *substitute*.
     if let Some(bad) = flags.chars().find(|c| !"ginctfyj".contains(*c)) {
         return Some(Err(CommandError::InvalidArgument {
             command: "substitute",
@@ -7017,7 +6947,7 @@ fn parse_substitution(input: &str) -> Option<Result<Command, CommandError>> {
         confirm: flags.contains('c'),
         count_only: flags.contains('n'),
         reshape: flags.contains('t'),
-        // **`y` 讀音、`j` 繁簡**（2026-10-12 作者定的字母：音、簡）。兩個各自管
+        // **`y` 讀音、`j` 繁簡**（音、簡）。兩個各自管
         // 各自，疊得起來，也疊得到正則之上——`/` 那一行只有一個鍵所以兩樣一起
         // 翻，而這裏有旗標，分得開就分開。
         pinyin: flags.contains('y'),
@@ -7037,7 +6967,7 @@ mod tests {
         }
     }
 
-    /// `:open` with nothing to open is the picker, not an error (2026-09-16).
+    /// `:open` with nothing to open is the picker, not an error.
     ///
     /// The command line takes no 中文 anywhere on it, and a chapter is called
     /// 「第三章.md」, so the path has to be named somewhere that composes. Every
@@ -7084,9 +7014,8 @@ mod tests {
     /// §5.2.2 fault 6: a bang has to survive every prefix that resolves
     /// without one.
     ///
-    /// `:rec` was `recover` and `:rec!` was 「没有『rec』這個命令」, because
-    /// the name lived in one of the two lists that had to agree and not the
-    /// other. There is one list now; this walks it so a tenth forceable
+    /// `:rec` is `recover`, so `:rec!` must not be 「没有『rec』這個命令」.
+    /// There is one list; this walks it so a tenth forceable
     /// command cannot arrive half-registered.
     #[test]
     fn a_forceable_command_takes_its_bang_on_every_prefix() {
@@ -7107,7 +7036,7 @@ mod tests {
             }
         }
         assert_eq!(parse(":recover"), Ok(Command::Recover));
-        // `:recover!` 2026-10-02 取消了：刪草稿要走面板那一格。
+        // 没有 `:recover!`：刪草稿要走面板那一格。
         assert!(parse(":recover!").is_err());
 
         // …and the other direction, which is the one that actually failed:
@@ -7140,10 +7069,9 @@ mod tests {
     ///
     /// `:table ` draws twelve words with their shortest spellings — `off
     /// (of)`, `rules (r)` — and `:tab rules` **runs**, because `resolve`
-    /// expands the prefix. The menu was the one reader of `COMMANDS` that did
-    /// not ask it: `complete_at` looked the head up by exact name or alias and
-    /// matched each word below it the same way, so the shortest spelling it
-    /// had just printed drew a blank panel.
+    /// expands the prefix. The menu asks `resolve` too: looking the head up by
+    /// exact name or alias, and each word below it the same way, the shortest
+    /// spelling it had just printed would draw a blank panel.
     ///
     /// Asked of every command at once, and of every word under it, because
     /// `shortest` is what the menu prints — so the two can only disagree here
@@ -7205,10 +7133,9 @@ mod tests {
     ///
     /// The declaration and the arm that answers it sit two thousand lines
     /// apart, so nothing but a walk of the table can tell they disagree.
-    /// `:view-hanging off` turned hanging punctuation **on**: `COMMANDS` declared
-    /// the two words and nothing else, the hint printed them, the menu offered
-    /// `parse` was `"hanging" => Ok(Command::ToggleHanging)` with `rest`
-    /// never read. `every_listed_command_parses` cannot see it — `:hanging
+    /// `:view-hanging off` must not turn hanging punctuation **on** — `COMMANDS`
+    /// declaring the two words, the hint printing them, and `parse` never
+    /// reading `rest`. `every_listed_command_parses` cannot see it — `:hanging
     /// off` *parses* — so the question has to be whether the two answers
     /// differ.
     #[test]
@@ -7286,13 +7213,13 @@ mod tests {
         assert_eq!(parse(":word-habit"), Ok(Command::Word(WordCommand::Habit)));
         // A level nobody defined is refused by name, not silently taken.
         assert!(parse(":word-level 中等").is_err());
-        // The commands it replaced are gone — `:words` was 口頭禪 and is
-        // `:word-habit`, one subject and one command.
+        // `:segment` and `:words` are not commands — 口頭禪 is `:word-habit`,
+        // one subject and one command.
         assert!(parse(":segment").is_err());
         assert!(parse(":words").is_err());
     }
 
-    /// **Two letters per scope** (2026-10-26): the verb's initial and the
+    /// **Two letters per scope**: the verb's initial and the
     /// scope's, for both panels; a bang still reshapes on the replace side.
     #[test]
     fn the_scoped_panels_have_two_letter_names() {
@@ -7317,9 +7244,9 @@ mod tests {
         for line in [":write-quit-all!", ":wqa!", ":xa!"] {
             assert_eq!(parse(line), Ok(Command::WriteQuitAll { force: true }), "{line}");
         }
-        // A spelling of `write-quit` with a bang is `:wq!` (2026-11-04,
-        // helix's `write-quit!`), never `:wqa!`; one that names no single
-        // command is nothing (2026-10-26 review).
+        // A spelling of `write-quit` with a bang is `:wq!` (helix's
+        // `write-quit!`), never `:wqa!`; one that names no single command is
+        // nothing.
         for line in [":write-q!", ":write-qui!", ":wq!"] {
             assert!(!matches!(parse(line), Ok(Command::WriteQuitAll { .. })), "{line}: {:?}", parse(line));
         }
@@ -7358,7 +7285,7 @@ mod tests {
 
     #[test]
     fn parses_layout_commands() {
-        // **一件事一種說法**（2026-10-12 定）。`:layout` 只剩互換，兩個方向各自
+        // **一件事一種說法**。`:layout` 只剩互換，兩個方向各自
         // 是一條命令——而不是 `:layout` 的兩個參數**加上**兩條同名命令，那就成
         // 了兩種拼法說同一件事，正是手冊那一節自己要去掉的東西。
         //
@@ -7394,7 +7321,7 @@ mod tests {
         // the editor's many parts it belonged to, and `:scheme` even less.
         assert_eq!(parse(":chaifen"), Err(CommandError::Unknown("chaifen".into())));
         assert_eq!(parse(":scheme x"), Err(CommandError::Unknown("scheme".into())));
-        // **A switch** (2026-11-07): bare turns it round, `on` and `off`
+        // **A switch**: bare turns it round, `on` and `off`
         // name the state; ABC is the lone Shift's, not a word here.
         assert_eq!(parse(":yume"), Ok(Command::Yume(Switch::Flip)));
         assert_eq!(parse(":yume on"), Ok(Command::Yume(Switch::To(true))));
@@ -7443,8 +7370,8 @@ mod tests {
             parse(":yume-panel box"),
             Ok(Command::YumePanel(Some("box".into())))
         );
-        // `:yume-p` 又是 `yume-panel` 一個人的了（2026-10-16）：2026-09-27 和它
-        // 搶這個頭的 `yume-preedit` 改叫 `yume-inline-preedit` 了。
+        // `:yume-p` 是 `yume-panel` 一個人的：正在打的那一段寫在哪，叫
+        // `yume-inline-preedit`。
         // Warning: `box` 與 `bottom` 同一個頭，所以參數那一頭最短是 `box` 和 `bot`。
         assert_eq!(
             parse(":yume-p bot"),
@@ -7454,7 +7381,7 @@ mod tests {
             parse(":yume-p i"),
             Ok(Command::YumePanel(Some("inline".into())))
         );
-        // 2026-09-27 分出來的那一格：面板畫不畫，和正在打的那一段寫在哪，兩件事。
+        // 面板畫不畫，和正在打的那一段寫在哪，兩件事。
         assert_eq!(
             parse(":yume-inline-preedit"),
             Ok(Command::YumeInlinePreedit(None))
@@ -7525,8 +7452,8 @@ mod tests {
 
     #[test]
     fn the_delimiter_is_whatever_follows_the_s() {
-        // A pattern holding a `/` — a date, a path, a URL — was unreachable,
-        // and `:s` answered 「substitute requires an argument」 to one.
+        // A pattern holding a `/` — a date, a path, a URL — is reachable, and
+        // `:s` must not answer 「substitute requires an argument」 to one.
         let want = Command::Substitute {
             pattern: "2024/01".into(),
             replacement: "2025/02".into(),
@@ -7567,7 +7494,7 @@ mod tests {
                 rows: Rows::All,
             })
         );
-        // `n` in vi means "count, change nothing" — and it used to substitute.
+        // `n` in vi means "count, change nothing" — and must not substitute.
         assert!(matches!(
             parse(":%s/a/b/n"),
             Ok(Command::Substitute { count_only: true,
@@ -7595,9 +7522,9 @@ mod tests {
 
     /// **`-` is a span, `,` is a list** — everywhere, `:s` included (§5.7).
     ///
-    /// `:1,40s` was vi's span and is now the two lines 1 and 40. The editor
-    /// had already taught `t2-10/` and `t1,5,9s`; leaving `:s` on vi's reading
-    /// meant the one convention was true in three places out of four.
+    /// `:1,40s` is the two lines 1 and 40, not vi's span. The editor teaches
+    /// `t2-10/` and `t1,5,9s`; leaving `:s` on vi's reading would make the one
+    /// convention true in three places out of four.
     #[test]
     fn a_substitution_takes_a_line_range() {
         assert!(matches!(
@@ -7632,8 +7559,7 @@ mod tests {
             Bound::Line(5),
             Bound::Line(9)
         ]);
-        // **`:1,40s` is two lines now**, which is the whole break: in vi it
-        // was forty.
+        // **`:1,40s` is two lines**, where in vi it is forty.
         assert_eq!(list(":1,40s/a/b/"), vec![Bound::Line(1), Bound::Line(40)]);
         assert_eq!(list(":.,$s/a/b/"), vec![Bound::Cursor, Bound::Last]);
         // Neither one span nor one list: refused, not guessed at.
@@ -7650,9 +7576,8 @@ mod tests {
 
     /// 主題與深淺是兩條命令，不是一條命令的兩個位置（#449）。
     ///
-    /// `:theme light` used to work, and so did `:theme moxiang dark` — which
-    /// made 「主題」 name two things on one line. 「現在的 :theme
-    /// dark/light/system 其實應該改成 :theme-mode，防止和其他的主題混淆。」
+    /// `:theme light` and `:theme moxiang dark` would make 「主題」 name two
+    /// things on one line, so dark, light and system are `:theme-mode`'s.
     #[test]
     fn a_theme_and_a_mood_are_two_questions() {
         use Mood::*;
@@ -7664,8 +7589,8 @@ mod tests {
             parse(":theme-mode light"),
             Ok(Command::Theme { name: None, mood: Some(Light) })
         );
-        // **The mood is no longer a theme's name.** `light` is a word
-        // `:theme` will now hand on to the front end as a theme nobody has,
+        // **The mood is not a theme's name.** `light` is a word
+        // `:theme` hands on to the front end as a theme nobody has,
         // which is the right answer: there is no theme called 「淺」.
         assert_eq!(
             parse(":theme light"),
@@ -7789,8 +7714,8 @@ mod tests {
             parse(":shot jpeg"),
             Err(CommandError::InvalidArgument { value, .. }) if value == "jpeg"
         ));
-        // The panel the writer opens on `:shot ` — which used to be empty,
-        // because the argument was a free string (2026-09-06).
+        // The panel the writer opens on `:shot ` — not empty, because the
+        // argument is not a free string.
         let words: Vec<String> = complete("shot ").iter().map(Choice::written).collect();
         assert_eq!(words, ["screen", "png", "html", "txt"]);
     }
@@ -7798,24 +7723,22 @@ mod tests {
     /// **A subcommand written with a space is refused, not swallowed.**
     ///
     /// This tree spells its subcommands with a hyphen. Text left over after a
-    /// command has read every parameter it declared used to be dropped in
-    /// silence, and two of those looked exactly like success: `:word show off`
-    /// printed the report with the tinting still on, and `:buffer next` opened
-    /// the picker having eaten `next`. The manual taught both spellings, which
-    /// is how they got typed.
+    /// command has read every parameter it declared is not dropped in silence,
+    /// where it would look exactly like success: `:word show off` would print
+    /// the report with the tinting still on, and `:buffer next` open the picker
+    /// having eaten `next`.
     ///
-    /// Warning: `:write all` is the one that wrote a file. `:write` takes a path, so
-    /// `all` was a legal one: a copy of the manuscript appeared in the working
-    /// directory called `all`, the status line said 「抄了一份到 all」, and
-    /// every other modified buffer stayed unsaved.
+    /// Warning: `:write all` would write a file. `:write` takes a path, so `all`
+    /// is a legal one: a copy of the manuscript would appear in the working
+    /// directory called `all`, the status line say 「抄了一份到 all」, and every
+    /// other modified buffer stay unsaved.
     ///
-    /// Warning: **the guard under a parameter that eats the line is the later half**
-    /// (2026-10-20). The leftover rule above sees only what no parameter took,
-    /// and a `Path` or a `Free` takes everything — so `:wiki panel on` looked
-    /// up an entry named 「panel on」 and said 「這本書還没有百科」, and
-    /// `:search project` searched a path of that name. Nine commands had the
-    /// hole; `:write`'s was the one that had been patched by hand, and that
-    /// patch is now this rule.
+    /// Warning: **the guard under a parameter that eats the line is the later half**.
+    /// The leftover rule above sees only what no parameter took,
+    /// and a `Path` or a `Free` takes everything — so `:wiki panel on` would
+    /// look up an entry named 「panel on」 and say 「這本書還没有百科」, and
+    /// `:search project` search a path of that name. Nine commands have the
+    /// hole, and one rule covers them.
     #[test]
     fn a_subcommand_written_with_a_space_says_the_spelling() {
         for (line, name, word) in [
@@ -7937,7 +7860,7 @@ mod tests {
         assert_eq!(parse(":theme-fill on"), Ok(Command::ThemeFill(Switch::To(true))));
     }
 
-    /// What a menu row says, and what it leaves out (2026-09-10).
+    /// What a menu row says, and what it leaves out.
     ///
     /// Three rules, and every one of them is about what a reader could not
     /// have worked out for themselves. A column of `(rec)` `(rel)` `(red)`
@@ -7980,7 +7903,7 @@ mod tests {
         assert_eq!(row("", "open"), ":open (o e edit)");
         assert_eq!(row("", "count"), ":count (wc) +2");
         assert_eq!(row("", "format"), ":format (fmt)");
-        // A folded command's shortcut is not a row of its own (2026-10-26):
+        // A folded command's shortcut is not a row of its own:
         // typing it opens the command's whole row, the shortcut in brackets.
         let listed: Vec<&str> = complete("").iter().map(|c| c.name).collect();
         assert!(!listed.contains(&"wq") && !listed.contains(&"bc"));
@@ -8008,16 +7931,15 @@ mod tests {
             found("discover"),
             ["word-discover", "word-discover-working", "word-discover-project"]
         );
-        // `close` is vim's `:close` now (2026-11-03), its own alias.
+        // `close` is vim's `:close` now, its own alias.
         assert_eq!(found("close"), ["quit-window"]);
         assert_eq!(found("footnote"), ["markdown-footnote", "markdown-footnote-inline"]);
         // Two commands can share a word, and then both are the answer —
         // **not** the two families they came from, which is what a fold would
         // have made of them.
         assert_eq!(found("punct"), ["check-punct", "view-punct"]);
-        // **`vert` 現在是兩條真命令的前綴**（2026-10-12）。從前它一條都不是，
-        // 於是深搜挖出三個參數；現在 `:vertical` 和 `:vertical-keys` 都在頂層，
-        // 答的就是它們兩個——而深搜本來就是「頂層找不着纔往下挖」。
+        // **`vert` 是兩條真命令的前綴**：`:vertical` 和 `:vertical-keys` 都在頂層，
+        // 答的就是它們兩個，不往下挖參數——而深搜本來就是「頂層找不着纔往下挖」。
         assert_eq!(found("vert"), ["vertical", "vertical-keys"]);
         // …and a prefix that names something at the top level is answered
         // about that, with nothing dredged up from below it.
@@ -8059,10 +7981,9 @@ mod tests {
             COMMANDS.len(),
             "and every one of them is still findable"
         );
-        // One name, one thing: `:ruby-on` and `:ruby-off` were the setting
-        // wearing the verb's name (#283), and the three levels that replaced
-        // them wore it too until 2026-10-07 — `:ruby` is the verb alone now,
-        // and 排多少 is `:ruby-render`'s, which says its own three words.
+        // One name, one thing: a setting must not wear the verb's name (#283).
+        // `:ruby` is the verb alone, and 排多少 is `:ruby-render`'s, which says
+        // its own three words.
         let ruby: Vec<String> = complete("ruby").iter().map(Choice::written).collect();
         assert_eq!(
             ruby,
@@ -8104,8 +8025,7 @@ mod tests {
         // **An alias is another name, not a shortcut** (#363) — and once a
         // command's name is one word, that is all a short spelling has to be
         // (#368): `bc` is `buffer-close`'s declared alias, exactly as `wq` is
-        // `write-quit`'s, and the table that used to hold the two-word lines
-        // separately is gone.
+        // `write-quit`'s, with no separate table of two-word lines.
         // `wqa` starts with `wq` too, so `:write-quit-all` is offered beside it;
         // `:wq` itself is still `write-quit`, an exact alias beating a prefix.
         assert_eq!(
@@ -8134,15 +8054,15 @@ mod tests {
         // family flattened, `y` still reaches the head rather than being torn
         // between it and the eight `yume-…` beside it (#368).
         assert_eq!(parse(":y"), Ok(Command::Yume(Switch::Flip)));
-        // Warning: **`:yu` stopped working on 2026-10-06**, when `:yuhao` arrived and
-        // made that prefix touch two commands. `:y` goes on reaching this one
-        // because it is now a *declared* alias, and an alias beats a prefix.
+        // Warning: **`:yu` does not work**: `:yuhao` makes that prefix touch two
+        // commands. `:y` reaches this one because it is a *declared* alias, and
+        // an alias beats a prefix.
         assert_eq!(parse(":yum"), Ok(Command::Yume(Switch::Flip)));
         // `:ta` again: `:target` took the two-letter prefix away when it
         // arrived, and gave it back when the fold put it under `:count`
         // (§5.2.3 ③). Ten abbreviations got shorter that way.
         // The bare name makes a table now, and its default is 3×4's smaller
-        // cousin: three rows, three columns (2026-10-07).
+        // cousin: three rows, three columns.
         assert_eq!(parse(":tab"), Ok(Command::NewTable { rows: 3, columns: 3 }));
         assert_eq!(parse(":ta"), Ok(Command::NewTable { rows: 3, columns: 3 }));
 
@@ -8154,7 +8074,7 @@ mod tests {
 
         // An ambiguous prefix names nothing rather than guessing.
         assert_eq!(parse(":re"), Err(CommandError::Unknown("re".into())));
-        // Warning: **`s` 從歧義變成了一個聲明過的簡寫**（2026-09-26 定的）：光禿禿的
+        // Warning: **`s` 從歧義變成了一個聲明過的簡寫**：光禿禿的
         // `:s` 開高級搜索那扇面板。`s` 本來夾在 `search`/`set`/`shot`… 中間，
         // 哪個都不算——而聲明出來的簡寫壓過前綴規則，同 `w` 之於 `write`。
         assert_eq!(parse(":s"), Ok(Command::OpenSearch(crate::search_panel::Where::Buffer)));
@@ -8258,9 +8178,9 @@ mod tests {
         let words = |line: &str| -> Vec<&str> { complete(line).iter().map(|c| c.name).collect() };
         assert_eq!(words("view-margin "), ["never", "dense", "loose", "always"]);
         assert_eq!(words("view-margin l"), ["loose"]);
-        // **這張表就是 `:syntax` 收得了什麼**（2026-10-10 補齊）。少寫一行不是少
-        // 一條補全，是少一個答案：從前 C 和 Java 不在表上，於是 `c` 在十個詞裏唯
-        // 一命中 `css`、`java` 唯一命中 `javascript`，兩種語言一個都選不到。
+        // **這張表就是 `:syntax` 收得了什麼**。少寫一行不是少一條補全，是少一個答案：
+        // C 和 Java 不在表上的話，`c` 唯一命中 `css`、`java` 唯一命中 `javascript`，
+        // 兩種語言一個都選不到。
         assert_eq!(
             words("syntax "),
             [
@@ -8285,8 +8205,8 @@ mod tests {
                 "rust"
             ]
         );
-        // 補全照舊列出每一個以它開頭的，而**全名解析得到自己**——從前 `c` 和
-        // `java` 這兩個全名只能解析成 `css` 和 `javascript`。
+        // 補全照舊列出每一個以它開頭的，而**全名解析得到自己**——`c` 和 `java`
+        // 不解析成 `css` 和 `javascript`。
         assert_eq!(words("syntax c"), ["css", "c"]);
         assert_eq!(words("syntax java"), ["javascript", "java"]);
         assert_eq!(
@@ -8297,14 +8217,14 @@ mod tests {
             crate::syntax::Syntax::parse("java"),
             Some(crate::syntax::Syntax::Code(crate::code::Language::Java))
         );
-        // `:layout` 2026-10-12 起不收參數了，兩個方向各自是一條命令。
+        // `:layout` 不收參數，兩個方向各自是一條命令。
         assert!(words("layout ").is_empty());
 
         // A parent command is not a mechanism of its own — its subcommands are
         // simply the words it takes, and they go as deep as they like.
         assert_eq!(words("ruby-render "), ["off", "basic", "full"]);
         assert_eq!(words("ruby-html "), ["on", "off"], "a switch takes its two words");
-        // `:view-pages-*` take a count and no words (2026-10-28).
+        // `:view-pages-*` take a count and no words.
         assert!(!words("view-pages-vertical ").contains(&"on"));
 
         // Where the word being completed starts, so a completion replaces it
@@ -8360,8 +8280,8 @@ mod tests {
         // The case that started it. The whole path is what Tab writes, so the
         // line ends up sayable rather than clever.
         //
-        // **`vert` 2026-10-12 起不再往下挖**：`:vertical` 和 `:vertical-keys`
-        // 都是頂層的真命令了，而深搜的前提是「頂層一條都找不着」。`horiz` 還是
+        // **`vert` 不往下挖**：`:vertical` 和 `:vertical-keys` 都是頂層的真命令，
+        // 而深搜的前提是「頂層一條都找不着」。`horiz` 還是
         // 往下挖的那一種——`:horizontal` 是頂層一條，所以它答的是那一條。
         assert_eq!(written("vert"), ["vertical", "vertical-keys"]);
         assert_eq!(written("horiz"), ["horizontal"]);
@@ -8464,7 +8384,7 @@ mod tests {
             "yume",
             "buffer",
             "clipboard-yank",
-            // `:layout` 2026-10-12 整條刪了，兩個方向各自一條。
+            // 没有 `:layout`，兩個方向各自一條。
             "vertical",
             "horizontal",
             "view-wrap",
@@ -8570,7 +8490,7 @@ mod tests {
     #[test]
     fn reports_errors() {
         assert_eq!(parse(":"), Err(CommandError::Empty));
-        // Warning: **`:open` is not in this list any more** (2026-09-16): with no
+        // Warning: **`:open` is not in this list any more**: with no
         // path it is the picker, not a missing argument. `:write-as` stands in
         // for the shape — a command that really does need one.
         assert_eq!(parse(":write-as"), Err(CommandError::MissingArgument("write-as")));
@@ -8579,8 +8499,8 @@ mod tests {
     /// §5.2.3 ④: the signpost tells the truth on both sides.
     ///
     /// `RENAMED` is the one part of `moved_to` that is written down rather
-    /// than computed — nothing in the tree remembers that `punct` used to be
-    /// `note` — so it is the one part that can go stale. Both halves are
+    /// than computed — nothing in the tree remembers that `note` is now
+    /// `punct` — so it is the one part that can go stale. Both halves are
     /// checked: the name it disowns must really be gone, and the line it
     /// sends the reader to must really run.
     #[test]
@@ -8627,11 +8547,10 @@ mod tests {
     #[test]
     fn a_word_that_moved_under_a_parent_says_where_it_went() {
         for (word, sent_to) in [
-            // Two owners since 2026-11-08: `:export` takes it for one page.
+            // Two owners: `:export` takes it for one page.
             ("hanging", "`:view-hanging` `:export hanging`"),
-            // Two owners since 2026-10-16: `preview` is also the word that
-            // puts the first candidate in the text.
-            // Three since 2026-11-08: `:export-as-preview` ends in it too.
+            // Three owners: `preview` is also the word that puts the first
+            // candidate in the text, and `:export-as-preview` ends in it.
             // `:preview` itself is a command, so it is not among them.
             ("preview", "`:yume-inline-preedit preview` `:export-as-preview`"),
             ("progress", "`:count-progress`"),
@@ -8650,7 +8569,7 @@ mod tests {
     }
 
 
-    /// **`:s/找/換/g` 畫成三色，靠的是這一支**（2026-10-06）。
+    /// **`:s/找/換/g` 畫成三色，靠的是這一支**。
     ///
     /// 它在每一次按鍵上跑，所以寫到一半的那幾種形狀也得認得。
     #[test]
@@ -8714,9 +8633,9 @@ mod tests {
         assert_eq!(parts("write"), None);
     }
 
-    /// **A quoted path arrives without its quotes** (2026-10-20).
+    /// **A quoted path arrives without its quotes**.
     ///
-    /// `:w "a.txt"` used to write a file whose name had the quotes in it, and
+    /// `:w "a.txt"` must not write a file whose name has the quotes in it, nor
     /// `:w "a b.txt"` one with quotes *and* a space. The answers below are
     /// helix 25.07.1's, measured in a pty by reading which file landed on
     /// disk; the whole table is on [`unquote`].
@@ -8732,7 +8651,7 @@ mod tests {
         // **A backslash escapes only where it is not a path separator.**
         // `unquote` has said so since it was written, and the assertion did
         // not: it wanted the unix answer on both platforms, so CI was red on
-        // Windows alone from the day this test landed (2026-10-23).
+        // Windows alone from the day this test landed.
         let escaped = match cfg!(windows) {
             true => r"a\ b.txt",
             false => "a b.txt",
@@ -8747,7 +8666,7 @@ mod tests {
         assert_eq!(named(":w 第三章.md").as_deref(), Some("第三章.md"));
     }
 
-    /// **An unterminated quote is refused, not written** (2026-10-20).
+    /// **An unterminated quote is refused, not written**.
     ///
     /// helix writes nothing and says `'write': unterminated token a.txt`.
     /// Writing `"a.txt` instead would make a file nobody can name again
@@ -8773,7 +8692,7 @@ mod tests {
         );
     }
 
-    /// **One separator list for both parsers** (2026-10-20).
+    /// **One separator list for both parsers**.
     ///
     /// `--shot=80,6` was taken and `:table 3,4` said 「不認得「3,4」」. The
     /// comma had been added to `--shot` for a reason that applies to both:
@@ -8803,7 +8722,7 @@ mod tests {
         );
     }
 
-    /// **The bang of `:replace!` is read** (2026-10-20).
+    /// **The bang of `:replace!` is read**.
     ///
     /// It was in [`FORCEABLE`] and nothing looked at it, so the panel refused
     /// a replacement that reshaped a grid and told the writer to 「add the t
@@ -8834,7 +8753,7 @@ mod tests {
     fn a_number_too_big_for_a_line_is_still_a_number() {
         // `usize::MAX` itself parses, and the editor clamps it to the last line.
         assert_eq!(parse(":18446744073709551615"), Ok(Command::GotoLine(usize::MAX)));
-        // One more digit, and the word used to name no command at all.
+        // One more digit is a line too big, not a command that does not exist.
         let too_big = parse(":18446744073709551616");
         assert_eq!(
             too_big,
@@ -8859,11 +8778,9 @@ mod tests {
 
 #[cfg(test)]
 mod which_commands_are_overloaded {
-    /// **裸命令做的事，和帶參數做的事，是不是同一件事**（2026-10-07 作者提的）。
+    /// **裸命令做的事，和帶參數做的事，是不是同一件事**。
     ///
-    /// 原話：「a function has been overload to two different purposes and will be
-    /// a little bit confusing……A command with no option would be better
-    /// defaulted to one of the branch.」
+    /// 一支命令重載成兩種用途會讓人困惑：不帶參數的命令最好默認成其中一支。
     ///
     /// 這一支列出**第一個參數是一張詞表、而那張表没有默認值**的命令：那些就是
     /// 「不給參數」没有自動答案的，裸着按下去要麼報錯，要麼另做一件事。
