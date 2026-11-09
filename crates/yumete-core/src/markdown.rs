@@ -2238,6 +2238,85 @@ pub mod typst {
         Writing,
     }
 
+    /// **What runs on from one line of Typst to the next** besides brackets
+    /// and notes (review, 2026-11-09).
+    #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+    struct Open {
+        /// The backticks that opened a raw text still open, 0 outside one.
+        ///
+        /// **Typst's raw rules, not a fence's**: a raw text opens at any
+        /// backtick in writing or code, a raw block on a line of its own
+        /// being only the usual case, and closes at the first run of as many
+        /// backticks wherever it stands ([`raw_at`]). This used to be a
+        /// switch thrown by a line that began with ```, so a ``` at the end
+        /// of `let s = "字";```` closed a block for Typst and not for the
+        /// scan, and everything after was read the wrong way up.
+        raw: usize,
+        /// An equation is open: a `$` in writing that its line does not
+        /// close. Typst's maths runs to the next `$`, over blank lines too,
+        /// and a backtick in it is a symbol, not raw text. The page draws
+        /// only what [`super::maths_blocks`] finds as display maths; this
+        /// is for where a piece may begin ([`BlockScanner::in_math`]).
+        math: bool,
+    }
+
+    /// Where an equation whose maths starts at `from` closes on its line:
+    /// past its `$`. An escaped `$`, one in a string and one in a comment
+    /// are the maths' own; a `//` or a `/*` left open runs past the line.
+    fn math_end(chars: &[char], from: usize) -> Option<usize> {
+        let n = chars.len();
+        let mut at = from;
+        while at < n {
+            match chars[at] {
+                '\\' => at += 2,
+                '"' => {
+                    at += 1;
+                    while at < n && chars[at] != '"' {
+                        at += if chars[at] == '\\' { 2 } else { 1 };
+                    }
+                    at += 1;
+                }
+                '/' if chars.get(at + 1) == Some(&'/') => return None,
+                '/' if chars.get(at + 1) == Some(&'*') => at = block_comment_end(chars, at + 2)?,
+                '$' => return Some(at + 1),
+                _ => at += 1,
+            }
+        }
+        None
+    }
+
+    /// **A raw text that starts at the backtick at `at`**, read as Typst's
+    /// lexer reads it (`raw` in `lexer.rs`; review, 2026-11-09): the run of
+    /// backticks that opens it, two being an empty raw on their own, ends
+    /// at the first run of as many backticks — anywhere, mid-line too, a
+    /// longer run closing with its first ones and leaving the rest to open
+    /// another. A language tag after three or more is inside it and changes
+    /// nothing about where it ends. Where it ends on this line, and 0; or
+    /// the end of the line and the backticks still to be met on another.
+    fn raw_at(chars: &[char], at: usize) -> (usize, usize) {
+        let ticks = chars[at..].iter().take_while(|&&c| c == '`').count();
+        if ticks == 2 {
+            return (at + 2, 0);
+        }
+        match raw_end(chars, at + ticks, ticks) {
+            Some(end) => (end, 0),
+            None => (chars.len(), ticks),
+        }
+    }
+
+    /// Where a raw text opened by `ticks` backticks ends on a line read from
+    /// `from`: past the first run of `ticks` backticks in a row.
+    fn raw_end(chars: &[char], from: usize, ticks: usize) -> Option<usize> {
+        let mut found = 0;
+        for (at, &c) in chars.iter().enumerate().skip(from) {
+            found = if c == '`' { found + 1 } else { 0 };
+            if found == ticks {
+                return Some(at + 1);
+            }
+        }
+        None
+    }
+
     /// Read one line from inside `frames`, and leave them as the line leaves
     /// them: what each character is.
     ///
@@ -2246,7 +2325,11 @@ pub mod typst {
     /// way `scan` reads them: an escape, a link, a comment, a raw span, maths.
     /// Code skips its strings and comments, so the `(` in `"(甲)"` or in
     /// `// (說明` opens nothing.
-    fn walk(chars: &[char], frames: &mut Vec<Frame>) -> Vec<Piece> {
+    ///
+    /// A raw text is read by Typst's rules ([`raw_at`]); one the line leaves
+    /// open sets `raw` to the backticks that opened it, and is the rest of
+    /// the line.
+    fn walk(chars: &[char], frames: &mut Vec<Frame>, open: &mut Open) -> Vec<Piece> {
         let n = chars.len();
         let mut out = vec![Piece::Writing; n];
         let word_end = |from: usize| {
@@ -2310,9 +2393,12 @@ pub mod typst {
                     } else if c == '/' && next == Some('*') {
                         end = block_comment_end(chars, at + 2).unwrap_or(n);
                     } else if c == '`' {
-                        end = super::code_span(chars, at).map_or(at + 1, |(_, _, e)| e);
+                        (end, open.raw) = raw_at(chars, at);
                     } else if c == '$' {
-                        end = (at + 1..n).find(|&i| chars[i] == '$').map_or(at + 1, |close| close + 1);
+                        (end, open.math) = match math_end(chars, at + 1) {
+                            Some(close) => (close, false),
+                            None => (n, true),
+                        };
                     } else if c == '#' && next.is_some_and(|d| d.is_alphabetic() || matches!(d, '(' | '{' | '[')) {
                         piece = Piece::Code;
                         end = word_end(at + 1);
@@ -2347,7 +2433,7 @@ pub mod typst {
                         frames.push(Frame::Note);
                         end = at + 2;
                     } else if c == '`' {
-                        end = super::code_span(chars, at).map_or(at + 1, |(_, _, e)| e);
+                        (end, open.raw) = raw_at(chars, at);
                     } else if matches!(c, '{' | '[' | '(') {
                         // An `if`'s head ends at its block.
                         if c != '(' && top == Some(Frame::Head(false)) {
@@ -2412,7 +2498,7 @@ pub mod typst {
             return spans(line);
         }
         let chars: Vec<char> = line.chars().collect();
-        let pieces = walk(&chars, &mut frames.to_vec());
+        let pieces = walk(&chars, &mut frames.to_vec(), &mut Open::default());
         let code = !writing(frames);
         let mut out = Vec::new();
         let mut construct = 1usize;
@@ -2443,7 +2529,8 @@ pub mod typst {
     /// use the same ``` fence, so this is a small scanner of its own.
     #[derive(Debug, Default, Clone, PartialEq, Eq)]
     pub struct BlockScanner {
-        in_raw: bool,
+        /// A raw text or an equation the lines above left open ([`Open`]).
+        open: Open,
         /// What the scan is inside, innermost last ([`Frame`]).
         ///
         /// Typst code runs across lines — `#show heading: it => block({` opens
@@ -2465,6 +2552,25 @@ pub mod typst {
             &self.frames
         }
 
+        /// Whether the next line begins inside a raw text.
+        pub fn in_raw(&self) -> bool {
+            self.open.raw > 0
+        }
+
+        /// Whether the next line begins inside an equation.
+        pub fn in_math(&self) -> bool {
+            self.open.math
+        }
+
+        /// What follows a raw text that closed mid-line: in code, walked
+        /// as code is; in writing, for its raw texts alone.
+        fn walk_rest(&mut self, chars: &[char]) {
+            match self.frames.is_empty() {
+                true => walk(chars, &mut Vec::new(), &mut self.open),
+                false => walk(chars, &mut self.frames, &mut self.open),
+            };
+        }
+
         /// [`Self::feed_line`], with nothing but the line's opening at hand:
         /// a line longer than that is not walked.
         pub fn feed(&mut self, prefix: &str, len: usize) -> Block {
@@ -2474,19 +2580,53 @@ pub mod typst {
         /// The block of the next line, from its first [`super::PREFIX`]
         /// characters (`prefix`) and its length; `whole` hands over the whole
         /// line when the opening is not all of it and the line has to be
-        /// walked — the first line of a body, or one inside it.
+        /// walked — the first line of a body, or one inside it, or one with
+        /// a backtick in it.
         pub fn feed_line(&mut self, prefix: &str, len: usize, whole: impl FnOnce() -> Option<String>) -> Block {
+            self.feed_line_ticked(prefix, len, None, whole)
+        }
+
+        /// [`Self::feed_line`], told whether the line holds a backtick or a
+        /// `$` at all (`ticks`), so that a paragraph without one is never
+        /// copied to look for one. `None` looks.
+        pub fn feed_line_ticked(
+            &mut self,
+            prefix: &str,
+            len: usize,
+            ticks: Option<bool>,
+            whole: impl FnOnce() -> Option<String>,
+        ) -> Block {
             let line = prefix.trim_end_matches(['\n', '\r']);
             let trimmed = line.trim_start();
-            if trimmed.starts_with("```") {
-                self.in_raw = !self.in_raw;
-                self.frames.clear();
-                self.blank = false;
+            let mut whole = Some(whole);
+            let mut text = |line: &str| -> Option<Vec<char>> {
+                match len <= super::PREFIX {
+                    true => Some(line.chars().collect()),
+                    false => whole.take().and_then(|w| w()).map(|l| l.trim_end_matches(['\n', '\r']).chars().collect()),
+                }
+            };
+            // Inside a raw text: to the run of backticks that closes it, and
+            // what follows that read as any line's rest.
+            if self.open.raw > 0 {
+                let Some(chars) = text(line) else { return Block::Code { inside: None } };
+                if let Some(end) = raw_end(&chars, 0, self.open.raw) {
+                    self.open.raw = 0;
+                    self.walk_rest(&chars[end..]);
+                }
                 return Block::Code { inside: None };
             }
-            if self.in_raw {
-                return Block::Code { inside: None };
+            // Inside an equation: to its `$`. The line is maths, not a
+            // heading or an item, whatever it begins with.
+            if self.open.math {
+                if let Some(chars) = text(line) {
+                    if let Some(end) = math_end(&chars, 0) {
+                        self.open.math = false;
+                        self.walk_rest(&chars[end..]);
+                    }
+                }
+                return Block::Prose;
             }
+            let fence = trimmed.starts_with("```");
             if trimmed.is_empty() {
                 self.blank = !self.frames.is_empty();
                 return Block::Prose;
@@ -2516,20 +2656,21 @@ pub mod typst {
             // after it code, blank ones included (2026-09-08). A long line is
             // walked only when `whole` can hand it over; otherwise it opens
             // and closes nothing.
+            //
+            // A line of writing with a backtick in it is walked for its raw
+            // texts alone: the brackets it leaves open are not counted, as
+            // they never were on a line that does not begin with `#`.
+            let ticked = ticks.unwrap_or_else(|| line.contains(['`', '$']) || len > super::PREFIX);
             if !self.frames.is_empty() || trimmed.starts_with('#') {
-                let owned;
-                let text = match len <= super::PREFIX {
-                    true => Some(line),
-                    false => {
-                        owned = whole();
-                        owned.as_deref().map(|l| l.trim_end_matches(['\n', '\r']))
-                    }
-                };
-                if let Some(text) = text {
-                    walk(&text.chars().collect::<Vec<_>>(), &mut self.frames);
+                if let Some(chars) = text(line) {
+                    walk(&chars, &mut self.frames, &mut self.open);
+                }
+            } else if ticked {
+                if let Some(chars) = text(line) {
+                    walk(&chars, &mut Vec::new(), &mut self.open);
                 }
             }
-            if code || closes {
+            if fence || code || closes {
                 return Block::Code { inside: None };
             }
             let equals = trimmed.chars().take_while(|&c| c == '=').count();
@@ -2960,6 +3101,65 @@ mod typst_tests {
             })
             .collect();
         assert_eq!(walk, ".``....", "{walk}");
+    }
+
+    /// Each line of `text`: `` ` `` for a line the scan calls code, `$` for
+    /// one that begins inside an equation, `.` for anything else.
+    fn raw_and_maths(text: &str) -> String {
+        let mut scanner = BlockScanner::new();
+        text.lines()
+            .map(|line| {
+                let maths = scanner.in_math();
+                let prefix: String = line.chars().take(crate::markdown::PREFIX).collect();
+                match scanner.feed_line(&prefix, line.chars().count(), || Some(line.to_string())) {
+                    _ if maths => '$',
+                    Block::Code { .. } => '`',
+                    _ => '.',
+                }
+            })
+            .collect()
+    }
+
+    /// **Raw text by Typst's rules** (review, 2026-11-09): it opens at any
+    /// backtick, mid-line too, and closes at the first run of as many
+    /// backticks wherever it stands; two are an empty raw; a longer run
+    /// closes with its first ones and opens another with the rest. A
+    /// backtick escaped, in a comment, in a string or in maths is none.
+    #[test]
+    fn typst_raw_text_opens_and_closes_where_typst_s_does() {
+        // Opened at the end of a line, closed in the middle of one.
+        assert_eq!(raw_and_maths("那年 ```rust\nlet s = 1;\nlet t = 2;``` 雪\n後來"), ".``.");
+        // One backtick runs over lines, as Typst's does.
+        assert_eq!(raw_and_maths("甲 `乙\n丙\n丁` 戊\n己"), ".``.");
+        // Two are an empty raw.
+        assert_eq!(raw_and_maths("甲 `` 乙\n丙"), "..");
+        // Four inside a raw of three: the first three close it, the fourth
+        // opens a raw of one, closed on the line after.
+        assert_eq!(raw_and_maths("```\nx````y\nz`\n甲"), "```.");
+        // A tag only after the opening run; a run of three in the text of a
+        // raw of four closes nothing.
+        assert_eq!(raw_and_maths("````typ\n```\n````\n甲"), "```.");
+        // A line that opens and closes a raw block leaves nothing open.
+        assert_eq!(raw_and_maths("```rust fn main() {} ```\n甲"), "`.");
+        // Escaped, in a comment, in maths: no raw.
+        assert_eq!(raw_and_maths("甲 \\` 乙\n丙"), "..");
+        assert_eq!(raw_and_maths("甲 /* ` */ 乙\n丙"), "..");
+        assert_eq!(raw_and_maths("甲 $a ` b$ 乙\n丙"), "..");
+        // In code: a string's backtick is none; a raw in a code body opens
+        // and the body goes on after it.
+        assert_eq!(raw_and_maths("#let s = \"`\"\n甲"), "..");
+        assert_eq!(raw_and_maths("#let f() = {\n  let r = ```\n  }\n  ```\n  r\n}\n甲"), ".`````.");
+    }
+
+    /// **An equation runs to its `$`, over blank lines too**, as Typst's
+    /// maths does; no piece may begin inside one.
+    #[test]
+    fn a_typst_equation_runs_over_lines_to_its_dollar() {
+        assert_eq!(raw_and_maths("甲 $x\n\n= y\n$ 乙\n\n丙"), ".$$$..");
+        // Its own `$` in a string, escaped or in a comment does not close it.
+        assert_eq!(raw_and_maths("$ a \"$\" b\n\\$ /* $ */ c\nd $\n甲"), ".$$.");
+        // And a backtick inside it is a symbol.
+        assert_eq!(raw_and_maths("$ a\n` b $\n甲"), ".$.");
     }
 
     /// Each line of `text` as the editor reads it: its block (`` ` `` code,

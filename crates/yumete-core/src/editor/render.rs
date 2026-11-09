@@ -343,6 +343,7 @@ impl Editor {
             let framed = open.peek().is_some_and(|(l, frames)| *l == line && !frames.is_empty());
             if scan.facts[line - 1] & MATHS_BLANK != 0
                 && scan.facts[line] & CUT_OPENS != 0
+                && scan.facts[line] & IN_MATHS == 0
                 && matches!(blocks[line - 1], Block::Prose)
                 && matches!(blocks[line], Block::Prose | Block::Heading(_))
                 && !framed
@@ -1941,6 +1942,9 @@ const SCAN_STEP: usize = 64;
 /// character lets a piece begin there — not a space, not a closing bracket.
 const CUT_OPENS: u8 = 16;
 
+/// Another: the line begins inside an equation, where no piece may begin.
+const IN_MATHS: u8 = 32;
+
 /// What the Typst block scan carries from one line to the next.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(super) struct ScanState {
@@ -2059,6 +2063,9 @@ fn scan_typst_line(
     if head.chars().next().is_some_and(|c| !c.is_whitespace() && !matches!(c, ']' | ')' | '}')) {
         facts |= CUT_OPENS;
     }
+    if state.typst.in_math() {
+        facts |= IN_MATHS;
+    }
     scan.facts.push(facts);
     // **A note that runs over lines** (#288): the scanner is not shown its
     // lines — a ``` inside a note must not open a fence. Typst's notes nest,
@@ -2094,11 +2101,15 @@ fn scan_typst_line(
     }
     // A line whose opening is not all of it is copied only when the scanner
     // has to walk it: a body's, never a paragraph's.
-    let block = state.typst.feed_line(head, len, || Some(text.to_string()));
+    // A paragraph is walked for raw texts and equations only when it holds
+    // a backtick or a `$`, found without copying it.
+    let ticks = text.chunks().any(|c| c.contains(['`', '$']));
+    let block = state.typst.feed_line_ticked(head, len, Some(ticks), || Some(text.to_string()));
     scan.raw.push(block);
     // Typst's `/*`: only a line holding one is read whole (a URL's `/` is
-    // not one).
-    if !block.is_literal() && opens_a_block_comment(text) {
+    // not one). A line that leaves a raw text open has no note open after
+    // it: a `/*` before the raw text would have hidden its backticks.
+    if !block.is_literal() && !state.typst.in_raw() && opens_a_block_comment(text) {
         state.depth = typst::comment_depth_left(&text.to_string());
     }
 }

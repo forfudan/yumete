@@ -39358,3 +39358,75 @@ fn a_joined_typst_piece_is_cut_again() {
     let unlike = typst_lines_unlike_the_whole(&ed, line.saturating_sub(100)..line + 300);
     assert!(unlike.is_empty(), "{} lines, first {:?}", unlike.len(), unlike.first());
 }
+
+/// **A Typst book drawn in pieces is coloured as the whole file parsed at
+/// once**, through random edits — backticks anywhere among them, as Typst's
+/// raw text closes at a run of backticks mid-line (review, 2026-11-09) —
+/// whenever the whole file parses without an error. A few seeds here; the
+/// review ran 150:
+///
+///     YUMETE_TYPST_SEEDS=150 cargo test --release -p yumete-core typst_pieces_are_coloured_as_the_whole_file
+#[test]
+fn typst_pieces_are_coloured_as_the_whole_file() {
+    let seeds: u64 = std::env::var("YUMETE_TYPST_SEEDS").ok().and_then(|n| n.parse().ok()).unwrap_or(3);
+    let snippets = [
+        "/* c */", "/*", "*/", "#emph[x]", "#{ 1 }", "```\nraw\n```\n", "```\n", "```", "`", "``", "````", "```rust x```",
+        ";```", "\n\n", "#let z = {", "}", "[", "]", "$", "// x", "\"", "*", "_", "(", ")", "\n", "\n\n= 新\n\n", "\\", "x",
+    ];
+    let mut failed = Vec::new();
+    for seed in 1..=seeds {
+        let mut rng = seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1;
+        let mut next = move || {
+            rng ^= rng << 13;
+            rng ^= rng >> 7;
+            rng ^= rng << 17;
+            rng
+        };
+        let crlf = seed % 3 == 0;
+        let ending = |s: &str| if crlf { s.replace('\n', "\r\n") } else { s.to_string() };
+        let mut ed = Editor::new();
+        ed.current_buffer_mut().insert(0, &ending(&typst_book(280))).unwrap();
+        ed.set_syntax(crate::syntax::Syntax::Typst);
+        let mut done: Vec<String> = Vec::new();
+        'steps: for step in 0..30 {
+            let len = ed.current_buffer().rope().len_chars();
+            match next() % 10 {
+                0..=6 => {
+                    let at = (next() as usize) % (len + 1);
+                    let s = ending(snippets[(next() as usize) % snippets.len()]);
+                    ed.current_buffer_mut().insert(at, &s).unwrap();
+                    done.push(format!("insert {at} {s:?}"));
+                }
+                7..=8 if len > 0 => {
+                    let at = (next() as usize) % len;
+                    let n = 1 + (next() as usize) % if next() % 4 == 0 { 3000 } else { 5 };
+                    ed.current_buffer_mut().remove(at..(at + n).min(len)).unwrap();
+                    done.push(format!("remove {at}+{n}"));
+                }
+                _ => {
+                    let _ = ed.current_buffer_mut().undo(0);
+                    done.push("undo".into());
+                }
+            }
+            let source = ed.current_buffer().rope().to_string();
+            let tree = crate::code::parse(crate::code::Language::Typst, &source, None).unwrap();
+            let total = crate::code::line_starts(&source).len();
+            let valid = !tree.root_node().has_error();
+            for _ in 0..3 {
+                let top = (next() as usize) % total;
+                let rows = top..(top + 40).min(total);
+                if !valid {
+                    // Drawn all the same, so the pieces go on being cut and
+                    // joined as they are while writing.
+                    rows.for_each(|row| drop(ed.typst_colours(row)));
+                    continue;
+                }
+                if let Some(line) = typst_lines_unlike_the_whole(&ed, rows).first() {
+                    failed.push(format!("seed {seed} step {step} {line}, after {:?}", &done[done.len().saturating_sub(4)..]));
+                    break 'steps;
+                }
+            }
+        }
+    }
+    assert!(failed.is_empty(), "{}", failed.join("\n"));
+}
