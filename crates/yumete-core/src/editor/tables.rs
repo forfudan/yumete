@@ -2343,10 +2343,9 @@ impl Editor {
         if self.refuse_readonly() {
             return;
         }
-        // Warning: **圍欄裏的東西不是表格**（2026-10-03 一輪審查報來的）。裏面是代碼，
-        // 而這一支認的是「空行之間那幾行」——圍欄標記自己也在那幾行裏，於是
-        // ``` 連同它圍住的 CSV 一起被改寫成了 `|` 表格。另一個方向
-        // （`table_to_delimited`）本來就擋着，兩半從前不一致。
+        // Warning: **圍欄裏的東西不是表格**。裏面是代碼，而這一支認的是「空行之間
+        // 那幾行」——圍欄標記自己也在那幾行裏，不擋的話 ``` 連同它圍住的 CSV 一起
+        // 被改寫成 `|` 表格。另一個方向（`table_to_delimited`）同樣擋着。
         if self.in_a_literal_block() {
             self.status = say!("table.inside-a-fence");
             return;
@@ -2383,10 +2382,9 @@ impl Editor {
         if self.refuse_readonly() {
             return;
         }
-        // Warning: **圍欄裏的東西不是表格**（2026-10-03 一輪審查報來的）。裏面是代碼，
-        // 而這一支認的是「空行之間那幾行」——圍欄標記自己也在那幾行裏，於是
-        // ``` 連同它圍住的 CSV 一起被改寫成了 `|` 表格。另一個方向
-        // （`table_to_delimited`）本來就擋着，兩半從前不一致。
+        // Warning: **圍欄裏的東西不是表格**。裏面是代碼，而這一支認的是「空行之間
+        // 那幾行」——圍欄標記自己也在那幾行裏，不擋的話 ``` 連同它圍住的 CSV 一起
+        // 被改寫成 `|` 表格。另一個方向（`table_to_delimited`）同樣擋着。
         if self.in_a_literal_block() {
             self.status = say!("table.inside-a-fence");
             return;
@@ -2415,8 +2413,8 @@ impl Editor {
         // `from_delimited` writes a header, a rule row and one row per line, so
         // with `lines` non-empty there is always a header to measure. Asking
         // for it rather than indexing keeps a broken contract from taking the
-        // manuscript down with it; it used to be a separate emptiness check
-        // above, which read as a case that could happen and never could.
+        // manuscript down with it; a separate emptiness check above would read
+        // as a case that could happen and never can.
         let Some(header) = out.first() else {
             self.status = say!("table.nothing-to-convert");
             return;
@@ -2433,10 +2431,10 @@ impl Editor {
         // Straight into the grid: the writer asked for a table, and a table in
         // this editor is something you walk by cell.
         self.enter_table();
-        // Warning: **分隔符要報名字，不許把那個字符本身印進句子**（2026-10-03）。
-        // 製表符畫出來什麼都没有，於是這一句成了「照「」分的」——引號裏空着，讀
+        // Warning: **分隔符要報名字，不許把那個字符本身印進句子**。
+        // 製表符畫出來什麼都没有，印進去的話這一句成了「照「」分的」——引號裏空着，讀
         // 着像壞了。空格同病。`named_delimiter` 那一支就是幹這個的，另一個方向
-        // （`table.now-delimited`）本來就在用。
+        // （`table.now-delimited`）也用它。
         self.status = say!("table.now-a-pipe-table", rows, columns, named_delimiter(delimiter));
     }
 
@@ -2458,9 +2456,8 @@ impl Editor {
         let lines = self.md_lines(&region);
         let out = crate::mdtable::to_delimited(&lines, delimiter);
         // Every line of `out` is a row: `to_delimited` writes no rule row, and
-        // there is nothing to subtract. (`table_to_pipe` *does* write one,
-        // which is where the `- 1` this used to have came from — copied across
-        // and wrong here: it said 「2 行」 for the three rows it had written.)
+        // there is nothing to subtract. (`table_to_pipe` *does* write one, and
+        // its `- 1` does not belong here.)
         let rows = out.len();
         self.snapshot();
         self.leave_table_quietly();
@@ -2680,10 +2677,9 @@ impl Editor {
                 .map(|t| t.trim().is_empty())
                 .unwrap_or(true)
         };
-        // **A blank line, or nothing** (2026-10-07: 「爲了防止出現意外，破壞段
-        // 落，我們可以要求必須在空行（可以有 leading spaces) 使用這個命令」).
-        // It used to put the table *under* the line instead, which is a guess
-        // at where a paragraph ends — and a wrong guess rewrites prose.
+        // **A blank line, or nothing**, so a paragraph is never broken by
+        // accident. Putting the table *under* the line instead would be a
+        // guess at where a paragraph ends — and a wrong guess rewrites prose.
         // Leading spaces still count as blank: `trim` is the judge.
         if !empty(self, here) {
             self.status = say!("table.needs-a-blank-line");
@@ -2739,10 +2735,9 @@ impl Editor {
 
     /// Take the cursor's row out, **into the register**.
     ///
-    /// The delimited half of this (`drop_row`) has stored what it took since
-    /// it was written; this one did not, so `t d` then `p` answered 「没有取
-    /// 過東西」 on a Markdown table and 「貼回來」 was a thing only CSV could
-    /// do. Two paths, one key, one promise (2026-10-17).
+    /// The delimited half of this (`drop_row`) stores what it took too, so
+    /// `t d` then `p` puts the row back on a Markdown table as on a CSV. Two
+    /// paths, one key, one promise.
     fn md_drop_row(&mut self) {
         let Some((region, mut parts)) = self.md_parts_to_edit() else {
             return;
@@ -2755,8 +2750,8 @@ impl Editor {
         };
         match parts.remove_row(row) {
             Ok(at) => {
-                // Into the register only when the row really went (2026-10-30:
-                // a torn table refused and the register filled anyway).
+                // Into the register only when the row really went, not when a
+                // torn table refused.
                 if self.md_write(&region, &parts, at, cell) {
                     self.store(taken);
                     self.status = say!("table.row-deleted");
@@ -2920,8 +2915,8 @@ impl Editor {
 
     /// `s`/`S` 收尾那一下：把 `a`/`d` 關掉的那幾欄和還在打的那幾欄合起來排。
     ///
-    /// Warning: **一塊和一份檔案共用這一支**（2026-10-03）。從前塊那一支裏根本没有
-    /// `s`，於是 `␣tt` 進了格子再 `␣t1s` 一聲不響地落到兜底那一句。
+    /// Warning: **一塊和一份檔案共用這一支**，不然塊那一支裏没有 `s`，`␣tt` 進了
+    /// 格子再 `␣t1s` 一聲不響地落到兜底那一句。
     fn sort_the_named_columns(&mut self, key: Key) {
         let down = key == Key::Char('S');
         // Every column `a`/`d` closed, and then the ones still being
@@ -2953,13 +2948,13 @@ impl Editor {
             self.status = say!("table.not-in-a-table");
             return;
         };
-        // **文中那一塊排得了序**（2026-10-03 定，原話：「如果是我，我会先在
-        // 逗号上按 _tt 进入表格模式，然后 _t1s 来排序。再 _tq 回到正文」）。
+        // **文中那一塊排得了序**：逗號上按 `␣tt` 進表格模式，`␣t1s` 排序，`␣tq`
+        // 回到正文。
         //
-        // Warning: 從前這裏一句話擋掉：「文中的表格區塊只讀不改寫」。那句話說的不是一
-        // 條規矩，是底下那一段的做法——它把**整份檔案**按表格自己的行重建一遍，
-        // 而一塊只是一章當中的幾行，重建就等於改寫整章。範圍是知道的
-        // （`block_region`），所以擋的是實現，不是語義。
+        // Warning: 「文中的表格區塊只讀不改寫」不是一條規矩，是底下那一段的做法會
+        // 出的事——它把**整份檔案**按表格自己的行重建一遍，而一塊只是一章當中的
+        // 幾行，重建就等於改寫整章。範圍是知道的（`block_region`），所以要守的是
+        // 實現，不是語義。
         let block = match view.bounds {
             Bounds::Block => match self.block_region() {
                 Some(region) => Some((region.first, region.last)),
@@ -3011,15 +3006,13 @@ impl Editor {
                 .join("\n"),
             None => self.current_buffer().text(),
         };
-        // Warning: **排的是記錄，不是行**（2026-10-09 攔住，2026-10-22 做出來）。
+        // Warning: **排的是記錄，不是行**。
         //
-        // 一個引號裏夾了換行的欄位是**一條記錄兩行**，而這一支從前按 `text.lines()`
-        // 一行一條地重排：排完 `zz,"line1` 落到檔尾、`line2"` 升成第二行，記錄碎了、
-        // 引號也不成對，整個檔從此讀不進去。字一個没少，可那比少幾個字更糟。所以
-        // 2026-10-09 審出來的時候先攔住了它，報的是開檔那道門那一句——而那一句說的是
-        // 「讀不了這一種」，自 2026-10-20 起已經不是真話了。
+        // 一個引號裏夾了換行的欄位是**一條記錄兩行**；按 `text.lines()` 一行一條地
+        // 重排的話，排完 `zz,"line1` 落到檔尾、`line2"` 升成第二行，記錄碎了、引號
+        // 也不成對，整個檔從此讀不進去。字一個没少，可那比少幾個字更糟。
         //
-        // 現在先按記錄分組再排（`records_in` 同一條規矩），只有**引號從頭到尾不成對**
+        // 所以先按記錄分組再排（`records_in` 同一條規矩），只有**引號從頭到尾不成對**
         // 的時候纔拒絕：那樣的檔不是這張表的幾條記錄，`:table-check` 指得出是哪一行。
         let ends_with_newline = block.is_none() && text.ends_with('\n');
         // **Whatever this file ends its lines with, it goes on ending them with
@@ -3039,9 +3032,9 @@ impl Editor {
             self.status = say!("table.too-few-rows-to-sort");
             return;
         }
-        // Warning: **按欄位的字排，不按它在檔裏的拼法**（2026-10-02 一輪掃查報來的）。
-        // `cell_text` 交的是原樣的那一段，引號在內——於是 `"Smith, John"` 按 `"`
-        // （0x22）排，落在 `Amy` 前面。排序排的是人看得見的那幾個字。
+        // Warning: **按欄位的字排，不按它在檔裏的拼法**。`cell_text` 交的是原樣的
+        // 那一段，引號在內——按它排的話 `"Smith, John"` 按 `"`（0x22）排，落在
+        // `Amy` 前面。排序排的是人看得見的那幾個字。
         let cell = |line: &str, at: usize| -> String {
             crate::table::cells(line, delimiter)
                 .get(at)
@@ -3137,10 +3130,10 @@ impl Editor {
         if !self.applied(done) {
             return;
         }
-        // **The records moved, so which lines start one has changed**
-        // (2026-10-30): a field holding a line break sorted to a new place left
-        // the old record starts standing, the grid drew the record in two, and
-        // the next `Space t d` deleted the wrong lines.
+        // **The records moved, so which lines start one has changed**: with
+        // the old record starts left standing, a field holding a line break
+        // sorted to a new place would be drawn in two, and the next `Space t d`
+        // would delete the wrong lines.
         self.rescan_records();
         self.clamp_cursor();
         // The *text*, not the document: the table is still this table, and
@@ -3207,11 +3200,11 @@ impl Editor {
         }
     }
 
-    /// Whether `at` is inside one of its row's cells (2026-10-17).
+    /// Whether `at` is inside one of its row's cells.
     ///
-    /// The insert half of the structure test §5.12.70 gave to cuts. A cut now
-    /// asks 「is it still a table afterwards」; an insert only ever asked
-    /// 「what character is this」, so **where** the text landed was nobody's
+    /// The insert half of the structure test §5.12.70 gave to cuts. A cut
+    /// asks 「is it still a table afterwards」; an insert asking only 「what
+    /// character is this」 would leave **where** the text lands nobody's
     /// question — and text landing before a row's leading `|` is a line that
     /// stops being a row, which is the same damage by the other door.
     ///
@@ -3230,15 +3223,15 @@ impl Editor {
     }
 
     /// **Put the caret back inside a cell** after an edit moved it somewhere a
-    /// cell does not reach (2026-10-17, found in review).
+    /// cell does not reach.
     ///
     /// The row cut that §5.12.70 opened up leaves the head at the line's own
-    /// start — which in a `|` table is the row's **leading wall**. 全窗 then
-    /// draws it on the first cell's last character, because that is where a
-    /// caret outside the content is drawn, so the reader sees an ordinary
-    /// in-cell cursor; the next `i` writes before the pipe, the line stops
-    /// being a row and the table splits in two. Measured:
-    /// `空格 t t` → `x d` → `i Z` gave `Z| dog | reads | book |`.
+    /// start — which in a `|` table is the row's **leading wall**. 全窗 draws
+    /// it on the first cell's last character, because that is where a caret
+    /// outside the content is drawn, so the reader sees an ordinary in-cell
+    /// cursor; unseated, the next `i` would write before the pipe, the line
+    /// would stop being a row and the table would split in two
+    /// (`空格 t t` → `x d` → `i Z` → `Z| dog | reads | book |`).
     ///
     /// Every edit that moves the caret as part of its work calls this. It is
     /// a no-op outside a table and wherever the caret is already in a cell.
@@ -3248,9 +3241,9 @@ impl Editor {
         }
         let at = self.sel.head();
         if let Some((from, to)) = self.cell_here().filter(|(from, to)| (*from..=*to).contains(&at)) {
-            // The head is seated; the anchor has to be too (2026-10-30: just
-            // after opening a CSV it was still at the top of the file, so the
-            // first `g/` searched the whole header line).
+            // The head is seated; the anchor has to be too, or just after
+            // opening a CSV it is still at the top of the file and the first
+            // `g/` searches the whole header line.
             if !(from..=to).contains(&self.sel.anchor()) {
                 self.sel.set_anchor(at);
             }
@@ -3308,10 +3301,10 @@ impl Editor {
         true
     }
 
-    /// **A single step at the cell's edge goes into the one next door**
-    /// (2026-10-22 作者定,「往上對齊:h/l 也跨」).
+    /// **A single step at the cell's edge goes into the one next door**:
+    /// `h`/`l` cross too, aligned upwards.
     ///
-    /// The arrow keys in Insert have crossed since #376 —「an arrow key moves
+    /// The arrow keys in Insert cross (#376) —「an arrow key moves
     /// and changes nothing, so barring it was a rule about editing applied to
     /// walking」— and `j`/`k` cross at the cell's first and last row. A
     /// direction means the same thing whichever mode it is pressed in, so the
@@ -3322,7 +3315,7 @@ impl Editor {
     /// 設計 §01 and the way to stay inside one.
     ///
     /// `false` when there is no cell that way — the table's own first or last
-    /// — which is where 「到邊了說一句」 belongs now.
+    /// — which is where 「到邊了說一句」 belongs.
     pub(super) fn step_into_the_next_cell(&mut self, forward: bool) -> bool {
         if !self.grid_has_the_pane() {
             return false;
@@ -3332,8 +3325,8 @@ impl Editor {
         // **And not onto the header**, which `step_cell` walks back onto from
         // the first data row: the grid draws it frozen at the top and refuses
         // every edit on it, so a caret there is one the page cannot show —
-        // 「the window holds you」 then dragged it back and said so, about a
-        // key that had merely reached the table's first cell (2026-10-22).
+        // 「the window holds you」 would drag it back and say so, about a key
+        // that had merely reached the table's first cell.
         if self.cell_position() == was || self.on_header_row() {
             self.set_cursor(home);
             return false;
@@ -3364,12 +3357,12 @@ impl Editor {
 
     /// The same, told whether the rule row counts as a row to stop on.
     ///
-    /// **`Tab` says no** (2026-10-17, found in review). Standing on the rule
-    /// row was decided for `j`/`k`, which walk the page a line at a time and
-    /// so have to account for every line the page draws. `Tab` walks *cells*,
-    /// and the rule row has none worth filling in — every keystroke there is
-    /// refused — so inheriting the decision cost three presses of nothing
-    /// between the header and the first row of data.
+    /// **`Tab` says no**. Standing on the rule row is for `j`/`k`, which walk
+    /// the page a line at a time and so have to account for every line the
+    /// page draws. `Tab` walks *cells*, and the rule row has none worth
+    /// filling in — every keystroke there is refused — so inheriting the rule
+    /// would cost three presses of nothing between the header and the first
+    /// row of data.
     pub(super) fn next_row_for(&self, line: usize, down: bool, rule_counts: bool) -> Option<usize> {
         if let Some(region) = self.prose_region() {
             let mut want = self.md_next_row(&region, line, down)?;
@@ -3379,11 +3372,11 @@ impl Editor {
             return Some(want);
         }
         let last = motion::last_line(self.current_buffer().rope());
-        // **A record's continuation lines are not rows to stop on**
-        // (2026-10-20 作者報的). A field holding a line break is one row, so a
-        // `j` that stepped into the middle of it looked like a `j` that did
-        // nothing: the page was already showing the whole record, and the
-        // writer pressed it twice to get past a single row.
+        // **A record's continuation lines are not rows to stop on**. A field
+        // holding a line break is one row, so a `j` that stepped into the
+        // middle of it would look like a `j` that did nothing: the page already
+        // shows the whole record, and the writer would press it twice to get
+        // past a single row.
         let start = self.record_first(line);
         if down {
             let want = start + self.record_height(start).max(1);
@@ -3400,14 +3393,11 @@ impl Editor {
     /// the rule row owns one at every level that draws it — `| --- |` printed
     /// as itself at 基本, `├┄┄┼┄┄┤` at 全. It cannot be typed into
     /// (`md_rule_here` refuses, naming `t < = >`), which is a reason to say so
-    /// when the reader is on it, not a reason to make it unreachable.
-    /// 2026-10-17 作者：「`j` `k` cannot (they skip the separator)……check
-    /// whether we can align the model so that they can also select the
-    /// border.」
+    /// when the reader is on it, not a reason to make it unreachable: `j` and
+    /// `k` select the border too.
     ///
     /// **The pane is the one place it stays skipped**: `t t` draws no rule row
-    /// at all, so landing there would be the invisible step 2026-09-11 ruled
-    /// out.
+    /// at all, so landing there would be an invisible step.
     fn md_next_row(
         &self,
         region: &crate::mdtable::Region,
@@ -3436,21 +3426,20 @@ impl Editor {
     /// the whole point: the table below then costs nothing to keep and nothing
     /// to consult.
     ///
-    /// Warning: **Forwards, never backwards** (2026-10-20 作者報的). See
-    /// [`crate::editor::TableView::record_starts`] for what the backward walk
-    /// did to a file with unpaired quotes in it.
+    /// Warning: **Forwards, never backwards**. See
+    /// [`crate::editor::TableView::record_starts`] for what a backward walk
+    /// does to a file with unpaired quotes in it.
     fn scan_record_starts(&self, first: usize, delimiter: char) -> Option<std::rc::Rc<Vec<usize>>> {
         let rope = self.current_buffer().rope();
-        // **No quote, no record that runs on** (2026-10-23). The walk below
-        // reads every line of the file and builds a boundary for each one,
-        // only to throw the lot away when none of them joined — and a `"` is
-        // the one thing that can join them. The real 拆分表 holds **not one
-        // quote** in 123,380 lines, so that was the whole of the 50 ms an
-        // <kbd>Esc</kbd> out of a cell cost there: the fill loop is
-        // `i` 打字 `Esc` `Tab`, which paid it once per cell. Asking first
-        // runs over the chunks, where the search is a memchr, and a file that
-        // does hold a quote is no worse off than before.
-        // Found by `scripts/table_big.py` on the real table.
+        // **No quote, no record that runs on**. The walk below reads every
+        // line of the file and builds a boundary for each one, only to throw
+        // the lot away when none of them joined — and a `"` is the one thing
+        // that can join them. The real 拆分表 holds **not one quote** in
+        // 123,380 lines, where the walk alone costs 50 ms per <kbd>Esc</kbd>
+        // out of a cell, paid once per cell by the fill loop `i` 打字 `Esc`
+        // `Tab`. Asking first runs over the chunks, where the search is a
+        // memchr, and a file that does hold a quote is no worse off
+        // (`scripts/table_big.py` measures it on the real table).
         if !rope.chunks().any(|chunk| chunk.contains('"')) {
             return None;
         }
@@ -3473,8 +3462,8 @@ impl Editor {
     /// **Re-read where the records start.**
     ///
     /// Scanned once on the way in, because no 拆分表 anybody has written holds
-    /// a field that runs on. A cell typed into can grow one now (2026-10-21),
-    /// and from that keystroke every row number in the grid depends on this
+    /// a field that runs on. A cell typed into can grow one, and from that
+    /// keystroke every row number in the grid depends on this
     /// answer — so it is asked again wherever a cell edit could have added a
     /// line break or taken one away, and **nowhere near a frame**: the scan
     /// reads every line of the file.
@@ -3492,7 +3481,7 @@ impl Editor {
         }
     }
 
-    /// **The first line of the record `line` is part of** (2026-10-20 作者定).
+    /// **The first line of the record `line` is part of**.
     ///
     /// A grid row is named by this, and that is the whole of what makes a
     /// multi-line record cheap: a row is still a line number, so every offset
@@ -3541,7 +3530,7 @@ impl Editor {
     /// The text of the record that starts at `line` — its lines, joined.
     ///
     /// Line breaks **inside** it are kept: they are what the writer typed, and
-    /// the cell they sit in is 「一個獨立的小文章」 (2026-10-20 作者定).
+    /// the cell they sit in is 「一個獨立的小文章」.
     pub(super) fn record_text(&self, line: usize) -> Option<String> {
         let rope = self.current_buffer().rope();
         if line >= rope.len_lines() {
@@ -3589,7 +3578,7 @@ impl Editor {
         self.record_first(line)
     }
 
-    /// **The text a row's cell spans are measured in** (2026-10-20 作者定).
+    /// **The text a row's cell spans are measured in**.
     ///
     /// The record, which is the line in every file that has no quoted line
     /// break in it. Pair it with [`Self::row_cells`]: those spans are offsets
@@ -3605,20 +3594,18 @@ impl Editor {
     /// normalises through [`Self::record_first`], so every span it gives back
     /// is an offset into the **whole record**; adding one to a continuation
     /// line's own start lands in a different cell, and the further down the
-    /// record the caret is the further out the answer goes. 2026-10-21 作者報
-    /// 的：`Tab` out of a two-line cell went 列 5 → 列 4 → 列 5 → 列 1,
-    /// because the record's second written line was being walked as though it
-    /// were a row of its own.
+    /// record the caret is the further out the answer goes (`Tab` out of a
+    /// two-line cell would go 列 5 → 列 4 → 列 5 → 列 1, walking the record's
+    /// second written line as though it were a row of its own).
     /// **The first and last file line of the record the cursor is on** —
-    /// `None` unless it really runs over more than one (2026-10-22).
+    /// `None` unless it really runs over more than one.
     ///
-    /// Every structural key answered 「which line am I on」, which is the same
-    /// question for all but a handful of records and the wrong one for those:
-    /// `t d` cut off the record's first line and left the rest of it standing
-    /// as an unparseable row, `t j` moved that line past the next record, and
-    /// `t r` opened the new row **inside** the record, between its two lines.
-    /// `None` for an ordinary row keeps each of them on exactly the path it
-    /// was on before.
+    /// 「Which line am I on」 is the same question for all but a handful of
+    /// records and the wrong one for those: asked by the structural keys, `t d`
+    /// would cut off the record's first line and leave the rest of it standing
+    /// as an unparseable row, `t j` would move that line past the next record,
+    /// and `t r` would open the new row **inside** the record, between its two
+    /// lines. `None` for an ordinary row keeps each of them on the line path.
     pub(super) fn record_lines_here(&self) -> Option<(usize, usize)> {
         let rope = self.current_buffer().rope();
         let line = rope.char_to_line(self.caret().min(rope.len_chars()));
@@ -3633,8 +3620,7 @@ impl Editor {
 
     /// **What a reader sees in one cell** — the value, not the bytes.
     ///
-    /// Two differences from [`crate::table::cell_text`], both decided
-    /// 2026-10-20:
+    /// Two differences from [`crate::table::cell_text`]:
     ///
     /// - **The quotes come off.** In the grid a cell is 「一個獨立的小文章」,
     ///   and the pair of `"` around it is the file's syntax rather than
@@ -3672,16 +3658,15 @@ impl Editor {
         // so landing on a cell lands on its first real character rather than on
         // the space before it.
         //
-        // **The record, not the line** (2026-10-20): a field holding a line
+        // **The record, not the line**: a field holding a line
         // break is one record over several lines, and `scan` reads it whole as
         // soon as it is given the whole of it.
         //
-        // Warning: **and a continuation line names its record**, not itself. Handed
-        // one raw, this read from the middle of a record: `line two of seven\",r7f`
-        // parsed as a row whose **first** column was the cell's second line, and
-        // that is what the detail panel then showed and what the column widths
-        // were measured against (2026-10-20 作者報的: 「the multiple line of that
-        // cell goes to the first cell」).
+        // Warning: **and a continuation line names its record**, not itself.
+        // Handed one raw, this would read from the middle of a record:
+        // `line two of seven\",r7f` would parse as a row whose **first** column
+        // is the cell's second line, and that is what the detail panel would
+        // show and what the column widths would be measured against.
         view.cells(&self.row_source(line))
     }
 
@@ -3733,8 +3718,8 @@ impl Editor {
     /// One arithmetic, three questions: where the cursor is
     /// ([`Self::cell_position`]), which cells a selection covers
     /// ([`Self::run_selected`]), and where a selection's far end has to be
-    /// pulled to ([`Self::round_out_to_cells`]). It was written out three
-    /// times, and two of the copies disagreed with this one (2026-10-21).
+    /// pulled to ([`Self::round_out_to_cells`]) — written once, so the three
+    /// cannot disagree.
     pub(super) fn cell_holding(&self, line: usize, at: usize) -> Option<usize> {
         let within = at.saturating_sub(self.record_base(line));
         let cells = self.row_cells(line);
@@ -3748,18 +3733,17 @@ impl Editor {
     /// quoted field taken off.
     ///
     /// Those two characters are the file's syntax, not anything the writer
-    /// typed (`cell_shown` has said so since 2026-10-20), so everything that
-    /// is about *content* asks this and not [`Self::cell_span`]: where the
-    /// caret may stand, what walls a motion, what `g h`/`g l` answer, what
-    /// Insert is clamped to — and, since 2026-10-22, where the page draws the
-    /// caret and what a click in a cell lands on, which are the same question
+    /// typed (as `cell_shown` says), so everything that is about *content*
+    /// asks this and not [`Self::cell_span`]: where the caret may stand, what
+    /// walls a motion, what `g h`/`g l` answer, what Insert is clamped to —
+    /// and where the page draws the caret and what a click in a cell lands on, which are the same question
     /// asked by the one surface that draws the value rather than the source.
     ///
-    /// Warning: **this is why a record over several lines used to be read-only.**
-    /// The caret was counted in the value while the span it edited still
-    /// carried the quotes, so typing landed in front of the opening one:
-    /// `alpha,"first line` became `alpha,ZZ"first line` and the record stopped
-    /// parsing (2026-10-20). A `|` table has no quoting at all, so there the
+    /// Warning: **the caret and the span it edits are counted the same way.**
+    /// With the caret counted in the value and the span still carrying the
+    /// quotes, typing would land in front of the opening one:
+    /// `alpha,"first line` would become `alpha,ZZ"first line` and the record
+    /// would stop parsing. A `|` table has no quoting at all, so there the
     /// two spans are the same answer.
     pub fn value_span(&self, from: usize, to: usize) -> (usize, usize) {
         if !matches!(
@@ -3797,10 +3781,10 @@ impl Editor {
     }
 
     /// **The cell the caret is in — only in 全窗, and only for the keys that
-    /// must not leave it** (2026-10-17 作者定).
+    /// must not leave it**.
     ///
-    /// 原話：「还是按字符，不跨格。这样的话格子只能通过 hjkl tab/S-tab 来移
-    /// 动。」So the fine-grained keys cross — `h`/`l` a character at a time,
+    /// Cells are left only by `hjkl` and `Tab`/`S-Tab`. So the fine-grained
+    /// keys cross — `h`/`l` a character at a time,
     /// `j`/`k` a row, `Tab` a cell — and everything that moves by a *word or
     /// more* stays in the cell it started in. A word motion that crosses is a
     /// selection that holds a wall, and in a view that is only about content
@@ -3814,7 +3798,7 @@ impl Editor {
     }
 
     /// The same span **at every level a table is being read at** — what
-    /// `mi c` takes (2026-10-17). A cell is a cell in `t b` and `t f` too;
+    /// `mi c` takes. A cell is a cell in `t b` and `t f` too;
     /// only `t o` has none, and there `self.table` is `None`.
     pub(super) fn cell_here(&self) -> Option<(usize, usize)> {
         let (line, cell) = self.cell_position()?;
@@ -3822,12 +3806,12 @@ impl Editor {
         Some(self.value_span(from, to))
     }
 
-    /// **全窗裏行號是表格自己的行號**（2026-10-17 作者定），左邊畫的那一個。
+    /// **全窗裏行號是表格自己的行號**，左邊畫的那一個。
     ///
     /// 格子窗的欄位從 1 數起，數的是**資料行**——標題由 schema 畫在凍住的那一
-    /// 條上，`| --- |` 根本不畫。而 `3G` 從前走的是檔案行號，於是在一張開頭有
-    /// 兩行前文的 `.md` 裏，`3G` 落到的是「畫着 1 的那一行」之外的某處，再被
-    /// 「窗子拉得住你」那一條硬拖回來（實測 `2G` 落在第 1 行）。
+    /// 條上，`| --- |` 根本不畫。`3G` 走檔案行號的話，在一張開頭有兩行前文的
+    /// `.md` 裏，`3G` 落到的是「畫着 3 的那一行」之外的某處，再被「窗子拉得住你」
+    /// 那一條硬拖回來。
     ///
     /// 不在全窗就照檔案行號走——那三層畫的本來就是檔案。
     pub(super) fn goto_grid_row(&mut self, n: usize) {
@@ -3838,9 +3822,9 @@ impl Editor {
         match span {
             Some((first, last)) => {
                 // **A record over several lines puts the row and the line one
-                // apart** (2026-10-20 作者報的), so adding `n` to the first line
-                // stopped naming row `n`: `40G` landed on row 39 and `8G` on
-                // row 7, while `:40` and `␣t40g` went where they said. One
+                // apart**, so adding `n` to the first line does not name row
+                // `n`: `40G` would land on row 39 and `8G` on row 7, while
+                // `:40` and `␣t40g` go where they say. One
                 // answer for all three — `grid_row_line`.
                 let want = match self.grid_row_line(n) {
                     Some(line) => line.min(last),
@@ -3853,7 +3837,7 @@ impl Editor {
         }
     }
 
-    /// **全窗裏「這一行」就是「這一格」**（2026-10-17 作者定）——`g h`／`g l`／
+    /// **全窗裏「這一行」就是「這一格」**——`g h`／`g l`／
     /// `g s`（vim 的 `0`／`$`／`^`）與 `Home`／`End` 落在哪。
     ///
     /// `end` ＝ 要的是格尾。格尾是這一格**最後一個字**，不是它後面那一格：那
@@ -3877,17 +3861,16 @@ impl Editor {
     /// *writing* that cannot be done from the pieces `cells` cut, so only the
     /// five operations that write go through this door.
     fn cell_span_to_edit(&mut self, line: usize, cell: usize) -> Option<(usize, usize)> {
-        // The guard that used to stand here is gone with the reason for it
-        // (#311): `cells` reads the quotes now, so the pieces a row comes
-        // apart into are the right ones and writing it back from them says
-        // what it said. What still guards the row is what guards every other
+        // No guard here (#311): `cells` reads the quotes, so the pieces a row
+        // comes apart into are the right ones and writing it back from them
+        // says what it said. What still guards the row is what guards every other
         // one — a delimiter typed into a cell is turned away where it is typed.
         self.cell_span(line, cell)
     }
 
     /// **Write a value into one cell, and let the file's syntax be the
-    /// editor's problem** (2026-10-21 作者定: 「格子裏打什麼都行，引號歸編輯器
-    /// 管」).
+    /// editor's problem**: anything may be typed in a cell, and the quotes
+    /// are the editor's.
     ///
     /// What goes in is the value a reader sees; what lands in the file is that
     /// value written so a parser cut by this delimiter gets it back whole —
@@ -3940,11 +3923,11 @@ impl Editor {
     /// **Whether a cell of this file can hold a line break at all.**
     ///
     /// Only a delimited one: RFC 4180 quotes a field that holds one, and the
-    /// grid has read records over several lines since 2026-10-20. A `|` table
+    /// grid reads records over several lines. A `|` table
     /// row *is* a line — it has no quoting to lean on, and a break in the
     /// middle of one is two broken rows.
     /// **Inside a cell, `o`/`O` open a line of the cell** — 設計 §03 的中層那
-    /// 一格:「`o` 在格內開新行」(2026-10-22 做的).
+    /// 一格:「`o` 在格內開新行」.
     ///
     /// At the top layer the same letter opens a *row*: one key, one meaning
     /// per layer, which is the whole of what the layer model buys. A `|`
@@ -3995,7 +3978,7 @@ impl Editor {
     }
 
     /// **Put the quotes around the cursor's cell, so the next character typed
-    /// can be anything** (2026-10-21).
+    /// can be anything**.
     ///
     /// Lazily, on the three keystrokes that need it — the delimiter, a quote
     /// and <kbd>Enter</kbd> — rather than on the way into every cell: a field
@@ -4052,17 +4035,16 @@ impl Editor {
         let (first, _last) = self.value_span(from, to);
         let source = self.current_buffer().rope().slice(from..to).to_string();
         // **Un-escape before re-escaping, or the `""` pairs double every time**
-        // (2026-10-22, `scripts/table_keys.py` 第一趟掃出來的). The span inside
-        // the quotes is still the *file's* text: a value holding one `"` is
-        // written `""` there. Reading that span as the value and handing it to
-        // `quote_for` escaped it a second time, so `i` `Esc` — with nothing
-        // typed — turned `"he said ""ok"""` into `"he said """"ok"""""`, and
-        // each visit doubled it again. Nothing said so: the cell drew the same
-        // either way until the file was read back.
+        // (`scripts/table_keys.py` sweeps the shapes). The span inside the
+        // quotes is still the *file's* text: a value holding one `"` is written
+        // `""` there. Reading that span as the value and handing it to
+        // `quote_for` would escape it a second time, so `i` `Esc` — with
+        // nothing typed — would turn `"he said ""ok"""` into
+        // `"he said """"ok"""""`, and each visit would double it again, with
+        // the cell drawn the same either way until the file is read back.
         //
-        // Every other kind of cell was safe, which is why it took a sweep
-        // over the shapes to see: with no `"` in the value the span between
-        // the quotes **is** the value.
+        // Every other kind of cell is safe either way: with no `"` in the value
+        // the span between the quotes **is** the value.
         let value = crate::table::unquote(&source);
         let within = self.caret().saturating_sub(first).min(value.chars().count());
         let delimiter = match self.table.as_ref().map(|view| view.separator) {
@@ -4085,8 +4067,8 @@ impl Editor {
     /// **The rows the grid draws one cell on** — as spans of the buffer, in
     /// the order they are drawn, never empty.
     ///
-    /// A cell has had rows of its own since a line break could be typed into
-    /// one (2026-10-21, 第三刀), and the grid draws them two ways: a value's
+    /// A cell has rows of its own, since a line break can be typed into one,
+    /// and the grid draws them two ways: a value's
     /// own line breaks each start a row, and under 折行 (`␣t a`) anything past
     /// [`crate::mdtable::MAX_COLUMN`] columns is drawn underneath as well.
     /// `visual` asks for the rows **on the screen** (both splits) and
@@ -4135,9 +4117,9 @@ impl Editor {
     ///
     /// Warning: **a row's far end belongs to the row after it.** Rows split by
     /// 折行 share a position — one ends where the next begins, with no line
-    /// break between them — and reading it as the earlier row made `j` on the
-    /// cell's second drawn row count as its first, so it stepped to the
-    /// second again and the caret stopped there (2026-10-22, 量出來的). The
+    /// break between them — and reading it as the earlier row would make `j`
+    /// on the cell's second drawn row count as its first, so it would step to
+    /// the second again and the caret would stop there. The
     /// cell's own far end has no row after it, and belongs to the last.
     pub(super) fn row_of_the_cell(
         &self,
@@ -4165,10 +4147,10 @@ impl Editor {
     /// back. It is also a shape every other tool understands, so a column
     /// yanked here pastes into a spreadsheet as a column.
     ///
-    /// **A value that holds a line break is quoted** (2026-10-23), the way a
-    /// one-column TSV writes it ([`crate::table::quote_for`] with a tab). One
-    /// value to a line cannot otherwise say where a two-line value ends: it
-    /// went out as two values and came back two rows apart.
+    /// **A value that holds a line break is quoted**, the way a one-column TSV
+    /// writes it ([`crate::table::quote_for`] with a tab). One value to a line
+    /// cannot otherwise say where a two-line value ends: it would go out as
+    /// two values and come back two rows apart.
     fn yank_column(&mut self) {
         let Some((_, cell)) = self.cell_position() else {
             return;
@@ -4182,9 +4164,9 @@ impl Editor {
         let lines: Vec<String> = values.iter().map(|v| crate::table::quote_for(v, '\t')).collect();
         self.store(format!("{}\n", lines.join("\n")));
         // **The table the cursor is in names it** (#283) — see
-        // [`Self::schema_here`]. It used to be the view's schema, which in a
-        // Markdown document is the *first* table's: `t y` in the second table
-        // of a file reported the first table's column, and was believed.
+        // [`Self::schema_here`], not the view's schema, which in a Markdown
+        // document is the *first* table's: `t y` in the second table of a file
+        // would report the first table's column, and be believed.
         let name = self
             .schema_here()
             .and_then(|s| s.columns.get(cell).map(|c| c.heading().to_string()))
@@ -4194,10 +4176,9 @@ impl Editor {
 
     /// Every cell of one column, header included, top to bottom.
     ///
-    /// Warning: **交出來的是那一格的字，不是它在檔裏的拼法**（2026-10-02 一輪掃查報來
-    /// 的）。`Parts` 裏存的是原樣的拼法，連 `\|` 那個反斜杠一起；而
-    /// [`Editor::put_column`] 收到之後會**再轉義一遍**。於是 `␣ty` 抄一欄、`␣tp`
-    /// 原地貼回去，`木\|水` 變成 `木\\\|水`——那一格本來是「木|水」，貼完成了
+    /// Warning: **交出來的是那一格的字，不是它在檔裏的拼法**。`Parts` 裏存的是原樣
+    /// 的拼法，連 `\|` 那個反斜杠一起；而 [`Editor::put_column`] 收到之後會**再轉義
+    /// 一遍**。交拼法的話 `␣ty` 抄一欄、`␣tp` 原地貼回去，`木\|水` 變成 `木\\\|水`——那一格本來是「木|水」，貼完成了
     /// 「木\|水」。抄了再貼回去不是一件白做的事。
     ///
     /// 這一欄抄出去的用處是「貼進表格軟件」（見 `yank_column`），那邊要的也是字。
@@ -4227,10 +4208,10 @@ impl Editor {
     /// [`Self::cell_lines`] is every line that has cells, and a record whose
     /// field holds a line break is written on several of them — each of which
     /// answers with the whole record's cells. A column walked line by line
-    /// took that record once per line (2026-10-23: `␣t y` reported 42 cells of
-    /// a 41-row table, the two-line value went out as two quoted halves, and
-    /// `␣t p` wrote every cell under it two rows down — silently, since the
-    /// row and column counts never changed).
+    /// would take that record once per line: `␣t y` would report 42 cells of
+    /// a 41-row table, the two-line value would go out as two quoted halves,
+    /// and `␣t p` would write every cell under it two rows down — silently,
+    /// since the row and column counts never change.
     fn record_lines(&self) -> Vec<usize> {
         self.cell_lines()
             .into_iter()
@@ -4243,10 +4224,10 @@ impl Editor {
     /// Every line of the file when the file *is* the table: a blank line is
     /// still a row, of one empty cell, and a column yanked over it carries the
     /// blank along so that putting it back puts it back where it came from.
-    /// What this is for is that `t y` and `t p` ask **one** question — they
-    /// used to each walk the lines their own way, and tightening the filter on
-    /// one side alone would have shifted every value below the blank by a row
-    /// without a single test noticing.
+    /// What this is for is that `t y` and `t p` ask **one** question — each
+    /// walking the lines its own way, tightening the filter on one side alone
+    /// would shift every value below the blank by a row without a single test
+    /// noticing.
     ///
     /// **A block recognised in a document is bounded by the block** (#216).
     /// Without that, `t p` inside a 碼表 pasted into a chapter would write the
@@ -4265,9 +4246,9 @@ impl Editor {
     /// word on the status line) when there are none.
     fn yanked_column(&mut self) -> Option<Vec<String>> {
         let text = self.recall();
-        // **One terminator off, not all of them** (2026-10-30): a column whose
-        // last values are empty ends in empty lines, and trimming every `\n`
-        // dropped those cells, so the paste ran short and a stale value stayed.
+        // **One terminator off, not all of them**: a column whose last values
+        // are empty ends in empty lines, and trimming every `\n` would drop
+        // those cells, so the paste would run short and a stale value stay.
         let body = text.strip_suffix('\n').unwrap_or(&text);
         // What `␣t y` wrote: one value to a line, a value with a line break in
         // it quoted. Text that never closes a quote was not written by it, and
@@ -4298,9 +4279,9 @@ impl Editor {
         };
         let n = values.len();
         if let Some((region, mut parts)) = self.md_parts() {
-            // **A `|` cell is one line** (2026-10-23). A column yanked out of a
-            // delimited file can carry a two-line value, and written into a
-            // `|` row it broke the row in two — the table stopped being one.
+            // **A `|` cell is one line**. A column yanked out of a delimited
+            // file can carry a two-line value, and written into a `|` row it
+            // would break the row in two — the table would stop being one.
             // Refused whole and before anything moves, so the refusal costs
             // nothing to undo.
             if let Some(nth) = values.iter().position(|v| v.contains('\n')) {
@@ -4339,7 +4320,7 @@ impl Editor {
             return;
         }
         self.snapshot();
-        // **From the bottom up** (2026-10-23). A value that brings a line
+        // **From the bottom up**. A value that brings a line
         // break with it moves every line under it down by one, so the record
         // lines worked out above stay true only for the rows not yet written —
         // which, written last-first, is all of them.
@@ -4361,7 +4342,7 @@ impl Editor {
     }
 
     /// Put what was yanked in as a **new column** beside the cursor's: `t p`
-    /// to the right, `t P` to the left (2026-10-30, as decided, so the column
+    /// to the right, `t P` to the left (so the column
     /// keys answer like the row keys `p`/`P`; writing over a column is `t v`).
     ///
     /// Every record gets a cell, with the yanked value where there is one and
@@ -4520,10 +4501,9 @@ impl Editor {
             // Past the last row, the block writes new rows of its own — **at
             // the row's own place**, not at the end of the file. A file that
             // ends in a newline has an empty last line, so appending behind
-            // that put the new row one line below where the block was being
-            // laid down: a two-row paste into 「字,說明 / 木,樹」 came back as
-            // 「甲,乙 / 丙 / ,」, the second row's cells written into the empty
-            // line and the row that was meant to hold them left blank at the
+            // that would put the new row one line below where the block is
+            // being laid down: the second row's cells would be written into
+            // the empty line and the row meant to hold them left blank at the
             // bottom.
             let lines = self.current_buffer().line_count();
             if at >= lines || self.row_cells(at).len() != width {
@@ -4595,7 +4575,7 @@ impl Editor {
     /// Step one row up or down, keeping to the same column.
     ///
     /// A step off the end of an in-document table walks into the prose around
-    /// it (2026-09-05); [`Self::move_cell_page`] passes `false` because a page
+    /// it; [`Self::move_cell_page`] passes `false` because a page
     /// is a count of the **grid's** rows and running out of them is where it
     /// stops.
     pub(super) fn move_cell_row(&mut self, down: bool) {
@@ -4617,9 +4597,9 @@ impl Editor {
                 self.go_to_cell(want, goal);
                 return;
             }
-            // **The last row is not the end of the page** (2026-09-05):
-            // 「ti, ta 這兩個模式應該允許光標上下離開表格回到正文中（現在不可
-            // 以）」. The two surfaces drawn *inside* a document are part of
+            // **The last row is not the end of the page**: in an in-document
+            // table the cursor walks up and down out of it into the prose. The
+            // two surfaces drawn *inside* a document are part of
             // that document, so `j` on the bottom row walks into the paragraph
             // under the table and `k` on the header walks into the one above
             // it — where `table_here()` is false, so `hjkl` are letters again.
@@ -4638,15 +4618,13 @@ impl Editor {
             }
             return;
         }
-        // **A record's continuation lines are not rows to stop on** (§5.236,
-        // 2026-10-20 作者報的). `line ± 1` is a *line*, and a field holding a
-        // line break makes one row several of them — so this `j` stepped into
-        // the middle of a record and read as a press that did nothing.
+        // **A record's continuation lines are not rows to stop on** (§5.236).
+        // `line ± 1` is a *line*, and a field holding a line break makes one
+        // row several of them — so `line ± 1` would step into the middle of a
+        // record and read as a press that did nothing.
         //
-        // [`Self::next_row`] is the one authority on 「the row that way」, and
-        // the character path has asked it since that day; this one went on
-        // asking the buffer. It only showed up once a grid started opening on
-        // cells (2026-10-21), which is where this branch runs by default.
+        // [`Self::next_row`] is the one authority on 「the row that way」, for
+        // this path as for the character path.
         let last = self.grid_last_line();
         let want = self.next_row(line, down).unwrap_or(line).min(last);
         let goal = self.table.as_ref().map(|v| v.goal).unwrap_or(0);
@@ -4724,24 +4702,22 @@ impl Editor {
     /// they mean is [`Layer::claim`]'s to answer — one short file, read in one
     /// sitting ([`crate::table::layer`]) — and everything in the first half of
     /// this function is the execution of what it said. That split is the point:
-    /// 「does a table change what this key means?」 used to be answerable only
-    /// by reading this function to the end, and every table bug reported so far
-    /// has been that question answered twice.
+    /// 「does a table change what this key means?」 is answerable without
+    /// reading this function to the end, and answered once, not twice.
     ///
     /// The cell **operators** in the second half are not claims. They are the
     /// keys that work on whatever the unit is, and the unit is the whole cell
     /// exactly when [`Layer::selects_the_cell`] says so — asked once, here,
     /// rather than by each of them.
     ///
-    /// Warning: **`T` is till in a grid too**（2026-09-30 定，原話「这个可能要
-    /// 改成 _tT了，因为 T 现在 till 佔用的」）。換層那一下掛在表格那一組上
+    /// Warning: **`T` is till in a grid too**：換層是 `␣t T`。換層那一下掛在表格那一組上
     /// （[`Self::toggle_table_layer`]），而 `Enter` / `Esc` 是正路。
     pub(super) fn table_motion(&mut self, key: Key, count: usize) -> bool {
         // **The rule row is not a line anybody types into** — a guard, not a
-        // cell operator (2026-10-21). It used to be inside `edit_cell`, which
-        // only the top layer reaches; `t b` walks by character now and its
-        // letters are the page's, so from there `i` would have typed straight
-        // into `| --- | --- |` and the file would have stopped being a table.
+        // cell operator. Inside `edit_cell`, which only the top layer reaches,
+        // it would miss `t b`, which walks by character with the page's
+        // letters, so from there `i` would type straight into `| --- | --- |`
+        // and the file would stop being a table.
         // Markdown knows that row by its shape, and it is the one line a `|`
         // table cannot survive losing.
         //
@@ -4755,12 +4731,11 @@ impl Editor {
             self.status = say!("table.rule-row-is-drawn");
             return true;
         }
-        // **And a table with no rows has no cell to be about** (2026-10-23
-        // 作者定). The same shape of guard as the rule row above, and for the
-        // same reason: a key that means 「this cell」 has to be turned away
-        // before anything downstream invents one. `i` used to write a
-        // one-column record into a three-column schema, and `d`/`y` reported
-        // on a cell that was not there (「這一格是空的」/「取了一格(0 個字)」).
+        // **And a table with no rows has no cell to be about**. The same shape
+        // of guard as the rule row above, and for the same reason: a key that
+        // means 「this cell」 has to be turned away before anything downstream
+        // invents one — or `i` writes a one-column record into a three-column
+        // schema, and `d`/`y` report on a cell that is not there.
         //
         // Not every key: `␣t r`, `o`, `O`, `p`, `P` and `R` all open a row
         // with the schema's own columns in it, and they are the way out.
@@ -4786,7 +4761,7 @@ impl Editor {
                 // **A caret has to be somewhere it may stand.** The layer it
                 // came from draws none, so the position it was carrying is a
                 // source position — the opening `"` of a quoted field — and
-                // one `i` there writes outside the value (2026-10-22 報的).
+                // one `i` there would write outside the value.
                 self.put_the_caret_in_the_cell();
                 return true;
             }
@@ -4816,14 +4791,10 @@ impl Editor {
             // everything else and reach `move_page`, which aims at a
             // *character* column — and a character column is in a different
             // cell on every row a table has, because no two rows are the same
-            // width. Half a page from column 5 landed in column 10.
+            // width: half a page from column 5 would land in column 10.
             //
-            // Warning: **`J`/`K`/`L`/`H` are not among them** (2026-10-17 作者報的:
-            // 「These four seem to be incompatible with non-table mode」). They
-            // were, and that was this table carrying on after the rest of the
-            // editor had already moved paging off them: 「既然對齊就干脆點……
-            // JK 本质上也是和弦（上档）。因此 Ctrl n / p 并不比 JK 更难按。」
-            // Outside a grid the four mean 合併行 / 篩選多重選區 / 句子向前 /
+            // Warning: **`J`/`K`/`L`/`H` are not among them**: paging is off
+            // them everywhere in the editor, and the grid agrees. Outside a grid the four mean 合併行 / 篩選多重選區 / 句子向前 /
             // 句子向後, and a key that changes meaning with where the cursor
             // stands is what `manual.md:2640` promises never happens. Paging
             // is the six Ctrl keys, here as everywhere.
@@ -4842,21 +4813,19 @@ impl Editor {
             // in. Without this the guard that makes the grid safe is also what
             // makes copying a cell impossible: `v l y` reaches across the
             // delimiter, and pasting what it took is then refused.
-            // **vim's operators wait for a motion here too** (2026-10-23
-            // 作者定). At this layer `c` and `d` were one stroke — `c` retypes
-            // the cell, `d` empties it — while in vim's own grammar they are
-            // operators that wait. So the motion key that followed had no one
-            // to take it: `s` is spelled `@c{n}l`, `c` started insert on the
-            // spot and the `l` was typed into the cell (`二,l山,B`); `cw` left
-            // a `w` and `cc` a `c`; `dd` ran two `d`s, and on a record short
-            // of its columns the second one took the cell the cursor had
-            // fallen back to — `七,短` became `,`. Found by
-            // `scripts/table_keys.py --preset vim`.
+            // **vim's operators wait for a motion here too**: in vim's own
+            // grammar `c` and `d` are operators that wait. As one stroke at
+            // this layer the motion key that follows would have no one to take
+            // it: `s` is spelled `@c{n}l`, so `c` would start insert on the
+            // spot and the `l` be typed into the cell; `cw` would leave a `w`
+            // and `cc` a `c`; `dd` would run two `d`s, and on a record short of
+            // its columns the second would take the cell the cursor had fallen
+            // back to (`scripts/table_keys.py --preset vim` sweeps this).
             //
             // Every motion resolves to 「this cell」 ([`Self::cell_operator`],
             // reached through [`Editor::do_vim_span`]), so `dd` `dw` `d$` and
             // `cc` `cw` `cl` all mean the one unit this layer has. The cost is
-            // vim's own: a bare `d` no longer empties the cell, `dd` does.
+            // vim's own: a bare `d` does not empty the cell, `dd` does.
             // `A-d` / `A-c` stay one stroke, and the helix preset is untouched.
             Key::Char(op @ ('d' | 'c' | 'y'))
                 if self.as_vim()
@@ -4872,23 +4841,22 @@ impl Editor {
             // The whole row, spelled the way vi spells "the whole line".
             Key::Char('Y') => self.yank_row(),
             // **A line-wise register is a record, and a record is a line** —
-            // which the editor's ordinary paste already puts where it belongs
-            // (2026-10-21). The kind is carried by a trailing newline
+            // which the editor's ordinary paste already puts where it belongs.
+            // The kind is carried by a trailing newline
             // (`edits.rs`), so it is answered by the key that *filled* the
             // register rather than guessed at here by counting delimiters.
             //
-            // Warning: **counting was wrong twice**, and both only showed up once a
-            // grid started opening on cells, which is where `p` means this at
-            // all. ① On a `.csv` with no schema beside it there is no column
-            // count to count against, so `x d` then `P` lost the row to
-            // 「逗號寫不進格子」. ② In a `|` table the row went back through
-            // the Markdown writer, which squared the whole table up — and `d`
-            // then `P` is the one sequence whose entire job is 「put that back
-            // the way it was」.
+            // Warning: **counting delimiters is wrong twice**. ① On a `.csv`
+            // with no schema beside it there is no column count to count
+            // against, so `x d` then `P` would lose the row to 「逗號寫不進
+            // 格子」. ② In a `|` table the row would go back through the
+            // Markdown writer, which squares the whole table up — and `d` then
+            // `P` is the one sequence whose entire job is 「put that back the
+            // way it was」.
             // **A table with no rows has one place a record can go, and no
-            // record to replace** (2026-10-23). `P` aimed at the line before
-            // the caret — the header — and `R` had nothing under it to cover,
-            // so both fell to the cell path and were answered 「',' 是格與格
+            // record to replace**. `P` would aim at the line before the caret
+            // — the header — and `R` would have nothing under it to cover, so
+            // both would fall to the cell path and be answered 「',' 是格與格
             // 的分隔」 and 「放不下 3 格」 about a record this very table had
             // just given up. `o` and `O` already agree that there is only one
             // place, and 「剪什麼就放回什麼」 is the rule the pair is for.
@@ -4899,7 +4867,7 @@ impl Editor {
             }
             Key::Char('p') | Key::Char('P') if self.register_holds_records() => return false,
             Key::Char('p') | Key::Char('P') => self.put_cell(key == Key::Char('p')),
-            // **`R` 蓋上去，`p` 放進去**（2026-10-21 作者定，見
+            // **`R` 蓋上去，`p` 放進去**（見
             // [`Self::put_cell`]）。整條記錄那一種讓正文那一支蓋——`x R` 蓋掉的
             // 正是選區那幾條，而整行換整行這個編輯器本來就認
             // （`put_takes_whole_rows`）。没選區的時候蓋掉的是光標這一條，所以
@@ -4925,40 +4893,29 @@ impl Editor {
             // contents, and a Markdown table is the only one whose shape the
             // editor may change: a delimited file's columns are the schema's,
             // and 123,380 rows do not want a column inserted by a keystroke.
-            // `d` on a grid means the cell. It used to mean one character —
-            // and to *error* on an empty cell, which in a 28-column 拆分表 is
-            // four cells in five, because the collapsed selection there sits
-            // exactly on the delimiter.
+            // `d` on a grid means the cell, not one character — which would
+            // *error* on an empty cell, in a 28-column 拆分表 four cells in
+            // five, because the collapsed selection there sits exactly on the
+            // delimiter.
             // …with a selection standing, `d` still means the selection: `x d`
             // must go on being refused rather than quietly clearing one cell.
-            // Warning: **哪一個進寄存器，和正文逐鍵一樣**（2026-10-08 定）。
-            //
-            // 從前格子裏是「`d` 不進、`D` 進」，而正文 2026-09-28 起是「`d` 進、
-            // `A-d` 不進」——同一個大寫鍵在散文裏和表格裏意思相反，而手冊 2640
-            // 行自己承諾過「一個鍵不會因爲光標停在哪裏就換一個意思」。
-            //
-            // 中間改過一版「`d` 進、`D` 不進」，當天就被問到點子上：**爲什麽格子
-            // 裏没有 `A-d`？有了不就不用 `D` 了嗎。** 量過——`A-d` 在格子裏是個
-            // 死鍵，按下去一點反應都没有，它只是從來没人給它接上。接上了，`D` 就
-            // 刪掉：不留別名，也不出「你要的是 A-d」那種提示。
+            // Warning: **哪一個進寄存器，和正文逐鍵一樣**：「`d` 進、`A-d` 不進」。
+            // 手冊承諾過「一個鍵不會因爲光標停在哪裏就換一個意思」，所以格子裏也是
+            // `A-d`，没有 `D` 這個別名，也不出「你要的是 A-d」那種提示。
             Key::Char('d') if self.sel.anchor() == self.sel.head() => {
                 self.clear_cell(self.yank_on_delete())
             }
             Key::Alt('d') if self.sel.anchor() == self.sel.head() => {
                 self.clear_cell(!self.yank_on_delete())
             }
-            // Warning: **`t` 在格子裏也是 till，不是表格組**（2026-09-23 補完
-            // `203ea92` 那次搬家）。表格組 2026-09-21 搬到了 `空格 t`，手冊
-            // 2640 行為此寫下一句承諾：「一個鍵不會因爲光標停在哪裏就換一個
-            // 意思」。這兩處（按字、按格各一）是那次搬家漏下的，留着它等於錢
-            // 花了東西没拿到。
+            // Warning: **`t` 在格子裏也是 till，不是表格組**：表格組在 `空格 t`，而手冊
+            // 承諾「一個鍵不會因爲光標停在哪裏就換一個意思」。按字、按格兩處都是。
             // `o` in a grid means a new row, and on the header row the new row
             // has to go under the rule rather than between it and its names.
             // **`o` opens a row and puts you in it, ready to type** — vi's own
             // `o`, which is 「open a line and start writing」 and not 「open a
-            // line」 (2026-10-21). A new row's cells are all empty, so there is
-            // nothing to do there in Normal, and this key used to land in one
-            // and stop; the key that followed it was always `i`.
+            // line」. A new row's cells are all empty, so there is nothing to do
+            // there in Normal: the key after it would always be `i`.
             Key::Char('o') | Key::Char('O') if self.md_region().is_some() => {
                 if self.md_new_row(key == Key::Char('o')) {
                     self.edit_cell(CellEdit::Start);
@@ -4977,11 +4934,11 @@ impl Editor {
     }
 
     /// **A command's meaning in a table's grid, when a binding or a group
-    /// runs it by name** (2026-11-01). A key pressed in the grid is read
-    /// by [`Self::table_motion`] as it always was; a command reached any
-    /// other way (`"n" = "move_char_right"`, `g h`, the palette) used to
-    /// skip it and move by a character where no caret is drawn. It goes
-    /// through the key [`TABLE_KEYS`] gives it now, so a name means the
+    /// runs it by name**. A key pressed in the grid is read by
+    /// [`Self::table_motion`]; a command reached any other way
+    /// (`"n" = "move_char_right"`, `g h`, the palette) goes through the key
+    /// [`TABLE_KEYS`] gives it, rather than moving by a character where no
+    /// caret is drawn, so a name means the
     /// same thing in the grid whichever way it is reached: the same action,
     /// done to a cell. `true` when the grid took it.
     ///
@@ -5118,10 +5075,10 @@ impl Editor {
     pub(super) fn step_cells(&mut self, step: layer::Step, count: usize) {
         self.step_cells_unsnapped(step, count);
         self.round_out_to_cells();
-        // **The parked position is in the value too** (2026-10-22 報的). The
-        // top layer draws no caret, but everything that asks 「where am I」
-        // reads that position: the status line's character readout said a
-        // quoted cell held `"` and an empty one held the delimiter. Not while
+        // **The parked position is in the value too**. The top layer draws no
+        // caret, but everything that asks 「where am I」 reads that position:
+        // the status line's character readout would say a quoted cell holds
+        // `"` and an empty one the delimiter. Not while
         // extending — there the head is one end of a cell range, and
         // [`Self::round_out_to_cells`] has just put it where that range ends.
         if !self.extend {
@@ -5129,9 +5086,9 @@ impl Editor {
         }
     }
 
-    /// **A selection at this layer is a whole number of cells** (2026-10-21
-    /// 作者定: 「`v` 在一行里横着长 is something good if users want to pick
-    /// some cells of a line and paste/replace into another row.」).
+    /// **A selection at this layer is a whole number of cells**: `v` grows
+    /// across a row, to pick some cells of it and paste or replace them into
+    /// another row.
     ///
     /// The motions land the caret on a cell's **first** character, which is
     /// where a caret belongs; a selection that ended there would be 「these
@@ -5154,12 +5111,11 @@ impl Editor {
             return;
         };
         // **The far end stands on the cell's last character — and an empty
-        // cell's last character is its first** (2026-10-21 作者報的: 「`v l l`
-        // … it stucks at empty cells」). A cell with nothing in it is one
-        // position wide, so stepping back from its end lands on the padding,
-        // which belongs to no cell; the next `l` then read the cell *before*
-        // it and walked back, and the selection could not get past a blank
-        // column.
+        // cell's last character is its first**. A cell with nothing in it is
+        // one position wide, so stepping back from its end would land on the
+        // padding, which belongs to no cell; the next `l` would then read the
+        // cell *before* it and walk back, and `v l l` could not get past a
+        // blank column.
         let last = match past > head {
             true => motion::prev_grapheme(self.current_buffer().rope(), past),
             false => head,
@@ -5235,10 +5191,9 @@ impl Editor {
                 return;
             }
         }
-        // Warning: **`None` 在這一支是「翻」，不是「報告」**（2026-10-09）。
+        // Warning: **`None` 在這一支是「翻」，不是「報告」**。
         //
-        // 裸的**命令**改成報告了（作者定，三個表格開關一起），可 `空格 t H` 是一個
-        // **鍵**——鍵没有「裸形」可言，按下去就得做事。所以那條規矩擺在命令那一頭
+        // 裸的**命令**是報告（三個表格開關一起），可 `空格 t H` 是一個**鍵**——鍵没有「裸形」可言，按下去就得做事。所以那條規矩擺在命令那一頭
         // （`Command::SetTableHeader` 自己把當前值填進來），這一支照舊翻。
         let want = want.unwrap_or(!view.schema.header);
         // **Names a person wrote are not undone by a keystroke.** A schema file
@@ -5279,10 +5234,10 @@ impl Editor {
         // cursor left standing on it is a cursor in a cell nothing can be done
         // to — the same landing `enter_table` makes.
         //
-        // **Both directions, one question** (2026-10-23): turning the header
-        // off makes row one editable, and the caret was waiting on the header
-        // line above it — so `c` had no row to change and typed a second line
-        // into the file instead. 「Is the caret on a row of this table」 is the
+        // **Both directions, one question**: turning the header off makes row
+        // one editable, and a caret left waiting on the header line above it
+        // would give `c` no row to change, typing a second line into the file
+        // instead. 「Is the caret on a row of this table」 is the
         // whole of it, and when the table has none the caret waits on the
         // header line, which `hold_the_pane` is the keeper of.
         let line = self.cursor_line();
@@ -5319,7 +5274,7 @@ impl Editor {
     /// half, the way `空格 w` reads a place without leaving the one you are
     /// standing in — `空格 w` crosses over when there is something to type.
     /// **`:table-schema`**: how this table is read, and from where — a line on
-    /// the status bar, not a file (2026-10-30, as decided). The file is
+    /// the status bar, not a file. The file is
     /// `:table-schema write`.
     pub(super) fn report_schema(&mut self) {
         let Some(view) = self.table.as_ref() else {
@@ -5341,7 +5296,7 @@ impl Editor {
 
     /// **`:table-schema write`**: this table's description into the
     /// `datapackage.json` beside the data — made when there is none, this
-    /// file's resource replaced when there is (2026-10-30, as decided).
+    /// file's resource replaced when there is.
     pub(super) fn write_schema(&mut self) {
         let Some(view) = self.table.as_ref() else {
             self.status = say!("table.not-in-a-table");
@@ -5422,9 +5377,9 @@ impl Editor {
         if self.edit_remove(start..end) {
             self.set_cursor(start);
             self.format_md_table();
-            // **No count** (2026-10-23): it counted the source, so a cell whose
-            // value held a comma or a quote reported more characters than the
-            // reader could see. 「清空了一个单元格就可以了吧」.
+            // **No count**: counting the source, a cell whose value holds a
+            // comma or a quote would report more characters than the reader can
+            // see. 「清空了一格」 is enough.
             self.status = say!("table.cell-cleared");
         }
     }
@@ -5443,10 +5398,9 @@ impl Editor {
             return;
         }
         // **The record's lines, which for a field with a line break in it are
-        // more than one** (2026-10-22). It used to take the cursor's line and
-        // nothing else, so `t d` on such a record left `three four",1` behind
-        // — a row that parses as nothing and that the grid then drew as a
-        // ragged one.
+        // more than one**. Taking the cursor's line and nothing else, `t d` on
+        // such a record would leave `three four",1` behind — a row that parses
+        // as nothing and that the grid would draw as a ragged one.
         let (first, through) = self.record_lines_here().unwrap_or_else(|| {
             let rope = self.current_buffer().rope();
             let line = rope.char_to_line(self.sel.head().min(rope.len_chars()));
@@ -5480,10 +5434,10 @@ impl Editor {
 
     /// Move the row the cursor is on down (or up), in a delimited file.
     ///
-    /// **Two records change places, not two lines** (2026-10-22). A field
-    /// holding a line break makes a record of two lines, and swapping the
-    /// cursor's line with the one under it tore such a record in half — the
-    /// half left behind parsed as nothing.
+    /// **Two records change places, not two lines**. A field holding a line
+    /// break makes a record of two lines, and swapping the cursor's line with
+    /// the one under it would tear such a record in half — the half left
+    /// behind parses as nothing.
     fn shift_row(&mut self, down: bool) {
         if self.refuse_readonly() {
             return;
@@ -5571,12 +5525,11 @@ impl Editor {
         // 「get me into a table」 — from prose, from another table, from the top
         // of a document whose tables are three screens down.
         match key {
-            // **Three levels and a window** (#275, remade 2026-09-05, lettered
-            // 2026-09-06, levelled 2026-09-06 for #283). One naming scheme for
+            // **Three levels and a window** (#275, #283). One naming scheme for
             // all four dimensions — `render`, `table`, `ruby`, `indent` — so
-            // that a reader who learns `off` / `basic` / `full` once has
-            // learnt them everywhere: 「我的目的是能让命令和快捷键的命名尽量统
-            // 一、规范，便于用户学习记忆。」
+            // that a reader who learns `off` / `basic` / `full` once has learnt
+            // them everywhere: commands and keys named uniformly are easier to
+            // learn and remember.
             //
             // `t o` is the file as it is written. `t b` lines the columns up
             // and gives the keys to the grid, hiding nothing. `t f` draws the
@@ -5586,10 +5539,9 @@ impl Editor {
             // that is why `t q` can undo it without anything being written
             // down: the level it was taken from was never touched.
             //
-            // **`f`, not `a`** (2026-09-06): 排齊 gave the letter up
-            // and went to `t F`, where the capital reads as the confirmation a
-            // whole-file reformat should always have asked for.
-            // **轉換格式也是「有没有表格都按得下」的一個**（2026-10-02 定）：
+            // 排齊 is `t F`, where the capital reads as the confirmation a
+            // whole-file reformat should always ask for.
+            // **轉換格式也是「有没有表格都按得下」的一個**：
             // 把一段分隔文本變成 `|` 表格，正是**還没有表格**的時候要做的事，所
             // 以這一格要排在「光標不在表格裏」那道閘的前面。
             Key::Char('x') => {
@@ -5599,9 +5551,8 @@ impl Editor {
             // `t b` — 基本, the same word the command takes:
             // [`Self::ask_for_table_level`] is the whole of it.
             //
-            // **`t f` is gone** (2026-10-21): it drew the `|` you typed as the
-            // wall it means and nothing else `t b` had not caught up with, and
-            // that is what `t t` is for.
+            // **No `t f`**: drawing the `|` you typed as the wall it means is
+            // what `t t` is for.
             Key::Char('b') => {
                 self.ask_for_table_level(TableLevel::Basic);
                 return;
@@ -5609,14 +5560,12 @@ impl Editor {
             // `t w` — 寬: how a cell wider than the cap is drawn, round a ring
             // of three (軟折行 → 摺起 → 全文).
             //
-            // **Only where the table has the window** (2026-10-22 定：「in the
-            // document (`tb` mode), we do not allow `tw` to change the layout
-            // …we promised users that in `tb` mode, no letters or symbols from
-            // the source code is hidden」). So it is not a key here at all
-            // outside the pane: it falls through to the group's own 「`tw` is
-            // not a key combination here」 rather than to a sentence refusing
-            // what the menu never offered. `t a` was the second key over this
-            // axis and went with the ring.
+            // **Only where the table has the window**: in the document (`t b`)
+            // no letter or symbol of the source is hidden, so `t w` may not
+            // change the layout there. It is not a key here at all outside the
+            // pane: it falls through to the group's own 「`tw` is not a key
+            // combination here」 rather than to a sentence refusing what the
+            // menu never offered.
             Key::Char('w') if self.the_pane_is_on() => {
                 return self.cycle_cell_width();
             }
@@ -5625,9 +5574,7 @@ impl Editor {
                 self.ask_for_the_table_window();
                 return;
             }
-            // `t o` — 源碼模式, the way out of all three. It used to open a
-            // row; 加行 is `t r` since 2026-09-05, which is what freed the
-            // letter that spells the mode it now names.
+            // `t o` — 源碼模式, the way out of all three. 加行 is `t r`.
             Key::Char('o') => {
                 self.ask_for_table_level(TableLevel::Off);
                 return;
@@ -5654,8 +5601,8 @@ impl Editor {
         }
         // **誰用了它**, down the columns rather than across the lines — the
         // other axis of the same verb `g/` is in prose, and the same pair of
-        // letters: `/` answers here, `?` answers in the other work area. It
-        // used to be `Enter`, which a writer presses by accident.
+        // letters: `/` answers here, `?` answers in the other work area. Not
+        // `Enter`, which a writer presses by accident.
         //
         // Which columns: the sequence's own argument — `t1/` is the first, and
         // `t2-10?` is the second through the tenth — or, with no argument, the
@@ -5667,13 +5614,13 @@ impl Editor {
         //
         // **The comma, not the dash** (§5.7). A row and a column are two kinds
         // of thing and `,` is the key that pairs two kinds; `-` spans one kind,
-        // which is what `t2-10/` asks for. The dash used to do both, and a
-        // reader who typed `t2-10g` got row 2, column 10 — a plausible answer
-        // to a question nobody asked.
+        // which is what `t2-10/` asks for. A dash doing both would answer
+        // `t2-10g` with row 2, column 10 — a plausible answer to a question
+        // nobody asked.
         if key == Key::Char('g') {
-            // **一個數都没給也要答一句**（2026-10-01 測出來的）。單子上寫着
-            // `g 去某一格（␣t 20,20g）`，而光按 `␣t g` 從前掉到最底下那個兜
-            // 底——回的是「`t` 之後可以按這些」，等於把那張單子再念一遍。
+            // **一個數都没給也要答一句**。單子上寫着 `g 去某一格（␣t 20,20g）`，
+            // 光按 `␣t g` 要是掉到最底下那個兜底，回的是「`t` 之後可以按這些」，
+            // 等於把那張單子再念一遍。
             if self.sequence.is_none() {
                 self.status = say!("table.cell-wants-a-comma");
                 return;
@@ -5693,13 +5640,13 @@ impl Editor {
                         (row, self.cell_position().map(|(_, c)| c).unwrap_or(0))
                     }
                 };
-                // **Clamped into the table you are standing in**
-                // (2026-09-07: 「markdown 表格中按 t1g，会跑到整个文档的第一行
-                // 而不是表格的第一行」). The number is still the one in the
+                // **Clamped into the table you are standing in**: `t1g` in a
+                // Markdown table goes to the table's first row, not the
+                // document's. The number is still the one in the
                 // gutter — that is what makes `t238g` mean the row a reader
                 // can see the number of, in a `.csv` and in a chapter alike —
-                // but a number outside this table used to walk the cursor out
-                // of the grid altogether, and a *table* key has no business
+                // but a number outside this table must not walk the cursor out
+                // of the grid altogether: a *table* key has no business
                 // landing in the prose three screens up. Outside a table
                 // there is nothing to clamp to and the file is the answer:
                 // `t <n>g` is also one of the ways **in**.
@@ -5711,9 +5658,9 @@ impl Editor {
                 let lines = self.current_buffer().line_count();
                 let base = self.table_row_base();
                 // **A record over several lines puts the row and the line one
-                // apart** (2026-10-20 作者報的), and `grid_row_line` is the one
-                // answer the gutter, `:40` and this key now share: `␣t40g`
-                // used to add 40 to the first line and land on row 39.
+                // apart**, and `grid_row_line` is the one answer the gutter,
+                // `:40` and this key share: adding 40 to the first line would
+                // land `␣t40g` on row 39.
                 let line = match self.grid_row_line(row) {
                     Some(line) => line,
                     None => match self.table_row_span() {
@@ -5744,11 +5691,11 @@ impl Editor {
         // is standing in one** (#283). A `|` table's mode is the whole
         // *file's*, so it is on in the paragraphs between the tables too —
         // and there `md_region()` is `None`, which the split below reads as
-        // 「a delimited file」 and hands to the delimited keys. `t d` in a
-        // paragraph of a chapter therefore deleted the line the cursor was on
-        // and reported 「已刪除一行」: prose, taken out by a table key, with a
-        // table's message. The same door lets `t j`/`t k` shuffle prose lines
-        // and `t R` open one.
+        // 「a delimited file」 and hands to the delimited keys. Unguarded, `t d`
+        // in a paragraph of a chapter would delete the line the cursor is on
+        // and report 「已刪除一行」: prose, taken out by a table key, with a
+        // table's message. The same door would let `t j`/`t k` shuffle prose
+        // lines and `t R` open one.
         //
         // `t b`/`t f`/`t t`/`t o`/`t q`/`t ]`/`t [`/`t <n>g` are above it on
         // purpose: those are how you get **into** a table, and demanding one
@@ -5776,25 +5723,23 @@ impl Editor {
                 Key::Char('p') => self.put_column_beside(true),
                 Key::Char('P') => self.put_column_beside(false),
                 Key::Char('v') => self.put_column(),
-                // **排序也在這一塊上做得了**（2026-10-03 定，原話：「我会先
-                // 在逗号上按 _tt 进入表格模式，然后 _t1s 来排序。再 _tq 回到正
-                // 文」）。上面那一段註釋寫着「排序會把整份檔案按表格自己的行重建
-                // 一遍」——那是從前的做法，`sort_table` 現在按塊的行寫回。
+                // **排序也在這一塊上做得了**：`␣tt`、`␣t1s`、`␣tq`。`sort_table`
+                // 按塊的行寫回，不重建整份檔案。
                 Key::Char('s') | Key::Char('S') => self.sort_the_named_columns(key),
                 Key::Esc => {}
                 _ => self.status = Self::table_keys_say(Some(Bounds::Block), self.the_pane_is_on()),
             }
             return;
         }
-        // **A sort names the column it sorts by** (§5.7). A bare `t s` is
-        // gone: on 123 380 rows a sort costs real seconds, and `u` refunds the
+        // **A sort names the column it sorts by** (§5.7). No bare `t s`: on
+        // 123 380 rows a sort costs real seconds, and `u` refunds the
         // content but not the time — so the gesture that starts one is never a
         // single letter. `t0s` is 「the column I am standing in」, spelled out;
         // `0` is not a column, which is what left it free to mean that.
         //
-        // `S` is descending wherever it is written. A delimited file used to
-        // sort *up* either way when no column was named, silently, which is
-        // the worst way there is to disagree with a keystroke.
+        // `S` is descending wherever it is written, also in a delimited file
+        // with no column named: sorting *up* either way, silently, is the
+        // worst way there is to disagree with a keystroke.
         if matches!(key, Key::Char('s') | Key::Char('S')) {
             self.sort_the_named_columns(key);
             return;
@@ -5813,15 +5758,10 @@ impl Editor {
                 Key::Char('p') => self.put_column_beside(true),
                 Key::Char('P') => self.put_column_beside(false),
                 Key::Char('v') => self.put_column(),
-                // **The detail panel is a table key** (#215). It answered to
-                // `空格 d` for as long as the panel was the only thing that
-                // knew a row's twenty-eight fields — but `空格` is the
+                // **The detail panel is a table key** (#215): `空格` is the
                 // document's menu and `t` is the table's, and a key that only
-                // ever does anything inside a table belongs in `t`.
-                //
-                // `t i` (information), and it was `t i` for one day only in
-                // between: 表格操作模式 borrowed the letter on 2026-09-05 and
-                // gave it back on the 6th as `t n`. The hand wins.
+                // ever does anything inside a table belongs in `t` — `t i`
+                // (information).
                 Key::Char('i') => self.show_the_record_here(true),
                 Key::Char('I') => self.show_the_record_here(false),
                 // Each of these is an edit, and each announces an undo point
@@ -5910,7 +5850,7 @@ impl Editor {
 
     /// Put the cursor in the table the full-screen grid is about to draw.
     ///
-    /// **The grid draws one table and clears everything else** (2026-09-05).
+    /// **The grid draws one table and clears everything else**.
     /// A `|` table's mode is the whole file's since #275, so `t t` is pressed
     /// as often from the paragraph between two tables as from inside one — and
     /// from there the widget has nothing to draw and paints a blank window.
@@ -6038,11 +5978,9 @@ impl Editor {
         let Some((whole, past)) = self.cell_span_to_edit(line, cell) else {
             return;
         };
-        // **The caret goes into the value, not onto the opening quote**
-        // (2026-10-21). `i` used to land on the `"` itself, so the first
-        // character typed went in front of it and the record stopped parsing
-        // — which is the whole reason a record over several lines was
-        // read-only.
+        // **The caret goes into the value, not onto the opening quote**: on
+        // the `"` itself, the first character typed would go in front of it
+        // and the record would stop parsing.
         let (start, end) = self.value_span(whole, past);
         self.snapshot();
         match how {
@@ -6082,8 +6020,8 @@ impl Editor {
     /// Hands back what it put in the register, so `␣y` at the cell layer can
     /// send the same thing to the system clipboard ([`Self::copy_to_clipboard`]).
     pub(super) fn yank_cell(&mut self) -> Option<String> {
-        // **Whole records first** (2026-10-21 作者報的: 「y … For multiple rows
-        // selection, this is not working」). `x` takes a record and `%` takes
+        // **Whole records first**, so `y` works on a selection of several
+        // rows. `x` takes a record and `%` takes
         // the table, so `x y` means 「copy this row」 and `% y` 「copy this
         // table」; what they leave in the register is line-wise, which is what
         // `p` puts back as rows.
@@ -6102,7 +6040,7 @@ impl Editor {
             self.status = say!("table.yanked-records", records);
             return self.register_grid.as_ref().map(|(text, _)| text.clone());
         }
-        // **A run of cells, when a run is standing** (2026-10-21). The
+        // **A run of cells, when a run is standing**. The
         // selection is a whole number of cells at this layer
         // ([`Self::round_out_to_cells`]), so the text between its ends is
         // those cells with the file's own delimiters between them — which is
@@ -6132,7 +6070,7 @@ impl Editor {
         // **The value, not the field.** A quoted cell's `"` are the file's
         // syntax; taking them into the register would mean `R` quoting them
         // again on the way back, and `"a,b"` would come out as a value with
-        // two quotes in it (2026-10-21).
+        // two quotes in it.
         let value = {
             let (source, cells) = (self.row_source(line), self.row_cells(line));
             cells.get(cell).map(|&span| self.cell_shown(&source, span)).unwrap_or_default()
@@ -6140,9 +6078,9 @@ impl Editor {
         let text = value.clone();
         let n = text.chars().count();
         self.store(text.clone());
-        // **One cell is a run of one** (2026-10-21). Without this, a value
-        // holding the file's own delimiter — 「Smith, John」 — came back out of
-        // the register as *two* cells, because that is what the text says and
+        // **One cell is a run of one**. Without this, a value holding the
+        // file's own delimiter — 「Smith, John」 — would come back out of the
+        // register as *two* cells, because that is what the text says and
         // text is all there is to go on. The key that took it knows better.
         self.register_grid = Some((text.clone(), Held::Cells(vec![value])));
         self.status = say!("table.yanked-cell", n);
@@ -6159,9 +6097,9 @@ impl Editor {
     ///
     /// Warning: **and a run is cells of one record.** A selection over several
     /// records is a different thing with a different answer
-    /// ([`Self::records_selected`]). Asked here, it used to measure the far
-    /// end against the *near* record's cells: the subtraction saturated to
-    /// zero, so `x y` reported 「取了一格」 and took one (2026-10-21 作者報的).
+    /// ([`Self::records_selected`]). Asked here, it would measure the far end
+    /// against the *near* record's cells: the subtraction would saturate to
+    /// zero, so `x y` would report 「取了一格」 and take one.
     fn run_selected(&self) -> Option<(usize, usize, usize)> {
         if !self.layers_here() || !self.table_layer().selects_the_cell() {
             return None;
@@ -6242,9 +6180,9 @@ impl Editor {
 
     /// Put the register in — which in a grid can only mean **a new row**.
     ///
-    /// 2026-10-21 作者定, and it is the whole of the model: 「`p` means: append
-    /// to the end of selection (cursor). So this will broke the layout of the
-    /// table. Otherwise it is actually a 'replace' action.」 A row's cell count
+    /// That is the whole of the model: `p` appends after the selection (the
+    /// cursor), which would break the layout of the table for anything but a
+    /// record; otherwise it is really a replace. A row's cell count
     /// belongs to the table, so a cell or a run of cells has nowhere to be
     /// *inserted* — the only thing a grid can take in without changing shape
     /// is a whole record. Writing over what is already there is `R`
@@ -6253,9 +6191,8 @@ impl Editor {
     /// measured on 25.07 (`scripts/oracle/hx_keys.py`) its `p` with a
     /// selection standing pastes *after* the selection rather than over it.
     ///
-    /// `after` is vi's own distinction between `p` and `P`. Both keys put a
-    /// row below until 2026-10-21, which `x d` then `P` made plain: it is the
-    /// one key sequence whose whole job is 「put that back where it was」.
+    /// `after` is vi's own distinction between `p` and `P`: `x d` then `P` is
+    /// the one key sequence whose whole job is 「put that back where it was」.
     fn put_cell(&mut self, after: bool) {
         if self.refuse_readonly() {
             return;
@@ -6277,12 +6214,12 @@ impl Editor {
         // left to recognise is a row that was taken *character-wise*, which is
         // what `Y` stores.
         //
-        // **Counted the way the table reads a row** (2026-10-22). Counting the
-        // delimiter characters counted the ones inside a quoted field too, and
-        // 「no line break anywhere in it」 turned away the one record that is
+        // **Counted the way the table reads a row**. Counting the delimiter
+        // characters would count the ones inside a quoted field too, and 「no
+        // line break anywhere in it」 would turn away the one record that is
         // allowed to have one — so `x d` then `P`, the sequence whose whole job
-        // is 「put that back」, put nothing back for a record whose field holds
-        // a break, and said 「p 只可插入記錄」 about a record.
+        // is 「put that back」, would put nothing back for a record whose field
+        // holds a break.
         let is_row = match separator {
             Separator::Pipe => !body.contains(['\n', '\r']) && crate::mdtable::is_row(body),
             Separator::Delimiter(d) => {
@@ -6342,15 +6279,14 @@ impl Editor {
             }
             self.set_cursor(at + leading);
             // **A record that came in over several lines is several lines of
-            // the file** (2026-10-22), so which lines are rows has changed.
+            // the file**, so which lines are rows has changed.
             self.rescan_records();
             self.status = say!("table.pasted-as-new-row");
         }
     }
 
     /// **Write the register over what is here** — `R` where the unit is the
-    /// cell (2026-10-21 作者定; see [`Self::put_cell`] for why it is a key of
-    /// its own).
+    /// cell (see [`Self::put_cell`] for why it is a key of its own).
     ///
     /// Four things can be written over a grid, and only the first needs a key
     /// to tell it from the others: a run of N cells and an N-column row are
@@ -6400,17 +6336,16 @@ impl Editor {
             return self.put_the_run(line, cell, &run);
         }
         self.snapshot();
-        // **Whatever is in the register, the cell can hold it** (2026-10-21
-        // 作者定). A value with the file's own delimiter in it — 「Smith,
-        // John」 — used to be turned away here; now it is quoted on the way
-        // in, which is what the quotes are for.
+        // **Whatever is in the register, the cell can hold it**. A value with
+        // the file's own delimiter in it — 「Smith, John」 — is quoted on the
+        // way in, which is what the quotes are for.
         if self.write_the_cell(line, cell, &body) {
             if let Some((start, end)) = self.cell_span(line, cell) {
                 self.set_cursor(self.value_span(start, end).0);
             }
             // What was written in may be wider than the column was.
             //
-            // **Only a cell squares the table up** (2026-10-21). A *record*
+            // **Only a cell squares the table up**. A *record*
             // came out of this table and goes back the way it was — and `d`
             // then `P` is the one sequence whose whole job is 「put that
             // back」, so it must not come back padded.
@@ -6420,7 +6355,7 @@ impl Editor {
     }
 
     /// **Write the register's records over the records here** — `R` with a
-    /// record-wise register (2026-10-21 作者定).
+    /// record-wise register.
     ///
     /// With nothing selected the target is the cursor's own record, so this
     /// key always has a target a reader can see: 「蓋掉這一條」.
@@ -6467,9 +6402,9 @@ impl Editor {
         match view.separator {
             // Warning: **an unwalled fragment is not a row**, and `split` reads
             // rows: its cells are what stands *between* two pipes, so a
-            // two-cell run came back as **one** cell whose text held a `|` —
-            // which the cell then refused, and that is the message 作者 saw
-            // (2026-10-21). Give the fragment the walls it is missing.
+            // two-cell run would come back as **one** cell whose text holds a
+            // `|`, which the cell then refuses. Give the fragment the walls it
+            // is missing.
             Separator::Pipe => match crate::mdtable::is_row(body) {
                 true => crate::mdtable::split(body),
                 false => crate::mdtable::split(&format!("|{body}|")),
@@ -6519,7 +6454,7 @@ impl Editor {
         if self.refuse_readonly() {
             return;
         }
-        // **Doesn't fit, nothing moves** (2026-10-21 作者定). Writing as many
+        // **Doesn't fit, nothing moves**. Writing as many
         // as there is room for would leave a row that reads like another row,
         // and the two cells that went nowhere would be gone.
         let room = self.row_cells(line).len().saturating_sub(cell);
@@ -6627,7 +6562,7 @@ impl Editor {
         }
         let asked = named.clone();
         let view = self.table.as_ref().expect("table_here");
-        // No column is declared a link any more (2026-10-30, as decided):
+        // No column is declared a link:
         // with no argument the search runs over every column but the key
         // column — 「who uses this」 is asked of the cells that name rows, not
         // of the names themselves.
@@ -6775,9 +6710,9 @@ impl Editor {
     /// The hits, if they are still about the document in front of you.
     ///
     /// **The one gate.** A list found in another file, or before an edit, is
-    /// not a shorter answer — it is a wrong one, and it used to be given
-    /// confidently: 「第 3/78 處」 about a character that matched nothing, in a
-    /// chapter that was never searched.
+    /// not a shorter answer — it is a wrong one, given confidently: 「第 3/78
+    /// 處」 about a character that matched nothing, in a chapter that was never
+    /// searched.
     fn live_hits(&self) -> Option<&Hits> {
         let buffer = self.current_buffer();
         self.hits
@@ -6921,10 +6856,10 @@ impl Editor {
     /// are cells, as in a document; a `Delimiter` says every line is a row, as
     /// in a `.csv`.
     ///
-    /// The one answer every gate asks for. The gates used to open with
-    /// `self.table.as_ref()?` and so were off whenever `:table` was — which is
-    /// the state a table in a manuscript is normally edited in, and the state
-    /// the 拆分表 is in whenever the project has no schema file. A `.csv` is a
+    /// The one answer every gate asks for. A gate opening with
+    /// `self.table.as_ref()?` would be off whenever `:table` is — which is the
+    /// state a table in a manuscript is normally edited in, and the state the
+    /// 拆分表 is in whenever the project has no schema file. A `.csv` is a
     /// grid because of its own name; a `|` table is a grid because of what is
     /// written there.
     pub(super) fn grid_shape_here(&self) -> Option<Separator> {
@@ -7002,7 +6937,7 @@ impl Editor {
         if !self.table_here() {
             return None;
         }
-        // **A quoted field can hold anything** (2026-10-21 作者定). The pair of
+        // **A quoted field can hold anything**. The pair of
         // `"` is the editor's to put there and to take away
         // ([`Self::write_the_cell`]), and once it is there the delimiter, a
         // quote and a line break are all ordinary characters of the value —
@@ -7076,7 +7011,7 @@ impl Editor {
     }
 
     /// **Whether writing `text` over `range` moves a wall of the row it is
-    /// on** (2026-11-08): the row read again as it would then stand, so a
+    /// on**: the row read again as it would then stand, so a
     /// `|` that a backslash or a reading in braces (`{雨|yǔ}`) holds is the
     /// cell's, as [`crate::mdtable::pipes_from`] reads the row everywhere.
     fn walls_change(&self, range: std::ops::Range<usize>, text: &str) -> bool {
@@ -7146,13 +7081,12 @@ impl Editor {
         }
     }
 
-    /// **Taking the whole table is not damaging a table** (2026-10-17, found
-    /// in review).
+    /// **Taking the whole table is not damaging a table**.
     ///
-    /// `cut_takes_whole_rows` asks about *data* rows, so any cut that reached
-    /// the header failed it — and `%d` in a document holding a table, or in a
-    /// whole `.csv`, answered 「格與格之間的分隔符刪不掉」. A reader could not
-    /// empty a `.csv` in this editor. There is nothing left to be damaged, so
+    /// `cut_takes_whole_rows` asks about *data* rows, so any cut that reaches
+    /// the header fails it — and without this `%d` in a document holding a
+    /// table, or in a whole `.csv`, would answer 「格與格之間的分隔符刪不掉」,
+    /// and a `.csv` could not be emptied. There is nothing left to be damaged, so
     /// the invariant has nothing to say.
     fn cut_takes_the_whole_table(&self, range: &std::ops::Range<usize>) -> bool {
         let rope = self.current_buffer().rope();
@@ -7172,20 +7106,17 @@ impl Editor {
     }
 
     /// Whether this cut stays inside one cell — so the header's refusal does
-    /// not fire on an ordinary edit to a column name (2026-10-17).
+    /// not fire on an ordinary edit to a column name.
     fn cut_is_inside_one_cell(&self, range: &std::ops::Range<usize>) -> bool {
         self.cell_here()
             .is_some_and(|(from, to)| from <= range.start && range.end <= to)
     }
 
     /// **Whole rows, and nothing but whole rows** — the one shape of edit a
-    /// grid lets through unasked (2026-10-17 作者定).
+    /// grid lets through unasked, so whole rows can be deleted, cut and pasted
+    /// elsewhere with `d`.
     ///
-    /// 原話：「Shall we allow users to delete the border using `d`? So that
-    /// they can delete, cut, paste the whole row easily (currently it is not
-    /// possible to cut one or more rows and paste somewhere else).」
-    ///
-    /// The guard this sits in front of was a **character** test standing in
+    /// The guard this sits in front of is a **character** test standing in
     /// for a **structure** test: refuse any cut holding a bare `|` or a
     /// newline. That proxy says no to the one edit that cannot damage a
     /// table. The honest question is whether the table is still a table
@@ -7237,11 +7168,11 @@ impl Editor {
         let Some(at) = at else {
             return false;
         };
-        // Whole rows either way round. Warning: **the leading break counts too**
-        // (2026-10-17, found in review): pasting after a last line that
-        // carries no newline, `paste` moves the break to the front, and this
-        // then saw 「not whole rows」 and let the bare-pipe refusal answer —
-        // telling the reader to escape a pipe they had not typed.
+        // Whole rows either way round. Warning: **the leading break counts
+        // too**: pasting after a last line that carries no newline, `paste`
+        // moves the break to the front, and this would then see 「not whole
+        // rows」 and let the bare-pipe refusal answer — telling the reader to
+        // escape a pipe they had not typed.
         let text = match (text.ends_with('\n'), text.starts_with('\n')) {
             (true, _) => text.trim_end_matches('\n'),
             (false, true) => text.trim_start_matches('\n'),
@@ -7265,13 +7196,12 @@ impl Editor {
             .table_row_span_at(line)
             .or_else(|| self.table_row_span_at(line.saturating_sub(1)))
             .filter(|&(first, last)| (first..=last + 1).contains(&line));
-        // **A table with no rows still takes rows** (2026-10-23). `␣t d` on
-        // the last row and then `p` is the one pair whose whole job is 「put
-        // that back the way it was」, and a table emptied of rows still has a
-        // schema that says how many columns a row of it has. Without this the
-        // record went to the cell path and was answered 「',' 是格與格的分
-        // 隔」 about a record this very table had just given up — the third
-        // time that message has stood in for a missing row span.
+        // **A table with no rows still takes rows**. `␣t d` on the last row
+        // and then `p` is the one pair whose whole job is 「put that back the
+        // way it was」, and a table emptied of rows still has a schema that
+        // says how many columns a row of it has. Without this the record would
+        // go to the cell path and be answered 「',' 是格與格的分隔」 about a
+        // record this very table had just given up.
         let first = match span {
             Some((first, _)) => first,
             None if self.table_is_rowless() && line == usize::from(view.schema.header) => line,
@@ -7282,25 +7212,22 @@ impl Editor {
             Separator::Pipe => text.lines().all(|row| {
                 crate::mdtable::is_row(row) && crate::mdtable::split(row).len() == wide
             }),
-            // Warning: **Counted the way the file is read** (2026-10-17, found in
-            // review). It used to count raw delimiters, while everything else
-            // splits with `table::cells`, which honours quotes — so a row
-            // holding `"one, two"` was judged one cell too wide and its own
-            // table refused to take it back.
+            // Warning: **Counted the way the file is read**, with `table::cells`,
+            // which honours quotes — counting raw delimiters, a row holding
+            // `"one, two"` would be judged one cell too wide and its own table
+            // would refuse to take it back.
             //
-            // **And grouped into records first** (2026-10-22). A field holding
-            // a line break makes a record of two lines, and each of those
-            // lines on its own is the wrong number of cells — so the table
-            // turned away the record it had itself just given up, and `x d`
-            // then `P` answered 「',' 是格與格的分隔」 about a whole record.
+            // **And grouped into records first**. A field holding a line break
+            // makes a record of two lines, and each of those lines on its own
+            // is the wrong number of cells — so the table would turn away the
+            // record it had itself just given up.
             //
-            // **At most this wide, not exactly** (2026-10-22 作者定:「剪什麼就
-            // 放回什麼」). A file may hold a record short of the schema's
-            // columns — the writer put it there — and the cut side never
-            // asked: `x d` takes a ragged record away like any other. Asking
-            // here made the pair one-way, and `P` answered 「',' 是格與格的分
-            // 隔」 about the record this very table had just given up. Found
-            // by `scripts/table_keys.py` 掃形狀 over the 欄數不齊 shape.
+            // **At most this wide, not exactly**: what is cut is what goes
+            // back. A file may hold a record short of the schema's columns —
+            // the writer put it there — and the cut side does not ask: `x d`
+            // takes a ragged record away like any other. Asking here would make
+            // the pair one-way (`scripts/table_keys.py` sweeps the 欄數不齊
+            // shape).
             //
             // Wider than the table is still refused: that is not a record
             // this grid gave up, and taking it in would push every column
@@ -7318,11 +7245,9 @@ impl Editor {
         if self.cut_takes_whole_rows(&range) || self.cut_takes_the_whole_table(&range) {
             return None;
         }
-        // **The header says its own reason** (2026-10-17, found in review).
-        // §5.12.70 promised 「標題行、分隔行照舊各說各的理由」; the rule row
-        // did, and the header fell through to the stock 「分隔符删不掉」
-        // although `table.header-cannot-be-deleted` was written for it and
-        // `t d` has always printed it.
+        // **The header says its own reason** (§5.12.70: 「標題行、分隔行照舊各說
+        // 各的理由」): `table.header-cannot-be-deleted`, as `t d` prints it, not
+        // the stock 「分隔符删不掉」.
         if self.on_header_row() && !self.cut_is_inside_one_cell(&range) {
             return Some(say!("table.header-cannot-be-deleted"));
         }
@@ -7334,16 +7259,16 @@ impl Editor {
         if range.is_empty() {
             return None;
         }
-        // **A quoted cell's own `"` is not the writer's to cut** (2026-10-23
-        // 作者定). [`Self::cell_refuses`] below lets every character through
+        // **A quoted cell's own `"` is not the writer's to cut**.
+        // [`Self::cell_refuses`] below lets every character through
         // once the cell is quoted — right for the value, wrong for the pair
         // that makes it one, because those two quotes are the editor's to put
         // there and to take away. vim's `X` on the first character of
-        // `"甲,乙"` cut the opening quote and the record read `二,甲,乙",B`:
-        // four columns in a table of three, with a quote left standing. The
-        // unquoted cell never had the hole — the character before it is the
-        // delimiter, which is refused by name. Found by
-        // `scripts/table_keys.py --preset vim`.
+        // `"甲,乙"` would cut the opening quote and the record would read
+        // `二,甲,乙",B`: four columns in a table of three, with a quote left
+        // standing. The unquoted cell has no such hole — the character before
+        // it is the delimiter, which is refused by name
+        // (`scripts/table_keys.py --preset vim` sweeps this).
         //
         // **One of the pair, not both**, is the test: a cut that takes the
         // whole cell takes them together and leaves the file sound, which is
@@ -7410,9 +7335,8 @@ impl Editor {
 
     /// Go to the row this table names by `key` (`:table-jump 木`).
     ///
-    /// The index behind it has always been built and has always answered in
-    /// about 300 ns; until now nothing let a person ask it. Finding 木 in a
-    /// 123,380-row table meant `/^木,` and hoping no other row started that
+    /// The index behind it answers in about 300 ns. Without it, finding 木 in
+    /// a 123,380-row table means `/^木,` and hoping no other row starts that
     /// way.
     pub(super) fn goto_row(&mut self, key: &str) {
         let Some(view) = self.table.as_ref() else {
@@ -7558,7 +7482,7 @@ type SortKey = (bool, f64, String);
 
 /// **The records in this text**, each as one string — a field holding a line
 /// break makes a record of several lines, which is why this is not
-/// `str::lines` (2026-10-22).
+/// `str::lines`.
 ///
 /// `None` when a record never closes its quote: that text is not rows of this
 /// table, whatever else it is.
