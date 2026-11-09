@@ -2386,8 +2386,10 @@ fn ruby_rendering_is_set_per_dialect() {
     ed.execute(":ruby-render full").unwrap();
     assert!(ed.ruby().contains(Dialect::Html));
     ed.execute(":ruby-render basic").unwrap();
-    // A plain toggle (2026-11-07): HTML is off here, and the bare word
-    // turns it on.
+    // A plain toggle of whether HTML is read: here it is, though nothing is
+    // drawn, so the bare word turns it off, and the next on and drawn.
+    ed.execute(":ruby-html").unwrap();
+    assert!(!ed.ruby_configured().contains(Dialect::Html), "{}", ed.status());
     ed.execute(":ruby-html").unwrap();
     assert!(ed.ruby().contains(Dialect::Html), "{}", ed.status());
 
