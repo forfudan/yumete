@@ -27956,6 +27956,12 @@ fn vims_set_setf_ene_and_tabnew() {
     assert_eq!(ed.buffer_count(), tabs + 1, ":tabnew");
     ed.execute(":ene").unwrap();
     assert_eq!(ed.buffer_count(), tabs + 2, ":ene");
+    // `:tabn` is vim's `:tabnext`, not a prefix of `:tabnew` (2026-11-09,
+    // review): it opens nothing and says where the walk is.
+    for word in [":tabn", ":tabnext", ":tabne"] {
+        assert!(ed.execute(word).is_err(), "{word}");
+        assert_eq!(ed.buffer_count(), tabs + 2, "{word} opened nothing");
+    }
 }
 
 /// **vim's `{count}%`** (2026-11-07, measured in vim 9.1 and nvim 0.12 on

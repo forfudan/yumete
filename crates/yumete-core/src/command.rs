@@ -5895,6 +5895,13 @@ const RENAMED: &[(&str, &str)] = &[
     ("sav", "write-as"),
     ("saveas", "write-as"),
     ("source", "render"),
+    // **vim's tab walk is the buffer walk here** (2026-11-09, review): a tab
+    // is a file, and `:tabn` reached `:tabnew` by prefix and opened a scratch.
+    ("tabn", "buffer-next"),
+    ("tabne", "buffer-next"),
+    ("tabnext", "buffer-next"),
+    ("tabp", "buffer-previous"),
+    ("tabprevious", "buffer-previous"),
     ("view-dense", "view-margin"),
     // 0.20's name: the preview is a group of its own since 2026-11-09.
     ("view-preview", "preview"),
