@@ -11,10 +11,30 @@
 //!   below. State and cache start empty. Whatever the config or its plugins
 //!   write — `lazy-lock.json`, a plugin's build, a log — lands in the copy,
 //!   and the copy is removed afterwards.
+//! - **git stays inside the copy** (`GIT_CEILING_DIRECTORIES`). The copy has
+//!   no `.git`, so a `git config` run in it would climb to whatever
+//!   repository the temporary directory sits in, and write there.
+//! - **The copy has bounds** ([`Sandbox::copy`]): 200,000 files and
+//!   directories, 40 levels deep, and the same 10 s a run has. A link to a
+//!   directory it is inside is made again as a link in the copy, and a link
+//!   to a directory outside what is copied is left out and named.
 //! - **No shada or viminfo, no swap file**: `-i NONE -n`.
 //! - **It is killed after 10 s** (decision 9): a config that waits for input,
 //!   or a plugin manager that starts downloading, would never end. What it
-//!   started goes with it, then or when it quits ([`kill_group`]).
+//!   started goes with it, then or when it quits: its process group
+//!   ([`kill_group`]), and then every process that still carries the run's
+//!   mark in its environment or works in a directory inside the copy, a job
+//!   started with `detach` among them ([`kill_strays`]). A process that
+//!   leaves the group, clears its environment and moves out of the copy
+//!   escapes all three.
+//! - **Ctrl-C, `kill` or a closed terminal** while it runs do the same and
+//!   remove the copy before yumete goes ([`signals`]).
+//!
+//! Warning: **Windows has none of the last three.** It has no process group
+//! to kill and no environment to read, and a console's Ctrl-C ends yumete
+//! without removing the copy (a job object would close that gap, and needs a
+//! crate this one does not have). Only the editor itself is killed at the
+//! time limit there.
 //!
 //! What is read comes back as JSON from `dump.lua` or `dump.vim`, written
 //! into the same directory.
@@ -28,7 +48,8 @@ pub(super) const DUMP_LUA: &str = include_str!("dump.lua");
 pub(super) const DUMP_VIM: &str = include_str!("dump.vim");
 pub(super) const LAZYVIM_BASE: &str = include_str!("lazyvim_base.lua");
 
-/// How long one run may take (decision 9: 10 s, no flag).
+/// How long one run may take (decision 9: 10 s, no flag). Copying the config
+/// may take as long again.
 pub(super) const TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Directories of a data directory left out of the copy, at its top only:
@@ -36,8 +57,16 @@ pub(super) const TIMEOUT: Duration = Duration::from_secs(10);
 /// rest are history an old Neovim kept there.
 pub(super) const DATA_LEFT_OUT: &[&str] = &["mason", "shada", "swap", "undo", "backup", "view", "sessions"];
 
-/// The most files a copy takes before the import gives up.
-const MOST_FILES: usize = 200_000;
+/// The most files and directories, together, a copy takes before the import
+/// gives up.
+const MOST_ENTRIES: usize = 200_000;
+
+/// The deepest a copy goes.
+const DEEPEST: usize = 40;
+
+/// The variable every process of a run carries, naming the run's directory:
+/// how [`kill_strays`] knows them.
+const MARK: &str = "YUMETE_IMPORT_RUN";
 
 /// Why a run gave nothing.
 #[derive(Debug)]
@@ -52,6 +81,9 @@ pub(super) enum Failed {
     TooOld(String),
     /// The copy could not be made.
     Copy(String),
+    /// yumete was asked to stop (Ctrl-C, `kill`, a closed terminal). Never
+    /// shown: the sandbox ends the process once it has cleaned up.
+    Stopped,
 }
 
 impl Failed {
@@ -73,6 +105,7 @@ impl Failed {
             Failed::NoOutput(None) => format!("{editor} stopped before it could be read"),
             Failed::TooOld(found) => format!("needs {editor} {least} or later, found {found}"),
             Failed::Copy(why) => format!("could not copy the config to run it: {why}"),
+            Failed::Stopped => format!("{editor} was stopped with the import"),
         }
     }
 }
@@ -85,27 +118,68 @@ pub(super) struct Dumped {
     pub said: Option<String>,
 }
 
+/// Why a copy stopped part way.
+enum CopyStop {
+    Io(std::io::Error),
+    /// Past a bound; the sentence that says which.
+    GaveUp(String),
+    Stopped,
+}
+
+impl From<std::io::Error> for CopyStop {
+    fn from(e: std::io::Error) -> CopyStop {
+        CopyStop::Io(e)
+    }
+}
+
 /// **A home of the import's own**, removed when dropped.
 pub(super) struct Sandbox {
     pub root: PathBuf,
     pub home: PathBuf,
-    files: usize,
+    /// Files and directories copied so far.
+    entries: usize,
     runs: usize,
+    /// When copying has to be done by: [`TIMEOUT`] from the sandbox's start.
+    deadline: Instant,
+    budget: Duration,
+    /// Each link the copy left out, and why, for the terminal.
+    pub left_out: Vec<String>,
+    /// Ctrl-C and its kin, caught for as long as the sandbox lives.
+    #[cfg(unix)]
+    caught: Option<signals::Caught>,
 }
 
 impl Sandbox {
-    pub(super) fn new() -> Result<Sandbox, Failed> {
+    /// A sandbox under the system's temporary directory, whose copies may
+    /// take `budget` between them.
+    pub(super) fn new(budget: Duration) -> Result<Sandbox, Failed> {
+        Sandbox::new_in(&std::env::temp_dir(), budget)
+    }
+
+    /// The same, under `base`.
+    pub(super) fn new_in(base: &Path, budget: Duration) -> Result<Sandbox, Failed> {
         let stamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_nanos())
             .unwrap_or(0);
-        let root = std::env::temp_dir().join(format!("yumete-run-{}-{stamp}", std::process::id()));
+        let root = base.join(format!("yumete-run-{}-{stamp}", std::process::id()));
         let home = root.join("home");
+        let sandbox = Sandbox {
+            root,
+            home,
+            entries: 0,
+            runs: 0,
+            deadline: Instant::now() + budget,
+            budget,
+            left_out: Vec::new(),
+            #[cfg(unix)]
+            caught: Some(signals::Caught::install()),
+        };
         for dir in [".config", ".local/share", ".local/state", ".cache"] {
-            std::fs::create_dir_all(home.join(dir)).map_err(|e| Failed::Copy(e.to_string()))?;
+            std::fs::create_dir_all(sandbox.home.join(dir)).map_err(|e| Failed::Copy(e.to_string()))?;
         }
-        std::fs::create_dir_all(root.join("run")).map_err(|e| Failed::Copy(e.to_string()))?;
-        Ok(Sandbox { root, home, files: 0, runs: 0 })
+        std::fs::create_dir_all(sandbox.root.join("run")).map_err(|e| Failed::Copy(e.to_string()))?;
+        Ok(sandbox)
     }
 
     pub(super) fn config(&self) -> PathBuf {
@@ -118,36 +192,105 @@ impl Sandbox {
 
     /// **Copy `from` to `to`**, links followed, `.git` left out at every
     /// level and `left_out` at the top. Nothing is ever written to `from`.
+    ///
+    /// Warning: **a link can make a tree without end** — `lua/loop/a -> .`
+    /// once made 357,928 directories in 30 s, and was still going. So:
+    ///
+    /// - a link to a directory the copy is inside is made again as a link to
+    ///   that directory's copy (left out on Windows, where making a link
+    ///   takes a privilege): the config reads what it read, and the copy is
+    ///   one tree;
+    /// - a link to a directory outside `from` is left out and named in
+    ///   [`Sandbox::left_out`]: copied, it could be the whole home, and made
+    ///   again as a link, the editor would write through it to the reader's
+    ///   files. A link to a file is copied wherever it points (a stowed
+    ///   `init.lua` is one);
+    /// - and it gives up past [`MOST_ENTRIES`] files and directories,
+    ///   [`DEEPEST`] levels, or the sandbox's time.
     pub(super) fn copy(&mut self, from: &Path, to: &Path, left_out: &[&str]) -> Result<(), Failed> {
-        self.copy_at(from, to, left_out, 0).map_err(|e| Failed::Copy(format!("{}: {e}", from.display())))
+        // The top is followed: `~/.config/nvim` is often a link into dotfiles.
+        let Ok(top) = std::fs::canonicalize(from) else { return Ok(()) };
+        let mut inside = Vec::new();
+        match self.copy_at(&top, from, to, left_out, &mut inside) {
+            Ok(()) => Ok(()),
+            Err(CopyStop::Io(e)) => Err(Failed::Copy(format!("{}: {e}", from.display()))),
+            Err(CopyStop::GaveUp(why)) => Err(Failed::Copy(format!("gave up copying {}: {why}", from.display()))),
+            Err(CopyStop::Stopped) => Err(Failed::Stopped),
+        }
     }
 
-    fn copy_at(&mut self, from: &Path, to: &Path, left_out: &[&str], depth: usize) -> std::io::Result<()> {
-        let too_many = || std::io::Error::other("too many files");
-        // A link to a directory above it would go round for ever.
-        if depth > 40 {
-            return Err(too_many());
+    /// One entry of a copy. `inside` holds each directory the copy is in,
+    /// as it really is and where its copy is.
+    fn copy_at(
+        &mut self,
+        top: &Path,
+        from: &Path,
+        to: &Path,
+        left_out: &[&str],
+        inside: &mut Vec<(PathBuf, PathBuf)>,
+    ) -> Result<(), CopyStop> {
+        if signals::stopped() {
+            return Err(CopyStop::Stopped);
         }
-        let Ok(meta) = std::fs::metadata(from) else { return Ok(()) };
+        if Instant::now() >= self.deadline {
+            return Err(CopyStop::GaveUp(format!(
+                "it took more than {} s ({} files and directories so far); it may be too big to run in a copy",
+                self.budget.as_secs(),
+                self.entries
+            )));
+        }
+        if inside.len() > DEEPEST {
+            return Err(CopyStop::GaveUp(format!("it is more than {DEEPEST} directories deep at {}", from.display())));
+        }
+        let (Ok(link), Ok(meta)) = (std::fs::symlink_metadata(from), std::fs::metadata(from)) else {
+            // A link to nothing, or gone since it was listed.
+            return Ok(());
+        };
         if meta.is_file() {
-            self.files += 1;
-            if self.files > MOST_FILES {
-                return Err(too_many());
-            }
+            self.count()?;
             std::fs::copy(from, to)?;
             return Ok(());
         }
         if !meta.is_dir() {
             return Ok(());
         }
+        let Ok(real) = std::fs::canonicalize(from) else { return Ok(()) };
+        if link.file_type().is_symlink() && !inside.is_empty() {
+            if let Some((_, copied)) = inside.iter().find(|(dir, _)| *dir == real) {
+                #[cfg(unix)]
+                std::os::unix::fs::symlink(copied, to)?;
+                #[cfg(not(unix))]
+                let _ = copied;
+                return Ok(());
+            }
+            if !real.starts_with(top) {
+                self.left_out.push(format!("{}, a link to {}", from.display(), real.display()));
+                return Ok(());
+            }
+        }
+        self.count()?;
         std::fs::create_dir_all(to)?;
+        inside.push((real, to.to_path_buf()));
+        let depth = inside.len();
         for entry in std::fs::read_dir(from)? {
             let entry = entry?;
             let name = entry.file_name();
-            let skip = name == ".git" || (depth == 0 && left_out.iter().any(|n| name == *n));
+            let skip = name == ".git" || (depth == 1 && left_out.iter().any(|n| name == *n));
             if !skip {
-                self.copy_at(&entry.path(), &to.join(&name), left_out, depth + 1)?;
+                self.copy_at(top, &entry.path(), &to.join(&name), left_out, inside)?;
             }
+        }
+        inside.pop();
+        Ok(())
+    }
+
+    /// One more file or directory copied.
+    fn count(&mut self) -> Result<(), CopyStop> {
+        self.entries += 1;
+        if self.entries > MOST_ENTRIES {
+            return Err(CopyStop::GaveUp(format!(
+                "it has more than {MOST_ENTRIES} files and directories; it may be too big to run in a copy"
+            )));
         }
         Ok(())
     }
@@ -161,6 +304,9 @@ impl Sandbox {
         script: (&str, &str),
         timeout: Duration,
     ) -> Result<Dumped, Failed> {
+        if signals::stopped() {
+            return Err(Failed::Stopped);
+        }
         self.runs += 1;
         let run = self.root.join("run");
         let script_path = run.join(script.0);
@@ -168,6 +314,12 @@ impl Sandbox {
         let out = run.join(format!("dump-{}.json", self.runs));
         let err = run.join(format!("stderr-{}.txt", self.runs));
         let stderr = std::fs::File::create(&err).map_err(|e| Failed::Copy(e.to_string()))?;
+        // git looks for a repository no higher than the home: the sandbox's
+        // own directory and anything above it are out of bounds, under the
+        // name it was given and the one it resolves to (`/var` is
+        // `/private/var` on macOS).
+        let mut ceilings = vec![self.root.clone()];
+        ceilings.extend(std::fs::canonicalize(&self.root).ok().filter(|real| *real != self.root));
         let mut command = Command::new(program);
         command
             .args(args)
@@ -180,12 +332,23 @@ impl Sandbox {
             .env("YUMETE_DUMP_SCRIPT", &script_path)
             .env("YUMETE_DUMP", &out)
             .env("YUMETE_LOCK", run.join("lazy-lock.json"))
+            .env(MARK, &self.root)
+            .env("GIT_CEILING_DIRECTORIES", std::env::join_paths(&ceilings).unwrap_or_default())
+            .env("GIT_CONFIG_NOSYSTEM", "1")
             // Each names a file of the reader's or a running Neovim.
             .env_remove("VIMINIT")
             .env_remove("MYVIMRC")
             .env_remove("NVIM_LOG_FILE")
             .env_remove("NVIM")
             .env_remove("NVIM_LISTEN_ADDRESS")
+            // …or a repository, or git's config, of the reader's.
+            .env_remove("GIT_DIR")
+            .env_remove("GIT_WORK_TREE")
+            .env_remove("GIT_INDEX_FILE")
+            .env_remove("GIT_COMMON_DIR")
+            .env_remove("GIT_CONFIG")
+            .env_remove("GIT_CONFIG_GLOBAL")
+            .env_remove("GIT_CONFIG_SYSTEM")
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             // A file, not a pipe: a full pipe would stop the editor.
@@ -202,12 +365,19 @@ impl Sandbox {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Err(Failed::NotInstalled),
             Err(e) => return Err(Failed::NoOutput(Some(e.to_string()))),
         };
+        let watched = signals::Watched::new(&child);
         let start = Instant::now();
         loop {
             match child.try_wait() {
                 Ok(Some(_)) => {
                     kill_group(&child);
                     break;
+                }
+                Ok(None) if signals::stopped() => {
+                    kill_group(&child);
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(Failed::Stopped);
                 }
                 Ok(None) if start.elapsed() >= timeout => {
                     // Asked first: Neovim's own jobs run in sessions of their
@@ -220,12 +390,16 @@ impl Sandbox {
                     kill_group(&child);
                     let _ = child.kill();
                     let _ = child.wait();
+                    drop(watched);
+                    kill_strays(&self.root);
                     return Err(Failed::TimedOut(timeout));
                 }
                 Ok(None) => std::thread::sleep(Duration::from_millis(25)),
                 Err(e) => return Err(Failed::NoOutput(Some(e.to_string()))),
             }
         }
+        drop(watched);
+        kill_strays(&self.root);
         // The error's own line (`E5113: …`) before the line that leads to it,
         // with the copy's home written as the reader's `~`.
         let said = std::fs::read_to_string(&err).ok().and_then(|text| {
@@ -285,9 +459,283 @@ fn signal_group(child: &std::process::Child, signal: Signal) {
     let _ = (child, signal);
 }
 
+/// **Kill every process the run left behind outside its group**: one that
+/// carries the run's [`MARK`] in its environment, or works in a directory
+/// inside the copy. Neovim's `jobstart(…, {detach = true})` runs its job in
+/// a session of its own that nothing else reaches, and that job wrote into
+/// the copy 6 s after the import had returned (review, 2026-11-09).
+///
+/// A process inherits its parent's environment and directory, so one or the
+/// other is on everything the editor started, at any remove: the mark unless
+/// it was started with its environment cleared (`clear_env`), the directory
+/// unless it moved out. Warning: **macOS hides the environment of its own
+/// programs** (`/bin/sh`, `/bin/sleep`: signed by Apple, they show only their
+/// arguments), so there such a one is known by its directory alone.
+///
+/// Only the reader's own processes can be read, which are the only ones a
+/// run can start. Again until none is found, as one may have started another
+/// while it was being looked for.
+fn kill_strays(root: &Path) {
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        let mut needle = Vec::from(MARK.as_bytes());
+        needle.push(b'=');
+        needle.extend_from_slice(root.as_os_str().as_bytes());
+        needle.push(0);
+        // A process's directory is told as it really is: `/private/var`
+        // for macOS's `/var`.
+        let mut roots = vec![root.to_path_buf()];
+        roots.extend(std::fs::canonicalize(root).ok().filter(|real| real != root));
+        let me = libc::pid_t::try_from(std::process::id()).unwrap_or(0);
+        let mut buffer = Vec::new();
+        for _ in 0..10 {
+            let mut found = false;
+            for pid in processes::all() {
+                if pid <= 1 || pid == me {
+                    continue;
+                }
+                let inside = processes::directory(pid).is_some_and(|dir| roots.iter().any(|r| dir.starts_with(r)));
+                if inside || processes::environment(pid, &mut buffer).is_some_and(|env| carries(env, &needle)) {
+                    // SAFETY: as in `signal_group`, two integers.
+                    unsafe {
+                        libc::kill(pid, libc::SIGKILL);
+                    }
+                    found = true;
+                }
+            }
+            if !found {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    let _ = root;
+}
+
+/// Whether a NUL-separated environment holds `needle` (`NAME=value\0`) as
+/// one of its strings.
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
+pub(super) fn carries(env: &[u8], needle: &[u8]) -> bool {
+    env.windows(needle.len()).enumerate().any(|(at, w)| w == needle && (at == 0 || env[at - 1] == 0))
+}
+
+/// The process table, as far as it is ours to read.
+#[cfg(target_os = "linux")]
+mod processes {
+    pub(super) fn all() -> Vec<libc::pid_t> {
+        let Ok(dir) = std::fs::read_dir("/proc") else { return Vec::new() };
+        dir.flatten().filter_map(|e| e.file_name().to_str()?.parse().ok()).collect()
+    }
+
+    /// The directory it works in.
+    pub(super) fn directory(pid: libc::pid_t) -> Option<std::path::PathBuf> {
+        std::fs::read_link(format!("/proc/{pid}/cwd")).ok()
+    }
+
+    /// Its environment, NUL-separated, read into `buffer`.
+    pub(super) fn environment(pid: libc::pid_t, buffer: &mut Vec<u8>) -> Option<&[u8]> {
+        *buffer = std::fs::read(format!("/proc/{pid}/environ")).ok()?;
+        Some(buffer)
+    }
+}
+
+/// The process table, as far as it is ours to read.
+#[cfg(target_os = "macos")]
+mod processes {
+    pub(super) fn all() -> Vec<libc::pid_t> {
+        // SAFETY: asked for the count with no buffer, then into a buffer
+        // with room for more than that; the kernel writes no further than
+        // the size it is given.
+        unsafe {
+            let count = libc::proc_listallpids(std::ptr::null_mut(), 0);
+            if count <= 0 {
+                return Vec::new();
+            }
+            let mut pids: Vec<libc::pid_t> = vec![0; count as usize + 64];
+            let bytes = libc::c_int::try_from(pids.len() * std::mem::size_of::<libc::pid_t>()).unwrap_or(0);
+            let got = libc::proc_listallpids(pids.as_mut_ptr().cast(), bytes);
+            pids.truncate(got.max(0) as usize);
+            pids
+        }
+    }
+
+    /// The directory it works in (`PROC_PIDVNODEPATHINFO`).
+    pub(super) fn directory(pid: libc::pid_t) -> Option<std::path::PathBuf> {
+        use std::os::unix::ffi::OsStrExt;
+        // SAFETY: `proc_pidinfo` writes at most the size it is given into
+        // the struct, and says how much it wrote; the path in it ends in a
+        // NUL within its `MAXPATHLEN` bytes.
+        unsafe {
+            let mut info: libc::proc_vnodepathinfo = std::mem::zeroed();
+            let size = libc::c_int::try_from(std::mem::size_of::<libc::proc_vnodepathinfo>()).ok()?;
+            if libc::proc_pidinfo(pid, libc::PROC_PIDVNODEPATHINFO, 0, (&raw mut info).cast(), size) != size {
+                return None;
+            }
+            let path = std::slice::from_raw_parts(
+                info.pvi_cdir.vip_path.as_ptr().cast::<u8>(),
+                std::mem::size_of_val(&info.pvi_cdir.vip_path),
+            );
+            let path = &path[..path.iter().position(|&b| b == 0)?];
+            Some(std::path::PathBuf::from(std::ffi::OsStr::from_bytes(path)))
+        }
+    }
+
+    /// Its arguments and environment, NUL-separated (`KERN_PROCARGS2`),
+    /// read into `buffer`.
+    pub(super) fn environment(pid: libc::pid_t, buffer: &mut Vec<u8>) -> Option<&[u8]> {
+        // SAFETY: `sysctl` writes at most `size` bytes into the space it is
+        // given, and says how many it wrote in `size`.
+        unsafe {
+            if buffer.is_empty() {
+                let mut most: libc::c_int = 0;
+                let mut size = std::mem::size_of::<libc::c_int>();
+                let mut name = [libc::CTL_KERN, libc::KERN_ARGMAX];
+                if libc::sysctl(name.as_mut_ptr(), 2, (&raw mut most).cast(), &mut size, std::ptr::null_mut(), 0) != 0 {
+                    return None;
+                }
+                buffer.resize(usize::try_from(most).ok()?, 0);
+            }
+            let mut size = buffer.len();
+            let mut name = [libc::CTL_KERN, libc::KERN_PROCARGS2, pid];
+            if libc::sysctl(name.as_mut_ptr(), 3, buffer.as_mut_ptr().cast(), &mut size, std::ptr::null_mut(), 0) != 0 {
+                return None;
+            }
+            Some(&buffer[..size])
+        }
+    }
+}
+
+
+/// **Ctrl-C, `kill` and a closed terminal, during an import** (review,
+/// 2026-11-09). The editor leads a process group of its own, so the
+/// terminal's SIGINT reaches yumete alone, and yumete dying of it left
+/// Neovim running and the copy of the reader's config in the temporary
+/// directory. So for as long as a [`Sandbox`] lives, SIGINT, SIGTERM and
+/// SIGHUP kill the editor's group at once and only mark that the import is
+/// to stop; the copy and the run notice, return, and the sandbox, dropped,
+/// kills what is left, removes itself, and ends yumete by the same signal.
+#[cfg(unix)]
+mod signals {
+    use std::sync::atomic::{AtomicI32, Ordering};
+
+    /// The signal that asked yumete to stop, or 0.
+    static STOP: AtomicI32 = AtomicI32::new(0);
+    /// The group of the editor running now, or 0.
+    static GROUP: AtomicI32 = AtomicI32::new(0);
+
+    const CAUGHT: [libc::c_int; 3] = [libc::SIGINT, libc::SIGTERM, libc::SIGHUP];
+
+    /// Only what is safe in a signal handler: two stores and a `kill`.
+    extern "C" fn caught(signal: libc::c_int) {
+        STOP.store(signal, Ordering::SeqCst);
+        let group = GROUP.load(Ordering::SeqCst);
+        if group > 0 {
+            // SAFETY: `kill` is async-signal-safe, and takes two integers.
+            unsafe {
+                libc::kill(-group, libc::SIGKILL);
+            }
+        }
+    }
+
+    /// Whether yumete has been asked to stop.
+    pub(super) fn stopped() -> bool {
+        STOP.load(Ordering::SeqCst) != 0
+    }
+
+    /// The three signals caught, and what they did before.
+    pub(super) struct Caught {
+        was: Vec<(libc::c_int, libc::sigaction)>,
+    }
+
+    impl Caught {
+        /// Catch the three. One a parent set to be ignored (`nohup`) stays
+        /// ignored.
+        pub(super) fn install() -> Caught {
+            let mut was = Vec::new();
+            // SAFETY: `sigaction` reads the action given and writes the old
+            // one into the space given; the handler does only what a handler
+            // may.
+            unsafe {
+                let mut now: libc::sigaction = std::mem::zeroed();
+                now.sa_sigaction = caught as extern "C" fn(libc::c_int) as libc::sighandler_t;
+                libc::sigemptyset(&mut now.sa_mask);
+                now.sa_flags = libc::SA_RESTART;
+                for signal in CAUGHT {
+                    let mut old: libc::sigaction = std::mem::zeroed();
+                    if libc::sigaction(signal, std::ptr::null(), &mut old) != 0 || old.sa_sigaction == libc::SIG_IGN {
+                        continue;
+                    }
+                    if libc::sigaction(signal, &now, std::ptr::null_mut()) == 0 {
+                        was.push((signal, old));
+                    }
+                }
+            }
+            Caught { was }
+        }
+
+        /// Put the three back, then, if one of them came, die of it as
+        /// yumete would have without the sandbox.
+        pub(super) fn release(self) {
+            // SAFETY: putting back the actions read in `install`.
+            unsafe {
+                for (signal, old) in &self.was {
+                    libc::sigaction(*signal, old, std::ptr::null_mut());
+                }
+            }
+            let signal = STOP.swap(0, Ordering::SeqCst);
+            if signal != 0 {
+                // SAFETY: the default action for a signal yumete was sent.
+                unsafe {
+                    libc::signal(signal, libc::SIG_DFL);
+                    libc::raise(signal);
+                }
+            }
+        }
+    }
+
+    /// The editor's group, known to the handler while it runs.
+    pub(super) struct Watched;
+
+    impl Watched {
+        pub(super) fn new(child: &std::process::Child) -> Watched {
+            GROUP.store(i32::try_from(child.id()).unwrap_or(0), Ordering::SeqCst);
+            Watched
+        }
+    }
+
+    impl Drop for Watched {
+        fn drop(&mut self) {
+            GROUP.store(0, Ordering::SeqCst);
+        }
+    }
+}
+
+/// Windows: nothing caught (see the module's warning).
+#[cfg(not(unix))]
+mod signals {
+    pub(super) fn stopped() -> bool {
+        false
+    }
+
+    pub(super) struct Watched;
+
+    impl Watched {
+        pub(super) fn new(_: &std::process::Child) -> Watched {
+            Watched
+        }
+    }
+}
+
 impl Drop for Sandbox {
     fn drop(&mut self) {
+        kill_strays(&self.root);
         let _ = std::fs::remove_dir_all(&self.root);
+        #[cfg(unix)]
+        if let Some(caught) = self.caught.take() {
+            caught.release();
+        }
     }
 }
 

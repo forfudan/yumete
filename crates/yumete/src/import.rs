@@ -1186,10 +1186,17 @@ fn nvim_data_dir(env: Env) -> Option<PathBuf> {
     Some(home.join(".local").join("share").join(name))
 }
 
+/// Each link the copy left out, one line each: the config may miss it.
+fn said_left_out(sandbox: &dump::Sandbox) {
+    for link in &sandbox.left_out {
+        println!("yumete: left out of the copy it runs on: {link}, outside the config");
+    }
+}
+
 /// **Run the reader's Neovim and a baseline**, each on the same copy:
 /// `--clean` for `--import nvim`, LazyVim alone for `--import lazyvim`.
 fn read_nvim(program: &str, env: Env, lazyvim: bool, timeout: std::time::Duration) -> Result<(vim::Dump, vim::Dump, Option<String>), dump::Failed> {
-    let mut sandbox = dump::Sandbox::new()?;
+    let mut sandbox = dump::Sandbox::new(timeout)?;
     let app = nvim_app(env);
     if let Some(config) = nvim_dir(env) {
         let to = sandbox.config().join(&app);
@@ -1199,6 +1206,7 @@ fn read_nvim(program: &str, env: Env, lazyvim: bool, timeout: std::time::Duratio
         let to = sandbox.data().join(nvim_data_name(&app));
         sandbox.copy(&data, &to, dump::DATA_LEFT_OUT)?;
     }
+    said_left_out(&sandbox);
     let script = ("dump.lua", dump::DUMP_LUA);
     let user = sandbox.run(program, &dump::nvim_args(dump::Nvim::Own, &sandbox), script, timeout)?;
     let how = if lazyvim { dump::Nvim::LazyVimBase } else { dump::Nvim::Clean };
@@ -1229,7 +1237,7 @@ pub fn vimrc_path(env: Env) -> Result<Option<PathBuf>, String> {
 /// **Run the reader's Vim and a baseline** (`-u NONE`) on a copy of the
 /// vimrc and the directories beside it.
 fn read_vim(program: &str, env: Env, vimrc: &Path, timeout: std::time::Duration) -> Result<(vim::Dump, vim::Dump, Option<String>), dump::Failed> {
-    let mut sandbox = dump::Sandbox::new()?;
+    let mut sandbox = dump::Sandbox::new(timeout)?;
     let home = sandbox.home.clone();
     let config = sandbox.config();
     let sandboxed = |name: &str| -> Option<String> {
@@ -1252,6 +1260,7 @@ fn read_vim(program: &str, env: Env, vimrc: &Path, timeout: std::time::Duration)
             false => sandbox.copy(a, b, &[])?,
         }
     }
+    said_left_out(&sandbox);
     let script = ("dump.vim", dump::DUMP_VIM);
     let user = sandbox.run(program, &dump::vim_args(Some(&to[at])), script, timeout)?;
     let base = sandbox.run(program, &dump::vim_args(None), script, timeout)?;
@@ -2092,5 +2101,149 @@ put(vim.fn.expand("~/written-by-the-config"), "x")
         };
         assert!(vimrc_path(&viminit).is_err());
         let _ = std::fs::remove_dir_all(&home);
+    }
+
+    /// **A link round the config is not a tree without end** (review,
+    /// 2026-11-09: `lua/loop/{a,b} -> .` made 357,928 directories in 30 s).
+    /// A link to a directory the copy is in comes over as a link into the
+    /// copy; one to a directory outside the config is left out and named;
+    /// one to a file is copied; and the config still runs.
+    #[test]
+    fn a_link_round_the_config_is_copied_once() {
+        let home = nvim_home("nvim-loop", "vim.opt.tabstop = 3\n");
+        let config = home.join(".config/nvim");
+        let elsewhere = home.join("elsewhere");
+        std::fs::create_dir_all(elsewhere.join("big")).unwrap();
+        std::fs::write(elsewhere.join("big/x.lua"), "-- not the config's\n").unwrap();
+        std::fs::write(elsewhere.join("stowed.lua"), "vim.g.stowed = 1\n").unwrap();
+        std::fs::create_dir_all(config.join("lua/loop")).unwrap();
+        std::fs::write(config.join("lua/loop/init.lua"), "return 1\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::symlink;
+            symlink(".", config.join("lua/loop/a")).unwrap();
+            symlink(".", config.join("lua/loop/b")).unwrap();
+            symlink("../..", config.join("lua/loop/up")).unwrap();
+            symlink(elsewhere.join("big"), config.join("lua/big")).unwrap();
+            symlink(elsewhere.join("stowed.lua"), config.join("lua/stowed.lua")).unwrap();
+        }
+        let before = snapshot(&home);
+        let started = std::time::Instant::now();
+        let mut sandbox = dump::Sandbox::new(dump::TIMEOUT).unwrap();
+        let to = sandbox.config().join("nvim");
+        sandbox.copy(&config, &to, &[]).unwrap();
+        assert!(started.elapsed() < std::time::Duration::from_secs(2), "{:?}", started.elapsed());
+        assert!(to.join("lua/loop/init.lua").is_file());
+        #[cfg(unix)]
+        {
+            for (link, points_to) in [("lua/loop/a", "lua/loop"), ("lua/loop/b", "lua/loop"), ("lua/loop/up", "")] {
+                let meta = std::fs::symlink_metadata(to.join(link)).unwrap();
+                assert!(meta.file_type().is_symlink(), "{link} is made again as a link");
+                let target = std::fs::read_link(to.join(link)).unwrap();
+                assert_eq!(target.components().collect::<Vec<_>>(), to.join(points_to).components().collect::<Vec<_>>(), "{link}");
+            }
+            assert!(to.join("lua/loop/a/a/b/init.lua").is_file(), "the link still reads as it did");
+            assert!(!to.join("lua/big").exists(), "a directory outside the config is left out");
+            assert_eq!(sandbox.left_out.len(), 1, "{:?}", sandbox.left_out);
+            assert!(sandbox.left_out[0].contains("lua/big"), "{:?}", sandbox.left_out);
+            let stowed = to.join("lua/stowed.lua");
+            assert!(!std::fs::symlink_metadata(&stowed).unwrap().file_type().is_symlink(), "a file is copied");
+            assert_eq!(std::fs::read_to_string(&stowed).unwrap(), "vim.g.stowed = 1\n");
+        }
+        drop(sandbox);
+        // Out of time: it says so, and how far it got.
+        let mut sandbox = dump::Sandbox::new(std::time::Duration::ZERO).unwrap();
+        let to = sandbox.config().join("nvim");
+        let Err(dump::Failed::Copy(why)) = sandbox.copy(&config, &to, &[]) else { panic!("a copy out of time") };
+        assert!(why.starts_with("gave up copying ") && why.contains("more than 0 s"), "{why}");
+        drop(sandbox);
+        if installed("nvim") {
+            let (user, base, _) = read_nvim("nvim", &env_of(&home), false, dump::TIMEOUT).unwrap();
+            let own = vim::translate(&user, &base, vim::Source::Neovim);
+            assert!(own.editor.contains(&"tab_width = 3".to_string()), "{:?}", own.editor);
+        }
+        assert_eq!(snapshot(&home), before, "the reader's files are as they were");
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    /// **git stays in the copy** (review, 2026-11-09): with the temporary
+    /// directory inside a repository, a config's `git config` in its own
+    /// directory, which has no `.git` in the copy, wrote the outer
+    /// repository's `.git/config`.
+    #[test]
+    fn git_run_by_the_config_stays_in_the_copy() {
+        if !installed("nvim") || !installed("git") {
+            return;
+        }
+        let repo = scratch("nvim-git");
+        let git = |args: &[&str]| std::process::Command::new("git").arg("-C").arg(&repo).args(args).output().unwrap();
+        assert!(git(&["init", "-q"]).status.success());
+        let before = std::fs::read_to_string(repo.join(".git/config")).unwrap();
+        let mut sandbox = dump::Sandbox::new_in(&repo, dump::TIMEOUT).unwrap();
+        let config = sandbox.config().join("nvim");
+        std::fs::create_dir_all(&config).unwrap();
+        let wrote = repo.join("git-said");
+        std::fs::write(
+            config.join("init.lua"),
+            format!(
+                "local said = vim.fn.system({{ \"git\", \"-C\", vim.fn.stdpath(\"config\"), \"config\", \"user.name\", \"WRITTEN-BY-IMPORT\" }})\n\
+                 local f = io.open(\"{}\", \"w\"); f:write(said); f:close()\n",
+                wrote.display()
+            ),
+        )
+        .unwrap();
+        let args = dump::nvim_args(dump::Nvim::Own, &sandbox);
+        sandbox.run("nvim", &args, ("dump.lua", dump::DUMP_LUA), dump::TIMEOUT).unwrap();
+        drop(sandbox);
+        assert!(wrote.is_file(), "the config ran git");
+        assert_eq!(std::fs::read_to_string(repo.join(".git/config")).unwrap(), before);
+        let _ = std::fs::remove_dir_all(&repo);
+    }
+
+    /// **A detached job goes with the run** (review, 2026-11-09): Neovim's
+    /// `jobstart(…, {detach = true})` leaves the editor's group, and wrote
+    /// into the copy 6 s after the import had returned.
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[test]
+    fn a_detached_job_does_not_outlive_the_import() {
+        if !installed("nvim") {
+            return;
+        }
+        let pids = scratch("nvim-detach-pid");
+        let pid_file = pids.join("job");
+        let home = nvim_home(
+            "nvim-detach",
+            &format!(
+                "vim.opt.tabstop = 3\n\
+                 vim.fn.jobstart({{ \"sh\", \"-c\", \"echo $$ > {0} && exec sleep 300\" }}, {{ detach = true }})\n\
+                 vim.wait(5000, function() return vim.uv.fs_stat(\"{0}\") ~= nil end, 20)\n",
+                pid_file.display()
+            ),
+        );
+        let (user, base, _) = read_nvim("nvim", &env_of(&home), false, dump::TIMEOUT).unwrap();
+        let own = vim::translate(&user, &base, vim::Source::Neovim);
+        assert!(own.editor.contains(&"tab_width = 3".to_string()), "{:?}", own.editor);
+        let pid: libc::pid_t = std::fs::read_to_string(&pid_file).unwrap().trim().parse().unwrap();
+        let gone = (0..100).any(|_| {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            // SAFETY: signal 0 only asks whether the process is there.
+            unsafe { libc::kill(pid, 0) != 0 }
+        });
+        if !gone {
+            // SAFETY: as above; it must not outlive the test either.
+            unsafe { libc::kill(pid, libc::SIGKILL) };
+        }
+        assert!(gone, "the detached job outlived the import");
+        let _ = std::fs::remove_dir_all(&pids);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn a_mark_is_one_whole_string_of_an_environment() {
+        let needle = b"YUMETE_IMPORT_RUN=/t/r\0";
+        assert!(dump::carries(b"A=1\0YUMETE_IMPORT_RUN=/t/r\0B=2\0", needle));
+        assert!(dump::carries(b"YUMETE_IMPORT_RUN=/t/r\0", needle));
+        assert!(!dump::carries(b"XYUMETE_IMPORT_RUN=/t/r\0", needle));
+        assert!(!dump::carries(b"YUMETE_IMPORT_RUN=/t/r/2\0", needle));
     }
 }
