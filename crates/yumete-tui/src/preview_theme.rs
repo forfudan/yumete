@@ -84,6 +84,7 @@ pub fn theme(ink: Palette) -> Theme {
         stripe,
         table_head,
         highlight: crate::markup_style(Kind::Highlight, ink).bg.map_or(background, c),
+        caret: c(ink.gold()),
         list_marker,
         callouts: [ink.azure(), ink.green(), ink.purple(), ink.amber(), ink.mark()].map(c),
         callout_grounds: grounds,

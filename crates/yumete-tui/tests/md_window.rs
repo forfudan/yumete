@@ -124,18 +124,9 @@ fn a_markdown_preview_is_drawn_and_follows_the_cursor() {
     // has them, thick once the preview does.
     let shown = frame(&mut editor, &config);
     assert!(shown.contains('┌') && !shown.contains('┏'), "{shown}");
-    // **The cursor's line is marked on the frame**, on both side walls of
-    // one row, and the marks go down as the cursor does.
-    let row_of = |shown: &str, mark: char| shown.lines().position(|l| l.contains(mark));
-    let at = row_of(&shown, '▶').expect("a mark on the left wall");
-    assert_eq!(row_of(&shown, '◀'), Some(at), "and on the right, same row");
-    let first = md_window::shot_of(preview).and_then(|s| s.caret);
-    for _ in 0..4 {
-        editor.on_key(yumete_core::input::Key::Char('j'));
-    }
-    until(&mut editor, &config, &mut md, |_| md_window::shot_of(preview).and_then(|s| s.caret) > first);
-    let lower = frame(&mut editor, &config);
-    assert!(row_of(&lower, '▶').unwrap() > at, "{lower}");
+    // **The cursor's paragraph has a bar in the picture**; the frame's
+    // arrows only point the way to it once it is out of view.
+    assert!(!shown.contains('▶'), "in view, no arrows: {shown}");
     editor.on_key(yumete_core::input::Key::Ctrl('w'));
     editor.on_key(yumete_core::input::Key::Char('w'));
     let shown = frame(&mut editor, &config);
@@ -277,9 +268,6 @@ fn a_vertical_text_has_a_vertical_preview() {
     let want = md.sent(preview).unwrap();
     assert_eq!(want.vertical, Some(yumete_mdview::Vertical { latin: yumete_core::export::Latin::Turn, hanging: false }));
     until(&mut editor, &config, &mut md, |_| md_window::shot_of(preview).is_some_and(|s| s.page > 0.0 && s.top == 0.0 && s.vertical));
-    // Down a vertical page the cursor's line is marked on the top and bottom walls.
-    let shown = frame(&mut editor, &config);
-    assert!(shown.contains('▼') && shown.contains('▲') && !shown.contains('▶'), "{shown}");
     editor.execute(":100").unwrap();
     until(&mut editor, &config, &mut md, |_| top_of(preview).is_some_and(|t| t > 0.0));
 

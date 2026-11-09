@@ -515,6 +515,20 @@ impl Preview {
         out
     }
 
+    /// **Where the top-level block holding source line `line` lies along the
+    /// page**: its start and end.
+    pub fn block_span_of(&self, line: usize) -> Option<(f32, f32)> {
+        self.placed
+            .iter()
+            .find(|p| p.lines.0 <= line && line <= p.lines.1)
+            .map(|p| (p.y, p.y + p.laid.height))
+    }
+
+    /// The bar's colour, from the theme.
+    pub fn caret_colour(&self) -> theme::Rgba {
+        self.engine.theme.caret
+    }
+
     /// The source lines of the top-level block shown at height `y`.
     pub fn block_at(&self, y: f32) -> Option<(usize, usize)> {
         let k = self.placed.partition_point(|p| p.y <= y);

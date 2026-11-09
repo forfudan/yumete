@@ -76,6 +76,8 @@ pub struct Colours {
     pub stripe: Rgba,
     pub table_head: Rgba,
     pub highlight: Rgba,
+    /// The preview's bar beside the cursor's paragraph; an export draws none.
+    pub caret: Rgba,
     pub list_marker: Rgba,
     /// Note, tip, important, warning, caution.
     pub callouts: [Rgba; 5],
@@ -176,6 +178,7 @@ impl Colours {
             stripe: [0xf6, 0xf8, 0xfa, 0xff],
             table_head: text,
             highlight: [0xff, 0xf8, 0xc5, 0xff],
+            caret: [0x9a, 0x67, 0x00, 0xff],
             list_marker: text,
             callouts,
             callout_grounds: callouts.map(|c| tint(c, background, 0.10)),
@@ -684,6 +687,7 @@ pub(crate) fn test_look() -> Look {
             stripe: grey(0x8e),
             table_head: grey(0x8f),
             highlight: grey(0x90),
+            caret: grey(0x90),
             list_marker: grey(0x91),
             callouts: [[0x0a, 0x0b, 0x0c, 255], grey(0x92), grey(0x93), grey(0x94), grey(0x95)],
             callout_grounds: [grey(0x96), grey(0x97), grey(0x98), grey(0x99), grey(0x9a)],

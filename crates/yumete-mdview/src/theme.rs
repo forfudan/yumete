@@ -43,6 +43,8 @@ pub struct Theme {
     pub table_head: Rgba,
     /// `==highlight==`'s ground.
     pub highlight: Rgba,
+    /// The bar beside the paragraph the cursor is in.
+    pub caret: Rgba,
     /// A list's bullets and numbers.
     pub list_marker: Rgba,
     /// Note, tip, important, warning, caution: their colour, and their
@@ -108,6 +110,7 @@ impl Theme {
             stripe: [0x15, 0x1b, 0x23, 0xff],
             table_head: text,
             highlight: [0x5c, 0x4a, 0x14, 0xff],
+            caret: [0xdc, 0xaa, 0x4c, 0xff],
             list_marker: text,
             callouts,
             callout_grounds: callouts.map(|c| tint(c, background, 0.16)),

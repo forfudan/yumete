@@ -268,7 +268,10 @@ fn work(inbox: mpsc::Receiver<Job>, out: mpsc::Sender<Shot>) {
         };
         let top = top.clamp(0.0, (page - along).max(0.0)).round();
         let caret = want.caret.map(|line| p.y_for_line(line));
-        let picture = p.render(top, h);
+        let mut picture = p.render(top, h);
+        if let Some((from, to)) = want.caret.and_then(|line| p.block_span_of(line)) {
+            paint_the_bar(&mut picture, (from - top, to - top), want.vertical.is_some(), want.scale(), p.caret_colour());
+        }
         let png = picture.png();
         let hash = {
             use std::hash::{Hash, Hasher};
@@ -499,10 +502,34 @@ pub fn draw(frame: &mut ratatui::Frame, editor: &Editor, config: &yumete_config:
     }
 }
 
-/// **The cursor's line, marked on the frame**: `▶` `◀` on the side walls
-/// across a page, `▼` `▲` on the top and bottom walls down a vertical one,
-/// where the line stands in the picture. A line off the picture is marked
-/// at the edge nearest to it.
+/// **A bar beside the paragraph the cursor is in**, painted into the
+/// picture so it stands exactly beside its lines: in the left margin across
+/// a page, along the top margin down a vertical one. `span` is the
+/// paragraph's start and end along the page, measured from the picture's
+/// own start.
+fn paint_the_bar(picture: &mut yumete_mdview::Picture, span: (f32, f32), vertical: bool, scale: f32, colour: [u8; 4]) {
+    let (w, h) = (picture.width as i64, picture.height as i64);
+    let thick = (3.0 * scale).round().max(2.0) as i64;
+    let inset = (4.0 * scale).round() as i64;
+    let (from, to) = (span.0.round() as i64, span.1.round() as i64);
+    // The rectangle, in the picture's pixels.
+    let (x0, x1, y0, y1) = match vertical {
+        false => (inset, inset + thick, from, to),
+        true => (w - to, w - from, inset, inset + thick),
+    };
+    for y in y0.max(0)..y1.min(h) {
+        for x in x0.max(0)..x1.min(w) {
+            let at = ((y * w + x) * 4) as usize;
+            if let Some(px) = picture.rgba.get_mut(at..at + 4) {
+                px.copy_from_slice(&colour);
+            }
+        }
+    }
+}
+
+/// **The way to the cursor's line, marked on the frame** while it is out
+/// of view: `▶` `◀` on the side walls across a page, `▼` `▲` on the top and
+/// bottom walls down a vertical one, at the edge nearest to it.
 fn mark_the_caret(buf: &mut ratatui::buffer::Buffer, area: Rect, shot: &Shot, style: ratatui::style::Style) {
     let Some(caret) = shot.caret else { return };
     if area.width == 0 || area.height == 0 || area.x == 0 || area.y == 0 {
@@ -510,6 +537,15 @@ fn mark_the_caret(buf: &mut ratatui::buffer::Buffer, area: Rect, shot: &Shot, st
     }
     let cell = crate::graphics::cell_pixels();
     let along = caret - shot.top;
+    // In view, the bar in the picture shows the paragraph; the arrows only
+    // point the way to one out of view.
+    let shown = match shot.vertical {
+        false => area.height as f32 * cell.1.max(1) as f32,
+        true => area.width as f32 * cell.0.max(1) as f32,
+    };
+    if (0.0..shown).contains(&along) {
+        return;
+    }
     let mut put = |x: u16, y: u16, mark: &str| {
         if let Some(c) = buf.cell_mut((x, y)) {
             c.set_symbol(mark).set_style(style);
@@ -534,4 +570,28 @@ fn mark_the_caret(buf: &mut ratatui::buffer::Buffer, area: Rect, shot: &Shot, st
 /// only a terminal that draws pictures can.
 pub fn why_not() -> Option<String> {
     (crate::graphics::support() == crate::graphics::Support::None).then(|| say!("preview.no-pictures"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// **The bar stands beside the paragraph, and only there**: in the left
+    /// margin across a page, along the top margin down a vertical one.
+    #[test]
+    fn the_bar_is_painted_beside_the_paragraph() {
+        let blank = || yumete_mdview::Picture { width: 100, height: 50, rgba: vec![0; 100 * 50 * 4] };
+        let gold = [1, 2, 3, 255];
+        let at = |p: &yumete_mdview::Picture, x: usize, y: usize| p.rgba[(y * 100 + x) * 4..][..4].to_vec();
+        let mut across = blank();
+        paint_the_bar(&mut across, (10.0, 30.0), false, 1.0, gold);
+        assert_eq!(at(&across, 5, 15), gold);
+        assert_eq!(at(&across, 5, 5), [0, 0, 0, 0], "above the paragraph");
+        assert_eq!(at(&across, 50, 15), [0, 0, 0, 0], "not over the text");
+        let mut down = blank();
+        paint_the_bar(&mut down, (10.0, 30.0), true, 1.0, gold);
+        assert_eq!(at(&down, 80, 5), gold, "its columns, counted from the right");
+        assert_eq!(at(&down, 95, 5), [0, 0, 0, 0]);
+        assert_eq!(at(&down, 80, 30), [0, 0, 0, 0], "not over the text");
+    }
 }
