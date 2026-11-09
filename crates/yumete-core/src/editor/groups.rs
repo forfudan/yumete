@@ -1265,6 +1265,9 @@ pub(super) static WINDOW: Group = Group {
         ch('E', NormalCmd::GotoLeftSidebar, "hint.region.into-bar").flavor(FlavorItem::Sidebars),
         ch('I', NormalCmd::GotoRightSidebar, "hint.region.into-bar").flavor(FlavorItem::Sidebars),
         ch('s', NormalCmd::Hsplit, "hint.region.split"),
+        // vim opens a split on the left, helix on the right, whatever the
+        // page's direction.
+        ch('v', NormalCmd::Vsplit, "hint.region.split-left").when(Only::Vim),
         ch('v', NormalCmd::Vsplit, "hint.region.split-beside"),
         // vim's `C-w n` is the blank window below; helix's is a group.
         ch('n', NormalCmd::HsplitNew, "hint.region.new").when(Only::Vim),

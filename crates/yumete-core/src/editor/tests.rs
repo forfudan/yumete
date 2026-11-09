@@ -38866,9 +38866,10 @@ fn switching_the_layout_moves_no_window() {
 
 /// A split made on a 縱書 page opens with its new window on the left, and
 /// **keeps that side** when the page turns horizontal; the keys follow what
-/// is drawn.
+/// **A side-by-side split opens on the right on any page**, as helix opens
+/// it, and the windows stay put when the page turns.
 #[test]
-fn a_split_made_on_a_vertical_page_keeps_its_side() {
+fn a_split_opens_on_the_right_on_any_page() {
     let mut ed = typed("那年冬天。\n");
     ed.execute(":vertical").unwrap();
     let one = ed.live_window();
@@ -38876,27 +38877,12 @@ fn a_split_made_on_a_vertical_page_keeps_its_side() {
     ed.on_key(Key::Char('v'));
     let two = ed.live_window();
     assert_ne!(one, two);
-    assert_eq!(window_columns(&ed), [(one, 41), (two, 0)], "縱書: the new window on the left");
+    assert_eq!(window_columns(&ed), [(one, 0), (two, 41)], "縱書 too: the new window on the right");
     ed.execute(":horizontal").unwrap();
-    assert_eq!(window_columns(&ed), [(one, 41), (two, 0)], "`:horizontal` moves neither");
-    ed.on_key(Key::Ctrl('w'));
-    ed.on_key(Key::Char('l'));
-    assert_eq!(ed.live_window(), one, "`C-w l` goes to the window on the right");
-    ed.execute(":vertical").unwrap();
-    assert_eq!(window_columns(&ed), [(one, 41), (two, 0)]);
+    assert_eq!(window_columns(&ed), [(one, 0), (two, 41)], "`:horizontal` moves neither");
     ed.on_key(Key::Ctrl('w'));
     ed.on_key(Key::Char('h'));
-    assert_eq!(ed.live_window(), two, "`C-w h` to the one on the left");
-    // A split made on a horizontal page opens to the right, and stays.
-    ed.execute(":horizontal").unwrap();
-    ed.on_key(Key::Ctrl('w'));
-    ed.on_key(Key::Char('v'));
-    let three = ed.live_window();
-    let at = |ed: &Editor, id| window_columns(ed).into_iter().find(|&(w, _)| w == id).map(|(_, x)| x);
-    let x = at(&ed, three);
-    assert!(x > at(&ed, two), "to the right of the one it was split from");
-    ed.execute(":vertical").unwrap();
-    assert_eq!(at(&ed, three), x);
+    assert_eq!(ed.live_window(), one, "`C-w h` goes to the window on the left");
 }
 
 /// **A session keeps the side of a split**: a split from the right is
@@ -38915,14 +38901,22 @@ fn a_session_keeps_the_side_of_a_split() {
     };
     ed.knows_its_paths(dir.join("config"), data.clone());
     ed.keep_session_in(data.join("sessions"), &dir);
-    ed.execute(":vertical").unwrap();
     let one = ed.live_window();
     ed.on_key(Key::Ctrl('w'));
     ed.on_key(Key::Char('v'));
-    assert_eq!(window_columns(&ed), [(one, 41), (ed.live_window(), 0)]);
+    assert_eq!(window_columns(&ed), [(one, 0), (ed.live_window(), 41)]);
     let kept = ed.windows_to_keep();
-    assert_eq!(kept[0], "beside\trtl", "{kept:?}");
+    assert_eq!(kept[0], "beside", "{kept:?}");
     ed.save_session();
+    // A split laid out from the right, as a session may hold one, is read back
+    // on the same side.
+    let file = std::fs::read_dir(data.join("sessions"))
+        .unwrap()
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .find(|p| p.to_string_lossy().ends_with(".windows.txt"))
+        .expect("the windows file");
+    let text = std::fs::read_to_string(&file).unwrap();
+    std::fs::write(&file, text.replacen("beside\n", "beside\trtl\n", 1)).unwrap();
 
     let mut back = fresh();
     assert_eq!(back.restore_session(), 1);
@@ -38932,15 +38926,8 @@ fn a_session_keeps_the_side_of_a_split() {
     assert_eq!(window_columns(&back), [(leaves[0], 41), (leaves[1], 0)], "the same sides");
     assert_eq!(back.live_window(), leaves[1], "the keys where they were");
 
-    // A session from before: `beside` alone is left to right.
-    let file = std::fs::read_dir(data.join("sessions"))
-        .unwrap()
-        .filter_map(|e| e.ok().map(|e| e.path()))
-        .find(|p| p.to_string_lossy().ends_with(".windows.txt"))
-        .expect("the windows file");
-    let text = std::fs::read_to_string(&file).unwrap();
-    assert!(text.starts_with("beside\trtl\n"), "{text}");
-    std::fs::write(&file, text.replacen("beside\trtl\n", "beside\n", 1)).unwrap();
+    // `beside` alone is left to right.
+    std::fs::write(&file, text).unwrap();
     let mut old = fresh();
     old.restore_session();
     old.restore_windows();

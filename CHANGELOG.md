@@ -15,6 +15,8 @@ in `docs/development.md` §5.2.
 - **A preview is drawn in a frame**: thick and gold while the keys are in it, thin and quiet otherwise, so with two previews side by side the one with the keys is plain to see; the status line says `PRV` there too. In a Markdown preview, a bar in the theme's gold stands beside the line the cursor is in (a paragraph, one list item or one line of code) (in the left margin, or along the top of a vertical page), and arrows on the frame point the way to it when it is out of view. The window's title line stays where it is.
 - **纵中横 (`[editor] tatechuyoko`) is off by default**, so every run of half-width characters on a vertical page is set the same way; set it to 2–8 to stand short numbers across in one cell.
 
+- **`␣wv` and `␣wnv` open the new window on the right on any page**, as helix does, where a vertical page used to open it on the left; with vim's keys `C-w v` opens it on the left, as vim does. The hint says which side.
+
 ### Fixed
 
 - **The Markdown preview's picture is made again as soon as its window changes size**, when the terminal is resized or the window moves to another side; it used to stay cut to the old size until a key was pressed.

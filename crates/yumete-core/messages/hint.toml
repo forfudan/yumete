@@ -1164,10 +1164,10 @@ zhs = "下方新建空白窗口"
 en = "new blank window below"
 
 [[message]]
-# C-w n 提示：v 在旁邊開空白窗口
+# C-w n 提示：v 在右邊開空白窗口（草稿）
 key = "hint.region.new-beside"
-zhs = "旁边新建空白窗口"
-en = "new blank window beside"
+zhs = "右侧新建空白窗口"
+en = "new blank window on the right"
 
 [[message]]
 # C-w w：走到下一個區域
@@ -1212,10 +1212,16 @@ zhs = "向上拆分"
 en = "split above"
 
 [[message]]
-# C-w 提示：v 在旁邊開一個窗口
+# C-w 提示：v 在右邊開一個窗口
 key = "hint.region.split-beside"
-zhs = "并排拆分"
-en = "split beside"
+zhs = "向右拆分"
+en = "split right"
+
+[[message]]
+# C-w 提示：vim 鍵位下 v 在左邊開一個窗口，同 vim（草稿）
+key = "hint.region.split-left"
+zhs = "向左拆分"
+en = "split left"
 
 [[message]]
 # C-w H J K L：和那個方向的窗口對調
