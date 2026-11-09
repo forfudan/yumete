@@ -12,6 +12,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Changed
 
+- **The word count on the status line is counted again when you return to Normal mode**, not on every key typed, so typing in a long book stays quick.
 - **`:vertical` is one switch**: `:vertical on` sets the page vertically, `:vertical off` across, and `:vertical` alone turns it round. `:horizontal` is gone and says where it went.
 - **The word list for completion is read once each time you enter Insert mode**, not on every key, so typing in a long book no longer reads the whole book per keystroke; a word typed now is offered from the next time you enter Insert mode.
 - **A preview is drawn in a frame**: thick and gold while the keys are in it, thin and quiet otherwise, so with two previews side by side the one with the keys is plain to see; the status line says `PRV` there too. In a Markdown preview, the page keeps the cursor's part of a long paragraph in view as you move or type through it, and a bar in the theme's gold stands beside the whole line the cursor is in (a paragraph, one list item or one line of code) (in the left margin, or along the top of a vertical page), and arrows on the frame point the way to it when it is out of view. The window's title line stays where it is.

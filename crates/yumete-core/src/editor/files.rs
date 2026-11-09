@@ -91,8 +91,11 @@ impl Editor {
         }
         let (id, revision) = (buffer.id(), buffer.revision());
         let mut cache = self.count_cache.borrow_mut();
+        // **Counted again back in Normal mode**: in Insert mode the count
+        // stands as it was, so a key typed in a long book does not count the
+        // book.
         let whole = match cache.0 {
-            Some((i, r, n)) if i == id && r == revision => n,
+            Some((i, r, n)) if i == id && (r == revision || self.mode == crate::input::Mode::Insert) => n,
             _ => {
                 let n = self.units_in_rope(rope);
                 cache.0 = Some((id, revision, n));

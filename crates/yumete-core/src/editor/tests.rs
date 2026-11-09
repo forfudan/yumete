@@ -26283,6 +26283,19 @@ fn a_shell_line_has_its_label_ghost_history_and_bang() {
 
 /// Words of the open buffers are offered as you write: Latin after
 /// `word_completion` letters, matched fuzzily; 漢字 after ⌈N/2⌉, only words
+/// **The live count is counted again back in Normal mode**: in Insert mode
+/// it stands, so a key typed does not count the book.
+#[test]
+fn the_live_count_waits_while_typing() {
+    let mut ed = typed("那年冬天\n");
+    assert_eq!(ed.live_count().map(|c| c.1), Some(4));
+    press(&mut ed, "A");
+    press(&mut ed, "下雪");
+    assert_eq!(ed.live_count().map(|c| c.1), Some(4), "still the count from before the keys");
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.live_count().map(|c| c.1), Some(6), "exact out of Insert mode");
+}
+
 /// **The words are read once per stay in Insert mode**: a word typed in
 /// this stay is offered from the next one, and no key reads the book again.
 #[test]
