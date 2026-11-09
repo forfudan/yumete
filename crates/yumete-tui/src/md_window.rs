@@ -424,7 +424,18 @@ impl MdPreviews {
 
     /// **How long the loop may sleep**: until the typing in a previewed file
     /// has been still for [`SETTLE`]. A picture that comes rings the bell.
+    ///
+    /// **At once when a window was drawn at another size** than its picture
+    /// was asked for — the terminal resized, or the window moved to another
+    /// side: the picture for the new size is asked for on the next turn,
+    /// which no key has to bring.
     pub fn due_in(&self) -> Option<Duration> {
+        let resized = self.tabs.iter().any(|(id, t)| {
+            t.shown && t.sent.as_ref().is_some_and(|w| cells_of(*id).is_some_and(|c| c != (w.columns, w.rows)))
+        });
+        if resized {
+            return Some(Duration::ZERO);
+        }
         self.tabs
             .values()
             .filter(|t| t.shown)

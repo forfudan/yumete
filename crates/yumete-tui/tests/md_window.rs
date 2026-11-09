@@ -107,6 +107,19 @@ fn a_markdown_preview_is_drawn_and_follows_the_cursor() {
     assert_eq!(md.jobs_sent(preview), sent, "asked again with nothing changed");
     assert!(graphics::take_pending().is_empty(), "an unchanged picture is not sent twice");
 
+    // **Drawn at another size, the loop comes back at once** — a terminal
+    // resized, or the window moved to another side — and the next turn asks
+    // for the picture at the new size, with no key pressed.
+    assert_ne!(md.due_in(), Some(Duration::ZERO), "nothing to come back for");
+    let ime = ImeSession::empty(Scheme::LINGMING);
+    yumete_tui::frame_to_text(&mut editor, &config, &ime, 80, 24, None);
+    assert_eq!(md.due_in(), Some(Duration::ZERO), "drawn at a new size");
+    md.follow(&mut editor, &config);
+    assert_eq!(md.jobs_sent(preview), sent + 1, "the new size is asked for");
+    assert_ne!(md.due_in(), Some(Duration::ZERO), "and asked once");
+    frame(&mut editor, &config);
+    md.follow(&mut editor, &config);
+
     // **The cursor followed**: line 100 a third of the way down.
     editor.execute(":100").unwrap();
     until(&mut editor, &config, &mut md, |_| top_of(preview).is_some_and(|t| t > 0.0));

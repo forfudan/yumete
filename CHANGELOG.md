@@ -17,6 +17,7 @@ in `docs/development.md` §5.2.
 
 ### Fixed
 
+- **The Markdown preview's picture is made again as soon as its window changes size**, when the terminal is resized or the window moves to another side; it used to stay cut to the old size until a key was pressed.
 - **vim's `*` and `#` look for the word under the cursor whole and land on its first letter**, as in vim: `the` no longer stops inside `then`, and `#` from inside a word goes to the one before it. A selection is still looked for exactly as selected.
 
 ## 0.21.0 · 2026-11-09
