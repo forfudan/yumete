@@ -317,9 +317,17 @@ impl Engine {
                     match self.formula(tex, *display, st.color, size) {
                         Some(f) => {
                             let pad = 0.1 * st.size;
+                            // **Never longer than the column it is set in**
+                            // (review, 2026-11-09): in a table's cell that is
+                            // the band, and a turned formula wider than the
+                            // band ran out of its cell; it is scaled down to
+                            // fit, as a picture is.
+                            let long = if upright { f.height } else { f.width };
+                            let k = ((len - 2.0 * pad) / long.max(1.0)).clamp(0.05, 1.0);
+                            let (w, h) = (f.width * k, f.height * k);
                             atoms.push(match upright {
-                                true => (text.len(), Look::Pic { pix: f.pix, w: f.width, h: f.height, turned: false }, f.height + 2.0 * pad, f.width),
-                                false => (text.len(), Look::Pic { pix: f.pix, w: f.width, h: f.height, turned: true }, f.width + 2.0 * pad, f.height),
+                                true => (text.len(), Look::Pic { pix: f.pix, w, h, turned: false }, h + 2.0 * pad, w),
+                                false => (text.len(), Look::Pic { pix: f.pix, w, h, turned: true }, w + 2.0 * pad, h),
                             });
                         }
                         None => {
@@ -1972,6 +1980,30 @@ mod tests {
             below(&laid, len);
             let words: String = laid.cols.iter().map(|c| c.1.as_str()).collect();
             assert!(words.contains("index.html"), "{len}: {words}");
+        }
+    }
+
+    /// **A turned formula in a cell is held to its band** (review,
+    /// 2026-11-09): one wider than the band ran out of its cell and past the
+    /// foot; it is scaled down to fit, as a picture is, and a short one keeps
+    /// its size.
+    #[test]
+    fn a_turned_formula_in_a_cell_is_scaled_to_its_band() {
+        let mut e = engine(Latin::Turn, false);
+        let text = format!("| 名 | 式 |\n|---|---|\n| 甲 | ${}$ |\n| 乙 | $x+y$ |\n", "a+".repeat(40));
+        let block = crate::parse::parse(&text).into_iter().next().unwrap();
+        for len in [200.0f32, 300.0, 420.0] {
+            let laid = e.vtop(&block, None, Page { top: 0.0, len, width: 800.0 });
+            let turned: Vec<Rect> = laid.items.iter().filter_map(|item| match item {
+                Item::Turned { r, .. } => Some(*r),
+                _ => None,
+            }).collect();
+            assert_eq!(turned.len(), 2, "{len}");
+            for r in &turned {
+                assert!(r.y1 <= f64::from(len) + 1.0, "{len}: a formula ends at {} past the foot", r.y1);
+            }
+            let short = turned.iter().map(|r| r.height()).fold(f64::MAX, f64::min);
+            assert!(short >= 3.0 * 16.0 * 1.05 * 0.5 - 1.0, "{len}: the short one keeps its size: {short}");
         }
     }
 
