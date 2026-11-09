@@ -69,6 +69,12 @@ zhs = "开关；出厂 {0}"
 en = "a switch; factory {0}"
 
 [[message]]
+# 设置面板：撤销或重做写了一个文件，同时删掉了另一个，接在「已撤销，已写入 …」后面。{0} 是删掉的文件（草稿）
+key = "settings.also-removed"
+zhs = "，已删除 {0}"
+en = "; removed {0}"
+
+[[message]]
 # 設置面板：注解模式那一行的值，有幾個模式
 key = "settings.annotation-modes.count"
 zhs = "{0} 个模式"
@@ -1139,6 +1145,12 @@ zhs = "jk 上下, Enter 切换, r 重置, u 撤销, C-r 重做, Tab 全局/项�
 en = "jk move, Enter toggle, r reset, u undo, C-r redo, Tab global/project, e open file, Esc back, q close"
 
 [[message]]
+# 设置面板：按 : 打开的命令行里能按的键；这一行不用输入法，所以没有 C-^（草稿）
+key = "settings.keys-command"
+zhs = "Enter 执行, Esc 取消, ←→ Home End 移动, C-w 删词, C-u 清空"
+en = "Enter run, Esc cancel, ←→ Home End move, C-w delete a word, C-u clear"
+
+[[message]]
 # 设置面板：在底下那一行输入一项的值时能按的键（草稿）
 key = "settings.keys-editing"
 zhs = "Enter 确定, Esc 取消, ←→ Home End 移动, C-w 删词, C-u 清空, C-^ 中/英"
@@ -1855,6 +1867,12 @@ zhs = "已重做，已写入 {0}"
 en = "redone; written to {0}"
 
 [[message]]
+# 设置面板：按 C-r 重做了一步，结果是删掉文件。{0} 是删掉的文件（草稿）
+key = "settings.redone-removed"
+zhs = "已重做，已删除 {0}"
+en = "redone; removed {0}"
+
+[[message]]
 # 设置面板：在一项上按 Enter 而什么都没打，这一项不能空着（草稿）
 key = "settings.refused.empty"
 zhs = "不能为空"
@@ -1997,6 +2015,12 @@ en = "settings"
 key = "settings.undone"
 zhs = "已撤销，已写入 {0}"
 en = "undone; written to {0}"
+
+[[message]]
+# 设置面板：按 u 撤销了一步，而那一步建出了文件，于是文件被删掉。{0} 是删掉的文件（草稿）
+key = "settings.undone-removed"
+zhs = "已撤销，已删除 {0}"
+en = "undone; removed {0}"
 
 [[message]]
 # 设置面板顶上：一份配置文件读不进来（TOML 写坏了，或者有不认识的名字）。{0} 是哪一层（全局/本项目），{1} 是行号，{2} 是解析器的话（草稿）

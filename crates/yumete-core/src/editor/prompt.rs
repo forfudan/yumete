@@ -1028,6 +1028,24 @@ impl Editor {
     /// `:` — its keys, the IME, a paste at the caret — with `label` before
     /// it; Enter and Esc hand back ([`Editor::take_value_answer`]).
     pub fn open_value_line(&mut self, label: &str, text: &str) {
+        self.open_line_for_a_value(label, text, false);
+    }
+
+    /// **The command row for a command a front end takes** (2026-11-09,
+    /// reported: the settings panel's `:` line composed `q` with the IME):
+    /// [`Editor::open_value_line`], but keys go in as they are, as on the
+    /// editor's own `:` line.
+    pub fn open_value_command_line(&mut self, label: &str, text: &str) {
+        self.open_line_for_a_value(label, text, true);
+    }
+
+    /// Whether the open value line takes keys as they are, the IME out of it.
+    pub fn value_line_is_plain(&self) -> bool {
+        self.mode == Mode::Value && self.value_plain
+    }
+
+    fn open_line_for_a_value(&mut self, label: &str, text: &str, plain: bool) {
+        self.value_plain = plain;
         self.value_label = label.to_string();
         self.command_line = text.to_string();
         self.command_caret = self.command_line.chars().count();

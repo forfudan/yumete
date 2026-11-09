@@ -479,7 +479,18 @@ pub enum Refusal {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Saved {
     pub wrote: Vec<PathBuf>,
+    /// Files taken away: `u` of a change that made the file.
+    pub removed: Vec<PathBuf>,
     pub changed_underneath: Vec<PathBuf>,
+}
+
+/// **What one file of a step will hold after `u` or `C-r`** ([`Panel::replan`]):
+/// the text written (`None` ＝ the file taken away), the text the step goes
+/// back to after that, and whether it had been changed outside since.
+struct Replanned {
+    want: Option<String>,
+    other: Option<String>,
+    moved: bool,
 }
 
 /// **Why a change was not written.**
@@ -1494,7 +1505,8 @@ impl Panel {
             }
         };
         let mut saved = Saved::default();
-        for (entry, (disk, want, moved)) in step.iter_mut().zip(plan) {
+        for (entry, planned) in step.iter_mut().zip(plan) {
+            let Replanned { want, other, moved } = planned;
             if let Err(err) = put(&entry.path, want.as_deref()) {
                 keep(self, step);
                 return Err(err);
@@ -1502,14 +1514,17 @@ impl Panel {
             // The step now says what this write did, so the way back is exact
             // again, a change made outside meanwhile included.
             match back {
-                true => (entry.before, entry.after) = (want.clone(), disk),
-                false => (entry.before, entry.after) = (disk, want.clone()),
+                true => (entry.before, entry.after) = (want.clone(), other),
+                false => (entry.before, entry.after) = (other, want.clone()),
             }
-            self.sheet_mut_of(entry.which).took(want);
             if moved {
                 saved.changed_underneath.push(entry.path.clone());
             }
-            saved.wrote.push(entry.path.clone());
+            match want.is_some() {
+                true => saved.wrote.push(entry.path.clone()),
+                false => saved.removed.push(entry.path.clone()),
+            }
+            self.sheet_mut_of(entry.which).took(want);
         }
         match back {
             true => self.redo.push(step),
@@ -1518,11 +1533,29 @@ impl Panel {
         Ok(Some(saved))
     }
 
-    /// What each file of a step will hold after `u` (`back`) or `C-r`: what
-    /// the disk holds now, what it will hold, and whether it had been
-    /// changed outside since.
-    #[allow(clippy::type_complexity)]
-    fn replan(&self, step: &Step, back: bool) -> Result<Vec<(Option<String>, Option<String>, bool)>, SaveError> {
+    /// What each file of a step will hold after `u` (`back`) or `C-r`, and
+    /// what the step will take it back to next.
+    ///
+    /// Warning: **a file changed outside since gets the step's keys set on
+    /// what it holds now, and so does the way back** (2026-11-09, reported:
+    /// set to 5, changed outside to 7, `u` wrote 3 over the 7 and `C-r` then
+    /// wrote the 7 back, not the 5). The way back was the text the disk held
+    /// before `u`, which is the change outside, not the step's; it is now
+    /// what `u` wrote with the step's keys set again — and a file deleted
+    /// outside, taken back by `u`, comes back from `C-r` with the change in
+    /// it rather than gone again.
+    fn replan(&self, step: &Step, back: bool) -> Result<Vec<Replanned>, SaveError> {
+        let keyed = |entry: &Stepped, text: &str, back: bool| -> Result<String, SaveError> {
+            let changes: Vec<(String, Change)> = entry
+                .keys
+                .iter()
+                .map(|(key, before, after)| {
+                    let to = if back { before } else { after };
+                    (key.clone(), to.clone().map_or(Change::Drop, Change::Written))
+                })
+                .collect();
+            rewrite(text, &changes).map_err(SaveError::Io)
+        };
         step.iter()
             .map(|entry| {
                 let disk = read_disk(&entry.path)?;
@@ -1531,27 +1564,24 @@ impl Panel {
                     false => (&entry.before, &entry.after),
                 };
                 if disk == *from {
-                    return Ok((disk, want.clone(), false));
+                    return Ok(Replanned { want: want.clone(), other: disk, moved: false });
                 }
                 let now = disk.as_deref().unwrap_or("");
                 if let Some((line, said)) = crate::faults::unread(now) {
                     return Err(SaveError::Unread { path: entry.path.clone(), line, said });
                 }
-                let changes: Vec<(String, Change)> = entry
-                    .keys
-                    .iter()
-                    .map(|(key, before, after)| {
-                        let to = if back { before } else { after };
-                        (key.clone(), to.clone().map_or(Change::Drop, Change::Written))
-                    })
-                    .collect();
-                let fresh = rewrite(now, &changes).map_err(SaveError::Io)?;
+                let fresh = keyed(entry, now, back)?;
                 // A file gone, and nothing to put in it: it stays gone.
                 let want = match disk.is_none() && fresh.trim().is_empty() {
                     true => None,
                     false => Some(fresh),
                 };
-                Ok((disk, want, true))
+                let other = keyed(entry, want.as_deref().unwrap_or(""), !back)?;
+                let other = match want.is_none() && other.trim().is_empty() {
+                    true => None,
+                    false => Some(other),
+                };
+                Ok(Replanned { want, other, moved: true })
             })
             .collect()
     }
@@ -2347,6 +2377,40 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// **`C-r` after a `u` that had to take in a change made outside** puts
+    /// the step's change back on what `u` wrote (2026-11-09, reported: set
+    /// to 5, changed outside to 7, `u` wrote 3 and `C-r` wrote the 7 back).
+    /// A file deleted outside comes back from `C-r` with the change in it.
+    #[test]
+    fn redo_after_a_merged_undo_puts_the_change_back() {
+        let dir = scratch("outside-redo");
+        let path = dir.join("config.toml");
+        std::fs::write(&path, "[editor]\nscrolloff = 3 # a\nindent = 2\n").unwrap();
+        let mut p = on(Panel::open(Some(path.clone()), None), "editor.scrolloff");
+        assert!(p.commit_value("5"));
+        p.flush().unwrap();
+        std::fs::write(&path, "[editor]\nscrolloff = 7 # a\nindent = 2\n").unwrap();
+        p.undo().unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "[editor]\nscrolloff = 3 # a\nindent = 2\n");
+        let saved = p.redo().unwrap().unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "[editor]\nscrolloff = 5 # a\nindent = 2\n", "the step's 5, not the 7");
+        assert!(saved.removed.is_empty() && saved.wrote == vec![path.clone()]);
+        p.undo().unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "[editor]\nscrolloff = 3 # a\nindent = 2\n", "and back, exactly");
+
+        // Deleted outside after the change.
+        let mut p = on(p, "editor.indent");
+        assert!(p.commit_value("4"));
+        p.flush().unwrap();
+        std::fs::remove_file(&path).unwrap();
+        p.undo().unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap().trim(), "[editor]\nindent = 2");
+        let saved = p.redo().unwrap().unwrap();
+        assert!(saved.removed.is_empty(), "written, not removed");
+        assert_eq!(std::fs::read_to_string(&path).unwrap().trim(), "[editor]\nindent = 4");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// **A file changed outside is read again** (2026-11-09) — another value,
     /// or the file gone — and a file deleted outside is written with the
     /// new line only, not back from the text read before.
@@ -2389,8 +2453,9 @@ mod tests {
         p.press();
         p.flush().unwrap();
         assert!(local.exists());
-        p.undo().unwrap();
+        let saved = p.undo().unwrap().unwrap();
         assert!(!local.exists() && !p.local.there);
+        assert_eq!((saved.wrote, saved.removed), (Vec::new(), vec![local.clone()]), "removed, not written");
         p.redo().unwrap();
         assert!(std::fs::read_to_string(&local).unwrap().contains("soft_wrap = false"));
         let _ = std::fs::remove_dir_all(&dir);

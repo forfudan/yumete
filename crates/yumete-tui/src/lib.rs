@@ -2418,6 +2418,11 @@ fn composes_here(editor: &Editor) -> bool {
     // 那一層的時候把 `j` 交給引擎就成了一個碼：「我按了 space f 進入 picker，按
     // jk 他開始輸入」。2026-10-08 那一層去掉了——`Mode::Picker` 只有打字這一個
     // 狀態，`composes()` 本來就說它收中文，那道閘隨之刪了。
+    // The settings panel's `:` line is a command, as the editor's own `:`
+    // is: no composing there (2026-11-09).
+    if editor.value_line_is_plain() {
+        return false;
+    }
     if editor.mode().composes() {
         return true;
     }
@@ -6066,7 +6071,7 @@ fn draw(
         // `panel_caret` 只在 `Mode::Field` 有值，`prompt_label()` 只在命令行與
         // 搜索行有值，兩者互斥，所以次序無關。
         frame.set_cursor_position(at);
-    } else if let Some((prefix, skip)) = prompt_view(editor, prompt_area.width) {
+    } else if let Some((prefix, skip)) = prompt_view(editor, ime, prompt_area.width) {
         // Measured in cells, not characters: a Chinese search pattern is twice
         // as wide as it is long — and up to the **caret**, not to the end of
         // the line, now that the prompt can be edited in the middle.
@@ -6183,7 +6188,7 @@ fn draw(
                     (at.x, at.y)
                 }
                 Some((_, text)) => {
-                    let (label, skip) = prompt_view(editor, prompt_area.width).unwrap_or_default();
+                    let (label, skip) = prompt_view(editor, ime, prompt_area.width).unwrap_or_default();
                     let shown: String = text.chars().skip(skip).collect();
                     let col = yumete_cjk::str_width(&label)
                         + yumete_cjk::str_width(&shown)
@@ -6322,6 +6327,16 @@ fn draw(
             crate::backend::keep_the_cursor_hidden(false);
             frame.set_cursor_position(at);
         }
+        // **No command row, and something said** (2026-11-09, reported: with
+        // `command_line = false` nothing the panel said was ever seen — the
+        // status line it would fall to is under the page): it is said on the
+        // page's own bottom row, over its keys, until it goes.
+        let foot = match foot {
+            None if !editor.status().is_empty() && page_area.height > 2 => {
+                Some(Rect { y: page_area.y + page_area.height - 1, height: 1, ..page_area })
+            }
+            foot => foot,
+        };
         if let Some(foot) = foot {
             let talking = editor.prompt().is_some() || !editor.status().is_empty();
             match talking {
@@ -14946,13 +14961,6 @@ fn indent_span(indent: usize, editor: &Editor, ink: crate::theme::Palette) -> Sp
     }
 }
 
-/// The bottom row: what you are typing, what just happened, or what you can
-/// press — in that order, because only one of them can have the row (#302).
-///
-/// Quieter than the status line, and deliberately: the status line is the
-/// page's own footing and is always there, while this only sometimes has
-/// something to say. Set on the page's own ground rather than reversed, so a
-/// blank one reads as part of the margin instead of as an empty bar.
 /// **The prompt as its row has room for it** (2026-11-09): the label to draw
 /// before the line, and how many characters of the line are scrolled off its
 /// left. Only a value typed for the settings panel is fitted — its label is
@@ -14960,14 +14968,19 @@ fn indent_span(indent: usize, editor: &Editor, ink: crate::theme::Palette) -> Sp
 /// edge, drawn where nobody could see it. The label gives way first, then
 /// the start of the line, so the caret and what stands just before it always
 /// show. The caret and the row both ask this, so they agree.
-fn prompt_view(editor: &Editor, width: u16) -> Option<(String, usize)> {
+///
+/// **What the IME is composing is part of the line** (2026-11-09, reported:
+/// a long reading being composed ran off the right edge of a narrow
+/// window): it is drawn after the line, and the caret after it.
+fn prompt_view(editor: &Editor, ime: &ImeSession, width: u16) -> Option<(String, usize)> {
     let label = editor.prompt_label()?;
     if editor.mode() != Mode::Value {
         return Some((label, 0));
     }
     let width = width as usize;
+    let preedit = yumete_cjk::str_width(&prompt_preedit(editor, ime));
     // A cell for the caret after the line.
-    let text = yumete_cjk::str_width(&editor.prompt_drawn()) + 1;
+    let text = yumete_cjk::str_width(&editor.prompt_drawn()) + preedit + 1;
     let label = match yumete_cjk::str_width(&label) + text <= width {
         true => label,
         false => match width.saturating_sub(text) {
@@ -14975,7 +14988,7 @@ fn prompt_view(editor: &Editor, width: u16) -> Option<(String, usize)> {
             _ => String::new(),
         },
     };
-    let room = width.saturating_sub(yumete_cjk::str_width(&label) + 1);
+    let room = width.saturating_sub(yumete_cjk::str_width(&label) + preedit + 1);
     let before: Vec<char> = editor.prompt_before_caret().chars().collect();
     let mut skip = 0;
     while skip < before.len() && yumete_cjk::str_width(&before[skip..].iter().collect::<String>()) > room {
@@ -14984,6 +14997,13 @@ fn prompt_view(editor: &Editor, width: u16) -> Option<(String, usize)> {
     Some((label, skip))
 }
 
+/// The bottom row: what you are typing, what just happened, or what you can
+/// press — in that order, because only one of them can have the row (#302).
+///
+/// Quieter than the status line, and deliberately: the status line is the
+/// page's own footing and is always there, while this only sometimes has
+/// something to say. Set on the page's own ground rather than reversed, so a
+/// blank one reads as part of the margin instead of as an empty bar.
 fn draw_command(
     frame: &mut Frame,
     editor: &Editor,
@@ -15020,7 +15040,7 @@ fn draw_command(
     // `draw`, and a prompt that began a column further along than the caret
     // was told about is a prompt you cannot type into straight.
     if editor.prompt().is_some() {
-        let (prefix, skip) = prompt_view(editor, area.width).unwrap_or_default();
+        let (prefix, skip) = prompt_view(editor, ime, area.width).unwrap_or_default();
         let text = &editor.prompt_drawn().chars().skip(skip).collect::<String>();
         let line = format!("{prefix}{text}{}", prompt_preedit(editor, ime));
         // The guess is a rung back from what was actually typed — a colour,
@@ -16663,6 +16683,30 @@ fn squeezed(text: &str) -> String {
         assert!((2..5).any(|up| row(h - up).contains("jk")), "the keys are still there");
     }
 
+    /// **With no command row, what the settings page says is on its own
+    /// bottom row** (2026-11-09, reported: with `command_line = false` no
+    /// message of the panel's was ever seen), and the row is the page's
+    /// again when nothing is said.
+    #[test]
+    fn with_no_command_row_the_settings_page_says_it_on_its_bottom_row() {
+        let mut ed = editor_with("那年冬天。\n");
+        let mut config = Config::default();
+        config.editor.command_line = false;
+        let page = yumete_config::panel::Panel::open(None, None);
+        let (w, h) = (70u16, 16u16);
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+        let mut viewport = Seats::default();
+        let last = |terminal: &Terminal<TestBackend>| -> String {
+            let buf = terminal.backend().buffer();
+            (0..w).filter_map(|x| buf.cell((x, h - 1)).map(|c| c.symbol().to_string())).collect()
+        };
+        terminal.draw(|frame| draw(frame, &ed, &config, no_ime(), &mut viewport, Some(&page))).unwrap();
+        assert!(!last(&terminal).contains("written to"), "{:?}", last(&terminal));
+        ed.set_status("written to config.toml, in force".to_string());
+        terminal.draw(|frame| draw(frame, &ed, &config, no_ime(), &mut viewport, Some(&page))).unwrap();
+        assert!(last(&terminal).contains("written to config.toml"), "{:?}", last(&terminal));
+    }
+
     /// 那份測試文檔叫什麼——`editor_with` 開的是一個沒有名字的草稿。
     fn editor_name() -> String {
         Editor::new().current_buffer().display_name().to_string()
@@ -16807,6 +16851,41 @@ fn squeezed(text: &str) -> String {
             terminal.draw(|frame| draw(frame, &ed, &config, &ime, &mut viewport, Some(&page))).unwrap();
             let text = buffer_to_text(terminal.backend().buffer());
             assert!(text.contains('吧'), "{display:?}:\n{text}");
+        }
+    }
+
+    /// **The settings panel's `:` line does not compose** (2026-11-09,
+    /// reported: `:q` there came out as a reading in the IME), as the
+    /// editor's own `:` line does not; a value typed there does.
+    #[test]
+    fn the_settings_panels_colon_line_does_not_compose() {
+        let mut ed = editor_with("那年冬天。\n");
+        ed.open_value_command_line(":", "");
+        assert!(!composes_here(&ed));
+        ed.open_value_line("paragraph mark symbol: ", "");
+        assert!(composes_here(&ed));
+    }
+
+    /// **What the IME is composing counts in fitting a value line**
+    /// (2026-11-09, reported: a reading being composed ran off the right
+    /// edge): the label gives way and the start of the line scrolls off, so
+    /// the line, the reading and the caret fit the row.
+    #[test]
+    fn a_value_line_makes_room_for_the_reading_being_composed() {
+        let mut ed = editor_with("那年冬天。\n");
+        ed.open_value_line("paragraph mark symbol: ", "abcdefghij");
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "bbbb 吧\n");
+        for c in "bbbb".chars() {
+            ime.input(c);
+        }
+        let preedit = yumete_cjk::str_width(&prompt_preedit(&ed, &ime));
+        assert!(preedit >= 4, "composing: {preedit}");
+        for w in 10..40u16 {
+            let (label, skip) = prompt_view(&ed, &ime, w).unwrap();
+            let before: String = ed.prompt_before_caret().chars().skip(skip).collect();
+            let used = yumete_cjk::str_width(&label) + yumete_cjk::str_width(&before) + preedit + 1;
+            assert!(used <= w as usize, "{w}: {label:?} {before:?} + {preedit}");
+            assert!(!before.is_empty(), "{w}: something of the line shows");
         }
     }
 

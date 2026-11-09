@@ -3608,6 +3608,9 @@ pub struct Editor {
     ruby_target: Option<RubyTarget>,
     /// What the command row says before a value being typed (`Mode::Value`).
     value_label: String,
+    /// **The value line takes keys as they are, no IME** (2026-11-09): the
+    /// settings panel's `:` line, a command as the editor's own `:` is.
+    value_plain: bool,
     /// The value typed, handed back: `Some(text)` on Enter, `None` on Esc.
     value_answer: Option<Option<String>>,
     /// How many half-width characters share a slot in vertical layout (緃中横);
@@ -4720,6 +4723,7 @@ impl Editor {
             key_index: RefCell::new(None),
             ruby_target: None,
             value_label: String::new(),
+            value_plain: false,
             value_answer: None,
             completion: None,
             reference: None,
