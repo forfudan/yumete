@@ -41,7 +41,7 @@ impl Editor {
         // A preview has no caret and no text to dim, so the status line is
         // what says the keys are in it.
         if self.mode == Mode::Normal && self.page_window_has_the_keys() {
-            return Some("PRV.NOR".to_string());
+            return Some("PRV".to_string());
         }
         // **選擇器也報狀態**，同面板：讀者馬上知道現在是不是插入狀態。
         //
