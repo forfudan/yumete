@@ -122,8 +122,8 @@ impl Editor {
 
     /// **此刻該浮哪一種**，`None` ＝ 不浮。
     ///
-    /// Warning: **邊欄開着就一個字都不浮。** 兩個地方畫同一句話是報上來的
-    /// （「浮窗不应该和边栏同时出现」），而這一支和 [`Editor::info_in_the_sidebar`]
+    /// Warning: **邊欄開着就一個字都不浮**：浮窗和邊欄不同時出現，兩個地方不畫同一
+    /// 句話。這一支和 [`Editor::info_in_the_sidebar`]
     /// 問的是同一件事的兩面，所以它們不可能對不上。
     pub fn info_afloat(&self) -> Option<Info> {
         // **按下去了就不浮**，直到光標挪開。
