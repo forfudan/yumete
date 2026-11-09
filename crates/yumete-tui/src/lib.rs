@@ -3622,9 +3622,9 @@ impl Job {
     /// are worth a line on a status bar that the writing needs.
     /// **這一版要不要推？**
     ///
-    /// Warning: **問在把整份正文變成字串之前。** 從前這一句在 `push` 裏面，而呼叫方
-    /// 每一幀先 `rope().to_string()` 再問——一章三百 KB 的稿子，**每一幀複製一
-    /// 遍**，而九成九的幀正文根本沒動。2026-09-24 看出來的。
+    /// Warning: **問在把整份正文變成字串之前。** 這一句若在 `push` 裏面，呼叫方
+    /// 每一幀就得先 `rope().to_string()` 再問——一章三百 KB 的稿子，**每一幀複製一
+    /// 遍**，而九成九的幀正文根本沒動。
     fn wants(&self, version: (u64, u64)) -> bool {
         if self.pushed == Some(version) {
             return false;
@@ -3690,9 +3690,8 @@ impl Job {
 
     /// **光標在這裏** —— 預覽跟着走。
     ///
-    /// Warning: **這一支 2026-09-23 就寫好了（當時叫 `preview::change_cursor`，連測試帶文檔），
-    /// 而一次都沒有人叫它**——「開這條 socket 的理由」寫在那支函數的文檔裏，卻是
-    /// 死代碼。2026-09-24 接上。
+    /// Warning: **這一支是開這條 socket 的理由之一**，要真有人叫它——寫好了而沒接上
+    /// 就是死代碼，預覽悄悄不再跟着按鍵走。
     ///
     /// 光標不動就不說：一幀一條的話那是每秒幾十次無謂的往返。
     fn look_at(&mut self, path: &std::path::Path, where_to: (u64, usize, usize)) {
@@ -3749,9 +3748,8 @@ fn a_number() -> u128 {
     now ^ (here as u128).rotate_left(64)
 }
 
-/// **Which of the addresses a preview server prints is the page** (2026-09-22).
+/// **Which of the addresses a preview server prints is the page.**
 ///
-/// 報的時候是：「我現在預覽 typst，瀏覽器打開之後是空的。」量出來的原因是
 /// `tinymist preview` 開**兩個**端口，而先印出來的那個不是頁面：
 ///
 /// ```text
@@ -3763,15 +3761,15 @@ fn a_number() -> u128 {
 /// ```
 ///
 /// `curl` 過兩個：**23626 對 `GET /` 什麽都不回**，23625 回的纔是
-/// `<!doctype html>`。從前取第一個 `http://` 就收工，於是瀏覽器打開的是控制面
+/// `<!doctype html>`。取第一個 `http://` 就收工的話，瀏覽器打開的是控制面
 /// 板——一張空白頁，而且看起來像「預覽壞了」。
 ///
 /// 判準用**它自己說的那句話**（「端着靜態文件的那一個」），不用「第二個」：次序
 /// 是那個程序的實現細節，說法是它的接口。Warning: 那一行**自己不帶 `http://`**，它寫
 /// 的是 `… listening on: 127.0.0.1:23625`，所以地址是拼出來的。
 ///
-/// 認不出來就退回第一個地址——那是舊行為，對別的預覽服務器（`:preview` 是
-/// 每個語言自己配的）總比什麽都不開強。
+/// 認不出來就退回第一個地址——對別的預覽服務器（`:preview` 是每個語言自己配的）
+/// 總比什麽都不開強。
 /// **Both of the addresses a preview server prints**, from one pass.
 ///
 /// The page is what the browser opens. The control plane is a **websocket the
@@ -3829,7 +3827,7 @@ fn run_for_language(
     config: &Config,
     want: &yumete_core::editor::LanguageRun,
 ) -> String {
-    // 外部程序跑在工作路徑上，同 `!cmd`（2026-10-01）。
+    // 外部程序跑在工作路徑上，同 `!cmd`。
     let here = editor.working_dir();
     let Some(runner) = config
         .language
@@ -3842,10 +3840,10 @@ fn run_for_language(
             want.verb
         );
     };
-    // Warning: **交給程序的是絕對路徑**（2026-10-01 審出來的）。緩衝區存的路徑
-    // 是**當初給的樣子**（可能是 `src/a.rs` 這種相對的），而這一支現在把子進程
-    // 放在工作路徑上跑——`rustfmt src/a.rs` 於是在 `/repo/src` 裏找
-    // `/repo/src/src/a.rs`。改工作路徑之前它碰巧對，因為兩個都是進程的 cwd。
+    // Warning: **交給程序的是絕對路徑。** 緩衝區存的路徑
+    // 是**當初給的樣子**（可能是 `src/a.rs` 這種相對的），而這一支把子進程
+    // 放在工作路徑上跑——給相對路徑的話 `rustfmt src/a.rs` 在 `/repo/src` 裏找
+    // `/repo/src/src/a.rs`。
     let file = match want.path.is_absolute() {
         true => want.path.clone(),
         false => std::env::current_dir().unwrap_or_default().join(&want.path),
@@ -3865,10 +3863,9 @@ fn run_for_language(
             let text = editor.current_buffer().text();
             match run_program(program, args, Some(&text), &here) {
                 Ok(ran) if ran.ok => {
-                    // **整份進去，整份回來。** 從前這裏叫的是 `provide_pipe_output`，
-                    // 而那一支換的是選區——Normal 模式下選區是一個字，於是整份格
-                    // 式化好的稿子貼在那一個字上，原文留在後面（2026-10-03 一輪審
-                    // 查報來的）。
+                    // **整份進去，整份回來。** 不走 `provide_pipe_output`：
+                    // 那一支換的是選區——Normal 模式下選區是一個字，於是整份格
+                    // 式化好的稿子會貼在那一個字上，原文留在後面。
                     editor.provide_formatted_text(&ran.said);
                     say!("language.replaced", want.verb)
                 }
@@ -3916,14 +3913,14 @@ fn run_program(
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()?;
-    // Warning: **餵料要在另一條線程上** —— 同 [`run_capturing`]，同一個理由，而這一支
-    // 從前是直接 `write_all` 再 `wait_with_output`：子進程的 stdout 管道一滿
+    // Warning: **餵料要在另一條線程上** —— 同 [`run_capturing`]，同一個理由：直接
+    // `write_all` 再 `wait_with_output` 的話，子進程的 stdout 管道一滿
     // （macOS 64 KB）它就不再讀 stdin，兩邊一起等。**屏幕凍住、`:w` 敲不進去、
     // 只能 `kill -9`，而 `kill -9` 跳過 panic 鉤子，一份搶救副本都不寫。**
     //
-    // 那一支 2026-09 為此加了喂料線程（實測 `:!cat` 掛在 ~150 KB、`:convert` 3.1
-    // MB），**這一支沒跟上**——它走的是 `[language.<語言>]` 的 `kind = "filter"`
-    // ＋ `:format`。同一個檔裏兩支孿生函數，一支修了一支沒有。2026-09-24 審出來的。
+    // 這一支走的是 `[language.<語言>]` 的 `kind = "filter"` ＋ `:format`，和
+    // `run_capturing`（`:!cat` 在 ~150 KB、`:convert` 3.1 MB 就會掛）是同一個檔裏
+    // 兩支孿生函數，要一起守這一條。
     let feeder = match (input, child.stdin.take()) {
         (Some(text), Some(mut pipe)) => {
             let text = text.to_string();
@@ -4141,8 +4138,8 @@ fn commit_name(cs: CommitStrategy) -> String {
 /// else. A scheme that can only be typed as whole sentences — 拼音 has no 碼表
 /// to look a segment up in — says so rather than pretending the choice took.
 ///
-/// **`default` 是第四個詞，意思是「沒有覆蓋」**（2026-10-16 加）：撥回去，由那個
-/// 方案自己說了算，同配置檔不寫 `[ime] commit` 那一格。從前撥過一次就回不去了。
+/// **`default` 是第四個詞，意思是「沒有覆蓋」**：撥回去，由那個
+/// 方案自己說了算，同配置檔不寫 `[ime] commit` 那一格。撥過一次也回得去。
 fn commit_method(ime: &mut ImeSession, mode: &str) -> String {
     if mode.is_empty() {
         return say!("commit.set", commit_name(ime.commit_strategy()));
@@ -4187,8 +4184,7 @@ fn panel_method(ime: &mut ImeSession, mode: &str) -> String {
 
 /// `:yume-inline-preedit off|composition|preview` —— 正在打的那一段寫在哪、寫什麼。
 ///
-/// 2026-09-27 從 `:yume-panel` 裏分出來。原話：「你搞错了 layout 和
-/// inline-preedit」——面板畫不畫，和正在打的那一段寫在哪，是兩件事。
+/// 和 `:yume-panel` 分開：面板畫不畫，和正在打的那一段寫在哪，是兩件事。
 fn inline_preedit_method(ime: &mut ImeSession, mode: &str) -> String {
     if mode.is_empty() {
         return say!("inline-preedit.set", preedit_name(ime.inline_preedit()));
@@ -4211,7 +4207,7 @@ fn menu_size(ime: &mut ImeSession, n: &str) -> String {
         // 記下要的那個數，窗口矮的時候照舊夾小——而窗口長高了還長得回去（#516）。
         want_page_size(n);
         // **答的是剛設的那一頁，不是上一頁。** [`fit_the_page`] 要到下一幀纔
-        // 夾，而這一行現在就要寫出去：從前 `:yume-menu-size 3` 回「候選面板一頁
+        // 夾，而這一行現在就要寫出去：不然 `:yume-menu-size 3` 回「候選面板一頁
         // 6 條」——上一個數——再問一次纔說 3。夾法與那一支同一支，所以窗口矮的
         // 時候答的仍是畫得下的那個數。
         let room = PANEL_ROOM.load(std::sync::atomic::Ordering::Relaxed);
@@ -4233,8 +4229,7 @@ fn autocompletion(ime: &mut ImeSession, want: &str) -> String {
         "on" => true,
         "off" => false,
         "toggle" => !now,
-        // The bare command asks, like every other switch (2026-10-19). It used
-        // to flip, and then there was no way to ask.
+        // The bare command asks, like every other switch.
         _ => now,
     };
     ime.set_prediction_enabled(on);
@@ -4332,8 +4327,8 @@ fn settle_inline_candidate(editor: &mut Editor, ime: &ImeSession) {
 
 /// **要寫進正文的那一段**，或者空的（不內嵌，或者這一幀沒地方寫）。
 ///
-/// Warning: **不問面板畫不畫**（2026-09-27 改）。面板照畫而正文裏站着首選，是一個合法
-/// 的組合——從前這裏拿 `panel_is_full()` 當閘，於是「有面板 ＋ 內嵌」按不出來。
+/// Warning: **不問面板畫不畫。** 面板照畫而正文裏站着首選，是一個合法
+/// 的組合——拿 `panel_is_full()` 當閘的話，「有面板 ＋ 內嵌」就按不出來。
 /// 寫不寫得下由頁面答（[`page_can_hold_a_candidate`]），寫什麼由會話答
 /// （`ImeSession::inline_text`）。
 fn inline_text(editor: &Editor, ime: &ImeSession) -> String {
@@ -4341,8 +4336,8 @@ fn inline_text(editor: &Editor, ime: &ImeSession) -> String {
         || !page_can_hold_a_candidate(editor)
         || !ime.available()
         || !ime.is_composing()
-        // Warning: **多選區下不畫**（#405，2026-09-28 定，原話：「multiselection 的时候应当
-        // 禁止 pre-edit 而是用候选面板。这样的话防止一堆非确定的修改」）。
+        // Warning: **多選區下不畫**（#405）：多選區的時候禁止 pre-edit，用候選面板，
+        // 防止一堆非確定的修改。
         //
         // 兩條理由。一、**半成品乘以 N**：一屏幾十個光標同時長出一串還沒定下來的碼，
         // 讀者分不出哪些是稿子哪些不是。二、**幽靈文本是進版面量度的**，N 處各長一串，
@@ -4376,8 +4371,7 @@ fn page_can_hold_a_candidate(editor: &Editor) -> bool {
     editor.prompt().is_none() && !editor.grid_has_the_pane()
 }
 
-/// **Which of the three shapes the candidates take on this frame**
-/// (2026-10-16).
+/// **Which of the three shapes the candidates take on this frame.**
 ///
 /// Asked in two places that have to agree: [`fit_the_page`], before the key,
 /// to settle how many candidates a page may hold; and [`draw`], to settle
@@ -4398,16 +4392,16 @@ fn candidate_shape(editor: &Editor, ime: &ImeSession) -> PanelDisplay {
     }
 }
 
-/// **The `:yume-…` requests that only move a dial on the session** (2026-10-16).
+/// **The `:yume-…` requests that only move a dial on the session.**
 ///
 /// Two readers, one list. The interactive loop reads it through
 /// [`switch_scheme`], and `--shot` reads it directly, between one `--keys`
 /// press and the next.
 ///
-/// Warning: **離屏那一支從前一句都不答**，整個 `:yume-…` 家族被當成「要事件循環」
-/// 丟掉，而這五句一不開進程、二不碰磁碟、三不等人——動的就是這一幀畫成什麼樣。
-/// 於是這個倉審前端靠的那張照片，恰恰照不到 `:yume-panel` 改出來的東西：三檔候
-/// 選欄一張金樣都拍不了。同 #470 給 `:theme` 開的那個口子，判準逐字相同。
+/// Warning: **離屏那一支也要答這幾句。** 這五句一不開進程、二不碰磁碟、三不等人——
+/// 動的就是這一幀畫成什麼樣。整個 `:yume-…` 家族當成「要事件循環」丟掉的話，這個
+/// 倉審前端靠的那張照片恰恰照不到 `:yume-panel` 改出來的東西：三檔候選欄一張金樣
+/// 都拍不了。同 #470 給 `:theme` 開的那個口子，判準逐字相同。
 ///
 /// `None` 是「這一句不歸這裏答」——換方案要讀磁碟，報告要印幾行，那些留給循環。
 pub fn settings_request(ime: &mut ImeSession, tag: &str) -> Option<String> {
@@ -4476,7 +4470,7 @@ pub fn lane_label(id: &str) -> String {
     }
 }
 
-/// `:yume-charset`: `""` asks, or a filter by yume's name (2026-11-04).
+/// `:yume-charset`: `""` asks, or a filter by yume's name.
 fn charset_method(ime: &mut ImeSession, word: &str) -> String {
     if !word.is_empty() {
         let filter = yumete_ime::CharsetFilterMode::from_str_tag(word)
@@ -4660,11 +4654,11 @@ fn where_report(ime: &ImeSession) -> String {
     let _ = writeln!(out, "{}\n", say!("yume.where.head"));
     let mut last: Option<DataSource> = None;
     let mut nth = 0;
-    // **The first layer is drawn even when it is empty** (2026-10-18). It is the
+    // **The first layer is drawn even when it is empty.** It is the
     // one place a reader may name for himself, and the page is where he finds
     // out that he can: an unset layer that is simply missing teaches nothing,
-    // and the layer it replaced — `~/.local/share/yumete` — taught the wrong
-    // thing by being writable with a file copy.
+    // and a layer like `~/.local/share/yumete` would teach the wrong thing by
+    // being writable with a file copy.
     let layers = yumete_config::data_search_layers();
     if !layers.iter().any(|l| l.source == DataSource::Config) {
         nth += 1;
@@ -4684,14 +4678,13 @@ fn where_report(ime: &ImeSession) -> String {
             let _ = writeln!(out, "{}", say!("yume.where.layer", nth, label));
             last = Some(found.source);
         }
-        // **Name every file, and the generation stamp it carries.** This used
-        // to fold the list after four names (「… 共 19 個」), and the four it
-        // kept were never the ones in question: a reader whose 拼音 is gone
-        // needs to see `data/pinyin.yflb` on the list, not a count. The stamp
-        // is here for the same reason — 2026-10-18 a Linux reader's tables were
+        // **Name every file, and the generation stamp it carries.** Folding
+        // the list after four names (「… 共 19 個」) would keep the wrong four:
+        // a reader whose 拼音 is gone needs to see `data/pinyin.yflb` on the
+        // list, not a count. The stamp is here for the same reason — tables
         // one format generation behind (`YFL3` where the core wants
-        // `YFL20260913`), and settling that took downloading his package. With
-        // both on the page, one screenshot answers it.
+        // `YFL20260913`) are settled by one screenshot when both are on the
+        // page, instead of by downloading the reader's package.
         //
         // The name is the path **as it was found**, relative to the directory,
         // because the two layouts in the wild differ exactly there: 宇浩's own
@@ -4724,10 +4717,9 @@ fn where_report(ime: &ImeSession) -> String {
         }
     }
     let _ = writeln!(out, "{}", say!("yume.where.layer", nth + 1, say!("yume.where.builtin")));
-    // **一家一行**（2026-10-08 定）。從前這裏寫死「靈明碼表 {版本}」，而 2026-10-07
-    // 起二進制裏是兩張（靈明 ＋ 星陳）——報出來的只有一張。
+    // **一家一行**：二進制裏嵌了幾張（靈明 ＋ 星陳）就報幾行，不寫死一張。
     let built_in = yumete_ime::builtin_tables();
-    // **全息拆分表也在裏面**（2026-10-12）。它不分方案，所以是自己一行，沒有版
+    // **全息拆分表也在裏面。** 它不分方案，所以是自己一行，沒有版
     // 本——上面那個日期是 `VERSION` 裏碼表的戳記。這張單子是全樹唯一答得出「我
     // 這份二進制到底帶了什麼」的地方，而 `空格 n` 查不出東西時缺的可能正是它。
     let chaifen = yumete_ime::has_builtin_chaifen();
@@ -4852,10 +4844,10 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
         let want = match want {
             "chinese" => Engagement::Chinese,
             "abc" => Engagement::Ascii,
-            // **`空格 空格` 翻個面**（2026-10-10）。哪一頭由這裏答，因為「此刻
+            // **`空格 空格` 翻個面。** 哪一頭由這裏答，因為「此刻
             // 挂着沒有」只有這一邊知道——核心那頭發的是「翻一下」，不是一個狀態。
-            // 挂着就摘下來；摘着的就挂上**並且直接是中文**（原話：「开启后直接是
-            // 中文（和现在一样）」）。中文還是字母那一根軸歸 Shift。
+            // 挂着就摘下來；摘着的就挂上**並且直接是中文**。中文還是字母那一根軸
+            // 歸 Shift。
             "toggle" => match ime.holding_the_keys() {
                 true => Engagement::Off,
                 false => Engagement::Chinese,
@@ -4866,8 +4858,8 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
     }
     // The 碼表 the system has — `builtin`'s other half.
     // `Space z n`: the next scheme in menu order, as ⌃⇧N is in Yume.
-    // Past the schemes whose 碼表 is not installed (2026-10-30: it stopped at
-    // the first of those and said so on every press), round to the start.
+    // Past the schemes whose 碼表 is not installed, rather than stopping at
+    // the first of those and saying so on every press, round to the start.
     if tag == "scheme:next" {
         let start = ime.scheme();
         let mut next = start.next();
@@ -4892,9 +4884,8 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
         *ime = full;
         return say!("ime.scheme-from-system", ime.scheme_name());
     }
-    // **`!` 後面跟得了一個方案名**（2026-10-07 定）；`! xingchen` 是內嵌的星陳。
-    // `!` 光着是**眼下這個方案**的內嵌那一份（2026-11-04）：從前是靈明，因爲那時
-    // 二進制裏只有靈明一張能打；現在拼音、靈明、星陳三家都在裏面。
+    // **`!` 後面跟得了一個方案名**；`! xingchen` 是內嵌的星陳。
+    // `!` 光着是**眼下這個方案**的內嵌那一份：拼音、靈明、星陳三家都在二進制裏。
     if let Some(rest) = tag.strip_prefix('!') {
         let rest = rest.trim();
         let scheme = match rest.is_empty() {
@@ -4947,7 +4938,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
     say!("scheme.table-not-installed", tag)
 }
 
-/// **A mode's name as the reader sees it** (2026-11-02): yume's two and
+/// **A mode's name as the reader sees it**: yume's two and
 /// `off` in the interface's language, a mode the config adds as written.
 pub fn annotation_label(mode: Option<&str>) -> String {
     match mode {
@@ -4985,7 +4976,7 @@ fn annotate(ime: &mut ImeSession, word: Option<&str>) -> String {
 }
 
 /// The annotation in force, as a label: the mode's name, or under 拼音,
-/// which draws its own fields whatever the mode, on or off (2026-11-02).
+/// which draws its own fields whatever the mode, on or off.
 fn annotation_state(ime: &ImeSession) -> String {
     match (ime.scheme_owns_fields(), ime.annotation()) {
         (true, Some(_)) => say!("annotation.mode.on"),
@@ -4995,7 +4986,7 @@ fn annotation_state(ime: &ImeSession) -> String {
 }
 
 /// The status line's word on the annotation: 「注解：多重」, or under 拼音
-/// 「拼音模式注解：开」 (the wording chosen 2026-11-02).
+/// 「拼音模式注解：开」.
 fn annotation_said(ime: &ImeSession) -> String {
     match ime.scheme_owns_fields() {
         true => say!("annotation.pinyin-now", annotation_state(ime)),
@@ -5106,12 +5097,11 @@ fn ime_handle(
         // A digit only selects when a candidate is actually under it: with a
         // five-candidate page, `7` must not commit the second candidate of the
         // page the reader cannot see.
-        // Warning: **…而窗口矮到一個候選都畫不出來的時候，一個數字都不許選**
-        // （2026-10-03 一輪審查報來的）。`page_for_window` 那一下 `.max(1)` 是硬
-        // 的，於是三行高的窗口上 `page_has(1)` 照樣答真，而面板那一塊畫出來只有
-        // 兩道框——按 `1` 上屏的還是一個從沒畫出來過的字。這是 #516 沒收住的那
-        // 一端。面板本來就不以框示人的時候（`display = off`/內嵌）不受這一條管，
-        // 那是配置說了算。
+        // Warning: **…而窗口矮到一個候選都畫不出來的時候，一個數字都不許選。**
+        // `page_for_window` 那一下 `.max(1)` 是硬的，於是三行高的窗口上
+        // `page_has(1)` 照樣答真，而面板那一塊畫出來只有兩道框——不攔的話按 `1`
+        // 上屏的是一個從沒畫出來過的字。這是 #516 的另一端。面板本來就不以框示人
+        // 的時候（`display = off`/內嵌）不受這一條管，那是配置說了算。
         KeyCode::Char(c)
             if composing
                 && ('1'..='9').contains(&c)
@@ -5138,12 +5128,11 @@ fn ime_handle(
                 editor.set_status(annotation_said(ime));
             }
         }
-        // **方向鍵走候選欄**（2026-10-16 定，原話：「users can still use arrow
-        // keys to navigate and use =- to paging」）。兩個走候選，兩個翻頁，哪兩
+        // **方向鍵走候選欄**，`=`/`-` 翻頁照舊。兩個走候選，兩個翻頁，哪兩
         // 個由候選排在哪一軸上定——見 [`candidate_step`]。
         //
-        // 從前四個方向鍵一律吞掉，而那之前它們會穿過去把光標挪走，碼還留在引擎
-        // 裏，於是後面上屏的字落到了別處。現在它們有事做了，照樣不穿過去。
+        // 它們不穿過去：穿過去會把光標挪走，碼還留在引擎裏，後面上屏的字就落到了
+        // 別處。
         KeyCode::Left | KeyCode::Right | KeyCode::Up | KeyCode::Down
             if composing && !ime.is_shortcut() =>
         {
@@ -5155,8 +5144,7 @@ fn ime_handle(
                 None => {}
             }
         }
-        // …and the two page keys page, whichever way the list is lying
-        // (2026-10-16 定).
+        // …and the two page keys page, whichever way the list is lying.
         KeyCode::PageDown if composing && !ime.is_shortcut() => ime.page_down(),
         KeyCode::PageUp if composing && !ime.is_shortcut() => ime.page_up(),
         // Nothing else reaches the editor mid-composition.
@@ -5178,22 +5166,19 @@ fn ime_handle(
         // thing a single 字 has. Swallowed either way — a Tab typed
         // mid-composition has never been an indent.
         //
-        // **It no longer takes two presses with the box off** (2026-10-16:
-        // 「the tab key can now directly open the dict because the candidate
-        // list is always shown」). `Tab` used to summon the box for one word
-        // first, because you cannot ask about a candidate you cannot see; the
-        // candidates are on the command row now, so there is nothing to summon
-        // and the 字典 answers on the first press whatever the setting is.
+        // **One press, with the box off too**: the candidates are always shown
+        // (on the command row when the box is off), so there is nothing to
+        // summon and the 字典 answers on the first press whatever the setting
+        // is.
         //
-        // Warning: **It floats unless the sidebar is already showing info** (2026-10-15:
-        // 「the tab key on yume candidate panel forcely open the dict sidebar
-        // ……Please show it first in floating panel first and only in sidebar if
-        // the sidebar is open.」). This used to call `look_up`, which is `空格 N`
-        // — and that one *means* 「put it in the sidebar」, so it opened the
-        // sidebar and moved the page out from under somebody in the middle of
-        // typing a word. `look_up_afloat` is `空格 n`: it draws into the info
-        // slot when that slot is open and floats by the caret when it is not,
-        // and it never opens or closes the sidebar itself.
+        // Warning: **It floats unless the sidebar is already showing info**:
+        // shown first in a floating panel, and in the sidebar only if the
+        // sidebar is open. `look_up` is `空格 N` — and that one *means* 「put it
+        // in the sidebar」, so it would open the sidebar and move the page out
+        // from under somebody in the middle of typing a word. `look_up_afloat`
+        // is `空格 n`: it draws into the info slot when that slot is open and
+        // floats by the caret when it is not, and it never opens or closes the
+        // sidebar itself.
         KeyCode::Tab if composing => {
             // 一個候選的頭一個**字簇**，不是頭一個碼位：帶變體選擇符的
             // 候選（`🈚️`）按碼位切出來是殘的，查不着。
@@ -5217,11 +5202,10 @@ fn ime_handle(
     true
 }
 
-/// **一個方向鍵在候選欄上是什麼意思**（2026-10-16 定）。
+/// **一個方向鍵在候選欄上是什麼意思。**
 ///
-/// 兩個鍵走候選，另兩個翻頁，而**哪兩個要看候選排在哪一軸上**（原話：「ensure
-/// that the direction is correct according to the positions of candidates」）。
-/// 候選欄有三種擺法，兩種排版，所以這張表有五行：
+/// 兩個鍵走候選，另兩個翻頁，而**哪兩個要看候選排在哪一軸上**——方向要和候選的
+/// 位置對得上。候選欄有三種擺法，兩種排版，所以這張表有五行：
 ///
 /// | 擺在哪 | 候選順着 | 下一個 | 上一個 | 下一頁 | 上一頁 |
 /// | --- | --- | --- | --- | --- | --- |
@@ -5235,7 +5219,7 @@ fn ime_handle(
 /// 軸，指着「這一頁讀完往哪走」的那一頭是下一頁——橫排往下往右，竪排往下往左。
 ///
 /// 走到這一頁的末一個再走，自己落到下一頁的頭一個上（`move_highlight` 本來就跨
-/// 頁繞）——原話：「at the last candidate, Left lands on the next page」。
+/// 頁繞）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CandidateStep {
     Next,
@@ -5255,7 +5239,7 @@ fn candidate_step(editor: &Editor, ime: &ImeSession, code: KeyCode) -> Option<Ca
         // 竪排的框跟着頁面排版走：首選在最右
         // （`vertical_candidate_panel_runs_right_to_left`）；翻頁走竪軸，往下。
         (PanelDisplay::Box, Vertical) => (Left, Down),
-        // 底行那一條是窗飾，窗飾一律自左往右——竪排也一樣（2026-10-16 定）。
+        // 底行那一條是窗飾，窗飾一律自左往右——竪排也一樣。
         (Bottom, _) => (Right, Down),
         // 行中那一條在頁面上，所以跟着頁面轉：橫排是一行，竪排是一縱。
         (Inline, Horizontal) => (Right, Down),
@@ -5278,14 +5262,14 @@ fn candidate_step(editor: &Editor, ime: &ImeSession, code: KeyCode) -> Option<Ca
 
 /// **把一個 [`Key`] 交給真正的那一支輸入法派發**，回「它收下了沒有」。
 ///
-/// 給 `--shot --keys` 用的。Warning: **不許在那邊另寫一份。** 2026-10-03 一輪審查報來
-/// 的就是這個：`main.rs` 裏手抄過一段「打字要用的那幾個鍵」，而真正的
-/// [`ime_handle`] 一直在長——離屏按 `;` 出「；」而真機出「辶」（靈明的選二）、`=`
-/// 離屏出 `=` 而真機翻頁、方向鍵離屏把光標移走並把字上到別處。**這個倉審前端靠
-/// 的那張照片，在輸入法這一塊照的是另一個程序。**
+/// 給 `--shot --keys` 用的。Warning: **不許在那邊另寫一份。** `main.rs` 裏手抄一段
+/// 「打字要用的那幾個鍵」的話，真正的 [`ime_handle`] 一直在長，兩邊就分岔——離屏
+/// 按 `;` 出「；」而真機出「辶」（靈明的選二）、`=` 離屏出 `=` 而真機翻頁、方向鍵
+/// 離屏把光標移走並把字上到別處。**這個倉審前端靠的那張照片，在輸入法這一塊照的
+/// 就成了另一個程序。**
 ///
 /// 判準和互動循環那一處逐字相同（`composes_here` / `available` / `engaged`），
-/// 所以離屏與真機從此只有一份答案。
+/// 所以離屏與真機只有一份答案。
 pub fn offline_ime_key(ime: &mut ImeSession, editor: &mut Editor, key: Key) -> bool {
     let (code, mods) = terminal_key(key);
     composes_here(editor) && ime.holding_the_keys() && ime_handle(ime, editor, code, mods)
@@ -5375,7 +5359,7 @@ const GUTTER_AIR: usize = 2;
 ///
 /// **次序照 helix**（`helix-view/src/editor.rs:100`，25.07.1 的出廠值是
 /// `[Diagnostics, Spacer, LineNumbers, Spacer, Diff]`）——診斷在**最左**，號碼在
-/// 它右邊。2026-09-21 對着那一段源碼定的。
+/// 它右邊。
 ///
 /// Warning: **只有代碼檔纔有這一欄。** 小説不會有語言服務器，而這兩格是從正文身上要
 /// 的——中文裏兩格是一個整字。判準是這個緩衝區的語法是不是 `Code`，不是「服務
@@ -5388,10 +5372,9 @@ const PROBLEM_GUTTER: usize = 2;
 /// writing.
 ///
 /// Warning: **A 漢字 needs two cells, and one cell draws nothing at all.** At a frame
-/// width of 4 the gutter took 3 and left 1, and ratatui cannot put a two-cell
-/// glyph in one cell — so 春夏秋冬 came out as four blank rows with the
-/// manuscript untouched underneath. Latin went on being readable, which is how
-/// it stayed hidden.
+/// width of 4 a 3-cell gutter would leave 1, and ratatui cannot put a two-cell
+/// glyph in one cell — so 春夏秋冬 would come out as four blank rows with the
+/// manuscript untouched underneath, while Latin stays readable and hides it.
 ///
 /// Helix 25.07.1, measured in a pty at every width from 4 to 12: it drops its
 /// gutter below 8 columns and gives the writing the whole frame (at 4 it draws
@@ -5400,7 +5383,7 @@ const PROBLEM_GUTTER: usize = 2;
 /// So the rule here is the one it is reaching for rather than the width it
 /// reaches for it at: the writing never gets fewer than two cells.
 /// How lines are numbered: what `:line-numbers` chose this session, else
-/// the config (2026-10-31).
+/// the config.
 pub(crate) fn numbers(editor: &Editor, config: &Config) -> LineNumbers {
     use yumete_core::editor::LineNumbers as Mode;
     match editor.line_numbers_chosen() {
@@ -5437,8 +5420,7 @@ fn gutter_width(total_lines: usize, mode: LineNumbers, code: bool) -> usize {
 ///
 /// `foo\n` 在 ropey 裏是兩行，而寫稿的人只寫了一行：第二格是上一行的**結束符**
 /// 畫出來的，不是檔裏的一行。所以它不報行號——報了，末尾的換行符就看成「多出來
-/// 一行」，而那正是 2026-10-13 的這個問題：「最後一行的 \n 應該是不顯示爲新行的
-/// 吧？」helix 的答案是行還在、光標進得去，但號碼欄畫 `~`，這裏跟它一樣。
+/// 一行」。helix 的答案是行還在、光標進得去，但號碼欄畫 `~`，這裏跟它一樣。
 ///
 /// 空檔沒有這一格：它只有一行，而那一行不是誰的結束符畫出來的。
 pub(crate) fn tail_row(rope: &yumete_core::Rope) -> Option<usize> {
@@ -5487,11 +5469,9 @@ const CUT_BELOW: &str = "▁";
 
 /// 改動條本身的字形：`▍`（U+258D，左五八分塊）。
 ///
-/// **畫一個字，不塗滿一格**（2026-09-19，對着 helix 看出來的：「我們的這個
-/// 底色竪綫爲什麽比 helix 的粗？它的更細而且和正文中間還有一些距離」）。helix
+/// **畫一個字，不塗滿一格**（同 helix：更細，而且和正文中間還有一些距離）。helix
 /// 畫的就是這個字（`helix-view/src/gutter.rs:125`），用前景色——字形只佔格子的
-/// 八分之五又靠左，所以右邊自己留出一條縫，離正文遠一點。塗滿底色的那一版又粗
-/// 又貼着字。
+/// 八分之五又靠左，所以右邊自己留出一條縫，離正文遠一點。塗滿底色又粗又貼着字。
 ///
 /// Warning: 和剪口同一個毛病：整個方塊區是 East Asian Ambiguous，CJK 字體下佔兩格。
 /// 量出兩格就退回塗滿底色——那一版寬窄是對的，只是粗。
@@ -5555,9 +5535,8 @@ fn diff_cell(change: yumete_core::vcs::Change, ink: crate::theme::Palette, band:
 
 /// 語言服務器那一格：**朱是一塊鋪滿的顏色，另外三檔是淡底加一個字**。
 ///
-/// 2026-09-21，走了四輪纔到這裏：「符號可以不要，只要鋪滿就好，其他幾個顏色可
-/// 以不要太突出，但紅色可以突出」→ 畫出來 →「另外三檔確實看不清了……除了紅色的
-/// 都有符號和底色。」
+/// 符號可以不要，只要鋪滿；別的顏色不要太突出，紅色可以突出——而淡底太淡的三檔
+/// 光靠底色認不出，所以它們帶符號。
 ///
 /// 落下來的形狀正好各司其職：
 ///
@@ -5620,11 +5599,11 @@ fn problem_cell(
 /// Where each part of the window goes.
 ///
 /// **Worked out in one place**, because three parts of this program need the
-/// answer and used to work it out separately: the drawing, the mouse looking
-/// for what it landed on, and the event loop settling the wrap length and the
-/// page size *before* the keys that use them run. They disagreed by the hint
-/// row, the tab bar and the detail panel — so the 縱 the cursor moved on was
-/// one longer than the 縱 on the screen, and a click resolved to the wrong
+/// answer: the drawing, the mouse looking for what it landed on, and the
+/// event loop settling the wrap length and the page size *before* the keys
+/// that use them run. Worked out separately they disagree by the hint row,
+/// the tab bar and the detail panel — so the 縱 the cursor moves on is one
+/// longer than the 縱 on the screen, and a click resolves to the wrong
 /// character.
 #[derive(Debug, Clone)]
 struct Areas {
@@ -5641,8 +5620,8 @@ struct Areas {
     /// whose caption it carries.
     dividers: Vec<(Rect, yumete_core::window::WindowId)>,
     tabs: Rect,
-    /// **The sidebars' blocks at the two ends of the tab line**, by [`Side`]
-    /// (2026-11-04): zero wide when there is no tab line, the setting is off
+    /// **The sidebars' blocks at the two ends of the tab line**, by [`Side`]:
+    /// zero wide when there is no tab line, the setting is off
     /// or the window has no room for a sidebar.
     blocks: [Rect; 2],
     /// **Two rows at the top of the page, or none** (#379): the column numbers
@@ -5673,8 +5652,8 @@ fn page_areas(editor: &Editor, config: &Config, area: Rect, head_rows: u16) -> A
     // am I* and never changes shape; the one below it is *what am I typing,
     // what just happened, and what can I press*, and is blank when it is none
     // of the three. Splitting them is what lets the status line stay still: a
-    // message used to push the position along the line, or take it away
-    // outright, and a `:` used to replace the whole row.
+    // message never pushes the position along the line or takes it away, and
+    // a `:` never replaces the whole row.
     let command_rows = u16::from(config.editor.command_line && area.height > 4);
     let body_h = area.height.saturating_sub(command_rows + 1);
     let status = Rect::new(area.x, area.y + body_h, area.width, 1);
@@ -5682,9 +5661,9 @@ fn page_areas(editor: &Editor, config: &Config, area: Rect, head_rows: u16) -> A
     // A panel takes its columns off its own side; set vertically the left is
     // still the left, because the 縱 fill from the right edge and the page
     // simply ends sooner.
-    // Warning: **兩側一起算**（2026-09-26）：從前右側拿的是 `area.width - left`，於是
-    // 它是「左側剩下的那點的 1/3」——同一檔在右邊比在左邊窄一大截（60 欄下 20 對
-    // 13）。現在超了是兩邊一起按比例縮。
+    // Warning: **兩側一起算**：右側若拿 `area.width - left`，它就是「左側剩下的那點的
+    // 1/3」——同一檔在右邊比在左邊窄一大截（60 欄下 20 對 13）。超了是兩邊一起按
+    // 比例縮。
     let [left, right] = sidebar_columns(editor, area.width);
     let panels = [
         Rect::new(area.x, area.y, left, body_h),
@@ -5722,10 +5701,9 @@ fn page_areas(editor: &Editor, config: &Config, area: Rect, head_rows: u16) -> A
     let head_rows = head_rows.min(page.height.saturating_sub(1));
     let head = Rect::new(page.x, page.y, page.width, head_rows);
     let page = Rect::new(page.x, page.y + head_rows, page.width, page.height - head_rows);
-    // The detail panel used to be carved out here, off the right of the page
-    // (`table::split_detail`, gone). It is the bottom layer of the right slot
-    // now, taken off before the tab bar like every other panel — so the tab
-    // bar no longer runs over the top of it (#293).
+    // The detail panel is the bottom layer of the right slot, taken off before
+    // the tab bar like every other panel — so the tab bar does not run over
+    // the top of it (#293).
     let text = page;
     // 工作區 (Feature #176). **The cut runs across the direction the text
     // advances in**: 橫排 advances downward, so the panes are 上下; 縱書
@@ -5733,10 +5711,10 @@ fn page_areas(editor: &Editor, config: &Config, area: Rect, head_rows: u16) -> A
     // is what keeps the measure untouched — both panes keep the full width in
     // 橫排 and the full height in 縱書, so not one row rewraps and not one 縱
     // is shortened. A divider carries the boundary and the caption.
-    // **The windows, laid out by the editor's tree** (2026-10-30). Two
+    // **The windows, laid out by the editor's tree.** Two
     // slots still, until the viewports follow the tree (stage 2); a split
     // opened from a 縱書 page puts its second half on the left, and keeps
-    // it there whatever page the keys are on (2026-11-08).
+    // it there whatever page the keys are on.
     let text_area = yumete_core::window::Area::new(text.x, text.y, text.width, text.height);
     editor.note_text_area(text_area);
     let (placed, rules) = editor.windows().place(text_area);
@@ -5780,10 +5758,10 @@ fn draw(
     // the page is, and answered from last frame's scroll together with this
     // frame's cursor — see `table_head_is_off_the_page`.
     let top = viewport[editor.live_pane()].top.line;
-    // Warning: **不給格子模式留這兩行**（2026-09-30 報的：拆分表捲過一行，
-    // 整個表頭連同標尺往下掉兩行，上面空出兩行）。那條頂欄是給**散文裏的 `|`
+    // Warning: **不給格子模式留這兩行。** 那條頂欄是給**散文裏的 `|`
     // 表**用的：正文照常滾，表頭滾沒了就在頁頂補一條。格子模式（`.csv` 整檔進
-    // 來那一種）自己就凍着表頭與標尺，補的那兩行沒有人畫，於是成了兩行空白。
+    // 來那一種）自己就凍着表頭與標尺，補的那兩行沒有人畫，會成了兩行空白，捲過
+    // 一行時整個表頭連同標尺往下掉兩行。
     let head_rows = 2
         * u16::from(!editor.grid_has_the_pane() && editor.table_head_is_off_the_page(top));
     let areas = page_areas(editor, config, area, head_rows);
@@ -5811,7 +5789,7 @@ fn draw(
         if rect.width == 0 || rect.height == 0 {
             continue;
         }
-        // Warning: **一個邊欄一個面板**（2026-09-22：臨時層廢除）。信息那一格裏
+        // Warning: **一個邊欄一個面板**，沒有臨時層。信息那一格裏
         // 擺哪一種是**問出來的**（`info_now`），這裏什麽都不用記——#426。
         //
         // 記錄那一種自己畫（它是一張表的一行，兩欄對齊），別的四種走
@@ -5847,8 +5825,7 @@ fn draw(
         if rect.width == 0 || rect.height == 0 {
             continue;
         }
-        // **A window showing a preview draws the page, not text**
-        // (2026-11-07).
+        // **A window showing a preview draws the page, not text.**
         if let Some(&id) = leaves.get(which).filter(|&&id| editor.is_page_window(id)) {
             let kind = editor.preview_in(id).and_then(|p| editor.preview_kind_of(p));
             match kind {
@@ -5865,8 +5842,8 @@ fn draw(
             .then(|| leaves.get(which).and_then(|&id| editor.pane_of(id)))
             .flatten();
         // A peeked window folds to its own width less its gutter, asked
-        // through a first peek since the gutter depends on its buffer
-        // (2026-10-30: windows beside each other wrapped at the live one's).
+        // through a first peek since the gutter depends on its buffer —
+        // windows beside each other do not wrap at the live one's width.
         let folded = peek.map(|pane| {
             let _look = editor.view_pane(pane);
             let gutter = gutter_in(
@@ -5892,8 +5869,8 @@ fn draw(
                 table::draw(frame, editor, config, *rect, &mut seat.table, peek)
             }
             WritingLayout::Horizontal => {
-                // **Pages side by side, the text running on** (2026-10-28,
-                // `:view-pages-horizontal`): the first page scrolls for the
+                // **Pages side by side, the text running on**
+                // (`:view-pages-horizontal`): the first page scrolls for the
                 // whole chain, each next one starts where the last one ended.
                 let strips = horizontal_pages(editor, config, *rect);
                 let chain = strips.len();
@@ -6003,33 +5980,27 @@ fn draw(
     // Where the picker put its caret, so the candidate panel can stand under
     // the query instead of over the page the list is already covering.
     //
-    // Warning: **選擇器也不許蓋頁腳**——和候選框那一條是同一個（#387），可 2026-09-24
-    // 審出來的時候只有候選框跟上了。窗口高 14 的時候它的下邊框正壓在狀態行上，
-    // 畫出來是 `-- PIC╰────────╯ Latin`。這一行寫死在頁腳之上，往後改成什麼形狀
-    // 都不會再壓過去。
+    // Warning: **選擇器也不許蓋頁腳**——和候選框那一條是同一個（#387）。窗口高 14 的
+    // 時候它的下邊框會壓在狀態行上，畫出來是 `-- PIC╰────────╯ Latin`。這一行寫死
+    // 在頁腳之上，往後改成什麼形狀都不會壓過去。
     let room = Rect { height: status_area.y.saturating_sub(area.y).max(1), ..area };
     let picker = draw_picker(frame, editor, config, ime, room);
     let picker_caret = picker.map(|(caret, _)| caret);
     panels.extend(picker.and_then(|(_, list)| list));
-    // One panel for every half-pressed sequence, `空格` included — it used to
-    // draw its own menu and every other prefix got a row.
+    // One panel for every half-pressed sequence, `空格` included.
     // **The page's rectangle, not the frame's**: a menu drawn from the frame
     // covers the sidebar, which is a list the reader may be in the middle of
     // using.
-    // Warning: **One float at a time, and this is the order** (2026-09-18):
+    // Warning: **One float at a time, and this is the order**:
     //
     //   a `:` menu  >  the picker  >  a half-pressed sequence  >  a note
     //
     // Each of them wants the same corner, and each of them means 「the reader
     // is doing *this* right now」 — so the one they are furthest into wins and
-    // the others are not drawn at all. 2026-09-18, looking at a 百科
-    // entry and the `:` menu crowding one screen: 「一次只會出現一個面板，那麽
-    // 輸入命令的時候百科窗口自然就會消失」.
-    //
-    // It used to be four unconditional calls, later ones painting over
-    // earlier ones — and the comment here claimed the opposite of what the
-    // code did (the note was drawn *after* the which-key, so the note won).
-    // **要讓開的是那個詞，不是光標那一格**（2026-10-12 報的）。一個漢字就佔兩格，
+    // the others are not drawn at all: typing a command makes a 百科 entry go
+    // away. Four unconditional calls, later ones painting over earlier ones,
+    // would let the note win over the which-key.
+    // **要讓開的是那個詞，不是光標那一格。** 一個漢字就佔兩格，
     // 而百科那一扇講的那個詞條常常好幾個字——核心按分詞量出「光標之前幾格、從光標
     // 起算幾格」，橫排往左右攤，竪排往上下攤（見 `chrome::Spot`）。
     let spot = crate::chrome::Spot {
@@ -6044,13 +6015,12 @@ fn draw(
     // The footnote, the comment, or the 百科 entry the cursor is standing on
     // (#294, #287) — the quietest of the four, and the first to give way.
     //
-    // Warning: **It gives way to the *sequence*, not to the panel that drew**
-    // (2026-09-19, caught in review). `panel::draw` answers `None` both for
-    // 「there was nothing to show」 and for 「it did not fit」, and on a small
-    // terminal the key table does not fit — so a half-pressed `空格` dropped
-    // its menu **and put a 百科 entry there instead**. What the reader is in
-    // the middle of is the question, and `pending_menu` is the one that
-    // answers it.
+    // Warning: **It gives way to the *sequence*, not to the panel that drew.**
+    // `panel::draw` answers `None` both for 「there was nothing to show」 and
+    // for 「it did not fit」, and on a small terminal the key table does not
+    // fit — so asking the panel would let a half-pressed `空格` drop its menu
+    // **and put a 百科 entry there instead**. What the reader is in the middle
+    // of is the question, and `pending_menu` is the one that answers it.
     panel::take_room();
     let note_panel = match taken || editor.pending_menu().is_some() {
         true => None,
@@ -6097,12 +6067,12 @@ fn draw(
         // picker is open.
     } else if let Some(at) = panel_caret {
         // **A box inside a panel is where the keys are, so it is where the
-        // cursor goes** (2026-09-23 報的：高級搜索裏打字，光標在邊欄的框裏，而
-        // 正文上也有一個，系統輸入法的候選面板跟着**那一個**跑)。
+        // cursor goes**: typing in 高級搜索 puts the cursor in the sidebar's
+        // box, not also one on the page that the system IME's candidates follow.
         //
-        // Warning: **這一格是給系統輸入法的，不是給眼睛的。** 我們自己的候選面板早就
+        // Warning: **這一格是給系統輸入法的，不是給眼睛的。** 我們自己的候選面板
         // 站對了位置（下面那個 `panel_caret` 分支），可 macOS 的輸入法看的是
-        // 終端的硬件光標——它停在正文第一行，於是候選框畫在正文上，而 preedit
+        // 終端的硬件光標——它停在正文第一行的話，候選框畫在正文上，而 preedit
         // 的拼音串也被終端畫進了正文的格子裏。
         //
         // `panel_caret` 只在 `Mode::Field` 有值，`prompt_label()` 只在命令行與
@@ -6123,25 +6093,25 @@ fn draw(
     } else if editor.mode() == Mode::Field {
         // **鍵在框裏，而框裏沒有光標可放**——`空格 /` 開出來那一下整條是選中的，
         // `box_in` 於是不交位置回來（選中本身就是「這一整條在這裏」的說法）。
-        // 從前這一支會掉到下面去，把硬件光標放進**正文**：一根光標在稿子上閃，
+        // 這一支不許掉到下面去，把硬件光標放進**正文**：一根光標在稿子上閃，
         // 而打的字進的是搜索框。
         //
         // Warning: **而那一格正是 macOS 系統輸入法跟着走的那一個**（見上面
         // `panel_caret` 那一段）：候選框會畫到稿子上，preedit 的拼音串也一樣。
-        // 上面那一支 2026-09-23 修的就是這件事，這裏是它漏掉的那半格。
+        // 這裏是上面那一支的另外半格。
         //
         // 什麼都不做，於是這一幀沒人設光標，ratatui 自己把它藏起來——同設置頁
         // 那一支。
     } else if settings.is_some() {
-        // **設置頁蓋住了正文，所以正文的光標不算數**（2026-09-25 報的：「为什么
-        // 「设置」左侧有个光标呢？」）。這一支什麼都不做，於是這一幀沒人設光標，
+        // **設置頁蓋住了正文，所以正文的光標不算數**：「設置」左側不許有光標。
+        // 這一支什麼都不做，於是這一幀沒人設光標，
         // ratatui 就把它藏起來（`Terminal::draw` 裏 `None => hide_cursor()`）。
         // 打字的時候由下面那一段設回來。
     } else if editor.page_window_has_the_keys() {
-        // **A page window holds no text, so it has no caret** (2026-11-07):
+        // **A page window holds no text, so it has no caret**:
         // nobody sets the cursor, and ratatui hides it.
     } else if editor.caret_is_the_cell() {
-        // **The whole cell is the unit, so the cell is the mark** (2026-10-21).
+        // **The whole cell is the unit, so the cell is the mark.**
         // At a grid's top layer there is no character to stand on: `hjkl` walk
         // cells, `y` takes a cell, and what the reader needs to see is which
         // cell — which the grid widget draws as two 金 edges in the seams
@@ -6156,18 +6126,17 @@ fn draw(
         the_caret_reads_back(editor, config, area, viewport, (cursor_x, cursor_y), Some(head_rows));
         // **A block is painted into the page; a bar is the terminal's.**
         //
-        // The vertical page has always painted its own block, and 2026-10-16
-        // this page does too: 「和豎排的 block 光標一致，都是自己畫的……顔色可
-        // 控……大小可控……你 shot 截圖的時候就可以截到了」. The last one is the
-        // reason this was worth doing on its own: a cursor the terminal draws
-        // leaves no mark in the buffer, so every offscreen picture this repo
-        // reviews by was a picture with no cursor in it.
+        // Both pages paint their own block, consistent with each other, its
+        // colour and size under control. The reason it is worth doing on its
+        // own: a cursor the terminal draws leaves no mark in the buffer, so
+        // every offscreen picture this repo reviews by would be a picture
+        // with no cursor in it.
         //
         // The bar and the underscore stay the terminal's. They are one cell by
         // nature, nothing about them is wrong, and the terminal blinks and
         // shapes them the way the reader set it up to.
         let vertical = editor.layout() == WritingLayout::Vertical;
-        // **竪排插入態的光標只是輸入法的錨**（2026-10-16）：那條橫線由
+        // **竪排插入態的光標只是輸入法的錨**：那條橫線由
         // `vertical.rs` 自己畫在插入邊界上，而終端光標擺在**文字會出現的那一個
         // 字**上並藏起來，不然系統輸入法的 inline preedit 會蓋錯字。
         crate::backend::keep_the_cursor_hidden(vertical && editor.mode() == Mode::Insert);
@@ -6181,9 +6150,9 @@ fn draw(
                 areas.panes[editor.live_pane()],
             ),
             false => {
-                // **While `v` is on, a bare primary cursor keeps its block**
-                // (2026-10-27, reported: after `v` `jjjj` `s2` the first `2`
-                // had only the underline and the four others a block). Helix
+                // **While `v` is on, a bare primary cursor keeps its block**:
+                // after `v` `jjjj` `s2` the first `2` has a block as the four
+                // others do, not only the underline. Helix
                 // paints the primary's cell in select mode too, darker than
                 // the others, and puts the terminal's underline over it; a
                 // grown selection is painted by its own ground already.
@@ -6201,10 +6170,10 @@ fn draw(
         }
     }
 
-    // Warning: **drawn after the settings page while it is open** (2026-11-09,
-    // reported: no candidate ever showed while a value was typed in the
-    // panel — the page was drawn over the box and the strips). One body for
-    // both places, every display style in it.
+    // Warning: **drawn after the settings page while it is open**, or the
+    // page covers the box and the strips and no candidate shows while a value
+    // is typed in the panel. One body for both places, every display style
+    // in it.
     let candidates = |frame: &mut Frame, over_the_page: bool| {
         if candidate_panel {
             // The panel follows the page, not the prompt: a `/` search in a
@@ -6246,8 +6215,8 @@ fn draw(
                 height: status_area.y.saturating_sub(area.y).max(1),
                 ..area
             };
-            // **編碼那一列畫不畫**：這一幀沒有把它寫進正文，纔輪到面板寫
-            // （2026-09-27）。問的是這一幀真寫了沒有，不是設置說什麼——命令行開着的
+            // **編碼那一列畫不畫**：這一幀沒有把它寫進正文，纔輪到面板寫。
+            // 問的是這一幀真寫了沒有，不是設置說什麼——命令行開着的
             // 時候正文寫不下，那時編碼要回到面板上來。
             let show_code = inline_text(editor, ime).is_empty();
             match editor.layout() {
@@ -6259,7 +6228,7 @@ fn draw(
                 }
             }
         } else if composing_here {
-            // **The box is not up, so the candidates are a strip** (2026-10-16),
+            // **The box is not up, so the candidates are a strip**,
             // in one of the two places the setting names.
             let show_code = inline_text(editor, ime).is_empty();
             let pane = areas.panes[editor.live_pane()];
@@ -6326,48 +6295,45 @@ fn draw(
         let what = Floating { rows: seek_rows, lit: None, keep_off_the_caret: false };
         draw_panel_rows(frame, config, room, cursor_x, cursor_y, what);
     }
-    // **設置面板鋪滿整個窗口**（2026-09-25 報的：「设置界面是独佔的全屏，所以是
-    // 不是可以把下方的状态栏和命令栏覆盖掉？」）。
+    // **設置面板鋪滿整個窗口**：設置界面是獨佔的全屏，蓋掉下方的狀態欄和命令欄。
     //
     // Warning: **狀態行在這一頁上是一句假話**：它報的是 `development.md 行 262`——一個
     // 此刻沒人在看的緩衝區。蓋掉。
     //
-    // Warning: **命令行不是「又一條狀態行」，它就是這一頁的頁腳**。一句話說中了：
-    // 「本来命令行就是不说话的时候显示快捷键提示，说话的时候显示命令」——所以這
-    // 一頁的鍵位行落在那一行上不是補丁，是同一條規矩。於是它自己那兩行（說明、
-    // 鍵位）正好接手原來狀態行與命令行的位子，一行不浪費，頁面高度也不會因為冒
-    // 出一句話就整頁跳。
+    // Warning: **命令行不是「又一條狀態行」，它就是這一頁的頁腳**：命令行不說話的時候
+    // 顯示快捷鍵提示，說話的時候顯示命令——所以這一頁的鍵位行落在那一行上不是補丁，
+    // 是同一條規矩。於是它自己那兩行（說明、鍵位）正好接手狀態行與命令行的位子，
+    // 一行不浪費，頁面高度也不會因為冒出一句話就整頁跳。
     if let Some(page) = settings {
-        // **Two rows at the foot** (2026-10-31, replacing 09-25's one): the
+        // **Two rows at the foot**: the
         // page's key row stays where it is, and the command row under it
-        // carries what is said and the `:` being typed. Reported: a message
-        // covered the keys, and the page has the room. With no command row
-        // (a window too short for one) the page keeps the whole window.
+        // carries what is said and the `:` being typed, so a message never
+        // covers the keys. With no command row (a window too short for one)
+        // the page keeps the whole window.
         let (page_area, foot) = match command_area.height {
             1 if command_area.y > area.y => (Rect { height: command_area.y - area.y, ..area }, Some(command_area)),
-            // **No command row, and a line being typed** (2026-11-09,
-            // reported: below eight rows the value was typed under the page,
-            // where nobody could see it): the prompt keeps its own row and
-            // the page makes do with the rest, down to nothing at all.
+            // **No command row, and a line being typed**: below eight rows the
+            // prompt keeps its own row, so the value is never typed under the
+            // page where nobody can see it, and the page makes do with the
+            // rest, down to nothing at all.
             _ if editor.prompt().is_some() && prompt_area.height == 1 && prompt_area.y >= area.y => {
                 (Rect { height: prompt_area.y - area.y, ..area }, Some(prompt_area))
             }
             _ => (area, None),
         };
-        // Warning: **不在打字就一個字都別設**，光標自己會藏起來。從前這裏把它停在窗口
-        // 左上角——理由是「別留在正文裏」（系統輸入法的候選框跟着硬件光標跑），
-        // 可那一格正好在「設置」左邊，看着像頁面上多了一根豎槓。**藏起來纔是那個
-        // 理由要的東西**；上面那一支負責讓正文不去設它。
+        // Warning: **不在打字就一個字都別設**，光標自己會藏起來。系統輸入法的候選框
+        // 跟着硬件光標跑，所以光標別留在正文裏——可停在窗口左上角的話，那一格正好在
+        // 「設置」左邊，看着像頁面上多了一根豎槓。**藏起來纔是那個理由要的東西**；
+        // 上面那一支負責讓正文不去設它。
         if let Some(at) = settings_page::draw(frame, page, config, page_area) {
             // A vertical page in Insert keeps the terminal's cursor hidden
             // (its caret is drawn into the page); the panel's bar is shown.
             crate::backend::keep_the_cursor_hidden(false);
             frame.set_cursor_position(at);
         }
-        // **No command row, and something said** (2026-11-09, reported: with
-        // `command_line = false` nothing the panel said was ever seen — the
-        // status line it would fall to is under the page): it is said on the
-        // page's own bottom row, over its keys, until it goes.
+        // **No command row, and something said**: with `command_line = false`
+        // the status line it would fall to is under the page, so it is said
+        // on the page's own bottom row, over its keys, until it goes.
         let foot = match foot {
             None if !editor.status().is_empty() && page_area.height > 2 => {
                 Some(Rect { y: page_area.y + page_area.height - 1, height: 1, ..page_area })
@@ -6408,11 +6374,10 @@ fn draw(
 /// **The one place nobody can forget.** [`drawable`] is the first line and it
 /// works — where the drawing goes through [`put_text`]. About thirty spans do
 /// not: block titles carry a file's name, the tab bar carries it again, the
-/// HUD carries what has just been typed, and the status line carried the
-/// character under the cursor, which on a 碼表 is a TAB. That one cost #375
-/// and #377 together, and the reading of it is the rule this
-/// enforces, 2026-09-11：「TAB 是个不稳定渲染。除了文本区有 tab 外，我们在其他
-/// 位置不应该有 tab 存在。太危险了。」
+/// HUD carries what has just been typed, and the status line carries the
+/// character under the cursor, which on a 碼表 is a TAB (#375, #377). The
+/// rule this enforces: a tab renders unstably, so apart from the text area
+/// there must be no tab anywhere on the screen.
 ///
 /// Every drawing path ends in a cell, so the cells are where the rule can be
 /// kept once instead of thirty times. A control character measures nought to
@@ -6449,7 +6414,7 @@ fn settle_control_characters(buf: &mut ratatui::buffer::Buffer) {
 /// not: the editor is stopped behind it (`Editor::on_key` gives it every key),
 /// and a modal question that hides in a corner is one a writer answers without
 /// reading. Centre, border, name in gold — #273's panel, at the middle.
-/// **替換走到哪了**，畫在剛纔問話那一扇窗的位置上（2026-10-11 定）。
+/// **替換走到哪了**，畫在剛纔問話那一扇窗的位置上。
 ///
 /// 和 [`draw_query`] 同一個殼、同一個落點：按下 `y` 的那一下窗不該跳走，它只是
 /// 從一個問句變成一條進度。所以這一支是那一支去掉選項、加上一條槽和一個檔名。
@@ -6558,11 +6523,11 @@ fn draw_query(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
             Style::default().fg(ink.gold()).bg(crate::chrome::panel_ground(ink)),
         )),
     });
-    // Warning: **The body sets no ground of its own** (2026-09-18: 「命令行文字
-    // 嚴格意義上來說底色是透明的，下面是什麽顏色就是什麽底色」). The ring has
-    // already painted the panel; text that carried its own copy of that colour
-    // dragged a patch of the *old* one behind every line the day the panel's
-    // ground moved. `Cell::set_style` patches, so a style with no `bg` keeps
+    // Warning: **The body sets no ground of its own**: text on it is
+    // transparent, whatever is beneath shows through. The ring has already
+    // painted the panel; text that carried its own copy of that colour would
+    // drag a patch of the *old* one behind every line whenever the panel's
+    // ground moves. `Cell::set_style` patches, so a style with no `bg` keeps
     // whatever is under it.
     let ground = Style::default();
     let limit = panel.x + width - 1;
@@ -6600,9 +6565,8 @@ fn wrap_to(text: &str, width: usize) -> Vec<String> {
     let mut line = String::new();
     let mut wide = 0usize;
     for ch in text.chars() {
-        // **換行符就在那裏換**（2026-10-09）。中央那扇窗的正文現在也裝得下一張名
-        // 單（「這幾個檔沒有撤銷」底下一行一個名字），而從前這一支把它當成一個要
-        // 量寬度的字推進行裏去。
+        // **換行符就在那裏換。** 中央那扇窗的正文也裝得下一張名單（「這幾個檔沒有
+        // 撤銷」底下一行一個名字），所以它不當成一個要量寬度的字推進行裏去。
         if ch == '\n' {
             lines.push(std::mem::take(&mut line));
             wide = 0;
@@ -6610,8 +6574,8 @@ fn wrap_to(text: &str, width: usize) -> Vec<String> {
         }
         let w = yumete_cjk::str_width(&ch.to_string());
         if wide + w > width && !line.is_empty() && !NO_START.contains(ch) {
-            // **An ASCII word is not cut** (2026-11-04: 「149」 / 「27.8×」 and
-            // `Ln 1204` broke across rows). The word so far moves down with
+            // **An ASCII word is not cut** (「149」, 「27.8×」, `Ln 1204` stay
+            // whole). The word so far moves down with
             // its next letter, when there is somewhere before it to break.
             if ch == ' ' {
                 lines.push(std::mem::take(&mut line));
@@ -6660,8 +6624,8 @@ fn language_tag(editor: &Editor, ime: &ImeSession) -> String {
 /// wherever keys are commands. The status line asks the other question:「what
 /// will `i` land in」. The language belongs to the process, not to the mode
 /// (one `ImeSession` for the whole editor), so that answer exists in Normal
-/// too — and it used to be invisible there, which left one way to learn it:
-/// press `i`, type a word, and watch it come out wrong.
+/// too — and shown there, nobody has to learn it by pressing `i`, typing a
+/// word and watching it come out wrong.
 ///
 /// It still says nothing when yume has handed the keyboard back
 /// (`Engagement::Off`): then there is no 中/ABC to be in.
@@ -6681,10 +6645,10 @@ fn standing_language_tag(ime: &ImeSession) -> String {
 ///
 /// Helix caps its completion popup and scrolls it, and the reason is not screen
 /// real estate but reading: a list you have to search is not a list you can
-/// glance at. Twenty-odd commands laid out across the whole page hid the very
-/// document the command was about to act on.
+/// glance at. Twenty-odd commands laid out across the whole page would hide
+/// the very document the command is about to act on.
 ///
-/// How many columns the `:` menu may spread into (2026-09-10).
+/// How many columns the `:` menu may spread into.
 ///
 /// The width is what the columns fill (#372), but not without end: past a
 /// half-dozen the eye has to find its way back across too far a page, and a
@@ -6736,9 +6700,9 @@ pub fn elide(line: &str, width: usize) -> String {
 ///
 /// The mirror of [`elide`], for text whose identity is at its **end**: a path.
 /// `crates/yumete-core/src/editor/find.rs` cut the usual way is
-/// `crates/yumete-core…`, and in a 項目 search five different files came out
-/// as five identical rows — the count beside each one was cut off too, so
-/// there was nothing at all to tell them apart (2026-09-27).
+/// `crates/yumete-core…`, and in a 項目 search five different files would come
+/// out as five identical rows — with the count beside each one cut off too,
+/// nothing at all would tell them apart.
 pub fn elide_head(line: &str, width: usize) -> String {
     if yumete_cjk::str_width(line) <= width {
         return line.to_string();
@@ -6774,29 +6738,25 @@ struct List<'a> {
     footer: &'a str,
     /// Whether it may spread across the window.
     columns: bool,
-    /// **說明寫在單子上面，橫線隔開**（2026-10-06 定，照 helix 的命令面板）。
+    /// **說明寫在單子上面，橫線隔開**（照 helix 的命令面板）。
     ///
-    /// 一段一行，太長的自己折。空的就是舊形狀——沒有說明塊，也沒有那道橫線。
-    ///
-    /// 原話：「The description is above the horizontal line an can be multiple
-    /// lines. They can go shorter or taller to fit the content.」
+    /// 一段一行，太長的自己折，可以多行，隨內容高矮。空的就是沒有說明塊，也沒有
+    /// 那道橫線。
     about: &'a [String],
-    /// **撑滿終端的寬度**（2026-10-06 定），右邊空着也認：那片空白是留給說明的。
+    /// **撑滿終端的寬度**，右邊空着也認：那片空白是留給說明的。
     wide: bool,
-    /// **下邊框壓在狀態欄那一行上**（2026-10-06 定，同 helix）：命令行和它之間
-    /// 不再隔着一行別的東西。
+    /// **下邊框壓在狀態欄那一行上**（同 helix）：命令行和它之間
+    /// 不隔着一行別的東西。
     over_status: bool,
-    /// **深到和命令面板一樣**（2026-10-06）：窗口的三分之二，不是挑選器那個寫死
+    /// **深到和命令面板一樣**：窗口的三分之二，不是挑選器那個寫死
     /// 的八行。
     ///
     /// `::` 那一張單子兩樣都不是：它不分欄（每一行是一句話，欄會把句子切碎），
     /// 可是它也不是挑選器那種「幾百條路徑，怎麼擺都擺不下」——它是一張**排過序
-    /// 的短名單**，而讀者要的正是多看幾條。原話：「6 is quite few … we also have
-    /// a protocal about the height of the command panel? That can be used here」。
+    /// 的短名單**，而讀者要的正是多看幾條，所以借命令面板的高度那一套。
     deep_as_the_page: bool,
     /// The name in the top-left of the ring, the way a which-key panel is
-    /// named. 2026-09-05: 「command 提示面板的設計感不如快捷鍵提示
-    /// 面板。」 — a floating rectangle with no edge and no name is a thing that
+    /// named — a floating rectangle with no edge and no name is a thing that
     /// appeared, not a panel that opened.
     title: &'a str,
     /// The widest one entry may be, padding and all.
@@ -6825,7 +6785,7 @@ struct List<'a> {
 struct Row {
     text: String,
     note: Option<String>,
-    /// **淡一點**：這一行是猜的，不是打出來的那幾個字母開頭的（2026-10-06）。
+    /// **淡一點**：這一行是猜的，不是打出來的那幾個字母開頭的。
     ///
     /// `:` 那一行上 ⇥ 走的是前綴配中的那些；模糊猜出來的只是說「你要的也許是
     /// 這個」，走不到。顏色說的就是這件事。
@@ -6852,12 +6812,12 @@ const NOTE_GAP: usize = 2;
 
 /// Returns the rectangle it covered, so a pinned HUD can keep off it (#284).
 ///
-/// Reading the drawn buffer back used to answer 「is anything there」 for every
-/// kind of thing at once — writing, this menu, the picker, a panel's ring —
-/// and that was the whole of the HUD's collision avoidance. `:view-hud full` covers
-/// writing on purpose, so 「有字」 and 「有面板」 stop reading alike and every
-/// panel has to say where it put itself.
-/// **一段話折成幾行，按顯示寬度**（2026-10-06，說明塊用）。
+/// Reading the drawn buffer back answers 「is anything there」 for every kind
+/// of thing at once — writing, this menu, the picker, a panel's ring — and
+/// that is not enough for the HUD's collision avoidance: `:view-hud full`
+/// covers writing on purpose, so 「有字」 and 「有面板」 stop reading alike and
+/// every panel has to say where it put itself.
+/// **一段話折成幾行，按顯示寬度**（說明塊用）。
 ///
 /// Warning: **折的是格子，不是字節**：一個漢字兩格。拉丁詞之間有空格的在空格上折，
 /// 中文沒有空格——所以折不動的時候就在字與字之間斷，那正是中文本來的斷法。
@@ -6931,9 +6891,9 @@ fn draw_list(
     // files does, and the way the numbers on it stay in order.
     //
     // **Each column is as wide as its own longest entry**, not as the longest
-    // entry anywhere in the list. One long entry used to widen the
-    // six columns beside it by two cells each and cost the list a whole column
-    // — the seventh, the one it needed to be shown whole.
+    // entry anywhere in the list. Otherwise one long entry widens the six
+    // columns beside it by two cells each and costs the list a whole column
+    // — the seventh, the one it needs to be shown whole.
     let room = (area.width as usize).saturating_sub(4);
     let lay = |deep: usize, from: usize| -> Vec<usize> {
         let mut widths = Vec::new();
@@ -6955,21 +6915,20 @@ fn draw_list(
         widths
     };
     //
-    // **The shape is two caps and nothing else** (2026-09-10): as deep as
+    // **The shape is two caps and nothing else**: as deep as
     // the whole list needs, or **two thirds of the window** when that is
-    // shorter (2026-09-23; it was half until the list outgrew it); and as
-    // many columns as the width holds, up to six. The entries fill it downwards and then
-    // across, so nine commands on eight rows are eight and one.
+    // shorter; and as many columns as the width holds, up to six. The
+    // entries fill it downwards and then across, so nine commands on eight
+    // rows are eight and one.
     //
-    // It used to be worked out from the number of entries — the fewest columns
-    // that showed them all — and the shape moved as the list did: a menu that
-    // was three columns of eighteen at one moment and eight of six at the
-    // next. Two caps say the same thing about every list, which is what makes
-    // a place on the page worth learning.
+    // Not worked out from the number of entries — the fewest columns that
+    // show them all — or the shape moves as the list does: a menu that is
+    // three columns of eighteen at one moment and eight of six at the next.
+    // Two caps say the same thing about every list, which is what makes a
+    // place on the page worth learning.
     let (mut widths, deep) = if columns {
-        // **Two thirds of the window, footer and rings included** —— 半扇
-        // 窗是 2026-09-10 定的，而 24 行的窗口下那是 9 行 × 6 欄 ＝ 54 格，
-        // 命令已經 55 條。放寬到三分之二（2026-09-23 定）：
+        // **Two thirds of the window, footer and rings included** —— 半扇窗在
+        // 24 行的窗口下是 9 行 × 6 欄 ＝ 54 格，裝不下所有命令：
         //
         // | 窗口高 | 單子 | 容量 | 正文還剩 |
         // | --- | --- | --- | --- |
@@ -6977,7 +6936,7 @@ fn draw_list(
         // | 24 | **13** | **78** | 8 |
         // | 36 | 21 | 126 | 12 |
         //
-        // Warning: **那個 3 不許拿掉**（想過）：框綫兩道加頁腳一行是真佔地方的，
+        // Warning: **那個 3 不許拿掉**：框綫兩道加頁腳一行是真佔地方的，
         // 面板高 ＝ 行數 ＋ 3。拿掉它等於讓面板高過說好的那個比例，而矮窗口
         // 上「還剩幾行正文」正是這條規矩在守的東西。要更寬就動比例，別動它。
         let half = (area.height as usize * 2 / 3).saturating_sub(3);
