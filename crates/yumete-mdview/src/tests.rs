@@ -421,3 +421,34 @@ fn quotes_follow_the_language_when_the_page_turns_vertical() {
     let all: String = p.visible_text(0.0, p.size().1).replace('\n', "");
     assert!(all.contains("“走吧”") && !all.contains('『'), "{all}");
 }
+
+/// **No depth of nesting takes the preview down**: a line of 3000 `>`, a
+/// list 600 deep, containers and notes nested 1000 deep are laid out across
+/// and down a page on a thread with the preview's own stack, and the words
+/// at the bottom are shown.
+#[test]
+fn deep_nesting_is_drawn_and_never_overflows() {
+    let quotes = format!("{} 最深處\n", ">".repeat(3000));
+    let list: String = (0..600).map(|k| format!("{}- 第{k}層\n", "  ".repeat(k))).collect();
+    let mixed = format!("{}最深處\n", "> - ".repeat(1500));
+    let fenced = format!("{}最深處\n{}", "::: tip\n".repeat(1000), ":::\n".repeat(1000));
+    let notes: String = std::iter::once("引[^0]\n\n[^0]: 甲\n".to_string()).chain((1..1000).map(|k| format!("  [^{k}]: 乙\n"))).collect();
+    for (text, deepest) in [(quotes, "最深處"), (list, "第599層"), (mixed, "最深處"), (fenced, "最深處"), (notes, "乙")] {
+        let found = std::thread::Builder::new()
+            .stack_size(2 << 20)
+            .spawn(move || {
+                let mut p = Preview::new(options(600), Box::new(NoFormulas));
+                p.set_height(800);
+                p.set_text(&text);
+                let across = p.visible_text(0.0, p.size().1);
+                p.render(0.0, 400);
+                p.set_vertical(Some(Vertical { latin: yumete_core::export::Latin::Turn, hanging: false }));
+                p.render(0.0, 400);
+                across.contains(deepest)
+            })
+            .expect("a thread")
+            .join()
+            .expect("no overflow");
+        assert!(found, "{deepest}");
+    }
+}
