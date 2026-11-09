@@ -26265,6 +26265,24 @@ fn a_shell_line_has_its_label_ghost_history_and_bang() {
 
 /// Words of the open buffers are offered as you write: Latin after
 /// `word_completion` letters, matched fuzzily; 漢字 after ⌈N/2⌉, only words
+/// **The words are read once per stay in Insert mode**: a word typed in
+/// this stay is offered from the next one, and no key reads the book again.
+#[test]
+fn words_typed_now_are_offered_from_the_next_insert() {
+    let labels = |ed: &Editor| -> Vec<String> {
+        ed.offers_here().map(|(items, _)| items.iter().map(|o| o.label.clone()).collect()).unwrap_or_default()
+    };
+    let mut ed = typed("Donaudampfschiff\n");
+    press(&mut ed, "Go");
+    press(&mut ed, "Straßenbahn Stra");
+    assert!(labels(&ed).is_empty(), "typed in this stay: {:?}", labels(&ed));
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Esc);
+    press(&mut ed, "o");
+    press(&mut ed, "Stra");
+    assert_eq!(labels(&ed), ["Straßenbahn"]);
+}
+
 /// longer than that; `C-n` at any length; Tab takes one.
 #[test]
 fn words_of_the_open_buffers_are_offered_as_you_write() {

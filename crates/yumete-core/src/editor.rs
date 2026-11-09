@@ -2689,6 +2689,9 @@ pub struct Editor {
     word_completion: usize,
     /// Each open buffer's words, for that list.
     word_index: HashMap<u64, suggest::WordIndex>,
+    /// The words were read during this stay in Insert mode: they are read
+    /// once per stay, not on every key, and read again after `Esc`.
+    words_read_in_insert: bool,
     /// The words of every line read so far, by the line's hash.
     line_words: HashMap<u64, suggest::LineWords>,
     /// Where readings come from for `:ruby-auto` (Feature #234). Defaults to
@@ -4413,6 +4416,7 @@ impl Editor {
             segmenter: Box::new(CategorySegmenter),
             word_completion: 4,
             word_index: HashMap::new(),
+            words_read_in_insert: false,
             line_words: HashMap::new(),
             reader: Box::new(NoReader),
             project_words: std::rc::Rc::new(RefCell::new(yumete_cjk::WordList::default())),

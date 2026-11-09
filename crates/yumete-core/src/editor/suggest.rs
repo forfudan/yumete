@@ -382,7 +382,14 @@ impl Editor {
     /// changed are read again**: a buffer's lines are hashed (a novel's in a
     /// millisecond or two), and a line whose hash is new is cut once and kept,
     /// so typing into a long book costs the line being typed, not the book.
+    ///
+    /// **Once per stay in Insert mode**: the words typed during it are
+    /// offered from the next stay on, and a key typed costs nothing here.
     fn read_the_open_buffers(&mut self) {
+        if self.mode == Mode::Insert && self.words_read_in_insert {
+            return;
+        }
+        self.words_read_in_insert = self.mode == Mode::Insert;
         let open: Vec<u64> = self.buffers.iter().map(|b| b.id()).collect();
         self.word_index.retain(|id, _| open.contains(id));
         for i in 0..self.buffers.len() {

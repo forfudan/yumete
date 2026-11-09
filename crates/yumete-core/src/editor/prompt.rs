@@ -268,6 +268,7 @@ impl Editor {
     /// **Leave Insert mode** (`Esc`, and `normal_mode` from a binding such as
     /// `jk`).
     pub(super) fn leave_insert(&mut self) {
+        self.words_read_in_insert = false;
         self.take_back_fresh_indent();
         // **`5ix` spends its count here**: what repeats is
         // the whole typing session, and nobody knows what that is until

@@ -7,6 +7,12 @@ Written for people who use it to write, not for the commit log: each line says
 what you can *do*, and what changed under you. The numbers are the feature table
 in `docs/development.md` §5.2.
 
+## Unreleased
+
+### Changed
+
+- **The word list for completion is read once each time you enter Insert mode**, not on every key, so typing in a long book no longer reads the whole book per keystroke; a word typed now is offered from the next time you enter Insert mode.
+
 ## 0.21.0 · 2026-11-09
 
 ### Added
