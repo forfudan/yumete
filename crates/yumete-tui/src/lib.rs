@@ -6337,8 +6337,8 @@ fn draw(
             }
             foot => foot,
         };
-        // **On the panel's ground, not the page's** (2026-11-09, reported:
-        // the bottom row was a darker band under the panel).
+        // **On the panel's ground, not the page's**: the bottom row is part
+        // of the panel.
         let ink = crate::theme::Palette::of(config);
         let ground = ink.ground(yumete_config::rung::CHROME).fg(ink.text());
         if let Some(foot) = foot {
@@ -16740,7 +16740,7 @@ fn squeezed(text: &str) -> String {
         // blank while nothing is said, and the page's keys stand above it.
         assert!(last.trim().is_empty(), "the command row is blank: {last:?}");
         assert!((2..5).any(|up| row(h - up).contains("jk")), "the keys above it");
-        // **On the panel's ground** (2026-11-09, reported: a darker band).
+        // **On the panel's ground.**
         let panel_bg = buf.cell((w - 1, h - 2)).unwrap().bg;
         assert!((0..w).all(|x| buf.cell((x, h - 1)).unwrap().bg == panel_bg), "the blank row is the panel's");
 

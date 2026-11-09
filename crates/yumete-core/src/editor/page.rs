@@ -1383,16 +1383,20 @@ impl Editor {
     /// Where the keys go when the live window closes: the window they were
     /// in last, or, when none of those is left, the one that takes the room
     /// (2026-10-31, chosen over vim's room rule and helix's tree order).
-    /// A window showing a preview is never where they go (2026-11-07): with
-    /// only previews left besides this one, this is the last window.
+    /// **A preview is a window**: a text window is preferred, and with only
+    /// previews left the keys go to one of them, so this is the last window
+    /// only when it is the last of any kind.
     pub(super) fn window_after_closing(&self) -> Option<crate::window::WindowId> {
-        let usable = |w: crate::window::WindowId| w != self.live && self.windows.has(w) && !self.is_page_window(w);
-        self.window_history
-            .iter()
-            .copied()
-            .find(|&w| usable(w))
-            .or_else(|| self.windows.heir(self.live).filter(|&w| usable(w)))
-            .or_else(|| self.windows.leaves().into_iter().find(|&w| usable(w)))
+        let open = |w: crate::window::WindowId| w != self.live && self.windows.has(w);
+        let pick = |usable: &dyn Fn(crate::window::WindowId) -> bool| {
+            self.window_history
+                .iter()
+                .copied()
+                .find(|&w| usable(w))
+                .or_else(|| self.windows.heir(self.live).filter(|&w| usable(w)))
+                .or_else(|| self.windows.leaves().into_iter().find(|&w| usable(w)))
+        };
+        pick(&|w| open(w) && !self.is_page_window(w)).or_else(|| pick(&open))
     }
 
     /// Drop every window whose buffer is `gone` — a window naming a buffer

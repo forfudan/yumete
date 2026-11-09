@@ -373,8 +373,8 @@ impl Seat {
                 return self.write(editor);
             }
             Key::Char('h') | Key::Left if on_page => page.close_page(),
-            // **`h` `l` walk the left column** (2026-11-09): a page's row
-            // opens on `Enter` or `Space`, so `l` means one thing in the list.
+            // **`h` `l` walk the left column**: a page's row opens on `Enter`
+            // or `Space`, so `l` means one thing in the list.
             Key::Char('h') | Key::Left => page.step_group(false),
             Key::Char('l') | Key::Right => page.step_group(true),
             Key::Char('r') => {
@@ -397,8 +397,8 @@ impl Seat {
             Key::Char('e') => return self.open_the_file(editor),
             Key::Char('q') => self.close(editor),
             // **`Esc` steps back**: off a page, then off a search, and no
-            // further. Only `q` closes (2026-11-09, reported: Esc is the hand
-            // going back to Normal, and it threw the panel away).
+            // further. Only `q` closes: Esc is what the hand presses to get
+            // back to Normal, and it must not throw the panel away.
             Key::Esc if on_page => page.close_page(),
             Key::Esc if !page.search.is_empty() => {
                 page.search.clear();
@@ -2070,7 +2070,7 @@ mod tests {
         let dir = scratch("paste");
         let (mut ed, mut seat) = seated(&dir, "", "export.page");
         // Nothing yanked: the hint names `"+p`, not the editor's `␣p` —
-        // Space here would change the row (2026-11-09).
+        // Space here would change the row.
         keys(&mut seat, &mut ed, &[Key::Char('p')]);
         assert_eq!(ed.status(), say!("settings.nothing-yanked", "\"+p"));
         assert!(ed.status().contains("\"+p"), "{}", ed.status());
@@ -2501,7 +2501,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// **`h` `l` go to the group before and after** (2026-11-09), as the left
+    /// **`h` `l` go to the group before and after**, as the left
     /// column lists them, and a group a search left empty is passed over.
     #[test]
     fn h_and_l_walk_the_groups() {

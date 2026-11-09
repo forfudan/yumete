@@ -5,9 +5,8 @@
 //! notice on stderr says which. Its whole job is to tell a reader that what
 //! they typed did nothing, and on 2026-10-20 two of its fourteen names were
 //! the spellings of a fold ago: it answered `:view-preview on` with 「so
-//! `:preview` did nothing here」, when `:preview` was not a command (the
-//! `:view-` family had taken it in; it came back on 2026-11-09 as the
-//! preview's own group). `:chaifen` was `:yume-chaifen`'s.
+//! `:preview` did nothing here」, naming a command that did not exist then.
+//! `:chaifen` was `:yume-chaifen`'s.
 //!
 //! Driven through the real binary, like [`help_crib`](../help_crib.rs): what
 //! is checked is what a reader sees.

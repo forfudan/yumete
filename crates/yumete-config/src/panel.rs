@@ -878,10 +878,9 @@ impl Panel {
         }
     }
 
-    /// `h` / `l` —— **the group before or after** the cursor's, as the left
-    /// column lists them (2026-11-09, asked for: "previously it was hl"): its
-    /// first row, skipping a group a search left empty. At either end it
-    /// stays.
+    /// `h` / `l`: the first row of the group before or after the cursor's,
+    /// as the left column lists them, passing over a group a search left
+    /// empty. At either end it stays.
     pub fn step_group(&mut self, down: bool) {
         let rows = self.rows();
         let here = self.group();

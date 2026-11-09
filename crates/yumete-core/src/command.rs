@@ -2278,7 +2278,7 @@ const RENDER: &[Word] = &[
     },
 ];
 
-/// `:preview-fit` takes one of these (2026-11-07).
+/// `:preview-fit` takes one of these.
 const PREVIEW_FIT: &[Word] = &[
     Word { name: "width", help: "cmd.preview-fit.width", needs: &[] },
     Word { name: "page", help: "cmd.preview-fit.page", needs: &[] },
@@ -5896,7 +5896,6 @@ const RENAMED: &[(&str, &str)] = &[
     ("saveas", "write-as"),
     ("source", "render"),
     ("view-dense", "view-margin"),
-    // 0.20's name: the preview is a group of its own since 2026-11-09.
     ("view-preview", "preview"),
     ("wall", "write-all"),
     // One choice now, `off` among the ways (2026-10-25).
@@ -8596,8 +8595,8 @@ mod tests {
         }
     }
 
-    /// **`:preview` is the preview's own group, and 0.20's `:view-preview`
-    /// says where it went** (2026-11-09), as every renamed command does.
+    /// **`:preview` is the preview's own group**, and `:view-preview` says
+    /// where it went, as every renamed command does.
     #[test]
     fn the_preview_answers_to_its_old_name() {
         assert!(matches!(parse(":preview on"), Ok(Command::Preview(_))));
@@ -8618,8 +8617,7 @@ mod tests {
             // Two owners since 2026-10-16: `preview` is also the word that
             // puts the first candidate in the text.
             // Three since 2026-11-08: `:export-as-preview` ends in it too.
-            // `:preview` is a command again since 2026-11-09, so it is not
-            // among the places the word went.
+            // `:preview` itself is a command, so it is not among them.
             ("preview", "`:yume-inline-preedit preview` `:export-as-preview`"),
             ("progress", "`:count-progress`"),
             ("merge", "`:check-merge`"),

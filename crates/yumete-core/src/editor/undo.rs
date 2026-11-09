@@ -28,9 +28,8 @@ impl Editor {
         // close the file, or the whole editor with one file open, and `:q!`
         // then threw the changes away. From a focused sidebar they close the
         // sidebar, as `:q` in vim's file-tree window does.
-        // A window showing a preview does not count (2026-11-07): `:q` in the
-        // last text window leaves, as it would with no preview beside it, and
-        // so does `:q` in a preview with no text window left (2026-11-08).
+        // A preview is a window: `:q` beside one closes this window, and
+        // leaves only from the last window of any kind.
         if self.panel_focus().is_some() || self.window_after_closing().is_some() {
             self.close_this_region(false);
             return Ok(CommandOutcome::Continue);

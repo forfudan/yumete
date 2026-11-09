@@ -38152,8 +38152,7 @@ fn a_typst_book(name: &str) -> (Editor, std::path::PathBuf) {
     (ed, dir)
 }
 
-/// **`:preview` and its two siblings are switches** (2026-11-07; on the
-/// preview tab since 2026-11-08): `:preview` asks for this document's
+/// **`:preview` and its two siblings are switches**: `:preview` asks for this document's
 /// preview beside the text with the browser as the fallback, `-window` for
 /// the preview alone, `-browser` for the browser. `on` while this document's
 /// preview is on the screen says so; `off` closes its tab; bare is `on`
@@ -38418,11 +38417,10 @@ fn a_file_opened_in_a_preview_window_shows_there() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// **`:bc` on a preview closes the preview** (2026-11-08), not the file it
-/// followed: with one file open the keys go back to it, never into a
-/// preview following nothing. `:q` closes only the window; `:q` in the last
-/// text window leaves, and so does `:q` in a preview with no text window
-/// left.
+/// **`:bc` on a preview closes the preview**, not the file it followed:
+/// with one file open the keys go back to it, never into a preview
+/// following nothing. **A preview is a window**: `:q` and `␣wq` beside one
+/// close only the window they are in, and leave only from the last window.
 #[test]
 fn bc_closes_the_preview_and_q_closes_its_window() {
     let (mut ed, dir) = a_typst_book("close");
@@ -38449,9 +38447,23 @@ fn bc_closes_the_preview_and_q_closes_its_window() {
     assert!(!ed.page_window_has_the_keys());
     assert_eq!(ed.current_buffer().path(), Some(main.as_path()));
     assert!(ed.previews().is_empty());
-    // `:q` in the last text window leaves, a preview beside it or not.
+    // `:q` in the last text window closes it and leaves the preview…
     ed.open_page_window(main.clone()).unwrap();
+    assert_eq!(ed.live_window(), text);
+    assert_eq!(ed.execute(":q").unwrap(), CommandOutcome::Continue);
+    assert_eq!(ed.windows().len(), 1);
+    assert!(ed.page_window_has_the_keys(), "the keys go to the preview");
+    // …and `:q` there, the last window, leaves.
     assert_eq!(ed.execute(":q").unwrap(), CommandOutcome::Quit);
+    // `␣wq` is the same.
+    let (mut ed, dir3) = a_typst_book("close-space");
+    ed.open_page_window(dir3.join("main.typ")).unwrap();
+    press(&mut ed, " w");
+    assert_eq!(ed.on_key(Key::Char('q')), KeyOutcome::Continue, "beside a preview, only the window closes");
+    assert_eq!(ed.windows().len(), 1);
+    press(&mut ed, " w");
+    assert_eq!(ed.on_key(Key::Char('q')), KeyOutcome::Quit, "the last window leaves");
+    std::fs::remove_dir_all(&dir3).ok();
     // `:q` in a preview with no text window left leaves too.
     let (mut ed, dir2) = a_typst_book("close-last");
     ed.open_page_window(dir2.join("main.typ")).unwrap();
@@ -38614,7 +38626,7 @@ fn the_buffer_picker_says_what_a_preview_is() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// **`:preview-theme` is a switch** (2026-11-08): the page in the
+/// **`:preview-theme` is a switch**: the page in the
 /// theme's colours or as printed; bare flips it, and each says which.
 #[test]
 fn the_preview_theme_is_a_switch() {
@@ -38634,7 +38646,7 @@ fn the_preview_theme_is_a_switch() {
     assert!(ed.execute(":preview-theme dark").is_err());
 }
 
-/// **`:preview-vertical` is a switch** (2026-11-08), on at first; the
+/// **`:preview-vertical` is a switch**, on at first; the
 /// Markdown preview is vertical only while it is on and the page is.
 #[test]
 fn the_vertical_preview_is_a_switch_and_follows_the_page() {

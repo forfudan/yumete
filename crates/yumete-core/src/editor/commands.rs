@@ -1224,7 +1224,7 @@ impl Editor {
                 self.convert(ask);
                 Ok(CommandOutcome::Continue)
             }
-            // **Three switches** (2026-11-07): `:preview` is either
+            // **Three switches**: `:preview` is either
             // preview, the tab beside the text or the browser's; turned on it
             // shows this document's tab beside the text, falling back to the
             // browser when a picture cannot be drawn, and turned off it closes
