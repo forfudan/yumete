@@ -39135,3 +39135,226 @@ fn a_typst_manuscript_in_pieces_is_coloured_as_it_would_be_whole() {
     ed.current_buffer_mut().remove(from..to).unwrap();
     check(&ed, "after a deletion across pieces");
 }
+
+/// A Typst book of our own words, `chapters` chapters long: headings,
+/// paragraphs, maths, code, a raw block, a comment, a figure and a list.
+#[cfg(test)]
+fn typst_book(chapters: usize) -> String {
+    let mut text = String::new();
+    for n in 0..chapters {
+        text.push_str(&format!(
+            "= 第{n}章 <c{n}>\n\n那年*冬天*很冷，#emph[雪]下得早，見 @c{n} 與 $x^{n} + pi$。\n\n\
+             #let f{n}(x) = {{\n  let y = x\n\n  y + {n}\n}}\n\n\
+             ```rust\nfn main() {{\n\n    let s = \"字\";\n}}\n```\n\n\
+             /* 註\n\n   還是註 */\n#figure[\n  圖\n\n  說明\n]\n\n- 一項\n\n  接着說\n\n"
+        ));
+    }
+    text
+}
+
+/// What a keystroke costs on a long Typst book: the block scan and the
+/// colours of a screen.
+///
+///     cargo test --release -p yumete-core typst_keystroke_costs -- --ignored --nocapture
+#[test]
+#[ignore]
+fn typst_keystroke_costs() {
+    let text = typst_book(4000);
+    let mut ed = Editor::new();
+    ed.current_buffer_mut().insert(0, &text).unwrap();
+    ed.set_syntax(crate::syntax::Syntax::Typst);
+    ed.scan_blocks();
+    let line = 20_000;
+    for l in line..line + 40 {
+        let _ = ed.typst_colours(l);
+    }
+    let at = ed.current_buffer().rope().line_to_char(line + 2) + 3;
+    let (mut scan, mut colours) = (std::time::Duration::ZERO, std::time::Duration::ZERO);
+    let keys: u32 = std::env::var("TYPST_KEYS").ok().and_then(|n| n.parse().ok()).unwrap_or(20);
+    for _ in 0..keys {
+        ed.current_buffer_mut().insert(at, "字").unwrap();
+        let t = std::time::Instant::now();
+        ed.scan_blocks();
+        scan += t.elapsed();
+        let t = std::time::Instant::now();
+        for l in line..line + 40 {
+            let _ = ed.typst_colours(l);
+        }
+        colours += t.elapsed();
+    }
+    eprintln!("{} bytes, {} pieces: scan {:?}, colours {:?} a keystroke", text.len(), ed.typst_pieces(), scan / keys, colours / keys);
+}
+
+/// The lines of a Typst buffer whose colours differ from those of the whole
+/// file parsed at once, in `rows`.
+#[cfg(test)]
+fn typst_lines_unlike_the_whole(ed: &Editor, rows: std::ops::Range<usize>) -> Vec<String> {
+    let source = ed.current_buffer().rope().to_string();
+    let tree = crate::code::parse(crate::code::Language::Typst, &source, None).unwrap();
+    let starts = crate::code::line_starts(&source);
+    let rows = rows.start..rows.end.min(starts.len());
+    let want = crate::code::paint_typst(&source, &tree, &starts, rows.clone());
+    let runs = |spans: &[crate::markdown::Span]| -> Vec<(usize, usize, crate::markdown::Kind)> {
+        spans.iter().map(|s| (s.start, s.end, s.kind)).collect()
+    };
+    let mut unlike = Vec::new();
+    for (i, want) in want.iter().enumerate() {
+        let line = rows.start + i;
+        let got = ed.typst_colours(line).unwrap_or_default();
+        if runs(&got) != runs(want) {
+            unlike.push(format!("line {line} {:?}", ed.current_buffer().rope().line(line).to_string()));
+        }
+    }
+    unlike
+}
+
+/// **A comment inside a comment, across a cut** (review, 2026-11-09).
+/// Typst's comments nest, so a chapter put inside `/* … */` with an old
+/// `/* note */` at its head is all comment down to the last `*/`. The scan
+/// closed it at the note's `*/`, allowed cuts below, and every line from the
+/// next cut down was drawn as writing.
+#[test]
+fn a_nested_comment_across_a_typst_cut_is_one_comment() {
+    let mut text = String::new();
+    for n in 0..1500 {
+        text.push_str(&format!("第{n}段，那年冬天很冷，雪下得早。\n\n"));
+    }
+    text.push_str("/* 刪去的一章\n/* 舊註 */\n\n");
+    for n in 0..3000 {
+        text.push_str(&format!("刪{n}段，雪停了又下。\n\n"));
+    }
+    text.push_str("*/\n\n");
+    for n in 0..1500 {
+        text.push_str(&format!("後{n}段。\n\n"));
+    }
+    let mut ed = Editor::new();
+    ed.current_buffer_mut().insert(0, &text).unwrap();
+    ed.set_syntax(crate::syntax::Syntax::Typst);
+    let total = ed.current_buffer().rope().len_lines();
+    let mut row = 0;
+    while row < total {
+        let _ = ed.typst_colours(row);
+        row += 40;
+    }
+    assert!(ed.typst_pieces() >= 2, "{}", ed.typst_pieces());
+    let unlike = typst_lines_unlike_the_whole(&ed, 0..total);
+    assert!(unlike.is_empty(), "{} lines, first {:?}", unlike.len(), unlike.first());
+    // Inside, no cut: the note's own `*/` closes only the note.
+    let note = 3001;
+    assert!(matches!(ed.block_of(note), crate::markdown::Block::Comment { close: None }), "{:?}", ed.block_of(note));
+    assert!((note..note + 6000).all(|line| !ed.typst_cut_before(line)));
+    // And typed as a writer would: the inner pair closes, the outer runs on.
+    let at = ed.current_buffer().rope().line_to_char(note + 3);
+    ed.current_buffer_mut().insert(at, "/* 又一則 */ 還在註裏\n").unwrap();
+    let unlike = typst_lines_unlike_the_whole(&ed, note..note + 200);
+    assert!(unlike.is_empty(), "{} lines, first {:?}", unlike.len(), unlike.first());
+}
+
+/// An unclosed `/*` at the end of a piece is something left open, though
+/// tree-sitter-typst calls it no error: a comment, nested as Typst nests it.
+#[test]
+fn an_unclosed_typst_comment_is_open_at_its_end() {
+    for (source, open) in [
+        ("甲 /* 乙\n\n丙\n", true),
+        ("甲 /* 乙 /* 丙 */\n\n丁\n", true),
+        ("甲 /* 乙 */\n", false),
+        ("/* 甲 /* 乙 */ 丙 */\n\n丁\n", false),
+        ("甲 // /* 乙\n", false),
+    ] {
+        let tree = crate::code::parse(crate::code::Language::Typst, source, None).unwrap();
+        assert_eq!(crate::code::open_at_end(&tree, source), open, "{source:?}");
+    }
+}
+
+/// **The Typst block scan, taken up where the text changed, says what a
+/// scan from the top says** (2026-11-09): random edits over a book — a
+/// fence, a comment, a bracket opened and closed, maths, a merge marker,
+/// lines added and taken away, undone and redone — and after each, every
+/// line's block, frames and cut against a fresh editor's.
+#[test]
+fn the_typst_scan_from_an_edit_reads_as_a_scan_from_the_top() {
+    let snippets = [
+        "/* c */", "/*", "*/", "/* a /* b */", "```\n", "```", "#let z = {", "}", "\n  y\n", "#emph[", "]", "$", "$x$",
+        "\n\n", "\n", "= 新\n", "<<<<<<< ours\n", "=======\n", ">>>>>>> theirs\n", "#{", "(", ")", "\\", "x",
+    ];
+    for seed in 1..=8u64 {
+        let mut rng = seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1;
+        let mut next = move || {
+            rng ^= rng << 13;
+            rng ^= rng >> 7;
+            rng ^= rng << 17;
+            rng
+        };
+        let mut ed = Editor::new();
+        ed.current_buffer_mut().insert(0, &typst_book(40)).unwrap();
+        ed.set_syntax(crate::syntax::Syntax::Typst);
+        let mut done = Vec::new();
+        for step in 0..60 {
+            let len = ed.current_buffer().rope().len_chars();
+            match next() % 10 {
+                0..=5 => {
+                    let at = (next() as usize) % (len + 1);
+                    let s = snippets[(next() as usize) % snippets.len()];
+                    ed.current_buffer_mut().insert(at, s).unwrap();
+                    done.push(format!("insert {at} {s:?}"));
+                }
+                6..=7 if len > 0 => {
+                    let at = (next() as usize) % len;
+                    let n = 1 + (next() as usize) % if next() % 4 == 0 { 400 } else { 6 };
+                    ed.current_buffer_mut().remove(at..(at + n).min(len)).unwrap();
+                    done.push(format!("remove {at}+{n}"));
+                }
+                8 => {
+                    let _ = ed.current_buffer_mut().undo(0);
+                    done.push("undo".into());
+                }
+                _ => {
+                    let _ = ed.current_buffer_mut().redo(0);
+                    done.push("redo".into());
+                }
+            }
+            let mut fresh = Editor::new();
+            fresh.current_buffer_mut().insert(0, &ed.current_buffer().rope().to_string()).unwrap();
+            fresh.set_syntax(crate::syntax::Syntax::Typst);
+            let total = ed.current_buffer().rope().len_lines();
+            for line in 0..total {
+                let said = |e: &Editor| {
+                    (format!("{:?}", e.block_of(line)), e.typst_frames(line).map(|f| f.to_vec()), e.typst_cut_before(line))
+                };
+                assert_eq!(said(&ed), said(&fresh), "seed {seed} step {step} line {line}, after {:?}", &done[done.len().saturating_sub(3)..]);
+            }
+        }
+    }
+}
+
+/// **A piece joined for a moment is cut again** (review, 2026-11-09): a
+/// fence typed and closed again joined every piece drawn so far into one,
+/// and it stayed one until the buffer was left.
+#[test]
+fn a_joined_typst_piece_is_cut_again() {
+    let mut ed = Editor::new();
+    ed.current_buffer_mut().insert(0, &typst_book(1500)).unwrap();
+    ed.set_syntax(crate::syntax::Syntax::Typst);
+    let total = ed.current_buffer().rope().len_lines();
+    let mut row = 0;
+    while row < total {
+        let _ = ed.typst_colours(row);
+        row += 40;
+    }
+    let pieces = ed.typst_pieces();
+    assert!(pieces >= 5, "{pieces}");
+    // A fence opened near the top, everything drawn, then closed.
+    let line = 600;
+    let at = ed.current_buffer().rope().line_to_char(line);
+    ed.current_buffer_mut().insert(at, "```\n").unwrap();
+    let _ = ed.typst_colours(line + 1);
+    let _ = ed.typst_colours(total - 2);
+    assert!(ed.typst_pieces() < pieces, "joined while the fence is open: {}", ed.typst_pieces());
+    let at = ed.current_buffer().rope().line_to_char(line + 1);
+    ed.current_buffer_mut().insert(at, "```\n").unwrap();
+    let _ = ed.typst_colours(line);
+    let _ = ed.typst_colours(total - 2);
+    assert!(ed.typst_pieces() + 1 >= pieces, "cut again once it is closed: {} of {pieces}", ed.typst_pieces());
+    let unlike = typst_lines_unlike_the_whole(&ed, line.saturating_sub(100)..line + 300);
+    assert!(unlike.is_empty(), "{} lines, first {:?}", unlike.len(), unlike.first());
+}

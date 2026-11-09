@@ -326,6 +326,22 @@ impl Language {
             // as Typst's highlighter has it (the author chose its look,
             // 2026-11-08): a number is text, and `^` `_` `/` `'` `√` `&` are
             // operators.
+            //
+            // **And the rest as typst-syntax 0.15's `highlight` has it**
+            // (review, 2026-11-09), where nothing above says otherwise. Typst
+            // gives what it calls interpolated — a name after `#`, and a
+            // symbol in maths — a colour of its own, the same blue as a call
+            // in its own theme; this page draws it as a call, as `#name`
+            // above. So: `#` before a field access, a string, a number or
+            // `true` takes the colour of what follows, and the names of a
+            // field access after `#` are drawn as `#name` is (`#it.body`,
+            // the `calc` of `#calc.pow(…)`, three deep; `it.body` inside a
+            // code block is not interpolated, and keeps its plain names);
+            // `none`, `auto`, `true` and `false` are keywords; in maths `pi`,
+            // `sum` and `alpha` are drawn as a call, and `+`, `=`, `⌈` and a
+            // bracket are text — only the brackets Typst takes away, round a
+            // fraction's part, a script or a root's radicand, are
+            // punctuation.
             Language::Typst => {
                 "
 (code \"#\" @keyword [(let_binding) (set_rule) (show_rule) (module_import)
@@ -333,11 +349,34 @@ impl Language {
   (return_statement) (break_statement) (continue_statement)])
 (code \"#\" @function (call))
 (code \"#\" @function (identifier) @function)
+(code \"#\" @function . (field_access))
+(code (field_access object: (identifier) @function))
+(code (field_access field: (identifier) @function))
+(code (field_access object: (field_access object: (identifier) @function)))
+(code (field_access object: (field_access field: (identifier) @function)))
+(code (field_access object: (field_access object: (field_access object: (identifier) @function))))
+(code (field_access object: (field_access object: (field_access field: (identifier) @function))))
+(code (call function: (field_access object: (identifier) @function)))
+(code (call function: (field_access object: (field_access object: (identifier) @function))))
+(code (call function: (field_access object: (field_access field: (identifier) @function))))
+[(bool) (none) (auto)] @keyword
+(code \"#\" @string . (string))
+(code \"#\" @keyword . [(bool) (none) (auto)])
+(code \"#\" @constant.numeric . [(int) (float) (numeric)])
 (strong \"*\" @markup.marker)
 (emph \"_\" @markup.marker)
 (equation \"$\" @markup.math)
 (raw_block (raw_lang) @markup.raw.block)
 (math_number) @variable
+(math_ident) @function
+(math_symbol) @variable
+(math_delimited [\"(\" \")\"] @variable)
+(math_delimiter) @variable
+(math_frac numerator: (math_delimited open: \"(\" @punctuation.bracket close: \")\" @punctuation.bracket))
+(math_frac denominator: (math_delimited open: \"(\" @punctuation.bracket close: \")\" @punctuation.bracket))
+(math_attach top: (math_delimited open: \"(\" @punctuation.bracket close: \")\" @punctuation.bracket))
+(math_attach bottom: (math_delimited open: \"(\" @punctuation.bracket close: \")\" @punctuation.bracket))
+(math_root radicand: (math_delimited open: \"(\" @punctuation.bracket close: \")\" @punctuation.bracket))
 (math_attach [\"_\" \"^\"] @markup.math.operator)
 (math_frac \"/\" @markup.math.operator)
 [(primes) (root_sign) (align_point)] @markup.math.operator
@@ -1407,9 +1446,28 @@ pub fn paint_typst(
 /// **Whether `tree` ends inside something it could not close** — an error or
 /// a missing token that runs to the last byte, as an unclosed `[`, raw block
 /// or comment leaves it. A stray `)` mid-paragraph is not.
-pub fn open_at_end(tree: &Tree, len: usize) -> bool {
+///
+/// Warning: **an unclosed `/*` is no error to tree-sitter-typst** (review,
+/// 2026-11-09): it is a `block_comment` that runs to the end, in a tree with
+/// no error in it. So a comment that ends the source is read for its `*/`s,
+/// nested as Typst nests them.
+pub fn open_at_end(tree: &Tree, source: &str) -> bool {
+    let len = source.len();
     let root = tree.root_node();
-    if !root.has_error() || len == 0 {
+    if len == 0 {
+        return false;
+    }
+    let mut node = root.descendant_for_byte_range(len - 1, len);
+    while let Some(here) = node {
+        if here.kind() == "block_comment" {
+            if !block_comment_closed(&source.as_bytes()[here.byte_range()]) {
+                return true;
+            }
+            break;
+        }
+        node = here.parent();
+    }
+    if !root.has_error() {
         return false;
     }
     let last = root.child(root.child_count().saturating_sub(1));
@@ -1422,6 +1480,30 @@ pub fn open_at_end(tree: &Tree, len: usize) -> bool {
             return true;
         }
         node = here.parent();
+    }
+    false
+}
+
+/// Whether a Typst block comment's text closes every `/*` in it, its own
+/// first: the pairs taken as Typst's lexer takes them, left to right.
+fn block_comment_closed(text: &[u8]) -> bool {
+    if !text.starts_with(b"/*") {
+        return true;
+    }
+    let (mut deep, mut at) = (1usize, 2usize);
+    while at + 1 < text.len() {
+        match (text[at], text[at + 1]) {
+            (b'/', b'*') => deep += 1,
+            (b'*', b'/') => deep -= 1,
+            _ => {
+                at += 1;
+                continue;
+            }
+        }
+        at += 2;
+        if deep == 0 {
+            return true;
+        }
     }
     false
 }
@@ -2193,7 +2275,7 @@ mod tests {
         assert_eq!(at(3, "$x"), Some(Kind::Math));
         assert_eq!(at(3, "2 +"), token(Token::Plain), "a number in maths is text, as Typst draws it");
         assert_eq!(at(3, "^"), token(Token::Escape), "and `^` an operator");
-        assert_eq!(at(3, "pi"), token(Token::Constant));
+        assert_eq!(at(3, "pi"), token(Token::Function), "a symbol is interpolated, drawn as a call");
         assert_eq!(at(3, "#emph"), token(Token::Function), "a call's `#` is the call's");
         assert_eq!(at(3, "#title"), token(Token::Function), "and so is a name's");
         assert_eq!(at(3, "年"), None, "prose is the page's own ink");
@@ -2203,6 +2285,63 @@ mod tests {
         assert_eq!(at(5, "\"字\""), token(Token::String));
         assert_eq!(at(7, "heading"), token(Token::Function), "a show rule's selector");
         assert_eq!(at(7, "body"), token(Token::Plain), "a field in its object's colour");
+    }
+
+    /// **Where Typst's own highlighter is followed** (typst-syntax 0.15,
+    /// `highlight`; review, 2026-11-09), its interpolated colour drawn as a
+    /// call's: the `#` before a field access, a string, a number or a
+    /// keyword value takes what follows; the names of a field access after
+    /// `#` are interpolated; `none`, `auto`, `true` and `false` are
+    /// keywords; in maths a symbol is interpolated, `+`, `=` and brackets
+    /// are text, and only the brackets Typst takes away are punctuation.
+    #[test]
+    fn typst_is_coloured_as_its_own_highlighter_colours_it() {
+        let text = concat!(
+            "#show heading: it => [#it.body]\n",
+            "#calc.pow(2, 3) #\"s\" #true #none #auto #12pt\n",
+            "#{ let a = none; let b = it.body; a }\n",
+            "$x^2 + y_(i=0) = (a+b)/2 + n(n+1) + sqrt(c) + pi + sum$\n",
+            "#f(x: true, y: auto)\n",
+        );
+        let lines: Vec<String> = text.lines().map(str::to_string).collect();
+        let source = joined(&lines);
+        let tree = parse(Language::Typst, &source, None).expect("parses");
+        let painted = paint_typst(&source, &tree, &line_starts(&source), 0..lines.len());
+        let at = |row: usize, needle: &str| typst_kind_at(&painted, &lines, row, needle);
+        let token = |t: Token| Some(Kind::Token(t));
+        for (row, needle, want) in [
+            (0, "#it", Token::Function),
+            (0, "it.body]", Token::Function),
+            (0, "body]", Token::Function),
+            (0, ".body]", Token::Punctuation),
+            (1, "#calc", Token::Function),
+            (1, "calc", Token::Function),
+            (1, "pow", Token::Function),
+            (1, "#\"s\"", Token::String),
+            (1, "#true", Token::Keyword),
+            (1, "true", Token::Keyword),
+            (1, "#none", Token::Keyword),
+            (1, "#auto", Token::Keyword),
+            (1, "#12pt", Token::Number),
+            (2, "none;", Token::Keyword),
+            (2, "it.body;", Token::Plain),
+            (2, "body;", Token::Plain),
+            (3, "^", Token::Escape),
+            (3, "+ y", Token::Plain),
+            (3, "= (", Token::Plain),
+            (3, "(i=0)", Token::Punctuation),
+            (3, "(a+b)", Token::Punctuation),
+            (3, "/2", Token::Escape),
+            (3, "(n+1)", Token::Plain),
+            (3, "sqrt", Token::Function),
+            (3, "(c)", Token::Punctuation),
+            (3, "pi", Token::Function),
+            (3, "sum", Token::Function),
+            (4, "true,", Token::Keyword),
+            (4, "auto)", Token::Keyword),
+        ] {
+            assert_eq!(at(row, needle), token(want), "{needle:?} on row {row}");
+        }
     }
 
     /// The window the page asks for paints what the whole file would, and an
