@@ -1338,10 +1338,7 @@ pub fn run(
             crate::page_window::Outcome::Redraw => server_said_something = true,
             crate::page_window::Outcome::Browser { preview, path, why } => {
                 editor.close_preview(preview);
-                if job.is_none() {
-                    start_the_browser_preview(editor, config, &mut job, &path, yumete_core::syntax::Syntax::Typst);
-                }
-                editor.set_status(say!("preview.in-the-browser", why));
+                instead_in_the_browser(editor, config, &mut job, &path, yumete_core::syntax::Syntax::Typst, Some(why));
                 server_said_something = true;
             }
         }
@@ -1747,10 +1744,7 @@ pub fn run(
                         editor.set_status(say!("preview.stopped", running.what));
                     }
                     if let Preview::Start { path, syntax } = want {
-                        start_the_browser_preview(editor, config, &mut job, &path, syntax);
-                        if let Some(why) = why {
-                            editor.set_status(say!("preview.in-the-browser", why));
-                        }
+                        instead_in_the_browser(editor, config, &mut job, &path, syntax, why);
                     }
                 }
                 // **關掉那個檔案，預覽也跟着停**（2026-09-22）。判準是「這個檔案
@@ -3957,17 +3951,37 @@ fn run_program(
     })
 }
 
+/// **The browser's preview of `path` in place of the page window**, when
+/// `why` says why the window cannot be drawn. That is said only when the
+/// browser's preview starts, or is running already: the browser's preview
+/// of a Typst file is tinymist too, so where it cannot start, what stopped
+/// it is what the status line says.
+fn instead_in_the_browser(
+    editor: &mut Editor,
+    config: &Config,
+    job: &mut Option<Job>,
+    path: &std::path::Path,
+    syntax: yumete_core::syntax::Syntax,
+    why: Option<String>,
+) {
+    let started = job.is_some() || start_the_browser_preview(editor, config, job, path, syntax);
+    if let Some(why) = why.filter(|_| started) {
+        editor.set_status(say!("preview.in-the-browser", why));
+    }
+}
+
 /// **The browser's preview of `path`** (`:preview-browser`, and
 /// `:preview` where the page window cannot be drawn): the typesetter in
 /// the background for Typst, its address arriving on a later turn of the
 /// loop; the export, made once and handed to the browser, for Markdown.
+/// Whether it started; the status line says what happened either way.
 fn start_the_browser_preview(
     editor: &mut Editor,
     config: &Config,
     job: &mut Option<Job>,
     path: &std::path::Path,
     syntax: yumete_core::syntax::Syntax,
-) {
+) -> bool {
     // **What the config says, if it says anything.** The
     // typesetter for a language is a fact about the
     // reader's machine, not about the editor — see
@@ -3985,20 +3999,25 @@ fn start_the_browser_preview(
                 Ok(started) => {
                     editor.set_status(say!("preview.starting", program));
                     *job = Some(started);
+                    return true;
                 }
                 Err(why) => editor.set_status(why),
             },
             None => editor.set_status(say!("command.broken-line", runner.run)),
         }
-        return;
+        return false;
     }
     match syntax {
         yumete_core::syntax::Syntax::Typst => match Job::typst(path) {
             Ok(started) => {
                 editor.set_status(say!("preview.typst-starting"));
                 *job = Some(started);
+                true
             }
-            Err(why) => editor.set_status(why),
+            Err(why) => {
+                editor.set_status(why);
+                false
+            }
         },
         // Markdown has no server to run: the export *is*
         // the preview, made once and handed to the browser.
@@ -4016,15 +4035,20 @@ fn start_the_browser_preview(
                 Ok(_) => {
                     show(&out.to_string_lossy());
                     editor.set_status(say!("preview.made", out.display()));
+                    true
                 }
-                Err(err) => editor.set_status(say!("preview.failed", err)),
+                Err(err) => {
+                    editor.set_status(say!("preview.failed", err));
+                    false
+                }
             }
         }
         // Nothing to typeset: a file with no markup is
         // already what it is going to look like, and a
         // `:diff` listing is a report about two of them.
         yumete_core::syntax::Syntax::Text | yumete_core::syntax::Syntax::Diff | yumete_core::syntax::Syntax::Code(_) => {
-            editor.set_status(say!("preview.nothing-to-preview"))
+            editor.set_status(say!("preview.nothing-to-preview"));
+            false
         }
     }
 }
@@ -16303,6 +16327,24 @@ fn squeezed(text: &str) -> String {
     /// 每個 worker 送**兩次**：答案，以及線程結束時 `Unlatch` 補的那條空的。
     /// 從前收到空的那一輪會無條件清空，於是剛裝進去的兩百個詞在下一個按鍵就
     /// 沒了——`yume.md` 裏的「宇夢」掃多少遍都不著色，就是這一條。
+    /// **The browser's preview is said only when it starts**: where the
+    /// typesetter cannot be started, the status line says why, not that the
+    /// page is in the browser.
+    #[test]
+    fn a_browser_preview_that_cannot_start_is_not_said_to_be_open() {
+        let mut config = Config::default();
+        let runner = yumete_config::Runner { run: "/nonexistent/yumete-no-typesetter {file}".to_string(), kind: yumete_config::RunKind::Server };
+        config.language.insert("typst".to_string(), [("preview".to_string(), runner)].into_iter().collect());
+        let mut editor = yumete_core::Editor::new();
+        let mut job = None;
+        let path = std::path::Path::new("book.typ");
+        let why = "the terminal draws no pictures".to_string();
+        instead_in_the_browser(&mut editor, &config, &mut job, path, yumete_core::syntax::Syntax::Typst, Some(why.clone()));
+        assert!(job.is_none());
+        assert_ne!(editor.status(), say!("preview.in-the-browser", why));
+        assert!(editor.status().contains("yumete-no-typesetter"), "{}", editor.status());
+    }
+
     #[test]
     fn an_empty_second_answer_does_not_undo_the_first() {
         use yumete_core::discover::Found;
