@@ -1933,6 +1933,18 @@ mod tests {
         assert_eq!(how(&l, "."), ["turned"], "{l:?}");
     }
 
+    /// **A letter with a combining mark stands whole** (review, 2026-11-09):
+    /// `e` and U+0301 typed apart are one square under `jlreq`, as `é` is;
+    /// the mark used to be cut off and turned on its own.
+    #[test]
+    fn under_jlreq_a_letter_with_a_combining_mark_stands_whole() {
+        let mut e = engine(Latin::Jlreq, false);
+        let l = looks(&mut e, "又 e\u{301} 与 é 写。");
+        assert_eq!(how(&l, "e\u{301}"), ["across"], "{l:?}");
+        assert_eq!(how(&l, "é"), ["across"], "{l:?}");
+        assert!(how(&l, "\u{301}").is_empty(), "{l:?}");
+    }
+
     /// **A vertical table never runs past the foot** (2026-11-09, reported):
     /// empty and short bands keep their length while the long ones give way
     /// to fit, and a long word or an address in a cell is cut to its band.

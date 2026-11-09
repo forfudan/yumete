@@ -6546,7 +6546,7 @@ fn export_names_the_file_after_the_chapter_and_carries_the_layout() {
     let out = std::fs::read_to_string(dir.join("chapter.html")).unwrap();
     assert!(!out.contains("writing-mode: vertical-rl"), "{out}");
     assert!(!out.contains("hanging-punctuation"), "{out}");
-    assert!(out.contains("<h1>第一章</h1>"), "{out}");
+    assert!(out.contains("<h1 id=\"第一章\">第一章</h1>"), "{out}");
     // The export's own words carry it.
     ed.execute(":export! html vertical hanging").unwrap();
     let out = std::fs::read_to_string(dir.join("chapter.html")).unwrap();

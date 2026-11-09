@@ -2533,7 +2533,7 @@ mod tests {
         ed.execute(":export-as-preview").unwrap();
         let out = std::fs::read_to_string(dir.join("樣張.html")).unwrap();
         assert!(out.contains("background: #123456") && out.contains("'Test Sans'"), "{out}");
-        assert!(out.contains("<h1>一章</h1>") && out.contains("img class=\"math\""), "{out}");
+        assert!(out.contains("<h1 id=\"一章\">一章</h1>") && out.contains("img class=\"math\""), "{out}");
         assert_eq!(*INK.lock().unwrap(), Some([0xfe, 0xdc, 0xba]), "a formula in the writing's ink");
         assert_eq!(ed.status(), say!("export.wrote", dir.join("樣張.html").display()));
         ed.execute(":export-as-preview html").unwrap();
