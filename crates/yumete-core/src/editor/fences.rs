@@ -19,14 +19,12 @@ use crate::markdown::{Block, Span};
 /// reads by its colours, and parsing it on every edit is not free.
 const LONGEST: usize = 5_000;
 
-/// **整份是代碼的檔，大過這個就不建樹**（2026-10-13 報的：一個 3.91 GB 的 JSON 開
-/// 進來佔了 40 GB）。
+/// **整份是代碼的檔，大過這個就不建樹**（否則一個 3.91 GB 的 JSON 開進來佔 40 GB）。
 ///
 /// 上色那條路的代價量過：`361 MB` 的 JSON，關掉上色峰值 1165 MB，開着 3526 MB——
 /// **檔案本身的 6.5 倍**，而且三份都是整份的：逐行切出來的 `Vec<String>`、接回去的
-/// `source`，和 tree-sitter 整份解析出來的那棵樹。#423（2026-09-30）把舊的五千行閘
-/// 對這一類檔拿掉了，理由是「留樹 ＋ 窗口查詢 ＋ 增量解析，多長都染得起」——那三件
-/// 事省的是**每按一鍵**的時間，不是**一份**的記憶體，而那一份是線性的。
+/// `source`，和 tree-sitter 整份解析出來的那棵樹。#423 讓這一類檔不受行數的閘，
+/// 理由是「留樹 ＋ 窗口查詢 ＋ 增量解析，多長都染得起」——那三件事省的是**每按一鍵**的時間，不是**一份**的記憶體，而那一份是線性的。
 ///
 /// 16 MiB：這個倉最大的源碼檔是 1.2 MB，所以没有一份真的代碼碰得到它；碰得到的是
 /// 貼進來的數據檔，而那一種「没人靠顏色讀」（同 [`LONGEST`] 那一條的理由）。
@@ -60,10 +58,10 @@ pub(super) struct Fence {
 
 type Lines = Rc<Vec<Vec<Span>>>;
 
-/// **一份整個是代碼的檔，解析出來的那棵樹**（#423，2026-09-30）。
+/// **一份整個是代碼的檔，解析出來的那棵樹**（#423）。
 ///
-/// Warning: **樹要留着，這是整條的前提。** 從前 `code::highlight` 每叫一次解析
-/// 一次，於是滾一屏也付一次全份解析——量過 20,368 行的 `lib.rs` 是 50 毫秒。
+/// Warning: **樹要留着，這是整條的前提。** 每叫一次 `code::highlight` 解析一次
+/// 的話，滾一屏也付一次全份解析——量過 20,368 行的 `lib.rs` 是 50 毫秒。
 /// 留着它，滾屏只剩一次窗口查詢（0.06 毫秒），改一個字只剩一次增量解析
 /// （0.7 毫秒）。
 struct Held {
@@ -76,7 +74,7 @@ struct Held {
     tree: tree_sitter::Tree,
 }
 
-/// **How much of a Typst manuscript is parsed as one** (2026-11-08).
+/// **How much of a Typst manuscript is parsed as one**.
 ///
 /// tree-sitter reparses an edit in time that grows with how many nodes sit
 /// side by side under the root, wherever the edit is — and a manuscript is
@@ -192,7 +190,7 @@ pub(super) struct CodeCache {
     whole: Option<Held>,
     /// 這一版已經畫過的那幾塊，按塊號（#423）。換一版就清。
     by_chunk: HashMap<usize, Lines>,
-    /// A Typst manuscript's pieces and their trees (2026-11-08).
+    /// A Typst manuscript's pieces and their trees.
     typst: Option<Pieces>,
     /// This revision's Typst colours, by chunk.
     typst_chunks: HashMap<usize, Lines>,
@@ -204,12 +202,12 @@ impl Editor {
         self.code_colours
     }
 
-    /// **一行長過這個就不上色**（2026-10-08 定，10-09 從 3000 擡到這個數）。
+    /// **一行長過這個就不上色**。
     ///
-    /// 從前取的是 vim `synmaxcol` 的 3000。那個數不對：vim 那一道閘管的是**代碼上
-    /// 的語法著色**，而這一道還連着記號的藏與不藏、腳註的上標、分詞的著色——正是散
-    /// 文靠的那幾樣。3000 字在這個編輯器裏不是壓縮過的 `.js`，是一段寫得長的散文，
-    /// 於是出廠狀態下一段 3371 字的中文就靜靜地不再上色、`**粗**` 也不再收起來。
+    /// 不取 vim `synmaxcol` 的 3000：vim 那一道閘管的是**代碼上的語法著色**，而
+    /// 這一道還連着記號的藏與不藏、腳註的上標、分詞的著色——正是散文靠的那幾樣。
+    /// 3000 字在這個編輯器裏不是壓縮過的 `.js`，是一段寫得長的散文，取它的話一段
+    /// 3371 字的中文就靜靜地不再上色、`**粗**` 也不再收起來。
     ///
     /// 這個數是量出來的。扣掉啓動基線，每幀多花的時間：
     ///
@@ -229,7 +227,7 @@ impl Editor {
     ///
     /// Warning: **數的是字，不是列。** 問這一句不許造字串（見
     /// [`Self::line_is_too_long`]），而一行的列寬要逐字量，正好是這道閘要省的那筆
-    /// 賬。界面上那幾則文案現在說的是「列數」，對不上——那是文案，等作者定。
+    /// 賬。Warning: 界面上那幾則文案說的是「列數」，與這裏對不上。
     pub const LONG_LINE: usize = 50_000;
 
     /// 那個門槛，`None` ＝没有上限。
@@ -239,11 +237,11 @@ impl Editor {
 
     pub fn set_long_line(&mut self, upto: Option<usize>) {
         self.long_line = upto;
-        // **走這道閘的備忘，四份一起忘**（2026-10-09 改）。
+        // **走這道閘的備忘，四份一起忘**。
         //
-        // Warning: 從前只忘兩份（記號與代碼），另兩份（分詞與標點）靠的是「那道閘擺
-        // 在備忘查詢**之前**」——按今天的代碼確實不會過期，可那就成了「兩份靠順序、
-        // 兩份靠清空」，而讀代碼的人看見清空這一句，自然以為把閘擺在查詢後面也行。
+        // Warning: 只忘兩份（記號與代碼）、另兩份（分詞與標點）靠「那道閘擺在備忘
+        // 查詢**之前**」的話，就成了「兩份靠順序、兩份靠清空」，而讀代碼的人看見
+        // 清空這一句，自然以為把閘擺在查詢後面也行。
         // 門槛是一個設置，動一次就這麼一下，四份全忘最便宜也最說得清。
         self.markup_memo.forget();
         self.segment_memo.forget();
@@ -295,27 +293,25 @@ impl Editor {
 
     /// The coloured runs of `line` in a file that is code from top to bottom.
     ///
-    /// Warning: **這一支走的是另一條路**（#423，2026-09-30）。圍欄裏那幾行是幾
-    /// 十行，整份解析一次就完了；一份兩萬行的源碼不是——所以這一條**留着樹**、
-    /// **只查看得見的那一塊**、**改一個字走增量**。三件湊起來把一次按鍵從 75 毫
-    /// 秒壓到 0.8 毫秒，那個五千行的閘也就不必再有了。
+    /// Warning: **這一支走的是另一條路**（#423）。圍欄裏那幾行是幾十行，整份解析
+    /// 一次就完了；一份兩萬行的源碼不是——所以這一條**留着樹**、**只查看得見的
+    /// 那一塊**、**改一個字走增量**。三件湊起來一次按鍵 0.8 毫秒（整份解析是 75
+    /// 毫秒），所以不必按行數設閘。
     pub(super) fn code_file_line(&self, line: usize, language: Language) -> Vec<Span> {
         if !self.code_colours {
             return Vec::new();
         }
-        // Warning: **先確認手上那棵樹就是這個檔這一版的**（2026-10-01 報的：
-        // 「open a rust file first and then open a python file via picker,
-        // the coloring of the python file is incorrect」）。`by_chunk` 只按
+        // Warning: **先確認手上那棵樹就是這個檔這一版的**。`by_chunk` 只按
         // 「第幾塊」記，**不記是哪個檔**——所以從 `build.rs` 切到 `sc2tc.py`，
-        // 第 0 塊早就在裏頭了，直接命中的是**上一個檔的顏色**，而
+        // 第 0 塊早就在裏頭了，不先確認的話命中的是**上一個檔的顏色**，而
         // `hold_the_tree` 連叫都没叫到，那一格於是永遠不清。
         //
         // 放在前面不貴：同一個檔同一版的時候 `hold_the_tree` 就是三個比較。
-        // **一塊裏有一條過長的行，整塊就不上色**（2026-10-09 作者定）。
+        // **一塊裏有一條過長的行，整塊就不上色**。
         //
         // Warning: **按行攔攔不住這筆賬。** `markup_runs` 那頭的閘只丟掉**那一條長行
         // 自己**的跨度，而旁邊一條短行照樣叫整塊的解析與上色，而那一塊的字節範圍蓋
-        // 着長行——於是一行五萬字的 `.rs` 每幀多花 42 毫秒，20 萬字 165 毫秒，線性，
+        // 着長行——只按行攔的話一行五萬字的 `.rs` 每幀多花 42 毫秒，20 萬字 165 毫秒，線性，
         // 每千字約 0.8 毫秒。改一個字 `by_chunk` 全清，所以那一筆每次編輯都要再付。
         //
         // Warning: **擺在 `hold_the_tree` 前面，而且不進緩存。** 兩件事各有理由：
@@ -327,7 +323,7 @@ impl Editor {
         //
         // 代價寫明：那一塊裏的短行（最多 127 條）跟着没有顏色。另一條路是把長行的
         // 字節從查詢範圍裏摘出去，那要按行拆範圍，而跨行的構造（跨行字串、塊註釋）
-        // 會跟着判錯——作者選了這一條。
+        // 會跟着判錯，所以取這一條。
         let chunk = line / CHUNK;
         let gated = self.long_line.is_some()
             && (chunk * CHUNK..(chunk + 1) * CHUNK).any(|row| self.line_is_too_long(row));
@@ -354,8 +350,8 @@ impl Editor {
         painted.get(line - chunk * CHUNK).cloned().unwrap_or_default()
     }
 
-    /// **The colours of a line of a Typst manuscript, from its syntax tree**
-    /// (2026-11-08), or `None` where the tree does not speak and the block
+    /// **The colours of a line of a Typst manuscript, from its syntax tree**,
+    /// or `None` where the tree does not speak and the block
     /// scanner's runs keep the colour: `:view-code` off, `:markup off`, a
     /// file past [`BIGGEST`], a chunk with a line past `:view-long-line`.
     ///
@@ -581,10 +577,10 @@ impl Editor {
         cache.typst_chunks.clear();
     }
 
-    /// **Cut a regrown piece again** (review, 2026-11-09). A fence or a `/*`
-    /// typed and closed a moment later joins every piece it reached, and the
-    /// join used to last until the buffer was left: a 1 MB book went from 17
-    /// pieces to one, and every keystroke reparsed all of it. So a piece
+    /// **Cut a regrown piece again**. A fence or a `/*` typed and closed a
+    /// moment later joins every piece it reached, and a join that lasted until
+    /// the buffer was left would take a 1 MB book from 17 pieces to one, every
+    /// keystroke reparsing all of it. So a piece
     /// joined for the scanner, once it is more than twice [`PIECE`] and the
     /// scanner allows a cut inside it again, is cut where [`Self::next_cut`]
     /// would have cut it, each part to be read when its lines are drawn.
@@ -657,7 +653,7 @@ impl Editor {
     /// after such a break as it reads the top of a file, so a piece parsed on
     /// its own is the document's own reading of those lines.
     ///
-    /// The block scan works the lines out as it walks them (2026-11-09), so
+    /// The block scan works the lines out as it walks them, so
     /// asking is a search: the pieces ask for every line of a joined piece.
     pub(super) fn typst_cut_before(&self, line: usize) -> bool {
         if line == 0 || line >= self.current_buffer().rope().len_lines() {
@@ -667,12 +663,12 @@ impl Editor {
         self.typst_cuts.borrow().binary_search(&line).is_ok()
     }
 
-    /// **這一份裏每一個定義**，位置是**字符**（`]f`/`]c`/`mi f`，2026-10-06）。
+    /// **這一份裏每一個定義**，位置是**字符**（`]f`/`]c`/`mi f`）。
     ///
     /// 只在「整份是代碼」的檔上回得出東西：markdown 裏的圍欄各有各的樹，而一段
     /// 稿子裏的 `def` 不是這本書的結構。空的回空——按鍵那一頭照這個說「這裏没有」。
     ///
-    /// **…and in the code fence the caret is in** (2026-10-27): a Markdown file
+    /// **…and in the code fence the caret is in**: a Markdown file
     /// has code in its fences, and `mi f` inside a ```` ```rust ```` block means
     /// that function. Only the fence under the caret is read.
     pub(super) fn definitions_here(&self) -> Vec<(usize, usize, crate::code::Define)> {
@@ -702,7 +698,7 @@ impl Editor {
         found.into_iter().map(|(from, to, kind)| (at(from), at(to), kind)).collect()
     }
 
-    /// **這一份裏每一個參數/註釋**，位置是**字符**（`mi a`/`mi c`，2026-10-06）。
+    /// **這一份裏每一個參數/註釋**，位置是**字符**（`mi a`/`mi c`）。
     ///
     /// In a fence too, as [`Self::definitions_here`] is.
     pub(super) fn objects_here(&self, want: crate::code::Object) -> Vec<(usize, usize)> {
@@ -731,9 +727,9 @@ impl Editor {
         found.into_iter().map(|(from, to)| (at(from), at(to))).collect()
     }
 
-    /// **新開的那一行，比這一行多縮幾級**（2026-10-08，tree-sitter 縮進第一期）。
+    /// **新開的那一行，比這一行多縮幾級**（tree-sitter 縮進）。
     ///
-    /// 回 `0` ＝ 和這一行一樣（照抄空白，從前的行為）。`closing` 是新那一行開頭已
+    /// 回 `0` ＝ 和這一行一樣（照抄空白）。`closing` 是新那一行開頭已
     /// 經打出來的那個字——`}` 之類會把這個數減一。
     ///
     /// **照 helix 的 `Hybrid`**：樹只說「差幾級」，**基準是上一行真實的縮進**。它
@@ -741,7 +737,7 @@ impl Editor {
     /// differing indentation styles」——而這三樣每一樣這裏都有。所以源碼打到一半
     /// 解析不出來的時候（實測：`fn f() {` 自己一份檔，tree-sitter 給的是
     /// `(source_file (ERROR …))`，一個 `block` 都没有），兩頭都答 0，差也是 0，
-    /// 於是照抄上一行——和 2026-10-08 早些時候做的 `autoindent` 一字不差。
+    /// 於是照抄上一行——和 `autoindent` 一字不差。
     pub(super) fn levels_to_open_at(&self, pos: usize, closing: Option<char>) -> isize {
         let crate::syntax::Syntax::Code(language) = self.current_buffer().syntax() else {
             return 0;
@@ -849,7 +845,7 @@ impl Editor {
         let line = self.cursor_line();
         let rope = self.current_buffer().rope();
         let long = |n: usize| (n > LONGEST).then_some((n, LONGEST));
-        // Warning: **整份是代碼的檔没有這個閘了**（#423，2026-09-30）：它走留樹
+        // Warning: **整份是代碼的檔没有這個閘**（#423）：它走留樹
         // ＋窗口查詢＋增量解析那一條，多長都染得起。閘只剩給稿子裏貼的那一段
         // ——那一種是整份解析的，而一份貼進來的數據檔没人靠顏色讀。
         if matches!(self.current_buffer().syntax(), crate::syntax::Syntax::Code(_)) {
@@ -950,8 +946,7 @@ impl Editor {
         })
     }
 
-    /// **The syntax tree the caret stands in** (helix's tree keys,
-    /// 2026-11-02): a code file's, held as for its colours, or the fenced
+    /// **The syntax tree the caret stands in** (helix's tree keys): a code file's, held as for its colours, or the fenced
     /// block's, parsed for the asking. `None` in prose.
     pub(super) fn tree_here(&self) -> Option<TreeHere> {
         if let crate::syntax::Syntax::Code(language) = self.current_buffer().syntax() {
