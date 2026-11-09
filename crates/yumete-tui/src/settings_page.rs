@@ -81,6 +81,45 @@ const GROUPS_WIDE: u16 = 14;
 /// 中文可以在任何一個字之間斷，所以貪心地裝滿一行就斷；可是**空格那一種斷點更好
 /// 讀**——鍵那一行是一組一組的，斷在組裏面會把一組拆成兩半。所以裝滿之後往回找最
 /// 近的那個空格（只找這一行的後四分之一），找得到就斷在那裏。
+/// **The key row folded between its pairs** (2026-11-09, review: `Tab` was
+/// left at the end of one row and `global/project` began the next). The
+/// pairs are the ones `, ` stands between; a pair wider than the row is
+/// folded as text is.
+fn fold_pairs(text: &str, wide: usize) -> Vec<String> {
+    let mut rows: Vec<String> = Vec::new();
+    let mut line = String::new();
+    let pairs: Vec<&str> = text.split(", ").collect();
+    for (i, pair) in pairs.iter().enumerate() {
+        let piece = match i + 1 < pairs.len() {
+            true => format!("{pair},"),
+            false => pair.to_string(),
+        };
+        let with = match line.is_empty() {
+            true => piece.clone(),
+            false => format!("{line} {piece}"),
+        };
+        if yumete_cjk::str_width(&with) <= wide {
+            line = with;
+            continue;
+        }
+        if !line.is_empty() {
+            rows.push(std::mem::take(&mut line));
+        }
+        match yumete_cjk::str_width(&piece) <= wide {
+            true => line = piece,
+            false => {
+                let mut folded = fold(&piece, wide);
+                line = folded.pop().unwrap_or_default();
+                rows.extend(folded);
+            }
+        }
+    }
+    if !line.is_empty() {
+        rows.push(line);
+    }
+    rows
+}
+
 fn fold(text: &str, wide: usize) -> Vec<String> {
     if wide == 0 {
         return Vec::new();
@@ -562,7 +601,10 @@ impl Seat {
         }
         let _ = self.notice(editor);
         let Some(page) = self.panel.as_ref() else { return false };
+        // Text pasted into a value being typed is the line's, and what the
+        // editor says of it is a row message: it goes when the value does.
         if editor.mode().is_prompt() {
+            self.row_said = true;
             return false;
         }
         let before = page.spot();
@@ -702,6 +744,10 @@ impl Seat {
             (Some(Typing::Value), Some(None)) => {
                 page.typing = None;
                 page.refusal = None;
+                if self.row_said {
+                    editor.set_status(String::new());
+                    self.row_said = false;
+                }
             }
             // What was typed after a `:`: the habit of closing, or a word
             // that it is not taken. Nothing of it ever reaches the panel or
@@ -1055,7 +1101,7 @@ pub fn draw(
         (None, false, None) if !panel.search.is_empty() => say!("settings.keys-searched"),
         (None, false, None) => say!("settings.keys"),
     };
-    let keys_rows = fold(&keys, right.saturating_sub(area.x + 2) as usize);
+    let keys_rows = fold_pairs(&keys, right.saturating_sub(area.x + 2) as usize);
     // Warning: **矮窗口上一塊一塊地讓**：先讓說明那一塊，鍵那一塊最後讓。
     let room = bottom.saturating_sub(area.y + 3);
     let keys_high = (keys_rows.len() as u16 + 1).min(room);
@@ -2104,10 +2150,26 @@ mod tests {
         ed.paste_text("-");
         assert_eq!(ed.value_typed(), Some("letter-"));
         keys(&mut seat, &mut ed, &[Key::Esc]);
+        assert_eq!(ed.status(), "", "what the paste said goes with the value");
         page_mut(&mut seat).go_to("editor.soft_wrap", |_| Vec::new());
         keys(&mut seat, &mut ed, &[Key::Char('p')]);
         assert_eq!(ed.status(), say!("settings.paste-nowhere"));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// **The key row folds between its pairs**, never inside one.
+    #[test]
+    fn the_key_row_folds_between_its_pairs() {
+        let english = "jk move, hl group, / search, Enter change, Space toggle, r reset, u undo, C-r redo, p paste, y copy, Tab global/project, e open file, q close";
+        for (keys, wide) in [(english.to_string(), 98), (say!("settings.keys"), 78), (say!("settings.keys"), 40)] {
+            let rows = super::fold_pairs(&keys, wide);
+            assert!(rows.len() > 1, "{rows:?}");
+            for row in &rows {
+                assert!(yumete_cjk::str_width(row) <= wide, "{row:?}");
+                assert!(row.ends_with(',') || row == rows.last().unwrap(), "a row ends after a pair: {row:?}");
+            }
+            assert_eq!(rows.join(" "), keys, "nothing lost");
+        }
     }
 
     /// **A search lands on the setting it names** (2026-11-09, review:
