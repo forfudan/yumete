@@ -38322,9 +38322,11 @@ fn bc_closes_the_preview_and_q_closes_its_window() {
     // `:q` in the last text window closes it and leaves the preview…
     ed.open_page_window(main.clone()).unwrap();
     assert_eq!(ed.live_window(), text);
+    assert_eq!(ed.mode_label().as_deref(), Some("NOR"));
     assert_eq!(ed.execute(":q").unwrap(), CommandOutcome::Continue);
     assert_eq!(ed.windows().len(), 1);
     assert!(ed.page_window_has_the_keys(), "the keys go to the preview");
+    assert_eq!(ed.mode_label().as_deref(), Some("PRV.NOR"), "the status line says the keys are in the preview");
     // …and `:q` there, the last window, leaves.
     assert_eq!(ed.execute(":q").unwrap(), CommandOutcome::Quit);
     // `␣wq` is the same.

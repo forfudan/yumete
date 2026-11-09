@@ -38,6 +38,11 @@ impl Editor {
         if self.mode == Mode::Normal && self.sidebar_focused() {
             return Some("PAN.NOR".to_string());
         }
+        // A preview has no caret and no text to dim, so the status line is
+        // what says the keys are in it.
+        if self.mode == Mode::Normal && self.page_window_has_the_keys() {
+            return Some("PRV.NOR".to_string());
+        }
         // **選擇器也報狀態**，同面板：讀者馬上知道現在是不是插入狀態。
         //
         // Warning: **只有一個詞。** 挑選器只有打字那一層——開門就在框裏，`Esc` 一下
