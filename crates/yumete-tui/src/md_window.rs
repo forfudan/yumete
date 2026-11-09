@@ -278,7 +278,7 @@ fn work(inbox: mpsc::Receiver<Job>, out: mpsc::Sender<Shot>) {
         let top = top.clamp(0.0, (page - along).max(0.0)).round();
         let caret = want.caret.map(|(line, character)| p.y_for_character(line, character));
         let mut picture = p.render(top, h);
-        if let Some((from, to)) = want.caret.and_then(|(line, character)| p.visual_span_of(line, character)) {
+        if let Some((from, to)) = want.caret.and_then(|(line, _)| p.line_span_of(line)) {
             paint_the_bar(&mut picture, (from - top, to - top), want.vertical.is_some(), want.scale(), p.caret_colour());
         }
         let png = picture.png();
