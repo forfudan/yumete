@@ -6,6 +6,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Added
 
+- **The settings panel's `/` search reads either Chinese script and full pinyin**: 「預覽」 and `yulan` both find 预览字体.
 - **A click gives the window under it the keys**: a text window takes the caret where it was clicked, a preview takes the keys as it is (its frame turns gold), and a click in the text takes the keys back from a sidebar.
 - **`␣wn` opens a new window on a chosen side** (yumete flavour, basic, helix keys): `h` `j` `k` `l` a blank window on the left, below, above or on the right, and `H` `J` `K` `L` one with the buffer picker open in it.
 
