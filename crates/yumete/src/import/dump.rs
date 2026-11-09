@@ -33,8 +33,9 @@
 //! Warning: **Windows has none of the last three.** It has no process group
 //! to kill and no environment to read, and a console's Ctrl-C ends yumete
 //! without removing the copy (a job object would close that gap, and needs a
-//! crate this one does not have). Only the editor itself is killed at the
-//! time limit there.
+//! crate this one does not have). At the time limit the editor and what runs
+//! under it are killed there with `taskkill /T` ([`kill_tree`]); what it
+//! started and left running when it quit by itself is not.
 //!
 //! What is read comes back as JSON from `dump.lua` or `dump.vim`, written
 //! into the same directory.
@@ -135,6 +136,8 @@ impl From<std::io::Error> for CopyStop {
 /// **A home of the import's own**, removed when dropped.
 pub(super) struct Sandbox {
     pub root: PathBuf,
+    /// `root` as it really is (`/private/var` for macOS's `/var`).
+    real_root: PathBuf,
     pub home: PathBuf,
     /// Files and directories copied so far.
     entries: usize,
@@ -163,8 +166,20 @@ impl Sandbox {
             .map(|d| d.as_nanos())
             .unwrap_or(0);
         let root = base.join(format!("yumete-run-{}-{stamp}", std::process::id()));
+        // **The reader's alone, and new** (review, 2026-11-09): it holds a
+        // copy of their config under the shared temporary directory, so it
+        // is made 0700, and a directory already there by that name is
+        // refused rather than used (and, refused before the sandbox exists,
+        // never removed either).
+        #[cfg_attr(not(unix), allow(unused_mut))]
+        let mut made = std::fs::DirBuilder::new();
+        #[cfg(unix)]
+        std::os::unix::fs::DirBuilderExt::mode(&mut made, 0o700);
+        made.create(&root).map_err(|e| Failed::Copy(format!("{}: {e}", root.display())))?;
+        let real_root = std::fs::canonicalize(&root).map_err(|e| Failed::Copy(e.to_string()))?;
         let home = root.join("home");
         let sandbox = Sandbox {
+            real_root,
             root,
             home,
             entries: 0,
@@ -178,7 +193,9 @@ impl Sandbox {
         for dir in [".config", ".local/share", ".local/state", ".cache"] {
             std::fs::create_dir_all(sandbox.home.join(dir)).map_err(|e| Failed::Copy(e.to_string()))?;
         }
-        std::fs::create_dir_all(sandbox.root.join("run")).map_err(|e| Failed::Copy(e.to_string()))?;
+        for dir in ["run", "tmp"] {
+            std::fs::create_dir_all(sandbox.root.join(dir)).map_err(|e| Failed::Copy(e.to_string()))?;
+        }
         Ok(sandbox)
     }
 
@@ -207,9 +224,28 @@ impl Sandbox {
     ///   `init.lua` is one);
     /// - and it gives up past [`MOST_ENTRIES`] files and directories,
     ///   [`DEEPEST`] levels, or the sandbox's time.
+    ///
+    /// Warning (review, 2026-11-09): **a copy only ever writes inside the
+    /// sandbox.** A target outside it, or a config that holds the sandbox,
+    /// is refused before anything is written, and a file is never copied
+    /// onto itself: `NVIM_APPNAME=/abs/myconf` once made the target the
+    /// reader's config, and each file copied onto itself was emptied.
     pub(super) fn copy(&mut self, from: &Path, to: &Path, left_out: &[&str]) -> Result<(), Failed> {
         // The top is followed: `~/.config/nvim` is often a link into dotfiles.
         let Ok(top) = std::fs::canonicalize(from) else { return Ok(()) };
+        if !self.holds(to) {
+            return Err(Failed::Copy(format!(
+                "{} is not inside the import's own directory, so nothing was copied",
+                to.display()
+            )));
+        }
+        if self.real_root.starts_with(&top) {
+            return Err(Failed::Copy(format!(
+                "{} holds the import's own directory ({}), so nothing was copied",
+                from.display(),
+                self.root.display()
+            )));
+        }
         let mut inside = Vec::new();
         match self.copy_at(&top, from, to, left_out, &mut inside) {
             Ok(()) => Ok(()),
@@ -248,6 +284,9 @@ impl Sandbox {
         };
         if meta.is_file() {
             self.count()?;
+            if !self.holds(to) || same_file(from, to) {
+                return Err(CopyStop::GaveUp(format!("{} would be copied onto itself or out of the copy", from.display())));
+            }
             std::fs::copy(from, to)?;
             return Ok(());
         }
@@ -282,6 +321,19 @@ impl Sandbox {
         }
         inside.pop();
         Ok(())
+    }
+
+    /// **Whether `path` is inside the sandbox**, by its name (no `..`) and,
+    /// through the deepest part of it that is there already, as it really
+    /// is: a link on the way out of the sandbox does not count as inside.
+    fn holds(&self, path: &Path) -> bool {
+        use std::path::Component;
+        let Ok(below) = path.strip_prefix(&self.root) else { return false };
+        if !below.components().all(|c| matches!(c, Component::Normal(_) | Component::CurDir)) {
+            return false;
+        }
+        let there = path.ancestors().find(|p| p.symlink_metadata().is_ok()).unwrap_or(&self.root);
+        std::fs::canonicalize(there).is_ok_and(|real| real.starts_with(&self.real_root))
     }
 
     /// One more file or directory copied.
@@ -320,6 +372,8 @@ impl Sandbox {
         // `/private/var` on macOS).
         let mut ceilings = vec![self.root.clone()];
         ceilings.extend(std::fs::canonicalize(&self.root).ok().filter(|real| *real != self.root));
+        #[cfg(windows)]
+        let program = &on_path(program);
         let mut command = Command::new(program);
         command
             .args(args)
@@ -329,6 +383,10 @@ impl Sandbox {
             .env("XDG_DATA_HOME", self.data())
             .env("XDG_STATE_HOME", self.home.join(".local").join("state"))
             .env("XDG_CACHE_HOME", self.home.join(".cache"))
+            // Neovim's own temporary directory (`nvim.$USER`) and whatever a
+            // plugin makes there go with the copy, a killed run's included
+            // (review, 2026-11-09: each one was left in `$TMPDIR`).
+            .env("TMPDIR", self.root.join("tmp"))
             .env("YUMETE_DUMP_SCRIPT", &script_path)
             .env("YUMETE_DUMP", &out)
             .env("YUMETE_LOCK", run.join("lazy-lock.json"))
@@ -360,6 +418,8 @@ impl Sandbox {
             use std::os::unix::process::CommandExt;
             command.process_group(0);
         }
+        #[cfg(windows)]
+        command.env("TMP", self.root.join("tmp")).env("TEMP", self.root.join("tmp"));
         let mut child = match command.spawn() {
             Ok(child) => child,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Err(Failed::NotInstalled),
@@ -374,6 +434,7 @@ impl Sandbox {
                     break;
                 }
                 Ok(None) if signals::stopped() => {
+                    kill_tree(&child);
                     kill_group(&child);
                     let _ = child.kill();
                     let _ = child.wait();
@@ -387,6 +448,7 @@ impl Sandbox {
                     while asked.elapsed() < Duration::from_secs(1) && matches!(child.try_wait(), Ok(None)) {
                         std::thread::sleep(Duration::from_millis(25));
                     }
+                    kill_tree(&child);
                     kill_group(&child);
                     let _ = child.kill();
                     let _ = child.wait();
@@ -421,16 +483,65 @@ impl Sandbox {
     }
 }
 
+/// Whether `a` and `b` are one file (`b` there at all, and the same file
+/// as `a`).
+fn same_file(a: &Path, b: &Path) -> bool {
+    let (Ok(x), Ok(y)) = (std::fs::metadata(a), std::fs::metadata(b)) else { return false };
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        x.dev() == y.dev() && x.ino() == y.ino()
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (x, y);
+        std::fs::canonicalize(a).ok().is_some_and(|a| std::fs::canonicalize(b).ok() == Some(a))
+    }
+}
+
 /// **Kill whatever the editor started** — a plugin manager's `git fetch`, a
 /// language server — with it: the editor led a process group of its own.
 /// Also once it has quit, as a job it left would write into a copy about to
 /// be removed, or run on for ever.
 ///
-/// Warning: **Windows has no process group to kill**; only the editor itself
-/// is killed there, and what it started may run on (a job object would close
-/// that gap, and needs a crate this one does not have).
+/// Warning: **Windows has no process group to kill**; [`kill_tree`] stands
+/// in while the editor runs, and what it left behind when it quit may run on
+/// (a job object would close that gap, and needs a crate this one does not
+/// have).
 fn kill_group(child: &std::process::Child) {
     signal_group(child, Signal::Kill);
+}
+
+/// **Windows: the editor and every process under it**, while it still
+/// runs (review, 2026-11-09), with the system's own `taskkill`: Windows has
+/// no process group, and only the editor itself was killed at the time
+/// limit. The `Child` holds the process open, so its id is not yet anyone
+/// else's.
+fn kill_tree(child: &std::process::Child) {
+    #[cfg(windows)]
+    {
+        let _ = Command::new("taskkill")
+            .args(["/T", "/F", "/PID", &child.id().to_string()])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+    #[cfg(not(windows))]
+    let _ = child;
+}
+
+/// **Windows: `vim.bat` when there is no `vim.exe`** on `PATH` (review,
+/// 2026-11-09): Vim's installer puts the batch file there, and `Command`
+/// looks for an `.exe` alone.
+#[cfg(windows)]
+fn on_path(program: &str) -> String {
+    let path = std::env::var_os("PATH").unwrap_or_default();
+    let has = |name: &str| std::env::split_paths(&path).any(|dir| dir.join(name).is_file());
+    match !has(&format!("{program}.exe")) && has(&format!("{program}.bat")) {
+        true => format!("{program}.bat"),
+        false => program.to_string(),
+    }
 }
 
 /// The two signals a run is sent.

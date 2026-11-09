@@ -65,8 +65,10 @@ pub fn helix_config_path(env: Env) -> Option<PathBuf> {
 /// **Neovim's config directory**, as Neovim finds it: `$NVIM_APPNAME` (or
 /// `nvim`) under `$XDG_CONFIG_HOME`, `%LOCALAPPDATA%` on Windows, or
 /// `~/.config`.
+///
+/// `None` too for a `$NVIM_APPNAME` Neovim refuses ([`nvim_app`]).
 pub fn nvim_dir(env: Env) -> Option<PathBuf> {
-    let app = env("NVIM_APPNAME").filter(|v| !v.is_empty()).unwrap_or_else(|| "nvim".to_string());
+    let app = nvim_app(env).ok()?;
     if let Some(dir) = dir_of(env, "XDG_CONFIG_HOME") {
         return Some(dir.join(app));
     }
@@ -1156,9 +1158,35 @@ fn inline(value: &toml::Value) -> String {
 
 // ---- vim and Neovim --------------------------------------------------------
 
-/// `$NVIM_APPNAME`, or `nvim`.
-fn nvim_app(env: Env) -> String {
-    env("NVIM_APPNAME").filter(|v| !v.is_empty()).unwrap_or_else(|| "nvim".to_string())
+/// **`$NVIM_APPNAME`, or `nvim`**; `Err` with the name when Neovim would
+/// refuse it.
+///
+/// Warning (review, 2026-11-09): **the name is joined onto the copy's
+/// directory**, and `PathBuf::join` with an absolute path drops what it is
+/// joined to. `NVIM_APPNAME=/abs/myconf` (or `~/.config/nvim`, which the
+/// shell expands) made the copy's target the reader's config itself, and
+/// copying each file onto itself emptied it. Neovim takes a name or a
+/// relative path below its config directory and refuses the rest ("must be
+/// a name or relative path": an absolute path, `..`, `.` alone, a leading
+/// `~`), so the import refuses the same names before anything runs.
+fn nvim_app(env: Env) -> Result<String, String> {
+    use std::path::Component;
+    let Some(app) = env("NVIM_APPNAME").filter(|v| !v.is_empty()) else { return Ok("nvim".to_string()) };
+    let parts: Vec<Component> = Path::new(&app).components().collect();
+    let plain = parts.iter().all(|c| matches!(c, Component::Normal(_) | Component::CurDir));
+    let named = parts.iter().any(|c| matches!(c, Component::Normal(_)));
+    match plain && named && !app.starts_with('~') {
+        true => Ok(app),
+        false => Err(app),
+    }
+}
+
+/// What the terminal is told for a `$NVIM_APPNAME` Neovim refuses.
+fn bad_app(app: &str) -> String {
+    format!(
+        "$NVIM_APPNAME is {}, and Neovim takes only a name or a relative path below its config directory",
+        quote(app)
+    )
 }
 
 /// The name of Neovim's data directory: Windows adds `-data`, so that it is
@@ -1173,7 +1201,7 @@ fn nvim_data_name(app: &str) -> String {
 /// **Neovim's data directory**, where lazy.nvim keeps the plugins:
 /// `$XDG_DATA_HOME`, `%LOCALAPPDATA%` on Windows, or `~/.local/share`.
 fn nvim_data_dir(env: Env) -> Option<PathBuf> {
-    let name = nvim_data_name(&nvim_app(env));
+    let name = nvim_data_name(&nvim_app(env).ok()?);
     if let Some(dir) = dir_of(env, "XDG_DATA_HOME") {
         return Some(dir.join(name));
     }
@@ -1196,8 +1224,8 @@ fn said_left_out(sandbox: &dump::Sandbox) {
 /// **Run the reader's Neovim and a baseline**, each on the same copy:
 /// `--clean` for `--import nvim`, LazyVim alone for `--import lazyvim`.
 fn read_nvim(program: &str, env: Env, lazyvim: bool, timeout: std::time::Duration) -> Result<(vim::Dump, vim::Dump, Option<String>), dump::Failed> {
+    let app = nvim_app(env).map_err(|app| dump::Failed::Copy(bad_app(&app)))?;
     let mut sandbox = dump::Sandbox::new(timeout)?;
-    let app = nvim_app(env);
     if let Some(config) = nvim_dir(env) {
         let to = sandbox.config().join(&app);
         sandbox.copy(&config, &to, &[])?;
@@ -1301,6 +1329,13 @@ pub fn run(which: &str) -> ExitCode {
     let dir = yumete_config::config_dir();
     let (path, beside) = target(&dir);
     let when = now();
+    // Before anything runs or is copied (review, 2026-11-09; see `nvim_app`).
+    if matches!(which, "lazyvim" | "nvim" | "neovim") {
+        if let Err(app) = nvim_app(&env) {
+            eprintln!("yumete: {}. Nothing was read or written.", bad_app(&app));
+            return ExitCode::FAILURE;
+        }
+    }
     let imported = match which {
         "helix" => {
             let Some(from) = helix_config_path(&env) else {
@@ -2032,6 +2067,7 @@ put(vim.fn.expand("~/written-by-the-config"), "x")
                 "vim.opt.tabstop = 3\nvim.fn.jobstart({{ \"sh\", \"-c\", \"echo $$ > {0}/job && exec sleep 300\" }})\n\
                  vim.uv.spawn(\"sh\", {{ args = {{ \"-c\", \"echo $$ > {0}/spawned && exec sleep 300\" }} }})\n\
                  vim.uv.spawn(\"sh\", {{ args = {{ \"-c\", \"trap '' TERM; echo $$ > {0}/deaf; while true; do sleep 1; done\" }} }})\n\
+                 local f = io.open(\"{0}/tempname\", \"w\"); f:write(vim.fn.tempname()); f:close()\n\
                  local name = vim.fn.input(\"name? \")\n",
                 pids.display()
             ),
@@ -2051,6 +2087,11 @@ put(vim.fn.expand("~/written-by-the-config"), "x")
             });
             assert!(gone, "the {name} nvim started outlived it");
         }
+        // Neovim's own temporary directory went with the copy, though the
+        // run was killed (review, 2026-11-09: each one was left in $TMPDIR).
+        let tempname = std::fs::read_to_string(pids.join("tempname")).unwrap();
+        let nvim_tmp = Path::new(&tempname).parent().unwrap();
+        assert!(!nvim_tmp.exists(), "{} outlived the run", nvim_tmp.display());
         let _ = std::fs::remove_dir_all(&pids);
         let home = nvim_home("nvim-error", "vim.opt.tabstop = 3\nrequire(\"no.such.module\")\nvim.opt.shiftwidth = 5\n");
         let (user, base, said) = read_nvim("nvim", &env_of(&home), false, dump::TIMEOUT).unwrap();
@@ -2235,6 +2276,74 @@ put(vim.fn.expand("~/written-by-the-config"), "x")
         }
         assert!(gone, "the detached job outlived the import");
         let _ = std::fs::remove_dir_all(&pids);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    /// **A `$NVIM_APPNAME` Neovim refuses is refused before anything runs,
+    /// and a copy writes nowhere but into its sandbox** (review, 2026-11-09):
+    /// `NVIM_APPNAME=/abs/myconf` made the copy's target the config itself,
+    /// and every file of it was emptied.
+    #[test]
+    fn a_copy_never_writes_to_the_config_it_copies() {
+        let app = |v: &str| {
+            let v = v.to_string();
+            nvim_app(&move |n: &str| (n == "NVIM_APPNAME").then(|| v.clone()))
+        };
+        assert_eq!(app(""), Ok("nvim".to_string()));
+        for good in ["lazy", "foo/bar", "./x", "a..b"] {
+            assert_eq!(app(good), Ok(good.to_string()));
+        }
+        for bad in ["/abs/myconf", "..", "../nvim", "a/../b", ".", "~/.config/nvim", "~x"] {
+            assert_eq!(app(bad), Err(bad.to_string()));
+        }
+        let home = nvim_home("nvim-appname", "vim.opt.tabstop = 3\n");
+        let config = home.join(".config/nvim");
+        std::fs::create_dir_all(config.join("lua")).unwrap();
+        std::fs::write(config.join("lua/x.lua"), "return 1\n").unwrap();
+        // Nor into a sandbox the config holds (made there, it changes the
+        // directory's time, so before the snapshot).
+        let mut sandbox = dump::Sandbox::new_in(&config, dump::TIMEOUT).unwrap();
+        let to = sandbox.config().join("nvim");
+        let failed = sandbox.copy(&config, &to, &[]).unwrap_err();
+        assert!(matches!(&failed, dump::Failed::Copy(why) if why.contains("holds the import's own directory")), "{failed:?}");
+        drop(sandbox);
+        let before = snapshot(&home);
+        for name in [config.display().to_string(), "../.config/nvim".to_string()] {
+            let env = |n: &str| match n {
+                "HOME" => Some(home.display().to_string()),
+                "NVIM_APPNAME" => Some(name.clone()),
+                _ => None,
+            };
+            assert_eq!(nvim_dir(&env), None);
+            let failed = read_nvim("nvim", &env, false, dump::TIMEOUT).unwrap_err();
+            assert!(matches!(&failed, dump::Failed::Copy(why) if why.contains("$NVIM_APPNAME")), "{failed:?}");
+        }
+        // The second guard, in the copy itself: a target outside the
+        // sandbox, by name, through `..` or through a link, is refused.
+        let mut sandbox = dump::Sandbox::new(dump::TIMEOUT).unwrap();
+        #[cfg_attr(not(unix), allow(unused_mut))]
+        let mut outside = vec![config.clone(), sandbox.config().join("../../../elsewhere")];
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&sandbox.root).unwrap().permissions().mode();
+            assert_eq!(mode & 0o777, 0o700, "the sandbox is the reader's alone");
+            std::os::unix::fs::symlink(home.join(".config"), sandbox.config().join("out")).unwrap();
+            outside.push(sandbox.config().join("out/nvim"));
+        }
+        for to in outside {
+            let failed = sandbox.copy(&config, &to, &[]).unwrap_err();
+            assert!(matches!(&failed, dump::Failed::Copy(why) if why.contains("not inside")), "{}: {failed:?}", to.display());
+        }
+        // A file is never copied onto itself: a hard link to it inside the
+        // sandbox is the same file.
+        let to = sandbox.config().join("nvim");
+        std::fs::create_dir_all(&to).unwrap();
+        std::fs::hard_link(config.join("init.lua"), to.join("init.lua")).unwrap();
+        let failed = sandbox.copy(&config, &to, &[]).unwrap_err();
+        assert!(matches!(&failed, dump::Failed::Copy(why) if why.contains("onto itself")), "{failed:?}");
+        drop(sandbox);
+        assert_eq!(snapshot(&home), before, "the reader's files are as they were");
         let _ = std::fs::remove_dir_all(&home);
     }
 
