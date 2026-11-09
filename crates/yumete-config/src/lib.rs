@@ -148,8 +148,8 @@ pub struct EditorConfig {
     /// runs in columns from the right as the vertical export does. On.
     /// `:preview-vertical` sets it for the session.
     pub preview_vertical: bool,
-    /// **The fonts the Markdown preview is set in** (2026-11-09), a CSS font
-    /// list written as `[export] font_family` is. Empty, the default: the
+    /// **The fonts the Markdown preview is set in**, a CSS font list
+    /// written as `[export] font_family` is. Empty, the default: the
     /// export's fonts, so a preview and its export look alike until the
     /// writer wants them apart (a screen face to read in, a book face to
     /// print in). `:export-as-preview` takes it too; `:export` never does.
@@ -6922,7 +6922,7 @@ mod tests {
         assert_eq!(c.export.font_family, DEFAULT_FONT_FAMILY);
     }
 
-    /// **`[editor] preview_font_family`** (2026-11-09): empty at first and
+    /// **`[editor] preview_font_family`**: empty at first and
     /// when only spaces are written, which is the export's fonts; a list is
     /// kept as written, and the export's own list is left alone.
     #[test]

@@ -2334,7 +2334,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// **The preview's fonts may be emptied** (2026-11-09): unlike the
+    /// **The preview's fonts may be emptied**: unlike the
     /// export's, an empty list is a value, the export's fonts, and it is
     /// written and read back as one; a list is written whole.
     #[test]

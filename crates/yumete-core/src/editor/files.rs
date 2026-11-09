@@ -2077,7 +2077,7 @@ impl Editor {
         // a vertical page.
         settings.vertical = self.markdown_preview_vertical();
         settings.hanging = settings.vertical && settings.hanging;
-        // In the preview's fonts (2026-11-09), which are the export's until
+        // In the preview's fonts, which are the export's until
         // `[editor] preview_font_family` names others.
         settings.fonts = self.preview_fonts().to_string();
         let look = looker(&text, &settings.fonts);
@@ -2584,7 +2584,7 @@ mod tests {
     }
 
     /// **`:export-as-preview` is in the preview's fonts, `:export` in the
-    /// export's** (2026-11-09): with `[editor] preview_font_family` empty
+    /// export's**: with `[editor] preview_font_family` empty
     /// the front end is asked for a look in `[export] font_family`; with a
     /// list it is asked in that list, and a plain `:export` of the same file
     /// still names only the export's fonts.

@@ -274,9 +274,9 @@ fn png_size(png: &[u8]) -> (u32, u32) {
     (w, h)
 }
 
-/// **The preview's own fonts** (2026-11-09): `[editor] preview_font_family`
+/// **The preview's own fonts**: `[editor] preview_font_family`
 /// is what the preview is set in, across and down; empty, the preview
-/// follows `[export] font_family` as it always did.
+/// follows `[export] font_family`.
 #[test]
 fn the_preview_is_set_in_the_preview_fonts_or_the_export_s() {
     let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());

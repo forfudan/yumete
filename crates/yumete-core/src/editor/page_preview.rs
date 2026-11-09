@@ -524,7 +524,7 @@ impl Editor {
         self.preview_vertical = on;
     }
 
-    /// **The fonts the Markdown preview is set in** (2026-11-09): `[editor]
+    /// **The fonts the Markdown preview is set in**: `[editor]
     /// preview_font_family` when it names any, else the export's
     /// (`[export] font_family`). `:export-as-preview` writes its page in
     /// these; `:export` keeps the export's own.

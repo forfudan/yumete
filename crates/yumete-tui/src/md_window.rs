@@ -62,7 +62,7 @@ pub struct Want {
     pub top: Top,
     /// `[editor] preview_font_family`, else `[export] font_family`: the
     /// preview is set in the fonts the export asks for unless the writer
-    /// names others for the screen (2026-11-09).
+    /// names others for the screen.
     pub fonts: String,
     /// `[export] ruby_*`: the ruby spellings the export reads.
     pub ruby: yumete_core::ruby::Dialects,
