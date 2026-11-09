@@ -121,6 +121,7 @@ fn parts(text: &str, style: &Style) -> Parts {
     let body = crate::export::html_body(&text, style, lang);
     let body = pictures_in(&body, style.base.as_deref());
     let (body, images) = pictures_out(&body);
+    let body = links_kept_in(&body);
     let (body, headings) = anchored(&xhtml(&body));
     let title = headings
         .first()
@@ -203,10 +204,15 @@ fn alt_of(tag: &str) -> String {
 
 /// Each `data:` picture — a drawn formula, a figure taken in — written out
 /// into a file of its own, and the page pointing at it.
+///
+/// **One file for each picture** (2026-11-09, reported: a picture shown ten
+/// times went into the book ten times): a picture whose bytes are already
+/// filed points at that file.
 fn pictures_out(body: &str) -> (String, Vec<(String, Vec<u8>)>) {
     const DATA: &str = "src=\"data:";
     let mut out = String::with_capacity(body.len());
-    let mut images = Vec::new();
+    let mut images: Vec<(String, Vec<u8>)> = Vec::new();
+    let mut filed: std::collections::HashMap<Vec<u8>, usize> = std::collections::HashMap::new();
     let mut rest = body;
     while let Some(at) = rest.find(DATA) {
         out.push_str(&rest[..at]);
@@ -223,9 +229,15 @@ fn pictures_out(body: &str) -> (String, Vec<(String, Vec<u8>)>) {
         });
         match picture {
             Some((extension, bytes)) => {
-                let name = format!("images/f{}.{extension}", images.len() + 1);
-                let _ = write!(out, "src=\"{name}\"");
-                images.push((name, bytes));
+                let at = match filed.get(&bytes) {
+                    Some(&at) => at,
+                    None => {
+                        images.push((format!("images/f{}.{extension}", images.len() + 1), bytes.clone()));
+                        filed.insert(bytes, images.len() - 1);
+                        images.len() - 1
+                    }
+                };
+                let _ = write!(out, "src=\"{}\"", images[at].0);
             }
             None => out.push_str(&rest[at..at + DATA.len() + end + 1]),
         }
@@ -233,6 +245,43 @@ fn pictures_out(body: &str) -> (String, Vec<(String, Vec<u8>)>) {
     }
     out.push_str(rest);
     (out, images)
+}
+
+/// **Links a book can follow**, and the rest as their words (2026-11-09,
+/// reported: `[x](x.html)` made the book one epubcheck refuses, RSC-007,
+/// the file not in the book): a link to the web or to a place in the page
+/// stays a link; one to a file beside the manuscript, which the book does
+/// not hold, keeps its words, the target in their `title`.
+fn links_kept_in(body: &str) -> String {
+    const OPEN: &str = "<a href=\"";
+    let mut out = String::with_capacity(body.len());
+    let mut rest = body;
+    while let Some(at) = rest.find(OPEN) {
+        out.push_str(&rest[..at]);
+        let after = &rest[at + OPEN.len()..];
+        let (Some(end), Some(close)) = (after.find('"'), after.find('>')) else {
+            out.push_str(&rest[at..]);
+            return out;
+        };
+        let href = &after[..end];
+        let scheme = href.split_once(':').is_some_and(|(s, _)| {
+            s.len() > 1 && s.starts_with(|c: char| c.is_ascii_alphabetic()) && s.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '.' | '-'))
+        });
+        if scheme || href.starts_with('#') {
+            out.push_str(&rest[at..at + OPEN.len() + close + 1]);
+            rest = &after[close + 1..];
+            continue;
+        }
+        let words = &after[close + 1..];
+        let Some(shut) = words.find("</a>") else {
+            out.push_str(&rest[at..]);
+            return out;
+        };
+        let _ = write!(out, "<span class=\"link\" title=\"{href}\">{}</span>", &words[..shut]);
+        rest = &words[shut + "</a>".len()..];
+    }
+    out.push_str(rest);
+    out
 }
 
 /// HTML made XML: the void elements closed (`<br>` as `<br/>`), the one
@@ -520,12 +569,15 @@ mod tests {
         let files = entries(&book);
         let opf = String::from_utf8(files[2].1.clone()).unwrap();
         assert!(opf.contains("<spine>"), "{opf}");
-        assert!(opf.contains("href=\"images/f2.png\" media-type=\"image/png\""), "{opf}");
+        assert!(opf.contains("href=\"images/f1.png\" media-type=\"image/png\""), "{opf}");
+        // The two formulas drew the same picture: one file (2026-11-09).
+        assert!(!opf.contains("images/f2.png"), "{opf}");
         // No heading: the title is the file's name.
         assert!(opf.contains("<dc:title>第一章</dc:title>"), "{opf}");
         let page = String::from_utf8(files[4].1.clone()).unwrap();
-        assert!(page.contains("src=\"images/f1.png\"/>"), "{page}");
+        assert_eq!(page.matches("src=\"images/f1.png\"/>").count(), 2, "{page}");
         assert_eq!(files[6], ("OEBPS/images/f1.png".to_string(), vec![1, 2, 3]));
+        assert_eq!(files.len(), 7);
     }
 
     /// **A figure's picture goes into the book** (2026-11-08), read from
@@ -598,9 +650,25 @@ mod tests {
         assert!(page.contains("文中有图 <img class=\"inline\" src=\"images/f1.png\" alt=\"小图\"/> 在此"), "{page}");
         assert!(page.contains("又 不在 了。") && !page.contains("gone.png"), "{page}");
         assert!(page.contains("<img class=\"figure\" src=\"images/f2.png\" alt=\"有空格的图\"/>"), "{page}");
-        assert!(page.contains("<img class=\"figure\" src=\"images/f3.png\" alt=\"尖括号\"/>"), "{page}");
+        // The same picture twice is one file in the book (2026-11-09).
+        assert!(page.contains("<img class=\"figure\" src=\"images/f2.png\" alt=\"尖括号\"/>"), "{page}");
         assert!(files.contains(&("OEBPS/images/f1.png".to_string(), vec![1, 2, 3])));
         assert!(files.contains(&("OEBPS/images/f2.png".to_string(), vec![4, 5, 6])));
-        assert!(files.contains(&("OEBPS/images/f3.png".to_string(), vec![4, 5, 6])));
+        assert!(!files.iter().any(|(name, _)| name.ends_with("f3.png")));
+    }
+
+    /// **A link to a file beside the manuscript keeps its words, not its
+    /// target** (2026-11-09, reported: `[x](x.html)` made a book epubcheck
+    /// refuses, RSC-007): the target goes in the words' `title`; a link to
+    /// the web, a mail address or a note stays a link.
+    #[test]
+    fn a_link_to_a_file_outside_the_book_keeps_its_words() {
+        let text = "见[第二章](ch2.html)与[网页](https://example.com)，写信[给我](mailto:a@example.com)，注[^1]。\n\n[^1]: 注文。\n";
+        let files = entries(&book(text, &style()));
+        let page = String::from_utf8(files[4].1.clone()).unwrap();
+        assert!(page.contains("<span class=\"link\" title=\"ch2.html\">第二章</span>"), "{page}");
+        assert!(!page.contains("href=\"ch2.html\""), "{page}");
+        assert!(page.contains("<a href=\"https://example.com\">") && page.contains("<a href=\"mailto:a@example.com\">"), "{page}");
+        assert!(page.contains("href=\"#fn-1\""), "{page}");
     }
 }

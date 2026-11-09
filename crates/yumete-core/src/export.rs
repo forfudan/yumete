@@ -718,6 +718,29 @@ fn parse(lines: &[String], source: crate::syntax::Syntax, notes: &mut Vec<Note>,
             i += 1;
             continue;
         }
+        // **An indented code block** (2026-11-09, reported: `    let x = 1;`
+        // came out a paragraph, and a fence indented inside it a code block of
+        // its own): four spaces or a tab, not going on a paragraph, as the
+        // preview reads it. Its lines, the four columns taken off, go into a
+        // fence of backticks longer than any run inside, so a fence written in
+        // it is code text, in HTML and in Typst alike.
+        if markdown && para.is_empty() && columns_in(line) >= 4 {
+            let mut held: Vec<String> = Vec::new();
+            while i < lines.len() && (columns_in(&lines[i]) >= 4 || lines[i].trim().is_empty()) {
+                held.push(without_columns(&lines[i], 4));
+                i += 1;
+            }
+            while held.last().is_some_and(|l| l.trim().is_empty()) {
+                held.pop();
+            }
+            let longest = held.iter().flat_map(|l| l.split(|c| c != '`')).map(str::len).max().unwrap_or(0);
+            let fence = "`".repeat(longest.max(2) + 1);
+            let mut block = vec![fence.clone()];
+            block.extend(held);
+            block.push(fence);
+            out.push(Block::Code(block));
+            continue;
+        }
         if markdown && para.is_empty() {
             if let Some(end) = display_maths_end(lines, i) {
                 out.push(Block::Math(lines[i..=end].iter().map(|l| l.trim().to_string()).collect()));
@@ -930,6 +953,43 @@ fn parse(lines: &[String], source: crate::syntax::Syntax, notes: &mut Vec<Note>,
     }
     flush(&mut para, &mut out);
     out
+}
+
+/// **How far `line` is indented, in columns**: a space one, a tab to the
+/// next multiple of four, as CommonMark counts it.
+fn columns_in(line: &str) -> usize {
+    let mut n = 0;
+    for c in line.chars() {
+        match c {
+            ' ' => n += 1,
+            '\t' => n += 4 - n % 4,
+            _ => break,
+        }
+    }
+    n
+}
+
+/// `line` with `n` columns of its indent taken off, a tab that spans the
+/// cut leaving the spaces past it.
+fn without_columns(line: &str, n: usize) -> String {
+    let mut at = 0;
+    for (b, c) in line.char_indices() {
+        if at >= n {
+            return line[b..].to_string();
+        }
+        match c {
+            ' ' => at += 1,
+            '\t' => {
+                let next = at + 4 - at % 4;
+                if next > n {
+                    return format!("{}{}", " ".repeat(next - n), &line[b + 1..]);
+                }
+                at = next;
+            }
+            _ => return line[b..].to_string(),
+        }
+    }
+    String::new()
 }
 
 /// **The fence `body` opens**, if it opens one: its character, a backtick
@@ -1219,6 +1279,19 @@ fn render(
                     });
                     at = end.max(at + 1);
                     continue;
+                }
+                // **A picture with no words** (2026-11-09, reported: `![](a.png)`
+                // came out as nothing): there is no link span between its two
+                // markers, `![` and `](a.png)`, so the picture is drawn at the
+                // second.
+                let wordless = span.kind == Kind::Marker
+                    && dialect == Dialect::Html
+                    && chars[start] == ']'
+                    && start >= 2
+                    && chars[start - 2..start] == ['!', '[']
+                    && marks.iter().any(|m| m.kind == Kind::Marker && m.construct == span.construct && m.end == start);
+                if let Some(src) = link_target(chars, start, start).filter(|_| wordless) {
+                    out.push_str(&format!("<img class=\"inline\" src=\"{}\" alt=\"\">", url_attribute(&src)));
                 }
                 // **這三種不往裏走。** 代碼與批注裏寫的就是字面（`spans()` 本來
                 // 也不往它們裏面遞），而分隔符自己没有內容。
@@ -1587,7 +1660,8 @@ impl Orientation {
 /// **How one run of Latin is set under [`Latin::Jlreq`]** (2026-11-08).
 ///
 /// - A single letter, a capital or a small one: upright (2026-11-09: a small
-///   one was turned, while `$x$` beside it stood).
+///   one was turned, while `$x$` beside it stood); with marks joined to it
+///   (`x.`, `(x)`) the letter alone, as [`latin_runs`] cuts it.
 /// - A phrase (it holds a space) or a word with a small letter in it: turned.
 /// - Digits alone: one upright, two across in one square, more turned.
 /// - Capitals, with digits or not: upright, one to a square (`A`, `NHK`,
@@ -1622,18 +1696,35 @@ fn jlreq_orientation(run: &[char]) -> Orientation {
 
 /// **Curly quotes as corner brackets** (2026-11-08), `“”` as `『』` and `‘’`
 /// as `「」`, the way a vertical Chinese page sets them; a single quote
-/// between two Latin letters is an apostrophe and is left alone.
+/// between two Latin letters is an apostrophe and is left alone. Called for
+/// a Chinese page only ([`corners_quotes`]).
 ///
 /// **Only round Chinese** (2026-11-09): a pair of quotes round Western text
 /// keeps its own marks, as clreq has quoted Western text keep them — `他说
-/// “go”` keeps `“go”`, and an English sentence keeps every quote it has. A
-/// pair is Chinese when what it holds has a CJK character in it; a quote
-/// with no partner (a quotation running on over paragraphs opens each one)
-/// goes by the character on its inner side.
+/// “go”` keeps `“go”`, and an English sentence keeps every quote it has.
+///
+/// - A pair is **Western** only when what it holds has a Latin letter in it
+///   and no CJK character; it is **Chinese** when it holds a CJK character.
+/// - A pair that holds neither — only marks, digits or code (`“……”`, `“——”`,
+///   `“1949”`, ``“`走`”``) — **follows the text round it** (2026-11-09,
+///   reported: those stayed curly in a Chinese paragraph): the nearest
+///   letter outside it on either side, Chinese if either is CJK, Western if
+///   what is found is Latin, and Chinese when there is none, the page being
+///   Chinese.
+/// - A quote with no partner (a quotation running on over paragraphs opens
+///   each one) goes by the first letter on its inner side, and by the text
+///   round it when there is none.
 pub fn corner_quotes(chars: &[char]) -> Vec<char> {
     let latin_at = |k: Option<usize>| k.and_then(|k| chars.get(k)).is_some_and(|&c| latin_letter(c));
     let apostrophe = |k: usize| latin_at(k.checked_sub(1)) && latin_at(Some(k + 1));
-    let cjk = |c: &char| (*c as u32) >= 0x2E80 && !c.is_whitespace() && !matches!(c, '“' | '”' | '‘' | '’');
+    let cjk = |c: char| (c as u32) >= 0x2E80 && !c.is_whitespace() && !matches!(c, '“' | '”' | '‘' | '’');
+    let western = |c: char| c.is_alphabetic() && (c as u32) < 0x1100;
+    // What a letter says: Chinese, Western, or nothing (a mark, a digit).
+    let says = |c: char| match (cjk(c), western(c)) {
+        (true, _) => Some(true),
+        (false, true) => Some(false),
+        _ => None,
+    };
     // Each quote's partner, the quotes nested as they are written.
     let mut partner: Vec<Option<usize>> = vec![None; chars.len()];
     let mut open: Vec<usize> = Vec::new();
@@ -1654,14 +1745,28 @@ pub fn corner_quotes(chars: &[char]) -> Vec<char> {
             partner[k] = Some(o);
         }
     }
+    // The text round `from..=to`: the nearest letter before and after it.
+    let round = |from: usize, to: usize| {
+        let before = chars[..from].iter().rev().find_map(|&c| says(c));
+        let after = chars[to + 1..].iter().find_map(|&c| says(c));
+        matches!((before, after), (Some(true), _) | (_, Some(true)) | (None, None))
+    };
     let chinese = |k: usize| match partner[k] {
-        Some(other) => chars[k.min(other) + 1..k.max(other)].iter().any(cjk),
+        Some(other) => {
+            let (a, b) = (k.min(other), k.max(other));
+            let inside = &chars[a + 1..b];
+            match (inside.iter().any(|&c| cjk(c)), inside.iter().any(|&c| western(c))) {
+                (true, _) => true,
+                (false, true) => false,
+                (false, false) => round(a, b),
+            }
+        }
         None => {
             let inner = match chars[k] {
-                '“' | '‘' => chars[k + 1..].iter().find(|c| !c.is_whitespace()),
-                _ => chars[..k].iter().rev().find(|c| !c.is_whitespace()),
+                '“' | '‘' => chars[k + 1..].iter().find_map(|&c| says(c)),
+                _ => chars[..k].iter().rev().find_map(|&c| says(c)),
             };
-            inner.is_some_and(cjk)
+            inner.unwrap_or_else(|| round(k, k))
         }
     };
     (0..chars.len())
@@ -1673,6 +1778,22 @@ pub fn corner_quotes(chars: &[char]) -> Vec<char> {
             c => c,
         })
         .collect()
+}
+
+/// **Whether a page's curly quotes become corner brackets** (2026-11-09):
+/// on a page in Chinese, as [`document_language`] decides it. The one rule
+/// for the vertical export, the EPUB and the vertical preview alike — the
+/// preview asked its writing system, which a Chinese note with a page of
+/// English code in it answered differently.
+pub fn corners_quotes(lang: &str) -> bool {
+    lang == "zh"
+}
+
+/// **The language a page of `text` is set in** (2026-11-09): `zh`, `ja` or
+/// `en`, from its prose, comments left out — what the HTML and EPUB exports
+/// write as `lang`, and what the vertical preview asks too.
+pub fn document_language(text: &str) -> &'static str {
+    language_of(&crate::markdown::strip_comments(text))
 }
 
 /// **A half-width mark that stands upright down a vertical page**
@@ -1711,20 +1832,42 @@ pub fn latin_runs(chars: &[char], latin: Latin) -> Vec<(std::ops::Range<usize>, 
             words.push(from..k);
         }
     }
-    let mut runs: Vec<std::ops::Range<usize>> = Vec::new();
+    //
+    // **A single letter, its marks let go** (2026-11-09, reported: `x.`,
+    // `(x)` and `x,` were turned while `x` stood): under `jlreq` a word with
+    // one letter and no digit stands upright as the letter alone does, the
+    // letter in its square and the marks beside it as marks on their own
+    // are set; and two such words with a space between (`x, y`) are two
+    // letters, not a phrase.
+    let single = |r: &std::ops::Range<usize>| {
+        let word = &chars[r.clone()];
+        word.iter().filter(|c| c.is_alphabetic()).count() == 1 && !word.iter().any(|c| c.is_numeric())
+    };
+    let mut runs: Vec<(std::ops::Range<usize>, bool)> = Vec::new();
     for word in words {
         match runs.last_mut() {
-            Some(last) if last.end + 1 == word.start && chars[last.end] == ' ' => last.end = word.end,
-            _ => runs.push(word),
+            Some((last, one))
+                if last.end + 1 == word.start
+                    && chars[last.end] == ' '
+                    && !(latin == Latin::Jlreq && *one && single(last) && single(&word)) =>
+            {
+                last.end = word.end;
+                *one = false;
+            }
+            _ => runs.push((word, true)),
         }
     }
     runs.into_iter()
-        .map(|run| {
-            let how = match latin {
-                Latin::Turn => Orientation::Turned,
-                Latin::Jlreq => jlreq_orientation(&chars[run.clone()]),
-            };
-            (run, how)
+        .map(|(run, one)| match latin {
+            Latin::Turn => (run, Orientation::Turned),
+            Latin::Jlreq if one && single(&run) => {
+                let at = run.start + chars[run.clone()].iter().position(|c| c.is_alphabetic()).unwrap_or(0);
+                (at..at + 1, Orientation::Upright)
+            }
+            Latin::Jlreq => {
+                let how = jlreq_orientation(&chars[run.clone()]);
+                (run, how)
+            }
         })
         .collect()
 }
@@ -1815,8 +1958,8 @@ fn font_list(style: &Style) -> String {
 
 /// A standalone HTML page — the export that reproduces what is on screen.
 fn html(text: &str, style: &Style) -> String {
+    let lang = document_language(text);
     let text = crate::markdown::strip_comments(text);
-    let lang = language_of(&text);
     let mut out = String::new();
     out.push_str(&format!("<!doctype html>\n<html lang=\"{lang}\">\n<meta charset=\"utf-8\">\n"));
     out.push_str(&format!("<title>{}</title>\n", escape_html(&style.title)));
@@ -1920,7 +2063,9 @@ pub(crate) fn stylesheet(style: &Style, lang: &str, book: bool) -> String {
         // cell keeps its line (`.short`): Chrome sizes a vertical table's
         // cells as though anything could break, and wrapped `甲城` into two
         // lines with room to spare; a long cell may wrap, so the table is
-        // never longer than the 縱. Code is turned whole
+        // never longer than the 縱 — a long word or an address in it too,
+        // broken anywhere (2026-11-09, reported: a URL ran past the foot of
+        // the page, as one word it could not break). Code is turned whole
         // ([`vertical_code_css`]).
         //
         // **A formula on a line of its own** is turned, as JLREQ §3.7.4 sets
@@ -1930,6 +2075,7 @@ pub(crate) fn stylesheet(style: &Style, lang: &str, book: bool) -> String {
         out.push_str(LATIN_RULES);
         out.push_str(
             "table { margin: 0 1em; }\n\
+             th, td { overflow-wrap: anywhere; }\n\
              .short { white-space: nowrap; }\n\
              img.math { vertical-align: middle; }\n\
              img.math.display { margin-block: 0.5em; margin-inline: 2em 0; max-inline-size: calc(100% - 2em); }\n\
@@ -1973,7 +2119,7 @@ pub(crate) fn html_body(text: &str, style: &Style, lang: &str) -> String {
         body.push_str("</ol>\n</section>\n");
     }
     match style.settings.vertical && lang != "en" {
-        true => vertical_text(&body, style.settings.latin, lang == "zh"),
+        true => vertical_text(&body, style.settings.latin, corners_quotes(lang)),
         false => body,
     }
 }
@@ -3517,5 +3663,95 @@ mod tests {
         let out = export("“第一段。\n\n“第二段。”\n", Format::Html, &style());
         assert!(out.contains("<p>『第一段。</p>") && out.contains("<p>『第二段。』</p>"), "{out}");
         assert_eq!(corner_quotes(&"“go” “走” it’s".chars().collect::<Vec<_>>()).iter().collect::<String>(), "“go” 『走』 it’s");
+    }
+
+    /// **A pair of quotes holding no letter follows the text round it**
+    /// (2026-11-09, reported: `“……”`, `“——”` and `“1949”` stayed curly in a
+    /// Chinese paragraph): Chinese round it, corner brackets; Western round
+    /// it, curly; a pair holding a Latin letter and no CJK stays curly.
+    #[test]
+    fn quotes_holding_no_letter_follow_the_text_round_them() {
+        let q = |t: &str| corner_quotes(&t.chars().collect::<Vec<_>>()).iter().collect::<String>();
+        assert_eq!(q("“……”与“——”与“1949”与“？”。"), "『……』与『——』与『1949』与『？』。");
+        assert_eq!(q("他喊“OK”就走了，那是‘1949’年。"), "他喊“OK”就走了，那是「1949」年。");
+        assert_eq!(q("He wrote “1949” and ‘—’ there."), "He wrote “1949” and ‘—’ there.");
+        assert_eq!(q("“……”"), "『……』", "nothing round it: the page is Chinese");
+        assert_eq!(q("“……他说"), "『……他说", "a quote with no partner looks past the marks");
+        // Code is not text a quote is told by: it follows the text round it.
+        let out = vertical_text("<p>代码“<code>走</code>”与“<code>go</code>”。</p>", Latin::Jlreq, true);
+        assert!(out.contains("代码『<code>走</code>』与『<code>go</code>』。"), "{out}");
+    }
+
+    /// **Under jlreq a single letter with marks joined to it stands as the
+    /// letter alone does** (2026-11-09, reported: `x.`, `(x)` and `x,` were
+    /// turned), its marks beside it; `x, y` is two letters, not a phrase.
+    /// Under `turn` nothing changes.
+    #[test]
+    fn under_jlreq_a_letter_with_its_marks_stands_upright() {
+        let set = |text: &str| vertical_text(text, Latin::Jlreq, true);
+        let up = |c: &str| format!("<span class=\"tate\">{c}</span>");
+        assert_eq!(set("变量 x, y 和 z。"), format!("变量 {}, {} 和 {}。", up("x"), up("y"), up("z")));
+        assert_eq!(set("又 (x) 与 x. 和 A,"), format!("又 ({}) 与 {}. 和 {},", up("x"), up("x"), up("A")));
+        assert_eq!(set("和 x’s 与 f(x, y)"), "和 <span class=\"yoko\">x’s</span> 与 <span class=\"yoko\">f(x, y)</span>");
+        assert_eq!(vertical_text("变量 x, y", Latin::Turn, true), "变量 <span class=\"yoko\">x, y</span>");
+    }
+
+    /// **A picture with no words is drawn** (2026-11-09, reported:
+    /// `![](a.png)` came out as nothing), with an empty `alt`.
+    #[test]
+    fn a_picture_with_no_words_is_drawn() {
+        let mut s = style();
+        s.settings.vertical = false;
+        let out = export("前文 ![](a.png) 后文，又 ![有字](b.png) 与 ![](<my pic.png>) 了。\n", Format::Html, &s);
+        assert!(out.contains("前文 <img class=\"inline\" src=\"a.png\" alt=\"\"> 后文"), "{out}");
+        assert!(out.contains("<img class=\"inline\" src=\"b.png\" alt=\"有字\">"), "{out}");
+        assert!(out.contains("<img class=\"inline\" src=\"my%20pic.png\" alt=\"\">"), "{out}");
+        assert!(!out.contains("`![](a.png)`"), "{out}");
+        let out = export("代码 `![](a.png)` 里的不算。\n", Format::Html, &s);
+        assert!(!out.contains("<img"), "{out}");
+    }
+
+    /// **An indented code block is code** (2026-11-09, reported: it came out
+    /// a paragraph, its `#` line beside the words), four spaces or a tab, as
+    /// the preview reads it; a fence indented inside it is code text, in
+    /// HTML and in Typst.
+    #[test]
+    fn an_indented_code_block_is_code() {
+        let mut s = style();
+        s.settings.vertical = false;
+        let text = "甲段。\n\n    let x = 1;\n    # 不是标题\n\n乙段。\n\n    ```\n    # 缩进围栏\n    ```\n\n丙段。\n\n\tlet y = 2;\n";
+        let out = export(text, Format::Html, &s);
+        assert!(out.contains("<pre><code>let x = 1;\n# 不是标题</code></pre>"), "{out}");
+        assert!(out.contains("<pre><code>```\n# 缩进围栏\n```</code></pre>"), "{out}");
+        assert!(out.contains("<pre><code>let y = 2;</code></pre>"), "a tab: {out}");
+        assert!(!out.contains("<h1>") && out.contains("<p>丙段。</p>"), "{out}");
+        let typ = export(text, Format::Typst, &s);
+        assert!(typ.contains("````\n```\n# 缩进围栏\n```\n````"), "{typ}");
+        assert!(!typ.contains("= 不是标题"), "{typ}");
+        // Going on a paragraph, four spaces are the paragraph's.
+        let out = export("一行\n    接着\n", Format::Html, &s);
+        assert!(!out.contains("<pre>"), "{out}");
+    }
+
+    /// **A long word in a vertical table's cell breaks anywhere** (2026-11-09,
+    /// reported: a URL ran past the foot of the page).
+    #[test]
+    fn a_vertical_tables_cells_break_a_long_word() {
+        assert!(stylesheet(&style(), "zh", false).contains("th, td { overflow-wrap: anywhere; }"));
+        let mut flat = style();
+        flat.settings.vertical = false;
+        assert!(!stylesheet(&flat, "zh", false).contains("overflow-wrap"));
+    }
+
+    /// **One rule for whether quotes turn** (2026-11-09): the page's language
+    /// as the export decides it, which the vertical preview asks too; an
+    /// English page quoting Chinese keeps its quotes.
+    #[test]
+    fn quotes_turn_on_a_chinese_page_only() {
+        assert!(corners_quotes(document_language("这是一段中文，引用了“走吧”。\n")));
+        assert!(!corners_quotes(document_language("This essay is mostly written in English words, and it quotes “走吧” once.\n")));
+        assert!(!corners_quotes(document_language("ひらがなとカタカナ。“漢字”。\n")));
+        let out = export("This essay is mostly written in English words, and it quotes “走吧” once.\n", Format::Html, &style());
+        assert!(out.contains("“走吧”") && !out.contains('『'), "{out}");
     }
 }
