@@ -820,11 +820,11 @@ impl Engine {
             let p = pitch.max(thick + (pitch - size));
             let axis = x - p / 2.0;
             let first = col.iter().find(|(u, _)| !u.text.is_empty()).map_or(vt.shown.len(), |(u, _)| u.text.start);
-            let src_line = {
-                let k = vt.src.partition_point(|s| s.0 <= first).saturating_sub(1);
-                vt.src.get(k).map_or(line, |s| s.1)
-            };
+            let k = vt.src.partition_point(|s| s.0 <= first).saturating_sub(1);
+            let src_line = vt.src.get(k).map_or(line, |s| s.1);
             out.marks.push((-x, src_line));
+            let from = vt.src.get(k).map_or(0, |s| s.0).min(first);
+            out.starts.push((-x, src_line, vt.shown.get(from..first).map_or(0, |s| s.chars().count())));
             let words: String = col.iter().map(|(u, _)| &vt.shown[u.text.clone()]).collect();
             out.cols.push((-x, words));
             self.emit(col, axis, top, out);
@@ -1195,7 +1195,7 @@ impl Engine {
             _ => self.vblock(block, &mut u, page.top, page.len, &mut out, cx, page),
         }
         let (top, bottom) = self.vmargins(block, cx);
-        Laid { items: out.items, height: u, top, bottom, marks: out.marks, right: 0.0, cols: out.cols }
+        Laid { items: out.items, height: u, top, bottom, marks: out.marks, right: 0.0, cols: out.cols, starts: out.starts }
     }
 
     /// The room a block asks for before and after it, along the page.

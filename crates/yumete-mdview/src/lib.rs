@@ -136,6 +136,9 @@ pub struct Preview {
     /// down a vertical page, every column's distance from the page's right
     /// edge.
     marks: Vec<(f32, usize)>,
+    /// Every visual line of text's top, source line, and the character of
+    /// that line it begins at.
+    starts: Vec<(f32, usize, usize)>,
     /// How long the page is along the way it scrolls: down, or to the left
     /// when it is vertical.
     height: f32,
@@ -158,6 +161,7 @@ impl Preview {
             cache: HashMap::new(),
             placed: Vec::new(),
             marks: Vec::new(),
+            starts: Vec::new(),
             height: 0.0,
             view_height: 0,
             language_unread: None,
@@ -322,6 +326,7 @@ impl Preview {
         let mut stats = Stats { blocks: self.blocks.len(), ..Stats::default() };
         self.placed.clear();
         self.marks.clear();
+        self.starts.clear();
         let mut y = top;
         let mut below = 0.0f32;
         let mut k = 0;
@@ -358,6 +363,9 @@ impl Preview {
             let shift = block.lines.0;
             for &(my, line) in &laid.marks {
                 self.marks.push((y + my, shift + line));
+            }
+            for &(my, line, column) in &laid.starts {
+                self.starts.push((y + my, shift + line, column));
             }
             self.placed.push(Placed { y, lines, laid: laid.clone() });
             y += laid.height;
@@ -402,6 +410,7 @@ impl Preview {
         let mut stats = Stats { blocks: self.blocks.len(), ..Stats::default() };
         self.placed.clear();
         self.marks.clear();
+        self.starts.clear();
         let mut u = side;
         let mut after = 0.0f32;
         let mut k = 0;
@@ -438,6 +447,9 @@ impl Preview {
             }
             first = false;
             let shift = block.lines.0;
+            for &(mu, line, column) in &laid.starts {
+                self.starts.push((u + mu, shift + line, column));
+            }
             for &(mu, line) in &laid.marks {
                 self.marks.push((u + mu, shift + line));
             }
@@ -466,6 +478,27 @@ impl Preview {
             }
         }
         best.map_or(0.0, |b| b.1)
+    }
+
+    /// **Where character `character` of source line `line` is shown**: the
+    /// top of the visual line that holds it, so a cursor at the end of a long
+    /// paragraph is followed to its own line, not to the paragraph's first.
+    /// Falls back to the line's top where no visual line of text says.
+    pub fn y_for_character(&self, line: usize, character: usize) -> f32 {
+        self.starts
+            .iter()
+            .filter(|s| s.1 == line && s.2 <= character)
+            .max_by_key(|s| s.2)
+            .map_or_else(|| self.y_for_line(line), |s| s.0)
+    }
+
+    /// **The visual line holding character `character` of source line
+    /// `line`**, its start and end along the page, for the bar beside it.
+    pub fn visual_span_of(&self, line: usize, character: usize) -> Option<(f32, f32)> {
+        let here = self.y_for_character(line, character);
+        let (from, to) = self.line_span_of(line)?;
+        let next = self.marks.iter().map(|m| m.0).filter(|&y| y > here + 0.5).fold(f32::INFINITY, f32::min);
+        Some((here.max(from), next.min(to)))
     }
 
     /// **The source line shown at height `y`**: the line the visual line

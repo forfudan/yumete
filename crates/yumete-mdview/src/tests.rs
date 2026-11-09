@@ -511,3 +511,20 @@ fn a_line_span_is_one_line_not_its_block() {
     let (d0, d1) = p.line_span_of(5).unwrap();
     assert!(c0 < c1 && c1 <= d0 + 0.5 && d0 < d1, "{c0} {c1} {d0} {d1}");
 }
+
+/// **A character finds its own visual line**: the end of a long paragraph
+/// is lower on the page than its start, and the bar beside it spans that one
+/// visual line, not the paragraph.
+#[test]
+fn a_character_finds_its_visual_line() {
+    let mut p = Preview::new(options(400), Box::new(NoFormulas));
+    p.set_height(600);
+    let line = "那年冬天，雪下得很大，山路都封了。".repeat(20);
+    p.set_text(&format!("{line}\n"));
+    let n = line.chars().count();
+    let (start, end) = (p.y_for_character(0, 0), p.y_for_character(0, n - 1));
+    assert!(end > start + 40.0, "{start} {end}");
+    let (from, to) = p.line_span_of(0).unwrap();
+    let (a, b) = p.visual_span_of(0, n - 1).unwrap();
+    assert!(a >= from && b <= to + 0.5 && b - a < (to - from) / 3.0, "{a} {b} in {from} {to}");
+}

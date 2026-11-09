@@ -106,6 +106,10 @@ pub(crate) struct Laid {
     /// A vertical page's columns: how far from the block's right edge each
     /// begins, and its words.
     pub cols: Vec<(f32, String)>,
+    /// Each visual line of text: its top, its source line, and how many
+    /// characters into that line's words it begins, so a cursor's character
+    /// finds the visual line that holds it.
+    pub starts: Vec<(f32, usize, usize)>,
 }
 
 
@@ -564,7 +568,7 @@ impl Engine {
         self.block(block, x, width, &mut y, &mut out, cx);
         let (top, bottom) = self.margins(block, cx);
         let right = out.items.iter().map(item_right).fold(x + width, f32::max);
-        Laid { items: out.items, height: y, top, bottom, marks: out.marks, right, cols: Vec::new() }
+        Laid { items: out.items, height: y, top, bottom, marks: out.marks, right, cols: Vec::new(), starts: out.starts }
     }
 
     /// The margins a block asks for above and below it.
@@ -601,7 +605,11 @@ impl Engine {
             let start = line.text_range().start;
             let k = t.src.partition_point(|s| s.0 <= start).saturating_sub(1);
             let ln = t.src.get(k).map_or(base_line, |s| s.1);
-            out.marks.push((y + line.metrics().block_min_coord, ln));
+            let top = y + line.metrics().block_min_coord;
+            out.marks.push((top, ln));
+            let from = t.src.get(k).map_or(0, |s| s.0).min(start);
+            let column = t.string.get(from..start).map_or(0, |s| s.chars().count());
+            out.starts.push((top, ln, column));
         }
         out.items.push(Item::Text { x, y, text: Box::new(t) });
         h
@@ -1184,6 +1192,8 @@ pub(crate) struct Out {
     pub marks: Vec<(f32, usize)>,
     /// A vertical page's columns: where each begins and its words.
     pub cols: Vec<(f32, String)>,
+    /// See [`Laid::starts`].
+    pub starts: Vec<(f32, usize, usize)>,
 }
 
 /// The baseline of the first text in `items`, from the block's top.

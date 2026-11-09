@@ -70,8 +70,9 @@ pub struct Want {
     /// `:preview-vertical` is on, as `[export] vertical_latin` and
     /// `[export] hanging` say.
     pub vertical: Option<yumete_mdview::Vertical>,
-    /// The line of the file the cursor is on, for the marks on the frame.
-    pub caret: Option<usize>,
+    /// The line of the file the cursor is on and its character there: the
+    /// page follows that character, and the bar and the frame's marks show it.
+    pub caret: Option<(usize, usize)>,
 }
 
 impl Want {
@@ -263,13 +264,21 @@ fn work(inbox: mpsc::Receiver<Job>, out: mpsc::Sender<Shot>) {
         let page = p.size().1;
         let along = want.along();
         let top = match want.top {
-            Top::Line(line) => p.y_for_line(line) - along / 3.0,
+            // The cursor's own visual line, not its paragraph's first: a long
+            // paragraph is followed to where the cursor is in it.
+            Top::Line(line) => {
+                let here = match want.caret {
+                    Some((l, character)) if l == line => p.y_for_character(line, character),
+                    _ => p.y_for_line(line),
+                };
+                here - along / 3.0
+            }
             Top::At(y) => y as f32,
         };
         let top = top.clamp(0.0, (page - along).max(0.0)).round();
-        let caret = want.caret.map(|line| p.y_for_line(line));
+        let caret = want.caret.map(|(line, character)| p.y_for_character(line, character));
         let mut picture = p.render(top, h);
-        if let Some((from, to)) = want.caret.and_then(|line| p.line_span_of(line)) {
+        if let Some((from, to)) = want.caret.and_then(|(line, character)| p.visual_span_of(line, character)) {
             paint_the_bar(&mut picture, (from - top, to - top), want.vertical.is_some(), want.scale(), p.caret_colour());
         }
         let png = picture.png();
@@ -420,7 +429,13 @@ impl MdPreviews {
                 fonts: editor.preview_fonts().to_string(),
                 ruby: editor.export_settings().dialects(),
                 vertical,
-                caret: editor.page_target(id).map(|t| t.line).or_else(|| tab.sent.as_ref().and_then(|w| w.caret)),
+                // While typing has not settled the caret waits with the
+                // text, so a key typed asks for no picture of its own.
+                caret: match tab.changed.is_some() {
+                    true => tab.sent.as_ref().and_then(|w| w.caret),
+                    false => editor.page_target(id).map(|t| (t.line, t.character)),
+                }
+                .or_else(|| tab.sent.as_ref().and_then(|w| w.caret)),
             };
             if text.is_some() || tab.sent.as_ref() != Some(&want) {
                 let base_dir = tab.main.parent().map(PathBuf::from).unwrap_or_default();
