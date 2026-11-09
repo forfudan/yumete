@@ -1,4 +1,4 @@
-//! **那扇設置面板，畫出來** —— Feature #421（2026-09-24）；2026-11-08 重做。
+//! **那扇設置面板，畫出來** —— Feature #421。
 //!
 //! 狀態在 [`yumete_config::panel`]（那一頭讀得到設置表，核心讀不到）；這裏只管
 //! 把它畫成一頁，和把鍵交給它。
@@ -15,8 +15,8 @@
 //!   jk 上下, / 搜索, Enter 修改, ␣ 切換, r 重置, u 撤銷 …
 //! ```
 //!
-//! **一個鍵在每一行上只有一個意思**（2026-11-08 作者定，審出來的毛病一半是同一個鍵
-//! 在不同的行上做不同的事）。改一個值打開的是和 `:` 命令行同一條單行編輯器
+//! **一個鍵在每一行上只有一個意思**：同一個鍵在不同的行上做不同的事，是設置面板
+//! 最常見的毛病。改一個值打開的是和 `:` 命令行同一條單行編輯器
 //! （[`yumete_core::input::Mode::Value`]），每一次確認的改動當場寫進檔裏並生效，
 //! `u` 反悔。
 
@@ -44,7 +44,7 @@ fn said(tag: &str) -> String {
     yumete_core::messages::say(tag, &[])
 }
 
-/// **A message in every language it is written in** (2026-11-09): a
+/// **A message in every language it is written in**: a
 /// setting's name typed after `:settings` is found in the script it is
 /// typed in, whichever script the panel is drawn in.
 fn every_name(tag: &str) -> Vec<String> {
@@ -58,13 +58,13 @@ fn every_name(tag: &str) -> Vec<String> {
     }
 }
 
-/// **What closes the panel after a `:`** (2026-11-09): the habit of closing
+/// **What closes the panel after a `:`**: the habit of closing
 /// with a command, which here writes nothing more — every change is written
 /// already.
 const CLOSING: &[&str] = &["q", "q!", "wq", "wq!", "x"];
 
 /// **The setting a `:settings <name>` typed on the panel's `:` line names**
-/// (2026-11-09, reported: it was 「not a command」), or `:set <name>` —
+/// (not 「not a command」), or `:set <name>` —
 /// empty when none is named; `None` when it is not that command.
 fn setting_named(typed: &str) -> Option<&str> {
     let (word, rest) = typed.split_once(char::is_whitespace).unwrap_or((typed, ""));
@@ -76,7 +76,7 @@ use crate::put_text;
 /// 左邊那張組目録有多寬（全角格）。
 const GROUPS_WIDE: u16 = 14;
 
-/// **一段話折成幾行**，按顯示寬度（2026-10-13）。
+/// **一段話折成幾行**，按顯示寬度。
 ///
 /// 中文可以在任何一個字之間斷，所以貪心地裝滿一行就斷；可是**空格那一種斷點更好
 /// 讀**——鍵那一行是一組一組的，斷在組裏面會把一組拆成兩半。所以裝滿之後往回找最
@@ -127,7 +127,7 @@ fn fold(text: &str, wide: usize) -> Vec<String> {
     let mut line = String::new();
     let mut at = 0usize;
     // Punctuation that may not open a line (禁則): it hangs at the end of
-    // the line before instead (2026-11-02).
+    // the line before instead.
     let closes = |g: &str| matches!(g, "，" | "。" | "、" | "；" | "：" | "！" | "？" | "）" | "」" | "』" | "》" | "〉" | "】" | "," | "." | ";" | ":" | ")");
     for g in yumete_cjk::graphemes(text) {
         let w = yumete_cjk::grapheme_width(g).max(1);
@@ -162,9 +162,9 @@ fn fold(text: &str, wide: usize) -> Vec<String> {
 
 /// **右邊那幾欄從哪裏開始**。
 ///
-/// Warning: **量出來的，不是寫死的**（2026-09-24），而且**量的是檔與出廠說的，不是
-/// 正在改的**（2026-11-08，報的：長的出廠字體一換成短的，整組的值那一欄從第 44
-/// 格跳到第 26 格）。
+/// Warning: **量出來的，不是寫死的**，而且**量的是檔與出廠說的，不是
+/// 正在改的**：不然長的出廠字體一換成短的，整組的值那一欄就從第 44 格跳到
+/// 第 26 格。
 struct Columns {
     /// 名字那一欄從哪裏開始。
     name: u16,
@@ -190,7 +190,7 @@ impl Columns {
         let name_wide = match want_name + want_value <= room {
             true => want_name,
             // `max` then `min`, not `clamp`: under 22 columns `room` is below
-            // six, and `clamp(6, room)` panics (2026-10-30).
+            // six, and `clamp(6, room)` panics.
             false => room.saturating_sub(want_value.min(room / 2)).max(6).min(room),
         };
         Columns { name, value: name + name_wide, right }
@@ -267,8 +267,8 @@ pub struct Seat {
     preview: Option<Preview>,
     /// A theme is being tried on the screen.
     trying: bool,
-    /// **A file was found changed outside, and nobody may have read so**
-    /// (2026-11-09): the key that found it opened the value line over the
+    /// **A file was found changed outside, and nobody may have read so**:
+    /// the key that found it opened the value line over the
     /// news. The write that follows says it instead.
     outside: bool,
 }
@@ -311,7 +311,7 @@ impl Seat {
         true
     }
 
-    /// **A file changed outside, read again and said once** (2026-11-09):
+    /// **A file changed outside, read again and said once**:
     /// asked before every key, click and paste, and on the loop's clock
     /// while the panel stands open ([`Seat::due_in`]).
     /// Gives whether it said so, for the key that found it to leave the line.
@@ -339,8 +339,8 @@ impl Seat {
         let _ = self.notice(editor);
     }
 
-    /// **What a key said, or the stale line taken away** (2026-11-08,
-    /// reported: 「本層没有設這一項」 stayed after the row was set). A line
+    /// **What a key said, or the stale line taken away**: 「本層没有設這一項」
+    /// must not stay after the row is set. A line
     /// the panel said about a row lasts until the cursor or a value moves.
     fn say(&mut self, editor: &mut Editor, before: yumete_config::panel::Spot, said: Option<String>) {
         let Some(page) = self.panel.as_ref() else {
@@ -376,11 +376,11 @@ impl Seat {
         }
         let on_page = page.page.is_some();
         match key {
-            // **No commands in the panel** (2026-11-08): its changes are
+            // **No commands in the panel**: its changes are
             // written as they are made, and `q` closes it. Warning: **the `:`
-            // opens a line all the same** (2026-11-09, reported: `:e
-            // notes.md` ran `e` as the panel's key and typed the rest into
-            // the config file it opened) — what is typed after it is the
+            // opens a line all the same**, or `:e notes.md` would run `e` as
+            // the panel's key and type the rest into the config file it
+            // opened — what is typed after it is the
             // line's until Enter or Esc, and never a key of the panel's.
             Key::Char(':') => self.colon(editor),
             Key::Char('j') | Key::Down if on_page => page.page_step(true),
@@ -466,7 +466,7 @@ impl Seat {
                 self.untry();
                 return None;
             }
-            // **`q` closes the panel here as everywhere** (2026-11-09), and
+            // **`q` closes the panel here as everywhere**, and
             // the theme being tried goes back with it.
             Key::Char('q') => {
                 self.close(editor);
@@ -489,8 +489,8 @@ impl Seat {
         editor.open_value_command_line(":", "");
     }
 
-    /// The theme under the list's cursor, tried (2026-11-08: themes preview
-    /// while the list is walked).
+    /// The theme under the list's cursor, tried: themes preview while the
+    /// list is walked.
     fn try_theme(&mut self) {
         let Some(page) = self.panel.as_ref() else { return };
         if page.here().map(|s| s.path()).as_deref() != Some("theme.name") {
@@ -520,7 +520,7 @@ impl Seat {
     }
 
     /// **Write what the key changed**, and say where: every confirmed change
-    /// is written at once and takes effect (2026-11-08).
+    /// is written at once and takes effect.
     fn write(&mut self, editor: &mut Editor) -> Option<String> {
         let page = self.panel.as_mut()?;
         let mut wrote = page.flush();
@@ -539,7 +539,7 @@ impl Seat {
             true => page.undo(),
             false => page.redo(),
         };
-        // **A file taken away is said to be removed** (2026-11-09), not
+        // **A file taken away is said to be removed**, not
         // written: `u` of the change that made it.
         let removed = match &wrote {
             Ok(Some(saved)) => saved.removed.iter().map(|p| shorten(p)).collect::<Vec<_>>().join(&say!("label.comma")),
@@ -564,7 +564,7 @@ impl Seat {
         }
     }
 
-    /// **`p` puts a register in place of the value** (2026-11-08): the
+    /// **`p` puts a register in place of the value**: the
     /// editor opens with it, and `Enter` keeps it. `"+p` is the system
     /// clipboard, as in the editor.
     fn paste_register(&mut self, editor: &mut Editor, named: Option<char>) -> Option<String> {
@@ -593,7 +593,7 @@ impl Seat {
     }
 
     /// **Text pasted through the terminal** (bracketed paste, ⌘V): it takes
-    /// the value's place, in the editor, for `Enter` to keep (2026-11-08).
+    /// the value's place, in the editor, for `Enter` to keep.
     /// While the command row is typing, the paste is its, at the caret.
     /// Gives whether it was the panel's.
     pub fn pasted(&mut self, editor: &mut Editor, text: &str) -> bool {
@@ -621,7 +621,7 @@ impl Seat {
     }
 
     /// **`e` opens the file this page writes into, at the row's line**
-    /// (2026-10-20, the line since 2026-11-08). `Tab` says which file.
+    /// `Tab` says which file.
     fn open_the_file(&mut self, editor: &mut Editor) -> Option<String> {
         let page = self.panel.as_ref()?;
         let path = page.sheet().path.clone()?;
@@ -634,8 +634,8 @@ impl Seat {
         None
     }
 
-    /// **The mouse, while the panel is open** (2026-11-08): it used to go on
-    /// to the document behind the panel. A click on a group, a row or a
+    /// **The mouse, while the panel is open**: it never goes on to the
+    /// document behind the panel. A click on a group, a row or a
     /// value in a list goes to it, the wheel walks the list, and anything
     /// else is taken and does nothing. Gives whether it was the panel's.
     pub fn mouse(&mut self, editor: &mut Editor, pointer: Pointer, x: u16, y: u16) -> bool {
@@ -650,7 +650,7 @@ impl Seat {
         let before = page.spot();
         let mut said = None;
         // A click away from a choice's list puts it away, and the theme
-        // being tried goes back as Esc puts it back (2026-11-09).
+        // being tried goes back as Esc puts it back.
         let listed = page.popup.is_some();
         match pointer {
             Pointer::Click => match hit_at(x, y) {
@@ -703,7 +703,7 @@ impl Seat {
     pub fn settle(&mut self, editor: &mut Editor) {
         let _ = self.notice(editor);
         if editor.take_settings_request() && self.panel.is_none() {
-            // 本項目那一頁跟着工作路徑走（2026-10-01）。
+            // 本項目那一頁跟着工作路徑走。
             let local = Some(yumete_config::panel::local_sheet_path(&editor.root()));
             let mut page = Panel::open(Some(yumete_config::config_dir().join("config.toml")), local);
             // The schemes there are, as the input method reads a name.
@@ -761,7 +761,7 @@ impl Seat {
                     return;
                 }
                 // `:settings <name>` (or `:set <name>`) goes to that setting,
-                // as it opens the panel on it from the editor (2026-11-09).
+                // as it opens the panel on it from the editor.
                 if let Some(name) = setting_named(&typed) {
                     match name.is_empty() || page.go_to(name, |s| every_name(s.label)) {
                         true if !name.is_empty() => page.search.clear(),
@@ -806,7 +806,7 @@ impl Seat {
         }
     }
 
-    /// 走 —— 改動早已寫下去了，没有什麼要問的（2026-11-08）。
+    /// 走 —— 改動早已寫下去了，没有什麼要問的。
     fn close(&mut self, editor: &mut Editor) {
         self.untry();
         editor.close_value_line();
@@ -824,7 +824,7 @@ fn said_of_a_write(editor: &mut Editor, wrote: Result<Option<Saved>, SaveError>,
     match wrote {
         Ok(None) => None,
         Ok(Some(saved)) => {
-            // **寫完要讓編輯器重讀一遍**（2026-10-09，見 `Editor::set_config_reload`）。
+            // **寫完要讓編輯器重讀一遍**（見 `Editor::set_config_reload`）。
             editor.set_config_reload();
             Some(match (bare, saved.changed_underneath.is_empty()) {
                 (true, _) => names(&saved.wrote),
@@ -887,8 +887,8 @@ fn one_line(text: &str) -> String {
 
 /// 一個值畫成什麽樣。
 ///
-/// Warning: **打勾與幾選一戴的是同一副方括號** —— 同搜索面板那條規矩（2026-09-23
-/// 原話：「這樣用戶就知道這裏是可以空格切換的」）。數字與一段字不戴：它們按空格
+/// Warning: **打勾與幾選一戴的是同一副方括號** —— 同搜索面板那條規矩：方括號告訴
+/// 人這裏可以按空格切換。數字與一段字不戴：它們按空格
 /// 也動，但動的是「加一」而不是「換一個」，戴上會讓人以為只有兩三個值。
 /// **值那一格要的是名字，不是那一句話。**
 ///
@@ -897,9 +897,9 @@ fn one_line(text: &str) -> String {
 /// 的菜單寫的，那裏一行一個詞，整句放得下。值那一格放不下，撥一格就只換了半句話
 /// 的開頭。冒號前面那一截就是名字，而這十條都是那個形狀；沒有冒號的原樣不動。
 ///
-/// **English writes the colon `: `** (2026-11-08, reported: the English
-/// theme value was the whole sentence, `[moxiang: black, white-gold, …]`),
-/// so the name is cut at whichever comes first.
+/// **English writes the colon `: `**, or the English theme value would be
+/// the whole sentence, `[moxiang: black, white-gold, …]`, so the name is cut
+/// at whichever comes first.
 fn name_of(label: String) -> String {
     let cut = [label.find('：'), label.find(": ")].into_iter().flatten().min();
     match cut {
@@ -927,7 +927,7 @@ fn drawn(setting: &Setting, value: &str) -> String {
                 .unwrap_or_else(|| word.to_string());
             format!("[{label}]")
         }
-        // Warning: **`trim_matches` 不是 toml 轉義的反函數**（2026-10-01，見
+        // Warning: **`trim_matches` 不是 toml 轉義的反函數**（見
         // `yumete_config::panel::unwritten`）——`"a\"b"` 畫出來是 `a\"b`。
         Kind::Count { .. } | Kind::Text => yumete_config::panel::unwritten(value),
         // The page's own row draws its counts (see [`row_value`]).
@@ -988,7 +988,7 @@ enum Line {
 }
 
 /// **Where a row's value comes from**, at its right end: the layer, and the
-/// other file when it says something too (2026-11-08, VS Code's 「Modified
+/// other file when it says something too (VS Code's 「Modified
 /// in」).
 fn source_of(panel: &Panel, setting: &Setting) -> String {
     let shown = panel.shown(setting);
@@ -1022,7 +1022,7 @@ pub fn draw(
 
     HITS.with(|hits| hits.borrow_mut().clear());
     // A window too short for the page and the line being typed: the line
-    // keeps its row, and the page gives up everything (2026-11-09).
+    // keeps its row, and the page gives up everything.
     if area.width == 0 || area.height == 0 {
         return None;
     }
@@ -1041,7 +1041,7 @@ pub fn draw(
 
     // ---- 頂上那一行：標題、兩個標籤（全局／本項目，`Tab` 換），右邊是那一份檔 ----
     //
-    // **Both files are always there as tabs** (2026-11-08): the one written
+    // **Both files are always there as tabs**: the one written
     // into is lit. A search in force follows them.
     let mut x = area.x + 1;
     let title = say!("settings.title");
@@ -1078,23 +1078,23 @@ pub fn draw(
 
     // ---- 底下那幾塊有多高，上面那一欄就剩多少 --------------------------------
     //
-    // 從下往上排（2026-10-13 定）：鍵那一塊、一條橫線、說明那一塊（這一行是什麼、
+    // 從下往上排：鍵那一塊、一條橫線、說明那一塊（這一行是什麼、
     // 取什麼值、三層各說了什麼）。說明和鍵都可以折成幾行。
     let split = area.x + GROUPS_WIDE;
     let bottom = area.y + area.height;
     let note_wide = right.saturating_sub(split + 3) as usize;
     let note_rows: Vec<String> = note_lines(panel).iter().flat_map(|line| fold(line, note_wide)).collect();
-    // **Only the keys that work now** (2026-11-08): the list, a page, a
+    // **Only the keys that work now**: the list, a page, a
     // choice's list, a value typed, a search typed.
     let keys = match (panel.typing, panel.popup.is_some(), panel.subpage().filter(|_| panel.page.is_some())) {
         (Some(Typing::Value), _, _) => say!("settings.keys-editing"),
-        // The `:` line takes no IME, so no `C-^` (2026-11-09).
+        // The `:` line takes no IME, so no `C-^`.
         (Some(Typing::Command), _, _) => say!("settings.keys-command"),
         (Some(Typing::Search), _, _) => say!("settings.keys-search"),
         (None, true, _) => say!("settings.keys-list"),
         (None, false, Some(Subpage::Flavor)) => say!("settings.keys-flavor-page"),
         (None, false, Some(Subpage::Annotation)) => say!("settings.keys-annotation-page"),
-        // **Not a key that does nothing** (2026-11-09): with no row there is
+        // **Not a key that does nothing**: with no row there is
         // nothing to change or reset, and a page's row has no value to copy
         // or put back.
         (None, false, None) if rows.is_empty() => say!("settings.keys-no-match"),
@@ -1145,7 +1145,7 @@ pub fn draw(
         }
     }
 
-    // ---- A file that cannot be read, said at the top (2026-11-08) ----------
+    // ---- A file that cannot be read, said at the top ----------
     let banner: Vec<String> = panel
         .unread()
         .iter()
@@ -1201,7 +1201,7 @@ pub fn draw(
     if rows.is_empty() {
         put_text(buf, from, top, right, &say!("settings.no-match", &panel.search), quiet);
     }
-    // **One list, the groups its headings** (2026-11-08), and under the
+    // **One list, the groups its headings**, and under the
     // row the reason a value was refused, or the list a choice opened.
     let mut lines: Vec<Line> = Vec::new();
     let mut cursor_line = 0;
@@ -1227,7 +1227,7 @@ pub fn draw(
             cursor_end = lines.len() - 1;
         }
     }
-    // **光標走到哪，那一行就跳進畫面**（2026-10-09），連同它下面那幾行；它上面
+    // **光標走到哪，那一行就跳進畫面**，連同它下面那幾行；它上面
     // 那一組的標題放得下就一起放。
     let room = list_ends.saturating_sub(top) as usize;
     let mut first = match room {
@@ -1325,7 +1325,7 @@ fn draw_row(
             }
         }
     }
-    // **Set in this file**: a mark in the gap before the name (2026-11-08).
+    // **Set in this file**: a mark in the gap before the name.
     if panel.set_here(&setting.path()) {
         put_text(buf, from.saturating_sub(1), y, from, "*", ground.fg(ink.mark()));
     }
@@ -1356,7 +1356,7 @@ fn draw_row(
 }
 
 /// **The three layers of the row**, one a line, the one in force in gold;
-/// a file that cannot be read is unknown, not unset (2026-11-08).
+/// a file that cannot be read is unknown, not unset.
 #[allow(clippy::too_many_arguments)]
 fn draw_layers(
     buf: &mut ratatui::buffer::Buffer,
@@ -1423,8 +1423,8 @@ fn choice_line(setting: &Setting, word: &str) -> String {
     }
 }
 
-/// **The description line, always there for the row under the cursor**
-/// (2026-11-08): what it does, then what it is and takes — a switch, a
+/// **The description line, always there for the row under the cursor**:
+/// what it does, then what it is and takes — a switch, a
 /// number and its range, the choices, a piece of text — and its factory
 /// value, then what `0` means where it means something.
 fn note_lines(panel: &Panel) -> Vec<String> {
@@ -1462,7 +1462,7 @@ fn note_lines(panel: &Panel) -> Vec<String> {
     lines
 }
 
-/// **The annotation modes' page** (2026-11-02): each mode under its name,
+/// **The annotation modes' page**: each mode under its name,
 /// its eight fields with their ticks, and on the right the file that set
 /// a field when one did.
 #[allow(clippy::too_many_arguments)]
@@ -1575,7 +1575,7 @@ enum PageLine {
     Row(usize, FlavorRow),
 }
 
-/// **The flavour's page, in the right half** (2026-11-02): the level,
+/// **The flavour's page, in the right half**: the level,
 /// then each item with its tick, its keys, its name, and on the right
 /// where its state comes from or which binding took its keys.
 #[allow(clippy::too_many_arguments)]
@@ -1813,8 +1813,7 @@ fn draw_tick_layers(
 }
 
 /// **How many rows are out of sight, said on the rules above and below the
-/// list** (2026-11-08, reported: at 80×24 half of 標記 was cut off with no
-/// sign of it).
+/// list**: at 80×24 half of 標記 is cut off, and that needs a sign.
 #[allow(clippy::too_many_arguments)]
 fn more_marks(
     buf: &mut ratatui::buffer::Buffer,
@@ -2020,7 +2019,7 @@ mod tests {
     }
 
     /// **A switch is written at once, `u` writes it back, `C-r` again**
-    /// (2026-11-08, save model A): no 「未保存」, nothing to ask on leaving.
+    /// (save model A): no 「未保存」, nothing to ask on leaving.
     #[test]
     fn a_change_is_written_at_once_and_u_takes_it_back() {
         let dir = scratch("write");
@@ -2080,7 +2079,7 @@ mod tests {
 
     /// **A number is typed on the `:` line's own editor**, its name before
     /// it; Enter writes a value the config takes, and a value it refuses is
-    /// typed again with the reason under the row (2026-11-08).
+    /// typed again with the reason under the row.
     #[test]
     fn a_number_is_typed_on_the_command_row_and_checked() {
         let dir = scratch("number");
@@ -2226,9 +2225,9 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// **`:` opens a line that swallows what follows** (2026-11-09,
-    /// reported: `:e notes.md` ran `e` as the panel's key, opened the config
-    /// file and typed the rest into it). Enter on a command says the panel
+    /// **`:` opens a line that swallows what follows**, so `:e notes.md` does
+    /// not run `e` as the panel's key, open the config file and type the rest
+    /// into it. Enter on a command says the panel
     /// takes none; `q` and its kin close it; nothing reaches a panel key or
     /// the document.
     #[test]
@@ -2273,7 +2272,7 @@ mod tests {
     }
 
     /// **`:settings <name>` on the panel's `:` line goes to that setting**
-    /// (2026-11-09, reported: 「not a command」), and so does `:set <name>`;
+    /// (not 「not a command」), and so does `:set <name>`;
     /// a name there is not is said so. The line takes keys as they are, as
     /// the editor's own `:` does: the IME does not compose there.
     #[test]
@@ -2302,7 +2301,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// **A click away from a theme's list puts the theme back** (2026-11-09),
+    /// **A click away from a theme's list puts the theme back**,
     /// as Esc does, on a row or on a group; **`q` in the list closes the
     /// panel**, the theme put back too.
     #[test]
@@ -2334,7 +2333,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// **A file changed outside is read again and said once** (2026-11-09):
+    /// **A file changed outside is read again and said once**:
     /// the panel shows its new value, a change and its `u` start from it,
     /// and a file deleted outside gets only the new line.
     #[test]
@@ -2375,7 +2374,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// **`:settings` takes the rest of the line as the name** (2026-11-09):
+    /// **`:settings` takes the rest of the line as the name**:
     /// spaces in it, quotes or not, in any language the panel speaks — the
     /// simplified name finds the row drawn in Traditional.
     #[test]
@@ -2394,7 +2393,7 @@ mod tests {
         assert_eq!(ed.status(), say!("settings.no-such-setting", "no such thing"));
     }
 
-    /// **The keys at the foot are keys that do something** (2026-11-09): no
+    /// **The keys at the foot are keys that do something**: no
     /// `y` or `r` on a page's row, no Enter, Space or `r` when a search found
     /// nothing.
     #[test]
@@ -2418,9 +2417,8 @@ mod tests {
         }
     }
 
-    /// **A guide and a paragraph mark are one character** (2026-11-09,
-    /// reported: `""` and `"ab"` were written), refused with the loader's own
-    /// words.
+    /// **A guide and a paragraph mark are one character**: `""` and `"ab"`
+    /// are refused with the loader's own words, not written.
     #[test]
     fn a_single_character_setting_refuses_two_or_none() {
         let dir = scratch("one-char");
@@ -2476,7 +2474,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// **The mouse is the panel's** (2026-11-08): a click picks a row, a
+    /// **The mouse is the panel's**: a click picks a row, a
     /// group or a value in a list, the wheel walks, the document is not
     /// touched.
     #[test]
@@ -2541,7 +2539,7 @@ mod tests {
 
     /// **A file that cannot be read is said at the top**, its layer is
     /// unknown rather than unset, and a change to it writes nothing and says
-    /// why (2026-11-08).
+    /// why.
     #[test]
     fn an_unreadable_file_is_said_and_not_written() {
         let dir = scratch("broken");
@@ -2555,7 +2553,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// **A list cut off says how many rows are out of sight** (2026-11-08).
+    /// **A list cut off says how many rows are out of sight**.
     #[test]
     fn a_list_cut_off_says_how_many_more() {
         let mut p = Panel::open(None, None);
@@ -2566,7 +2564,7 @@ mod tests {
         assert!(drawn.contains('↑') && !drawn.contains('↓'), "{drawn}");
     }
 
-    /// **The value column stays put while a value changes** (2026-11-08).
+    /// **The value column stays put while a value changes**.
     #[test]
     fn the_value_column_does_not_move_with_a_value() {
         let dir = scratch("column");
@@ -2626,7 +2624,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// **A theme's value is its name in English too** (2026-11-08).
+    /// **A theme's value is its name in English too**.
     #[test]
     fn a_name_is_cut_at_either_colon() {
         assert_eq!(name_of("墨香：黑、白金".into()), "墨香");
@@ -2634,7 +2632,7 @@ mod tests {
         assert_eq!(name_of("横排".into()), "横排");
     }
 
-    /// **No line opens on a comma** (禁則, 2026-11-02).
+    /// **No line opens on a comma** (禁則).
     #[test]
     fn a_folded_line_never_opens_on_punctuation() {
         for wide in 4..30 {

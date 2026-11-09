@@ -1,20 +1,16 @@
-//! **把一份配置推進編輯器** —— 一處，兩個人叫（2026-09-23）。
+//! **把一份配置推進編輯器** —— 一處，兩個人叫。
 //!
-//! 從前這件事只發生在 `main.rs` 啓動那一段裏，攤成一百多行 `editor.set_…`。
-//! 那沒有錯，直到有人想**改完配置不重啓**：
+//! 配置要能**改完不重啓**：下次啓動生效，或者一個重載設置的命令當場生效。
 //!
-//! > 「下次啓動生效或者一個應用（重載）設置命令來生效。」——2026-09-23
-//!
-//! 於是它要有名字。啓動叫一次，`:reload-config` 叫一次，將來那扇設置面板存完盤
+//! 所以它有名字。啓動叫一次，`:reload-config` 叫一次，將來那扇設置面板存完盤
 //! 再叫一次——**同一支函數**，所以不會出現「啓動時認這個設定、重載時忘了它」。
 //!
 //! Warning: **只放「推設定」，不放「開東西」。** 恢復會話、開檔、造輸入法、認 `--flag`
 //! 都留在 `main.rs`：它們一趟只能做一次，而這一支要能叫第二次。判準是
 //! **冪等** —— 叫兩遍和叫一遍一樣。
 //!
-//! Warning: **這裏少一項就是一個無聲的洞。** 加了新設定而忘了加進來，啓動時它照舊生效
-//! （因為 `main.rs` 那一段被這一支取代了），可 `:reload-config` 之後它會**退回
-//! 舊值**——而屏幕上什麼都不說。`the_apply_pass_covers_every_setting` 釘着這件事。
+//! Warning: **這裏少一項就是一個無聲的洞。** 加了新設定而忘了加進來，`:reload-config`
+//! 之後它會**退回舊值**——而屏幕上什麼都不說。`the_apply_pass_covers_every_setting` 釘着這件事。
 
 use yumete_config::Config;
 use yumete_core::editor::Editor;
@@ -24,7 +20,7 @@ use yumete_core::{say, TextStore as _};
 ///
 /// `layout` 與 `language` 各收一個覆蓋：`-v`/`--horizontal` 和 `--language` 是這一
 /// 趟啓動的答案，不是配置的。重載的時候兩個都傳 `None`，配置說什麼就是什麼。
-/// **打錯的值要出聲，而這幾格的解析器在核心裏**（2026-10-10 報的）。
+/// **打錯的值要出聲，而這幾格的解析器在核心裏**。
 ///
 /// `yumete-config` 自己那一支（`into_config_saying`）已經盯住它看得見的每一格，
 /// 可 `syntax`／`table_rules`／`indent_hint` 的判準寫在 `yumete-core`
@@ -32,10 +28,8 @@ use yumete_core::{say, TextStore as _};
 /// 悄悄退回出廠值，和「這個設定不管用」在屏幕上長得一模一樣。這一支站在兩邊都看
 /// 得見的地方補上那一半。
 ///
-/// **The config file, checked while you are looking at it** (2026-10-20 作者定).
-///
-/// 原話：「為 config.toml 寫個 yumete config 專用 lsp，檢測有問題的項目？」Asked
-/// on 2026-10-10 and written down then as not built (§5.155 ②); this is it.
+/// **The config file, checked while you are looking at it** — what a
+/// language server for `config.toml` would do (§5.155 ②).
 ///
 /// Warning: **no server, and that is the point.** Everything it needs is already
 /// here — the checks ([`yumete_config::faults::faults_in`] and the four below
@@ -141,7 +135,7 @@ impl ConfigWatch {
     }
 }
 
-/// **`:check-config` — both config files, without opening either** (2026-10-20).
+/// **`:check-config` — both config files, without opening either**.
 ///
 /// The editor's own checks already run at start-up and, since
 /// [`ConfigWatch`], on the file while it is open. This is the third question
@@ -183,7 +177,7 @@ pub fn answer_config_check(editor: &mut Editor) {
         }));
     }
     // The keys a table took are not a fault, but asking is when a reader
-    // wants the whole list: it is said once at start-up (2026-11-06).
+    // wants the whole list: it is said once at start-up.
     let taken = editor.taken_keys_note();
     if lines.is_empty() {
         let clean = say!("config.check-clean", looked);
@@ -201,8 +195,8 @@ pub fn answer_config_check(editor: &mut Editor) {
 /// **Whether the keys a table took are news**: they differ from the ones
 /// last said, which `dir`'s `taken-keys` file keeps. Saying them every
 /// start-up was saying the same thing to someone who chose it; a config that
-/// takes no key forgets the file, so taking them again is said again
-/// (2026-11-06).
+/// takes no key forgets the file, so taking them again is said again.
+///
 pub fn taken_keys_are_news(taken: &[String], dir: &std::path::Path) -> bool {
     let file = dir.join("taken-keys");
     if taken.is_empty() {
@@ -272,7 +266,7 @@ pub fn complaints(config: &Config) -> Vec<String> {
     said
 }
 
-/// **How the page looks, as the `:` commands that would set it** (2026-10-28),
+/// **How the page looks, as the `:` commands that would set it**,
 /// without the colon: the layout, the `:view-*` settings (not `:preview`,
 /// which starts a server) and the theme. Order matters where one sets another:
 /// `view-wrap-width 40` turns wrapping on, so the width comes before the
@@ -284,8 +278,8 @@ fn view_lines(editor: &Editor) -> Vec<String> {
     let on = |b: bool| if b { "on" } else { "off" };
     vec![
         // What was chosen, not what this buffer shows: a program file or a
-        // drawn table is horizontal whatever the reader chose (2026-10-29,
-        // review: quitting on a `.rs` kept `horizontal` over a vertical config).
+        // drawn table is horizontal whatever the reader chose: quitting on a
+        // `.rs` must not keep `horizontal` over a vertical config.
         match editor.layout_chosen() {
             Layout::Vertical => "vertical".to_string(),
             Layout::Horizontal => "horizontal".to_string(),
@@ -324,7 +318,7 @@ fn view_lines(editor: &Editor) -> Vec<String> {
     ]
 }
 
-/// **What the session keeps of how the page looks** (2026-10-28): each line of
+/// **What the session keeps of how the page looks**: each line of
 /// [`view_lines`] the config would not give, then the theme that `:theme`,
 /// `:theme-mode` or `:theme-fill` chose. What the config gives is worked out on
 /// a fresh editor with the config applied, so a `:reload-config` part-way
@@ -333,7 +327,7 @@ fn view_lines(editor: &Editor) -> Vec<String> {
 pub fn view_to_keep(editor: &Editor, config: &Config) -> Vec<String> {
     let given = view_lines(&as_configured(config));
     let lines = view_lines(editor);
-    // **The wrap width and the switch go together** (2026-10-29, review): a
+    // **The wrap width and the switch go together**: a
     // kept `view-wrap-width 40` without its `view-wrap off` turned wrapping
     // on when replayed, since a width turns it on.
     let wrapping = |l: &String| l.starts_with("view-wrap ") || l.starts_with("view-wrap-width ");
@@ -342,7 +336,7 @@ pub fn view_to_keep(editor: &Editor, config: &Config) -> Vec<String> {
         .into_iter()
         .filter(|line| !given.contains(line) || (wrap_differs && wrapping(line)))
         .collect();
-    // **Not what the config says already** (2026-10-29, review): a chosen
+    // **Not what the config says already**: a chosen
     // theme or mood the config gives too was kept, and then outlived a later
     // change to the config.
     let name = crate::theme::name(config);
@@ -365,7 +359,7 @@ pub fn view_to_keep(editor: &Editor, config: &Config) -> Vec<String> {
 
 /// A fresh editor with `config` applied: what the config gives.
 ///
-/// Warning: **The editor half only** (2026-10-29, review): the whole of
+/// Warning: **The editor half only**: the whole of
 /// [`apply`] also asks the terminal about ambiguous widths and sets the
 /// process's language, and this runs at every quit, after the terminal has
 /// been handed back: a 120 ms wait, and over ssh a late reply printed at the
@@ -376,13 +370,13 @@ fn as_configured(config: &Config) -> Editor {
     plain
 }
 
-/// **Every view setting back the way the config has it** (2026-10-28), for
-/// `:reload-config`. [`apply`] sets only what a config writes, so a page count,
-/// `:view-focus` or `:view-hud` set by command used to outlive the reload that
-/// was meant to undo it. The status line is the reload's to fill.
+/// **Every view setting back the way the config has it**, for
+/// `:reload-config`. [`apply`] sets only what a config writes, so without this
+/// a page count, `:view-focus` or `:view-hud` set by command would outlive the
+/// reload that was meant to undo it. The status line is the reload's to fill.
 pub fn view_back_to_config(editor: &mut Editor, config: &Config) {
     let was = editor.status().to_string();
-    // Asked afresh before each line (2026-10-29, review): one line can change
+    // Asked afresh before each line: one line can change
     // another (`view-wrap-width 0` turns wrapping on), so what was true before the
     // first is not true before the third. Quietly, so a setting that needs
     // 竪排 is put back on a horizontal page too.
@@ -431,8 +425,8 @@ fn apply_to_the_process(config: &Config, language: Option<yumete_core::messages:
     if !config.ime.data_dirs.is_empty() {
         yumete_config::set_data_dirs(config.ime.data_dirs.clone());
     }
-    // **這三格從前只有啓動那一趟推**（2026-10-07 審出來的）。面板裏改了界面語言、
-    // 歧義寬度或顯示注音，存盤，`:reload-config`——屏幕上寫着「設定重讀了」，而那
+    // **這三格也在這裏推，不只啓動那一趟**。不推的話，面板裏改了界面語言、歧義
+    // 寬度或顯示注音，存盤，`:reload-config`——屏幕上寫着「設定重讀了」，而那
     // 三樣原封不動。這一支的開頭就寫着「每一項設定，推一遍」，漏掉的那幾項正是
     // 「加一個設定要動三處，漏了第三處」那一族。
     yumete_core::set_ambiguous_wide(match config.editor.ambiguous_width {
@@ -444,12 +438,12 @@ fn apply_to_the_process(config: &Config, language: Option<yumete_core::messages:
             crate::ambiguous::ask_the_terminal_about_width().unwrap_or(false)
         }
     });
-    // **`--lang` holds for the whole run** (2026-11-08, reported: with
-    // `--lang=zh`, `:w` in the settings panel reloaded the config and the
-    // whole screen turned English, the locale's). The flag was typed for this
+    // **`--lang` holds for the whole run**: with `--lang=zh`, `:w` in the
+    // settings panel reloads the config, and the screen must not turn to the
+    // locale's English. The flag was typed for this
     // run; a reload is part of the run.
     let language = held(language);
-    // **`auto` is the locale's** (2026-10-29): an English system starts in
+    // **`auto` is the locale's**: an English system starts in
     // English, a Chinese one in its own script.
     let language = language.or_else(|| yumete_core::messages::Language::parse(&config.editor.language));
     let language = match config.editor.language.trim() {
@@ -466,7 +460,7 @@ fn apply_to_the_process(config: &Config, language: Option<yumete_core::messages:
 /// Warning: **The language is process-wide, and the tests share a process.**
 /// A test that reloads a default config would otherwise switch every test
 /// after it into the machine's locale — English here, something else in CI —
-/// and they assert on the text they see (2026-10-29: twenty went red at once).
+/// and they assert on the text they see.
 #[cfg(not(test))]
 fn the_locale() -> yumete_core::messages::Language {
     yumete_core::messages::locale_language()
@@ -479,14 +473,14 @@ fn the_locale() -> yumete_core::messages::Language {
 
 /// The settings that belong to one editor.
 fn apply_to_editor(config: &Config, editor: &mut Editor, layout: Option<yumete_core::zong::Layout>) {
-    // **`remember = false` takes hold without a restart** (2026-10-29, review:
-    // unticked in the panel, the session was still written at the next quit).
+    // **`remember = false` takes hold without a restart**: unticked in the
+    // panel, the session is not written at the next quit.
     // Only off: turning it on needs the session's place, worked out at start.
     if !config.editor.remember {
         editor.set_remembering(false);
     }
     // How much ruby is laid out. Both ruby syntaxes are always read, so
-    // there is no per-dialect switch here (`ruby_dialects` went 2026-10-30).
+    // there is no per-dialect switch here.
     editor
         .execute(match config.editor.show_ruby {
             true => ":ruby-render full",
@@ -512,7 +506,7 @@ fn apply_to_editor(config: &Config, editor: &mut Editor, layout: Option<yumete_c
         }
         editor.set_table_aliases(config.keys.table.clone());
         editor.set_key_preset(config.keys.preset);
-        // **`d`/`c` 進不進寄存器**（`:yank-on-delete`，2026-10-08）。和上面兩句同一族：
+        // **`d`/`c` 進不進寄存器**（`:yank-on-delete`）。和上面兩句同一族：
         // 鍵位那一層的事，所以擺在一起。
         editor.set_flavor(config.keys.flavor.clone());
     });
@@ -529,8 +523,8 @@ fn apply_to_editor(config: &Config, editor: &mut Editor, layout: Option<yumete_c
     // is pushing the factory value, and a 0 saved from the panel, or a reset
     // with `r`, takes effect on the reload that follows.
     editor.set_indent(config.editor.indent);
-    // Warning: **1 is a page count now, not 「unset」** (2026-10-29, review: set
-    // back to 1 in the panel, two pages stayed).
+    // Warning: **1 is a page count, not 「unset」**: set back to 1 in the
+    // panel, two pages must not stay.
     if config.editor.pages_vertical > 0 {
         editor.set_pages_vertical(config.editor.pages_vertical);
     }
@@ -633,16 +627,15 @@ pub fn apply_ime(config: &Config, ime: &mut crate::ImeSession) {
     ime.set_annotation_modes(&config.ime.annotation_modes);
     ime.set_panel_display(config.panel.display);
     ime.set_inline_preedit(config.panel.inline_preedit);
-    // **上屏方式也在這裏推**（2026-10-07 審出來的）。從前只有啓動那一趟推它
-    // （`main.rs` 的 `load`），於是面板裏改了上屏方式、存了、`:reload-config`，
-    // 屏幕上說「設定重讀了」而那一格原封不動。
+    // **上屏方式也在這裏推**，不只啓動那一趟（`main.rs` 的 `load`）：不然面板裏
+    // 改了上屏方式、存了、`:reload-config`，屏幕上說「設定重讀了」而那一格原封不動。
     //
     // `None` 要一路傳下去，不能折成一個值：配置沒說話的時候，意思是「這個方案
     // 自己說了算」，而不是「拿拼音的整句去套每一個形碼方案」。
     ime.set_commit_strategy(
         config.ime.commit.as_deref().and_then(yumete_ime::CommitStrategy::from_str_tag),
     );
-    // 字集過濾、排序與整句字集軌, picked in the panel (2026-11-04 review).
+    // 字集過濾、排序與整句字集軌, picked in the panel.
     ime.set_charsets(yumete_ime::Charsets::from_words(
         &config.ime.charset,
         &config.ime.charset_sort,
@@ -652,13 +645,12 @@ pub fn apply_ime(config: &Config, ime: &mut crate::ImeSession) {
 
 #[cfg(test)]
 mod every_setting_is_pushed_here {
-    /// **`:reload-config` 推得到的，和啓動時推的，要是同一批**（2026-10-07 審出
-    /// 來的）。
+    /// **`:reload-config` 推得到的，和啓動時推的，要是同一批**。
     ///
-    /// 這一支開頭就寫着「每一項設定，推一遍」，而四樣東西從前只有 `main.rs` 的
-    /// 啓動那一段推：界面語言、歧義寬度、顯示注音＋注音寫法、輸入法上屏方式。
-    /// 面板裏改了、存了、`:reload-config`——屏幕上寫着「設定重讀了」，那四樣原封
-    /// 不動。這是「加一個設定要動三處，漏了第三處」那一族。
+    /// 這一支開頭就寫着「每一項設定，推一遍」，而四樣東西最容易只留在 `main.rs`
+    /// 的啓動那一段：界面語言、歧義寬度、顯示注音＋注音寫法、輸入法上屏方式。
+    /// 那樣面板裏改了、存了、`:reload-config`——屏幕上寫着「設定重讀了」，那四樣
+    /// 原封不動。這是「加一個設定要動三處，漏了第三處」那一族。
     ///
     /// 釘的是**源碼**：那幾個推送器只許在這個檔裏叫，不許散回啓動那一段去。源碼
     /// 比行為好釘——這四樣是進程級的全局，測試裏撥一下會弄紅鄰居。
@@ -671,11 +663,9 @@ mod every_setting_is_pushed_here {
             "{root}/crates/yumete-tui/src/settings.rs"
         ))
         .expect("this file");
-        // **問的是「推」那一句，不是那個名字**（2026-10-19）。從前拿名字在整個
-        // `main.rs` 上搜，而那個檔裏還有 `--help` 那一大段字——`--help` 寫上
-        // `:ruby-render off|basic|full` 這一行（它本來教的是一個已經退役的拼法）
-        // 當場把這一條弄紅了，而没有任何東西跑回啓動那一段。釘的是命令串，命令
-        // 串只出現在真去推它的地方。
+        // **問的是「推」那一句，不是那個名字**。拿名字在整個 `main.rs` 上搜會撞上
+        // `--help` 那一大段字——那裏寫着 `:ruby-render off|basic|full` 這種行，而
+        // 没有任何東西跑回啓動那一段。釘的是命令串，命令串只出現在真去推它的地方。
         let (what, needle) = ("顯示注音", "\":ruby-render ");
         assert!(here.contains(needle), "{what} 要在這個檔裏推：{needle}");
         assert!(
@@ -692,8 +682,8 @@ mod every_setting_is_pushed_here {
     }
 }
 
-/// **`--lang` outlives a reload** (2026-11-08, reported: `:w` in the
-/// settings panel turned a `--lang=zh` session English). Asked of `held`
+/// **`--lang` outlives a reload**: `:w` in the settings panel does not turn
+/// a `--lang=zh` session English. Asked of `held`
 /// rather than of the process's language, which the tests share.
 #[cfg(test)]
 mod held_language_tests {
@@ -742,7 +732,7 @@ mod config_watch_tests {
         }
     }
 
-    /// **The keys a table took are said once per change** (2026-11-06), and
+    /// **The keys a table took are said once per change**, and
     /// again after a config that took none.
     #[test]
     fn taken_keys_are_said_once_for_each_change() {
@@ -758,7 +748,7 @@ mod config_watch_tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// **`:check-config` — both files, without opening either** (2026-10-20).
+    /// **`:check-config` — both files, without opening either**.
     #[test]
     fn check_config_lists_every_fault_with_its_line() {
         let dir = std::env::temp_dir().join(format!("yumete-check-cfg-{}", std::process::id()));
@@ -829,7 +819,7 @@ mod config_watch_tests {
     }
 
     /// A session keeps the view settings the config would not give, and none
-    /// that it would (2026-10-28).
+    /// that it would.
     #[test]
     fn the_session_keeps_only_what_differs_from_the_config() {
         let config = yumete_config::Config::default();
@@ -873,7 +863,7 @@ mod config_watch_tests {
         assert_eq!(ed.paragraph_indent(), 0, "no indent again");
     }
 
-    /// **The session and the reload after the review** (2026-10-29): the
+    /// **The session and the reload**: the
     /// layout chosen, not the one a program file shows; the wrap width kept
     /// with its switch; a reload that puts wrapping and a 竪排-only setting
     /// back although one line changes another and the page is horizontal.
@@ -924,7 +914,7 @@ mod config_watch_tests {
     }
 }
 
-/// **The key tree read from a config** (2026-11-05): tables are groups,
+/// **The key tree read from a config**: tables are groups,
 /// flat runs are held, and the menus say so.
 #[cfg(test)]
 mod key_tree_tests {
@@ -997,7 +987,7 @@ mod key_tree_tests {
         assert_eq!(ed.selection(), (0, 13));
     }
 
-    /// **What a group's table gets wrong is said** (review, 2026-11-05): a
+    /// **What a group's table gets wrong is said**: a
     /// `label` that is not text, one key written twice, and a table with no
     /// keys in it.
     #[test]
@@ -1016,8 +1006,8 @@ mod key_tree_tests {
         assert!(!ed.key_notes().join(" ").contains("空的鍵組"), "a built-in group renamed is not hollow");
     }
 
-    /// **A table grid's group that takes a key is said too** (review,
-    /// 2026-11-06): `Q` replays a macro, and `[keys.table.Q]` takes it there.
+    /// **A table grid's group that takes a key is said too**: `Q` replays a
+    /// macro, and `[keys.table.Q]` takes it there.
     #[test]
     fn a_table_grids_group_says_the_key_it_took() {
         let ed = laid("[keys.table.Q]\nl = \"move_char_right\"\n");
@@ -1025,7 +1015,7 @@ mod key_tree_tests {
     }
 
     /// **A moved Space menu says the key that opened it**, and a named key
-    /// in a menu reads as the hint row writes it (review, 2026-11-06).
+    /// in a menu reads as the hint row writes it.
     #[test]
     fn a_moved_space_echoes_its_own_key_and_tab_reads_tab() {
         let mut ed = laid("[keys.normal]\n\";\" = \"space_mode\"\n\n[keys.normal.space.tab]\nlabel = \"tabs\"\nn = \":new\"\n");
@@ -1041,7 +1031,7 @@ mod key_tree_tests {
         assert_eq!(ed.typed_so_far(), "␣", "Space itself still says Space");
     }
 
-    /// **A count typed in a group is in the key echo** (review, 2026-11-05):
+    /// **A count typed in a group is in the key echo**:
     /// `Space a b 3` says `␣ab3`, and `Backspace` takes the 3 back.
     #[test]
     fn a_count_in_a_group_is_echoed() {
@@ -1054,7 +1044,7 @@ mod key_tree_tests {
         assert_eq!(ed.cursor(), 2, "Space a b 2 l");
     }
 
-    /// **A group with nothing in it is no group** (review, 2026-11-05):
+    /// **A group with nothing in it is no group**:
     /// emptied by `inherit = false`, or holding only `no_op`, it closes as
     /// it opens, and the Space menu does not list it.
     #[test]
@@ -1078,7 +1068,7 @@ mod key_tree_tests {
     }
 
     /// **`[keys.normal.space]` is the Space group's beside a flat
-    /// `"<space>v"`** (review, 2026-11-05): with the Space menu on `\`, the
+    /// `"<space>v"`**: with the Space menu on `\`, the
     /// flat run held the Space key, and the table's keys landed on it too.
     #[test]
     fn a_space_table_follows_the_group_beside_a_flat_space_run() {
@@ -1371,8 +1361,8 @@ q = ":quit"
         assert_eq!(ed.cursor(), 1, "l moved");
     }
 
-    /// **A deep group's menu costs one look at each level**: twenty-four
-    /// unnamed levels used to cost 2^24 menus.
+    /// **A deep group's menu costs one look at each level**, not 2^24 menus
+    /// for twenty-four unnamed levels.
     #[test]
     fn a_deep_menu_is_drawn_at_once() {
         let mut config = String::new();
@@ -1410,7 +1400,7 @@ q = ":quit"
         assert!(ed.key_notes().is_empty(), "{:?}", ed.key_notes());
     }
 
-    /// **A `[keys.vim.normal]` line holds in Visual mode too** (2026-11-08):
+    /// **A `[keys.vim.normal]` line holds in Visual mode too**:
     /// `ye --import vim` writes a vim reader's Normal-mode maps there, and
     /// says so. Not under helix's keys.
     #[test]
