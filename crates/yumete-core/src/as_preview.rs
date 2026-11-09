@@ -573,7 +573,7 @@ fn vertical_rules(look: &Look, hanging: bool) -> String {
          .footnotes {{ margin-block: 2rem 1rem; margin-inline: 0; }}\n\
          .footnotes hr {{ inline-size: 30%; margin-block: 0 1rem; margin-inline: 0; }}\n\
          .footnotes li::marker {{ color: {}; }}\n\
-         th, td {{ padding: 0.4em; line-height: 1.6; }}\n\
+         th, td {{ padding: 0.4em; line-height: 1.6; overflow-wrap: anywhere; }}\n\
          caption {{ font-size: 0.9em; padding: 0; padding-block-end: 0.25em; }}\n\
          .short {{ white-space: nowrap; }}\n\
          pre {{ text-align: start; }}\n\

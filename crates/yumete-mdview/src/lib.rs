@@ -141,6 +141,9 @@ pub struct Preview {
     height: f32,
     /// The window's height, which a vertical page's columns fill.
     view_height: u32,
+    /// The text, kept while the page is across, for the language a vertical
+    /// page asks of it ([`Preview::set_vertical`]).
+    language_unread: Option<String>,
 }
 
 impl Preview {
@@ -157,6 +160,7 @@ impl Preview {
             marks: Vec::new(),
             height: 0.0,
             view_height: 0,
+            language_unread: None,
         }
     }
 
@@ -172,10 +176,30 @@ impl Preview {
             self.engine.han = han;
             self.cache.clear();
         }
+        // Whether quotes turn into corner brackets down a vertical page: the
+        // export's own rule, read off the same text (2026-11-09). Reading it
+        // costs some milliseconds in a long book, so a page across, where it
+        // does not matter, keeps the text for when it is set vertically.
+        match self.engine.vertical {
+            Some(_) => {
+                self.language_unread = None;
+                self.read_language(text);
+            }
+            None => self.language_unread = Some(text.to_string()),
+        }
         let parse_ms = t.elapsed().as_secs_f64() * 1000.0;
         let mut stats = self.relayout();
         stats.parse_ms = parse_ms;
         stats
+    }
+
+    /// Whether the page's quotes turn, by the export's rule.
+    fn read_language(&mut self, text: &str) {
+        let quotes = yumete_core::export::corners_quotes(yumete_core::export::document_language(text));
+        if quotes != self.engine.quotes {
+            self.engine.quotes = quotes;
+            self.cache.clear();
+        }
     }
 
     /// A new page width: every block is laid out again.
@@ -206,6 +230,11 @@ impl Preview {
             return Stats::default();
         }
         self.engine.vertical = vertical;
+        if vertical.is_some() {
+            if let Some(text) = self.language_unread.take() {
+                self.read_language(&text);
+            }
+        }
         self.cache.clear();
         self.relayout()
     }

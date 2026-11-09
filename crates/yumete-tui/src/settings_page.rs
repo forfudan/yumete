@@ -63,6 +63,14 @@ fn every_name(tag: &str) -> Vec<String> {
 /// already.
 const CLOSING: &[&str] = &["q", "q!", "wq", "wq!", "x"];
 
+/// **The setting a `:settings <name>` typed on the panel's `:` line names**
+/// (2026-11-09, reported: it was 「not a command」), or `:set <name>` —
+/// empty when none is named; `None` when it is not that command.
+fn setting_named(typed: &str) -> Option<&str> {
+    let (word, rest) = typed.split_once(char::is_whitespace).unwrap_or((typed, ""));
+    matches!(word, "settings" | "set" | "se").then(|| rest.trim())
+}
+
 use crate::put_text;
 
 /// 左邊那張組目録有多寬（全角格）。
@@ -438,7 +446,7 @@ impl Seat {
     fn colon(&mut self, editor: &mut Editor) {
         let Some(page) = self.panel.as_mut() else { return };
         page.typing = Some(Typing::Command);
-        editor.open_value_line(":", "");
+        editor.open_value_command_line(":", "");
     }
 
     /// The theme under the list's cursor, tried (2026-11-08: themes preview
@@ -491,12 +499,27 @@ impl Seat {
             true => page.undo(),
             false => page.redo(),
         };
+        // **A file taken away is said to be removed** (2026-11-09), not
+        // written: `u` of the change that made it.
+        let removed = match &wrote {
+            Ok(Some(saved)) => saved.removed.iter().map(|p| shorten(p)).collect::<Vec<_>>().join(&say!("label.comma")),
+            _ => String::new(),
+        };
+        let wrote_any = matches!(&wrote, Ok(Some(saved)) if !saved.wrote.is_empty());
         match (&wrote, back) {
             (Ok(None), true) => Some(say!("settings.nothing-to-undo")),
             (Ok(None), false) => Some(say!("settings.nothing-to-redo")),
-            _ => said_of_a_write(editor, wrote, true).map(|said| match back {
-                true => say!("settings.undone", said),
-                false => say!("settings.redone", said),
+            _ => said_of_a_write(editor, wrote, true).map(|said| {
+                let mut out = match (back, wrote_any || removed.is_empty()) {
+                    (true, true) => say!("settings.undone", said),
+                    (false, true) => say!("settings.redone", said),
+                    (true, false) => say!("settings.undone-removed", removed.clone()),
+                    (false, false) => say!("settings.redone-removed", removed.clone()),
+                };
+                if wrote_any && !removed.is_empty() {
+                    out.push_str(&say!("settings.also-removed", removed));
+                }
+                out
             }),
         }
     }
@@ -687,6 +710,19 @@ impl Seat {
                 let typed = text.trim().to_string();
                 if CLOSING.contains(&typed.as_str()) {
                     self.close(editor);
+                    return;
+                }
+                // `:settings <name>` (or `:set <name>`) goes to that setting,
+                // as it opens the panel on it from the editor (2026-11-09).
+                if let Some(name) = setting_named(&typed) {
+                    match name.is_empty() || page.go_to(name, |s| every_name(s.label)) {
+                        true if !name.is_empty() => page.search.clear(),
+                        true => {}
+                        false => {
+                            editor.set_status(say!("settings.no-such-setting", name));
+                            self.row_said = true;
+                        }
+                    }
                     return;
                 }
                 if !typed.is_empty() {
@@ -981,7 +1017,9 @@ pub fn draw(
     // **Only the keys that work now** (2026-11-08): the list, a page, a
     // choice's list, a value typed, a search typed.
     let keys = match (panel.typing, panel.popup.is_some(), panel.subpage().filter(|_| panel.page.is_some())) {
-        (Some(Typing::Value | Typing::Command), _, _) => say!("settings.keys-editing"),
+        (Some(Typing::Value), _, _) => say!("settings.keys-editing"),
+        // The `:` line takes no IME, so no `C-^` (2026-11-09).
+        (Some(Typing::Command), _, _) => say!("settings.keys-command"),
         (Some(Typing::Search), _, _) => say!("settings.keys-search"),
         (None, true, _) => say!("settings.keys-list"),
         (None, false, Some(Subpage::Flavor)) => say!("settings.keys-flavor-page"),
@@ -2096,7 +2134,7 @@ mod tests {
         assert!(seat.panel.is_some() && ed.mode() == Mode::Value, "still the line's");
         assert_eq!(ed.value_typed(), Some("e notes.md"));
         let drawn = shot(page(&seat), 110, 34);
-        assert!(drawn.contains(&say!("settings.keys-editing").chars().take(8).collect::<String>()), "{drawn}");
+        assert!(drawn.contains(&say!("settings.keys-command").chars().take(8).collect::<String>()), "{drawn}");
         keys(&mut seat, &mut ed, &[Key::Enter]);
         assert!(seat.panel.is_some(), "the panel stays");
         assert_eq!(ed.status(), say!("settings.not-a-command", "e notes.md"));
@@ -2122,6 +2160,36 @@ mod tests {
         page_mut(&mut seat).go_to("editor.margin", |_| Vec::new());
         keys(&mut seat, &mut ed, &[Key::Enter, Key::Char(':'), Key::Char('j'), Key::Esc]);
         assert_eq!(page(&seat).popup_word(), Some("dense"), "j went to the line, not the list");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// **`:settings <name>` on the panel's `:` line goes to that setting**
+    /// (2026-11-09, reported: 「not a command」), and so does `:set <name>`;
+    /// a name there is not is said so. The line takes keys as they are, as
+    /// the editor's own `:` does: the IME does not compose there.
+    #[test]
+    fn settings_on_the_colon_line_goes_to_the_setting() {
+        let dir = scratch("colon-settings");
+        let (mut ed, mut seat) = seated(&dir, "", "editor.soft_wrap");
+        keys(&mut seat, &mut ed, &[Key::Char(':')]);
+        assert!(ed.value_line_is_plain(), "a command, not a value: no IME");
+        keys(&mut seat, &mut ed, &chars("settings editor.scrolloff"));
+        keys(&mut seat, &mut ed, &[Key::Enter]);
+        assert_eq!(page(&seat).here().map(|s| s.path()).as_deref(), Some("editor.scrolloff"));
+        assert_ne!(ed.status(), say!("settings.not-a-command", "settings editor.scrolloff"));
+        keys(&mut seat, &mut ed, &[Key::Char(':')]);
+        keys(&mut seat, &mut ed, &chars("set editor.indent"));
+        keys(&mut seat, &mut ed, &[Key::Enter]);
+        assert_eq!(page(&seat).here().map(|s| s.path()).as_deref(), Some("editor.indent"));
+        keys(&mut seat, &mut ed, &[Key::Char(':')]);
+        keys(&mut seat, &mut ed, &chars("settings no.such"));
+        keys(&mut seat, &mut ed, &[Key::Enter]);
+        assert_eq!(ed.status(), say!("settings.no-such-setting", "no.such"));
+        assert_eq!(page(&seat).here().map(|s| s.path()).as_deref(), Some("editor.indent"), "stays");
+        assert!(seat.panel.is_some());
+        // A value typed is still the IME's.
+        keys(&mut seat, &mut ed, &[Key::Enter]);
+        assert!(ed.mode() == Mode::Value && !ed.value_line_is_plain());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
