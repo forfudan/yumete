@@ -5811,7 +5811,8 @@ fn draw(
             // a picture has no caret to show it. Thick and gold for the one
             // with the keys, thin and quiet for the rest; the window's title
             // line stays where it is, whatever the window shows.
-            let inside = match rect.width > 2 && rect.height > 2 {
+            let framed = rect.width > 2 && rect.height > 2;
+            let inside = match framed {
                 true => {
                     let ink = crate::theme::Palette::of(config);
                     let focused = which == live;
@@ -5827,7 +5828,7 @@ fn draw(
                 false => *rect,
             };
             match kind {
-                Some(yumete_core::buffer::PreviewKind::Markdown) => crate::md_window::draw(frame, editor, config, inside, id),
+                Some(yumete_core::buffer::PreviewKind::Markdown) => crate::md_window::draw(frame, editor, config, inside, id, framed),
                 _ => crate::page_window::draw(frame, editor, config, inside, id),
             }
             if which == live {

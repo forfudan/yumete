@@ -70,6 +70,8 @@ pub struct Want {
     /// `:preview-vertical` is on, as `[export] vertical_latin` and
     /// `[export] hanging` say.
     pub vertical: Option<yumete_mdview::Vertical>,
+    /// The line of the file the cursor is on, for the marks on the frame.
+    pub caret: Option<usize>,
 }
 
 impl Want {
@@ -111,6 +113,10 @@ pub struct Shot {
     pub rows: u16,
     pub top: f32,
     pub page: f32,
+    /// Where the cursor's line is along the page, for the marks on the frame.
+    pub caret: Option<f32>,
+    /// Set down the page, columns going on to the left.
+    pub vertical: bool,
 }
 
 /// **What a Markdown preview's window draws**, shared by the loop and the
@@ -261,6 +267,7 @@ fn work(inbox: mpsc::Receiver<Job>, out: mpsc::Sender<Shot>) {
             Top::At(y) => y as f32,
         };
         let top = top.clamp(0.0, (page - along).max(0.0)).round();
+        let caret = want.caret.map(|line| p.y_for_line(line));
         let picture = p.render(top, h);
         let png = picture.png();
         let hash = {
@@ -269,7 +276,7 @@ fn work(inbox: mpsc::Receiver<Job>, out: mpsc::Sender<Shot>) {
             png.hash(&mut hasher);
             hasher.finish()
         };
-        if out.send(Shot { png, hash, columns: want.columns, rows: want.rows, top, page }).is_err() {
+        if out.send(Shot { png, hash, columns: want.columns, rows: want.rows, top, page, caret, vertical: want.vertical.is_some() }).is_err() {
             return;
         }
         if let Some(ring) = BELL.get() {
@@ -410,6 +417,7 @@ impl MdPreviews {
                 fonts: editor.preview_fonts().to_string(),
                 ruby: editor.export_settings().dialects(),
                 vertical,
+                caret: editor.page_target(id).map(|t| t.line).or_else(|| tab.sent.as_ref().and_then(|w| w.caret)),
             };
             if text.is_some() || tab.sent.as_ref() != Some(&want) {
                 let base_dir = tab.main.parent().map(PathBuf::from).unwrap_or_default();
@@ -456,7 +464,9 @@ impl MdPreviews {
 
 /// **Draw the Markdown preview window `id` shows into `area`**: the latest
 /// picture, from its top-left corner; while the first is being made, a word.
-pub fn draw(frame: &mut ratatui::Frame, editor: &Editor, config: &yumete_config::Config, area: Rect, id: WindowId) {
+/// `framed`: `area` has a frame round it, and the cursor's line is marked
+/// on it.
+pub fn draw(frame: &mut ratatui::Frame, editor: &Editor, config: &yumete_config::Config, area: Rect, id: WindowId, framed: bool) {
     let Some(preview) = editor.preview_in(id) else { return };
     let ink = crate::theme::Palette::of(config);
     frame.render_widget(Paragraph::new("").style(ink.page()), area);
@@ -472,6 +482,9 @@ pub fn draw(frame: &mut ratatui::Frame, editor: &Editor, config: &yumete_config:
             // one comes.
             let spot = Rect { width: shot.columns.min(area.width), height: shot.rows.min(area.height), ..area };
             crate::graphics::put_picture_from(frame.buffer_mut(), spot, picture, 0, 0);
+            if framed {
+                mark_the_caret(frame.buffer_mut(), area, &shot, ink.page().fg(ink.gold()));
+            }
         }
         None => {
             let said = match can {
@@ -482,6 +495,37 @@ pub fn draw(frame: &mut ratatui::Frame, editor: &Editor, config: &yumete_config:
             let lines = (said.chars().count() as u16 / area.width.max(1)) + 1;
             let middle = Rect { y: area.y + area.height.saturating_sub(lines) / 2, height: lines.min(area.height), ..area };
             frame.render_widget(Paragraph::new(said).style(quiet).alignment(Alignment::Center).wrap(Wrap { trim: true }), middle);
+        }
+    }
+}
+
+/// **The cursor's line, marked on the frame**: `▶` `◀` on the side walls
+/// across a page, `▼` `▲` on the top and bottom walls down a vertical one,
+/// where the line stands in the picture. A line off the picture is marked
+/// at the edge nearest to it.
+fn mark_the_caret(buf: &mut ratatui::buffer::Buffer, area: Rect, shot: &Shot, style: ratatui::style::Style) {
+    let Some(caret) = shot.caret else { return };
+    if area.width == 0 || area.height == 0 || area.x == 0 || area.y == 0 {
+        return;
+    }
+    let cell = crate::graphics::cell_pixels();
+    let along = caret - shot.top;
+    let mut put = |x: u16, y: u16, mark: &str| {
+        if let Some(c) = buf.cell_mut((x, y)) {
+            c.set_symbol(mark).set_style(style);
+        }
+    };
+    match shot.vertical {
+        false => {
+            let row = (along / cell.1.max(1) as f32).floor().clamp(0.0, (area.height - 1) as f32) as u16;
+            put(area.x - 1, area.y + row, "▶");
+            put(area.x + area.width, area.y + row, "◀");
+        }
+        true => {
+            let column = (along / cell.0.max(1) as f32).floor().clamp(0.0, (area.width - 1) as f32) as u16;
+            let x = area.x + area.width - 1 - column;
+            put(x, area.y - 1, "▼");
+            put(x, area.y + area.height, "▲");
         }
     }
 }
