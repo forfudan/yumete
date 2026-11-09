@@ -1409,6 +1409,8 @@ pub fn run(
                 editor.docs_due_in(),
                 // The signature asked again once the typing has been still.
                 editor.signature_due_in(),
+                // The settings panel's files, changed outside while it is open.
+                settings.due_in(),
                 // Warning: **磁碟那一眼是鬧鐘之一，不是它自己一條路**（2026-10-11
                 // 報的：即時文檔要等三到五秒纔出來）。從前自動重載在這一段**之
                 // 前**自己 `recv_timeout(兩秒)` 然後 `continue`，於是它一開——而
@@ -1457,6 +1459,7 @@ pub fn run(
                         // 別的鬧鐘一起排隊，所以也要在這裏問一句。自己節流，
                         // 所以不到兩秒按幾次都不花什麽。
                         editor.disk_tick();
+                        settings.watch(editor);
                         // One frame is redrawn on the way round — the loop
                         // draws at its head — and exactly one, because writing
                         // the copy makes the draft no longer stale and the next
@@ -6063,15 +6066,16 @@ fn draw(
         // `panel_caret` 只在 `Mode::Field` 有值，`prompt_label()` 只在命令行與
         // 搜索行有值，兩者互斥，所以次序無關。
         frame.set_cursor_position(at);
-    } else if let Some(prefix) = editor.prompt_label() {
+    } else if let Some((prefix, skip)) = prompt_view(editor, prompt_area.width) {
         // Measured in cells, not characters: a Chinese search pattern is twice
         // as wide as it is long — and up to the **caret**, not to the end of
         // the line, now that the prompt can be edited in the middle.
         // The prefix is measured too, because `::` is two cells wide (#224)
         // and a hard-coded 1 put the caret inside the second colon — and since
         // #505 a search says `搜索:`, which is five.
+        let before: String = editor.prompt_before_caret().chars().skip(skip).collect();
         let col = yumete_cjk::str_width(&prefix)
-            + yumete_cjk::str_width(&editor.prompt_before_caret())
+            + yumete_cjk::str_width(&before)
             + yumete_cjk::str_width(&prompt_preedit(editor, ime));
         frame.set_cursor_position(Position::new(prompt_area.x + col as u16, prompt_area.y));
     } else if editor.mode() == Mode::Field {
@@ -6155,94 +6159,114 @@ fn draw(
         }
     }
 
-    if candidate_panel {
-        // The panel follows the page, not the prompt: a `/` search in a
-        // vertically set document still picks its candidates out of a vertical
-        // list, and one panel wearing a different skin from the other reads as a
-        // different program.
-        let (at_x, at_y) = match editor.prompt() {
-            _ if picker_caret.is_some() => {
-                let at = picker_caret.expect("just checked");
-                (at.x, at.y)
+    // Warning: **drawn after the settings page while it is open** (2026-11-09,
+    // reported: no candidate ever showed while a value was typed in the
+    // panel — the page was drawn over the box and the strips). One body for
+    // both places, every display style in it.
+    let candidates = |frame: &mut Frame, over_the_page: bool| {
+        if candidate_panel {
+            // The panel follows the page, not the prompt: a `/` search in a
+            // vertically set document still picks its candidates out of a vertical
+            // list, and one panel wearing a different skin from the other reads as a
+            // different program.
+            let (at_x, at_y) = match editor.prompt() {
+                _ if picker_caret.is_some() => {
+                    let at = picker_caret.expect("just checked");
+                    (at.x, at.y)
+                }
+                // A box inside a panel — the search panel's query or replace row.
+                // It is not `prompt()` (that is the command line) and not a picker,
+                // so without this the panel stood over the manuscript instead of
+                // under the characters being typed.
+                _ if panel_caret.is_some() => {
+                    let at = panel_caret.expect("just checked");
+                    (at.x, at.y)
+                }
+                Some((_, text)) => {
+                    let (label, skip) = prompt_view(editor, prompt_area.width).unwrap_or_default();
+                    let shown: String = text.chars().skip(skip).collect();
+                    let col = yumete_cjk::str_width(&label)
+                        + yumete_cjk::str_width(&shown)
+                        + yumete_cjk::str_width(&prompt_preedit(editor, ime));
+                    (prompt_area.x + col as u16, prompt_area.y)
+                }
+                None => (cursor_x, cursor_y),
+            };
+            // **The panel may cover the writing; it may not cover the footer.**
+            // `area` here is the whole window, so on a tall terminal the panel
+            // never reached the bottom and nobody noticed — but at twelve rows a
+            // full page of nine candidates ran straight over the last row, and the
+            // mode, the file name and the position came out as
+            // `--╰──────────╯[中a 靈b明f] ch1.md   Ln 1, Col 1` (#387). Stopping at
+            // the status line keeps the command row below it clear too, which it
+            // has to be: the caret the panel belongs to is standing in it.
+            let room = Rect {
+                height: status_area.y.saturating_sub(area.y).max(1),
+                ..area
+            };
+            // **編碼那一列畫不畫**：這一幀沒有把它寫進正文，纔輪到面板寫
+            // （2026-09-27）。問的是這一幀真寫了沒有，不是設置說什麼——命令行開着的
+            // 時候正文寫不下，那時編碼要回到面板上來。
+            let show_code = inline_text(editor, ime).is_empty();
+            match editor.layout() {
+                WritingLayout::Horizontal => {
+                    draw_candidate_panel(frame, ime, config, room, at_x, at_y, show_code)
+                }
+                WritingLayout::Vertical => {
+                    vertical::draw_candidate_panel(frame, ime, config, room, at_x, at_y, show_code)
+                }
             }
-            // A box inside a panel — the search panel's query or replace row.
-            // It is not `prompt()` (that is the command line) and not a picker,
-            // so without this the panel stood over the manuscript instead of
-            // under the characters being typed.
-            _ if panel_caret.is_some() => {
-                let at = panel_caret.expect("just checked");
-                (at.x, at.y)
-            }
-            Some((prefix, text)) => {
-                let col = yumete_cjk::str_width(prefix)
-                    + yumete_cjk::str_width(text)
-                    + yumete_cjk::str_width(&prompt_preedit(editor, ime));
-                (prompt_area.x + col as u16, prompt_area.y)
-            }
-            None => (cursor_x, cursor_y),
-        };
-        // **The panel may cover the writing; it may not cover the footer.**
-        // `area` here is the whole window, so on a tall terminal the panel
-        // never reached the bottom and nobody noticed — but at twelve rows a
-        // full page of nine candidates ran straight over the last row, and the
-        // mode, the file name and the position came out as
-        // `--╰──────────╯[中a 靈b明f] ch1.md   Ln 1, Col 1` (#387). Stopping at
-        // the status line keeps the command row below it clear too, which it
-        // has to be: the caret the panel belongs to is standing in it.
-        let room = Rect {
-            height: status_area.y.saturating_sub(area.y).max(1),
-            ..area
-        };
-        // **編碼那一列畫不畫**：這一幀沒有把它寫進正文，纔輪到面板寫
-        // （2026-09-27）。問的是這一幀真寫了沒有，不是設置說什麼——命令行開着的
-        // 時候正文寫不下，那時編碼要回到面板上來。
-        let show_code = inline_text(editor, ime).is_empty();
-        match editor.layout() {
-            WritingLayout::Horizontal => {
-                draw_candidate_panel(frame, ime, config, room, at_x, at_y, show_code)
-            }
-            WritingLayout::Vertical => {
-                vertical::draw_candidate_panel(frame, ime, config, room, at_x, at_y, show_code)
+        } else if composing_here {
+            // **The box is not up, so the candidates are a strip** (2026-10-16),
+            // in one of the two places the setting names.
+            let show_code = inline_text(editor, ime).is_empty();
+            let pane = areas.panes[editor.live_pane()];
+            match shape {
+                // `bottom`: the command row. One row, left to right in both
+                // writing layouts — the 竪排 box runs right to left because it is
+                // set the way the page is, and a single line at the foot is
+                // chrome, which reads the way the status line and the `:` prompt
+                // read.
+                //
+                // `prompt_area` rather than `command_area`: with `[editor]
+                // command_line = false`, or a window too short for two rows, the
+                // status line is where everything that row would have carried
+                // goes, and the candidates are now one of those things.
+                PanelDisplay::Bottom => {
+                    draw_candidate_row(frame, ime, config, prompt_area, show_code)
+                }
+                // `inline`: the same strip, moved up against the caret — 「the
+                // candidate list will be closer to the cursor」 — at the cost of
+                // the line it covers. 竪排 is 「just vertical」: the 縱 to the left
+                // of the one being written, which is where 竪排's next line is.
+                // Over the settings page the caret is the command row's, so the
+                // strip goes on the row just above it.
+                PanelDisplay::Inline if over_the_page => {
+                    let at = match prompt_area.y > area.y {
+                        true => Rect { y: prompt_area.y - 1, height: 1, ..prompt_area },
+                        false => prompt_area,
+                    };
+                    draw_candidate_row(frame, ime, config, at, show_code)
+                }
+                PanelDisplay::Inline => match editor.layout() {
+                    WritingLayout::Vertical => vertical::draw_candidate_strip(
+                        frame, ime, config, pane, cursor_x, cursor_y, show_code,
+                    ),
+                    WritingLayout::Horizontal => draw_candidate_row(
+                        frame,
+                        ime,
+                        config,
+                        under_the_caret(pane, cursor_y),
+                        show_code,
+                    ),
+                },
+                // The box took the other branch.
+                PanelDisplay::Box => {}
             }
         }
-    } else if composing_here {
-        // **The box is not up, so the candidates are a strip** (2026-10-16),
-        // in one of the two places the setting names.
-        let show_code = inline_text(editor, ime).is_empty();
-        let pane = areas.panes[editor.live_pane()];
-        match shape {
-            // `bottom`: the command row. One row, left to right in both
-            // writing layouts — the 竪排 box runs right to left because it is
-            // set the way the page is, and a single line at the foot is
-            // chrome, which reads the way the status line and the `:` prompt
-            // read.
-            //
-            // `prompt_area` rather than `command_area`: with `[editor]
-            // command_line = false`, or a window too short for two rows, the
-            // status line is where everything that row would have carried
-            // goes, and the candidates are now one of those things.
-            PanelDisplay::Bottom => {
-                draw_candidate_row(frame, ime, config, prompt_area, show_code)
-            }
-            // `inline`: the same strip, moved up against the caret — 「the
-            // candidate list will be closer to the cursor」 — at the cost of
-            // the line it covers. 竪排 is 「just vertical」: the 縱 to the left
-            // of the one being written, which is where 竪排's next line is.
-            PanelDisplay::Inline => match editor.layout() {
-                WritingLayout::Vertical => vertical::draw_candidate_strip(
-                    frame, ime, config, pane, cursor_x, cursor_y, show_code,
-                ),
-                WritingLayout::Horizontal => draw_candidate_row(
-                    frame,
-                    ime,
-                    config,
-                    under_the_caret(pane, cursor_y),
-                    show_code,
-                ),
-            },
-            // The box took the other branch.
-            PanelDisplay::Box => {}
-        }
+    };
+    if settings.is_none() {
+        candidates(frame, false);
     }
     // **按「那裏寫的什麼」跳的候選面板**（`go`/`gu`，§5.73）。
     //
@@ -6277,9 +6301,16 @@ fn draw(
         // carries what is said and the `:` being typed. Reported: a message
         // covered the keys, and the page has the room. With no command row
         // (a window too short for one) the page keeps the whole window.
-        let page_area = match command_area.height {
-            1 if command_area.y > area.y => Rect { height: command_area.y - area.y, ..area },
-            _ => area,
+        let (page_area, foot) = match command_area.height {
+            1 if command_area.y > area.y => (Rect { height: command_area.y - area.y, ..area }, Some(command_area)),
+            // **No command row, and a line being typed** (2026-11-09,
+            // reported: below eight rows the value was typed under the page,
+            // where nobody could see it): the prompt keeps its own row and
+            // the page makes do with the rest, down to nothing at all.
+            _ if editor.prompt().is_some() && prompt_area.height == 1 && prompt_area.y >= area.y => {
+                (Rect { height: prompt_area.y - area.y, ..area }, Some(prompt_area))
+            }
+            _ => (area, None),
         };
         // Warning: **不在打字就一個字都別設**，光標自己會藏起來。從前這裏把它停在窗口
         // 左上角——理由是「別留在正文裏」（系統輸入法的候選框跟着硬件光標跑），
@@ -6291,22 +6322,23 @@ fn draw(
             crate::backend::keep_the_cursor_hidden(false);
             frame.set_cursor_position(at);
         }
-        if command_area.height == 1 {
+        if let Some(foot) = foot {
             let talking = editor.prompt().is_some() || !editor.status().is_empty();
             match talking {
-                true => draw_command(frame, editor, config, ime, command_area),
+                true => draw_command(frame, editor, config, ime, foot),
                 // Silent, the row is blank: the editor's own key hints are
                 // about the document, which is not what the keys are on.
                 false => {
                     let blank = crate::theme::Palette::of(config).page();
-                    for x in command_area.x..command_area.x + command_area.width {
-                        if let Some(cell) = frame.buffer_mut().cell_mut((x, command_area.y)) {
+                    for x in foot.x..foot.x + foot.width {
+                        if let Some(cell) = frame.buffer_mut().cell_mut((x, foot.y)) {
                             cell.set_symbol(" ").set_style(blank);
                         }
                     }
                 }
             }
         }
+        candidates(frame, true);
     }
     // Last, and over everything: the editor is stopped behind it (#295).
     draw_query(frame, editor, config, area);
@@ -14090,7 +14122,10 @@ fn draw_horizontal(
     // every motion, which is exactly the shape this editor keeps getting wrong.
     // Clamped to the page: a caret resting past a row that exactly fills the
     // width would otherwise be drawn in the column after the last one.
-    let x = (gutter + cursor_pos.column - left)
+    // Saturating (2026-11-09): on a window a few columns wide `left` can pass
+    // the caret's column, and the subtraction overflowed.
+    let x = (gutter + cursor_pos.column)
+        .saturating_sub(left)
         .min(text_area.width.saturating_sub(1) as usize);
     let caret = (
         text_area.x + x as u16,
@@ -14918,6 +14953,37 @@ fn indent_span(indent: usize, editor: &Editor, ink: crate::theme::Palette) -> Sp
 /// page's own footing and is always there, while this only sometimes has
 /// something to say. Set on the page's own ground rather than reversed, so a
 /// blank one reads as part of the margin instead of as an empty bar.
+/// **The prompt as its row has room for it** (2026-11-09): the label to draw
+/// before the line, and how many characters of the line are scrolled off its
+/// left. Only a value typed for the settings panel is fitted — its label is
+/// a setting's name, and on a narrow window the value went off the right
+/// edge, drawn where nobody could see it. The label gives way first, then
+/// the start of the line, so the caret and what stands just before it always
+/// show. The caret and the row both ask this, so they agree.
+fn prompt_view(editor: &Editor, width: u16) -> Option<(String, usize)> {
+    let label = editor.prompt_label()?;
+    if editor.mode() != Mode::Value {
+        return Some((label, 0));
+    }
+    let width = width as usize;
+    // A cell for the caret after the line.
+    let text = yumete_cjk::str_width(&editor.prompt_drawn()) + 1;
+    let label = match yumete_cjk::str_width(&label) + text <= width {
+        true => label,
+        false => match width.saturating_sub(text) {
+            room if room >= 4 => elide(&label, room),
+            _ => String::new(),
+        },
+    };
+    let room = width.saturating_sub(yumete_cjk::str_width(&label) + 1);
+    let before: Vec<char> = editor.prompt_before_caret().chars().collect();
+    let mut skip = 0;
+    while skip < before.len() && yumete_cjk::str_width(&before[skip..].iter().collect::<String>()) > room {
+        skip += 1;
+    }
+    Some((label, skip))
+}
+
 fn draw_command(
     frame: &mut Frame,
     editor: &Editor,
@@ -14954,8 +15020,8 @@ fn draw_command(
     // `draw`, and a prompt that began a column further along than the caret
     // was told about is a prompt you cannot type into straight.
     if editor.prompt().is_some() {
-        let text = &editor.prompt_drawn();
-        let prefix = editor.prompt_label().unwrap_or_default();
+        let (prefix, skip) = prompt_view(editor, area.width).unwrap_or_default();
+        let text = &editor.prompt_drawn().chars().skip(skip).collect::<String>();
         let line = format!("{prefix}{text}{}", prompt_preedit(editor, ime));
         // The guess is a rung back from what was actually typed — a colour,
         // not `DIM`, so it is still visibly *not yet* part of the line on a
@@ -16720,6 +16786,65 @@ fn squeezed(text: &str) -> String {
                 Box::leak(Box::new(ImeSession::new(Scheme::LINGMING, vec![])));
         }
         ONE.with(|one| *one)
+    }
+
+    /// **The candidates of a value typed in the settings panel show over the
+    /// page** (2026-11-09, reported: none ever did — the page was drawn over
+    /// them), in each of the three display styles.
+    #[test]
+    fn the_candidates_of_a_value_show_over_the_settings_page() {
+        let mut ed = editor_with("那年冬天。\n");
+        ed.open_value_line("paragraph mark symbol: ", "");
+        let page = yumete_config::panel::Panel::open(None, None);
+        let config = Config::default();
+        for display in [PanelDisplay::Box, PanelDisplay::Bottom, PanelDisplay::Inline] {
+            let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八\n");
+            ime.set_panel_display(display);
+            ime.input('b');
+            let (w, h) = (80u16, 24u16);
+            let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+            let mut viewport = Seats::default();
+            terminal.draw(|frame| draw(frame, &ed, &config, &ime, &mut viewport, Some(&page))).unwrap();
+            let text = buffer_to_text(terminal.backend().buffer());
+            assert!(text.contains('吧'), "{display:?}:\n{text}");
+        }
+    }
+
+    /// **The line being typed stays in sight on any window** (2026-11-09,
+    /// reported: below eight rows the value was typed under the settings
+    /// page): the page gives way first, then the setting's name, then the
+    /// start of the line — the caret and what stands before it always show,
+    /// and nothing panics on the way down.
+    #[test]
+    fn a_value_typed_in_the_settings_panel_stays_in_sight_on_a_tiny_window() {
+        let mut ed = editor_with("那年冬天。\n");
+        ed.open_value_line("keys that cross lines: ", "bxyz");
+        let page = yumete_config::panel::Panel::open(None, None);
+        let config = Config::default();
+        for w in 1..40u16 {
+            for h in 1..10u16 {
+                let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+                let mut viewport = Seats::default();
+                terminal.draw(|frame| draw(frame, &ed, &config, no_ime(), &mut viewport, Some(&page))).unwrap();
+                if w < 6 {
+                    continue;
+                }
+                let text = buffer_to_text(terminal.backend().buffer());
+                let last = text.lines().nth(h as usize - 1).unwrap_or_default().to_string();
+                assert!(last.contains("bxyz"), "{w}x{h}: {last:?}\n{text}");
+                let caret = caret_of(&mut terminal, &config);
+                assert_eq!(caret.y, h - 1, "{w}x{h}");
+                assert!(caret.x < w, "{w}x{h}: {caret:?}");
+            }
+        }
+        // A line longer than the window: its end, where the caret is.
+        ed.open_value_line("export fonts: ", &"serif, ".repeat(10));
+        let mut terminal = Terminal::new(TestBackend::new(20, 4)).unwrap();
+        let mut viewport = Seats::default();
+        terminal.draw(|frame| draw(frame, &ed, &config, no_ime(), &mut viewport, Some(&page))).unwrap();
+        let text = buffer_to_text(terminal.backend().buffer());
+        assert!(text.lines().nth(3).unwrap_or_default().contains("serif,"), "{text}");
+        assert!(caret_of(&mut terminal, &config).x < 20);
     }
 
     /// **一連畫好幾幀，邊欄的捲動位置跨幀留着**——那正是 [`window_start`] 要記

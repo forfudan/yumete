@@ -44,6 +44,25 @@ fn said(tag: &str) -> String {
     yumete_core::messages::say(tag, &[])
 }
 
+/// **A message in every language it is written in** (2026-11-09): a
+/// setting's name typed after `:settings` is found in the script it is
+/// typed in, whichever script the panel is drawn in.
+fn every_name(tag: &str) -> Vec<String> {
+    match yumete_core::messages::table().get(tag) {
+        Some(entry) => [entry.zht, entry.zhs, entry.en]
+            .into_iter()
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .collect(),
+        None => vec![said(tag)],
+    }
+}
+
+/// **What closes the panel after a `:`** (2026-11-09): the habit of closing
+/// with a command, which here writes nothing more — every change is written
+/// already.
+const CLOSING: &[&str] = &["q", "q!", "wq", "wq!", "x"];
+
 use crate::put_text;
 
 /// 左邊那張組目録有多寬（全角格）。
@@ -202,6 +221,10 @@ pub struct Seat {
     preview: Option<Preview>,
     /// A theme is being tried on the screen.
     trying: bool,
+    /// **A file was found changed outside, and nobody may have read so**
+    /// (2026-11-09): the key that found it opened the value line over the
+    /// news. The write that follows says it instead.
+    outside: bool,
 }
 
 impl Seat {
@@ -220,14 +243,54 @@ impl Seat {
     /// While a value or the search is typed the keys are the command row's —
     /// the `:` line's keys and the IME — and this gives them back.
     pub fn took(&mut self, editor: &mut Editor, key: Option<Key>) -> bool {
-        let Some(page) = self.panel.as_ref() else { return false };
+        if self.panel.is_none() {
+            return false;
+        }
+        let noticed = self.notice(editor);
         if editor.mode().is_prompt() {
             return false;
         }
+        // Said, and the key after it came in plain sight of it.
+        if !noticed {
+            self.outside = false;
+        }
+        let Some(page) = self.panel.as_ref() else { return false };
         let before = page.spot();
         let said = self.take(editor, key);
-        self.say(editor, before, said);
+        // The key that found a file changed outside does not take the news
+        // away again by moving.
+        if !(noticed && said.is_none()) {
+            self.say(editor, before, said);
+        }
         true
+    }
+
+    /// **A file changed outside, read again and said once** (2026-11-09):
+    /// asked before every key, click and paste, and on the loop's clock
+    /// while the panel stands open ([`Seat::due_in`]).
+    /// Gives whether it said so, for the key that found it to leave the line.
+    fn notice(&mut self, editor: &mut Editor) -> bool {
+        let Some(page) = self.panel.as_mut() else { return false };
+        let moved = page.refresh();
+        if moved.is_empty() {
+            return false;
+        }
+        let names = moved.iter().map(|p| shorten(p)).collect::<Vec<_>>().join(&say!("label.comma"));
+        editor.set_status(say!("settings.changed-outside", names));
+        self.row_said = true;
+        self.outside = true;
+        true
+    }
+
+    /// **The loop's clock**: how long until the files are looked at again,
+    /// while the panel is open.
+    pub fn due_in(&self) -> Option<std::time::Duration> {
+        self.open().then_some(std::time::Duration::from_secs(1))
+    }
+
+    /// The clock struck: a file changed outside is read again.
+    pub fn watch(&mut self, editor: &mut Editor) {
+        let _ = self.notice(editor);
     }
 
     /// **What a key said, or the stale line taken away** (2026-11-08,
@@ -268,8 +331,12 @@ impl Seat {
         let on_page = page.page.is_some();
         match key {
             // **No commands in the panel** (2026-11-08): its changes are
-            // written as they are made, and `q` closes it.
-            Key::Char(':') => return Some(say!("settings.no-commands")),
+            // written as they are made, and `q` closes it. Warning: **the `:`
+            // opens a line all the same** (2026-11-09, reported: `:e
+            // notes.md` ran `e` as the panel's key and typed the rest into
+            // the config file it opened) — what is typed after it is the
+            // line's until Enter or Esc, and never a key of the panel's.
+            Key::Char(':') => self.colon(editor),
             Key::Char('j') | Key::Down if on_page => page.page_step(true),
             Key::Char('k') | Key::Up if on_page => page.page_step(false),
             Key::Char('j') | Key::Down => page.step(true),
@@ -346,15 +413,32 @@ impl Seat {
                 }
                 return self.write(editor);
             }
-            Key::Esc | Key::Char('q') => {
+            Key::Esc => {
                 page.popup = None;
                 self.untry();
+                return None;
+            }
+            // **`q` closes the panel here as everywhere** (2026-11-09), and
+            // the theme being tried goes back with it.
+            Key::Char('q') => {
+                self.close(editor);
+                return None;
+            }
+            Key::Char(':') => {
+                self.colon(editor);
                 return None;
             }
             _ => return None,
         }
         self.try_theme();
         None
+    }
+
+    /// **`:`**: the command row opens, and takes every key up to Enter or Esc.
+    fn colon(&mut self, editor: &mut Editor) {
+        let Some(page) = self.panel.as_mut() else { return };
+        page.typing = Some(Typing::Command);
+        editor.open_value_line(":", "");
     }
 
     /// The theme under the list's cursor, tried (2026-11-08: themes preview
@@ -391,7 +475,12 @@ impl Seat {
     /// is written at once and takes effect (2026-11-08).
     fn write(&mut self, editor: &mut Editor) -> Option<String> {
         let page = self.panel.as_mut()?;
-        let wrote = page.flush();
+        let mut wrote = page.flush();
+        if let Ok(Some(saved)) = &mut wrote {
+            if std::mem::take(&mut self.outside) {
+                saved.changed_underneath = saved.wrote.clone();
+            }
+        }
         said_of_a_write(editor, wrote, false)
     }
 
@@ -444,6 +533,10 @@ impl Seat {
     /// While the command row is typing, the paste is its, at the caret.
     /// Gives whether it was the panel's.
     pub fn pasted(&mut self, editor: &mut Editor, text: &str) -> bool {
+        if self.panel.is_none() {
+            return false;
+        }
+        let _ = self.notice(editor);
         let Some(page) = self.panel.as_ref() else { return false };
         if editor.mode().is_prompt() {
             return false;
@@ -479,22 +572,35 @@ impl Seat {
     /// value in a list goes to it, the wheel walks the list, and anything
     /// else is taken and does nothing. Gives whether it was the panel's.
     pub fn mouse(&mut self, editor: &mut Editor, pointer: Pointer, x: u16, y: u16) -> bool {
+        if self.panel.is_none() {
+            return false;
+        }
+        let noticed = self.notice(editor);
         let Some(page) = self.panel.as_mut() else { return false };
         if editor.mode().is_prompt() {
             return true;
         }
         let before = page.spot();
         let mut said = None;
+        // A click away from a choice's list puts it away, and the theme
+        // being tried goes back as Esc puts it back (2026-11-09).
+        let listed = page.popup.is_some();
         match pointer {
             Pointer::Click => match hit_at(x, y) {
                 Some(Hit::Group(i)) => {
                     page.page = None;
                     page.popup = None;
                     page.to_group(i);
+                    if listed {
+                        self.untry();
+                    }
                 }
                 Some(Hit::Row(i)) => {
                     page.popup = None;
                     page.row = i;
+                    if listed {
+                        self.untry();
+                    }
                 }
                 Some(Hit::PageRow(i)) => page.page = Some(i),
                 Some(Hit::Choice(i)) => {
@@ -519,13 +625,16 @@ impl Seat {
             }
         }
         self.register = None;
-        self.say(editor, before, said);
+        if !(noticed && said.is_none()) {
+            self.say(editor, before, said);
+        }
         true
     }
 
     /// 核心那幾張條子：`:settings` 開這一扇（帶一個名字就停在那一項上），和命令行
     /// 交回來的那一段字。
     pub fn settle(&mut self, editor: &mut Editor) {
+        let _ = self.notice(editor);
         if editor.take_settings_request() && self.panel.is_none() {
             // 本項目那一頁跟着工作路徑走（2026-10-01）。
             let local = Some(yumete_config::panel::local_sheet_path(&editor.root()));
@@ -543,7 +652,7 @@ impl Seat {
         if let Some(name) = editor.take_settings_target() {
             if let Some(page) = self.panel.as_mut() {
                 page.search.clear();
-                if !page.go_to(&name, |s| said(s.label)) {
+                if !page.go_to(&name, |s| every_name(s.label)) {
                     editor.set_status(say!("settings.no-such-setting", name));
                     self.row_said = true;
                 }
@@ -570,6 +679,22 @@ impl Seat {
                 page.typing = None;
                 page.refusal = None;
             }
+            // What was typed after a `:`: the habit of closing, or a word
+            // that it is not taken. Nothing of it ever reaches the panel or
+            // the document.
+            (Some(Typing::Command), Some(Some(text))) => {
+                page.typing = None;
+                let typed = text.trim().to_string();
+                if CLOSING.contains(&typed.as_str()) {
+                    self.close(editor);
+                    return;
+                }
+                if !typed.is_empty() {
+                    editor.set_status(say!("settings.not-a-command", typed));
+                    self.row_said = true;
+                }
+            }
+            (Some(Typing::Command), Some(None)) => page.typing = None,
             (Some(Typing::Search), Some(answer)) => {
                 page.typing = None;
                 page.search = answer.unwrap_or_default();
@@ -789,8 +914,13 @@ pub fn draw(
     let on = ground.fg(ink.gold()).add_modifier(Modifier::REVERSED);
     let changed = ground.fg(ink.mark());
 
-    frame.render_widget(Clear, area);
     HITS.with(|hits| hits.borrow_mut().clear());
+    // A window too short for the page and the line being typed: the line
+    // keeps its row, and the page gives up everything (2026-11-09).
+    if area.width == 0 || area.height == 0 {
+        return None;
+    }
+    frame.render_widget(Clear, area);
     let rows = panel.rows();
     let col = Columns::of(area, panel);
     let right = col.right;
@@ -851,11 +981,16 @@ pub fn draw(
     // **Only the keys that work now** (2026-11-08): the list, a page, a
     // choice's list, a value typed, a search typed.
     let keys = match (panel.typing, panel.popup.is_some(), panel.subpage().filter(|_| panel.page.is_some())) {
-        (Some(Typing::Value), _, _) => say!("settings.keys-editing"),
+        (Some(Typing::Value | Typing::Command), _, _) => say!("settings.keys-editing"),
         (Some(Typing::Search), _, _) => say!("settings.keys-search"),
         (None, true, _) => say!("settings.keys-list"),
         (None, false, Some(Subpage::Flavor)) => say!("settings.keys-flavor-page"),
         (None, false, Some(Subpage::Annotation)) => say!("settings.keys-annotation-page"),
+        // **Not a key that does nothing** (2026-11-09): with no row there is
+        // nothing to change or reset, and a page's row has no value to copy
+        // or put back.
+        (None, false, None) if rows.is_empty() => say!("settings.keys-no-match"),
+        (None, false, None) if panel.here().is_some_and(|s| s.kind == Kind::Page) => say!("settings.keys-page-row"),
         (None, false, None) if !panel.search.is_empty() => say!("settings.keys-searched"),
         (None, false, None) => say!("settings.keys"),
     };
@@ -1703,7 +1838,7 @@ mod tests {
             std::fs::write(&file, global).unwrap();
         }
         let mut panel = Panel::open(Some(file), Some(dir.join("local.toml")));
-        assert!(panel.go_to(path, |_| String::new()), "{path}");
+        assert!(panel.go_to(path, |_| Vec::new()), "{path}");
         let mut ed = Editor::new();
         ed.on_key(Key::Char('i'));
         for c in "稿子上的一行".chars() {
@@ -1819,7 +1954,7 @@ mod tests {
         assert!(page(&seat).popup.is_none());
 
         let mut seat2 = seat;
-        page_mut(&mut seat2).go_to("theme.name", |_| String::new());
+        page_mut(&mut seat2).go_to("theme.name", |_| Vec::new());
         keys(&mut seat2, &mut ed, &[Key::Enter, Key::Char('j')]);
         assert!(matches!(seat2.take_preview(), Some(Preview::Show(name)) if name == "one-dark"));
         keys(&mut seat2, &mut ed, &[Key::Esc]);
@@ -1908,7 +2043,7 @@ mod tests {
         ed.paste_text("-");
         assert_eq!(ed.value_typed(), Some("letter-"));
         keys(&mut seat, &mut ed, &[Key::Esc]);
-        page_mut(&mut seat).go_to("editor.soft_wrap", |_| String::new());
+        page_mut(&mut seat).go_to("editor.soft_wrap", |_| Vec::new());
         keys(&mut seat, &mut ed, &[Key::Char('p')]);
         assert_eq!(ed.status(), say!("settings.paste-nowhere"));
         let _ = std::fs::remove_dir_all(&dir);
@@ -1944,15 +2079,189 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// **`:` does nothing in the panel but say so** (2026-11-08): there are
-    /// no commands in it.
+    /// **`:` opens a line that swallows what follows** (2026-11-09,
+    /// reported: `:e notes.md` ran `e` as the panel's key, opened the config
+    /// file and typed the rest into it). Enter on a command says the panel
+    /// takes none; `q` and its kin close it; nothing reaches a panel key or
+    /// the document.
     #[test]
-    fn a_colon_says_the_panel_takes_no_commands() {
+    fn a_colon_line_swallows_the_command_and_q_closes() {
         let dir = scratch("colon");
-        let (mut ed, mut seat) = seated(&dir, "", "editor.layout");
+        let (mut ed, mut seat) = seated(&dir, "[editor]\nindent = 4\n", "editor.soft_wrap");
+        let text = ed.current_buffer().rope().to_string();
         keys(&mut seat, &mut ed, &[Key::Char(':')]);
-        assert_ne!(ed.mode(), Mode::Command);
-        assert_eq!(ed.status(), say!("settings.no-commands"));
+        assert_eq!(ed.mode(), Mode::Value);
+        assert_eq!(ed.prompt_label().as_deref(), Some(":"));
+        keys(&mut seat, &mut ed, &chars("e notes.md"));
+        assert!(seat.panel.is_some() && ed.mode() == Mode::Value, "still the line's");
+        assert_eq!(ed.value_typed(), Some("e notes.md"));
+        let drawn = shot(page(&seat), 110, 34);
+        assert!(drawn.contains(&say!("settings.keys-editing").chars().take(8).collect::<String>()), "{drawn}");
+        keys(&mut seat, &mut ed, &[Key::Enter]);
+        assert!(seat.panel.is_some(), "the panel stays");
+        assert_eq!(ed.status(), say!("settings.not-a-command", "e notes.md"));
+        assert_eq!(file(&dir), "[editor]\nindent = 4\n", "no key of the panel's ran");
+        assert_eq!(ed.current_buffer().rope().to_string(), text, "the document is not touched");
+        assert!(ed.current_buffer().path().is_none_or(|p| !p.ends_with("config.toml")));
+        // A space or `j` typed after `:` is the line's too.
+        keys(&mut seat, &mut ed, &[Key::Char(':'), Key::Char(' '), Key::Char('j'), Key::Esc]);
+        assert!(file(&dir).contains("indent = 4") && !file(&dir).contains("soft_wrap"), "{}", file(&dir));
+        assert_eq!(page(&seat).here().map(|s| s.key), Some("soft_wrap"), "the cursor did not move");
+        assert!(seat.panel.is_some(), "Esc on the line leaves the panel open");
+        for closing in ["q", "q!", "wq", "x", "wq!"] {
+            page_mut(&mut seat).typing = None;
+            keys(&mut seat, &mut ed, &[Key::Char(':')]);
+            keys(&mut seat, &mut ed, &chars(closing));
+            keys(&mut seat, &mut ed, &[Key::Enter]);
+            assert!(seat.panel.is_none(), ":{closing} closes the panel");
+            assert_eq!(ed.mode(), Mode::Normal);
+            seat.panel = seated(&dir, "", "editor.soft_wrap").1.panel;
+            ed.set_settings_open(true);
+        }
+        // In a choice's list too.
+        page_mut(&mut seat).go_to("editor.margin", |_| Vec::new());
+        keys(&mut seat, &mut ed, &[Key::Enter, Key::Char(':'), Key::Char('j'), Key::Esc]);
+        assert_eq!(page(&seat).popup_word(), Some("dense"), "j went to the line, not the list");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// **A click away from a theme's list puts the theme back** (2026-11-09),
+    /// as Esc does, on a row or on a group; **`q` in the list closes the
+    /// panel**, the theme put back too.
+    #[test]
+    fn leaving_a_themes_list_puts_the_theme_back() {
+        let dir = scratch("untry");
+        let (mut ed, mut seat) = seated(&dir, "", "theme.name");
+        keys(&mut seat, &mut ed, &[Key::Enter, Key::Char('j')]);
+        assert!(matches!(seat.take_preview(), Some(Preview::Show(_))));
+        let drawn = shot(page(&seat), 110, 40);
+        let above = page(&seat).rows()[page(&seat).row - 1].label;
+        let (x, y) = find_on(&drawn, &said(above));
+        assert!(seat.mouse(&mut ed, Pointer::Click, x, y));
+        assert!(page(&seat).popup.is_none());
+        assert_eq!(seat.take_preview(), Some(Preview::Undo), "a click on a row");
+        page_mut(&mut seat).go_to("theme.name", |_| Vec::new());
+        keys(&mut seat, &mut ed, &[Key::Enter, Key::Char('j')]);
+        let _ = seat.take_preview();
+        let drawn = shot(page(&seat), 110, 40);
+        let (x, y) = find_on(&drawn, &format!("  {}", said(GROUPS[1].label)));
+        assert!(seat.mouse(&mut ed, Pointer::Click, x + 2, y));
+        assert_eq!(seat.take_preview(), Some(Preview::Undo), "a click on a group");
+        page_mut(&mut seat).go_to("theme.name", |_| Vec::new());
+        keys(&mut seat, &mut ed, &[Key::Enter, Key::Char('j')]);
+        let _ = seat.take_preview();
+        keys(&mut seat, &mut ed, &[Key::Char('q')]);
+        assert!(seat.panel.is_none(), "q closes the panel from the list");
+        assert_eq!(seat.take_preview(), Some(Preview::Undo));
+        assert!(!file(&dir).contains("[theme]"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// **A file changed outside is read again and said once** (2026-11-09):
+    /// the panel shows its new value, a change and its `u` start from it,
+    /// and a file deleted outside gets only the new line.
+    #[test]
+    fn a_file_changed_outside_is_read_again_and_said_once() {
+        let dir = scratch("outside");
+        let (mut ed, mut seat) = seated(&dir, "[editor]\nscrolloff = 3 # a\nindent = 2\n", "editor.scrolloff");
+        // A second apart, so the stamp tells it on any file system.
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        std::fs::write(dir.join("config.toml"), "[editor]\nscrolloff = 9 # a\nindent = 2\nruler = 80\n").unwrap();
+        seat.watch(&mut ed);
+        assert_eq!(ed.status(), say!("settings.changed-outside", shorten(&dir.join("config.toml"))));
+        assert_eq!(page(&seat).shown(page(&seat).here().unwrap()).value, "9");
+        seat.watch(&mut ed);
+        ed.set_status(String::new());
+        seat.watch(&mut ed);
+        assert_eq!(ed.status(), "", "once");
+        keys(&mut seat, &mut ed, &[Key::Enter]);
+        assert_eq!(ed.value_typed(), Some("9"), "the editor starts from the file as it is");
+        keys(&mut seat, &mut ed, &[Key::Ctrl('u'), Key::Char('5'), Key::Enter]);
+        assert_eq!(file(&dir), "[editor]\nscrolloff = 5 # a\nindent = 2\nruler = 80\n");
+        keys(&mut seat, &mut ed, &[Key::Char('u')]);
+        assert_eq!(file(&dir), "[editor]\nscrolloff = 9 # a\nindent = 2\nruler = 80\n", "back to 9, not 3");
+        // Deleted outside: read as empty, said, and only the new line written.
+        std::fs::remove_file(dir.join("config.toml")).unwrap();
+        keys(&mut seat, &mut ed, &[Key::Char('j')]);
+        assert_eq!(ed.status(), say!("settings.changed-outside", shorten(&dir.join("config.toml"))));
+        assert!(!page(&seat).global.there);
+        page_mut(&mut seat).go_to("editor.soft_wrap", |_| Vec::new());
+        keys(&mut seat, &mut ed, &[Key::Char(' ')]);
+        assert!(file(&dir).contains("soft_wrap = false") && !file(&dir).contains("scrolloff"), "{}", file(&dir));
+        // Found by the key that opens the value line, which covers the news:
+        // the write says it instead.
+        std::fs::remove_file(dir.join("config.toml")).unwrap();
+        page_mut(&mut seat).go_to("editor.ruler", |_| Vec::new());
+        keys(&mut seat, &mut ed, &[Key::Enter, Key::Ctrl('u'), Key::Char('8'), Key::Char('0'), Key::Enter]);
+        assert_eq!(ed.status(), say!("settings.saved-moved", shorten(&dir.join("config.toml"))));
+        assert_eq!(file(&dir).trim(), "[editor]\nruler = 80");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// **`:settings` takes the rest of the line as the name** (2026-11-09):
+    /// spaces in it, quotes or not, in any language the panel speaks — the
+    /// simplified name finds the row drawn in Traditional.
+    #[test]
+    fn settings_takes_a_name_with_spaces_in_any_script() {
+        let mut ed = Editor::new();
+        let mut seat = Seat::default();
+        for name in ["first-line indent", "\"first-line indent\"", "First-Line Indent", "首行缩进", "首行縮進", "'首行缩进'"] {
+            ed.execute(":settings editor.scrolloff").unwrap();
+            seat.settle(&mut ed);
+            ed.execute(&format!(":settings {name}")).unwrap();
+            seat.settle(&mut ed);
+            assert_eq!(page(&seat).here().map(|s| s.label), Some("settings.editor.indent"), "{name}");
+        }
+        ed.execute(":settings no such thing").unwrap();
+        seat.settle(&mut ed);
+        assert_eq!(ed.status(), say!("settings.no-such-setting", "no such thing"));
+    }
+
+    /// **The keys at the foot are keys that do something** (2026-11-09): no
+    /// `y` or `r` on a page's row, no Enter, Space or `r` when a search found
+    /// nothing.
+    #[test]
+    fn the_foot_lists_only_keys_that_work_here() {
+        let mut p = Panel::open(None, None);
+        let foot = |p: &Panel| shot(p, 200, 34).lines().rev().take(4).collect::<Vec<_>>().join("\n");
+        p.go_to("keys.flavor_items", |_| Vec::new());
+        let drawn = foot(&p);
+        assert!(drawn.contains(&say!("settings.keys-page-row")), "{drawn}");
+        for gone in ["r ", "y ", "p "] {
+            assert!(!say!("settings.keys-page-row").contains(&format!(", {gone}")), "{gone}");
+        }
+        p.go_to("ime.annotation_modes", |_| Vec::new());
+        assert!(foot(&p).contains(&say!("settings.keys-page-row")));
+        p.search = "zzzq".into();
+        p.narrow(Some(Vec::new()));
+        let drawn = foot(&p);
+        assert!(drawn.contains(&say!("settings.keys-no-match")), "{drawn}");
+        for gone in ["Enter", "␣", "Space", ", r "] {
+            assert!(!say!("settings.keys-no-match").contains(gone), "{gone}");
+        }
+    }
+
+    /// **A guide and a paragraph mark are one character** (2026-11-09,
+    /// reported: `""` and `"ab"` were written), refused with the loader's own
+    /// words.
+    #[test]
+    fn a_single_character_setting_refuses_two_or_none() {
+        let dir = scratch("one-char");
+        let (mut ed, mut seat) = seated(&dir, "", "editor.indent_symbol");
+        for bad in ["", "ab"] {
+            keys(&mut seat, &mut ed, &[Key::Enter, Key::Ctrl('u')]);
+            keys(&mut seat, &mut ed, &chars(bad));
+            keys(&mut seat, &mut ed, &[Key::Enter]);
+            assert_eq!(ed.mode(), Mode::Value, "{bad:?} typed again");
+            assert!(matches!(&page(&seat).refusal, Some(Refusal::Loader(said)) if said.contains("indent_symbol")), "{bad:?}");
+            keys(&mut seat, &mut ed, &[Key::Esc]);
+        }
+        assert!(!file(&dir).contains("indent_symbol"));
+        keys(&mut seat, &mut ed, &[Key::Enter, Key::Ctrl('u'), Key::Char('¶'), Key::Enter]);
+        assert!(file(&dir).contains("indent_symbol = \"¶\""), "{}", file(&dir));
+        page_mut(&mut seat).go_to("editor.indent_guides_character", |_| Vec::new());
+        keys(&mut seat, &mut ed, &[Key::Enter, Key::Ctrl('u'), Key::Char('字'), Key::Enter]);
+        assert_eq!(ed.mode(), Mode::Value, "a guide is one cell wide");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -2010,7 +2319,7 @@ mod tests {
         assert!(seat.mouse(&mut ed, Pointer::Wheel { back: false, notches: 3 }, 0, 0));
         assert_eq!(page(&seat).row, row + 3);
         // A value in a list.
-        page_mut(&mut seat).go_to("editor.margin", |_| String::new());
+        page_mut(&mut seat).go_to("editor.margin", |_| Vec::new());
         keys(&mut seat, &mut ed, &[Key::Enter]);
         let drawn = shot(page(&seat), 110, 40);
         let (x, y) = find_on(&drawn, " always");
@@ -2026,14 +2335,14 @@ mod tests {
     #[test]
     fn the_description_says_what_a_row_takes() {
         let mut p = Panel::open(None, None);
-        p.go_to("editor.zong_length", |_| String::new());
+        p.go_to("editor.zong_length", |_| Vec::new());
         let drawn = shot(&p, 120, 40);
         let range = say!("settings.range-or-zero", 8, 64);
         assert!(drawn.contains(&range), "{drawn}");
-        p.go_to("editor.margin", |_| String::new());
+        p.go_to("editor.margin", |_| Vec::new());
         let drawn = shot(&p, 120, 40);
         assert!(drawn.contains(&name_of(said("settings.margin.loose"))), "{drawn}");
-        p.go_to("editor.soft_wrap", |_| String::new());
+        p.go_to("editor.soft_wrap", |_| Vec::new());
         let lines = note_lines(&p);
         assert_eq!(lines[1], say!("settings.about.tick", "[x]"));
     }

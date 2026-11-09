@@ -3163,6 +3163,13 @@ impl Runner {
     }
 }
 
+/// **Exactly one character** as the eye counts it — one grapheme, so a
+/// letter with its accent or a flag is one — and one cell wide when
+/// `narrow` (2026-11-09).
+fn one_character(text: &str, narrow: bool) -> bool {
+    yumete_cjk::grapheme_count(text) == 1 && (!narrow || yumete_cjk::str_width(text) == 1)
+}
+
 /// **A complaint in the language the editor speaks** (2026-10-30): the
 /// Chinese as it has always read, and the English beside it. The language is
 /// [`yumete_cjk::speaks_english`], set by the front end before it loads.
@@ -5401,8 +5408,16 @@ impl RawConfig {
         if let Some(on) = self.editor.indent_guides {
             config.editor.indent_guides = on;
         }
+        // **One character, one cell wide** (2026-11-09, reported: an empty
+        // guide and `ab` were taken): anything else keeps the factory's.
         if let Some(character) = self.editor.indent_guides_character {
-            config.editor.indent_guides_character = character;
+            match one_character(&character, true) {
+                true => config.editor.indent_guides_character = character,
+                false => problems.push(said(
+                    format!("[editor] indent_guides_character = \"{character}\"：要一個佔一格的字符"),
+                    format!("[editor] indent_guides_character = \"{character}\": one character, one cell wide"),
+                )),
+            }
         }
         if let Some(skip) = self.editor.indent_guides_skip_levels {
             config.editor.indent_guides_skip_levels =
@@ -5432,8 +5447,16 @@ impl RawConfig {
         if let Some(level) = self.editor.auto_pairs {
             config.editor.auto_pairs = level;
         }
+        // One character, as the guide (2026-11-09), wide or narrow: it
+        // stands in a paragraph's opening square.
         if let Some(symbol) = self.editor.indent_symbol {
-            config.editor.indent_symbol = symbol;
+            match one_character(&symbol, false) {
+                true => config.editor.indent_symbol = symbol,
+                false => problems.push(said(
+                    format!("[editor] indent_symbol = \"{symbol}\"：要一個字符"),
+                    format!("[editor] indent_symbol = \"{symbol}\": one character"),
+                )),
+            }
         }
         if let Some(level) = self
             .editor
