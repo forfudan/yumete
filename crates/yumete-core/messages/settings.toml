@@ -1349,10 +1349,10 @@ zhs = "↓ 还有 {0} 项"
 en = "↓ {0} more"
 
 [[message]]
-# 設置面板：這一層還没有那個檔(存盤時建)
+# 設置面板：這一層還没有那個檔（第一次改動時建）
 key = "settings.no-file"
-zhs = "尚不存在，保存时创建"
-en = "not there yet; created on save"
+zhs = "尚不存在，第一次改动时创建"
+en = "not there yet; created by the first change"
 
 [[message]]
 # 设置面板：搜索没有找到任何一项。{0} 是搜的字（草稿）

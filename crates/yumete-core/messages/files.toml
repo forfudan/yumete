@@ -351,8 +351,8 @@ en = "typst is not installed, so nothing was exported: get it from https://githu
 [[message]]
 # ye --export typst 或 pdf：导出设置里开着 Typst 做不到的项（竖排、标点悬挂、jlreq），{0} 是这几项的名字，用逗号隔开；文件照样导出了（草稿）
 key = "export.not-for-typst"
-zhs = "Typst 导出用不上 {0}，已照横排导出"
-en = "{0} does not apply to a Typst export, so it was set horizontally"
+zhs = "Typst 导出用不上 {0}，已略去"
+en = "{0}: not used by a Typst export, so left out"
 
 [[message]]
 # :export 的一行里有个引号没有收尾（草稿）
@@ -432,8 +432,8 @@ en = "exported {0} from the files on disk: {1} open files have unsaved changes"
 [[message]]
 # :export typst 写好了文件，但导出设置里开着 Typst 做不到的项（竖排、标点悬挂、jlreq），{1} 是这几项的名字，用逗号隔开（草稿）
 key = "export.wrote-not-for-typst"
-zhs = "已导出 {0}；Typst 导出用不上 {1}，已照横排导出"
-en = "exported {0}; {1} does not apply to a Typst export, so it was set horizontally"
+zhs = "已导出 {0}；Typst 导出用不上 {1}，已略去"
+en = "exported {0}; {1}: not used by a Typst export, so left out"
 
 [[message]]
 # :info：字數(不含空白，也不含標記——同 :count)
