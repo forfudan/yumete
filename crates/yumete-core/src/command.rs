@@ -967,7 +967,15 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
     // the families that have not been moved over yet.
     if let Some(entry) = entry_named(word) {
         if let Some(answer) = read_params(entry, rest, word.ends_with('!')) {
-            return answer;
+            // **Said under the spelling typed** (2026-11-09, review: `:ene
+            // other.txt` answered that `new` takes no argument).
+            return match answer {
+                Err(CommandError::TakesNoArgument { command, value }) => Err(CommandError::TakesNoArgument {
+                    command: entry.aliases.iter().copied().find(|a| *a == word).unwrap_or(command),
+                    value,
+                }),
+                answer => answer,
+            };
         }
     }
 

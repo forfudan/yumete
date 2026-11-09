@@ -993,7 +993,62 @@ impl Editor {
             // reviews): read as a modeline is read, so they take exactly what
             // a modeline takes (`ft`, `ts`, `sw`, `et`, `tw`) into this
             // buffer, and the file type as one set by hand.
+            //
+            // **A question is answered** (2026-11-09, review): `:set ts?`, and
+            // `:set ts` bare for an option with a value, says `ts=4`, as vim
+            // does. A file type nobody knows is said to be one, not an option
+            // `:set` does not take, and `:setf` with nothing after it says
+            // the file type.
             Command::VimSet(options) => {
+                let mut answers = Vec::new();
+                let mut sets = Vec::new();
+                for word in options.split_whitespace() {
+                    let asked = word.strip_suffix('?');
+                    let name = asked.unwrap_or(word);
+                    let local = self.current_buffer().local();
+                    let answer = match name {
+                        "ft" | "filetype" => Some(self.syntax().name().to_string()),
+                        "ts" | "tabstop" => Some(self.tab_stop().to_string()),
+                        "sw" | "shiftwidth" => Some(self.indent_width().to_string()),
+                        "tw" | "textwidth" => Some(local.text_width.unwrap_or(0).to_string()),
+                        "et" | "expandtab" | "noet" | "noexpandtab" if asked.is_some() => {
+                            let long = name.trim_start_matches("no").len() > 2;
+                            answers.push(match (self.tab_spaces(), long) {
+                                (true, false) => "et".to_string(),
+                                (false, false) => "noet".to_string(),
+                                (true, true) => "expandtab".to_string(),
+                                (false, true) => "noexpandtab".to_string(),
+                            });
+                            continue;
+                        }
+                        _ if asked.is_some() => {
+                            self.status = say!("cmd.set-takes", name);
+                            return Ok(CommandOutcome::Continue);
+                        }
+                        _ => None,
+                    };
+                    match answer {
+                        Some(value) => answers.push(format!("{name}={value}")),
+                        None => sets.push(word),
+                    }
+                }
+                if sets.is_empty() {
+                    self.status = answers.join(" ");
+                    return Ok(CommandOutcome::Continue);
+                }
+                let typed_type = sets.iter().find_map(|w| w.strip_prefix("ft=").or_else(|| w.strip_prefix("filetype=")));
+                match typed_type {
+                    Some("") if sets.len() == 1 => {
+                        self.status = say!("render.markup-is", self.syntax().name());
+                        return Ok(CommandOutcome::Continue);
+                    }
+                    Some(name) if crate::modeline::scan(&[&format!("vim: set ft={name}:")]).syntax.is_none() => {
+                        self.status = say!("render.no-such-markup", name);
+                        return Ok(CommandOutcome::Continue);
+                    }
+                    _ => {}
+                }
+                let options = sets.join(" ");
                 let read = crate::modeline::scan(&[&format!("vim: set {options}:")]);
                 if read.is_empty() {
                     self.status = say!("cmd.set-takes", options.trim());
@@ -1008,6 +1063,9 @@ impl Editor {
                     self.set_syntax(syntax);
                 }
                 self.status = say!("cmd.set-took", read.said.join(" "));
+                if !answers.is_empty() {
+                    self.status = format!("{} {}", self.status, answers.join(" "));
+                }
                 Ok(CommandOutcome::Continue)
             }
             Command::SetSyntax(name) => {

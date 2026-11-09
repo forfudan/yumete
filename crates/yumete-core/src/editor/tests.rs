@@ -27960,6 +27960,21 @@ fn vims_set_setf_ene_and_tabnew() {
     press(&mut tw, "gqip");
     assert_eq!(tw.current_buffer().text(), "the quick brown fox jumps over the lazy dog again\n", "0 is the factory 79");
 
+    // A question is answered, and a wrong value is said to be one
+    // (2026-11-09, review).
+    ed.execute(":set ts? sw et?").unwrap();
+    assert_eq!(ed.status(), "ts=2 sw=2 et");
+    ed.execute(":set ft").unwrap();
+    assert_eq!(ed.status(), "ft=rust");
+    ed.execute(":set ft=nosuchlang").unwrap();
+    assert_eq!(ed.status(), say!("render.no-such-markup", "nosuchlang"));
+    assert_eq!(ed.syntax().name(), "rust", "nothing changed");
+    ed.execute(":setf").unwrap();
+    assert_eq!(ed.status(), say!("render.markup-is", "rust"));
+    ed.execute(":set ts=4 tw?").unwrap();
+    assert_eq!(ed.status(), format!("{} tw=60", say!("cmd.set-took", "ts=4")));
+    let Err(said) = ed.execute(":ene other.txt") else { panic!(":ene takes nothing") };
+    assert!(said.to_string().starts_with(&say!("cmd.takes-nothing-after-it", "ene", "other.txt")), "{said}");
     let tabs = ed.buffer_count();
     ed.execute(":tabnew").unwrap();
     assert_eq!(ed.buffer_count(), tabs + 1, ":tabnew");
