@@ -1,5 +1,5 @@
-//! **Normal mode's keys, each a named command** (2026-10-31, step 1 of
-//! the keymap plan: every key a command, as in helix).
+//! **Normal mode's keys, each a named command**: every key a command, as
+//! in helix.
 //!
 //! Each top-level Normal key's code lives here as a method, `cmd_` and the
 //! command's name: helix's name where helix has the same command
@@ -32,8 +32,7 @@ pub(super) struct Cx {
 }
 
 impl Cx {
-    /// **The same moment, with the key a command's own row names** (2026-11-01,
-    /// the review's decoupling): a body shared by several commands (`f`
+    /// **The same moment, with the key a command's own row names**: a body shared by several commands (`f`
     /// `F` `t` `T` are one) tells them apart by that key, and it must be
     /// the row's, never whichever key reached the command — a binding, a
     /// group, a key a later keymap adds. Only `move_char_*` read the key
@@ -230,7 +229,7 @@ pub(super) const NORMAL_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::RecordMacro, Editor::cmd_record_macro, Key::Char('Q')),
     (NormalCmd::ReplayMacro, Editor::cmd_replay_macro, Key::Char('q')),
     // vim's `q{a-z}` and `@{a-z}`: the letter names the register the macro
-    // is recorded into or played from (2026-11-03). `q` while recording
+    // is recorded into or played from. `q` while recording
     // stops, as in vim.
     (NormalCmd::VimRecordMacro, |e, cx| match e.recording.is_some() {
         true => e.stop_recording(),
@@ -304,7 +303,7 @@ pub(super) const NORMAL_COMMANDS: &[NormalCommand] = &[
 /// helix's entry for the key answers, as the `match` it replaced fell through.
 pub(super) type When = fn(&Editor, &Cx) -> bool;
 
-/// **The default keymap, helix's** (2026-10-31): each key and the command it
+/// **The default keymap, helix's**: each key and the command it
 /// runs. The vim preset reads [`VIM_NORMAL`] first.
 pub(super) const HELIX_NORMAL: &[(Key, NormalCmd)] = &[
     (Key::Char('h'), NormalCmd::MoveCharLeft),
@@ -432,7 +431,7 @@ pub(super) const HELIX_NORMAL: &[(Key, NormalCmd)] = &[
     (Key::Alt('.'), NormalCmd::RepeatLastMotion),
 ];
 
-/// **The flavour's keys** (2026-11-02): yumete's own keys at the top level,
+/// **The flavour's keys**: yumete's own keys at the top level,
 /// each held while its item is on (`yumete_cjk::FlavorItem`) and where its
 /// condition holds, before either keymap's. A key whose item belongs to one
 /// keymap only is said by the item, not by the row.
@@ -456,7 +455,7 @@ pub(super) const FLAVOR_NORMAL: &[(Key, NormalCmd, FlavorItem, super::groups::On
     (Key::Char(' '), NormalCmd::SpaceMode, FlavorItem::VimSpaceMenu, Only::Vim),
 ];
 
-/// **helix's keys that vim leaves free** (2026-11-02): under vim they reach
+/// **helix's keys that vim leaves free**: under vim they reach
 /// helix's table only while `helix_keys_under_vim` is on. A key a binding or
 /// the preset plays is helix's either way: the preset is spelt in them.
 pub(super) const HELIX_KEYS_UNDER_VIM: &[Key] = &[
@@ -501,16 +500,16 @@ pub(super) const HELIX_KEYS_UNDER_VIM: &[Key] = &[
 /// **The vim preset's own keys**, before helix's: the commands that do
 /// something else under vim, each with the condition it needs, if any.
 pub(super) const VIM_NORMAL: &[(Key, NormalCmd, Option<When>)] = &[
-    // **vim's own meanings where helix's table used to answer** (2026-11-01):
-    // a key this table did not name fell through to helix's, so vim's `C-n`
-    // turned two-thirds of a page and `_` trimmed the selection. Keys whose
-    // vim meaning yumete has no feature for do nothing (`&`, `!`).
+    // **vim's own meanings, so helix's table does not answer for them**: a
+    // key this table did not name would fall through to helix's, and vim's
+    // `C-n` would turn two-thirds of a page and `_` trim the selection. Keys
+    // whose vim meaning yumete has no feature for do nothing (`&`, `!`).
     (Key::Ctrl('n'), NormalCmd::MoveLineDown, None),
     (Key::Ctrl('p'), NormalCmd::MoveLineUp, None),
     (Key::Char('_'), NormalCmd::VimGotoFirstNonwhitespace, None),
     (Key::Char('&'), NormalCmd::NoOp, None),
     // vim's `=` re-indents over a motion, which yumete does not have; helix's
-    // formats through the server (2026-11-02).
+    // formats through the server.
     (Key::Char('='), NormalCmd::NoOp, None),
     (Key::Char('!'), NormalCmd::NoOp, None),
     (Key::Char('q'), NormalCmd::VimRecordMacro, None),
@@ -522,10 +521,10 @@ pub(super) const VIM_NORMAL: &[(Key, NormalCmd, Option<When>)] = &[
     (Key::Ctrl('6'), NormalCmd::GotoLastAccessedFile, None),
     // vim's `Space` moves right, and `\` (vim's leader, which vim leaves
     // free) opens the Space menu: the flavour's `vim_space_menu` puts the
-    // menu back on `Space` (2026-11-01).
+    // menu back on `Space`.
     (Key::Char(' '), NormalCmd::MoveCharRight, None),
     // vim's `C-e` `C-y` scroll a line; its `C-c` in Normal mode does
-    // nothing, where helix's comments (2026-11-02).
+    // nothing, where helix's comments.
     (Key::Ctrl('e'), NormalCmd::ScrollDown, None),
     (Key::Ctrl('y'), NormalCmd::ScrollUp, None),
     (Key::Ctrl('c'), NormalCmd::NoOp, None),
@@ -562,8 +561,7 @@ pub(super) const VIM_NORMAL: &[(Key, NormalCmd, Option<When>)] = &[
     (Key::Char('<'), NormalCmd::VimUnindent, None),
     (Key::Char('i'), NormalCmd::SelectInnerObject, Some(when::extending)),
     (Key::Char('a'), NormalCmd::SelectAroundObject, Some(when::extending)),
-    // **vim's own versions of helix's commands** (2026-11-01, step 8 of the
-    // keymap plan): the same keys, the `vim_` twin of each command, so
+    // **vim's own versions of helix's commands**: the same keys, the `vim_` twin of each command, so
     // `insert_mode` means helix's `i` under either keymap.
     // vim's Visual mode: these act on the whole selection and leave it.
     (Key::Char('o'), NormalCmd::VimFlipSelections, Some(when::typed_extending)),
@@ -595,8 +593,8 @@ pub(super) const VIM_NORMAL: &[(Key, NormalCmd, Option<When>)] = &[
     (Key::Ctrl('r'), NormalCmd::VimRedo, None),
     (Key::Char('X'), NormalCmd::DeleteCharBackward, None),
     (Key::Char('`'), NormalCmd::GotoMark, None),
-    // helix has no `'`; vim's is the mark's line (helix's table held it as
-    // a yumete key until the flavour took that one, 2026-11-02).
+    // helix has no `'`; vim's is the mark's line (under helix the flavour
+    // holds it as a yumete key).
     (Key::Char('\''), NormalCmd::GotoMark, None),
     (Key::Char('#'), NormalCmd::SearchWordBackward, None),
     (Key::Char('R'), NormalCmd::ReplaceMode, Some(when::not_extending)),
@@ -639,14 +637,14 @@ mod when {
 
 }
 
-/// **Select mode: the keys that extend instead of move** (2026-10-31,
-/// step 4 of the keymap plan; helix's `select` keymap is its `normal` one
-/// with these keys changed, `keymap/default.rs`). Looked up while a
+/// **Select mode: the keys that extend instead of move** (helix's
+/// `select` keymap is its `normal` one with these keys changed,
+/// `keymap/default.rs`). Looked up while a
 /// selection is being extended, after the vim preset's own keys and before
 /// helix's; the `g` group's select keys are its own rows (`groups.rs`).
 ///
-/// A `move_*` command follows the mode (it extends in select mode, as it
-/// always has here, and as helix's `goto_line_start` does); an `extend_*`
+/// A `move_*` command follows the mode (it extends in select mode, as
+/// helix's `goto_line_start` does); an `extend_*`
 /// command extends in either mode, so a binding can say which it means.
 pub(super) const SELECT_NORMAL: &[(Key, NormalCmd)] = &[
     (Key::Char('h'), NormalCmd::ExtendCharLeft),
@@ -840,8 +838,7 @@ pub(crate) fn default_key_written(name: &str) -> Option<String> {
 }
 
 impl Editor {
-    /// **Run a Normal command by name**, as a binding or `::` does
-    /// (2026-10-31): the count typed before the key that asked, and the key
+    /// **Run a Normal command by name**, as a binding or `::` does: the count typed before the key that asked, and the key
     /// the command answers to by default (commands sharing one body tell
     /// their names apart by it). `false` when no command has the name.
     pub(super) fn run_normal(&mut self, name: &str) -> bool {
@@ -866,10 +863,10 @@ impl Editor {
     }
 
     /// **The key that runs `name` now, as the palette and `:keymap-actions`
-    /// write it** (2026-11-01): the keymap in use's own key while the
-    /// reader has not bound it to something else, else the reader's own
-    /// key for the command. They used to show helix's key under vim's
-    /// keymap, and the default even where the reader had moved it.
+    /// write it**: the keymap in use's own key while the reader has not
+    /// bound it to something else, else the reader's own key for the
+    /// command — never helix's key under vim's keymap, nor the default where
+    /// the reader has moved it.
     pub fn keys_now(&self, name: &str) -> Option<String> {
         self.run_now(name).map(|run| yumete_cjk::actions::spell(&run))
     }
@@ -879,8 +876,7 @@ impl Editor {
     /// A key the preset or the reader binds is not the default's any more
     /// (vim's `x` `s` `%` `K` `Q`), a key a flavour item has switched off
     /// does nothing, and with `vim_space_menu` off the Space menu is on `\`
-    /// (found in review, 2026-11-02: all three were shown as they are under
-    /// helix).
+    /// — none of the three is shown as it is under helix.
     pub(super) fn run_now(&self, name: &str) -> Option<String> {
         let aliases = &self.key_aliases;
         let space_moved = self.vim_keymap() && !self.flavor_on(FlavorItem::VimSpaceMenu);
@@ -910,8 +906,8 @@ impl Editor {
         mine.into_iter().next().map(shown)
     }
 
-    /// **A hint row's keys for Normal commands, as they are bound now**
-    /// (2026-11-01): each slot is one or more commands, alternatives in the
+    /// **A hint row's keys for Normal commands, as they are bound now**:
+    /// each slot is one or more commands, alternatives in the
     /// order to try (a vim twin before its helix one), and names the first
     /// that has a key; slots without one are left out, and the row is
     /// `None` when none has.
@@ -1021,7 +1017,7 @@ impl Editor {
     // **四個鍵分開寫，因為 vim 分開管**：`whichwrap` 給 `h`/`l` 和兩個方向鍵各一個
     // 字母（`h` `l` `<` `>`），所以 `which_wrap = "h"` 只放開 `h`，方向鍵照舊停在行
     // 頭。綁在一起的話那一格就只剩「全放開」一檔。
-    // **普通模式的退格是「左一格」**（`:h <BS>`；2026-10-10 補的）：`whichwrap` 的
+    // **普通模式的退格是「左一格」**（`:h <BS>`）：`whichwrap` 的
     // `b` 管的就是它。helix 不綁它，所以只在 vim 鍵位下。
     pub(super) fn cmd_move_char_left(&mut self, cx: Cx) {
         if self.mode == Mode::Insert {
@@ -1046,7 +1042,7 @@ impl Editor {
         self.repeat(cx.count, |e| e.step_sideways(motion::next_grapheme, Some(wrap)))
     }
 
-    // **`j`/`k` 是 vim 和 helix 真的答不一樣的一處**（2026-10-10 量出來的）。
+    // **`j`/`k` 是 vim 和 helix 真的答不一樣的一處**。
     // vim 的 `j` 走**文件的行**（一段是一行，所以是下一段），`gj` 纔走屏幕的行；
     // helix 正好反過來——它的 `j` 綁的是 `move_visual_line_down`。兩個參考實現都
     // 實測過（nvim `--clean`：`j` 到第 2 行、`gj` 到第 1 行第 41 欄；helix 的
@@ -1068,8 +1064,8 @@ impl Editor {
         self.repeat(cx.count, |e| e.move_textual_line(false))
     }
 
-    // **`Home`/`End` and `g h`/`g l` are one command each**, as in helix
-    // (2026-10-31). In a table these are the cell's two ends, and where the
+    // **`Home`/`End` and `g h`/`g l` are one command each**, as in helix.
+    // In a table these are the cell's two ends, and where the
     // cell is the unit, the record's (`goto_motion`).
     pub(super) fn cmd_goto_line_start(&mut self, _: Cx) {
         if self.mode == Mode::Insert {
@@ -1085,8 +1081,8 @@ impl Editor {
         self.goto_motion(motion::Motion::LineEnd);
         if self.as_vim() {
             self.sel.set_goal(Some(super::keys::LINE_END_GOAL));
-            // **vim's Visual `$` takes the line break** (`:h v_$`, measured
-            // against nvim 2026-11-07): `v$d` joins the next line on, `v$y`
+            // **vim's Visual `$` takes the line break** (`:h v_$`, as nvim
+            // does): `v$d` joins the next line on, `v$y`
             // yanks the break. Charwise only; in Normal `$` stays on the
             // last character.
             if self.extend && !self.vim_lines {
@@ -1109,7 +1105,7 @@ impl Editor {
     }
 
     // **`Enter`, `+` and `-`** — vim's three ways of saying 「the next
-    // line, where its writing begins」 (B4, 2026-09-20). `Enter` is
+    // line, where its writing begins」 (B4). `Enter` is
     // unbound in Normal here, and `+`/`-` are in the preset's table;
     // this is the one that cannot be spelled there, because the table
     // holds characters.
@@ -1124,18 +1120,17 @@ impl Editor {
         });
     }
 
-    // **A standalone motion, read vim's way** (B3, 2026-09-20).
+    // **A standalone motion, read vim's way** (B3).
     //
-    // 2026-09-20：「vim 的 `w` 獨立的時候是跳轉，在命令中是選詞。
-    // helix 就是將跳轉和選擇兩個 `w` 合一了。」 So under the vim preset
+    // vim's bare `w` jumps and its `w` after an operator selects a word;
+    // helix makes the two one `w`. So under the vim preset
     // a bare motion asks for the **caret** reading: it goes to the
     // primitive — the next word's first character — and paints
     // nothing. Extend mode still extends, because `jump_to` moves the
     // head and leaves the anchor where it is: that is vim's visual
     // mode, for free.
-    // Warning: **`H`/`L` 2026-10-06 從這張表上撤了**：它們在 vim 裏是屏幕的
-    // 頂/底，而句子是 `(`/`)`（今早照 vim 綁的）。上面那一支接住了裸
-    // 鍵；帶算子的 `dH`/`dL` 暫時答「不是一個動作」——要做得先有一個
+    // Warning: **`H`/`L` 不在這張表上**：它們在 vim 裏是屏幕的頂/底，而句子是
+    // `(`/`)`。上面那一支接住了裸鍵；帶算子的 `dH`/`dL` 暫時答「不是一個動作」——要做得先有一個
     // 看得見視口的動作，記在 §5.95。
     #[allow(unused_variables)]
     pub(super) fn cmd_jump_by_word(&mut self, cx: Cx) {
@@ -1228,54 +1223,48 @@ impl Editor {
     // proofreads in, and the one the manual already teaches by telling you
     // to break the file on 。 with `:%s`.
     //
-    // **On `H`/`L` since 2026-09-12** (#404), for two reasons at once.
-    // They were on `(`/`)`, which Helix spends on cycling the primary
-    // selection — a multi-cursor key we will want when #405 lands, and
-    // squatting on it now would mean moving twice. And the pair they
-    // moved to reads better than the one they left: capitals are the
-    // bigger unit along the same axis, so
+    // **On `H`/`L`** (#404), for two reasons at once. `(`/`)` are what
+    // Helix spends on cycling the primary selection, a multi-cursor key
+    // (#405). And `H`/`L` read well: capitals are the bigger unit along the
+    // same axis, so
     //
     // ```text
     // h  l   one character      j  k   one row
     // H  L   one sentence       J  K   half a page
     // ```
     //
-    // Warning: `H`/`L` used to be whole-page paging. Nothing was lost:
-    // `C-f` and `C-b` still do it, and the pair a reader actually
+    // Whole-page paging is `C-f` and `C-b`; the pair a reader actually
     // wears out is the *half* page on `J`/`K`.
-    // **vim 鍵位下 `H`/`M`/`L` 是屏幕的頂/中/底**（2026-10-06 定）。
+    // **vim 鍵位下 `H`/`M`/`L` 是屏幕的頂/中/底**。
     //
-    // Warning: **這一條 10-05 定過「不讓」，10-06 翻了。** 當時的理由是「句子是
-    // 寫小說按得最多的單位」——而那不是理由（§5.94：兼容第一，讓位的另找
-    // 空鍵）。這一次一個鍵都没丟：vim 的句子動作本來就是 `(`/`)`，今早照
-    // vim 綁上去了。
+    // Warning: **兼容第一，讓位的另找空鍵**（§5.94）：「句子是寫小說按得最多的
+    // 單位」不是佔掉 vim 的鍵的理由。一個鍵都没丟：vim 的句子動作本來就是
+    // `(`/`)`。
     //
     // 屏幕畫了哪一段是前端每幀交過來的（`set_page_span`，`gw` 也靠它）。
 
-    // **vim 的句子動作是 `(`/`)`**（2026-10-06）。
+    // **vim 的句子動作是 `(`/`)`**。
     //
-    // Warning: **不能寫成鍵位表上的 `("(", "H")`**（寫的時候當場撞的）。單字符
+    // Warning: **不能寫成鍵位表上的 `("(", "H")`**。單字符
     // 的別名是**替換**不是播放——`expanding_alias` 不會為它撥上，於是換出
-    // 來的 `H` 又被上面那一支接住，`)` 跳到屏幕底下去了。自己一支最清楚。
+    // 來的 `H` 又會被上面那一支接住，`)` 跳到屏幕底下去。自己一支最清楚。
     #[allow(unused_variables)]
     pub(super) fn cmd_jump_by_sentence(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
         let Key::Char(one) = key else { return };
         self.repeat(count, |e| {
-            // Warning: **`Reading::Caret`, not the selection reading** (2026-10-18).
+            // Warning: **`Reading::Caret`, not the selection reading.**
             // vim's `)` *goes to* the next sentence's first character; this
             // editor's sentence motion *selects a sentence* (#404), which is
-            // helix's reading and what `H`/`L` keep. Asking the selection
-            // reading here left the caret on the full stop that ends the
+            // helix's reading and what `H`/`L` keep. The selection reading
+            // here would leave the caret on the full stop that ends the
             // sentence before, one cell short, and every operator built on it
-            // inherited the error: against nvim, `d)` differed in 148 of 184
-            // cases and `))d(` in all 184.
+            // would inherit the error (`d)`, `))d(` against nvim).
             //
-            // **The two readings already exist** (B3) — `w` has the same split,
-            // 「vim 的 `w` 獨立的時候是跳轉，在命令中是選詞」 — so this is the
+            // **The two readings already exist** (B3) — `w` has the same split:
+            // a bare motion jumps, after an operator it selects — so this is the
             // question being put the way vim puts it, not a new behaviour. The
-            // sentence *object* and helix's `H`/`L` are untouched, which is why
-            // this did not have to wait on #404.
+            // sentence *object* and helix's `H`/`L` are untouched.
             let span = e.read_motion(
                 motion::Motion::Sentence { forward: one == ')' },
                 motion::Reading::Caret,
@@ -1317,7 +1306,7 @@ impl Editor {
     }
 
     // 「下一個這種東西」, which is where Helix keeps it too.
-    // **`z` 那一層**：把光標這一行挪到屏幕的頂/中/底（2026-09-28）。
+    // **`z` 那一層**：把光標這一行挪到屏幕的頂/中/底。
     // Warning: `zc` 也是居中，同 helix（它的 `zc` 是 align_view_center）。
     #[allow(unused_variables)]
     pub(super) fn cmd_view_mode(&mut self, cx: Cx) {
@@ -1374,7 +1363,7 @@ impl Editor {
         let Cx { key, count, operator_count, continuing_zong } = cx;
         self.pending = Pending::Goto;
         self.operator_count = operator_count;
-        // **開一個序列不算走了一步**（2026-10-13）：這一支開頭就把
+        // **開一個序列不算走了一步**：這一支開頭就把
         // `zong_motion` 取走了，而 `gj gj` 要和 `h h` 一樣守着同一個目標
         // 格——下一鍵纔是那個動作。
         self.zong_motion = continuing_zong;
@@ -1389,15 +1378,12 @@ impl Editor {
 
     // In-line character search — **all four of vi's**, `f` `F` `t` `T`.
     //
-    // Warning: **`t`/`T` were the table group until 2026-09-21**, retired as
-    // till-keys on the reasoning that a verb-last editor puts till
-    // 「one keystroke away from find and no more」. Two things undid
-    // that: the vim preset puts the verb **first** (`dt,`), and
-    // **helix's own `t` is `find_till_char`**
-    // (`helix-term/src/keymap/default.rs:14`) — so one key was costing
-    // *both* hands their muscle memory to save one keystroke in the
-    // one group that can afford to be a keystroke longer. 「表格操作
-    // 並不是特別頻繁。」 The table group is `空格 t` now.
+    // Warning: **`t`/`T` are till-keys, not the table group.** The vim
+    // preset puts the verb **first** (`dt,`), and **helix's own `t` is
+    // `find_till_char`** (`helix-term/src/keymap/default.rs:14`) — taking
+    // the key would cost *both* hands their muscle memory to save one
+    // keystroke in a group that is not pressed often and can afford to be a
+    // keystroke longer. The table group is `空格 t`.
     #[allow(unused_variables)]
     pub(super) fn cmd_find_char(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
@@ -1412,10 +1398,9 @@ impl Editor {
 
     // Select (extend) mode and collapse (Helix `v` / `;`).
     // **vim's `V` is linewise visual**, not 「select this line」
-    // (B3, 2026-09-20): the selection grows by *lines* as the caret
-    // moves, and a verb takes those lines entire. The old translation
-    // (`V` → `x`) could take three lines only if told `3V`; a vim hand
-    // types `Vjj`.
+    // (B3): the selection grows by *lines* as the caret moves, and a verb
+    // takes those lines entire. Translating `V` to `x` would take three
+    // lines only if told `3V`; a vim hand types `Vjj`.
     #[allow(unused_variables)]
     pub(super) fn cmd_select_line_mode(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
@@ -1425,8 +1410,8 @@ impl Editor {
             head - rope.line_to_char(rope.char_to_line(head))
         };
         // From a caret, the caret's line alone: helix's `x` on an empty
-        // line, already whole, took the next line too (2026-11-04: `V` `d`
-        // on an empty line deleted two).
+        // line, already whole, takes the next line too, so `V` `d` on an
+        // empty line would delete two.
         match self.sel.anchor() == self.sel.head() {
             true => {
                 let rope = self.current_buffer().rope();
@@ -1460,14 +1445,14 @@ impl Editor {
         if self.mode == Mode::Insert {
             return self.leave_insert();
         }
-        // **浮窗先收**（2026-10-01 提的）。它是屏幕上最臨時的那一樣，
+        // **浮窗先收**。它是屏幕上最臨時的那一樣，
         // 而 `Esc` 是人對着臨時的東西按的那一鍵。收的只是「這會兒別擋
         // 着」——挪開光標它又回來，邊欄一動不動。
         if self.hush_the_float() {
             return;
         }
-        // Only a window opened to show something: Esc closed the reader's own
-        // splits too, from the first window (review, 2026-11-03).
+        // Only a window opened to show something, never the reader's own
+        // splits.
         if self.other_pane().is_some_and(|pane| pane.preview) && self.live_pane() == 0 {
             // **The window goes; the search stays.** Esc dismissed the
             // pane, and the reader who then presses `n` means the same
@@ -1480,24 +1465,22 @@ impl Editor {
             return;
         }
         // **Esc 没有別的事可做的時候，就是「把輸入法的挂起再說一
-        // 遍」**（2026-09-22）。收窗口輪不到這一件；而說不說得成，看的是
+        // 遍」**。收窗口輪不到這一件；而說不說得成，看的是
         // 這一下有没有別的事做。
         //
-        // Warning: **選區不收**（2026-10-06，對齊 helix）。helix 的
+        // Warning: **選區不收**（對齊 helix）。helix 的
         // `exit_select_mode` 只改 mode，`enter_normal_mode` 從不動選區
-        // （`helix-view/src/editor.rs`）。我們從前連錨點一起拉到頭上，於是
-        // `v w w Esc d` 只刪掉一個空格，而 helix 刪掉 `alpha beta `——
-        // 選中了一段、退出延伸、再動手，是這個模型裏最順的一條路，而
-        // `Esc` 從前把中間那一步變成了「全丟掉」。
+        // （`helix-view/src/editor.rs`），所以 `v w w Esc d` 刪掉
+        // `alpha beta `——選中了一段、退出延伸、再動手，是這個模型裏最順的
+        // 一條路，`Esc` 不許把中間那一步變成「全丟掉」。
         //
         // 「退一層」那個意思留着：收的是**延伸**這一層，不是選區。要把
         // 選區收成一點有自己的鍵（`;`）。
-        // Warning: **只問延伸還開不開着**（2026-10-06）。從前還要求選區是塌
-        // 的，因為那一下 Esc 順手把它收了；現在它不收，於是「還有選區」
-        // 不再是 Esc 有事可做——不改這一句的話，選區留着的時候 Esc 永遠
-        // 說不出那一句。
+        // Warning: **只問延伸還開不開着**，不問選區塌不塌：Esc 不收選區，所以
+        // 「還有選區」不算 Esc 有事可做——否則選區留着的時候 Esc 永遠說不出
+        // 那一句。
         // **vim's Esc leaves Visual with nothing selected and the
-        // cursor where it stood** (2026-10-30, as decided; `:h v_<Esc>`).
+        // cursor where it stood** (`:h v_<Esc>`).
         // After `V` the cursor goes back to the column it was in.
         if self.as_vim() && self.extend {
             let at = match self.vim_lines {
@@ -1527,14 +1510,14 @@ impl Editor {
     // Helix's own behaviour, and the reason it looks broken to a
     // reader who has just pressed `v`: the very next motion grows the
     // selection again. So it says which of the two happened.
-    // **vim repeats a find with `;` and `,`** (#428, 2026-09-18) —
+    // **vim repeats a find with `;` and `,`** (#428) —
     // here that is `A-.`, which no vim hand will ever press. `,` is
     // the same search the other way round.
-    // Warning: **…but not while an alias is being played** (2026-09-19).
-    // The preset writes `;` into its own expansions to mean 「collapse
-    // first」 (`x` is `;{n}D`), and once a find had happened that `;`
-    // repeated the find instead — so after `f,` the preset's `x` cut
-    // everything the `f` had selected rather than one character.
+    // Warning: **…but not while an alias is being played.** The preset
+    // writes `;` into its own expansions to mean 「collapse first」 (`x` is
+    // `;{n}D`); if that `;` repeated a find, then after `f,` the preset's
+    // `x` would cut everything the `f` had selected rather than one
+    // character.
     #[allow(unused_variables)]
     pub(super) fn cmd_repeat_find(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
@@ -1580,8 +1563,8 @@ impl Editor {
         self.keep_primary_selection();
     }
 
-    // **`,` 的反面，和兩種合併，和「全部轉成正向」**（2026-10-06）。
-    // §5.13.6 自己把這四個列成「空着的，直接拿來用」，而四期都没排到。
+    // **`,` 的反面，和兩種合併，和「全部轉成正向」**（§5.13.6 列的那四個空
+    // 着的鍵）。
     #[allow(unused_variables)]
     pub(super) fn cmd_remove_primary_selection(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
@@ -1606,8 +1589,7 @@ impl Editor {
         self.face_them_forward();
     }
 
-    // **`X` 的反面**（helix 的 `shrink_to_line_bounds`）。`x`/`X` 一直都在，
-    // 缺的是往回收的那一個（2026-10-06）。
+    // **`X` 的反面**（helix 的 `shrink_to_line_bounds`）：往回收的那一個。
     #[allow(unused_variables)]
     pub(super) fn cmd_shrink_to_line_bounds(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
@@ -1627,8 +1609,7 @@ impl Editor {
     // **`(` `)` 換主選區，`_` 去兩端空白**（#405 Phase 3）。Warning: 前兩個一段都不
     // 動，動的只是「哪一段是主的」——選了二十處要一處一處看過去靠的就是它。
     // 帶數字走幾格——helix 的 `rotate_selections` 吃計數
-    // （`helix-term/src/commands.rs:5649`），從前這裏 `3)` 只走一格
-    // （2026-10-06）。
+    // （`helix-term/src/commands.rs:5649`），`3)` 走三格。
     #[allow(unused_variables)]
     pub(super) fn cmd_rotate_selections_forward(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
@@ -1696,26 +1677,20 @@ impl Editor {
     // Selection + changes (Helix: `x` selects the line, `d` deletes the
     // selection, `c` changes it).
     //
-    // Warning: **這一族 2026-09-28 翻過一次，現在是 helix 的那一條**（#405）。
+    // Warning: **這一族照 helix 的那一條**（#405）。
     //
-    // #492 當初把它定成「小寫刪、大寫剪」，原話是「d 作为剪切功能会污染
-    // register。这是我觉得 helix 最不好的地方」——剪貼板只有一個，而編輯器裏
-    // 按得最多的那個鍵會花掉它。依據之一是「helix 的 `C`/`D` 都空着」，而**那
-    // 句話錯了一半**：helix 的 `C` 是 `copy_selection_on_next_line`，佔着，
-    // 只有頂層的 `D` 是空的。多選區（#405）要的正是 `C`。
-    //
-    // 現在：`d`/`c` 進寄存器（同 helix），`A-d`/`A-c` 不進（同 helix），
-    // **`D` 是 `A-d` 的別名**——#492 那個需求（刪掉這段，別蓋掉我剛複製的）
-    // 保下來了，只是從最好按的鍵換成了第二好按的。`A-c` 没有對應的別名，
-    // 因為 `C` 讓給了多選區。
+    // `d`/`c` 進寄存器（同 helix），`A-d`/`A-c` 不進（同 helix）。「刪掉這段，
+    // 別蓋掉我剛複製的」（#492）由 `A-d` 答。helix 的 `C` 是
+    // `copy_selection_on_next_line`，多選區（#405）要的正是它，所以 `A-c` 没有
+    // 大寫的別名。
     #[allow(unused_variables)]
     pub(super) fn cmd_extend_line_below(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
         self.repeat(count, |e| e.select_line());
     }
 
-    // **`d`, `c`, `y` are operators under the vim preset** (#429,
-    // 2026-09-18): they wait for a motion. With something already
+    // **`d`, `c`, `y` are operators under the vim preset** (#429):
+    // they wait for a motion. With something already
     // selected they act at once, which is what vim's visual mode does
     // — and it is also what makes `v3wd` go on working for a hand that
     // learnt this editor's own way round.
@@ -1727,20 +1702,17 @@ impl Editor {
         self.count = operator_count;
     }
 
-    // Warning: **2026-09-28 整族換成了 helix 的拼法**（#405 要 `C` 這個鍵）。從前是
-    // 「小寫刪、大寫剪」，四個鍵一條規矩；現在是 helix 的那一條：
+    // Warning: **整族是 helix 的拼法**（#405 要 `C` 這個鍵）：
     //
     // - `d` `c`：刪/改，**進寄存器**（helix 一樣）
     // - `A-d` `A-c`：刪/改，**不進**（helix 一樣）
     //
-    // Warning: **`D` 在 helix 鍵位下有意不綁**（2026-10-07 覆查時定的）。這一段
-    // 從前寫着「`D` 是 `A-d` 的別名，留一個好按的大寫鍵給它」——**代碼裏
-    // 從來没有那個別名**（下面那道閘 `|| key_preset == Vim` 就是把 `D` 擋在
-    // 外面的），按下去是一句提示。查證的那一天順便把帳算清了：多一個入口
-    // 就多一份要記的事，而 `A-d` 本來就是 helix 的講法。
+    // Warning: **`D` 在 helix 鍵位下有意不綁**（下面那道閘 `|| key_preset ==
+    // Vim` 就是把 `D` 擋在外面的），按下去是一句提示：多一個入口就多一份要記
+    // 的事，而 `A-d` 本來就是 helix 的講法。
     //
-    // 旁證：helix 那邊 2024 年起有一個九十多人點讚的討論（#10361）要把
-    // `d` 改成不進寄存器、`A-d` 改成進——至今没改。這一頭不替他們改。
+    // helix 那邊有一個討論（#10361）要把 `d` 改成不進寄存器、`A-d` 改成進；
+    // helix 没改，這一頭也不替他們改。
     #[allow(unused_variables)]
     pub(super) fn cmd_delete_or_change(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;

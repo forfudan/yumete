@@ -1,20 +1,16 @@
 //! Everything the editor does with a **grid** (#296).
 //!
-//! Three sections of `editor.rs`, moved here whole on 2026-09-08 because they
-//! were always one subject: the table *mode* (#118), `|` tables inside a
-//! document (#142), and delimited text read as a grid either way (#227). They
-//! sat between 「what a character is」 and 「the command row」 for no reason but the
-//! order they were written in.
+//! Three subjects that are one: the table *mode* (#118), `|` tables inside a
+//! document (#142), and delimited text read as a grid either way (#227).
 //!
 //! A child module of `editor`, so `Editor`'s private fields are as reachable
-//! here as they were where this code used to stand — the move changes which
-//! file the reader opens and nothing else.
+//! here as they are in `editor.rs` itself.
 
 use super::*;
 use yumete_cjk::actions::NormalCmd;
 
 /// **Each command a table's grid gives a meaning of its own, and the key
-/// that means it there** (2026-11-01): the default keymap of the grid, read
+/// that means it there**: the default keymap of the grid, read
 /// as commands. Most are a Normal command done to a cell (`move_char_right`
 /// is one cell right, `yank` takes the cell); four are the grid's own
 /// (`table_enter_cell`, `table_leave_cell`, `table_next_cell`,
@@ -82,9 +78,8 @@ impl Editor {
     ///
     /// **[`Layer::Inside`] wherever the layers are not in force**
     /// ([`Self::layers_here`]) — `t b` walks by character and has no second
-    /// answer, which is the whole of what makes it a document (2026-10-21
-    /// 作者定: 「`tb` should have no _tT toggle at all. It just go by char,
-    /// period. Two layer: normal mode - insert mode.」).
+    /// answer, which is the whole of what makes it a document: no `_`/`T`
+    /// toggle, only two layers, Normal and Insert.
     ///
     /// [`Layer::Whole`] outside a grid altogether, so a caller that forgot to
     /// ask [`Self::table_here`] first gets the answer a grid opens with
@@ -99,9 +94,8 @@ impl Editor {
         }
     }
 
-    /// **Whether the grid's layers are in force here** (2026-10-21 作者定:
-    /// 「we are only working on the tt mode and it should not affect tb/tf
-    /// mode (tb/tf mode are only for document-type files)」).
+    /// **Whether the grid's layers are in force here** — in `t t` only; `t b`
+    /// and `t f` are for document-type files and the layers never reach them.
     ///
     /// They belong to the surface that is **nothing but a grid**: 全窗, and a
     /// file that is a table from its first line to its last. A table drawn
@@ -154,8 +148,7 @@ impl Editor {
 
     /// **The second click of a double click goes into the cell, with the caret
     /// on the character clicked** (design §04: 「鼠標:單擊選格,雙擊進中層(光標
-    /// 落在你點的那個字上)」; built 2026-10-23 — the page carried it as
-    /// unmeasured, and there was no double click to measure).
+    /// 落在你點的那個字上)」).
     ///
     /// The first click has already selected the cell ([`Self::point_at`]).
     /// Anywhere the grid's layers are not in force, or already inside a cell,
@@ -175,9 +168,9 @@ impl Editor {
     /// Reports what it did, because a mode that changes what every key means
     /// must never turn itself on quietly.
     ///
-    /// **The surface is the file's own shape** (2026-09-05). A file that is
-    /// nothing but table gets the whole window — that is what a `.csv` has
-    /// always been drawn as. Three lines of a chapter are drawn where they
+    /// **The surface is the file's own shape.** A file that is
+    /// nothing but table gets the whole window — that is how a `.csv` is
+    /// drawn. Three lines of a chapter are drawn where they
     /// stand, because clearing the chapter in order to look at three of its
     /// lines is not what `:table` was asked for. `t t` on those three lines
     /// says so out loud, and gets the window.
@@ -209,7 +202,7 @@ impl Editor {
     /// The question 縱書 asks: a grid is read across, and that is the one
     /// thing a vertical page cannot do, so the pane turns the page
     /// horizontal. `t b` draws no walls and leaves the page alone — which
-    /// since 2026-10-21 is the only other answer there is.
+    /// is the only other answer there is.
     /// Whether `line` is a row of a `|` table, counting a row written without
     /// its outer pipes when the rule row under the header says so.
     pub(super) fn md_row_at(&self, line: usize) -> bool {
@@ -260,14 +253,14 @@ impl Editor {
             return self.enter_md_table_as(pane);
         }
         // **A Markdown file's tables are the file's** (#275), so the mode is
-        // reachable from the paragraph between two of them: 「可以在文件任何位
-        // 置通過 ti tt 進入表格視圖…對於這個文件中所有的表格都生效」. The
+        // reachable from anywhere in the file, the paragraph between two of
+        // them included, and holds for every table in the file. The
         // cursor is left where it is — the mode is not a jump, and `t ]` is
         // the key for going to a table.
-        // **`None` or the level's own view** (#283). The test used to be
-        // `table.is_none()`, which was the same set until the level began
-        // building a `Bounds::Md` view on its own — after which `t i` from the
-        // paragraph between two tables answered 「没有檔名，就没有 schema」.
+        // **`None` or the level's own view** (#283). Warning: not
+        // `table.is_none()` — the level builds a `Bounds::Md` view on its own,
+        // and with that test `t i` from the paragraph between two tables
+        // would answer 「没有檔名，就没有 schema」.
         // A schema'd file and a 碼表 block are somebody's claim on the buffer
         // and still win here; an `Md` view is only the level being read.
         if self.syntax() == crate::syntax::Syntax::Markdown
@@ -310,10 +303,10 @@ impl Editor {
             // Column names and nothing else — but that is enough to line the
             // file up and walk it by cell, which is most of what a grid is for.
             None => {
-                // **What separates the columns is guessed, not assumed.** It
-                // used to be a hard-coded comma, so `:table` on a `.tsv` split
-                // its header into a single column and was told 「不是表格」 —
-                // a file this editor's own `:export tsv` had just written.
+                // **What separates the columns is guessed, not assumed.** A
+                // hard-coded comma would split a `.tsv`'s header into a single
+                // column and tell `:table` 「不是表格」 — about a file this
+                // editor's own `:export tsv` writes.
                 // The guess is the sniffer's, over the same first lines
                 // `looks_delimited` reads, and a comma when it says nothing.
                 let lines = self.first_lines(20);
@@ -325,12 +318,12 @@ impl Editor {
                     .unwrap_or(',');
                 let head = self.current_buffer().rope().line(0).to_string();
                 let schema = crate::table::Schema::from_header(&head, delimiter);
-                // Warning: **名字說了的那幾種不必「每行欄數一樣」**（2026-10-09 審出
-                // 來的）。`looks_delimited` 那道閘的理由是「別把一頁散文當成表格」，
-                // 而 `.csv` 這個名字**本身就是作者在說它是什麽**
-                // （[`Self::names_itself_a_grid`]）。於是前二十行裏有一行欄數不齊，
-                // 整個檔就降級成「文中的區塊」——而區塊那一支是 `header: false`：表頭
-                // 成了第一條數據，`t1s` 排一次序就把它沉到了檔尾。欄數不齊是要讓人
+                // Warning: **名字說了的那幾種不必「每行欄數一樣」**。
+                // `looks_delimited` 那道閘的理由是「別把一頁散文當成表格」，
+                // 而 `.csv` 這個名字**本身就是寫檔的人在說它是什麽**
+                // （[`Self::names_itself_a_grid`]）。否則前二十行裏有一行欄數不齊，
+                // 整個檔就會降級成「文中的區塊」——而區塊那一支是 `header: false`：表頭
+                // 成了第一條數據，`t1s` 排一次序就把它沉到檔尾。欄數不齊是要讓人
                 // **看見**的損傷（`Schema::shows` 說的就是這件事），不是改判這個檔是
                 // 什麽的理由。
                 let declared = self
@@ -391,15 +384,15 @@ impl Editor {
         // the page, which is the one thing a 縱書 layout cannot do. Rather than
         // draw something incoherent, table mode is horizontal.
         // …and the cursor lands on the first **data** row. Standing on the
-        // header, `cell_position` says row 0 — a row the grid draws frozen at
-        // the top and refuses every edit on — while the caret was drawn on the
-        // first row of data, so the cell you were told you were in and the
-        // cell the caret sat in were two different cells.
+        // header, `cell_position` would say row 0 — a row the grid draws
+        // frozen at the top and refuses every edit on — while the caret is
+        // drawn on the first row of data, so the cell you are told you are in
+        // and the cell the caret sits in would be two different cells.
         //
-        // **And not when there is no row to land on** (2026-10-23): a header
+        // **And not when there is no row to land on**: a header
         // with nothing under it has one line, the one the grid freezes, and
         // `ropey`'s trailing empty line is not a place to wait (#384) — `o`
-        // opened its row *under* that line and left a blank one in the file.
+        // would open its row *under* that line and leave a blank one in the file.
         if self.on_header_row() && self.table_row_span().is_some() {
             let rope = self.current_buffer().rope();
             if rope.len_lines() > 1 {
@@ -431,9 +424,9 @@ impl Editor {
 
     /// Whether the file's own first lines agree that it is a table.
     ///
-    /// The header-row fallback used to take any first line with a comma in it,
-    /// which meant `:table` on a page of prose whose first sentence held one
-    /// turned the manuscript into a two-column grid. A delimited file has the
+    /// A header-row fallback that took any first line with a comma in it
+    /// would let `:table` on a page of prose whose first sentence holds one
+    /// turn the manuscript into a two-column grid. A delimited file has the
     /// property prose never has: **every line has the same number of fields**.
     /// Twenty lines is enough to tell, and is what a person would look at.
     fn looks_delimited(&self, delimiter: char, columns: usize) -> bool {
@@ -660,7 +653,7 @@ impl Editor {
             }
         }
         // A level that draws walls is read across, which is the one thing a
-        // vertical page cannot do — 「照舊把整頁轉橫」.
+        // vertical page cannot do — so the whole page turns horizontal.
         if self.grid_is_drawn() {
             self.turn_for_table();
         } else if let Some(back) = self.turned_for_table.take() {
@@ -677,14 +670,10 @@ impl Editor {
     /// Ask for one of the three levels — the one thing `空格 t o|b|f` and
     /// `:table-render off|basic|full` both do.
     ///
-    /// **A shortcut is the command with its argument already typed**
-    /// (2026-10-07: 「如果他們確實等價，其實可以讓他們關聯起來，也就是說快捷鍵
-    /// 就是命令+參數的語法糖。這樣的好處是文案寫一份就夠了」). They were two
-    /// bodies of code that read almost the same, and the two that differed did
-    /// so by accident: the keys walked into the grid and snapped to a cell,
-    /// which the command never did, and the command wrote down 「not this one」
-    /// for a guessed grid (#380), which the key never did. Both are right, so
-    /// both are here and there is one of them.
+    /// **A shortcut is the command with its argument already typed**, so
+    /// there is one body of code and the copy is written once. Both of its
+    /// behaviours belong to both doors: walking into the grid and snapping to
+    /// a cell, and writing down 「not this one」 for a guessed grid (#380).
     ///
     /// [`Self::set_table_level`] is still the assignment, and still cannot
     /// fail: `:render` goes straight to it, with no file to walk into.
@@ -701,7 +690,7 @@ impl Editor {
         }
         // **The level is set first, and it cannot fail.** Finding the table
         // can — a buffer with no name, a file that is not a grid — and that
-        // used to take the level down with it. It is a preference: a file with
+        // must not take the level down with it. It is a preference: a file with
         // nothing to draw it on is not a reason to forget what was asked for.
         self.set_table_level(want);
         // **A file-wide mode is switched from anywhere in the file** — 「可以在
@@ -841,7 +830,7 @@ impl Editor {
             self.status = say!("table.schema-problems", listed(&problems));
         }
         // A delimiter chosen for this file before (`:table-delimiter`) opens
-        // it as a grid without the sniffer's say (2026-10-30, as decided).
+        // it as a grid without the sniffer's say.
         if self.table.is_none() && problems.is_empty() {
             if let Some(delimiter) = self.table_choice_for(&path).delimiter {
                 self.attach_text_grid(delimiter);
@@ -852,9 +841,9 @@ impl Editor {
         // **A plain-text file that is plainly a grid** (#380). No schema, no
         // `.csv` in the name, nobody to declare it — and yet every line has
         // the same number of tabs in it, which is a thing prose never manages.
-        // It used to open as source and look like a bug: the tabs advanced to
-        // their stops and drew a grey ground, so 「tb 没對齊」 was reported
-        // about a file that had never been in tb at all.
+        // Opened as source it looks like a bug: the tabs advance to their
+        // stops and draw a grey ground, which reads as a misaligned `t b` in
+        // a file that was never in `t b` at all.
         // A schema that did not parse has already said so, and it was
         // written *about this file* — guessing over the top of that reply
         // would answer a question nobody asked.
@@ -870,22 +859,21 @@ impl Editor {
                 self.open_notice = Some(self.status.clone());
             }
         }
-        // A `.md` has no schema beside it and never took this door — so the
-        // first frame after an open was drawn with the level's padding and
-        // none of the level's keys, and stayed that way until a key was
+        // A `.md` has no schema beside it and never takes this door — without
+        // this, the first frame after an open would be drawn with the level's
+        // padding and none of the level's keys, until a key was
         // pressed. **The whole file, once**, because on an open there is no
         // per-keystroke budget to keep and the table may be below the fold:
         // the reader who opens a document at a table wants it drawn as one
         // before they touch anything.
-        // **一份 `.csv` 打開就是表格**（2026-09-22 定：「從 picker 打開的 csv
-        // 不是自動進入高級表格編輯模式，是不是直接進入比較好？」）。
+        // **一份 `.csv` 打開就是表格**，直接進入高級表格編輯模式。
         //
         // Warning: **判準是「這個文件是 csv」，不是「從哪兒打開的」**：`.csv` 没有第二
         // 種讀法，它就是一張表——從 picker、從命令行、從 `:open` 進來都一樣。而
         // `.md` 裏的表格只是正文的一部分，所以那一種永遠不自動。
         //
         // 上面那扇門（schema 旁置）已經給過全窗表格；這一扇管的是**没有 schema
-        // 的 `.csv`**，它從前只是把列對齊，人還得自己按一次 `空格 t t`。
+        // 的 `.csv`**：不只把列對齊，也不必人自己再按一次 `空格 t t`。
         if self.table.is_none() && problems.is_empty() && self.names_itself_a_grid(&path) {
             self.enter_table();
         }
@@ -896,23 +884,23 @@ impl Editor {
             self.status = say!("table.schema-problems", listed(&old));
             self.open_notice = Some(self.status.clone());
         }
-        // **And where its records start** (2026-10-22 reported). The schema
+        // **And where its records start.** The schema
         // door above builds its view right here instead of going through
-        // `enter_table`, and this is the one thing it never asked for: a field
-        // with a line break in it then drew as two ragged rows with the quotes
+        // `enter_table`, so it has to ask this itself: otherwise a field
+        // with a line break in it draws as two ragged rows with the quotes
         // on the page, in the very file the manual calls the ordinary way to
         // have a table — 「放一份 schema 在資料旁邊，它就自動是表格」. Before
         // the block below, which asks which lines the rows are.
         self.rescan_records();
-        // **The caret starts on a row, never on the header the grid freezes**
-        // (2026-10-17, found in review). `enter_table_as` has checked this
-        // since #356 — 「進得去、用不了的表格」 — but a schema beside the data
-        // builds its view right here and never went through that door. The
+        // **The caret starts on a row, never on the header the grid freezes.**
+        // `enter_table_as` checks this (#356: a table that can be entered but
+        // not used), but a schema beside the data builds its view right here
+        // and never goes through that door. The
         // frozen header is drawn at the top out of the schema, so a caret on
-        // it is a caret the grid cannot show: the status line read out the
-        // header's first letter, `l` walked along the column names, and only
-        // `i` put things right by snapping into a row behind the reader's
-        // back.
+        // it is a caret the grid cannot show: the status line would read out
+        // the header's first letter, `l` would walk along the column names,
+        // and only `i` would put things right by snapping into a row behind
+        // the reader's back.
         if self.grid_has_the_pane() {
             if let Some((first, _)) = self.table_row_span() {
                 if self.cursor_line() < first {
@@ -1024,9 +1012,8 @@ impl Editor {
     }
 
     /// **`:table-delimiter tab`**: read this file as a grid cut by that
-    /// character, and remember it for this file (2026-10-30, as decided) —
-    /// the way a space-separated list is read as a table now that the
-    /// sniffer never guesses a space.
+    /// character, and remember it for this file — the way a space-separated
+    /// list is read as a table, since the sniffer never guesses a space.
     pub(super) fn set_table_delimiter(&mut self, delimiter: char) {
         let Some(path) = self.current_buffer().path().map(Path::to_path_buf) else {
             self.status = say!("table.no-file-name-no-schema");
@@ -1146,9 +1133,8 @@ impl Editor {
     pub(super) fn turn_for_table(&mut self) -> bool {
         // **The surface, and only the surface** (#261). A table drawn in prose
         // is part of a page, and turning the page sideways to edit three lines
-        // of it would throw away everything around them. This line always meant
-        // that; it used to have to say it by naming Markdown, which made it
-        // read as an exception for one kind of table.
+        // of it would throw away everything around them. It is a rule about
+        // the surface, not an exception for one kind of table.
         if !self.grid_is_drawn() {
             return false;
         }
@@ -1230,7 +1216,7 @@ impl Editor {
     }
 
     /// **Whether `line` is a row of a `|` table** — asked by the 竪排 renderer,
-    /// which turns the grid a quarter turn (2026-09-19).
+    /// which turns the grid a quarter turn.
     ///
     /// The turn is the whole of it: a row is one 縱 (`zong::lay_out` refuses to
     /// wrap one), so a column becomes a band down that 縱 and every character
@@ -1238,14 +1224,14 @@ impl Editor {
     /// a `|` between two columns is a band **across** the 縱, and the `---`
     /// under the header is a wall **down** it.
     pub fn line_is_table_row(&self, line: usize) -> bool {
-        // Warning: **Three questions, not one** (2026-09-19). 「Does this line open
-        // with a `|`」 is `mdtable::is_row`, and on its own it turned tables
+        // Warning: **Three questions, not one.** 「Does this line open
+        // with a `|`」 is `mdtable::is_row`, and on its own it would turn tables
         // that are not being drawn as tables at all:
         //
         // - **源碼** (`:render off`, `:table-render off`) promises the file as it
         //   stands, and there the core stops padding and stops hiding the
-        //   cushions — but the renderer went on drawing `──` and `│`, so the
-        //   one mode whose whole job is honesty showed characters the file
+        //   cushions — a renderer that went on drawing `──` and `│` would show,
+        //   in the one mode whose whole job is honesty, characters the file
         //   does not hold.
         // - **Inside a fence** a table is an *example* of a table; `is_row` is
         //   fence-blind, and `wall_here` is not.
@@ -1261,24 +1247,23 @@ impl Editor {
     }
 
     /// Whether `line` is a table's `| --- |` rule row — the one that becomes
-    /// the wall when the grid is turned (2026-09-19).
+    /// the wall when the grid is turned.
     pub fn line_is_table_rule(&self, line: usize) -> bool {
         self.line_text(line).is_some_and(|l| crate::mdtable::rule_of(&l).is_some())
     }
 
     /// Whether the cursor's own line is a row of a `|` table.
     pub(super) fn md_row_at_cursor(&self) -> bool {
-        // Warning: **不造字串**（2026-10-08）。這一支在**每一鍵的末尾**被問一次
-        // （`find_the_table_here`），而從前它 `rope.line(line).to_string()`——一行 1240 萬
+        // Warning: **不造字串**。這一支在**每一鍵的末尾**被問一次
+        // （`find_the_table_here`），`rope.line(line).to_string()` 在一行 1240 萬
         // 字的稿子上就是**每按一下拷 37 MB**。[`Self::opens_a_row`] 問的是同一件事，
         // 一個字一個字讀 rope，一個字節也不配。
         //
-        // Warning: **要問的是 `opens_a_row`，不是另外那一支**（2026-10-09 審出來的）。
-        // 當天這裏新寫了一支 `opens_with_a_pipe`，而倉裏三百八十行之外早有同一支；
-        // 兩支只差一處：舊的跳的是 `char::is_whitespace`（`mdtable::is_row` 的 `trim`
-        // 就是這一套），新的只跳半角空格與製表符。於是用全角空格縮進的 `|` 行，在
-        // `mdtable::row_lines` 與 `line_is_table_row` 眼裏還是表格，在光標這一問眼裏
-        // 就不是了。重複的那一支已經刪掉。
+        // Warning: **要問的是 `opens_a_row`，別另寫一支**。它跳的是
+        // `char::is_whitespace`（`mdtable::is_row` 的 `trim` 就是這一套）；另寫一支
+        // 只跳半角空格與製表符的，用全角空格縮進的 `|` 行就會在
+        // `mdtable::row_lines` 與 `line_is_table_row` 眼裏是表格，在光標這一問眼裏
+        // 不是。
         let rope = self.current_buffer().rope();
         let line = rope.char_to_line(self.caret().min(rope.len_chars()));
         self.opens_a_row(line)
@@ -1288,9 +1273,9 @@ impl Editor {
     /// **光標這一行在圍欄（或者別的「照字面算」的塊）裏嗎。**
     ///
     /// Warning: [`Self::md_row_in_a_fence`] 答不了這個問題：它先要求這一行**長得像
-    /// `|` 表格的一行**，所以圍欄裏的一段 CSV 它一律回假。2026-10-03 一輪審查報
-    /// 來的就是這個洞——`:convert-table csv pipe` 把一段圍在 ``` 裏的 CSV 連圍欄
-    /// 標記一起改寫成了 `|` 表格。
+    /// `|` 表格的一行**，所以圍欄裏的一段 CSV 它一律回假——拿它來問，
+    /// `:convert-table csv pipe` 就會把一段圍在 ``` 裏的 CSV 連圍欄
+    /// 標記一起改寫成 `|` 表格。
     pub(super) fn in_a_literal_block(&self) -> bool {
         let rope = self.current_buffer().rope();
         let at = rope.char_to_line(self.caret().min(rope.len_chars()));
@@ -1313,8 +1298,8 @@ impl Editor {
     /// two cells, never the `\|` a cell holds as text.
     ///
     /// Asked by the 竪排 page, which turns a wall into a band **across** the
-    /// 縱 and so has to know which pipes those are. It used to swap the glyph
-    /// on every pipe in a table row, and cut `a \| b` in two (2026-09-20).
+    /// 縱 and so has to know which pipes those are. Warning: swapping the
+    /// glyph on every pipe in a table row would cut `a \| b` in two.
     pub fn table_walls_on_line(&self, line: usize) -> Vec<usize> {
         if !self.line_is_table_row(line) {
             return Vec::new();
@@ -1351,8 +1336,8 @@ impl Editor {
     /// whether there is still a table under the cursor to draw. `G`, `gg` and
     /// `:120` are file-wide motions that a grid cannot follow: they walk out of
     /// a `|` table into the chapter around it, [`Self::table_row_span`] gives
-    /// nothing back, and a widget that draws only between those two lines drew
-    /// **nothing at all** — a blank window with a live cursor behind it.
+    /// nothing back, and a widget that draws only between those two lines would
+    /// draw **nothing at all** — a blank window with a live cursor behind it.
     ///
     /// So the window goes back to the page, and walking into the table again
     /// brings the grid back: the same bargain [`Self::table_here`] makes for
@@ -1364,7 +1349,7 @@ impl Editor {
     /// even when there is no row left to draw. Giving the window back to the
     /// page there would make `␣t d` on the last row look like leaving table
     /// mode — and the header is still on the screen, which is the one thing
-    /// such a file still has (2026-10-23).
+    /// such a file still has.
     pub fn grid_has_the_pane(&self) -> bool {
         let Some(view) = self.table.as_ref() else {
             return false;
@@ -1375,7 +1360,7 @@ impl Editor {
 
     /// **Whether the grid is showing a table with no rows in it** — a header
     /// and nothing under it, which is what a `.csv` looks like one `␣t d` past
-    /// its last row (2026-10-23 作者定: 「零行是正當狀態，沒有格子可編」).
+    /// its last row. Zero rows is a legitimate state, with no cell to edit.
     ///
     /// There is no cell here, so the keys that mean 「this cell」 say so and
     /// change nothing; `␣t r`, `o`, `O` and `p` open a row and are the way
@@ -1388,11 +1373,10 @@ impl Editor {
     /// The buffer lines this table's **data rows** occupy: the first and the
     /// last, both inclusive.
     ///
-    /// **The grid widget draws between these two lines and nowhere else**
-    /// (2026-09-05). It used to draw from the top of the buffer to the bottom,
-    /// which was right for the only table it was ever given — a whole `.csv` —
-    /// and became wrong the moment `t t` started handing it three lines of a
-    /// chapter. Everything the widget measures, scrolls and clicks on is
+    /// **The grid widget draws between these two lines and nowhere else**:
+    /// drawing from the top of the buffer to the bottom is right only for a
+    /// whole `.csv`, and `t t` hands it three lines of a chapter as readily.
+    /// Everything the widget measures, scrolls and clicks on is
     /// bounded by this pair.
     ///
     /// The header row and the `| --- |` rule are **not** rows: the header is
@@ -1412,8 +1396,8 @@ impl Editor {
     /// they typed welded to the end of the file with no separator and no line
     /// break, and the trailing newline gone (#384).
     ///
-    /// `row_is_ragged` had this guard for itself since the beginning; the
-    /// drawing, the caret and the write path did not. One place, four callers.
+    /// One place, four callers: `row_is_ragged`, the drawing, the caret and
+    /// the write path.
     pub(super) fn grid_last_line(&self) -> usize {
         crate::motion::last_line(self.current_buffer().rope())
     }
@@ -1423,13 +1407,13 @@ impl Editor {
         let view = self.table.as_ref()?;
         let last_line = self.grid_last_line();
         match view.bounds {
-            // **And a whole file that is one table can have no rows either**
-            // (2026-10-23). The region branch below has had this guard since
-            // the beginning; this one handed back an inverted pair, the grid's
-            // scroll clamp turned it into `0`, and a `.csv` one `␣t d` past
-            // its last row **drew its header a second time as row 1** — `i`
-            // then typed a one-column record under a three-column schema, and
-            // `d`/`y` named a cell that was not there.
+            // **And a whole file that is one table can have no rows either**,
+            // the same guard as the region branch below. Warning: without it
+            // this hands back an inverted pair, the grid's scroll clamp turns
+            // it into `0`, and a `.csv` one `␣t d` past its last row **draws
+            // its header a second time as row 1** — `i` then types a
+            // one-column record under a three-column schema, and `d`/`y` name
+            // a cell that is not there.
             Bounds::WholeFile => {
                 let first = usize::from(view.schema.header);
                 (first <= last_line).then_some((first, last_line))
@@ -1443,15 +1427,15 @@ impl Editor {
                 // **A table can have no rows at all** — a header and its
                 // `| --- |` and nothing under them yet, which is what every
                 // table looks like for the second between `t f` and the first
-                // `t r`. `first.min(last)` used to hand the rule back as if it
-                // were a row, and the grid drew the dashes as data.
+                // `t r`. Warning: `first.min(last)` would hand the rule back
+                // as if it were a row, and the grid would draw the dashes as data.
                 (first <= last).then_some((first, last))
             }
         }
     }
 
-    /// **Where the window starts counting rows** (2026-09-07: 「她的
-    /// 行號用自己的行號而不是全文的行號」).
+    /// **Where the window starts counting rows**: a table's line numbers are
+    /// its own, not the file's.
     ///
     /// 全窗表格 is a window onto one table and nothing walks out of it
     /// ([`Self::hold_the_pane`]), so inside it the useful number is which row
@@ -1467,8 +1451,8 @@ impl Editor {
         }
     }
 
-    /// **Which row of the grid `line` is**, counted in records (2026-10-20
-    /// 作者定: 「行号应该是表格行，不管单元格内部分行」).
+    /// **Which row of the grid `line` is**, counted in records: the number is
+    /// the table's row, however many lines a cell breaks into.
     ///
     /// Zero-based from [`Self::table_row_base`], so a caller adds one to print
     /// it. With no multi-line record in the file — every table so far — the
@@ -1599,16 +1583,16 @@ impl Editor {
         }
         let region = match (bounds, separator) {
             // The fence is checked **here**, not only on the way in. Checking
-            // it at the door was not enough: `gg`, `G`, `:N` and a search all
+            // it at the door is not enough: `gg`, `G`, `:N` and a search all
             // land outside the cells — the manual says so — and from a quoted
-            // example in a code block `t t` then reformatted somebody's text.
+            // example in a code block `t t` would then reformat somebody's text.
             // The region is what everything downstream asks about, so this is
             // where a table that is really a quotation has to stop being one.
-            // **The same question the renderer asks** (#283). It used to take
-            // any run of lines that opened with a pipe, while the renderer
-            // (`with_md_tables`) took only the ones Markdown parses — so a
-            // lone `| 甲` in a paragraph had the cells' keys on it, `hjkl`
-            // walking cells nobody had drawn, while the line was painted as
+            // **The same question the renderer asks** (#283). Taking any run
+            // of lines that opens with a pipe, while the renderer
+            // (`with_md_tables`) takes only the ones Markdown parses, would put
+            // the cells' keys on a lone `| 甲` in a paragraph, `hjkl`
+            // walking cells nobody has drawn, while the line is painted as
             // the prose it is. One rule, asked in one place.
             (Bounds::Md, _) => match self.md_row_in_a_fence() {
                 true => None,
@@ -1632,22 +1616,22 @@ impl Editor {
     ///
     /// A header with no `| --- |` under it is somebody still typing, and a
     /// single-column line that merely opens with a pipe is prose. **One
-    /// copy** (#283): the renderer and the keys used to decide this
-    /// separately, and disagreed about exactly those two cases.
+    /// copy** (#283): the renderer and the keys both ask it, so they cannot
+    /// disagree about exactly those two cases.
     fn md_table_parses(&self, region: &crate::mdtable::Region) -> bool {
         let header = self.line_text(region.first).unwrap_or_default();
-        // Warning: **One column is a table when it has a rule row** (2026-10-17, found
-        // in review). The test used to want two, and the reason written below
-        // is 「a single-column line that merely opens with a pipe is prose」 —
-        // true, and about a line with **no** `| --- |` under it, which the
-        // first half of this test already turns away. With the rule there
-        // nothing is being guessed: prose does not write `| --- |`.
+        // Warning: **One column is a table when it has a rule row.** The
+        // reason written above is 「a single-column line that merely opens
+        // with a pipe is prose」 — true, and about a line with **no**
+        // `| --- |` under it, which the first half of this test already turns
+        // away. With the rule there nothing is being guessed: prose does not
+        // write `| --- |`.
         //
-        // The two halves of the editor disagreed about it. `enter_md_table_at`
-        // built a view and said 「表格：1 欄」, while this — which the
-        // renderer, the guards and `:s` all ask — said no, so the mode was
-        // entered and then protected nothing: `x d` cut the header off and
-        // left an orphan `| --- |`, with no refusal and no grid ever drawn.
+        // The two halves of the editor must agree about it. `enter_md_table_at`
+        // builds a view and says 「表格：1 欄」; if this — which the
+        // renderer, the guards and `:s` all ask — said no, the mode would be
+        // entered and then protect nothing: `x d` would cut the header off and
+        // leave an orphan `| --- |`, with no refusal and no grid ever drawn.
         region.rule.is_some() && !crate::mdtable::cells(&header).is_empty()
     }
 
@@ -1660,9 +1644,8 @@ impl Editor {
     /// — so a header with no `| --- |` under it and a single-column line that
     /// merely opens with a pipe are prose, and so is a table quoted inside a
     /// fenced block, which is *an example of* a table (the manual has
-    /// several). One walk answers both of the questions that used to ask
-    /// separately, which is why the fence check now covers the second of them
-    /// as well.
+    /// several). One walk answers both questions, which is why the fence
+    /// check covers the second of them as well.
     pub(super) fn with_md_tables<T>(&self, f: impl FnOnce(&[(usize, usize)]) -> T) -> T {
         let asked = (self.current_buffer().id(), self.current_buffer().revision());
         if let Some(cache) = self.md_tables.borrow().as_ref() {
@@ -1740,28 +1723,26 @@ impl Editor {
     /// grid is one row, however long it is, because a cell that has wrapped
     /// onto the next screen row is no longer in its column.
     pub fn table_row_at(&self, line: usize) -> bool {
-        // A closed fold's line is one row too (2026-11-03).
+        // A closed fold's line is one row too.
         if self.fold_head(line) {
             return true;
         }
         if self.table_lines_at(line).is_some() {
             return true;
         }
-        // **光標還没站進去過的時候，這一行自己也說得出來**（2026-10-08 報的）。
+        // **光標還没站進去過的時候，這一行自己也說得出來**。
         //
         // 上面那一句要 `self.table` 先存在，而它只由 [`Self::find_the_table_here`] 建，
-        // 那一支又要求「光標此刻站在一個 `|` 行上」——於是 `:info` 剛開出來、
-        // 光標在標題那行的時候，整張表是折的，點進去一下就正了（實測：光標在第
-        // 1 行時 `table_row_at(2)` 是 `false`，按兩下 `j` 走進表格後是 `true`）。
+        // 那一支又要求「光標此刻站在一個 `|` 行上」——只靠它，`:info` 剛開出來、
+        // 光標在標題那行的時候，整張表是折的，要光標走進去一下纔正。
         //
-        // **不走全文掃描**（[`Self::with_md_tables`]），而是就地問這一行——他定的：
-        // 「only check the top 100 lines (or currently visible lines) … we do not care the
-        // rest of the document because users have to use cursor to navigate to them」。
+        // **不走全文掃描**（[`Self::with_md_tables`]），而是就地問這一行：只看
+        // 看得見的那幾行，文件其餘部分要光標走過去纔算數。
         // 折行那一問只對**畫得出來的行**問，所以「就地」正好是「看得見的那幾行」；
         // `mdtable::region` 只往上下走到表格的邊為止，散文行第一句就回 `None`。
         // Warning: **最便宜的那一句先問**。下面兩句裏 `block_of` 要掃一遍團塊
         // （按版本緩存，可每改一次就重掃一次），而絕大多數行根本不以 `|` 開頭。
-        // 順序搭錯的代價量過：`a_paste_asked_for_a_million_stops_at_the_ceiling`
+        // 順序搭錯的代價：`a_paste_asked_for_a_million_stops_at_the_ceiling`
         // 在 0.99 秒與 41 秒之間。
         if !self.opens_a_row(line) {
             return false;
@@ -1786,8 +1767,7 @@ impl Editor {
     /// own — there the grid is drawn by `crate::table` out of the schema rather
     /// than out of the writer's own punctuation.
     fn grid_walls(&self, _line: usize) -> Option<(usize, usize, Vec<usize>)> {
-        // **Nothing draws walls into a page of prose any more** (2026-10-21).
-        // That was `t f`'s one difference from `t b`, and `t f` is folded into
+        // **Nothing draws walls into a page of prose.** `t f` is folded into
         // `t b`: an inline table shows the `|` you typed, and a table you want
         // drawn as a grid is `t t`'s, which draws its own.
         None
@@ -1839,14 +1819,13 @@ impl Editor {
             // and there is no character before the start of a line — passing
             // `true` here quietly ate the opening wall of every row.
             Separator::Pipe => crate::mdtable::pipes_from(&text, false),
-            // Warning: **Not every one of them** (2026-10-17, found in review). A
+            // Warning: **Not every one of them.** A
             // delimiter inside a quoted field is a character in that field,
-            // which the parser has always known and `mdtable::Wall::at`
+            // which the parser knows and `mdtable::Wall::at`
             // exists to say — its own comment names this bug (#391, 「a wall
-            // through 「"Smith, John"」 that the file does not have」). This
-            // call site was the one that never got it: 全窗 and 基本 drew
-            // `alpha,"one, two",1` as three cells, 完整 drew four, and the
-            // walls then stood where no column was.
+            // through 「"Smith, John"」 that the file does not have」). Without
+            // it, 全窗 and 基本 would draw `alpha,"one, two",1` as three cells
+            // and 完整 four, with walls standing where no column is.
             Separator::Delimiter(c) => crate::mdtable::Wall::Between(c)
                 .at(&text)
                 .into_iter()
@@ -1918,8 +1897,8 @@ impl Editor {
     /// the markup that came off it and the padding that squared it up have both
     /// moved it.
     pub fn table_ruler_on_line(&self, line: usize) -> Vec<(usize, usize)> {
-        // **基本 gets it too** (#379). It used to ask `grid_walls`, which
-        // answers only at 全, and the numbers are wanted at 基本 as
+        // **基本 gets it too** (#379). Not `grid_walls`, which
+        // answers only at 全: the numbers are wanted at 基本 as
         // well — which its own law allows: 「tb 的原则是只能多字（标注）不能
         // 少字」, and a strip above the table adds a row of annotation without
         // hiding, folding or replacing a single character. 源碼 keeps none:
@@ -1933,13 +1912,13 @@ impl Editor {
         if line != first {
             return Vec::new();
         }
-        // **Where the cells are is asked, not worked out again.** This used to
-        // derive it: the gaps between the walls for a `|` row, and for a
-        // delimited one a walk that had to remember to trim the newline off
-        // the end or the last column's number was silently dropped. That is
-        // `boxes_of`'s job and it was already doing it for the padding — two
-        // derivations of one rule, and a table would have squared its columns
-        // up against a set of cells the ruler above it did not agree with.
+        // **Where the cells are is asked, not worked out again.** That is
+        // `boxes_of`'s job, and it does it for the padding too — two
+        // derivations of one rule would let a table square its columns
+        // up against a set of cells the ruler above it does not agree with.
+        // (A second derivation for a delimited row also has to remember to
+        // trim the newline off the end, or the last column's number is
+        // silently dropped.)
         self.table_cells_on_line(line)
     }
 
@@ -1963,18 +1942,17 @@ impl Editor {
     /// Whether the head of the table being read is **off the page**, so the
     /// reader is in its middle with nothing naming the columns (#379).
     ///
-    /// 2026-09-11：「在顶部预留一个信息栏（两行：列号+列名）。这个
-    /// 平常不显示，只是在下方是表格中间部分的时候显示。这样它是独立的，也就不
-    /// 会侵扰文本的区域了。」The region is what makes it buildable — the page
+    /// The bar is two rows reserved at the top — column numbers and column
+    /// names — shown only while the reader is in the middle of a table, so it
+    /// stays out of the text's region. The region is what makes it buildable — the page
     /// is simply two rows shorter, which is the arithmetic the command row and the
-    /// tab bar already do, where a row drawn *over* the text would have been a
+    /// tab bar already do, where a row drawn *over* the text would be a
     /// screen row that does not belong to the line it sits on, and the wrap,
-    /// the caret and the click map would each have had to learn what that is.
+    /// the caret and the click map would each have to learn what that is.
     ///
-    /// **The first answer was too coarse**: 「is this table taller than the
-    /// page」, which put the bar up the moment the cursor entered a long table
-    /// even with its head in plain view two rows above. 2026-09-11:
-    /// 「光标进入表格但是表格头部还没出屏幕，顶上的表头就开始显示了。」
+    /// Warning: 「is this table taller than the page」 is too coarse — it
+    /// puts the bar up the moment the cursor enters a long table, even with
+    /// its head still in plain view above.
     ///
     /// Reserving rows changes how many lines the page shows, which is the
     /// thing being asked about — so the test is written against `page_lines`,
@@ -2154,12 +2132,12 @@ impl Editor {
             .as_ref()
             .map(|v| v.schema.columns.len())
             .unwrap_or(0);
-        // **Looking at a table does not rewrite it.** Entering used to lay the
-        // whole region out again — 45 lines of this project's own `development.md`,
-        // `modified` set, and `:table-render off` does not undo it. The padding is
-        // this editor's, not theirs, and `:write-all` was one keystroke from
+        // **Looking at a table does not rewrite it.** Laying the whole region
+        // out again on entry would set `modified` on lines nobody touched, and
+        // `:table-render off` does not undo it. The padding is
+        // this editor's, not theirs, and `:write-all` would be one keystroke from
         // committing a diff nobody typed. The layout is kept up *after an
-        // edit*, which is where it came from and where it belongs.
+        // edit*, which is where it belongs.
         self.snap_to_cell();
         self.status = match added {
             true => say!("table.entered-rule-added", columns),
@@ -2204,7 +2182,7 @@ impl Editor {
         // **No lines means no lines.** Not one blank one: a region replaced
         // with nothing is a region taken out, and the newline that would be
         // pushed here for a last line there is not would leave a hole where
-        // the rows used to be (#249 resolves a conflict this way when a side
+        // the rows were (#249 resolves a conflict this way when a side
         // is empty).
         if !lines.is_empty() && (was.ends_with('\n') || !ends_file) {
             text.push_str(eol);
@@ -2233,24 +2211,22 @@ impl Editor {
     fn block_here(&self) -> (usize, usize) {
         let rope = self.current_buffer().rope();
         let last_line = rope.len_lines().saturating_sub(1);
-        // **整個檔就是一張表的時候，那一塊就是整個檔**（2026-10-03 一輪審查報來
-        // 的，會毀檔）。`ye --table 表.csv` 開出來的是一張**整檔**的網格，而這一
-        // 支只認「空行之間那幾行」：`␣t x t` 於是只轉了光標所在的那一段，檔子落
-        // 得一半 CSV 一半 TSV，而 schema 說的還是逗號。`:export` 一直是分情形的
-        // （`Bounds::WholeFile` 自己一支），轉換這一邊没跟上。
+        // **整個檔就是一張表的時候，那一塊就是整個檔**（否則會毀檔）。
+        // `ye --table 表.csv` 開出來的是一張**整檔**的網格；只認「空行之間那幾行」
+        // 的話，`␣t x t` 就只轉光標所在的那一段，檔子落得一半 CSV 一半 TSV，而
+        // schema 說的還是逗號。`:export` 也是分情形的（`Bounds::WholeFile` 自己一支）。
         //
         // Warning: **選區優先。** 真圈了幾行的人說的是那幾行，整檔那一條讓給他。
         let blank = |i: usize| {
             self.line_text(i)
                 .is_none_or(|l| l.trim().is_empty())
         };
-        // **空行是一段的盡頭，三種範圍都算**（2026-10-07 定）。
+        // **空行是一段的盡頭，三種範圍都算**。
         //
-        // 「文中一段」那一種本來就這樣（底下那兩個 `while`），而整檔與選區那兩種
-        // 從前是把範圍裏的空行**濾掉**再拼——四行帶一個空行的 CSV 轉出來是一張四
-        // 行的表，那個空行没了，一聲不吭。`|` 表格本來就裝不下空行，所以「停在它
-        // 前面」是唯一不丟字的做法。判詞：「如果一個文件是csv的話，那么它就是
-        // 「一個表格」的意思。如果出現空行，説明是文件有問題。」
+        // 「文中一段」那一種靠底下那兩個 `while`；整檔與選區那兩種若把範圍裏的
+        // 空行**濾掉**再拼，四行帶一個空行的 CSV 轉出來是一張四行的表，那個空行
+        // 一聲不吭地没了。`|` 表格本來就裝不下空行，所以「停在它前面」是唯一不
+        // 丟字的做法。一個 csv 文件就是「一個表格」；出現空行，是文件有問題。
         let upto = |from: usize, last: usize| -> usize {
             (from..=last).take_while(|&i| !blank(i)).last().unwrap_or(from)
         };
@@ -2298,14 +2274,14 @@ impl Editor {
             't' => Shape::Delimited('\t'),
             _ => return,
         };
-        // **小寫轉這裏這一張，大寫貼剪貼板那一張**（2026-10-02 定）。
+        // **小寫轉這裏這一張，大寫貼剪貼板那一張**。
         match c.is_ascii_uppercase() {
             true => self.paste_table(to, None),
             false => self.convert_table(to, None),
         }
     }
 
-    /// `:convert-table` — **把光標這裏的表寫成另一種樣子**（2026-10-02 定）。
+    /// `:convert-table` — **把光標這裏的表寫成另一種樣子**。
     ///
     /// 源没說就自己嗅：光標站在 `|` 表格裏就是 `|` 表格，否則看那一塊用的是什麼
     /// 分隔符。嗅源這一條照 org-mode 和 markdown-mode——兩家都是看有没有 TAB、
@@ -2313,7 +2289,7 @@ impl Editor {
     pub(super) fn convert_table(&mut self, to: crate::table::Shape, from: Option<crate::table::Shape>) {
         use crate::table::Shape;
         // **先說在圍欄裏**，再說看不出分隔符：後面那一句在這裏是假話，它會讓人
-        // 以為寫明分隔符就轉得動（2026-10-03 一輪審查報來的）。
+        // 以為寫明分隔符就轉得動。
         if self.in_a_literal_block() {
             self.status = say!("table.inside-a-fence");
             return;
@@ -2358,7 +2334,7 @@ impl Editor {
         crate::table::sniff(&lines).map(crate::table::Shape::Delimited)
     }
 
-    /// 分隔符換一個——CSV 轉 TSV 那一種（2026-10-02 定「任一到任一」）。
+    /// 分隔符換一個——CSV 轉 TSV 那一種（任一到任一）。
     ///
     /// Warning: **這一條不 `trim`。** 轉成 `|` 表格的時候格子兩邊的空白一定没
     /// （`|` 表格存不下，見 `mdtable::from_delimited`），而分隔符換一個是存得下
@@ -2583,14 +2559,13 @@ impl Editor {
     /// The same, for a caller that means to write the parts back — and the one
     /// place the `.md` grid keys are told the manuscript is locked (#213).
     ///
-    /// `:readonly on` → `t r` used to say 「加了一行」 with the grid unchanged:
-    /// the text was safe, because `Buffer::insert` does not move a locked rope,
-    /// so what was lost was only the truth. Eight of these functions each ended
-    /// in a `self.status = say!(…)` that had no way to know. The guard belongs
-    /// on the **door they all come through**, not on eight of their tails,
-    /// because the ninth was always going to be written without one — and the
-    /// `.csv` half of the same `t` menu already refused properly, so the two
-    /// halves of one menu disagreed.
+    /// Without it, `:readonly on` → `t r` would say 「加了一行」 with the grid
+    /// unchanged: the text is safe, because `Buffer::insert` does not move a
+    /// locked rope, so what is lost is only the truth. Each of these functions
+    /// ends in a `self.status = say!(…)` that has no way to know. The guard
+    /// belongs on the **door they all come through**, not on each of their
+    /// tails, because the next one would be written without one — and it
+    /// keeps this half of the `t` menu refusing the way the `.csv` half does.
     fn md_parts_to_edit(&mut self) -> Option<(crate::mdtable::Region, crate::mdtable::Parts)> {
         if self.refuse_readonly() {
             return None;
@@ -2626,19 +2601,19 @@ impl Editor {
     }
 
     /// Write the parts back and put the cursor on one cell of them.
-    /// Warning: **先問那兩道閘**（2026-10-02 一輪掃查報來的，會改壞表）。
+    /// Warning: **先問那兩道閘**（不問會改壞表）。
     ///
     /// [`crate::mdtable::format`] 攔着兩種表不許重排：**撕開的**（某一行的格數和
     /// 標題不一樣，#328）和**跑飛的**（某一欄寬得没有窗口放得下，#292）。那邊的
     /// 註釋寫着「Every door into this module passes here … so the guard cannot be
-    /// walked around by an edit」——而這一支直接叫 `compose`，於是**十個鍵從旁邊
-    /// 繞過去了**：排序、加行、加列、刪列、挪列，連三個對齊鍵都算。
+    /// walked around by an edit」——而這一支直接叫 `compose`，不問就**十個鍵從旁邊
+    /// 繞過去**：排序、加行、加列、刪列、挪列，連三個對齊鍵都算。
     ///
     /// 代價是真的改壞表。一格裏打了一個裸的 `|`（`torn` 的註釋說的正是這一種），
     /// 按一下 `t1s` 排序：**每一行都多出一格空的，標題多出一個没名字的欄**——而
     /// 排序一行字都不該動。跑飛那一種是 543 字節變 1736。
     ///
-    /// `␣tF` 一直是對的（它走 `format`），所以兩個鍵對同一張表給出兩種答案。
+    /// `␣tF` 走 `format`，所以兩個鍵對同一張表要給出同一種答案。
     pub(super) fn md_write(
         &mut self,
         region: &crate::mdtable::Region,
@@ -2673,8 +2648,9 @@ impl Editor {
 
     /// Write an empty `|` table here and stand in its first heading (#276).
     ///
-    /// 2026-09-05: 「`:table-new 3 4`，迅速在 markdown 中插入一個三
-    /// 行四列表格，上下有空白行，光標自動到標題欄最左的一格並進去編輯模式。」
+    /// `:table-new 3 4` inserts a three-by-four table in Markdown, with a
+    /// blank line above and below, and puts the cursor in Insert mode in the
+    /// leftmost heading cell.
     ///
     /// **`rows` counts the heading**, the way a word processor's「3 × 4」does:
     /// `3 4` is a heading and two rows of data, four columns wide. The rule row

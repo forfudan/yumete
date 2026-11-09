@@ -58,11 +58,11 @@ impl Editor {
     /// Walks from the top, because a fence opened above decides what this line
     /// means. Cached, because everything on a page asks.
     pub fn block_of(&self, line: usize) -> crate::markdown::Block {
-        // **One line's answer is one lookup.** This used to go through
-        // `blocks_through`, which hands back a copy of every line above it —
-        // so a question the 縱書 page asks per line cost 11 ns near the top of
-        // 資治通鑑 and 6.9 µs at line 19,883, and a page anchored down there
-        // spent 364 µs a frame copying blocks nobody looked at.
+        // **One line's answer is one lookup.** Not through `blocks_through`,
+        // which hands back a copy of every line above it — that way a question
+        // the 縱書 page asks per line costs 11 ns near the top of 資治通鑑 and
+        // 6.9 µs at line 19,883, and a page anchored down there spends 364 µs
+        // a frame copying blocks nobody looked at.
         if !self.markup_visible() {
             return crate::markdown::Block::Prose;
         }
@@ -93,9 +93,9 @@ impl Editor {
     /// line above the one asked about, so `blocks_through(l).get(l)` allocates
     /// sixty-three thousand elements to index one of them — which is what
     /// [`Editor::block_of`] is for, out of the same cache with no copy. The
-    /// shape reads so much like what it means that it came back twice after
-    /// being fixed once, so `tests/one_line_one_lookup.rs` reads it out of the
-    /// source rather than trusting review.
+    /// shape reads so much like what it means that review lets it through, so
+    /// `tests/one_line_one_lookup.rs` reads it out of the source rather than
+    /// trusting review.
     pub fn blocks_through(&self, last: usize) -> Vec<crate::markdown::Block> {
         let buffer = self.current_buffer();
         let rope = buffer.rope();
@@ -105,7 +105,7 @@ impl Editor {
             return vec![crate::markdown::Block::Prose; last + 1];
         }
         // Worked out once per edit, not once per frame. Blocks depend on the
-        // whole document above a line, so asking per row was quadratic — and
+        // whole document above a line, so asking per row would be quadratic — and
         // the answer only changes when the text does.
         // By **id**, never by index: closing a buffer shifts every later one
         // down, and a fresh buffer opens at revision 0 — so an index-keyed
@@ -206,8 +206,7 @@ impl Editor {
         // must not turn the rest of the chapter into somebody's side of an
         // argument. So the conflicts are assembled first — which throws the
         // unclosed ones away — and only then do their lines take the label.
-        // **A table written without its outer pipes** (GFM; 2026-10-30, as
-        // decided): the scanner reads one line's opening and cannot see the
+        // **A table written without its outer pipes** (GFM): the scanner reads one line's opening and cannot see the
         // rule row under a bare header, so those tables are found here, after
         // the scan, where both lines are at hand. A bar in a sentence stays
         // prose: only a rule row on the next line makes a table of it.
@@ -241,7 +240,7 @@ impl Editor {
                 }
             }
         }
-        // **Display maths over several lines** (2026-11-06), found the same
+        // **Display maths over several lines**, found the same
         // way as the bare tables above: after the scan, with both ends at
         // hand. Only a line holding a `$` is copied.
         if markdown_syntax {
@@ -263,19 +262,18 @@ impl Editor {
         *self.typst_cuts.borrow_mut() = std::rc::Rc::new(Vec::new());
     }
 
-    /// **The block scan of a Typst file, from where the text changed**
-    /// (2026-11-09).
+    /// **The block scan of a Typst file, from where the text changed.**
     ///
-    /// The scan used to walk every line on every keystroke: 16 ms on a
-    /// 660 kB book, 24 ms on a megabyte, half of it the walk and half the
-    /// display-maths pass after it. Now each line's answer is kept with
+    /// Walking every line on every keystroke costs 16 ms on a 660 kB book,
+    /// 24 ms on a megabyte, half of it the walk and half the display-maths
+    /// pass after it. So each line's answer is kept with
     /// the scanner's state at the start of every [`SCAN_STEP`]th line, and an
     /// edit is scanned from the last such line above it, on until the
     /// scanner, past the edit, stands where it stood before at the same
     /// line of the unchanged text — from there every line reads as it did,
     /// and the old answers are moved down. The display maths is found from
     /// what each line holds ([`crate::markdown::maths_facts`]), kept the same
-    /// way, so that pass no longer reads the text.
+    /// way, so that pass does not read the text.
     fn scan_typst(&self, key: (u64, u64)) {
         use crate::markdown::{Block, MATHS_BLANK, MATHS_CLOSES, MATHS_OPENS};
         let buffer = self.current_buffer();
@@ -359,7 +357,7 @@ impl Editor {
     }
 
     /// What a line of Typst begins inside — the brackets still open above it
-    /// — or `None` for a line that begins in plain writing (2026-11-08).
+    /// — or `None` for a line that begins in plain writing.
     ///
     /// A line's runs are worked out one line at a time, and a line inside
     /// `#let style(body) = { … }` reads as writing on its own: `set page(…)`
@@ -385,10 +383,10 @@ impl Editor {
     /// A reading is markup like any other — though only the vertical page can
     /// show one, since that is the only layout with a column to put it in.
     ///
-    /// **Assigned, not stashed.** This used to put the reader's dialects aside
-    /// on the way into 所見即所得 and hand them back on the way out, and the
-    /// stash went stale the moment `:ruby` was typed while 所見即所得 was on:
-    /// leaving it then gave back a set the reader had already replaced. With
+    /// **Assigned, not stashed.** Putting the reader's dialects aside on the
+    /// way into 所見即所得 and handing them back on the way out would go stale
+    /// the moment `:ruby` is typed while 所見即所得 is on: leaving it then
+    /// would give back a set the reader had already replaced. With
     /// the level assigned outright there is nothing to go stale, and `:ruby`
     /// afterwards is an override that stands until the next `:render`.
     pub(super) fn set_ruby_level(&mut self, how: Render) {
@@ -404,16 +402,15 @@ impl Editor {
                 all
             }
         };
-        // **中階 knows the reading and does not draw it** (settled 2026-09-06).
-        // Laying the reading out beside the base means taking the tags off the
-        // page — 「正文不许摘 ruby 标签」 — and taking something off the page is
-        // 全's business. So 中階 keeps both: the tags where the writer typed
+        // **中階 knows the reading and does not draw it.** Laying the reading
+        // out beside the base means taking the tags off the page, and taking
+        // something off the page is 全's business. So 中階 keeps both: the tags where the writer typed
         // them, and a word count that knows 「錢塘」 is two 字 and `qián táng`
         // is none.
         //
-        // This is the level that used to lie. `:render basic` set every dialect
-        // *and* drew them, so the tags came off while the status line said
-        // 「標記留在畫面上」.
+        // Warning: this level must not draw them. A `:render basic` that set
+        // every dialect *and* drew them would take the tags off while the
+        // status line says 「標記留在畫面上」.
         self.ruby_drawn = how == Render::Full;
         // The level is assigned outright, and the brace form goes back to
         // following the file.
@@ -446,7 +443,7 @@ impl Editor {
 
     /// `:indent off|basic|full` — how much of a paragraph's opening is drawn.
     ///
-    /// **The three words, and not `:render`'s to write** (settled 2026-09-06).
+    /// **The three words, and not `:render`'s to write.**
     /// The other three dimensions are all one question — how much of the
     /// *markup* is resolved — and a master switch over them is a switch over
     /// one idea. An indent is not markup: it is how a Chinese paragraph opens,
@@ -481,11 +478,11 @@ impl Editor {
     /// which is what makes every motion and every edit act on what can be seen.
     pub fn hidden_on_line(&self, line: usize) -> Spans {
         // A closed fold's first line: its text is off the page and the
-        // fold's own line drawn instead (2026-11-03).
+        // fold's own line drawn instead.
         if let Some(all) = self.fold_head_hides(line) {
             return all.into_iter().collect();
         }
-        // **太長的一行也不藏記號**（`:view-long-line`，2026-10-08）。
+        // **太長的一行也不藏記號**（`:view-long-line`）。
         //
         // 和 [`Self::markup_runs`] 同一條門槛，因為是同一筆賬：這一支走
         // `readings_on_line` 與 `markdown::hidden`，兩個都把整行物化一遍。量過：
@@ -495,7 +492,7 @@ impl Editor {
         // 藏與不藏要**量的和畫的一致**：記號這一頭兩邊問的都是 `markup_runs`，它自
         // 己帶着同一道閘；注音那一頭的閘在 `readings_on_line` 裏（兩頭同一支）。
         //
-        // Warning: **表格的襯墊不在這道閘裏面**（2026-10-09 補）。它是竪排自己要藏
+        // Warning: **表格的襯墊不在這道閘裏面**。它是竪排自己要藏
         // 的那幾格，而頁那一頭（[`Self::markup_hidden_on_line`]）無條件藏——這裏一
         // 早返回就成了「藏了没量」，底下七十行那條規矩說的正是它。
         if self.line_is_too_long(line) {
@@ -505,14 +502,14 @@ impl Editor {
         }
         // A reading that is being *laid out* is drawn beside the base, so its
         // markup comes off the page whatever `:render` says — leaving the tags
-        // on would be showing the same reading twice. This is what the 縱書
-        // page has always done; the horizontal one now does it too.
+        // on would be showing the same reading twice. The 縱書 page and the
+        // horizontal one both do this.
         //
         // Warning: **光標在裏面的那一組要露出源碼**，和 `**粗**` 同一條規矩
         // （[`crate::markdown::hidden`]：選區碰到的構造整個展開，近端含、遠端
-        // 不含）。2026-09-22 報的：一行上只有一個 ruby 詞的時候，從上一行 `j`
+        // 不含）。不露的話：一行上只有一個 ruby 詞的時候，從上一行 `j`
         // 走下來，光標落在**第一個看得見的字**上——那是 `<ruby>` 後面的
-        // `immerhin`，而不是行首——於是 `i` 打進去的字跑進了標籤裏面。Warning: **兩種
+        // `immerhin`，而不是行首——於是 `i` 打進去的字跑進標籤裏面。Warning: **兩種
         // 情形畫出來一模一樣**（都是 `甲immerhin`），所以看不出來：從 `3gg` 過去
         // 是對的，從 `j` 走下來是錯的。露出源碼，位置就說得清了。
         let caret = self.selected_columns(line);
@@ -543,7 +540,7 @@ impl Editor {
             // is. `=======` has no label, so its row goes empty, which is what
             // a divider between two halves should look like.
             //
-            // Warning: **光標站上去就要露出來**（2026-10-02 查出來的）。這是整支
+            // Warning: **光標站上去就要露出來**。這是整支
             // `hidden_on_line` 裏**唯一**不問光標的一處——它底下那兩支都問
             // （`markdown::hidden(…, self.selected_columns(line))`、註號那一支的
             // `!Self::caret_within(…)`）。不問的後果不是看着怪，是**寫錯地方**：
@@ -601,15 +598,15 @@ impl Editor {
     /// through, and the caret, the wrap and the click map already read that
     /// door. They agree about a tab for free.
     ///
-    /// It used to be nothing at all: `UnicodeWidthChar::width('\t')` is
-    /// `None`, so a tab was zero cells and no glyph, and `dl<TAB>叭` drew as
-    /// `dl叭` — a 碼表, which is what this editor is *for*, came out with its
-    /// columns collapsed and the caret standing on a column the page did not
-    /// have.
+    /// Warning: left to the width table a tab is nothing at all:
+    /// `UnicodeWidthChar::width('\t')` is `None`, so it would be zero cells
+    /// and no glyph, and `dl<TAB>叭` would draw as `dl叭` — a 碼表, which is
+    /// what this editor is *for*, would come out with its columns collapsed
+    /// and the caret standing on a column the page does not have.
     fn tab_stops_on_line(&self, line: usize) -> Vec<crate::drawn::Run> {
-        // Warning: **「這一行有製表符嗎」要先問，而且不造字串**（2026-10-08）。
+        // Warning: **「這一行有製表符嗎」要先問，而且不造字串**。
         //
-        // 從前是先 `line_text`（一整行物化成 `String`）再 `contains('\t')`。絕大多數行
+        // 不能先 `line_text`（一整行物化成 `String`）再 `contains('\t')`：絕大多數行
         // 一個製表符都没有，而這一支每幀每行要問一次——一行 150 萬字的檔上就是
         // 每幀一次 4.5 MB 的拷貝。rope 自己按塊存著，一塊一塊找字節不配任何內存。
         //
@@ -621,12 +618,12 @@ impl Editor {
         // (see [`Self::wall_columns`]) — it keeps its own single cell, exactly
         // as a `|` or a `,` does, and nothing is drawn beside it.
         let walls = self.wall_columns(line);
-        // Warning: **算過就記著**（2026-10-08 使用者報的：「50 萬字的比 200 萬字的還卡」）。
+        // Warning: **算過就記著**。
         //
         // 這一支要把整行走一遍字簇才算得出每一個製表符的列（製表符補到哪一格，
         // 跟它前面所有字的寬度走），而折行每量一行就問一次——一屏十幾行就是十幾遍。
-        // 實測他那兩份稿子：**47 萬字、97 個製表符的那份 0.43 秒一幀，206 萬字、
-        // 一個製表符也没有的那份 0.16 秒**——小四倍的檔慢兩倍多，差別全在這裏。
+        // 不記的話量得出來：**47 萬字、97 個製表符的稿子 0.43 秒一幀，206 萬字、
+        // 一個製表符也没有的 0.16 秒**——小四倍的檔慢兩倍多，差別全在這裏。
         //
         // 答案只跟著「正文、製表位寬、藏起來的那幾段、表格的牆」走，四樣都進指紋；
         // 光標走一步不改其中任何一樣，所以一次改動算一遍就夠。
@@ -637,7 +634,7 @@ impl Editor {
             &walls,
         ));
         self.tab_memo.or_work_out(self.current_buffer().id(), line, stamp, || {
-            // 「這一行有製表符嗎」也收進備忘裏（2026-10-08）：那一遍字节掃描不配內存，
+            // 「這一行有製表符嗎」也收進備忘裏：那一遍字节掃描不配內存，
             // 可在一行 1240 萬字的稿子上一幀仍要走好幾遍（折行每量一行就問一次）。
             if !self.current_buffer().rope().line(line).chunks().any(|c| c.contains('\t')) {
                 return Vec::new();
@@ -716,7 +713,7 @@ impl Editor {
         crate::drawn::compose(runs)
     }
 
-    /// **`[^1]` 畫成 `⁽¹⁾`**（2026-09-22）。
+    /// **`[^1]` 畫成 `⁽¹⁾`**。
     ///
     /// 源碼在 [`Self::hidden_on_line`] 那頭藏起來，這裏在原地畫一個印刷體的
     /// 註號——和表格摺疊畫那個 `>` 是同一條路（藏掉一段、原地立一個記號）。
@@ -830,7 +827,7 @@ impl Editor {
     /// stale the way a finding stored from a walk of the file does.
     ///
     /// Warning: **the long-line gate is tested before the memo, not inside the
-    /// work** (2026-10-09). `:view-long-line` is a setting, so an answer worked
+    /// work**. `:view-long-line` is a setting, so an answer worked
     /// out under one threshold and kept under the line's own hash *would* be
     /// stale after the threshold moved — and the only thing that stops it is
     /// the order of those two lines below. Every gated producer here keeps that
@@ -873,9 +870,9 @@ impl Editor {
     /// width, which is what squares a table up across a page, aligns nothing
     /// there.
     ///
-    /// **One field, asked once** (#283). It used to ask `markup_visible()` —
-    /// a question about `:render`, answered by reaching across into another
-    /// subsystem's state, and every proposal to extend it grew a new hole:
+    /// **One field, asked once** (#283). Not `markup_visible()` — a question
+    /// about `:render`, answered by reaching across into another subsystem's
+    /// state, where every extension grows a new hole:
     /// the `layout` term dropped, `Reach::Cursor` silently widening to the
     /// file, `PadKey` going stale across a mode switch that moves neither
     /// revision nor render. The link is made where the command runs instead —
@@ -888,10 +885,8 @@ impl Editor {
     /// question is the *level* and not [`Editor::table`] — the level is the
     /// file's, and holds in the paragraph between two tables.
     ///
-    /// **竪排 squares tables up too, since 2026-09-19.** It used to be barred
-    /// here because a table stood on end was nonsense anyway — the rows were
-    /// wrapped and its `|` were loose pipes down a column. Now a row is one 縱
-    /// (`zong::lay_out`) and the walls turn with it, so the grid is the page's
+    /// **竪排 squares tables up too.** A row is one 縱 (`zong::lay_out`) and
+    /// the walls turn with it, so the grid is the page's
     /// own grid a quarter turn round, and it wants squaring up exactly as the
     /// horizontal one does — counted in slots rather than cells
     /// ([`crate::mdtable::Measure`]).
@@ -901,10 +896,9 @@ impl Editor {
 
     /// Whether a table view may **open by itself** under the cursor.
     ///
-    /// Not the same question as [`Self::table_padding_on`], and 2026-09-19 is
-    /// where they parted: 竪排 squares a table up now, but a table there is
-    /// **read-only** by design (「進入表格後還是只讀狀態，必須 tt 才能編輯」)
-    /// — the view is the thing that takes the keys, and a turned grid
+    /// Not the same question as [`Self::table_padding_on`]: 竪排 squares a
+    /// table up, but a table there is **read-only** by design (editing it takes
+    /// `t t`) — the view is the thing that takes the keys, and a turned grid
     /// is not a grid the caret edits in place. `t t` still opens one, and
     /// turns the page flat to do it.
     pub(super) fn table_view_opens_itself(&self) -> bool {
@@ -912,19 +906,14 @@ impl Editor {
     }
 
     /// `t w` — **one ring of three stops**: 軟折行 → 摺起 → 全文, and round
-    /// again (2026-10-22 定：「I would keep only `tw` which cycles "raw
-    /// length", "folded" and "soft wrap"… Do default "wrap", then "folded",
-    /// then "full"」). `t a` was a second key over this one axis and is gone
-    /// with the ring: one key, one question, three answers.
+    /// again. There is no second key over this one axis: one key, one
+    /// question, three answers.
     ///
-    /// **It is the 全窗表格's key and nobody else's** (2026-10-22 定：「in the
-    /// document (`tb` mode), we do not allow `tw` to change the layout. It
-    /// always show the full length of the cell. This is because we promised
-    /// users that in `tb` mode, no letters or symbols from the source code is
-    /// hidden」). That reverses 2026-09-07's 「虽然 tb 在默认状态下不折叠，但
-    /// 能不能在按下 tw 之后折叠？」, and the promise is why: 基本 may add to
-    /// the page and never take from it, and a reader's shortcut does not get
-    /// to spend that promise. Hiding a cell's tail belongs to the place that
+    /// **It is the 全窗表格's key and nobody else's.** In the document (`tb`
+    /// mode) `t w` does not change the layout and every cell is drawn at its
+    /// full length, because `tb` mode promises that no letter or symbol of the
+    /// source is hidden: 基本 may add to the page and never take from it, and
+    /// a reader's shortcut does not get to spend that promise. Hiding a cell's tail belongs to the place that
     /// is a table interface rather than a document.
     ///
     /// Two things follow, and both are elsewhere: the key is **not offered**
@@ -958,8 +947,8 @@ impl Editor {
     ///
     /// **Prose has no switch to read.** 源碼 and 基本 draw every cell whole,
     /// whatever `t w` was last pressed on, because neither of them may take a
-    /// character off the page (2026-10-22 定：「in `tb` mode, no letters or
-    /// symbols from the source code is hidden」). The reader's answer is the
+    /// character off the page: in `tb` mode no letter or symbol of the source
+    /// is hidden. The reader's answer is the
     /// 全窗表格's, and the grid's own answer is **軟折行** — it has the window
     /// to itself, so the tail of a long cell has somewhere to go, and a cell
     /// cut off behind a `>` is the one thing a table interface should not open
@@ -1011,17 +1000,15 @@ impl Editor {
     ///
     /// The other half of [`Self::hidden_on_line`] — the markup — comes back
     /// the moment the caret is in it, which is what 所見即所得 means, so the
-    /// caret is welcome to walk into it. This half does not. 2026-09-11：
-    /// 「tf tt 模式下这种 padding 的空格既然没有显示，就应该允许用户直接跳过
-    /// 去，而不是把光标定在那里但后台还是在过空格。」Which is #212's own law
-    /// read from the other end: if the caret may never stand in a column the
+    /// caret is welcome to walk into it. This half does not: padding the page
+    /// does not show is jumped over, not walked through one unseen space at a
+    /// time. That is #212's own law read from the other end: if the caret may never stand in a column the
     /// page does not have, then a motion may not leave it there either.
     ///
-    /// Warning: **What a turned table keeps off the page is kept off motion too**
-    /// (2026-09-19, caught in review). Without it the caret walked the
-    /// cushions and the file's own alignment spaces in a 竪排 table: six
-    /// presses of `j`, six file positions, and the caret sat on the same slot
-    /// the whole time.
+    /// Warning: **What a turned table keeps off the page is kept off motion too.**
+    /// Without it the caret walks the cushions and the file's own alignment
+    /// spaces in a 竪排 table: six presses of `j`, six file positions, and the
+    /// caret sits on the same slot the whole time.
     pub fn cell_hidden_on_line(&self, line: usize) -> Vec<(usize, usize)> {
         let mut out = self.table_slack_off_the_page(line);
         out.sort_unstable();
@@ -1031,10 +1018,9 @@ impl Editor {
     /// Which punctuation the table on `line` is told apart by, if there is a
     /// table on it at all (#378).
     ///
-    /// **The separator is a value, never a kind of file.**
-    /// 2026-09-11：「markdown 中的表格使用 | 分隔，tsv 用 tab，csv 用逗号。他们
-    /// 本质上都是分隔符。所以 tb / tf 模式下他们显示效果应该是一样的。」So this
-    /// is the only place that asks, and everything past it — the widths, the
+    /// **The separator is a value, never a kind of file.** A Markdown table is
+    /// split by `|`, a TSV by tab, a CSV by comma: all three are separators,
+    /// and `tb` / `tf` draw them alike. So this is the only place that asks, and everything past it — the widths, the
     /// padding, the folding — is written once.
     ///
     /// A delimited file is read by a view that says so, and there **every**
@@ -1101,19 +1087,18 @@ impl Editor {
             }
         };
         // **Only what is on screen is measured** (#378) — the same window for
-        // either punctuation, because「他们本质上都是分隔符」. The alignments
+        // either punctuation, because both are only separators. The alignments
         // travel with the region rather than with the rows, so a table scrolled
         // past its own rule row keeps them.
-        // Warning: **「一屏幾行」竪排要問別的數** (2026-09-19: 「整個表格都在
-        // 可視範圍內哦」). The window is `[page_top, page_top + a screenful]`
+        // Warning: **「一屏幾行」竪排要問別的數.** The window is `[page_top, page_top + a screenful]`
         // *in lines*, and 橫排 a screenful of lines is the terminal's height.
         // 竪排 a line is a 縱 and the 縱 run **across** the page, so a screenful
         // is how many of them fit side by side — `page_columns`. Measured by
-        // the height instead, a table forty lines down the file fell clean
+        // the height instead, a table forty lines down the file falls clean
         // outside the window with every row of it plainly on the screen: only
-        // the header got measured, so only the header got padded, and it stood
-        // beside a body squared up to nothing. Scroll until the table reached
-        // the right edge and it snapped into line — which is exactly what the
+        // the header is measured, so only the header is padded, and it stands
+        // beside a body squared up to nothing. Scroll until the table reaches
+        // the right edge and it snaps into line — which is exactly what the
         // window sliding over it looks like.
         let screenful = match self.layout() {
             Layout::Vertical => self.page_columns,
@@ -1215,8 +1200,8 @@ impl Editor {
             let (measured, mark) = kept.unwrap_or_else(|| {
                 let measured = self.hidden_on_line(i);
                 // **⁽¹⁾ 畫上去的註號佔三格。** 源碼那四個字 `[^1]` 藏了，算寬
-                // 的時候當零；可畫上去的註號佔三格，於是帶註的那一行整整頂出
-                // 去三格，格線歪掉（2026-09-23 審出來的）。
+                // 的時候當零；可畫上去的註號佔三格，不算進去的話帶註的那一行
+                // 整整頂出去三格，格線歪掉。
                 let mut mark: Vec<(usize, usize)> = self
                     .footnote_marks_on_line(i)
                     .into_iter()
@@ -1247,7 +1232,7 @@ impl Editor {
             &region.aligns,
             &marks,
             &shown,
-            // **The unit is the page's own** (2026-09-19): 竪排 stands every
+            // **The unit is the page's own**: 竪排 stands every
             // grapheme in a slot, so a table padded in cells comes out ragged
             // there — see [`crate::mdtable::Measure`].
             measure,
@@ -1259,10 +1244,10 @@ impl Editor {
 
     /// Whether an inline candidate is standing on the page.
     ///
-    /// Only the candidate. It used to be "anything the file does not contain",
-    /// which stopped being a useful question the day the padding that squares
-    /// a table up became drawn too (#212): that padding is **derived**, it is
-    /// on nearly every page of documentation, and no caller ever meant it.
+    /// Only the candidate, not "anything the file does not contain": the
+    /// padding that squares a table up is drawn too (#212), and that padding
+    /// is **derived**, it is on nearly every page of documentation, and no
+    /// caller ever means it.
     pub fn has_candidate(&self) -> bool {
         !self.candidate.is_empty()
     }
@@ -1285,14 +1270,14 @@ impl Editor {
         if dialects.is_empty() {
             return Vec::new();
         }
-        // **太長的一行連注音也不排**（`:view-long-line`，2026-10-09）。
+        // **太長的一行連注音也不排**（`:view-long-line`）。
         //
         // Warning: **這道閘只能擺在這裏。** 注音這一件事有兩頭——標籤由
         // [`Self::hidden_on_line`] 藏起來，讀音由橫排那一行疊在上面畫——而兩頭問的
-        // 都是這一支。從前閘擺在 `hidden_on_line` 裏，於是長行上標籤露着、讀音照樣
+        // 都是這一支。閘擺在 `hidden_on_line` 裏的話，長行上標籤露着、讀音照樣
         // 畫在它上面：`長段<ruby>甲<rt>jiǎ</rt></ruby>開頭` 的源碼上頭浮着一個錯開
-        // 六格的 `jiǎ`。[`Self::footnote_spans`] 那一段說過這條規矩（「兩邊要是各算
-        // 各的，就會出現『藏了没畫』或者『畫了没藏』」），注音漏在外頭了。
+        // 六格的 `jiǎ`。[`Self::footnote_spans`] 那一段說的是同一條規矩（「兩邊要是
+        // 各算各的，就會出現『藏了没畫』或者『畫了没藏』」）。
         if self.line_is_too_long(line) {
             return Vec::new();
         }
@@ -1352,10 +1337,8 @@ impl Editor {
     /// and every construct between the two ends has to be shown or the
     /// highlight would cover fewer characters than `d` takes.
     pub(super) fn selected_columns(&self, line: usize) -> Option<(usize, usize)> {
-        // **一份算出來的報告裏沒有「光標站上去就露出來」這回事**（2026-10-16
-        // 定，原話：「should not expand to show raw markup when the cursor it
-        // on the markup. It just be a rendered, readonly, fixed, clean buffer
-        // ……Anything beyond this would become noise.」）。
+        // **一份算出來的報告裏沒有「光標站上去就露出來」這回事**：它是畫好的、
+        // 唯讀的、固定的、乾淨的一份，多出來的都是噪音。
         //
         // 露出來是為了**改得了**：`**` 是稿子自己的字，光標要站進去纔編輯得到
         // 它。報告改不了（`is_readonly`），而它那幾個記號是這一支自己一分鐘前
@@ -1422,9 +1405,9 @@ impl Editor {
         *self.block_cache.borrow_mut() = None;
     }
 
-    /// **A scratch is guessed again as it is written** (2026-11-06): it
-    /// opened empty, so the guess made then had nothing to go on, and a
-    /// scratch of Typst kept being drawn as Markdown. Asked whenever the text
+    /// **A scratch is guessed again as it is written**: it opens empty, so
+    /// the guess made then has nothing to go on, and a scratch of Typst would
+    /// stay drawn as Markdown. Asked whenever the text
     /// changed outside Insert mode — on `Esc`, not between two letters of a
     /// word — until `:syntax` or a name settles it. The project's word, when
     /// it has one for a nameless buffer, is not second-guessed.
@@ -1434,8 +1417,7 @@ impl Editor {
         }
         let name = self.current_buffer().display_name();
         // The project's word for a nameless buffer is taken, not guessed
-        // over: a `:new` made after start-up never had it applied
-        // (review, 2026-11-06).
+        // over: a `:new` made after start-up has it applied only here.
         if let Some(said) = self.configured_syntax(&name) {
             if self.current_buffer().sniffs_as_typed() && self.current_buffer().syntax() != said {
                 self.current_buffer_mut().set_syntax(said);
@@ -1493,14 +1475,14 @@ impl Editor {
     ) -> Vec<crate::markdown::Span> {
         match block {
             // A line of a Typst code body is Typst, read from the brackets it
-            // begins inside (2026-11-08); a raw block is a listing.
+            // begins inside; a raw block is a listing.
             crate::markdown::Block::Code { .. } if self.typst_frames(line).is_some() => self.markup_line(line),
             // Not markup either — the code's own grammar, in colour (#420).
             crate::markdown::Block::Code { .. } => self.code_line(line),
             // Inside a note that opened lines above (#288): the note up to its
             // closer, and the line's own runs after it.
             crate::markdown::Block::Comment { close } => self.note_line(line, close),
-            // A line of display maths over several lines (2026-11-06).
+            // A line of display maths over several lines.
             crate::markdown::Block::Math { first, last } => {
                 let text = self.current_buffer().rope().line(line).to_string();
                 let typst = self.current_buffer().syntax() == crate::syntax::Syntax::Typst;
@@ -1579,7 +1561,7 @@ impl Editor {
         if line >= rope.len_lines() {
             return Vec::new();
         }
-        // **太長的一行一個記號都不算**（`:view-long-line`，2026-10-08）。
+        // **太長的一行一個記號都不算**（`:view-long-line`）。
         //
         // 這一句摔在最前面是有意的：下面兩條路都按**整行**算——散文那一條把一整行
         // 物化成 `String` 再走 `markdown::spans()`，代碼那一條的 `hold_the_tree` 要把
@@ -1596,9 +1578,9 @@ impl Editor {
             return self.code_file_line(line, language);
         }
         // **Which version of the document, not what it says.** Reading the
-        // paragraph to find out whether it had changed made the cache cost more
-        // than it saved: a chapter written as one 500,000-character paragraph
-        // was hashed once per 縱 of every frame. A revision moves on every
+        // paragraph to find out whether it had changed would make the cache
+        // cost more than it saves: a chapter written as one 500,000-character
+        // paragraph would be hashed once per 縱 of every frame. A revision moves on every
         // edit, so an edit anywhere costs the visible lines one pass — which is
         // what they would have cost anyway.
         //
@@ -1628,7 +1610,7 @@ impl Editor {
             })
     }
 
-    /// **代碼檔的大綱：它自己的函數和類**（2026-10-11）。
+    /// **代碼檔的大綱：它自己的函數和類**。
     ///
     /// 名字取那一段的**首行**，照它原樣寫着的樣子——不另解析一次簽名。讀者在大綱
     /// 上找的是「那一行長什麼樣」，而簽名本來就寫在第一行；真要漂亮得再問一次語法
@@ -1665,9 +1647,9 @@ impl Editor {
     /// manuscript is a line that starts with hashes, and that is the whole
     /// rule. A 縱書 draft in Typst uses `=` the same way, so both are read.
     pub fn outline(&self) -> Vec<(usize, usize, String)> {
-        // **代碼檔列的是它自己的符號**（2026-10-11）。helix 的 `空格 s` 在代碼上
-        // 是 `lsp_or_syntax_symbol_picker`，而這一格從前對代碼一律是空的——按下去
-        // 開一扇什麼都没有的面板。tree-sitter 那一半這裏本來就有（`mi f`/`mi t`
+        // **代碼檔列的是它自己的符號**。helix 的 `空格 s` 在代碼上是
+        // `lsp_or_syntax_symbol_picker`；這一格對代碼交空的話，按下去開的是
+        // 一扇什麼都没有的面板。tree-sitter 那一半這裏本來就有（`mi f`/`mi t`
         // 用的是同一支 `definitions_here`），所以先走它；LSP 的
         // `textDocument/documentSymbol` 還没接，接上之後它優先、這一支當退路。
         if matches!(self.current_buffer().syntax(), crate::syntax::Syntax::Code(_)) {
@@ -1708,9 +1690,9 @@ impl Editor {
             ) {
                 continue;
             }
-            // **`第一章` ＋ 一行 `====` 也是標題**（setext，2026-10-03）。CommonMark
-            // 認它，而從前這裏只找行首的 `#`——於是用下劃線寫章名的稿子，大綱
-            // 是空的，`空格 o` 和 `:toc` 一章都跳不到。
+            // **`第一章` ＋ 一行 `====` 也是標題**（setext）。CommonMark 認它；
+            // 只找行首的 `#` 的話，用下劃線寫章名的稿子大綱是空的，`空格 o` 和
+            // `:toc` 一章都跳不到。
             //
             // Warning: **上一行必須是 `Prose`**，這一句就是 CommonMark 那條「上面要是
             // 一個段落」。它一次擋掉四種假陽性：卷首 `---` 元數據（那幾行是
@@ -1735,9 +1717,8 @@ impl Editor {
                     }
                 }
             }
-            // Warning: **判準走 `heading_marks`，三處同一份**（2026-09-28）。底下那一大段
-            // 說明搬進了那一支。這裏跟着多了一條：**七個井號不是標題**，CommonMark
-            // 封頂六級，而從前這裏不封頂。
+            // Warning: **判準走 `heading_marks`，三處同一份**，說明寫在那一支上。
+            // **七個井號不是標題**：CommonMark 封頂六級。
             let Some(depth) = crate::markdown::heading_marks(trimmed, want) else {
                 continue;
             };
@@ -1953,7 +1934,7 @@ pub(super) struct ScanState {
     typst: crate::markdown::typst::BlockScanner,
 }
 
-/// **What the last block scan of a Typst file read** (2026-11-09), kept for
+/// **What the last block scan of a Typst file read**, kept for
 /// the next one to start from where the text changed.
 pub(super) struct TypstScan {
     buffer: u64,
@@ -2069,8 +2050,8 @@ fn scan_typst_line(
     scan.facts.push(facts);
     // **A note that runs over lines** (#288): the scanner is not shown its
     // lines — a ``` inside a note must not open a fence. Typst's notes nest,
-    // so it closes at the `*/` that matches its first `/*` (review,
-    // 2026-11-09): `/* 舊註 */` inside a note that was opened a line above
+    // so it closes at the `*/` that matches its first `/*`: `/* 舊註 */`
+    // inside a note that was opened a line above
     // closes only itself.
     if state.depth > 0 {
         let whole = text.to_string();

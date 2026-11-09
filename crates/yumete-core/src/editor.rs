@@ -43,9 +43,8 @@ const DEFAULT_INDENT: usize = 2;
 /// one level up, because two panes can hold one buffer and a buffer has room
 /// for one place.
 ///
-/// Warning: **這一句從前寫的是「The editor has one cursor」**，而 2026-09-28 起不再是那樣了
-/// （#405，`crate::selection::Selections`）。它要說的其實一直是**分屏**那件事——有幾個
-/// 選區和有幾個工作區是兩回事，一個分屏仍舊只有一組選區。
+/// Warning: 這裏說的是**分屏**那件事，不是選區：有幾個選區（#405，
+/// `crate::selection::Selections`）和有幾個工作區是兩回事，一個分屏仍舊只有一組選區。
 #[derive(Debug, Clone)]
 pub struct Pane {
     /// The buffer's **id**, never its index: closing a file shifts every
@@ -75,7 +74,7 @@ pub struct Pane {
     half_page: Option<(usize, usize)>,
 }
 
-/// **One place in a jump list** (2026-11-02).
+/// **One place in a jump list**.
 ///
 /// By the buffer's **id**, not its index: closing a buffer shifts every later
 /// one down, and a list that kept indices would walk into another chapter.
@@ -105,8 +104,8 @@ impl Pane {
 /// The renderer asks the editor forty questions a frame — what is on line 12,
 /// what is hidden there, where the caret is — and every one of them answers
 /// about the **current** buffer. The other half of a split is a different
-/// buffer, so all forty came back about the wrong file while the divider above
-/// them printed the right file's name.
+/// buffer, so without this all forty would answer about the wrong file while
+/// the divider above them printed the right file's name.
 #[derive(Debug, Clone, Copy)]
 struct Viewing {
     /// Into `buffers`, resolved once at the door: the pane keeps an id, and
@@ -129,7 +128,7 @@ struct Viewing {
 /// one while the override is open: 「reading only」 is not a rule anybody has
 /// to remember here, it is the only program that compiles.
 #[must_use = "the override lasts as long as this guard"]
-/// How the gutter numbers lines (`:line-numbers`, 2026-10-31). The config
+/// How the gutter numbers lines (`:line-numbers`). The config
 /// sets the baseline; the command chooses for the session.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum LineNumbers {
@@ -203,7 +202,7 @@ pub type Gloss = (String, String);
 ///
 /// 兩件事，不是一件：畫哪幾欄，以及**拆分表裏到底有沒有這個字**。符號有碼位而
 /// 沒有拆法，漢字在碼表沒載的時候也是——兩種的欄目長得一樣，而底下要說的那一句
-/// 不一樣（2026-10-13）。
+/// 不一樣。
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Found {
     /// 要畫的那幾欄，照畫的次序。**不會是空的**：每個字都有碼位。
@@ -250,9 +249,9 @@ enum Pending {
     /// `"` awaiting the letter naming a register.
     Register,
     /// vim's `q` and `@`, waiting for the letter of the register the macro
-    /// is recorded into or played from (2026-11-01; named 2026-11-03).
+    /// is recorded into or played from.
     MacroRegister { record: bool, count: usize },
-    /// **`C-g` 剛按下，撤銷已經斷了**——等着把跟在後面那個 `u` 吞掉（2026-09-23）。
+    /// **`C-g` 剛按下，撤銷已經斷了**——等着把跟在後面那個 `u` 吞掉。
     ///
     /// vim 的正統拼法是 `C-g u`（`:h i_CTRL-G_u`，字面意思「斷開 undo 序列」），
     /// 而這裏 `C-g` 底下没有第二件事，那個 `u` 是純儀式。**兩種都收**：斷在
@@ -262,17 +261,17 @@ enum Pending {
     /// Warning: **helix 那個拼法抄不了**：它用 `C-s`，而終端裏 `C-s` 是 XOFF，按下去
     /// 屏幕會凍住（除非 `stty -ixon`）。
     UndoBreak,
-    /// **`空格 t x` — 轉換表格格式**，等着那一個格式名（2026-10-02 定）。
+    /// **`空格 t x` — 轉換表格格式**，等着那一個格式名。
     ///
     /// 命令是 `:convert-table`；這一組是它的鍵位，`p` pipe、`c` csv、`t` tsv。
     TableConvert,
-    /// **`C-w n`: a blank window**, waiting for where (2026-10-31, helix's
-    /// `n` group): `s` below, `v` beside.
+    /// **`C-w n`: a blank window**, waiting for where (helix's `n` group):
+    /// `s` below, `v` beside.
     RegionNew,
     /// An `m` match sequence awaiting its verb (`m`, `i`, `a`, `s`, `d`, `r`).
     Match,
     /// **A vim operator waiting for its motion** — `d`, `c`, `y` under the vim
-    /// preset (#429, 2026-09-18).
+    /// preset (#429).
     ///
     /// `op` is the letter that was pressed; `first` is the key that arrived
     /// after it, when one has — the start of a two-key motion (`g` before
@@ -297,12 +296,11 @@ enum Pending {
     SurroundTo(char),
     /// `t` in a table, awaiting the structural edit it opens.
     Table,
-    /// **`空格 o` — 開上次的那一組**，等着它底下那個字母（2026-10-18 作者定）。
+    /// **`空格 o` — 開上次的那一組**，等着它底下那個字母。
     Open,
-    /// **`空格 z` — 輸入法那一組**，等着它底下那個字母（2026-10-17 作者定）。
+    /// **`空格 z` — 輸入法那一組**，等着它底下那個字母。
     ///
-    /// 原話：「In Yume, we have many shortcuts too with (shift + control + a
-    /// letter). I want them to be aligned as much as possible.」所以這一層的
+    /// Yume 那邊的快捷鍵是 ⌃⇧ 加一個字母，兩邊儘量對齊，所以這一層的
     /// 字母**抄 Yume 的 ⌃⇧ 那一張表**：`m` 上屏方式（⌃⇧M）、`y` 輸入預測
     /// （⌃⇧Y）、`i` 選方案（⌃⇧I）、`n` 下一個方案（⌃⇧N）、`/` 注解（⌃⇧/）、
     /// `3`–`9` 一頁幾條（⌃⇧3–9）。Yume 沒有的那幾樣另取，而 Yume 有、yumete
@@ -319,22 +317,21 @@ enum Pending {
     /// walks between things a document *has* on the brackets, and #249's
     /// `]c` is the first of them here.
     Hop { forward: bool },
-    /// **`z` 那一層在等哪一行**（`zz`/`zt`/`zb`，2026-09-28）。
+    /// **`z` 那一層在等哪一行**（`zz`/`zt`/`zb`）。
     Aim,
     /// `Z` — the same layer, and it stays open until `Esc` (helix's sticky view
-    /// mode). 2026-10-06.
+    /// mode).
     AimStuck,
     /// `空格 m` — what to keep of the merge conflict under the cursor.
     Conflict,
-    /// **`C-w`/`空格 w` 之後那一層：區域**（2026-09-30 定，照 helix 的
+    /// **`C-w`/`空格 w` 之後那一層：區域**（照 helix 的
     /// `keymap/default.rs:193` 與 `:260`——那兩處是同一組，兩扇門）。
     ///
-    /// 原話：「space+w is the parent command for 『region』 operations (helix
-    /// uses 『window』)。」Warning: **一組要有好幾個成員纔值一個前綴**：走到哪一
-    /// 區、開關哪一欄、切一刀、關掉、只留這一個。從前它們散在 `空格 1234`、
-    /// `空格 !@#$`、`空格 w/W/q/Q` 三套詞彙裏。
+    /// `空格 w` 是「區域」那一類操作的前綴（helix 叫「window」）。Warning:
+    /// **一組要有好幾個成員纔值一個前綴**：走到哪一區、開關哪一欄、切一刀、
+    /// 關掉、只留這一個。
     Region,
-    /// **A group of the reader's own** (2026-11-05): a table in the config
+    /// **A group of the reader's own**: a table in the config
     /// under a key that opens no built-in group, by its node in the key tree
     /// in force (`keymap.rs`).
     Node(u16),
@@ -343,9 +340,9 @@ enum Pending {
     /// Unlike every other pending here this one is not opened by a key: the
     /// command opens it and it stays open across many keys, one per match.
     Confirm,
-    /// **`:3-1s` 的範圍是反的**，問一句再改（2026-10-09 作者定）。
+    /// **`:3-1s` 的範圍是反的**，問一句再改，不默默對調成 1–3。
     ///
-    /// 從前它默默對調成 1–3 就改了。vim 問「Backwards range given, OK to swap
+    /// vim 問「Backwards range given, OK to swap
     /// (y/n)?」——而「我寫反了」和「我故意寫反」在屏幕上長得一樣，所以它問。
     SwapRange,
     /// `` ` `` — 「不改它說什麼，只改它長什麼樣」 (§5.2.3 ②).
@@ -353,7 +350,7 @@ enum Pending {
     /// Helix spends three top-level keys here (`` ` `` 小寫, `` A-` `` 大寫,
     /// `~` 互換) on an operation that is the **identity on 漢字** — only
     /// full-width Ａ↔ａ actually maps. By the level law they can wait for a
-    /// second key, so they became a group and the three keys are unbound.
+    /// second key, so they are a group and the three keys stay unbound.
     Case,
 }
 
@@ -367,8 +364,8 @@ impl Pending {
     /// **what is in the manuscript**, and in this editor the manuscript is
     /// Chinese: 「，」, 「」, 【】. None of those can be typed on a keyboard
     /// with the input method held off, which is what Normal mode does — so
-    /// until this question existed, `f，`, `ms「` and `mi《` were spellings
-    /// nobody could reach. `r` had the one exception, hand-written.
+    /// without this question `f，`, `ms「` and `mi《` would be spellings
+    /// nobody could reach.
     ///
     /// Asked once here rather than listed at each gate: the preedit, the
     /// candidate panel and the lone-Shift tap all light up from this one
@@ -413,12 +410,10 @@ impl Pending {
             // **A vim operator is waiting for a *motion*, which is keys** — the
             // character `f` asks for is read by the motion itself.
             //
-            // Warning: **`di`/`da` 之後也不開輸入法**（2026-09-29 撤回，前一天加的）。
-            // 加它的理由是「`di（` 要的是一個全角括號，而 Normal 模式下打不出來」，
-            // 而**它等的那一個鍵多半根本不是要寫進去的字**：`diw` 的 `w` 是「詞」，
-            // `dip` 的 `p` 是「段」，`dis` 的 `s` 是「句」。開着輸入法的時候 `diw`
-            // 把 `w` 當成碼，往稿子裏上屏了一個「中」；關着輸入法的 `--shot` 裏那
-            // 一鍵被吃掉，`diw` 和 `di(` 都變成什麽也不發生。
+            // Warning: **`di`/`da` 之後也不開輸入法**：**它等的那一個鍵多半根本不是
+            // 要寫進去的字**：`diw` 的 `w` 是「詞」，`dip` 的 `p` 是「段」，`dis` 的
+            // `s` 是「句」。開着輸入法的話，`diw` 會把 `w` 當成碼，往稿子裏上屏一個
+            // 「中」。
             //
             // 全角括號不靠這一條：`pair_family`（§5.15 三）讓 `di(` 自己就認得
             // （）〔〕「」，ASCII 一個鍵到底。
@@ -428,15 +423,14 @@ impl Pending {
 
     /// **要不要為這一格請輸入法來** —— 前端問的是這一支（`composes_here`）。
     ///
-    /// Warning: **和 [`Self::takes_a_character`] 有意不同，差的就是 `mi`/`ma`**
-    /// （2026-10-04 定）。那兩個照樣**吃**一個字符鍵，可它等的是**物件的名字**，
-    /// 不是要寫進稿子的字：`mik` 的 `k` 是「標記」（2026-10-27 前是 `mim`）、`mis` 的 `s` 是「句」、
-    /// `mip` 的 `p` 是「段」。開着輸入法，那一鍵被當成碼吃掉——原話：「我打
-    /// `mam`，最后一個 m 會變成輸入法候選框」。
+    /// Warning: **和 [`Self::takes_a_character`] 有意不同，差的就是 `mi`/`ma`**。
+    /// 那兩個照樣**吃**一個字符鍵，可它等的是**物件的名字**，
+    /// 不是要寫進稿子的字：`mik` 的 `k` 是「標記」、`mis` 的 `s` 是「句」、
+    /// `mip` 的 `p` 是「段」。開着輸入法，那一鍵會被當成碼吃掉——`mam` 最後
+    /// 那個 `m` 會變成輸入法的候選框。
     ///
-    /// 這和底下 `VimOperator` 那一條是**同一個理由**，而那一條 2026-09-29 就定了
-    /// （`di`/`da`）；`mi`/`ma`（以及 vim 可視模式的 `vi`/`va`，同一個
-    /// `Pending`）當時被落下了。
+    /// 這和底下 `VimOperator` 那一條（`di`/`da`）是**同一個理由**；vim 可視
+    /// 模式的 `vi`/`va` 走的是同一個 `Pending`，一併算在這裏。
     ///
     /// 全角那一族不靠輸入法：`pair_family` 讓 `ma(` 認得（）〔〕、`ma[` 認得
     /// 「」，ASCII 一個鍵到底（量過）。
@@ -451,10 +445,10 @@ impl Pending {
 
 /// Which way an in-line character search runs.
 ///
-/// **Two, not four** — `t`/`T` (till) were retired when `t` became the table
-/// group (§14, 2026-09-04), and the `…To` in the old names was the till half
-/// saying so. 「走到下一個某字母的前面」 has nothing to land on in a Chinese
-/// manuscript; `f`/`F` stayed because 「走到下一個某字母」 still does.
+/// `f`/`F` land on the character, `t`/`T` stop one short of it (till).
+/// 「走到下一個某字母的前面」 rarely has anything to land on in a Chinese
+/// manuscript, while 「走到下一個某字母」 does — which is why the default keys
+/// can give `t` to the table group (§14).
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum FindKind {
     Forward,
@@ -496,8 +490,8 @@ impl FindKind {
 /// 7 KB, which is a morning's writing; +256 KB alone fires on a long book
 /// gaining a chapter. Together they describe the accident this exists for —
 /// an alignment, a paste, a generated block — where the file *multiplies* and
-/// the amount is more than a person types in a day. 2026-09-08 measured the
-/// case that prompted it: 425,694 bytes to 2,945,642, on one keystroke.
+/// the amount is more than a person types in a day: 425,694 bytes to
+/// 2,945,642, say, on one keystroke.
 const OVERSIZE_JUMP: u64 = 256 * 1024;
 
 /// How many rows a listing holds. Everything is counted; this many are shown.
@@ -590,8 +584,8 @@ fn typst_headings(text: &str) -> Vec<(usize, usize, String)> {
         .enumerate()
         .filter_map(|(line, raw)| {
             let raw = raw.trim_end_matches(['\n', '\r']);
-            // Warning: **判準走 `heading_marks`，和着色那一支、大綱那一支同一份**
-            // （2026-09-28）。從前這裏既不要求 `=` 後面有空白也不封頂六級，於是同一行
+            // Warning: **判準走 `heading_marks`，和着色那一支、大綱那一支同一份**。
+            // 另寫一份的話，`=` 後面要不要空白、封不封頂六級稍有出入，同一行就會
             // 在正文裏不畫成標題、卻出現在這張清單上。
             let level = crate::markdown::heading_marks(raw, '=')?;
             let title = raw.trim_start_matches('=').trim();
@@ -610,7 +604,7 @@ enum CellEdit {
     /// Take the whole thing out and start again, **the old text going into the
     /// register** — prose's `c`.
     Replace,
-    /// The same, **leaving the register alone** — prose's `A-c` (2026-10-08).
+    /// The same, **leaving the register alone** — prose's `A-c`.
     ReplaceKeeping,
 }
 
@@ -639,8 +633,8 @@ pub struct Detail {
     ///
     /// **`None` is not the same as `Some("")`**: an empty field is a finding in
     /// a 拆分表, and a field this row does not have at all is a *different*
-    /// finding — the row is short, and the panel that drew both as a blank was
-    /// the one place a person fixing cells by eye could not tell them apart.
+    /// finding — the row is short, and a panel that drew both as a blank would
+    /// leave a person fixing cells by eye unable to tell them apart.
     pub rows: Vec<(String, Option<String>)>,
     /// The rows this cell points at, and whether each one exists.
     pub links: Vec<(char, Option<usize>)>,
@@ -722,30 +716,28 @@ pub struct Shell {
     pub how: How,
 }
 
-/// **一趟正在背景跑的搜索**（§5.93，2026-10-06）。
+/// **一趟正在背景跑的搜索**（§5.93）。
 ///
-/// 從前搜索跑在按鍵那一下上，編輯器整個停住，所以加了一道「最多找三到五秒就收
-/// 手」的閘——10-06 撞上的正是它：命令行找到四處，進編輯器只剩一兩處。
-/// 挪到旁邊跑之後那道閘不需要了。
+/// 搜索跑在旁邊，按鍵那一下不等它，所以不設「最多找幾秒就收手」的閘——那道閘
+/// 會讓編輯器裏找到的比命令行少。
 pub(crate) struct Searching {
     /// 哪一趟。收的時候對一下號，對不上就是上一趟的殘響。
     pub generation: u64,
     pub heard: std::sync::mpsc::Receiver<(u64, crate::editor::find::Found)>,
     /// 撥上去那一趟就收攤：改查詢、關面板、再搜一次，都撥它。
     pub stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
-    /// **這一趟什麼時候開跑的**——面板那個轉圈照它算第幾格（2026-10-08）。
+    /// **這一趟什麼時候開跑的**——面板那個轉圈照它算第幾格。
     ///
     /// 轉圈那一支不存狀態，只問「從什麼時候開始忙」（`spinner::frame`），所以這
     /// 裏只要記一個時刻；誰都不必數格子，也不會有兩處轉得不同步。
     pub since: std::time::Instant,
 }
 
-/// **一趟正在背景跑的走查，喂着挑選器**（2026-10-09 作者定：「流式化，和 helix 一樣
-/// 不設上限」）。
+/// **一趟正在背景跑的走查，喂着挑選器**：流式化，和 helix 一樣不設上限。
 ///
-/// 從前走查跑在按鍵那一下上，所以要兩道閘護着畫面：兩萬個檔封頂、五秒硬停。代價有
-/// 兩個——大目錄裏開一次 `空格 f` 凍最多五秒（中間一幀都不說它在幹什麼），而第兩萬
-/// 個之後的檔**打出全名也搜不到**（名單一次建好再打分，不在名單上的就不存在）。
+/// 走查要是跑在按鍵那一下上，就得兩道閘護着畫面（檔數封頂、時限硬停），代價有
+/// 兩個——大目錄裏開一次 `空格 f` 要凍住好幾秒（中間一幀都不說它在幹什麼），而
+/// 封頂之後的檔**打出全名也搜不到**（名單一次建好再打分，不在名單上的就不存在）。
 /// helix 把走查的每一條路徑流着喂給 `nucleo`，所以它連上限都不需要。
 ///
 /// 這一支和 [`Searching`] 同形，照它寫的：旁邊一條線程、每幀收一批、一格 `stop`。
@@ -768,9 +760,9 @@ impl Drop for Filling {
     }
 }
 
-/// **一次跨檔替換動過的一份緩衝**，記得住它當時的樣子（2026-10-09 定）。
+/// **一次跨檔替換動過的一份緩衝**，記得住它當時的樣子。
 ///
-/// 從前這裏只記一個號。號夠用來「逐份撤回」，不夠用來回答兩個問題：**這一份後來
+/// 只記一個號夠用來「逐份撤回」，不夠用來回答兩個問題：**這一份後來
 /// 有没有又被改過**（`depth`），和**按鈕上該寫哪個名字**（`name`）。少了第一個，
 /// `R` 之後手打幾個字再按 `u`，撤掉的是那幾個字而屏幕上寫着「撤回了剛纔那次替換」。
 pub(crate) struct Undone {
@@ -781,13 +773,12 @@ pub(crate) struct Undone {
     pub name: String,
     /// **這一份換掉了幾處**。
     ///
-    /// Warning: **不能問 `replace_tally`**（2026-10-09 查出來的）：那一格在報完「共替換
-    /// N 處」的時候就被 `mem::take` 拿走了，於是撤回那扇窗上寫着「涉及 2 個文件
-    /// **0** 處」。一批做完就没了的數，不能在它死後再問一次。
+    /// Warning: **不能問 `replace_tally`**：那一格在報完「共替換 N 處」的時候就被
+    /// `mem::take` 拿走了，再問會讓撤回那扇窗寫成「涉及 2 個文件 **0** 處」。一批做完就没了的數，不能在它死後再問一次。
     pub hits: usize,
 }
 
-/// **Where a shell command's output goes** (2026-10-06, helix's four).
+/// **Where a shell command's output goes** (helix's four).
 ///
 /// helix spells them `|`, `A-|`, `!`, `A-!` and calls them `Replace`,
 /// `Ignore`, `Insert`, `Append` (`ShellBehavior`). Warning: **Only two of the four
@@ -855,13 +846,11 @@ pub enum Preview {
         syntax: crate::syntax::Syntax,
     },
     /// A typesetter is already running: open its page again rather than start a
-    /// second one. `:preview` twice used to kill the server and start another,
-    /// which is a fresh compile of the whole book to answer 「where was that
-    /// page again?」.
+    /// second one. Starting another would kill the server and compile the
+    /// whole book afresh to answer 「where was that page again?」.
     Show,
     Stop,
-    /// **The page beside the text** (`:preview`, `:preview-window`,
-    /// 2026-11-07): a window drawn by tinymist, opened by the front end, which
+    /// **The page beside the text** (`:preview`, `:preview-window`): a window drawn by tinymist, opened by the front end, which
     /// knows whether this terminal draws pictures and how old the tinymist is.
     /// With `fallback`, a window that cannot be drawn becomes the browser's
     /// preview ([`Preview::Start`]) instead.
@@ -888,9 +877,9 @@ pub enum Render {
     /// writer typed, and never a character fewer. That is the law the other
     /// three dimensions are held to at this level as well.
     ///
-    /// It was called `On` until #283, and `:render` with no argument used to
-    /// mean it. It reports now: there are three levels, so the bare word is
-    /// better spent saying which one you are on.
+    /// `:render` with no argument reports rather than sets (#283): there are
+    /// three levels, so the bare word is better spent saying which one you
+    /// are on.
     #[default]
     Basic,
     /// The markers come off the page — except the ones the cursor is inside,
@@ -906,8 +895,7 @@ pub enum Render {
 /// nothing about whether the count in front of `d` should be visible. So
 /// `:render` never writes it, and `render.is` keeps its four fields.
 ///
-/// The three names are the shared ones. The factory level is `Full`
-/// (2026-09-08): a mark that has to be looked for is not a mark, and the
+/// The three names are the shared ones. The factory level is `Full`: a mark that has to be looked for is not a mark, and the
 /// characters it covers come back with one move of the caret. `Basic` is
 /// §5.7's answer — identical to `Off` in the worst case — and stays one word
 /// away for anyone who would rather not have prose covered.
@@ -980,8 +968,8 @@ const JUMPS: usize = 100;
 #[derive(Debug, Clone)]
 struct MdCache {
     /// Which buffer (by id), which revision of it, which line the cursor was
-    /// on — and which **kind** of region was asked for, because since #216
-    /// two of them are walked and one cache answers both.
+    /// on — and which **kind** of region was asked for, because two of them
+    /// are walked (#216) and one cache answers both.
     asked: (u64, u64, usize, Bounds),
     region: Option<crate::mdtable::Region>,
 }
@@ -992,8 +980,8 @@ impl MdCache {
     ///
     /// A region is a run of rows, and every line in that run walks out to the
     /// same two ends. Keyed by the line alone, `j` down a 10,000-row table
-    /// missed on every step and re-walked the whole table to find the ends it
-    /// had just found: 25.8 ms a keystroke, which at 30 a second is 78% of a
+    /// would miss on every step and re-walk the whole table to find the ends
+    /// it had just found: 25.8 ms a keystroke, which at 30 a second is 78% of a
     /// core to hold a key down. A `None` is never reused — it says nothing
     /// about any line but the one asked.
     fn answers(&self, asked: &(u64, u64, usize, Bounds)) -> bool {
@@ -1034,27 +1022,26 @@ struct PadKey {
     /// so what comes off a row — and therefore how wide its cells draw —
     /// moves with the caret. Under `:render basic` it does not: nothing in
     /// [`Editor::hidden_on_line`] asks where the caret is unless
-    /// [`Editor::wysiwyg`] is true, which is the whole of the question now
-    /// that prose folds nothing.
+    /// [`Editor::wysiwyg`] is true, which is the whole of the question, since
+    /// prose folds nothing.
     ///
-    /// Carrying it unconditionally threw the whole table's padding away on
-    /// every `j`, and a padding is a walk down every row of the table: one
-    /// flick of a trackpad over the 223-row table in this project's own
-    /// `development.md` took 8.3 s. Asking only when the answer depends on
-    /// it: 41 ms.
+    /// Carrying it unconditionally would throw the whole table's padding away
+    /// on every `j`, and a padding is a walk down every row of the table: one
+    /// flick of a trackpad over a 223-row table takes 8.3 s that way, and
+    /// 41 ms asking only when the answer depends on it.
     caret: Option<(usize, usize)>,
     render: Render,
     ruby: Dialects,
     /// What comes off the page depends on how the file is being read, and
-    /// `:syntax` changes that without touching a byte of it — so a table drawn
-    /// with the backticks hidden stayed drawn that way after `:syntax text`
-    /// put them back, one cell ragged per hidden character.
+    /// `:syntax` changes that without touching a byte of it — without this, a
+    /// table drawn with the backticks hidden would stay drawn that way after
+    /// `:syntax text` put them back, one cell ragged per hidden character.
     syntax: crate::syntax::Syntax,
     /// **Which punctuation this table is told apart by** (#378). `:table csv`
     /// and its kin change the separator without touching a byte of the file,
     /// and a table squared up on commas is not squared up on tabs.
     wall: crate::mdtable::Wall,
-    /// **Cells or 縱 slots** (2026-09-19). `:layout` changes the unit the
+    /// **Cells or 縱 slots**. `:layout` changes the unit the
     /// padding is counted in without touching a byte of the file, and a table
     /// squared up in cells is ragged when it is stood on end.
     measure: crate::mdtable::Measure,
@@ -1084,7 +1071,7 @@ impl PadKey {
 /// The padding itself is one walk down every row, and it is thrown away on
 /// every edit because a revision is a revision. But an edit is one row: the
 /// other 4,999 rows of a long table are the same text being asked the same
-/// question, and re-deriving their answers cost 40 ms of every keystroke
+/// question, and re-deriving their answers costs 40 ms of every keystroke
 /// (#316). So the inputs are kept beside the output, and a rebuild copies
 /// forward every row whose text — and whose place under the caret — has not
 /// moved.
@@ -1121,9 +1108,9 @@ pub struct TableView {
     ///
     /// **Orthogonal to the level**, which is why `t q` needs nothing written
     /// down to find its way back: it puts this to `false` and whatever
-    /// [`Editor::table_level`] was before the takeover is still there. The
-    /// field this replaced remembered the way back by hand, and had to be
-    /// cleared correctly at every exit or `t q` walked you into prose.
+    /// [`Editor::table_level`] was before the takeover is still there.
+    /// Remembering the way back by hand would need clearing correctly at
+    /// every exit, or `t q` would walk you into prose.
     ///
     /// [`Editor::table_level`]: crate::editor::Editor::table_level
     pub pane: bool,
@@ -1132,18 +1119,18 @@ pub struct TableView {
     /// How far the mode reaches — this table, or every table in the file.
     pub reach: Reach,
     /// **Where every record of this file starts**, when any of them runs over
-    /// more than one line (2026-10-20 作者報的).
+    /// more than one line.
     ///
     /// `None` for every table anybody has written so far, and that is the
     /// cheap path: with no quoted line break in the file the *n*th record is
     /// the *n*th line, so nothing has to be counted or looked up.
     ///
-    /// Warning: **Boundaries can only be found forwards.** The first version asked
-    /// 「does the line before this one run on?」 and walked back — and
-    /// `field_runs_on` scans one line, so a file with several lines each
-    /// carrying an unpaired `"` has every one of them looking unclosed. From
-    /// row 40 the walk went back to row 7, which drew row 7's text in row 40
-    /// and made `k` jump 7 → 1. Scanned from the top there is no such
+    /// Warning: **Boundaries can only be found forwards.** Asking 「does the
+    /// line before this one run on?」 and walking back fails: `field_runs_on`
+    /// scans one line, so a file with several lines each carrying an unpaired
+    /// `"` has every one of them looking unclosed, and a walk back from row 40
+    /// can end at row 7, drawing row 7's text in row 40 and making `k` jump
+    /// 7 → 1. Scanned from the top there is no such
     /// ambiguity: a record ends where its quotes balance, and the next one
     /// starts on the next line.
     ///
@@ -1153,10 +1140,9 @@ pub struct TableView {
 
 /// What splits one cell of a row from the next (#261).
 ///
-/// **The splitter, and nothing else.** It used to be half of `Shape`, whose
-/// other half was which renderer draws the thing — so every one of the twenty
-/// tests against it had to be reread to find out which of the two questions it
-/// was really asking.
+/// **The splitter, and nothing else.** Which renderer draws the thing is a
+/// separate question, and a type that answered both would leave every test
+/// against it unclear about which of the two questions it was asking.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Separator {
     /// One character between cells: `,` in a CSV, a tab in a TSV, and — when
@@ -1208,28 +1194,24 @@ pub enum TableLevel {
     /// replaced** — every character the writer typed is still on the page, so
     /// a 縱書 chapter with no table in it is drawn exactly as `Off` draws it.
     ///
-    /// **`hjkl` are letters here, and there is no second answer** (2026-10-21
-    /// 作者定). This level is a *document* that happens to line its columns
-    /// up: 「`tb` is for convenient. It preserves some basic navigation
-    /// feature of a normal document but allow to have some table features
-    /// like visual alignment, tab navigation.」 So the top-level letter keys
+    /// **`hjkl` are letters here, and there is no second answer.** This level
+    /// is a *document* that happens to line its columns up: it keeps a normal
+    /// document's navigation and adds the table features that cost it
+    /// nothing, visual alignment and `Tab` navigation. So the top-level letter keys
     /// are the page's, the grid's own work is on the `空格 t` menu, and the
     /// two table keys that are worth a keystroke of their own — alignment,
     /// and `Tab` from cell to cell — are the two that cost the page nothing.
     ///
-    /// This paragraph has said three different things in six weeks, and the
-    /// reason each time was the same: what it was reporting was a toggle with
-    /// no mark on the screen. There is no toggle now. A grid you walk by cell
+    /// There is no toggle here: a toggle with no mark on the screen is a mode
+    /// the reader cannot see. A grid you walk by cell
     /// is [`TableLevel`]'s neighbour `t t`, which is a different model and
     /// says so on the status line.
     ///
-    /// **`t f` was folded in here** (2026-10-21): it drew the `|` you typed as
-    /// the wall `┆` it means, and nothing else that `t b` had not already
-    /// caught up with — the column ruler came over on 2026-09-11 (#379) and
-    /// folding long cells was always the `空格 t w` toggle. That last
-    /// difference is what `t t` is *for*, and a half-grid drawn into prose is
-    /// the awkward middle: not faithful to what you typed, and not a table
-    /// interface either.
+    /// **There is no level above this one.** It would only draw the `|` you
+    /// typed as the wall `┆` it means — the column ruler is here (#379) and
+    /// folding long cells is the `空格 t w` toggle. A grid is what `t t` is
+    /// *for*, and a half-grid drawn into prose is the awkward middle: not
+    /// faithful to what you typed, and not a table interface either.
     #[default]
     Basic,
 }
@@ -1251,10 +1233,10 @@ pub enum Held {
 
 /// The numbers a `t` or `g` sequence has been given, and how they were joined.
 ///
-/// **`-` is a range, `,` is a list or a pair** (§5.7). One key had been doing
-/// both jobs, and the day `t20,20g` was typed the two readings collided: row
-/// 20 *and* column 20 is two kinds of thing, where `t2-10/` is a span of one
-/// kind. They are different keys now, and one sequence is one of them or the
+/// **`-` is a range, `,` is a list or a pair** (§5.7). One key doing both
+/// jobs would make the two readings collide: `t20,20g` is row 20 *and*
+/// column 20, two kinds of thing, where `t2-10/` is a span of one kind. So
+/// they are different keys, and one sequence is one of them or the
 /// other — never both, because nothing has been agreed about what a mixture
 /// would mean.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1352,7 +1334,7 @@ impl Sequence {
 }
 
 /// **Which of helix's moves put their landing in the middle** (helix-term's
-/// `commands.rs`, read and measured in hx 25.07.1 2026-11-04). Every other
+/// `commands.rs`, read and measured in hx 25.07.1). Every other
 /// move that leaves the page scrolls only as far as scrolloff asks
 /// (`ensure_cursor_in_view`): `gg`, `G`, `ge`, `:N`, `30j`. vim's page has its
 /// own rule ([`Editor::vim_landing_row`]).
@@ -1379,7 +1361,7 @@ pub enum Landing {
     Below(Option<usize>),
 }
 
-/// **`z` 那一層把光標放在哪一行**（`zz`/`zt`/`zb`，2026-09-28）。
+/// **`z` 那一層把光標放在哪一行**（`zz`/`zt`/`zb`）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Aim {
     /// `zt` — 頂上那一行。
@@ -1388,7 +1370,7 @@ pub enum Aim {
     Middle,
     /// `zb` — 底下那一行。
     Bottom,
-    /// `zj`／`zk` — **光標這一行坐在第幾個屏幕行上**（2026-10-06）。
+    /// `zj`／`zk` — **光標這一行坐在第幾個屏幕行上**。
     ///
     /// 滾視窗和挪光標是同一件事的兩面：視窗往下滾一行，光標的文字没動，於是它
     /// 在屏幕上**往上**坐了一行。helix 的 `scroll_up`／`scroll_down` 就是這麼
@@ -1418,10 +1400,9 @@ pub enum Sideways {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Bounds {
     /// The first line to the last. A schema, or a name like `.csv`, is a person
-    /// saying「this whole file is one table」, and the boundary is the one thing
-    /// that used to have no value at all for such a file — it was the *absence*
-    /// of `md_region()`, which is why a CSV and a `|` table could not share a
-    /// code path.
+    /// saying「this whole file is one table」, and naming that boundary as a
+    /// value, rather than leaving it as the *absence* of `md_region()`, is
+    /// what lets a CSV and a `|` table share a code path.
     WholeFile,
     /// Walked out from the cursor by [`crate::mdtable::region`]: up and down
     /// while the line is still a `|` row, and never into a fenced block.
@@ -1443,12 +1424,12 @@ pub enum Bounds {
 
 /// How far a table mode reaches (#275).
 ///
-/// **The rule, 2026-09-05**, and the reason it is safe:
+/// **The rule**, and the reason it is safe:
 ///
-/// > 有明確表格語法定義的文檔（csv tsv markdown），可以在文件任何位置通過 `ti`
-/// > `tt` 進入表格視圖…對於這個文件中所有的表格都生效。如果一個文件没有確切的
-/// > 表格語法，比如 txt、yaml 用空格制表符隔開，那麼我們就…在制表符上按 `ti`
-/// > `tt` 將這一段進入表格模式，離開表格立刻回到 prose 狀態。
+/// 有明確表格語法定義的文檔（csv tsv markdown），在文件任何位置按 `ti` `tt`
+/// 都能進入表格視圖，對這個文件中所有的表格都生效。没有確切表格語法的文件，
+/// 比如 txt、用空格制表符隔開的 yaml，只在制表符上按 `ti` `tt` 把這一段變成
+/// 表格模式，離開表格立刻回到 prose 狀態。
 ///
 /// A file whose syntax *says*「table」can be turned on with confidence. A file
 /// where the editor is **guessing** from a run of tab characters should never

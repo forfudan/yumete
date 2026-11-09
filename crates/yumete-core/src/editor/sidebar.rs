@@ -9,7 +9,7 @@ use super::*;
 use yumete_cjk::actions::PlaceCmd;
 
 /// One of the screen's regions: an editing window, or a sidebar. The word
-/// for either, because one key (`C-w w`) walks both kinds (2026-10-30).
+/// for either, because one key (`C-w w`) walks both kinds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Region {
     Window(crate::window::WindowId),
@@ -20,21 +20,13 @@ impl Editor {
     // ---- The side panels (Feature #94, #293) -------------------------------
 
     /// **Which slot a panel lives in — and yumete decides, not the reader**
-    /// (#293, settled 2026-10-20).
+    /// (#293).
     ///
-    /// 原話：「the location of each type of panel is fixed by yumete and users
-    /// cannot change it to left and right themselves. This makes our model
-    /// concise and stable, and also makes it less buggy.」 So this is a fact
+    /// Readers cannot move a panel to the other side: a fixed place keeps the
+    /// model small and stable, with fewer ways to go wrong. So this is a fact
     /// about the panel, not a field: 文件、緩衝、大綱、搜索 on the left, 信息
     /// on the right — it is 「what is this」, and it follows the eye rather
     /// than pushing the manuscript to the right.
-    ///
-    /// Warning: **what went with the setting.** `set_side` carried a showing panel
-    /// across, handed the displaced one back, moved the keys if they were in
-    /// it, and left `side_view`/`views_on` to agree about the result; a
-    /// `[sidebar]` table in the config said it again at startup. The empty
-    /// docs panel that `空格 4` used to open was that machinery disagreeing
-    /// with itself.
     ///
     /// Warning: **`Tab` walks only the views that share a slot**
     /// ([`Editor::cycle_view`]): the motion belongs to the column, not to the
@@ -97,9 +89,8 @@ impl Editor {
 
     /// **這一側的邊欄此刻擺着哪一種信息**，`None` ＝ 那一格不是信息、或者它空着。
     ///
-    /// Warning: **它只問，不存**（#426）。從前這裏答的是「光標頂上來的那一層」，
-    /// 而常駐那一層另有一份記錄——兩份記錄對不上就是那四次 bug。現在信息是一
-    /// 扇面板，裏面擺哪一種由 [`Editor::info_now`] 算，這一支只是把「那一格是
+    /// Warning: **它只問，不存**（#426）：另存一份記錄就會與那一扇面板對不上。
+    /// 信息是一扇面板，裏面擺哪一種由 [`Editor::info_now`] 算，這一支只是把「那一格是
     /// 信息嗎」和「該擺哪一種」兜在一起。
     pub fn info_in_this_sidebar(&self, side: crate::sidebar::Side) -> Option<crate::sidebar::Info> {
         (self.panel(side).map(|p| p.view()) == Some(crate::sidebar::View::Info))
@@ -109,8 +100,7 @@ impl Editor {
 
     /// **光標走開了、鍵也不在它身上，那一份字典就不再作數**——當場丟掉。
     ///
-    /// 原話：「走出之后回到这个字母，它是不是不应该出现了？」對的：那一則是問
-    /// 出來的，問題已經過去了。同
+    /// 走開再回到這個字，它不該再出現：那一則是問出來的，問題已經過去了。同
     /// [`Editor::forget_a_hover_nobody_is_looking_at`]，在派鍵**之前**掃。
     pub(super) fn forget_a_dictionary_nobody_is_reading(&mut self) {
         if self.dictionary.is_none() || self.dictionary_live() {
@@ -160,7 +150,7 @@ impl Editor {
     }
 
     /// Whether that layer of that slot has anything in it to look at.
-    /// **這個邊欄裏此刻有没有東西**（2026-09-22：一個邊欄一個面板）。
+    /// **這個邊欄裏此刻有没有東西**（一個邊欄一個面板）。
     pub fn slot_showing(&self, side: crate::sidebar::Side) -> bool {
         self.panel(side).is_some()
     }
@@ -221,11 +211,11 @@ impl Editor {
         }
     }
 
-    /// **開一扇面板，鍵不交過去**（2026-09-29）。
+    /// **開一扇面板，鍵不交過去**。
     ///
     /// Warning: 別的入口開面板都順手把焦點給它，因為那幾個是「我要去那裏看」。文檔那
-    /// 一扇不是：`空格 K` 說的是「一邊寫一邊讓它跟着」，人還在正文裏
-    /// （報上來的原話：「它直接把焦点给到了侧栏，但用户希望焦点留在正文」）。
+    /// 一扇不是：`空格 K` 說的是「一邊寫一邊讓它跟着」，人還在正文裏，焦點
+    /// 就留在正文。
     /// 要走進去就按 `空格 4`，和別的邊欄一個樣。
     pub(super) fn open_panel_without_the_keys(
         &mut self,
@@ -268,9 +258,8 @@ impl Editor {
         }
     }
 
-    /// **`Tab` 在這一欄裏走的那幾個視圖，按它走的次序**（2026-09-25 原話：
-    /// 「底部……可以在上面写上 tab 的循环顺序，比如『Tab 文件 > 缓冲区 > 大纲 >
-    /// 搜索』」）。
+    /// **`Tab` 在這一欄裏走的那幾個視圖，按它走的次序**，給底邊那一行寫成
+    /// 「Tab 文件 > 緩衝區 > 大綱 > 搜索」。
     ///
     /// Warning: **算出來的，不是寫死的**：哪個視圖歸哪一欄是使用者配得動的
     /// （`side_for`），底邊上那一行要說的就是他這一台此刻的真話。少於兩個的時候
@@ -295,7 +284,7 @@ impl Editor {
             .unwrap_or(crate::sidebar::View::Explorer)
     }
 
-    /// The view a panel's name stands for. Every panel is one now (#426), so
+    /// The view a panel's name stands for. Every panel is one (#426), so
     /// this never answers `None` — it stays an `Option` because callers读它
     /// 的時候還不知道那一點。
     pub(super) fn view_of(panel: crate::sidebar::Panel) -> Option<crate::sidebar::View> {
@@ -322,11 +311,10 @@ impl Editor {
     ///
     /// Warning: **連「誰叫的」一起丟，不只關容器。** 「畫在哪」是算出來的，所以
     /// 光關掉邊欄那一格，手動叫出來的那一則下一幀就浮到光標旁邊去了——讀者說的
-    /// 是「我不要看這個」，不是「換個地方給我看」（2026-09-30 審出來的）。
+    /// 是「我不要看這個」，不是「換個地方給我看」。
     ///
-    /// Warning: **即時的那一種照樣會浮回來，那是對的。** 模型是「右侧栏就
-    /// 是固定的『浮窗』，它开着，浮窗就不用开了」——反過來說，關掉邊欄，浮窗就
-    /// 回來。即時的那一種關不掉（`:info` 纔換得動它），能收起來的只有手動叫的。
+    /// Warning: **即時的那一種照樣會浮回來，那是對的。** 模型是：右側欄就是
+    /// 固定的浮窗，它開着，浮窗就不用開——反過來說，關掉邊欄，浮窗就回來。即時的那一種關不掉（`:info` 纔換得動它），能收起來的只有手動叫的。
     pub(super) fn close_the_info(&mut self, side: crate::sidebar::Side) {
         if let Some(one) = self.info_in_this_sidebar(side) {
             self.stop_showing_this_info(one);
@@ -372,7 +360,7 @@ impl Editor {
             PlaceCmd::PageUp => self.panel_scroll = step(self.panel_scroll, Self::PAGE_IN_A_LIST, false),
             PlaceCmd::GotoFileStart => self.panel_scroll = 0,
             PlaceCmd::GotoLastLine => self.panel_scroll = last,
-            // **改動那一格自己的兩個鍵**（2026-10-11，照 gitsigns／gitgutter／
+            // **改動那一格自己的兩個鍵**（照 gitsigns／gitgutter／
             // signify 三家）：`u` 把這一塊還原成 `HEAD` 那一份，`y` 複製它改之前
             // 寫的那幾行。只有那一格有。
             PlaceCmd::RestoreChange if change => {
@@ -398,7 +386,7 @@ impl Editor {
         self.width[side as usize]
     }
 
-    /// **一扇側面板要這麼多欄纔擺得下**（2026-10-03 定）。
+    /// **一扇側面板要這麼多欄纔擺得下**。
     ///
     /// 版面算術是 `正文保底 = max(窗口/3, 24)`，面板分的是剩下的（見 `yumete-tui`
     /// 的 `sidebar_columns`）。要讓面板分到十二欄——六個漢字，比那更窄的一列名字
@@ -416,12 +404,12 @@ impl Editor {
     /// 離屏那一支在按鍵**之前**報，否則 `--shot` 看不見窄窗口下的行為。
     pub fn note_window(&mut self, columns: u16, rows: u16) {
         self.window = (columns, rows);
-        // Warning: **這道閘要在這裏，不在那四個開面板的入口上**（2026-10-10 報的）。
+        // Warning: **這道閘要在這裏，不在那四個開面板的入口上**。
         //
-        // 擺不下的時候檔案樹／緩衝區／大綱／信息四扇是「拿着鍵、一個字不畫」：狀態
-        // 欄寫 `PAN.NOR`、提示行列着鍵位，而那一塊是空的，按下去的鍵還真的生效
-        // （在一扇看不見的面板上）。[`Self::room_for_a_panel`] 從前全樹只有搜索那
-        // 一支問——規矩只加在一邊，正是這個倉反覆在拆的那一族。
+        // 擺不下的時候面板若還開着，就是「拿着鍵、一個字不畫」：狀態欄寫
+        // `PAN.NOR`、提示行列着鍵位，而那一塊是空的，按下去的鍵還真的生效（在一扇
+        // 看不見的面板上）。[`Self::room_for_a_panel`] 若只在某一個入口問，別的入口
+        // 就漏掉——規矩要放在大家都經過的一處。
         //
         // 擺在「每一幀報一次窗口」這一處，三種情形一次蓋住：窄窗口下按 `空格 w E`、
         // 開機就是窄的（`window` 出廠是 `u16::MAX`，開面板那一刻還没人報過，所以
@@ -468,7 +456,7 @@ impl Editor {
         }
     }
 
-    /// **A click on a sidebar's block in the tab line** (2026-11-04): the
+    /// **A click on a sidebar's block in the tab line**: the
     /// side opened or closed, the keys staying where they are, as `C-w e`
     /// and `C-w i` do.
     pub fn toggle_sidebar(&mut self, side: crate::sidebar::Side) {
@@ -531,8 +519,8 @@ impl Editor {
     }
 
     /// `C-w q`: close the region the keys are in. In the last window it is
-    /// `:q`, as in helix and vim (2026-11-03; it used to stay and say so,
-    /// which `C-w c` still does: `quit_last` false).
+    /// `:q`, as in helix and vim. `C-w c` instead stays and says so
+    /// (`quit_last` false).
     pub(super) fn close_this_region(&mut self, quit_last: bool) {
         if let Some(side) = self.panel_focus() {
             if self.info_in_this_sidebar(side).is_some() {
@@ -650,7 +638,7 @@ impl Editor {
         }
     }
 
-    /// **`:sidebar-explorer`, `:sidebar-info`, …** (2026-11-07): `on` opens
+    /// **`:sidebar-explorer`, `:sidebar-info`, …**: `on` opens
     /// the panel where yumete keeps it, `off` puts it away, and bare does
     /// whichever it is not.
     ///
@@ -720,8 +708,8 @@ impl Editor {
     /// editor's own knowledge, so they are pushed in from here.
     /// Refreshed when it is asked for, not on every keystroke.
     ///
-    /// Building the outline walks the document, and doing that per key is the
-    /// trap this editor has fallen into three times. Headings do not change
+    /// Building the outline walks the document, and doing that per key is a
+    /// trap. Headings do not change
     /// while a sentence is being typed, so the views are rebuilt when the
     /// sidebar is opened, focused, switched, or the file under it changes —
     /// every moment a reader is about to look at it.
@@ -781,7 +769,7 @@ impl Editor {
         }
     }
 
-    /// **百科那一頁的滾動**（2026-09-22）。
+    /// **百科那一頁的滾動**。
     ///
     /// 與別的視圖同一套鍵：`j`/`k` 一行，`J`/`K` 半頁，`g`/`G` 兩頭；`q` 與
     /// `C-w` 照舊由 [`Self::panel_command_in_common`] 接。
@@ -817,9 +805,9 @@ impl Editor {
         self.wiki_scroll.set((at, self.sel.head()));
     }
 
-    /// **不管這一頁是單子還是文章，這幾個鍵都算數**（2026-09-23 審出來的：提示
-    /// 行在百科那一頁上照樣寫着 `Tab 換視圖`/`w 寬窄`，而那兩個鍵在那裏什麽都
-    /// 不做——「拿走鍵的那一半有義務」）。
+    /// **不管這一頁是單子還是文章，這幾個鍵都算數**：提示行在百科那一頁上照樣
+    /// 寫着 `Tab 換視圖`/`w 寬窄`，那兩個鍵在那裏就得管用——「拿走鍵的那一半有
+    /// 義務」。
     /// **What every panel answers, wherever it sits and whatever it holds**
     /// — `R`, `w`, `Tab`/`S-Tab`, `Esc`, then `q`/`C-w`/`:`/空格. Answers
     /// whether it took the command.
@@ -832,16 +820,16 @@ impl Editor {
     fn panel_command_in_common(&mut self, name: PlaceCmd, side: crate::sidebar::Side) -> bool {
         match name {
             PlaceCmd::RefreshSidebar => self.refresh_sidebar(),
-            // **`w` 走一格：窄 → 中 → 寬 → 窄**（2026-09-26 定的）。
+            // **`w` 走一格：窄 → 中 → 寬 → 窄**。
             //
             // Warning: **不問這一格裏裝的是什麼**：寬度歸側欄，面板只是借它。所以字典、
-            // 懸停、表格詳情按 `w` 一樣管用——從前它們根本不認這個鍵。
+            // 懸停、表格詳情按 `w` 一樣管用。
             PlaceCmd::CycleSidebarWidth => {
                 let step = self.width[side as usize].next();
                 self.width[side as usize] = step;
                 let (num, den) = step.fraction();
                 // 一句回聲，三秒之後自己下去——按的人眼睛已經看見邊欄寬了一檔，
-                // 而這一行底下正是按鍵提示的位子（2026-09-27）。
+                // 而這一行底下正是按鍵提示的位子。
                 self.murmur(say!("sidebar.width", num, den));
             }
             // **Tab walks the views that live in *this* slot.** Which ones
@@ -850,29 +838,25 @@ impl Editor {
             // slot walks two and the other one walks one (#293).
             PlaceCmd::NextSidebarView => self.cycle_view(side, false),
             PlaceCmd::PrevSidebarView => self.cycle_view(side, true),
-            // **`Esc` 在邊欄裏也是「把輸入法的挂起再說一遍」**（2026-09-27 報的：
-            // 「光标在侧栏中的时候，我在别的 app 中使用了系统的宇夢，回到
-            // terminal，无法通过 esc 把它挂起。它会在工作区的光标处形成一个输入
-            // 面板」）。
+            // **`Esc` 在邊欄裏也是「把輸入法的挂起再說一遍」**：光標在側欄時，輸入法
+            // 若在別的程序裏恢復過，回到終端要能用 `Esc` 把它再挂起，否則它會在工作
+            // 區的光標處開出一個輸入面板。
             //
-            // 正文那一頭 2026-09-22 就有這條退路（`keys.rs` 的 `say_it_again`）：
+            // 正文那一頭有同一條退路（`keys.rs` 的 `say_it_again`）：
             // 「已經挂起了」是一個**信念**，而輸入法在別的程序裏自己恢復之後，這
             // 一頭還記着舊的，於是再也不發第二次信號。抹掉信念，下一輪自己重發。
             PlaceCmd::NormalMode => self.say_it_again = true,
-            // **邊欄裏 `C-w` 也是那一組的門**（2026-09-30）。從前它在這裏直接
-            // 走下一區，而在正文裏是前綴——同一個和弦兩個意思，正是這一輪在
-            // 拆的毛病。走下一區照舊是 `C-w w`，兩處一樣。
+            // **邊欄裏 `C-w` 也是那一組的門**，和正文裏一樣是前綴——同一個和弦不許
+            // 有兩個意思。走下一區是 `C-w w`，兩處一樣。
             PlaceCmd::WindowMode => self.pending = Pending::Region,
-            // **`q` 把鍵還給正文，面板留着**（2026-10-10 定）。
+            // **`q` 把鍵還給正文，面板留着**。
             //
-            // 從前它是「關掉」，而關掉已經有 `C-w q` 了——同一件事兩個鍵，而「讀完
-            // 了，手回去寫字」這件每天做幾十次的事反倒没有鍵：`空格 w` 是「換一個
-            // 區域」，不是「回正文」。原話：「q 就重复了。建议 q 改成返回编辑区但
-            // 不关闭搜索面板」。
+            // 關掉已經有 `C-w q` 了；「讀完了，手回去寫字」這件每天做幾十次的事要有
+            // 自己的鍵：`空格 w` 是「換一個區域」，不是「回正文」。
             PlaceCmd::LeaveSidebar => self.panel_focus = None,
-            // **`:` opens the command line from in here too.** It used to be
-            // swallowed, so a reader with the keys in a panel had no way to
-            // run a command at all — and `:panel-left` is a command
+            // **`:` opens the command line from in here too.** Without it a
+            // reader with the keys in a panel has no way to run a command at
+            // all — and `:panel-left` is a command
             // *about* the panel you are standing in, which nobody could have
             // reached. The focus stays where it is while the line is typed, so
             // 「this one」 still means this one.
@@ -945,7 +929,7 @@ impl Editor {
             }
             rows.push(crate::sidebar::Row {
                 path: heading.path.clone(),
-                // **每級兩格，縮到第三級封頂**（2026-09-26 定的）。
+                // **每級兩格，縮到第三級封頂**。
                 //
                 // Warning: **深處的層級靠編號自己說**：`5.8.11` 一看就比 `5.8` 深一層，
                 // 不必再花欄位重說一遍。development.md 有到五級，不封頂的話那一條
@@ -968,7 +952,7 @@ impl Editor {
     }
 
     /// **Whether a 大綱 row's section is closed on the page**, or inside one
-    /// that is (decided 2026-11-03): asked of the live window when the row is
+    /// that is: asked of the live window when the row is
     /// drawn, so it is never stale. A chapter in another file has none.
     pub fn outline_row_in_text(&self, row: &crate::sidebar::Row) -> Option<crate::sidebar::InText> {
         if !row.path.as_os_str().is_empty() {
@@ -984,7 +968,7 @@ impl Editor {
     }
 
     /// **Each heading's count**, its own text and the headings under it, by
-    /// Word's rule (2026-10-29) — what a writer checks a chapter's length by.
+    /// Word's rule — what a writer checks a chapter's length by.
     /// `None` for a code file's symbols and for a chapter in another file.
     fn section_counts(&self, headings: &[crate::sidebar::Heading]) -> Vec<Option<usize>> {
         if self.writes_code() {
@@ -1128,20 +1112,19 @@ impl Editor {
     ///
     /// Warning: **原樣的 Markdown**，和浮窗裏那一份一個字不差——邊欄畫它的時候走的是
     /// 同一支行內標記渲染。
-    /// **這一行上服務器說的那幾句**，給診斷那一扇（2026-09-29）。
+    /// **這一行上服務器說的那幾句**，給診斷那一扇。
     ///
     /// 診斷不必問——它是服務器自己推過來的，早就在內存裏，所以這一支和百科一樣
     /// 是現算的純函數。
-    /// **這一段改動：改之前那幾行，然後現在這幾行**（`空格 x`/`X`，2026-10-11）。
+    /// **這一段改動：改之前那幾行，然後現在這幾行**（`空格 x`/`X`）。
     ///
     /// 記號借 diff 自己的：`-` 是 `HEAD` 說的，`+` 是現在寫的。純添的那一段没有
     /// 上半，剪口那兩種没有下半——那正是它們和「改過」的分別。
     /// **改動那一格的兩稿**（`空格 X`）。
     ///
     /// 和浮窗（`空格 x`）、`:git-diff` 的報告同一份算出來的東西
-    /// （`Editor::change_drafts`）。從前這一支自己拼 `-　{line}`：沒有行號、
-    /// 沒有逐字的記號，而浮窗兩樣都有——同一份 diff 在兩處不一樣，正是作者
-    /// 2026-10-16 報來的那一條。
+    /// （`Editor::change_drafts`）：同一份 diff 在兩處要一樣，行號與逐字的記號
+    /// 這裏也有。
     pub(super) fn change_rows(&self) -> Vec<crate::sidebar::Row> {
         let drafts = self.change_drafts();
         // 號碼靠右對齊，所以每一行的字都從同一欄起。
@@ -1262,7 +1245,7 @@ impl Editor {
             let pad = " ".repeat(width.saturating_sub(yumete_cjk::str_width(name)));
             rows.push(plain(format!("{name}{pad}  {value}"), false));
         }
-        // **「沒有拆法」寫在下面，淡的，隔一行**（2026-10-13 定）。上面那幾行是
+        // **「沒有拆法」寫在下面，淡的，隔一行**。上面那幾行是
         // 這個字的事實，這一句是這一次查詢的事實——擺在上面會讀成一條欄目，擺在
         // 貼着的下一行會讀成最後一欄的註腳。
         //
@@ -1291,15 +1274,13 @@ impl Editor {
     ///
     /// Warning: **The keys stay in the editor.** The panel is opened to be glanced
     /// at while the writing goes on, so nothing is gained by moving the cursor
-    /// into it — the same rule `空格 K` keeps (2026-10-13: 「The focus should be
-    /// kept in the main editor (just like space K). This is because there is no
-    /// need to change the focus there.」). `q` in the sidebar is still the way
+    /// into it — the same rule `空格 K` keeps. `q` in the sidebar is still the way
     /// in, for a gloss too long to read at a glance.
     pub fn look_up(&mut self, ch: &str) -> bool {
         self.look_up_here(ch, false)
     }
 
-    /// **`空格 n`：只浮一個窗**（2026-09-22 定）。
+    /// **`空格 n`：只浮一個窗**。
     ///
     /// 同一個問題、同一份答案，畫在光標旁邊而不是邊欄裏——而且**一點都不碰邊
     /// 欄**：邊欄是容器，只由人開由人關，看一眼字不該讓工作區變樣。
@@ -1332,8 +1313,7 @@ impl Editor {
         self.dictionary_anchor = Some(self.sel.head());
         self.panel_scroll = 0;
         // **問的時候不交鍵。** 鍵留在原處——編輯區、檔案樹，哪兒來的還在哪兒。
-        // 從前 `空格 N` 把鍵交給邊欄，而那一扇是給人瞥一眼的，交了鍵就得按 `q`
-        // 纔寫得下去。2026-10-13 定，同 `空格 K`。
+        // 那一扇是給人瞥一眼的，交了鍵就得按 `q` 纔寫得下去。同 `空格 K`。
         self.refresh_sidebar();
         true
     }
@@ -1381,16 +1361,16 @@ impl Editor {
     /// place a reader already looks for what is going on.
     ///
     /// Warning: **百科那一頁是一段文章**，没有行可以 `l` 進去、也没有行可以 `h` 收
-    /// 起，`R` 重讀的是一張單子而不是一條詞條——這一行從前照樣寫着那三個鍵
-    /// （2026-09-23 審出來的：「拿走鍵的那一半有義務」說清楚）。
+    /// 起，`R` 重讀的是一張單子而不是一條詞條——這一行不寫那三個鍵（「拿走鍵的
+    /// 那一半有義務」說清楚）。
     pub fn sidebar_keys(&self) -> String {
         let article = self.info_now() == Some(crate::sidebar::Info::Wiki)
             && self
                 .panel_focus()
                 .and_then(|side| self.panel(side))
                 .is_some_and(|p| p.view() == crate::sidebar::View::Info);
-        // **The keys from the table, the words from the message files**
-        // (2026-11-01): each part is dropped when its keys are bound to
+        // **The keys from the table, the words from the message files**:
+        // each part is dropped when its keys are bound to
         // something else, and the reader's own keys join it.
         use crate::input::Key;
         let (walk, page) = match article {
@@ -1448,8 +1428,7 @@ impl Editor {
         self.on_sidebar_table_key(key);
     }
 
-    /// **A sidebar's key, by its table** (2026-11-01, step 9 of the keymap
-    /// plan): the reader's `[keys.sidebar]`, then the default.
+    /// **A sidebar's key, by its table**: the reader's `[keys.sidebar]`, then the default.
     pub(super) fn on_sidebar_table_key(&mut self, key: Key) {
         let place = yumete_cjk::actions::Place::Sidebar;
         if let Some(commands) = self.commands_in(place, key) {
@@ -1470,7 +1449,7 @@ impl Editor {
             // moving keys.
             Some(View::Search) => self.search_panel_command(name),
             None => {}
-            // **百科是一段文章，要滾不要走**（2026-09-22）：它軟折行，只有畫的
+            // **百科是一段文章，要滾不要走**：它軟折行，只有畫的
             // 那一頭數得出屏幕行，所以它的捲軸自己存一份（`wiki_scroll`）。
             Some(View::Info) => match self.info_now() {
                 Some(crate::sidebar::Info::Wiki) => self.scroll_wiki(name),
@@ -1604,8 +1583,8 @@ impl Editor {
     }
 
     /// **What the picker is standing on, to be shown beside the list** — the
-    /// head of the file, the head of the buffer, or the lines around a row
-    /// (2026-09-17: 「左側是文件窗口，右側是預覽」).
+    /// head of the file, the head of the buffer, or the lines around a row:
+    /// the list on the left, the preview on the right.
     ///
     /// `rows` lines at most, and the answer is kept until the highlight moves
     /// off it: without that, holding `j` down would read a file per keystroke.
@@ -1656,20 +1635,16 @@ impl Editor {
                     // A directory, a 14 MB 碼表, a binary: read the head and
                     // nothing more, and say nothing rather than guess.
                     //
-                    // Warning: **真的只讀頭上那幾行。** 這裏從前是
-                    // `fs::read_to_string`——整個文件進內存，然後纔切掉
-                    // 99.99%。2026-09-22 報的就是這個：「picker 如果用 jk 快速
-                    // 過文件，會出現到某個文件的時候突然卡死十幾二十秒」，而走
-                    // 過的那一個是十幾兆的碼表。上面那句註釋一直寫着「read the
-                    // head and nothing more」，代碼卻没做到。
+                    // Warning: **真的只讀頭上那幾行。** `fs::read_to_string`
+                    // 會把整個文件讀進內存再切掉 99.99%，用 `jk` 快速走過一張
+                    // 十幾兆的碼表就會卡死十幾二十秒。
                     *cached = Some((full.clone(), head_of_file(&full, rows)?));
                 }
                 cached.as_ref().map(|(_, lines)| (path, lines.clone()))
             }
             crate::picker::Item::Buffer(i, name) => {
                 let buffer = self.buffers.get(i)?;
-                // A preview has no text to show: one line says what it is
-                // (2026-11-08).
+                // A preview has no text to show: one line says what it is.
                 if let Some(main) = buffer.preview_main() {
                     // Inside the project, from its top.
                     let root = self.project_root();
@@ -1684,12 +1659,11 @@ impl Editor {
                 Some((name, head(&buffer.text())))
             }
             // A clipboard entry is already the whole of what it is.
-            // **寄存器那一扇也有預覽**（2026-10-11 報的）。從前這裏一律回 `None`，
-            // 而畫的那一支「有没有東西都把框畫出來」——於是右邊那半扇**永遠**是
-            // 一個空框。名單上那一行只容得下一行（`one_line`），而取過的東西常
+            // **寄存器那一扇也有預覽**：畫的那一支「有没有東西都把框畫出來」，回
+            // `None` 就是一個空框。名單上那一行只容得下一行（`one_line`），而取過的東西常
             // 常是好幾行：要看全的正是這裏。
             //
-            // Warning: **系統剪貼板那一條照舊没有。** 只有前端讀得了系統剪貼板，而
+            // Warning: **系統剪貼板那一條没有預覽。** 只有前端讀得了系統剪貼板，而
             // 高亮每挪一格就去讀一次是一件有副作用的事。核心手上没有的東西，這
             // 一支不猜。
             crate::picker::Item::Paste(Some(which), _) => {
@@ -1700,7 +1674,7 @@ impl Editor {
             crate::picker::Item::Paste(None, name) => {
                 Some((name, head(self.clipboard_seen.as_deref()?)))
             }
-            // **A reference, with the lines around it** (2026-10-29), the
+            // **A reference, with the lines around it**, the
             // way helix's reference picker previews.
             crate::picker::Item::Place(label, path, line, _) => {
                 let lines = (line.saturating_sub(rows / 2)..line + rows / 2 + 1)
@@ -1710,7 +1684,7 @@ impl Editor {
             }
             // A code action's title is the whole of what there is to show.
             crate::picker::Item::Action(..) => None,
-            // **The file read in the highlighted encoding** (2026-11-04): the
+            // **The file read in the highlighted encoding**: the
             // head of it, so the reader sees which one makes sense.
             crate::picker::Item::Encoding(name, path, word) => {
                 let encoding = crate::encoding::by_name(word)?;
@@ -1721,9 +1695,9 @@ impl Editor {
                 let text = encoding.decode_without_bom_handling(&head_bytes).0.into_owned();
                 Some((name, text.lines().take(rows).map(str::to_string).collect()))
             }
-            // **The entry itself, beside the list of names** (2026-09-25).
-            // The preview a picker already has is exactly the 「選中的條目浮窗
-            // 顯示」 the request asked for — no second mechanism.
+            // **The entry itself, beside the list of names.** The preview a
+            // picker already has shows the highlighted entry — no second
+            // mechanism.
             crate::picker::Item::Wiki(name, _) => {
                 let view = self.wiki_view_of(&name)?;
                 let lines = view
@@ -1741,10 +1715,9 @@ impl Editor {
     /// Open whatever the picker is standing on — from either layer.
     fn choose_from_picker(&mut self) {
         let chosen = self.picker.as_ref().and_then(crate::picker::Picker::chosen);
-        // Warning: **篩不出東西的時候 `Enter` 不關窗**（2026-10-02 一輪黑盒審查報來
-        // 的）。從前它照樣關掉，於是打錯一個字母按了 `Enter`，面板没了、打過的
-        // 那幾個字也没了，人回到正文裏看着一句「没有符合的」——要重開一次、重打
-        // 一遍。helix 的挑選器在這一步什麼都不做。那句話照說，窗留着，退一格就
+        // Warning: **篩不出東西的時候 `Enter` 不關窗**：關掉的話，打錯一個字母按了
+        // `Enter`，面板和打過的那幾個字都没了，要重開一次、重打一遍。helix 的挑選
+        // 器在這一步什麼都不做。那句話照說，窗留着，退一格就
         // 改得動。
         if chosen.is_none() {
             self.status = say!("picker.nothing-matched");
@@ -1787,7 +1760,7 @@ impl Editor {
             Some(crate::picker::Item::Paste(Some(which), _)) => self.paste_from_menu(which),
             // The system clipboard is the front end's to read.
             Some(crate::picker::Item::Paste(None, _)) => self.clipboard_paste(true),
-            // **釘住它**，直到光標一動（2026-09-25）。面板關掉，鍵回正文——
+            // **釘住它**，直到光標一動。面板關掉，鍵回正文——
             // 「直到光標移動」本來就要求鍵已經不在面板裏了。
             Some(crate::picker::Item::Wiki(name, _)) => self.pin_wiki_entry(name),
             Some(crate::picker::Item::Place(_, path, line, column)) => {
@@ -1807,18 +1780,12 @@ impl Editor {
         }
     }
 
-    /// **`:wiki <詞條名>` —— 一扇挑詞條的面板**（2026-09-25）。
-    ///
-    /// 原話：「先彈出類似「找命令」面板一樣的面板，詞條+部分內容（用 ... 省略）
-    /// 然後tab和shift + Tab 上下移動。選中的條目浮窗顯示或者右邊欄顯示（如果右
-    /// 邊欄開着），按下enter 之后固定浮窗和面板直到光標移動。」
+    /// **`:wiki <詞條名>` —— 一扇挑詞條的面板**，像「找命令」那一扇：每行是詞條
+    /// 加一截內容（用 … 省略），`Tab`/`S-Tab` 上下走，選中的條目浮窗顯示或者在
+    /// 右邊欄顯示（如果右邊欄開着），`Enter` 之後把浮窗與面板釘住，直到光標移動。
     ///
     /// 四件事這扇面板本來就有：`Tab`/`S-Tab` 走單子、右邊那半是預覽、打字就篩、
-    /// `Enter` 挑中。要新做的只有「釘住」。
-    ///
-    /// Warning: **從前這裏還要撥一下「鍵落在查詢裏」**（`type_here(true)`）——命令行上
-    /// 打過名字的人還在打字那個心境裏。2026-10-08 挑選器只剩打字這一層，每一扇
-    /// 開門就是這樣，那一句隨之刪了。
+    /// `Enter` 挑中。另加的只有「釘住」。
     pub(super) fn open_wiki_picker(&mut self, name: &str) {
         if self.wiki.by_name.is_empty() {
             self.status = say!("wiki.none", self.book_wiki_path().display());
@@ -1847,7 +1814,7 @@ impl Editor {
         self.show_the_picker(picker);
     }
 
-    /// **Which encoding to open a file in** (2026-11-04): the ones that read
+    /// **Which encoding to open a file in**: the ones that read
     /// it, the likeliest first, each previewed as the file would read.
     pub(super) fn open_encoding_picker(&mut self, asked: &crate::encoding::Undecided) {
         // One at a time: a second file waits for the picker on the first.
@@ -1876,8 +1843,8 @@ impl Editor {
     //
     // (`blurb_of` 在檔尾，和別的自由函數放在一起。)
     ///
-    /// **Two orders, one list** (2026-09-18). What is gathered is
-    /// 「写的东西在前面」: the prose — `.md`, `.txt`, `.typ` and the rest of
+    /// **Two orders, one list.** What is gathered puts the writing
+    /// first: the prose — `.md`, `.txt`, `.typ` and the rest of
     /// [`PROSE`] — comes first in path order, which for a novel is chapter
     /// order, and everything else (the build files, the code, the
     /// `Cargo.lock`) follows. What is *offered* is then that list with the
@@ -1889,15 +1856,15 @@ impl Editor {
         self.open_file_picker_in(self.root(), crate::editor::Sieve::default());
     }
 
-    /// **`空格 e` — the explorer**: one directory at a time (2026-10-20 作者定,
-    /// after helix's `file_explorer`).
+    /// **`空格 e` — the explorer**: one directory at a time (after helix's
+    /// `file_explorer`).
     ///
     /// Not the file tree in the sidebar and not `空格 f` either. `空格 f` is
     /// for a name you can already half spell; this is for a book you are
     /// looking *through* — the directory you are in, `..` to go up, Enter on a
-    /// directory to go down. Measured against the real helix before it was
-    /// written: it is its picker widget, not a tree, with `../` as the first
-    /// row and the preview pane showing whatever the highlight stands on.
+    /// directory to go down. As in helix, it is its picker widget, not a
+    /// tree, with `../` as the first row and the preview pane showing
+    /// whatever the highlight stands on.
     ///
     /// Warning: **the title is the path, and that is the whole of the title.**
     /// There is nothing to translate and nothing to keep in step: a reader
@@ -1908,7 +1875,7 @@ impl Editor {
         self.browse(&root, Self::explorer_sieve());
     }
 
-    /// **The explorer shows everything at first** (2026-11-08), hidden and
+    /// **The explorer shows everything at first**, hidden and
     /// ignored entries included, as helix's file explorer does (its own
     /// `[editor.file-explorer]` filters all default to off, unlike the file
     /// picker's). It lists one directory, so showing more costs nothing.
@@ -1968,8 +1935,8 @@ impl Editor {
         }
     }
 
-    /// `空格 F` —— 同上，但搜的是[工作路徑][`Editor::working_dir`]（2026-10-01，
-    /// 照 helix 的 `file_picker_in_current_directory`）。
+    /// `空格 F` —— 同上，但搜的是[工作路徑][`Editor::working_dir`]（照 helix 的
+    /// `file_picker_in_current_directory`）。
     pub(super) fn open_file_picker_here(&mut self) {
         self.open_file_picker_in(self.working_dir(), crate::editor::Sieve::default());
     }
@@ -1984,15 +1951,15 @@ impl Editor {
     /// 護的是畫面）；管道印給別的程序看，少印一條就是錯一條，所以它連那一道也不認。
     pub fn files_matching(&self, root: &Path, query: &str, sieve: &crate::editor::Sieve) -> Vec<String> {
         let mut names = Vec::new();
-        // Warning: **篩子要傳進來**（2026-10-03 一輪審查報來的）。從前這裏寫死
-        // `Sieve::default()`，於是 `ye --files md --hidden`、`--glob=`、`--exclude=`
-        // 三個開關**全是死的**，而 `--help` 說「下面每一個都還管用」。
+        // Warning: **篩子要傳進來**。寫死 `Sieve::default()` 的話，
+        // `ye --files md --hidden`、`--glob=`、`--exclude=` 三個開關**全是死的**，
+        // 而 `--help` 說它們都管用。
         crate::editor::walk_with(root, sieve, &mut |path| {
             names.push(path.strip_prefix(root).unwrap_or(path).display().to_string());
         });
         let items = names.into_iter().map(crate::picker::Item::File).collect();
         let mut picker = crate::picker::Picker::new("", items);
-        // **管道那一邊收緊**（2026-10-04 定）：跳着配和亂序都不收，因為它把全部印
+        // **管道那一邊收緊**：跳着配和亂序都不收，因為它把全部印
         // 出來，長尾就是噪音。`空格 f` 不撥它——那是一張排過序的單子，只看前十條。
         picker.tighten();
         for c in query.chars() {
@@ -2006,10 +1973,10 @@ impl Editor {
     /// Warning: **打進去，不是塞進去**：一個字一個字走 `Picker::push`，和人敲鍵盤走的
     /// 是同一支，所以篩選、評分、第一條預覽都和手打出來的一模一樣。
     ///
-    /// Warning: **篩子要傳進來**（2026-10-08 修）。從前這一支走的是寫死的
-    /// `Sieve::default()`，於是 `ye --files --hidden --open` 的 `--hidden`、
-    /// `--no-ignore`、`--glob=`、`--exclude=` 四個開關**印出來那條路管用、進編輯
-    /// 器那條路全是死的**，而 `--help` 說它們都管用。它也是 `A-h` 轉一格之後重走
+    /// Warning: **篩子要傳進來**。寫死 `Sieve::default()` 的話，
+    /// `ye --files --hidden --open` 的 `--hidden`、`--no-ignore`、`--glob=`、
+    /// `--exclude=` 四個開關**印出來那條路管用、進編輯器那條路全是死的**，而
+    /// `--help` 說它們都管用。它也是 `A-h` 轉一格之後重走
     /// 那一趟走的同一支。
     pub fn open_file_picker_with(
         &mut self,
@@ -2024,7 +1991,7 @@ impl Editor {
         }
     }
 
-    /// **`A-h` 轉一格：跳過哪些，然後照新的篩子重走一趟**（2026-10-08 定）。
+    /// **`A-h` 轉一格：跳過哪些，然後照新的篩子重走一趟**。
     ///
     /// 四態的次序照搜索面板那個 `7` 鍵（`find.rs` 的 `Field::Hidden`）：
     /// `(隱藏, 忽略)` 走 `(f,f) → (f,t) → (t,f) → (t,t) → (f,f)`。那邊記下的理由
@@ -2050,9 +2017,8 @@ impl Editor {
             (true, false) => (true, true),
             (true, true) => (false, false),
         };
-        // **The explorer stays the explorer** (2026-11-08): it lists the same
-        // directory again with the new sieve. It used to become the project's
-        // file picker.
+        // **The explorer stays the explorer**: it lists the same directory
+        // again with the new sieve, not the project's file picker.
         if browsing {
             self.browse(&root, sieve);
             if let Some(picker) = self.picker.as_mut() {
@@ -2068,15 +2034,14 @@ impl Editor {
     /// 一批送幾條。送一條一則消息，二十三萬個檔就是二十三萬則。
     const FILL_BATCH: usize = 512;
 
-    /// **開一扇空的挑選器，把走查交給旁邊那條線程**（2026-10-09 作者定：「流式化，
-    /// 和 helix 一樣不設上限」，見 [`crate::editor::Filling`]）。
+    /// **開一扇空的挑選器，把走查交給旁邊那條線程**：流式，和 helix 一樣不設上限
+    /// （見 [`crate::editor::Filling`]）。
     ///
     /// Warning: **`uncapped` 在這裏是撥上的。** 走查那兩道閘（兩萬條封頂、五秒硬停）
-    /// 護的是畫面那條線程，而這一趟已經不在它上面了——同搜索面板 2026-10-06 搬走
-    /// 的那一趟（§5.93）。停得下它的是 `Filling::stop`：面板一關就撥。
+    /// 護的是畫面那條線程，而這一趟不在它上面——同搜索面板的走查（§5.93）。停得下它的是 `Filling::stop`：面板一關就撥。
     ///
-    /// Warning: **「這裏没有檔」要等走完纔說得出來。** 從前名單一次建好，空的就不開面
-    /// 板；現在開面板的那一刻還不知道。所以面板照開（helix 也是開一扇空的），那
+    /// Warning: **「這裏没有檔」要等走完纔說得出來。** 開面板的那一刻還不知道，
+    /// 所以面板照開（helix 也是開一扇空的），那
     /// 句話挪到收完最後一批的時候說（[`Self::collect_picker_items`]）。
     fn open_file_picker_in(&mut self, root: PathBuf, sieve: crate::editor::Sieve) {
         self.stop_filling_the_picker();
@@ -2181,7 +2146,7 @@ impl Editor {
         if let Some(picker) = self.picker.as_mut() {
             picker.take_more(more);
         }
-        // 走完了而一條都没有——那句話從前在開面板之前說，現在只有這時候說得出來。
+        // 走完了而一條都没有——那句話只有這時候說得出來。
         if done && self.picker.as_ref().is_some_and(|p| p.total() == 0) {
             self.status = say!("picker.no-files-here");
         }
@@ -2209,15 +2174,12 @@ impl Editor {
         self.show_the_picker(crate::picker::Picker::new(&say!("picker.buffers"), items));
     }
 
-    /// **最近開過的檔** — `:recent-files` / `:recent-files-global`
-    /// (2026-10-18 作者定).
+    /// **最近開過的檔** — `:recent-files` / `:recent-files-global`.
     ///
     /// Two pickers rather than one with a switch, because **a picker is in
     /// Insert from the moment it opens** (`PIC.INS`): a digit typed in there
-    /// is a digit in the query, not a key. 作者 2026-10-18：「We are in the
-    /// insert mode only, so number keys cannot be used as shortcut. My
-    /// suggestion is to have two pickers.」 Measured first: `空格 f` then `2`
-    /// puts 「搜: 2」 in the box.
+    /// is a digit in the query, not a key, so number keys cannot be
+    /// shortcuts there: `空格 f` then `2` puts 「搜: 2」 in the box.
     pub(super) fn open_recent_picker(&mut self, here: bool) {
         let root = match here {
             true => Some(self.project_root()),
@@ -2239,7 +2201,7 @@ impl Editor {
         self.show_the_picker(crate::picker::Picker::new(&title, items));
     }
 
-    /// **存在改動文件** — `空格 g`, helix's key (2026-10-31).
+    /// **存在改動文件** — `空格 g`, helix's key.
     ///
     /// Every file git reports for the repository holding the working
     /// directory — staged ones too, which helix's picker leaves out — and
@@ -2260,7 +2222,7 @@ impl Editor {
         };
         // Git spells the top `C:/Users/…` on Windows and a buffer's path may be
         // `\\?\C:\Users\…`: both resolved, and compared with forward slashes,
-        // which is how git writes the paths it lists (2026-10-31, CI).
+        // which is how git writes the paths it lists.
         let root = std::fs::canonicalize(&root).unwrap_or(root);
         for path in self.unsaved_paths() {
             let Ok(inside) = path.strip_prefix(&root) else { continue };
@@ -2284,7 +2246,7 @@ impl Editor {
 
     /// **Which open files have unsaved changes**, by every spelling of their
     /// path a picker row may use: as opened, and resolved. For the `+` the
-    /// pickers draw beside a name (2026-10-31).
+    /// pickers draw beside a name.
     pub fn unsaved_paths(&self) -> Vec<PathBuf> {
         let mut out = Vec::new();
         for path in self.buffers.iter().filter(|b| b.is_modified()).filter_map(|b| b.path()) {
@@ -2303,7 +2265,7 @@ impl Editor {
         self.buffers.get(i).is_some_and(|b| b.is_modified())
     }
 
-    /// **最近開過的項目** — `:recent-projects` (2026-10-18 作者定).
+    /// **最近開過的項目** — `:recent-projects`.
     pub(super) fn open_project_picker(&mut self) {
         let here = self.session_root.clone();
         let items: Vec<crate::picker::Item> = self
@@ -2320,7 +2282,7 @@ impl Editor {
         self.show_the_picker(crate::picker::Picker::new(&say!("picker.recent-projects"), items));
     }
 
-    /// **Where the front end should start again**, taken once (2026-10-18).
+    /// **Where the front end should start again**, taken once.
     pub fn take_reopen_request(&mut self) -> Option<PathBuf> {
         self.reopen_request.take()
     }
@@ -2348,18 +2310,15 @@ impl Editor {
 
     /// Run one key while a picker is open.
     ///
-    /// **一扇挑選器只有一個狀態**（2026-10-08 定）：開門就在打字，`Esc` 一下關掉。
+    /// **一扇挑選器只有一個狀態**：開門就在打字，`Esc` 一下關掉。
     ///
-    /// Warning: **從前有兩層**（2026-09-17 到 2026-10-08）：開門在「列表」那一層，`jk`
-    /// 走單子、`i` 或 `/` 進打字、`Esc` 回列表、再一下纔出門。四個編輯器對過一遍
-    /// ——helix、VS Code、Zed、nvim **一個都没有挑選器裏的模式**，四個都是開門就
-    /// 打字、一下 `Esc` 關掉（helix 的 `helix-term/src/ui/picker.rs:1090-1108` 把
+    /// Warning: **別再分「列表」與「打字」兩層。** helix、VS Code、Zed、nvim
+    /// **一個都没有挑選器裏的模式**，四個都是開門就打字、一下 `Esc` 關掉（helix 的 `helix-term/src/ui/picker.rs:1090-1108` 把
     /// `Tab`/`Down`/`ctrl-n`、`shift-Tab`/`Up`/`ctrl-p` 和
     /// `key!(Esc) | ctrl!('c') => return close_fn(self)` 寫在同一個 match 裏，配不
     /// 上的一律落到那一行輸入框上，`:1160`）。
     ///
-    /// Warning: **2026-10-01 試過「開門就打字」，當天撤回**，理由是關窗變成要按兩次
-    /// `Esc`。那一條是對的，而答案是把另一半也做掉：`Esc` 現在一下就關。
+    /// Warning: **開門就打字，`Esc` 就得一下關掉**，否則關窗要按兩次 `Esc`。
     pub(super) fn on_picker_key(&mut self, key: Key) {
         let Some(picker) = self.picker.as_mut() else {
             self.mode = Mode::Normal;
@@ -2395,12 +2354,11 @@ impl Editor {
         match name {
             // **一下就關。** 没有層可退回去了。
             PlaceCmd::NormalMode => self.close_picker(),
-            // Warning: **框空着的時候退格什麼都不做**。從前它換層（`i` 是怎麼進來的，
-            // 退到頭就該退回去）；只剩一層之後那個去處不存在，而「退格到頭就關
-            // 窗」是另一回事——打空了接着打纔是人要的。
+            // Warning: **框空着的時候退格什麼都不做**。「退格到頭就關窗」是另一回
+            // 事——打空了接着打纔是人要的。
             PlaceCmd::DeleteCharBackward => picker.backspace(),
-            // **往前三個鍵，往後三個鍵**，照 helix 那一行。`Tab`/`S-Tab` 先說，
-            // 原話：「这两个其实更加顺手」。
+            // **往前三個鍵，往後三個鍵**，照 helix 那一行。`Tab`/`S-Tab` 先說：
+            // 它們最順手。
             PlaceCmd::NextEntry => picker.step(true),
             PlaceCmd::PrevEntry => picker.step(false),
             PlaceCmd::PageDown => picker.page(true),
@@ -2429,7 +2387,7 @@ impl Editor {
     /// is too short, `Some(false)` too narrow — the geometry is the drawing
     /// side's (see `picker_box` there), the words are here.
     ///
-    /// **A picker the window cannot draw must not be open** (2026-10-19 定):
+    /// **A picker the window cannot draw must not be open**:
     /// it owns every key while it is, so an invisible one is worse than a
     /// cramped one — the query goes nowhere the reader can see, and `Enter`
     /// opens whatever happened to be highlighted. Reported from the same hook
@@ -2455,8 +2413,7 @@ impl Editor {
     }
 
     /// **Every door into a picker comes through here** — so the refusal above
-    /// cannot be fitted to one of the six and forgotten on the other five,
-    /// which is the shape this repository keeps taking apart.
+    /// cannot be fitted to one of the six and forgotten on the other five.
     ///
     /// `false` when the window has no room and nothing was opened; the caller
     /// stops there rather than starting a walk whose answers have nowhere to
@@ -2513,11 +2470,10 @@ impl Editor {
         }
         // **A spreadsheet's clipboard becomes rows** (Feature #226). Excel,
         // Numbers, LibreOffice and a browser table all put tab-separated lines
-        // on the clipboard, and until now the cell refused every one of them
-        // for holding a tab — the writer got 「格子裏不能有 Tab」 for the one
-        // paste a table editor exists to accept. `t p` had already learned to
-        // read a block out of the register; this is the same block arriving by
-        // the other door, and it lands the same way.
+        // on the clipboard, and a table editor exists to accept that paste
+        // rather than refuse it for holding a tab. `t p` reads a block out of
+        // the register; this is the same block arriving by the other door, and
+        // it lands the same way.
         if (self.mode == Mode::Insert || self.mode == Mode::Normal) && self.table_here() {
             if let Some(grid) = sniff_grid(text.trim_end_matches(['\n', '\r'])) {
                 self.paste_grid(grid);
@@ -2525,9 +2481,9 @@ impl Editor {
             }
         }
         // **Judged before anything happens**, in Insert as well as in Normal:
-        // the Insert branch used to hand the text to `insert_str`, which
-        // silently drops what a cell refuses, and then say 「貼了 8 個字」 about
-        // a paste that had not happened. It also spent an undo point on it.
+        // `insert_str` silently drops what a cell refuses, so handing it the
+        // text would report 「貼了 8 個字」 about a paste that had not happened,
+        // and spend an undo point on it.
         if self.mode == Mode::Insert || self.mode == Mode::Normal {
             if let Some(why) = self.cell_refuses_text(text) {
                 self.status = why;
@@ -2543,10 +2499,9 @@ impl Editor {
             // something they have just picked out.
             Mode::Normal => {
                 // **Both halves judged before either runs**, the way `r` and
-                // `R` already do it: pasting a comma into a cell used to
-                // delete what was selected and *then* refuse the paste, so the
-                // cell came back short and the message only talked about the
-                // refusal.
+                // `R` do it: otherwise pasting a comma into a cell deletes what
+                // was selected and *then* refuses the paste, so the cell comes
+                // back short and the message only talks about the refusal.
                 self.delete_selection();
                 let at = self.sel.head();
                 if !self.edit_insert(at, text) {
@@ -2568,7 +2523,7 @@ impl Editor {
                 let text: String = text.chars().filter(|c| !c.is_control()).collect();
                 self.type_into_field(&text);
             }
-            // A value lands at the caret (2026-11-08), as committed 中文 does:
+            // A value lands at the caret, as committed 中文 does:
             // a font list is pasted into the middle of one.
             Mode::Value => {
                 // A break is a space: a list copied over two lines reads `a, b`.
@@ -2595,13 +2550,11 @@ impl Editor {
     /// terminal editor is often run from. The terminal may refuse — many do by
     /// default — so this says what it asked for rather than claiming success.
     /// **`Space y` / `Space Y`** (helix's `yank_to_clipboard` and
-    /// `yank_main_selection_to_clipboard`, 2026-11-02): every selection,
+    /// `yank_main_selection_to_clipboard`): every selection,
     /// one to a line, or the primary alone.
     pub(super) fn copy_to_clipboard(&mut self, every: bool) {
         // **At the cell layer the cell is the unit, not the character the caret
-        // sits on** (2026-10-23 作者報的: 「when I use `space y` on a cell (CEL
-        // layer), it only yank the first char instead of the whole cell. Note
-        // that `y` works correctly」). There is no character selection there —
+        // sits on**, as with `y`. There is no character selection there —
         // the selection is one character wide while the whole cell is lit — so
         // this copies what `y` takes: the value of this cell, the run of cells
         // standing, or the records selected.
@@ -2647,9 +2600,9 @@ impl Editor {
         self.sel.set_head(pos);
         self.refresh_goal_column();
         // **The mouse leaves a guessed block too** (#275). Walking out of one
-        // with `j` drops it at the end of `on_key`; clicking out of one never
-        // went through `on_key`, so the mode stayed on until the next
-        // keystroke — the cursor was in the paragraph and `hjkl` were still
+        // with `j` drops it at the end of `on_key`; a click does not go
+        // through `on_key`, so without this the mode would stay on until the
+        // next keystroke, with the cursor in the paragraph and `hjkl` still
         // walking cells.
         self.forget_a_guessed_table();
         self.find_the_table_here();
@@ -2678,7 +2631,7 @@ impl Editor {
         self.clipboard_read = Some(crate::editor::Pasting::Replace);
     }
 
-    /// `:paste-table <格式>` — 剪貼板裏那張表，轉成這一種再貼（2026-10-02 定）。
+    /// `:paste-table <格式>` — 剪貼板裏那張表，轉成這一種再貼。
     pub(super) fn paste_table(
         &mut self,
         to: crate::table::Shape,
@@ -2688,7 +2641,7 @@ impl Editor {
     }
 
     /// Take a pending clipboard read, and what to do with what comes back.
-    /// **前端，去讀一次系統剪貼板**——粘貼面板開着要畫它（2026-10-11）。
+    /// **前端，去讀一次系統剪貼板**——粘貼面板開着要畫它。
     pub fn take_clipboard_peek(&mut self) -> bool {
         std::mem::take(&mut self.clipboard_peek)
     }
@@ -2770,11 +2723,10 @@ impl Editor {
         let rope = self.current_buffer().rope();
         let last = motion::last_line(rope);
         // Warning: **`n` is a 1-based line of the file, and every caller means that.**
-        // 2026-10-20 I made this translate a grid *row* instead, which is what
-        // `:40` means — and broke the dozen callers that do not: `hold_the_pane`
-        // hands it `line + 1`, and `gg` then landed a row low in every table,
-        // multi-line records or none. The translation belongs on the command
-        // whose number is a row (`Command::GotoLine`), not here.
+        // Do not translate a grid *row* here, which is what `:40` means: the
+        // other callers mean a line (`hold_the_pane` hands it `line + 1`), and
+        // `gg` would land a row low in every table. The translation belongs on
+        // the command whose number is a row (`Command::GotoLine`), not here.
         let line = n.saturating_sub(1).min(last);
         let at = rope.line_to_char(line);
         let pos = motion::line_first_non_blank(rope, at);
@@ -2782,12 +2734,12 @@ impl Editor {
     }
 }
 
-/// **The first `rows` lines of a file, and not one byte more** (2026-09-22).
+/// **The first `rows` lines of a file, and not one byte more.**
 ///
 /// The picker walks files as fast as `j` repeats, and it previews whatever it
-/// is standing on. Reading the whole file to show twenty lines of it made one
-/// keystroke cost as much as opening the file — which on a 14 MB 碼表 is the
-/// 「突然卡死十幾二十秒」 that was reported.
+/// is standing on. Reading the whole file to show twenty lines of it would make
+/// one keystroke cost as much as opening the file — which on a 14 MB 碼表 is a
+/// freeze of ten or twenty seconds.
 ///
 /// Warning: **`lines()` stops where it is told**, so a huge file costs the head and
 /// the buffering, not its length. `None` for what cannot be read as text at
@@ -2803,9 +2755,9 @@ fn head_of_file(path: &Path, rows: usize) -> Option<Vec<String>> {
     for line in std::io::BufReader::new(file).lines().take(rows) {
         match line {
             Ok(line) => out.push(line.replace('\t', "    ")),
-            // **Not UTF-8: perhaps one of the three** (2026-11-04). The head
-            // of the file, read as it plainly is; a Big5 chapter used to
-            // preview as an empty pane.
+            // **Not UTF-8: perhaps one of the three.** The head of the file,
+            // read as it plainly is, so a Big5 chapter does not preview as an
+            // empty pane.
             Err(_) if out.is_empty() => return head_in_another_encoding(path, rows),
             // 讀到這裏爲止——前面那些照樣是正文。
             Err(_) => break,
@@ -2840,7 +2792,7 @@ fn head_in_another_encoding(path: &Path, rows: usize) -> Option<Vec<String>> {
 
 /// **一條詞條說的頭一句，裁到一行放得下**——挑詞條那扇面板每一行的後半截。
 ///
-/// 原話：「詞條+部分內容（用 ... 省略）」。裁的是**字**不是字節，而且只在這裏
+/// 詞條加一截內容，用 … 省略。裁的是**字**不是字節，而且只在這裏
 /// 裁一次：名字有多長、窗口有多寬是前端的事，這裏給的是「一句話的量」。
 fn blurb_of(line: &str) -> String {
     const BLURB: usize = 40;
