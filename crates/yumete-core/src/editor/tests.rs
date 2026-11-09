@@ -18681,6 +18681,16 @@ fn opening_a_file_by_name_goes_back_to_where_i_was() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **A preview tab's line names no file**: `preview\tmarkdown\t…` is not
+/// the path `preview`, so a file of that name in the working directory is
+/// not opened on a restore.
+#[test]
+fn a_session_s_preview_line_is_not_a_file_named_preview() {
+    let text = "/書/ch01.md\n/書/ch02.md\t7\npreview\tmarkdown\t/書/ch01.md\n";
+    let paths: Vec<_> = super::session::session_paths(text).collect();
+    assert_eq!(paths, [std::path::PathBuf::from("/書/ch01.md"), std::path::PathBuf::from("/書/ch02.md")]);
+}
+
 #[test]
 fn the_session_opens_again_what_was_open() {
     // Five `:open`s every morning is five too many.
