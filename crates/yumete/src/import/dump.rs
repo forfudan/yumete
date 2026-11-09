@@ -117,6 +117,9 @@ impl Failed {
 pub(super) struct Dumped {
     pub json: serde_json::Value,
     pub said: Option<String>,
+    /// Neovim said a Lua file or function stopped at an error (`E5108`,
+    /// `E5112`, `E5113`): what it would have set after that was never set.
+    pub stopped: bool,
 }
 
 /// Why a copy stopped part way.
@@ -464,22 +467,30 @@ impl Sandbox {
         kill_strays(&self.root);
         // The error's own line (`E5113: …`) before the line that leads to it,
         // with the copy's home written as the reader's `~`.
-        let said = std::fs::read_to_string(&err).ok().and_then(|text| {
+        let stderr = std::fs::read_to_string(&err).unwrap_or_default();
+        // **An error part way through a Lua file stops the file** (review,
+        // 2026-11-09): a colour scheme that was not installed in the copy
+        // took the five maps after it, and nothing said they were missing.
+        let stopped = ["E5108:", "E5112:", "E5113:"].iter().any(|e| stderr.contains(e));
+        let said = Some(stderr).and_then(|text| {
             let lines: Vec<&str> = text.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
             let numbered = |l: &&&str| l.starts_with('E') && l[1..].starts_with(|c: char| c.is_ascii_digit());
             let line = lines.iter().find(numbered).or(lines.first())?;
             let line = line.replace(&self.home.display().to_string(), "~");
             Some(line.chars().take(200).collect::<String>())
         });
-        let Some(json) = std::fs::read_to_string(&out).ok().and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
-        else {
+        // Read as UTF-8 where it is not (review, 2026-11-09): Neovim writes
+        // a description's bytes as they are, and one byte that was not
+        // UTF-8 made the whole dump unreadable.
+        let read = std::fs::read(&out).ok().map(|bytes| String::from_utf8_lossy(&bytes).into_owned());
+        let Some(json) = read.and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok()) else {
             return Err(Failed::NoOutput(said));
         };
         if json.get("error").and_then(|e| e.as_str()) == Some("too old") {
             let found = json.get("nvim").or(json.get("vim")).and_then(|v| v.as_str()).unwrap_or("an older one");
             return Err(Failed::TooOld(found.to_string()));
         }
-        Ok(Dumped { json, said })
+        Ok(Dumped { json, said, stopped })
     }
 }
 
