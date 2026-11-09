@@ -1,4 +1,4 @@
-//! **One answer for a page's name** (2026-11-08): `[export] page`, read by
+//! **One answer for a page's name**: `[export] page`, read by
 //! yumete-config, and `:export page=…`, read by yumete-core, which cannot see
 //! each other. This crate sees both.
 

@@ -1,4 +1,4 @@
-//! **The rendered Markdown preview in the editor's colours** (2026-11-08):
+//! **The rendered Markdown preview in the editor's colours**:
 //! a [`yumete_mdview::Theme`] filled from a [`Palette`], field by field, out
 //! of the same functions that colour the Markdown in the text window
 //! ([`crate::markup_style`], [`crate::block_style`]), so a heading is the

@@ -1,25 +1,23 @@
-//! **轉圈的那八個點**，一個模組，誰都用得上（2026-09-30 提的）。
+//! **轉圈的那八個點**，一個模組，誰都用得上。
 //!
-//! 原話：「⣾⣽⣻⢿⡿⣟⣯⣷ I love this. This can be used elsewhere (at different
-//! locations to mean different things). If it is beside the NOR, it means the
-//! status of LSP. It can also be somewhere else, like after a notice to show
-//! 『doing』, instead of using 『...』.」
+//! 不同的地方用它說不同的事：在 NOR 旁邊，它說語言服務器在忙；也可以跟在一句通知
+//! 後面說「正在做」，代替「...」。
 //!
 //! Warning: **它不存狀態，只問時間。** 轉到第幾格是「從什麽時候開始轉」算出來
 //! 的純函數——所以一個地方要用它，只要記得自己是什麽時候開始忙的，別的什麽都
 //! 不必記，也不會有兩處轉得不同步。
 //!
 //! Warning: **不轉的時候也要佔那一格。** 旁邊的字纔不會每八十毫秒跳一次；helix
-//! 的註釋原話是「Even if there's no spinner; reserve its space to avoid
+//! 的註釋寫的是「Even if there's no spinner; reserve its space to avoid
 //! elements frequently shifting」（`ui/statusline.rs`）。所以 [`frame`] 不轉的
 //! 時候回的是一個空格，不是空串。
 //!
-//! Warning: **那句話的後半至今沒有落點，而且理由是結構性的**（2026-10-02 查
-//! 的）。「after a notice to show 『doing』」要有一件**邊轉邊等**的事，而這個
+//! Warning: **「跟在通知後面」那一半沒有落點，而且理由是結構性的**。它要有一件
+//! **邊轉邊等**的事，而這個
 //! 編輯器裏慢的那幾件全是同步跑完的：搜索走磁碟（最長五秒，見
 //! `editor::WALK_DEADLINE`）、自動認詞、`:check` 那一族——它們一跑，主循環就
 //! 停在那裏，轉圈轉不動，畫出來的永遠是同一格。真要讓它轉起來，先要把那幾件搬
-//! 到後臺去，那是另一件事。所以今天只有語言服務器那一處用得上它：**那一頭本來
+//! 到後臺去，那是另一件事。所以只有語言服務器那一處用得上它：**那一頭本來
 //! 就在別的進程裏跑**。
 //!
 //! Warning: **要有人叫醒循環。** 這個編輯器是有事纔重畫的，不按秒重畫——所以轉
@@ -31,7 +29,7 @@ use std::time::{Duration, Instant};
 /// 八格，轉一圈。那一組點在等寬字體裏每一格都是一欄寬，換格的時候不會把旁邊的
 /// 字推開。
 ///
-/// **順時針**（2026-10-08 報的：「這裏能不能改成顺时针转圈？」）。八個字各缺一個
+/// **順時針**。八個字各缺一個
 /// 點，眼睛跟的是那個**缺口**——算出來的位置是：
 ///
 /// ```text
@@ -78,7 +76,7 @@ pub fn due_in(since: Option<Instant>) -> Option<Duration> {
 mod tests {
     use super::*;
 
-    /// **缺口是順時針走的**（2026-10-08 定）。每一格缺哪一個點是算得出來的，所以
+    /// **缺口是順時針走的**。每一格缺哪一個點是算得出來的，所以
     /// 這一條不靠眼睛：缺口的位置要一格一格走成 左1→右1→右2→右3→右4→左4→左3→左2。
     #[test]
     fn the_hole_goes_round_clockwise() {

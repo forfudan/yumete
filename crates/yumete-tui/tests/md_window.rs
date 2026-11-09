@@ -1,4 +1,4 @@
-//! **The Markdown preview, drawn** (2026-11-08): a Markdown file rendered
+//! **The Markdown preview, drawn**: a Markdown file rendered
 //! beside the text as one picture the window's size, following the cursor,
 //! scrolled by its own keys, laid out again once the typing settles, and
 //! asked for nothing when nothing changed.
@@ -214,7 +214,7 @@ fn the_markdown_previews_leave_a_typst_one_alone() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// **A vertical text, a vertical preview** (2026-11-08): while the page is
+/// **A vertical text, a vertical preview**: while the page is
 /// vertical the preview is asked for in columns from the right, as the
 /// export's settings say; following the cursor goes left; `j` and `h` step
 /// a column on, to the left; switched off, it runs across again.

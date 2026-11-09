@@ -197,7 +197,7 @@ impl Server {
 /// Every server, and the one rule about when to talk to them.
 /// **這一輪各服務器答了什麽**，攢着，等迴圈走完再一起交給編輯器（#425）。
 ///
-/// Warning: **一個問題現在發給這種語言的每一個服務器。** 於是「沒什麽可說的」
+/// Warning: **一個問題發給這種語言的每一個服務器。** 於是「沒什麽可說的」
 /// 這句話不能誰先答空誰說——**ruff 宣稱 `hoverProvider: true` 而實際回
 /// `null`**，誰先答空誰說的話它每次都搶在 pylsp 前面把「沒有」說出口。
 /// 規矩是 helix 那一條：**第一個非空的答案算數，全都答空了纔說沒有。**
@@ -1313,7 +1313,7 @@ impl Servers {
                     // **The answer to `gd`** — anything else with an id is an
                     // answer nobody is waiting for any more.
                     // Warning: **答案先收着，出了這個迴圈再說**（#425）。一個
-                    // 問題現在發給了這種語言的每一個服務器，所以「沒什麽可說
+                    // 問題發給這種語言的每一個服務器，所以「沒什麽可說
                     // 的」這句話要等**全都**答完了纔說得出口——而在迴圈裏借着
                     // 一個 server，動不了別人的 `asked_*`。
                     Ok(Notice::Answer { id, places, told, offers, incomplete, signature, edits, actions, error, symbols, spans, executed }) => {

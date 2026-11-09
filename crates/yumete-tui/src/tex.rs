@@ -1,4 +1,4 @@
-//! **TeX formulas as pictures, by RaTeX** (2026-11-08).
+//! **TeX formulas as pictures, by RaTeX**.
 //!
 //! Markdown writes its maths in TeX (`$…$`, `$$…$$`). The formula float
 //! under the cursor ([`crate::maths`]) draws it here, and anything else that
@@ -111,14 +111,14 @@ pub fn render_on_baseline(tex: &str, display: bool, ink: Ink, size: f32) -> Resu
     Ok((Picture { png, width, height }, baseline))
 }
 
-/// **A formula for `:export html`** (2026-11-08): in `ink` on clear — black
+/// **A formula for `:export html`**: in `ink` on clear — black
 /// for a printed page, the preview's writing for `:export-as-preview` — drawn at
 /// three times a 40-pixel em so it stays sharp when printed, and measured in
 /// `em` of the text around it — 1.1 of it, a little larger than the text as
 /// KaTeX sets it (1.21), since a CJK line is already a full square tall.
 /// Handed to the editor by `main` ([`yumete_core::Editor::set_formula_painter`]).
 ///
-/// **`turned`** (2026-11-08), for a formula down a vertical page: the
+/// **`turned`**, for a formula down a vertical page: the
 /// picture is turned a quarter turn clockwise in the bitmap, and measured as
 /// it is then shown — as wide as it was tall and as tall as it was wide —
 /// so the page shows an ordinary picture and turns nothing itself, which
@@ -418,7 +418,7 @@ impl Drop for Away {
     }
 }
 
-/// **Formulas for the rendered Markdown preview** (2026-11-08): RaTeX, as
+/// **Formulas for the rendered Markdown preview**: RaTeX, as
 /// the formula float draws them, with where each one's baseline is.
 pub struct Ratex;
 
@@ -535,7 +535,7 @@ mod tests {
         assert!(base_down < down.height as f32 - 2.0, "{base_down} in {}", down.height);
     }
 
-    /// **A formula for an HTML export** (2026-11-08) is measured in `em` of
+    /// **A formula for an HTML export** is measured in `em` of
     /// the text: about a line tall for `x^2`, reaching below the baseline
     /// for a fraction, and drawn three times finer than it is shown.
     #[test]
@@ -552,7 +552,7 @@ mod tests {
         assert!(for_export(r"\frac{a", false, false, [0, 0, 0]).is_err());
     }
 
-    /// **A formula turned for a vertical page** (2026-11-08) is turned in
+    /// **A formula turned for a vertical page** is turned in
     /// the bitmap, clockwise: the picture as tall as the upright one is wide,
     /// and what was its top row its right-hand column.
     #[test]
@@ -653,7 +653,7 @@ mod tests {
         drawing.join().unwrap();
     }
 
-    /// **Nothing reaches the screen** (2026-11-08): RaTeX says which font it
+    /// **Nothing reaches the screen**: RaTeX says which font it
     /// found for a 漢字 on standard error, and standard error is the
     /// terminal. Run in a process of its own, with nothing capturing its
     /// output, and its standard error read back.

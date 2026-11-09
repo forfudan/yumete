@@ -455,9 +455,9 @@ fn layout_page(
     //   asked for first — 「只對存在注釋的視覺縱出現」 — and the page it costs
     //   is one whose 縱 are not all the same width.
     // * `loose` asks **the paragraph**: any 縱 of it carrying something buys
-    //   the cell for all of them. This is how a 着重號 was always asked, for
-    //   the reason still worth having — the page does not change shape as it
-    //   scrolls through a paragraph — and now readings can be asked it too.
+    //   the cell for all of them. This is how a 着重號 is asked, for the
+    //   reason worth having — the page does not change shape as it scrolls
+    //   through a paragraph — and readings can be asked it too.
     // * `never` asks nothing; `always` keeps the cell empty.
     //
     // A paragraph's other 縱 may be off the page, so `loose` lays the whole
@@ -882,9 +882,9 @@ fn put_number(buf: &mut Buffer, x: u16, top: u16, rows: u16, digits: &str, style
     // instead of four. On an eighty-row terminal that is two rows of every
     // column given back to the writing.
     //
-    // This was tried once and taken out again: 「119」「118」 in neighbouring
-    // 縱 read as 「11」「11」 over 「9」「8」, a wall of digits. The reason it
-    // stands now is that the *neighbours* are told apart — every other 縱's
+    // Alone it would not work: 「119」「118」 in neighbouring 縱 read as
+    // 「11」「11」 over 「9」「8」, a wall of digits. It stands because the
+    // *neighbours* are told apart — every other 縱's
     // number is drawn a rung back — so two numbers side by side are two
     // colours, not one run. Position could never separate them here (the
     // number sits above the text, in the text's own columns), and colour is

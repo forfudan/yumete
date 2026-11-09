@@ -1,4 +1,4 @@
-//! **The Markdown preview, drawn** (2026-11-08): a Markdown file rendered by
+//! **The Markdown preview, drawn**: a Markdown file rendered by
 //! `yumete-mdview` in proportional type, in a preview tab of its own, as VS
 //! Code's Markdown preview sits beside the text.
 //!
@@ -66,7 +66,7 @@ pub struct Want {
     pub fonts: String,
     /// `[export] ruby_*`: the ruby spellings the export reads.
     pub ruby: yumete_core::ruby::Dialects,
-    /// **Set vertically** (2026-11-08) while the text window is and
+    /// **Set vertically** while the text window is and
     /// `:preview-vertical` is on, as `[export] vertical_latin` and
     /// `[export] hanging` say.
     pub vertical: Option<yumete_mdview::Vertical>,
@@ -315,8 +315,8 @@ impl MdPreviews {
         let now = Instant::now();
         let cell = crate::graphics::cell_pixels();
         let theme = crate::preview_theme::theme(crate::theme::Palette::of(config));
-        // **`:export-as-preview` writes the page in these colours**
-        // (2026-11-08): handed over whenever they change — a theme, or the
+        // **`:export-as-preview` writes the page in these colours**:
+        // handed over whenever they change — a theme, or the
         // mood — so the page is the preview as it is drawn now.
         if self.looked.as_ref() != Some(&theme) {
             self.looked = Some(theme.clone());

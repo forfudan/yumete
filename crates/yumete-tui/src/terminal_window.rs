@@ -1,12 +1,11 @@
-//! **Which window on the screen is the terminal this editor runs in**
-//! (2026-11-08), for `:shot` and `:shot png`.
+//! **Which window on the screen is the terminal this editor runs in**, for
+//! `:shot` and `:shot png`.
 //!
-//! Until today the shipped screenshot line asked `System Events` for the
-//! frontmost window's position and size. That is Accessibility, a permission a
-//! terminal is rarely given, and when it was missing `osascript` failed into a
-//! pipe whose status was `tr`'s, so `screencapture -R` still ran with an empty
-//! rectangle — and both of them wrote their complaints straight onto the
-//! editor's screen.
+//! Not by asking `System Events` for the frontmost window's position and size.
+//! That is Accessibility, a permission a terminal is rarely given, and when it
+//! is missing `osascript` fails into a pipe whose status is `tr`'s, so
+//! `screencapture -R` still runs with an empty rectangle — and both of them
+//! write their complaints straight onto the editor's screen.
 //!
 //! The window server will say which windows are on screen, whose they are and
 //! where, to anybody and without a permission (`CGWindowListCopyWindowInfo`;
@@ -206,7 +205,7 @@ mod backend {
     /// Warning: **the short record, not `PROC_PIDTBSDINFO`.** The terminal's
     /// child is `/usr/bin/login`, which runs as root, and the full record of a
     /// root process is refused to a user (`proc_pidinfo` answers 0) — the walk
-    /// stopped one step short of Ghostty. The short one is answered for any
+    /// would stop one step short of Ghostty. The short one is answered for any
     /// process, as `ps` answers.
     pub fn ancestors(pid: u32) -> Vec<u32> {
         let mut chain = Vec::new();

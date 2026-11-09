@@ -1,4 +1,4 @@
-//! **The page window, drawn** (2026-11-07): a page beside the text in
+//! **The page window, drawn**: a page beside the text in
 //! placeholder cells, its picture uploaded once, the page number under it;
 //! and words instead where no picture can be drawn.
 //!
@@ -54,7 +54,7 @@ fn the_page_is_drawn_beside_the_text_and_uploaded_once() {
     assert!(!plain.contains(PLACEHOLDER), "{plain}");
     assert!(plain.contains(&yumete_core::say!("preview.no-pictures")[..6]), "{plain}");
 
-    // **The tab line and the status line** (2026-11-08): the preview's tab
+    // **The tab line and the status line**: the preview's tab
     // by its name; with the keys in it, the status line says that name and
     // nothing of a place, a count or a lock its empty buffer has no use for.
     let label = yumete_core::say!("preview.tab", "main.typ");
@@ -108,7 +108,7 @@ fn the_page_is_drawn_beside_the_text_and_uploaded_once() {
     assert!(owed.contains("a=d,d=I"), "{owed:?}");
     assert!(!frame(&mut editor, &config).contains(PLACEHOLDER));
 
-    // **Two previews on the screen at once** (2026-11-08): two documents,
+    // **Two previews on the screen at once**: two documents,
     // each page under picture ids of its own; closing one frees its pair
     // and no more.
     editor.execute(":preview-fit width").unwrap();
