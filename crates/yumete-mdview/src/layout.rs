@@ -166,6 +166,10 @@ pub(crate) struct Engine {
     pub formulas: Box<dyn Formulas>,
     /// The document's writing system, and the faces of each.
     pub han: Han,
+    /// **Whether curly quotes become corner brackets down a vertical page**
+    /// (2026-11-09): the export's rule, the document in Chinese as
+    /// [`yumete_core::export::document_language`] decides it.
+    pub quotes: bool,
     families: [Arc<Families>; 3],
     /// `[export] font_family`, which the faces of each writing system begin
     /// with.
@@ -199,6 +203,7 @@ impl Engine {
             base_dir,
             formulas,
             han: Han::default(),
+            quotes: false,
             squeeze: true,
             families: [Han::Simplified, Han::Traditional, Han::Japanese].map(|h| Arc::new(families(h, ""))),
             font_list: String::new(),

@@ -38,7 +38,6 @@ use parley::{FontData, FontFamily, FontStyle, FontWeight, LineHeight, StylePrope
 use vello_cpu::kurbo::Affine;
 use yumete_core::export::{Latin, Orientation, CODE_HANG, CODE_HOOK};
 
-use crate::fonts::Han;
 use crate::layout::{closing_mark, ink_of, opening_mark, push_marks, rect, Ctx, Engine, Ink, Item, Laid, Out, Pix, Run, Style};
 use crate::parse::{Align, Block, BlockKind, Callout, Inline, InlineKind, Marks};
 use crate::theme::Rgba;
@@ -359,9 +358,11 @@ impl Engine {
         let verbatim_at = |at: usize| st.mono || ranges.iter().any(|(r, m, ..)| r.contains(&at) && m.code);
 
         // **The text as shown**: curly quotes as corner brackets in Chinese,
-        // never in code. Each is three bytes, as its bracket is.
+        // never in code. Each is three bytes, as its bracket is. Chinese is
+        // what the export calls Chinese (2026-11-09): the same rule, not the
+        // writing system the faces are chosen by.
         let typed: Vec<(usize, char)> = text.char_indices().collect();
-        let quotes = self.han != Han::Japanese && !st.mono;
+        let quotes = self.quotes && !st.mono;
         let shown: String = match quotes {
             true => {
                 let plain: Vec<char> = typed.iter().map(|&(at, c)| if code_at(at) { '\u{3000}' } else { c }).collect();
@@ -430,9 +431,12 @@ impl Engine {
             }
             // A mark UAX #50 stands upright (`×`, `±`) stands, as
             // `text-orientation: mixed` leaves it in the export (2026-11-09).
+            // **A curly quote that stays curly is turned** (2026-11-09,
+            // reported: `“go”` stood its quotes upright): UAX #50 gives it R,
+            // and a browser turns it, as the export's page shows it.
             if c == ' ' || c == '\u{a0}' || c == '\t' {
                 seg[k] = Seg::Gap;
-            } else if half_width(c) && !yumete_core::export::upright_mark(c) {
+            } else if (half_width(c) && !yumete_core::export::upright_mark(c)) || matches!(c, '“' | '”' | '‘' | '’') {
                 seg[k] = Seg::Run(latin_runs.len());
                 latin_runs.push(LatinRun { bytes: at..at + c.len_utf8(), how: Orientation::Turned, small: false });
             }
@@ -622,7 +626,13 @@ impl Engine {
                                     let base = if run.small { 0.15 * st.size } else { 0.0 } - (c0.asc - c0.desc) / 2.0;
                                     let look = Look::Turn { font: c0.font.clone(), coords: c0.coords.clone(), size: c0.size, glyphs: std::mem::take(glyphs), base };
                                     let ch = shown[c0.at.clone()].chars().next().unwrap_or('a');
-                                    let mut u = Unit::new(look, *pen, c0.asc + c0.desc, st.size, Cls::Normal, ch, c0.ink, c0.at.start..group[b - 1].at.end);
+                                    // One mark turned on its own breaks as it would
+                                    // upright: a turned `“` ends no column.
+                                    let cls = match b - a {
+                                        1 => class_of(ch),
+                                        _ => Cls::Normal,
+                                    };
+                                    let mut u = Unit::new(look, *pen, c0.asc + c0.desc, st.size, cls, ch, c0.ink, c0.at.start..group[b - 1].at.end);
                                     u.glue = glue;
                                     units.push(u);
                                     *pen = 0.0;
@@ -1663,13 +1673,19 @@ impl Engine {
         // page, where nothing could bring them back. Every band then gives
         // way down to a square, its cells wrapping as a long one does, so
         // the table is never longer than the column, as the export has it.
+        //
+        // Warning: **only a band longer than a square gives way, and the floor
+        // counts a shorter one as it is** (2026-11-09, reported: a table with
+        // empty cells still ran past the foot): the floor was a square for
+        // every band, and a short band was stretched up to a square while the
+        // long ones were shrunk to fit the floor that did not count it.
         let least = em + 2.0 * pad;
         let given: f32 = bands.iter().sum();
-        let floor = nband as f32 * least;
+        let floor: f32 = bands.iter().map(|&b| b.min(least)).sum();
         let bands: Vec<f32> = match given > room && given > floor {
             true => {
                 let k = ((room - floor) / (given - floor)).clamp(0.0, 1.0);
-                bands.iter().map(|&b| least + (b - least).max(0.0) * k).collect()
+                bands.iter().map(|&b| if b > least { least + (b - least) * k } else { b }).collect()
             }
             false => bands,
         };
@@ -1677,10 +1693,27 @@ impl Engine {
         // Each cell in its band, and each row as thick as its fullest cell.
         let mut laid: Vec<Vec<VText>> = Vec::with_capacity(cells.len());
         let mut thick: Vec<f32> = Vec::with_capacity(cells.len());
-        for row in cells {
+        //
+        // **A word longer than its band is cut** (2026-11-09, reported: a URL
+        // in a cell ran past the foot of the page): a cell was read with the
+        // page's column length, so a word that fitted the page and not the
+        // band stood out of its cell. Such a cell is read again at the band's
+        // length, the word cut anywhere, as the export breaks it.
+        for (ri, row) in cells.into_iter().enumerate() {
             let mut r: Vec<VText> = Vec::with_capacity(nband);
             for (b, cell) in row.into_iter().enumerate() {
-                r.push(columns(cell, (bands[b] - 2.0 * pad).max(em), 0.0, 0.0, false, false));
+                let inner = (bands[b] - 2.0 * pad).max(em);
+                let cell = match cell.units.iter().any(|unit| unit.adv > inner + 0.5) {
+                    true => {
+                        let st = match ri {
+                            0 => Style { weight: 600.0, color: self.theme.table_head, ..body },
+                            _ => body,
+                        };
+                        self.units(all[ri].1.get(b).unwrap_or(&empty), st, inner)
+                    }
+                    false => cell,
+                };
+                r.push(columns(cell, inner, 0.0, 0.0, false, false));
             }
             let most = r.iter().map(|vt| vt.cols.len().max(1)).max().unwrap_or(1);
             thick.push(most as f32 * pitch + 2.0 * pad);
@@ -1736,6 +1769,7 @@ impl Engine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::fonts::Han;
     use crate::{Formula, Formulas, Options, Preview, Theme};
     use vello_cpu::kurbo::Rect;
 
@@ -1854,7 +1888,79 @@ mod tests {
         let mut e = engine(Latin::Turn, false);
         e.han = Han::Japanese;
         let l = looks(&mut e, "彼は“雨”と言った。");
-        assert_eq!(how(&l, "“"), ["up"], "a Japanese text keeps its quotes: {l:?}");
+        assert_eq!(how(&l, "“"), ["turned"], "a Japanese text keeps its quotes, turned: {l:?}");
+    }
+
+    /// **A curly quote that stays curly is turned** (2026-11-09, reported:
+    /// it stood upright): orientation R, as a browser sets it in the export,
+    /// and it still breaks as a quote, never ending a column.
+    #[test]
+    fn a_curly_quote_that_stays_is_turned() {
+        let mut e = engine(Latin::Turn, false);
+        e.quotes = true;
+        let l = looks(&mut e, "他说“go”，又说“走”。");
+        assert_eq!(how(&l, "“"), ["turned"], "{l:?}");
+        assert_eq!(how(&l, "”"), ["turned"], "{l:?}");
+        assert_eq!(how(&l, "『"), ["up"], "{l:?}");
+        let u = e.units(&runs("他说“go”。"), body(), 10_000.0);
+        let open = u.units.iter().find(|x| x.ch == '“').expect("the quote");
+        assert_eq!(open.cls, Cls::Open);
+    }
+
+    /// **The preview turns quotes exactly when the export does** (2026-11-09):
+    /// the page's language as the export decides it, not its writing
+    /// system; an English page quoting Chinese keeps its quotes.
+    #[test]
+    fn quotes_turn_when_the_export_turns_them() {
+        let text = "This essay is mostly written in English words, and it quotes “走吧” once, then goes on in English.\n";
+        let p = page(text, Latin::Turn, 600);
+        let all = columns_of(&p).concat();
+        assert!(all.contains("“走吧”") && !all.contains('『'), "{all}");
+        let p = page("这一段是中文，引用了“走吧”。\n", Latin::Turn, 600);
+        assert!(columns_of(&p).concat().contains("『走吧』"));
+    }
+
+    /// **Under jlreq a letter with marks joined to it stands as the letter
+    /// alone** (2026-11-09), the marks turned beside it as the export's page
+    /// sets them; `x, y` are two letters.
+    #[test]
+    fn under_jlreq_a_letter_with_its_marks_stands_upright() {
+        let mut e = engine(Latin::Jlreq, false);
+        let l = looks(&mut e, "又 (x) 与 x. 和 x, y 写。");
+        assert_eq!(how(&l, "x"), ["across", "across", "across"], "{l:?}");
+        assert_eq!(how(&l, "y"), ["across"], "{l:?}");
+        assert_eq!(how(&l, "("), ["turned"], "{l:?}");
+        assert_eq!(how(&l, "."), ["turned"], "{l:?}");
+    }
+
+    /// **A vertical table never runs past the foot** (2026-11-09, reported):
+    /// empty and short bands keep their length while the long ones give way
+    /// to fit, and a long word or an address in a cell is cut to its band.
+    #[test]
+    fn a_tables_cells_stay_inside_and_above_the_foot() {
+        let mut e = engine(Latin::Turn, false);
+        let below = |laid: &Laid, len: f32| {
+            for item in &laid.items {
+                match item {
+                    Item::Rect { r, .. } => assert!(r.y1 <= f64::from(len) + 1.0, "a line ends at {} on a column {len} long", r.y1),
+                    Item::Glyphs(run) => assert!(run.bounds.y1 <= f64::from(len) + 1.0, "glyphs end at {} on a column {len} long", run.bounds.y1),
+                    _ => {}
+                }
+            }
+        };
+        let text = "| 一 |  | 很长很长很长很长很长的一格 |  | 又是很长很长很长很长的一格 |\n|---|---|---|---|---|\n| 甲 |  | 乙 |  | 丙 |\n";
+        let block = crate::parse::parse(text).into_iter().next().unwrap();
+        for len in [160.0f32, 220.0, 300.0] {
+            below(&e.vtop(&block, None, Page { top: 0.0, len, width: 800.0 }), len);
+        }
+        let text = "| 名 | 网址 |\n|---|---|\n| 甲 | https://example.com/a/very/long/path/that/goes/on/and/on/index.html |\n";
+        let block = crate::parse::parse(text).into_iter().next().unwrap();
+        for len in [200.0f32, 300.0, 420.0] {
+            let laid = e.vtop(&block, None, Page { top: 0.0, len, width: 800.0 });
+            below(&laid, len);
+            let words: String = laid.cols.iter().map(|c| c.1.as_str()).collect();
+            assert!(words.contains("index.html"), "{len}: {words}");
+        }
     }
 
     const LONG: &str = "那一年秋天，我们走了很远的路，看见一座山。山上有树，树下有人，他说：“雨要来了。”我们没有回答——只是看着他。\
