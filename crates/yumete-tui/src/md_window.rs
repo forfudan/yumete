@@ -66,7 +66,7 @@ pub struct Want {
     /// `[export] ruby_*`: the ruby spellings the export reads.
     pub ruby: yumete_core::ruby::Dialects,
     /// **Set vertically** (2026-11-08) while the text window is and
-    /// `:view-preview-vertical` is on, as `[export] vertical_latin` and
+    /// `:preview-vertical` is on, as `[export] vertical_latin` and
     /// `[export] hanging` say.
     pub vertical: Option<yumete_mdview::Vertical>,
 }

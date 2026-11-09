@@ -471,31 +471,31 @@ zhs = "窗口太矮，无法打开选择器"
 en = "the window is too short for the picker"
 
 [[message]]
-# :view-preview 做不出那一頁
+# :preview 做不出那一頁
 key = "preview.failed"
 zhs = "预览：{0}"
 en = "preview: {0}"
 
 [[message]]
-# :view-preview-fit page，或裸的 :view-preview-fit 问到是整页（草稿）
+# :preview-fit page，或裸的 :preview-fit 问到是整页（草稿）
 key = "preview.fit-page"
 zhs = "页面窗口：整页放进窗口"
 en = "page window: the whole page in the window"
 
 [[message]]
-# :view-preview-fit width，或裸的 :view-preview-fit 问到是页宽（草稿）
+# :preview-fit width，或裸的 :preview-fit 问到是页宽（草稿）
 key = "preview.fit-width"
 zhs = "页面窗口：页宽适应窗口"
 en = "page window: the page as wide as the window"
 
 [[message]]
-# :view-preview 打不开页面窗口，改在浏览器中预览了。{0} 是原因（草稿）
+# :preview 打不开页面窗口，改在浏览器中预览了。{0} 是原因（草稿）
 key = "preview.in-the-browser"
 zhs = "{0}；已改在浏览器中预览"
 en = "{0}; previewing in a browser instead"
 
 [[message]]
-# :view-preview 一份 Markdown 稿子，導出的那一頁交給瀏覽器了
+# :preview 一份 Markdown 稿子，導出的那一頁交給瀏覽器了
 key = "preview.made"
 zhs = "预览：{0}"
 en = "preview: {0}"
@@ -513,7 +513,7 @@ zhs = "页面窗口需要 tinymist，但没有找到"
 en = "the page window needs tinymist, which is not installed"
 
 [[message]]
-# :view-preview 用在没有標記語法的檔案上
+# :preview 用在没有標記語法的檔案上
 key = "preview.nothing-to-preview"
 zhs = "此文件没有标记，无可预览"
 en = "this file has no markup, so there is nothing to preview"
@@ -525,10 +525,10 @@ zhs = "预览没有可保存的文件；用 :q 关闭窗口"
 en = "a preview has no file to write; :q closes its window"
 
 [[message]]
-# :view-preview-window 打不开页面窗口，{0} 是原因，后面提示可以用浏览器（草稿）
+# :preview-window 打不开页面窗口，{0} 是原因，后面提示可以用浏览器（草稿）
 key = "preview.or-the-browser"
-zhs = "{0}；`:view-preview-browser` 可在浏览器中预览"
-en = "{0}; `:view-preview-browser` previews it in a browser"
+zhs = "{0}；`:preview-browser` 可在浏览器中预览"
+en = "{0}; `:preview-browser` previews it in a browser"
 
 [[message]]
 # 啓動時停掉上次留下的預覽服務器
@@ -557,11 +557,11 @@ en = "rendering…"
 [[message]]
 # 預覽服務器開啟了
 key = "preview.running"
-zhs = "预览：{0}(`:view-preview` 停止)"
-en = "preview: {0} (`:view-preview` stops it)"
+zhs = "预览：{0}(`:preview` 停止)"
+en = "preview: {0} (`:preview` stops it)"
 
 [[message]]
-# :view-preview 用在没存過的緩衝區上
+# :preview 用在没存過的緩衝區上
 key = "preview.save-first"
 zhs = "请先保存，排版器读取的是文件"
 en = "save first: the typesetter reads the file"
@@ -585,13 +585,13 @@ zhs = "预览 {0}"
 en = "Preview {0}"
 
 [[message]]
-# :view-preview-theme 关闭之后：预览页面按印刷原样（草稿）
+# :preview-theme 关闭之后：预览页面按印刷原样（草稿）
 key = "preview.theme-off"
 zhs = "页面窗口：按印刷原样"
 en = "page window: as printed"
 
 [[message]]
-# :view-preview-theme 打开之后：预览页面用主题配色（草稿）
+# :preview-theme 打开之后：预览页面用主题配色（草稿）
 key = "preview.theme-on"
 zhs = "页面窗口：使用主题配色"
 en = "page window: in the theme's colours"
@@ -615,7 +615,7 @@ zhs = "页面窗口只能显示 Typst"
 en = "the page window shows Typst only"
 
 [[message]]
-# :view-preview 一份 Typst 稿子，排版器正在起來
+# :preview 一份 Typst 稿子，排版器正在起來
 key = "preview.typst-starting"
 zhs = "预览：tinymist 启动中……"
 en = "preview: tinymist starting…"
@@ -624,19 +624,19 @@ en = "preview: tinymist starting…"
 # ── problem ──────────────────────────────────────────
 
 [[message]]
-# :view-preview-vertical 关闭之后：Markdown 预览总是横排（草稿）
+# :preview-vertical 关闭之后：Markdown 预览总是横排（草稿）
 key = "preview.vertical-off"
 zhs = "Markdown 预览：总是横排"
 en = "Markdown preview: always across"
 
 [[message]]
-# :view-preview-vertical 打开之后：文字窗口竖排时 Markdown 预览也竖排（草稿）
+# :preview-vertical 打开之后：文字窗口竖排时 Markdown 预览也竖排（草稿）
 key = "preview.vertical-on"
 zhs = "Markdown 预览：文字竖排时也竖排"
 en = "Markdown preview: vertical while the text is"
 
 [[message]]
-# :view-preview off、:view-preview-window off，或在预览标签上 :bc，关掉了这份文件的预览标签（草稿）
+# :preview off、:preview-window off，或在预览标签上 :bc，关掉了这份文件的预览标签（草稿）
 key = "preview.window-closed"
 zhs = "已关闭预览"
 en = "closed the preview"
@@ -644,8 +644,8 @@ en = "closed the preview"
 [[message]]
 # 要打开页面窗口，而这个窗口已经有一个页面窗口跟着（草稿）
 key = "preview.window-open"
-zhs = "页面窗口已打开(`:view-preview` 关闭)"
-en = "the page window is open (`:view-preview` closes it)"
+zhs = "页面窗口已打开(`:preview` 关闭)"
+en = "the page window is open (`:preview` closes it)"
 
 [[message]]
 # 側欄裏打 :wq：沒有文件可寫

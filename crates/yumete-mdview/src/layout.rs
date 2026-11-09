@@ -185,7 +185,7 @@ pub(crate) struct Engine {
     /// Each picture's size in pixels, read from its file's header, with the
     /// file's stamp when read.
     sizes: std::collections::HashMap<String, (Stamp, Option<(u32, u32)>)>,
-    /// Set vertically, and how (`:view-preview-vertical`).
+    /// Set vertically, and how (`:preview-vertical`).
     pub vertical: Option<crate::vertical::Vertical>,
     /// Characters shaped down a column, by face: each one's glyph, advance
     /// and offsets, in ems.

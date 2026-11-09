@@ -424,8 +424,8 @@ en = "{0}: done"
 [[message]]
 # 設定裏那條命令其實是服務器
 key = "language.is-a-server"
-zhs = "{0} 是服务器，用 :view-preview 启动"
-en = "{0} is a server; start it with :view-preview"
+zhs = "{0} 是服务器，用 :preview 启动"
+en = "{0} is a server; start it with :preview"
 
 [[message]]
 # 設定裏没説這種檔要跑什麼

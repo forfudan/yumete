@@ -68,7 +68,7 @@ fn a_markdown_preview_is_drawn_and_follows_the_cursor() {
     let page = editor.open_page_window_of(main.clone(), PreviewKind::Markdown).expect("room");
     let preview = editor.preview_in(page).unwrap();
 
-    // **No pictures here**: said in words; `:view-preview` would go to the
+    // **No pictures here**: said in words; `:preview` would go to the
     // browser for the reason `why_not` gives.
     graphics::set_support(Support::None);
     let plain = frame(&mut editor, &config);
@@ -175,7 +175,7 @@ fn a_markdown_preview_is_drawn_and_follows_the_cursor() {
     }
 
     // **Closed**: its pictures freed.
-    editor.execute(":view-preview off").unwrap();
+    editor.execute(":preview off").unwrap();
     let _ = graphics::take_pending();
     md.follow(&mut editor, &config);
     assert!(md_window::shot_of(preview).is_none());
@@ -260,7 +260,7 @@ fn a_vertical_text_has_a_vertical_preview() {
     md.follow(&mut editor, &config);
     assert_eq!(md.sent(preview).map(|w| w.top), Some(Top::At((at + 2.0 * cell.0 as f32) as i64)), "`l` comes back");
 
-    editor.execute(":view-preview-vertical off").unwrap();
+    editor.execute(":preview-vertical off").unwrap();
     md.follow(&mut editor, &config);
     assert_eq!(md.sent(preview).and_then(|w| w.vertical), None);
     md_window::clear();

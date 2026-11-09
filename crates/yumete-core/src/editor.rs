@@ -860,7 +860,7 @@ pub enum Preview {
     /// page again?」.
     Show,
     Stop,
-    /// **The page beside the text** (`:view-preview`, `:view-preview-window`,
+    /// **The page beside the text** (`:preview`, `:preview-window`,
     /// 2026-11-07): a window drawn by tinymist, opened by the front end, which
     /// knows whether this terminal draws pictures and how old the tinymist is.
     /// With `fallback`, a window that cannot be drawn becomes the browser's
@@ -3380,7 +3380,7 @@ pub struct Editor {
     /// editor knows *what* was asked for and the front end knows how to run a
     /// program.
     language_run: Option<LanguageRun>,
-    /// A pending `:view-preview`, waiting for the front end — starting a typesetter
+    /// A pending `:preview`, waiting for the front end — starting a typesetter
     /// is running a program, which only the front end can do.
     preview_request: Option<Preview>,
     /// Where the typesetter that **is running** put its page.
@@ -3401,13 +3401,13 @@ pub struct Editor {
     /// **A PDF being typeset for `:export-as-preview`** (2026-11-08), on a
     /// thread of its own.
     typesetting: Option<files::Typesetting>,
-    /// How big a page window draws the page (`:view-preview-fit`).
+    /// How big a page window draws the page (`:preview-fit`).
     preview_fit: PreviewFit,
     /// Whether the page is drawn in the theme's colours rather than as
-    /// printed (`:view-preview-theme`, `[editor] preview_theme`).
+    /// printed (`:preview-theme`, `[editor] preview_theme`).
     preview_theme: bool,
     /// Whether the Markdown preview is set vertically while the text window
-    /// is (`:view-preview-vertical`, `[editor] preview_vertical`).
+    /// is (`:preview-vertical`, `[editor] preview_vertical`).
     preview_vertical: bool,
     /// The scroll keys pressed in a page window, for the front end.
     page_steps: Vec<PageStep>,
@@ -4945,7 +4945,7 @@ impl Editor {
         self.preview_look = Some(looker);
     }
 
-    /// The running typesetter's address, for the status bar and for `:view-preview`.
+    /// The running typesetter's address, for the status bar and for `:preview`.
     pub fn preview_at(&self) -> Option<&str> {
         self.preview_at.as_deref()
     }

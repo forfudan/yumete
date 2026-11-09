@@ -273,7 +273,7 @@ pub fn complaints(config: &Config) -> Vec<String> {
 }
 
 /// **How the page looks, as the `:` commands that would set it** (2026-10-28),
-/// without the colon: the layout, the `:view-*` settings (not `:view-preview`,
+/// without the colon: the layout, the `:view-*` settings (not `:preview`,
 /// which starts a server) and the theme. Order matters where one sets another:
 /// `view-wrap-width 40` turns wrapping on, so the width comes before the
 /// switch. The switches are written `on`/`off`, which only the replay reads
@@ -318,9 +318,9 @@ fn view_lines(editor: &Editor) -> Vec<String> {
             Some(upto) => format!("view-long-line {upto}"),
             None => "view-long-line off".to_string(),
         },
-        format!("view-preview-fit {}", editor.preview_fit().name()),
-        format!("view-preview-theme {}", on(editor.preview_theme())),
-        format!("view-preview-vertical {}", on(editor.preview_vertical())),
+        format!("preview-fit {}", editor.preview_fit().name()),
+        format!("preview-theme {}", on(editor.preview_theme())),
+        format!("preview-vertical {}", on(editor.preview_vertical())),
     ]
 }
 

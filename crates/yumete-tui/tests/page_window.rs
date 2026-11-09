@@ -94,14 +94,14 @@ fn the_page_is_drawn_beside_the_text_and_uploaded_once() {
     assert!(graphics::take_pending().is_empty(), "an unchanged page is not uploaded again");
 
     // The whole page instead: smaller, and the picture placed again.
-    editor.execute(":view-preview-fit page").unwrap();
+    editor.execute(":preview-fit page").unwrap();
     let whole = frame(&mut editor, &config);
     let whole_rows = whole.lines().filter(|r| r.contains(PLACEHOLDER)).count();
     assert!(whole_rows <= 22 && whole_rows > 5, "{whole}");
     assert!(!graphics::take_pending().is_empty(), "another size is another upload");
 
     // Closed: the window goes, and the pictures are freed.
-    editor.execute(":view-preview off").unwrap();
+    editor.execute(":preview off").unwrap();
     page_window::clear();
     graphics::drop_pages();
     let owed = String::from_utf8(graphics::take_pending()).unwrap();
@@ -111,7 +111,7 @@ fn the_page_is_drawn_beside_the_text_and_uploaded_once() {
     // **Two previews on the screen at once** (2026-11-08): two documents,
     // each page under picture ids of its own; closing one frees its pair
     // and no more.
-    editor.execute(":view-preview-fit width").unwrap();
+    editor.execute(":preview-fit width").unwrap();
     let other = dir.join("other");
     std::fs::create_dir_all(&other).unwrap();
     std::fs::write(other.join("note.typ"), "= 附記\n").unwrap();

@@ -699,7 +699,7 @@ pub fn run(
     // **預覽開始之前主題是什麼樣**（2026-10-07）。外面那一層是「有沒有預覽在場」，
     // 裏面那一層是「開始的時候選着誰」——誰都沒選過也要記得，放回去纔放得準。
     let mut was_themed: Option<Option<yumete_config::ThemeConfig>> = None;
-    // A typesetter started with `:view-preview`, if one is running — and one left
+    // A typesetter started with `:preview`, if one is running — and one left
     // behind by a session that ended badly, which is stopped before this one
     // can start another.
     let mut job: Option<Job> = None;
@@ -1329,7 +1329,7 @@ pub fn run(
         servers.ask_signature_doc(editor, config);
         // **The page window** (2026-11-07): after `collect`, where tinymist's
         // answers land. A window that cannot be drawn after all, opened by
-        // `:view-preview`, becomes the browser's preview.
+        // `:preview`, becomes the browser's preview.
         if markdown.follow(editor, config) {
             server_said_something = true;
         }
@@ -1586,7 +1586,7 @@ pub fn run(
                         None => editor.set_status(clipboard_unreadable()),
                     }
                 }
-                        // `:view-preview` — the real typesetter, in the background. Its
+                        // `:preview` — the real typesetter, in the background. Its
                 // address arrives on a later turn of the loop.
                 // `C-z` (helix's `suspend`): the terminal goes back to the
                 // shell as it would on the way out, and comes back on `fg`.
@@ -1695,7 +1695,7 @@ pub fn run(
                     use yumete_core::editor::Preview;
                     // **The page window** (2026-11-07): opened when this
                     // terminal draws pictures and tinymist is new enough;
-                    // otherwise said why, or, from `:view-preview`, the
+                    // otherwise said why, or, from `:preview`, the
                     // browser's preview instead.
                     let (want, why) = match want {
                         Preview::Window { path, syntax, fallback } => {
@@ -3763,7 +3763,7 @@ fn a_number() -> u128 {
 /// 是那個程序的實現細節，說法是它的接口。Warning: 那一行**自己不帶 `http://`**，它寫
 /// 的是 `… listening on: 127.0.0.1:23625`，所以地址是拼出來的。
 ///
-/// 認不出來就退回第一個地址——那是舊行為，對別的預覽服務器（`:view-preview` 是
+/// 認不出來就退回第一個地址——那是舊行為，對別的預覽服務器（`:preview` 是
 /// 每個語言自己配的）總比什麽都不開強。
 /// **Both of the addresses a preview server prints**, from one pass.
 ///
@@ -3885,7 +3885,7 @@ fn run_for_language(
                 Err(err) => say!("language.cannot-run", err),
             }
         }
-        // A server is a life of its own; `:view-preview` owns that path.
+        // A server is a life of its own; `:preview` owns that path.
         yumete_config::RunKind::Server => {
             say!("language.is-a-server", want.verb)
         }
@@ -3944,8 +3944,8 @@ fn run_program(
     })
 }
 
-/// **The browser's preview of `path`** (`:view-preview-browser`, and
-/// `:view-preview` where the page window cannot be drawn): the typesetter in
+/// **The browser's preview of `path`** (`:preview-browser`, and
+/// `:preview` where the page window cannot be drawn): the typesetter in
 /// the background for Typst, its address arriving on a later turn of the
 /// loop; the export, made once and handed to the browser, for Markdown.
 fn start_the_browser_preview(
@@ -3996,7 +3996,7 @@ fn start_the_browser_preview(
             // there, which is right for a manuscript and
             // wrong for the scratch page this rewrites
             // every time. Without the `!` the *second*
-            // `:view-preview` of a Markdown file failed, and
+            // `:preview` of a Markdown file failed, and
             // said so in the language of a command the
             // reader had not typed.
             match editor.execute(&format!("export! html {}", out.display())) {

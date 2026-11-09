@@ -219,7 +219,7 @@ const DISOWNED: &[&str] = &[
     ":meter",
     ":note",
     ":hud",
-    ":preview",
+    // `:preview` came back on 2026-11-09 as the preview's own group.
     ":progress",
     ":prog",
     ":target",

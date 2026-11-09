@@ -137,16 +137,16 @@ pub struct EditorConfig {
     /// **How big the page window draws the page** (2026-11-07): `"width"`
     /// (the default), the page as wide as the window and scrolled to the
     /// cursor, or `"page"`, the whole page in the window.
-    /// `:view-preview-fit` sets it for the session.
+    /// `:preview-fit` sets it for the session.
     pub preview_fit: String,
     /// **The preview's page in the theme's colours** (2026-11-08): the
     /// paper as the background, black as the text colour. Off: the page as
-    /// printed. `:view-preview-theme` sets it for the session.
+    /// printed. `:preview-theme` sets it for the session.
     pub preview_theme: bool,
     /// **The Markdown preview set vertically when the text is** (2026-11-08):
     /// while the text window's page is vertical (`:vertical`), the preview
     /// runs in columns from the right as the vertical export does. On.
-    /// `:view-preview-vertical` sets it for the session.
+    /// `:preview-vertical` sets it for the session.
     pub preview_vertical: bool,
     /// **What a yank copied, lit for a moment** (2026-11-07): nvim's
     /// `vim.hl.on_yank`, 150 ms on the selection's ground. Off, as nvim has
@@ -3010,7 +3010,7 @@ impl Default for KeyConfig {
 /// format = { run = "rumdl check --fix {file}" }
 /// ```
 ///
-/// **The verbs are language-independent** — `:view-preview`, `:format` — so one key
+/// **The verbs are language-independent** — `:preview`, `:format` — so one key
 /// means one thing in every file and the config says how it is done here.
 ///
 /// **A project may define these**, and the safety is in *how* they run: no

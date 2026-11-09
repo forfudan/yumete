@@ -30,7 +30,7 @@ ratex-render = { version = "0.1.15", features = ["embed-fonts"] }
 ratex-types = "0.1.15"
 
 # **The preview's page in the theme's colours** (2026-11-08,
-# `:view-preview-theme`): the PNG tinymist hands over is read, each pixel
+# `:preview-theme`): the PNG tinymist hands over is read, each pixel
 # mapped from paper and ink to the theme's, and written again. Already in
 # the tree under `ratex-render`; MIT or Apache-2.0.
 png = "0.17"

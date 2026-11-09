@@ -12,7 +12,7 @@
 //! ```
 //!
 //! `--vertical` sets the page as the preview of a vertical text window does
-//! (`:view-preview-vertical`): columns from the right, a screen the window's
+//! (`:preview-vertical`): columns from the right, a screen the window's
 //! width further left each time; `--latin` and `--hanging` are `[export]
 //! vertical_latin` and `[export] hanging`.
 //!

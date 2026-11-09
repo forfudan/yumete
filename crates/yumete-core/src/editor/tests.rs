@@ -16756,7 +16756,7 @@ fn every_prompt_has_a_caret() {
     assert_eq!(ed.picker().map(|p| p.caret()), Some(0));
 }
 
-/// A preview server is a running thing: `:view-preview` while one is up asks
+/// A preview server is a running thing: `:preview` while one is up asks
 /// *where* it is, not for a second one.
 /// `:help` is written from what the editor actually runs on.
 /// `:markdown` writes the pieces a manuscript keeps needing.
@@ -16924,7 +16924,7 @@ fn a_second_preview_asks_where_the_first_one_is() {
     let mut ed = Editor::new();
     ed.open_file(&book).unwrap();
     // **A switch** (2026-11-07): bare starts it when none runs.
-    ed.execute(":view-preview").unwrap();
+    ed.execute(":preview").unwrap();
     // The page window since 2026-11-07, with the browser's preview behind
     // it when the window cannot be drawn.
     assert!(
@@ -16935,13 +16935,13 @@ fn a_second_preview_asks_where_the_first_one_is() {
     ed.set_preview_at(Some("http://127.0.0.1:23625".to_string()));
     assert_eq!(ed.preview_at(), Some("http://127.0.0.1:23625"));
 
-    ed.execute(":view-preview on").unwrap();
+    ed.execute(":preview on").unwrap();
     assert!(
         matches!(ed.take_preview_request(), Some(Preview::Show)),
         "`on` while it runs asks for the address, not for another server"
     );
 
-    ed.execute(":view-preview").unwrap();
+    ed.execute(":preview").unwrap();
     assert!(matches!(ed.take_preview_request(), Some(Preview::Stop)), "bare turns it off");
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -38152,8 +38152,8 @@ fn a_typst_book(name: &str) -> (Editor, std::path::PathBuf) {
     (ed, dir)
 }
 
-/// **`:view-preview` and its two siblings are switches** (2026-11-07; on the
-/// preview tab since 2026-11-08): `:view-preview` asks for this document's
+/// **`:preview` and its two siblings are switches** (2026-11-07; on the
+/// preview tab since 2026-11-08): `:preview` asks for this document's
 /// preview beside the text with the browser as the fallback, `-window` for
 /// the preview alone, `-browser` for the browser. `on` while this document's
 /// preview is on the screen says so; `off` closes its tab; bare is `on`
@@ -38165,27 +38165,27 @@ fn the_preview_commands_ask_for_the_window_or_the_browser() {
     let window = |path: &std::path::Path, fallback: bool| {
         Some(Preview::Window { path: path.to_path_buf(), syntax: crate::syntax::Syntax::Typst, fallback })
     };
-    ed.execute(":view-preview").unwrap();
+    ed.execute(":preview").unwrap();
     assert_eq!(ed.take_preview_request(), window(&main, true));
-    ed.execute(":view-preview-window on").unwrap();
+    ed.execute(":preview-window on").unwrap();
     assert_eq!(ed.take_preview_request(), window(&main, false));
-    ed.execute(":view-preview-browser").unwrap();
+    ed.execute(":preview-browser").unwrap();
     assert_eq!(ed.take_preview_request(), Some(Preview::Start { path: main.clone(), syntax: crate::syntax::Syntax::Typst }));
     // The front end opened it: `on` says it is open…
     assert!(ed.open_page_window(main.clone()).is_some());
-    for asked in [":view-preview on", ":view-preview-window on"] {
+    for asked in [":preview on", ":preview-window on"] {
         ed.execute(asked).unwrap();
         assert_eq!(ed.take_preview_request(), None, "{asked}");
         assert_eq!(ed.status(), say!("preview.window-open"), "{asked}");
     }
     // …from a chapter of the book too, whose preview it is.
     ed.execute(&format!(":e {}", dir.join("two.typ").display())).unwrap();
-    ed.execute(":view-preview on").unwrap();
+    ed.execute(":preview on").unwrap();
     assert_eq!(ed.take_preview_request(), None);
     assert_eq!(ed.status(), say!("preview.window-open"));
     ed.show_buffer_at(0);
     // A bare `-window` closes the tab: off the screen and out of the list.
-    ed.execute(":view-preview-window").unwrap();
+    ed.execute(":preview-window").unwrap();
     assert_eq!(ed.take_preview_request(), None);
     assert_eq!(ed.status(), say!("preview.window-closed"));
     assert!(!ed.has_a_page_window());
@@ -38200,36 +38200,36 @@ fn the_preview_commands_ask_for_the_window_or_the_browser() {
     ed.execute(":q").unwrap();
     assert_eq!(ed.previews().len(), 1, "`:q` closed the window, not the tab");
     assert!(!ed.has_a_page_window());
-    ed.execute(":view-preview").unwrap();
+    ed.execute(":preview").unwrap();
     assert_eq!(ed.take_preview_request(), window(&main, true), "bare is `on` while it is off the screen");
-    ed.execute(":view-preview off").unwrap();
+    ed.execute(":preview off").unwrap();
     assert!(ed.previews().is_empty(), "`off` closes a tab off the screen too");
-    // `:view-preview off` closes the tab and stops the browser's too.
+    // `:preview off` closes the tab and stops the browser's too.
     assert!(ed.open_page_window(main.clone()).is_some());
     ed.set_preview_at(Some("http://127.0.0.1:23625".to_string()));
-    ed.execute(":view-preview off").unwrap();
+    ed.execute(":preview off").unwrap();
     assert_eq!(ed.take_preview_request(), Some(Preview::Stop), "the browser's goes too");
     assert!(!ed.has_a_page_window());
     assert!(ed.previews().is_empty());
     assert_eq!(ed.windows().len(), 1);
     // `-browser off` stops only the browser's; with none running it is quiet.
-    ed.execute(":view-preview-browser off").unwrap();
+    ed.execute(":preview-browser off").unwrap();
     assert_eq!(ed.take_preview_request(), Some(Preview::Stop));
     ed.set_preview_at(None);
-    ed.execute(":view-preview-browser off").unwrap();
+    ed.execute(":preview-browser off").unwrap();
     assert_eq!(ed.take_preview_request(), None);
     // A buffer never saved has nothing to typeset.
     let mut scratch = Editor::new();
-    scratch.execute(":view-preview-window").unwrap();
+    scratch.execute(":preview-window").unwrap();
     assert_eq!(scratch.take_preview_request(), None);
     assert_eq!(scratch.status(), say!("preview.save-first"));
     // The fit: bare says, a word sets.
-    ed.execute(":view-preview-fit").unwrap();
+    ed.execute(":preview-fit").unwrap();
     assert_eq!(ed.status(), say!("preview.fit-width"));
-    ed.execute(":view-preview-fit page").unwrap();
+    ed.execute(":preview-fit page").unwrap();
     assert_eq!(ed.preview_fit(), PreviewFit::Page);
     assert_eq!(ed.status(), say!("preview.fit-page"));
-    assert!(ed.execute(":view-preview-fit tall").is_err());
+    assert!(ed.execute(":preview-fit tall").is_err());
     std::fs::remove_dir_all(&dir).ok();
 }
 
@@ -38375,7 +38375,7 @@ fn a_preview_cannot_be_edited_or_written() {
 
 /// **Opening a file in a preview's window shows the file there** (2026-11-08):
 /// the preview stays a tab, off the screen, and `ga`, `C-o`, `:b` and
-/// `:view-preview` bring it back. The tab line tells the truth throughout.
+/// `:preview` bring it back. The tab line tells the truth throughout.
 #[test]
 fn a_file_opened_in_a_preview_window_shows_there() {
     let (mut ed, dir) = a_typst_book("open-in");
@@ -38406,8 +38406,8 @@ fn a_file_opened_in_a_preview_window_shows_there() {
     // `C-o` goes on out of it to the file before.
     ed.on_key(Key::Ctrl('i'));
     assert_eq!(ed.current_buffer().path(), Some(two.as_path()), "C-i forward again");
-    // `:view-preview` shows it beside, being off the screen.
-    ed.execute(":view-preview").unwrap();
+    // `:preview` shows it beside, being off the screen.
+    ed.execute(":preview").unwrap();
     assert_eq!(
         ed.take_preview_request(),
         Some(Preview::Window { path: main.clone(), syntax: crate::syntax::Syntax::Typst, fallback: true })
@@ -38500,7 +38500,7 @@ fn two_documents_have_two_previews() {
     let b = dir_b.join("main.typ");
     ed.open_page_window(a.clone()).unwrap();
     ed.execute(&format!(":open {}", b.display())).unwrap();
-    ed.execute(":view-preview").unwrap();
+    ed.execute(":preview").unwrap();
     assert_eq!(
         ed.take_preview_request(),
         Some(Preview::Window { path: b.clone(), syntax: crate::syntax::Syntax::Typst, fallback: true }),
@@ -38513,7 +38513,7 @@ fn two_documents_have_two_previews() {
     let tasks: Vec<String> = previews.iter().map(|(id, _)| crate::preview::task_id(*id)).collect();
     assert_ne!(tasks[0], tasks[1]);
     // `off` from b closes b's, and a's stays.
-    ed.execute(":view-preview off").unwrap();
+    ed.execute(":preview off").unwrap();
     assert_eq!(ed.previews(), vec![previews[0].clone()]);
     std::fs::remove_dir_all(&dir).ok();
     std::fs::remove_dir_all(&dir_b).ok();
@@ -38529,19 +38529,19 @@ fn a_chapter_s_preview_typesets_the_book_that_includes_it() {
     let main = dir.join("main.typ");
     let two = dir.join("two.typ");
     ed.execute(&format!(":open {}", two.display())).unwrap();
-    ed.execute(":view-preview").unwrap();
+    ed.execute(":preview").unwrap();
     assert_eq!(
         ed.take_preview_request(),
         Some(Preview::Window { path: main.clone(), syntax: crate::syntax::Syntax::Typst, fallback: true }),
         "the book that includes it"
     );
     // The browser's preview is still of the file itself.
-    ed.execute(":view-preview-browser").unwrap();
+    ed.execute(":preview-browser").unwrap();
     assert_eq!(ed.take_preview_request(), Some(Preview::Start { path: two.clone(), syntax: crate::syntax::Syntax::Typst }));
     // The book not open: the chapter.
     let mut alone = Editor::new();
     alone.open_file(&two).unwrap();
-    alone.execute(":view-preview-window").unwrap();
+    alone.execute(":preview-window").unwrap();
     assert_eq!(
         alone.take_preview_request(),
         Some(Preview::Window { path: two.clone(), syntax: crate::syntax::Syntax::Typst, fallback: false })
@@ -38614,27 +38614,27 @@ fn the_buffer_picker_says_what_a_preview_is() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// **`:view-preview-theme` is a switch** (2026-11-08): the page in the
+/// **`:preview-theme` is a switch** (2026-11-08): the page in the
 /// theme's colours or as printed; bare flips it, and each says which.
 #[test]
 fn the_preview_theme_is_a_switch() {
     let mut ed = Editor::new();
     assert!(!ed.preview_theme(), "as printed at first");
-    ed.execute(":view-preview-theme").unwrap();
+    ed.execute(":preview-theme").unwrap();
     assert!(ed.preview_theme());
     assert_eq!(ed.status(), say!("preview.theme-on"));
-    ed.execute(":view-preview-theme").unwrap();
+    ed.execute(":preview-theme").unwrap();
     assert!(!ed.preview_theme());
     assert_eq!(ed.status(), say!("preview.theme-off"));
-    ed.execute(":view-preview-theme on").unwrap();
-    ed.execute(":view-preview-theme on").unwrap();
+    ed.execute(":preview-theme on").unwrap();
+    ed.execute(":preview-theme on").unwrap();
     assert!(ed.preview_theme(), "`on` stays on");
-    ed.execute(":view-preview-theme off").unwrap();
+    ed.execute(":preview-theme off").unwrap();
     assert!(!ed.preview_theme());
-    assert!(ed.execute(":view-preview-theme dark").is_err());
+    assert!(ed.execute(":preview-theme dark").is_err());
 }
 
-/// **`:view-preview-vertical` is a switch** (2026-11-08), on at first; the
+/// **`:preview-vertical` is a switch** (2026-11-08), on at first; the
 /// Markdown preview is vertical only while it is on and the page is.
 #[test]
 fn the_vertical_preview_is_a_switch_and_follows_the_page() {
@@ -38643,16 +38643,16 @@ fn the_vertical_preview_is_a_switch_and_follows_the_page() {
     assert!(!ed.markdown_preview_vertical(), "the page runs across");
     ed.execute(":vertical").unwrap();
     assert!(ed.markdown_preview_vertical(), "the page runs down, and so does the preview");
-    ed.execute(":view-preview-vertical").unwrap();
+    ed.execute(":preview-vertical").unwrap();
     assert!(!ed.preview_vertical());
     assert_eq!(ed.status(), say!("preview.vertical-off"));
     assert!(!ed.markdown_preview_vertical(), "switched off, the preview runs across");
-    ed.execute(":view-preview-vertical on").unwrap();
+    ed.execute(":preview-vertical on").unwrap();
     assert_eq!(ed.status(), say!("preview.vertical-on"));
     assert!(ed.markdown_preview_vertical());
     ed.execute(":horizontal").unwrap();
     assert!(!ed.markdown_preview_vertical());
-    assert!(ed.execute(":view-preview-vertical sideways").is_err());
+    assert!(ed.execute(":preview-vertical sideways").is_err());
 }
 
 /// **A session keeps the preview tabs** (2026-11-08), and which window
@@ -38711,19 +38711,19 @@ fn a_markdown_note(name: &str) -> (Editor, std::path::PathBuf) {
 }
 
 /// **A Markdown file's preview is a tab of its own** (2026-11-08):
-/// `:view-preview` asks for it beside the text, a Markdown preview and not
+/// `:preview` asks for it beside the text, a Markdown preview and not
 /// a typeset page; on the screen `on` says so, bare and `off` close the tab,
 /// `:q` in its window closes only the window; the picker says what it is.
 #[test]
 fn a_markdown_file_has_a_preview_tab_of_its_own() {
     let (mut ed, dir) = a_markdown_note("tab");
     let main = dir.join("notes.md");
-    ed.execute(":view-preview").unwrap();
+    ed.execute(":preview").unwrap();
     assert_eq!(
         ed.take_preview_request(),
         Some(Preview::Window { path: main.clone(), syntax: crate::syntax::Syntax::Markdown, fallback: true })
     );
-    ed.execute(":view-preview-window").unwrap();
+    ed.execute(":preview-window").unwrap();
     assert_eq!(
         ed.take_preview_request(),
         Some(Preview::Window { path: main.clone(), syntax: crate::syntax::Syntax::Markdown, fallback: false })
@@ -38735,7 +38735,7 @@ fn a_markdown_file_has_a_preview_tab_of_its_own() {
     assert_eq!(ed.preview_kind_of(id), Some(crate::buffer::PreviewKind::Markdown));
     assert_eq!(ed.live_window(), text, "the keys stay in the text");
     assert_eq!(ed.buffers[ed.buffer_with(id).unwrap()].display_name(), say!("preview.tab", "notes.md"));
-    ed.execute(":view-preview on").unwrap();
+    ed.execute(":preview on").unwrap();
     assert_eq!(ed.take_preview_request(), None);
     assert_eq!(ed.status(), say!("preview.window-open"));
     // It follows this file's cursor, by line.
@@ -38749,11 +38749,11 @@ fn a_markdown_file_has_a_preview_tab_of_its_own() {
     assert_eq!(ed.previews().len(), 1);
     assert!(!ed.has_a_page_window());
     // Bare shows it again; `off` closes the tab.
-    ed.execute(":view-preview").unwrap();
+    ed.execute(":preview").unwrap();
     assert!(ed.take_preview_request().is_some(), "bare is `on` while it is off the screen");
     ed.open_page_window_of(main.clone(), crate::buffer::PreviewKind::Markdown).unwrap();
     assert_eq!(ed.previews().len(), 1, "the same tab");
-    ed.execute(":view-preview off").unwrap();
+    ed.execute(":preview off").unwrap();
     assert!(ed.previews().is_empty());
     assert_eq!(ed.status(), say!("preview.window-closed"));
     // `:bc` in it closes it too, and the picker says what it is.
@@ -38841,7 +38841,7 @@ fn a_typst_preview_and_a_markdown_one_side_by_side() {
     assert!(ed.page_target(markdown).is_none(), "nothing is a chapter of a Markdown file");
     // `off` from the Markdown file closes only its own.
     ed.execute(&format!(":open {}", notes.display())).unwrap();
-    ed.execute(":view-preview off").unwrap();
+    ed.execute(":preview off").unwrap();
     assert_eq!(ed.previews().len(), 1);
     assert_eq!(ed.previews()[0].0, typst);
     std::fs::remove_dir_all(&dir).ok();
@@ -38946,7 +38946,7 @@ fn switching_the_layout_moves_no_window() {
     assert_eq!(window_columns(&ed), [(text, 0), (page, 41)], "nor `:horizontal`");
     // Opened from a 縱書 page, the preview is on the right all the same.
     ed.execute(":vertical").unwrap();
-    ed.execute(":view-preview-window").unwrap();
+    ed.execute(":preview-window").unwrap();
     assert_eq!(ed.windows().len(), 1);
     let page = ed.open_page_window_of(main.clone(), crate::buffer::PreviewKind::Markdown).expect("room");
     assert_eq!(window_columns(&ed), [(text, 0), (page, 41)], "a preview opens on the right on a 縱書 page");

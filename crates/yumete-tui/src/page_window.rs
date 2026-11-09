@@ -19,10 +19,10 @@
 //!   ([`crate::graphics`]), scrolled to the cursor's place when the page is
 //!   as wide as the window.
 //!
-//! **Shown as printed** unless `:view-preview-theme` says otherwise. **Only
+//! **Shown as printed** unless `:preview-theme` says otherwise. **Only
 //! tinymist** draws it, and only one new enough to hand the page over in
 //! memory ([`yumete_core::preview::LEAST_TINYMIST`]); otherwise the window
-//! says so and `:view-preview` opens the browser's preview instead. The
+//! says so and `:preview` opens the browser's preview instead. The
 //! research is `local/survey-0.20/graphics.md` and its follow-up.
 
 use std::collections::HashMap;
@@ -76,7 +76,7 @@ impl Page {
 }
 
 /// **One pixel of the page in the theme's colours** (2026-11-08,
-/// `:view-preview-theme`): its lightness, from black ink to white paper,
+/// `:preview-theme`): its lightness, from black ink to white paper,
 /// taken from the theme's text colour to its background, and whatever
 /// colour it had over its grey carried across, so a red heading stays red
 /// and a blue link blue in light themes and dark alike.
@@ -164,7 +164,7 @@ struct Board {
     /// The window's picture area in cells, when last drawn.
     cells: Option<(u16, u16)>,
     /// The page in the theme's colours, made once from the page whose hash
-    /// it names, in the paper and ink it names (`:view-preview-theme`).
+    /// it names, in the paper and ink it names (`:preview-theme`).
     tinted: Option<(Tint, Arc<Page>)>,
 }
 
@@ -265,7 +265,7 @@ pub enum Outcome {
     /// Something new to draw.
     Redraw,
     /// **Preview `preview` cannot be drawn**, and it was opened by
-    /// `:view-preview`: close it and open the browser's preview of `path`,
+    /// `:preview`: close it and open the browser's preview of `path`,
     /// saying `why`.
     Browser { preview: u64, path: PathBuf, why: String },
 }
@@ -309,7 +309,7 @@ struct Talk {
     task_id: String,
     /// The file it typesets.
     main: PathBuf,
-    /// Whether it was opened by `:view-preview`, which goes to the browser
+    /// Whether it was opened by `:preview`, which goes to the browser
     /// when the window cannot be drawn.
     fallback: bool,
     /// Whether it was on the screen at the last turn.
@@ -328,8 +328,8 @@ struct Talk {
 }
 
 impl PagePreview {
-    /// **Preview `id` was just opened beside the text**, by `:view-preview`
-    /// (`fallback`) or by `:view-preview-window`.
+    /// **Preview `id` was just opened beside the text**, by `:preview`
+    /// (`fallback`) or by `:preview-window`.
     pub fn opened(&mut self, id: u64, fallback: bool) {
         self.talks.entry(id).or_default().fallback = fallback;
     }

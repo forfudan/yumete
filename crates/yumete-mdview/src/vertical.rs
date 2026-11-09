@@ -1,6 +1,6 @@
 //! **A vertical page** (2026-11-08): the preview set in 縱 from the right
 //! edge, columns read right to left, the page going on to the left, when the
-//! text window is vertical and `:view-preview-vertical` is on.
+//! text window is vertical and `:preview-vertical` is on.
 //!
 //! The preview is publication, as `:export` is, so nothing here reads how
 //! the draft is shown (`:render`, `[editor] tatechuyoko`): the rules are the

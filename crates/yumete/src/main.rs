@@ -1325,7 +1325,7 @@ fn main() -> ExitCode {
         }
         // Warning: **the names here are names, and they rot** (2026-10-20). These two
         // were the spellings of 2026-09: `:chaifen` is `:yume-annotation` and
-        // `:preview` is `:view-preview`, and both folds happened without this
+        // `:preview` is `:preview`, and both folds happened without this
         // list hearing about it — so the one notice whose whole job is to say
         // 「what you typed did nothing」 was naming a command that does not
         // exist. `tests/inert_notice.rs` holds the printed names to the table.
@@ -1333,7 +1333,7 @@ fn main() -> ExitCode {
             unheard.push(":yume-annotation".into());
         }
         if editor.take_preview_request().is_some() {
-            unheard.push(":view-preview".into());
+            unheard.push(":preview".into());
         }
         if editor.take_open_request().is_some() {
             unheard.push("gx".into());

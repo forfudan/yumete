@@ -539,23 +539,23 @@ pub enum Command {
     SetHud(crate::editor::Hud),
     /// `:view-hud` with no argument — say which of the three it is on.
     ReportHud,
-    /// `:view-preview [on|off]` — hand the file to the real typesetter and
+    /// `:preview [on|off]` — hand the file to the real typesetter and
     /// show what it makes (Feature #128): on, the window, or the browser when
     /// a window cannot be drawn; off, whichever is up (2026-11-07).
     Preview(Switch),
-    /// `:view-preview-window [on|off]` — the page beside the text, never the
+    /// `:preview-window [on|off]` — the page beside the text, never the
     /// browser (2026-11-07).
     PreviewWindow(Switch),
-    /// `:view-preview-browser [on|off]` — the page in the browser, as
-    /// `:view-preview` was before the window.
+    /// `:preview-browser [on|off]` — the page in the browser, as
+    /// `:preview` was before the window.
     PreviewBrowser(Switch),
-    /// `:view-preview-fit width|page` — how big the page window draws the
+    /// `:preview-fit width|page` — how big the page window draws the
     /// page; bare, which it is.
     PreviewFit(Option<crate::editor::PreviewFit>),
-    /// `:view-preview-theme [on|off]` — the page in the theme's colours, or
+    /// `:preview-theme [on|off]` — the page in the theme's colours, or
     /// as printed (2026-11-08).
     PreviewTheme(Switch),
-    /// `:view-preview-vertical [on|off]` — the Markdown preview set
+    /// `:preview-vertical [on|off]` — the Markdown preview set
     /// vertically while the text window is (2026-11-08).
     PreviewVertical(Switch),
     /// `:w!` — write over a file that changed on disk since it was read.
@@ -2278,7 +2278,7 @@ const RENDER: &[Word] = &[
     },
 ];
 
-/// `:view-preview-fit` takes one of these (2026-11-07).
+/// `:preview-fit` takes one of these (2026-11-07).
 const PREVIEW_FIT: &[Word] = &[
     Word { name: "width", help: "cmd.preview-fit.width", needs: &[] },
     Word { name: "page", help: "cmd.preview-fit.page", needs: &[] },
@@ -4686,7 +4686,7 @@ pub const COMMANDS: &[Entry] = &[
         }),
     },
     Entry {
-        name: "view-preview",
+        name: "preview",
         aliases: &[],
         help: "cmd.view.preview",
         needs: &[],
@@ -4694,7 +4694,7 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|p| Ok(Command::Preview(switched(p)))),
     },
     Entry {
-        name: "view-preview-window",
+        name: "preview-window",
         aliases: &[],
         help: "cmd.view.preview-window",
         needs: &[],
@@ -4702,7 +4702,7 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|p| Ok(Command::PreviewWindow(switched(p)))),
     },
     Entry {
-        name: "view-preview-browser",
+        name: "preview-browser",
         aliases: &[],
         help: "cmd.view.preview-browser",
         needs: &[],
@@ -4710,7 +4710,7 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|p| Ok(Command::PreviewBrowser(switched(p)))),
     },
     Entry {
-        name: "view-preview-fit",
+        name: "preview-fit",
         aliases: &[],
         help: "cmd.view.preview-fit",
         needs: &[],
@@ -4718,7 +4718,7 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|p| Ok(Command::PreviewFit(p.arg(0).and_then(crate::editor::PreviewFit::parse)))),
     },
     Entry {
-        name: "view-preview-theme",
+        name: "preview-theme",
         aliases: &[],
         help: "cmd.view.preview-theme",
         needs: &[],
@@ -4726,7 +4726,7 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|p| Ok(Command::PreviewTheme(switched(p)))),
     },
     Entry {
-        name: "view-preview-vertical",
+        name: "preview-vertical",
         aliases: &[],
         help: "cmd.view.preview-vertical",
         needs: &[],
@@ -5896,6 +5896,8 @@ const RENAMED: &[(&str, &str)] = &[
     ("saveas", "write-as"),
     ("source", "render"),
     ("view-dense", "view-margin"),
+    // 0.20's name: the preview is a group of its own since 2026-11-09.
+    ("view-preview", "preview"),
     ("wall", "write-all"),
     // One choice now, `off` among the ways (2026-10-25).
     ("word-show", "word-mark"),
@@ -5968,8 +5970,8 @@ fn moved_to(word: &str) -> Option<String> {
     // 處**，不是幾次命中。
     found.dedup();
     // **A family's head stands for the family** (2026-11-07): `preview` is a
-    // segment of `:view-preview-window` and its two siblings too, and naming
-    // `:view-preview` says where all four are.
+    // segment of `:preview-window` and its two siblings too, and naming
+    // `:preview` says where all four are.
     let heads = found.clone();
     found.retain(|one| {
         !heads.iter().any(|head| head != one && one.starts_with(&format!("{}-", head.trim_end_matches('`'))))
@@ -7944,7 +7946,7 @@ mod tests {
         // A family with no head of its own keeps the hyphen, which is what
         // says it is a family and not a command, and nothing else: `view-w` is
         // `view-wrap`'s spelling, not the thirteen's.
-        assert_eq!(row("", "view-"), ":view- +25");
+        assert_eq!(row("", "view-"), ":view- +19");
         assert_eq!(row("", "check-"), ":check- +6");
         // …and a stem is a stem however many are under it.
         assert_eq!(row("", "markdown-"), ":markdown- +2");
@@ -8294,7 +8296,7 @@ mod tests {
         // Where the word being completed starts, so a completion replaces it
         // and not the whole line.
         assert_eq!(complete_at("ruby ht").0, 5);
-        assert_eq!(complete_at("view-preview-fit p").0, 17);
+        assert_eq!(complete_at("preview-fit p").0, 12);
         // One word now, so the completion replaces the whole of it (#368).
         assert_eq!(complete_at("view-margin").0, 0);
 
@@ -8594,6 +8596,15 @@ mod tests {
         }
     }
 
+    /// **`:preview` is the preview's own group, and 0.20's `:view-preview`
+    /// says where it went** (2026-11-09), as every renamed command does.
+    #[test]
+    fn the_preview_answers_to_its_old_name() {
+        assert!(matches!(parse(":preview on"), Ok(Command::Preview(_))));
+        assert!(matches!(parse(":preview-vertical off"), Ok(Command::PreviewVertical(_))));
+        assert_eq!(moved_to("view-preview").as_deref(), Some("`:preview`"));
+    }
+
     /// The other half of the signpost, the half that cannot go stale.
     ///
     /// Every word the fold moved is reachable by its own name from the parent
@@ -8607,7 +8618,9 @@ mod tests {
             // Two owners since 2026-10-16: `preview` is also the word that
             // puts the first candidate in the text.
             // Three since 2026-11-08: `:export-as-preview` ends in it too.
-            ("preview", "`:yume-inline-preedit preview` `:view-preview` `:export-as-preview`"),
+            // `:preview` is a command again since 2026-11-09, so it is not
+            // among the places the word went.
+            ("preview", "`:yume-inline-preedit preview` `:export-as-preview`"),
             ("progress", "`:count-progress`"),
             ("merge", "`:check-merge`"),
         ] {

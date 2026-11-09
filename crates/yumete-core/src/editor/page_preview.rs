@@ -10,7 +10,7 @@
 //! chapter of its book (a Typst file under the main file's folder), and
 //! otherwise keeps its place. Several may be open, one a document.
 //!
-//! `:bc` on it, and `:view-preview off`, close it; `:q` in a window showing
+//! `:bc` on it, and `:preview off`, close it; `:q` in a window showing
 //! it closes the window and leaves the tab. **Windows showing a preview do
 //! not count as windows when the last one goes**: `:q` in the last text
 //! window leaves the editor, as it would with no preview open.
@@ -35,7 +35,7 @@ pub fn in_the_book(main: &Path, path: &Path, syntax: crate::syntax::Syntax) -> b
     path == main || (book && syntax == crate::syntax::Syntax::Typst && main.parent().is_some_and(|book| path.starts_with(book)))
 }
 
-/// **How big the page is drawn** (`:view-preview-fit`, `[editor] preview_fit`).
+/// **How big the page is drawn** (`:preview-fit`, `[editor] preview_fit`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum PreviewFit {
     /// The page as wide as the window, scrolled to the cursor.
@@ -505,7 +505,7 @@ impl Editor {
     }
 
     /// Whether the page is drawn in the theme's colours rather than as
-    /// printed (`:view-preview-theme`).
+    /// printed (`:preview-theme`).
     pub fn preview_theme(&self) -> bool {
         self.preview_theme
     }
@@ -515,7 +515,7 @@ impl Editor {
     }
 
     /// Whether the Markdown preview follows the text window into vertical
-    /// (`:view-preview-vertical`).
+    /// (`:preview-vertical`).
     pub fn preview_vertical(&self) -> bool {
         self.preview_vertical
     }
@@ -525,7 +525,7 @@ impl Editor {
     }
 
     /// **Whether the Markdown preview is set vertically now** (2026-11-08):
-    /// `:view-preview-vertical` is on and the page the writer chose is
+    /// `:preview-vertical` is on and the page the writer chose is
     /// vertical. Only the direction is read from the editing window; how the
     /// page is set is the export's.
     pub fn markdown_preview_vertical(&self) -> bool {

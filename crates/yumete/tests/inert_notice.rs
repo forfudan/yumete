@@ -5,8 +5,9 @@
 //! notice on stderr says which. Its whole job is to tell a reader that what
 //! they typed did nothing, and on 2026-10-20 two of its fourteen names were
 //! the spellings of a fold ago: it answered `:view-preview on` with 「so
-//! `:preview` did nothing here」, and `:preview` has not been a command since
-//! the `:view-` family was gathered. `:chaifen` was `:yume-chaifen`'s.
+//! `:preview` did nothing here」, when `:preview` was not a command (the
+//! `:view-` family had taken it in; it came back on 2026-11-09 as the
+//! preview's own group). `:chaifen` was `:yume-chaifen`'s.
 //!
 //! Driven through the real binary, like [`help_crib`](../help_crib.rs): what
 //! is checked is what a reader sees.
@@ -48,7 +49,7 @@ fn the_notice_names_commands_the_editor_still_has() {
     let path = a_file();
     let mut checked = 0;
     for keys in [
-        r":view-preview on\n",
+        r":preview on\n",
         r":shot\n",
         r":reload-config\n",
         r":word-list-reload\n",
