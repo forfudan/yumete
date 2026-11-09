@@ -9,15 +9,13 @@
 //! a scoring function nobody can predict is worse than one that is merely
 //! adequate.
 //!
-//! Warning: **這張名單是長出來的**（2026-10-09 作者定：「流式化，和 helix 一樣不設上
-//! 限」）。走查跑在旁邊那條線程上，每一幀收一批（`Editor::collect_picker_items`），
+//! Warning: **這張名單是長出來的**：流式化，和 helix 一樣不設上限。走查跑在旁邊那條線程上，每一幀收一批（`Editor::collect_picker_items`），
 //! 所以 [`Picker::total`] 在走完之前一直在漲。腳注那個 `+` 與那個轉圈說的就是這
 //! 件事，問的是 `Editor::still_filling_the_picker`。
 //!
-//! Warning: **從前這裏有過兩種「半截」，兩種都没了**：`PICKER_LIMIT` 四千條（砍的不
-//! 是「顯示多少條」而是「能搜到多少條」——名單一次建好再打分，裝不進的那幾千條打出
-//! 全名也找不着），和走查自己的 `WALK_CEILING` 兩萬條。前者 2026-10-09 去掉，後者
-//! 同一天隨流式化去掉（那一趟撥 `Sieve::uncapped`）。
+//! Warning: **名單没有「半截」**：條數上限砍的不是「顯示多少條」而是「能搜到多少條」
+//! ——名單一次建好再打分，裝不進的那幾千條打出全名也找不着。走查也不設上限（撥
+//! `Sieve::uncapped`）。
 
 /// What a picker offers, and what choosing it does.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -30,7 +28,7 @@ pub enum Item {
     /// shown for it. `None` is the system clipboard, which only the front end
     /// can read.
     Paste(Option<usize>, String),
-    /// **A wiki entry, by name** — `:wiki 朱宇浩` (2026-09-25).
+    /// **A wiki entry, by name** — `:wiki 朱宇浩`.
     ///
     /// The second string is the **blurb**: the head of what the entry says, so
     /// a list of names is a list you can read. Warning: **It is drawn and never
@@ -41,7 +39,7 @@ pub enum Item {
     /// is saved, and an index would go stale between opening this list and
     /// choosing from it. The name is the feature's own key (`Wiki::by_name`).
     Wiki(String, String),
-    /// **A directory, in the explorer** — `␣e` (2026-10-20 作者定).
+    /// **A directory, in the explorer** — `␣e`.
     ///
     /// Not a file with a slash on the end: choosing one does not open
     /// anything, it re-roots this same picker one level down, and that is the
@@ -51,23 +49,23 @@ pub enum Item {
     /// The label carries the trailing `/`, because that is what a reader needs
     /// to see before pressing Enter; `path` is the name without it.
     Dir(String),
-    /// **A project to carry on in** — `:recent-projects` (2026-10-18 作者定).
+    /// **A project to carry on in** — `:recent-projects`.
     ///
     /// Not a file: choosing one means leaving this directory for that one.
     /// yumete is one process in one terminal, so it does that by **going
     /// there and starting again** — see `Editor::reopen_request`.
     Project(String),
-    /// **A place in a file** — a reference `gr` found (2026-10-29): the row
+    /// **A place in a file** — a reference `gr` found: the row
     /// shown (`file:line  text`), the file, the line and the character.
     Place(String, std::path::PathBuf, usize, usize),
     /// **A code action** `空格 a` offered, by its place in the offer, and its
     /// title.
     Action(usize, String),
-    /// **A changed file** — `空格 g` (2026-10-31): its path from the picker's
+    /// **A changed file** — `空格 g`: its path from the picker's
     /// root, and what git says of it, when git says anything (a buffer with
     /// unsaved changes in a file git thinks clean has none).
     Changed(String, Option<(char, crate::vcs::Staging)>),
-    /// **An encoding to open a file in** (2026-11-04): its name as shown, the
+    /// **An encoding to open a file in**: its name as shown, the
     /// file, and the name `encoding::by_name` reads back.
     Encoding(String, std::path::PathBuf, &'static str),
 }
@@ -95,7 +93,7 @@ impl Item {
 }
 
 /// A relative path as a picker row spells it for comparing: forward
-/// slashes, as git writes them, on every system (2026-10-31).
+/// slashes, as git writes them, on every system.
 pub fn slashed(path: &std::path::Path) -> String {
     path.display().to_string().replace('\\', "/")
 }
@@ -116,14 +114,14 @@ pub struct Picker {
     selected: usize,
     /// How far into the query the caret is, in characters.
     caret: usize,
-    /// **檔名那一列是相對哪個目錄算的**（2026-10-02）。
+    /// **檔名那一列是相對哪個目錄算的**。
     ///
-    /// Warning: **從前它和列表緩衝區共用 `Editor::listing_root` 一個槽。** 那個槽的本
-    /// 業是「`檔名:行號:` 這種列表的根」，給 `gf` 用；開一次 `空格 f` 就把它蓋
-    /// 掉，於是 `:check` 出一張單子、中間按一下 `空格 f`，再回去 `gf` 就解到挑
-    /// 選器的根底下去了。兩件不相干的事，各存各的。
+    /// Warning: **不和列表緩衝區共用 `Editor::listing_root` 一個槽。** 那個槽的本
+    /// 業是「`檔名:行號:` 這種列表的根」，給 `gf` 用；共用的話開一次 `空格 f` 就把
+    /// 它蓋掉，`:check` 出一張單子、中間按一下 `空格 f`，再回去 `gf` 就解到挑選器
+    /// 的根底下去了。兩件不相干的事，各存各的。
     pub root: Option<std::path::PathBuf>,
-    /// **走檔的時候跳過哪些** —— `A-h` 轉一格（2026-10-08）。
+    /// **走檔的時候跳過哪些** —— `A-h` 轉一格。
     ///
     /// `None` 是「這一扇不走磁碟」：緩衝區、百科、粘貼單子、跳轉那幾扇列的是內存
     /// 裏現成的東西，篩子對它們没有意思，`A-h` 在那裏什麼都不做，提示行上也就不
@@ -133,7 +131,7 @@ pub struct Picker {
     /// `A-h` re-lists that directory instead of walking the project.
     pub browsing: bool,
     /// **What to put near the top before anything is typed**, one number per
-    /// item (2026-09-18).
+    /// item.
     ///
     /// Alphabetical is chapter order, which is the right answer for a book and
     /// the wrong one for 「the file I was in five minutes ago」 — 137 names and
@@ -143,32 +141,29 @@ pub struct Picker {
     /// match's own score, so typing still decides what matches best, and this
     /// decides which of two equally good matches is offered first.
     bonus: Vec<i64>,
-    /// **散文檔排在其餘的前面**，一個 `bool` 一條（2026-10-09）。
+    /// **散文檔排在其餘的前面**，一個 `bool` 一條。
     ///
-    /// Warning: **從前這件事是靠次序做的**：收名單那一支先收散文檔、再把其餘的接在
-    /// 後面，於是「散文檔在前」就是「下標較小」。走查搬到旁邊流着進來之後次序由
-    /// 磁盤決定，那個辦法没了——所以它成了一格明寫出來的平手條件，排在分數後面、
-    /// 收到的次序前面。答案和從前逐條相同。
+    /// Warning: **這件事不能靠次序做**：走查在旁邊流着進來，次序由磁盤決定——所以它
+    /// 是一格明寫出來的平手條件，排在分數後面、收到的次序前面。
     prose: Vec<bool>,
     /// **收不收「跳着配」和「亂序」**。缺省**收**，`空格 f` 那一扇一格没變。
     ///
-    /// Warning: **只有 `ye --files` 把它關掉**（2026-10-04 定）。那一邊把全部印出來，
+    /// Warning: **只有 `ye --files` 把它關掉**。那一邊把全部印出來，
     /// 長尾就是噪音；`空格 f` 是一張排過序的單子，只看前十條，長尾不要錢——而跳着
-    /// 配（`rlcrd` 找 `release_card.py`）在那裏是真有用的。原話：「cli --files 更
-    /// 精确（五个选项不全开），只有当加了 open 之后进了 tui 才五个选项都开。」
+    /// 配（`rlcrd` 找 `release_card.py`）在那裏是真有用的。命令行的 `--files` 更精確，
+    /// 進了 TUI 纔五個選項都開。
     ///
     /// 關掉的是兩檔，不是五個：**大小寫、繁簡、拼音照舊**。所以 `ye --files` 比
     /// `ye --grep` 還多一條——後者的大小寫是智能的，這裏一律不分。
     loose: bool,
-    /// **Rows drawn as written**, not name first and folders after
-    /// (2026-10-31): the symbol and diagnostics pickers are columns — kind,
+    /// **Rows drawn as written**, not name first and folders after:
+    /// the symbol and diagnostics pickers are columns — kind,
     /// name, container, path — and moving the path's folders would break them.
     pub verbatim: bool,
-    /// **The server is asked again as the query changes** (`空格 S`,
-    /// 2026-10-31), as helix's workspace symbol picker does; the answer
+    /// **The server is asked again as the query changes** (`空格 S`), as helix's workspace symbol picker does; the answer
     /// replaces the rows ([`Picker::replace_items`]).
     pub live: bool,
-    /// **名單那一列有幾行**——翻一頁翻的就是這個數（2026-10-07）。
+    /// **名單那一列有幾行**——翻一頁翻的就是這個數。
     ///
     /// 這個編輯器没有 viewport（`Editor::page_lines` 那一格同理），所以畫的那一
     /// 支每一幀量一次，告訴核心。上一幀的答案，而窗口的高度上一幀和這一幀一樣。
@@ -223,7 +218,7 @@ impl Picker {
         self.bonus.resize(self.items.len(), 0);
     }
 
-    /// **再收一批進來** —— 走查在旁邊跑，名單是長出來的（2026-10-09）。
+    /// **再收一批進來** —— 走查在旁邊跑，名單是長出來的。
     ///
     /// 每一條帶着它自己那兩格：加分（最近開過的排前面）和「是不是散文檔」。
     ///
@@ -292,10 +287,10 @@ impl Picker {
         // Best score first; then prose before the rest; then **the shallower
         // path**, and only then the order they were gathered in.
         //
-        // **根目錄在前**（2026-10-11 報的）。收進來的次序就是完整路徑的字典序
+        // **根目錄在前**。收進來的次序就是完整路徑的字典序
         // （走查那一頭 `sort_by_file_path`），而那把 `misc/置闰法.txt` 排在
         // `template.typ` 前面——只因為 `m` < `t`，而根目錄那幾個檔的名字是漢字、
-        // 漢字排在 ASCII 後面。原話：「to me the root path should come first」。
+        // 漢字排在 ASCII 後面。
         //
         // 對着這個編輯器它是對的：稿子躺在根上，`設定/`、`misc/`、`辭典/` 是旁
         // 邊的東西。先按深淺分層，等於先給稿子、再給那些圍着它的。
@@ -303,7 +298,7 @@ impl Picker {
         // Warning: **代價是同一棵子樹會被層拆開**：`設定/a.md` 和
         // `設定/深/b.md` 不再挨着。同一層裏次序没動（還是路徑序），所以一個目錄
         // 底下的檔照舊連在一起——拆開的只有「目錄裏還有目錄」那一種。
-        // Warning: **a trailing slash is not a level** (2026-10-20). The explorer
+        // Warning: **a trailing slash is not a level**. The explorer
         // writes a directory as `chapters/`, and without the trim every
         // directory counted as one level deeper than every file beside it —
         // so the first screen of `␣e` was all files and the directories were
@@ -318,11 +313,10 @@ impl Picker {
         scored.into_iter().map(|(_, _, _, item)| item).collect()
     }
 
-    /// **「最近開過的」排到第幾條為止**，`None` ＝ 不畫那條線（2026-10-11 報的）。
+    /// **「最近開過的」排到第幾條為止**，`None` ＝ 不畫那條線。
     ///
     /// 空查詢的時候名單的頭一層是 `bonus`——開着的緩衝、最近開過的檔——而那個數
-    /// 看不見。報的原話：「I know why some files are ranked higher」。所以在它和
-    /// 其餘之間畫一條虛線：次序不動，只是把看不見的那一刀畫出來。
+    /// 看不見，讀者看不出為什麼有幾條排得高。所以在它和其餘之間畫一條虛線：次序不動，只是把看不見的那一刀畫出來。
     ///
     /// 三種情形不畫：**打了字**（那時次序由分數定，最近開過的不再連在一起，一條
     /// 線會說謊）、一條都没開過、以及全都開過（線底下没有東西）。
@@ -352,15 +346,13 @@ impl Picker {
 
     /// **一頁就是窗口上那一頁**，繞回去（helix 的 `Picker::page_down`）。
     ///
-    /// Warning: 從前它是十次 [`Self::step`]，而 `step` 是繞回去的——於是一張**短過二十
-    /// 條**的名單上，`PageDown` 往回走：十二條的名單站在第六條上按下去，
-    /// `(5 + 10) % 12 = 3`，高亮退到第四條（2026-10-07 審出來的）。
+    /// Warning: 不是寫死的十次 [`Self::step`]：`step` 是繞回去的，一張**短過二十條**的
+    /// 名單上 `PageDown` 會往回走（十二條的名單站在第六條上按下去，`(5 + 10) % 12 = 3`，
+    /// 高亮退到第四條），而一頁二十八行的窗口上「翻一頁」走十步，走的不是一頁。
     ///
-    /// 當天先改成了「十步，到頭就停」，隔一步就發現那是自作主張：helix 的那一支
-    /// 是 `move_by(completion_height)`，數目是**窗口的高度**，而且照 `% len` 繞
-    /// （它自己的註釋寫着「After the last page comes the first page」）。寫死的
-    /// 十纔是那個倒退的根子——一頁二十八行的窗口上「翻一頁」走十步，走的不是一
-    /// 頁。現在數目由 [`Self::note_rows`] 從畫的那一支來。
+    /// helix 的那一支是 `move_by(completion_height)`，數目是**窗口的高度**，而且照
+    /// `% len` 繞（它自己的註釋寫着「After the last page comes the first page」）。
+    /// 數目由 [`Self::note_rows`] 從畫的那一支來。
     pub fn page(&mut self, down: bool) {
         let count = self.matches().len();
         if count == 0 {
@@ -422,9 +414,8 @@ impl Picker {
 
     /// Remove the character before the caret.
     ///
-    /// Warning: **框空着的時候它什麼都不做**（2026-10-08 定）。從前它交出一個
-    /// `false`，而呼叫方拿那個 `false` 去換層——挑選器只剩一層之後没有層可換，
-    /// 而「退格到頭就把窗關掉」是另一回事：打空了接着打纔是人要的。
+    /// Warning: **框空着的時候它什麼都不做**：挑選器只有一層，没有層可換，而「退格到頭
+    /// 就把窗關掉」是另一回事——打空了接着打纔是人要的。
     pub fn backspace(&mut self) {
         self.selected = 0;
         let caret = self.caret();
@@ -439,8 +430,8 @@ impl Picker {
     /// Remove the character *under* the caret; the caret stays where it is.
     ///
     /// Warning: **末尾那一格上刪的是它前面那一個**——同搜索面板的 `Search::delete_here`。
-    /// 那一條是 2026-09-27 定的，原話是兩個試用的人都報「`d` 按了什麼都不發生」：
-    /// 框裏的光標走得到文字後面那一格，而按的人想刪的是看得見的最後那個字。
+    /// `d` 不許什麼都不發生：框裏的光標走得到文字後面那一格，而按的人想刪的是看得見
+    /// 的最後那個字。
     pub fn delete(&mut self) {
         let last = self.query.chars().count();
         let caret = match self.caret() >= last {
@@ -540,44 +531,41 @@ impl Picker {
 /// ending at that point. fzf's v1 algorithm does the same thing for the same
 /// reason.
 fn matched(label: &str, query: &str, loose: bool) -> Option<(i64, Vec<usize>)> {
-    // **原樣收着，大小寫交給 [`crate::nearby::alike`] 折**（2026-10-04）。
+    // **原樣收着，大小寫交給 [`crate::nearby::alike`] 折**。
     //
-    // Warning: **從前這裏自己先折一遍**，而且只能取 `to_lowercase()` 的第一個字
-    // （İ 折出來是兩個），理由是「交回去的下標是要拿來高亮的，一對多就會點亮錯
-    // 的格子」。共用那一支比的是**兩個字**、不改下標，所以那個將就没有了。
+    // Warning: **這裏不自己先折一遍**：那樣只能取 `to_lowercase()` 的第一個字
+    // （İ 折出來是兩個），不然交回去拿來高亮的下標會點亮錯的格子。共用那一支比的
+    // 是**兩個字**、不改下標，所以不必將就。
     let haystack: Vec<char> = label.chars().collect();
     let needle: Vec<char> = query.chars().collect();
     if needle.is_empty() {
         return Some((0, Vec::new()));
     }
-    // **In order first, and if that fails, the same letters in any order**
-    // (2026-09-25). 原話：「我覺得改變順序應該很常見的，比如 a red apple 和 a
-    // apple red 的相近程度其實很高」，而在此之前一個顛倒的查詢不是排在後面，是
-    // **整條被篩掉、根本不出現**。
+    // **In order first, and if that fails, the same letters in any order**.
+    // 改變順序很常見——a red apple 和 a apple red 相近程度很高——所以一個顛倒的
+    // 查詢排在後面，不是**整條被篩掉、根本不出現**。
     //
     // Warning: **兩檔之間差着 [`IN_ORDER`] 分**，所以順序對的永遠在上面，顛倒的墊在
     // 底下——放寬不會把本來就對的那一批攪亂。門檻没有：詞條、檔名這些單子本來就
-    // 不長（定的，原話：「寧可多列」）。
-    // **簡繁異體照樣算同一個字**（2026-09-26 原話：「中文搜索的匹配繁简体和匹配
-    // 拼音对于 picker, buffer wiki 窗口中的搜索也应该有效」）。和高級搜索那一扇用
-    // 的是同一張表。
+    // 不長，寧可多列。
+    // **簡繁異體照樣算同一個字**：中文搜索的繁簡與拼音匹配，在挑選器、緩衝區、詞條
+    // 窗口裏一樣有效。和高級搜索那一扇用的是同一張表。
     //
     // Warning: **放寬的是查詢那一邊，不是名字那一邊**，而這個方向就是那張表值錢的地方：
     // `class(发) = 发發髮`，所以打「头发」找得到「頭髮」；`class(發) = 發发`，所以
     // 打「發」不會誤中「髮」（見 [`crate::glyphs`]）。反過來折就把這個性質毀了。
 
-    // **跨多遠算一處命中** —— 和搜索面板那一扇同一條規矩（`nearby::window`，
-    // 2026-10-04 合的）。從前這裏不限：`release` 七個字母散在
-    // `crates/yumete-core/src/lib.rs` 裏也算配上，於是 `ye --files release`
-    // 在本倉吐了四兆。面板限它的理由寫在 `nearby` 的檔頭上——「差不多是這幾個字」
+    // **跨多遠算一處命中** —— 和搜索面板那一扇同一條規矩（`nearby::window`）。
+    // 不限的話，`release` 七個字母散在 `crates/yumete-core/src/lib.rs` 裏也算配上，
+    // `ye --files release` 在本倉吐四兆。面板限它的理由寫在 `nearby` 的檔頭上——「差不多是這幾個字」
     // 說的是**一個詞組**，不是一行；一條路徑也不是一個詞組。
     let reach = Some(crate::nearby::window(needle.len()));
     // 大小寫折、繁簡折——兩條都是 `alike` 的事，面板問的是同一支。
     let (fold_case, glyphs) = (true, true);
-    // **字面找不着，就問它念作什麽**（2026-09-26 提的）。`shuzhai` 找得到「書齋」。
+    // **字面找不着，就問它念作什麽**。`shuzhai` 找得到「書齋」。
     //
-    // Warning: **只認全拼，和高級搜索一條規矩**（定的，原話：「Option 2 更符合目前的设计
-    // 哲学——不一下子提供太多东西直到真有人要」）。所以 `sz` 不中。
+    // Warning: **只認全拼，和高級搜索一條規矩**：不一下子提供太多東西，直到真有人要。
+    // 所以 `sz` 不中。
     //
     // Warning: **排在字面之後**：查詢全是字母的時候，`md` 既是一個後綴也是一串讀音，而
     // 讀者打 `md` 十有八九在找 `.md`。字面接得住就不必問讀音。
@@ -640,7 +628,7 @@ fn matched(label: &str, query: &str, loose: bool) -> Option<(i64, Vec<usize>)> {
 /// the two kinds never interleave — 「順序對的」 is a category, not a nudge.
 const IN_ORDER: i64 = 1_000_000;
 
-/// **連在一起的那一段**，從左往右第一處 —— 收緊那一檔（2026-10-04）。
+/// **連在一起的那一段**，從左往右第一處 —— 收緊那一檔。
 ///
 /// 和 [`crate::nearby::one`] 的分別就是「跳不跳」：這一支要求每一個字緊挨着上一個。
 /// 折疊規矩還是 [`crate::nearby::alike`]，所以簡繁與大小寫照舊不分。
@@ -663,7 +651,7 @@ fn run_of(
 }
 
 /// **Every needle character is in there somewhere, order be damned** — 朱浩宇
-/// finding 朱宇浩 (2026-09-25).
+/// finding 朱宇浩.
 ///
 /// One haystack character per needle character (so 「朱朱」 needs two 朱), each
 /// taken as early as it can be. The positions come back **sorted**, because
@@ -685,7 +673,7 @@ fn anyhow(
         positions.push(found);
     }
     positions.sort_unstable();
-    // Warning: **這一檔也要限窗**（2026-10-04）。順序那一檔限了而它没限，放水的就
+    // Warning: **這一檔也要限窗**。順序那一檔限了而它没限，放水的就
     // 全走它這一條——而它本來就是最鬆的一檔。
     let (first, last) = (positions[0], positions[positions.len() - 1]);
     reach.is_none_or(|reach| last - first < reach).then_some(positions)
@@ -709,7 +697,7 @@ mod tests {
         assert_eq!(picker.chosen(), Some(Item::File("ch01.md".to_string())));
     }
 
-    /// **最近開過的和其餘之間那條虛線，畫在第幾條之後**（2026-10-11 報的）。
+    /// **最近開過的和其餘之間那條虛線，畫在第幾條之後**。
     #[test]
     fn the_rule_sits_under_the_files_that_were_opened_lately() {
         let mut picker = files(&["ch01.md", "ch02.md", "ch03.md", "ch04.md"]);
@@ -733,7 +721,7 @@ mod tests {
         assert_eq!(picker.rule_after(), None, "全都在線上面就不畫");
     }
 
-    /// **根目錄的檔排在子目錄前面**（2026-10-11 報的）。
+    /// **根目錄的檔排在子目錄前面**。
     ///
     /// 收進來的次序是完整路徑的字典序，而那把 `misc/置闰法.txt` 排在
     /// `template.typ` 前面——`m` < `t`，而根上那幾個檔的名字是漢字。
@@ -774,8 +762,7 @@ mod tests {
         );
     }
 
-    /// **簡繁異體在這扇窗裏也算同一個字**（2026-09-26 原話：「中文搜索的匹配繁
-    /// 简体和匹配拼音对于 picker, buffer wiki 窗口中的搜索也应该有效」）。
+    /// **簡繁異體在這扇窗裏也算同一個字**，和高級搜索一樣。
     #[test]
     fn the_two_ways_of_writing_a_character_find_one_file() {
         let mut picker = files(&["卷一/岳陽樓記.md", "卷二/別的.md"]);
@@ -801,7 +788,7 @@ mod tests {
         assert_eq!(picker.chosen(), Some(Item::File("卷一/洞庭湖.md".to_string())));
         assert_eq!(picker.matches().len(), 1);
 
-        // 首字母那一路不算——2026-09-26 定，同高級搜索。
+        // 首字母那一路不算，同高級搜索。
         let mut picker = files(&["卷一/洞庭湖.md"]);
         for c in "dth".chars() {
             picker.push(c);
@@ -844,8 +831,8 @@ mod tests {
 
     #[test]
     fn the_name_beats_the_folder_it_is_in() {
-        // 2026-09-18: 「ch63」 typed at a novel means the chapter, not the
-        // folder the chapters are in.
+        // 「ch63」 typed at a novel means the chapter, not the folder the
+        // chapters are in.
         let mut picker = files(&["ch63/notes.md", "卷二/ch63.md"]);
         for c in "ch63".chars() {
             picker.push(c);
@@ -886,10 +873,9 @@ mod tests {
         assert_eq!(picker.chosen(), Some(Item::File("a.md".to_string())));
     }
 
-    /// **框空着的時候退格什麼都不做**（2026-10-08 定）。
+    /// **框空着的時候退格什麼都不做**。
     ///
-    /// 從前它交出一個 `false`，呼叫方拿它換層；挑選器只剩一層之後没有層可換，而
-    /// 「退格到頭就關窗」是另一回事。
+    /// 挑選器只有一層，没有層可換，而「退格到頭就關窗」是另一回事。
     #[test]
     fn backspacing_an_empty_query_does_nothing_at_all() {
         let mut picker = files(&["a.md"]);
@@ -912,10 +898,10 @@ mod tests {
         );
     }
 
-    /// **順序反了也找得到，而順序對的排在前面**（2026-09-25 定）。
+    /// **順序反了也找得到，而順序對的排在前面**。
     ///
-    /// 原話：「我覺得改變順序應該很常見的，比如 a red apple 和 a apple red 的
-    /// 相近程度其實很高」。從前顛倒的查詢不是排在後面，是**整條篩掉**。
+    /// a red apple 和 a apple red 相近程度很高，所以顛倒的查詢排在後面，不是**整條
+    /// 篩掉**。
     #[test]
     fn letters_out_of_order_still_match_and_rank_below_the_ones_in_order() {
         let mut picker = files(&["朱宇浩.md"]);
@@ -942,10 +928,9 @@ mod tests {
     }
 
     /// 詞條那一行後半截只畫不比：打「冬天」找的是**叫**冬天的那一條。
-    /// **管道那一邊收緊：跳着配和亂序都不收**（2026-10-04 定）。
+    /// **管道那一邊收緊：跳着配和亂序都不收**。
     ///
-    /// 原話：「cli --files 更精确（五个选项不全开），只有当加了 open 之后进了 tui
-    /// 才五个选项都开。」`空格 f` 是一張排過序的單子，只看前十條，長尾不要錢；
+    /// 命令行的 `--files` 更精確，進了 TUI 纔五個選項都開。`空格 f` 是一張排過序的單子，只看前十條，長尾不要錢；
     /// `ye --files` 把全部印出來，長尾就是噪音。
     ///
     /// 量出來的（本倉）：`ye --files lib` 從 13 行剩 **5 行**——正好那五個 `lib.rs`，
@@ -973,14 +958,13 @@ mod tests {
         assert!(matched("卷01/第120章.md", "di120", false).is_some(), "字母與漢字混寫");
     }
 
-    /// **一處命中跨不過那個窗口** —— 和搜索面板同一條規矩（2026-10-04 合的）。
+    /// **一處命中跨不過那個窗口** —— 和搜索面板同一條規矩。
     ///
-    /// 從前這裏不限：子序列跨多遠都算配上，於是 `release` 七個字母散在
+    /// 不限的話，子序列跨多遠都算配上，`release` 七個字母散在
     /// `crates/yumete-core/src/lib.rs` 裏也中。路徑長、重複字母多，結果是幾乎
-    /// 什麽都中——`ye --files release` 在本倉吐了**四兆**（2026-10-04 報的：「噪
-    /// 音太多太多」）。
+    /// 什麽都中——`ye --files release` 在本倉吐**四兆**的噪音。
     ///
-    /// 面板早就限了（`nearby::window` ＝ 查詢長度×2＋4），理由寫在 `nearby` 的檔頭
+    /// 面板也限（`nearby::window` ＝ 查詢長度×2＋4），理由寫在 `nearby` 的檔頭
     /// 上：「差不多是這幾個字」說的是**一個詞組**，不是一行。一條路徑也不是一個
     /// 詞組，所以同一條規矩在這裏一樣對。
     #[test]
@@ -1021,12 +1005,11 @@ mod tests {
     }
 
 
-    /// **翻一頁翻的是窗口上那一頁**（2026-10-07）。
+    /// **翻一頁翻的是窗口上那一頁**。
     ///
-    /// `page` 從前是十次 `step`，而 `step` 繞回去——於是短過二十條的名單上
-    /// `PageDown` 往回走：十二條，站在第六條上按下去，`(5 + 10) % 12 = 3`。
-    /// 根子是那個寫死的十；數目改成窗口的高度之後，一頁裝得下整張名單的時候
-    /// 「翻一頁」就是繞回原地，而不是退四條。
+    /// 寫死十次 `step` 的話，`step` 繞回去，短過二十條的名單上 `PageDown` 往回走：
+    /// 十二條，站在第六條上按下去，`(5 + 10) % 12 = 3`。數目是窗口的高度，一頁裝得
+    /// 下整張名單的時候「翻一頁」就是繞回原地，而不是退四條。
     #[test]
     fn a_page_is_the_window_not_ten_steps() {
         let names: Vec<String> = (1..=12).map(|n| format!("ch{n:02}.md")).collect();
@@ -1037,7 +1020,7 @@ mod tests {
         }
         assert_eq!(picker.selected(), 5, "站在第六條上");
         // 二十八行的窗口裝得下十二條：`28 % 12 = 4`，往下翻一頁落在第十條。
-        // 從前寫死的十在這裏算出 `(5 + 10) % 12 = 3`，高亮**往回**跳。
+        // 寫死的十在這裏會算出 `(5 + 10) % 12 = 3`，高亮**往回**跳。
         picker.page(true);
         assert_eq!(picker.selected(), 9);
         picker.page(false);
@@ -1061,7 +1044,7 @@ mod tests {
         assert_eq!(picker.selected(), 0, "`j` 照舊繞回去");
     }
 
-    /// 窗口還没量過（`--keys`、測試裏按鍵在畫之前）就是十，和從前一樣。
+    /// 窗口還没量過（`--keys`、測試裏按鍵在畫之前）就是十。
     #[test]
     fn a_page_before_the_first_frame_is_ten() {
         let names: Vec<String> = (1..=40).map(|n| format!("ch{n:02}.md")).collect();
