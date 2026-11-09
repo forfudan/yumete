@@ -3112,6 +3112,7 @@ dependencies = [
  "ratex-parser",
  "ratex-render",
  "ratex-types",
+ "ratex-unicode-font",
  "serde_json",
  "windows-sys 0.61.2",
  "yumete-cjk",

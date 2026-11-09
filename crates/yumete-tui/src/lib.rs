@@ -2943,7 +2943,14 @@ fn run_in_the_terminal(line: &str, in_dir: &std::path::Path) -> io::Result<std::
             libc::signal(libc::SIGQUIT, libc::SIG_IGN),
         )
     };
-    let status = cmd.status();
+    // Started with standard error the process's own: a formula being drawn
+    // may point it away for a moment (`tex.rs`).
+    let status = {
+        let steady = crate::tex::stderr_steady();
+        let child = cmd.spawn();
+        drop(steady);
+        child.and_then(|mut child| child.wait())
+    };
     unsafe {
         libc::signal(libc::SIGINT, was_int);
         libc::signal(libc::SIGQUIT, was_quit);
@@ -2977,7 +2984,13 @@ fn run_in_the_terminal(line: &str, in_dir: &std::path::Path) -> io::Result<std::
     }
     // Safety: 往本進程那串處理函數上掛一個，再摘掉同一個。
     unsafe { SetConsoleCtrlHandler(Some(swallow), 1) };
-    let status = shell_command(line, in_dir).status();
+    // Started with standard error the process's own (`tex.rs`).
+    let status = {
+        let steady = crate::tex::stderr_steady();
+        let child = shell_command(line, in_dir).spawn();
+        drop(steady);
+        child.and_then(|mut child| child.wait())
+    };
     unsafe { SetConsoleCtrlHandler(Some(swallow), 0) };
     status
 }
