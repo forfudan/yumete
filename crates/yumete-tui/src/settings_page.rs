@@ -846,13 +846,23 @@ fn found(text: &str) -> Option<Vec<usize>> {
     if text.is_empty() {
         return None;
     }
+    // **Either script, or the reading**: 「預覽」 finds 预览, and a full
+    // pinyin reading such as `yulan` finds the name it reads, as the picker
+    // finds 「書齋」 by `shuzhai`.
+    let needle: Vec<char> = text.chars().collect();
+    let reading = yumete_core::pinyin::atoms(&text);
+    let matches = |t: &str| {
+        let t = t.to_lowercase();
+        let hay: Vec<char> = t.chars().collect();
+        t.contains(&text)
+            || !yumete_core::nearby::spans(&hay, &needle, true, true).is_empty()
+            || reading.as_ref().is_some_and(|r| !yumete_core::pinyin::spans_of(&t, r, true).is_empty())
+    };
     Some(
         all_rows()
             .iter()
             .enumerate()
-            .filter(|(_, s)| {
-                [said(s.label), said(s.hint), s.path()].iter().any(|t| t.to_lowercase().contains(&text))
-            })
+            .filter(|(_, s)| [said(s.label), said(s.hint), s.path()].iter().any(|t| matches(t)))
             .map(|(i, _)| i)
             .collect(),
     )
@@ -2595,6 +2605,22 @@ mod tests {
         assert_eq!(page(&seat).page, None);
         assert!(seat.panel.is_some(), "back on the row, not out");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// **The search reads either script and the pinyin**: 「預覽」 and
+    /// `yulan` both find 预览字体, as `font` finds it by its key.
+    #[test]
+    fn the_search_reads_either_script_and_pinyin() {
+        let paths = |text: &str| -> Vec<String> {
+            let all = all_rows();
+            found(text).unwrap_or_default().into_iter().map(|i| all[i].path()).collect()
+        };
+        let preview_fonts = "editor.preview_font_family".to_string();
+        assert!(paths("font").contains(&preview_fonts));
+        if !yumete_cjk::speaks_english() {
+            assert!(paths("預覽字體").contains(&preview_fonts), "{:?}", paths("預覽字體"));
+            assert!(paths("yulanziti").contains(&preview_fonts), "{:?}", paths("yulanziti"));
+        }
     }
 
     /// **`h` `l` go to the group before and after**, as the left
