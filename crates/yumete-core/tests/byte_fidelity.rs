@@ -43,7 +43,7 @@ fn opening_and_saving_changes_not_one_byte() {
     }
 }
 
-/// **一存就以行尾結尾，而補的是這個檔自己的行尾**（2026-10-13 定，照 vim 與 helix）。
+/// **一存就以行尾結尾，而補的是這個檔自己的行尾**（照 vim 與 helix）。
 ///
 /// vim 的模型是「每一行都以行尾結束」，`'endofline'` 那一格**只在 `:set binary` 時**
 /// 算數——實測 nvim：`printf foo > a.txt` 之後開了就 `:wq`，一個字沒改，出來的是
@@ -53,9 +53,8 @@ fn opening_and_saving_changes_not_one_byte() {
 /// Warning: **空的不補**：0 位元組的檔開了再存還是 0 位元組（nvim 也是）。一個只有行
 /// 尾的檔和一個空檔是兩件事。
 ///
-/// 原話：「就算是老档案，當你按下 `:w` 的时候，你就应该預期到文檔发生了变化……其他任
-/// 何时候只要文件不是空的，`:w` 都会加行尾」。§309 那條「逐位元組往返」於是只剩 CRLF
-/// 與混行尾兩條。
+/// 老檔案也一樣：按下 `:w` 就預期文檔會變，只要檔不是空的，`:w` 都會加行尾。§309 那條
+/// 「逐位元組往返」因此只管 CRLF 與混行尾兩條。
 #[test]
 fn a_save_ends_the_file_the_way_its_own_lines_end() {
     for (name, bytes, want) in [
@@ -74,12 +73,11 @@ fn a_save_ends_the_file_the_way_its_own_lines_end() {
     }
 }
 
-/// **補上去的那個行尾不算「被外部改過」**（2026-10-13 報的）。
+/// **補上去的那個行尾不算「被外部改過」**。
 ///
 /// 存檔之後 `read_as` 記的是「盤上那一份長什麼樣」，而補行尾那一步只動寫出去的位元組、
 /// 不動繩子——記下繩子的 digest 就和盤上對不上，下一個心跳當場判「文件被外部修改」，自
-/// 動重載把剛改的東西蓋回去。原話：「The command line first shows 存了…, then it shows
-/// 文件被外部修改，已同步加載…And a new empty line appears」。
+/// 動重載把剛改的東西蓋回去，還多出一個空行。
 #[test]
 fn the_line_ending_a_save_adds_is_not_somebody_elses_edit() {
     for (name, bytes) in [
@@ -148,15 +146,14 @@ fn enter_in_insert_mode_ends_the_line_the_same_way() {
     );
 }
 
-/// **A line break is one break, even when it is two characters** (丟字第二輪,
-/// 2026-10-07).
+/// **A line break is one break, even when it is two characters.**
 ///
-/// `J` and `gJ` deleted one character at [`line_end`], and on a CRLF file that
-/// character is the `\r`: the two lines were not joined at all, the `\n` stayed
-/// behind, and the manuscript came back with one line in LF and the rest in
-/// CRLF. Nothing said so — the page looked the same, because the view strips
-/// `\r` either way. A writer joining lines down a chapter would have converted
-/// its endings one line at a time.
+/// `J` and `gJ` deleting one character at [`line_end`] would, on a CRLF file,
+/// delete the `\r`: the two lines would not be joined at all, the `\n` would
+/// stay behind, and the manuscript would come back with one line in LF and
+/// the rest in CRLF. Nothing would say so — the view strips `\r` either way. A
+/// writer joining lines down a chapter would convert its endings one line at
+/// a time.
 ///
 /// [`line_end`]: yumete_core::motion::line_end
 #[test]
@@ -205,14 +202,12 @@ fn joining_two_lines_takes_the_whole_break_however_long_it_is() {
     );
 }
 
-/// **A block comment must not write its two marks in the other kind of line**
-/// (丟字第二輪, 2026-10-07).
+/// **A block comment must not write its two marks in the other kind of line.**
 ///
 /// `空格 C` over more than one line of prose puts `<!--` and `-->` on lines
-/// of their own (the flavour's `block_comment_lines`, 2026-11-02), and those
-/// two lines were built with a literal `\n`. In a CRLF manuscript that left
-/// the file with two kinds of line in it, invisibly: the page strips `\r`
-/// either way, so nothing on screen said so. Code is commented inline, as
+/// of their own (the flavour's `block_comment_lines`). Built with a literal
+/// `\n`, those two lines would leave a CRLF manuscript with two kinds of line
+/// in it, invisibly: the page strips `\r` either way. Code is commented inline, as
 /// helix does, and keeps its endings too.
 #[test]
 fn a_block_comment_writes_its_marks_in_this_files_kind_of_line() {
@@ -246,10 +241,10 @@ fn a_block_comment_writes_its_marks_in_this_files_kind_of_line() {
     );
 }
 
-/// **導出的那一份跟着源文件走** (丟字第二輪, 2026-10-07).
+/// **導出的那一份跟着源文件走**.
 ///
-/// `:export csv` wrote `\n` and no BOM, whatever the source was. A `.csv`
-/// exported from a BOM'd CRLF table came out with neither — and those three
+/// `:export csv` writes the source's line ending and BOM. A `.csv` exported
+/// from a BOM'd CRLF table must not come out with neither — those three
 /// bytes are how Excel decides the file is UTF-8, which is the reason the
 /// first test in this file exists.
 #[test]
@@ -276,13 +271,13 @@ fn an_exported_csv_keeps_the_mark_and_the_line_ending_it_came_with() {
     );
 }
 
-/// **空行是一段的盡頭，三種範圍都算** (丟字第二輪, 2026-10-07).
+/// **空行是一段的盡頭，三種範圍都算**.
 ///
-/// `:convert-table` filtered blank lines *out* of the span it rewrote, so a
-/// CSV with a blank line in it came back one line shorter and said nothing.
-/// 「文中一段」 already stopped at a blank line; the other two now agree.
-/// 判詞：「如果一個文件是csv的話，那么它就是「一個表格」的意思。如果出現空行，
-/// 説明是文件有問題。」
+/// `:convert-table` does not filter blank lines *out* of the span it rewrites,
+/// or a CSV with a blank line in it comes back one line shorter and says
+/// nothing. All three ranges stop at a blank line, as 「文中一段」 does: a
+/// CSV file is one table, and a blank line in it means the file has a
+/// problem.
 #[test]
 fn converting_a_table_stops_at_a_blank_line_rather_than_swallowing_it() {
     // The whole file is the grid, and it has a blank line in the middle.

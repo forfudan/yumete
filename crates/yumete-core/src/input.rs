@@ -40,7 +40,7 @@ pub enum Mode {
     /// enum is for — and so the IME lights up there without a special case.
     Field,
     /// Typing **a value for a front end's panel** on the command row: the
-    /// settings panel's one-line editor and its search (2026-11-08). The `:`
+    /// settings panel's one-line editor and its search. The `:`
     /// line's own keys, the IME after `C-^`, a paste at the caret; Enter hands
     /// the text back ([`crate::Editor::take_value_answer`]) instead of
     /// running it, and Esc hands back nothing.
@@ -49,7 +49,7 @@ pub enum Mode {
 
 impl Mode {
     /// A short label for the status line — `None` when the row below already
-    /// says it (2026-09-27).
+    /// says it.
     ///
     /// **The four that draw nothing**: `:` writes `:` on the row below,
     /// `/` writes 「搜索:」, the reading writes 「讀音:」 and `::` writes `::`.
@@ -57,16 +57,15 @@ impl Mode {
     /// the character readout all give way in turn when the window narrows
     /// (#394, #500).
     ///
-    /// Warning: **選擇器 2026-10-01 從那一組裏拿了出來**，由
-    /// [`Editor::mode_label`] 報 `PIC.INS`。這一支仍回 `None`：它答的是「哪一種模
-    /// 式」，而那個詞答的是**鍵在哪一層**，同 `PAN.`。2026-10-08 起選擇器只有一層，
-    /// 所以那裏也只剩一個詞（從前是 `PIC.NOR`/`PIC.INS` 兩個）。
+    /// Warning: **選擇器不在那一組裏**，由 [`Editor::mode_label`] 報 `PIC.INS`。
+    /// 這一支仍回 `None`：它答的是「哪一種模式」，而那個詞答的是**鍵在哪一層**，
+    /// 同 `PAN.`。選擇器只有一層，所以那裏也只有一個詞。
     ///
-    /// **The rest are three letters**, the way Helix writes them. Twelve cells
-    /// (`-- NORMAL --  `) said one word.
+    /// **The rest are three letters**, the way Helix writes them, not twelve
+    /// cells (`-- NORMAL --  `) for one word.
     ///
     /// Warning: **`PAN.` says where the keys are, not what they are.** Standing in
-    /// the results list and standing in the page both used to read `NORMAL`,
+    /// the results list and standing in the page would both read `NORMAL`,
     /// and `d` means「delete the search word」in one and「delete a line of the
     /// novel」in the other. [`Editor::mode_label`] adds `PAN.NOR`; this one
     /// answers for the field, which is only ever reached from a side panel.
@@ -199,7 +198,7 @@ pub enum Key {
 /// **A macro written as text**, the way helix writes one into its register
 /// (`record_macro`): a plain character as itself, any other key in angle
 /// brackets by helix's name for it — `ihello<esc>`, `<C-w>v`, `<space>`.
-/// Chosen for both keymaps (2026-11-03), so `"ap` shows a macro and an
+/// Chosen for both keymaps, so `"ap` shows a macro and an
 /// edited line can be yanked back and played.
 pub fn macro_text(keys: &[Key]) -> String {
     fn name(c: char) -> String {
@@ -324,7 +323,7 @@ mod tests {
     use super::Mode;
 
     /// A macro's text goes both ways as helix writes it, and reads what
-    /// vim's registers hold too (2026-11-03).
+    /// vim's registers hold too.
     #[test]
     fn a_macro_is_written_as_helix_writes_it() {
         use super::{macro_keys, macro_text, Key};

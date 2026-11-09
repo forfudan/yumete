@@ -1297,7 +1297,7 @@ zhs = "插入"
 en = "insert"
 
 [[message]]
-# 提示：搜索面板——Enter 去看結果(兩種範圍同一句，2026-09-25 統一)
+# 提示：搜索面板——Enter 去看結果(兩種範圍同一句)
 key = "hint.search.go-look"
 zhs = "搜索"
 en = "search"
@@ -1763,7 +1763,7 @@ zhs = "删除行/列"
 en = "delete this row / column"
 
 [[message]]
-# t 組：數據那一格(從前是 空格 d，2026-09-30 從「詳情欄」改名)
+# t 組：本行記錄那一格
 key = "hint.table.detail-panel"
 zhs = "本行记录"
 en = "this row's record"

@@ -1,4 +1,4 @@
-//! **What one counts as** (2026-10-29): Word's 字數. Each 漢字, kana or
+//! **What one counts as**: Word's 字數. Each 漢字, kana or
 //! Hangul syllable is one, and each run of letters or digits in any other
 //! script is one word — so a Chinese chapter counts as it always did, an
 //! English one stops reading 0, and `我用 Rust 寫` is four. The live count on
@@ -73,7 +73,7 @@ fn east_asian(c: char) -> bool {
 
 
 /// A combining mark: zero-width and not a format character. U+200B, U+2060
-/// and U+FEFF are zero-width too, and they separate words (2026-10-30).
+/// and U+FEFF are zero-width too, and they separate words.
 fn is_combining(c: char) -> bool {
     yumete_cjk::char_width(c) == 0
         && !c.is_whitespace()

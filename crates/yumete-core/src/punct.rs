@@ -102,7 +102,7 @@ fn prose(line: &str, in_fence: &mut bool) -> Vec<char> {
         return vec![' '; chars.len()];
     }
     let mut out = chars.clone();
-    // **腳註定義開頭那一段是語法，不是散文**（2026-10-09 審出來的）。
+    // **腳註定義開頭那一段是語法，不是散文**。
     //
     // 一行以 `[^1]:` 起頭的時候，那個半角冒號是 markdown 寫的，不是打字的人少按了
     // 一下 Shift——而提示就畫在它旁邊：`[^1]:：這是註腳的正文。`。照着那個提示改，

@@ -262,9 +262,8 @@ mod tests {
 
     /// **The shape of the report, not the capture** (#300).
     ///
-    /// This used to call `report`, which captures a real backtrace — 14.6
-    /// seconds of symbolising, in a lib suite that is otherwise 2. One test
-    /// turned the fast lane into the slow one. `compose` is everything the
+    /// Not `report`, which captures a real backtrace — 14.6 seconds of
+    /// symbolising, in a lib suite that is otherwise 2. `compose` is everything the
     /// hook writes except the capture, which is the one line nothing here
     /// could have asserted about anyway.
     #[test]

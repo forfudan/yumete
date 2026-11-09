@@ -1,7 +1,6 @@
-//! **Folds** (2026-11-03): ranges of lines a window shows as one row.
+//! **Folds**: ranges of lines a window shows as one row.
 //!
-//! Decided after a writer's, a vim user's and an engineer's review: vim's
-//! keys and behaviour under the vim keymap; folds from Markdown and Typst
+//! Vim's keys and behaviour under the vim keymap; folds from Markdown and Typst
 //! headings as a flavour item, all open at first; manual folds (`zf`)
 //! alongside; one set per window, as vim keeps them; the session keeps
 //! them.
@@ -36,8 +35,8 @@ pub struct FoldSet {
     /// The heading folds that are closed: where the heading's line starts,
     /// moved with every edit as a manual fold is, and its text. A heading
     /// is closed while its line starts there and still reads so, so typing
-    /// another heading with the same text closes nothing (review,
-    /// 2026-11-03), and one rewritten or deleted is open.
+    /// another heading with the same text closes nothing, and one
+    /// rewritten or deleted is open.
     pub closed_headings: Vec<(usize, String)>,
     /// vim's `zn` (and `zi`): every fold drawn open while set, and kept.
     pub disabled: bool,
@@ -87,7 +86,7 @@ impl FoldSet {
     }
 
     /// Move every manual fold through `change`, as vim moves its folds
-    /// (measured in nvim, 2026-11-03): lines put in or taken out inside a
+    /// (measured in nvim): lines put in or taken out inside a
     /// fold grow or shrink it; whole lines put in at its first line's start
     /// (`O`) push it down; a line opened after its last line (`o`) stays
     /// outside; a fold whose lines are all taken goes.
@@ -100,7 +99,7 @@ impl FoldSet {
             if let (true, Some(b)) = (joined && taken > 0, break_after.filter(|&b| b < fold.to)) {
                 // A join pulled its first line up onto the line above
                 // (`J`): that line is gone from the fold, which starts at the
-                // next (nvim, 2026-11-04).
+                // next (as nvim does).
                 fold.from = b + 1 - taken + put;
                 fold.to = fold.to - taken + put;
                 return true;
@@ -112,7 +111,7 @@ impl FoldSet {
                 } else if at == fold.to && starts_line && at > fold.from {
                     // Its last line was empty, so the fold ended where that
                     // line starts, and that line went: it ends at the line
-                    // before (review, 2026-11-03).
+                    // before.
                     fold.to = at - 1;
                 } else if at >= fold.to {
                     // After its last line's text: a join onto its last line.
@@ -165,8 +164,7 @@ impl FoldSet {
     ///
     /// A fold made since that point stays, moved through `undone`, the
     /// change the undo made; one deleted since with `zd` stays deleted
-    /// (review, 2026-11-03: `u` took the first away and brought the second
-    /// back).
+    /// (`u` must not take the first away or bring the second back).
     pub fn restore(&mut self, restored: &FoldSet, undone: Option<Change>) {
         let now = std::mem::take(&mut self.manual);
         let deleted = &self.deleted;

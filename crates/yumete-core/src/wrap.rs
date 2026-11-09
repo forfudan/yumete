@@ -1,10 +1,10 @@
 //! Soft-wrapping for horizontal layout — the counterpart of [`crate::zong`].
 //!
-//! Horizontal layout used to draw one logical line per screen row, so a
-//! paragraph wider than the terminal simply ran off the right edge and the rest
-//! of it could not be seen at all. For an editor whose whole purpose is long
-//! CJK prose — where a paragraph is routinely one line of several hundred
-//! characters — that is not a limitation but a missing feature.
+//! Drawn one logical line per screen row, a paragraph wider than the terminal
+//! would run off the right edge and the rest of it could not be seen at all.
+//! For an editor whose whole purpose is long CJK prose — where a paragraph is
+//! routinely one line of several hundred characters — soft wrap is not an
+//! extra but the layout itself.
 //!
 //! This module answers, for a rope and a text width in cells, the same three
 //! questions [`crate::zong`] answers for 縱, and in the same shape:
@@ -106,8 +106,8 @@ pub struct Measure<'a> {
     typed: &'a dyn Fn(usize) -> Vec<(usize, String)>,
     /// Which lines are **one row however long they are** (#275).
     ///
-    /// A row of a table. 「进入后，表格所在的行不再 soft wrap」 —
-    /// and the reason is the whole point of the mode: a cell that has wrapped
+    /// A row of a table does not soft-wrap, and the reason is the whole
+    /// point of the mode: a cell that has wrapped
     /// onto the next screen row is no longer in its column, so a table folded
     /// to the measure is not a table any more. Part of the measure and not of
     /// the renderer, like everything else here, because the caret, `j`, the
@@ -134,10 +134,10 @@ pub struct Measure<'a> {
     ///
     /// With it, an answer for a paragraph can be *continued* from the one
     /// before the edit instead of being made again; without it the paragraph
-    /// is wrapped from its head, which is what typing into a million-character
-    /// paragraph used to cost 25.4 ms a key for.
+    /// is wrapped from its head, which costs 25.4 ms a key when typing into a
+    /// million-character paragraph.
     edit: Option<(usize, isize)>,
-    /// **這一行的前綴寬度索引**，有的話（2026-10-08）。見 [`Widths`]。
+    /// **這一行的前綴寬度索引**，有的話。見 [`Widths`]。
     ///
     /// 與 `version` 一樣是純粹的省工夫：`None` 的時候每一處都逐字素走，答案一樣
     /// ——只是不折行的一行 1242 萬字上，光標在行尾按一下 `h` 要 223 ms。
@@ -148,7 +148,7 @@ pub struct Measure<'a> {
     ///
     /// 第三個參數是**這一問跨多少個字符**，答的那一邊據此決定值不值得建：一段不
     /// 到一塊長，逐字素走至多 86 µs，而建索引要把那一行整個走一遍（1242 萬字是
-    /// 190 ms）。2026-10-08 量到的：`gh` 之後不往右走，少了這一道就白付 192 ms。
+    /// 190 ms）。量過：`gh` 之後不往右走，少了這一道就白付 192 ms。
     widths: &'a AskWidths<'a>,
 }
 
@@ -263,7 +263,7 @@ impl<'a> Measure<'a> {
         Measure { edit, ..self }
     }
 
-    /// 交進「這一行的前綴寬度索引」那一支（2026-10-08）。見 [`Measure::widths`]。
+    /// 交進「這一行的前綴寬度索引」那一支。見 [`Measure::widths`]。
     pub fn with_widths(
         self,
         widths: &'a AskWidths<'a>,
@@ -464,7 +464,7 @@ fn line_text(rope: &Rope, line: usize) -> String {
 
 /// **How many characters are on `line`**, without building the line.
 ///
-/// Warning: **不要為了數一行有多長把它整個變成 `String`**（2026-10-03 量出來的）。一行
+/// Warning: **不要為了數一行有多長把它整個變成 `String`**（量出來的）。一行
 /// 四十兆的檔上 `:view-wrap` (off) 比開着折行慢**七倍半**（14.4 秒對 1.9 秒），整個
 /// 差額就是 [`rows_of_line`] 不折行那一支裏的 `line_text(...).chars().count()`——
 /// 它每一幀被叫很多次，每一次拷貝兩千萬個字符再數一遍。rope 自己數得出來。
@@ -493,13 +493,12 @@ fn latin_word_char(c: char) -> bool {
 /// > 點號（頓號、逗號、句號、冒號、分號、嘆號、問號）、結束引號、結束括號、
 /// > 結束書名號乙式（單雙書名號）、連接號、間隔號、分隔號不能出現在一行的開頭。
 ///
-/// The list used to be derived from [`yumete_cjk::hangs_in_the_margin`], which
-/// is a *rendering* question — what fits in a one-cell margin — and answers
-/// `false` for every mark with no half-width form. So `》〉』】〕` and the
-/// 簡體 quotes `”’` were free to open a column, and did: thirteen offences on
-/// one page of 論語集解 at `zong_length 12`, every one of them a 書名號.
-/// Line breaking and margin hanging are different questions and are asked
-/// separately now.
+/// Warning: the list is **not** derived from
+/// [`yumete_cjk::hangs_in_the_margin`], which is a *rendering* question — what
+/// fits in a one-cell margin — and answers `false` for every mark with no
+/// half-width form, so `》〉』】〕` and the 簡體 quotes `”’` would be free to
+/// open a column. Line breaking and margin hanging are different questions and
+/// are asked separately.
 pub(crate) fn forbidden_at_row_start(c: char) -> bool {
     matches!(
         c,
@@ -601,12 +600,12 @@ pub fn line_rows_drawing(
 /// [`line_rows_drawing`], plus **whether the caret is standing at the end of
 /// this line** and so needs a cell that the last row has not got.
 ///
-/// Warning: **這一格從前是無條件開的**，理由是「一段正好填滿最後一行，段末的光標
-/// 就沒地方站」。理由對，可它一天到晚都在付：**一段話正好排滿一行，屏幕上就
-/// 憑空多一個空行**，讀起來是分了段——寫小說最常見的排版事故，2026-09-23 報的。
-/// 而且它不只坑編輯器：面板、導出、預覽都走這一支，那裏根本沒有光標。
+/// Warning: **這一格不許無條件開。** 「一段正好填滿最後一行，段末的光標就沒地方
+/// 站」這個理由對，可無條件開就一天到晚都在付：**一段話正好排滿一行，屏幕上就
+/// 憑空多一個空行**，讀起來是分了段——寫小說最常見的排版事故。而且它不只坑編輯
+/// 器：面板、導出、預覽都走這一支，那裏根本沒有光標。
 ///
-/// 所以現在按 vi 的辦法：**光標到了纔開**。Normal 模式下光標落在字上，行末那一
+/// 所以按 vi 的辦法：**光標到了纔開**。Normal 模式下光標落在字上，行末那一
 /// 格沒人要；Insert 模式打到行尾，它就長出來——這也正是 vim 在 `wrap` 下的樣子。
 pub fn line_rows_for_caret(
     text: &str,
@@ -709,10 +708,9 @@ fn adjusted_break(
 ) -> usize {
     // **The character the reader sees.** A grapheme that is not drawn has no
     // width, and 禁則 is about what stands at a row's head and foot — so a
-    // retreat onto a hidden `` ` `` used to stop there, having moved nothing,
-    // and the row after it opened with 。 in `development.md` itself.
-    // The vertical page was taught this; this is the same rule, on the other
-    // side, asked the same way.
+    // retreat onto a hidden `` ` `` must not stop there, having moved nothing,
+    // or the row after it opens with 。. The vertical page asks the same rule
+    // the same way.
     let seen = |i: usize| -> Option<char> {
         (widths.get(i).copied().unwrap_or(1) > 0)
             .then(|| chars.get(cuts.get(i).copied().unwrap_or(0)).copied())
@@ -731,13 +729,12 @@ fn adjusted_break(
     };
     // 禁則處理 first: pull the offending character down with its neighbour.
     //
-    // Warning: **A retreat that does not help is not taken** (2026-10-20). The loop
-    // retreated while the rule was offended, and handed back wherever it had
-    // got to — so a run of marks that offend it *everywhere* paid the full
-    // retreat for nothing: 連接號 is 行首禁則, and a line of `—` offends it at
-    // every boundary, so a 22-cell row came out 18 cells long and no 行首禁則
-    // was satisfied by the four empty cells. Measured on `—`×40 at width 25:
-    // 18/22, where 字 filled 22/22 and letters 22/22. 追い出し is a way to
+    // Warning: **A retreat that does not help is not taken.** Retreating while
+    // the rule is offended and handing back wherever it got to would make a
+    // run of marks that offend it *everywhere* pay the full retreat for
+    // nothing: 連接號 is 行首禁則, and a line of `—` offends it at every
+    // boundary, so a 22-cell row would come out 18 cells long and no 行首禁則
+    // would be satisfied by the four empty cells. 追い出し is a way to
     // honour the rule, not a tax; where it cannot honour it, the break stands
     // where the measure put it, as it does in a typesetter.
     let kinsoku = |first: usize| {
@@ -794,9 +791,9 @@ fn adjusted_break(
 ///
 /// Wrap off means one row per paragraph, however long — which is what a very
 /// large width gives, through the same code the wrapped page uses. Going round
-/// it instead (`motion::down`, over the source) was a second answer to「which
-/// column is this character in」, and it did not know what was off the page: with
-/// 所見即所得 on and wrap off, `j` landed a glyph left per `**` above it, and
+/// it instead (`motion::down`, over the source) would be a second answer to「which
+/// column is this character in」, one that does not know what is off the page: with
+/// 所見即所得 on and wrap off, `j` would land a glyph left per `**` above it, and
 /// could land *on* an asterisk that is not drawn.
 pub const NO_WRAP: usize = 1 << 40;
 
@@ -1016,14 +1013,11 @@ fn carried_on(rope: &Rope, line: usize, m: Measure) -> Option<Vec<(usize, usize)
     // whichever way it went — an insert pushes what follows along and a
     // removal pulls it back, and neither touches what came first.
     //
-    // This added the removed length back on until 2026-09-11, which named a
-    // row later than the one the edit fell in and so reused *more* of the old
-    // list than the edit allowed. Reasoned, not caught: the test that looked
-    // as though it had caught it was lying to itself at the time (two cases
-    // sharing a buffer number and handing each other their rows), and with
-    // that fixed the old arithmetic passes — the two rows of slack below were
-    // covering for it. Slack is not a licence to be wrong about where the
-    // edit was.
+    // Warning: adding the removed length back on would name a row later than
+    // the one the edit fell in and so reuse *more* of the old list than the
+    // edit allows. No test catches that — the two rows of slack below cover
+    // for it — and slack is not a licence to be wrong about where the edit
+    // was.
     let was = col;
     if at > end || was > old.last().map_or(0, |r| r.1) {
         note("outside the paragraph");
@@ -1134,14 +1128,14 @@ fn remember(hash: u64, width: usize, rows: &[(usize, usize)]) {
 
 /// 一塊多少個字符——[`Widths`] 每隔這麼多字符記一條累計寬度。
 ///
-/// 4096 是這麼挑的（2026-10-08 量的，一個字素約 21 ns）：一次查詢的代價是兩頭各
+/// 4096 是這麼挑的（量過，一個字素約 21 ns）：一次查詢的代價是兩頭各
 /// 走至多一塊，4096 個字符是 **86 µs**，一幀問四五次也還在半毫秒以內；而一行
 /// 1242 萬字的稿子上索引本身只有 12 419 022 / 4096 ≈ 3031 條、48 KB。再大
 /// （65536）兩頭那一走漲到 1.4 ms，一幀問五次就看得見了；再小（256）索引漲到
 /// 48 500 條而那一走本來就只有 5 µs，省不出什麼來。
 ///
 /// 也是**建不建索引**的門檻：一行不到一塊長，索引裏連一個內部切點都沒有，走的
-/// 就是從前那一條路。
+/// 就是逐字素那一條路。
 pub(crate) const BLOCK: usize = 4096;
 
 /// **這個切點記得下嗎**——只問一句：它左邊那個字符是不是區域指示符（國旗那
@@ -1149,7 +1143,7 @@ pub(crate) const BLOCK: usize = 4096;
 ///
 /// 索引成立的前提是：切點 `p` 在**從任何一處起**的分段裏都是字素邊界，而且 `p`
 /// 右邊的分段與「從 `p` 起重新分段」逐一相同。索引是**從行首**分段算出來的，查
-/// 詢卻是**從 `a`** 分段走的（從前那一支就是 `steps(slice(a..b))`），兩者只有在
+/// 詢卻是**從 `a`** 分段走的（[`walk_width`] 就是 `steps(slice(a..b))`），兩者只有在
 /// 這種切點上接得起來纔保證逐格相同。
 ///
 /// 一句話夠用，理由是 UAX #29 那十幾條裏只有三條要往左看一個字符以上——GB9c
@@ -1167,7 +1161,7 @@ pub(crate) const BLOCK: usize = 4096;
 ///   標在一種分段裏是邊界，在另一種裏在字素中間。數的起點只被非區域指示符打斷，
 ///   所以「左邊那個不是區域指示符」正好把這一條關掉。
 ///
-/// 一行全是國旗就一個切點都記不下來（見那條性質測試），於是照從前那樣逐字素
+/// 一行全是國旗就一個切點都記不下來（見那條性質測試），於是逐字素
 /// 走——慢，不會錯。
 fn clean_cut(before: char) -> bool {
     !matches!(before as u32, 0x1F1E6..=0x1F1FF)
@@ -1175,8 +1169,8 @@ fn clean_cut(before: char) -> bool {
 
 /// **一行裏 `[a, b)` 這一段佔多少格**，逐字素走——`hidden` 裏的字符不算。
 ///
-/// 索引算得出來的那一支（[`Widths::width`]）逐格與這一支相同，而這一支就是
-/// 2026-10-08 之前 [`position`] 裏那幾行：答案以它為準。
+/// 索引算得出來的那一支（[`Widths::width`]）逐格與這一支相同，而這一支是
+/// [`position`] 不靠索引時的量法：答案以它為準。
 pub fn walk_width(rope: &Rope, line: usize, a: usize, b: usize, hidden: &[(usize, usize)]) -> usize {
     if b <= a {
         return 0;
@@ -1194,7 +1188,7 @@ pub fn walk_width(rope: &Rope, line: usize, a: usize, b: usize, hidden: &[(usize
 
 /// `hidden` 併成互不相交、按頭排好的一串。
 ///
-/// 從前那道過濾是 `any(…)`，所以重疊的區間只算一次；索引那一支是**減**出來的，
+/// [`walk_width`] 那道過濾是 `any(…)`，所以重疊的區間只算一次；索引那一支是**減**出來的，
 /// 重疊就會減兩遍。併一次，兩條路就說同一句話。
 fn merged(hidden: &[(usize, usize)]) -> Vec<(usize, usize)> {
     let mut spans: Vec<(usize, usize)> = hidden.iter().copied().filter(|&(a, b)| a < b).collect();
@@ -1209,7 +1203,7 @@ fn merged(hidden: &[(usize, usize)]) -> Vec<(usize, usize)> {
     out
 }
 
-/// **一行的前綴寬度索引**（2026-10-08）：在若干個乾淨切點上記下從行首數起的累計
+/// **一行的前綴寬度索引**：在若干個乾淨切點上記下從行首數起的累計
 /// 顯示寬度，於是「行首到第 `col` 個字符有多寬」不必每次逐字素走一遍。
 ///
 /// 為什麼要它：不折行的時候一段就是一行，於是 [`position`] 裏那句「只量這一行裏
@@ -1224,11 +1218,10 @@ pub struct Widths {
     /// `(字符下標, 行首到這個下標的累計寬度)`，按下標遞增，第一條恆為 `(0, 0)`、
     /// 最後一條恆為行末。
     cuts: Vec<(usize, usize)>,
-    /// **每一條切點上「行首到這裏有幾個字素」**，與 [`Self::cuts`] 同下標
-    /// （2026-10-09 作者定）。
+    /// **每一條切點上「行首到這裏有幾個字素」**，與 [`Self::cuts`] 同下標。
     ///
-    /// 狀態欄那個「字 N」要的是字素數（`葛`＋異體字選擇符是**一個**字，作者的原則：
-    /// 「嚴格意義上 char 應該是 grapheme cluster 而不是 codepoint」），而那一行每幀
+    /// 狀態欄那個「字 N」要的是字素數（`葛`＋異體字選擇符是**一個**字：一個字是
+    /// grapheme cluster 而不是 codepoint），而那一行每幀
     /// 都問一次。從行首數起要走過光標前面那一整段——量過：四百萬字單行上走到行尾，
     /// 每幀多花 70 毫秒。於是搭在這一份索引上，和寬度同一趟走出來，一個字節不多讀。
     clusters: Vec<usize>,
@@ -1284,7 +1277,7 @@ impl Widths {
         self.cuts.get(i.checked_sub(1)?).copied()
     }
 
-    /// **行首到 `at` 之間，最近的那一條切點，和到它為止有幾個字素**（2026-10-09）。
+    /// **行首到 `at` 之間，最近的那一條切點，和到它為止有幾個字素**。
     ///
     /// 交 `(那條切點的字符下標, 到它為止的字素數)`。剩下那一截不到一個 [`BLOCK`]，
     /// 由呼叫方自己走——見 `Editor::cursor_grapheme`。第一條切點恆為 `(0, 0)`，所以
@@ -1322,7 +1315,7 @@ impl Widths {
         if b <= a {
             return 0;
         }
-        // 索引說不了的就照從前走：`b` 超出這一行（不該有，兜底），或者 `a` 與 `b`
+        // 索引說不了的就逐字素走：`b` 超出這一行（不該有，兜底），或者 `a` 與 `b`
         // 之間擠不進兩個切點（那本來也沒什麼可省的）。
         let (Some((p, wp)), Some((q, wq))) = (self.at_or_after(a), self.at_or_before(b)) else {
             return walk_width(rope, line, a, b, hidden);
@@ -1348,7 +1341,7 @@ impl Widths {
     /// `[x, y)` 裏起頭的那些字素一共佔多少格——減 `hidden` 用的那一項。
     ///
     /// 從 `x` 左邊那個切點走到 `y` 右邊那個切點：兩頭都是切點，所以走出來的字素
-    /// 與行首那一份分段逐一對應，而**起頭在 `[x, y)` 裏**正是從前那道過濾的判準。
+    /// 與行首那一份分段逐一對應，而**起頭在 `[x, y)` 裏**正是 [`walk_width`] 那道過濾的判準。
     /// 調用方保證 `p <= x < y <= q`，於是這兩個切點都在 `[p, q)` 裏夾得住。
     fn covered(&self, rope: &Rope, line: usize, x: usize, y: usize) -> usize {
         let u = self.at_or_before(x).map_or(x, |(c, _)| c);
@@ -1366,7 +1359,7 @@ impl Widths {
     ///
     /// 只跳 `hidden` 與 `drawn` 都碰不着的塊：那兩樣各有自己的坐標，一格都不能算
     /// 錯。跳到越過 `goal` 的那一塊就停——答案在那一塊裏，所以往後只要走一塊；碰
-    /// 上那兩樣（或者塊不夠一整個了）就把終點交回 `e`，從那裏起照從前那樣走。
+    /// 上那兩樣（或者塊不夠一整個了）就把終點交回 `e`，從那裏起逐字素走。
     fn skip_to(
         &self,
         s: usize,
@@ -1382,7 +1375,7 @@ impl Widths {
         let mut i = self.cuts.partition_point(|&(c, _)| c <= from);
         loop {
             // 切點用完了，或者下一個已經出了這一行（這一行的末尾），或者這一塊裏
-            // 有自己坐標的東西：剩下的照從前那樣逐字素走。
+            // 有自己坐標的東西：剩下的逐字素走。
             let Some(&(c, wc)) = self.cuts.get(i).filter(|&&(c, _)| c <= e) else {
                 return Some((from, col, e));
             };
@@ -1414,11 +1407,11 @@ pub fn row_count_in_line(rope: &Rope, line: usize, m: Measure) -> usize {
 }
 
 /// Locate the char index `pos` in the wrapped grid.
-/// **一行開頭那幾個字**——問「這一行開不開段」只要這麼多（2026-10-08）。
+/// **一行開頭那幾個字**——問「這一行開不開段」只要這麼多。
 ///
-/// Warning: **從前這幾處都把整行物化成 `String`。** `Measure::indent_of` 收的是一行文字，
-/// 而它轉手交給 `zong::opens_a_paragraph`——那一支只看開頭的空白與第一兩個字。於是
-/// 一行 1240 萬字的稿子上，**每動一下光標就拷 37 MB**（`sample` 指的就是這裏）。
+/// Warning: **別把整行物化成 `String` 交給它。** `Measure::indent_of` 收的是一行文字，
+/// 而它轉手交給 `zong::opens_a_paragraph`——那一支只看開頭的空白與第一兩個字。整行
+/// 物化的話，一行 1240 萬字的稿子上**每動一下光標就拷 37 MB**。
 ///
 /// 六十四個字足夠，而且答案與整行逐字相同：
 ///
@@ -1448,17 +1441,16 @@ pub fn position(rope: &Rope, pos: usize, m: Measure) -> Position {
     // Only the part of the row before the cursor is measured — a row, not a
     // paragraph, however long the paragraph is.
     //
-    // Warning: **那句話只在折行開着的時候是真的**（2026-10-08 量出來的）。折行關
+    // Warning: **那句話只在折行開着的時候是真的**（量出來的）。折行關
     // 掉，一段就是一行，於是 `row_start` 恆為 0 而這裏量的是**整個前綴**——一行
-    // 1242 萬字的檔上，光標在行尾按一下 `h` 要 223 ms（行首 5.5 ms）。現在中間那
+    // 1242 萬字的檔上，光標在行尾按一下 `h` 要 223 ms（行首 5.5 ms）。所以中間那
     // 一大段從 [`Widths`] 那份索引裏減出來，兩頭各逐字素走至多一塊。
     //
-    // **A character that is not drawn takes no column.** This summed the
-    // source, while `line_rows_indented` — the function that decides where the
-    // rows actually break — zeroes what is hidden. So with 所見即所得 on, a
-    // `j` from a row above a paragraph with `**` in it landed one glyph right
-    // per hidden character, and the front end papered over the caret's half of
-    // it by subtracting the hidden width again on its way to the screen.
+    // **A character that is not drawn takes no column**, as in
+    // `line_rows_indented` — the function that decides where the rows actually
+    // break — which zeroes what is hidden. Summing the source instead would land
+    // a `j` from a row above a paragraph with `**` in it one glyph right per
+    // hidden character.
     let hidden = m.off(line);
     let column = m.width_between(rope, line, row_start, col, &hidden);
     // **Text drawn before the caret is page the caret is past.** A run stands
@@ -1640,22 +1632,22 @@ fn char_at_column(
     // there is nothing in the indent to land on.
     let mut col = m.indent_of(line, &line_head(rope, line), index_in_line);
     let hidden = m.off(line);
-    // **The page drawn beside the text counts here too** (2026-10-08 報的：
-    // 「行首有 tab 縮進時（go 代碼），按下 j/k 時 cursor 位置不對齊」).
+    // **The page drawn beside the text counts here too**, or `j`/`k` from a
+    // line indented with a tab lands out of column.
     //
-    // Warning: 這一支從前只數了真字符，而 [`position`]（算目標列的那一支）數的是
+    // Warning: 這一支不許只數真字符：[`position`]（算目標列的那一支）數的是
     // 真字符**加上畫在它們旁邊的那些**。一個 tab 正是後者：它自己佔一格，到下一
     // 個制表位的那幾格是一段 `Ink::Tab` 的 `drawn` 跑出來的（見
-    // `Editor::tab_stops_on_line`）。於是一行行首一個 tab，目標列多算七格，而落
-    // 點這一頭少算七格——`j` 一下就偏了十四格。表格的填充（`Ink::Padding`）同病。
+    // `Editor::tab_stops_on_line`）。只數真字符的話，一行行首一個 tab，目標列多算
+    // 七格，而落點這一頭少算七格——`j` 一下就偏十四格。表格的填充（`Ink::Padding`）同理。
     //
     // 規矩照 `position` 抄：跑段站在它所錨的那個字**之前**，所以錨點等於眼下這
     // 一格的時候，它整段都在前面。
     let drawn = m.drawn_on(line);
-    // Warning: **這一行不許整個物化**（2026-10-08）。從前這裏是
-    // `rope.slice(start + s..start + e).to_string()`，而折行關掉的時候一段就是一
-    // 行：一行 1242 萬字的檔上，`j`／`k` 每按一下拷 37 MB 再逐字素走最多一遍。
-    // 現在先拿 [`Widths`] 那份索引整塊整塊地跳，剩下的只物化至多一塊。
+    // Warning: **這一行不許整個物化**（`rope.slice(start + s..start + e).to_string()`）：
+    // 折行關掉的時候一段就是一行，一行 1242 萬字的檔上，`j`／`k` 每按一下就要拷
+    // 37 MB 再逐字素走最多一遍。所以先拿 [`Widths`] 那份索引整塊整塊地跳，剩下的只
+    // 物化至多一塊。
     let (from, upto) = match (m.widths)(rope, line, e.saturating_sub(s)) {
         Some(index) => match index.skip_to(s, e, goal, col, &hidden, &drawn) {
             Some((from, skipped, upto)) => {
@@ -1775,8 +1767,9 @@ mod tests {
 
     /// …and a caller that can say **which version of which document** this
     /// rope is need not have its paragraph read at all to find the memo
-    /// (#315): the hash that took it was a walk down the whole paragraph, two
-    /// to five times a keystroke.
+    /// (#315): the hash that would take it is a walk down the whole paragraph,
+    /// two to five times a keystroke.
+
     #[test]
     fn a_stamped_paragraph_is_found_without_being_read() {
         let one: String = "春夏秋冬".repeat(2_500);
@@ -1842,9 +1835,9 @@ mod tests {
 
     #[test]
     fn a_latin_word_after_a_han_character_is_kept_whole() {
-        // The manual's own example, and it used to break `Heli|x`: in Chinese
+        // The manual's own example, which must not break `Heli|x`: in Chinese
         // prose a Latin word follows a 漢字, so there is no space in the row
-        // to retreat to and the old rule gave up.
+        // to retreat to.
         let rows = line_rows("一二三四五六Helix七八", 16);
         let text: Vec<String> = rows
             .iter()
@@ -1891,7 +1884,7 @@ mod tests {
         // Four 漢字 in eight cells leave the caret no column to stand in on
         // that row — the ninth cell is off the row — so it gets the next one.
         assert_eq!(line_rows_for_caret("春夏秋冬", 8, &[], 0, &[], true), vec![(0, 4), (4, 4)]);
-        // Warning: **而光標不在那裏的時候，那一格不許開**（2026-09-23）：一段話正好
+        // Warning: **而光標不在那裏的時候，那一格不許開**：一段話正好
         // 排滿一行，屏幕上就會憑空多一個空行，讀起來是分了段。
         assert_eq!(line_rows("春夏秋冬", 8), vec![(0, 4)], "没人要就別開");
         // A row that does not fill the width needs no such thing.
@@ -1999,8 +1992,7 @@ mod tests {
         // character of that row rather than sliding onto the next one.
         assert_eq!(char_at_column(&rope, 0, 0, Measure::plain(8), 99), 3);
         // 末一行照舊「可以停在最後一個字後面一格」——那是段末，每一段都一樣
-        // （`線 = e`）。從前這裏寫的是 7，而那是**多出來的那一行**造成的假象：
-        // 有它在，第 1 行就不是末一行（2026-09-23 把那一行改成光標到了纔開）。
+        // （`線 = e`）。第 1 行是末一行，因為段末那一格要光標到了纔開。
         assert_eq!(char_at_column(&rope, 0, 1, Measure::plain(8), 99), 8);
         // 光標真在段末的時候，它自己那一行在第 2 行上。
         let m = Measure::plain(8).with_caret(Some((0, 8)));
@@ -2064,7 +2056,7 @@ mod tests {
         assert_eq!(position(&rope, 3, m).column, 8);
     }
 
-    // ---- 前綴寬度索引（2026-10-08）-----------------------------------------
+    // ---- 前綴寬度索引 -----------------------------------------------------
 
     /// 定了種子的隨機數源（LCG）——性質測試要重跑得出同一批字，而這個倉不為一個
     /// 測試加依賴。
@@ -2198,11 +2190,11 @@ mod tests {
 
     /// **藏起來的那幾段照樣算對。**
     ///
-    /// 索引記的是淨寬，所以落在 `hidden` 裏的字素要**減**出去；減的那一項與從前
-    /// 那道過濾的判準必須是同一句話——「字素的**起頭**在區間裏就整個不算」。
+    /// 索引記的是淨寬，所以落在 `hidden` 裏的字素要**減**出去；減的那一項與
+    /// [`walk_width`] 那道過濾的判準必須是同一句話——「字素的**起頭**在區間裏就整個不算」。
     ///
     /// 區間是隨機撒的，起點**不管字素邊界**：一段 `hidden` 從組合序列中間開始，
-    /// 從前那道過濾照樣把那整個字素去掉，所以減的時候也得整個減。
+    /// [`walk_width`] 那道過濾照樣把那整個字素去掉，所以減的時候也得整個減。
     #[test]
     fn the_width_index_agrees_with_the_walk_with_things_hidden() {
         for block in [4usize, 8, 64] {
@@ -2235,7 +2227,7 @@ mod tests {
     /// **一段 `hidden` 整個蓋住這一行，與一段都沒有，答案一樣。**
     ///
     /// 兩頭的極端：全藏起來就是零格（一個字素的起頭都不在區間外），而重疊的區間
-    /// 只許減一次——從前那道過濾是 `any(…)`，減卻會減兩遍。
+    /// 只許減一次——[`walk_width`] 那道過濾是 `any(…)`，減卻會減兩遍。
     #[test]
     fn hidden_spans_that_overlap_are_only_taken_off_once() {
         let text = made(31415, 600);
@@ -2315,7 +2307,7 @@ mod tests {
         }
     }
 
-    /// **不到一塊長的行不建索引**——尋常的一段走的還是從前那一條路。
+    /// **不到一塊長的行不建索引**——尋常的一段走的還是逐字素那一條路。
     #[test]
     fn a_paragraph_shorter_than_a_block_is_not_indexed() {
         let mut editor = crate::editor::Editor::new();
@@ -2354,10 +2346,11 @@ mod tests {
     /// **禁則 does not get to shorten a row it cannot fix.**
     ///
     /// 連接號 `—` is 行首禁則, so every boundary inside a run of them offends
-    /// the rule and retreating moves the offence rather than removing it. The
-    /// retreat was taken anyway: a 22-cell row of `—` came out 18 cells long,
-    /// four empty cells bought nothing, and 漢字 and letters beside it filled
-    /// the row exactly.
+    /// the rule and retreating moves the offence rather than removing it.
+    /// Taken anyway, the retreat would make a 22-cell row of `—` 18 cells
+    /// long, four empty cells buying nothing, where 漢字 and letters beside it
+    /// fill the row exactly.
+
     #[test]
     fn a_retreat_that_cannot_help_is_not_taken() {
         for mark in ['—', '…'] {

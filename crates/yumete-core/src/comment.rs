@@ -1,13 +1,12 @@
 //! Commenting out, and taking the comment off again (#409).
 //!
-//! **helix's three commands** (2026-11-02, after a writer's and a code
-//! user's study): `toggle_comments` (`C-c`, `Space c`) writes line comments,
+//! **helix's three commands**: `toggle_comments` (`C-c`, `Space c`) writes line comments,
 //! takes off a block comment that wraps each line or the selection, and in a
 //! format with only a block form wraps each line; `toggle_line_comments`
 //! (`Space A-c`) writes line comments only; `toggle_block_comments`
-//! (`Space C`) wraps exactly the selection, half a sentence included. The
-//! 2026-09-12 rule — 「`space + c`: 強制行注釋，没有纔退到塊注釋；`space + C`:
-//! 強制塊注釋，没有纔退到行注釋」 — is helix's too, and stands.
+//! (`Space C`) wraps exactly the selection, half a sentence included. So
+//! `Space c` forces a line comment and falls back to a block comment only in a
+//! format without one, and `Space C` the other way round.
 //!
 //! Everything here is a function of text. The editor decides which spans, and
 //! this decides what they become — which is why the whole of it is testable
@@ -89,9 +88,9 @@ fn shared_indent(lines: &[&str]) -> usize {
     lines
         .iter()
         .filter(|line| !line.trim().is_empty())
-        // Spaces and tabs only (2026-10-30): `trim_start` also counts U+3000,
-        // three bytes, and a run mixing it with ASCII indents was then sliced
-        // inside the full-width space and panicked.
+        // Spaces and tabs only: `trim_start` also counts U+3000, three
+        // bytes, and a run mixing it with ASCII indents would be sliced
+        // inside the full-width space and panic.
         .map(|line| line.len() - line.trim_start_matches([' ', '\t']).len())
         .min()
         .unwrap_or(0)
@@ -209,8 +208,7 @@ pub fn toggle_spans(texts: &[String], open: &str, close: &str) -> Vec<String> {
 }
 
 /// **Whole lines in one comment, its marks on lines of their own** at the
-/// lines' shared indent (yumete's shape, decided 2026-10-07 and kept as a
-/// flavour item 2026-11-02): a `<!--` at the end of a paragraph's first line
+/// lines' shared indent (yumete's shape, a flavour item): a `<!--` at the end of a paragraph's first line
 /// and a `-->` in the middle of its last is a thing nobody can read back.
 /// `text` is whole lines; the marks' lines end the way the file's do.
 pub fn stand_off(text: &str, open: &str, close: &str, ending: &str) -> String {
@@ -254,7 +252,7 @@ pub fn would_nest(texts: &[String], open: &str, close: &str) -> bool {
 mod tests {
     use super::*;
 
-    /// A run indented partly with U+3000 does not panic (2026-10-30).
+    /// A run indented partly with U+3000 does not panic.
     #[test]
     fn a_full_width_indent_is_not_cut_in_half() {
         let lines = [" a", "\u{3000}b"];
@@ -311,8 +309,8 @@ mod tests {
     }
 
     /// **Two comments side by side are two**, not one with garbage inside
-    /// (found 2026-11-02: `<!-- 甲 -->` then `<!-- 乙 -->` came back as
-    /// `甲 -->` then `<!-- 乙`).
+    /// (`<!-- 甲 -->` then `<!-- 乙 -->` must not come back as `甲 -->` then
+    /// `<!-- 乙`).
     #[test]
     fn two_comments_side_by_side_are_two() {
         assert_eq!(wrapped("<!-- 甲 --> <!-- 乙 -->", "<!--", "-->"), None);

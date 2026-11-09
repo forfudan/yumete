@@ -51,11 +51,10 @@ fn all_messages() -> String {
 
 /// Every file that says anything: **every `.rs` under `crates/*/src/`**.
 ///
-/// It used to be a list of five paths, and a list is exactly the wrong shape
-/// for this. 2026-09-08, splitting `editor.rs` into modules moved five tags
-/// into `editor/tables.rs` and this test reported them as 「in the table, said
-/// by nothing」 — the entries were fine, the *list* had gone stale, and the way
-/// that reads is 「delete these five messages」. A walk cannot go stale.
+/// Not a list of paths, which is exactly the wrong shape for this: moving
+/// tags into a new module would make this test report them as 「in the table,
+/// said by nothing」 — the entries fine, the *list* stale, and the way that
+/// reads is 「delete these messages」. A walk cannot go stale.
 ///
 /// A file whose name is `tests.rs` is skipped whole, and an inline
 /// `#[cfg(test)] mod tests` is cut off by [`source`]: a tag a test makes up is
@@ -112,10 +111,10 @@ fn speakers() -> Vec<String> {
 fn source(relative: &str) -> String {
     let text = std::fs::read_to_string(root().join(relative))
         .unwrap_or_else(|e| panic!("{relative}: {e}"));
-    // Warning: **末尾那個測試模組，不是任何一個 `#[cfg(test)]`。** 從前的判準是第一個
-    // `#[cfg(test)]`，於是一個只給測試用的小函數擺在檔案中間，就把它**後面所有的
-    // `say!` 從這張網裏抹掉了**——測試轉而報「messages.toml 裏有四則沒人說」，
-    // 而那四則明明在下面兩百行處說着。2026-09-23 踩到。
+    // Warning: **末尾那個測試模組，不是任何一個 `#[cfg(test)]`。** 判準若是第一個
+    // `#[cfg(test)]`，一個只給測試用的小函數擺在檔案中間，就把它**後面所有的
+    // `say!` 從這張網裏抹掉**——測試轉而報「messages.toml 裏有幾則沒人說」，
+    // 而那幾則明明在下面說着。
     //
     // Warning: **模組的名字不限**：`yumete-config` 有兩個（`runner_tests` 與 `tests`），
     // 而釘死 `mod tests` 會把前一個整段當成生產代碼掃進來，於是 `r.argv("x.md")`
@@ -226,11 +225,11 @@ fn said() -> BTreeMap<String, String> {
         // 那一句。開口寫足 `zero: Some(` 而不是光一個 `Some(`：後者會把全樹每一個
         // `Some("…")` 都掃進來，而那裏面躺着檔名、擴展名、命令名。
         tags.extend(literals(&text, "zero: Some("));
-        // `Described { word: Some("cmd.substitute.flags") }` —— 命令的說明之外那一行
-        // （2026-10-09）。同上一條，開口寫足 `word: Some(` 而不是光一個 `Some(`。
+        // `Described { word: Some("cmd.substitute.flags") }` —— 命令的說明之外那一行。
+        // 同上一條，開口寫足 `word: Some(` 而不是光一個 `Some(`。
         tags.extend(literals(&text, "word: Some("));
         // A place's command and its description (`place("action.confirm",
-        // PlaceCmd::Confirm)` in `yumete-cjk/src/actions.rs`, 2026-11-01).
+        // PlaceCmd::Confirm)` in `yumete-cjk/src/actions.rs`).
         tags.extend(literals(&text, "place("));
         // A Normal command's (`normal("action.move-char-left", NormalCmd::…)`).
         tags.extend(literals(&text, "normal("));
@@ -240,11 +239,11 @@ fn said() -> BTreeMap<String, String> {
         tags.extend(literals(&text, "', "));
         tags.extend(literals(&text, "\", "));
         // `Err("table.no-further")` —— a pure function hands back the tag,
-        // and the editor says it (`mdtable.rs`, 2026-10-30).
+        // and the editor says it (`mdtable.rs`).
         tags.extend(literals(&text, "Err("));
         // A tag a `match` arm hands back (`Panel::tag`, `Info::tag` in
         // `sidebar.rs`): the panels' names lost their last other mention when
-        // `:sidebar <panel>` became one command a panel (2026-11-07).
+        // `:sidebar <panel>` became one command a panel.
         // Only labels: a match arm hands back file names and key names too.
         tags.extend(literals(&text, "=> ").into_iter().filter(|t| t.starts_with("label.")));
         for tag in tags.into_iter().filter(|t| is_tag(t)) {
@@ -258,7 +257,7 @@ fn said() -> BTreeMap<String, String> {
 #[derive(Default)]
 struct Entry {
     note: bool,
-    /// Simplified is what every message is written in (2026-11-07); the
+    /// Simplified is what every message is written in; the
     /// Traditional is made from it at build time unless written by hand.
     zhs: bool,
     /// The words a reader might look the entry up by but never sees (#224):
@@ -404,8 +403,8 @@ fn every_command_can_be_looked_up_by_a_word_it_is_not_named_with() {
 
     // A `find` line anywhere else is never read.
     //
-    // Warning: **`action.` joined `cmd.` on 2026-10-06**, when `::` began looking for
-    // shortcuts as well as commands. Everything else is still dead weight: a
+    // Warning: **`action.` and `cmd.`**, because `::` looks for shortcuts as
+    // well as commands. Everything else is dead weight: a
     // `find` line on a status message is words nobody can ever type at.
     let stray: Vec<&String> = table
         .iter()
@@ -506,8 +505,7 @@ fn the_table_is_in_order() {
     // The section rules (`# ── table ──`) are the file's own headings and stay
     // put; this asks only that the keys read in order from top to bottom, which
     // they do across the rules as well, the sections being alphabetical too.
-    // Each file is in order on its own (2026-10-31: the one file became one
-    // per area).
+    // Each file (one per area) is in order on its own.
     let mut out_of_order: Vec<String> = Vec::new();
     for (file, text) in message_files() {
         let keys: Vec<&str> = text
@@ -528,7 +526,7 @@ fn the_table_is_in_order() {
     );
 }
 
-/// **A tag lives in the file of its prefix** (2026-10-31): each file's
+/// **A tag lives in the file of its prefix**: each file's
 /// first line names its prefixes (`# prefixes: cmd`), and a prefix belongs
 /// to one file only, so a tag is found by its name and a file stays about
 /// one area.

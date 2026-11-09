@@ -1,4 +1,4 @@
-//! 雙鏈 — the links between a project's Markdown files, both ways (2026-10-30).
+//! 雙鏈 — the links between a project's Markdown files, both ways.
 //!
 //! Obsidian's rule, and only that rule: every `.md` file in the project is a
 //! node, and `[[name]]` written in one is an edge to the file named. A name is
@@ -40,7 +40,7 @@ pub struct Index {
     pub out: Vec<Vec<Link>>,
     /// Each file's text as last read or saved, by the index in `files`: the
     /// unlinked mentions are looked for here, not on the disk again each
-    /// time another file comes up (found in review, 2026-11-02).
+    /// time another file comes up.
     pub texts: Vec<String>,
     /// Which files answer to a page name — the file's stem, and its path
     /// without the suffix (`人物/安寧`), both relative to the root.

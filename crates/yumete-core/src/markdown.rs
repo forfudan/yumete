@@ -12,17 +12,16 @@
 //!   to take out of word motion, the segmentation overlay and search. Emphasis
 //!   in prose does not straddle a paragraph, so a paragraph is the right unit —
 //!   and one paragraph's answer can be cached against its own text.
-//! - **CommonMark 的 flanking 規則這裏不做。** Warning: **2026-09-28 更正**：從前這一條寫的是
-//!   「CommonMark 的強調規則對漢字是錯的，兩個漢字之間它會失手」，**那句話說過頭了**。
-//!   實測 pulldown-cmark 與 comrak 的預設配置，`中**文**中` 兩家都出粗體——漢字在
-//!   flanking 眼裏是 `Lo`，和拉丁字母同一類。真正失手的是**強調內側貼着全角標點**：
+//! - **CommonMark 的 flanking 規則這裏不做。** Warning: 不是因為它對漢字失手——
+//!   pulldown-cmark 與 comrak 的預設配置下，`中**文**中` 兩家都出粗體：漢字在
+//!   flanking 眼裏是 `Lo`，和拉丁字母同一類。它真正失手的是**強調內側貼着全角標點**：
 //!   `他說**「好」**。` 兩家都不認（兩家各有一個預設關着的 `cjk_friendly_emphasis`
 //!   擴展在修這個，同一份上游規範的移植）。
 //!
-//!   不做 flanking 的理由因此換一條：**這裏是編輯器不是 CommonMark 實現**，屏幕上的着
+//!   不做 flanking 的理由是：**這裏是編輯器不是 CommonMark 實現**，屏幕上的着
 //!   色要和寫的人按下去的鍵對得上，而 flanking 的判準要看左右兩個字符的類別——同一串
 //!   星號在句中和句末着色不同，讀者看不出規律。一個分隔符就是一個分隔符。
-//! - **套得起來，但只到三層**（2026-09-28）。一個構造配對成功之後對它的文字再掃一遍，
+//! - **套得起來，但只到三層**。一個構造配對成功之後對它的文字再掃一遍，
 //!   `**粗的`碼`**` 因此認得出來。不做通用的 delimiter stack。
 
 /// What a span of a line is.
@@ -36,13 +35,13 @@ pub enum Kind {
     Code,
     /// `~~struck~~`.
     Strike,
-    /// **`$a + b$`** — Typst 的數學（2026-09-28）。
+    /// **`$a + b$`** — Typst 的數學。
     ///
-    /// Warning: **從前它借 `Kind::Code`**，於是 `:export` 把公式導成 `` `a + b` ``——一條反引
+    /// Warning: **不許借 `Kind::Code`**：借了 `:export` 就把公式導成 `` `a + b` ``——一條反引
     /// 號在 Typst 裏是**原樣文本**，公式就此不是公式了。借用在屏幕上看不出來（兩者
     /// 都該畫成一個要逐字讀的字面），是導出的時候壞的。
     Math,
-    /// **`@定理一`** — Typst 的交叉引用（2026-09-28）。整串連 `@` 一起。
+    /// **`@定理一`** — Typst 的交叉引用。整串連 `@` 一起。
     Ref,
     /// **`<定理一>`** — Typst 的標籤，被 [`Kind::Ref`] 指的那一頭。整串連尖括號一起。
     Label,
@@ -80,13 +79,13 @@ pub enum Kind {
     Gone,
     /// `{+什麼來了+}` in a `:diff` listing — the new draft's words.
     Added,
-    /// **The whole of an old row in a `:diff` listing** (2026-10-16).
+    /// **The whole of an old row in a `:diff` listing**.
     ///
     /// A changed line is drawn as two rows, the draft before and the draft
     /// after, and the row itself carries a faint ground so the pair reads as a
     /// pair before a word of it is read. The words that actually changed sit
     /// on [`Gone`](Kind::Gone) / [`Added`](Kind::Added), which is the louder
-    /// step of the same colour — 「mark the words changed in brighter colors」.
+    /// step of the same colour.
     GoneRow,
     /// The whole of a new row — see [`GoneRow`](Kind::GoneRow).
     AddedRow,
@@ -127,10 +126,9 @@ pub enum Block {
     /// it is inside, if any.
     ///
     /// Warning: **A block inside a callout is still that block** (#468). A fence in a
-    /// `::: details` used to come out as `Container`, which was harmless while
-    /// every block wore the same grey band and wrong the moment they stopped:
-    /// a fence draws no ground of its own now, so it punched a page-coloured
-    /// hole straight through the callout. A quote lost its 綠 the same way.
+    /// `::: details` must not come out as `Container`: a fence draws no ground
+    /// of its own, so it would punch a page-coloured hole straight through the
+    /// callout, and a quote would lose its 綠 the same way.
     Code { inside: Option<Callout> },
     /// The `---`-delimited metadata a file may open with.
     FrontMatter,
@@ -160,7 +158,7 @@ pub enum Block {
     /// merge conflict. The opening line itself stays whatever it was: its own
     /// runs already carry the comment to the end of the line.
     Comment { close: Option<usize> },
-    /// **A line of display maths that runs over several lines** (2026-11-06):
+    /// **A line of display maths that runs over several lines**:
     /// Markdown's `$$` … `$$`, Typst's `$` … `$`. `first` is the line the
     /// opening delimiter is on, `last` the line the closing one is on; the
     /// lines between are the formula through and through.
@@ -283,14 +281,14 @@ pub struct BlockScanner {
     note: Note,
 }
 
-/// **A footnote runs on past its first line** (2026-10-25).
+/// **A footnote runs on past its first line**.
 ///
 /// `[^1]: text` is followed by the lines that continue it, the way GFM and
 /// pandoc read one: an indented line is the note's, after a blank line too
 /// (a note of two paragraphs), and a plain line straight after the note's text
-/// is its lazy continuation. Only the `[^1]:` line used to be set back as
-/// furniture, so a note hard-wrapped into six lines had its first line grey and
-/// the other five drawn as writing.
+/// is its lazy continuation. Every line of the note is set back as furniture,
+/// so a note hard-wrapped into six lines is grey on all six, not on its first
+/// line alone.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 enum Note {
     #[default]
@@ -318,12 +316,12 @@ impl BlockScanner {
         let at = self.line;
         self.line += 1;
         // Warning: **The table counter is reset by default, and only the table arm
-        // puts it back** (#467). It used to be cleared on two of the eleven
-        // paths that end a table — so a second table separated from the first
-        // by a heading, a `:::`, a fence, a quote or a list item went on
-        // counting, and its header was drawn as a body row with the banding
-        // inverted. Clearing here and restoring there cannot be forgotten by
-        // whoever adds the twelfth path.
+        // puts it back** (#467). Eleven paths end a table; a path that forgot
+        // to clear it would let a second table separated from the first by a
+        // heading, a `:::`, a fence, a quote or a list item go on counting,
+        // and draw its header as a body row with the banding inverted.
+        // Clearing here and restoring there cannot be forgotten by whoever
+        // adds the twelfth path.
         let table_row = std::mem::take(&mut self.table_row);
         // Same shape: every path ends the note unless it says otherwise.
         let note = std::mem::take(&mut self.note);
@@ -482,8 +480,8 @@ fn is_metadata(text: &str) -> bool {
 /// Whether the line is `---`, `***` or `___` on its own — a scene break.
 ///
 /// One pass that stops at the first character that settles it, rather than two
-/// passes over the line: a paragraph opening with `- ` used to be counted twice
-/// from end to end before being ruled out.
+/// passes over the line: a paragraph opening with `- ` is ruled out at once
+/// instead of being counted twice from end to end.
 fn is_rule(text: &str) -> bool {
     let mut chars = text.chars().filter(|c| !c.is_whitespace());
     let Some(first) = chars.next() else {
@@ -683,9 +681,8 @@ pub fn hidden(spans: &[Span], selected: Option<(usize, usize)>) -> Vec<(usize, u
 /// Warning: **標題本身空不空由呼叫方決定。** 大綱要求非空（光一個 `##` 是一條線，不是標題），
 /// 而着色那一支不要求。
 ///
-/// Warning: **這一支存在的理由是樹裏本來有三份不一樣的判準**（2026-09-28 查出來的）：着色那一
-/// 份要求空白、大綱那一份要求空白但不封頂六級、`typst_headings` 兩樣都不要求。同一行在
-/// 正文裏不畫成標題、卻出現在大綱上。
+/// Warning: **着色、大綱、`typst_headings` 都走這一支，不許各寫一份判準**：判準一分家，
+/// 同一行就會在正文裏不畫成標題、卻出現在大綱上。
 pub fn heading_marks(line: &str, mark: char) -> Option<usize> {
     let level = line.chars().take_while(|&c| c == mark).count();
     if level == 0 || level > 6 {
@@ -708,7 +705,7 @@ pub struct Span {
     /// `**` share one. It is what lets the markup of the construct the cursor
     /// is in be shown while every other construct's stays hidden.
     pub construct: usize,
-    /// **套了幾層**（2026-09-28）：頂層是 0，`**粗的 `碼`**` 裏那個 `` ` `` 是 1。
+    /// **套了幾層**：頂層是 0，`**粗的 `碼`**` 裏那個 `` ` `` 是 1。
     ///
     /// 算得出來（包住它的有幾條），存下來是因為 `:export` 那一趟棧式遍歷有了它是十行、
     /// 没有就得每一步做區間比較。
@@ -727,10 +724,10 @@ pub struct Span {
 /// 「蓋住某一格的最內層那一條」＝ 覆蓋它的裏面 `start` 最大的那一條
 /// （`max_by_key(start)`，`mi k` 就是這麼取的）。
 ///
-/// Warning: **「不重疊」那句話 2026-09-28 之前就已經不成立了**，標題那一支先壓一條
-/// `Kind::Heading` 蓋住整行、行內的構造再壓上去。當時没寫下約定，於是七個消費方各猜各
-/// 的，其中三個猜錯：`panel.rs` 那個順序寫字的循環會切出反向區間**當場崩**，`export.rs`
-/// 與 `detail.rs` 的 `.find()` 取到的是外層那一條（標題裏的腳註因此没有詳情面板）。
+/// Warning: **span 會重疊**：標題那一支先壓一條 `Kind::Heading` 蓋住整行、行內的構造
+/// 再壓上去。消費方要照上面兩條不變式取，別假定不重疊：順序寫字的循環（`panel.rs`）
+/// 假定了就會切出反向區間**當場崩**，`.find()`（`export.rs`、`detail.rs`）取到的是外層
+/// 那一條（標題裏的腳註就没有詳情面板）。
 ///
 /// # 嵌套
 ///
@@ -799,7 +796,7 @@ fn scan(
     while at < to {
         // A comment is the writer talking to themselves — everything in it is
         // theirs, markup included — so it is taken before anything else.
-        // **`\*` 不是斜體的開頭**（2026-09-28）。反斜杠自己算標記，所見即所得把它藏
+        // **`\*` 不是斜體的開頭**。反斜杠自己算標記，所見即所得把它藏
         // 起來，剩下那個字符原樣是正文。
         //
         // Warning: **可轉義的只有 ASCII 標點**，CommonMark §2.4 的規矩，兩家實現也一樣：
@@ -881,7 +878,7 @@ fn scan(
                 mark(out, at + len, close, kind, *construct, depth);
                 let mine = *construct;
                 *construct += 1;
-                // **裏面再掃一遍**（2026-09-28）：``**粗的`碼`**``。前序——外層那一條
+                // **裏面再掃一遍**：``**粗的`碼`**``。前序——外層那一條
                 // 已經發出去了，閉標記留到遞歸之後發，於是整串仍然按起點排好。
                 if depth + 1 < DEPTH {
                     scan(chars, at + len, close, depth + 1, construct, out);
@@ -925,12 +922,12 @@ fn scan(
         }
         // `[text](target)` — the text is what the reader reads.
         //
-        // Warning: **`![圖](a.png)` 的那個驚嘆號也在構造裏**（2026-09-28）。從前它不在，於是
-        // 所見即所得把 `[` `](a.png)` 藏起來之後，行首孤零零留着一個 `!`。
+        // Warning: **`![圖](a.png)` 的那個驚嘆號也在構造裏**。不在的話，所見即所得把
+        // `[` `](a.png)` 藏起來之後，行首會孤零零留着一個 `!`。
         let bang = chars[at] == '!' && chars.get(at + 1) == Some(&'[');
         if chars[at] == '[' || bang {
             let open = at + usize::from(bang);
-            // Warning: **兩頭都數括號**（2026-09-28）。從前是「往後找第一個 `]`/`)`」：
+            // Warning: **兩頭都數括號**，不是「往後找第一個 `]`/`)`」——那樣
             // `[甲[乙]丙](x)` 在第一個 `]` 上就斷了，整條鏈接不認；
             // `[連結](…/中文_(消歧義))` 在裏面那個 `)` 上就收了口，末尾那個括號掉在正
             // 文上。中文維基的地址裏帶括號是常事。
@@ -1118,7 +1115,7 @@ pub fn link_at(line: &str, at: usize) -> Option<Link> {
     let all = spans(line);
     // **蓋住光標的那些構造裏，最裏面那個「是鏈接」的。**
     //
-    // Warning: **不能只看最裏面那一條**（2026-09-28）：`[**粗**的](x)` 裏光標站在「粗」上，
+    // Warning: **不能只看最裏面那一條**：`[**粗**的](x)` 裏光標站在「粗」上，
     // 最裏面的是那個 `Strong`，它自己不是鏈接——只看它的話，文字是粗體的鏈接就跟不
     // 了了。往外走一層就到了。
     //
@@ -1169,8 +1166,8 @@ pub fn link_at(line: &str, at: usize) -> Option<Link> {
         Some((before, after)) => (before.to_string(), Some(after.to_string())),
         None => (written, None),
     };
-    // A path written as a URL (`my%20file.md`) names the file with the space
-    // (2026-10-29, review); an address keeps its escapes for the browser.
+    // A path written as a URL (`my%20file.md`) names the file with the space;
+    // an address keeps its escapes for the browser.
     let target = match wiki || target.contains(':') {
         true => target,
         false => percent_decoded(&target),
@@ -1220,10 +1217,10 @@ fn fence(chars: &[char], at: usize, to: usize) -> Option<(usize, usize)> {
     if !matches!(c, '*' | '_' | '~' | '=') {
         return None;
     }
-    // Warning: **整行只有這一個字符，那是一條線，不是強調**（2026-10-02 一輪掃查
-    // 報來的）。十四個 `=` 自己一行，從前被當成反覆的 `==高亮==` 一對一對吃掉：
-    // 畫出來只剩六個，而且光標走過去的時候那一行在 6/10/14 格之間變來變去。
-    // setext 標題的下劃線（`====`）和散文裏的 `*****` 分隔線都中。
+    // Warning: **整行只有這一個字符，那是一條線，不是強調**。十四個 `=` 自己一行要是
+    // 當成反覆的 `==高亮==` 一對一對吃掉，畫出來只剩六個，而且光標走過去的時候那一行
+    // 在 6/10/14 格之間變來變去。setext 標題的下劃線（`====`）和散文裏的 `*****`
+    // 分隔線都是這一種。
     //
     // CommonMark 也是這麼分的：`***` 自己一行是 thematic break，`===` 自己一行是
     // setext 的下劃線——兩個都不是強調。只收「整行」這一種，別的照舊。
@@ -1236,16 +1233,16 @@ fn fence(chars: &[char], at: usize, to: usize) -> Option<(usize, usize)> {
     if matches!(c, '~' | '=') && run != 2 {
         return None;
     }
-    // Warning: **一串三顆星是一層套一層**（2026-10-03 修）：CommonMark 把 `***x***` 讀成
-    // 外面一顆（斜）包着裏面兩顆（粗）。從前這裏寫的是 `.min(2)`，於是外面那一層一上來
+    // Warning: **一串三顆星是一層套一層**：CommonMark 把 `***x***` 讀成
+    // 外面一顆（斜）包着裏面兩顆（粗）。不能寫成 `.min(2)`：那樣外面那一層一上來
     // 就拿走兩顆，首尾各剩一顆掉在正文上——`***both***` 畫出來是 `*both`。
     // 開標記從一串的**前面**取，閉標記從它那一串的**後面**取，剩下的留給外面那一層。
     let len = if run.is_multiple_of(2) { 2 } else { 1 };
     if c == '_' {
-        // Warning: **漢字不算「詞內」**（2026-09-28 修）。這一條本來是保 `snake_case` 的：
-        // 拉丁詞中間的下劃線不是強調。可是 `is_alphanumeric()` 對漢字也回真，於是
-        // `這_是_重點` 一條 span 都不交——這是這一族裏唯一一個我們自己造出來的中文
-        // 問題。Typst 官方那條 `in_word` 也是明確把漢字、假名、諺文排除在外的。
+        // Warning: **漢字不算「詞內」**。這一條是保 `snake_case` 的：拉丁詞中間的下劃線
+        // 不是強調。可是 `is_alphanumeric()` 對漢字也回真，只靠它的話 `這_是_重點`
+        // 一條 span 都不交，所以漢字要另外排除。Typst 官方那條 `in_word` 也是明確把
+        // 漢字、假名、諺文排除在外的。
         let before = at.checked_sub(1).and_then(|i| chars.get(i));
         if before.is_some_and(|&c| c.is_alphanumeric() && !yumete_cjk::is_han(c)) {
             return None;
@@ -1264,9 +1261,8 @@ fn fence(chars: &[char], at: usize, to: usize) -> Option<(usize, usize)> {
 ///
 /// # Warning: 閉合的那一串要**整串一樣長**，不許在一串中間收口
 ///
-/// 2026-10-03 修。從前這裏是逐格比對「接下來 `len` 個都是分隔符」，於是
-/// `*em **strong** em*` 裏那一顆星的強調走到 `**` 的**第二顆**就收了口，畫出來是
-/// `em *`——`**` 被拆掉一顆。
+/// 只逐格比對「接下來 `len` 個都是分隔符」不行：`*em **strong** em*` 裏那一顆星的
+/// 強調會走到 `**` 的**第二顆**就收口，畫出來是 `em *`——`**` 被拆掉一顆。
 ///
 /// 只擋「串中間」不夠：那樣一顆星的強調會改收在後面那個 `**` 上（`*em **strong*`），
 /// 只是換一種錯法。真正分得開兩層的是**串長**：一顆星配一顆星那一串，兩顆配兩顆。
@@ -1290,7 +1286,7 @@ fn closing(
     // 要分得清它是在收我這一層還是在開新的一層——這就是那個計數。
     let mut depth = 0usize;
     while at < to {
-        // Warning: **轉義掉的那一個不算閉合**（2026-09-28）：`*斜\*體*` 的斜體到最後那個
+        // Warning: **轉義掉的那一個不算閉合**：`*斜\*體*` 的斜體到最後那個
         // 星號纔收口，不是到中間那個。
         if chars[at] != delimiter || escaped(chars, at) {
             at += 1;
@@ -1361,10 +1357,10 @@ fn escaped(chars: &[char], at: usize) -> bool {
 /// for the same thing — a note that is not part of the book. An unclosed one
 /// runs to the end of the line, because a half-typed note is still a note.
 fn comment(chars: &[char], at: usize) -> Option<(usize, usize, usize)> {
-    // Warning: **asked at every character of every line drawn** (2026-11-08):
-    // the scan in [`spans`] tries a comment first, everywhere. It built two
-    // `Vec<char>` each time — the openers and, through [`run`], the closer —
-    // and that was most of what reading a line cost. Nothing here allocates.
+    // Warning: **asked at every character of every line drawn**: the scan in
+    // [`spans`] tries a comment first, everywhere. Building a `Vec<char>` here
+    // (for the openers, or through [`run`] for the closer) would be most of
+    // what reading a line costs, so nothing here allocates.
     for (open, close) in [("%%", "%%"), ("<!--", "-->")] {
         if starts_at(chars, at, open) {
             // Both markers are ASCII: a byte is a char.
@@ -1424,10 +1420,10 @@ pub fn strip_comments(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut open: Option<&'static str> = None;
     let mut fence: Option<char> = None;
-    // Warning: **A note that is never closed may not eat the rest of the book**
-    // (2026-09-19). A comment carries across lines by design, so a `<!--` with
-    // no `-->` swallowed every line after it — and silently: `:export html` on
-    // a chapter with one unfinished note handed the publisher the first
+    // Warning: **A note that is never closed may not eat the rest of the book**.
+    // A comment carries across lines by design, so a `<!--` with no `-->`
+    // would swallow every line after it — and silently: `:export html` on a
+    // chapter with one unfinished note would hand the publisher the first
     // paragraph and nothing else, while the page on screen still showed the
     // whole thing. [`comment`]'s own rule is that an unclosed one runs to the
     // end of **its line**, so that is what this falls back to: remember where
@@ -1513,18 +1509,15 @@ fn run(chars: &[char], from: usize, text: &str) -> Option<usize> {
     (from..chars.len().saturating_sub(n.saturating_sub(1))).find(|&i| starts_at(chars, i, text))
 }
 
-/// **An inline code span, counted in backticks** (2026-09-19).
+/// **An inline code span, counted in backticks**.
 ///
 /// CommonMark's rule: a run of *n* backticks opens a code span, and only a run
-/// of **exactly n** closes it. Everything here used to take 「the next backtick」
-/// instead, which is right for `` `code` `` and wrong the moment two of them
-/// stand together: ```` ``%%`` ```` was read as an *empty* code span made of the
-/// first two backticks, and the scan came back out standing on the `%%` — which
-/// then opened a comment and greyed the rest of the file. 2026-09-19:
-/// 「markdown 中的百分號會把後面的所有文字變成註釋」. The same shape did it in
-/// this project's own manual (`docs/manual_tc.md:394`, a line of quoted markup),
-/// and the exporter — which strips comments — **dropped those paragraphs from
-/// the exported file**.
+/// of **exactly n** closes it. Warning: taking "the next backtick" instead is
+/// right for `` `code` `` and wrong the moment two of them stand together:
+/// ```` ``%%`` ```` would read as an *empty* code span made of the first two
+/// backticks, and the scan would come back out standing on the `%%` — which
+/// then opens a comment and greys the rest of the file, and the exporter,
+/// which strips comments, drops those paragraphs from the exported file.
 ///
 /// Returns `(how many backticks opened it, where the closing run starts, where
 /// it ends)`.
@@ -1557,7 +1550,7 @@ fn find(chars: &[char], from: usize, f: impl Fn(char) -> bool) -> Option<usize> 
 ///
 /// `from` 指着開括號本身。回的是閉括號自己的下標，`to` 之前找不到就回 `None`。
 ///
-/// Warning: **為什麼不是「往後找第一個」**（2026-09-28）：`[連結](…/中文_(消歧義))` 的地址裏
+/// Warning: **為什麼不是「往後找第一個」**：`[連結](…/中文_(消歧義))` 的地址裏
 /// 有一對括號，找第一個 `)` 會在 `消歧義` 後面收口，末尾那個括號掉在正文上；
 /// `[甲[乙]丙](x)` 同理，在第一個 `]` 上就斷了，整條鏈接不認。中文維基的地址裏帶括號
 /// 是常事。
@@ -1580,7 +1573,7 @@ fn balanced(chars: &[char], from: usize, shut: char, to: usize) -> Option<usize>
     None
 }
 
-/// **The formula the cursor is in** (2026-11-06), as the float under the
+/// **The formula the cursor is in**, as the float under the
 /// cursor draws it.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Maths {
@@ -1593,17 +1586,17 @@ pub struct Maths {
     pub display: bool,
 }
 
-/// The construct a display-maths block's runs carry on every line
-/// (2026-11-06), clear of the ones the line's own writing has — so the formula
+/// The construct a display-maths block's runs carry on every line,
+/// clear of the ones the line's own writing has — so the formula
 /// can be told from a `*` beside it on the line that opens it.
 pub const MATHS_BLOCK_CONSTRUCT: usize = usize::MAX / 4;
 
 /// How many lines a display-maths block may run before it is taken for a
-/// stray delimiter instead (2026-11-06). A blank line already ends one; this
+/// stray delimiter instead. A blank line already ends one; this
 /// bounds a paragraph that never has one.
 const MATHS_BLOCK_LINES: usize = 400;
 
-/// **Find the display maths that runs over several lines** (2026-11-06) and
+/// **Find the display maths that runs over several lines** and
 /// label its lines [`Block::Math`].
 ///
 /// Markdown's opens on a line that begins with `$$` and does not close it,
@@ -1639,7 +1632,7 @@ pub const MATHS_BLANK: u8 = 8;
 
 /// **What [`maths_blocks`] asks of a line, all at once**, for a scan that
 /// keeps the answers line by line and asks again only for lines that
-/// changed (2026-11-09). `line` is without its line ending.
+/// changed. `line` is without its line ending.
 pub fn maths_facts(line: &str, typst: bool) -> u8 {
     let mut facts = 0;
     if line.trim().is_empty() {
@@ -1748,7 +1741,7 @@ fn maths_parts(
     (open, from..to.max(from), close)
 }
 
-/// **The runs of one line of a display-maths block** (2026-11-06): the
+/// **The runs of one line of a display-maths block**: the
 /// delimiters as markup, the formula as [`Kind::Math`], and whatever stands
 /// before the opening delimiter or after the closing one read as the line's
 /// own writing.
@@ -1780,7 +1773,7 @@ pub fn maths_block_spans(line: &str, first: bool, last: bool, typst: bool) -> Ve
     out
 }
 
-/// **The formula a display-maths block holds** (2026-11-06): its lines from
+/// **The formula a display-maths block holds**: its lines from
 /// the one that opens it to the one that closes it, less the delimiters.
 pub fn maths_block_source(lines: &[String], typst: bool) -> String {
     let n = lines.len();
@@ -1796,7 +1789,7 @@ pub fn maths_block_source(lines: &[String], typst: bool) -> String {
         .join("\n")
 }
 
-/// **The one-line formula a char column of `line` stands in** (2026-11-06),
+/// **The one-line formula a char column of `line` stands in**,
 /// delimiters included: `$a$`, `$$a$$`, Typst's `$a$` and `$ a $`. `runs`
 /// are the line's runs as the page has them, so the answer is the formula
 /// the page draws.
@@ -1965,17 +1958,16 @@ pub mod typst {
         }
 
         while at < chars.len() {
-            // **`\*` 不是強調的開頭**（2026-09-28，同 Markdown 那一邊）。這個倉自己的
-            // `export.rs` 正在生成 `\*`，導出的檔用自己的編輯器打開會亂。
+            // **`\*` 不是強調的開頭**（同 Markdown 那一邊）。這個倉自己的
+            // `export.rs` 生成 `\*`，不認的話導出的檔用自己的編輯器打開會亂。
             if chars[at] == '\\' && chars.get(at + 1).is_some_and(|&c| super::escapable(c)) {
                 push(&mut out, at, at + 1, Kind::Marker, construct);
                 construct += 1;
                 at += 2;
                 continue;
             }
-            // **A bare `https://…` is a link**, as Typst reads it in writing; its
-            // `//` drew the rest of the line as a comment (review, 2026-11-05).
-            // It runs to a space, less the stop or comma after it.
+            // **A bare `https://…` is a link**, as Typst reads it in writing, not
+            // a `//` comment running to the end of the line. It runs to a space, less the stop or comma after it.
             if (at == 0 || !chars[at - 1].is_alphanumeric())
                 && ["https://", "http://"].iter().any(|p| chars[at..].starts_with(&p.chars().collect::<Vec<_>>()))
             {
@@ -1994,8 +1986,8 @@ pub mod typst {
                 break;
             }
             // `/* a note */`, to its `*/` or the end of the line: one left
-            // open carries on below ([`comment_left_open`]). Its `*` used to
-            // open a strong run.
+            // open carries on below ([`comment_left_open`]). Its `*` opens no
+            // strong run.
             if chars[at] == '/' && chars.get(at + 1) == Some(&'*') {
                 let end = block_comment_end(chars, at + 2).unwrap_or(chars.len());
                 push(&mut out, at, end, Kind::Comment, construct);
@@ -2006,16 +1998,16 @@ pub mod typst {
             // `#import`, `#let`, `#show`, `#set` and every call: the
             // instructions, not the writing. Shown, always — a writer needs to
             // see what produces the page. `#(1 + 2)`, `#{…}` and `#[…]` are code
-            // too, the last with writing inside (review, 2026-11-06).
+            // too, the last with writing inside.
             if chars[at] == '#'
                 && chars.get(at + 1).is_some_and(|&c| c.is_alphabetic() || matches!(c, '(' | '{' | '['))
             {
                 let (end, bodies) = code_parts(chars, at + 1);
                 let mine = construct;
                 construct += 1;
-                // **方括號裏裝的是正文，不是代碼**（2026-09-28）。`#chapter[初雪]`、
+                // **方括號裏裝的是正文，不是代碼**。`#chapter[初雪]`、
                 // `#quote[…]`、`#figure(caption: [說明])` 是中文 Typst 稿裏最常見的三
-                // 種寫法，從前整塊畫成代碼色，等於把寫稿人寫的字藏起來。
+                // 種寫法，整塊畫成代碼色就等於把寫稿人寫的字藏起來。
                 //
                 // Warning: **這是官方那套模式切換裏唯一值得學的一層**：Typst 的 `[]` 從 code
                 // 模式切回 markup 模式。再往裏（`#if x { [文字] }` 這種）只出現在模板檔
@@ -2045,15 +2037,14 @@ pub mod typst {
                     continue;
                 }
             }
-            // **`@定理一`** — 交叉引用（2026-09-28）。Warning: 一個孤零零的 `@` 不是引用。
+            // **`@定理一`** — 交叉引用。Warning: 一個孤零零的 `@` 不是引用。
             if chars[at] == '@' {
                 let mut end = (at + 1..chars.len())
                     .take_while(|&i| ref_name(chars[i]))
                     .last()
                     .map(|i| i + 1);
                 // A `.` or `:` at the end ends the sentence, not the name, as
-                // typst reads it: `See @intro.` refers to `intro` (review,
-                // 2026-11-06).
+                // typst reads it: `See @intro.` refers to `intro`.
                 while let Some(e) = end.filter(|&e| e > at + 1 && matches!(chars[e - 1], '.' | ':')) {
                     end = Some(e - 1);
                 }
@@ -2167,7 +2158,7 @@ pub mod typst {
     }
 
     /// **How many `/*` deep `line` leaves a comment it opens** — 0 when it
-    /// closes what it opens. Typst's comments nest (review, 2026-11-09):
+    /// closes what it opens. Typst's comments nest:
     /// `/* 刪去的一章` then `/* 舊註 */` on the next line is still one level
     /// deep, and the chapter below it is still the comment's.
     pub fn comment_depth_left(line: &str) -> usize {
@@ -2190,15 +2181,13 @@ pub mod typst {
     /// What a line of Typst is inside when it begins: one entry per bracket
     /// still open above it, innermost last, and the `#` that opened them.
     ///
-    /// **Typst's modes, switched where Typst switches them** (2026-11-08). In
+    /// **Typst's modes, switched where Typst switches them**. In
     /// a `{` or a `(` every line is code until it closes, blank lines and all;
     /// a `[` inside code is writing again; a `#` inside writing is code again.
-    /// The scanner used to count brackets in any order, strings and comments
-    /// included, and gave up at the first blank line — so the body of
-    /// `#let style(body) = { … }` came out as one flat purple down to its
-    /// first blank line and as plain writing after it, and only the
-    /// `[#box(…)]` inside it, which the line scan sees for itself, was drawn
-    /// as code.
+    /// Warning: counting brackets in any order, strings and comments included,
+    /// and giving up at the first blank line is not enough — the body of
+    /// `#let style(body) = { … }` would come out as one flat purple down to
+    /// its first blank line and as plain writing after it.
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub enum Frame {
         /// `{`: a code block.
@@ -2239,7 +2228,7 @@ pub mod typst {
     }
 
     /// **What runs on from one line of Typst to the next** besides brackets
-    /// and notes (review, 2026-11-09).
+    /// and notes.
     #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
     struct Open {
         /// The backticks that opened a raw text still open, 0 outside one.
@@ -2247,10 +2236,10 @@ pub mod typst {
         /// **Typst's raw rules, not a fence's**: a raw text opens at any
         /// backtick in writing or code, a raw block on a line of its own
         /// being only the usual case, and closes at the first run of as many
-        /// backticks wherever it stands ([`raw_at`]). This used to be a
-        /// switch thrown by a line that began with ```, so a ``` at the end
-        /// of `let s = "字";```` closed a block for Typst and not for the
-        /// scan, and everything after was read the wrong way up.
+        /// backticks wherever it stands ([`raw_at`]). Warning: not a switch
+        /// thrown by a line that begins with ```: a ``` at the end of
+        /// `let s = "字";```` closes a block for Typst, and a scan that missed
+        /// it would read everything after the wrong way up.
         raw: usize,
         /// An equation is open: a `$` in writing that its line does not
         /// close. Typst's maths runs to the next `$`, over blank lines too,
@@ -2286,7 +2275,7 @@ pub mod typst {
     }
 
     /// **A raw text that starts at the backtick at `at`**, read as Typst's
-    /// lexer reads it (`raw` in `lexer.rs`; review, 2026-11-09): the run of
+    /// lexer reads it (`raw` in `lexer.rs`): the run of
     /// backticks that opens it, two being an empty raw on their own, ends
     /// at the first run of as many backticks — anywhere, mid-line too, a
     /// longer run closing with its first ones and leaving the rest to open
@@ -2647,12 +2636,12 @@ pub mod typst {
                 return Block::Prose;
             }
             // **A blank line, then a line that is not indented, closes a code
-            // body** (2026-11-08). The count is a guess, and a guess that has
-            // gone wrong must not run to the end of the file — one line used
-            // to be able to tint an entire manuscript. It used to be any blank
-            // line, which cut every template's `#let style(body) = { … }` in
-            // two at the first one; a body's lines are indented, the writing
-            // after a stray `(` is not. A full-width `　　` is a paragraph's
+            // body**. The count is a guess, and a guess that has gone wrong
+            // must not run to the end of the file, where one line could tint
+            // an entire manuscript. Any blank line alone would cut every
+            // template's `#let style(body) = { … }` in two at the first one;
+            // a body's lines are indented, the writing after a stray `(` is
+            // not. A full-width `　　` is a paragraph's
             // indent, not code's, so only ASCII counts.
             if std::mem::take(&mut self.blank)
                 && matches!(self.frames.last(), Some(Frame::Brace | Frame::Paren))
@@ -2665,10 +2654,10 @@ pub mod typst {
             // Inside a `[` the line is writing, but for the `]` that ends it.
             let closes = !self.frames.is_empty() && trimmed.starts_with(']');
             // **Only a line seen whole may be counted.** The caller hands over
-            // the first [`PREFIX`] characters, not the line — so
-            // `#set par(first-line-indent: (amount: 2em, all: true), …)` had
-            // its closing `)` cut off, left `depth` at 1, and made every line
-            // after it code, blank ones included (2026-09-08). A long line is
+            // the first [`PREFIX`] characters, not the line — and
+            // `#set par(first-line-indent: (amount: 2em, all: true), …)` cut
+            // off before its closing `)` would leave `depth` at 1 and make every
+            // line after it code, blank ones included. A long line is
             // walked only when `whole` can hand it over; otherwise it opens
             // and closes nothing.
             //
@@ -2743,8 +2732,7 @@ pub mod typst {
     fn code_end(chars: &[char], from: usize) -> usize {
         let mut at = from;
         // A `.` goes on only into a field or method (`#w.len()`); the one
-        // in `第 #w. 項` ends the sentence, as Typst reads it (review,
-        // 2026-11-06).
+        // in `第 #w. 項` ends the sentence, as Typst reads it.
         let goes_on = |i: usize| chars.get(i + 1).is_some_and(|&c| c.is_alphanumeric() || c == '_');
         while at < chars.len()
             && (chars[at].is_alphanumeric() || chars[at] == '_' || (chars[at] == '.' && goes_on(at)))
@@ -2840,7 +2828,7 @@ pub mod typst {
     /// Where the run closing the delimiter opened at `from` is.
     ///
     /// **Typst 官方那條「詞內不算分隔符」**（`typst-syntax/src/lexer.rs:628` 的
-    /// `in_word`，2026-09-28 照抄）。
+    /// `in_word`，照抄）。
     ///
     /// 一個 `*` 或 `_` 前後都貼着**西文**字母或數字的時候，它是那個詞的一部分，不是分隔
     /// 符——`snake_case` 不該畫成斜體，`a*b*c` 不該畫成粗體。
@@ -2871,9 +2859,9 @@ pub mod typst {
     }
 
     fn closing(chars: &[char], from: usize, delimiter: char) -> Option<usize> {
-        // Warning: **空白那兩道閘去掉了**（2026-09-28）。從前是「開標記後面不許是空格、閉標記
-        // 前面不許是空格」，那是照 Markdown 抄的；Typst 没有這條規矩，`* 文*` 在官方
-        // 那裏就是強調。判準換成官方唯一的那一條：[`in_word`]。
+        // Warning: **没有空白那兩道閘**：「開標記後面不許是空格、閉標記前面不許是空格」
+        // 是 Markdown 的規矩；Typst 没有這條，`* 文*` 在官方那裏就是強調。判準只有官方
+        // 唯一的那一條：[`in_word`]。
         (from..chars.len()).find(|&i| chars[i] == delimiter && !in_word(chars, i))
     }
 
@@ -2895,8 +2883,7 @@ mod typst_tests {
     use super::typst::*;
     use super::{hidden, Block, Kind};
 
-    /// **A sentence's full stop is not the reference's** (review,
-    /// 2026-11-06): typst reads `See @intro.` as `@intro`.
+    /// **A sentence's full stop is not the reference's**: typst reads `See @intro.` as `@intro`.
     #[test]
     fn a_reference_leaves_the_full_stop_to_the_sentence() {
         let refs = |line: &str| -> Vec<(usize, usize)> {
@@ -2956,9 +2943,9 @@ mod typst_tests {
         );
     }
 
-    /// **公式、交叉引用、標籤各有自己的 `Kind`**（2026-09-28）。
+    /// **公式、交叉引用、標籤各有自己的 `Kind`**。
     ///
-    /// Warning: 公式從前借 `Kind::Code`，`:export` 因此把 `$a + b$` 導成 `` `a + b` ``——
+    /// Warning: 公式不許借 `Kind::Code`，借了 `:export` 就把 `$a + b$` 導成 `` `a + b` ``——
     /// 一條反引號在 Typst 裏是原樣文本，公式就此不是公式了。
     #[test]
     fn maths_and_references_are_not_code() {
@@ -2970,7 +2957,7 @@ mod typst_tests {
         assert_eq!(shape("1 < 2 > 3"), "         ");
     }
 
-    /// **Typst's `$` … `$` over several lines is maths** (2026-11-06): it
+    /// **Typst's `$` … `$` over several lines is maths**: it
     /// opens at the `$` its line leaves unpaired and closes at the next `$`.
     #[test]
     fn typst_maths_over_several_lines_is_maths() {
@@ -2999,10 +2986,10 @@ mod typst_tests {
     }
 
     /// **Typst 官方那條「詞內不算分隔符」**（`typst-syntax/src/lexer.rs:628` 的
-    /// `in_word`，2026-09-28 照抄）。
+    /// `in_word`，照抄）。
     #[test]
     fn a_delimiter_inside_a_latin_word_is_not_a_delimiter() {
-        // 從前這兩行被畫成斜體和粗體。
+        // 這兩行不是斜體，也不是粗體。
         assert_eq!(shape("snake_case_here"), "               ");
         assert_eq!(shape("a*b*c"), "     ");
         // Warning: **中文那一側一個字符不變**：官方明確把漢字、假名、諺文排除在「詞內」外。
@@ -3011,11 +2998,11 @@ mod typst_tests {
         assert_eq!(shape("* 文*"), ".BB.");
     }
 
-    /// **反斜杠轉義，以及全角空格開頭的標題**（2026-09-28）。
+    /// **反斜杠轉義，以及全角空格開頭的標題**。
     #[test]
     fn a_backslash_escapes_and_a_fullwidth_space_still_opens_a_heading() {
         assert_eq!(shape(r"\*不是強調\*"), ".     . ");
-        // Warning: 全角空格是寫中文的人最常見的縮進，從前它讓整行標題不上色。
+        // Warning: 全角空格是寫中文的人最常見的縮進，它不許讓整行標題不上色。
         assert_eq!(shape("= 　第一章"), ".HHHHH");
         assert_eq!(shape("= 第一章"), ".HHHH");
     }
@@ -3025,9 +3012,9 @@ mod typst_tests {
         // Not decoration around writing — the instructions that make it. A
         // writer has to see them, so they are never hidden, only set back.
         //
-        // Warning: **方括號裏的那幾個字不是代碼**（2026-09-28）。`#chapter[初雪]` 裏「初雪」
-        // 是寫稿人寫的字，從前整塊畫成代碼色，等於把它藏起來。現在代碼色只蓋
-        // `#chapter[` 和 `]` 兩截。這一條原先寫的是 `"############"`。
+        // Warning: **方括號裏的那幾個字不是代碼**。`#chapter[初雪]` 裏「初雪」
+        // 是寫稿人寫的字，整塊畫成代碼色等於把它藏起來。代碼色只蓋
+        // `#chapter[` 和 `]` 兩截。
         assert_eq!(shape("#chapter[初雪]"), "#########  #");
         assert_eq!(shape("那年#emph[冬天]。"), "  ######  # ");
         // An import takes the rest of its line.
@@ -3069,12 +3056,12 @@ mod typst_tests {
         assert_eq!(walk, "1.```-");
     }
 
-    /// **One `#set` used to tint everything under it** (#303).
+    /// **One `#set` may not tint everything under it** (#303).
     ///
     /// The scanner is fed a line's first `PREFIX` characters, not the line.
-    /// A `#set par(…)` long enough to have its closing `)` cut off left the
-    /// bracket count at 1, and every line after it — prose, blank lines, the
-    /// whole rest of the manuscript — came back `Code`.
+    /// A `#set par(…)` long enough to have its closing `)` cut off would leave
+    /// the bracket count at 1, and every line after it — prose, blank lines,
+    /// the whole rest of the manuscript — would come back `Code`.
     #[test]
     fn a_line_too_long_to_be_seen_whole_may_not_open_a_code_block() {
         let long = "#set par(first-line-indent: (amount: 2em, all: true), leading: 1em, justify: true)";
@@ -3135,7 +3122,7 @@ mod typst_tests {
             .collect()
     }
 
-    /// **Raw text by Typst's rules** (review, 2026-11-09): it opens at any
+    /// **Raw text by Typst's rules**: it opens at any
     /// backtick, mid-line too, and closes at the first run of as many
     /// backticks wherever it stands; two are an empty raw; a longer run
     /// closes with its first ones and opens another with the rest. A
@@ -3177,7 +3164,7 @@ mod typst_tests {
         assert_eq!(raw_and_maths("$ a\n` b $\n甲"), ".$.");
     }
 
-    /// **An equation written in code is maths too** (review, 2026-11-09),
+    /// **An equation written in code is maths too**,
     /// as Typst's lexer reads `$` in code: a backtick in it is a symbol, not
     /// raw text, and its brackets open and close nothing of the code.
     #[test]
@@ -3232,10 +3219,10 @@ mod typst_tests {
             .collect()
     }
 
-    /// **A template's code block is code from its `{` to its `}`**
-    /// (2026-11-08): blank lines, `set` and `show` rules, closures, comments
-    /// and all. Its lines used to be one flat colour down to the first blank
-    /// line and plain writing after it.
+    /// **A template's code block is code from its `{` to its `}`**:
+    /// blank lines, `set` and `show` rules, closures, comments
+    /// and all — not one flat colour down to the first blank line and plain
+    /// writing after it.
     #[test]
     fn a_code_block_is_code_down_to_its_closing_brace() {
         let text = "\
@@ -3338,7 +3325,7 @@ mod typst_tests {
         assert_eq!(got.iter().map(|l| l.chars().next().unwrap()).collect::<String>(), ".``.");
     }
 
-    /// `/* … */` is a comment, as `//` is (2026-11-05): its `*` opened a
+    /// `/* … */` is a comment, as `//` is: its `*` opened a
     /// strong run, so the note was drawn bold.
     #[test]
     fn a_block_comment_is_a_comment_not_a_strong_run() {
@@ -3350,7 +3337,7 @@ mod typst_tests {
         assert!(!comment_left_open("`/*` 是代碼"));
     }
 
-    /// `#(1 + 2)` and `#{…}` are code, as `#set` is (2026-11-05).
+    /// `#(1 + 2)` and `#{…}` are code, as `#set` is.
     #[test]
     fn an_expression_after_a_hash_is_code() {
         assert_eq!(shape("值 #(1 + 2) 個"), "  ########  ");
@@ -3359,7 +3346,7 @@ mod typst_tests {
         assert_eq!(shape("第 # 3 #1"), "        ");
     }
 
-    /// `*粗 _斜_ 粗*` sets 斜 both ways, and the reverse (2026-11-05).
+    /// `*粗 _斜_ 粗*` sets 斜 both ways, and the reverse.
     #[test]
     fn emphasis_and_strong_nest_inside_each_other() {
         let kinds_at = |line: &str, at: usize| -> Vec<Kind> {
@@ -3379,7 +3366,7 @@ mod typst_tests {
     }
 
     /// `#[…]` is code around writing, and the `.` after `#w` ends it unless
-    /// a field follows (review, 2026-11-06).
+    /// a field follows.
     #[test]
     fn content_blocks_and_a_stop_after_a_variable() {
         assert_eq!(shape("#[甲 *乙*] 丙"), "##  .B.#  ");
@@ -3387,16 +3374,15 @@ mod typst_tests {
         assert_eq!(shape("#w.len() x"), "########  ");
     }
 
-    /// **A bare URL is a link, not a comment from its `//`** (review,
-    /// 2026-11-05).
+    /// **A bare URL is a link, not a comment from its `//`**.
     #[test]
     fn a_bare_url_is_a_link() {
         assert_eq!(shape("see https://e.com/a. Then"), "    LLLLLLLLLLLLLLL      ");
         assert_eq!(shape("x // note"), "  %%%%%%%");
     }
 
-    /// `#if x [甲] else [乙]`: the head is code and the brackets are writing
-    /// (2026-11-05); the whole of it was code, or none of the head was.
+    /// `#if x [甲] else [乙]`: the head is code and the brackets are writing;
+    /// the whole of it was code, or none of the head was.
     #[test]
     fn a_keyword_block_is_code_around_writing() {
         assert_eq!(shape("#if x [甲 *乙*] else [丙]"), "#######  .B.######## #");
@@ -3407,7 +3393,7 @@ mod typst_tests {
     }
 
     /// The lines inside a `[` opened by code are writing; inside `{` or `(`
-    /// they are code (2026-11-05).
+    /// they are code.
     #[test]
     fn the_lines_of_a_content_block_are_writing() {
         let mut scanner = BlockScanner::new();
@@ -3499,13 +3485,13 @@ mod list_tests {
 // Warning: **測試模組一律擺在檔尾。** `yumete-core/tests/messages.rs` 那張「每個標籤都
 // 有條目」的網把源碼切在**第一個**頂格的 `#[cfg(test)]\nmod ` 處——擺在檔案中間，
 // 它後面的生產代碼就整段從網裏消失，於是那裏加一則文案，面板上直接印標籤而測試
-// 全綠。這一支從前擺在中間，後面壓着 445 行（2026-09-24 審出來的）。
+// 全綠。
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// **A comment found without allocating reads as it always did**
-    /// (2026-11-08): opened and closed, opened only, closed at once, at the
+    /// **A comment found without allocating reads as it always did**:
+    /// opened and closed, opened only, closed at once, at the
     /// end of the line, and a closer that is only half there.
     #[test]
     fn comments_are_found_where_they_were() {
@@ -3526,11 +3512,11 @@ mod tests {
 
     /// Every path that ends a table resets its row counter (#467).
     ///
-    /// The counter used to be cleared on two of the eleven returns that end a
-    /// table, so a second table separated from the first by anything other
-    /// than a blank line went on counting: its header came out as a body row
-    /// and the banding was inverted for the rest of the table. No file in the
-    /// repository triggered it, which is exactly why it wanted a test.
+    /// Cleared on only some of the returns that end a table, a second table
+    /// separated from the first by anything other than a blank line would go
+    /// on counting: its header would come out as a body row and the banding
+    /// would be inverted for the rest of the table. No file in the repository
+    /// triggers it, which is exactly why it wants a test.
     #[test]
     fn a_second_table_starts_counting_from_its_own_header() {
         let nths = |between: &str| -> Vec<usize> {
@@ -3568,10 +3554,9 @@ mod tests {
 
     /// A quote, a fence and a table inside a `:::` are still themselves (#468).
     ///
-    /// Everything inside a container used to come back as `Container`, which
-    /// was harmless while every block wore the same grey band and wrong the
-    /// moment they stopped: a fence draws no ground of its own now, so it
-    /// punched a page-coloured hole through the callout, and a quote lost its
+    /// Not everything inside a container is `Container`: a fence draws no
+    /// ground of its own, so read as `Container` it would punch a
+    /// page-coloured hole through the callout, and a quote would lose its
     /// colour entirely.
     #[test]
     fn a_block_inside_a_callout_is_still_that_block() {
@@ -3627,7 +3612,7 @@ mod tests {
                 Kind::AddedRow => '>',
                 // Only a fence's grammar makes these (`code::highlight`).
                 Kind::Token(_) => '~',
-                // Typst 那一支的三個（2026-09-28）。
+                // Typst 那一支的三個。
                 Kind::Math => '$',
                 Kind::Ref => '@',
                 Kind::Label => '<',
@@ -3686,11 +3671,10 @@ mod tests {
         assert_eq!(shape("`**not bold**`"), ".CCCCCCCCCCCC.");
     }
 
-    /// 2026-09-19：**一個代碼段由幾個反引號開，就要幾個反引號關**。從前這裏
-    /// 取的是「下一個反引號」，所以兩個挨在一起的反引號被當成一對空代碼段，
-    /// 掃描回到 `%%` 上——於是它開了一條註釋，後面半本書變灰，導出的時候那
-    /// 幾段**整個不見**。2026-09-19 報的就是這個，而這個檔自己的手冊
-    /// （`docs/manual_tc.md:394`，引用各種標記的那一行）正是這個形狀。
+    /// **一個代碼段由幾個反引號開，就要幾個反引號關**。取「下一個反引號」的話，
+    /// 兩個挨在一起的反引號被當成一對空代碼段，掃描回到 `%%` 上——於是它開了一
+    /// 條註釋，後面半本書變灰，導出的時候那幾段**整個不見**。手冊裏引用各種標記
+    /// 的那一行正是這個形狀。
     ///
     /// Warning: 上面那一條只用了單反引號，所以它永遠是綠的。
     #[test]
@@ -3816,8 +3800,8 @@ mod tests {
             .collect()
     }
 
-    /// 2026-10-25: a note hard-wrapped with an indent was grey on its first line
-    /// only.
+    /// A note hard-wrapped with an indent is grey on every line, not on its
+    /// first line only.
     #[test]
     fn a_footnote_runs_on_over_its_indented_and_lazy_lines() {
         // Indented lines, a second paragraph after a blank, then writing again.
@@ -3941,9 +3925,9 @@ mod tests {
         assert!(spans("").is_empty());
     }
 
-    /// **標記套得起來了**（2026-09-28）。
+    /// **標記套得起來了**。
     ///
-    /// 從前 ``**粗的`碼`**`` 交出來的是三段，中間那一段連反引號一起算成粗體的正文。
+    /// ``**粗的`碼`**`` 不是三段：中間那一段不許連反引號一起算成粗體的正文。
     #[test]
     fn marks_nest_now() {
         let inner = |line: &str, want: Kind| {
@@ -3966,11 +3950,10 @@ mod tests {
         assert!(inner("**a`b**c", Kind::Code).is_empty(), "反引號不許找到外面去");
     }
 
-    /// **一層套一層的強調**（2026-10-03 修）。
+    /// **一層套一層的強調**。
     ///
-    /// 三條都是 2026-10-02 那一輪掃查報來的：`*em **strong** em*` 畫成 `em *`、
-    /// `***both***` 畫成 `*both`、`**粗 *斜* 粗**` 是對的。前兩條的根子在
-    /// [`closing`]——它在一串分隔符的中間收口。
+    /// `*em **strong** em*` 不許畫成 `em *`、`***both***` 不許畫成 `*both`，
+    /// `**粗 *斜* 粗**` 照舊對。要點在 [`closing`]——它在一串分隔符的中間收口。
     #[test]
     fn emphasis_nests_without_eating_a_delimiter() {
         let inner = |line: &str, want: Kind| {
@@ -3989,7 +3972,7 @@ mod tests {
         assert_eq!(inner("***both***", Kind::Emphasis), vec!["**both**"]);
         assert_eq!(inner("***both***", Kind::Strong), vec!["both"]);
 
-        // 從前就對的那一條，別改壞。
+        // 本來就對的那一條，別改壞。
         assert_eq!(inner("**outer *inner* outer**", Kind::Strong), vec!["outer *inner* outer"]);
         assert_eq!(inner("**outer *inner* outer**", Kind::Emphasis), vec!["inner"]);
 
@@ -3997,10 +3980,9 @@ mod tests {
         assert_eq!(inner("**甲**和**乙**", Kind::Strong), vec!["甲", "乙"]);
         assert_eq!(inner("*甲*和*乙*", Kind::Emphasis), vec!["甲", "乙"]);
 
-        // **兩段貼在一起，中間那一串是共用的**（2026-10-03 一輪審查報來的，是我
-        // 當天自己挖的洞）。`**粗***斜*` 中間三顆星：兩顆收粗體、一顆開斜體。
-        // 從前這裏要求「閉合那一串和開頭那一串一樣長」，於是兩邊都配不上，兩個
-        // 構造一起落回正文——`**粗***斜*` 畫出來是一條斜體裏裝着三顆裸星。
+        // **兩段貼在一起，中間那一串是共用的**。`**粗***斜*` 中間三顆星：兩顆收
+        // 粗體、一顆開斜體。要求「閉合那一串和開頭那一串一樣長」的話，兩邊都配
+        // 不上，兩個構造一起落回正文——畫出來是一條斜體裏裝着三顆裸星。
         assert_eq!(inner("**粗***斜*", Kind::Strong), vec!["粗"]);
         assert_eq!(inner("**粗***斜*", Kind::Emphasis), vec!["斜"]);
         assert_eq!(inner("*a***b**", Kind::Emphasis), vec!["a"]);
@@ -4012,7 +3994,7 @@ mod tests {
     /// **兩條不變式**：按起點排好，任意兩條要麼不交要麼全含。
     ///
     /// 下游全靠它們——`mi k` 用「起點最靠後的那一條」當最內層，詳情面板同理，而兩個
-    /// 順序寫字的循環從前假定不重疊，切出反向區間當場崩。
+    /// 順序寫字的循環假定不重疊，否則切出反向區間當場崩。
     #[test]
     fn the_two_invariants_hold() {
         let lines = [
@@ -4045,7 +4027,7 @@ mod tests {
     }
 
 
-    /// **鏈接那三個洞**（2026-09-28）。
+    /// **鏈接那三個洞**。
     #[test]
     fn a_link_holds_together_through_brackets_and_a_bang() {
         let marker = |line: &str| {
@@ -4081,7 +4063,7 @@ mod tests {
         assert!(spans("[没配對(x)").is_empty());
     }
 
-    /// Warning: **文字是粗體的鏈接照樣跟得了**（2026-09-28）。
+    /// Warning: **文字是粗體的鏈接照樣跟得了**。
     ///
     /// 最裏面那一條是 `Strong`，它自己不是鏈接；要往外走一層纔找得到。
     #[test]
@@ -4093,7 +4075,7 @@ mod tests {
     }
 
 
-    /// **反斜杠轉義**（2026-09-28）。從前没有，於是正文裏寫不出一個字面的星號。
+    /// **反斜杠轉義**：没有它，正文裏寫不出一個字面的星號。
     ///
     /// Warning: 這個倉自己的 `export.rs` 正在生成 `\*`，導出的檔用自己的編輯器打開會亂。
     #[test]
@@ -4125,10 +4107,10 @@ mod tests {
     }
 
 
-    /// Warning: **`_` 的詞中保護不許把漢字也擋掉**（2026-09-28 修）。
+    /// Warning: **`_` 的詞中保護不許把漢字也擋掉**。
     ///
-    /// 那一條是保 `snake_case` 的，而 `is_alphanumeric()` 對漢字回真，於是
-    /// `這_是_重點` 一條 span 都不交。這是這一族裏唯一一個我們自己造出來的中文問題。
+    /// 那一條是保 `snake_case` 的，而 `is_alphanumeric()` 對漢字回真，只問它的話
+    /// `這_是_重點` 一條 span 都不交。
     #[test]
     fn an_underscore_between_han_still_emphasises() {
         let kinds = |line: &str| spans(line).into_iter().map(|s| s.kind).collect::<Vec<_>>();
@@ -4141,11 +4123,11 @@ mod tests {
         assert!(kinds("snake_case_here").is_empty(), "snake_case 還是要保住");
     }
 
-    /// **一長串 `=` 不是反覆的 `==高亮==`**（2026-10-11 報的）。
+    /// **一長串 `=` 不是反覆的 `==高亮==`**。
     ///
-    /// 十四個 `=` 畫出來只剩六個：掃描器把它們兩個兩個配成 `==…==`，每配成一對
-    /// 就把那四個字符當標記收走。光標走過去那一行在 6／10／14 格之間跳，因為所
-    /// 見即所得只在光標不在那一行的時候把標記藏起來。
+    /// 把它們兩個兩個配成 `==…==`、每配成一對就把那四個字符當標記收走的話，十四
+    /// 個 `=` 畫出來只剩六個，光標走過去那一行在 6／10／14 格之間跳，因為所見即
+    /// 所得只在光標不在那一行的時候把標記藏起來。
     #[test]
     fn a_run_of_equals_is_not_a_row_of_highlights() {
         for line in ["==============", "=====", "===="] {
@@ -4161,10 +4143,10 @@ mod tests {
         assert_eq!(kinds("==重點=="), vec![Kind::Marker, Kind::Highlight, Kind::Marker]);
     }
 
-    /// **`***三個***` 兩層都算數**（2026-10-11 報的）。
+    /// **`***三個***` 兩層都算數**。
     ///
     /// CommonMark 把它讀成 `<em><strong>`。這裏不做 delimiter stack，可至少不該
-    /// 吃掉一半——從前畫出來是 `*粗斜**`。
+    /// 吃掉一半畫成 `*粗斜**`。
     #[test]
     fn three_stars_are_both_layers() {
         let line = "***又粗又斜***";
@@ -4186,10 +4168,10 @@ mod tests {
         assert_eq!(marks, 6, "六個星號全是標記");
     }
 
-    /// **嵌套的強調，裏層不許把外層的閉合吃掉**（2026-10-11 報的）。
+    /// **嵌套的強調，裏層不許把外層的閉合吃掉**。
     ///
-    /// `*斜 **粗** 斜*` 從前畫成 `斜 *粗** 斜`——找閉合那一步不跳過比自己長的
-    /// 那一串分隔符，於是外層的 `*` 配到了裏層 `**` 的第一個星號上。
+    /// 找閉合那一步要跳過比自己長的那一串分隔符，不然外層的 `*` 配到裏層 `**` 的
+    /// 第一個星號上，`*斜 **粗** 斜*` 畫成 `斜 *粗** 斜`。
     #[test]
     fn the_inner_emphasis_does_not_eat_the_outer_one() {
         let line = "*斜 **粗** 斜*";
@@ -4207,7 +4189,7 @@ mod tests {
         );
     }
 
-    /// `$a + b$` and `$$x^2$$` are maths, as Pandoc reads them (2026-11-05).
+    /// `$a + b$` and `$$x^2$$` are maths, as Pandoc reads them.
     #[test]
     fn dollars_around_a_formula_are_maths_and_prices_are_not() {
         assert_eq!(shape("式 $a + b$ 和 $$x^2$$"), "  .$$$$$.   ..$$$..");
@@ -4250,8 +4232,8 @@ mod tests {
     }
 
     /// **`$$` on a line of its own opens display maths that runs to the next
-    /// `$$`** (2026-11-06). Only the one-line form used to be coloured, so a
-    /// formula set on lines of its own was drawn as prose.
+    /// `$$`**, not only the one-line form, so a formula set on lines of its own
+    /// is not drawn as prose.
     #[test]
     fn display_maths_over_several_lines_is_maths() {
         let doc = ["前文", "$$", r"\begin{aligned}", r"a &= b \\", r"\end{aligned}", "$$", "後文"];
@@ -4286,7 +4268,7 @@ mod tests {
         assert_eq!(blocks[0], Block::Prose);
     }
 
-    /// **The formula a column stands in**, delimiters included (2026-11-06).
+    /// **The formula a column stands in**, delimiters included.
     #[test]
     fn the_formula_under_a_column() {
         let line = "式 $a + b$ 和 $$x^2$$";
@@ -4303,7 +4285,7 @@ mod tests {
         assert_eq!(maths_at("價 $3 and $5", &spans("價 $3 and $5"), 3, false), None);
     }
 
-    /// `<https://…>` and `<name@host>` are links (2026-11-05), and say where
+    /// `<https://…>` and `<name@host>` are links, and say where
     /// they go.
     #[test]
     fn an_autolink_is_a_link() {
@@ -4318,7 +4300,7 @@ mod tests {
     }
 
     /// `<kbd>`, `</kbd>` and `<br>` are HTML: set back, never hidden, and
-    /// the text between them is prose (2026-11-05).
+    /// the text between them is prose.
     #[test]
     fn an_html_tag_is_markup_and_what_it_holds_is_prose() {
         assert_eq!(shape("按 <kbd>Esc</kbd> 鍵"), "  TTTTT   TTTTTT  ");

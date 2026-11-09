@@ -80,9 +80,9 @@ fn the_caret_stands_where_the_tab_put_it() {
     assert_eq!(ed.cursor_visual_column(), 8, "and 錐 begins at the stop");
 }
 
-/// 2026-09-11: 「tf状态下，tab 分隔符会被表格虚线接管，不需要绘
-/// 制…tb状态下，tab分隔符会被表格的对齐代替，这时候他也是个普通的符号，显示
-/// 1格宽都行（和markdown 中的pipe一样）」.
+/// Under `t f` a tab separator is taken over by the table's dotted rule and
+/// draws nothing; under `t b` the alignment stands in for it, and it is an
+/// ordinary character one cell wide, like Markdown's pipe.
 ///
 /// A separator is not indentation. Advanced to its stop it would push every
 /// column right of it out of line with the rows above — and in 全 the grid
@@ -115,7 +115,7 @@ fn a_tab_a_table_has_taken_over_is_a_separator_and_not_a_stop() {
     // And the table knows that very character as its wall, which is only
     // possible because the character still has a cell of its own.
     //
-    // **Asked of the table, not of the page** (2026-10-21): no level drawn
+    // **Asked of the table, not of the page**: no level drawn
     // into a document paints over the punctuation you typed any more — `t f`
     // did, and it is folded into `t b` — so where the walls *are* is the
     // question, and `grid_on_line` answered where they were *drawn*.

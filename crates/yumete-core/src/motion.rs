@@ -8,9 +8,7 @@
 //! width and grapheme primitives come from [`yumete_cjk`].
 //!
 //! Motions operate on one line at a time. **Where that line is materialized,
-//! and where it is not, is now a list** (2026-10-09 — three commits on
-//! 10-08 did part of the deferred work and this paragraph still promised all
-//! of it):
+//! and where it is not, is a list**:
 //!
 //! - **Not materialized**: finding a line's length ([`line_char_len`]), the
 //!   visual column of a position ([`visual_column`], a 64-character slice),
@@ -48,10 +46,9 @@ fn col_of_byte(s: &str, byte: usize) -> usize {
 
 /// The number of characters on `line` (excluding the trailing line break).
 ///
-/// Warning: **不抄整行**（2026-10-08）。從前寫的是
-/// `line_text(rope, line).chars().count()`——為了數一個數字，把一行一千兩百萬字
-/// 的行抄成一個 37 MB 的 `String`，而 `line_end` 問的就是這個數，於是每一下詞動
-/// 作都抄一次。`ropey` 的行切片自己報得出字數，剩下的只是把尾巴上那一兩格扣掉，
+/// Warning: **不抄整行**。`line_text(rope, line).chars().count()` 為了數一個數字，
+/// 把一行一千兩百萬字的行抄成一個 37 MB 的 `String`，而 `line_end` 問的就是這個數，
+/// 每一下詞動作都要抄一次。`ropey` 的行切片自己報得出字數，剩下的只是把尾巴上那一兩格扣掉，
 /// 扣的與 `line_text` 一樣（先 `\n`，再它前面的 `\r`），所以答案逐位相同。
 pub(crate) fn line_char_len(rope: &Rope, line: usize) -> usize {
     let slice = rope.line(line);
@@ -70,10 +67,10 @@ pub(crate) fn line_char_len(rope: &Rope, line: usize) -> usize {
 /// ⚠ **A line break is not always one character.** [`line_end`] is one past
 /// the line's last *character*, and [`line_text`] strips `\r` as well as `\n`
 /// — so on a CRLF file `line_end` stands on the `\r`, and `line_end + 1`
-/// stands between the two halves of one break. Two joins did exactly that
-/// (2026-10-07, 丟字第二輪): `J` and `gJ` deleted the `\r` and left the `\n`,
-/// so a CRLF manuscript came back with one line in LF and the two lines not
-/// joined at all. Ask for this instead of adding one.
+/// stands between the two halves of one break: a join that deletes there
+/// takes the `\r` and leaves the `\n`, so a CRLF manuscript comes back with
+/// one line in LF and the two lines not joined at all. Ask for this instead of
+/// adding one.
 ///
 /// On the last line, where there is no break, this is the end of the rope.
 pub fn past_the_break(rope: &Rope, pos: usize) -> usize {
@@ -100,9 +97,9 @@ pub fn last_line(rope: &Rope) -> usize {
 
 /// 一個字簇最多往外看多少個字——[`left`]／[`right`] 只拿光標旁邊這一截。
 ///
-/// Warning: **這是 O(行長) 換 O(1) 的那一刀**（2026-10-09）。這兩支從前各
-/// `line_text` 一次，於是「往左走一個字」在一行一千二百萬字的稿子上要抄 37 MB；
-/// 而它們要的只是光標緊鄰那一個字簇的邊界。[`visual_column`] 早就是這麽切的，
+/// Warning: **這是 O(行長) 換 O(1) 的那一刀**。這兩支各 `line_text` 一次的話，
+/// 「往左走一個字」在一行一千二百萬字的稿子上要抄 37 MB；而它們要的只是光標緊鄰
+/// 那一個字簇的邊界。[`visual_column`] 也是這麽切的，
 /// 餘量取的也是這個數：真實文字裏一個字簇兩三個碼位就到頂（帶異體字選擇符的漢
 /// 字是兩個），64 是十幾倍的餘量。
 ///
@@ -181,7 +178,7 @@ pub fn visual_column(rope: &Rope, pos: usize) -> usize {
     let line = rope.char_to_line(pos);
     let ls = rope.line_to_char(line);
     let col = pos - ls;
-    // Warning: **只拿光標前面那一截**（2026-10-08）。下面那個迴圈 `chars >= col`
+    // Warning: **只拿光標前面那一截**。下面那個迴圈 `chars >= col`
     // 就斷，所以後面的字一個也用不著；可 `line_text` 把**整行**物化成 `String`，
     // 而這一支是狀態欄與光標每幀都問的——一行 150 萬字的檔上就是每幀一次
     // 4.5 MB 的拷貝（`sample` 指的就是這裏）。
@@ -209,7 +206,7 @@ pub fn visual_column(rope: &Rope, pos: usize) -> usize {
 pub fn pos_at_visual_column(rope: &Rope, line: usize, goal: usize) -> usize {
     let ls = rope.line_to_char(line);
     let le = ls + line_char_len(rope, line);
-    // Warning: **一截一截地拿，不抄整行**（2026-10-09）。這一支在 `goal` 列上就斷，
+    // Warning: **一截一截地拿，不抄整行**。這一支在 `goal` 列上就斷，
     // 所以後面的字一個也用不着——可 `line_text` 把整行物化，而 `j`／`k` 每按一下都
     // 問它一次。
     //
@@ -267,16 +264,16 @@ pub fn line_start(rope: &Rope, pos: usize) -> usize {
 /// The first non-blank character of the cursor's line (`^`), or the line start
 /// if the line is all blanks or empty.
 ///
-/// Warning: **全是空白的那一行回行首，不是行尾**（2026-10-02 查出來的）。上面那句話
-/// 一直是這麼寫的，而代碼走完所有空白就停——在一行只有空白的行上，那個位置是
-/// **換行符**。站在換行符上，`selection()` 會把下一個字素也算進來（那是下一行的
-/// 第一個字），於是 `x` 選中兩行，`xd` 把下面那一行一起刪了。又是 #382 那個形狀。
+/// Warning: **全是空白的那一行回行首，不是行尾**。走完所有空白就停的話，在一行只有
+/// 空白的行上那個位置是**換行符**。站在換行符上，`selection()` 會把下一個字素也算
+/// 進來（那是下一行的第一個字），於是 `x` 選中兩行，`xd` 把下面那一行一起刪了。
+/// #382 那個形狀。
 ///
 /// helix 的 `goto_first_nonwhitespace_impl` 在 `first_non_whitespace_char()` 回
 /// `None` 的時候**原地不動**。
 ///
-/// Warning: **全角空格也是空白**（同日）。從前只認 ASCII 的空格和製表符，而這是一個
-/// 寫中文稿子的編輯器——`　` 縮進的那一行，`gs` 跳到第 1 欄，ASCII 縮進的跳到第 3
+/// Warning: **全角空格也是空白**，不只 ASCII 的空格和製表符：這是一個寫中文稿子的
+/// 編輯器——只認 ASCII 的話，`　` 縮進的那一行，`gs` 跳到第 1 欄，ASCII 縮進的跳到第 3
 /// 欄，同一個鍵兩種答案。照 helix 用 `char::is_whitespace`（它收 U+3000、U+00A0、
 /// U+2000–U+200A 那一族）。
 pub fn line_first_non_blank(rope: &Rope, pos: usize) -> usize {
@@ -351,11 +348,9 @@ pub fn buffer_end(rope: &Rope, _pos: usize) -> usize {
 /// | [`Grain::Word`] | whatever `seg` says | `w` |
 /// | [`Grain::Coarse`] | a run of one category, 漢字 as letters | `e` `b` |
 ///
-/// Warning: **`b` is in the third row, not the second** (2026-10-09 — the table
-/// said `w` `b` and a reviewer nearly filed the real behaviour as a bug off the
-/// strength of it). `b` is `e`'s partner: it walks back to where an `e` would
+/// Warning: **`b` is in the third row, not the second.** `b` is `e`'s partner: it walks back to where an `e` would
 /// have started, and there is no 「back one word」 key to pair with `w`. The
-/// binding has always said so — see `keys.rs`, 「**`b` is `e`'s partner, not
+/// binding says so — see `keys.rs`, 「**`b` is `e`'s partner, not
 /// `w`'s**」.
 ///
 /// `Coarse` is not a third opinion for its own sake. Chinese has no spaces, so
@@ -374,7 +369,7 @@ pub enum Grain {
     Coarse,
 }
 
-/// Warning: **詞動作不問這一支，問 [`near_words`]**（2026-10-08）。整行一份答案
+/// Warning: **詞動作不問這一支，問 [`near_words`]**。整行一份答案
 /// 在一行一千兩百萬字的檔上就是整份文件一份答案，而一下 `e` 只用得上其中一條。
 /// 畫面上的東西（跳轉標籤、`miw`、`*` 取光標下那個詞）還是問這一支：它們要的本
 /// 來就是一整行。
@@ -397,7 +392,7 @@ fn segment_text(text: &str, grain: Grain, seg: &dyn Segmenter) -> Vec<(usize, us
     whole_graphemes(text, words)
 }
 
-/// **A word is made of whole graphemes** (2026-10-23).
+/// **A word is made of whole graphemes**.
 ///
 /// A segmenter counts a combining mark as a thing of its own, so a word ended
 /// *between* a letter and its mark — and a caret there is not a place. On
@@ -441,11 +436,11 @@ fn whole_graphemes(text: &str, words: Vec<(usize, usize)>) -> Vec<(usize, usize)
     out
 }
 
-// ---- 長行上的詞動作：只切光標附近那一段（2026-10-08） ----------------------
+// ---- 長行上的詞動作：只切光標附近那一段 ----------------------
 
 /// 一次詞動作往兩邊各看多少個字元。
 ///
-/// **量出來的病**（2026-10-08，§5.126 ② 留下的那一條）：一行 12,419,022 字的檔
+/// **量出來的病**（§5.126 ② 留下的那一條）：一行 12,419,022 字的檔
 /// 上，`e` 每一下 287 ms、`w` 272 ms、`b` 379 ms，而 `l` 只要 5.7 ms——
 /// [`line_words`] 把整行抄成一個 37 MB 的 `String`，分完一千兩百萬字的詞，然後
 /// 用掉其中一條。helix 那一邊是 `slice.chars_at(head)` 往前走、碰上第一個邊界就
@@ -453,8 +448,8 @@ fn whole_graphemes(text: &str, words: Vec<(usize, usize)>) -> Vec<(usize, usize)
 /// 算，不跟着行長算。這一節要的是同一件事，差別只在漢語的分詞器要的是一段上下
 /// 文，不是一個遊標。
 ///
-/// Warning: **這一支管的只是分詞那一筆賬**（2026-10-09 補）。從前這一段寫的是「代
-/// 價不跟着行長算」，而量出來不是：`w` 在單行上仍舊是每一百萬字十四毫秒，那幾毫
+/// Warning: **這一支管的只是分詞那一筆賬**，代價並不全不跟着行長算：`w` 在單行上
+/// 仍舊是每一百萬字十四毫秒，那幾毫
 /// 秒花在 [`prev_grapheme`] 與 [`left`]／[`right`] 上——它們各自把整行抄一遍。窗口
 /// 攔住的是分詞器，攔不住它們，模塊開頭那張單子列着誰還没改。
 ///
@@ -552,7 +547,7 @@ impl Window {
 
     /// **第 `k` 條詞前面那條詞的終點** —— `e` 要的那半個邊界（見 [`next_word_end`]）。
     ///
-    /// Warning: **`k == 0` 的時候不許拿行首頂替**（2026-10-09）。窗是往前推出來的
+    /// Warning: **`k == 0` 的時候不許拿行首頂替**。窗是往前推出來的
     /// 時候，第一條詞前面那條詞落在窗外，而它的終點**可能在 `pos` 後面**：光標正站
     /// 在一個詞的末字上、下一個詞的尾巴又遠在這扇窗之外，那條邊界就是 `pos + 1`。
     /// 拿行首頂替會讓 `e` 把光標那個字一起收進去，`de` 就多吃一個字。被丟掉的那一
@@ -566,7 +561,7 @@ impl Window {
     }
 }
 
-/// **在 `pos` 附近一段一段地問，問到有答案為止**（2026-10-08）。
+/// **在 `pos` 附近一段一段地問，問到有答案為止**。
 ///
 /// 第一扇窗是 `[pos - WORD_REACH, pos + WORD_REACH]`，夾在這一行裏；窗裏没有答
 /// 案就往 `forward` 的方向再推一扇，推到行的那一頭為止。
@@ -576,8 +571,8 @@ impl Window {
 /// 兩扇窗重疊 [`WORD_SEAM`]：上一扇窗邊上那條不可信的邊界，在新窗裏離窗邊有五百
 /// 個字，是中間那些可信的邊界之一。
 ///
-/// Warning: **短行只問一次，窗就是整行**，於是答案與開銷都和從前整行分詞那一版
-/// 逐位相同——稿子走的是這一條。
+/// Warning: **短行只問一次，窗就是整行**，於是答案與開銷都和整行分詞逐位相同——
+/// 稿子走的是這一條。
 fn near_words<T>(
     rope: &Rope,
     line: usize,
@@ -643,9 +638,9 @@ pub fn next_word_start(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmente
 }
 
 /// **What a motion asks the page for** — the first of the grammar layer
-/// (B1, 2026-09-20).
+/// (B1).
 ///
-/// A motion used to *move the caret itself*, which is why 「the same motion」
+/// A motion does not *move the caret itself*: if it did, 「the same motion」
 /// could not be shared between a selection-first grammar (helix: the motion
 /// makes a selection, a verb eats it) and a caret-first one (vim: a verb
 /// waits, the motion hands it a range). Made a **value**, one motion serves
@@ -671,7 +666,7 @@ pub enum Span {
 /// > instead.
 ///
 /// One rule, two surfaces, and the difference is that **Chinese has no
-/// spaces** (measured 2026-09-20):
+/// spaces** (measured):
 ///
 /// | 文 | 光標在 | `w` 選到 |
 /// | --- | --- | --- |
@@ -689,11 +684,10 @@ pub enum Span {
 /// `[pos, next_word_start)`. That is the whole of why the two feel different,
 /// and why a translation table could never say it.
 pub fn word_forward(rope: &Rope, from: usize, grain: Grain, seg: &dyn Segmenter) -> Span {
-    // Warning: **一次 `w` 不跨換行**（2026-10-02 照 helix 比出來的，會焊行）。
+    // Warning: **一次 `w` 不跨換行**（照 helix）。
     //
-    // 從前行末按 `w` 選中的是「本行剩下的字 ＋ 換行 ＋ 下一行的縮進」，一個 `d`
-    // 就把兩行焊成一行。§5.11 B3 記過這個症狀（「`dw` 在行末吃掉換行**和下一行的
-    // 縮進**」），可那一次只改了 vim 那一套文法，helix 這一套留着。
+    // 跨過去的話，行末按 `w` 選中的是「本行剩下的字 ＋ 換行 ＋ 下一行的縮進」，一個
+    // `d` 就把兩行焊成一行（§5.11 B3）。
     //
     // helix 的 `range_to_target` 把換行當成一個**目標**（`movement.rs:470`）：`w`
     // 停在行末，再按一下纔過去；真跨過去的時候 `anchor = head`，所以選中的裏面
@@ -725,7 +719,7 @@ pub fn word_forward(rope: &Rope, from: usize, grain: Grain, seg: &dyn Segmenter)
     }
 }
 
-/// **Helix's `w` and `e` do not stop on a line break** (2026-10-27, measured
+/// **Helix's `w` and `e` do not stop on a line break** (measured
 /// against helix 25.07.1). [`word_forward`] lands on the break when the next
 /// word begins its own line (`xa` then `yb`: from `a`, `w` selected the break
 /// here and `yb` there); this carries such a span on over the break and any
@@ -805,8 +799,7 @@ pub fn unit_forward(rope: &Rope, from: usize, next: impl Fn(&Rope, usize) -> usi
 /// The same, backwards: the span from where the caret is to where the unit
 /// behind it begins.
 ///
-/// Warning: **動不了就是 `Missed`**（2026-10-02 改，原話「Never `Missed` — at the
-/// top of the buffer it collapses」）。往前那一支（[`unit_forward`]）動不了的時候
+/// Warning: **動不了就是 `Missed`**，不是在檔首縮成一格。往前那一支（[`unit_forward`]）動不了的時候
 /// 交的是 `Missed`，往回這一支交一格——而 `Span::Missed` 自己的註釋說得很清楚，
 /// 那個分別「是 `wdiw` 在檔尾打開的」：動詞要分得出「那裏什麼都没有」和「那裏有
 /// 一格」。
@@ -826,10 +819,9 @@ pub fn unit_back(rope: &Rope, from: usize, prev: impl Fn(&Rope, usize) -> usize)
     }
 }
 
-/// **A motion, as a value** — the second half of the grammar layer (B1,
-/// 2026-09-20).
+/// **A motion, as a value** — the second half of the grammar layer (B1).
 ///
-/// A key no longer *does* a motion; it names one. What a motion covers is
+/// A key does not *do* a motion; it names one. What a motion covers is
 /// [`Span`], and who reads which part of that span is the grammar's business:
 /// helix takes the whole of it as a selection, vim (B3) takes one end as a
 /// caret target or hands the whole of it to a waiting verb.
@@ -845,7 +837,7 @@ pub enum Motion {
     WordForward(Grain),
     /// `e` / `E` — the end of the run ahead, both ends set.
     WordEnd(Grain),
-    /// `ge` / `gE` — **往回到上一個詞的末尾**（vim；2026-10-02 定，照參考實現）。
+    /// `ge` / `gE` — **往回到上一個詞的末尾**（vim，照參考實現）。
     ///
     /// Warning: **helix 没有這一個**，而 `ge` 在 helix 鍵位裏是「到檔尾」。所以這
     /// 一支只有 vim 文法問得到，兩邊的 `ge` 各是各的。
@@ -853,7 +845,7 @@ pub enum Motion {
     /// **vim 的 `cw`，而 `cw` 不是 `ce`** — 光標**所在**那一段的末尾。
     ///
     /// Warning: `:h cw` 說 `cw` 不吃詞後面的空白，照字面抄就寫成 `ce`，而
-    /// `e` 站在詞的最後一格上會跳到**下一**個詞的末尾。2026-10-02 拿 nvim 逐欄
+    /// `e` 站在詞的最後一格上會跳到**下一**個詞的末尾。拿 nvim 逐欄
     /// 量：`alpha beta` 的第 5 格（`alpha` 的 `a`）按 `cw`，nvim 只換那一格，而
     /// `ce` 會換掉 `a beta`。所以這是自己的一支，不是 `e`。
     WordEndHere(Grain),
@@ -878,8 +870,7 @@ pub enum Motion {
     Paragraph { forward: bool },
     /// `L` / `H` — a sentence: 。！？ and the closing mark after one.
     Sentence { forward: bool },
-    /// `h` / `l` — **one character, and never off this line** (B5,
-    /// 2026-09-21).
+    /// `h` / `l` — **one character, and never off this line** (B5).
     ///
     /// The keys themselves walk the page; this is the reading an operator
     /// wants, and it exists because `dl`、`d3l`、`yl`、`c2h` are everyday vim
@@ -898,7 +889,7 @@ pub enum Motion {
     /// asks it. The keys themselves still walk the screen's rows.
     Line { down: bool },
     /// `H` / `M` / `L` — **the top, middle or bottom of what is on the screen**
-    /// (vim; 2026-10-06).
+    /// (vim).
     ///
     /// Warning: **The one motion that has to ask the front end.** Every other is a
     /// function of the rope alone; this one needs to know which slice is drawn,
@@ -915,7 +906,7 @@ pub enum Motion {
     /// Warning: **An object knows both its ends**, which is why it is not two
     /// motions: `i(` is not 「forward to `)`」, it is 「the thing this caret is
     /// inside of」, and from anywhere in it the answer is the same.
-    /// **`count` 只有詞對象用得上**（2026-10-11）：vim 的 `2iw` 是「兩個單位」，
+    /// **`count` 只有詞對象用得上**：vim 的 `2iw` 是「兩個單位」，
     /// 單位在詞和空白之間交替；`2aw` 是兩個「詞 ＋ 它後面那道縫」。
     ///
     /// Warning: **括號那一族的數目是另一個意思**，所以這一格對它們没有作用。`2i(`
@@ -925,10 +916,10 @@ pub enum Motion {
 }
 
 /// **What a verb does to a span** — the other half of the grammar layer
-/// (B2, 2026-09-20).
+/// (B2).
 ///
-/// A verb used to read the selection itself, which is why a second grammar
-/// could not reach it: vim's `dw` has no selection to read, it has a range the
+/// A verb does not read the selection itself, or a second grammar could not
+/// reach it: vim's `dw` has no selection to read, it has a range the
 /// motion just handed over. Made a value, the verb takes the range from
 /// whoever has one — helix passes its selection, vim (B3) passes the span its
 /// motion returned — and **there is one knife** either way.
@@ -944,10 +935,10 @@ pub enum Operator {
     Yank,
 }
 
-/// **Which reading of a motion is wanted** (B3, 2026-09-20).
+/// **Which reading of a motion is wanted** (B3).
 ///
-/// 2026-09-20：「vim 的 `w` 獨立的時候是跳轉，在命令中是選詞。helix 就是
-/// 將跳轉和選擇兩個 `w` 合一了。」 That is this enum: one motion, and the two
+/// vim's `w` moves on its own and picks a word under an operator; helix makes
+/// the two `w`s one. That is this enum: one motion, and the two
 /// things an editor can ask of it.
 ///
 /// | | `Caret` | `Selection` |
@@ -971,32 +962,30 @@ pub enum Object {
     /// A word — or, standing on blanks, that run of blanks (vim's rule, and
     /// the one that makes `wdiw` the handiest press in this editor).
     ///
-    /// Warning: **`big` 說用不用分詞器**（2026-09-28）。`iw` 走分詞器，和 `w`/`b` 同一個
-    /// 答案；`iW` 走 [`Grain::Big`]，也就是 vim 的「一串非空白」。從前這裏没有這一格，
-    /// `iw` 寫死了粗粒度，於是「今天天氣很好」整串是一個「詞」，而同一個編輯器的 `w`
-    /// 走三步。一個編輯器對「詞」只能有一個答案。
+    /// Warning: **`big` 說用不用分詞器**。`iw` 走分詞器，和 `w`/`b` 同一個
+    /// 答案；`iW` 走 [`Grain::Big`]，也就是 vim 的「一串非空白」。`iw` 寫死粗粒度的話，
+    /// 「今天天氣很好」整串是一個「詞」，而同一個編輯器的 `w` 走三步。一個編輯器對
+    /// 「詞」只能有一個答案。
     ///
-    /// Warning: **這一格 2026-10-11 之前叫 `coarse`，而那個名字把它送進了
-    /// [`Grain::Coarse`]**——兩個名字裏都有「粗」，可那是「一次一類」（`e` 的規矩），
-    /// 不是「一串非空白」。改名是為了讓那個挑選再也寫不錯：`big` 對着
-    /// `select_word_forward` 的 `big`，兩頭同一個字。
+    /// Warning: **這一格不叫 `coarse`**：那個名字會把它送進 [`Grain::Coarse`]——那是
+    /// 「一次一類」（`e` 的規矩），不是「一串非空白」。`big` 對着
+    /// `select_word_forward` 的 `big`，兩頭同一個字，那個挑選就寫不錯。
     ///
     /// Warning: 詞典關着的時候 `iw` 和 `w` 一樣——`word_grain()` 那時本來就回 `Coarse`。
     Word { big: bool },
     /// A pair of delimiters, already resolved to its two characters.
     Pair { open: char, close: char },
-    /// **`mi m`/`ma m` — the nearest pair, whichever kind** (2026-10-27,
-    /// helix's `m`). Resolved by the editor, which can look at the text: the
+    /// **`mi m`/`ma m` — the nearest pair, whichever kind** (helix's
+    /// `m`). Resolved by the editor, which can look at the text: the
     /// innermost bracket or quote around the caret names the two characters,
     /// and from there it is a [`Object::Pair`].
     NearestPair,
-    /// **`mi k`/`ma k` — 光標所在的那一段 Markdown 標記**（2026-09-28；2026-10-27 從
-    /// `m` 挪到 `k`，mar(k)up）。
+    /// **`mi k`/`ma k` — 光標所在的那一段 Markdown 標記**（mar(k)up）。
     ///
     /// `**粗**`、`*斜*`、`~~刪~~`、`==標==`、`` `碼` ``、`[文字](地址)`、`[[雙鏈]]`、
     /// `%%批注%%`、腳註。`i` 取裏面的文字，`a` 連標記一起。套着的時候取最裏面那一層。
     ///
-    /// Warning: **一個鍵，不是一個標記一個鍵**（2026-09-28 定）。`**` `~~` `==` 是**兩個**
+    /// Warning: **一個鍵，不是一個標記一個鍵**。`**` `~~` `==` 是**兩個**
     /// 字符，寫不進 `Object::Pair` 那張一對一的表；而且這一族有九種，一種一個鍵就把
     /// `m` 那一層佔掉一半，而這個倉的規矩是「鍵位很貴」。`md`（去掉最裏面那一對括號）
     /// 早就是同一個思路。
@@ -1005,22 +994,22 @@ pub enum Object {
     /// 不是 tree-sitter——tree-sitter 在這個倉裏只管代碼檔與代碼圍欄。`:syntax text`
     /// 的檔交空，Typst 交 Typst 自己那一份。
     Markup,
-    /// **`mi s`/`ma s` — 光標所在的那一句**（2026-09-28）。
+    /// **`mi s`/`ma s` — 光標所在的那一句**。
     ///
     /// Warning: **這一條是這個編輯器該有而 helix 和 vim 都不太有的**：句在這裏本來就是一個
     /// 單位——`H`/`L` 按句走、`:view-sentence` 一句一縱、`:check-punct` 按句查——可是
-    /// 「改寫這一句」從前做不到，只能 `H` 再 `L` 再猜邊界。邊界走的是
+    /// 「改寫這一句」不該只能 `H` 再 `L` 再猜邊界。邊界走的是
     /// [`sentence_starts`]，和那三處同一支：兩個答案就意味着光標停在版面不斷行的地方。
     ///
     /// Warning: **`as` 在中文裏會退化成 `is`**，同 `aw`：它多取句末那一段空白，而中文句子之間
     /// 没有空白。
     Sentence,
-    /// **`mi u`/`ma u` — 短句, a clause** (2026-10-27): what lies between two
+    /// **`mi u`/`ma u` — 短句, a clause**: what lies between two
     /// punctuation marks of any kind, brackets and quotes included. helix and
     /// vim have none; `W` stops only at a space, which in Chinese is the
     /// whole paragraph. Boundaries are [`ends_a_clause`].
     Clause,
-    /// `ip` / `ap` — a paragraph (B5, 2026-09-21).
+    /// `ip` / `ap` — a paragraph (B5).
     ///
     /// Warning: **Whole lines, not a run of characters**, which is what makes it an
     /// object and not two `}` motions: from anywhere inside a paragraph the
@@ -1046,12 +1035,11 @@ impl Span {
 /// **`f` / `F`, as a span** (B1) — the nth `target` ahead of `pos` or behind
 /// it.
 ///
-/// **`across` is the keymap's answer, not a preference** (2026-10-23, measured
+/// **`across` is the keymap's answer, not a preference** (measured
 /// against helix 25.07.1 in a pty): helix's `f`, `t`, `F` and `T` run on over
 /// line breaks — `f d` on `ab⏎cd` lands on the `d` below, `2f d` counts past
 /// lines, `t d` stops on the line break when `d` opens the next line — and
-/// vim's stop at the end of the line. This used to be line-bound for both, on
-/// the reasoning that a search that ran on would be `/`.
+/// vim's stop at the end of the line.
 ///
 /// Not found is [`Span::Missed`] — the editor says so on the status line,
 /// which is its business and not this function's.
@@ -1109,11 +1097,11 @@ pub fn find_char(
     }
     let chars: Vec<char> = text.chars().collect();
     let col = pos - line_start;
-    // Warning: **數目是「第 n 個」，而且不夠就整個不動**（2026-10-02 拿這臺機器上的
-    // nvim 量出來的）。從前數目是在外面**重複**這一支，於是每一趟都從上一個落點
-    // 重新下錨：`a,b,c,d,e` 上 `2f,` 選的是「第一個逗號到第二個」，而 vim 和 helix
-    // 選的都是「光標到第二個」。數目超出的時候更糟——`9f,` 只有四個逗號，vim 整個
-    // 動作失敗、一格不動，而從前它走到最後一個，`d9f,` **默默吃掉三十二個字**。
+    // Warning: **數目是「第 n 個」，而且不夠就整個不動**（拿 nvim 量出來的）。數目
+    // 若在外面**重複**這一支，每一趟都從上一個落點重新下錨：`a,b,c,d,e` 上 `2f,`
+    // 選的是「第一個逗號到第二個」，而 vim 和 helix 選的都是「光標到第二個」。數目
+    // 超出的時候——`9f,` 只有四個逗號——vim 整個動作失敗、一格不動；走到最後一個
+    // 的話，`d9f,` **默默吃掉一大截**。
     //
     // nvim 量出來的（`a,b,c,d,e`，逗號在第 2、4、6、8 欄）：`2f,`→4、`3f,`→6、
     // `9f,`→1（不動）、`2t,`→3、`3t,`→5。
@@ -1157,8 +1145,8 @@ pub fn word_end(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> S
 /// A span whose `head` is before its `anchor` is a backwards selection, which
 /// is what this editor has always made of `b`: it selects what it crosses.
 ///
-/// Warning: **站在詞首的時候，你站的那一格不算在內**（2026-10-02 照 helix 比出來的）。
-/// 從前錨點一律是 `pos`，於是詞首按 `b` 多拿一個字：`beta` 的 `b` 上按 `b`，選的是
+/// Warning: **站在詞首的時候，你站的那一格不算在內**（照 helix）。
+/// 錨點一律是 `pos` 的話，詞首按 `b` 多拿一個字：`beta` 的 `b` 上按 `b`，選的是
 /// `alpha␣b` 而不是 `alpha␣`，`bd` 於是把 `beta` 咬掉一個頭。而 `b` 正常就是停在
 /// 詞首按的——「把前面那個詞拿過來」——所以分歧落在最常見的那一下。
 ///
@@ -1198,7 +1186,7 @@ pub fn word_back(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> 
         return Span::Missed;
     };
     // Warning: **後面没東西了就什麼都不做**，不是「選中一格」。`Span::Missed` 自己的
-    // 註釋說的正是這個分別。helix 在檔首按 `b` 原地不動，而從前這裏交出一格，於是
+    // 註釋說的正是這個分別。helix 在檔首按 `b` 原地不動；這裏交出一格的話，
     // `2bd` 在檔首刪掉一個字。
     if head >= anchor {
         return Span::Missed;
@@ -1221,10 +1209,9 @@ pub fn word_back(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> 
     while anchor > head && rope.char(anchor.min(rope.len_chars().saturating_sub(1))) == '\n' {
         anchor = prev_grapheme(rope, anchor);
     }
-    // Warning: **錨點退到和 head 同一格，那也是一段**（2026-10-04 修）。倒着走的
-    // `Span::Over` 是閉區間，所以 `anchor == head` 說的是「選中一個字」，不是
-    // 「什麼都没選中」。從前這裏寫 `anchor > head`，於是**上一個詞只有一個字符的
-    // 時候交出 `Missed`**——而 `Missed` 的意思是「哪兒也不去」，光標就卡死了：
+    // Warning: **錨點退到和 head 同一格，那也是一段**。倒着走的 `Span::Over` 是閉
+    // 區間，所以 `anchor == head` 說的是「選中一個字」，不是「什麼都没選中」。寫成
+    // `anchor > head` 的話，**上一個詞只有一個字符的時候交出 `Missed`**——而 `Missed` 的意思是「哪兒也不去」，光標就卡死了：
     //
     // ```
     // alpha beta gamma      光標在 beta 的 b  →  退到 alpha   ✓
@@ -1236,7 +1223,7 @@ pub fn word_back(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> 
     // `anchor=4 head=3 span=[3,4) text="`"`，也就是**走到第 3 格、選中那個反引號**。
     //
     // 真正的「哪兒也不去」在上面那道閘（`head >= anchor`，退錨點之前問的），
-    // 那一條管的是檔首——它照舊。
+    // 那一條管的是檔首。
     match anchor >= head {
         true => Span::Over { anchor, head },
         false => Span::Missed,
@@ -1246,15 +1233,15 @@ pub fn word_back(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> 
 /// The end (last character) of the next word after `pos` (`e` / `E`).
 pub fn next_word_end(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> (usize, usize) {
     for line in line_of(rope, pos)..rope.len_lines() {
-        // Warning: **那半個邊界要跟着窗走**（2026-10-09 改）。從前這裏論證過「窗把
-        // 前一條切掉也不要緊」，論證是錯的：`pos + 1` 這條邊界只在**罩着 `pos` 那一
+        // Warning: **那半個邊界要跟着窗走**。「窗把前一條切掉也不要緊」不成立：
+        // `pos + 1` 這條邊界只在**罩着 `pos` 那一
         // 扇**窗的正中間，而窗一往前推，`pos` 就落在窗外了——光標站在一個詞的末字
         // 上、下一個詞的尾巴又遠在一扇窗之外（`ab` ＋ 兩萬個 `x`，光標在 `b`），推
         // 過去那一扇裏 `k == 0`，拿行首頂替就把 `b` 一起收進了選區，`de` 多吃一個
-        // 字。現在那條邊界由被丟掉的那一扇記下來，見 [`Window::leading`]。
+        // 字。所以那條邊界由被丟掉的那一扇記下來，見 [`Window::leading`]。
         let found = near_words(rope, line, pos, grain, seg, true, |w| {
             let words = w.ended();
-            // Warning: **「已經在詞尾了」要按字位問,不是按碼位**（2026-10-23）。光標罩
+            // Warning: **「已經在詞尾了」要按字位問,不是按碼位**。光標罩
             // 着的是一整個字位,而 `m̀`（U+006D U+0300）那種詞**整個就是那一格**——
             // 問 `end - 1 > pos` 的時候 1 是組合記號,於是 `e` 把頭放進了字位中間,
             // 而真 helix 25.07 收下一個詞（`scripts/oracle/hx_keys.py` 量的）。
@@ -1289,7 +1276,7 @@ pub fn next_word_end(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter)
 pub fn word_end_here(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> usize {
     let line = line_of(rope, pos);
     // Warning: **窗裏問的是「`pos` 後面第一個可信的詞尾」**，不是「罩着 `pos` 那一條
-    // 的詞尾」（2026-10-08）。兩者在整行上是同一個答案——詞不重疊，`pos` 前面那幾條
+    // 的詞尾」。兩者在整行上是同一個答案——詞不重疊，`pos` 前面那幾條
     // 的終點都不超過 `pos`——而光標那一條的尾巴落在窗外的時候只有前者還答得出：推
     // 一扇窗之後 `pos` 已經不在窗裏了（一行全是漢字没有標點的時候，`E` 的「本詞」就
     // 是整行）。
@@ -1319,11 +1306,11 @@ pub fn prev_word_end(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter)
             w.ended()
                 .iter()
                 .rev()
-                // Warning: **起點在 `pos` 之後的那些詞，先用整數比掉**（2026-10-08）。
+                // Warning: **起點在 `pos` 之後的那些詞，先用整數比掉**。
                 // 一個詞的最後一個字素起在它自己裏面（`start <= prev_grapheme(end)`），
-                // 所以那些詞一條都過不了下面那道閘——答案與逐條問 `prev_grapheme` 的
-                // 從前完全相同，而少問的那幾下很貴：`prev_grapheme` 在長行上是 O(行長)
-                // （`prev_grapheme_boundary` 從行尾往回數字素），於是 `ge` 從前在光標
+                // 所以那些詞一條都過不了下面那道閘——答案與逐條問 `prev_grapheme`
+                // 完全相同，而少問的那幾下很貴：`prev_grapheme` 在長行上是 O(行長)
+                // （`prev_grapheme_boundary` 從行尾往回數字素），逐條問的話 `ge` 在光標
                 // 後面每有一個詞就掃一遍整行。這一跳之後最多問兩次。
                 .filter(|&&(start, _)| start < pos)
                 .map(|&(_, end)| prev_grapheme(rope, end))
@@ -1371,8 +1358,8 @@ fn blank(rope: &Rope, line: usize) -> bool {
 /// blank line between them.
 ///
 /// That is also why the motion is needed at all. With soft wrap on, `j` and `k`
-/// move by *visual row*, and a paragraph is twenty of them — so the key that
-/// used to mean "the next paragraph" no longer does, and nothing replaced it.
+/// move by *visual row*, and a paragraph is twenty of them — so `j` does not
+/// mean "the next paragraph", and this motion does.
 /// Blank lines are skipped: they separate sections, and no one wants to stop
 /// on one.
 pub fn next_paragraph(rope: &Rope, pos: usize) -> usize {
@@ -1465,7 +1452,7 @@ fn ends_sentence(chars: &[char], i: usize) -> bool {
     }
 }
 
-/// **Does the character at `i` end a clause** (`mi u`, 2026-10-27)?
+/// **Does the character at `i` end a clause** (`mi u`)?
 ///
 /// Any punctuation mark does: 「any punctuation, word-internal kept」. The one
 /// exception is a mark inside a word — `3.14`, `1,000`, `don't`,
@@ -1546,7 +1533,7 @@ fn vim_sentence_starts(rope: &Rope, line: usize, chars: &[char]) -> Vec<usize> {
     let mut starts = Vec::new();
     // The line opens one only when nothing is carried over into it.
     let carried = line > 0 && !blank(rope, line - 1) && !line_finishes_a_sentence(rope, line - 1);
-    // Warning: **column 0, not the first non-blank** (2026-10-18, measured against
+    // Warning: **column 0, not the first non-blank** (measured against
     // nvim). The indent belongs to the sentence it introduces: `d(` from inside
     // the first word of `␣␣he said…` deletes the two spaces as well, and `)`
     // from column 0 must not treat the first non-blank as somewhere to go —
@@ -1779,7 +1766,7 @@ mod paragraph_and_sentence_tests {
 // Warning: **測試模組一律擺在檔尾。** `yumete-core/tests/messages.rs` 那張「每個標籤都
 // 有條目」的網把源碼切在**第一個**頂格的 `#[cfg(test)]\nmod ` 處——擺在檔案中間，
 // 它後面的生產代碼就整段從網裏消失，於是那裏加一則文案，面板上直接印標籤而測試
-// 全綠。這一支從前擺在中間，後面壓着 223 行（2026-09-24 審出來的）。
+// 全綠。
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1842,13 +1829,13 @@ mod tests {
         assert!(seg.0.get() <= 24, "read {} going back", seg.0.get());
     }
 
-    // ---- 一行就是整份文件的時候（2026-10-08） ----------------------------
+    // ---- 一行就是整份文件的時候 ----------------------------
     //
     // 下面這幾支守的是同一件事：`near_words` 那扇窗交出來的答案，**和整行分詞那
-    // 一版逐位相同**。所以參照實現就擺在這裏，一字不改地照搬改之前的代碼——它們
-    // 是「從前的答案」這句話的本體，別為了「更好寫」去改它們。
+    // 一版逐位相同**。所以整行分詞的參照實現就擺在這裏——它們是「整行的答案」這句話
+    // 的本體，別為了「更好寫」去改它們。
 
-    /// 從前的 `next_word_start`。
+    /// 整行分詞的 `next_word_start`。
     fn whole_next_word_start(r: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> usize {
         for line in line_of(r, pos)..r.len_lines() {
             if let Some(start) = line_words(r, line, grain, seg)
@@ -1862,7 +1849,7 @@ mod tests {
         r.len_chars()
     }
 
-    /// 從前的 `prev_word_start`。
+    /// 整行分詞的 `prev_word_start`。
     fn whole_prev_word_start(r: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> usize {
         let mut line = line_of(r, pos);
         loop {
@@ -1881,7 +1868,7 @@ mod tests {
         }
     }
 
-    /// 從前的 `next_word_end`。
+    /// 整行分詞的 `next_word_end`。
     fn whole_next_word_end(
         r: &Rope,
         pos: usize,
@@ -1905,7 +1892,7 @@ mod tests {
         (pos, pos)
     }
 
-    /// 從前的 `prev_word_end`。
+    /// 整行分詞的 `prev_word_end`。
     ///
     /// Warning: **這一支帶着那道 `start < pos` 的整數閘**，和改完的那一版一樣——
     /// 不帶的話參照實現自己是行長的平方（`prev_grapheme` 在長行上是 O(行長)），一
@@ -1930,7 +1917,7 @@ mod tests {
         }
     }
 
-    /// 從前的 `word_end_here`。
+    /// 整行分詞的 `word_end_here`。
     fn whole_word_end_here(r: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> usize {
         line_words(r, line_of(r, pos), grain, seg)
             .into_iter()
@@ -1939,7 +1926,7 @@ mod tests {
             .unwrap_or_else(|| whole_next_word_end(r, pos, grain, seg).1)
     }
 
-    /// 從前的 `word_forward` 停在哪：`stop_at_line_end` 餵給 [`unit_forward`]。
+    /// 整行分詞的 `word_forward` 停在哪：`stop_at_line_end` 餵給 [`unit_forward`]。
     fn whole_word_forward(r: &Rope, from: usize, grain: Grain, seg: &dyn Segmenter) -> Span {
         let stop = |r: &Rope, p: usize| -> usize {
             let line = line_of(r, p);
@@ -1990,7 +1977,7 @@ mod tests {
         s
     }
 
-    /// **一行就是整份文件的時候，一下詞動作只讀光標附近那一段**（2026-10-08）。
+    /// **一行就是整份文件的時候，一下詞動作只讀光標附近那一段**。
     ///
     /// 計時會讓測試飄，所以數的是字數：一個把交給它的字數記下來的分詞器。實測的
     /// 病是一行 12,419,022 字的檔上 `e` 每一下 181 ms、`w` 298 ms——整行抄成一個
@@ -2025,10 +2012,10 @@ mod tests {
         }
     }
 
-    /// **窗裏没有邊界就推一扇，不是停在原地**（2026-10-08）。
+    /// **窗裏没有邊界就推一扇，不是停在原地**。
     ///
     /// 一行幾萬個同一個漢字，粗粒度看就是**一個詞**——`e` 真要走到行尾，而那段路
-    /// 一扇窗（`2 * WORD_REACH`）裝不下。從前整行分詞答得出，所以這一條守的是
+    /// 一扇窗（`2 * WORD_REACH`）裝不下。整行分詞答得出，所以這一條守的是
     /// 「窗口那條路不許因為看不見邊界就少走」。
     #[test]
     fn the_window_slides_when_a_run_is_longer_than_it_is() {
@@ -2073,7 +2060,7 @@ mod tests {
         }
     }
 
-    /// **窗口交出來的答案，和整行分詞那一版逐位相同**（2026-10-08）。
+    /// **窗口交出來的答案，和整行分詞那一版逐位相同**。
     ///
     /// 這是「行為一個字都不許變」那一條的本體：同一行文字，兩套實現，幾十個位置
     /// 逐個對。位置取得密是故意的——窗邊落在詞裏、落在標點上、落在空隙上，切出來
@@ -2147,12 +2134,12 @@ mod tests {
         }
     }
 
-    /// **一個詞長過一扇窗的時候，`e` 的錨點還是對的**（#315，2026-10-09）。
+    /// **一個詞長過一扇窗的時候，`e` 的錨點還是對的**（#315）。
     ///
     /// 靶造得極小：`ab` ＋ 一個空格 ＋ 兩萬個 `x`，光標按在 `b` 上。`b` 是前一個詞
     /// 的末字，而下一個詞的尾巴在兩萬格之外——窗要往前推四趟纔問得出來，而 `pos`
-    /// 在第一趟之後就落在窗外了。從前推過去那一扇用行首頂替那條邊界，於是 `e` 從
-    /// `b` 起選（`de` 把 `b` 一起吃掉）；對的答案是從那個空格起選。
+    /// 在第一趟之後就落在窗外了。推過去那一扇若用行首頂替那條邊界，`e` 就從 `b` 起選
+    /// （`de` 把 `b` 一起吃掉）；對的答案是從那個空格起選。
     ///
     /// 上面那一支逐位對照的測試看不見這個：[`one_long_line`] 裏最長的「詞」不過十
     /// 幾個字，窗邊永遠落在一條真邊界附近，推一扇窗從來不會跨過一整個詞。
@@ -2175,10 +2162,8 @@ mod tests {
         }
     }
 
-    /// **The rule `w` has always followed, written down at last** (B1,
-    /// 2026-09-20). Derived by measuring the editor key by key, then found to
-    /// be exactly what the code said — which is why it is pinned here before
-    /// a second grammar starts reading it.
+    /// **The rule `w` follows** (B1), derived by measuring the editor key by
+    /// key and pinned here because a second grammar reads it.
     ///
     /// > A `w` never hands back a span of just the cell you are already on.
     /// > If 「to the next word's start」 would do that, it takes the next word.
@@ -2236,7 +2221,7 @@ mod tests {
     }
 
     /// **helix's `f` runs on over line breaks** — the answers below are real
-    /// helix 25.07.1's, read off the file in a pty (2026-10-23).
+    /// helix 25.07.1's, read off the file in a pty.
     #[test]
     fn helixs_find_crosses_lines() {
         let r = rope("ab\ncd\nxd\n");
@@ -2273,10 +2258,10 @@ mod tests {
         assert_eq!(word_forward(&r, 5, Grain::Coarse, &seg), Span::Over { anchor: 6, head: 10 });
     }
 
-    /// **一次 `w` 不跨換行**（2026-10-02 照 helix 的 `helix-core` 079a789e8 比出來的）。
+    /// **一次 `w` 不跨換行**（照 `helix-core` 079a789e8）。
     ///
-    /// 行末按 `w` 從前選中「本行剩下的字 ＋ 換行 ＋ 下一行的縮進」，一個 `d` 就把
-    /// 兩行焊成一行。§5.11 B3 記過這個症狀，可那一次只改了 vim 那一套文法。
+    /// 跨過去的話，行末按 `w` 選中「本行剩下的字 ＋ 換行 ＋ 下一行的縮進」，一個 `d`
+    /// 就把兩行焊成一行（§5.11 B3）。
     ///
     /// 底下三行是拿 helix 自己的 `move_next_word_start` 量出來的答案。
     #[test]
@@ -2309,7 +2294,7 @@ mod tests {
         );
     }
 
-    /// **`b` 在詞首不帶上你站的那一格，也不圈進換行**（2026-10-02 照 helix 比出來的）。
+    /// **`b` 在詞首不帶上你站的那一格，也不圈進換行**（照 helix）。
     ///
     /// 底下每一行都是拿 helix 自己的 `move_prev_word_start` 量出來的（`helix-core`
     /// 079a789e8）。`b` 正常就是停在詞首按的——「把前面那個詞拿過來」——所以那一條
@@ -2347,20 +2332,20 @@ mod tests {
         assert_eq!(word_back(&r, 0, Grain::Coarse, &seg), Span::Missed);
     }
 
-    /// **上一個詞只有一個字符的時候，`b` 照樣走得掉**（2026-10-04 修的回歸）。
+    /// **上一個詞只有一個字符的時候，`b` 照樣走得掉**。
     ///
-    /// 報上來的：站在 `` `mam` `` 的 `m` 上按 `b`，光標一動不動，按幾次都不動。
-    /// 跟中文、跟 markdown 都無關，`` aa `bb` cc `` 一樣：
+    /// 站在 `` `mam` `` 的 `m` 上按 `b`，光標不許一動不動。跟中文、跟 markdown 都
+    /// 無關，`` aa `bb` cc `` 一樣：
     ///
     /// ```text
     /// alpha beta gamma      光標在 beta 的 b  →  退到 alpha   ✓
     /// alpha `beta` gamma    光標在 beta 的 b  →  一動不動     ✗
     /// ```
     ///
-    /// 根子是末尾那道閘寫成了 `anchor > head`。倒着走的 `Span::Over` 是**閉區間**，
+    /// 要點是末尾那道閘不能寫成 `anchor > head`。倒着走的 `Span::Over` 是**閉區間**，
     /// 所以 `anchor == head` 說的是「選中一個字」；前一個詞只有一個字符（反引號、
-    /// 逗號、括號、「」都是）的時候，詞首那一下的錨點正好退到和 head 同一格，於是
-    /// 它被當成「没地方可去」交了 `Missed`——而 `Missed` 的意思是光標不動。
+    /// 逗號、括號、「」都是）的時候，詞首那一下的錨點正好退到和 head 同一格，它不許
+    /// 被當成「没地方可去」交 `Missed`——`Missed` 的意思是光標不動。
     ///
     /// 神諭量過（`helix-core`，`` aa `bb` cc ``，光標在第 4 格）：
     /// `anchor=4 head=3 span=[3,4) text="`"`——走到第 3 格，選中那個反引號。

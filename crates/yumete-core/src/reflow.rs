@@ -1,5 +1,5 @@
-//! **Filling lines to a width**: vim's `gq` and helix's `:reflow`
-//! (2026-10-29). Two references, two rules, because each keymap copies its
+//! **Filling lines to a width**: vim's `gq` and helix's `:reflow`.
+//! Two references, two rules, because each keymap copies its
 //! own:
 //!
 //! - [`refill_like_helix`] is helix's `reflow_hard_wrap`, word for word: the
@@ -125,8 +125,8 @@ pub fn fill_like_vim(lines: &[String], width: usize, code: bool) -> Vec<String> 
             Some((leader, text)) => {
                 let goes_on = match (&held, &leader) {
                     (Some((Leader::Again(was), _)), Leader::Again(now)) => was == now,
-                    // **A line opening with U+3000 is a paragraph of its own**
-                    // (2026-10-30, as decided): Chinese marks a paragraph by
+                    // **A line opening with U+3000 is a paragraph of its own**:
+                    // Chinese marks a paragraph by
                     // the two-square indent, not by a blank line, so `gq`
                     // must not run two of them together as vim would.
                     (Some((Leader::Plain(_) | Leader::Once(_), _)), Leader::Plain(indent)) => {
@@ -187,7 +187,7 @@ mod tests {
         fill_like_vim(&lines, width, code).join("\n")
     }
 
-    /// The cases nvim was asked (`nvim -u NONE`, `set tw=12`, 2026-10-29).
+    /// The cases nvim was asked (`nvim -u NONE`, `set tw=12`).
     #[test]
     fn gq_fills_as_nvim_does() {
         assert_eq!(
@@ -230,7 +230,7 @@ mod tests {
         assert_eq!(vim("# one two three", 9, true), "# one two\n# three");
     }
 
-    /// The case helix was asked (`x` then `:reflow 20`, 2026-10-29).
+    /// The case helix was asked (`x` then `:reflow 20`).
     #[test]
     fn reflow_refills_as_helix_does() {
         assert_eq!(

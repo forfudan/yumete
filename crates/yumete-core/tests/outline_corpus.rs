@@ -118,7 +118,7 @@ fn a_defective_copy_is_reported_as_it_is() {
 }
 
 /// 紅樓夢 marks its chapters plainly — 「第一回　甄士隱夢幻識通靈」 — and was
-/// the book that reported #390: its 目錄 ends 「第百二十回」, the 校閱參考 notes
+/// the book behind #390: its 目錄 ends 「第百二十回」, the 校閱參考 notes
 /// under it counted as writing, and that listing line got in *above* 第一回.
 #[test]
 fn the_last_line_of_a_listing_is_not_the_first_chapter() {

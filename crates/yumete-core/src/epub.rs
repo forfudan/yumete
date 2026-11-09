@@ -1,4 +1,4 @@
-//! **`:export epub`** (2026-11-08): the HTML export as a book a reader app
+//! **`:export epub`**: the HTML export as a book a reader app
 //! opens — Apple Books, Thorium, a Kobo — vertical and turning from right to
 //! left when the editor is.
 //!
@@ -49,7 +49,7 @@ pub fn book(text: &str, style: &Style) -> Vec<u8> {
         let kind = media_type(name).unwrap_or("image/png");
         let _ = writeln!(manifest, "<item id=\"f{}\" href=\"{name}\" media-type=\"{kind}\"/>", n + 1);
     }
-    // **Right to left exactly when the page is vertical** (2026-11-09), as
+    // **Right to left exactly when the page is vertical**, as
     // the stylesheet sets it: a vertical page read as English set its lines
     // from the right and turned its pages from the left.
     let (direction, mode) = match style.settings.vertical {
@@ -156,8 +156,8 @@ fn media_type(name: &str) -> Option<&'static str> {
     PICTURES.iter().find(|(e, _)| extension.eq_ignore_ascii_case(e)).map(|(_, kind)| *kind)
 }
 
-/// **Each picture taken into the book** (2026-11-08), a figure's and
-/// (2026-11-09) one in a line: read from beside the source, its path
+/// **Each picture taken into the book**, a figure's and
+/// one in a line: read from beside the source, its path
 /// percent-decoded as the preview reads it (`my%20pic.png`), and written
 /// into the page as a `data:` URL, for [`pictures_out`] to file. A picture
 /// that cannot be read — not there, on the web, of a type a book does not
@@ -200,9 +200,9 @@ fn pictures_in(body: &str, base: Option<&std::path::Path>) -> String {
     out
 }
 
-/// **A picture the writer wrote as HTML**, `<img src="a.png" alt="…">`
-/// (review, 2026-11-09: it stayed pointing out of the book, RSC-007), taken
-/// into the book as a picture written in Markdown is, its other attributes
+/// **A picture the writer wrote as HTML**, `<img src="a.png" alt="…">`,
+/// taken into the book as a picture written in Markdown is (a picture
+/// pointing out of the book is RSC-007), its other attributes
 /// kept; one that cannot be read leaves its `alt`. The page's own pictures,
 /// a figure's, one in a line and a drawn formula, are [`pictures_in`]'s and
 /// [`pictures_out`]'s.
@@ -264,9 +264,8 @@ fn alt_of(tag: &str) -> String {
 /// Each `data:` picture — a drawn formula, a figure taken in — written out
 /// into a file of its own, and the page pointing at it.
 ///
-/// **One file for each picture** (2026-11-09, reported: a picture shown ten
-/// times went into the book ten times): a picture whose bytes are already
-/// filed points at that file.
+/// **One file for each picture**, however many times it is shown: a
+/// picture whose bytes are already filed points at that file.
 fn pictures_out(body: &str) -> (String, Vec<(String, Vec<u8>)>) {
     const DATA: &str = "src=\"data:";
     let mut out = String::with_capacity(body.len());
@@ -306,13 +305,13 @@ fn pictures_out(body: &str) -> (String, Vec<(String, Vec<u8>)>) {
     (out, images)
 }
 
-/// **Links a book can follow**, and the rest as their words (2026-11-09,
-/// reported: `[x](x.html)` made the book one epubcheck refuses, RSC-007,
-/// the file not in the book): a link to the web or to a place in the page
+/// **Links a book can follow**, and the rest as their words (a link to a
+/// file the book does not hold, `[x](x.html)`, is one epubcheck refuses,
+/// RSC-007): a link to the web or to a place in the page
 /// stays a link; one to a file beside the manuscript, which the book does
 /// not hold, keeps its words, the target in their `title`. So does one in
-/// any scheme but `http`, `https` and `mailto` (review, 2026-11-09: a
-/// `file:` link, RSC-030), which a reader cannot follow from inside a book.
+/// any scheme but `http`, `https` and `mailto` (a `file:` link is
+/// RSC-030), which a reader cannot follow from inside a book.
 fn links_kept_in(body: &str) -> String {
     const OPEN: &str = "<a href=\"";
     let mut out = String::with_capacity(body.len());
@@ -392,8 +391,8 @@ fn alt_words(markup: &str) -> String {
     words.join(" ")
 }
 
-/// **Inline HTML the writer typed, made XML** (review, 2026-11-09: a
-/// `<span>` left open made the page one a reader refuses, RSC-016). A
+/// **Inline HTML the writer typed, made XML** (a `<span>` left open makes
+/// the page one a reader refuses, RSC-016). A
 /// browser closes what is left open and an XML reader does not, so here a
 /// tag that is closed in its place stays a tag; an attribute with no value
 /// (`<details open>`) or with an unquoted one is written out in full, and an
@@ -893,7 +892,7 @@ mod tests {
         let opf = String::from_utf8(files[2].1.clone()).unwrap();
         assert!(opf.contains("<spine>"), "{opf}");
         assert!(opf.contains("href=\"images/f1.png\" media-type=\"image/png\""), "{opf}");
-        // The two formulas drew the same picture: one file (2026-11-09).
+        // The two formulas drew the same picture: one file.
         assert!(!opf.contains("images/f2.png"), "{opf}");
         // No heading: the title is the file's name.
         assert!(opf.contains("<dc:title>第一章</dc:title>"), "{opf}");
@@ -903,7 +902,7 @@ mod tests {
         assert_eq!(files.len(), 7);
     }
 
-    /// **A figure's picture goes into the book** (2026-11-08), read from
+    /// **A figure's picture goes into the book**, read from
     /// beside the source and listed with its own type; one that cannot be
     /// read is left out and its caption kept.
     #[test]
@@ -923,8 +922,8 @@ mod tests {
         assert!(files.contains(&("OEBPS/images/f1.jpg".to_string(), vec![9, 8, 7])));
     }
 
-    /// **A vertical book turns from the right whatever its language**
-    /// (2026-11-09): the stylesheet sets it vertical-rl when the export is
+    /// **A vertical book turns from the right whatever its language**:
+    /// the stylesheet sets it vertical-rl when the export is
     /// vertical, and the spine says so with it; across, neither does.
     #[test]
     fn a_vertical_book_turns_from_the_right_in_any_language() {
@@ -940,7 +939,7 @@ mod tests {
         assert!(opf.contains("<spine>") && !opf.contains("vertical-rl"), "{opf}");
     }
 
-    /// **A book's page is well-formed XML** (2026-11-09): a form feed or
+    /// **A book's page is well-formed XML**: a form feed or
     /// another control character in the text, or in a heading, is not
     /// carried into it.
     #[test]
@@ -954,8 +953,8 @@ mod tests {
         assert!(page.contains("甲 乙丙。") && page.contains(">标题一</h1>"), "{page}");
     }
 
-    /// **A picture in a line goes into the book as a figure's does**
-    /// (2026-11-09), and a path written as a URL writes it is read as the
+    /// **A picture in a line goes into the book as a figure's does**,
+    /// and a path written as a URL writes it is read as the
     /// preview reads it, `%20` a space; a picture in a line that cannot be
     /// read leaves its words.
     #[test]
@@ -973,7 +972,7 @@ mod tests {
         assert!(page.contains("文中有图 <img class=\"inline\" src=\"images/f1.png\" alt=\"小图\"/> 在此"), "{page}");
         assert!(page.contains("又 不在 了。") && !page.contains("gone.png"), "{page}");
         assert!(page.contains("<img class=\"figure\" src=\"images/f2.png\" alt=\"有空格的图\"/>"), "{page}");
-        // The same picture twice is one file in the book (2026-11-09).
+        // The same picture twice is one file in the book.
         assert!(page.contains("<img class=\"figure\" src=\"images/f2.png\" alt=\"尖括号\"/>"), "{page}");
         assert!(files.contains(&("OEBPS/images/f1.png".to_string(), vec![1, 2, 3])));
         assert!(files.contains(&("OEBPS/images/f2.png".to_string(), vec![4, 5, 6])));
@@ -981,8 +980,8 @@ mod tests {
     }
 
     /// **A link to a file beside the manuscript keeps its words, not its
-    /// target** (2026-11-09, reported: `[x](x.html)` made a book epubcheck
-    /// refuses, RSC-007): the target goes in the words' `title`; a link to
+    /// target** (`[x](x.html)` would make a book epubcheck refuses,
+    /// RSC-007): the target goes in the words' `title`; a link to
     /// the web, a mail address or a note stays a link.
     #[test]
     fn a_link_to_a_file_outside_the_book_keeps_its_words() {
@@ -995,8 +994,8 @@ mod tests {
         assert!(page.contains("href=\"#fn-1\""), "{page}");
     }
 
-    /// **Only the web and mail are followed from a book** (review,
-    /// 2026-11-09: a `file:` link made epubcheck refuse it, RSC-030): a link
+    /// **Only the web and mail are followed from a book** (a `file:` link
+    /// makes epubcheck refuse it, RSC-030): a link
     /// in any other scheme keeps its words, as one to a file beside the
     /// manuscript does.
     #[test]
@@ -1009,8 +1008,8 @@ mod tests {
         assert!(page.contains("<a href=\"HTTPS://example.com\">") && page.contains("<a href=\"//example.com/x\">"), "{page}");
     }
 
-    /// **A link to a heading finds it** (review, 2026-11-09: `[锚点](#第二章)`
-    /// pointed at nothing, RSC-012): each heading's `id` is made from its
+    /// **A link to a heading finds it** (`[锚点](#第二章)` pointing at
+    /// nothing is RSC-012): each heading's `id` is made from its
     /// words as GitHub makes it, and the table of contents points there.
     #[test]
     fn a_link_to_a_heading_finds_it_and_so_does_the_contents() {
@@ -1027,8 +1026,8 @@ mod tests {
         assert!(nav.contains("<a href=\"text.xhtml#第一章-1\">第一章</a>"), "{nav}");
     }
 
-    /// **The writer's own HTML is made XML** (review, 2026-11-09: a `<span>`
-    /// left open made the page one a reader refuses, RSC-016): a tag closed
+    /// **The writer's own HTML is made XML** (a `<span>` left open makes
+    /// the page one a reader refuses, RSC-016): a tag closed
     /// in its place stays, written out in full; one left open or with
     /// nothing to close, or a block typed in a line of text, is its words.
     #[test]
@@ -1045,8 +1044,8 @@ mod tests {
         assert!(!page.contains("<span>"), "{page}");
     }
 
-    /// **A picture written as HTML goes into the book** (review, 2026-11-09:
-    /// `<img src="x.png">` pointed out of it, RSC-007), as one written in
+    /// **A picture written as HTML goes into the book** (`<img src="x.png">`
+    /// pointing out of it is RSC-007), as one written in
     /// Markdown does; one that is not there leaves its `alt`.
     #[test]
     fn a_picture_written_as_html_goes_into_the_book() {

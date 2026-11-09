@@ -13,9 +13,9 @@
 //! **Phase 1**（在做）讓它真的裝得下多段：[`Selections::normalize`] 那一套不變式、造出
 //! 第二段的鍵、移動與編輯作用在每一段上。
 //!
-//! Warning: **`goal_column` 和 `goal_slot` 都搬進 [`Range`] 了**（2026-09-28，那個「真的需要
-//! 各有一份」的時候到了：N 個光標一起按 `j`/`h`，得各記各的目標）。兩個量兩格——一個是
-//! 橫排的顯示列，一個是竪排的槽位，共用一格的話換一次版面就會拿列當槽位用。
+//! Warning: **目標列與目標槽位都記在 [`Range`] 裏**：N 個光標一起按 `j`/`h`，得各記各的
+//! 目標。兩個量兩格——一個是橫排的顯示列，一個是竪排的槽位，共用一格的話換一次版面就會
+//! 拿列當槽位用。
 //!
 //! **`zong_motion`、`extend`、`vim_lines` 還在 `Editor` 上**，只有一段的時候行為一樣，
 //! 等同一個理由出現再搬。
@@ -33,10 +33,9 @@ pub struct Range {
     pub head: usize,
     /// **`j`/`k` 瞄準的那一列**，`None` 是「還不知道，用時現算」。
     ///
-    /// Warning: **每一段各記一份，不是整個編輯器一份**（2026-09-28）。從前它是 `Editor` 上的
-    /// 一個 `goal_column`，只有一個光標的時候那和放在這裏一模一樣；N 段一起按 `j` 就不
-    /// 是了——N 段會一起瞄準主選區那一列。helix 也把它放在 `Range` 裏
-    /// （`old_visual_position`）。
+    /// Warning: **每一段各記一份，不是整個編輯器一份**。整個編輯器只記一格的話，只有一個
+    /// 光標的時候和放在這裏一模一樣；N 段一起按 `j` 就不是了——N 段會一起瞄準主選區那一列。
+    /// helix 也把它放在 `Range` 裏（`old_visual_position`）。
     ///
     /// Warning: **它進 `PartialEq`**，所以兩段兩端相同而目標列不同的選區不相等。`normalize`
     /// 靠值把主選區認回來，而排序不改值、合併會把合出來的那一段整個交回去，所以認得住。
@@ -157,15 +156,14 @@ impl Selections {
 
     // ---- 主選區的兩端 ---------------------------------------------------
     //
-    // 這四支是 Phase 0 的全部門面：從前直接讀寫 `editor.cursor` / `editor.anchor` 的那
-    // 三百多處，現在走這裏。Warning: 它們問的**永遠是主選區**——所以 Phase 1 加進第二段的時候，
-    // 這些呼叫點一個都不用改，它們本來就只該管主選區（比如狀態行上的「行 1, 列 1」）。
-    // 要作用在**全部**選區上的那些（移動、編輯），Phase 1 會換成別的入口。
+    // 這四支是主選區兩端的門面，讀寫光標與錨點的三百多處都走這裏。Warning: 它們問的
+    // **永遠是主選區**——這些呼叫點本來就只該管主選區（比如狀態行上的「行 1, 列 1」）。
+    // 要作用在**全部**選區上的那些（移動、編輯）走別的入口。
 
     /// **把每一段都收進 `0..=len` 裏。**
     ///
     /// Warning: 文本縮短之後（撤銷、刪掉一大段、換一份稿子）不收的話，那幾段還指着已經不存在
-    /// 的位置，而畫面那一支拿它們去切 rope——2026-09-28 真機上就是這麼崩的。
+    /// 的位置，而畫面那一支拿它們去切 rope，當場就崩。
     ///
     /// 收完整理一遍：兩段一起被壓到檔尾就是同一段了。
     pub fn clamp(&mut self, len: usize) -> usize {
@@ -284,7 +282,7 @@ impl Selections {
     /// 同一個地方會變成兩個。
     ///
     /// Warning: **合併是靜默地少掉一段**，所以呼叫方拿到的這個回傳值是要說給讀者聽的
-    /// （2026-09-28 定：命令行 murmur 三秒）。helix 不說，而中文更常撞上——打一個字要按
+    /// （命令行 murmur 三秒）。helix 不說，而中文更常撞上——打一個字要按
     /// 好幾下，相鄰的兩個光標很容易在中途撞到一起。
     pub fn normalize(&mut self) -> usize {
         if self.ranges.len() < 2 {
@@ -303,11 +301,11 @@ impl Selections {
                     // 「`prev` 的起點，到兩者較遠的那個終點」。
                     let lo = prev.span().0;
                     let hi = prev.span().1.max(one.span().1);
-                    // **Backward only when both were** (2026-10-27, helix's
-                    // `Range::merge`; measured: `b` from three cursors, the first
-                    // at the file's start, ends backward there). It used to
-                    // follow whichever came first. A one-character cursor faces
-                    // neither way, so it goes with the other.
+                    // **Backward only when both were** (helix's `Range::merge`;
+                    // measured: `b` from three cursors, the first at the file's
+                    // start, ends backward there), not whichever came first. A
+                    // one-character cursor faces neither way, so it goes with
+                    // the other.
                     // 目標列跟着先來的那一個：它是讀者先造出來的那一段。
                     let (goal, goal_slot) = (prev.goal, prev.goal_slot);
                     *prev = merged(*prev, one, lo, hi, goal, goal_slot);
@@ -327,7 +325,7 @@ impl Selections {
 }
 
 impl Selections {
-    /// **Merge selections that share a character, in Normal mode** (2026-10-27).
+    /// **Merge selections that share a character, in Normal mode**.
     ///
     /// [`Selections::normalize`] reads a range half-open, which is right in
     /// Insert mode, where the head is a gap between two characters. In Normal
@@ -463,8 +461,8 @@ mod tests {
         assert_eq!(s.primary().span(), (0, 100), "被併掉就認蓋住它的那一段");
     }
 
-    /// **A merged range faces backward only when both did** (2026-10-27,
-    /// helix's `Range::merge`; until then it followed the one that came first).
+    /// **A merged range faces backward only when both did** (helix's
+    /// `Range::merge`), not whichever came first.
     #[test]
     fn a_merged_range_faces_backward_only_when_both_did() {
         let mut s = Selections::at(0);

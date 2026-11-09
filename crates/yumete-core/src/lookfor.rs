@@ -276,10 +276,10 @@ fn wide_score(word: &str, text: &str, idf: &Idf) -> Option<f32> {
     for token in &wanted {
         let weight = idf.at(token);
         asked += weight;
-        // Warning: **一個字的詞要和正文的「字」比，不是和它的「二字組」比**
-        // （2026-10-06 量出來的）。正文切成二字組，而查詢只有一個字的時候
-        // [`tokens`] 交出來的是那一個字——兩邊永遠不相等，於是「行」整張表
-        // **一條都配不到**，而表裏有幾十行寫着「行」。
+        // Warning: **一個字的詞要和正文的「字」比，不是和它的「二字組」比**。
+        // 正文切成二字組，而查詢只有一個字的時候 [`tokens`] 交出來的是那一個
+        // 字——拿它和二字組比，兩邊永遠不相等，「行」整張表**一條都配不到**，而
+        // 表裏有幾十行寫着「行」。
         let there = match token.chars().count() {
             1 => text.contains(token.as_str()),
             _ => held.iter().any(|h| h == token),
@@ -288,8 +288,7 @@ fn wide_score(word: &str, text: &str, idf: &Idf) -> Option<f32> {
             shared += weight;
         }
     }
-    // **配不上整個詞的，按字再數一遍，算半分**（2026-10-06 定：「`::` will always
-    // print many possible matches for users to pick up」）。「排序」在表裏只有一行
+    // **配不上整個詞的，按字再數一遍，算半分**：`::` 總是多列幾條讓人挑。「排序」在表裏只有一行
     // 原樣寫着，而寫着「排」或「序」的有十幾行——讀者要的是那一張單子，排在
     // 真正配得上的那幾行後面。
     for token in &wanted {
@@ -386,10 +385,9 @@ pub struct Hit {
     pub score: f32,
 }
 
-/// **A command, or a key** (2026-10-06).
+/// **A command, or a key**.
 ///
-/// 原話：「we can instead enrich the current find command functionality by making
-/// it find commands **or shortcuts**」. The two are the same question asked of the
+/// The find command finds commands **or shortcuts**. The two are the same question asked of the
 /// same reader — 「怎麼把這一頁轉成竖排」 is answered by `:vertical` and by
 /// a key, and which of the two exists is the editor's business, not theirs.
 #[derive(Debug, Clone)]
@@ -505,7 +503,7 @@ pub fn look_above(query: &str, floor: f32) -> Vec<Hit> {
             crate::messages::Language::English => [e.en, e.zht, e.zhs],
         }
     };
-    // **命令和鍵在同一張單子上**（2026-10-06）。`actions::ALL` 本來就是一張「這個
+    // **命令和鍵在同一張單子上**。`actions::ALL` 本來就是一張「這個
     // 鍵叫什麼、做什麼」的表（#429 建的），所以這一步不是新造一份索引，是把已經
     // 有的兩份合起來問同一個問題。
     //
@@ -556,8 +554,7 @@ pub fn look_above(query: &str, floor: f32) -> Vec<Hit> {
     hits.sort_by(|a, b| {
         b.score.total_cmp(&a.score).then_with(|| a.written().cmp(&b.written()))
     });
-    // **很不像的那些不列出來**（2026-10-06 定：「with a likelihood-score threshold
-    // that block some very unlikely matches」）。
+    // **很不像的那些不列出來**：一道門檻擋掉很不可能的那幾條。
     //
     // 門檻是**相對最高分**的，不是一個絕對數：打得準的時候最高分很高，尾巴上那些
     // 只配到一個常用字的行就是噪音；打得含糊的時候滿屏都是低分，那時候一個絕對
@@ -569,7 +566,7 @@ pub fn look_above(query: &str, floor: f32) -> Vec<Hit> {
 
 /// 低於這個分的當噪音，不列出來。
 ///
-/// Warning: **是一個絕對分，不是「最高分的幾成」**（2026-10-06 量出來的）。按比例砍
+/// Warning: **是一個絕對分，不是「最高分的幾成」**。按比例砍
 /// 在有一行**原樣配中**的時候會把單子清空：`排序` 的頭一名 12.4（`:table-sort` 的
 /// `find` 裏就寫着這兩個字），四分之一是 3.1，於是二十三條只剩三條——而那正是
 /// 「多給幾條讓人挑」要的反面。
@@ -578,8 +575,7 @@ pub fn look_above(query: &str, floor: f32) -> Vec<Hit> {
 /// 配到一個常用字的散兵。
 pub const FAR_ENOUGH: f32 = 1.0;
 
-/// **`:` 那一行上的門檻，比 `::` 高**（2026-10-06 定：「we need to set a higher
-/// likelihood-score threshold for it than for the search command panel」）。
+/// **`:` 那一行上的門檻，比 `::` 高**。
 ///
 /// 兩扇面板問的不是同一個問題。`::` 是「我忘了它叫什麼」——多給幾條讓人挑；
 /// `:` 是「我正在打它的名字」，猜出來的那幾行只是補一句「也許你要的是這個」，
@@ -589,7 +585,7 @@ pub const SURE_ENOUGH: f32 = 4.0;
 /// `:` 那一行上最多補幾條猜的。
 pub const GUESSES: usize = 5;
 
-/// **只要命令，不要鍵**（2026-10-06）：`:` 那一行上打不出一個鍵來。
+/// **只要命令，不要鍵**：`:` 那一行上打不出一個鍵來。
 pub fn guesses(query: &str) -> Vec<crate::command::Choice> {
     if query.trim().is_empty() {
         return Vec::new();
@@ -667,9 +663,8 @@ mod tests {
             ranked.sort_by(|a, b| b.0.total_cmp(&a.0));
             ranked.first().map(|r| r.1).unwrap_or("—")
         };
-        // Warning: **`lyt` 從前對的是 `layout vertical`**（l-y-t 是那三個詞裏
-        // 挑出來的）。2026-10-12 那條命令改叫 `vertical`，`lyt` 自然就不對它
-        // 了——換一個真的在名字裏的縮寫。
+        // Warning: **縮寫要真的在名字裏**：那條命令叫 `vertical`，`lyt`
+        // 不對它。
         assert_eq!(best("vtcl"), "vertical");
         assert_eq!(best("tbsrt"), "table-sort");
     }

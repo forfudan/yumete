@@ -675,8 +675,7 @@ en = "the markup this file uses (no argument shows the current one)"
 find = "語法 语法 標記 标记 高亮 highlight filetype"
 
 [[message]]
-# : 命令選單裏 table 那一項的説明(commands 組)。從前這個名字是「進表格」那道門，
-# 2026-10-07 改成新建一張表，所以這一則接的是舊 `cmd.table.new` 那一句
+# : 命令選單裏 table 那一項的説明(commands 組)：`:table` 新建一張表
 key = "cmd.commands.table"
 zhs = "插入空表：`:table 3 4` 为三行四列，首行为表头；只能在空行使用"
 en = "insert an empty table: `:table 3 4` is three rows by four columns, the first row headings; only on a blank line"

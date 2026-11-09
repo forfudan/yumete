@@ -1,4 +1,4 @@
-//! **Legacy encodings** (2026-11-04): GB18030, Big5 and Shift-JIS, read and
+//! **Legacy encodings**: GB18030, Big5 and Shift-JIS, read and
 //! written back as they came.
 //!
 //! A file that is valid UTF-8 is UTF-8, always. Otherwise the detector
@@ -7,7 +7,7 @@
 //! byte. Anything else is refused as before: a Latin-1 file, a binary, UTF-8
 //! with one stray byte.
 //!
-//! Measured on samples of our own (research of 2026-11-04): from 16
+//! Measured on samples of our own from 16
 //! characters up the guess is right every time; below that a GB file may read
 //! as Big5 and the detector may not decide at all (41% of two-character GB
 //! files). So a file with fewer than [`SURE_FROM`] characters outside ASCII is
@@ -209,8 +209,8 @@ impl fmt::Display for Unencodable {
 
 impl std::error::Error for Unencodable {}
 
-/// **The characters a file can hold that the standard encoder cannot write**
-/// (2026-11-04): Big5's Hong Kong (HKSCS) range and Shift-JIS's user-defined
+/// **The characters a file can hold that the standard encoder cannot write**:
+/// Big5's Hong Kong (HKSCS) range and Shift-JIS's user-defined
 /// area. encoding_rs reads them, as the WHATWG standard says, and writes
 /// none of them, so a Cantonese file opened as Big5 could not be saved back
 /// untouched. The table is the decoder run backwards over every two-byte
@@ -377,7 +377,7 @@ mod tests {
         assert_eq!(encode(BIG5, "a简"), b"a&#31616;");
     }
 
-    /// **Hong Kong characters go back as they came** (review 2026-11-04):
+    /// **Hong Kong characters go back as they came**:
     /// encoding_rs reads Big5-HKSCS and writes none of it.
     #[test]
     fn a_big5_hkscs_file_saves_back_as_it_came() {

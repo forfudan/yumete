@@ -66,16 +66,16 @@ pub struct Run {
     /// 新檔這一側的行（0 起算）。剪口那兩種佔一行，是記號不是內容。
     pub at: Range<usize>,
     pub how: Change,
-    /// **改之前這裏寫的是什麼**（2026-10-11）。
+    /// **改之前這裏寫的是什麼**。
     ///
-    /// 從前 `parse` 只讀 `@@` 那一行、把 `-` 那幾行扔了——畫行號槽只要知道「這幾
-    /// 行動過」，而「改之前長什麼樣」要的正是被扔掉的那一半。純添的那一段是空的
+    /// `parse` 不只讀 `@@` 那一行、不扔 `-` 那幾行——畫行號槽只要知道「這幾
+    /// 行動過」，而「改之前長什麼樣」要的正是 `-` 那一半。純添的那一段是空的
     /// （本來就沒有舊文本）。
     pub was: Vec<String>,
     /// **`was` 那幾行在 `HEAD` 裏從第幾行起**（1 起算；沒有舊文本時是 0）。
     ///
     /// 行內 diff 給「刪掉的」那幾行標號要它——那幾行在現在這份檔裏沒有行號，
-    /// 而讀者要認出「原來第 2341 行寫的是什麼」（2026-10-11）。
+    /// 而讀者要認出「原來第 2341 行寫的是什麼」。
     pub was_at: usize,
 }
 
@@ -85,7 +85,7 @@ impl Changes {
         self.run_at(line).map(|run| run.how)
     }
 
-    /// **這一行屬於哪一段改動**，連它改之前寫的是什麼一起（2026-10-11）。
+    /// **這一行屬於哪一段改動**，連它改之前寫的是什麼一起。
     pub fn run_at(&self, line: usize) -> Option<&Run> {
         // 區間互不重疊且按起點排好，所以「起點 ≤ line 的最後一條」是唯一可能命中的。
         let i = self.runs.partition_point(|run| run.at.start <= line);
@@ -93,7 +93,7 @@ impl Changes {
         run.at.contains(&line).then_some(run)
     }
 
-    /// **下一處/上一處改動的起點行**（`]g`/`[g`，2026-10-06）。
+    /// **下一處/上一處改動的起點行**（`]g`/`[g`）。
     ///
     /// 走的是**段**不是行：`runs` 本來就是按起點排好、互不重疊的段，所以一段五行
     /// 的改動只算一處，按五下不會在它裏面爬。
@@ -123,23 +123,21 @@ impl Changes {
         self.runs.is_empty()
     }
 
-    /// **`HEAD` 裏那一份的正文**，拿來跟緩衝區比（2026-09-19）。
+    /// **`HEAD` 裏那一份的正文**，拿來跟緩衝區比。
     ///
-    /// 從前比的是**磁碟上那一份**，於是緩衝區裏剛打的行根本不在那次比較裏：在
-    /// 一段上面插一行，記號還釘在原來的行號上，看着就是「下面那一段的竪綫不見
-    /// 了」。helix 比的是緩衝區，這裏跟它一樣。
+    /// 不比**磁碟上那一份**：那樣緩衝區裏剛打的行根本不在比較裏，在一段上面插一行，
+    /// 記號還釘在原來的行號上，看着就是「下面那一段的竪綫不見了」。helix 比的是緩衝
+    /// 區，這裏跟它一樣。
     ///
     /// Warning: **兩邊都把行尾的 `\r` 去掉**。倉裏開着 `core.autocrlf` 的時候，`HEAD`
     /// 裏存的是 CRLF 而緩衝區是 LF——逐字節比會說**每一行都改過**，整篇亮起來。
     /// 這正是 helix 在同一個檔案上掉進去的坑（`git diff` 自己不會，因為它兩邊都
     /// 過一遍 git 的換行轉換；`--no-index` 不過）。
-    /// **`HEAD` 此刻指着哪一個提交**——不喊 git，只讀兩個檔（2026-10-11 報的）。
+    /// **`HEAD` 此刻指着哪一個提交**——不喊 git，只讀兩個檔。
     ///
     /// 提交之後檔案一個字節都沒變，變的是 `HEAD`，所以按檔的 mtime 或者 buffer 的
     /// `revision` 判「要不要重算」的那一套看不見它：行號槽上的改動條一直是提交前
-    /// 的樣子，直到人手動 `:reload`。原話：「the problem is not about
-    /// autoreloading the file per se as the file is the same. It is about the
-    /// detection of the git HEAD.」
+    /// 的樣子，直到人手動 `:reload`。要偵測的是 `HEAD`，不是重讀檔案。
     ///
     /// 答的是一個**指紋**，不是提交號：`.git/HEAD` 的內容（分支名，或者 detached
     /// 時就是提交號）加上它指的那個 ref 檔的內容。切分支、提交、rebase、reset
@@ -190,7 +188,7 @@ impl Changes {
     /// 呼叫方不必先算出倉根在哪。`current_dir` 是檔案自己那一層——編輯器開着兩個
     /// 倉裏的檔是常事，呼叫者的 cwd 說了不算。
     ///
-    /// The committed bytes are read in `encoding`, the buffer's (2026-11-04):
+    /// The committed bytes are read in `encoding`, the buffer's:
     /// a Big5 file read back as UTF-8 marked every line changed.
     pub fn text_at(
         path: &Path,
@@ -230,7 +228,7 @@ impl Changes {
             let s = s.strip_prefix('\u{feff}').unwrap_or(s);
             s.split('\n').map(|l| l.trim_end_matches('\r')).collect::<Vec<_>>().join("\n")
         };
-        // **A directory of its own for each call** (2026-10-29): one per
+        // **A directory of its own for each call**: one per
         // process let two callers at once — two tests on two threads — write
         // over each other's `head` and delete the directory under the other.
         static CALLS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -318,7 +316,7 @@ fn hunk(header: &str) -> Option<(usize, usize, usize, usize)> {
         }
     };
     // `old_at` 是**這一段在 `HEAD` 裏從第幾行起**（1 起算）。行內 diff 要拿它給
-    // 「刪掉的」那幾行標號——那幾行在現在這份檔裏根本沒有行號（2026-10-11）。
+    // 「刪掉的」那幾行標號——那幾行在現在這份檔裏根本沒有行號。
     let (old_at, old_n) = count(old, '-')?;
     let (new_at, new_n) = count(new, '+')?;
     Some((old_at, old_n, new_at, new_n))
@@ -338,7 +336,7 @@ fn parse(diff: &str, lines: usize) -> Changes {
             // Warning: **`---` 是檔頭不是刪掉的行。** `-U0` 的輸出頭上有
             // `--- a/…`，照收就會把它當成原文的第一行。
             //
-            // **But only before a hunk** (2026-10-30): inside one, a removed
+            // **But only before a hunk**: inside one, a removed
             // line that is itself `---` (a Markdown rule, a front-matter fence)
             // shows as `----`, and skipping it lost that line on restore. A hunk
             // owes exactly its old count of `-` rows; those are taken whatever
@@ -408,7 +406,7 @@ fn parse(diff: &str, lines: usize) -> Changes {
     Changes { runs }
 }
 
-/// **Where a changed file stands with git** (2026-10-31): the colour of its
+/// **Where a changed file stands with git**: the colour of its
 /// letter in the changed-files picker.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Staging {
@@ -432,7 +430,7 @@ pub struct FileStatus {
 }
 
 /// **Every changed file in the repository holding `dir`**, and that
-/// repository's top (2026-10-31, `Space g`).
+/// repository's top (`Space g`).
 ///
 /// One `git status` for the whole repository, asked when the picker opens,
 /// never while drawing. `None` outside a repository or without git.
@@ -506,8 +504,8 @@ mod tests {
         assert_eq!(Changes::default().hunk_at_the_end(true), None);
     }
 
-    /// `git status -z` read into VS Code's letters, coloured by the index
-    /// (2026-10-31): what is all staged is green, what still has working-tree
+    /// `git status -z` read into VS Code's letters, coloured by the index:
+    /// what is all staged is green, what still has working-tree
     /// changes is gold, a conflict red.
     #[test]
     fn status_is_read_into_letters_and_staging() {
@@ -529,9 +527,9 @@ mod tests {
         assert_eq!(got, want);
     }
 
-    /// **改之前寫的是什麼，也要留着**（2026-10-11）。
+    /// **改之前寫的是什麼，也要留着**。
     ///
-    /// `-U0` 的 `-` 那幾行從前整個扔了，而「看這一塊改前長什麼樣」要的正是它們。
+    /// `-U0` 的 `-` 那幾行不扔：「看這一塊改前長什麼樣」要的正是它們。
     #[test]
     fn a_change_remembers_what_the_line_used_to_say() {
         let c = parse(
@@ -555,7 +553,7 @@ mod tests {
         );
     }
 
-    /// **A removed `---` is a removed line** (2026-10-30): a Markdown rule or
+    /// **A removed `---` is a removed line**: a Markdown rule or
     /// a front-matter fence shows as `----` inside a hunk, and was skipped as
     /// a file header, so restoring the change lost it.
     #[test]

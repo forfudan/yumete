@@ -8,8 +8,8 @@
 //!
 //! `block_of(line)` is the same answer out of the same cache with no copy. The
 //! antipattern is invisible in review (`blocks_through(l).get(l)` reads exactly
-//! like what it means) and it came back twice after being fixed once, so it is
-//! read out of the source here rather than remembered.
+//! like what it means) and it creeps back in, so it is read out of the source
+//! here rather than remembered.
 
 /// Every `.rs` file of the workspace's source.
 fn sources() -> Vec<(String, String)> {

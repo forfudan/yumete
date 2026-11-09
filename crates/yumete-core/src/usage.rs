@@ -178,9 +178,9 @@ pub fn check(text: &str, extra: &[String]) -> Vec<Slip> {
     //
     // **The reader's own groups first among equals.** `sort_by_key` is stable,
     // so whichever side is chained first wins a spelling the two share — and
-    // the built-ins winning meant a config of `裡 裏` could never be honoured:
-    // both spellings landed in the built-in group, which is written `裏 裡`, so
-    // the scan reported the opposite of what the reader had asked for. The
+    // with the built-ins winning, a config of `裡 裏` could never be honoured:
+    // both spellings would land in the built-in group, which is written `裏 裡`,
+    // and the scan would report the opposite of what the reader asked for. The
     // group numbering is untouched by this; only which group claims a hit is.
     let mut all: Vec<(usize, &str)> = owned
         .iter()

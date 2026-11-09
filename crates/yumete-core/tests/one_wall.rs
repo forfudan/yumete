@@ -1,7 +1,7 @@
 //! A separator is a separator (#378).
 //!
-//! 2026-09-11：「markdown 中的表格使用 | 分隔，tsv 用 tab，csv 用
-//! 逗号。他们本质上都是分隔符。所以 tb / tf 模式下他们显示效果应该是一样的。」
+//! A Markdown table separates with `|`, a TSV with a tab, a CSV with a comma:
+//! all three are separators, so under `t b` they look the same.
 //!
 //! So these tests are written the same way for all of them: one table, said in
 //! four punctuations, and the assertion is that the page cannot tell which one
@@ -98,7 +98,7 @@ fn the_levels_mean_the_same_thing_whatever_the_punctuation() {
         );
 
         // **One level squares the columns up**, since `t f` was folded into
-        // `t b` (2026-10-21). 全窗 lines them up too, but it draws its own
+        // `t b`. 全窗 lines them up too, but it draws its own
         // grid out of the schema rather than padding the page — which is a
         // different question, asked by `nothing_drawn_into_a_page_replaces_what_you_typed`.
         press(&mut ed, " tb");
@@ -131,12 +131,11 @@ fn only_the_pipe_is_written_with_a_space_off_it() {
 
 /// A column is measured over **the rows on the page** — because a delimited
 /// file's table *is* the file: the 碼表 this editor exists for is 124,083 rows,
-/// and measuring them all took 160 ms on every keystroke.
+/// and measuring them all takes 160 ms on every keystroke.
 ///
-/// The window was one page either side of the row being asked about until
-/// 2026-09-11：「可以都只量屏幕上的吗？」It can, and it
-/// should: the wider window let a cell a page below the screen widen every
-/// column in view with nothing visible to say why.
+/// Not a page either side of the row being asked about: that wider window
+/// lets a cell a page below the screen widen every column in view with
+/// nothing visible to say why.
 #[test]
 fn a_table_is_measured_over_what_is_on_the_page() {
     use yumete_core::mdtable::measured_window;
@@ -167,35 +166,26 @@ fn a_table_is_measured_over_what_is_on_the_page() {
     }
 }
 
-/// **The level does not decide what `hjkl` mean — the layer does**
-/// (2026-10-21).
+/// **The level does not decide what `hjkl` mean — the layer does**.
 ///
-/// Written down as a test because the doc comment that answered this has now
-/// been wrong twice, and each time it was read as law. 2026-09-11 it still
-/// said 「they walk cells」, and an argument against recognising a delimited
-/// file on open was built on it (「自动进 tb 会悄悄改掉 hjkl 的含义」) —
-/// answered then with 「tb tf to 模式都是按字走的不是按格走的」. Which is what
-/// it said next, until the layers made *that* the wrong half: a grid now opens
-/// at its top layer, where one press is one cell, and `Enter` goes down to the
-/// characters. A comment cannot fail; this can.
+/// Written down as a test because a doc comment answering it is read as law
+/// and cannot fail; this can. A grid opens at its top layer, where one press
+/// is one cell, and `Enter` goes down to the characters.
 ///
-/// What survives both turns is the sentence the test is named for: **the three
-/// levels that draw a grid walk alike**, and 源碼模式 has no grid to walk.
+/// **The levels that draw a grid walk alike**, and 源碼模式 has no grid to
+/// walk.
 #[test]
 fn the_levels_leave_hjkl_to_the_layer() {
-    // Warning: **全窗 is a different model, not a third level** (2026-10-17 作者定:
-    // 「to, tb, tf are about the texts (content + separators though
-    // rendered), and tt is only about the content」). Since 2026-10-21 that
-    // sentence has teeth. `t f` is folded into `t b`, and what is left is a
-    // document that lines its columns up — 「`tb` is for convenient. It
-    // preserves some basic navigation feature of a normal document but allow
-    // to have some table features like visual alignment, tab navigation.」 So
-    // `l` there is a letter, separator and all, as it is in 源碼模式.
+    // Warning: **全窗 is a different model, not a third level**: `t o` and
+    // `t b` are about the text (content and separators, however drawn), and
+    // `t t` only about the content. `t b` is a document that lines its
+    // columns up — it keeps a normal document's navigation and adds a
+    // table's visual alignment and tab navigation. So `l` there is a letter,
+    // separator and all, as it is in 源碼模式.
     //
     // 全窗 is where a cell is a container: `Enter` goes inside one and `l`
-    // walks the two characters of `ch`. At the cell's edge it steps into the
-    // one next door — 2026-10-22 作者定,「往上對齊:h/l 也跨」, which is what
-    // the arrows in Insert have always done.
+    // walks the two characters of `ch`. At the cell's edge `h`/`l` step into
+    // the one next door, as the arrows in Insert do.
     let walk = |ed: &mut Editor| {
         let mut seen = vec![ed.cursor()];
         for _ in 0..3 {
@@ -230,17 +220,13 @@ fn the_levels_leave_hjkl_to_the_layer() {
 }
 
 /// **The page keeps nothing of a table off it, so there is nothing to step
-/// over** (2026-10-22 定：「in the document (`tb` mode) …we promised users that
-/// in `tb` mode, no letters or symbols from the source code is hidden」).
+/// over**: under `t b` no letter or symbol of the source is hidden.
 ///
-/// This is where #379 stood. 2026-09-11：「如果我一直按 l，光标是定住不动的，
-/// 然后突然跳到右边一格……既然没有显示，就应该允许用户直接跳过去。」 The run it
-/// was about was the file's own padding, which came off the page **because the
-/// cell's tail did** — fold the writing to the cap and the spaces behind it
-/// went with it. Nothing folds on the page now, so the padding is drawn where
-/// the file wrote it and every press of `l` moves something a reader can see.
-/// The skipping itself is still there for what is still off the page: a 竪排
-/// row's slack, and the markup ([`Editor::cell_hidden_on_line`]).
+/// #379: pressing `l` over a run the page does not draw must not leave the
+/// cursor standing still and then jump. Nothing of a cell folds on the page,
+/// so the file's own padding is drawn where the file wrote it and every press
+/// of `l` moves something a reader can see. The skipping is there for what
+/// is off the page: a 竪排 row's slack, and the markup ([`Editor::cell_hidden_on_line`]).
 #[test]
 fn the_page_keeps_nothing_of_a_table_off_it() {
     let long = "甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥天地玄黃宇宙洪荒日月盈昃";

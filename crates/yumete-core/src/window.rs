@@ -1,4 +1,4 @@
-//! **Windows**: how the editing area of the screen is divided (2026-10-30).
+//! **Windows**: how the editing area of the screen is divided.
 //!
 //! The screen has up to four *regions*: the editing windows and the two
 //! sidebars. This is the windows' half — a binary tree whose leaves are
@@ -12,7 +12,7 @@
 //! shows — its buffer, its place in it — is the editor's (`Pane`), and what
 //! it scrolls to is the front end's. The tree never looks inside a window.
 //!
-//! Decided 2026-10-30 (the four questions): the editing areas are windows and
+//! The editing areas are windows and
 //! the sidebars stay sidebars, with 「region」 the word for either; any number
 //! of windows, limited by the room on screen rather than by a count; helix's
 //! keys open them, `C-w v` beside and `C-w s` below; a new window shows the
@@ -29,7 +29,7 @@ pub enum Split {
     /// Side by side: the second half to the right of the first — or to its
     /// left when the split was opened from the right, as one opened from a
     /// 縱書 page is. Which of the two is the split's own, kept from when it
-    /// was made (2026-11-08): switching the layout moves no window.
+    /// was made: switching the layout moves no window.
     Beside,
     /// One above the other: the second half under the first.
     Below,
@@ -147,7 +147,7 @@ impl Windows {
 
     /// [`Self::split`], the new window going `before` `at` — above it or
     /// to its left, as vim's `:split` and `:vsplit` open one
-    /// (`nosplitbelow`, `nosplitright`; measured in nvim 2026-11-04). `rtl`
+    /// (`nosplitbelow`, `nosplitright`; measured in nvim). `rtl`
     /// lays a **beside** split out from the right, its first half on the
     /// right, as one opened from a 縱書 page is; the split keeps it.
     pub fn split_on(&mut self, at: WindowId, how: Split, before: bool, rtl: bool) -> Option<WindowId> {
@@ -200,7 +200,7 @@ impl Windows {
 
     /// The window that takes `id`'s place when it closes: the next window
     /// of its row or column, or the one before when it is the last — vim's
-    /// choice (`nosplitbelow`; measured in nvim 2026-11-04). A neighbour
+    /// choice (`nosplitbelow`; measured in nvim). A neighbour
     /// split the other way answers its window touching `id`. `None` for the
     /// last window.
     pub fn heir(&self, id: WindowId) -> Option<WindowId> {
@@ -521,7 +521,7 @@ mod tests {
     use super::*;
 
     /// vim's `C-w x` `r` `R` `H` `J` `K` `L`, each as nvim did it
-    /// (2026-11-03, `winlayout()` before and after) on three windows
+    /// (`winlayout()` before and after) on three windows
     /// stacked, and on one of them split beside.
     #[test]
     fn a_row_exchanges_rotates_and_a_window_goes_to_an_edge() {
@@ -644,7 +644,7 @@ mod tests {
         assert_eq!(w.row_of(1).len(), 3);
     }
 
-    /// Splits laid out each its own way share a screen (2026-11-08): a
+    /// Splits laid out each its own way share a screen: a
     /// preview opened to the right of a window whose row was opened from the
     /// right stays to its right, and the row stays as it was.
     #[test]
@@ -667,7 +667,7 @@ mod tests {
     }
 
     /// A row shares its room equally, however its splits were made, as
-    /// nvim's and helix's do (2026-11-04): three stacked in 40 rows less
+    /// nvim's and helix's do: three stacked in 40 rows less
     /// two rules, three beside after `C-w L` from a column.
     #[test]
     fn a_row_shares_its_room_equally() {
@@ -709,7 +709,7 @@ mod tests {
 
     #[test]
     fn the_heir_is_the_window_that_takes_the_room() {
-        // Three stacked, as vim measured 2026-10-31: the middle's room and
+        // Three stacked, as measured in vim: the middle's room and
         // the keys go below, the top's to the middle, the bottom's up.
         let mut w = Windows::one();
         let two = w.split(1, Split::Below).unwrap();

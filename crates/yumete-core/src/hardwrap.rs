@@ -1,5 +1,5 @@
 //! **`:hard-wrap`: re-filling lines to a width without changing what they
-//! mean** (2026-10-30).
+//! mean**.
 //!
 //! Two fillers already live in [`crate::reflow`], and both are copies: vim's
 //! `gq` and helix's `:reflow`, kept faithful to their originals. Measured on
@@ -31,7 +31,7 @@
 //!   code line, including one with a comment after the code, is left alone.
 //!   A Python or Mojo docstring — `"""` right after a `def`, a `class` or at
 //!   the top of the file — is documentation, and its body is filled; every
-//!   other string is never touched (decided 2026-10-30).
+//!   other string is never touched.
 //!
 //! A comment's or a quote's body is read as Markdown in turn, so a fenced
 //! example inside a `///` is skipped and a list inside a `>` hangs.
@@ -95,8 +95,8 @@ pub fn hard_wrap(lines: &[String], syntax: Syntax, width: usize) -> Vec<String> 
     hard_wrap_within(lines, syntax, width, 0..lines.len())
 }
 
-/// The lines of `range` filled, **read in the context of the whole file**
-/// (2026-11-02): a selection inside a fence is the fence's code, and a
+/// The lines of `range` filled, **read in the context of the whole file**:
+/// a selection inside a fence is the fence's code, and a
 /// selection that starts in the middle of a list item is still that item.
 /// Lines outside the range are never touched, so a unit is cut where the
 /// range is.
@@ -1091,7 +1091,7 @@ mod tests {
         assert_eq!(unit_around(&lines, Syntax::Markdown, 8), None);
     }
 
-    /// Found in the review before 0.16.0 (2026-11-02): each of these changed
+    /// Found in the review before 0.16.0: each of these changed
     /// what the text says.
     #[test]
     fn an_opening_quote_takes_the_whole_word() {

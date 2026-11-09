@@ -57,14 +57,13 @@ pub struct Grid<'a> {
     /// writing rather than asterisks — the same thing a ruby group's tags have
     /// always done.
     ///
-    /// **Handed in, never re-derived.** This used to be a `bool` and the
-    /// answer was worked out here, from the bare line, as
-    /// `markdown::spans(text)` — with no syntax and no block. So a 縱書 page
-    /// ate the `**` inside a code fence, hid two asterisks where Typst has
-    /// one, and hid four characters under `:syntax text`, while the horizontal
-    /// page — which is *given* the answer, by [`crate::wrap::Measure`] — hid
-    /// exactly none. One document, two pages, and no test could see it,
-    /// because each side asked its own implementation.
+    /// **Handed in, never re-derived.** Worked out here from the bare line
+    /// (`markdown::spans(text)`, with no syntax and no block), a 縱書 page
+    /// would eat the `**` inside a code fence, hide two asterisks where Typst
+    /// has one, and hide four characters under `:syntax text`, while the
+    /// horizontal page — which is *given* the answer, by
+    /// [`crate::wrap::Measure`] — hides none. One document, two pages, and no
+    /// test could see it, because each side would ask its own implementation.
     hidden: &'a dyn Fn(usize) -> Vec<(usize, usize)>,
     /// **Which document, and which version of it** — for the memo, and for
     /// nothing else.
@@ -88,7 +87,7 @@ pub struct Grid<'a> {
     pub ruby: Dialects,
     /// Whether a recognised ruby group's **reading** is dealt down the margin
     /// and its base centred against it — or the group is only the base, with
-    /// its tags off the page (`:view-margin never`, 2026-09-16).
+    /// its tags off the page (`:view-margin never`).
     ///
     /// Warning: **Not the same question as `ruby`**, and the reason this is a second
     /// field: turning the dialects off to hide the readings — which is what
@@ -110,7 +109,7 @@ pub struct Grid<'a> {
     /// Which whole lines are not on the page (Feature #159) — by the same
     /// argument: one rule for folding a blank line, and both layouts ask it.
     folded: &'a dyn Fn(usize) -> bool,
-    /// **Whether `line` is drawn as a row of a turned table** (2026-09-19).
+    /// **Whether `line` is drawn as a row of a turned table**.
     ///
     /// Handed in rather than worked out here, for the same reason `hidden` is:
     /// the answer needs the page's layout, the table level and whether the line
@@ -130,8 +129,8 @@ pub struct Grid<'a> {
     /// to a row, hung right, is what a reader of vertical text expects. It stays
     /// available because a two-digit year genuinely does read better packed.
     ///
-    /// **A count, not a switch** (2026-09-21: 「對於比較短的單詞和數字，把他們
-    /// 直接 inline 顯示，撐大縱距似乎也是可行的」). Two is what fits the grid;
+    /// **A count, not a switch**: a short word or number is set inline, and
+    /// widening the 縱 for it is acceptable. Two is what fits the grid;
     /// a longer group is set in one row all the same and hangs out into the
     /// 行間, which is what print does with a three- or four-digit one. See
     /// [`TATECHUYOKO_MAX`] for where it stops and why.
@@ -432,9 +431,9 @@ impl Slot {
 /// what real typesetting does and is why two adjacent readings never collide.
 /// …with **nothing off the page**, whatever the grid was told.
 ///
-/// The name says so now: this used to be spelled `line_slots`, take a `Grid`
-/// carrying the answer, and ignore it — public API that contradicts the value
-/// it is handed. Everything that draws goes through [`line_slots_in`].
+/// The name says so: it takes a `Grid` and ignores the hidden runs, and a
+/// public API must not contradict the value it is handed. Everything that
+/// draws goes through [`line_slots_in`].
 pub fn line_slots_plain(text: &str, grid: Grid) -> Vec<Slot> {
     line_slots_in(text, grid, &[])
 }
@@ -442,8 +441,8 @@ pub fn line_slots_plain(text: &str, grid: Grid) -> Vec<Slot> {
 /// [`line_slots`], told which characters of this line are off the page.
 ///
 /// The ranges are columns within the line and come from the editor — the same
-/// answer the horizontal page is given. This function used to work them out
-/// itself and got them wrong in three ways; see [`Grid::hidden`].
+/// answer the horizontal page is given. This function does not work them out
+/// itself; see [`Grid::hidden`] for the three ways that goes wrong.
 pub fn line_slots_in(text: &str, grid: Grid, hidden: &[(usize, usize)]) -> Vec<Slot> {
     let chars: Vec<char> = text.chars().collect();
     let groups = crate::ruby::groups(&chars, grid.ruby);
@@ -616,25 +615,25 @@ fn push_plain(
         // 標點旁置: a 句讀 mark stops being a row of its own and hangs beside the
         // character it follows. It joins that character's slot, so the wrap
         // length, the cursor and every motion agree that 「文。」 is one row.
-        // …**whatever came off the page just before it**. This used to give up
-        // the moment a hidden run had been swallowed, so 那年**冬天**。 took a
-        // whole square for its 。 while 那年冬天。 hung it — turning
-        // 所見即所得 on quietly turned 標點旁置 off. The run has somewhere to
-        // go in every branch below: it joins whichever slot the mark joins.
+        // …**whatever came off the page just before it**. A swallowed hidden
+        // run must not stop the hanging, or 那年**冬天**。 takes a whole square
+        // for its 。 while 那年冬天。 hangs it — 所見即所得 would quietly turn
+        // 標點旁置 off. The run has somewhere to go in every branch below: it
+        // joins whichever slot the mark joins.
         if grid.hanging && body.chars().count() == 1 {
             let mark = body.chars().next().expect("one character");
             // The half-width form is what hangs, and a mark that has none does
             // not hang at all — it keeps its square. So this is one question,
-            // not two, and the two can no longer disagree.
+            // not two, and the two cannot disagree.
             if let Some(hung) = yumete_cjk::margin_form(mark) {
                 // **An opener still waiting goes into the margin first.** It is
                 // waiting for the character it introduces, and a mark is not
-                // that character — so `（；，。` used to leave the （ to be
-                // attached to whatever came *after* the three marks, giving its
-                // row a start behind rows already pushed. `position` looks a
-                // caret up in these rows with a binary search, which needs them
-                // in document order and answered quietly with the wrong row
-                // when they were not.
+                // that character — left waiting, `（；，。` would attach the （
+                // to whatever came *after* the three marks, giving its row a
+                // start behind rows already pushed. `position` looks a caret up
+                // in these rows with a binary search, which needs them in
+                // document order and answers quietly with the wrong row when
+                // they are not.
                 if let Some((opened_at, _earlier)) = opening.take() {
                     // Warning: **Its own square, not an empty one with the glyph in
                     // the margin** (#231): an opener that never reached a base
@@ -675,10 +674,10 @@ fn push_plain(
                     }
                     // **Two marks running do not hang at all.** `。」` ends
                     // most sentences of Chinese dialogue, and only one of them
-                    // can sit beside the character it follows — so the second
-                    // used to take a margin row of its own with the text
-                    // square beside it left empty, which is the hole a reader
-                    // sees in the middle of the column.
+                    // can sit beside the character it follows — the second
+                    // would take a margin row of its own with the text square
+                    // beside it left empty, which is the hole a reader sees in
+                    // the middle of the column.
                     //
                     // Print does not do that. JLREQ §3.1.4① and clreq §6.3.2.2
                     // set a 句點 followed by a closing bracket **solid**: each
@@ -757,9 +756,9 @@ fn push_plain(
                     // **Anything else that finds the margin taken keeps its
                     // own square** — Feature #231.
                     //
-                    // Warning: It used to take a margin row with the text square
-                    // beside it **empty**, which is a hole in the middle of
-                    // the column — and not a rare one: 秋「冬」」 makes two of
+                    // Warning: A margin row with the text square beside it
+                    // **empty** is a hole in the middle of the column — and not
+                    // a rare one: 秋「冬」」 makes two of
                     // them and 春（。）」 makes four, because a base already
                     // carrying an opener has no margin left to give. A row is
                     // a row either way, so putting the glyph in the square
@@ -891,7 +890,7 @@ fn push_ruby(
     let rows = rows.max(1);
     // **And the reading is centred against the base** (JLREQ §3.3.6), which is
     // the same rule the base follows against the span two lines up. A reading
-    // shorter than what it reads — 「上海話」 read 「zon」 — used to start at
+    // shorter than what it reads — 「上海話」 read 「zon」 — must not start at
     // the group's first row and stop two rows above the base's last, pointing
     // at the top character rather than at the word.
     //
@@ -915,12 +914,11 @@ fn push_ruby(
             // sit in document order — or the rows stop being sorted and nothing
             // can look the cursor up in them.
             //
-            // **The group's own markup lives on the first of them.** It used to
-            // be given to the first row as an afterthought, which wrote
-            // `start = group.start` onto a row whose range was empty — so
-            // `<ruby>` belonged to no slot at all, the caret for those six
-            // characters collapsed onto a blank square, and with 標點旁置 on it
-            // happened to *every* ruby group.
+            // **The group's own markup lives on the first of them.** Written as
+            // `start = group.start` onto a row whose range is empty, `<ruby>`
+            // would belong to no slot at all, the caret for those six
+            // characters would collapse onto a blank square, and with 標點旁置
+            // on it would happen to *every* ruby group.
             None if row == 0 => (group.start, group.base.0, String::new()),
             None if row < top => (group.base.0, group.base.0, String::new()),
             None => (base_end, base_end, String::new()),
@@ -977,7 +975,7 @@ fn push_ruby(
 }
 
 /// **Which characters take their vertical presentation form** — decided by the
-/// `:render` level (2026-10-30, as decided).
+/// `:render` level.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Forms {
     /// `:render off`: the file's own characters, 。 and 「 as typed.
@@ -1076,10 +1074,9 @@ fn slot_offsets(text: &str, at_most: usize) -> Vec<usize> {
 
 /// Where each 縱 of a line begins, counted in slots.
 ///
-/// **The one place a 縱 boundary is decided.** It used to be decided in five —
-/// every one of them `index * zong_len` — which is why 禁則處理 could not be
-/// added: any adjustment made in one of them would have disagreed with the
-/// other four about which character the cursor was standing on.
+/// **The one place a 縱 boundary is decided.** Decided in several places,
+/// 禁則處理 could not be added: any adjustment made in one of them would
+/// disagree with the others about which character the cursor stands on.
 ///
 /// The rule is [`wrap::adjusted_break`]'s, turned ninety degrees: a 縱 may not
 /// open with a mark that closes something (。、」）) and may not close with one
@@ -1098,7 +1095,7 @@ fn zong_breaks(
     // **The character the reader sees**, not the one the range begins with.
     // 禁則 is about what stands at the head and the foot of a 縱, and a slot
     // that swallowed a hidden run begins at the `*` — so with 所見即所得 on,
-    // 。 was read as an asterisk and allowed to open a column, which is the one
+    // 。 would be read as an asterisk and allowed to open a column, which is the one
     // thing 禁則處理 exists to prevent. A row with nothing but markup in it
     // reports a space, which no rule forbids anywhere.
     let is_hidden = |at: usize| hidden.iter().any(|&(a, b)| at >= a && at < b);
@@ -1177,7 +1174,7 @@ fn zong_breaks(
                 || crate::wrap::forbidden_at_row_start(char_of(cut))
                 || crate::wrap::forbidden_at_row_end(char_of(cut - 1))
         };
-        // Warning: **A retreat that does not help is not taken** (2026-10-20), the
+        // Warning: **A retreat that does not help is not taken**, the
         // same rule the horizontal page keeps (`wrap::row_end`) — a run of 連接號
         // offends 行首禁則 at every boundary, so retreating shortened the 縱 and
         // satisfied nothing. The two pages have to agree about where a
@@ -1315,8 +1312,8 @@ fn lay_out(rope: &Rope, line: usize, grid: Grid, hidden: &[(usize, usize)]) -> L
     let text = line_text(rope, line);
     let chars: Vec<char> = text.chars().collect();
     let groups = crate::ruby::groups(&chars, grid.ruby);
-    // **A table row is one 縱, however long** (2026-09-19: 「你保證竪排
-    // 模式表格也是非 wrap 的」).
+    // **A table row is one 縱, however long**: a table does not wrap in
+    // 竪排 either.
     //
     // Turning a grid a quarter turn is the whole of what 竪排 does to a table
     // — a row becomes a 縱, a column becomes a band down it, and every
@@ -1347,16 +1344,14 @@ fn zong_span(breaks: &[usize], total: usize, index: usize) -> (usize, usize) {
 /// vertically but are not the manuscript: the 百科 float, and whatever joins it.
 ///
 /// One entry point rather than 「wrap it horizontally and then chop the rows up
-/// by hand」, which is what the panel did first and which is wrong twice over
-/// (2026-09-18): the horizontal wrapper's budget is **cells** while a 縱's
-/// length is **字**, so a row of halfwidth digits comes back deeper than the box
+/// by hand」, which is wrong twice over: the horizontal wrapper's budget is
+/// **cells** while a 縱's length is **字**, so a row of halfwidth digits comes back deeper than the box
 /// it was measured for; and a hand-chop afterwards knows nothing of 禁則, so a
 /// 「，」 ends up at the head of the next 縱. Both are what this function's
 /// caller — [`zong_breaks`] — already gets right for the page.
 ///
-/// **空段落照樣是一縱**（2026-10-12 改的）。從前這裏把它濾掉了，理由是「在框
-/// 裏它是一縱空白」——而框裏的那一縱空白正是兩段之間的界，和頁面上是同一回事。
-/// 翻得動之後省那一縱不再值錢，橫排那一邊也從來沒省過它。
+/// **空段落照樣是一縱**：框裏的那一縱空白正是兩段之間的界，和頁面上是同一回事。
+/// 框翻得動，省那一縱不值錢，橫排那一邊也不省它。
 pub fn zong_rows(text: &str, zong_len: usize) -> Vec<String> {
     let rope = Rope::from_str(text);
     let grid = Grid::plain(zong_len, Dialects::NONE);
@@ -1557,11 +1552,9 @@ impl IndentHint {
 /// the paragraphs instead. Two blanks in a row are a scene break and both
 /// stay; the cursor's own line always stays.
 pub fn folded(_rope: &Rope, line: usize, grid: Grid) -> bool {
-    // **One rule, asked — not a second copy of it.** This function used to
-    // decide for itself, with a different test from the horizontal page's:
-    // no block knowledge, a span instead of a map, and a `cursor_line` of its
-    // own. Same document, two answers, and flipping `:layout` changed which
-    // lines of the file were on the page.
+    // **One rule, asked — not a second copy of it.** A test of its own here
+    // would differ from the horizontal page's, and flipping `:layout` would
+    // change which lines of the file are on the page.
     grid.folded(line)
 }
 
@@ -1744,9 +1737,9 @@ pub fn zong_index(zongs: &[Zong], pos: usize) -> usize {
 /// The renderer walks this rather than the graphemes, so a 緃中横 pair arrives
 /// as one two-cell string and lands in one row.
 ///
-/// Takes the one setting it uses rather than a whole [`Grid`]: it used to take
-/// the page and read only `tatechuyoko` from it, which is API that contradicts
-/// the value it is handed — the same thing `line_slots` was renamed for.
+/// Takes the one setting it uses rather than a whole [`Grid`]: taking the page
+/// and reading only `tatechuyoko` from it is API that contradicts the value it
+/// is handed.
 pub fn slot_text(text: &str, at_most: usize) -> Vec<String> {
     let offsets = slot_offsets(text, at_most);
     let chars: Vec<char> = text.chars().collect();
@@ -2388,8 +2381,7 @@ mod tests {
     }
 
     /// A 緃中横 group wider than the 字 is one row, and the page opens the
-    /// 行間 for it rather than letting it land on the 縱 beside it
-    /// (2026-09-21).
+    /// 行間 for it rather than letting it land on the 縱 beside it.
     #[test]
     fn render_page_opens_the_gap_for_a_long_group() {
         let r = rope("第1997章\n甲乙");
@@ -2718,10 +2710,9 @@ mod tests {
             "那**年",
             // A reading of **more than one character**, which is what every
             // real one is: the base then needs padding rows above it, and the
-            // group's own tags used to be written onto a row whose range was
-            // empty — so `<ruby>` belonged to no slot at all. The line this
-            // test had always used, `<rt>h</rt>`, is the one length at which
-            // that cannot happen.
+            // group's own tags must not land on a row whose range is empty,
+            // or `<ruby>` belongs to no slot at all. `<rt>h</rt>` alone is the
+            // one length at which that cannot happen.
             "他<ruby>漢<rt>hàn</rt></ruby>字。",
             "曰「<ruby>漢<rt>hàn</rt></ruby>字",
             "「<ruby>口<rt>kǒu</rt></ruby>」和「<ruby>囗<rt>wéi</rt></ruby>」。",
@@ -2735,7 +2726,7 @@ mod tests {
             let hidden = crate::markdown::hidden(&crate::markdown::spans(line), None);
             // 標點旁置 makes the reading take the rows *above* the base
             // outright, so every ruby group has padding rows — with it on, a
-            // one-character reading is no longer the safe case either.
+            // one-character reading is not the safe case either.
             for grid in [RUBY, Grid { hanging: true, ..RUBY }] {
                 let slots = line_slots_in(line, grid, &hidden);
                 let n = line.chars().count();
@@ -2762,9 +2753,9 @@ mod tests {
 
     /// 所見即所得 does not turn 標點旁置 off, and does not turn 禁則處理 off.
     ///
-    /// Both used to read the character at a slot's *start*, which after a
-    /// hidden run is an asterisk: so 那年**冬天**。 gave its 。 a whole square
-    /// while 那年冬天。 hung it, and a 。 at a column's head was let through
+    /// Neither reads the character at a slot's *start*, which after a hidden
+    /// run is an asterisk: 那年**冬天**。 would give its 。 a whole square while
+    /// 那年冬天。 hangs it, and a 。 at a column's head would be let through
     /// because the rule was asked about `*`.
     #[test]
     fn what_comes_off_the_page_does_not_change_the_other_settings() {
@@ -2860,9 +2851,9 @@ mod tests {
     /// wrong one of two overlapping rows is drawn a row off the mark.
     /// 禁則處理 against the marks a Chinese manuscript actually uses.
     ///
-    /// The set used to be derived from what fits in a one-cell margin, which is
-    /// a rendering question — so `》〉』】〕` and the 簡體 quotes `”’` were free
-    /// to open a column, and did, thirteen times on one page of 論語集解.
+    /// The set is not derived from what fits in a one-cell margin, which is a
+    /// rendering question — that would leave `》〉』】〕` and the 簡體 quotes
+    /// `”’` free to open a column, thirteen times on one page of 論語集解.
     #[test]
     fn the_marks_that_may_not_open_a_line_are_the_ones_clreq_names() {
         for c in ['、', '，', '。', '：', '；', '！', '？', '」', '』', '”', '’',
@@ -3107,9 +3098,9 @@ mod tests {
     /// — Feature #231.
     ///
     /// The hole this closes is not rare. A base already carrying an opener has
-    /// no margin left to give, so every mark after it used to take a margin
-    /// row with the text square beside it **blank**: 秋「冬」」 made two of
-    /// those and 春（。）」 made four. A row is a row either way — the margin
+    /// no margin left to give, so every mark after it would take a margin row
+    /// with the text square beside it **blank**: 秋「冬」」 makes two of those
+    /// and 春（。）」 makes four. A row is a row either way — the margin
     /// is beside the square, not instead of it — so putting the glyph in the
     /// square costs nothing and leaves nothing blank.
     #[test]
@@ -3216,7 +3207,7 @@ mod tests {
         let plain = Grid { indent: 2, ..G };
         // **The page decides, and it decides once** — this is the editor's own
         // rule (`Editor::line_is_folded`), which the horizontal page asks too.
-        // The 縱書 side used to keep a second copy of it and the two disagreed.
+        // The 縱書 side keeps no second copy of it.
         let folds = |line: usize| line == 1;
         let folded_grid = plain.with_folds(&folds);
         assert!(!folded(&rope, 1, plain), "…unless the page says to fold");
@@ -3321,8 +3312,7 @@ mod tests {
 mod forms_tests {
     use super::*;
 
-    /// **The `:render` level decides the vertical forms** (2026-10-30, as
-    /// decided): off draws the file's own marks, basic the CJK forms, and
+    /// **The `:render` level decides the vertical forms**: off draws the file's own marks, basic the CJK forms, and
     /// full the curly quotes as corner brackets too.
     #[test]
     fn the_render_level_decides_the_vertical_forms() {

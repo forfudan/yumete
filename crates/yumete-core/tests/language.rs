@@ -38,9 +38,8 @@ fn the_three_names_the_help_advertises_all_parse() {
 ///
 /// 一：`:language en` 當場換，而且**回話已經是新語言**——一個讀不懂繁體的讀者打了
 /// 這一條，如果確認那句仍是繁體，他就不知道成沒成。
-/// 二：分詞那一行的詞表名字也跟着換。從前它是 `yumete-cjk` 裏寫死的
-/// `format!("{} 條（內置）")`，而那個 crate 沒有文案表——於是 `--lang=en` 的狀態行
-/// 中間卡着四個繁體字。
+/// 二：分詞那一行的詞表名字也跟着換。寫死在 `yumete-cjk` 裏（那個 crate 沒有文案
+/// 表）的話，`--lang=en` 的狀態行中間會卡着四個繁體字。
 #[test]
 fn everything_the_editor_says_follows_the_language_in_force() {
     let _put_back = borrow_the_language();

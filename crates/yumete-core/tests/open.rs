@@ -13,7 +13,7 @@ fn temp_path(name: &str) -> std::path::PathBuf {
     p
 }
 
-/// `$TMPDIR`，照編輯器的說法拼——`Buffer::open` 解析軟鏈接（2026-10-11）。
+/// `$TMPDIR`，照編輯器的說法拼——`Buffer::open` 解析軟鏈接。
 fn tmp() -> std::path::PathBuf {
     let dir = std::env::temp_dir();
     std::fs::canonicalize(&dir).unwrap_or(dir)

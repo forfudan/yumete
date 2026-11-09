@@ -15,8 +15,8 @@
 //! into a scratch buffer — so `:w` works, `u` is part of lesson one, and every
 //! destructive key in it is safe to try.
 
-/// The lesson, in Chinese, as written: Simplified, in mainland usage
-/// (2026-11-07). Written as a manuscript rather than as a reference: each
+/// The lesson, in Chinese, as written: Simplified, in mainland usage.
+/// Written as a manuscript rather than as a reference: each
 /// section is a paragraph to read and a line to do something to, in the order
 /// a writer meets them. The reader is expected to break it — that is the point
 /// of a copy.
@@ -27,7 +27,7 @@ pub const LESSON_ZHS: &str = include_str!("tutor_zhs.md");
 /// table, the term fixes).
 pub const LESSON: &str = include_str!(concat!(env!("OUT_DIR"), "/tutor_zht.md"));
 
-/// **The lesson, in English** (2026-10-29), for a reader whose interface is
+/// **The lesson, in English**, for a reader whose interface is
 /// English: the same ten steps, practised on English prose, with the Chinese
 /// input method and the vertical page kept to one section each.
 pub const LESSON_EN: &str = r#"# The yumete lesson

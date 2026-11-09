@@ -1,14 +1,13 @@
-//! **vim's grammar** — the second reader of [`crate::motion`] (B3, 2026-09-20).
+//! **vim's grammar** — the second reader of [`crate::motion`] (B3).
 //!
-//! The vim preset used to be a **translation table**: `x` was played as `;D`,
-//! and an operator waited by remembering which keys to press next. A table can
+//! The vim preset is not a **translation table** (`x` played as `;D`, an
+//! operator waiting by remembering which keys to press next). A table can
 //! give a vim hand `dw` and `dd`; it cannot give it `d$`, `df,`, `di(` — and it
-//! cannot give it vim's *special cases* at all, because those are not keys.
-//! Measured against a conformance corpus, six of twenty everyday presses were
-//! wrong, and two of them lost text the hand did not mean to lose (`dw` at the
-//! end of a line took the newline **and the next line's indent**).
+//! cannot give it vim's *special cases* at all, because those are not keys
+//! (`dw` at the end of a line would take the newline **and the next line's
+//! indent**).
 //!
-//! What is here instead is vim's own model, in vim's own words:
+//! What is here is vim's own model, in vim's own words:
 //!
 //! - a **motion** names a place ([`crate::motion::Motion`]);
 //! - an **operator** takes the text between here and there;
@@ -16,8 +15,8 @@
 //!   `:h exclusive`, `:h inclusive`. That one word is the whole of what the
 //!   translation table could not say.
 //!
-//! Warning: **The same key can be two motions.** 2026-09-20: 「vim 的 `w` 獨立
-//! 的時候是跳轉，在命令中是選詞。」 Standalone, `w` asks
+//! Warning: **The same key can be two motions**: vim's `w` moves on its own and
+//! picks a word under an operator. Standalone, `w` asks
 //! [`crate::motion::Reading::Caret`]; under an operator it also asks for the
 //! caret's target and the operator then takes everything up to it, *excluding*
 //! it. Both readings come from one motion — see [`crate::motion::Reading`].
@@ -69,7 +68,7 @@ pub fn step_for(typed: &str, grain: Grain, told: Option<char>) -> Option<Step> {
         ("b", _) => step(Motion::WordBack(g), Reach::Exclusive),
         ("B", _) => step(Motion::WordBack(Grain::Big), Reach::Exclusive),
         ("e", _) => step(Motion::WordEnd(g), Reach::Inclusive),
-        // Warning: **`ge` 在兩套鍵位裏是兩件事**（2026-10-02 定）：vim 的是「往
+        // Warning: **`ge` 在兩套鍵位裏是兩件事**：vim 的是「往
         // 回到上一個詞的末尾」，helix 的是「到檔尾」。這張表只管 vim。
         ("ge", _) => step(Motion::WordEndBack(g), Reach::Inclusive),
         ("gE", _) => step(Motion::WordEndBack(Grain::Big), Reach::Inclusive),
@@ -94,14 +93,14 @@ pub fn step_for(typed: &str, grain: Grain, told: Option<char>) -> Option<Step> {
         ("gg", _) => step(Motion::FileStart, Reach::Linewise),
         ("}", _) => step(Motion::Paragraph { forward: true }, Reach::Exclusive),
         ("{", _) => step(Motion::Paragraph { forward: false }, Reach::Exclusive),
-        // **`H`/`M`/`L` 是屏幕的頂/中/底**（2026-10-06），而句子是 `(`/`)`
+        // **`H`/`M`/`L` 是屏幕的頂/中/底**，而句子是 `(`/`)`
         // ——下面那一對就是。整行整行地取，同 vim（`:h H` 說它是 linewise）。
         ("H", _) => step(Motion::Screen { which: 'H' }, Reach::Linewise),
         ("M", _) => step(Motion::Screen { which: 'M' }, Reach::Linewise),
         ("L", _) => step(Motion::Screen { which: 'L' }, Reach::Linewise),
-        // **`(` 和 `)` 也是句子**（2026-10-06）。vim 的句子動作就是這一對；這個
-        // 編輯器把句子放在 `H`/`L` 上（#404），可一個 vim 的手按的是這一對，而
-        // `d)` 從前什麼都不做。兩個拼法同一件事。
+        // **`(` 和 `)` 也是句子**。vim 的句子動作就是這一對；這個
+        // 編輯器把句子放在 `H`/`L` 上（#404），可一個 vim 的手按的是這一對，
+        // `d)` 不能什麼都不做。兩個拼法同一件事。
         ("(", _) => step(Motion::Sentence { forward: false }, Reach::Exclusive),
         (")", _) => step(Motion::Sentence { forward: true }, Reach::Exclusive),
         // ---- Find, which is told a character ------------------------------
@@ -144,22 +143,21 @@ pub fn step_for(typed: &str, grain: Grain, told: Option<char>) -> Option<Step> {
 /// `iw` / `i(` — the object a character names.
 fn object(c: char, around: bool) -> Option<Motion> {
     let what = match c {
-        // Warning: **`w` 和 `W` 分開了**（2026-09-28）：`iw` 走分詞器，`iW` 是 vim 那個
-        // 「一串非空白」。從前兩個折成同一個，於是 `diW` 和 `diw` 一模一樣。
+        // Warning: **`w` 和 `W` 是兩樣**：`iw` 走分詞器，`iW` 是 vim 那個
+        // 「一串非空白」。折成同一個的話，`diW` 和 `diw` 一模一樣。
         'w' => crate::motion::Object::Word { big: false },
         'W' => crate::motion::Object::Word { big: true },
         'p' => crate::motion::Object::Paragraph,
-        // `dim`/`dam`：最近的那一對（2026-10-27，同 `mi m`）；Markdown 標記挪到
-        // `dik`/`dak`（從 2026-09-28 起是 `dim`），mar(k)up。
+        // `dim`/`dam`：最近的那一對（同 `mi m`）；Markdown 標記在
+        // `dik`/`dak`，mar(k)up。
         'm' => crate::motion::Object::NearestPair,
         'k' => crate::motion::Object::Markup,
-        // `dis`/`das`：光標所在的那一句（2026-09-28）。
+        // `dis`/`das`：光標所在的那一句。
         's' => crate::motion::Object::Sentence,
-        // `diu`/`dau`: 短句 (2026-10-27, same as `mi u`). vim has no `iu`.
+        // `diu`/`dau`: 短句 (same as `mi u`). vim has no `iu`.
         'u' => crate::motion::Object::Clause,
-        // **`b` 和 `B` 是 vim 給括號的兩個別名**（2026-10-12 神諭上掃出來的）：
-        // `ib` ＝ `i(`、`iB` ＝ `i{`。從前落到底下那一支，而 `b` 不是任何一對的
-        // 半邊，於是 `dib` 整個不成一個動作——按下去 `d` 等着，`i` 不是動作，三
+        // **`b` 和 `B` 是 vim 給括號的兩個別名**：`ib` ＝ `i(`、`iB` ＝ `i{`。落到
+        // 底下那一支的話，`b` 不是任何一對的半邊，`dib` 整個不成一個動作——三
         // 個鍵一聲不吭地散掉。
         'b' => crate::motion::Object::Pair { open: '(', close: ')' },
         'B' => crate::motion::Object::Pair { open: '{', close: '}' },

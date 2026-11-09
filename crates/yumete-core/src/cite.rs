@@ -1,4 +1,4 @@
-//! **The keys a citation can name** (2026-10-29): `[@` in Markdown (Pandoc's
+//! **The keys a citation can name**: `[@` in Markdown (Pandoc's
 //! syntax) and `@` in Typst finish from the bibliography beside the document —
 //! BibTeX's `@article{key,` and hayagriva's top-level `key:` — with each
 //! entry's title beside its key.
