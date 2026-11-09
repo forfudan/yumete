@@ -396,13 +396,14 @@ impl Seat {
             Key::Tab => page.flip_into(),
             Key::Char('e') => return self.open_the_file(editor),
             Key::Char('q') => self.close(editor),
-            // **`Esc` steps back**: off a page, then off a search, then out.
+            // **`Esc` steps back**: off a page, then off a search, and no
+            // further. Only `q` closes (2026-11-09, reported: Esc is the hand
+            // going back to Normal, and it threw the panel away).
             Key::Esc if on_page => page.close_page(),
             Key::Esc if !page.search.is_empty() => {
                 page.search.clear();
                 page.narrow(None);
             }
-            Key::Esc => self.close(editor),
             _ => {}
         }
         None
@@ -545,7 +546,8 @@ impl Seat {
             return Some(match named {
                 Some('+' | '*') => say!("edit.clipboard-empty"),
                 Some(name) => say!("register.empty", name),
-                None => say!("register.nothing-yanked"),
+                // Not the editor's 「␣p」: Space here changes the row.
+                None => say!("settings.nothing-yanked", "\"+p"),
             });
         }
         self.edit(editor, Some(one_line(&text)));
@@ -2067,6 +2069,11 @@ mod tests {
     fn p_and_a_paste_replace_the_value_and_y_copies_it() {
         let dir = scratch("paste");
         let (mut ed, mut seat) = seated(&dir, "", "export.page");
+        // Nothing yanked: the hint names `"+p`, not the editor's `␣p` —
+        // Space here would change the row (2026-11-09).
+        keys(&mut seat, &mut ed, &[Key::Char('p')]);
+        assert_eq!(ed.status(), say!("settings.nothing-yanked", "\"+p"));
+        assert!(ed.status().contains("\"+p"), "{}", ed.status());
         keys(&mut seat, &mut ed, &[Key::Char('y')]);
         assert_eq!(ed.register_contents(None), "a5");
         assert_eq!(ed.status(), say!("settings.yanked", "a5"));
@@ -2089,7 +2096,8 @@ mod tests {
     }
 
     /// **`/` narrows the list as it is typed**, across groups; Enter keeps
-    /// the search, Esc in the list clears it, Esc again closes the panel.
+    /// the search, Esc in the list clears it, and Esc again leaves the panel
+    /// open: only `q` closes it.
     #[test]
     fn slash_searches_every_setting() {
         let dir = scratch("search");
@@ -2113,8 +2121,10 @@ mod tests {
         assert_eq!(page(&seat).here().map(|s| s.key), Some("scrolloff"));
         keys(&mut seat, &mut ed, &[Key::Esc]);
         assert!(page(&seat).found.is_none(), "Esc on the line clears it");
-        keys(&mut seat, &mut ed, &[Key::Esc]);
-        assert!(seat.panel.is_none(), "Esc in the list closes");
+        keys(&mut seat, &mut ed, &[Key::Esc, Key::Esc]);
+        assert!(seat.panel.is_some(), "Esc never closes the panel");
+        keys(&mut seat, &mut ed, &[Key::Char('q')]);
+        assert!(seat.panel.is_none(), "q does");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

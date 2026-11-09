@@ -1373,6 +1373,12 @@ zhs = "没有可以撤销的改动"
 en = "nothing to undo"
 
 [[message]]
+# 设置面板：按 p 而默认寄存器是空的；空格在面板里是改这一行，所以不提 ␣p。{0} 是系统剪贴板那一句键（"+p），值里写不了引号（草稿）
+key = "settings.nothing-yanked"
+zhs = "还没有复制过内容：y 复制，{0} 从系统剪贴板粘贴"
+en = "nothing yanked yet: y copies, {0} pastes from the system clipboard"
+
+[[message]]
 # 設置：候选怎么画
 key = "settings.panel.display"
 zhs = "候选位置"
