@@ -175,3 +175,20 @@ fn pdf_is_not_written_through_a_link_onto_the_source() {
     assert_eq!(std::fs::read_to_string(&md).unwrap(), "# 第一章\n\n那年冬天。\n");
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// **What Typst cannot set is said, once**, and `page=` sets its paper.
+#[test]
+fn a_typst_export_says_what_it_cannot_set_and_takes_the_paper() {
+    let root = fixture("typst-words");
+    let md = root.join("ch1.md");
+    std::fs::write(&md, "# 第一章\n\n那年冬天。\n").unwrap();
+    let out = ye().args(["--lang=en", "--export", "typst", "vertical", "page=A6"]).arg(&md).output().unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(stderr.matches("vertical does not apply to a Typst export").count(), 1, "{stderr}");
+    let typ = std::fs::read_to_string(md.with_extension("typ")).unwrap();
+    assert!(typ.contains("#set page(width: 105mm, height: 148mm)"), "{typ}");
+    let out = ye().args(["--export", "html", "vertical"]).arg(&md).output().unwrap();
+    assert!(String::from_utf8_lossy(&out.stderr).is_empty());
+    let _ = std::fs::remove_dir_all(&root);
+}

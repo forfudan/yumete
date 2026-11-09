@@ -2029,6 +2029,12 @@ fn run_export(
         eprintln!("get it from https://github.com/typst/typst/releases, or `brew install typst`");
         return ExitCode::from(1);
     }
+    // What Typst cannot set, said once for the run, not for each file. A
+    // Typst file compiled to PDF is set as it is written.
+    let ignored = yumete_core::export::typst_ignores(editor.export_settings());
+    if matches!(format.as_str(), "typst" | "typ" | "pdf") && !ignored.is_empty() {
+        eprintln!("yumete: {}", yumete_core::say!("export.not-for-typst", ignored.join(", ")));
+    }
     let sources: Vec<std::path::PathBuf> =
         files.iter().map(|f| std::path::PathBuf::from(yumete_config::expand_tilde(f))).collect();
     let clashes = clashes_in_the_batch(&sources, &format, out);

@@ -521,13 +521,38 @@ impl Tag {
         }
         let mut out = format!("<{}", self.name);
         let mut seen: Vec<&str> = Vec::new();
+        // **`align` is written as the style it means**: HTML still draws
+        // `<p align="center">`, and an EPUB's XHTML has no such attribute
+        // (epubcheck, RSC-005).
+        let align = self
+            .attributes
+            .iter()
+            .find(|(name, _)| name == "align")
+            .and_then(|(_, v)| v.as_deref())
+            .map(|v| v.trim().to_ascii_lowercase())
+            .filter(|v| matches!(v.as_str(), "left" | "right" | "center" | "justify"))
+            .map(|v| format!("text-align: {v}"));
+        let mut styled = false;
         for (name, value) in &self.attributes {
             if seen.contains(&name.as_str()) {
                 return None;
             }
             seen.push(name);
+            if name == "align" {
+                continue;
+            }
             let value = value.as_deref().unwrap_or(name);
-            let _ = write!(out, " {name}=\"{}\"", attribute_text(value));
+            let value = match (name.as_str(), &align) {
+                ("style", Some(align)) => {
+                    styled = true;
+                    format!("{}; {align}", value.trim_end().trim_end_matches(';'))
+                }
+                _ => value.to_string(),
+            };
+            let _ = write!(out, " {name}=\"{}\"", attribute_text(&value));
+        }
+        if let Some(align) = align.filter(|_| !styled) {
+            let _ = write!(out, " style=\"{align}\"");
         }
         out.push_str(if void || self.closed { "/>" } else { ">" });
         Some(out)
@@ -1068,5 +1093,19 @@ mod tests {
         assert!(!page.contains("&#1;\""), "{page}");
         assert!(page.contains("title=\"&amp;#1;\""), "{page}");
         assert!(page.contains("title=\"&#x4E00;\""), "a character XML allows stays: {page}");
+    }
+
+    /// **An HTML block is in the book too**, not words, and HTML's `align`,
+    /// which XHTML has not, is the style it means.
+    #[test]
+    fn an_html_block_is_in_the_book_and_align_is_a_style() {
+        let mut s = style();
+        s.settings.vertical = false;
+        let text = "<details open><summary>展开</summary>里面</details>\n\n<p align=\"Center\">居中</p>\n\n<div align=right style=\"color: red;\">右</div>\n";
+        let files = entries(&book(text, &s));
+        let page = String::from_utf8(files[4].1.clone()).unwrap();
+        assert!(page.contains("<details open=\"open\"><summary>展开</summary>里面</details>"), "{page}");
+        assert!(page.contains("<p style=\"text-align: center\">居中</p>"), "{page}");
+        assert!(page.contains("<div style=\"color: red; text-align: right\">右</div>"), "{page}");
     }
 }

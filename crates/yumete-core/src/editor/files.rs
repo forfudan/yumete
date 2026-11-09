@@ -1987,7 +1987,15 @@ impl Editor {
         let written = crate::export::export_file(&self.current_buffer().text(), format, &style);
         // Written the way a save is written: whole, or not at all.
         crate::buffer::write_binary_atomically(&target, &written).map_err(EditorError::Io)?;
-        self.status = say!("export.wrote", target.display());
+        // What Typst cannot set is said, not left to be found in the PDF.
+        let ignored = match format {
+            crate::export::Format::Typst => crate::export::typst_ignores(&style.settings),
+            _ => Vec::new(),
+        };
+        self.status = match ignored.is_empty() {
+            true => say!("export.wrote", target.display()),
+            false => say!("export.wrote-not-for-typst", target.display(), ignored.join(", ")),
+        };
         Ok(CommandOutcome::Continue)
     }
 
