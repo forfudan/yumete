@@ -61,7 +61,17 @@ impl Editor {
         let buffer = self.current_buffer();
         let headings = self.flavor_on(yumete_cjk::FlavorItem::HeadingFolds) && self.lists_here();
         let key = (buffer.id(), buffer.revision(), self.folds_window(), self.fold_generation, headings, buffer.syntax());
-        let stale = self.fold_view.borrow().as_ref().is_none_or(|view| view.key != key);
+        // **The outline waits for Normal mode**: while typing, a view that
+        // differs only by the edit stands, so a key typed does not rebuild the
+        // book's outline. Not when a fold is closed: lines typed above it
+        // would move what it hides.
+        let stale = self.fold_view.borrow().as_ref().is_none_or(|view| {
+            let only_typed = view.key.0 == key.0
+                && (view.key.2, view.key.3, view.key.4, view.key.5) == (key.2, key.3, key.4, key.5)
+                && self.mode == crate::input::Mode::Insert
+                && view.shut.is_empty();
+            view.key != key && !only_typed
+        });
         if stale {
             let view = self.work_out_folds(key, headings);
             *self.fold_view.borrow_mut() = Some(view);

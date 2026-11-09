@@ -26283,6 +26283,21 @@ fn a_shell_line_has_its_label_ghost_history_and_bang() {
 
 /// Words of the open buffers are offered as you write: Latin after
 /// `word_completion` letters, matched fuzzily; 漢字 after ⌈N/2⌉, only words
+/// **The outline is rebuilt back in Normal mode**: a heading typed in
+/// Insert mode joins the folds once Insert mode is left.
+#[test]
+fn the_outline_waits_for_normal_mode() {
+    let mut ed = typed("# 一\n\n那年冬天\n");
+    ed.current_buffer_mut().set_syntax(crate::syntax::Syntax::Markdown);
+    let headings = |ed: &Editor| ed.fold_view().spans.iter().filter(|s| matches!(s.of, super::folds::FoldOf::Heading(_))).count();
+    assert_eq!(headings(&ed), 1);
+    press(&mut ed, "Go");
+    press(&mut ed, "# 二");
+    assert_eq!(headings(&ed), 1, "not while typing");
+    ed.on_key(Key::Esc);
+    assert_eq!(headings(&ed), 2, "back in Normal mode");
+}
+
 /// **The live count is counted again back in Normal mode**: in Insert mode
 /// it stands, so a key typed does not count the book.
 #[test]
