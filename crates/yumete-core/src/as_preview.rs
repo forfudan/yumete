@@ -41,7 +41,7 @@ pub const COLUMN_PITCH: f32 = 1.75;
 pub const VERTICAL_HEADING_PITCH: f32 = 1.4;
 
 /// **The fonts the preview sets a document in**, as CSS font lists: the
-/// writing (`[export] font_family`, then the CJK face of the document's
+/// writing (the preview's fonts, then the CJK face of the document's
 /// writing system), code, emphasis (漢字 in a 楷體), and the CJK face first
 /// for the quotes and dashes between 漢字.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -186,7 +186,8 @@ impl Colours {
 }
 
 /// **What the front end answers when asked how the preview would draw a
-/// text**: the text, and `[export] font_family`.
+/// text**: the text, and the preview's fonts (`[editor]
+/// preview_font_family`, else `[export] font_family`).
 pub type Looker = std::sync::Arc<dyn Fn(&str, &str) -> Look + Send + Sync>;
 
 /// **What a preview can be written out as.** Room is left for the Markdown

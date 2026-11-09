@@ -617,6 +617,7 @@ fn apply_to_editor(config: &Config, editor: &mut Editor, layout: Option<yumete_c
     }
     editor.set_preview_theme(config.editor.preview_theme);
     editor.set_preview_vertical(config.editor.preview_vertical);
+    editor.set_preview_fonts(&config.editor.preview_font_family);
     editor.set_usage_groups(config.editor.usage_groups.clone());
 }
 

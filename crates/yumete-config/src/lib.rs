@@ -148,6 +148,12 @@ pub struct EditorConfig {
     /// runs in columns from the right as the vertical export does. On.
     /// `:preview-vertical` sets it for the session.
     pub preview_vertical: bool,
+    /// **The fonts the Markdown preview is set in**, a CSS font list
+    /// written as `[export] font_family` is. Empty, the default: the
+    /// export's fonts, so a preview and its export look alike until the
+    /// writer wants them apart (a screen face to read in, a book face to
+    /// print in). `:export-as-preview` takes it too; `:export` never does.
+    pub preview_font_family: String,
     /// **What a yank copied, lit for a moment** (2026-11-07): nvim's
     /// `vim.hl.on_yank`, 150 ms on the selection's ground. Off, as nvim has
     /// it; `--import lazyvim` turns it on, as LazyVim does. Under vim `yap`
@@ -524,6 +530,7 @@ impl Default for EditorConfig {
             preview_fit: "width".to_string(),
             preview_theme: false,
             preview_vertical: true,
+            preview_font_family: String::new(),
             yank_flash: false,
             indent_guides: false,
             indent_guides_character: "│".to_string(),
@@ -4750,6 +4757,7 @@ struct RawEditor {
     preview_fit: Option<String>,
     preview_theme: Option<bool>,
     preview_vertical: Option<bool>,
+    preview_font_family: Option<String>,
     yank_flash: Option<bool>,
     indent_guides: Option<bool>,
     indent_guides_character: Option<String>,
@@ -4981,6 +4989,9 @@ impl RawConfig {
         }
         if other.editor.preview_vertical.is_some() {
             self.editor.preview_vertical = other.editor.preview_vertical;
+        }
+        if other.editor.preview_font_family.is_some() {
+            self.editor.preview_font_family = other.editor.preview_font_family.clone();
         }
         if other.editor.screenshot.is_some() {
             self.editor.screenshot = other.editor.screenshot.clone();
@@ -5437,6 +5448,11 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.preview_vertical {
             config.editor.preview_vertical = on;
+        }
+        // Unlike `[export] font_family`, an empty list is a value here: it
+        // says "the export's", and a layer above may say it over one below.
+        if let Some(fonts) = self.editor.preview_font_family {
+            config.editor.preview_font_family = fonts.trim().to_string();
         }
         if let Some(line) = self.editor.screenshot {
             config.editor.screenshot = line;
@@ -6904,6 +6920,22 @@ mod tests {
         let c = Config::from_toml("[export]\nvertical_latin = \"sideways\"\nfont_family = \" \"\n");
         assert_eq!(c.export.vertical_latin, VerticalLatin::Turn);
         assert_eq!(c.export.font_family, DEFAULT_FONT_FAMILY);
+    }
+
+    /// **`[editor] preview_font_family`**: empty at first and
+    /// when only spaces are written, which is the export's fonts; a list is
+    /// kept as written, and the export's own list is left alone.
+    #[test]
+    fn the_preview_fonts_follow_the_export_while_empty() {
+        let c = Config::from_toml("");
+        assert_eq!(c.editor.preview_font_family, "");
+        let c = Config::from_toml("[editor]\npreview_font_family = \"'LXGW WenKai Screen', serif\"\n");
+        assert_eq!(c.editor.preview_font_family, "'LXGW WenKai Screen', serif");
+        assert_eq!(c.export.font_family, DEFAULT_FONT_FAMILY, "the export keeps its own");
+        let c = Config::from_toml("[editor]\npreview_font_family = \"  \"\n");
+        assert_eq!(c.editor.preview_font_family, "", "only spaces is empty");
+        let c = Config::from_toml("[editor]\npreview_font_family = \" Kaiti, serif \"\n");
+        assert_eq!(c.editor.preview_font_family, "Kaiti, serif");
     }
 
     #[test]

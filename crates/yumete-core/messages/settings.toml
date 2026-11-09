@@ -521,6 +521,18 @@ zhs = "页面窗口中页面的大小：页宽适应窗口并随光标滚动，�
 en = "how the page window draws the page: as wide as the window and scrolled to the cursor, or the whole page"
 
 [[message]]
+# 设置面板：预览用的字体（草稿）
+key = "settings.editor.preview-font-family"
+zhs = "预览字体"
+en = "preview fonts"
+
+[[message]]
+# 设置面板：预览用的字体——一句话（草稿）
+key = "settings.editor.preview-font-family.hint"
+zhs = "Markdown 预览与 :export-as-preview 用的字体，写法同导出字体；留空则跟着导出字体"
+en = "the fonts the Markdown preview and :export-as-preview are set in, written as the export fonts are; empty, the export fonts"
+
+[[message]]
 # 设置面板：预览页面用主题配色（草稿）
 key = "settings.editor.preview-theme"
 zhs = "页面窗口用主题配色"

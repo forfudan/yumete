@@ -643,6 +643,15 @@ pub const SETTINGS: &[Setting] = &[
     },
     Setting {
         table: "editor",
+        key: "preview_font_family",
+        group: Group::Marks,
+        kind: Kind::Text,
+        label: "settings.editor.preview-font-family",
+        hint: "settings.editor.preview-font-family.hint",
+        factory: r#""""#,
+    },
+    Setting {
+        table: "editor",
         key: "yank_flash",
         group: Group::Marks,
         kind: Kind::Tick,

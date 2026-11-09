@@ -273,3 +273,38 @@ fn png_size(png: &[u8]) -> (u32, u32) {
     let h = u32::from_be_bytes([png[20], png[21], png[22], png[23]]);
     (w, h)
 }
+
+/// **The preview's own fonts**: `[editor] preview_font_family`
+/// is what the preview is set in, across and down; empty, the preview
+/// follows `[export] font_family`.
+#[test]
+fn the_preview_is_set_in_the_preview_fonts_or_the_export_s() {
+    let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let dir = std::env::temp_dir().join(format!("yumete-md-window-fonts-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let main = a_long_note(&dir);
+    let mut editor = Editor::new();
+    editor.open_file(&main).unwrap();
+    let config = Config::from_toml(
+        "[export]\nfont_family = \"'Print Serif', serif\"\n[editor]\npreview_font_family = \"'Screen Sans', sans-serif\"\n",
+    );
+    yumete_tui::settings::apply(&config, &mut editor, None, None);
+    let mut md = MdPreviews::default();
+    let page = editor.open_page_window_of(main.clone(), PreviewKind::Markdown).expect("room");
+    let preview = editor.preview_in(page).unwrap();
+    graphics::set_support(Support::Kitty);
+    until(&mut editor, &config, &mut md, |m| m.sent(preview).is_some());
+    assert_eq!(md.sent(preview).unwrap().fonts, "'Screen Sans', sans-serif");
+    editor.execute(":vertical").unwrap();
+    until(&mut editor, &config, &mut md, |m| m.sent(preview).is_some_and(|w| w.vertical.is_some()));
+    assert_eq!(md.sent(preview).unwrap().fonts, "'Screen Sans', sans-serif", "down the page too");
+
+    // Emptied, as a reload would: the export's fonts again.
+    let config = Config::from_toml("[export]\nfont_family = \"'Print Serif', serif\"\n[editor]\npreview_font_family = \"\"\n");
+    yumete_tui::settings::apply(&config, &mut editor, None, None);
+    until(&mut editor, &config, &mut md, |m| m.sent(preview).is_some_and(|w| w.fonts == "'Print Serif', serif"));
+    md_window::clear();
+    graphics::drop_pages();
+    std::fs::remove_dir_all(&dir).ok();
+}

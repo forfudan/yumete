@@ -2394,6 +2394,32 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// **The preview's fonts may be emptied**: unlike the
+    /// export's, an empty list is a value, the export's fonts, and it is
+    /// written and read back as one; a list is written whole.
+    #[test]
+    fn the_preview_fonts_take_an_empty_list() {
+        let p = panel("", "");
+        let fonts = find("editor.preview_font_family");
+        assert!(matches!(p.check(fonts, ""), Ok(Change::Text(t)) if t.is_empty()), "empty follows the export");
+        assert!(p.check(fonts, "'Kaiti SC', serif").is_ok());
+        let dir = scratch("preview-font");
+        let path = dir.join("config.toml");
+        std::fs::write(&path, "[editor]\npreview_font_family = \"Kaiti, serif\"\n").unwrap();
+        let mut p = on(Panel::open(Some(path.clone()), None), "editor.preview_font_family");
+        assert!(p.commit_value(""));
+        p.flush().unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains("preview_font_family = \"\""), "{text}");
+        assert_eq!(crate::Config::from_toml(&text).editor.preview_font_family, "", "{text}");
+        let typed = "\"LXGW WenKai Screen\", 'Songti SC', serif";
+        assert!(p.commit_value(typed));
+        p.flush().unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(crate::Config::from_toml(&text).editor.preview_font_family, typed, "{text}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// **`u` writes back the file exactly as it was** (2026-11-09, reported:
     /// `u` after `r` lost `# a` after `scrolloff = 3`, and the last key of a
     /// table taken away and taken back came back without the table's

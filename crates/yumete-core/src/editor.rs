@@ -3409,6 +3409,9 @@ pub struct Editor {
     /// Whether the Markdown preview is set vertically while the text window
     /// is (`:preview-vertical`, `[editor] preview_vertical`).
     preview_vertical: bool,
+    /// The fonts the Markdown preview is set in (`[editor]
+    /// preview_font_family`); empty, the export's.
+    preview_fonts: String,
     /// The scroll keys pressed in a page window, for the front end.
     page_steps: Vec<PageStep>,
     /// A count typed in a page window, for `G` and `gg` (`5G`).
@@ -4678,6 +4681,7 @@ impl Editor {
             preview_fit: PreviewFit::default(),
             preview_theme: false,
             preview_vertical: true,
+            preview_fonts: String::new(),
             page_steps: Vec::new(),
             page_count: None,
             page_g: false,
