@@ -1,4 +1,4 @@
-//! **The Traditional Chinese of the interface is made here** (2026-11-07).
+//! **The Traditional Chinese of the interface is made here.**
 //!
 //! The message files under `messages/` are written in English (`en`) and
 //! Simplified Chinese (`zhs`, alias `sc`). Traditional (`zht`, aliases `tc`
@@ -56,7 +56,7 @@ fn main() {
     }
 
     // The Chinese lesson (`:tutor`) is written in Simplified too, and its
-    // Traditional made the same way (2026-11-07).
+    // Traditional made the same way.
     let lesson_path = root.join("src").join("tutor_zhs.md");
     println!("cargo:rerun-if-changed={}", lesson_path.display());
     let lesson = std::fs::read_to_string(&lesson_path).expect("tutor_zhs.md is there");
@@ -88,7 +88,7 @@ fn process(name: &str, text: &str, to_trad: &dyn Fn(&str) -> String, to_simp: &d
             }
             // `# tc on purpose` above the key: a written `zht` that differs on
             // purpose (it shows character forms side by side, or names the
-            // scripts), checked once by the author.
+            // scripts), checked once by hand.
             (Some(zhs), Some(zht))
                 if !zhs.is_empty() && !zht.is_empty() && !block.iter().any(|l| l.trim().starts_with("# tc on purpose")) =>
             {
