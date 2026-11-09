@@ -73,6 +73,7 @@ pub fn book(text: &str, style: &Style) -> Vec<u8> {
     );
     let mut toc = String::new();
     for (anchor, words) in &headings {
+        let words = if words.is_empty() { anchor } else { words };
         let _ = writeln!(toc, "<li><a href=\"text.xhtml#{anchor}\">{}</a></li>", xml_text(words));
     }
     if toc.is_empty() {
@@ -124,7 +125,8 @@ fn parts(text: &str, style: &Style) -> Parts {
     let body = links_kept_in(&body);
     let (body, headings) = anchored(&well_formed(&xhtml(&body)));
     let title = headings
-        .first()
+        .iter()
+        .find(|(_, words)| !words.is_empty())
         .map(|(_, words)| words.clone())
         .unwrap_or_else(|| style.title.rsplit_once('.').map_or(style.title.clone(), |(stem, _)| stem.to_string()));
     let page = format!(
@@ -364,10 +366,30 @@ fn anchored(body: &str) -> (String, Vec<(String, String)>) {
         let Some(rest) = ["<h1 id=\"", "<h2 id=\"", "<h3 id=\""].iter().find_map(|tag| line.strip_prefix(tag)) else { continue };
         let Some((anchor, rest)) = rest.split_once("\">") else { continue };
         let close = format!("</{}", &line[1..3]);
-        let words = rest.find(&close).map(|end| crate::export::plain_words(&rest[..end])).unwrap_or_default();
-        headings.push((anchor.to_string(), words));
+        let inner = rest.find(&close).map(|end| &rest[..end]).unwrap_or_default();
+        // **A heading that is only a picture is named by the picture**:
+        // `# ![第一章](title.png)` has no words, and an empty entry in the
+        // table of contents, or an empty title, is what epubcheck refuses
+        // (RSC-005). Its `alt`; a heading with neither is given its anchor in
+        // the table of contents, and does not title the book.
+        let words = Some(crate::export::plain_words(inner))
+            .filter(|w| !w.trim().is_empty())
+            .unwrap_or_else(|| alt_words(inner));
+        headings.push((anchor.to_string(), words.trim().to_string()));
     }
     (body.to_string(), headings)
+}
+
+/// The `alt` words of the pictures in a run of markup, one space between.
+fn alt_words(markup: &str) -> String {
+    let mut words: Vec<String> = Vec::new();
+    for (at, _) in markup.match_indices("<img") {
+        let tag = &markup[at..markup[at..].find('>').map_or(markup.len(), |end| at + end)];
+        if let Some(alt) = tag.split_once(" alt=\"").and_then(|(_, rest)| rest.split_once('"')).map(|(alt, _)| alt) {
+            words.push(crate::export::plain_words(alt));
+        }
+    }
+    words.join(" ")
 }
 
 /// **Inline HTML the writer typed, made XML** (review, 2026-11-09: a
@@ -468,7 +490,7 @@ fn well_formed(body: &str) -> String {
         match fate {
             Fate::Keep => out.push_str(&body[from..to]),
             Fate::Written(written) => out.push_str(&written),
-            Fate::Words => out.push_str(&attribute_text(&body[from..to])),
+            Fate::Words => out.push_str(&words_text(&body[from..to])),
         }
         at = to;
     }
@@ -527,14 +549,31 @@ fn attribute_text(value: &str) -> String {
     out
 }
 
-/// Whether `text` starts with an entity XML reads: one of its five, or a
-/// character's number.
+/// A tag that goes into the page as the words it was typed as: as
+/// [`attribute_text`], and its `>` escaped too: in a line of text, as
+/// against an attribute, `]]>` is a thing XML refuses, so a
+/// `<div title="]]>">` typed in a paragraph would make the page ill-formed.
+fn words_text(tag: &str) -> String {
+    attribute_text(tag).replace('>', "&gt;")
+}
+
+/// Whether `text` starts with an entity XML reads: one of its five, or the
+/// number of a character XML allows — not `&#0;`, nor any other control
+/// but tab and the two line ends, which make the page ill-formed wherever
+/// they stand.
 fn entity_at(text: &str) -> bool {
     let Some(end) = text.find(';') else { return false };
     let name = &text[1..end];
-    matches!(name, "amp" | "lt" | "gt" | "quot" | "apos")
-        || name.strip_prefix("#x").or_else(|| name.strip_prefix("#X")).is_some_and(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_hexdigit()))
-        || name.strip_prefix('#').is_some_and(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()))
+    let number = match name.strip_prefix("#x").or_else(|| name.strip_prefix("#X")) {
+        Some(hex) if !hex.is_empty() && hex.chars().all(|c| c.is_ascii_hexdigit()) => u32::from_str_radix(hex, 16).ok(),
+        Some(_) => return false,
+        None => match name.strip_prefix('#') {
+            Some(n) if !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()) => n.parse::<u32>().ok(),
+            Some(_) => return false,
+            None => return matches!(name, "amp" | "lt" | "gt" | "quot" | "apos"),
+        },
+    };
+    number.and_then(char::from_u32).is_some_and(|c| matches!(c, '\t' | '\n' | '\r') || (c >= ' ' && !matches!(c, '\u{FFFE}' | '\u{FFFF}')))
 }
 
 /// **The tag at the start of `text`**, read as HTML reads one: a name,
@@ -972,10 +1011,10 @@ mod tests {
         let text = "行内 <span>未闭合 与 <b>粗</b> 与 </i> 与 <details open>开</details> 与 <abbr title=a&b>缩</abbr> 与 <span hidden>藏</span>。\n";
         let files = entries(&book(text, &style()));
         let page = String::from_utf8(files[4].1.clone()).unwrap();
-        assert!(page.contains("&lt;span>未闭合"), "{page}");
+        assert!(page.contains("&lt;span&gt;未闭合"), "{page}");
         assert!(page.contains("<b>粗</b>"), "{page}");
-        assert!(page.contains("&lt;/i>"), "{page}");
-        assert!(page.contains("&lt;details open>开&lt;/details>"), "a block in a line: {page}");
+        assert!(page.contains("&lt;/i&gt;"), "{page}");
+        assert!(page.contains("&lt;details open&gt;开&lt;/details&gt;"), "a block in a line: {page}");
         assert!(page.contains("<span hidden=\"hidden\">藏</span>"), "{page}");
         assert!(page.contains("<abbr title=\"a&amp;b\">缩</abbr>"), "{page}");
         assert!(!page.contains("<span>"), "{page}");
@@ -1002,5 +1041,32 @@ mod tests {
         assert!(!page.contains("gone.png") && !page.contains("\"a.png\""), "{page}");
         assert!(files.contains(&("OEBPS/images/f1.png".to_string(), vec![1, 2, 3])));
         assert_eq!(files.iter().filter(|(name, _)| name.starts_with("OEBPS/images/")).count(), 1);
+    }
+
+    /// **What epubcheck refuses, kept out**: an empty entry in the contents
+    /// or an empty title from a heading that is only a picture, two
+    /// `id="fnref-1"` from a note cited twice, and a page XML will not read
+    /// from a tag kept as words with `]]>` in it or a `&#1;` in an
+    /// attribute.
+    #[test]
+    fn a_picture_heading_a_note_cited_twice_and_odd_html_make_a_valid_book() {
+        let mut s = style();
+        s.settings.vertical = false;
+        let text = "# ![第一章](nowhere.png)\n\n甲[^n]乙[^n]丙[^n]。\n\n# ![](nowhere.png)\n\n文 <div title=\"x]]>y\">块</div> 与 <span title=\"&#1;\">字</span> 与 <span title=\"&#x4E00;\">一</span>。\n\n[^n]: 註。\n";
+        let files = entries(&book(text, &s));
+        let file = |name: &str| String::from_utf8(files.iter().find(|(n, _)| n == name).unwrap().1.clone()).unwrap();
+        let (opf, nav, page) = (file("OEBPS/content.opf"), file("OEBPS/nav.xhtml"), file("OEBPS/text.xhtml"));
+        assert!(opf.contains("<dc:title>第一章</dc:title>"), "{opf}");
+        assert!(nav.contains("<title>第一章</title>"), "{nav}");
+        assert!(nav.contains(">第一章</a></li>"), "the picture's alt: {nav}");
+        assert!(!nav.contains("\"></a>"), "no entry is empty: {nav}");
+        for id in ["id=\"fnref-1\"", "id=\"fnref-1-2\"", "id=\"fnref-1-3\""] {
+            assert_eq!(page.matches(id).count(), 1, "{id}: {page}");
+        }
+        assert!(!page.contains("]]>"), "{page}");
+        assert!(page.contains("x]]&gt;y"), "{page}");
+        assert!(!page.contains("&#1;\""), "{page}");
+        assert!(page.contains("title=\"&amp;#1;\""), "{page}");
+        assert!(page.contains("title=\"&#x4E00;\""), "a character XML allows stays: {page}");
     }
 }

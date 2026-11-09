@@ -843,17 +843,25 @@ fn parse(lines: &[String], source: crate::syntax::Syntax, notes: &mut Vec<Note>,
             }
         }
         let rowish = |l: &str| crate::mdtable::is_row(l) || crate::mdtable::has_bar(l);
-        let table = match markdown && rowish(line) {
+        // **A table is as wide as its header**, as GFM has it: a row's cells
+        // past the header's are dropped and a short row is filled out, and a
+        // header with no cells (a bare `|`) is no table — in Typst it would
+        // be `columns: 0`, which typst refuses.
+        let table = match markdown && rowish(line) && !crate::mdtable::split(line).is_empty() {
             true => lines.get(i + 1).and_then(|l| crate::mdtable::rule_of(l)),
             false => None,
         };
-        if let Some(align) = table {
+        if let Some(mut align) = table {
             flush(&mut para, &mut out);
             let head = crate::mdtable::split(line);
+            let width = head.len();
+            align.resize(width, crate::mdtable::Align::Plain);
             i += 2;
             let mut rows = Vec::new();
             while i < lines.len() && rowish(&lines[i]) {
-                rows.push(crate::mdtable::split(&lines[i]));
+                let mut row = crate::mdtable::split(&lines[i]);
+                row.resize(width, String::new());
+                rows.push(row);
                 i += 1;
             }
             // The caption: the paragraph just above, if it was one, or the
@@ -1433,8 +1441,7 @@ fn marked(kind: crate::markdown::Kind, text: &str, dialect: Dialect) -> String {
         // A footnote's mark, numbered once the whole text is out (see
         // [`number_the_notes`]): the name, whatever escaping it came with.
         (Kind::Footnote, _) => {
-            let name: String = text.chars().filter(|c| !matches!(c, '\\' | '[' | ']' | '^' | ':')).collect();
-            format!("{NOTE_OPEN}{name}{NOTE_CLOSE}")
+            format!("{NOTE_OPEN}{}{NOTE_CLOSE}", note_name(text))
         }
         // A link's target is scaffolding for a manuscript, not part of the
         // book; its visible text is the book. The heading's own hashes are
@@ -2111,8 +2118,15 @@ pub(crate) fn html_body(text: &str, style: &Style, lang: &str) -> String {
     let (blocks, notes) = blocks(&text, style.source, true);
     let mut body = String::new();
     html_blocks(&blocks, style, &mut body);
-    let (mut body, order) = number_the_notes(&body, &notes, |n, _| {
-        format!("<sup class=\"fn\"><a href=\"#fn-{n}\" id=\"fnref-{n}\">{n}</a></sup>")
+    // A note cited again is a second anchor: `fnref-1`, then `fnref-1-2`,
+    // as an `id` is one place on the page, and epubcheck refuses a book
+    // with two of them.
+    let (mut body, order) = number_the_notes(&body, &notes, escape_html, |n, k, _| {
+        let id = match k {
+            1 => format!("fnref-{n}"),
+            k => format!("fnref-{n}-{k}"),
+        };
+        format!("<sup class=\"fn\"><a href=\"#fn-{n}\" id=\"{id}\">{n}</a></sup>")
     });
     if !order.is_empty() {
         body.push_str("<section class=\"footnotes\">\n<hr>\n<ol>\n");
@@ -2142,9 +2156,16 @@ pub(crate) fn html_body(text: &str, style: &Style, lang: &str) -> String {
 fn heading_ids(body: &str) -> String {
     let mut out = String::with_capacity(body.len() + 64);
     let mut taken: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut next: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     // The footnotes' own anchors are taken already.
+    // A second citation's anchor is `fnref-1-2`.
     let reserved = |id: &str| {
-        id.strip_prefix("fn-").or_else(|| id.strip_prefix("fnref-")).is_some_and(|n| n.parse::<usize>().is_ok())
+        let number = |n: &str| n.parse::<usize>().is_ok();
+        id.strip_prefix("fn-").is_some_and(number)
+            || id.strip_prefix("fnref-").is_some_and(|n| match n.split_once('-') {
+                Some((n, k)) => number(n) && number(k),
+                None => number(n),
+            })
     };
     for line in body.split_inclusive('\n') {
         let depth = line.strip_prefix("<h").and_then(|rest| rest.chars().next()).filter(|d| ('1'..='6').contains(d));
@@ -2158,12 +2179,19 @@ fn heading_ids(body: &str) -> String {
             slug if slug.is_empty() => "heading".to_string(),
             slug => slug,
         };
-        let mut id = base.clone();
-        let mut n = 0;
+        // The search for a free suffix starts where the last heading of
+        // these words left it, so a book of many headings of the same words
+        // is numbered in one pass, not in a pass per heading.
+        let mut n = next.get(&base).copied().unwrap_or(0);
+        let mut id = match n {
+            0 => base.clone(),
+            n => format!("{base}-{n}"),
+        };
         while taken.contains(&id) || reserved(&id) {
             n += 1;
             id = format!("{base}-{n}");
         }
+        next.insert(base, n + 1);
         out.push_str(&format!("<h{depth} id=\"{id}\">"));
         out.push_str(&line[4..]);
         taken.insert(id);
@@ -2503,16 +2531,30 @@ fn html_lines(lines: &[String], style: &Style) -> String {
 const NOTE_OPEN: char = '\u{FDD0}';
 const NOTE_CLOSE: char = '\u{FDD1}';
 
-/// Every footnote mark in `body` replaced by `mark(n, note)`, numbered in the
-/// order the marks are met, and the notes in that order. A mark with no note
+/// A footnote mark's name as the body carries it: the brackets, the caret
+/// and every backslash gone.
+fn note_name(text: &str) -> String {
+    text.chars().filter(|c| !matches!(c, '\\' | '[' | ']' | '^' | ':')).collect()
+}
+
+/// Every footnote mark in `body` replaced by `mark(n, k, note)`, numbered in
+/// the order the marks are met (`k` is which citation of note `n` this is,
+/// from 1), and the notes in that order. A mark with no note
 /// stays as it was written; a note with no mark is left out.
+///
+/// **The mark's name is escaped and the note's is not**: the body has been
+/// through the format's `escape`, so `[^a&b]` reaches here as `a&amp;b` in
+/// HTML while its note is `a&b`. Each note's name is put through the same
+/// escape before it is compared, or the two would never meet.
 fn number_the_notes(
     body: &str,
     notes: &[Note],
-    mark: impl Fn(usize, &[String]) -> String,
+    escape: fn(&str) -> String,
+    mark: impl Fn(usize, usize, &[String]) -> String,
 ) -> (String, Vec<Vec<String>>) {
     let mut out = String::with_capacity(body.len());
     let mut order: Vec<(String, Vec<String>)> = Vec::new();
+    let mut cited: Vec<usize> = Vec::new();
     let mut rest = body;
     while let Some(at) = rest.find(NOTE_OPEN) {
         out.push_str(&rest[..at]);
@@ -2525,7 +2567,7 @@ fn number_the_notes(
         rest = &after[close + NOTE_CLOSE.len_utf8()..];
         let n = match order.iter().position(|(seen, _)| seen == name) {
             Some(k) => k + 1,
-            None => match notes.iter().find(|(had, _)| had == name) {
+            None => match notes.iter().find(|(had, _)| had == name || note_name(&escape(had)) == name) {
                 Some((_, text)) => {
                     order.push((name.to_string(), text.clone()));
                     order.len()
@@ -2536,7 +2578,9 @@ fn number_the_notes(
                 }
             },
         };
-        out.push_str(&mark(n, &order[n - 1].1));
+        cited.resize(order.len(), 0);
+        cited[n - 1] += 1;
+        out.push_str(&mark(n, cited[n - 1], &order[n - 1].1));
     }
     out.push_str(rest);
     (out, order.into_iter().map(|(_, text)| text).collect())
@@ -2732,7 +2776,7 @@ fn typst(text: &str, style: &Style) -> String {
     typst_blocks(&blocks, style, &mut body);
     // Typst sets a footnote where it is called, so the note's text goes in
     // at the mark.
-    let (body, _) = number_the_notes(&body, &notes, |_, text| {
+    let (body, _) = number_the_notes(&body, &notes, escape_typst, |_, _, text| {
         let lines: Vec<String> = text
             .iter()
             .map(|l| line_into(l, style.settings.dialects(), Dialect::Typst, escape_typst, style.source, None))
@@ -3301,6 +3345,60 @@ mod tests {
         assert!(typ.contains("#quote(block: true)[\nquoted\non\n]"), "{typ}");
         assert!(typ.contains("#line(length: 100%)"), "{typ}");
         assert!(typ.contains("align: (left, right,),\n  table.header([N], [C]),\n  [x], [3],"), "{typ}");
+    }
+
+    /// **Footnotes whose name is markup, and a note cited twice**: `[^a&b]`
+    /// finds its note although the body has escaped its name, and each
+    /// citation of one note has an anchor of its own.
+    #[test]
+    fn a_note_named_with_markup_is_found_and_each_citation_has_its_own_anchor() {
+        let mut flat = style();
+        flat.settings.vertical = false;
+        let text = "甲[^a&b]乙[^<x>]丙[^a&b]。\n\n[^a&b]: 註一。\n[^<x>]: 註二。\n";
+        let html = export(text, Format::Html, &flat);
+        assert!(html.contains("<li id=\"fn-1\">註一。</li>\n<li id=\"fn-2\">註二。</li>"), "{html}");
+        assert!(html.contains("甲<sup class=\"fn\"><a href=\"#fn-1\" id=\"fnref-1\">1</a></sup>"), "{html}");
+        assert!(html.contains("乙<sup class=\"fn\"><a href=\"#fn-2\" id=\"fnref-2\">2</a></sup>"), "{html}");
+        assert!(html.contains("丙<sup class=\"fn\"><a href=\"#fn-1\" id=\"fnref-1-2\">1</a></sup>"), "{html}");
+        assert!(!html.contains("[^"), "{html}");
+        let typ = export(text, Format::Typst, &flat);
+        assert!(typ.contains("甲#footnote[註一。]乙#footnote[註二。]丙#footnote[註一。]"), "{typ}");
+        // A heading of the words a second citation's anchor has does not take it.
+        let html = export("甲[^n]乙[^n]。\n\n# fnref-1-2\n\n[^n]: 註。\n", Format::Html, &flat);
+        assert!(html.contains("<h1 id=\"fnref-1-2-1\">"), "{html}");
+    }
+
+    /// **A table is as wide as its header**, as GFM has it: a row's extra
+    /// cells are dropped, a short row is filled out, and a bare `|` over a
+    /// rule is no table (Typst refuses `columns: 0`).
+    #[test]
+    fn a_table_is_as_wide_as_its_header() {
+        let mut flat = style();
+        flat.settings.vertical = false;
+        let text = "| 名 | 數 |\n| - | - |\n| 甲 | 1 | 多 | 餘 |\n| 乙 |\n";
+        let html = export(text, Format::Html, &flat);
+        assert!(html.contains("<tr><td>甲</td><td>1</td></tr>"), "{html}");
+        assert!(html.contains("<tr><td>乙</td><td></td></tr>"), "{html}");
+        assert!(!html.contains("多") && !html.contains("餘"), "{html}");
+        let typ = export(text, Format::Typst, &flat);
+        assert!(typ.contains("columns: 2,") && typ.contains("  [甲], [1],\n  [乙], [],\n"), "{typ}");
+        let typ = export("|\n| - |\n| 甲 |\n", Format::Typst, &flat);
+        assert!(!typ.contains("columns: 0"), "{typ}");
+    }
+
+    /// **Headings of the same words are numbered in one pass**: twenty
+    /// thousand of them take a moment, not a pass each.
+    #[test]
+    fn many_headings_of_the_same_words_are_numbered_at_once() {
+        let body = "<h2>同</h2>\n".repeat(20_000);
+        let started = std::time::Instant::now();
+        let out = heading_ids(&body);
+        assert!(started.elapsed() < std::time::Duration::from_secs(2), "{:?}", started.elapsed());
+        assert!(out.starts_with("<h2 id=\"同\">同</h2>\n<h2 id=\"同-1\">"), "{}", &out[..80]);
+        assert!(out.ends_with("<h2 id=\"同-19999\">同</h2>\n"));
+        // The same answers as GitHub's where a heading's words are a suffix.
+        let out = heading_ids("<h1>a</h1>\n<h1>a-1</h1>\n<h1>a</h1>\n<h1>a</h1>\n");
+        assert_eq!(out, "<h1 id=\"a\">a</h1>\n<h1 id=\"a-1\">a-1</h1>\n<h1 id=\"a-2\">a</h1>\n<h1 id=\"a-3\">a</h1>\n");
     }
 
     /// **A line break stays one in Chinese and is a space between Latin
