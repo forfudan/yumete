@@ -2687,6 +2687,8 @@ pub struct Editor {
     /// `[editor] word_completion`: Latin letters before the word list opens
     /// by itself, `0` never (see `suggest.rs`).
     word_completion: usize,
+    /// `:preview-redraw` asked the previews' pictures to be made again.
+    preview_redraw: bool,
     /// Each open buffer's words, for that list.
     word_index: HashMap<u64, suggest::WordIndex>,
     /// The words were read during this stay in Insert mode: they are read
@@ -4417,6 +4419,7 @@ impl Editor {
             word_completion: 4,
             word_index: HashMap::new(),
             words_read_in_insert: false,
+            preview_redraw: false,
             line_words: HashMap::new(),
             reader: Box::new(NoReader),
             project_words: std::rc::Rc::new(RefCell::new(yumete_cjk::WordList::default())),

@@ -1322,6 +1322,10 @@ impl Editor {
                 }
                 Ok(CommandOutcome::Continue)
             }
+            Command::PreviewRedraw => {
+                self.preview_redraw = true;
+                Ok(CommandOutcome::Continue)
+            }
             Command::PreviewVertical(how) => {
                 self.preview_vertical = how.over(self.preview_vertical);
                 self.status = match self.preview_vertical {

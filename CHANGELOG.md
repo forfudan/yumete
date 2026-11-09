@@ -8,6 +8,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 - **The settings panel's `/` search reads either Chinese script and full pinyin**: 「預覽」 and `yulan` both find 预览字体.
 - **A click gives the window under it the keys**: a text window takes the caret where it was clicked, a preview takes the keys as it is (its frame turns gold), and a click in the text takes the keys back from a sidebar.
+- **`:preview-redraw` draws the previews again at their windows' size now**, for when a picture is left at its old size after a window moves.
 - **`␣wn` opens a new window on a chosen side** (yumete flavour, basic, helix keys): `h` `j` `k` `l` a blank window on the left, below, above or on the right, and `H` `J` `K` `L` one with the buffer picker open in it.
 
 ### Changed
@@ -18,6 +19,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **A preview is drawn in a frame**: thick and gold while the keys are in it, thin and quiet otherwise, so with two previews side by side the one with the keys is plain to see; the status line says `PRV` there too. In a Markdown preview, the page keeps the cursor's part of a long paragraph in view as you move or type through it, and a bar in the theme's gold stands beside the whole line the cursor is in (a paragraph, one list item or one line of code) (in the left margin, or along the top of a vertical page), and arrows on the frame point the way to it when it is out of view. The window's title line stays where it is.
 - **纵中横 (`[editor] tatechuyoko`) is off by default**, so every run of half-width characters on a vertical page is set the same way; set it to 2–8 to stand short numbers across in one cell.
 
+- **A preview opened from a vertical page goes below the text**, where the columns leave room, and beside it on a horizontal page.
 - **`␣wv` and `␣wnv` open the new window on the right on any page**, as helix does, where a vertical page used to open it on the left; with vim's keys `C-w v` opens it on the left, as vim does. Each side is an action of its own (`vsplit`, `vsplit_left`, `hsplit`, `hsplit_above`, `goto_file_hsplit_above`), so `:keymap-actions` names it and an action no longer changes with the keymap.
 - **Keys are spelled in English in every interface language**: `Space f`, as `Esc`, `Tab` and `C-o` already were.
 

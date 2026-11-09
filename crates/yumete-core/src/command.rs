@@ -551,6 +551,8 @@ pub enum Command {
     /// `:preview-vertical [on|off]` — the Markdown preview set
     /// vertically while the text window is.
     PreviewVertical(Switch),
+    /// Make every preview's picture again, at its window's size now.
+    PreviewRedraw,
     /// `:w!` — write over a file that changed on disk since it was read.
     WriteForce(Option<String>),
     /// `:reload` / `:reload!` — read the file again. The `!` throws away
@@ -4691,6 +4693,14 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[Param::Words { of: SWITCH, default: None }],
         build: Some(|p| Ok(Command::PreviewVertical(switched(p)))),
+    },
+    Entry {
+        name: "preview-redraw",
+        aliases: &[],
+        help: "cmd.view.preview-redraw",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::PreviewRedraw)),
     },
     Entry {
         name: "render",

@@ -331,6 +331,15 @@ impl MdPreviews {
             Some(_) => editor.take_page_steps(),
             None => Vec::new(),
         };
+        // **`:preview-redraw`**: every picture is forgotten and asked for
+        // again at its window's size now.
+        if editor.take_preview_redraw() {
+            for (&id, tab) in self.tabs.iter_mut() {
+                tab.sent = None;
+                crate::graphics::drop_pages_of(id);
+            }
+            redraw = true;
+        }
         let now = Instant::now();
         let cell = crate::graphics::cell_pixels();
         let theme = crate::preview_theme::theme(crate::theme::Palette::of(config));

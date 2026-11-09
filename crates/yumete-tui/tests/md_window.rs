@@ -336,3 +336,38 @@ fn the_preview_is_set_in_the_preview_fonts_or_the_export_s() {
     graphics::drop_pages();
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// **A preview moved to the bottom is drawn again at its new size**, a
+/// vertical one too, its columns as long as the new window is tall.
+#[test]
+fn a_preview_moved_below_is_drawn_at_its_new_size() {
+    let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let dir = std::env::temp_dir().join(format!("yumete-md-moved-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let main = a_long_note(&dir);
+    let mut editor = Editor::new();
+    editor.open_file(&main).unwrap();
+    let config = Config::default();
+    let mut md = MdPreviews::default();
+    editor.execute(":vertical").unwrap();
+    let page = editor.open_page_window_of(main.clone(), PreviewKind::Markdown).expect("room");
+    let preview = editor.preview_in(page).unwrap();
+    graphics::set_support(Support::Kitty);
+    until(&mut editor, &config, &mut md, |_| md_window::shot_of(preview).is_some_and(|s| s.vertical));
+    let before = md_window::cells_of(preview).unwrap();
+    // To the bottom as a writer does it: `␣wl ␣wt ␣wk`, a frame between keys.
+    for keys in [" wl", " wt", " wk"] {
+        for c in keys.chars() {
+            editor.on_key(yumete_core::input::Key::Char(c));
+        }
+        frame(&mut editor, &config);
+        md.follow(&mut editor, &config);
+    }
+    until(&mut editor, &config, &mut md, |_| md_window::cells_of(preview).is_some_and(|c| c != before));
+    let after = md_window::cells_of(preview).unwrap();
+    until(&mut editor, &config, &mut md, |_| md_window::shot_of(preview).is_some_and(|s| (s.columns, s.rows) == after));
+    let shot = md_window::shot_of(preview).unwrap();
+    eprintln!("before {before:?} after {after:?} shot {}x{} page {} top {}", shot.columns, shot.rows, shot.page, shot.top);
+    let _ = std::fs::remove_dir_all(&dir);
+}

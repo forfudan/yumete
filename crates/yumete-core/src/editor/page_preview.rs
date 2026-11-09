@@ -344,6 +344,12 @@ impl Editor {
     /// preview opened to the side leaves them in VS Code. A preview already
     /// on the screen is said to be open instead. The window, or `None` when
     /// there is no room.
+    /// Whether `:preview-redraw` asked for the pictures to be made again
+    /// since the front end last asked; asking takes the request.
+    pub fn take_preview_redraw(&mut self) -> bool {
+        std::mem::take(&mut self.preview_redraw)
+    }
+
     pub fn open_page_window(&mut self, main: PathBuf) -> Option<WindowId> {
         let kind = crate::buffer::PreviewKind::for_path(&main);
         self.open_page_window_of(main, kind)
@@ -359,9 +365,15 @@ impl Editor {
             return Some(id);
         }
         let from = self.live;
+        // **Below a 縱書 page, beside a horizontal one**: vertical columns
+        // fill the width, so the page takes the height left under them.
+        let how = match self.layout() {
+            Layout::Vertical => crate::window::Split::Below,
+            Layout::Horizontal => crate::window::Split::Beside,
+        };
         if let Some(area) = self.text_area.get() {
             let mut tried = self.windows.clone();
-            let room = tried.split_on(from, crate::window::Split::Beside, false, false).is_some_and(|fresh| {
+            let room = tried.split_on(from, how, false, false).is_some_and(|fresh| {
                 let (placed, _) = tried.place(area);
                 placed
                     .iter()
@@ -377,9 +389,7 @@ impl Editor {
                 return None;
             }
         }
-        // **To the right on a 縱書 page too**: a preview is a
-        // window beside the text, not a column of it.
-        let fresh = self.windows.split_on(from, crate::window::Split::Beside, false, false)?;
+        let fresh = self.windows.split_on(from, how, false, false)?;
         let caption = self.buffer_with(preview).map(|i| self.buffers[i].display_name()).unwrap_or_default();
         self.panes.insert(fresh, Pane {
             buffer: preview,

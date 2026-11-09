@@ -38859,8 +38859,19 @@ fn window_columns(ed: &Editor) -> Vec<(crate::window::WindowId, u16)> {
 /// **Switching the layout moves no window**: a Markdown file with its
 /// preview on the right stays so through `:vertical` on and off in
 /// the text — the screen is not laid out by the page the keys are on. A
-/// preview opens to the right from a 縱書 page too, and `C-w h` `l` go to the
-/// window drawn there.
+/// preview opened from a 縱書 page goes below it, where the columns leave
+/// room, and `C-w j` `k` go to the window drawn there.
+/// **`:preview-redraw`** asks the front end once for new pictures.
+#[test]
+fn preview_redraw_is_taken_once() {
+    let (mut ed, dir) = a_markdown_note("redraw");
+    assert!(!ed.take_preview_redraw());
+    ed.execute(":preview-redraw").unwrap();
+    assert!(ed.take_preview_redraw());
+    assert!(!ed.take_preview_redraw(), "taken");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 #[test]
 fn switching_the_layout_moves_no_window() {
     let (mut ed, dir) = a_markdown_note("sides");
@@ -38874,21 +38885,23 @@ fn switching_the_layout_moves_no_window() {
     assert_eq!(window_columns(&ed), [(text, 0), (page, 41)], "`:vertical` moves neither");
     ed.execute(":vertical off").unwrap();
     assert_eq!(window_columns(&ed), [(text, 0), (page, 41)], "nor `:vertical off`");
-    // Opened from a 縱書 page, the preview is on the right all the same.
+    // Opened from a 縱書 page, the preview goes below.
     ed.execute(":vertical").unwrap();
     ed.execute(":preview-window").unwrap();
     assert_eq!(ed.windows().len(), 1);
     let page = ed.open_page_window_of(main.clone(), crate::buffer::PreviewKind::Markdown).expect("room");
-    assert_eq!(window_columns(&ed), [(text, 0), (page, 41)], "a preview opens on the right on a 縱書 page");
+    assert_eq!(window_columns(&ed), [(text, 0), (page, 0)], "a preview opens below a 縱書 page");
+    let (placed, _) = ed.windows().place(crate::window::Area::new(0, 0, 81, 20));
+    assert!(placed[1].area.y > placed[0].area.y, "below, not above");
     // The keys go to the window that is there.
     ed.on_key(Key::Ctrl('w'));
-    ed.on_key(Key::Char('l'));
-    assert_eq!(ed.live_window(), page, "`C-w l` goes right, into the preview");
+    ed.on_key(Key::Char('j'));
+    assert_eq!(ed.live_window(), page, "`C-w j` goes down, into the preview");
     ed.on_key(Key::Ctrl('w'));
-    ed.on_key(Key::Char('h'));
-    assert_eq!(ed.live_window(), text, "`C-w h` comes back");
+    ed.on_key(Key::Char('k'));
+    assert_eq!(ed.live_window(), text, "`C-w k` comes back");
     ed.execute(":vertical off").unwrap();
-    assert_eq!(window_columns(&ed), [(text, 0), (page, 41)]);
+    assert_eq!(window_columns(&ed), [(text, 0), (page, 0)], "and stays below");
     std::fs::remove_dir_all(&dir).ok();
 }
 

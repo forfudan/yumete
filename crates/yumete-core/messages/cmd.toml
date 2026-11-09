@@ -2065,6 +2065,13 @@ en = "how big the page window draws the page: as wide as the window, or whole"
 find = "預覽 预览 頁寬 页宽 整頁 整页 fit width page"
 
 [[message]]
+# : 命令選單裏 preview-redraw 那一項的説明：照窗口現在的大小重畫預覽（草稿）
+key = "cmd.view.preview-redraw"
+zhs = "按窗口现在的大小重画预览"
+en = "draw the previews again at their windows' size now"
+find = "預覽 预览 重畫 重画 刷新 preview redraw refresh"
+
+[[message]]
 # : 命令菜单里 preview-theme 那一项的说明（草稿）
 key = "cmd.view.preview-theme"
 zhs = "用主题配色显示预览页面：纸为背景色，黑字为文字色；关闭则按印刷原样"
