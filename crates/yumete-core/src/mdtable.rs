@@ -158,8 +158,8 @@ pub fn is_row(line: &str) -> bool {
 }
 
 /// Whether a line could be a row of a table written **without its outer
-/// pipes** (`a | b` over `--- | ---`), which GFM allows (2026-10-30, as
-/// decided): an unescaped `|` somewhere in it. On its own that is only a
+/// pipes** (`a | b` over `--- | ---`), which GFM allows: an
+/// unescaped `|` somewhere in it. On its own that is only a
 /// candidate — a sentence may hold a bar — so [`region`] and [`row_lines`]
 /// ask for the rule row under the first line before believing it.
 pub fn has_bar(line: &str) -> bool {
@@ -227,9 +227,8 @@ pub fn row_lines(text: &str) -> Vec<bool> {
 /// How a row's cells are told apart (#378).
 ///
 /// A `|` in Markdown, a `,` in a CSV, a `;` in what Excel writes, a TAB in a
-/// 碼表, a space in an SSV: **one idea in five punctuations**.
-/// 2026-09-11：「他们本质上都是分隔符。所以 tb / tf 模式下他们显示效果应该是
-/// 一样的。」So the separator is a *value* carried through the one code path
+/// 碼表, a space in an SSV: **one idea in five punctuations**, all of them
+/// separators that look the same under `t b`. So the separator is a *value* carried through the one code path
 /// that squares a table up, and nothing downstream asks what kind of file it
 /// is reading.
 ///
@@ -350,7 +349,7 @@ pub fn pipes_from(text: &str, escaped: bool) -> Vec<usize> {
 ///
 /// `escaped` says whether the character just before it is a backslash that is
 /// itself unescaped — so typing `|` after a `\` already in the cell is allowed,
-/// which is what the manual promises and what the editor used to refuse.
+/// which is what the manual promises.
 pub fn has_bare_pipe(text: &str, escaped: bool) -> bool {
     !pipes_from(text, escaped).is_empty()
 }
@@ -803,10 +802,10 @@ pub fn torn(parts: &Parts) -> Option<(usize, usize, usize)> {
 /// Has somebody laid this table out already?
 ///
 /// The question the four automatic doors ask before they touch a table, and
-/// the answer to 「兩個字的編輯換來五千行 diff」 (#329). Leaving a cell used to
-/// square the whole table up, so the first edit ever made to a hand-typed
-/// table padded every one of its rows: 141,716 bytes of manuscript became
-/// 150,065, and the two characters that were actually typed were somewhere in
+/// the answer to 「兩個字的編輯換來五千行 diff」 (#329). Leaving a cell must not
+/// square the whole table up, or the first edit ever made to a hand-typed
+/// table pads every one of its rows: 141,716 bytes of manuscript become
+/// 150,065, and the two characters that were actually typed are somewhere in
 /// there. **Squaring a table up is a decision** — `t F` — **not a side effect
 /// of leaving a cell.** A table already squared up stays squared up, because
 /// there the rewrite is the two characters and nothing else.
@@ -853,9 +852,9 @@ pub fn laid_out(lines: &[String]) -> bool {
 /// (#327) — see [`yumete_cjk::stored_width`]. Ambiguous width is a property of
 /// the terminal, and a byte on disk is not.
 ///
-/// There is no ceiling on that width. There used to be one — 32 columns, so
-/// that a single long 備註 sentence could not make every line of a 人物表 as
-/// wide as itself — but a ceiling and alignment are the same knob: any cell
+/// There is no ceiling on that width — not even one meant to stop a single
+/// long 備註 sentence making every line of a 人物表 as wide as itself — because
+/// a ceiling and alignment are the same knob: any cell
 /// over the ceiling stops being padded, and its closing `|` lands wherever its
 /// own text ends. A table whose right edge is ragged is not lined up, which is
 /// the one thing this function is for. So the table grows as wide as it has to
@@ -995,10 +994,9 @@ pub fn format(lines: &[String]) -> Vec<String> {
 /// key is not an editor.
 ///
 /// `top` is where the page starts and `page` is how tall it is, so the window
-/// is the screen. It was 「one page either side of the row being asked about」
-/// until 2026-09-11 — which needed no viewport, and which let a long cell up to
-/// a page away widen every column around it with nothing visible to say why.
-/// 「可以都只量屏幕上的吗？」Yes, and it is better for the reason
+/// is the screen, not 「one page either side of the row being asked about」,
+/// which would let a long cell up to a page away widen every column around it
+/// with nothing visible to say why. The screen is better for the reason
 /// the grid gives for the same choice: a column that suddenly needs more room
 /// is telling you something true about the rows you just reached — which it
 /// only is if the change and its cause arrive together.
@@ -1065,10 +1063,8 @@ pub const FOLD_MARK: &str = ">";
 /// the column's width: the cell then scrolls inside itself so that what is
 /// being typed stays on the page, and this says the cell did not begin here.
 ///
-/// Warning: **`>` alone does not cover it** (settled 2026-10-17 by looking at a real
-/// frame). It was taken out that day as noise — 「I do not understand the usage
-/// of `<`……`>` is sufficient showing folded content」 — and put back the same
-/// day once the gap was drawn out. `>` says 「the tail is not all here」, and
+/// Warning: **`>` alone does not cover it** (settled by looking at a real
+/// frame). `>` says 「the tail is not all here」, and
 /// while the caret is mid-cell both marks show, so it does cover that case.
 /// What it cannot say is 「the head is behind you and the tail is all here」,
 /// which is exactly where the caret sits at the end of a long cell: a 27-character
@@ -1086,12 +1082,11 @@ pub const HEAD_MARK: &str = "<";
 
 /// The drawn padding that squares a table up, row by row.
 ///
-/// **Measured and drawn are two lists** (#283, 2026-09-07). `rows` carries
+/// **Measured and drawn are two lists** (#283). `rows` carries
 /// what each row hides when the table is *measured* and `shown` what it hides
 /// as the page really draws it, so a column's width never moves because of
 /// where the caret is. Pass `shown` empty to say 「the same as measured」,
-/// which is what prose does now that it folds nothing — the two
-/// parted company only over a cell whose folded tail came back for writing.
+/// which is what prose does, since it folds nothing.
 pub fn padding(
     rows: &[(String, Vec<(usize, usize)>)],
     wall: Wall,
@@ -1234,15 +1229,12 @@ pub fn padding(
             let short = target[c].saturating_sub(drawn_room[i][c]);
             // The colons of `:---:` are the alignment: the dashes grow between
             // them, never over them.
-            // Warning: **補白掛在豎線上，不插在內容和它自己的尾空格中間**
-            // （2026-10-17 報的）。從前它掛在**內容**的兩頭（`from`/`to`），而
-            // 格子裏 `to` 之後常常還有檔案自己的那一個空格——補白插在中間，於
-            // 是那一個空格被推到十七欄之外。畫出來一模一樣（都是空格），可
-            // 「檔案的第幾個字 → 螢幕第幾欄」那張圖斷了：`w` 選到末一個詞，選
-            // 中那一塊在螢幕上成了兩截，中間隔着補白（原話：「when selecting
-            // the last word of a cell with w, it also mark something in gray
-            // at the left side of the pipe」）。掛在 `start`/`end` 上，檔案自
-            // 己那幾個字就連着了。
+            // Warning: **補白掛在豎線上，不插在內容和它自己的尾空格中間**。
+            // 掛在**內容**的兩頭（`from`/`to`）的話，格子裏 `to` 之後常常還有
+            // 檔案自己的那一個空格——補白插在中間，那一個空格被推到十七欄之
+            // 外。畫出來一模一樣（都是空格），可「檔案的第幾個字 → 螢幕第幾欄」
+            // 那張圖斷了：`w` 選到末一個詞，選中那一塊在螢幕上成了兩截，中間
+            // 隔着補白。掛在 `start`/`end` 上，檔案自己那幾個字就連着了。
             //
             // 對齊那一行另算：`:---:` 的冒號是對齊記號，橫槓在它們**中間**長，
             // 不許長到它們外面去。
@@ -1412,12 +1404,11 @@ pub fn from_delimited(lines: &[String], delimiter: char) -> Vec<String> {
                 // 格子——按 RFC 4180，CSV 裏没加引號的空格就是欄位內容。
                 //
                 // 不是「該不該 `trim`」：**`|` 表格本身存不下那幾個空格**（讀的時
-                // 候格子兩邊一律去掉），所以轉過去就没地方放。也不報一句，原話：
-                // 「我觉得 csv -> pipe 这个过程本身就是有歧义的，用户做这件事情
-                // 就已经做好了心理准备了。」`u` 退得回來。
-                // **讀出值，不是讀出它在檔裏的寫法**（2026-10-03 修）：`"Smith,
-                // John"` 這一格的值是 `Smith, John`，引號是 CSV 的語法。從前連引
-                // 號一起搬進 `|` 表格，於是再轉回 CSV 就成了「這一格裏有逗號」。
+                // 候格子兩邊一律去掉），所以轉過去就没地方放。也不報一句：
+                // CSV 轉 `|` 表格本身就有歧義，做這件事的人心裏有數，`u` 退得回來。
+                // **讀出值，不是讀出它在檔裏的寫法**：`"Smith, John"` 這一格的值
+                // 是 `Smith, John`，引號是 CSV 的語法。連引號一起搬進 `|` 表格的
+                // 話，再轉回 CSV 就成了「這一格裏有逗號」。
                 .map(|span| {
                     escape(crate::table::unquote(&crate::table::cell_text(line, span)).trim())
                 })
@@ -1437,16 +1428,13 @@ pub fn from_delimited(lines: &[String], delimiter: char) -> Vec<String> {
 
 /// Turn a `|` table's lines into delimited ones.
 ///
-/// **A cell holding the delimiter is quoted, not refused**（2026-10-03 改）。
+/// **A cell holding the delimiter is quoted, not refused.**
 ///
-/// Warning: 這裏從前拒絕，理由寫着「一個格子加了引號而別的没加，在一個程序裏讀得對、
-/// 在另一個裏整列右移」。那個擔心是不成立的——**按欄位決定加不加引號正是
-/// RFC 4180 的規矩**，不是權宜。而這一條其實早就定過了（`development.md` 腳註 311：
-/// 「`:export` 遇到含分隔符的格子就**拒絕**——現在加引號就好了，那纔是一次 `.csv`
-/// 讀者讀得對的轉換」），只是那一改當時只落在 `:export` 整檔網格那一支上，`|`
-/// 表格這一支和 `:convert-table` 都没跟上，於是同一個倉裏兩種答案。
+/// Warning: 「一個格子加了引號而別的没加，在一個程序裏讀得對、在另一個裏整列右移」
+/// 這個擔心不成立——**按欄位決定加不加引號正是 RFC 4180 的規矩**，不是權宜。
+/// `:export` 整檔網格、`|` 表格這一支和 `:convert-table` 給同一個答案。
 ///
-/// 轉換從此**不會失敗**，所以不再交 `Result`。
+/// 轉換**不會失敗**，所以不交 `Result`。
 pub fn to_delimited(lines: &[String], delimiter: char) -> Vec<String> {
     parse(lines)
         .rows
@@ -1861,11 +1849,9 @@ mod tests {
         assert_eq!(unescape(r"a\\b"), r"a\b");
     }
 
-    /// **格子裏有分隔符就加引號**（2026-10-03 改；從前這一支叫
-    /// `a_cell_holding_the_delimiter_is_refused_rather_than_quoted`）。
+    /// **格子裏有分隔符就加引號**。
     ///
-    /// 按欄位決定加不加引號是 RFC 4180 的規矩，而 `:export` 那一邊早就這麼做了
-    /// ——兩邊從前不一致。
+    /// 按欄位決定加不加引號是 RFC 4180 的規矩，`:export` 那一邊也這麼做。
     #[test]
     fn a_cell_holding_the_delimiter_is_quoted() {
         let table = vec![
@@ -2008,56 +1994,20 @@ mod proof_292 {
             }
         }
         // **Bytes added per row, not per table**: the command
-        // table the site generates passed 100,000 bytes for one table by
-        // having 575 rows of about 175 each, while #292's table added some
-        // 8,400 a row. A bound on the table grew with every command added.
+        // table the site generates passes 100,000 bytes for one table by
+        // having 575 rows of about 175 each, while #292's table adds some
+        // 8,400 a row. A bound on the table would grow with every command
+        // added.
         assert!(
             worst.0 < 1_000,
             "one table would grow by {} bytes a row: {}",
             worst.0,
             worst.1
         );
-        // Warning: **20 萬 → 26 萬，2026-09-28**，而且這一句該不該留着是一個問題。
-        //
-        // 撞線的那一次是 §5.13（多選區方案）加進來的十四張表——可量出來它們一共只有
-        // **3,388 字節**，而當時的總數已經是 19.7 萬。**不是那一節撐爆的，它只是最後
-        // 一根稻草。**
-        //
-        // 量出來的三個數（2026-09-28，`docs/` 全部 .md）：
-        //
-        // | | |
-        // | --- | --- |
-        // | 文檔總字節 | 1,793,870 |
-        // | 表格本身 | 219,556（佔 12.2%） |
-        // | 對齊要補的 | 228,747（**佔表格 104%**——對齊一遍差不多翻一倍） |
-        //
         // Warning: **真正該看的是上面那一句 `worst`，不是這一句。** #292 防的是「**一張**表
         // 的最寬格子是一整段，於是別的每一行都補到那麼寬」——那是單張表的病。而這一
-        // 句量的是「整個文檔集加起來」，它**隨文檔一起長**，於是每隔一陣就要調大一次
-        // ——一條注定被反覆消音的護欄。
-        //
-        // Warning: **而它順帶露出一件真事**：`local/development.md:511` 那張功能表**一張就
-        // 99,138 字節**，佔全部的一半，**貼着上面那條「單張不許過十萬」的線**。下一個
-        // 功能行就會把那一句（真正要緊的那一句）撞紅。
-        //
-        // Warning: **2026-10-01 重量，那個 99,138 不成立了**（原地跑同一支測量）：
-        //
-        // | | 2026-09-28 | 2026-10-01 |
-        // | --- | --- | --- |
-        // | 最壞的那一張（功能表） | 99,138 | **68,434**（離十萬還有 31,566） |
-        // | 全部加起來 | 228,747 | **230,637**（離 26 萬還有 29,363） |
-        //
-        // 所以「下一個功能行就撞紅」是假警報，**那張表眼下不必拆**。真正在往線上
-        // 走的是累計那一句——而它本來就是「注定被反覆消音」的那一句。
-        //
-        // **没有動 `worst` 那一句，也没有改這一句的形狀**——「累計該不該換成一個不隨
-        // 文檔長大的說法（比如補的字節不許超過表格自身）」還没定，記在這裏等着定。
-        // 眼下只把數字讓開，好讓工作樹是綠的。
-        //
-        // Warning: **26 萬 → 32 萬，2026-10-06**：手冊那天多了一個英文正本（§5.95），
-        // 於是同一批表在 `docs/` 底下存了兩份，累計從 230,637 跳到 **291,046**
-        // （+60,409）。`worst` 那一句没動——英文版最壞的那一張比中文版還窄。
-        // 這正是上面說的「注定被反覆消音」：這一次連成因都寫得出來。
+        // 句量的是「整個文檔集加起來」，它**隨文檔一起長**，所以每隔一陣就要調大一次。
+        // 累計該不該換成一個不隨文檔長大的說法（比如補的字節不許超過表格自身），還沒定。
         assert!(total < 320_000, "every table together would add {total} bytes");
     }
 }
@@ -2067,7 +2017,7 @@ mod bare_tables {
     use super::*;
 
     /// **A table written without its outer pipes is one under a rule row**
-    /// (GFM; 2026-10-30, as decided), and a bar in a sentence is not.
+    /// (GFM), and a bar in a sentence is not.
     #[test]
     fn a_table_without_outer_pipes_is_one_under_a_rule_row() {
         let doc = ["姓 | 名", "--- | ---", "李 | 白", "", "a | b in a sentence", "| c |"];

@@ -45,36 +45,33 @@ impl Side {
     }
 }
 
-/// **What is in a slot right now** — one panel, never two (2026-09-22 定：
-/// 「臨時面板直接廢除，以後只有左右邊欄」)。
+/// **What is in a slot right now** — one panel, never two: 没有臨時面板，只有左右邊欄。
 ///
-/// 現在的模型一句話：**邊欄是容器，面板是內容。** 容器只由人開由人關，空了就空
+/// 模型一句話：**邊欄是容器，面板是內容。** 容器只由人開由人關，空了就空
 /// 着；內容一次一個。
 ///
-/// **「信息」——光標底下這個東西是什麽**（2026-09-30 定，#426）。
+/// **「信息」——光標底下這個東西是什麽**（#426）。
 ///
-/// 六種內容，**一個槽**。原話：「右侧栏和浮窗可以完全做成这样的特征：它永远只有
-/// 一个信息可以即时显示，其他的都必须手动触发……换句话说，右侧栏就是固定的
-/// 『浮窗』，对于这几类信息，它开着，浮窗就不用开了。」
+/// 六種內容，**一個槽**：永遠只有一種信息即時顯示，其他的都要手動觸發。右側欄就是
+/// 固定的浮窗——對這幾類信息，它開着，浮窗就不用開了。
 ///
-/// Warning: **這不是五扇面板。** 從前它們是（三扇常駐面板加兩扇臨時面板），於是
-/// 「畫在哪」和「擺哪一種」各存了兩份，四次同一族的 bug 都出在那上面（§5.44）。
-/// 現在內容是一個 `Info`，容器是「那一格開着嗎」，兩個都問出來，不存。
+/// Warning: **這不是五扇面板。** 做成幾扇面板的話，「畫在哪」和「擺哪一種」各存兩份，
+/// 同一族的 bug 都出在那上面（§5.44）。內容是一個 `Info`，容器是「那一格開着嗎」，
+/// 兩個都問出來，不存。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Info {
     /// 漢字的拆分與編碼（`空格 d`，#215）。
     Dictionary,
     /// 詞條（#287）。
     Wiki,
-    /// 這一行的字段（#296）。改過兩次名：2026-09-30 從「表格」改「數據」
-    /// （原話「比『表格』更能反映这一行的内容」），2026-10-01 又改「記錄」
-    /// （原話「更能反映表格行的事实。数据太 broad 了」）。
+    /// 這一行的字段（#296）。叫「記錄」：比「表格」更說得出這一行的內容，
+    /// 「數據」又太寬。
     Record,
     /// 語言服務器說這個名字是什麽（#53 ③）。
     Docs,
     /// 語言服務器說這一行哪兒不對。
     Problems,
-    /// **這一段改動，`HEAD` 那一份原來寫的是什麼**（`空格 x`/`X`，2026-10-11）。
+    /// **這一段改動，`HEAD` 那一份原來寫的是什麼**（`空格 x`/`X`）。
     ///
     /// helix 沒有這一格（它只有 `]g`/`[g` 跳塊和 `空格 g` 那張改過的檔單子），
     /// vim 要靠插件；gitsigns／gitgutter／signify 三家的形狀一樣，這裏照它們做。
@@ -136,7 +133,7 @@ pub enum Panel {
     Outline,
     /// Look for a pattern, and what it found.
     Search,
-    /// What links to this file and what it links to (雙鏈, 2026-10-30).
+    /// What links to this file and what it links to (雙鏈).
     Links,
     /// **光標底下這個東西是什麽**——六種內容共用的那一格（[`Info`]，#426）。
     Info,
@@ -150,9 +147,8 @@ impl Panel {
     /// Its name in the config file and on the command line.
     pub fn key(self) -> &'static str {
         match self {
-            // **`explorer`, not `files`** (2026-10-20 作者定): it is what
-            // vscode calls the thing and what the English label says, and the
-            // old word was the only place still saying the other one.
+            // **`explorer`, not `files`**: it is what vscode calls the thing
+            // and what the English label says.
             Panel::Files => "explorer",
             Panel::Buffers => "buffers",
             Panel::Outline => "outline",
@@ -218,7 +214,7 @@ pub enum View {
     /// Look for a pattern, and what it found — Feature #419.
     Search,
     /// The links into and out of the file being written, as sections or as
-    /// the file among its neighbours (雙鏈, 2026-10-30).
+    /// the file among its neighbours (雙鏈).
     Links,
     /// **光標底下這個東西是什麽**——六種內容輪流佔着的那一格（#426）。
     ///
@@ -239,15 +235,15 @@ impl View {
 /// `2/10 → 3/10 → 4/10 → 5/10`，`w` 按一下走一格，到頭回到 2/10。**出廠 3/10**。
 ///
 /// Warning: **同一個分母，次序纔一眼看得出來。** 這一檔的名字就是那個分數，寫在狀態欄
-/// 上；`3/10 → 4/10` 是升一格，而 `3/10 → 2/5` 要心算。原話：「2/10, 3/10,
-/// 4/10, 5/10 比较好一些……这样感觉调节的范围更加广一些(20%-50%)」。
+/// 上；`3/10 → 4/10` 是升一格，而 `3/10 → 2/5` 要心算。2/10 到 5/10，
+/// 調節的範圍也寬（20%–50%）。
 ///
-/// Warning: **名字不寫「窄/中/綽/寬」**（同日定）。「綽」和「寬」是近義詞，狀態欄寫着
+/// Warning: **名字不寫「窄/中/綽/寬」**。「綽」和「寬」是近義詞，狀態欄寫着
 /// 「邊欄：綽」的時候讀者看不出它比「寬」窄還是寬——他得記。分數自己排序，不用學
 /// 詞，而且直接說出會得到什麼；往後加一檔改一個數組就行。
 ///
-/// Warning: **寬度是側欄的屬性，不是面板的屬性**（原話）：「面板自身不能改变侧栏的
-/// 宽度，它只是借用了侧栏这个容器」。所以這個檔位記在**那一側**上，換視圖不變、
+/// Warning: **寬度是側欄的屬性，不是面板的屬性**：面板自身不能改變側欄的寬度，它只
+/// 是借用了側欄這個容器。所以這個檔位記在**那一側**上，換視圖不變、
 /// 關掉再開也不變——你把左欄調寬是因為你的屏幕寬，不是因為你在看文件樹。
 ///
 /// Warning: **檔位是意圖，寬度是結果。** 兩欄都開而窗口又小的時候，靠後那幾檔會被「正文
@@ -316,7 +312,7 @@ pub struct Row {
     pub is_dir: bool,
     /// Whether it is a directory that is showing its contents.
     pub expanded: bool,
-    /// **整行鋪一層淡底**——改動那一格用它（`空格 X`，2026-10-11）。
+    /// **整行鋪一層淡底**——改動那一格用它（`空格 X`）。
     ///
     /// 核心不認識顏色，所以這裏說的是「哪一種」，由前端去調色板上取：
     /// `Wash::Gone` 是刪掉的、`Wash::Added` 是新添的，和 `:git-diff` 同一套。
@@ -324,14 +320,14 @@ pub struct Row {
     /// **整行退一級**——它是一句關於這一扇窗的話，不是窗裏的一條內容。
     ///
     /// 字典那一扇用它說「拆分表裏沒有這個字」：那一句和上面幾行不是同一種東西，
-    /// 上面是這個字的事實，它是這一次查詢的事實（2026-10-13 定，原話「put the
-    /// words in grey below (with a gap line) the two unicode lines」）。
+    /// 上面是這個字的事實，它是這一次查詢的事實，所以它灰着、隔一行擺在兩行
+    /// Unicode 下面。
     pub quiet: bool,
     /// **這一行裏改掉的那幾段**，相對 [`Self::name`] 的字節區間。
     ///
     /// 只有改動那一格填它（`空格 X`）：整行那一層淡底說「這是哪一稿」，這幾段
-    /// 重一檔說「改的是這幾個字」。從前邊欄只有前一半，而浮窗兩半都有——同一
-    /// 份 diff 在兩處不一樣，正是作者 2026-10-16 報來的那一條。
+    /// 重一檔說「改的是這幾個字」。邊欄與浮窗兩半都有——同一份 diff 在兩處
+    /// 不許不一樣。
     pub marks: Vec<std::ops::Range<usize>>,
     /// **A quiet figure at the right edge**: the 大綱 writes each
     /// heading's count there, the way a table of contents writes a page.
@@ -411,11 +407,9 @@ pub struct Sidebar {
 /// A directory of ten thousand files is not a manuscript, and drawing it would
 /// stall the keystroke that opened the sidebar.
 ///
-/// Warning: **砍在排序之後，不是之前**（2026-10-07 審出來的）。從前是
-/// `children.take(MAX_PER_DIR)`——先砍再排，而目錄給出來的次序是**文件系統的**
-/// 次序，於是一千個檔的目錄裏留下的是任意的五百個：`a.md` 可能不在樹上，而
-/// `z.md` 在。現在是整個目錄讀進來、排好、再砍，所以留下的是按名字數的頭五百個，
-/// 而且每次都一樣。讀一層目錄是有限的活，畫一萬行不是。
+/// Warning: **砍在排序之後，不是之前**。先砍再排的話，目錄給出來的次序是**文件系統的**
+/// 次序，一千個檔的目錄裏留下的是任意的五百個：`a.md` 可能不在樹上，而 `z.md` 在。
+/// 整個目錄讀進來、排好、再砍，留下的是按名字數的頭五百個，而且每次都一樣。讀一層目錄是有限的活，畫一萬行不是。
 const MAX_PER_DIR: usize = 500;
 
 impl Sidebar {
@@ -448,12 +442,12 @@ impl Sidebar {
 
     /// Fill the sidebar with rows the editor built (buffers, or headings).
     pub fn set_rows(&mut self, rows: Vec<Row>) {
-        // **高亮留在它站着的那一條上，不是留在第幾行上**（2026-10-07 審出來的）。
+        // **高亮留在它站着的那一條上，不是留在第幾行上**。
         //
-        // Warning: 從前這裏只夾一下數字。於是大綱在上面多出一個標題的時候——改一個
-        // 字就重建一次——高亮**滑到了另一條**上，而大綱上按 `Enter` 跳的就是高亮
-        // 那一條；緩衝區那一扇關掉一條之後同理。文件樹那一支（[`Self::rebuild`]）
-        // 一直是按路徑認的，這一支照它辦。
+        // Warning: 只夾一下數字的話，大綱在上面多出一個標題的時候——改一個字就重建
+        // 一次——高亮**滑到另一條**上，而大綱上按 `Enter` 跳的就是高亮那一條；緩衝
+        // 區那一扇關掉一條之後同理。文件樹那一支（[`Self::rebuild`]）按路徑認，這
+        // 一支照它辦。
         //
         // 認的是「路徑＋名字」：大綱每一行的路徑都一樣（同一份稿子），而
         // `depth` 存的是行號，上面多一行它就變了，所以行號不能當身份。同名的標
@@ -508,10 +502,9 @@ impl Sidebar {
     /// **這一格的主語**，接在框畫的標題後面——文件樹接的是它扎根的那個目錄
     /// （「文件樹  yumete」）。別的視圖沒有主語，回空。
     ///
-    /// Warning: **名字不在這裏**（2026-09-26 定，原話：「我希望你让这些面板都一致，不要
-    /// 搞特殊化」）：五扇面板的標題一律由 `sidebar_shell` 畫，源頭是 `Panel::tag()`
-    /// 那一張表。從前這裏另有一張寫死的繁體短名表，於是同一扇面板有兩個名字，而
-    /// 英文界面上這一行照樣是中文。
+    /// Warning: **名字不在這裏**：面板一律一致，不搞特殊化。五扇面板的標題一律由
+    /// `sidebar_shell` 畫，源頭是 `Panel::tag()` 那一張表。這裏另有一張寫死的短名表
+    /// 的話，同一扇面板就有兩個名字，而英文界面上這一行照樣是中文。
     pub fn subject(&self) -> String {
         match self.view {
             View::Explorer => self
@@ -663,7 +656,7 @@ impl Sidebar {
             .min(self.rows.len().saturating_sub(1));
     }
 
-    /// **把一條規範化過的路徑說成這棵樹自己那套說法**（2026-10-07 審出來的）。
+    /// **把一條規範化過的路徑說成這棵樹自己那套說法**。
     ///
     /// Warning: 呼叫方交來的路徑是 `canonicalize` 過的（見 `Editor::open_sidebar_showing`
     /// ——它那樣做是對的，不然同一個檔兩種寫法認不出是一個），而根是項目自己說
@@ -690,8 +683,8 @@ impl Sidebar {
     ///
     /// **The same question `:grep` asks** (#362), asked of the same walker:
     /// one level of [`ignore`], which reads the `.gitignore` in the directory
-    /// as well as the ones above it. The tree used to skip three hard-coded
-    /// names, so a repository showed its whole source next to the chapters.
+    /// as well as the ones above it, not a few hard-coded names — or a
+    /// repository shows its whole source next to the chapters.
     fn push_dir(&mut self, dir: &Path, depth: usize) {
         let mut dirs = Vec::new();
         let mut files = Vec::new();
@@ -717,8 +710,7 @@ impl Sidebar {
         }
         dirs.sort();
         files.sort();
-        // 文件夾先留，它們是走得進去的那一種；五百的上限數的是這一層的總數，和
-        // 從前一樣。
+        // 文件夾先留，它們是走得進去的那一種；五百的上限數的是這一層的總數。
         dirs.truncate(MAX_PER_DIR);
         files.truncate(MAX_PER_DIR - dirs.len());
         for (name, path) in dirs {
@@ -889,7 +881,7 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// **符號連結上的根也認得出那一條**（2026-10-07 審出來的）。
+    /// **符號連結上的根也認得出那一條**。
     ///
     /// 呼叫方交來的路徑是規範化過的，而根是項目說的那一條——macOS 上 `/tmp` 就是
     /// `/private/tmp` 的連結，於是 `starts_with(root)` 一上來就不成立：一個目錄都

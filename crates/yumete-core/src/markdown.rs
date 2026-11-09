@@ -3122,7 +3122,7 @@ mod typst_tests {
             .collect()
     }
 
-    /// **Raw text by Typst's rules** (review, 2026-11-09): it opens at any
+    /// **Raw text by Typst's rules**: it opens at any
     /// backtick, mid-line too, and closes at the first run of as many
     /// backticks wherever it stands; two are an empty raw; a longer run
     /// closes with its first ones and opens another with the rest. A
@@ -3164,7 +3164,7 @@ mod typst_tests {
         assert_eq!(raw_and_maths("$ a\n` b $\n甲"), ".$.");
     }
 
-    /// **An equation written in code is maths too** (review, 2026-11-09),
+    /// **An equation written in code is maths too**,
     /// as Typst's lexer reads `$` in code: a backtick in it is a symbol, not
     /// raw text, and its brackets open and close nothing of the code.
     #[test]
@@ -3221,8 +3221,8 @@ mod typst_tests {
 
     /// **A template's code block is code from its `{` to its `}`**:
     /// blank lines, `set` and `show` rules, closures, comments
-    /// and all. Its lines used to be one flat colour down to the first blank
-    /// line and plain writing after it.
+    /// and all — not one flat colour down to the first blank line and plain
+    /// writing after it.
     #[test]
     fn a_code_block_is_code_down_to_its_closing_brace() {
         let text = "\
@@ -3366,7 +3366,7 @@ mod typst_tests {
     }
 
     /// `#[…]` is code around writing, and the `.` after `#w` ends it unless
-    /// a field follows (review, 2026-11-06).
+    /// a field follows.
     #[test]
     fn content_blocks_and_a_stop_after_a_variable() {
         assert_eq!(shape("#[甲 *乙*] 丙"), "##  .B.#  ");
@@ -3374,8 +3374,7 @@ mod typst_tests {
         assert_eq!(shape("#w.len() x"), "########  ");
     }
 
-    /// **A bare URL is a link, not a comment from its `//`** (review,
-    /// 2026-11-05).
+    /// **A bare URL is a link, not a comment from its `//`**.
     #[test]
     fn a_bare_url_is_a_link() {
         assert_eq!(shape("see https://e.com/a. Then"), "    LLLLLLLLLLLLLLL      ");
@@ -3486,7 +3485,7 @@ mod list_tests {
 // Warning: **測試模組一律擺在檔尾。** `yumete-core/tests/messages.rs` 那張「每個標籤都
 // 有條目」的網把源碼切在**第一個**頂格的 `#[cfg(test)]\nmod ` 處——擺在檔案中間，
 // 它後面的生產代碼就整段從網裏消失，於是那裏加一則文案，面板上直接印標籤而測試
-// 全綠。這一支從前擺在中間，後面壓着 445 行（2026-09-24 審出來的）。
+// 全綠。
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3513,11 +3512,11 @@ mod tests {
 
     /// Every path that ends a table resets its row counter (#467).
     ///
-    /// The counter used to be cleared on two of the eleven returns that end a
-    /// table, so a second table separated from the first by anything other
-    /// than a blank line went on counting: its header came out as a body row
-    /// and the banding was inverted for the rest of the table. No file in the
-    /// repository triggered it, which is exactly why it wanted a test.
+    /// Cleared on only some of the returns that end a table, a second table
+    /// separated from the first by anything other than a blank line would go
+    /// on counting: its header would come out as a body row and the banding
+    /// would be inverted for the rest of the table. No file in the repository
+    /// triggers it, which is exactly why it wants a test.
     #[test]
     fn a_second_table_starts_counting_from_its_own_header() {
         let nths = |between: &str| -> Vec<usize> {
@@ -3555,10 +3554,9 @@ mod tests {
 
     /// A quote, a fence and a table inside a `:::` are still themselves (#468).
     ///
-    /// Everything inside a container used to come back as `Container`, which
-    /// was harmless while every block wore the same grey band and wrong the
-    /// moment they stopped: a fence draws no ground of its own now, so it
-    /// punched a page-coloured hole through the callout, and a quote lost its
+    /// Not everything inside a container is `Container`: a fence draws no
+    /// ground of its own, so read as `Container` it would punch a
+    /// page-coloured hole through the callout, and a quote would lose its
     /// colour entirely.
     #[test]
     fn a_block_inside_a_callout_is_still_that_block() {
@@ -3673,11 +3671,10 @@ mod tests {
         assert_eq!(shape("`**not bold**`"), ".CCCCCCCCCCCC.");
     }
 
-    /// 2026-09-19：**一個代碼段由幾個反引號開，就要幾個反引號關**。從前這裏
-    /// 取的是「下一個反引號」，所以兩個挨在一起的反引號被當成一對空代碼段，
-    /// 掃描回到 `%%` 上——於是它開了一條註釋，後面半本書變灰，導出的時候那
-    /// 幾段**整個不見**。2026-09-19 報的就是這個，而這個檔自己的手冊
-    /// （`docs/manual_tc.md:394`，引用各種標記的那一行）正是這個形狀。
+    /// **一個代碼段由幾個反引號開，就要幾個反引號關**。取「下一個反引號」的話，
+    /// 兩個挨在一起的反引號被當成一對空代碼段，掃描回到 `%%` 上——於是它開了一
+    /// 條註釋，後面半本書變灰，導出的時候那幾段**整個不見**。手冊裏引用各種標記
+    /// 的那一行正是這個形狀。
     ///
     /// Warning: 上面那一條只用了單反引號，所以它永遠是綠的。
     #[test]
@@ -3803,8 +3800,8 @@ mod tests {
             .collect()
     }
 
-    /// 2026-10-25: a note hard-wrapped with an indent was grey on its first line
-    /// only.
+    /// A note hard-wrapped with an indent is grey on every line, not on its
+    /// first line only.
     #[test]
     fn a_footnote_runs_on_over_its_indented_and_lazy_lines() {
         // Indented lines, a second paragraph after a blank, then writing again.
@@ -3930,7 +3927,7 @@ mod tests {
 
     /// **標記套得起來了**。
     ///
-    /// 從前 ``**粗的`碼`**`` 交出來的是三段，中間那一段連反引號一起算成粗體的正文。
+    /// ``**粗的`碼`**`` 不是三段：中間那一段不許連反引號一起算成粗體的正文。
     #[test]
     fn marks_nest_now() {
         let inner = |line: &str, want: Kind| {
@@ -3953,11 +3950,10 @@ mod tests {
         assert!(inner("**a`b**c", Kind::Code).is_empty(), "反引號不許找到外面去");
     }
 
-    /// **一層套一層的強調**（2026-10-03 修）。
+    /// **一層套一層的強調**。
     ///
-    /// 三條都是 2026-10-02 那一輪掃查報來的：`*em **strong** em*` 畫成 `em *`、
-    /// `***both***` 畫成 `*both`、`**粗 *斜* 粗**` 是對的。前兩條的根子在
-    /// [`closing`]——它在一串分隔符的中間收口。
+    /// `*em **strong** em*` 不許畫成 `em *`、`***both***` 不許畫成 `*both`，
+    /// `**粗 *斜* 粗**` 照舊對。要點在 [`closing`]——它在一串分隔符的中間收口。
     #[test]
     fn emphasis_nests_without_eating_a_delimiter() {
         let inner = |line: &str, want: Kind| {
@@ -3976,7 +3972,7 @@ mod tests {
         assert_eq!(inner("***both***", Kind::Emphasis), vec!["**both**"]);
         assert_eq!(inner("***both***", Kind::Strong), vec!["both"]);
 
-        // 從前就對的那一條，別改壞。
+        // 本來就對的那一條，別改壞。
         assert_eq!(inner("**outer *inner* outer**", Kind::Strong), vec!["outer *inner* outer"]);
         assert_eq!(inner("**outer *inner* outer**", Kind::Emphasis), vec!["inner"]);
 
@@ -3984,10 +3980,9 @@ mod tests {
         assert_eq!(inner("**甲**和**乙**", Kind::Strong), vec!["甲", "乙"]);
         assert_eq!(inner("*甲*和*乙*", Kind::Emphasis), vec!["甲", "乙"]);
 
-        // **兩段貼在一起，中間那一串是共用的**（2026-10-03 一輪審查報來的，是我
-        // 當天自己挖的洞）。`**粗***斜*` 中間三顆星：兩顆收粗體、一顆開斜體。
-        // 從前這裏要求「閉合那一串和開頭那一串一樣長」，於是兩邊都配不上，兩個
-        // 構造一起落回正文——`**粗***斜*` 畫出來是一條斜體裏裝着三顆裸星。
+        // **兩段貼在一起，中間那一串是共用的**。`**粗***斜*` 中間三顆星：兩顆收
+        // 粗體、一顆開斜體。要求「閉合那一串和開頭那一串一樣長」的話，兩邊都配
+        // 不上，兩個構造一起落回正文——畫出來是一條斜體裏裝着三顆裸星。
         assert_eq!(inner("**粗***斜*", Kind::Strong), vec!["粗"]);
         assert_eq!(inner("**粗***斜*", Kind::Emphasis), vec!["斜"]);
         assert_eq!(inner("*a***b**", Kind::Emphasis), vec!["a"]);
@@ -3999,7 +3994,7 @@ mod tests {
     /// **兩條不變式**：按起點排好，任意兩條要麼不交要麼全含。
     ///
     /// 下游全靠它們——`mi k` 用「起點最靠後的那一條」當最內層，詳情面板同理，而兩個
-    /// 順序寫字的循環從前假定不重疊，切出反向區間當場崩。
+    /// 順序寫字的循環假定不重疊，否則切出反向區間當場崩。
     #[test]
     fn the_two_invariants_hold() {
         let lines = [
@@ -4080,7 +4075,7 @@ mod tests {
     }
 
 
-    /// **反斜杠轉義**。從前没有，於是正文裏寫不出一個字面的星號。
+    /// **反斜杠轉義**：没有它，正文裏寫不出一個字面的星號。
     ///
     /// Warning: 這個倉自己的 `export.rs` 正在生成 `\*`，導出的檔用自己的編輯器打開會亂。
     #[test]
@@ -4112,10 +4107,10 @@ mod tests {
     }
 
 
-    /// Warning: **`_` 的詞中保護不許把漢字也擋掉**（2026-09-28 修）。
+    /// Warning: **`_` 的詞中保護不許把漢字也擋掉**。
     ///
-    /// 那一條是保 `snake_case` 的，而 `is_alphanumeric()` 對漢字回真，於是
-    /// `這_是_重點` 一條 span 都不交。這是這一族裏唯一一個我們自己造出來的中文問題。
+    /// 那一條是保 `snake_case` 的，而 `is_alphanumeric()` 對漢字回真，只問它的話
+    /// `這_是_重點` 一條 span 都不交。
     #[test]
     fn an_underscore_between_han_still_emphasises() {
         let kinds = |line: &str| spans(line).into_iter().map(|s| s.kind).collect::<Vec<_>>();
@@ -4128,11 +4123,11 @@ mod tests {
         assert!(kinds("snake_case_here").is_empty(), "snake_case 還是要保住");
     }
 
-    /// **一長串 `=` 不是反覆的 `==高亮==`**（2026-10-11 報的）。
+    /// **一長串 `=` 不是反覆的 `==高亮==`**。
     ///
-    /// 十四個 `=` 畫出來只剩六個：掃描器把它們兩個兩個配成 `==…==`，每配成一對
-    /// 就把那四個字符當標記收走。光標走過去那一行在 6／10／14 格之間跳，因為所
-    /// 見即所得只在光標不在那一行的時候把標記藏起來。
+    /// 把它們兩個兩個配成 `==…==`、每配成一對就把那四個字符當標記收走的話，十四
+    /// 個 `=` 畫出來只剩六個，光標走過去那一行在 6／10／14 格之間跳，因為所見即
+    /// 所得只在光標不在那一行的時候把標記藏起來。
     #[test]
     fn a_run_of_equals_is_not_a_row_of_highlights() {
         for line in ["==============", "=====", "===="] {
@@ -4148,10 +4143,10 @@ mod tests {
         assert_eq!(kinds("==重點=="), vec![Kind::Marker, Kind::Highlight, Kind::Marker]);
     }
 
-    /// **`***三個***` 兩層都算數**（2026-10-11 報的）。
+    /// **`***三個***` 兩層都算數**。
     ///
     /// CommonMark 把它讀成 `<em><strong>`。這裏不做 delimiter stack，可至少不該
-    /// 吃掉一半——從前畫出來是 `*粗斜**`。
+    /// 吃掉一半畫成 `*粗斜**`。
     #[test]
     fn three_stars_are_both_layers() {
         let line = "***又粗又斜***";
@@ -4173,10 +4168,10 @@ mod tests {
         assert_eq!(marks, 6, "六個星號全是標記");
     }
 
-    /// **嵌套的強調，裏層不許把外層的閉合吃掉**（2026-10-11 報的）。
+    /// **嵌套的強調，裏層不許把外層的閉合吃掉**。
     ///
-    /// `*斜 **粗** 斜*` 從前畫成 `斜 *粗** 斜`——找閉合那一步不跳過比自己長的
-    /// 那一串分隔符，於是外層的 `*` 配到了裏層 `**` 的第一個星號上。
+    /// 找閉合那一步要跳過比自己長的那一串分隔符，不然外層的 `*` 配到裏層 `**` 的
+    /// 第一個星號上，`*斜 **粗** 斜*` 畫成 `斜 *粗** 斜`。
     #[test]
     fn the_inner_emphasis_does_not_eat_the_outer_one() {
         let line = "*斜 **粗** 斜*";
@@ -4237,8 +4232,8 @@ mod tests {
     }
 
     /// **`$$` on a line of its own opens display maths that runs to the next
-    /// `$$`**. Only the one-line form used to be coloured, so a
-    /// formula set on lines of its own was drawn as prose.
+    /// `$$`**, not only the one-line form, so a formula set on lines of its own
+    /// is not drawn as prose.
     #[test]
     fn display_maths_over_several_lines_is_maths() {
         let doc = ["前文", "$$", r"\begin{aligned}", r"a &= b \\", r"\end{aligned}", "$$", "後文"];
