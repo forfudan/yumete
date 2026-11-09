@@ -439,7 +439,7 @@ fn main() -> ExitCode {
                     Some(language) => force_language = Some(language),
                     None => {
                         eprintln!("yumete: --lang: no language called {want:?}");
-                        eprintln!("try zh (繁體), zhs (简体) or en");
+                        eprintln!("try zht (繁體), zhs (简体) or en");
                         return ExitCode::from(2);
                     }
                 }
@@ -2643,7 +2643,7 @@ OPTIONS:
                      it standing. Recovery copies are still kept.
         --tutor      Open the lesson (the same as `:tutor` inside the editor).
         --lang=LANG  Which language the editor says things in for this run:
-                     zh (繁體), zhs (简体) or en. Without it, the locale
+                     zht (繁體), zhs (简体) or en. Without it, the locale
                      decides (LC_ALL, LC_MESSAGES, LANG: zh_TW and zh_HK
                      are 繁體, other zh is 简体, anything else English).
                      `[editor] language` in the config is the standing answer, and

@@ -49,3 +49,14 @@ fn a_walk_switch_after_files_is_a_missing_word_too() {
     assert_eq!(code, 2, "a refusal: {said}");
     assert!(said.contains("wants a word, not another option"), "{said}");
 }
+
+/// **The Traditional interface is `zht`**, in the refusal and in `--help`,
+/// as `:language` and `[editor] language` call it.
+#[test]
+fn a_language_misspelt_is_offered_the_names_the_editor_uses() {
+    let (code, said) = refused(&["--lang=klingon", "--version"]);
+    assert_eq!(code, 2, "a refusal: {said}");
+    assert!(said.contains("try zht (繁體), zhs (简体) or en"), "{said}");
+    let help = Command::new(env!("CARGO_BIN_EXE_yumete")).arg("--help").output().unwrap();
+    assert!(String::from_utf8_lossy(&help.stdout).contains("zht (繁體), zhs (简体) or en"));
+}
