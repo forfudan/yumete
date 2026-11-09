@@ -98,7 +98,7 @@ fn the_levels_mean_the_same_thing_whatever_the_punctuation() {
         );
 
         // **One level squares the columns up**, since `t f` was folded into
-        // `t b` (2026-10-21). 全窗 lines them up too, but it draws its own
+        // `t b`. 全窗 lines them up too, but it draws its own
         // grid out of the schema rather than padding the page — which is a
         // different question, asked by `nothing_drawn_into_a_page_replaces_what_you_typed`.
         press(&mut ed, " tb");
@@ -167,8 +167,7 @@ fn a_table_is_measured_over_what_is_on_the_page() {
     }
 }
 
-/// **The level does not decide what `hjkl` mean — the layer does**
-/// (2026-10-21).
+/// **The level does not decide what `hjkl` mean — the layer does**.
 ///
 /// Written down as a test because the doc comment that answered this has now
 /// been wrong twice, and each time it was read as law. 2026-09-11 it still

@@ -375,12 +375,12 @@ pub fn schema_for_reporting(path: &Path) -> (Option<(PathBuf, Schema)>, Vec<Stri
     (found, problems)
 }
 
-/// **The old format is no longer read, and says so** (2026-10-30): a
+/// **The old format is no longer read, and says so**: a
 /// `.yumete/tables/*.toml` up the tree that names this file would be silently
 /// ignored otherwise, and its writer would see the header row and wonder
 /// where their column names went.
 ///
-/// Warning: **a notice, never a problem** (2026-10-31). It used to travel in
+/// Warning: **a notice, never a problem**. It used to travel in
 /// [`schema_for_reporting`]'s problems, which mean 「the schema meant for this
 /// file is broken」 and stop every way into the grid — so a `.csv` with an
 /// old TOML beside it opened as plain text and `␣tt` refused it, the one file
@@ -723,7 +723,7 @@ pub fn sniff_among(lines: &[String], guesses: &[char]) -> Option<char> {
 }
 
 /// **How many times `c` cuts each record**, counting only outside double
-/// quotes, a quoted field running over lines making one record (2026-10-30).
+/// quotes, a quoted field running over lines making one record.
 /// Counted raw, `A,"x, y"` held two commas against its neighbours' one, and a
 /// real CSV with one quoted comma was "no delimiter in sight".
 fn outside_quotes(rows: &[&String], c: char) -> Vec<usize> {
@@ -749,7 +749,7 @@ fn outside_quotes(rows: &[&String], c: char) -> Vec<usize> {
     counts
 }
 
-/// **一張表的寫法**：`|` 表格，或者某個分隔符分開的文本（2026-10-02 定）。
+/// **一張表的寫法**：`|` 表格，或者某個分隔符分開的文本。
 ///
 /// `csv` 和 `tsv` 不是兩種東西，是 [`Shape::Delimited`] 的兩個分隔符——Pandoc
 /// 的叫法也是這樣（`csv`/`tsv`/`pipe_tables`），所以命令上那三個詞是通用詞彙，
@@ -860,7 +860,7 @@ pub fn cell_text(line: &str, span: (usize, usize)) -> String {
 mod tests {
     use super::*;
 
-    /// A quoted comma is not a delimiter (2026-10-30).
+    /// A quoted comma is not a delimiter.
     #[test]
     fn a_quoted_comma_does_not_count_against_the_grid() {
         let lines: Vec<String> = ["name,city", "A,\"x, y\"", "B,\"line1", "line2\""].map(String::from).to_vec();

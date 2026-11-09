@@ -35,7 +35,7 @@ pub enum Layer {
     /// **The top layer: the whole cell is the unit.** No caret is drawn, the
     /// selection is exactly one cell, and `hjkl` walk cells and rows.
     ///
-    /// **Where a grid opens** (2026-10-21 定): reading a table is commoner
+    /// **Where a grid opens**: reading a table is commoner
     /// than editing one, and going down costs one key.
     #[default]
     Whole,
@@ -147,8 +147,8 @@ impl Layer {
     ///
     /// The layer prefixes whatever word the editor had already worked out for
     /// the mode, so `REP` and `SEL` come along for free and this file does not
-    /// have to know they exist. **The top layer is `TBL`, a cell is `CEL`**
-    /// (2026-11-01): a selection grows by whole cells at the top and by
+    /// have to know they exist. **The top layer is `TBL`, a cell is `CEL`**:
+    /// a selection grows by whole cells at the top and by
     /// characters inside, and one word `CEL.SEL` named both; the hint row
     /// already called the two 表格 and 格內. The top layer at rest is
     /// `TBL.NOR`: `hjkl` walk it as they walk the text, a cell at a time
@@ -160,7 +160,7 @@ impl Layer {
     /// keys are」 — `PIC.INS` in a picker, `PAN.NOR` in a side panel.
     ///
     /// Warning: **`CEL.INS` cannot say which layer `Esc` goes back to.** Both
-    /// ways into insert read the same, and that is accepted (2026-10-21):
+    /// ways into insert read the same, and that is accepted:
     /// `Esc` means 「back where I was」 whichever it was, and a fourth word
     /// would cost cells the status line does not have (#394).
     pub fn label(self, mode: &str) -> String {
@@ -202,7 +202,7 @@ impl Layer {
     /// at its last character, `gg` is its first, `$` its end, and `d w`
     /// cannot reach the delimiter. That is what 「inside one cell」 means, and
     /// it is the half of the middle layer this model could not state until
-    /// the motions were bounded (2026-10-21).
+    /// the motions were bounded.
     ///
     /// `false` at the top, where motions are over cells and there is nothing
     /// inside one to be walled.
@@ -228,7 +228,7 @@ impl Layer {
     /// cross.
     ///
     /// Warning: **insert never moves the layer.** That is the whole mechanism
-    /// behind 「`Esc` goes back to the layer you came from」 (2026-10-21 定):
+    /// behind 「`Esc` goes back to the layer you came from」:
     /// `i` at the top leaves this field at [`Layer::Whole`] and `i` in the
     /// middle leaves it at [`Layer::Inside`], so leaving insert only has to
     /// read it. One field, no second flag, and therefore no way for a flag and
@@ -350,7 +350,7 @@ mod tests {
         assert!(Layer::Inside.walled());
     }
 
-    /// **A grid opens at the top layer** (2026-10-21 定).
+    /// **A grid opens at the top layer**.
     #[test]
     fn a_table_opens_with_the_whole_cell() {
         assert_eq!(Layer::default(), Layer::Whole);
@@ -486,7 +486,7 @@ mod tests {
         );
     }
 
-    /// **`t` is the table's group at the top, and nowhere else** (2026-10-20).
+    /// **`t` is the table's group at the top, and nowhere else**.
     ///
     /// Stated over every key, so a second key that opens the menu would show
     /// up here as well as a `t` that stopped opening it; and over both layers
@@ -536,8 +536,8 @@ mod tests {
     /// a page that washed a cell round a caret would be saying two things at
     /// once (2026-10-21 作者報的).
     ///
-    /// The second mark used to be the edge, and is not any more
-    /// (2026-10-22): the two seams are 金 in either layer, so the ground is
+    /// The second mark used to be the edge, and is not any more:
+    /// the two seams are 金 in either layer, so the ground is
     /// the whole of the difference. A ground is the terminal's to draw, so
     /// that it follows this answer is asserted over there, in
     /// `yumete_tui::tests::the_top_layer_washes_its_cell_and_draws_no_caret`.

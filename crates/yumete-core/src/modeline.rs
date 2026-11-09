@@ -1,4 +1,4 @@
-//! **vim modelines** (2026-11-04): `vim: set ts=2 ft=python:` in the first or
+//! **vim modelines**: `vim: set ts=2 ft=python:` in the first or
 //! last five lines of a file says how that file is to be read.
 //!
 //! Read exactly as vim and nvim read them (measured in nvim 0.12.5): both

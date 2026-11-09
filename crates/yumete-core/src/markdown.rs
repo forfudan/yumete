@@ -3219,8 +3219,8 @@ mod typst_tests {
             .collect()
     }
 
-    /// **A template's code block is code from its `{` to its `}`**
-    /// (2026-11-08): blank lines, `set` and `show` rules, closures, comments
+    /// **A template's code block is code from its `{` to its `}`**:
+    /// blank lines, `set` and `show` rules, closures, comments
     /// and all. Its lines used to be one flat colour down to the first blank
     /// line and plain writing after it.
     #[test]
@@ -3325,7 +3325,7 @@ mod typst_tests {
         assert_eq!(got.iter().map(|l| l.chars().next().unwrap()).collect::<String>(), ".``.");
     }
 
-    /// `/* … */` is a comment, as `//` is (2026-11-05): its `*` opened a
+    /// `/* … */` is a comment, as `//` is: its `*` opened a
     /// strong run, so the note was drawn bold.
     #[test]
     fn a_block_comment_is_a_comment_not_a_strong_run() {
@@ -3337,7 +3337,7 @@ mod typst_tests {
         assert!(!comment_left_open("`/*` 是代碼"));
     }
 
-    /// `#(1 + 2)` and `#{…}` are code, as `#set` is (2026-11-05).
+    /// `#(1 + 2)` and `#{…}` are code, as `#set` is.
     #[test]
     fn an_expression_after_a_hash_is_code() {
         assert_eq!(shape("值 #(1 + 2) 個"), "  ########  ");
@@ -3346,7 +3346,7 @@ mod typst_tests {
         assert_eq!(shape("第 # 3 #1"), "        ");
     }
 
-    /// `*粗 _斜_ 粗*` sets 斜 both ways, and the reverse (2026-11-05).
+    /// `*粗 _斜_ 粗*` sets 斜 both ways, and the reverse.
     #[test]
     fn emphasis_and_strong_nest_inside_each_other() {
         let kinds_at = |line: &str, at: usize| -> Vec<Kind> {
@@ -3382,8 +3382,8 @@ mod typst_tests {
         assert_eq!(shape("x // note"), "  %%%%%%%");
     }
 
-    /// `#if x [甲] else [乙]`: the head is code and the brackets are writing
-    /// (2026-11-05); the whole of it was code, or none of the head was.
+    /// `#if x [甲] else [乙]`: the head is code and the brackets are writing;
+    /// the whole of it was code, or none of the head was.
     #[test]
     fn a_keyword_block_is_code_around_writing() {
         assert_eq!(shape("#if x [甲 *乙*] else [丙]"), "#######  .B.######## #");
@@ -3394,7 +3394,7 @@ mod typst_tests {
     }
 
     /// The lines inside a `[` opened by code are writing; inside `{` or `(`
-    /// they are code (2026-11-05).
+    /// they are code.
     #[test]
     fn the_lines_of_a_content_block_are_writing() {
         let mut scanner = BlockScanner::new();
@@ -3491,8 +3491,8 @@ mod list_tests {
 mod tests {
     use super::*;
 
-    /// **A comment found without allocating reads as it always did**
-    /// (2026-11-08): opened and closed, opened only, closed at once, at the
+    /// **A comment found without allocating reads as it always did**:
+    /// opened and closed, opened only, closed at once, at the
     /// end of the line, and a closer that is only half there.
     #[test]
     fn comments_are_found_where_they_were() {
@@ -3614,7 +3614,7 @@ mod tests {
                 Kind::AddedRow => '>',
                 // Only a fence's grammar makes these (`code::highlight`).
                 Kind::Token(_) => '~',
-                // Typst 那一支的三個（2026-09-28）。
+                // Typst 那一支的三個。
                 Kind::Math => '$',
                 Kind::Ref => '@',
                 Kind::Label => '<',
@@ -3928,7 +3928,7 @@ mod tests {
         assert!(spans("").is_empty());
     }
 
-    /// **標記套得起來了**（2026-09-28）。
+    /// **標記套得起來了**。
     ///
     /// 從前 ``**粗的`碼`**`` 交出來的是三段，中間那一段連反引號一起算成粗體的正文。
     #[test]
@@ -4032,7 +4032,7 @@ mod tests {
     }
 
 
-    /// **鏈接那三個洞**（2026-09-28）。
+    /// **鏈接那三個洞**。
     #[test]
     fn a_link_holds_together_through_brackets_and_a_bang() {
         let marker = |line: &str| {
@@ -4068,7 +4068,7 @@ mod tests {
         assert!(spans("[没配對(x)").is_empty());
     }
 
-    /// Warning: **文字是粗體的鏈接照樣跟得了**（2026-09-28）。
+    /// Warning: **文字是粗體的鏈接照樣跟得了**。
     ///
     /// 最裏面那一條是 `Strong`，它自己不是鏈接；要往外走一層纔找得到。
     #[test]
@@ -4080,7 +4080,7 @@ mod tests {
     }
 
 
-    /// **反斜杠轉義**（2026-09-28）。從前没有，於是正文裏寫不出一個字面的星號。
+    /// **反斜杠轉義**。從前没有，於是正文裏寫不出一個字面的星號。
     ///
     /// Warning: 這個倉自己的 `export.rs` 正在生成 `\*`，導出的檔用自己的編輯器打開會亂。
     #[test]
@@ -4194,7 +4194,7 @@ mod tests {
         );
     }
 
-    /// `$a + b$` and `$$x^2$$` are maths, as Pandoc reads them (2026-11-05).
+    /// `$a + b$` and `$$x^2$$` are maths, as Pandoc reads them.
     #[test]
     fn dollars_around_a_formula_are_maths_and_prices_are_not() {
         assert_eq!(shape("式 $a + b$ 和 $$x^2$$"), "  .$$$$$.   ..$$$..");
@@ -4237,7 +4237,7 @@ mod tests {
     }
 
     /// **`$$` on a line of its own opens display maths that runs to the next
-    /// `$$`** (2026-11-06). Only the one-line form used to be coloured, so a
+    /// `$$`**. Only the one-line form used to be coloured, so a
     /// formula set on lines of its own was drawn as prose.
     #[test]
     fn display_maths_over_several_lines_is_maths() {
@@ -4273,7 +4273,7 @@ mod tests {
         assert_eq!(blocks[0], Block::Prose);
     }
 
-    /// **The formula a column stands in**, delimiters included (2026-11-06).
+    /// **The formula a column stands in**, delimiters included.
     #[test]
     fn the_formula_under_a_column() {
         let line = "式 $a + b$ 和 $$x^2$$";
@@ -4290,7 +4290,7 @@ mod tests {
         assert_eq!(maths_at("價 $3 and $5", &spans("價 $3 and $5"), 3, false), None);
     }
 
-    /// `<https://…>` and `<name@host>` are links (2026-11-05), and say where
+    /// `<https://…>` and `<name@host>` are links, and say where
     /// they go.
     #[test]
     fn an_autolink_is_a_link() {
@@ -4305,7 +4305,7 @@ mod tests {
     }
 
     /// `<kbd>`, `</kbd>` and `<br>` are HTML: set back, never hidden, and
-    /// the text between them is prose (2026-11-05).
+    /// the text between them is prose.
     #[test]
     fn an_html_tag_is_markup_and_what_it_holds_is_prose() {
         assert_eq!(shape("按 <kbd>Esc</kbd> 鍵"), "  TTTTT   TTTTTT  ");

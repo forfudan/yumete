@@ -161,7 +161,7 @@ const DISOWNED: &[&str] = &[
     ":scheme",
     ":chaifen",
     ":cf",
-    // **反過來的一次**（2026-10-12）：`:layout vertical` 是被**拆開**的那一個，
+    // **反過來的一次**：`:layout vertical` 是被**拆開**的那一個，
     // 兩個方向各自成了一條命令。拆開的理由在手冊 §6：`:vertical-keys` 一加，
     // `vertical` 成了它的唯一前綴，打 `:vertical` 的人會靜靜地撥到 hjkl 那個設
     // 置上去；把兩個方向定成命令，就是把那個詞佔住。
@@ -195,7 +195,7 @@ const DISOWNED: &[&str] = &[
     // as the tables of the day they were made, and they are names now only in
     // the sense that `:view-wrap` begins with one.
     ":view",
-    // Warning: `:clipboard` 也回來了（2026-09-25）：拍平的時候它是個空殼父命令，
+    // Warning: `:clipboard` 也回來了：拍平的時候它是個空殼父命令，
     // 現在它自己有意思了——**粘貼選單**，`空格 "` 開的那一扇。和上面
     // `:clipboard-yank` 那一條同一回事，所以它不在這張單子上。
     ":buffers",
@@ -207,7 +207,7 @@ const DISOWNED: &[&str] = &[
     // old spelling is gone, and §「沒有了」 prints it beside the new one.
     ":wrap",
     ":dense",
-    // …and the leaf itself went a second time (2026-09-16): `:view-margin`
+    // …and the leaf itself went a second time: `:view-margin`
     // asks the question it only half answered.
     ":view-dense",
     ":bands",
@@ -311,7 +311,7 @@ fn leader_and_key(quote: &str) -> Option<(char, String)> {
             "空格" | "Space" => '空',
             one => one.chars().next().filter(|_| one.chars().count() == 1)?,
         };
-        // Warning: **Two levels, since the table group moved** (2026-09-21).
+        // Warning: **Two levels, since the table group moved**.
         // `空格 t/` is three presses — the 空 menu's `t`, then the table
         // menu's `/` — and `空格 t2-10/` puts a column range between them.
         // Asking only about the first key would stop checking the forty keys
@@ -323,7 +323,7 @@ fn leader_and_key(quote: &str) -> Option<(char, String)> {
         // there really does nothing, which is what `t s` is doing in
         // [`DISOWNED_KEYS`]. So a spelling with arithmetic in it is checked
         // one level up only: this table's vocabulary is keys, not columns.
-        // **`空格 空格` 是「按兩下空格」**（2026-10-10）。手冊照人讀得懂的寫法寫；
+        // **`空格 空格` 是「按兩下空格」**。手冊照人讀得懂的寫法寫；
         // 編輯器那張表裏它是 `' '`，所以這裏把那兩個漢字折回那一個字符。寫成
         // `空格 ␣` 也對得上，可那一行是給人看的。
         if lead == '空' && matches!(key, "空格" | "Space" | "␣") {
@@ -382,9 +382,9 @@ fn leader_and_key(quote: &str) -> Option<(char, String)> {
 // safe only because their first letter is not a leader; this one is not.
 // Warning: `[ ]` 與 `[x]` 是**一個沒勾上/勾上了的方框的畫像**，不是按鍵——搜索面板與
 // 設置面板（#421）滿頁都是它。`[]` 本來就在這張單子上，而中間那一格空白讓它讀成
-// 「`[` 選單裏的 `]`」，於是同一個東西的兩種寫法一個過一個不過（2026-09-24）。
-// `](` is **the middle of a Markdown link**, where a path is completed
-// (2026-10-28), not `]` followed by `(`. `[@` opens a citation (2026-10-29),
+// 「`[` 選單裏的 `]`」，於是同一個東西的兩種寫法一個過一個不過。
+// `](` is **the middle of a Markdown link**, where a path is completed,
+// not `]` followed by `(`. `[@` opens a citation,
 // typed into the page as `[^` is. `]]` closes a `[[wiki link]]`.
 const NOT_A_SEQUENCE: &[&str] = &["md", "tw", "go", "[]", "[ ]", "[x]", "[^", "[[", "]]", "](", "[@"];
 
@@ -406,14 +406,14 @@ const NOT_A_SEQUENCE: &[&str] = &["md", "tw", "go", "[]", "[ ]", "[x]", "[^", "[
 /// helix」 page to say so.
 const DISOWNED_KEYS: &[&str] = &["t s", "Space ."];
 
-/// **Pages about keys a reader binds themselves** (2026-11-04): the
+/// **Pages about keys a reader binds themselves**: the
 /// 「Coming from LazyVim」 page teaches the keys its own config adds, which
 /// the editor does not have until it is pasted. That config is held to the
 /// editor by `yumete-tui/tests/lazyvim_page.rs`.
 const YOUR_OWN_KEYS: &[&str] = &["src/from/lazyvim.md"];
 
 /// **Keys the vim keymap has and the `g` menu does not list yet**: `gi`
-/// (2026-10-30) works, and its row in the menu waits for its Chinese label.
+/// works, and its row in the menu waits for its Chinese label.
 /// Take it off this list in the commit that adds the row.
 const NOT_IN_A_MENU_YET: &[&str] = &[];
 

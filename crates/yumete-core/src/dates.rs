@@ -1,5 +1,5 @@
-//! **Dates and times that `C-a` and `C-x` step**, as helix's do (2026-10-29,
-//! measured against helix 25.07.1).
+//! **Dates and times that `C-a` and `C-x` step**, as helix's do (measured
+//! against helix 25.07.1).
 //!
 //! A selection that is exactly one of the forms below changes; anything else,
 //! a malformed or impossible date among them (`2024-02-30`, `2024-1-5`,

@@ -1,4 +1,4 @@
-//! **A file written out the way its preview draws it** (2026-11-08),
+//! **A file written out the way its preview draws it**,
 //! `:export-as-preview`: see what you get.
 //!
 //! - **Markdown** becomes the HTML page `:export html` writes — the same
@@ -233,7 +233,7 @@ impl Format {
     }
 }
 
-/// **The words of one `:export-as-preview` line** (2026-11-08): a format
+/// **The words of one `:export-as-preview` line**: a format
 /// and a path, both optional, the format first. A first word that is not a
 /// path is taken for a format (and refused by the caller if it is none); a
 /// path is quoted or written as `:export` takes one.
@@ -380,7 +380,7 @@ pub fn stylesheet(look: &Look, vertical: bool, hanging: bool) -> String {
     }
     out.push_str(&format!("h1, h2 {{ padding-block-end: 0.3em; border-block-end: 1px solid {}; }}\n", css(c.border)));
     out.push_str("strong, b { font-weight: 600; }\n:is(h1, h2, h3, h4, h5, h6) :is(strong, b) { font-weight: 800; }\n");
-    // **Emphasised 漢字 in a 楷體, its Latin in italics** (2026-11-08), as
+    // **Emphasised 漢字 in a 楷體, its Latin in italics**, as
     // the preview sets them. A browser's `system-ui` brings its own CJK face,
     // so a list that begins with it never reaches the 楷體 after it: the
     // 楷體 faces are named for the CJK characters alone, by `unicode-range`.
@@ -489,7 +489,7 @@ pub fn stylesheet(look: &Look, vertical: bool, hanging: bool) -> String {
     out
 }
 
-/// **What a page's structure looks like, in `c`** (2026-11-08): GitHub's
+/// **What a page's structure looks like, in `c`**: GitHub's
 /// alerts and VitePress's `:::` containers, front matter in a frame, code
 /// in its colours, and a task's box where a bullet would be. The same
 /// rules for `:export html` (in GitHub's light colours) and for
@@ -749,7 +749,7 @@ mod tests {
         assert!(out.contains(&format!("line-height: {COLUMN_PITCH}")), "{out}");
     }
 
-    /// **`:export html` has the same structure** (2026-11-08): callouts,
+    /// **`:export html` has the same structure**: callouts,
     /// front matter, code in colour, links and task boxes, in GitHub's light
     /// colours and the export's own fonts and sizes; only the look differs.
     #[test]

@@ -226,8 +226,8 @@ fn said() -> BTreeMap<String, String> {
         // 那一句。開口寫足 `zero: Some(` 而不是光一個 `Some(`：後者會把全樹每一個
         // `Some("…")` 都掃進來，而那裏面躺着檔名、擴展名、命令名。
         tags.extend(literals(&text, "zero: Some("));
-        // `Described { word: Some("cmd.substitute.flags") }` —— 命令的說明之外那一行
-        // （2026-10-09）。同上一條，開口寫足 `word: Some(` 而不是光一個 `Some(`。
+        // `Described { word: Some("cmd.substitute.flags") }` —— 命令的說明之外那一行。
+        // 同上一條，開口寫足 `word: Some(` 而不是光一個 `Some(`。
         tags.extend(literals(&text, "word: Some("));
         // A place's command and its description (`place("action.confirm",
         // PlaceCmd::Confirm)` in `yumete-cjk/src/actions.rs`, 2026-11-01).
@@ -244,7 +244,7 @@ fn said() -> BTreeMap<String, String> {
         tags.extend(literals(&text, "Err("));
         // A tag a `match` arm hands back (`Panel::tag`, `Info::tag` in
         // `sidebar.rs`): the panels' names lost their last other mention when
-        // `:sidebar <panel>` became one command a panel (2026-11-07).
+        // `:sidebar <panel>` became one command a panel.
         // Only labels: a match arm hands back file names and key names too.
         tags.extend(literals(&text, "=> ").into_iter().filter(|t| t.starts_with("label.")));
         for tag in tags.into_iter().filter(|t| is_tag(t)) {
@@ -258,7 +258,7 @@ fn said() -> BTreeMap<String, String> {
 #[derive(Default)]
 struct Entry {
     note: bool,
-    /// Simplified is what every message is written in (2026-11-07); the
+    /// Simplified is what every message is written in; the
     /// Traditional is made from it at build time unless written by hand.
     zhs: bool,
     /// The words a reader might look the entry up by but never sees (#224):
@@ -528,7 +528,7 @@ fn the_table_is_in_order() {
     );
 }
 
-/// **A tag lives in the file of its prefix** (2026-10-31): each file's
+/// **A tag lives in the file of its prefix**: each file's
 /// first line names its prefixes (`# prefixes: cmd`), and a prefix belongs
 /// to one file only, so a tag is found by its name and a file stays about
 /// one area.

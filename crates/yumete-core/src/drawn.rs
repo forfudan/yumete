@@ -33,7 +33,7 @@ pub enum Ink {
     /// Worked out from the text and standing in for nothing that was typed:
     /// the padding that squares a table up (#212).
     Padding,
-    /// **A footnote's mark, set the way print sets one** (2026-09-22).
+    /// **A footnote's mark, set the way print sets one**.
     ///
     /// `[^1]` is four characters of source in the middle of a sentence; print
     /// has written it as a small raised number for four hundred years. The
@@ -58,10 +58,10 @@ pub enum Ink {
     /// **No character at all**, because a marker's width is a question the
     /// terminal answers and a tab already has enough of those. What says
     /// 「this is a tab and not spaces」 is the ground under it — quiet, the
-    /// rung a table's own bands sit on. Decided 2026-09-10:
-    /// 「tab 不用符号，但可以用一个背景色」.
+    /// rung a table's own bands sit on: a tab gets no symbol, only a
+    /// background colour.
     Tab,
-    /// **A closed fold's line** (2026-11-03): what the fold holds, said in
+    /// **A closed fold's line**: what the fold holds, said in
     /// place of its first line's text.
     Fold,
 }

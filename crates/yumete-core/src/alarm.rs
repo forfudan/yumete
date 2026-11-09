@@ -1,4 +1,4 @@
-//! **The Unicode alarm** (#252, 2026-10-29): characters a reader cannot see
+//! **The Unicode alarm** (#252): characters a reader cannot see
 //! or cannot tell from a space, which arrive by pasting and do their harm
 //! silently — a zero-width space splitting `price` so that a search misses
 //! it, a bidi control reordering the text after it (the "Trojan Source"

@@ -234,7 +234,7 @@ impl View {
         [View::Explorer, View::Buffers, View::Outline, View::Search, View::Links, View::Info];
 }
 
-/// **一個側欄有多寬**，四檔，分母都是十（2026-09-26 定的）。
+/// **一個側欄有多寬**，四檔，分母都是十。
 ///
 /// `2/10 → 3/10 → 4/10 → 5/10`，`w` 按一下走一格，到頭回到 2/10。**出廠 3/10**。
 ///
@@ -327,13 +327,13 @@ pub struct Row {
     /// 上面是這個字的事實，它是這一次查詢的事實（2026-10-13 定，原話「put the
     /// words in grey below (with a gap line) the two unicode lines」）。
     pub quiet: bool,
-    /// **這一行裏改掉的那幾段**，相對 [`Self::name`] 的字節區間（2026-10-16）。
+    /// **這一行裏改掉的那幾段**，相對 [`Self::name`] 的字節區間。
     ///
     /// 只有改動那一格填它（`空格 X`）：整行那一層淡底說「這是哪一稿」，這幾段
     /// 重一檔說「改的是這幾個字」。從前邊欄只有前一半，而浮窗兩半都有——同一
     /// 份 diff 在兩處不一樣，正是作者 2026-10-16 報來的那一條。
     pub marks: Vec<std::ops::Range<usize>>,
-    /// **A quiet figure at the right edge** (2026-10-29): the 大綱 writes each
+    /// **A quiet figure at the right edge**: the 大綱 writes each
     /// heading's count there, the way a table of contents writes a page.
     pub aside: Option<String>,
 }
@@ -347,7 +347,7 @@ pub enum Wash {
     Added,
 }
 
-/// **Where a 大綱 row's section stands on the page** (2026-11-03). The
+/// **Where a 大綱 row's section stands on the page**. The
 /// outline folds its own list and the page folds the text; this says what
 /// the page did, so a closed chapter does not look open in the outline.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

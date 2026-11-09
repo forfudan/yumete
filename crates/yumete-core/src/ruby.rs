@@ -4,7 +4,7 @@
 //! *how* is a property of the document, not of yumete. A Markdown file wants
 //! HTML ruby, which is what the Yuhao documentation is already written in and
 //! what a browser renders unchanged; a Typst file wants Typst's call, which its
-//! own compiler will typeset; and since 2026-11-08 a Markdown file may also
+//! own compiler will typeset; and a Markdown file may also
 //! use the brace form Denden Markdown, VFM and markdown-it-ruby share,
 //! `{漢字|かんじ}`. So the markup is a [`Dialect`], the editor renders
 //! whichever ones a file uses — several at once, if it mixes them — and
@@ -21,7 +21,7 @@ pub enum Dialect {
     Html,
     /// `#ruby("漢字", "hàn zì")` — Typst, which compiles it straight to type.
     Typst,
-    /// **`{漢字|hàn zì}` and `{漢字|hàn|zì}`** (2026-11-08) — the brace form of
+    /// **`{漢字|hàn zì}` and `{漢字|hàn|zì}`** — the brace form of
     /// Denden Markdown, VFM and markdown-it-ruby, part of YFM. One reading
     /// over the whole base, or one per character when the bars split it into
     /// exactly as many readings as the base has characters; with any other
@@ -728,7 +728,7 @@ fn find(chars: &[char], needle: &str, from: usize) -> Option<usize> {
 }
 
 /// Whether `chars` reads `needle` starting at `at`.
-/// **這一段裏可能有注音嗎**——一趟便宜的掃描（2026-10-13）。
+/// **這一段裏可能有注音嗎**——一趟便宜的掃描。
 ///
 /// 答「不可能」的時候，數漢字那一支就不必逐行拆解了：兩種方言的起手都是一個固定
 /// 的字串，沒有它就一定沒有注音組。量過：一個 3.91 GB 的檔上，逐行拆解要 7.9 秒
@@ -817,7 +817,7 @@ mod tests {
         groups(&chars, BRACES).iter().map(|g| (g.base_of(&chars), g.reading_of(&chars))).collect()
     }
 
-    /// **The brace form** (2026-11-08), as Denden Markdown reads it: one
+    /// **The brace form**, as Denden Markdown reads it: one
     /// reading over the base, one per character when the count matches, one
     /// over the base run together when it does not.
     #[test]

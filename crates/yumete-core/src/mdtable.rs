@@ -315,7 +315,7 @@ impl Wall {
 /// escaped: the backslash that escapes it is already in the buffer, not in the
 /// text being inserted.
 ///
-/// **Nor is the bar of a reading in braces** (2026-11-08): `{雨|yǔ}` in a
+/// **Nor is the bar of a reading in braces**: `{雨|yǔ}` in a
 /// cell is ruby (YFM's brace form, [`crate::ruby::Dialect::Markdown`]), and
 /// its bar belongs to it. Always, not only while `:ruby-markdown` reads the
 /// form: which cell a character is in is the file's grammar, and a table
@@ -1026,7 +1026,7 @@ pub fn measured_window(
     let page = page.max(1);
     let a = top.max(first).min(last);
     let b = top.saturating_add(page).min(last).max(a);
-    // Warning: **A window holding one row is no window** (2026-09-19). When the table
+    // Warning: **A window holding one row is no window**. When the table
     // sits *below* `top + page` — a chapter of prose above it, and in 竪排 the
     // screenful is counted in 縱 while `top` is a line — this clips to
     // `[first, first]`, and the one row it holds is the header. The header was
@@ -1090,7 +1090,7 @@ pub const HEAD_MARK: &str = "<";
 /// what each row hides when the table is *measured* and `shown` what it hides
 /// as the page really draws it, so a column's width never moves because of
 /// where the caret is. Pass `shown` empty to say 「the same as measured」,
-/// which is what prose does now that it folds nothing (2026-10-23) — the two
+/// which is what prose does now that it folds nothing — the two
 /// parted company only over a cell whose folded tail came back for writing.
 pub fn padding(
     rows: &[(String, Vec<(usize, usize)>)],
@@ -1194,7 +1194,7 @@ pub fn padding(
     // **No narrower than its own alignment marker**, where there is one to
     // write — see [`Wall::ruled`].
     //
-    // Warning: **Only where the rule row is written out as characters** (2026-09-20).
+    // Warning: **Only where the rule row is written out as characters**.
     // 竪排 draws that row as the wall running down the 縱 — one glyph, and the
     // `:` are off the page entirely — so there is nothing for this floor to
     // protect, and it was making every band in a `:-:` table **three slots
@@ -1293,7 +1293,7 @@ fn push_run(runs: &mut Vec<(usize, String)>, at: usize, text: String) {
 /// with. Per *character* it disagreed with the page over anything the two
 /// count differently: a tab, a control character or a lone combining mark is
 /// nought here and one cell there, and the table stood one cell out for good.
-/// **How a cell is measured: in cells, or in 縱 slots** (2026-09-19).
+/// **How a cell is measured: in cells, or in 縱 slots**.
 ///
 /// 橫排 counts the cells a glyph covers — a 漢字 is two. 竪排 stands every
 /// grapheme in a slot of its own, so there a 漢字 is **one** and so is a space.
@@ -1309,8 +1309,7 @@ pub enum Measure {
     /// that a run of up to `packed` half-width alphanumerics shares one
     /// (緃中横), exactly as the page packs it. Counted per grapheme it
     /// disagreed with the page by the length of every Latin word, and the
-    /// rules of a turned table landed at different depths in each 縱
-    /// (2026-10-30).
+    /// rules of a turned table landed at different depths in each 縱.
     Slots { packed: usize },
 }
 
@@ -1408,7 +1407,7 @@ pub fn from_delimited(lines: &[String], delimiter: char) -> Vec<String> {
         .map(|line| {
             crate::table::cells(line, delimiter)
                 .into_iter()
-                // Warning: **格子兩邊的空白在這裏没了，而這是定過的**（2026-10-02）。
+                // Warning: **格子兩邊的空白在這裏没了，而這是定過的**。
                 // `  padded  ,1` 轉出來是 `| padded | 1 |`，整格三個空格的轉成空
                 // 格子——按 RFC 4180，CSV 裏没加引號的空格就是欄位內容。
                 //
@@ -1501,7 +1500,7 @@ mod tests {
 
     use super::*;
 
-    /// **A reading in braces keeps its bar in its cell** (2026-11-08), as
+    /// **A reading in braces keeps its bar in its cell**, as
     /// an escaped bar does; a bar in a code span is still a wall, as GFM has
     /// it, and so is one in braces that are not a reading.
     #[test]
@@ -1708,7 +1707,7 @@ mod tests {
             .collect()
     }
 
-    /// **A mark drawn inside a cell is one cell of its column** (2026-09-23).
+    /// **A mark drawn inside a cell is one cell of its column**.
     /// `padding`'s `marks` is how it hears about something it does not draw
     /// itself — today the `⁽¹⁾` a footnote reference is drawn as, whose four
     /// source characters are hidden and count as nothing. A column squared up
@@ -1955,7 +1954,7 @@ mod tests {
     }
 }
 
-// The docs are the site's pages now (2026-10-30), beside this repository.
+// The docs are the site's pages now, beside this repository.
 #[cfg(test)]
 #[path = "../tests/site/mod.rs"]
 mod site;
@@ -2008,7 +2007,7 @@ mod proof_292 {
                 }
             }
         }
-        // **Bytes added per row, not per table** (2026-11-03): the command
+        // **Bytes added per row, not per table**: the command
         // table the site generates passed 100,000 bytes for one table by
         // having 575 rows of about 175 each, while #292's table added some
         // 8,400 a row. A bound on the table grew with every command added.

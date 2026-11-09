@@ -55,7 +55,7 @@ const NEW: (&str, &str) = ("{+", "+}");
 /// invisible change is the one a writer cannot check.
 const BREAK: &str = "⏎";
 
-/// **One row of one draft** — half of a 「before and after」 pair (2026-10-16).
+/// **One row of one draft** — half of a 「before and after」 pair.
 ///
 /// 原話：「It first list the paragraph before and after, than mark the words
 /// changed in brighter colors.」
@@ -262,7 +262,7 @@ pub fn spans(line: &str) -> Vec<crate::markdown::Span> {
     let mut out = Vec::new();
     let mut at = 0usize;
     let mut construct = 0usize;
-    // **行號後面那一個 `-`/`+` 說這一整行是哪一稿**（2026-10-16）。`537-` 是
+    // **行號後面那一個 `-`/`+` 說這一整行是哪一稿**。`537-` 是
     // 舊稿、`533+` 是新稿，同 `空格 x` 那一扇；號碼靠右對齊，所以記號在前導的
     // 空格與數字之後。記號本身**不**畫出來——同 `[-`，它是報告的腳手架。
     let sigil = chars

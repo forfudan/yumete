@@ -31,7 +31,7 @@
 use crate::ruby::{self, Dialect, Dialects};
 use crate::say;
 
-/// **The Typst compiler** (2026-11-06): the `typst` on `PATH`, which
+/// **The Typst compiler**: the `typst` on `PATH`, which
 /// `--export pdf` runs and the formula float under the cursor runs too. One
 /// place says which program that is, so the two cannot come to disagree.
 pub fn typst_command() -> std::process::Command {
@@ -56,7 +56,7 @@ pub enum Format {
     Html,
     /// A Typst source file, horizontal.
     Typst,
-    /// **An EPUB 3 book** (2026-11-08): the HTML page's text and stylesheet
+    /// **An EPUB 3 book**: the HTML page's text and stylesheet
     /// in a zip a reader app opens, vertical and turning right to left when
     /// the editor is. See [`crate::epub`].
     Epub,
@@ -161,7 +161,7 @@ impl Paper {
     }
 }
 
-/// **How a page is set** (2026-11-08): the `[export]` settings, and the words
+/// **How a page is set**: the `[export]` settings, and the words
 /// one `:export` or `ye --export` gives for itself.
 ///
 /// Nothing here comes from the editing window. An export is publication, and
@@ -204,7 +204,7 @@ impl Default for Settings {
     }
 }
 
-/// **The words `:export` and `ye --export` take** (2026-11-08), each the
+/// **The words `:export` and `ye --export` take**, each the
 /// setting of the same name for one export. `page=` and `font=` take a value.
 pub const WORDS: &[&str] = &[
     "vertical", "horizontal", "hanging", "no-hanging", "ruby-html", "no-ruby-html", "ruby-typst", "no-ruby-typst",
@@ -233,7 +233,7 @@ impl Settings {
     /// `Some(Err(why))` when it is one of them with a value that is not, or
     /// when it ends in a comma.
     ///
-    /// **A comma does not carry a word on** (2026-11-09): `font=Songti, b.html`
+    /// **A comma does not carry a word on**: `font=Songti, b.html`
     /// once read as the font list `Songti, b.html` and wrote the page to the
     /// last file named. A word runs to the next space; a font list with a
     /// space or a comma in it is quoted. A word left ending in a comma is a
@@ -296,8 +296,8 @@ impl Settings {
         }
     }
 
-    /// **The words of one `:export` line, and the path after them**
-    /// (2026-11-08): `vertical jlreq page=A5 out/book.epub`. The words come
+    /// **The words of one `:export` line, and the path after them**:
+    /// `vertical jlreq page=A5 out/book.epub`. The words come
     /// in any order and the path last, if there is one.
     ///
     /// A word is split at a space, except inside quotes, so a font list
@@ -408,7 +408,7 @@ const MARGIN_TOP: f64 = 0.12;
 const MARGIN_BOTTOM: f64 = 0.09;
 /// Each of the two side margins, as a fraction of the page width.
 const MARGIN_SIDE: f64 = 0.10;
-/// **The type size of a printed page** (2026-11-08): 五號, 10.5 point, what
+/// **The type size of a printed page**: 五號, 10.5 point, what
 /// a Chinese book is set in. The screen page has no measure at all — its
 /// lines fill the window across, its 縱 fill it down — so the paper alone
 /// says how long a line is in print.
@@ -424,7 +424,7 @@ pub struct Style {
     pub settings: Settings,
     /// The document's title, for the HTML `<title>`.
     pub title: String,
-    /// **源檔是什麼語法**（2026-09-28）。
+    /// **源檔是什麼語法**。
     ///
     /// Warning: **這一格從前没有，於是導出永遠按 Markdown 解析源檔**——一份 Typst 稿子裏的
     /// `*粗*`、`$a+b$`、`@引用` 一個都認不出來，原樣（並且轉義）寫進導出的檔。
@@ -434,11 +434,11 @@ pub struct Style {
     /// from: an EPUB carries its pictures inside it. `None` for a buffer
     /// never saved.
     pub base: Option<std::path::PathBuf>,
-    /// **What draws a TeX formula** (2026-11-08), or `None` to leave Markdown's
+    /// **What draws a TeX formula**, or `None` to leave Markdown's
     /// `$…$` as written. The front end hands it over: RaTeX lives there, so
     /// that this crate and its tests do not carry KaTeX's fonts.
     pub painter: Option<Painter>,
-    /// **How the Markdown preview draws** (2026-11-08), for
+    /// **How the Markdown preview draws**, for
     /// `:export-as-preview`: its fonts and colours, and YFM read as it reads
     /// it — callouts, front matter, code in colour. `None` for every other
     /// export, which is set as `[export]` says.
@@ -466,8 +466,8 @@ pub struct Formula {
 /// colour for `:export-as-preview`), or says what was wrong with it.
 pub type Painter = fn(&str, bool, bool, [u8; 3]) -> Result<Formula, String>;
 
-/// **How half-width letters and digits are set down a vertical page**
-/// (2026-11-08), `[export] vertical_latin`.
+/// **How half-width letters and digits are set down a vertical page**,
+/// `[export] vertical_latin`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Latin {
     /// Every run of letters and digits turned a quarter turn clockwise, the
@@ -504,7 +504,7 @@ impl Drawing {
         style.painter.map(|painter| Drawing { painter, vertical: style.settings.vertical, latin: style.settings.latin, ink: ink_of(style) })
     }
 
-    /// **Whether `tex` is turned on its side** (2026-11-08). Across the page
+    /// **Whether `tex` is turned on its side**. Across the page
     /// nothing is. Down it a formula on a line of its own always is, as
     /// JLREQ §3.7.4 sets one, and an inline one under [`Latin::Turn`]; under
     /// [`Latin::Jlreq`] one letter or digit and a numeric fraction stand
@@ -514,7 +514,7 @@ impl Drawing {
     }
 }
 
-/// **`style`, its ink the one `pick` chooses** (2026-11-08): a formula in
+/// **`style`, its ink the one `pick` chooses**: a formula in
 /// a quotation is in the quotation's colour, in a note in the notes', as
 /// the preview draws them. Only the ink of what is written inside changes;
 /// without a look the ink is black throughout.
@@ -596,22 +596,22 @@ enum Block {
     List { ordered: bool, start: usize, items: Vec<(Option<bool>, Vec<Block>)> },
     /// A pipe table: its heading row, how each column aligns, its rows, and
     /// its caption — Pandoc's `Table: …` (or `: …`) paragraph just above or
-    /// below it (2026-11-08).
+    /// below it.
     Table { head: Vec<String>, align: Vec<crate::mdtable::Align>, rows: Vec<Vec<String>>, caption: Option<String> },
-    /// **A picture alone in its paragraph** (2026-11-08), `![說明](a.png)`:
+    /// **A picture alone in its paragraph**, `![說明](a.png)`:
     /// a figure, its text the caption, as Pandoc reads it.
     Figure { caption: String, src: String },
-    /// **A display formula on lines of its own** (2026-11-08): Markdown's
+    /// **A display formula on lines of its own**: Markdown's
     /// `$$`, the formula, `$$`, delimiters and all. Read as a paragraph, the
     /// three lines came out joined by spaces and no line could be drawn: each
     /// held a piece of the formula.
     Math(Vec<String>),
-    /// **A callout** (2026-11-08), read for a page as the Markdown preview
+    /// **A callout**, read for a page as the Markdown preview
     /// reads YFM: a `:::` container (`fenced`) or a
     /// GitHub alert, `> [!NOTE]`. Its kind ([`CALLOUTS`]), the word it was
     /// written with, the title written after it, and its blocks.
     Callout { kind: usize, name: String, title: Option<String>, fenced: bool, body: Vec<Block> },
-    /// **Front matter** (2026-11-08), the `---` lines heading the file,
+    /// **Front matter**, the `---` lines heading the file,
     /// read for a page: the preview shows it in a frame.
     FrontMatter(Vec<String>),
     /// **An HTML block**, CommonMark's: a line that opens with a block's tag
@@ -730,7 +730,7 @@ fn blocks(text: &str, source: crate::syntax::Syntax, yfm: bool) -> (Vec<Block>, 
 /// and footnotes in Markdown, which is where they are written that way.
 fn parse(lines: &[String], source: crate::syntax::Syntax, notes: &mut Vec<Note>, yfm: bool) -> Vec<Block> {
     use crate::syntax::Syntax;
-    // 標題在 Markdown 裏是 `#`，在 Typst 裏是 `=`（2026-09-28）。
+    // 標題在 Markdown 裏是 `#`，在 Typst 裏是 `=`。
     let mark = match source {
         Syntax::Typst => '=',
         _ => '#',
@@ -753,8 +753,8 @@ fn parse(lines: &[String], source: crate::syntax::Syntax, notes: &mut Vec<Note>,
         // a backtick. One nobody closed still comes out, since the writer's
         // text is the writer's, half-written or not.
         //
-        // **The fence is read as the Markdown preview reads it**
-        // (2026-11-09), CommonMark's rule: three or more backticks or tildes
+        // **The fence is read as the Markdown preview reads it**,
+        // CommonMark's rule: three or more backticks or tildes
         // open it, and a line of the same character, at least as many and
         // nothing after them, closes it. It used to be three backticks and
         // the next line opening with three: a `~~~` block's `# 注释` came out
@@ -1118,7 +1118,7 @@ fn caption_of(line: &str) -> Option<&str> {
 /// A line that is one picture and nothing else, `![caption](src "title")`:
 /// its caption and where the picture is.
 ///
-/// **One picture** (2026-11-09): the caption holds no `]`, so
+/// **One picture**: the caption holds no `]`, so
 /// `![两张](a.png) 和 ![图](b.png)` is two pictures in a line of text, as
 /// the preview reads it, and not one figure captioned `两张](a.png) 和 ![图`.
 /// A path in angle brackets may hold spaces, `![图](<my pic.png>)`.
@@ -1160,7 +1160,7 @@ struct Item {
     width: usize,
     /// The same, for the first line's text: past a task's box.
     text: usize,
-    /// **A task** (2026-11-08), GFM's `- [ ]` and `- [x]`: done or not.
+    /// **A task**, GFM's `- [ ]` and `- [x]`: done or not.
     task: Option<bool>,
 }
 
@@ -1205,7 +1205,7 @@ fn list_item(line: &str, source: crate::syntax::Syntax) -> Option<Item> {
     Some(Item { indent, ordered, start, width, text, task })
 }
 
-/// **How far a line is indented, in bytes of spaces and tabs** (2026-10-30).
+/// **How far a line is indented, in bytes of spaces and tabs**.
 ///
 /// Only those two, as CommonMark counts indentation. `trim_start` also takes
 /// U+3000, the full-width space a Chinese paragraph opens with, which is three
@@ -1251,7 +1251,7 @@ fn line_into(
         (Dialect::Html, _) => painter,
         (Dialect::Typst | Dialect::Markdown, _) => None,
     };
-    // Warning: **讀的是源檔的語法，不是要寫成的格式**（2026-09-28）。從前這裏寫死
+    // Warning: **讀的是源檔的語法，不是要寫成的格式**。從前這裏寫死
     // `markdown::spans`，於是一份 Typst 稿子導出去，`*粗*` 是四個字符、`$a+b$` 被
     // 轉義成 `\$a + b\$`。
     let marks = match source {
@@ -1395,7 +1395,7 @@ fn render(
                         render(chars, groups, marks, Some(i), start, end, dialect, escape, paint)
                     }
                 };
-                // **A link is a link on a web page** (2026-11-08): its words
+                // **A link is a link on a web page**: its words
                 // in an `<a href>`, as the Markdown preview shows them. In
                 // Typst the target is the manuscript's scaffolding and only
                 // the words go over.
@@ -1403,7 +1403,7 @@ fn render(
                     (Kind::Link, Dialect::Html) => link_target(chars, span.start, span.end),
                     _ => None,
                 };
-                // **A picture in a line is a picture** (2026-11-09), as the
+                // **A picture in a line is a picture**, as the
                 // preview draws it: `![小图](a.png)` among words was a link
                 // to the file, which in an EPUB pointed out of the book.
                 let picture = span.start >= 2 && chars[span.start - 2] == '!' && chars[span.start - 1] == '[';
@@ -1448,7 +1448,7 @@ fn link_target(chars: &[char], start: usize, end: usize) -> Option<String> {
         }
         target.push(c);
     }
-    // **`<…>` first** (2026-11-09): a target in angle brackets may hold
+    // **`<…>` first**: a target in angle brackets may hold
     // spaces, as CommonMark has it, and `[文字](<a b.html>)` was cut at its
     // space into `<a`. Otherwise the target ends at a space, where a title
     // may follow.
@@ -1481,7 +1481,7 @@ fn without_maths(mut marks: Vec<crate::markdown::Span>) -> Vec<crate::markdown::
 ///
 /// The markers themselves and the 批注 come out as nothing at all — those are
 /// the two runs that are *about* the manuscript rather than part of it.
-/// Warning: **`text` 已經排好了**（2026-10-01）：裏層的標記已經包過，該轉義的已
+/// Warning: **`text` 已經排好了**：裏層的標記已經包過，該轉義的已
 /// 經轉義過。這一支只管外面那一層怎麽寫。從前它自己 `escape`，而那在巢狀之後
 /// 是錯的——裏層排出來的 `<strong>` 會被當成寫稿人打的字再轉義一遍。
 fn marked(kind: crate::markdown::Kind, text: &str, dialect: Dialect) -> String {
@@ -1524,7 +1524,7 @@ fn marked(kind: crate::markdown::Kind, text: &str, dialect: Dialect) -> String {
     }
 }
 
-/// **A drawn formula as an `<img>`** (2026-11-08): the PNG inline, so the page
+/// **A drawn formula as an `<img>`**: the PNG inline, so the page
 /// stays one file; the TeX as its `alt`, for a screen reader and for whatever
 /// copies the picture's text; and its size in `em`, so it grows and shrinks
 /// with the text — the print stylesheet changes the type size, and a size in
@@ -1552,8 +1552,8 @@ fn formula_img(drawn: &Formula, tex: &str, display: bool, turn: bool) -> String 
     )
 }
 
-/// **What a vertical page does to its text that CSS cannot be asked to**
-/// (2026-11-08), done to the HTML `body` once it is written.
+/// **What a vertical page does to its text that CSS cannot be asked to**,
+/// done to the HTML `body` once it is written.
 ///
 /// - **Half-width letters and digits** are set as `latin` says
 ///   ([`Latin`]), each run of them with the half-width marks joined to it
@@ -1589,7 +1589,7 @@ fn vertical_text(body: &str, latin: Latin, quotes: bool) -> String {
 }
 
 /// **`body` with its curly quotes as corner brackets** where
-/// [`corner_quotes`] says, each block's text read whole (2026-11-09): a pair
+/// [`corner_quotes`] says, each block's text read whole: a pair
 /// is told Chinese or not by what it holds, and `“<strong>走</strong>”` holds
 /// its words in another run between tags. A paragraph, a heading, a cell or
 /// an item is a block; what is not touched in [`text_between_tags`] is not
@@ -1652,8 +1652,8 @@ fn quotes_cornered(body: &str) -> String {
     String::from_utf8(bytes).unwrap_or_else(|_| body.to_string())
 }
 
-/// **`body` with each run of text between its tags done as `f` says**
-/// (2026-11-08): what is inside a tag is not touched, nor what is in
+/// **`body` with each run of text between its tags done as `f` says**:
+/// what is inside a tag is not touched, nor what is in
 /// `<code>`, `<pre>`, a reading (`<rt>`) or a script.
 pub(crate) fn text_between_tags(body: &str, f: impl Fn(&str) -> String) -> String {
     const SKIP: &[&str] = &["code", "pre", "rt", "rp", "script", "style", "svg", "math", "kbd", "samp"];
@@ -1715,7 +1715,7 @@ fn half_width(c: char) -> bool {
 }
 
 /// **How a run of half-width letters and digits stands down a vertical
-/// page** (2026-11-08): what [`latin_runs`] says of each run, the HTML
+/// page**: what [`latin_runs`] says of each run, the HTML
 /// export's `<span>` classes and the Markdown preview's drawing alike.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Orientation {
@@ -1738,7 +1738,7 @@ impl Orientation {
     }
 }
 
-/// **How one run of Latin is set under [`Latin::Jlreq`]** (2026-11-08).
+/// **How one run of Latin is set under [`Latin::Jlreq`]**.
 ///
 /// - A single letter, a capital or a small one: upright (2026-11-09: a small
 ///   one was turned, while `$x$` beside it stood); with marks joined to it
@@ -1775,12 +1775,12 @@ fn jlreq_orientation(run: &[char]) -> Orientation {
     }
 }
 
-/// **Curly quotes as corner brackets** (2026-11-08), `“”` as `『』` and `‘’`
+/// **Curly quotes as corner brackets**, `“”` as `『』` and `‘’`
 /// as `「」`, the way a vertical Chinese page sets them; a single quote
 /// between two Latin letters is an apostrophe and is left alone. Called for
 /// a Chinese page only ([`corners_quotes`]).
 ///
-/// **Only round Chinese** (2026-11-09): a pair of quotes round Western text
+/// **Only round Chinese**: a pair of quotes round Western text
 /// keeps its own marks, as clreq has quoted Western text keep them — `他说
 /// “go”` keeps `“go”`, and an English sentence keeps every quote it has.
 ///
@@ -1861,7 +1861,7 @@ pub fn corner_quotes(chars: &[char]) -> Vec<char> {
         .collect()
 }
 
-/// **Whether a page's curly quotes become corner brackets** (2026-11-09):
+/// **Whether a page's curly quotes become corner brackets**:
 /// on a page in Chinese, as [`document_language`] decides it. The one rule
 /// for the vertical export, the EPUB and the vertical preview alike — the
 /// preview asked its writing system, which a Chinese note with a page of
@@ -1870,15 +1870,15 @@ pub fn corners_quotes(lang: &str) -> bool {
     lang == "zh"
 }
 
-/// **The language a page of `text` is set in** (2026-11-09): `zh`, `ja` or
+/// **The language a page of `text` is set in**: `zh`, `ja` or
 /// `en`, from its prose, comments left out — what the HTML and EPUB exports
 /// write as `lang`, and what the vertical preview asks too.
 pub fn document_language(text: &str) -> &'static str {
     language_of(&crate::markdown::strip_comments(text))
 }
 
-/// **A half-width mark that stands upright down a vertical page**
-/// (2026-11-09): those UAX #50 gives orientation U, `§ © ® ± ¼ ½ ¾ × ÷`
+/// **A half-width mark that stands upright down a vertical page**:
+/// those UAX #50 gives orientation U, `§ © ® ± ¼ ½ ¾ × ÷`
 /// and two tone marks, which `text-orientation: mixed` leaves standing. On
 /// its own, out of a run of Latin, such a mark stands in the export, and the
 /// preview stands it too; any other half-width mark on its own is turned.
@@ -1886,7 +1886,7 @@ pub fn upright_mark(c: char) -> bool {
     matches!(c as u32, 0xA7 | 0xA9 | 0xAE | 0xB1 | 0xBC..=0xBE | 0xD7 | 0xF7 | 0x2EA..=0x2EB)
 }
 
-/// **The runs of Latin in `chars` and how each stands** (2026-11-08): runs
+/// **The runs of Latin in `chars` and how each stands**: runs
 /// of half-width characters with a letter or digit in them, the half-width
 /// marks joined to them (`5%`, `don’t`, `’` taken only between two letters),
 /// and words with one space between them joined into one phrase. Under
@@ -2102,7 +2102,7 @@ fn escape_typst(text: &str) -> String {
     out
 }
 
-/// **The font list a page asks for** (2026-11-08): `[export] font_family`,
+/// **The font list a page asks for**: `[export] font_family`,
 /// whatever the language, with nothing in it that could end the rule or the
 /// `<style>` it is written in. No third-party font is named unless the
 /// writer names it: the default is the system's own faces, as VS Code's
@@ -2157,12 +2157,12 @@ pub(crate) fn stylesheet(style: &Style, lang: &str, book: bool) -> String {
     if style.settings.vertical && !book {
         // The one place outside a terminal where 縱書 costs a line of CSS.
         //
-        // **No measure** (2026-11-08): a 縱 is as long as the window is tall,
+        // **No measure**: a 縱 is as long as the window is tall,
         // as a line across is as long as the window is wide. A page is
         // publication, and the 縱 length the editing window wraps at is how
         // the writer sees the draft; the paper sets the printed one.
         //
-        // Warning: **the writing mode goes on `html`** (2026-11-08). It was on
+        // Warning: **the writing mode goes on `html`**. It was on
         // `body` alone, and the 縱 past the body's left edge overflowed where
         // a horizontal page cannot scroll to — a window narrower than the
         // text cut off its opening. On the root, the page opens at its right
@@ -2214,7 +2214,7 @@ pub(crate) fn stylesheet(style: &Style, lang: &str, book: bool) -> String {
         // one square, or upright one to a square. `sideways` rather than
         // `mixed` for the turned ones, so a mark in the run turns with it.
         //
-        // **A table is a vertical one** (2026-11-08), as a 年表 in 史記 is:
+        // **A table is a vertical one**, as a 年表 in 史記 is:
         // nothing overrides its writing mode, so each row of the source is a
         // column read from the right, the head row on the right, and its
         // caption runs down beside it. No nested writing mode, which DPFJ
@@ -2415,7 +2415,7 @@ fn cell_length(text: &str) -> f64 {
     text.chars().map(|c| if half_width(c) || c == ' ' { 0.5 } else { 1.0 }).sum()
 }
 
-/// **Whether a cell of a vertical table keeps its line** (2026-11-08): up to
+/// **Whether a cell of a vertical table keeps its line**: up to
 /// six squares, or up to half the table's longest cell, and never past
 /// twelve. Chrome sizes a vertical table's cells as though anything could
 /// break, so a cell left to wrap is cut short with room to spare — `甲城` in
@@ -2427,7 +2427,7 @@ fn short_cell(length: f64, longest: f64) -> bool {
     length <= (longest / 2.0).clamp(6.0, 12.0)
 }
 
-/// **The hook in a wrapped code line's hang** (2026-11-08), ↳ as it is
+/// **The hook in a wrapped code line's hang**, ↳ as it is
 /// across: down from the line before, then on along this one to an
 /// arrowhead. Two strokes of three points each, in the hang's width and the
 /// line's height from their top left. The preview draws the same.
@@ -2440,7 +2440,7 @@ pub const CODE_HANG: u8 = 2;
 /// A code line's height, in ems of the code.
 const CODE_LINE: f64 = 1.45;
 
-/// **Code on a vertical page** (2026-11-08): turned whole, a block and a
+/// **Code on a vertical page**: turned whole, a block and a
 /// span alike — `sideways`, not `mixed`, so 漢字 in it turn with the line:
 /// code is verbatim, and its columns line up only if nothing in it stands
 /// up. Each line of a block runs down the page, the next on its left.
@@ -2492,7 +2492,7 @@ fn code_block_html(lines: &[String], vertical: bool, painted: Option<Vec<String>
     }
 }
 
-/// **A code block's lines in colour** (2026-11-08), as the Markdown
+/// **A code block's lines in colour**, as the Markdown
 /// preview draws them, when its fence names a language yumete colours:
 /// each line escaped, its tokens in `<span>`s of their class
 /// ([`crate::as_preview::painted_code`]).
@@ -2675,7 +2675,7 @@ fn html_lines(lines: &[String], style: &Style) -> String {
 /// The marks a footnote reference is written as until the whole text is out
 /// and the notes can be numbered in the order they are met.
 ///
-/// **Noncharacters, not private use** (2026-10-30): U+E000 and U+E001 were
+/// **Noncharacters, not private use**: U+E000 and U+E001 were
 /// here, and a 字根 font puts real glyphs in the private-use area, so a
 /// writer's U+E000 vanished from the export. U+FDD0 and U+FDD1 are reserved by
 /// Unicode for exactly this, a program's own internal marks.
@@ -2740,7 +2740,7 @@ fn number_the_notes(
 /// The page's language, from what it is written in: kana makes it Japanese,
 /// more 漢字 than Latin words Chinese, and otherwise English.
 ///
-/// **Only the prose is counted** (2026-11-09): code, in a block or a span,
+/// **Only the prose is counted**: code, in a block or a span,
 /// and addresses — a link's target, a bare URL — are left out. Counted, they
 /// made a Chinese note with a page of code in it an English one.
 pub(crate) fn language_of(text: &str) -> &'static str {
@@ -2820,7 +2820,7 @@ fn prose_of(text: &str) -> String {
     out
 }
 
-/// **`text` with nothing in it an XML page may not hold** (2026-11-09): the
+/// **`text` with nothing in it an XML page may not hold**: the
 /// control characters other than a tab and the line ends — a form feed or a
 /// vertical tab as a space, the rest gone — and U+FFFE and U+FFFF. An EPUB's
 /// page is XML, and one form feed made it a page a strict reader refuses.
@@ -2846,7 +2846,7 @@ pub(crate) fn legal_text(text: &str) -> std::borrow::Cow<'_, str> {
 /// what makes it one. Without this the print is the screen page cut wherever
 /// the paper happens to end: one endless 縱, sliced.
 ///
-/// **The type is 五號, 10.5 point** (2026-11-08), and the paper says how
+/// **The type is 五號, 10.5 point**, and the paper says how
 /// many characters a line or a 縱 then holds. It used to be worked out the
 /// other way, from the 縱 length the editing window wraps at; a page is
 /// publication, and nothing of the editing window's reaches it.
@@ -3153,7 +3153,7 @@ mod tests {
         }
     }
 
-    /// **`Format` 說寫成什麼，`Style::source` 說讀的是什麼**（2026-09-28）。
+    /// **`Format` 說寫成什麼，`Style::source` 說讀的是什麼**。
     ///
     /// Warning: 從前只有前一半，於是導出**永遠按 Markdown 解析源檔**：一份 Typst 稿子裏的
     /// `*粗*` 是四個字符、`$a+b$` 被當成兩個字面美元號轉義掉。
@@ -3187,7 +3187,7 @@ mod tests {
         assert!(!out.contains("<h1"), "Markdown 源裏它是一行字：{out}");
     }
 
-    /// **Print is 五號 on the paper asked for** (2026-11-08): 10.5 point,
+    /// **Print is 五號 on the paper asked for**: 10.5 point,
     /// whatever the editing window wraps at, and the paper says how many
     /// characters a 縱 or a line then holds.
     #[test]
@@ -3225,7 +3225,7 @@ mod tests {
         );
     }
 
-    /// **The screen page has no measure** (2026-11-08): a line fills the
+    /// **The screen page has no measure**: a line fills the
     /// window across, a 縱 fills it down, and the vertical page's writing
     /// mode is the root's, so it opens at its right edge.
     #[test]
@@ -3283,7 +3283,7 @@ mod tests {
         assert!(!out.contains("私話"), "{out}");
     }
 
-    /// **一層套一層的標記，一層一層排出來**（2026-10-01）。
+    /// **一層套一層的標記，一層一層排出來**。
     ///
     /// Warning: 從前那一趟是平的：取頭一個蓋住光標的 span，而 `spans()` 交出來的
     /// 是**外層在前**的嵌套表，於是永遠取到最外那一層，整段原文連同裏層的分隔
@@ -3403,7 +3403,7 @@ mod tests {
         assert!(!out.contains("x\\_y"), "nothing inside it is markup: {out}");
 
         // HTML wants its own wrapper, and its own escaping inside it; the
-        // code is in its colours (2026-11-08), its words as written.
+        // code is in its colours, its words as written.
         let mut across = style();
         across.settings.vertical = false;
         let out = export(text, Format::Html, &across);
@@ -3411,7 +3411,7 @@ mod tests {
         assert!(out.contains("<span class=\"t-keyword\">fn</span>") && out.contains("x_y"), "{out}");
     }
 
-    /// **Task lists** (2026-11-08), GFM's `- [ ]` and `- [x]`: a box before
+    /// **Task lists**, GFM's `- [ ]` and `- [x]`: a box before
     /// the item's words, ticked or not, in HTML and in Typst; `[ ]` that is
     /// not followed by a space or the line's end is the item's words.
     #[test]
@@ -3427,7 +3427,7 @@ mod tests {
         assert!(out.contains("- ☐ 買菜\n- ☑ 洗衣\n"), "{out}");
     }
 
-    /// **Code down the page is turned whole** (2026-11-08), a block and a
+    /// **Code down the page is turned whole**, a block and a
     /// span alike, 漢字 in it too, under `turn` and `jlreq`: it is verbatim,
     /// never upright, never 縱中橫. A block's lines are boxes of their own,
     /// each keeping its newline, so a line too long for the 縱 wraps, hangs
@@ -3541,7 +3541,7 @@ mod tests {
     }
 
     /// **Lists, quotes, footnotes, tables and rules come out as what they
-    /// are** (2026-10-29); before, each came out as its source.
+    /// are**; before, each came out as its source.
     #[test]
     fn markdown_structure_reaches_both_formats() {
         let mut flat = style();
@@ -3745,7 +3745,7 @@ mod tests {
         assert!(typst.contains("1.\n2. 二"), "{typst}");
     }
 
-    /// Inline HTML is HTML (2026-11-05): through as it is to an HTML page,
+    /// Inline HTML is HTML: through as it is to an HTML page,
     /// and gone from a Typst one, which has nothing to make of a tag.
     #[test]
     fn inline_html_goes_through_to_html_and_not_to_typst() {
@@ -3805,7 +3805,7 @@ mod tests {
         s
     }
 
-    /// **`turn`, the default** (2026-11-08): every run of half-width letters
+    /// **`turn`, the default**: every run of half-width letters
     /// and digits turned, the marks joined to it turned with it, words with
     /// one space between turned as one; nothing set across.
     #[test]
@@ -3829,7 +3829,7 @@ mod tests {
         assert!(!out.contains("class=\"yoko\"") && !out.contains("text-orientation: sideways"), "{out}");
     }
 
-    /// **`jlreq`** (2026-11-08): JLREQ §2.3.2 and clreq. A word turned whole,
+    /// **`jlreq`**: JLREQ §2.3.2 and clreq. A word turned whole,
     /// capitals and single letters upright, one digit upright, two across,
     /// more turned, and a number with its unit one way as a whole.
     #[test]
@@ -3859,7 +3859,7 @@ mod tests {
         assert!(out.contains("<span title=\"12\">丙</span>"), "{out}");
     }
 
-    /// **Curly quotes become corner brackets down a Chinese 縱** (2026-11-08):
+    /// **Curly quotes become corner brackets down a Chinese 縱**:
     /// what `:render full` draws. An apostrophe stays one, and a page across
     /// or in English keeps the writer's quotes.
     #[test]
@@ -3877,7 +3877,7 @@ mod tests {
         assert!(out.contains("He said “go” and ‘stay’"), "{out}");
     }
 
-    /// **A table down the page is a vertical one** (2026-11-08): no writing
+    /// **A table down the page is a vertical one**: no writing
     /// mode of its own, its cells set by the same rules as the text, a short
     /// cell kept on one line, its caption with it; a printer does not cut it
     /// in two.
@@ -3903,7 +3903,7 @@ mod tests {
         assert!(!out.contains("class=\"short\""), "{out}");
     }
 
-    /// **A picture alone in its paragraph is a figure** (2026-11-08): the
+    /// **A picture alone in its paragraph is a figure**: the
     /// picture where the source finds it, its text the caption.
     #[test]
     fn a_picture_alone_is_a_figure() {
@@ -3917,7 +3917,7 @@ mod tests {
         assert!(typ.contains("一棵树") && !typ.contains("tree.png"), "{typ}");
     }
 
-    /// **The fonts are the writer's** (2026-11-08): `[export] font_family`
+    /// **The fonts are the writer's**: `[export] font_family`
     /// for every language, VS Code's default list when it is not set, and
     /// nothing in it can end the rule.
     #[test]
@@ -3933,8 +3933,8 @@ mod tests {
         assert!(!out.contains("Source Han") && !out.contains("Georgia"), "{out}");
     }
 
-    /// **A TeX formula is drawn** when the front end hands over a painter
-    /// (2026-11-08): a PNG inline, the TeX as its `alt`, and its size in `em`.
+    /// **A TeX formula is drawn** when the front end hands over a painter:
+    /// a PNG inline, the TeX as its `alt`, and its size in `em`.
     #[test]
     fn a_formula_is_drawn_into_the_page() {
         let mut s = style();
@@ -3951,7 +3951,7 @@ mod tests {
         assert!(out.contains("<img class=\"math display\" alt=\"E=mc^2\""), "{out}");
     }
 
-    /// **Down the page a formula is turned** (2026-11-08), in the bitmap by
+    /// **Down the page a formula is turned**, in the bitmap by
     /// the painter: every one under `turn`; under `jlreq` all but one letter
     /// or digit and a numeric fraction; one on a line of its own always, set
     /// two squares in from the head of its line.
@@ -3976,7 +3976,7 @@ mod tests {
         assert!(out.contains("<img class=\"math display turned\""), "{out}");
     }
 
-    /// **The brace form goes out as ruby** (2026-11-08): `<ruby>` in HTML, a
+    /// **The brace form goes out as ruby**: `<ruby>` in HTML, a
     /// reading a character where the bars give one, `#ruby` in Typst; left
     /// as written with `no-ruby-markdown`, and never read in a Typst source.
     #[test]
@@ -4001,7 +4001,7 @@ mod tests {
         assert!(!words.ruby_markdown && !words.dialects().contains(Dialect::Markdown));
     }
 
-    /// **The words of an `:export` line** (2026-11-08): any order, the path
+    /// **The words of an `:export` line**: any order, the path
     /// last, a font list held whole by its quotes and commas, and a word
     /// misspelt said rather than taken for a file.
     #[test]
@@ -4032,7 +4032,7 @@ mod tests {
         assert_eq!(s.read_line("page=quarto").unwrap_err(), say!("export.no-such-page", "quarto"));
         assert!(s.read_line("font=").is_err() && s.read_line(r#"font="Songti"#).is_err());
         assert_eq!(s, Settings::default(), "nothing is taken from a line that is refused");
-        // A comma does not carry a word on past a space (2026-11-09): the
+        // A comma does not carry a word on past a space: the
         // file named after it was once read into the font list.
         assert_eq!(s.read_line("font=Songti, b.html").unwrap_err(), say!("export.trailing-comma", "font=Songti,"));
         assert_eq!(s.read_line(r#"font="PingFang SC", serif"#).unwrap_err(), say!("export.trailing-comma", r#"font="PingFang SC","#));
@@ -4065,7 +4065,7 @@ mod tests {
         assert!(out.contains("\\$\\$\nx\\_1\n\\$\\$"), "{out}");
     }
 
-    /// **A fence is read as the preview reads it** (2026-11-09): tildes as
+    /// **A fence is read as the preview reads it**: tildes as
     /// well as backticks, and closed only by a line of the same character, at
     /// least as long.
     #[test]
@@ -4094,7 +4094,7 @@ mod tests {
         assert!(out.contains("````\n```\n````\n"), "{out}");
     }
 
-    /// **A picture in a line is a picture** (2026-11-09), as the preview
+    /// **A picture in a line is a picture**, as the preview
     /// draws it, and two on one line are two such pictures, not a figure; a
     /// target in angle brackets may hold a space.
     #[test]
@@ -4123,7 +4123,7 @@ mod tests {
         assert!(out.contains("文中有图 小图 在此。"), "{out}");
     }
 
-    /// **The page's language is its prose's** (2026-11-09): code and
+    /// **The page's language is its prose's**: code and
     /// addresses are not counted, so a Chinese note full of code is Chinese.
     #[test]
     fn the_language_is_read_from_the_prose_alone() {
@@ -4134,7 +4134,7 @@ mod tests {
         assert_eq!(language_of("ひらがなとカタカナ。漢字。\n"), "ja");
     }
 
-    /// **Nothing XML refuses reaches a page** (2026-11-09): a control
+    /// **Nothing XML refuses reaches a page**: a control
     /// character other than a tab or a line end goes, a form feed as a space.
     #[test]
     fn control_characters_do_not_reach_the_page() {
@@ -4146,7 +4146,7 @@ mod tests {
         assert!(matches!(legal_text("plain"), std::borrow::Cow::Borrowed(_)));
     }
 
-    /// **Under jlreq a single letter stands upright** (2026-11-09), a small
+    /// **Under jlreq a single letter stands upright**, a small
     /// one as a capital does and as `$x$` does beside it; a word of small
     /// letters is still turned.
     #[test]
@@ -4158,7 +4158,7 @@ mod tests {
         assert!(stands_upright("x"), "and the formula $x$ stands as the letter does");
     }
 
-    /// **Corner brackets only round Chinese** (2026-11-09): quotes round
+    /// **Corner brackets only round Chinese**: quotes round
     /// Western words keep their marks, as clreq has them, on a Chinese page
     /// too; a pair holding Chinese turns, its words in other tags or not.
     #[test]
@@ -4302,7 +4302,7 @@ mod tests {
         assert!(!stylesheet(&flat, "zh", false).contains("overflow-wrap"));
     }
 
-    /// **One rule for whether quotes turn** (2026-11-09): the page's language
+    /// **One rule for whether quotes turn**: the page's language
     /// as the export decides it, which the vertical preview asks too; an
     /// English page quoting Chinese keeps its quotes.
     #[test]

@@ -386,7 +386,7 @@ pub struct Hit {
     pub score: f32,
 }
 
-/// **A command, or a key** (2026-10-06).
+/// **A command, or a key**.
 ///
 /// 原話：「we can instead enrich the current find command functionality by making
 /// it find commands **or shortcuts**」. The two are the same question asked of the
@@ -505,7 +505,7 @@ pub fn look_above(query: &str, floor: f32) -> Vec<Hit> {
             crate::messages::Language::English => [e.en, e.zht, e.zhs],
         }
     };
-    // **命令和鍵在同一張單子上**（2026-10-06）。`actions::ALL` 本來就是一張「這個
+    // **命令和鍵在同一張單子上**。`actions::ALL` 本來就是一張「這個
     // 鍵叫什麼、做什麼」的表（#429 建的），所以這一步不是新造一份索引，是把已經
     // 有的兩份合起來問同一個問題。
     //
@@ -589,7 +589,7 @@ pub const SURE_ENOUGH: f32 = 4.0;
 /// `:` 那一行上最多補幾條猜的。
 pub const GUESSES: usize = 5;
 
-/// **只要命令，不要鍵**（2026-10-06）：`:` 那一行上打不出一個鍵來。
+/// **只要命令，不要鍵**：`:` 那一行上打不出一個鍵來。
 pub fn guesses(query: &str) -> Vec<crate::command::Choice> {
     if query.trim().is_empty() {
         return Vec::new();

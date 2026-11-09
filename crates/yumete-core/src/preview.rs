@@ -1,4 +1,4 @@
-//! **The wire to a preview server's control plane** (2026-09-23).
+//! **The wire to a preview server's control plane**.
 //!
 //! `tinymist preview` opens two ports. One of them is the page the browser
 //! reads (`crate::…`/`yumete_tui::server_address` picks it). The other is a
@@ -10,8 +10,8 @@
 //! ```
 //!
 //! That is how the VS Code extension keeps its preview a keystroke behind the
-//! caret, and 2026-09-23 報的就是這個：「vscode 的 tinymist 預覽，每次按鍵他都
-//! 會刷新一下（而且似乎是增量編譯，所以反應很快）。我們是不是也可以做到？」
+//! caret, refreshing on every key with an incremental compile, and it is what
+//! this preview does too.
 //!
 //! Warning: **It is not 「save, then let it notice」.** Measured against the tinymist
 //! on this machine (build 2025-07-25): push a *deliberately broken* text over
@@ -28,7 +28,7 @@
 //! handshake, the masking, and nothing else: it may skip `Sec-WebSocket-Accept`
 //! (a 101 is the answer), which is the only part that would want sha1. That is
 //! the whole of why this file is 150 lines and adds no dependency — the same
-//! bargain #53 took (「新依賴只有 serde_json」).
+//! bargain #53 took (serde_json its only new one).
 
 use std::path::Path;
 
@@ -36,8 +36,8 @@ use std::path::Path;
 ///
 /// Warning: **`Origin` is not optional here.** The server logs 「websocket connection
 /// is not set `Origin` header, which will be a hard error in the future」 when
-/// it is left off (seen in its own log, 2026-09-23), so it goes in now rather
-/// than on the day it starts refusing us.
+/// it is left off (seen in its own log), so it goes in now rather than on
+/// the day it starts refusing us.
 pub fn handshake(host: &str, key: &str) -> String {
     format!(
         "GET / HTTP/1.1\r\n\
@@ -112,7 +112,7 @@ pub fn update_memory_files(path: &Path, text: &str) -> String {
 /// Free with the socket, and the reason the socket is worth opening even for a
 /// document that is not being typed into.
 ///
-/// Warning: **`panelScrollTo`, not `changeCursorPosition`** (2026-11-07). The
+/// Warning: **`panelScrollTo`, not `changeCursorPosition`**. The
 /// second only ever drew a caret mark on the page, and tinymist has ignored
 /// it since 0.15.2 (#2586: 「cursor indicator … temporarily disabled. Request
 /// ignored」), so the browser preview had stopped following the caret.
@@ -184,7 +184,7 @@ fn json_string(text: &str) -> String {
 
 // ---- The page window: tinymist through the language server ----------------
 //
-// **The page beside the text** (2026-11-07). The window draws the page the
+// **The page beside the text**. The window draws the page the
 // cursor is on, as a picture, and asks the tinymist the editor already runs
 // as its Typst language server for two things: the page as a PNG made from
 // the unsaved text (`tinymist.exportPng` with `write: false`), and where on
@@ -224,7 +224,7 @@ pub fn new_enough(version: Option<&str>) -> bool {
     version.and_then(version_of).is_some_and(|v| v >= LEAST_TINYMIST)
 }
 
-/// **The name of a preview's task inside tinymist** (2026-11-08): one task
+/// **The name of a preview's task inside tinymist**: one task
 /// a preview tab, named by the tab's id, since several may be open and
 /// tinymist keeps its tasks by name. The server is the editor's own, so the
 /// names need only differ within this process.
@@ -410,7 +410,7 @@ pub struct Want {
     pub text: u64,
 }
 
-/// **When to ask for the page again** (2026-11-07): one request out at a
+/// **When to ask for the page again**: one request out at a
 /// time; a new page or a new size at once; new text only once the typing has
 /// been still for a while ([`Refresh::QUIET`]), since a page made in the
 /// middle of a word is a page nobody reads. Pure, so the clock is handed in.
@@ -499,7 +499,7 @@ impl Refresh {
 mod tests {
     use super::*;
 
-    /// **Too old is the same as unknown** (2026-11-07): `write: false` came in
+    /// **Too old is the same as unknown**: `write: false` came in
     /// 0.13.30, and the tinymist before it sent no `serverInfo` at all.
     #[test]
     fn only_a_tinymist_that_says_a_new_enough_version_draws_the_window() {
@@ -536,7 +536,7 @@ mod tests {
             r#"["yumete-7",{"event":"panelScrollTo","filepath":"/書/第一章.typ","line":100,"character":5}]"#
         );
         assert_eq!(kill_preview_arguments(&task), r#"["yumete-7"]"#);
-        // **Two previews, two tasks** (2026-11-08): each tab names its own.
+        // **Two previews, two tasks**: each tab names its own.
         assert_ne!(start_preview_arguments(&task_id(7), main), start_preview_arguments(&task_id(8), main));
         for made in [
             export_png_arguments(main, 1, 72),

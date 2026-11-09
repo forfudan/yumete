@@ -48,7 +48,7 @@ fn col_of_byte(s: &str, byte: usize) -> usize {
 
 /// The number of characters on `line` (excluding the trailing line break).
 ///
-/// Warning: **不抄整行**（2026-10-08）。從前寫的是
+/// Warning: **不抄整行**。從前寫的是
 /// `line_text(rope, line).chars().count()`——為了數一個數字，把一行一千兩百萬字
 /// 的行抄成一個 37 MB 的 `String`，而 `line_end` 問的就是這個數，於是每一下詞動
 /// 作都抄一次。`ropey` 的行切片自己報得出字數，剩下的只是把尾巴上那一兩格扣掉，
@@ -100,7 +100,7 @@ pub fn last_line(rope: &Rope) -> usize {
 
 /// 一個字簇最多往外看多少個字——[`left`]／[`right`] 只拿光標旁邊這一截。
 ///
-/// Warning: **這是 O(行長) 換 O(1) 的那一刀**（2026-10-09）。這兩支從前各
+/// Warning: **這是 O(行長) 換 O(1) 的那一刀**。這兩支從前各
 /// `line_text` 一次，於是「往左走一個字」在一行一千二百萬字的稿子上要抄 37 MB；
 /// 而它們要的只是光標緊鄰那一個字簇的邊界。[`visual_column`] 早就是這麽切的，
 /// 餘量取的也是這個數：真實文字裏一個字簇兩三個碼位就到頂（帶異體字選擇符的漢
@@ -181,7 +181,7 @@ pub fn visual_column(rope: &Rope, pos: usize) -> usize {
     let line = rope.char_to_line(pos);
     let ls = rope.line_to_char(line);
     let col = pos - ls;
-    // Warning: **只拿光標前面那一截**（2026-10-08）。下面那個迴圈 `chars >= col`
+    // Warning: **只拿光標前面那一截**。下面那個迴圈 `chars >= col`
     // 就斷，所以後面的字一個也用不著；可 `line_text` 把**整行**物化成 `String`，
     // 而這一支是狀態欄與光標每幀都問的——一行 150 萬字的檔上就是每幀一次
     // 4.5 MB 的拷貝（`sample` 指的就是這裏）。
@@ -209,7 +209,7 @@ pub fn visual_column(rope: &Rope, pos: usize) -> usize {
 pub fn pos_at_visual_column(rope: &Rope, line: usize, goal: usize) -> usize {
     let ls = rope.line_to_char(line);
     let le = ls + line_char_len(rope, line);
-    // Warning: **一截一截地拿，不抄整行**（2026-10-09）。這一支在 `goal` 列上就斷，
+    // Warning: **一截一截地拿，不抄整行**。這一支在 `goal` 列上就斷，
     // 所以後面的字一個也用不着——可 `line_text` 把整行物化，而 `j`／`k` 每按一下都
     // 問它一次。
     //
@@ -374,7 +374,7 @@ pub enum Grain {
     Coarse,
 }
 
-/// Warning: **詞動作不問這一支，問 [`near_words`]**（2026-10-08）。整行一份答案
+/// Warning: **詞動作不問這一支，問 [`near_words`]**。整行一份答案
 /// 在一行一千兩百萬字的檔上就是整份文件一份答案，而一下 `e` 只用得上其中一條。
 /// 畫面上的東西（跳轉標籤、`miw`、`*` 取光標下那個詞）還是問這一支：它們要的本
 /// 來就是一整行。
@@ -397,7 +397,7 @@ fn segment_text(text: &str, grain: Grain, seg: &dyn Segmenter) -> Vec<(usize, us
     whole_graphemes(text, words)
 }
 
-/// **A word is made of whole graphemes** (2026-10-23).
+/// **A word is made of whole graphemes**.
 ///
 /// A segmenter counts a combining mark as a thing of its own, so a word ended
 /// *between* a letter and its mark — and a caret there is not a place. On
@@ -441,7 +441,7 @@ fn whole_graphemes(text: &str, words: Vec<(usize, usize)>) -> Vec<(usize, usize)
     out
 }
 
-// ---- 長行上的詞動作：只切光標附近那一段（2026-10-08） ----------------------
+// ---- 長行上的詞動作：只切光標附近那一段 ----------------------
 
 /// 一次詞動作往兩邊各看多少個字元。
 ///
@@ -552,7 +552,7 @@ impl Window {
 
     /// **第 `k` 條詞前面那條詞的終點** —— `e` 要的那半個邊界（見 [`next_word_end`]）。
     ///
-    /// Warning: **`k == 0` 的時候不許拿行首頂替**（2026-10-09）。窗是往前推出來的
+    /// Warning: **`k == 0` 的時候不許拿行首頂替**。窗是往前推出來的
     /// 時候，第一條詞前面那條詞落在窗外，而它的終點**可能在 `pos` 後面**：光標正站
     /// 在一個詞的末字上、下一個詞的尾巴又遠在這扇窗之外，那條邊界就是 `pos + 1`。
     /// 拿行首頂替會讓 `e` 把光標那個字一起收進去，`de` 就多吃一個字。被丟掉的那一
@@ -566,7 +566,7 @@ impl Window {
     }
 }
 
-/// **在 `pos` 附近一段一段地問，問到有答案為止**（2026-10-08）。
+/// **在 `pos` 附近一段一段地問，問到有答案為止**。
 ///
 /// 第一扇窗是 `[pos - WORD_REACH, pos + WORD_REACH]`，夾在這一行裏；窗裏没有答
 /// 案就往 `forward` 的方向再推一扇，推到行的那一頭為止。
@@ -915,7 +915,7 @@ pub enum Motion {
     /// Warning: **An object knows both its ends**, which is why it is not two
     /// motions: `i(` is not 「forward to `)`」, it is 「the thing this caret is
     /// inside of」, and from anywhere in it the answer is the same.
-    /// **`count` 只有詞對象用得上**（2026-10-11）：vim 的 `2iw` 是「兩個單位」，
+    /// **`count` 只有詞對象用得上**：vim 的 `2iw` 是「兩個單位」，
     /// 單位在詞和空白之間交替；`2aw` 是兩個「詞 ＋ 它後面那道縫」。
     ///
     /// Warning: **括號那一族的數目是另一個意思**，所以這一格對它們没有作用。`2i(`
@@ -971,7 +971,7 @@ pub enum Object {
     /// A word — or, standing on blanks, that run of blanks (vim's rule, and
     /// the one that makes `wdiw` the handiest press in this editor).
     ///
-    /// Warning: **`big` 說用不用分詞器**（2026-09-28）。`iw` 走分詞器，和 `w`/`b` 同一個
+    /// Warning: **`big` 說用不用分詞器**。`iw` 走分詞器，和 `w`/`b` 同一個
     /// 答案；`iW` 走 [`Grain::Big`]，也就是 vim 的「一串非空白」。從前這裏没有這一格，
     /// `iw` 寫死了粗粒度，於是「今天天氣很好」整串是一個「詞」，而同一個編輯器的 `w`
     /// 走三步。一個編輯器對「詞」只能有一個答案。
@@ -996,7 +996,7 @@ pub enum Object {
     /// `**粗**`、`*斜*`、`~~刪~~`、`==標==`、`` `碼` ``、`[文字](地址)`、`[[雙鏈]]`、
     /// `%%批注%%`、腳註。`i` 取裏面的文字，`a` 連標記一起。套着的時候取最裏面那一層。
     ///
-    /// Warning: **一個鍵，不是一個標記一個鍵**（2026-09-28 定）。`**` `~~` `==` 是**兩個**
+    /// Warning: **一個鍵，不是一個標記一個鍵**。`**` `~~` `==` 是**兩個**
     /// 字符，寫不進 `Object::Pair` 那張一對一的表；而且這一族有九種，一種一個鍵就把
     /// `m` 那一層佔掉一半，而這個倉的規矩是「鍵位很貴」。`md`（去掉最裏面那一對括號）
     /// 早就是同一個思路。
@@ -1005,7 +1005,7 @@ pub enum Object {
     /// 不是 tree-sitter——tree-sitter 在這個倉裏只管代碼檔與代碼圍欄。`:syntax text`
     /// 的檔交空，Typst 交 Typst 自己那一份。
     Markup,
-    /// **`mi s`/`ma s` — 光標所在的那一句**（2026-09-28）。
+    /// **`mi s`/`ma s` — 光標所在的那一句**。
     ///
     /// Warning: **這一條是這個編輯器該有而 helix 和 vim 都不太有的**：句在這裏本來就是一個
     /// 單位——`H`/`L` 按句走、`:view-sentence` 一句一縱、`:check-punct` 按句查——可是
@@ -1015,7 +1015,7 @@ pub enum Object {
     /// Warning: **`as` 在中文裏會退化成 `is`**，同 `aw`：它多取句末那一段空白，而中文句子之間
     /// 没有空白。
     Sentence,
-    /// **`mi u`/`ma u` — 短句, a clause** (2026-10-27): what lies between two
+    /// **`mi u`/`ma u` — 短句, a clause**: what lies between two
     /// punctuation marks of any kind, brackets and quotes included. helix and
     /// vim have none; `W` stops only at a space, which in Chinese is the
     /// whole paragraph. Boundaries are [`ends_a_clause`].
@@ -1254,7 +1254,7 @@ pub fn next_word_end(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter)
         // 字。現在那條邊界由被丟掉的那一扇記下來，見 [`Window::leading`]。
         let found = near_words(rope, line, pos, grain, seg, true, |w| {
             let words = w.ended();
-            // Warning: **「已經在詞尾了」要按字位問,不是按碼位**（2026-10-23）。光標罩
+            // Warning: **「已經在詞尾了」要按字位問,不是按碼位**。光標罩
             // 着的是一整個字位,而 `m̀`（U+006D U+0300）那種詞**整個就是那一格**——
             // 問 `end - 1 > pos` 的時候 1 是組合記號,於是 `e` 把頭放進了字位中間,
             // 而真 helix 25.07 收下一個詞（`scripts/oracle/hx_keys.py` 量的）。
@@ -1289,7 +1289,7 @@ pub fn next_word_end(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter)
 pub fn word_end_here(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter) -> usize {
     let line = line_of(rope, pos);
     // Warning: **窗裏問的是「`pos` 後面第一個可信的詞尾」**，不是「罩着 `pos` 那一條
-    // 的詞尾」（2026-10-08）。兩者在整行上是同一個答案——詞不重疊，`pos` 前面那幾條
+    // 的詞尾」。兩者在整行上是同一個答案——詞不重疊，`pos` 前面那幾條
     // 的終點都不超過 `pos`——而光標那一條的尾巴落在窗外的時候只有前者還答得出：推
     // 一扇窗之後 `pos` 已經不在窗裏了（一行全是漢字没有標點的時候，`E` 的「本詞」就
     // 是整行）。
@@ -1319,7 +1319,7 @@ pub fn prev_word_end(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter)
             w.ended()
                 .iter()
                 .rev()
-                // Warning: **起點在 `pos` 之後的那些詞，先用整數比掉**（2026-10-08）。
+                // Warning: **起點在 `pos` 之後的那些詞，先用整數比掉**。
                 // 一個詞的最後一個字素起在它自己裏面（`start <= prev_grapheme(end)`），
                 // 所以那些詞一條都過不了下面那道閘——答案與逐條問 `prev_grapheme` 的
                 // 從前完全相同，而少問的那幾下很貴：`prev_grapheme` 在長行上是 O(行長)
@@ -1842,7 +1842,7 @@ mod tests {
         assert!(seg.0.get() <= 24, "read {} going back", seg.0.get());
     }
 
-    // ---- 一行就是整份文件的時候（2026-10-08） ----------------------------
+    // ---- 一行就是整份文件的時候 ----------------------------
     //
     // 下面這幾支守的是同一件事：`near_words` 那扇窗交出來的答案，**和整行分詞那
     // 一版逐位相同**。所以參照實現就擺在這裏，一字不改地照搬改之前的代碼——它們
@@ -1990,7 +1990,7 @@ mod tests {
         s
     }
 
-    /// **一行就是整份文件的時候，一下詞動作只讀光標附近那一段**（2026-10-08）。
+    /// **一行就是整份文件的時候，一下詞動作只讀光標附近那一段**。
     ///
     /// 計時會讓測試飄，所以數的是字數：一個把交給它的字數記下來的分詞器。實測的
     /// 病是一行 12,419,022 字的檔上 `e` 每一下 181 ms、`w` 298 ms——整行抄成一個
@@ -2025,7 +2025,7 @@ mod tests {
         }
     }
 
-    /// **窗裏没有邊界就推一扇，不是停在原地**（2026-10-08）。
+    /// **窗裏没有邊界就推一扇，不是停在原地**。
     ///
     /// 一行幾萬個同一個漢字，粗粒度看就是**一個詞**——`e` 真要走到行尾，而那段路
     /// 一扇窗（`2 * WORD_REACH`）裝不下。從前整行分詞答得出，所以這一條守的是
@@ -2073,7 +2073,7 @@ mod tests {
         }
     }
 
-    /// **窗口交出來的答案，和整行分詞那一版逐位相同**（2026-10-08）。
+    /// **窗口交出來的答案，和整行分詞那一版逐位相同**。
     ///
     /// 這是「行為一個字都不許變」那一條的本體：同一行文字，兩套實現，幾十個位置
     /// 逐個對。位置取得密是故意的——窗邊落在詞裏、落在標點上、落在空隙上，切出來
@@ -2236,7 +2236,7 @@ mod tests {
     }
 
     /// **helix's `f` runs on over line breaks** — the answers below are real
-    /// helix 25.07.1's, read off the file in a pty (2026-10-23).
+    /// helix 25.07.1's, read off the file in a pty.
     #[test]
     fn helixs_find_crosses_lines() {
         let r = rope("ab\ncd\nxd\n");

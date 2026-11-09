@@ -78,8 +78,7 @@ fn the_grid_is_drawn_where_the_parser_cut() {
     assert_eq!(split(line, ','), ["\"Smith, John\"", "ok", "30"]);
 }
 
-/// **A record may be several lines, and the scanner already reads them**
-/// (2026-10-20 作者定).
+/// **A record may be several lines, and the scanner already reads them**.
 ///
 /// A field holding a line break is still one record (RFC 4180 §2.6), and the
 /// grid used to draw it as two rows with the wrong number of columns in each.

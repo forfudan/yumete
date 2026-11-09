@@ -1,5 +1,5 @@
 //! **The site's English pages**, for the tests that hold the documents to the
-//! editor (2026-10-30: the manual moved to the yumete-docs site).
+//! editor: the manual is the yumete-docs site.
 //!
 //! The site is its own repository, checked out beside this one as
 //! `../yumete-docs`, or wherever `YUMETE_DOCS` points. Without it these tests

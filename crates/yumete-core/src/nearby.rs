@@ -1,6 +1,6 @@
 //! **Nearly these characters, nearly in a row** — the search panel's 模糊
-//! switch (2026-09-19: 「寫小説的人記得『差不多是這幾個字』卻記不得原
-//! 句」).
+//! switch: a novelist remembers 「roughly these characters」 and not the
+//! sentence.
 //!
 //! The panel's other setting is a regular expression, which answers a
 //! different question: a regex is for a *shape* (行首的「他説」, 兩個以上的驚
@@ -40,8 +40,8 @@ pub fn window(len: usize) -> usize {
 /// 繁簡**放寬的是查詢那一邊**——`shapes(发) = 发發髮`，所以打「头发」找得到「頭髮」；
 /// `shapes(發) = 發发`，所以打「發」不會誤中「髮」。對調就把這個性質毀了。
 ///
-/// Warning: **從前這條規矩在兩個檔裏各寫了一遍**（`nearby` 與 `picker`，2026-10-04 合
-/// 的）。兩份逐字等價，可「同一條規矩兩處實現」本身就是下一個分歧的種子。
+/// Warning: **這條規矩只寫在這裏一遍**，`nearby` 與 `picker` 共用：「同一條規矩兩處
+/// 實現」本身就是下一個分歧的種子。
 pub fn alike(query: char, text: char, fold_case: bool, glyphs: bool) -> bool {
     let plain = match fold_case {
         true => query.to_lowercase().eq(text.to_lowercase()),
@@ -106,7 +106,7 @@ pub fn one(
 /// `fold` lower-cases both sides; the caller decides that from 大小寫.
 /// `glyphs` counts 書 and 书 as one character, from 中文匹配.
 ///
-/// 兩趟那一套在 [`one`] 身上，和挑選器共用（2026-10-04 合的）。這一支只多做一件
+/// 兩趟那一套在 [`one`] 身上，和挑選器共用。這一支只多做一件
 /// 事：接着上一處的後面再找一次，所以一句話裏重複的詞是兩行，不是一串疊着的。
 pub fn spans(hay: &[char], needle: &[char], fold: bool, glyphs: bool) -> Vec<(usize, usize)> {
     let mut out = Vec::new();
