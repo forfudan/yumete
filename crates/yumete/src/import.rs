@@ -2389,7 +2389,13 @@ put(vim.fn.expand("~/written-by-the-config"), "x")
         std::fs::create_dir_all(&to).unwrap();
         std::fs::hard_link(config.join("init.lua"), to.join("init.lua")).unwrap();
         let failed = sandbox.copy(&config, &to, &[]).unwrap_err();
+        // Windows gives no stable file identity, so there the copy is stopped
+        // by the system's own refusal to copy a file onto itself; the reader's
+        // files are left as they were either way.
+        #[cfg(unix)]
         assert!(matches!(&failed, dump::Failed::Copy(why) if why.contains("onto itself")), "{failed:?}");
+        #[cfg(not(unix))]
+        assert!(matches!(&failed, dump::Failed::Copy(_)), "{failed:?}");
         drop(sandbox);
         assert_eq!(snapshot(&home), before, "the reader's files are as they were");
         let _ = std::fs::remove_dir_all(&home);
