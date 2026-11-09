@@ -185,7 +185,7 @@ fn a_typst_export_says_what_it_cannot_set_and_takes_the_paper() {
     let out = ye().args(["--lang=en", "--export", "typst", "vertical", "page=A6"]).arg(&md).output().unwrap();
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
     let stderr = String::from_utf8_lossy(&out.stderr);
-    assert_eq!(stderr.matches("vertical does not apply to a Typst export").count(), 1, "{stderr}");
+    assert_eq!(stderr.matches("vertical: not used by a Typst export").count(), 1, "{stderr}");
     let typ = std::fs::read_to_string(md.with_extension("typ")).unwrap();
     assert!(typ.contains("#set page(width: 105mm, height: 148mm)"), "{typ}");
     let out = ye().args(["--export", "html", "vertical"]).arg(&md).output().unwrap();
