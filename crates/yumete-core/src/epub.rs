@@ -379,8 +379,23 @@ fn anchored(body: &str) -> (String, Vec<(String, String)>) {
 /// closing tag with nothing to close and a tag XML cannot read go into the
 /// page as the words they were typed as. The page's own markup is closed
 /// where it opens, so only the writer's is ever touched.
+///
+/// **And where HTML allows it**: what is typed stands in a line of text, a
+/// paragraph's or a heading's, where only phrasing goes (`<span>`, `<b>`,
+/// `<kbd>`…); a block typed there (`<div>`, `<details>`) is words too, and
+/// a closing tag never closes past the paragraph it stands in.
 fn well_formed(body: &str) -> String {
     const VOID: &[&str] = &["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"];
+    // What may stand in a line of text (HTML's phrasing content, and a
+    // ruby's reading), and what holds nothing else.
+    const PHRASING: &[&str] = &[
+        "a", "abbr", "area", "audio", "b", "bdi", "bdo", "br", "button", "canvas", "cite", "code", "data", "datalist", "del", "dfn", "em",
+        "embed", "i", "iframe", "img", "input", "ins", "kbd", "label", "map", "mark", "meter", "object", "output", "picture", "progress",
+        "q", "ruby", "rt", "rp", "s", "samp", "select", "slot", "small", "span", "strong", "sub", "sup", "template", "textarea", "time",
+        "u", "var", "video", "wbr",
+    ];
+    const LINES: &[&str] = &["p", "h1", "h2", "h3", "h4", "h5", "h6", "pre"];
+    let in_a_line = |open: &[(String, usize)]| open.iter().any(|(n, _)| PHRASING.contains(&n.as_str()) || LINES.contains(&n.as_str()));
     /// What becomes of one tag.
     enum Fate {
         Keep,
@@ -416,9 +431,16 @@ fn well_formed(body: &str) -> String {
             Some(written) => Fate::Written(written),
             None => Fate::Words,
         };
+        // A closing tag looks no further out than the line it stands in.
+        let reach = open.iter().rposition(|(n, _)| LINES.contains(&n.as_str()) && *n != name).map_or(0, |k| k + 1);
+        if !tag.closing && in_a_line(&open) && !PHRASING.contains(&name.as_str()) {
+            tags.push((from, to, Fate::Words));
+            at = to;
+            continue;
+        }
         match (tag.closing, void || tag.closed) {
             (true, _) if void => tags.push((from, to, Fate::Words)),
-            (true, _) => match open.iter().rposition(|(n, _)| *n == name) {
+            (true, _) => match open[reach..].iter().rposition(|(n, _)| *n == name).map(|k| k + reach) {
                 Some(k) => {
                     // What was opened inside it and never closed is words.
                     for (_, place) in open.drain(k..).skip(1) {
@@ -944,16 +966,17 @@ mod tests {
     /// **The writer's own HTML is made XML** (review, 2026-11-09: a `<span>`
     /// left open made the page one a reader refuses, RSC-016): a tag closed
     /// in its place stays, written out in full; one left open or with
-    /// nothing to close is its words.
+    /// nothing to close, or a block typed in a line of text, is its words.
     #[test]
     fn inline_html_left_open_does_not_break_the_book() {
-        let text = "行内 <span>未闭合 与 <b>粗</b> 与 </i> 与 <details open>开</details> 与 <abbr title=a&b>缩</abbr>。\n";
+        let text = "行内 <span>未闭合 与 <b>粗</b> 与 </i> 与 <details open>开</details> 与 <abbr title=a&b>缩</abbr> 与 <span hidden>藏</span>。\n";
         let files = entries(&book(text, &style()));
         let page = String::from_utf8(files[4].1.clone()).unwrap();
         assert!(page.contains("&lt;span>未闭合"), "{page}");
         assert!(page.contains("<b>粗</b>"), "{page}");
         assert!(page.contains("&lt;/i>"), "{page}");
-        assert!(page.contains("<details open=\"open\">开</details>"), "{page}");
+        assert!(page.contains("&lt;details open>开&lt;/details>"), "a block in a line: {page}");
+        assert!(page.contains("<span hidden=\"hidden\">藏</span>"), "{page}");
         assert!(page.contains("<abbr title=\"a&amp;b\">缩</abbr>"), "{page}");
         assert!(!page.contains("<span>"), "{page}");
     }
