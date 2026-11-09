@@ -1246,10 +1246,10 @@ pub(super) static WINDOW: Group = Group {
         ch('L', NormalCmd::MoveViewFarRight, "hint.region.to-edge").when(Only::Vim),
         ch('c', NormalCmd::VimCloseWindow, "hint.region.close-not-last").when(Only::Vim),
         // vim opens a split above, so its rows say so.
-        ch('S', NormalCmd::Hsplit, "hint.region.split-above").when(Only::Vim),
-        ch('s', NormalCmd::Hsplit, "hint.region.split-above").when(Only::Vim),
-        ch('F', NormalCmd::GotoFileHsplit, "hint.region.file-above").when(Only::Vim),
-        ch('f', NormalCmd::GotoFileHsplit, "hint.region.file-above").when(Only::Vim),
+        ch('S', NormalCmd::HsplitAbove, "hint.region.split-above").when(Only::Vim),
+        ch('s', NormalCmd::HsplitAbove, "hint.region.split-above").when(Only::Vim),
+        ch('F', NormalCmd::GotoFileHsplitAbove, "hint.region.file-above").when(Only::Vim),
+        ch('f', NormalCmd::GotoFileHsplitAbove, "hint.region.file-above").when(Only::Vim),
         ch('^', NormalCmd::GotoLastAccessedFileHsplit, "hint.region.last-file-above").when(Only::Vim),
         ch(':', NormalCmd::CommandMode, "action.command-mode").when(Only::Vim),
         ch('h', NormalCmd::JumpViewLeft, "hint.region.go"),
@@ -1267,10 +1267,10 @@ pub(super) static WINDOW: Group = Group {
         ch('s', NormalCmd::Hsplit, "hint.region.split"),
         // vim opens a split on the left, helix on the right, whatever the
         // page's direction.
-        ch('v', NormalCmd::Vsplit, "hint.region.split-left").when(Only::Vim),
+        ch('v', NormalCmd::VsplitLeft, "hint.region.split-left").when(Only::Vim),
         ch('v', NormalCmd::Vsplit, "hint.region.split-beside"),
         // vim's `C-w n` is the blank window below; helix's is a group.
-        ch('n', NormalCmd::HsplitNew, "hint.region.new").when(Only::Vim),
+        ch('n', NormalCmd::NewWindowUp, "action.new-window-up").when(Only::Vim),
         ch('n', NormalCmd::WindowNewMode, "hint.region.new"),
         ch('q', NormalCmd::Wclose, "hint.region.close"),
         ch('o', NormalCmd::Wonly, "hint.region.only"),
@@ -1301,6 +1301,14 @@ pub(super) static WINDOW_NEW: Group = Group {
     rows: &[
         ch('s', NormalCmd::HsplitNew, "hint.region.new-below"),
         ch('v', NormalCmd::VsplitNew, "hint.region.new-beside"),
+        ch('h', NormalCmd::NewWindowLeft, "action.new-window-left").flavor(FlavorItem::WindowSides),
+        ch('j', NormalCmd::NewWindowDown, "action.new-window-down").flavor(FlavorItem::WindowSides),
+        ch('k', NormalCmd::NewWindowUp, "action.new-window-up").flavor(FlavorItem::WindowSides),
+        ch('l', NormalCmd::NewWindowRight, "action.new-window-right").flavor(FlavorItem::WindowSides),
+        ch('H', NormalCmd::NewWindowLeftPick, "action.new-window-left-pick").flavor(FlavorItem::WindowSides),
+        ch('J', NormalCmd::NewWindowDownPick, "action.new-window-down-pick").flavor(FlavorItem::WindowSides),
+        ch('K', NormalCmd::NewWindowUpPick, "action.new-window-up-pick").flavor(FlavorItem::WindowSides),
+        ch('L', NormalCmd::NewWindowRightPick, "action.new-window-right-pick").flavor(FlavorItem::WindowSides),
     ],
     unknown: Unknown::Silent,
     sticky: false,

@@ -356,18 +356,30 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::ToggleRightSidebar, |e, _| e.toggle_region(crate::sidebar::Side::Right), Key::Char('i')),
     (NormalCmd::GotoLeftSidebar, |e, _| e.go_to_region(super::sidebar::Region::Side(crate::sidebar::Side::Left)), Key::Char('E')),
     (NormalCmd::GotoRightSidebar, |e, _| e.go_to_region(super::sidebar::Region::Side(crate::sidebar::Side::Right)), Key::Char('I')),
+    // Each action is one side, whatever the keymap; a keymap chooses which
+    // action its key is bound to.
     (NormalCmd::Hsplit, |e, _| {
-        e.split_window(crate::window::Split::Below);
+        e.split_window_on(crate::window::Split::Below, false);
     }, Key::Char('s')),
     (NormalCmd::Vsplit, |e, _| {
-        e.split_window(crate::window::Split::Beside);
+        e.split_window_on(crate::window::Split::Beside, false);
     }, Key::Char('v')),
-    (NormalCmd::HsplitNew, |e, _| {
-        e.new_window(crate::window::Split::Below);
+    (NormalCmd::HsplitAbove, |e, _| {
+        e.split_window_on(crate::window::Split::Below, true);
     }, Key::Char('s')),
-    (NormalCmd::VsplitNew, |e, _| {
-        e.new_window(crate::window::Split::Beside);
+    (NormalCmd::VsplitLeft, |e, _| {
+        e.split_window_on(crate::window::Split::Beside, true);
     }, Key::Char('v')),
+    (NormalCmd::HsplitNew, |e, _| e.new_window_on(crate::window::Split::Below, false, false), Key::Char('s')),
+    (NormalCmd::NewWindowLeft, |e, _| e.new_window_on(crate::window::Split::Beside, true, false), Key::Char('h')),
+    (NormalCmd::NewWindowDown, |e, _| e.new_window_on(crate::window::Split::Below, false, false), Key::Char('j')),
+    (NormalCmd::NewWindowUp, |e, _| e.new_window_on(crate::window::Split::Below, true, false), Key::Char('k')),
+    (NormalCmd::NewWindowRight, |e, _| e.new_window_on(crate::window::Split::Beside, false, false), Key::Char('l')),
+    (NormalCmd::NewWindowLeftPick, |e, _| e.new_window_on(crate::window::Split::Beside, true, true), Key::Char('H')),
+    (NormalCmd::NewWindowDownPick, |e, _| e.new_window_on(crate::window::Split::Below, false, true), Key::Char('J')),
+    (NormalCmd::NewWindowUpPick, |e, _| e.new_window_on(crate::window::Split::Below, true, true), Key::Char('K')),
+    (NormalCmd::NewWindowRightPick, |e, _| e.new_window_on(crate::window::Split::Beside, false, true), Key::Char('L')),
+    (NormalCmd::VsplitNew, |e, _| e.new_window_on(crate::window::Split::Beside, false, false), Key::Char('v')),
     (NormalCmd::WindowNewMode, |e, _| e.pending = Pending::RegionNew, Key::Char('n')),
     (NormalCmd::Wclose, |e, _| e.close_this_region(true), Key::Char('q')),
     (NormalCmd::Wonly, |e, _| e.close_other_regions(), Key::Char('o')),
@@ -376,8 +388,9 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::SwapViewDown, |e, _| e.swap_window(crate::window::Direction::Down), Key::Char('J')),
     (NormalCmd::SwapViewUp, |e, _| e.swap_window(crate::window::Direction::Up), Key::Char('K')),
     (NormalCmd::SwapViewRight, |e, _| e.swap_window(crate::window::Direction::Right), Key::Char('L')),
-    (NormalCmd::GotoFileHsplit, |e, _| e.goto_file_in_split(crate::window::Split::Below), Key::Char('f')),
-    (NormalCmd::GotoFileVsplit, |e, _| e.goto_file_in_split(crate::window::Split::Beside), Key::Char('F')),
+    (NormalCmd::GotoFileHsplit, |e, _| e.goto_file_in_split(crate::window::Split::Below, false), Key::Char('f')),
+    (NormalCmd::GotoFileVsplit, |e, _| e.goto_file_in_split(crate::window::Split::Beside, false), Key::Char('F')),
+    (NormalCmd::GotoFileHsplitAbove, |e, _| e.goto_file_in_split(crate::window::Split::Below, true), Key::Char('f')),
     // ── ` ──────────────────────────────────────────────────────────────
     (NormalCmd::SwitchToLowercase, |e, _| e.map_selection(|c| c.to_lowercase().collect()), Key::Char('l')),
     (NormalCmd::SwitchToUppercase, |e, _| e.map_selection(|c| c.to_uppercase().collect()), Key::Char('u')),

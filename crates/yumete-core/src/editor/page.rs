@@ -1085,12 +1085,17 @@ impl Editor {
     /// live one, on the same buffer at the same place, and the keys go to it.
     /// `false` when the tree would not split.
     pub(super) fn split_window(&mut self, how: crate::window::Split) -> bool {
+        // Under the vim keymap it opens above or to the left, as vim's does;
+        // helix's opens below or to the right.
+        self.split_window_on(how, self.vim_keymap())
+    }
+
+    /// Split, the new window `before` (above or to the left) or after.
+    pub(super) fn split_window_on(&mut self, how: crate::window::Split, before: bool) -> bool {
         // **As many as fit**: a split that
         // would leave a window under a line of text or a few columns is
         // refused, so the keys never go into a window that is not drawn.
-        // Under the vim keymap it opens above or to the left, as vim's does;
-        // helix's opens below or to the right.
-        let (before, rtl) = (self.vim_keymap(), false);
+        let rtl = false;
         if let Some(area) = self.text_area.get() {
             let mut tried = self.windows.clone();
             let room = tried.split_on(self.live, how, before, rtl).is_some_and(|fresh| {
@@ -1136,8 +1141,8 @@ impl Editor {
     /// **helix's `C-w f` / `C-w F` (`goto_file_hsplit` / `_vsplit`)**: what
     /// `gf` opens, in a new window below or beside. When `gf` finds nothing
     /// the new window goes again and its answer stays on the status line.
-    pub(super) fn goto_file_in_split(&mut self, how: crate::window::Split) {
-        if !self.split_window(how) {
+    pub(super) fn goto_file_in_split(&mut self, how: crate::window::Split, before: bool) {
+        if !self.split_window_on(how, before) {
             return;
         }
         let (fresh, buffer, head) = (self.live, self.current_buffer().id(), self.sel.head());
@@ -1149,14 +1154,14 @@ impl Editor {
         }
     }
 
-    /// **vim's `C-w ^`**: the file before this one, in a new window below.
+    /// **vim's `C-w ^`**: the file before this one, in a new window above.
     /// No window when there is no such file (vim's E23).
     pub(super) fn goto_last_file_in_split(&mut self) {
         if self.last_file.and_then(|id| self.buffer_with(id)).is_none() {
             return self.goto_last_file();
         }
         let showing = self.current_buffer().id();
-        if self.split_window(crate::window::Split::Below) {
+        if self.split_window_on(crate::window::Split::Below, true) {
             self.goto_last_file();
             self.last_file = Some(showing);
         }
@@ -1250,6 +1255,18 @@ impl Editor {
         }
         self.add_buffer_kept(crate::buffer::Buffer::scratch(), false);
         true
+    }
+
+    /// **A blank window on one side** (`C-w n h/j/k/l`), and with `pick` the
+    /// buffer picker open in it (`H/J/K/L`), to choose what goes there.
+    pub(super) fn new_window_on(&mut self, how: crate::window::Split, before: bool, pick: bool) {
+        if !self.split_window_on(how, before) {
+            return;
+        }
+        self.add_buffer_kept(crate::buffer::Buffer::scratch(), false);
+        if pick {
+            self.open_buffer_picker();
+        }
     }
 
     /// Close the other work area, keeping the one the keys are in.

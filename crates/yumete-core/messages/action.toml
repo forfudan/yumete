@@ -1289,6 +1289,54 @@ en = "one line up, on screen"
 find = "上 上一行 往上 up"
 
 [[message]]
+# C-w n 組：j 在下方新開空白窗口（草稿）
+key = "action.new-window-down"
+zhs = "下方新建空白窗口"
+en = "new blank window below"
+
+[[message]]
+# C-w n 組：J 在下方新開窗口並打開緩衝區選擇器（草稿）
+key = "action.new-window-down-pick"
+zhs = "下方新建窗口并选择缓冲区"
+en = "new window below, picking a buffer"
+
+[[message]]
+# C-w n 組：h 在左邊新開空白窗口（草稿）
+key = "action.new-window-left"
+zhs = "左侧新建空白窗口"
+en = "new blank window on the left"
+
+[[message]]
+# C-w n 組：H 在左邊新開窗口並打開緩衝區選擇器（草稿）
+key = "action.new-window-left-pick"
+zhs = "左侧新建窗口并选择缓冲区"
+en = "new window on the left, picking a buffer"
+
+[[message]]
+# C-w n 組：l 在右邊新開空白窗口（草稿）
+key = "action.new-window-right"
+zhs = "右侧新建空白窗口"
+en = "new blank window on the right"
+
+[[message]]
+# C-w n 組：L 在右邊新開窗口並打開緩衝區選擇器（草稿）
+key = "action.new-window-right-pick"
+zhs = "右侧新建窗口并选择缓冲区"
+en = "new window on the right, picking a buffer"
+
+[[message]]
+# C-w n 組：k 在上方新開空白窗口（草稿）
+key = "action.new-window-up"
+zhs = "上方新建空白窗口"
+en = "new blank window above"
+
+[[message]]
+# C-w n 組：K 在上方新開窗口並打開緩衝區選擇器（草稿）
+key = "action.new-window-up-pick"
+zhs = "上方新建窗口并选择缓冲区"
+en = "new window above, picking a buffer"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.next-buffer"
 zhs = "下一个缓冲区"
@@ -2866,6 +2914,18 @@ en = "the Space menu"
 key = "keys.flavor.item.vim-space-menu.hint"
 zhs = "开：vim 下空格打开空格菜单。关：空格同 vim 右移一格，空格菜单改用反斜杠打开。"
 en = "On: under vim, Space opens the Space menu. Off: Space moves right as in vim, and the backslash opens the menu."
+
+[[message]]
+# 風味的一項：設置面板上的名字（草稿）
+key = "keys.flavor.item.window-sides"
+zhs = "朝一边新建窗口"
+en = "new window on a side"
+
+[[message]]
+# 風味的一項：設置面板上的說明（草稿）
+key = "keys.flavor.item.window-sides.hint"
+zhs = "开：C-w n（␣wn）组里 h j k l 在左下上右新建空白窗口，H J K L 新建窗口并打开缓冲区选择器。关：这八个键未绑定。"
+en = "On: in the C-w n (Space w n) group, h j k l open a blank window on the left, below, above or on the right, and H J K L open one with the buffer picker. Off: the eight keys are unbound."
 
 [[message]]
 # 風味的一項：設置面板上的名字

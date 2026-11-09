@@ -264,6 +264,19 @@ flavor_items! {
         label: "keys.flavor.item.goto-extras",
         hint: "keys.flavor.item.goto-extras.hint",
     },
+    /// A new window on a chosen side from the `C-w n` group: `h` `j` `k` `l`
+    /// blank, `H` `J` `K` `L` with the buffer picker open in it. Free in
+    /// helix's group; vim's `C-w n` opens below at once and keeps it.
+    WindowSides => ItemInfo {
+        id: "window_sides",
+        level: FlavorLevel::Basic,
+        keymaps: &[KeyPreset::Helix],
+        keys: &["C-wnh", "C-wnj", "C-wnk", "C-wnl", "C-wnH", "C-wnJ", "C-wnK", "C-wnL"],
+        vim_keys: None,
+        insert: false,
+        label: "keys.flavor.item.window-sides",
+        hint: "keys.flavor.item.window-sides.hint",
+    },
     /// mini.splitjoin's `gS`: the brackets round the cursor,
     /// one item per line, or back onto one line. Free in helix and vim.
     SplitJoin => ItemInfo {

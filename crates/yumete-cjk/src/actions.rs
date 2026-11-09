@@ -174,17 +174,16 @@ fn modifiers(spelled: &str) -> String {
     out
 }
 
-/// **A key sequence, spelled the way the manual spells it** — `空格 f`, not a
-/// space and an `f`; `C-o`, not a control byte. The inverse of [`written`].
+/// **A key sequence, spelled the way the manual spells it** — `Space f`, not
+/// a space and an `f`; `C-o`, not a control byte. The inverse of [`written`].
+/// Keys are named in English in every interface language, as `Esc`, `Tab`
+/// and `C-o` are.
 pub fn spell(keys: &str) -> String {
     let mut out = String::new();
     let mut chars = keys.chars();
     while let Some(c) = chars.next() {
         match c {
-            ' ' => out.push_str(match crate::speaks_english() {
-                true => "Space ",
-                false => "空格 ",
-            }),
+            ' ' => out.push_str("Space "),
             CTRL_J => out.push_str("C-j"),
             CTRL_I => out.push_str("C-i"),
             '\u{1b}' => out.push_str("Esc"),
@@ -605,9 +604,19 @@ normal_commands! {
     GotoRightSidebar = "goto_right_sidebar",
     Hsplit = "hsplit",
     Vsplit = "vsplit",
+    HsplitAbove = "hsplit_above",
+    VsplitLeft = "vsplit_left",
     HsplitNew = "hsplit_new",
     VsplitNew = "vsplit_new",
     WindowNewMode = "window_new_mode",
+    NewWindowLeft = "new_window_left",
+    NewWindowDown = "new_window_down",
+    NewWindowUp = "new_window_up",
+    NewWindowRight = "new_window_right",
+    NewWindowLeftPick = "new_window_left_pick",
+    NewWindowDownPick = "new_window_down_pick",
+    NewWindowUpPick = "new_window_up_pick",
+    NewWindowRightPick = "new_window_right_pick",
     Wclose = "wclose",
     Wonly = "wonly",
     TransposeView = "transpose_view",
@@ -617,6 +626,7 @@ normal_commands! {
     SwapViewRight = "swap_view_right",
     GotoFileHsplit = "goto_file_hsplit",
     GotoFileVsplit = "goto_file_vsplit",
+    GotoFileHsplitAbove = "goto_file_hsplit_above",
     CreateFold = "create_fold",
     CreateFoldLines = "create_fold_lines",
     OpenFold = "open_fold",
@@ -1182,10 +1192,20 @@ pub const ALL: &[Action] = &[
     normal("action.goto-left-sidebar", NormalCmd::GotoLeftSidebar),
     normal("action.goto-right-sidebar", NormalCmd::GotoRightSidebar),
     normal("hint.region.split", NormalCmd::Hsplit),
+    normal("hint.region.split-above", NormalCmd::HsplitAbove),
+    normal("hint.region.split-left", NormalCmd::VsplitLeft),
     normal("hint.region.split-beside", NormalCmd::Vsplit),
     normal("hint.region.new-below", NormalCmd::HsplitNew),
     normal("hint.region.new-beside", NormalCmd::VsplitNew),
     normal("action.window-new-mode", NormalCmd::WindowNewMode),
+    normal("action.new-window-left", NormalCmd::NewWindowLeft),
+    normal("action.new-window-down", NormalCmd::NewWindowDown),
+    normal("action.new-window-up", NormalCmd::NewWindowUp),
+    normal("action.new-window-right", NormalCmd::NewWindowRight),
+    normal("action.new-window-left-pick", NormalCmd::NewWindowLeftPick),
+    normal("action.new-window-down-pick", NormalCmd::NewWindowDownPick),
+    normal("action.new-window-up-pick", NormalCmd::NewWindowUpPick),
+    normal("action.new-window-right-pick", NormalCmd::NewWindowRightPick),
     normal("hint.region.close", NormalCmd::Wclose),
     normal("hint.region.only", NormalCmd::Wonly),
     normal("hint.region.transpose", NormalCmd::TransposeView),
@@ -1195,6 +1215,7 @@ pub const ALL: &[Action] = &[
     normal("action.swap-view-right", NormalCmd::SwapViewRight),
     normal("hint.region.file-below", NormalCmd::GotoFileHsplit),
     normal("hint.region.file-beside", NormalCmd::GotoFileVsplit),
+    normal("hint.region.file-above", NormalCmd::GotoFileHsplitAbove),
     normal("hint.fold.create", NormalCmd::CreateFold),
     normal("hint.fold.create-lines", NormalCmd::CreateFoldLines),
     normal("hint.fold.open", NormalCmd::OpenFold),

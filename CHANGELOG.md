@@ -9,13 +9,18 @@ in `docs/development.md` §5.2.
 
 ## Unreleased
 
+### Added
+
+- **`␣wn` opens a new window on a chosen side** (yumete flavour, basic, helix keys): `h` `j` `k` `l` a blank window on the left, below, above or on the right, and `H` `J` `K` `L` one with the buffer picker open in it.
+
 ### Changed
 
 - **The word list for completion is read once each time you enter Insert mode**, not on every key, so typing in a long book no longer reads the whole book per keystroke; a word typed now is offered from the next time you enter Insert mode.
 - **A preview is drawn in a frame**: thick and gold while the keys are in it, thin and quiet otherwise, so with two previews side by side the one with the keys is plain to see; the status line says `PRV` there too. In a Markdown preview, a bar in the theme's gold stands beside the line the cursor is in (a paragraph, one list item or one line of code) (in the left margin, or along the top of a vertical page), and arrows on the frame point the way to it when it is out of view. The window's title line stays where it is.
 - **纵中横 (`[editor] tatechuyoko`) is off by default**, so every run of half-width characters on a vertical page is set the same way; set it to 2–8 to stand short numbers across in one cell.
 
-- **`␣wv` and `␣wnv` open the new window on the right on any page**, as helix does, where a vertical page used to open it on the left; with vim's keys `C-w v` opens it on the left, as vim does. The hint says which side.
+- **`␣wv` and `␣wnv` open the new window on the right on any page**, as helix does, where a vertical page used to open it on the left; with vim's keys `C-w v` opens it on the left, as vim does. Each side is an action of its own (`vsplit`, `vsplit_left`, `hsplit`, `hsplit_above`, `goto_file_hsplit_above`), so `:keymap-actions` names it and an action no longer changes with the keymap.
+- **Keys are spelled in English in every interface language**: `Space f`, as `Esc`, `Tab` and `C-o` already were.
 
 ### Fixed
 

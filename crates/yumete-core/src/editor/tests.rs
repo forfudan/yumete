@@ -38866,6 +38866,37 @@ fn switching_the_layout_moves_no_window() {
 
 /// A split made on a 縱書 page opens with its new window on the left, and
 /// **keeps that side** when the page turns horizontal; the keys follow what
+/// **vim's keys are bound to vim's own actions**: `C-w v` is `vsplit_left`
+/// and opens on the left, `C-w s` is `hsplit_above`, so the actions list
+/// names each side, and no action changes with the keymap.
+#[test]
+fn vim_window_keys_have_actions_of_their_own() {
+    let mut ed = typed_vim("那年冬天。\n");
+    let one = ed.live_window();
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('v'));
+    let two = ed.live_window();
+    assert_eq!(window_columns(&ed), [(two, 0), (one, 41)], "vim's C-w v: on the left");
+    for (name, label) in [("vsplit_left", "hint.region.split-left"), ("hsplit_above", "hint.region.split-above")] {
+        assert_eq!(yumete_cjk::actions::action(name).map(|a| a.help), Some(label), "{name} is an action of its own");
+    }
+}
+
+/// **`␣wn` opens a window on the side its letter names**: `h` `j` `k` `l`
+/// blank, `H` `J` `K` `L` with the buffer picker open in it.
+#[test]
+fn space_w_n_opens_a_window_on_a_side() {
+    let mut ed = typed("那年冬天。\n");
+    let one = ed.live_window();
+    press(&mut ed, " wnh");
+    let two = ed.live_window();
+    assert_eq!(window_columns(&ed), [(two, 0), (one, 41)], "the new window on the left");
+    assert_eq!(ed.mode(), Mode::Normal);
+    press(&mut ed, " wnL");
+    assert_eq!(ed.windows().len(), 3);
+    assert_eq!(ed.mode(), Mode::Picker, "the buffer picker is open in it");
+}
+
 /// **A side-by-side split opens on the right on any page**, as helix opens
 /// it, and the windows stay put when the page turns.
 #[test]
