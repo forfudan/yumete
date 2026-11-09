@@ -141,7 +141,10 @@ impl Editor {
                 return;
             }
         }
-        let typst = buffer.syntax() == crate::syntax::Syntax::Typst;
+        if buffer.syntax() == crate::syntax::Syntax::Typst {
+            self.scan_typst(key);
+            return;
+        }
         // A code file has no blocks: `# 註` in Python is not a heading, and a
         // ``` in a string does not open a fence.
         let code = matches!(buffer.syntax(), crate::syntax::Syntax::Code(_));
@@ -153,8 +156,6 @@ impl Editor {
         let markdown_syntax = buffer.syntax() == crate::syntax::Syntax::Markdown;
         let mut note: Option<&'static str> = None;
         let mut markdown = crate::markdown::BlockScanner::new();
-        let mut typst_scanner = crate::markdown::typst::BlockScanner::new();
-        let mut frames: Vec<(usize, std::rc::Rc<[crate::markdown::typst::Frame]>)> = Vec::new();
         let mut blocks = Vec::with_capacity(lines);
         // The four markers are settled by the same opening characters, so a
         // merge conflict costs this walk nothing but the rare line it finds.
@@ -174,54 +175,21 @@ impl Editor {
             // opening this reads, so it *is* that opening, character for
             // character. Everything else — a long paragraph, a line that
             // straddles two chunks — is copied into the one buffer.
-            let head = match text.chunks().next() {
-                Some(chunk)
-                    if len <= crate::markdown::PREFIX && chunk.len() == text.len_bytes() =>
-                {
-                    chunk
-                }
-                _ => {
-                    prefix.clear();
-                    prefix.extend(text.chars().take(crate::markdown::PREFIX));
-                    prefix.as_str()
-                }
-            };
+            let head = line_head(text, len, &mut prefix);
             if let Some(kind) = crate::conflict::marker(head) {
                 marks.push((line, kind, crate::conflict::label(head)));
             }
-            if let Some(closer) = note.filter(|_| markdown_syntax || typst) {
+            if let Some(closer) = note.filter(|_| markdown_syntax) {
                 let whole = text.to_string();
                 let close = crate::markdown::comment_closes(&whole, closer);
                 if let Some(at) = close {
                     let rest: String = whole.chars().skip(at + closer.chars().count()).collect();
-                    note = match typst {
-                        true => crate::markdown::typst::comment_left_open(&rest).then_some("*/"),
-                        false => crate::markdown::comment_left_open(&rest),
-                    };
+                    note = crate::markdown::comment_left_open(&rest);
                 }
                 blocks.push(crate::markdown::Block::Comment { close });
                 continue;
             }
-            blocks.push(if code {
-                crate::markdown::Block::Prose
-            } else if typst {
-                // What the line begins inside, for its runs to start from
-                // ([`Self::typst_frames`]). Consecutive lines inside the same
-                // brackets share one copy; a raw block's fence is not code.
-                let open = typst_scanner.frames();
-                if !open.is_empty() && !head.trim_start().starts_with("```") {
-                    let shared = match frames.last() {
-                        Some((_, last)) if **last == *open => last.clone(),
-                        _ => open.into(),
-                    };
-                    frames.push((line, shared));
-                }
-                // A line whose opening is not all of it is copied only when
-                // the scanner has to walk it: a body's, never a paragraph's.
-                typst_scanner.feed_line(head, len, || Some(text.to_string()))
-            } else {
-                markdown.feed(head, len)
-            });
+            blocks.push(if code { crate::markdown::Block::Prose } else { markdown.feed(head, len) });
             // Does this line leave a note open? Only a line that holds a mark
             // is read whole, and never inside a fence or the metadata.
             if markdown_syntax && !blocks[line].is_literal() {
@@ -231,11 +199,6 @@ impl Editor {
                 if text.chunks().any(|c| c.contains('<') || c.contains('%')) {
                     note = crate::markdown::comment_left_open(&text.to_string());
                 }
-            }
-            // Typst's `/*`, the same way: only a line holding one is read
-            // whole (a URL's `/` is not one).
-            if typst && !blocks[line].is_literal() && opens_a_block_comment(text) {
-                note = crate::markdown::typst::comment_left_open(&text.to_string()).then_some("*/");
             }
         }
         // **Laid over the answer, not woven into it.** A forward scan cannot
@@ -281,10 +244,10 @@ impl Editor {
         // **Display maths over several lines** (2026-11-06), found the same
         // way as the bare tables above: after the scan, with both ends at
         // hand. Only a line holding a `$` is copied.
-        if markdown_syntax || typst {
+        if markdown_syntax {
             crate::markdown::maths_blocks(
                 &mut blocks,
-                typst,
+                false,
                 |i| rope.line(i).chunks().any(|c| c.contains('$')),
                 |i| rope.line(i).to_string().trim_end_matches(['\n', '\r']).to_string(),
             );
@@ -296,7 +259,102 @@ impl Editor {
             }
         }
         *self.block_cache.borrow_mut() = Some((key, blocks, conflicts));
-        *self.typst_frames.borrow_mut() = frames;
+        self.typst_frames.borrow_mut().clear();
+        *self.typst_cuts.borrow_mut() = std::rc::Rc::new(Vec::new());
+    }
+
+    /// **The block scan of a Typst file, from where the text changed**
+    /// (2026-11-09).
+    ///
+    /// The scan used to walk every line on every keystroke: 16 ms on a
+    /// 660 kB book, 24 ms on a megabyte, half of it the walk and half the
+    /// display-maths pass after it. Now each line's answer is kept with
+    /// the scanner's state at the start of every [`SCAN_STEP`]th line, and an
+    /// edit is scanned from the last such line above it, on until the
+    /// scanner, past the edit, stands where it stood before at the same
+    /// line of the unchanged text — from there every line reads as it did,
+    /// and the old answers are moved down. The display maths is found from
+    /// what each line holds ([`crate::markdown::maths_facts`]), kept the same
+    /// way, so that pass no longer reads the text.
+    fn scan_typst(&self, key: (u64, u64)) {
+        use crate::markdown::{Block, MATHS_BLANK, MATHS_CLOSES, MATHS_OPENS};
+        let buffer = self.current_buffer();
+        let rope = buffer.rope();
+        let lines = rope.len_lines();
+        let was = self.typst_scan.borrow_mut().take().filter(|s| s.buffer == key.0);
+        let mut scan = TypstScan::empty(key.0, rope.clone());
+        // Where to start, what was there before, and from which line on the
+        // old answers may be taken again.
+        let mut state = ScanState::default();
+        let mut from = 0;
+        let mut old = None;
+        if let Some(was) = &was {
+            let same = common_prefix(&was.rope, rope);
+            let (old_len, new_len) = (was.rope.len_bytes(), rope.len_bytes());
+            let suffix = common_suffix(&was.rope, rope, old_len.min(new_len) - same);
+            // The first line the edit touched, and the last kept state at or
+            // above it: what is above that line reads as it did.
+            let first = rope.byte_to_line(same.min(new_len));
+            let at = was.states.partition_point(|(l, _)| *l <= first).saturating_sub(1);
+            if let Some((start, start_state)) = was.states.get(at) {
+                from = *start;
+                state = start_state.clone();
+                scan.raw = was.raw[..from].to_vec();
+                scan.facts = was.facts[..from].to_vec();
+                scan.frames = was.frames.iter().filter(|(l, _)| *l < from).cloned().collect();
+                scan.marks = was.marks.iter().filter(|(l, ..)| *l < from).cloned().collect();
+                scan.states = was.states[..at].to_vec();
+                // From the first line that begins in the unchanged end of
+                // the text on, a line is the old text's line `shift` away —
+                // its line break before it unchanged too: an edit that ends
+                // in one (`>>>>>>> theirs\n` typed inside `#let f2`) starts a
+                // line the old text did not.
+                let changed_to = new_len - suffix;
+                let unchanged = rope.byte_to_line(changed_to) + 1;
+                let shift = lines as isize - was.rope.len_lines() as isize;
+                old = Some((was, unchanged, shift));
+            }
+        }
+        scan_typst_lines(rope, &mut scan, from, state, old);
+        let mut blocks = scan.raw.clone();
+        let facts = &scan.facts;
+        crate::markdown::maths_blocks_by(
+            &mut blocks,
+            true,
+            |i| facts[i] & MATHS_OPENS != 0,
+            |j| facts[j] & MATHS_BLANK != 0,
+            |j| facts[j] & MATHS_CLOSES != 0,
+        );
+        let conflicts = crate::conflict::assemble(scan.marks.iter().cloned());
+        for found in &conflicts {
+            for line in found.lines() {
+                blocks[line] = Block::Conflict(found.side_of(line));
+            }
+        }
+        // Where a piece may begin ([`Self::typst_cut_before`]): after a
+        // blank line of prose, on a line of prose or a heading outside any
+        // bracket, at the margin and not closing one.
+        let mut cuts = Vec::new();
+        let mut open = scan.frames.iter().peekable();
+        for line in 1..blocks.len() {
+            while open.peek().is_some_and(|(l, _)| *l < line) {
+                open.next();
+            }
+            let framed = open.peek().is_some_and(|(l, frames)| *l == line && !frames.is_empty());
+            if scan.facts[line - 1] & MATHS_BLANK != 0
+                && scan.facts[line] & CUT_OPENS != 0
+                && matches!(blocks[line - 1], Block::Prose)
+                && matches!(blocks[line], Block::Prose | Block::Heading(_))
+                && !framed
+            {
+                cuts.push(line);
+            }
+        }
+        debug_assert_eq!(blocks.len(), lines);
+        *self.block_cache.borrow_mut() = Some((key, blocks, conflicts));
+        *self.typst_frames.borrow_mut() = scan.frames.clone();
+        *self.typst_cuts.borrow_mut() = std::rc::Rc::new(cuts);
+        *self.typst_scan.borrow_mut() = Some(scan);
     }
 
     /// What a line of Typst begins inside — the brackets still open above it
@@ -1871,6 +1929,254 @@ impl Editor {
         }
         rows
     }
+}
+
+/// How many lines apart the Typst scan keeps the scanner's state
+/// ([`Editor::scan_typst`]): an edit is scanned again from at most this many
+/// lines above it, and the old answers are taken again at most this many
+/// lines below it.
+const SCAN_STEP: usize = 64;
+
+/// A line's fact beside [`crate::markdown::maths_facts`]'s: its first
+/// character lets a piece begin there — not a space, not a closing bracket.
+const CUT_OPENS: u8 = 16;
+
+/// What the Typst block scan carries from one line to the next.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(super) struct ScanState {
+    /// How many `/*` deep a note the writing opened still is: 0 outside one.
+    depth: usize,
+    typst: crate::markdown::typst::BlockScanner,
+}
+
+/// **What the last block scan of a Typst file read** (2026-11-09), kept for
+/// the next one to start from where the text changed.
+pub(super) struct TypstScan {
+    buffer: u64,
+    /// The text it read — a rope's clone shares its nodes, so this is cheap.
+    rope: ropey::Rope,
+    /// Each line's block as the walk gave it, before the display maths and
+    /// the conflicts are laid over it.
+    raw: Vec<crate::markdown::Block>,
+    /// Each line's [`crate::markdown::maths_facts`], and [`CUT_OPENS`].
+    facts: Vec<u8>,
+    frames: Vec<(usize, std::rc::Rc<[crate::markdown::typst::Frame]>)>,
+    marks: Vec<(usize, crate::conflict::Marker, String)>,
+    /// The state at the start of a line, about every [`SCAN_STEP`] lines.
+    states: Vec<(usize, ScanState)>,
+}
+
+impl TypstScan {
+    fn empty(buffer: u64, rope: ropey::Rope) -> TypstScan {
+        TypstScan {
+            buffer,
+            rope,
+            raw: Vec::new(),
+            facts: Vec::new(),
+            frames: Vec::new(),
+            marks: Vec::new(),
+            states: Vec::new(),
+        }
+    }
+}
+
+/// **Scan the lines of `rope` from `from`** into `scan`, starting in `state`.
+///
+/// `old` is the scan before the edit, the first line of this text that
+/// lies wholly in the unchanged end of it, and how many lines the edit
+/// added there. Once the scan reaches a line at or past that one where the
+/// old scan kept a state, and stands in the same state, everything below
+/// reads as it did: the old answers are taken, moved by that many lines.
+fn scan_typst_lines(
+    rope: &ropey::Rope,
+    scan: &mut TypstScan,
+    from: usize,
+    mut state: ScanState,
+    old: Option<(&TypstScan, usize, isize)>,
+) {
+    let mut prefix = String::with_capacity(crate::markdown::PREFIX * 4);
+    let mut texts = rope.lines_at(from);
+    let mut line = from;
+    let mut since = 0;
+    let mut met = 0;
+    loop {
+        if let Some((was, unchanged, shift)) = old {
+            let moved = |l: usize| l as isize + shift;
+            while met < was.states.len() && moved(was.states[met].0) < line as isize {
+                met += 1;
+            }
+            if line >= unchanged
+                && met < was.states.len()
+                && moved(was.states[met].0) == line as isize
+                && was.states[met].1 == state
+            {
+                let at = was.states[met].0;
+                let to = |l: usize| (l as isize + shift) as usize;
+                scan.raw.extend_from_slice(&was.raw[at..]);
+                scan.facts.extend_from_slice(&was.facts[at..]);
+                scan.frames.extend(was.frames.iter().filter(|(l, _)| *l >= at).map(|(l, f)| (to(*l), f.clone())));
+                scan.marks.extend(was.marks.iter().filter(|(l, ..)| *l >= at).map(|(l, m, s)| (to(*l), *m, s.clone())));
+                scan.states.extend(was.states[met..].iter().map(|(l, s)| (to(*l), s.clone())));
+                return;
+            }
+        }
+        if since == 0 {
+            scan.states.push((line, state.clone()));
+            since = SCAN_STEP;
+        }
+        let Some(text) = texts.next() else { return };
+        scan_typst_line(line, text, &mut prefix, &mut state, scan);
+        line += 1;
+        since -= 1;
+    }
+}
+
+/// One line of the Typst block scan.
+fn scan_typst_line(
+    line: usize,
+    text: ropey::RopeSlice,
+    prefix: &mut String,
+    state: &mut ScanState,
+    scan: &mut TypstScan,
+) {
+    use crate::markdown::{typst, Block};
+    let len = text.len_chars();
+    let head = line_head(text, len, prefix);
+    if let Some(kind) = crate::conflict::marker(head) {
+        scan.marks.push((line, kind, crate::conflict::label(head)));
+    }
+    // What the display maths and the cuts need of the line, read now: only a
+    // line holding a `$` is copied for it.
+    let mut facts = match text.chunks().any(|c| c.contains('$')) {
+        true => crate::markdown::maths_facts(text.to_string().trim_end_matches(['\n', '\r']), true),
+        false if head.chars().all(char::is_whitespace)
+            && (len <= crate::markdown::PREFIX || text.chars().all(char::is_whitespace)) =>
+        {
+            crate::markdown::MATHS_BLANK
+        }
+        false => 0,
+    };
+    if head.chars().next().is_some_and(|c| !c.is_whitespace() && !matches!(c, ']' | ')' | '}')) {
+        facts |= CUT_OPENS;
+    }
+    scan.facts.push(facts);
+    // **A note that runs over lines** (#288): the scanner is not shown its
+    // lines — a ``` inside a note must not open a fence. Typst's notes nest,
+    // so it closes at the `*/` that matches its first `/*` (review,
+    // 2026-11-09): `/* 舊註 */` inside a note that was opened a line above
+    // closes only itself.
+    if state.depth > 0 {
+        let whole = text.to_string();
+        let close = match typst::comment_closes(&whole, state.depth) {
+            Ok(at) => Some(at),
+            Err(deep) => {
+                state.depth = deep;
+                None
+            }
+        };
+        if let Some(at) = close {
+            let rest: String = whole.chars().skip(at + 2).collect();
+            state.depth = typst::comment_depth_left(&rest);
+        }
+        scan.raw.push(Block::Comment { close });
+        return;
+    }
+    // What the line begins inside, for its runs to start from
+    // ([`Editor::typst_frames`]). Consecutive lines inside the same brackets
+    // share one copy; a raw block's fence is not code.
+    let open = state.typst.frames();
+    if !open.is_empty() && !head.trim_start().starts_with("```") {
+        let shared = match scan.frames.last() {
+            Some((_, last)) if **last == *open => last.clone(),
+            _ => open.into(),
+        };
+        scan.frames.push((line, shared));
+    }
+    // A line whose opening is not all of it is copied only when the scanner
+    // has to walk it: a body's, never a paragraph's.
+    let block = state.typst.feed_line(head, len, || Some(text.to_string()));
+    scan.raw.push(block);
+    // Typst's `/*`: only a line holding one is read whole (a URL's `/` is
+    // not one).
+    if !block.is_literal() && opens_a_block_comment(text) {
+        state.depth = typst::comment_depth_left(&text.to_string());
+    }
+}
+
+/// **A line's opening**, which is all the block scan reads of most lines.
+///
+/// A short line that lies in one of the rope's own chunks is read where it
+/// lies, with no copy at all: it is shorter than the opening, so it *is* the
+/// opening, character for character. Everything else — a long paragraph, a
+/// line that straddles two chunks — is copied into `prefix`.
+fn line_head<'r: 'p, 'p>(text: ropey::RopeSlice<'r>, len: usize, prefix: &'p mut String) -> &'p str {
+    match text.chunks().next() {
+        Some(chunk) if len <= crate::markdown::PREFIX && chunk.len() == text.len_bytes() => chunk,
+        _ => {
+            prefix.clear();
+            prefix.extend(text.chars().take(crate::markdown::PREFIX));
+            prefix.as_str()
+        }
+    }
+}
+
+/// How many bytes `a` and `b` begin with alike.
+fn common_prefix(a: &ropey::Rope, b: &ropey::Rope) -> usize {
+    let (mut chunks_a, mut chunks_b) = (a.chunks(), b.chunks());
+    let (mut x, mut y): (&[u8], &[u8]) = (&[], &[]);
+    let mut same = 0;
+    loop {
+        while x.is_empty() {
+            match chunks_a.next() {
+                Some(c) => x = c.as_bytes(),
+                None => return same,
+            }
+        }
+        while y.is_empty() {
+            match chunks_b.next() {
+                Some(c) => y = c.as_bytes(),
+                None => return same,
+            }
+        }
+        let n = x.len().min(y.len());
+        if x[..n] != y[..n] {
+            return same + x.iter().zip(y).take_while(|(p, q)| p == q).count();
+        }
+        same += n;
+        x = &x[n..];
+        y = &y[n..];
+    }
+}
+
+/// How many bytes `a` and `b` end with alike, at most `most`.
+fn common_suffix(a: &ropey::Rope, b: &ropey::Rope, most: usize) -> usize {
+    let mut chunks_a = a.chunks_at_byte(a.len_bytes()).0.reversed();
+    let mut chunks_b = b.chunks_at_byte(b.len_bytes()).0.reversed();
+    let (mut x, mut y): (&[u8], &[u8]) = (&[], &[]);
+    let mut same = 0;
+    while same < most {
+        while x.is_empty() {
+            match chunks_a.next() {
+                Some(c) => x = c.as_bytes(),
+                None => return same,
+            }
+        }
+        while y.is_empty() {
+            match chunks_b.next() {
+                Some(c) => y = c.as_bytes(),
+                None => return same,
+            }
+        }
+        let n = x.len().min(y.len()).min(most - same);
+        let (tail_x, tail_y) = (&x[x.len() - n..], &y[y.len() - n..]);
+        if tail_x != tail_y {
+            return same + tail_x.iter().rev().zip(tail_y.iter().rev()).take_while(|(p, q)| p == q).count();
+        }
+        same += n;
+        x = &x[..x.len() - n];
+        y = &y[..y.len() - n];
+    }
+    same
 }
 
 /// Whether a line holds Typst's `/*`, also across two of the rope's chunks.

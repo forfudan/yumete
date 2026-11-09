@@ -1621,6 +1621,51 @@ pub fn maths_blocks(
     has_dollar: impl Fn(usize) -> bool,
     text: impl Fn(usize) -> String,
 ) {
+    let opens = |i: usize| has_dollar(i) && maths_opener(&text(i).chars().collect::<Vec<_>>(), typst).is_some();
+    let blank = |j: usize| text(j).trim().is_empty();
+    let closes = |j: usize| maths_closer(&text(j).chars().collect::<Vec<_>>(), 0, typst).is_some();
+    maths_blocks_by(blocks, typst, opens, blank, closes);
+}
+
+/// A line's part in display maths, worked out once ([`maths_facts`]): it
+/// holds a `$`.
+pub const MATHS_DOLLAR: u8 = 1;
+/// It may open a display-maths block ([`maths_opener`]).
+pub const MATHS_OPENS: u8 = 2;
+/// It may close one ([`maths_closer`]).
+pub const MATHS_CLOSES: u8 = 4;
+/// It is blank, which ends one unclosed.
+pub const MATHS_BLANK: u8 = 8;
+
+/// **What [`maths_blocks`] asks of a line, all at once**, for a scan that
+/// keeps the answers line by line and asks again only for lines that
+/// changed (2026-11-09). `line` is without its line ending.
+pub fn maths_facts(line: &str, typst: bool) -> u8 {
+    let mut facts = 0;
+    if line.trim().is_empty() {
+        facts |= MATHS_BLANK;
+    }
+    if line.contains('$') {
+        facts |= MATHS_DOLLAR;
+        let chars: Vec<char> = line.chars().collect();
+        if maths_opener(&chars, typst).is_some() {
+            facts |= MATHS_OPENS;
+        }
+        if maths_closer(&chars, 0, typst).is_some() {
+            facts |= MATHS_CLOSES;
+        }
+    }
+    facts
+}
+
+/// [`maths_blocks`], asking each line what [`maths_facts`] says of it.
+pub fn maths_blocks_by(
+    blocks: &mut [Block],
+    typst: bool,
+    opens: impl Fn(usize) -> bool,
+    blank: impl Fn(usize) -> bool,
+    closes: impl Fn(usize) -> bool,
+) {
     let opens_here = |block: Block| match typst {
         true => matches!(block, Block::Prose | Block::Item { .. }),
         false => matches!(block, Block::Prose | Block::Item { .. } | Block::FootnoteDef),
@@ -1639,21 +1684,14 @@ pub fn maths_blocks(
     };
     let mut i = 0;
     while i < blocks.len() {
-        if !opens_here(blocks[i]) || !has_dollar(i) {
-            i += 1;
-            continue;
-        }
-        let first: Vec<char> = text(i).chars().collect();
-        if maths_opener(&first, typst).is_none() {
+        if !opens_here(blocks[i]) || !opens(i) {
             i += 1;
             continue;
         }
         let close = (i + 1..blocks.len().min(i + 1 + MATHS_BLOCK_LINES))
             .take_while(|&j| walks(blocks[j]))
-            .map(|j| (j, text(j)))
-            .take_while(|(_, t)| !t.trim().is_empty())
-            .find(|(_, t)| maths_closer(&t.chars().collect::<Vec<_>>(), 0, typst).is_some())
-            .map(|(j, _)| j);
+            .take_while(|&j| !blank(j))
+            .find(|&j| closes(j));
         let Some(last) = close else {
             i += 1;
             continue;
@@ -2096,7 +2134,14 @@ pub mod typst {
     /// Where the `/*` whose body starts at `from` ends, past its `*/`. Typst's
     /// comments nest, so `/* a /* b */ c */` is one; counted on this line only.
     fn block_comment_end(chars: &[char], from: usize) -> Option<usize> {
-        let mut deep = 1usize;
+        comment_walk(chars, from, 1).ok()
+    }
+
+    /// Walk a comment `deep` levels deep from `from`: where it ends, past its
+    /// last `*/`, or how deep it still is at the end of the line. The pairs
+    /// are read as Typst's lexer reads them, so the `*` of a `*/` is not the
+    /// start of a `*/`'s neighbour `/*`.
+    fn comment_walk(chars: &[char], from: usize, mut deep: usize) -> Result<usize, usize> {
         let mut at = from;
         while at + 1 < chars.len() {
             match (chars[at], chars[at + 1]) {
@@ -2109,21 +2154,37 @@ pub mod typst {
             }
             at += 2;
             if deep == 0 {
-                return Some(at);
+                return Ok(at);
             }
         }
-        None
+        Err(deep)
     }
 
     /// Whether `line` opens a `/*` it does not close, read as [`spans`] reads
     /// it: a `/*` in a raw span or a call's string is not one.
     pub fn comment_left_open(line: &str) -> bool {
+        comment_depth_left(line) > 0
+    }
+
+    /// **How many `/*` deep `line` leaves a comment it opens** — 0 when it
+    /// closes what it opens. Typst's comments nest (review, 2026-11-09):
+    /// `/* 刪去的一章` then `/* 舊註 */` on the next line is still one level
+    /// deep, and the chapter below it is still the comment's.
+    pub fn comment_depth_left(line: &str) -> usize {
         let chars: Vec<char> = line.chars().collect();
-        spans(line).iter().any(|s| {
-            s.kind == Kind::Comment
-                && chars[s.start..].starts_with(&['/', '*'])
-                && block_comment_end(&chars, s.start + 2).is_none()
-        })
+        spans(line)
+            .iter()
+            .filter(|s| s.kind == Kind::Comment && chars[s.start..].starts_with(&['/', '*']))
+            .find_map(|s| comment_walk(&chars, s.start + 2, 1).err())
+            .unwrap_or(0)
+    }
+
+    /// **Where on `line` a comment left open `deep` levels deep above
+    /// closes**: the char index of the `*/` that closes it, or how deep it
+    /// still is when the line ends.
+    pub fn comment_closes(line: &str, deep: usize) -> Result<usize, usize> {
+        let chars: Vec<char> = line.chars().collect();
+        comment_walk(&chars, 0, deep).map(|end| end - 2)
     }
 
     /// What a line of Typst is inside when it begins: one entry per bracket
@@ -2380,7 +2441,7 @@ pub mod typst {
     ///
     /// Far less state than Markdown's: Typst has no `:::` and its raw blocks
     /// use the same ``` fence, so this is a small scanner of its own.
-    #[derive(Debug, Default)]
+    #[derive(Debug, Default, Clone, PartialEq, Eq)]
     pub struct BlockScanner {
         in_raw: bool,
         /// What the scan is inside, innermost last ([`Frame`]).

@@ -3712,6 +3712,12 @@ pub struct Editor {
     /// they begin inside, in line order — written by the same walk as
     /// `block_cache` and good for as long as it is (2026-11-08).
     typst_frames: RefCell<Vec<(usize, std::rc::Rc<[crate::markdown::typst::Frame]>)>>,
+    /// What the last block scan of a Typst file read, line by line, for the
+    /// next scan to start from where the text changed (2026-11-09).
+    typst_scan: RefCell<Option<render::TypstScan>>,
+    /// The lines a Typst manuscript may be cut before into pieces, in order —
+    /// written by the same walk as `block_cache` (2026-11-09).
+    typst_cuts: RefCell<std::rc::Rc<Vec<usize>>>,
     /// Whether fenced code is coloured by its own grammar (#420, `:view-code`).
     code_colours: bool,
     /// **一行長過多少字就不上色**（`:view-long-line`，2026-10-08）。
@@ -4744,6 +4750,8 @@ impl Editor {
             ruby_memo: memo::LineMemo::default(),
             block_cache: RefCell::new(None),
             typst_frames: RefCell::new(Vec::new()),
+            typst_scan: RefCell::new(None),
+            typst_cuts: RefCell::new(std::rc::Rc::new(Vec::new())),
             code_colours: true,
             long_line: Some(Self::LONG_LINE),
             code_cache: RefCell::default(),

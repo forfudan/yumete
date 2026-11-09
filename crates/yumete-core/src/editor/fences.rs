@@ -96,6 +96,10 @@ struct Piece {
     stale: bool,
     /// Its first reading has been looked at for something left open.
     checked: bool,
+    /// It was joined because the scanner stopped allowing a cut inside it —
+    /// a raw block or a comment opened for a moment — and is cut again once
+    /// it allows one ([`Editor::recut`]).
+    regrown: bool,
 }
 
 /// A Typst manuscript as [`Piece`]s, for its colours.
@@ -158,7 +162,8 @@ impl Pieces {
             false => None,
         };
         let stale = tree.is_some();
-        let joined = Piece { first, lines: end as usize - first, tree, stale, checked: true };
+        let regrown = a != b || self.pieces[a].regrown;
+        let joined = Piece { first, lines: end as usize - first, tree, stale, checked: true, regrown };
         self.pieces.splice(a..=b, [joined]);
         for piece in &mut self.pieces[a + 1..] {
             piece.first = (piece.first as isize + delta) as usize;
@@ -486,6 +491,9 @@ impl Editor {
                 self.join_pieces(lo, hi, true);
                 continue;
             }
+            if self.recut(at, total) {
+                continue;
+            }
             let end = {
                 let cache = self.code_cache.borrow();
                 let piece = &cache.typst.as_ref()?.pieces[at];
@@ -503,7 +511,7 @@ impl Editor {
                     (None, _) => crate::code::parse(Language::Typst, source, None),
                 };
                 piece.stale = false;
-                let open = !piece.checked && tree.as_ref().is_some_and(|t| crate::code::open_at_end(t, source.len()));
+                let open = !piece.checked && tree.as_ref().is_some_and(|t| crate::code::open_at_end(t, source));
                 piece.checked = true;
                 piece.tree = tree;
                 piece.tree.as_ref()?;
@@ -528,7 +536,7 @@ impl Editor {
             let end = self.next_cut(covered, total);
             let mut cache = self.code_cache.borrow_mut();
             let Some(pieces) = cache.typst.as_mut() else { return };
-            pieces.pieces.push(Piece { first: covered, lines: end - covered, tree: None, stale: false, checked: false });
+            pieces.pieces.push(Piece { first: covered, lines: end - covered, tree: None, stale: false, checked: false, regrown: false });
         }
     }
 
@@ -569,22 +577,78 @@ impl Editor {
         piece.tree = None;
         piece.stale = false;
         piece.checked = checked;
+        piece.regrown = checked;
         cache.typst_chunks.clear();
+    }
+
+    /// **Cut a regrown piece again** (review, 2026-11-09). A fence or a `/*`
+    /// typed and closed a moment later joins every piece it reached, and the
+    /// join used to last until the buffer was left: a 1 MB book went from 17
+    /// pieces to one, and every keystroke reparsed all of it. So a piece
+    /// joined for the scanner, once it is more than twice [`PIECE`] and the
+    /// scanner allows a cut inside it again, is cut where [`Self::next_cut`]
+    /// would have cut it, each part to be read when its lines are drawn.
+    /// Whether it was cut.
+    fn recut(&self, at: usize, total: usize) -> bool {
+        let (first, end) = {
+            let cache = self.code_cache.borrow();
+            let Some(pieces) = cache.typst.as_ref() else { return false };
+            let piece = &pieces.pieces[at];
+            let (from, to) = pieces.bytes(piece);
+            if !piece.regrown || to - from <= 2 * PIECE {
+                return false;
+            }
+            (piece.first, piece.first + piece.lines)
+        };
+        let mut parts = Vec::new();
+        let mut from = first;
+        loop {
+            let next = self.next_cut(from, total);
+            if next >= end {
+                break;
+            }
+            parts.push(from..next);
+            from = next;
+        }
+        if parts.is_empty() {
+            return false;
+        }
+        parts.push(from..end);
+        let mut cache = self.code_cache.borrow_mut();
+        let Some(pieces) = cache.typst.as_mut() else { return false };
+        let parts = parts.into_iter().map(|lines| Piece {
+            first: lines.start,
+            lines: lines.len(),
+            tree: None,
+            stale: false,
+            checked: false,
+            regrown: false,
+        });
+        pieces.pieces.splice(at..=at, parts);
+        cache.typst_chunks.clear();
+        true
     }
 
     /// Where the piece that starts at `from` ends: the first line at least
     /// [`PIECE`] bytes on that may begin a piece, or the end of the file.
+    /// The lines that may are the block scan's ([`Self::typst_cut_before`]).
     fn next_cut(&self, from: usize, total: usize) -> usize {
         let rope = self.current_buffer().rope();
-        let start = rope.line_to_byte(from);
-        let mut line = from + 1;
-        while line < total && rope.line_to_byte(line) - start < PIECE {
-            line += 1;
+        let target = rope.line_to_byte(from) + PIECE;
+        let line = match target >= rope.len_bytes() {
+            true => total,
+            false => {
+                let line = rope.byte_to_line(target);
+                line + usize::from(rope.line_to_byte(line) < target)
+            }
+        };
+        let line = line.max(from + 1);
+        if line >= total {
+            return total;
         }
-        while line < total && !self.typst_cut_before(line) {
-            line += 1;
-        }
-        line.min(total)
+        self.scan_blocks();
+        let cuts = self.typst_cuts.borrow();
+        cuts.get(cuts.partition_point(|&cut| cut < line)).copied().unwrap_or(total).min(total)
     }
 
     /// **Whether a piece may begin at `line`**: after a blank line of prose,
@@ -592,19 +656,15 @@ impl Editor {
     /// body, at the margin, and not closing a bracket. Typst reads what comes
     /// after such a break as it reads the top of a file, so a piece parsed on
     /// its own is the document's own reading of those lines.
+    ///
+    /// The block scan works the lines out as it walks them (2026-11-09), so
+    /// asking is a search: the pieces ask for every line of a joined piece.
     pub(super) fn typst_cut_before(&self, line: usize) -> bool {
-        use crate::markdown::Block;
-        let rope = self.current_buffer().rope();
-        if line == 0 || line >= rope.len_lines() {
+        if line == 0 || line >= self.current_buffer().rope().len_lines() {
             return line == 0;
         }
-        let blank = rope.line(line - 1).chars().all(char::is_whitespace);
-        let opens = rope.line(line).chars().next();
-        blank
-            && matches!(self.block_of(line - 1), Block::Prose)
-            && matches!(self.block_of(line), Block::Prose | Block::Heading(_))
-            && self.typst_frames(line).is_none_or(|frames| frames.is_empty())
-            && opens.is_some_and(|c| !c.is_whitespace() && !matches!(c, ']' | ')' | '}'))
+        self.scan_blocks();
+        self.typst_cuts.borrow().binary_search(&line).is_ok()
     }
 
     /// **這一份裏每一個定義**，位置是**字符**（`]f`/`]c`/`mi f`，2026-10-06）。
