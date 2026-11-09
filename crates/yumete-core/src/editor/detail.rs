@@ -403,7 +403,10 @@ impl Editor {
         // 都留下選區，而光標蓋着自己那一格——所以問 `to > from` 的話它恆真，下面
         // 那條「取光標下那個詞」的路**一次都走不到**。搜索面板那一扇同一條規矩
         // （`open_search` 的 `to > from + 1`）。
-        let needle = match to > from + 1 {
+        let selected = to > from + 1;
+        // Where the thing looked for begins here: `#` looks before it.
+        let mut begins = from;
+        let needle = match selected {
             true => rope.slice(from..to.min(rope.len_chars())).to_string(),
             false => {
                 // Warning: **問 `line_words`，不要問 `segment_line`**。`segment_line` 是**畫分詞底線**用的，它有意把拉丁詞整段濾
@@ -418,8 +421,14 @@ impl Editor {
                 let words = crate::motion::line_words(rope, line, self.word_grain(), self.segmenter.as_ref());
                 let here = self.sel.head();
                 match words.iter().find(|&&(a, b)| (a..b).contains(&here)) {
-                    Some(&(a, b)) => rope.slice(a..b.min(rope.len_chars())).to_string(),
-                    None => rope.get_char(here).map(|c| c.to_string()).unwrap_or_default(),
+                    Some(&(a, b)) => {
+                        begins = a;
+                        rope.slice(a..b.min(rope.len_chars())).to_string()
+                    }
+                    None => {
+                        begins = here;
+                        rope.get_char(here).map(|c| c.to_string()).unwrap_or_default()
+                    }
                 }
             }
         };
@@ -428,13 +437,27 @@ impl Editor {
             self.status = say!("find.nothing-here-to-look-for");
             return;
         }
-        let spans = self.every_match(&regex::escape(&needle));
+        // **The word under the cursor is looked for whole** (vim's `*`, `#`):
+        // `the` does not stop inside `then`. The ends that are Latin letters
+        // or digits take `\b`; a Chinese word has no such edge, so it matches
+        // as written. A selection is looked for exactly as selected.
+        let edge = |c: Option<char>| c.is_some_and(|c| c.is_ascii_alphanumeric() || (c.is_alphabetic() && !yumete_cjk::is_han(c)));
+        let pattern = match selected {
+            true => regex::escape(&needle),
+            false => format!(
+                "{}{}{}",
+                if edge(needle.chars().next()) { "\\b" } else { "" },
+                regex::escape(&needle),
+                if edge(needle.chars().last()) { "\\b" } else { "" },
+            ),
+        };
+        let spans = self.every_match(&pattern);
         if spans.len() <= 1 {
             self.status = say!("find.only-here", needle);
             self.hits = None;
             return;
         }
-        self.last_search = regex::escape(&needle);
+        self.last_search = pattern;
         // The first one *after* where you are standing: the useful answer to
         // 「還在哪裏」 is the next place, not the first page of the book.
         let here = self.sel.head();
@@ -442,7 +465,7 @@ impl Editor {
         // 裏那一條）。落地之後光標停在匹配的**最後一個
         // 字**上，開頭在 `anchor`——拿光標去問，當前這一處的開頭就在光標之前，於是
         // `#` 把自己又找了一遍，一動不動。匹配只有一個字的時候兩種問法一樣。
-        let from_here = self.sel.anchor().min(here);
+        let from_here = self.sel.anchor().min(here).min(begins);
         let at = match back {
             // 往回：光標**之前**最後一處；前面没有就繞到最末一處。
             true => spans

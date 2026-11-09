@@ -5376,6 +5376,24 @@ fn extend_to_line_bounds_covers_whole_lines() {
     assert_eq!(ed.selection(), (0, 7));
 }
 
+/// **vim's `*` and `#` look for the word whole and land on its start**:
+/// `the` skips `then`, and `x` after `*` takes the word's first letter.
+#[test]
+fn vim_star_and_hash_find_the_whole_word() {
+    let mut ed = typed_vim("the then other the\n");
+    press(&mut ed, "*");
+    assert_eq!(ed.cursor(), 15, "the second the, not then or other");
+    press(&mut ed, "x");
+    assert_eq!(ed.current_buffer().text(), "the then other he\n");
+    let mut ed = typed_vim("the then other the\n");
+    press(&mut ed, "$#");
+    assert_eq!(ed.cursor(), 0);
+    // A Chinese word has no word edge and is looked for as written.
+    let mut ed = typed_vim("春江花月夜，春江\n");
+    press(&mut ed, "*");
+    assert!(ed.status().contains("2/2") || ed.cursor() > 0, "{}", ed.status());
+}
+
 #[test]
 fn star_searches_for_the_selection() {
     let mut ed = typed("春江春江\n");

@@ -6785,7 +6785,9 @@ impl Editor {
             return;
         }
         // The match itself becomes the selection, exactly as `/` leaves it —
-        // on its last grapheme, not one past it.
+        // on its last grapheme, not one past it; under vim the cursor stands
+        // on the match's first character, as vim's `/` and `*` leave it.
+        let head = if self.as_vim() { from } else { head };
         self.sel.set_anchor(from);
         self.sel.set_head(head);
         self.extend = false;

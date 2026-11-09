@@ -15,6 +15,10 @@ in `docs/development.md` §5.2.
 - **The status line says `PRV` while the keys are in a preview**, which has no caret to show it.
 - **纵中横 (`[editor] tatechuyoko`) is off by default**, so every run of half-width characters on a vertical page is set the same way; set it to 2–8 to stand short numbers across in one cell.
 
+### Fixed
+
+- **vim's `*` and `#` look for the word under the cursor whole and land on its first letter**, as in vim: `the` no longer stops inside `then`, and `#` from inside a word goes to the one before it. A selection is still looked for exactly as selected.
+
 ## 0.21.0 · 2026-11-09
 
 ### Added
