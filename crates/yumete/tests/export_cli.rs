@@ -125,3 +125,70 @@ fn pdf_goes_through_typst() {
     assert!(!root.join("ch1.yumete-export.typ").exists(), "the draft is removed");
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// **Nothing in one run is written over another file named in it**:
+/// `ye --export typst *` in a folder with `ch1.md` and a finished `ch1.typ`
+/// leaves the `.typ` as it is, and `a.md` beside `a.typ` do not both go to
+/// `a.html`. Both clashes are refused before anything is written; the rest
+/// of the batch goes ahead.
+#[test]
+fn one_run_writes_nothing_over_a_file_it_names() {
+    let root = fixture("batch");
+    std::fs::write(root.join("ch1.md"), "# 第一章\n\n那年冬天。\n").unwrap();
+    std::fs::write(root.join("ch1.typ"), "= 定稿\n").unwrap();
+    for order in [["ch1.md", "ch1.typ"], ["ch1.typ", "ch1.md"]] {
+        let out = ye().current_dir(&root).args(["--export", "typst"]).args(order).output().unwrap();
+        assert!(!out.status.success());
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(stderr.contains("ch1.md: not exported"), "{stderr}");
+        assert_eq!(std::fs::read_to_string(root.join("ch1.typ")).unwrap(), "= 定稿\n");
+    }
+    std::fs::write(root.join("a.md"), "# 甲\n").unwrap();
+    std::fs::write(root.join("a.typ"), "= 乙\n").unwrap();
+    std::fs::write(root.join("c.md"), "# 丙\n").unwrap();
+    let out = ye().current_dir(&root).args(["--export", "html", "a.md", "a.typ", "c.md"]).output().unwrap();
+    assert!(!out.status.success());
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("a.md: not exported: it and a.typ"), "{stderr}");
+    assert!(stderr.contains("a.typ: not exported: it and a.md"), "{stderr}");
+    assert!(!root.join("a.html").exists(), "neither of the two is written");
+    assert!(root.join("c.html").is_file(), "the rest of the batch is");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// **`--out` through a link onto the source is refused for PDF too**:
+/// `typst compile` writes where it is told, so the check is made before it
+/// is asked.
+#[cfg(unix)]
+#[test]
+fn pdf_is_not_written_through_a_link_onto_the_source() {
+    let have_typst = Command::new("typst").arg("--version").output().is_ok_and(|o| o.status.success());
+    if !have_typst {
+        return;
+    }
+    let root = fixture("pdf-link");
+    let md = root.join("ch1.md");
+    std::fs::write(&md, "# 第一章\n\n那年冬天。\n").unwrap();
+    std::os::unix::fs::symlink(&md, root.join("out.pdf")).unwrap();
+    let out = ye().args(["--export", "pdf", "--out"]).arg(root.join("out.pdf")).arg(&md).output().unwrap();
+    assert!(!out.status.success());
+    assert_eq!(std::fs::read_to_string(&md).unwrap(), "# 第一章\n\n那年冬天。\n");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// **What Typst cannot set is said, once**, and `page=` sets its paper.
+#[test]
+fn a_typst_export_says_what_it_cannot_set_and_takes_the_paper() {
+    let root = fixture("typst-words");
+    let md = root.join("ch1.md");
+    std::fs::write(&md, "# 第一章\n\n那年冬天。\n").unwrap();
+    let out = ye().args(["--lang=en", "--export", "typst", "vertical", "page=A6"]).arg(&md).output().unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(stderr.matches("vertical does not apply to a Typst export").count(), 1, "{stderr}");
+    let typ = std::fs::read_to_string(md.with_extension("typ")).unwrap();
+    assert!(typ.contains("#set page(width: 105mm, height: 148mm)"), "{typ}");
+    let out = ye().args(["--export", "html", "vertical"]).arg(&md).output().unwrap();
+    assert!(String::from_utf8_lossy(&out.stderr).is_empty());
+    let _ = std::fs::remove_dir_all(&root);
+}

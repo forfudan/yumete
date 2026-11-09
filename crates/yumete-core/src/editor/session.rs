@@ -1076,9 +1076,7 @@ impl Editor {
         // a file may turn the page, and a layout set after it would be
         // refused. Only when a file will come back, so a session with nothing
         // left to open does not change how the page looks.
-        let any = text
-            .lines()
-            .any(|line| PathBuf::from(line.split_once('\t').map_or(line, |(p, _)| p)).is_file());
+        let any = session_paths(&text).any(|path| path.is_file());
         if any {
             if let Ok(view) = std::fs::read_to_string(Self::view_file(&file)) {
                 self.replay_view(&view);
@@ -1086,10 +1084,7 @@ impl Editor {
         }
         let mut opened = 0usize;
         let mut first = None;
-        for line in text.lines() {
-            // A session written before 2026-10-27 has `path\tline`; the line
-            // is dropped, since `open_file` takes it from `places.txt`.
-            let path = PathBuf::from(line.split_once('\t').map_or(line, |(p, _)| p));
+        for path in session_paths(&text) {
             // A file that has since been moved or deleted is simply not opened:
             // the session is a convenience, and a convenience does not get to
             // put an error on the screen every morning.
@@ -1789,4 +1784,16 @@ impl Shape {
 /// was spelt (`short.txt`, `./short.txt`, the full path).
 fn encoding_key(path: &Path) -> String {
     std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf()).to_string_lossy().into_owned()
+}
+
+/// The files a session names, one a line.
+///
+/// An older session's line is `path\tline`; the line is dropped, since
+/// `open_file` takes it from `places.txt`. **A preview tab's line is not a
+/// file's**: `preview\t…` read as a path would be `preview` in the working
+/// directory, and a file of that name would open on every restore.
+pub(crate) fn session_paths(text: &str) -> impl Iterator<Item = PathBuf> + '_ {
+    text.lines()
+        .filter(|line| !line.starts_with("preview\t"))
+        .map(|line| PathBuf::from(line.split_once('\t').map_or(line, |(p, _)| p)))
 }

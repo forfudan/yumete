@@ -17602,6 +17602,26 @@ fn one_cell_of_text_is_not_a_spreadsheet() {
     assert!(ed.status().contains(&say!("edit.pasted-characters", 5)), "{}", ed.status());
 }
 
+/// **`:export typst vertical` says Typst cannot set it**, rather than
+/// writing a horizontal file as if that were what was asked for.
+#[test]
+fn a_typst_export_says_what_it_cannot_set() {
+    let dir = tmp().join(format!("yumete-typst-says-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let md = dir.join("ch1.md");
+    std::fs::write(&md, "# 第一章\n\n那年冬天。\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&md).unwrap();
+    ed.execute(":export typst").unwrap();
+    assert_eq!(ed.status(), say!("export.wrote", md.with_extension("typ").display()));
+    ed.execute(":export! typst vertical hanging").unwrap();
+    assert_eq!(ed.status(), say!("export.wrote-not-for-typst", md.with_extension("typ").display(), "vertical, hanging"));
+    ed.execute(":export! html vertical").unwrap();
+    assert_eq!(ed.status(), say!("export.wrote", md.with_extension("html").display()));
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 #[test]
 fn no_writer_replaces_a_file_the_editor_is_holding() {
     let dir = tmp().join(format!("yumete-ident-{}", std::process::id()));
@@ -18679,6 +18699,16 @@ fn opening_a_file_by_name_goes_back_to_where_i_was() {
     assert_eq!(ed.cursor_line(), 0, "没記過就從第 1 行");
 
     std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **A preview tab's line names no file**: `preview\tmarkdown\t…` is not
+/// the path `preview`, so a file of that name in the working directory is
+/// not opened on a restore.
+#[test]
+fn a_session_s_preview_line_is_not_a_file_named_preview() {
+    let text = "/書/ch01.md\n/書/ch02.md\t7\npreview\tmarkdown\t/書/ch01.md\n";
+    let paths: Vec<_> = super::session::session_paths(text).collect();
+    assert_eq!(paths, [std::path::PathBuf::from("/書/ch01.md"), std::path::PathBuf::from("/書/ch02.md")]);
 }
 
 #[test]

@@ -614,6 +614,64 @@ enum Block {
     /// **Front matter** (2026-11-08), the `---` lines heading the file,
     /// read for a page: the preview shows it in a frame.
     FrontMatter(Vec<String>),
+    /// **An HTML block**, CommonMark's: a line that opens with a block's tag
+    /// (`<details>`, `<div>`, `<p align>`), to the next blank line. A page
+    /// takes it as it was written: read as a paragraph it would be
+    /// `<p><details>…</details></p>`, HTML no browser reads as meant.
+    Html(Vec<String>),
+}
+
+/// Whether `line` opens an HTML block (CommonMark's sixth kind): `<` or
+/// `</`, a block's tag name in any case, and then a space, `>`, `/>` or
+/// the end of the line.
+fn opens_html_block(line: &str) -> bool {
+    const BLOCKS: &[&str] = &[
+        "address", "article", "aside", "base", "basefont", "blockquote", "body", "caption", "center", "col", "colgroup", "dd",
+        "details", "dialog", "dir", "div", "dl", "dt", "fieldset", "figcaption", "figure", "footer", "form", "frame", "frameset",
+        "h1", "h2", "h3", "h4", "h5", "h6", "head", "header", "hr", "html", "iframe", "legend", "li", "link", "main", "menu",
+        "menuitem", "nav", "noframes", "ol", "optgroup", "option", "p", "param", "search", "section", "summary", "table", "tbody",
+        "td", "tfoot", "th", "thead", "title", "tr", "track", "ul",
+    ];
+    let Some(rest) = line.strip_prefix('<') else { return false };
+    let rest = rest.strip_prefix('/').unwrap_or(rest);
+    let name_len = rest.find(|c: char| !c.is_ascii_alphanumeric()).unwrap_or(rest.len());
+    let after = &rest[name_len..];
+    BLOCKS.contains(&rest[..name_len].to_ascii_lowercase().as_str())
+        && (after.is_empty() || after.starts_with([' ', '\t', '>']) || after.starts_with("/>"))
+}
+
+/// An HTML block's lines for the page: its tags as written, and in its text
+/// an entity read as its character and a lone `&` or `>` escaped, so the
+/// same lines are XML too, for a book.
+fn html_block(lines: &[String]) -> String {
+    let text = lines.join("\n");
+    let mut out = String::with_capacity(text.len() + 16);
+    let mut rest = text.as_str();
+    while let Some(c) = rest.chars().next() {
+        let tag = match c {
+            '<' if rest[1..].starts_with(|n: char| n.is_ascii_alphabetic() || n == '/' || n == '!') => rest.find('>').map(|end| end + 1),
+            _ => None,
+        };
+        if let Some(len) = tag {
+            out.push_str(&rest[..len]);
+            rest = &rest[len..];
+            continue;
+        }
+        match c {
+            '&' => match entity_reference(rest) {
+                Some((c, len)) => {
+                    out.push_str(&escape_html(c.encode_utf8(&mut [0; 4])));
+                    rest = &rest[len..];
+                    continue;
+                }
+                None => out.push_str("&amp;"),
+            },
+            '>' => out.push_str("&gt;"),
+            c => out.push(c),
+        }
+        rest = &rest[c.len_utf8()..];
+    }
+    out
 }
 
 /// **The kinds of callout**, in the order the preview's palette holds their
@@ -640,7 +698,10 @@ type Note = (String, Vec<String>);
 /// The manuscript as blocks, and its footnotes' texts taken out of the flow.
 ///
 /// `yfm` reads YFM as the Markdown preview reads it, for the HTML and EPUB
-/// exports: callouts and front matter. Task lists are read everywhere.
+/// exports: callouts. Task lists and front matter are read everywhere —
+/// **the Typst export too**: unread, its opening `---` would be a rule and
+/// its closing one would make the lines between a heading,
+/// `== title: … lang: …`.
 fn blocks(text: &str, source: crate::syntax::Syntax, yfm: bool) -> (Vec<Block>, Vec<Note>) {
     let mut lines: Vec<String> = text.lines().map(str::to_string).collect();
     let mut notes = Vec::new();
@@ -648,7 +709,7 @@ fn blocks(text: &str, source: crate::syntax::Syntax, yfm: bool) -> (Vec<Block>, 
     // Front matter: `---` on the first line, to the `---` or `...` that
     // closes it.
     let mut front = None;
-    if yfm && markdown && lines.first().is_some_and(|l| l.trim_end() == "---") {
+    if markdown && lines.first().is_some_and(|l| l.trim_end() == "---") {
         if let Some(end) = lines.iter().skip(1).position(|l| matches!(l.trim_end(), "---" | "...")) {
             front = Some(lines[1..=end].to_vec());
             lines.drain(..=end + 1);
@@ -716,6 +777,16 @@ fn parse(lines: &[String], source: crate::syntax::Syntax, notes: &mut Vec<Note>,
         if body.is_empty() {
             flush(&mut para, &mut out);
             i += 1;
+            continue;
+        }
+        if markdown && indent < 4 && opens_html_block(body) {
+            flush(&mut para, &mut out);
+            let mut held = Vec::new();
+            while i < lines.len() && !lines[i].trim().is_empty() {
+                held.push(lines[i].clone());
+                i += 1;
+            }
+            out.push(Block::Html(held));
             continue;
         }
         // **An indented code block** (2026-11-09, reported: `    let x = 1;`
@@ -843,17 +914,25 @@ fn parse(lines: &[String], source: crate::syntax::Syntax, notes: &mut Vec<Note>,
             }
         }
         let rowish = |l: &str| crate::mdtable::is_row(l) || crate::mdtable::has_bar(l);
-        let table = match markdown && rowish(line) {
+        // **A table is as wide as its header**, as GFM has it: a row's cells
+        // past the header's are dropped and a short row is filled out, and a
+        // header with no cells (a bare `|`) is no table — in Typst it would
+        // be `columns: 0`, which typst refuses.
+        let table = match markdown && rowish(line) && !crate::mdtable::split(line).is_empty() {
             true => lines.get(i + 1).and_then(|l| crate::mdtable::rule_of(l)),
             false => None,
         };
-        if let Some(align) = table {
+        if let Some(mut align) = table {
             flush(&mut para, &mut out);
             let head = crate::mdtable::split(line);
+            let width = head.len();
+            align.resize(width, crate::mdtable::Align::Plain);
             i += 2;
             let mut rows = Vec::new();
             while i < lines.len() && rowish(&lines[i]) {
-                rows.push(crate::mdtable::split(&lines[i]));
+                let mut row = crate::mdtable::split(&lines[i]);
+                row.resize(width, String::new());
+                rows.push(row);
                 i += 1;
             }
             // The caption: the paragraph just above, if it was one, or the
@@ -1306,6 +1385,9 @@ fn render(
                             // A formula is read by the maths, not as markup:
                             // `$a_b$` with its `_` escaped is a different formula.
                             (Kind::Code | Kind::Math, Dialect::Typst) | (Kind::Html, Dialect::Html) => text,
+                            // Code is literal: `&nbsp;` in backticks is six
+                            // characters, not a space (CommonMark).
+                            (_, Dialect::Html) => escape_html(&text),
                             _ => escape(&text),
                         }
                     }
@@ -1433,8 +1515,7 @@ fn marked(kind: crate::markdown::Kind, text: &str, dialect: Dialect) -> String {
         // A footnote's mark, numbered once the whole text is out (see
         // [`number_the_notes`]): the name, whatever escaping it came with.
         (Kind::Footnote, _) => {
-            let name: String = text.chars().filter(|c| !matches!(c, '\\' | '[' | ']' | '^' | ':')).collect();
-            format!("{NOTE_OPEN}{name}{NOTE_CLOSE}")
+            format!("{NOTE_OPEN}{}{NOTE_CLOSE}", note_name(text))
         }
         // A link's target is scaffolding for a manuscript, not part of the
         // book; its visible text is the book. The heading's own hashes are
@@ -1933,6 +2014,79 @@ pub(crate) fn escape_html(text: &str) -> String {
     out
 }
 
+/// **The writer's words for a page**: as [`escape_html`], and an entity
+/// reference read as the character it names, as CommonMark reads one, so
+/// `&nbsp;` is a no-break space and not six characters. A number is any
+/// character's (`&#0;` and what is no character
+/// are U+FFFD, as CommonMark has them); a name is one of HTML's that a
+/// writer reaches for, and one not known is left as it was typed. The
+/// character goes in itself, not as the entity: an EPUB is XML, which knows
+/// five names and not `&nbsp;`. Code is not prose, and keeps its `&`.
+pub(crate) fn escape_html_prose(text: &str) -> String {
+    with_entities_read(text, escape_html)
+}
+
+/// The writer's words for Typst: as [`escape_html_prose`], each character
+/// then escaped Typst's way, so the PDF has the character too.
+fn escape_typst_prose(text: &str) -> String {
+    with_entities_read(text, escape_typst)
+}
+
+/// `text` with each entity reference read as its character, and the whole,
+/// those characters too, put through `escape`.
+fn with_entities_read(text: &str, escape: fn(&str) -> String) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(at) = rest.find('&') {
+        out.push_str(&escape(&rest[..at]));
+        rest = &rest[at..];
+        match entity_reference(rest) {
+            Some((c, len)) => {
+                out.push_str(&escape(c.encode_utf8(&mut [0; 4])));
+                rest = &rest[len..];
+            }
+            None => {
+                out.push_str(&escape("&"));
+                rest = &rest[1..];
+            }
+        }
+    }
+    out.push_str(&escape(rest));
+    out
+}
+
+/// The character an entity reference at the start of `text` names, and how
+/// long the reference is.
+fn entity_reference(text: &str) -> Option<(char, usize)> {
+    const NAMES: &[(&str, char)] = &[
+        ("amp", '&'), ("lt", '<'), ("gt", '>'), ("quot", '"'), ("apos", '\''), ("nbsp", '\u{a0}'), ("ensp", '\u{2002}'),
+        ("emsp", '\u{2003}'), ("thinsp", '\u{2009}'), ("zwnj", '\u{200c}'), ("zwj", '\u{200d}'), ("lrm", '\u{200e}'),
+        ("rlm", '\u{200f}'), ("shy", '\u{ad}'), ("copy", '©'), ("reg", '®'), ("trade", '™'), ("hellip", '…'), ("mdash", '—'),
+        ("ndash", '–'), ("lsquo", '‘'), ("rsquo", '’'), ("sbquo", '‚'), ("ldquo", '“'), ("rdquo", '”'), ("bdquo", '„'),
+        ("laquo", '«'), ("raquo", '»'), ("lsaquo", '‹'), ("rsaquo", '›'), ("middot", '·'), ("bull", '•'), ("deg", '°'),
+        ("plusmn", '±'), ("times", '×'), ("divide", '÷'), ("para", '¶'), ("sect", '§'), ("dagger", '†'), ("Dagger", '‡'),
+        ("prime", '′'), ("Prime", '″'), ("larr", '←'), ("rarr", '→'), ("uarr", '↑'), ("darr", '↓'), ("harr", '↔'),
+        ("le", '≤'), ("ge", '≥'), ("ne", '≠'), ("asymp", '≈'), ("infin", '∞'), ("minus", '−'), ("micro", 'µ'),
+        ("frac12", '½'), ("frac14", '¼'), ("frac34", '¾'), ("sup1", '¹'), ("sup2", '²'), ("sup3", '³'), ("iexcl", '¡'),
+        ("iquest", '¿'), ("cent", '¢'), ("pound", '£'), ("yen", '¥'), ("euro", '€'), ("curren", '¤'),
+    ];
+    let end = text[1..].char_indices().take(33).find(|&(_, c)| c == ';')?.0 + 1;
+    let name = &text[1..end];
+    let c = match name.strip_prefix('#') {
+        Some(number) => {
+            let value = match number.strip_prefix(['x', 'X']) {
+                Some(hex) if (1..=6).contains(&hex.len()) && hex.chars().all(|c| c.is_ascii_hexdigit()) => u32::from_str_radix(hex, 16).ok()?,
+                Some(_) => return None,
+                None if (1..=7).contains(&number.len()) && number.chars().all(|c| c.is_ascii_digit()) => number.parse().ok()?,
+                None => return None,
+            };
+            char::from_u32(value).filter(|&c| c != '\0').unwrap_or('\u{fffd}')
+        }
+        None => NAMES.iter().find(|(n, _)| *n == name)?.1,
+    };
+    Some((c, end + 1))
+}
+
 /// Typst's own escapes: the characters that would otherwise be markup.
 fn escape_typst(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
@@ -2111,8 +2265,15 @@ pub(crate) fn html_body(text: &str, style: &Style, lang: &str) -> String {
     let (blocks, notes) = blocks(&text, style.source, true);
     let mut body = String::new();
     html_blocks(&blocks, style, &mut body);
-    let (mut body, order) = number_the_notes(&body, &notes, |n, _| {
-        format!("<sup class=\"fn\"><a href=\"#fn-{n}\" id=\"fnref-{n}\">{n}</a></sup>")
+    // A note cited again is a second anchor: `fnref-1`, then `fnref-1-2`,
+    // as an `id` is one place on the page, and epubcheck refuses a book
+    // with two of them.
+    let (mut body, order) = number_the_notes(&body, &notes, escape_html_prose, |n, k, _| {
+        let id = match k {
+            1 => format!("fnref-{n}"),
+            k => format!("fnref-{n}-{k}"),
+        };
+        format!("<sup class=\"fn\"><a href=\"#fn-{n}\" id=\"{id}\">{n}</a></sup>")
     });
     if !order.is_empty() {
         body.push_str("<section class=\"footnotes\">\n<hr>\n<ol>\n");
@@ -2142,9 +2303,16 @@ pub(crate) fn html_body(text: &str, style: &Style, lang: &str) -> String {
 fn heading_ids(body: &str) -> String {
     let mut out = String::with_capacity(body.len() + 64);
     let mut taken: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut next: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     // The footnotes' own anchors are taken already.
+    // A second citation's anchor is `fnref-1-2`.
     let reserved = |id: &str| {
-        id.strip_prefix("fn-").or_else(|| id.strip_prefix("fnref-")).is_some_and(|n| n.parse::<usize>().is_ok())
+        let number = |n: &str| n.parse::<usize>().is_ok();
+        id.strip_prefix("fn-").is_some_and(number)
+            || id.strip_prefix("fnref-").is_some_and(|n| match n.split_once('-') {
+                Some((n, k)) => number(n) && number(k),
+                None => number(n),
+            })
     };
     for line in body.split_inclusive('\n') {
         let depth = line.strip_prefix("<h").and_then(|rest| rest.chars().next()).filter(|d| ('1'..='6').contains(d));
@@ -2158,12 +2326,19 @@ fn heading_ids(body: &str) -> String {
             slug if slug.is_empty() => "heading".to_string(),
             slug => slug,
         };
-        let mut id = base.clone();
-        let mut n = 0;
+        // The search for a free suffix starts where the last heading of
+        // these words left it, so a book of many headings of the same words
+        // is numbered in one pass, not in a pass per heading.
+        let mut n = next.get(&base).copied().unwrap_or(0);
+        let mut id = match n {
+            0 => base.clone(),
+            n => format!("{base}-{n}"),
+        };
         while taken.contains(&id) || reserved(&id) {
             n += 1;
             id = format!("{base}-{n}");
         }
+        next.insert(base, n + 1);
         out.push_str(&format!("<h{depth} id=\"{id}\">"));
         out.push_str(&line[4..]);
         taken.insert(id);
@@ -2338,7 +2513,7 @@ fn code_inside(lines: &[String]) -> &[String] {
 
 /// The blocks as HTML.
 fn html_blocks(blocks: &[Block], style: &Style, out: &mut String) {
-    let line = |text: &str| line_into(text, style.settings.dialects(), Dialect::Html, escape_html, style.source, Drawing::of(style));
+    let line = |text: &str| line_into(text, style.settings.dialects(), Dialect::Html, escape_html_prose, style.source, Drawing::of(style));
     for block in blocks {
         match block {
             Block::Heading(depth, title) => {
@@ -2364,6 +2539,10 @@ fn html_blocks(blocks: &[Block], style: &Style, out: &mut String) {
                 }
             }
             Block::Rule => out.push_str("<hr>\n"),
+            Block::Html(lines) => {
+                out.push_str(&html_block(lines));
+                out.push('\n');
+            }
             Block::Quote(inner) => {
                 out.push_str("<blockquote>\n");
                 // A formula in a quotation is in the quotation's ink.
@@ -2488,7 +2667,7 @@ fn html_lines(lines: &[String], style: &Style) -> String {
                 false => "<br>\n",
             });
         }
-        out.push_str(&line_into(raw.trim(), style.settings.dialects(), Dialect::Html, escape_html, style.source, Drawing::of(style)));
+        out.push_str(&line_into(raw.trim(), style.settings.dialects(), Dialect::Html, escape_html_prose, style.source, Drawing::of(style)));
     }
     out
 }
@@ -2503,16 +2682,30 @@ fn html_lines(lines: &[String], style: &Style) -> String {
 const NOTE_OPEN: char = '\u{FDD0}';
 const NOTE_CLOSE: char = '\u{FDD1}';
 
-/// Every footnote mark in `body` replaced by `mark(n, note)`, numbered in the
-/// order the marks are met, and the notes in that order. A mark with no note
+/// A footnote mark's name as the body carries it: the brackets, the caret
+/// and every backslash gone.
+fn note_name(text: &str) -> String {
+    text.chars().filter(|c| !matches!(c, '\\' | '[' | ']' | '^' | ':')).collect()
+}
+
+/// Every footnote mark in `body` replaced by `mark(n, k, note)`, numbered in
+/// the order the marks are met (`k` is which citation of note `n` this is,
+/// from 1), and the notes in that order. A mark with no note
 /// stays as it was written; a note with no mark is left out.
+///
+/// **The mark's name is escaped and the note's is not**: the body has been
+/// through the format's `escape`, so `[^a&b]` reaches here as `a&amp;b` in
+/// HTML while its note is `a&b`. Each note's name is put through the same
+/// escape before it is compared, or the two would never meet.
 fn number_the_notes(
     body: &str,
     notes: &[Note],
-    mark: impl Fn(usize, &[String]) -> String,
+    escape: fn(&str) -> String,
+    mark: impl Fn(usize, usize, &[String]) -> String,
 ) -> (String, Vec<Vec<String>>) {
     let mut out = String::with_capacity(body.len());
     let mut order: Vec<(String, Vec<String>)> = Vec::new();
+    let mut cited: Vec<usize> = Vec::new();
     let mut rest = body;
     while let Some(at) = rest.find(NOTE_OPEN) {
         out.push_str(&rest[..at]);
@@ -2525,7 +2718,7 @@ fn number_the_notes(
         rest = &after[close + NOTE_CLOSE.len_utf8()..];
         let n = match order.iter().position(|(seen, _)| seen == name) {
             Some(k) => k + 1,
-            None => match notes.iter().find(|(had, _)| had == name) {
+            None => match notes.iter().find(|(had, _)| had == name || note_name(&escape(had)) == name) {
                 Some((_, text)) => {
                     order.push((name.to_string(), text.clone()));
                     order.len()
@@ -2536,7 +2729,9 @@ fn number_the_notes(
                 }
             },
         };
-        out.push_str(&mark(n, &order[n - 1].1));
+        cited.resize(order.len(), 0);
+        cited[n - 1] += 1;
+        out.push_str(&mark(n, cited[n - 1], &order[n - 1].1));
     }
     out.push_str(rest);
     (out, order.into_iter().map(|(_, text)| text).collect())
@@ -2710,15 +2905,19 @@ fn typst(text: &str, style: &Style) -> String {
     }
     let text = crate::markdown::strip_comments(text);
     let lang = language_of(&text);
+    // **The paper and the fonts are `[export]`'s**, as they are the page's
+    // and the book's: `page=` and `font=` set this file too, and no font is
+    // named that the writer has not chosen.
+    let paper = style.settings.paper;
+    out.push_str(&format!("#set page(width: {}mm, height: {}mm)\n", paper.width, paper.height));
+    let fonts = match typst_fonts(&style.settings.fonts) {
+        fonts if fonts.is_empty() => String::new(),
+        fonts => format!("font: ({},), ", fonts.iter().map(|f| format!("\"{f}\"")).collect::<Vec<_>>().join(", ")),
+    };
+    out.push_str(&format!("#set text({fonts}lang: \"{lang}\")\n"));
     match lang {
-        "en" => {
-            out.push_str("#set text(lang: \"en\")\n");
-            out.push_str("#set par(justify: true)\n");
-        }
-        lang => {
-            out.push_str(&format!("#set text(font: \"Source Han Serif\", lang: \"{lang}\")\n"));
-            out.push_str("#set par(first-line-indent: 2em, justify: true)\n");
-        }
+        "en" => out.push_str("#set par(justify: true)\n"),
+        _ => out.push_str("#set par(first-line-indent: 2em, justify: true)\n"),
     }
     out.push_str(
         "\n// yumete writes readings as `#ruby(base, reading)`; define it to
@@ -2732,10 +2931,10 @@ fn typst(text: &str, style: &Style) -> String {
     typst_blocks(&blocks, style, &mut body);
     // Typst sets a footnote where it is called, so the note's text goes in
     // at the mark.
-    let (body, _) = number_the_notes(&body, &notes, |_, text| {
+    let (body, _) = number_the_notes(&body, &notes, escape_typst_prose, |_, _, text| {
         let lines: Vec<String> = text
             .iter()
-            .map(|l| line_into(l, style.settings.dialects(), Dialect::Typst, escape_typst, style.source, None))
+            .map(|l| line_into(l, style.settings.dialects(), Dialect::Typst, escape_typst_prose, style.source, None))
             .collect();
         format!("#footnote[{}]", lines.join(" "))
     });
@@ -2743,9 +2942,59 @@ fn typst(text: &str, style: &Style) -> String {
     out
 }
 
+/// **`[export] font_family` as Typst's font list**: the names in it, in order, and none of CSS's own words for "whatever the
+/// system has" (`serif`, `system-ui`, `-apple-system`…), which Typst has no
+/// answer to. The list yumete ships, [`DEFAULT_FONTS`], is the system's
+/// faces by intent and names none of them for Typst: Typst's own type and
+/// its fallback to what is installed is the nearest thing. Empty when
+/// nothing is named, and no `font:` is written.
+fn typst_fonts(css: &str) -> Vec<String> {
+    const GENERIC: &[&str] = &[
+        "serif", "sans-serif", "monospace", "cursive", "fantasy", "system-ui", "ui-serif", "ui-sans-serif", "ui-monospace",
+        "ui-rounded", "emoji", "math", "fangsong", "blinkmacsystemfont",
+    ];
+    if css.trim() == DEFAULT_FONTS {
+        return Vec::new();
+    }
+    let mut names = Vec::new();
+    let (mut name, mut quote) = (String::new(), None);
+    for c in css.chars().chain(std::iter::once(',')) {
+        match (quote, c) {
+            (None, '"' | '\'') => quote = Some(c),
+            (Some(q), c) if c == q => quote = None,
+            (None, ',') => names.push(std::mem::take(&mut name)),
+            (_, c) => name.push(c),
+        }
+    }
+    names
+        .into_iter()
+        .map(|n| n.split_whitespace().collect::<Vec<_>>().join(" "))
+        .filter(|n| !n.is_empty() && !n.starts_with('-') && !GENERIC.contains(&n.to_ascii_lowercase().as_str()))
+        .map(|n| n.replace('\\', "\\\\").replace('"', "\\\""))
+        .collect()
+}
+
+/// **What a Typst export cannot do**: the settings that are on
+/// and that Typst has no way to set — it writes no vertical lines, hangs
+/// no punctuation, and so has no letters to turn the jlreq way. Said, not
+/// left to be found in the PDF.
+pub fn typst_ignores(settings: &Settings) -> Vec<&'static str> {
+    let mut out = Vec::new();
+    if settings.vertical {
+        out.push("vertical");
+    }
+    if settings.hanging {
+        out.push("hanging");
+    }
+    if settings.latin == Latin::Jlreq {
+        out.push("jlreq");
+    }
+    out
+}
+
 /// The blocks as Typst markup.
 fn typst_blocks(blocks: &[Block], style: &Style, out: &mut String) {
-    let line = |text: &str| line_into(text, style.settings.dialects(), Dialect::Typst, escape_typst, style.source, None);
+    let line = |text: &str| line_into(text, style.settings.dialects(), Dialect::Typst, escape_typst_prose, style.source, None);
     for block in blocks {
         match block {
             Block::Heading(depth, title) => {
@@ -2788,7 +3037,8 @@ fn typst_blocks(blocks: &[Block], style: &Style, out: &mut String) {
             }
             // A display formula is TeX, which Typst cannot read: its lines go
             // over as text, as they did when they were read as a paragraph.
-            Block::Paragraph(lines) | Block::Math(lines) => {
+            // An HTML block's words, its tags left out as a line's are.
+            Block::Paragraph(lines) | Block::Math(lines) | Block::Html(lines) => {
                 for text in lines {
                     out.push_str(&line(text.trim()));
                     out.push('\n');
@@ -2844,7 +3094,22 @@ fn typst_blocks(blocks: &[Block], style: &Style, out: &mut String) {
             }
             // Read only for `:export-as-preview`, which writes no Typst.
             Block::Callout { body, .. } => typst_blocks(body, style, out),
-            Block::FrontMatter(_) => {}
+            // In a frame, as the page and the book have it: its lines as
+            // they were written, in a string, so nothing in them is markup.
+            Block::FrontMatter(lines) => {
+                let mut text = String::new();
+                for c in lines.join("\n").chars() {
+                    match c {
+                        '\\' => text.push_str("\\\\"),
+                        '"' => text.push_str("\\\""),
+                        '\n' => text.push_str("\\n"),
+                        c => text.push(c),
+                    }
+                }
+                out.push_str(&format!(
+                    "#block(width: 100%, inset: 0.6em, stroke: 0.5pt + luma(160), raw(block: true, lang: \"yaml\", \"{text}\"))\n\n"
+                ));
+            }
             Block::Table { head, align, rows, caption, .. } => {
                 let side = |a: &crate::mdtable::Align| match a {
                     crate::mdtable::Align::Center => "center",
@@ -3301,6 +3566,133 @@ mod tests {
         assert!(typ.contains("#quote(block: true)[\nquoted\non\n]"), "{typ}");
         assert!(typ.contains("#line(length: 100%)"), "{typ}");
         assert!(typ.contains("align: (left, right,),\n  table.header([N], [C]),\n  [x], [3],"), "{typ}");
+    }
+
+    /// **Footnotes whose name is markup, and a note cited twice**: `[^a&b]`
+    /// finds its note although the body has escaped its name, and each
+    /// citation of one note has an anchor of its own.
+    #[test]
+    fn a_note_named_with_markup_is_found_and_each_citation_has_its_own_anchor() {
+        let mut flat = style();
+        flat.settings.vertical = false;
+        let text = "甲[^a&b]乙[^<x>]丙[^a&b]。\n\n[^a&b]: 註一。\n[^<x>]: 註二。\n";
+        let html = export(text, Format::Html, &flat);
+        assert!(html.contains("<li id=\"fn-1\">註一。</li>\n<li id=\"fn-2\">註二。</li>"), "{html}");
+        assert!(html.contains("甲<sup class=\"fn\"><a href=\"#fn-1\" id=\"fnref-1\">1</a></sup>"), "{html}");
+        assert!(html.contains("乙<sup class=\"fn\"><a href=\"#fn-2\" id=\"fnref-2\">2</a></sup>"), "{html}");
+        assert!(html.contains("丙<sup class=\"fn\"><a href=\"#fn-1\" id=\"fnref-1-2\">1</a></sup>"), "{html}");
+        assert!(!html.contains("[^"), "{html}");
+        let typ = export(text, Format::Typst, &flat);
+        assert!(typ.contains("甲#footnote[註一。]乙#footnote[註二。]丙#footnote[註一。]"), "{typ}");
+        // A heading of the words a second citation's anchor has does not take it.
+        let html = export("甲[^n]乙[^n]。\n\n# fnref-1-2\n\n[^n]: 註。\n", Format::Html, &flat);
+        assert!(html.contains("<h1 id=\"fnref-1-2-1\">"), "{html}");
+    }
+
+    /// **A table is as wide as its header**, as GFM has it: a row's extra
+    /// cells are dropped, a short row is filled out, and a bare `|` over a
+    /// rule is no table (Typst refuses `columns: 0`).
+    #[test]
+    fn a_table_is_as_wide_as_its_header() {
+        let mut flat = style();
+        flat.settings.vertical = false;
+        let text = "| 名 | 數 |\n| - | - |\n| 甲 | 1 | 多 | 餘 |\n| 乙 |\n";
+        let html = export(text, Format::Html, &flat);
+        assert!(html.contains("<tr><td>甲</td><td>1</td></tr>"), "{html}");
+        assert!(html.contains("<tr><td>乙</td><td></td></tr>"), "{html}");
+        assert!(!html.contains("多") && !html.contains("餘"), "{html}");
+        let typ = export(text, Format::Typst, &flat);
+        assert!(typ.contains("columns: 2,") && typ.contains("  [甲], [1],\n  [乙], [],\n"), "{typ}");
+        let typ = export("|\n| - |\n| 甲 |\n", Format::Typst, &flat);
+        assert!(!typ.contains("columns: 0"), "{typ}");
+    }
+
+    /// **Headings of the same words are numbered in one pass**: twenty
+    /// thousand of them take a moment, not a pass each.
+    #[test]
+    fn many_headings_of_the_same_words_are_numbered_at_once() {
+        let body = "<h2>同</h2>\n".repeat(20_000);
+        let started = std::time::Instant::now();
+        let out = heading_ids(&body);
+        assert!(started.elapsed() < std::time::Duration::from_secs(2), "{:?}", started.elapsed());
+        assert!(out.starts_with("<h2 id=\"同\">同</h2>\n<h2 id=\"同-1\">"), "{}", &out[..80]);
+        assert!(out.ends_with("<h2 id=\"同-19999\">同</h2>\n"));
+        // The same answers as GitHub's where a heading's words are a suffix.
+        let out = heading_ids("<h1>a</h1>\n<h1>a-1</h1>\n<h1>a</h1>\n<h1>a</h1>\n");
+        assert_eq!(out, "<h1 id=\"a\">a</h1>\n<h1 id=\"a-1\">a-1</h1>\n<h1 id=\"a-2\">a</h1>\n<h1 id=\"a-3\">a</h1>\n");
+    }
+
+    /// **Front matter is a frame in Typst too**, as it is in the page and
+    /// the book, not a rule and a setext heading.
+    #[test]
+    fn front_matter_is_a_frame_in_typst() {
+        let mut flat = style();
+        flat.settings.vertical = false;
+        let typ = export("---\ntitle: 河邊 \"晨\" \\ 一\nlang: zh\n---\n\n正文。\n", Format::Typst, &flat);
+        assert!(!typ.contains("#line(length: 100%)") && !typ.contains("== title"), "{typ}");
+        assert!(
+            typ.contains("#block(width: 100%, inset: 0.6em, stroke: 0.5pt + luma(160), raw(block: true, lang: \"yaml\", \"title: 河邊 \\\"晨\\\" \\\\ 一\\nlang: zh\"))"),
+            "{typ}"
+        );
+        assert!(typ.contains("\n正文。\n"), "{typ}");
+    }
+
+    /// **`[export]`'s paper and fonts set the Typst file**, and no font the
+    /// writer did not choose. CSS's words for the system's faces are no font
+    /// to Typst, and the list yumete ships names none.
+    #[test]
+    fn the_typst_file_takes_the_paper_and_the_fonts() {
+        let mut flat = style();
+        flat.settings.vertical = false;
+        let typ = export("那年冬天。\n", Format::Typst, &flat);
+        assert!(typ.contains("#set page(width: 148mm, height: 210mm)\n#set text(lang: \"zh\")\n"), "{typ}");
+        assert!(!typ.contains("Source Han"), "{typ}");
+        flat.settings.paper = Paper::named("32開").unwrap();
+        flat.settings.fonts = "\"Songti SC\", 'Noto  Serif CJK SC', -apple-system, system-ui, serif".to_string();
+        let typ = export("那年冬天。\n", Format::Typst, &flat);
+        assert!(typ.contains("#set page(width: 130mm, height: 184mm)\n"), "{typ}");
+        assert!(typ.contains("#set text(font: (\"Songti SC\", \"Noto Serif CJK SC\",), lang: \"zh\")"), "{typ}");
+        flat.settings.fonts = "serif".to_string();
+        assert!(export("one\n", Format::Typst, &flat).contains("#set text(lang: \"en\")"));
+        flat.settings.hanging = false;
+        assert!(typst_ignores(&flat.settings).is_empty());
+        flat.settings.vertical = true;
+        flat.settings.hanging = true;
+        flat.settings.latin = Latin::Jlreq;
+        assert_eq!(typst_ignores(&flat.settings), ["vertical", "hanging", "jlreq"]);
+    }
+
+    /// **An entity is the character it names**, in the page, the book and
+    /// the PDF. In code `&nbsp;` is six characters, and a name not known
+    /// stays as typed.
+    #[test]
+    fn an_entity_is_its_character_outside_code() {
+        let mut flat = style();
+        flat.settings.vertical = false;
+        let text = "还有&nbsp;空格&hellip;&#x4E00;&#20108;&#0;，AT&T，&bogus; 与 `&nbsp;`。\n";
+        let html = export(text, Format::Html, &flat);
+        assert!(html.contains("<p>还有\u{a0}空格…一二\u{fffd}，AT&amp;T，&amp;bogus; 与 <code>&amp;nbsp;</code>。</p>"), "{html}");
+        let html = export("甲 &lt;b&gt; 乙\n", Format::Html, &flat);
+        assert!(html.contains("甲 &lt;b&gt; 乙"), "an escaped tag stays words: {html}");
+        let typ = export(text, Format::Typst, &flat);
+        assert!(typ.contains("还有\u{a0}空格…一二\u{fffd}，AT&T，&bogus; 与 `&nbsp;`。"), "{typ}");
+        assert!(export("&#35;号\n", Format::Typst, &flat).contains("\\#号"), "an entity's character is escaped as typed one is");
+    }
+
+    /// **An HTML block goes into the page as written**, CommonMark's: a line
+    /// opening with a block's tag, to a blank line, and not inside a `<p>`.
+    /// Typst takes its words.
+    #[test]
+    fn an_html_block_goes_in_as_written() {
+        let mut flat = style();
+        flat.settings.vertical = false;
+        let text = "前文\n<details><summary>展开</summary>\n里面 & 更多&nbsp;</details>\n\n<p align=\"center\">居中</p>\n\n<span>行内</span>不算。\n";
+        let html = export(text, Format::Html, &flat);
+        assert!(html.contains("<p>前文</p>\n<details><summary>展开</summary>\n里面 &amp; 更多\u{a0}</details>\n<p align=\"center\">居中</p>\n"), "{html}");
+        assert!(html.contains("<p><span>行内</span>不算。</p>"), "{html}");
+        let typ = export(text, Format::Typst, &flat);
+        assert!(typ.contains("展开\n里面 & 更多\u{a0}\n\n居中\n"), "{typ}");
+        assert!(opens_html_block("</DIV>") && opens_html_block("<hr/>") && !opens_html_block("<divx>") && !opens_html_block("<span>"));
     }
 
     /// **A line break stays one in Chinese and is a space between Latin
