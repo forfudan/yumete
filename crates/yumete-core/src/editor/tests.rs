@@ -2105,7 +2105,7 @@ fn a_capital_s_sorts_a_delimited_file_downwards() {
 fn t_still_works_when_the_grid_is_read_by_character() {
     // `Tab` reads the grid by character — which is how you get *inside* a
     // cell, and exactly where the lesson tells the reader to press `t/`.
-    // When `Enter` did that job it worked in both grains; `t` did not.
+    // `t/` works in both grains.
     let mut ed = typed("| 字 | 拆分 |\n| -- | -- |\n| 木 | 木 |\n| 相 | 木目 |\n");
     ed.goto_line(3);
     assert!(ed.enter_table(), "{}", ed.status());
@@ -7355,10 +7355,10 @@ fn a_hit_list_belongs_to_the_document_it_was_found_in() {
 
 #[test]
 fn the_keys_a_keyboard_has_are_not_swallowed() {
-    // PageUp/PageDown reached the editor as *nothing*: the table that turns
-    // a terminal's keys into the editor's had no line for them, so they
-    // fell off the end in every mode. `C-a`/`C-e` were taken by the `:`
-    // line and swallowed by Insert.
+    // PageUp/PageDown reach the editor: the table that turns a terminal's
+    // keys into the editor's has a line for them, or they fall off the end in
+    // every mode. `C-a`/`C-e` are the `:` line's there, and Insert does not
+    // swallow them.
     let mut ed = typed(&"一行\n".repeat(200));
     ed.set_page(20, 80);
     ed.execute("1").unwrap();
@@ -8660,8 +8660,8 @@ fn a_file_changed_underneath_is_not_written_over() {
 
     let mut ed = Editor::new();
     ed.open_file(&file).unwrap();
-    // An ordinary save says so — the manual has been quoting this line as
-    // its example of the command row all along, and it did not exist.
+    // An ordinary save says so — the manual quotes this line as its example
+    // of the command row.
     press(&mut ed, "i");
     ed.on_key(Key::Char('甲'));
     ed.on_key(Key::Esc);
@@ -10085,8 +10085,9 @@ fn prose_with_a_comma_in_it_is_not_a_table() {
 #[test]
 fn a_header_on_the_last_line_with_no_newline_still_gets_its_rule() {
     // `line_to_char` of a line that does not exist is the end of the text,
-    // so the rule row was welded onto the header's own end and the table
-    // was gone — in exactly the case the feature advertises.
+    // so the rule row must not be written there: welded onto the header's
+    // own end, the table would be gone — in exactly the case the feature
+    // advertises.
     let mut ed = typed("前文\n| a | b |");
     assert_eq!(ed.current_buffer().text(), "前文\n| a | b |");
     ed.goto_line(2);
@@ -11653,8 +11654,8 @@ fn a_conversion_that_came_back_empty_changes_nothing() {
 
 #[test]
 fn what_was_cut_three_edits_ago_is_still_reachable() {
-    // Every yank and every delete overwrote one register, so "where did
-    // that paragraph go" had no answer.
+    // If every yank and every delete overwrote one register, "where did
+    // that paragraph go" would have no answer.
     let mut ed = typed("甲一\n乙二\n丙三\n");
     ed.goto_line(1);
     press(&mut ed, "xd");
@@ -17169,8 +17170,8 @@ fn the_panels_grid_refusal_names_the_bang() {
 
 /// A paste the cell refuses says so — in Insert as well as in Normal.
 ///
-/// The text is a bare `|`, not a tab-separated block: since #226 a block is
-/// not refused, it is a grid.
+/// The text is a bare `|`, not a tab-separated block: a block is not
+/// refused, it is a grid (#226).
 #[test]
 fn a_refused_paste_does_not_claim_to_have_happened() {
     let mut ed = typed("| 字 | 說明 |\n| --- | --- |\n| 木 | 樹 |\n");
@@ -17356,7 +17357,7 @@ fn a_quoted_field_is_read_as_the_one_field_it_is() {
     assert_eq!(ed.cell_text(2, 2), "note");
 
     // Changing the cell *beside* the name leaves the name alone — which is
-    // the whole of what went wrong.
+    // the whole point.
     ed.execute(":3").unwrap();
     ed.on_key(Key::Tab);
     ed.on_key(Key::Tab);
@@ -22089,7 +22090,7 @@ fn an_arrow_key_off_the_end_of_a_table_does_not_open_a_row() {
 /// A step down a table costs the same whatever the table is long (#320).
 ///
 /// **A ratio, on purpose.** A wall-clock bar would say more about the machine
-/// than about the code; what went wrong here was a shape — three walks of the
+/// than about the code; what this guards is a shape — three walks of the
 /// whole table on every keystroke — and a shape shows up as「eight times the
 /// rows, eight times the time」whatever the machine. With the walks, that
 /// ratio is about twenty; without them, under one — the bigger table is if
