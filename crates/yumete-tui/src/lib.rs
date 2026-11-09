@@ -1963,6 +1963,18 @@ pub fn run(
                         editor.toggle_sidebar(side);
                     } else if let Some(i) = tab_at(editor, config, terminal.size().ok(), mouse) {
                         editor.show_buffer_at(i);
+                    } else if let Some(window) = window_at(editor, config, terminal.size().ok(), &viewport, mouse)
+                        .filter(|&w| w != editor.live_window() || editor.panel_focus().is_some() || editor.is_page_window(w))
+                    {
+                        // **A click gives the window under it the keys**: a
+                        // preview takes them as it is; a text window also
+                        // takes the caret where it was clicked.
+                        editor.focus_window(window);
+                        if !editor.is_page_window(window) {
+                            if let Some(at) = text_at(editor, config, terminal.size().ok(), &viewport, mouse) {
+                                editor.point_at(at);
+                            }
+                        }
                     } else if let Some(at) =
                         text_at(editor, config, terminal.size().ok(), &viewport, mouse)
                     {
@@ -5626,6 +5638,25 @@ struct Areas {
 
 /// Divide `area` up. Pure: it draws nothing and depends only on what the
 /// editor and the config say.
+/// **The window under the pointer**, by the rectangles the frame drew.
+fn window_at(
+    editor: &Editor,
+    config: &Config,
+    size: Option<ratatui::layout::Size>,
+    seats: &Seats,
+    mouse: ratatui::crossterm::event::MouseEvent,
+) -> Option<yumete_core::window::WindowId> {
+    let size = size?;
+    let top = seats[editor.live_pane()].top.line;
+    let head_rows = 2 * u16::from(!editor.grid_has_the_pane() && editor.table_head_is_off_the_page(top));
+    let areas = page_areas(editor, config, Rect::new(0, 0, size.width, size.height), head_rows);
+    let leaves = editor.windows().leaves();
+    areas.panes.iter().enumerate().find_map(|(i, a)| {
+        let inside = mouse.column >= a.x && mouse.column < a.x + a.width && mouse.row >= a.y && mouse.row < a.y + a.height;
+        inside.then(|| leaves.get(i).copied()).flatten()
+    })
+}
+
 fn page_areas(editor: &Editor, config: &Config, area: Rect, head_rows: u16) -> Areas {
     // Two rows at the foot, answering two questions. The upper one is *where
     // am I* and never changes shape; the one below it is *what am I typing,
@@ -16334,6 +16365,34 @@ fn squeezed(text: &str) -> String {
         }
         assert!(ruled > 0, "有詞被畫了線");
         assert!(ruled < 24, "不是整行都畫——那就沒有分界了");
+    }
+
+    /// **A click gives the window under it the keys**: `window_at` names
+    /// the window by the rectangles the frame drew, and the editor hands it
+    /// the keys.
+    #[test]
+    fn a_click_finds_the_window_under_it() {
+        use ratatui::crossterm::event::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+        let mut editor = editor_with("那年冬天。\n");
+        let config = Config::default();
+        let one = editor.live_window();
+        editor.execute(":vsplit").unwrap();
+        let two = editor.live_window();
+        assert_ne!(one, two);
+        let areas = page_areas(&editor, &config, Rect::new(0, 0, 100, 20), 0);
+        let click = |r: Rect| MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: r.x + r.width / 2,
+            row: r.y + r.height / 2,
+            modifiers: KeyModifiers::NONE,
+        };
+        let size = Some(ratatui::layout::Size::new(100, 20));
+        let seats = Seats::default();
+        let leaves = editor.windows().leaves();
+        let other = leaves.iter().position(|&w| w == one).unwrap();
+        assert_eq!(window_at(&editor, &config, size, &seats, click(areas.panes[other])), Some(one));
+        editor.focus_window(one);
+        assert_eq!(editor.live_window(), one, "the clicked window has the keys");
     }
 
     /// **The sidebars' blocks**: two cells at each end of the

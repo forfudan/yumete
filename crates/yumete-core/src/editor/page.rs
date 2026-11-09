@@ -996,6 +996,14 @@ impl Editor {
     }
 
     /// The window holding the keys.
+    /// **Give the keys to `window`** (a click on it): from another window,
+    /// or from a sidebar that had them.
+    pub fn focus_window(&mut self, window: crate::window::WindowId) {
+        if self.windows.has(window) && (window != self.live || self.panel_focus().is_some()) {
+            self.go_to_region(super::sidebar::Region::Window(window));
+        }
+    }
+
     pub fn live_window(&self) -> crate::window::WindowId {
         self.live
     }
