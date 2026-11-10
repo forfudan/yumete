@@ -39565,3 +39565,28 @@ fn tab_in_the_indent_with_noet_goes_as_in_vim() {
         assert_eq!(ed.current_buffer().text(), end, "{opts}");
     }
 }
+
+/// **`o` in a Python block keeps the block's indent**: one level more after
+/// a header, the same in the middle and at the end, and another level under
+/// a nested `if`.
+#[test]
+fn o_in_a_python_block_keeps_its_indent() {
+    let source = "def f():\n    x = 1\n    if x:\n        y = 2\n    z = 3\n";
+    for (keys, line, indent) in [("o", 1, 4), ("jo", 2, 4), ("jjo", 3, 8), ("jjjo", 4, 8), ("jjjjo", 5, 4)] {
+        let mut ed = typed_vim(source);
+        ed.execute(":syntax python").unwrap();
+        press(&mut ed, keys);
+        press(&mut ed, "w");
+        ed.on_key(Key::Esc);
+        let text = ed.current_buffer().text();
+        let got = text.lines().nth(line).unwrap_or_default();
+        assert_eq!(got, format!("{}w", " ".repeat(indent)), "{keys}: {text:?}");
+    }
+    // A bracket closed on the line opens nothing.
+    let mut ed = typed_vim("def f():\n    print(x)\n    y = 1\n");
+    ed.execute(":syntax python").unwrap();
+    press(&mut ed, "jow");
+    ed.on_key(Key::Esc);
+    let text = ed.current_buffer().text();
+    assert_eq!(text.lines().nth(2).unwrap_or_default(), "    w", "{text:?}");
+}

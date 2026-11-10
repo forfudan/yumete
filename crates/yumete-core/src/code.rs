@@ -1178,9 +1178,18 @@ pub fn open_levels(
     // 檔尾**，所以 `to > byte` 是假的，一級都數不出來；② 改成 `to >= byte` 又把
     // 「光標剛好停在 `}` 後面」那一種錯數成在塊裏。祖先鏈兩種都答得對：没閉合的
     // 塊仍然罩着這個位置，而閉合完了的不再罩着。
+    // **Python and Mojo are asked at the line's last character**: a block
+    // there has no closing token, so at the end of its last line it has
+    // already ended, and `o` there would fall back a level. A bracket closed
+    // on that character is not counted below.
+    let blocks_by_indent = matches!(language, Language::Python | Language::Mojo);
+    let probe = match blocks_by_indent && byte > 0 && !source[..byte].ends_with('\n') {
+        true => source[..byte].char_indices().next_back().map_or(byte, |(i, _)| i),
+        false => byte,
+    };
     let at = tree
         .root_node()
-        .descendant_for_byte_range(byte, byte)
+        .descendant_for_byte_range(probe, probe)
         .unwrap_or_else(|| tree.root_node());
     // **按「開在第幾行」數，一行只算一級**：`foo(bar(` 兩個括號開在同一行，helix
     // 那一支也只給一級——縮進說的是層次，不是括號數。`call_expression` 和它的
@@ -1196,10 +1205,32 @@ pub fn open_levels(
     let mut lines: Vec<usize> = Vec::new();
     let mut node = Some(at);
     while let Some(one) = node {
-        if opens.contains(&one.id()) {
-            let line = source[..one.start_byte()].matches('\n').count();
+        let closed_here = blocks_by_indent
+            && one.end_byte() <= byte
+            && source[..one.end_byte()].ends_with([')', ']', '}']);
+        if opens.contains(&one.id()) && !closed_here {
+            let mut line = source[..one.start_byte()].matches('\n').count();
+            // **A block of Python or Mojo is opened by its header**: the node
+            // starts at its first statement, a line below the `def …:` that
+            // opens it, and that first line is already indented by it.
+            if matches!(language, Language::Python | Language::Mojo) && one.kind() == "block" {
+                line = line.saturating_sub(1);
+            }
             if line < before_line && !lines.contains(&line) {
                 lines.push(line);
+            }
+        }
+        // At the end of the header itself the block is not round the place
+        // yet: it is the statement's child that starts after it.
+        if matches!(language, Language::Python | Language::Mojo) {
+            let mut walk = one.walk();
+            for child in one.children(&mut walk) {
+                if child.kind() == "block" && child.start_byte() >= byte && opens.contains(&child.id()) {
+                    let line = source[..child.start_byte()].matches('\n').count().saturating_sub(1);
+                    if line < before_line && !lines.contains(&line) {
+                        lines.push(line);
+                    }
+                }
             }
         }
         node = one.parent();
