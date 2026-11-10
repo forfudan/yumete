@@ -3007,6 +3007,9 @@ fn suspend_to_the_shell<B: ratatui::backend::Backend + io::Write>(
         SetCursorStyle::DefaultUserShape
     );
     let _ = write!(stdout(), "\x1b]110\x07\x1b]111\x07\x1b]112\x07");
+    // The pictures are freed as on the way out, or a formula or a page can
+    // stay on the shell's screen; the next frame uploads them again.
+    let _ = stdout().write_all(&crate::graphics::release_all());
     execute!(terminal.backend_mut(), ratatui::crossterm::terminal::LeaveAlternateScreen)?;
     let _ = terminal.show_cursor();
     ratatui::crossterm::terminal::disable_raw_mode()?;

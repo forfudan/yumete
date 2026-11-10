@@ -28,6 +28,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Fixed
 
+- **`C-z` no longer leaves formula pictures or a preview page on the shell's screen**: they are freed before yumete steps aside, and drawn again on `fg`.
 - **A new draft carries a `- ` list on to the next line** before it is known to be Markdown; a file set to plain text still keeps `- ` as a dash.
 - **`␣wt` turns two windows over the diagonal every time**: the left one goes on top and the top one to the left. A side-by-side pair laid out from the right, as a session saved from a vertical page could hold, used to send its left window to the bottom.
 - **With vim's keys, a count on `$` reaches that many lines down** (`2$`, `v2$d`, `d2$`, `2D`), and `c0` or `c^` at the line's start goes into Insert mode in front of it, as in vim.
