@@ -227,7 +227,18 @@ impl Editor {
         let borrowed = self.one_normal_key;
         // 這一鍵按下去之前延伸開着没有——`gv` 要的那一段就是它關掉的那一刻留下
         // 的（見 [`Self::keep_the_last_selection`]）。
-        let was_extending = self.extend.then(|| self.span());
+        let was_extending = self.extend.then(|| {
+            let (from, to) = self.span();
+            match self.vim_lines {
+                // Lines by their numbers, which an indent does not move.
+                true => {
+                    let rope = self.current_buffer().rope();
+                    let line = |at: usize| rope.char_to_line(at.min(rope.len_chars()));
+                    ((line(from), line(to)), true)
+                }
+                false => ((from, to), false),
+            }
+        });
         // Where the pane's window was pointed before this key — see
         // [`Self::hold_the_pane`].
         let held = self
@@ -393,14 +404,16 @@ impl Editor {
     /// Warning: **動完手的那一段也記**，同 vim：`vjd` 之後 `gv` 選的是那一段原來佔的
     /// 位置。文字已經不在了，所以還原的時候要夾一次——vim 在這件事上同樣是「大致
     /// 那一塊」。
-    fn keep_the_last_selection(&mut self, was: Option<(usize, usize)>) {
-        let Some(span) = was else {
+    ///
+    /// 記的還有它是不是整行（`V`）：整行記行號，`Vj>gv` 重選的是那幾行。
+    fn keep_the_last_selection(&mut self, was: Option<((usize, usize), bool)>) {
+        let Some(((anchor, head), lines)) = was else {
             return;
         };
         if self.extend {
             return;
         }
-        self.last_selection = Some(span);
+        self.last_selection = Some((anchor, head, lines));
     }
 
     /// **vim 鍵位下光標不停在換行符上**（十三條的第 9 條，規劃在 §5.85）。
@@ -892,6 +905,7 @@ impl Editor {
         if c == 'o' {
             return self.flip_selection();
         }
+        let lines = self.vim_lines;
         if self.vim_lines {
             self.extend_to_line_bounds();
             self.vim_lines = false;
@@ -926,7 +940,20 @@ impl Editor {
             'u' => self.map_selection(|one| one.to_lowercase().collect()),
             'U' => self.map_selection(|one| one.to_uppercase().collect()),
             '~' => self.map_selection(switch_case),
-            'p' => self.replace_with_register(),
+            // **`p` puts what it replaced in the unnamed register, `P`
+            // leaves the registers as they were** (`:h v_P`).
+            'p' | 'P' => {
+                let (from, to) = self.selection();
+                let old = self.current_buffer().rope().slice(from..to).to_string();
+                let before = self.current_buffer().revision();
+                self.replace_with_register();
+                if c == 'p' && self.current_buffer().revision() != before {
+                    self.vim_lines = lines;
+                    self.pending_register = None;
+                    self.store(old);
+                    self.vim_lines = false;
+                }
+            }
             _ => {
                 let (anchor, head) = self.span();
                 self.apply(motion::Operator::Yank, motion::Span::Over { anchor, head });

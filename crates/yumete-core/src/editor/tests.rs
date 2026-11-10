@@ -39417,3 +39417,25 @@ fn dot_repeats_a_visual_operator_on_as_much_text() {
     press(&mut ed, "lvjld.");
     assert_eq!(ed.current_buffer().text(), "adef\n", "two lines, up to the same column on the last");
 }
+
+/// **vim's Visual `p` keeps what it replaced, `P` keeps the register**, and
+/// `gv` selects whole lines again after `V` (`:h v_P`, `:h gv`).
+#[test]
+fn visual_put_and_gv_behave_as_in_vim() {
+    let cases = [
+        ("foo bar\n", "yiwwviwp0viwp", "bar foo\n"),
+        ("foo bar\n", "yiwwviwP0viwP", "foo foo\n"),
+        ("a\nb\nc\n", "Vj>gvd", "c\n"),
+        ("a\nb\nc\n", "yyjVpGp", "a\na\nc\nb\n"),
+    ];
+    for (start, keys, end) in cases {
+        let mut ed = typed_vim(start);
+        press(&mut ed, keys);
+        assert_eq!(ed.current_buffer().text(), end, "{keys}");
+    }
+    let mut ed = typed_vim("a\nb\nc\n");
+    press(&mut ed, "Vjy");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "Ggvd");
+    assert_eq!(ed.current_buffer().text(), "c\n", "`gv` after `V` and Esc");
+}

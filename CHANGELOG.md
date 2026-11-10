@@ -25,6 +25,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Fixed
 
+- **With vim's keys, Visual `p` puts what it replaced in the unnamed register, Visual `P` replaces too and leaves the registers alone, and `gv` after `V` selects the same lines again**, an indent between them or not.
 - **With vim's keys, `.` repeats a Visual-mode change** on as much text from the cursor, as vim does: `vld.` takes two characters twice, `Vjd.` two lines twice, `v$d.` each line to its end.
 - **The Markdown preview's picture is made again as soon as its window changes size**, when the terminal is resized or the window moves to another side; it used to stay cut to the old size until a key was pressed.
 - **vim's `*` and `#` look for the word under the cursor whole and land on its first letter**, as in vim: `the` no longer stops inside `then`, and `#` from inside a word goes to the one before it. A selection is still looked for exactly as selected.

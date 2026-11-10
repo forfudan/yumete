@@ -1836,8 +1836,10 @@ impl Editor {
         if self.as_vim() && self.register_block && self.pending_register.is_none() {
             return self.paste_block(key == Key::Char('p'));
         }
-        if self.as_vim() && self.extend && !self.expanding_alias && key == Key::Char('p') {
-            return self.vim_visual_key('p');
+        if self.as_vim() && self.extend && !self.expanding_alias {
+            if let Key::Char(c @ ('p' | 'P')) = key {
+                return self.vim_visual_key(c);
+            }
         }
         let Key::Char(c) = key else { return };
         self.paste_copies = count.clamp(1, Self::WRITING_MAX);
