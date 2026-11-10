@@ -1081,7 +1081,14 @@ impl Editor {
 
     // vim's `$` remembers that it went to the end, so `j` keeps to line
     // ends; under the vim preset this does too.
-    pub(super) fn cmd_goto_line_end(&mut self, _: Cx) {
+    pub(super) fn cmd_goto_line_end(&mut self, cx: Cx) {
+        // vim's `2$` is the end of the next line (`:h $`).
+        if self.as_vim() && cx.count > 1 {
+            let rope = self.current_buffer().rope();
+            let line = (rope.char_to_line(self.sel.head()) + cx.count - 1).min(motion::last_line(rope));
+            let at = rope.line_to_char(line);
+            self.move_head(at);
+        }
         self.goto_motion(motion::Motion::LineEnd);
         if self.as_vim() {
             self.sel.set_goal(Some(super::keys::LINE_END_GOAL));

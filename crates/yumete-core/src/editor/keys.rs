@@ -1369,6 +1369,14 @@ impl Editor {
             let (here, to) = (rope.char_to_line(start), n.max(1).saturating_sub(1).min(motion::last_line(rope)));
             return self.do_vim_lines(op, here.min(to), here.max(to));
         }
+        // **`d2$` reaches the end of the next line** (`:h $`): the count is
+        // lines, not a repeat of the same line's end.
+        if let (Some(n @ 2..), motion::Motion::LineEnd) = (given, step.motion) {
+            let rope = self.current_buffer().rope();
+            let line = (rope.char_to_line(start) + n - 1).min(motion::last_line(rope));
+            let end = motion::line_end(rope, rope.line_to_char(line));
+            return self.do_vim(op, motion::Span::Over { anchor: start, head: end.saturating_sub(1).max(start) });
+        }
         // Warning: **`cw` ends the word it is in** — vim's own special case
         // (`:h cw`): 「When the cursor is in a word, `cw` does not include the
         // white space after a word, it only changes up to the end of the
@@ -1546,6 +1554,17 @@ impl Editor {
         if target == start && step.reach == crate::vim::Reach::Exclusive {
             self.count = None;
             self.alias_count = None;
+            // **`c0` and `c^` at the line's start still change**:
+            // they type in front of the line (measured in nvim), where `cb`
+            // at the file's start is refused.
+            let begins_the_line = matches!(
+                step.motion,
+                motion::Motion::LineStart | motion::Motion::LineFirstNonBlank
+            );
+            if op == 'c' && begins_the_line && !self.refuse_readonly() {
+                self.snapshot();
+                self.enter_insert();
+            }
             return;
         }
         let span = match step.reach {

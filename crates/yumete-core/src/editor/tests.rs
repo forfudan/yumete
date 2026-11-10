@@ -39497,3 +39497,27 @@ fn an_empty_command_line_repeats_the_last_command_with_helix_keys() {
     run(&mut ed, "");
     assert_eq!(ed.current_buffer().text(), "baa\n", "vim's does nothing");
 }
+
+/// **Small vim counts and empty changes** (measured in nvim): `2$` is the
+/// next line's end, after `v`, `d` or as `2D`; `c0` and `c^` at the line's
+/// start type in front of it, and `cb` at the file's start does not.
+#[test]
+fn a_count_on_dollar_and_an_empty_change_go_as_in_vim() {
+    let cases = [
+        ("abc\ndef\n", "c0X\u{1b}", "Xabc\ndef\n"),
+        ("abc\n", "c^X\u{1b}", "Xabc\n"),
+        ("abc\n", "ggcbX\u{1b}", "abc\n"),
+        ("a,bc\n", "ct,X\u{1b}", "X,bc\n"),
+        ("abc def\nghi\njkl\n", "lv2$d", "ajkl\n"),
+        ("abc def\nghi\njkl\n", "ld2$", "a\njkl\n"),
+        ("abc def\nghi\njkl\n", "l2D", "a\njkl\n"),
+        ("abc\ndef", "jv$d", "abc\n"),
+    ];
+    for (start, keys, end) in cases {
+        let mut ed = typed_vim(start);
+        for c in keys.chars() {
+            ed.on_key(if c == '\u{1b}' { Key::Esc } else { Key::Char(c) });
+        }
+        assert_eq!(ed.current_buffer().text(), end, "{keys:?}");
+    }
+}
