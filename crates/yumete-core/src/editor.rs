@@ -3081,6 +3081,9 @@ pub struct Editor {
     /// command that leaves the buffer different from how it found it *was* a
     /// change, and its keys are what `.` plays back.
     edit_keys: Vec<Key>,
+    /// The keys that select again what a vim Visual operator acted on,
+    /// put in front of [`Self::edit_keys`] when that operator is a change.
+    edit_visual: Option<Vec<Key>>,
     /// Which buffer the command started in, and that buffer's revision.
     ///
     /// The buffer too: after `gn` the revision belongs to a *different* file,
@@ -4527,6 +4530,7 @@ impl Editor {
             indent_symbol: "↵".to_string(),
             count: None,
             edit_keys: Vec::new(),
+            edit_visual: None,
             edit_revision: (0, 0),
             last_edit_keys: Vec::new(),
             edit_was_insert: false,

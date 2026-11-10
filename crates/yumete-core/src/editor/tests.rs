@@ -39390,3 +39390,30 @@ fn typst_pieces_are_coloured_as_the_whole_file() {
     }
     assert!(failed.is_empty(), "{}", failed.join("\n"));
 }
+
+/// **vim's `.` repeats a Visual operator on as much text from the cursor**
+/// (`:h visual-repeat`): as many characters, as many lines, to the line's
+/// end after `$`, and on several lines up to the same column on the last.
+#[test]
+fn dot_repeats_a_visual_operator_on_as_much_text() {
+    let mut ed = typed_vim("abcdefgh\n");
+    press(&mut ed, "vld.");
+    assert_eq!(ed.current_buffer().text(), "efgh\n", "`vld.` takes two characters twice");
+    let mut ed = typed_vim("a\nb\nc\nd\ne\n");
+    press(&mut ed, "Vjd.");
+    assert_eq!(ed.current_buffer().text(), "e\n", "`Vjd.` takes two lines twice");
+    let mut ed = typed_vim("one two\nthree four\nfive\n");
+    press(&mut ed, "v$d.");
+    assert_eq!(ed.current_buffer().text(), "five\n", "`v$d.` takes each line with its break");
+    let mut ed = typed_vim("ABCD\n");
+    press(&mut ed, "vlull.");
+    assert_eq!(ed.current_buffer().text(), "abcd\n", "Visual `u` changes case, and `.` does it again");
+    let mut ed = typed_vim("abcdef\n");
+    press(&mut ed, "vlcX");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "l.");
+    assert_eq!(ed.current_buffer().text(), "XXef\n", "`c` and what was typed");
+    let mut ed = typed_vim("abcdef\nabcdef\nabcdef\n");
+    press(&mut ed, "lvjld.");
+    assert_eq!(ed.current_buffer().text(), "adef\n", "two lines, up to the same column on the last");
+}

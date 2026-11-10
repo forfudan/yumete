@@ -216,6 +216,7 @@ impl Editor {
             // is one change and `.` has to repeat all three levels of it.
             if self.mode == Mode::Normal && self.pending == Pending::None && self.count.is_none() {
                 self.edit_keys.clear();
+                self.edit_visual = self.visual_replay();
                 self.edit_was_insert = false;
                 self.edit_revision = (self.current_buffer().id(), self.current_buffer().revision());
             }
@@ -711,13 +712,19 @@ impl Editor {
             .iter()
             .find(|key| !matches!(key, Key::Char(c) if c.is_ascii_digit()))
             .is_some_and(|key| {
+                // In Visual mode `u` and `U` change case.
+                let visual = self.edit_visual.is_some();
                 matches!(
                     key,
-                    Key::Char(':' | '/' | '?' | 'u' | 'U' | '.' | 'q' | 'Q') | Key::Ctrl('r')
-                )
+                    Key::Char(':' | '/' | '?' | '.' | 'q' | 'Q') | Key::Ctrl('r')
+                ) || (!visual && matches!(key, Key::Char('u' | 'U')))
             });
         if excluded || self.edit_keys.is_empty() {
             return;
+        }
+        if let Some(mut keys) = self.edit_visual.take() {
+            keys.append(&mut self.edit_keys);
+            self.edit_keys = keys;
         }
         if self.edit_was_insert {
             self.last_insert_keys = self.edit_keys.clone();
@@ -725,6 +732,41 @@ impl Editor {
         self.last_edit_keys = std::mem::take(&mut self.edit_keys);
     }
 
+
+    /// **What vim's `.` selects before it repeats a Visual operator**
+    /// (`:h visual-repeat`): as many lines from the cursor; a charwise
+    /// selection as many characters on one line, or on the last of several
+    /// lines up to the same column; to each line's end after `$`. A block
+    /// is repeated by [`Self::block_repeat`] instead.
+    fn visual_replay(&self) -> Option<Vec<Key>> {
+        if !self.as_vim() || !self.extend || self.block.is_some() {
+            return None;
+        }
+        let rope = self.current_buffer().rope();
+        let (from, to) = self.span();
+        let (first, last) = (rope.char_to_line(from), rope.char_to_line(to));
+        let mut keys = vec![Key::Char(if self.vim_lines { 'V' } else { 'v' })];
+        let step = |keys: &mut Vec<Key>, n: usize, key: char| {
+            if n > 1 {
+                keys.extend(n.to_string().chars().map(Key::Char));
+            }
+            if n > 0 {
+                keys.push(Key::Char(key));
+            }
+        };
+        step(&mut keys, last - first, 'j');
+        if !self.vim_lines {
+            if self.sel.primary().goal == Some(LINE_END_GOAL) {
+                keys.push(Key::Char('$'));
+            } else if last == first {
+                step(&mut keys, to - from, 'l');
+            } else {
+                keys.push(Key::Char('0'));
+                step(&mut keys, to - rope.line_to_char(last), 'l');
+            }
+        }
+        Some(keys)
+    }
 
     /// **vim 的可視模式那八個鍵**，表在呼叫處。
     ///
