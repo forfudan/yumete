@@ -39549,3 +39549,19 @@ fn a_new_draft_carries_a_list_on() {
     ed.on_key(Key::Enter);
     assert_eq!(ed.current_buffer().text(), "- a\n", "plain text chosen keeps its dash");
 }
+
+/// **vim's Tab in the indent with `noet`** (nvim's `smarttab`, measured):
+/// to the next multiple of `sw`, a TAB when that is a whole tab stop and
+/// spaces when it is less.
+#[test]
+fn tab_in_the_indent_with_noet_goes_as_in_vim() {
+    for (opts, end) in [("noet ts=8 sw=4", "abc\n    x\n"), ("noet ts=8 sw=8", "abc\n\tx\n"), ("noet ts=4 sw=4", "abc\n\tx\n")] {
+        let mut ed = typed_vim("abc\n");
+        ed.execute(&format!(":set {opts}")).unwrap();
+        ed.on_key(Key::Char('o'));
+        ed.on_key(Key::Tab);
+        ed.on_key(Key::Char('x'));
+        ed.on_key(Key::Esc);
+        assert_eq!(ed.current_buffer().text(), end, "{opts}");
+    }
+}
