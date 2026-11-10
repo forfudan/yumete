@@ -39590,3 +39590,18 @@ fn o_in_a_python_block_keeps_its_indent() {
     let text = ed.current_buffer().text();
     assert_eq!(text.lines().nth(2).unwrap_or_default(), "    w", "{text:?}");
 }
+
+/// **Esc in a preview asks the system's input method aside again**, as
+/// Esc in Normal mode in the text does.
+#[test]
+fn esc_in_a_preview_asks_the_system_input_method_aside() {
+    let (mut ed, dir) = a_markdown_note("esc-ime");
+    let main = dir.join("notes.md");
+    let page = ed.open_page_window_of(main, crate::buffer::PreviewKind::Markdown).expect("room");
+    ed.focus_window(page);
+    assert_eq!(ed.live_window(), page);
+    let _ = ed.take_say_it_again();
+    ed.on_key(Key::Esc);
+    assert!(ed.take_say_it_again(), "Esc in the preview says it again");
+    std::fs::remove_dir_all(&dir).ok();
+}

@@ -642,6 +642,12 @@ impl Editor {
         let times = count.unwrap_or(1) as i32;
         let step = match key {
             Key::Char(':') | Key::Ctrl('w') | Key::Char(' ') | Key::Ctrl('o') | Key::Ctrl('i') => return false,
+            // **Esc asks the system's input method aside again**, as it does
+            // in Normal mode in the text: the keys here are commands too.
+            Key::Esc => {
+                self.say_it_again = true;
+                return true;
+            }
             Key::Char(digit @ '0'..='9') if digit != '0' || count.is_some() => {
                 let digit = digit.to_digit(10).unwrap_or(0) as usize;
                 self.page_count = Some(count.unwrap_or(0).saturating_mul(10).saturating_add(digit));
