@@ -28,6 +28,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Fixed
 
+- **`␣wt` turns two windows over the diagonal every time**: the left one goes on top and the top one to the left. A side-by-side pair laid out from the right, as a session saved from a vertical page could hold, used to send its left window to the bottom.
 - **With vim's keys, a count on `$` reaches that many lines down** (`2$`, `v2$d`, `d2$`, `2D`), and `c0` or `c^` at the line's start goes into Insert mode in front of it, as in vim.
 - **With vim's keys, a mark is an operator's motion**: `d'a` takes the lines from the cursor to mark `a`, `` d`a `` the characters up to it, and `` `a `` goes to the mark's very column (`goto_mark_exact`), where `'a` goes to its line.
 - **With vim's keys, Visual `p` puts what it replaced in the unnamed register, Visual `P` replaces too and leaves the registers alone, and `gv` after `V` selects the same lines again**, an indent between them or not.

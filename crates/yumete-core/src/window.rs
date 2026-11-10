@@ -269,22 +269,29 @@ impl Windows {
     }
 
     /// **helix's `C-w t` (`transpose_view`)**: the split `id` is a half of
-    /// turns, beside to below and below to beside — beside laid out from
-    /// the right when `rtl`, as a split made there would be. `false` when
-    /// `id` is the only window.
-    pub fn transpose(&mut self, id: WindowId, rtl: bool) -> bool {
-        fn go(node: &mut Node, id: WindowId, to_rtl: bool) -> bool {
+    /// turns over the diagonal from the top left, beside to below and below
+    /// to beside. **What is on the left goes on top**, and what is on top
+    /// to the left, whichever half of the split it is: a beside split laid
+    /// out from the right (a session may still hold one) has its halves
+    /// trade order as it turns, or its left window would go to the bottom.
+    /// `false` when `id` is no half of a split.
+    pub fn transpose(&mut self, id: WindowId) -> bool {
+        fn go(node: &mut Node, id: WindowId) -> bool {
             let Node::Split { how, rtl, first, second } = node else { return false };
             if matches!(**first, Node::Window(w) if w == id) || matches!(**second, Node::Window(w) if w == id) {
-                (*how, *rtl) = match how {
-                    Split::Beside => (Split::Below, false),
-                    Split::Below => (Split::Beside, to_rtl),
+                if *how == Split::Beside && *rtl {
+                    std::mem::swap(first, second);
+                }
+                *how = match how {
+                    Split::Beside => Split::Below,
+                    Split::Below => Split::Beside,
                 };
+                *rtl = false;
                 return true;
             }
-            go(first, id, to_rtl) || go(second, id, to_rtl)
+            go(first, id) || go(second, id)
         }
-        go(&mut self.root, id, rtl)
+        go(&mut self.root, id)
     }
 
     /// **helix's `C-w H` `J` `K` `L` (`swap_view_*`)**: two windows trade
@@ -590,6 +597,23 @@ mod tests {
         assert_eq!(w.leaves(), [1]);
     }
 
+    /// **Turned over the diagonal**: the left window goes on top and comes
+    /// back to the left, for a beside split laid out from the right too.
+    #[test]
+    fn a_split_turns_with_its_left_window_on_top() {
+        let area = Area::new(0, 0, 81, 25);
+        let mut w = Windows::one();
+        w.split_on(1, Split::Beside, false, true);
+        // Laid out from the right: 2 on the left, 1 on the right.
+        assert_eq!(w.neighbour(2, Direction::Right, area), Some(1));
+        for _ in 0..3 {
+            assert!(w.transpose(1));
+            assert_eq!(w.neighbour(2, Direction::Down, area), Some(1), "the left one on top");
+            assert!(w.transpose(1));
+            assert_eq!(w.neighbour(2, Direction::Right, area), Some(1), "and back on the left");
+        }
+    }
+
     #[test]
     fn a_split_turns_and_two_windows_trade_places() {
         let mut w = Windows::one();
@@ -597,16 +621,13 @@ mod tests {
         w.split(2, Split::Below);
         let area = Area::new(0, 0, 81, 25);
         // 1 | 2 over 3. Turning 3's split puts 2 beside 3.
-        assert!(w.transpose(3, false));
+        assert!(w.transpose(3));
         assert_eq!(w.neighbour(2, Direction::Right, area), Some(3));
-        assert!(!Windows::one().transpose(1, false), "one window has no split to turn");
-        // Turned from the right, 3 goes left of 2; turned back, it is below.
-        assert!(w.transpose(3, true));
-        assert!(w.transpose(3, true));
-        assert_eq!(w.neighbour(2, Direction::Left, area), Some(3));
-        assert!(w.transpose(3, true));
+        assert!(!Windows::one().transpose(1), "one window has no split to turn");
+        // Turned back, 3 is below 2 again.
+        assert!(w.transpose(3));
         assert_eq!(w.neighbour(2, Direction::Down, area), Some(3));
-        assert!(w.transpose(3, false));
+        assert!(w.transpose(3));
         // 1 and 3 trade places: 3 is on the left now, and the ids stay.
         assert!(w.swap(1, 3));
         assert_eq!(w.leaves(), [3, 2, 1]);

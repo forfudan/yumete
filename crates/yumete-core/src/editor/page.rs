@@ -1179,7 +1179,7 @@ impl Editor {
     /// half of turns, beside to below and back, when the halves still fit.
     pub(super) fn transpose_window(&mut self) {
         let mut tried = self.windows.clone();
-        if tried.transpose(self.live, false) {
+        if tried.transpose(self.live) {
             self.lay_out_if_it_fits(tried);
         }
     }
