@@ -16,6 +16,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Changed
 
+- **`ye --import` no longer carries a theme over** from helix, vim or Neovim: their themes are not yumete's, so a match was a guess. The import says so; pick one with `:theme`.
 - **The word count on the status line, and the outline behind heading folds, are worked out again when you return to Normal mode**, not on every key typed, so typing in a long book stays quick (with a fold closed, the outline still follows each key).
 - **`:vertical` is one switch**: `:vertical on` sets the page vertically, `:vertical off` across, and `:vertical` alone turns it round. `:horizontal` is gone and says where it went.
 - **The word list for completion is read once each time you enter Insert mode**, not on every key, so typing in a long book no longer reads the whole book per keystroke; a word typed now is offered from the next time you enter Insert mode.

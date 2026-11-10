@@ -279,43 +279,9 @@ const HELIX_ACTION_RENAMES: &[(&str, &str)] = &[
     ("syntax_workspace_symbol_picker", "lsp_or_syntax_workspace_symbol_picker"),
 ];
 
-/// **A helix theme's yumete family**, and the mood when the family has two.
-/// `None` for a theme yumete has nothing like (and for `gruvbox_material`,
-/// which is not gruvbox's palette).
-fn helix_theme(name: &str) -> Option<(&'static str, Option<&'static str>)> {
-    let n = name.trim().to_ascii_lowercase();
-    let family = if n.starts_with("gruvbox_material") || n.starts_with("gruvbox-material") {
-        return None;
-    } else if n == "onedark" || n == "onedarker" {
-        "one-dark"
-    } else if n == "github" || n.starts_with("github_") {
-        "github"
-    } else if n.starts_with("monokai") {
-        "monokai"
-    } else if n.starts_with("dracula") {
-        "dracula"
-    } else if n.starts_with("tokyonight") {
-        "tokyo-night"
-    } else if n.starts_with("catppuccin") {
-        "catppuccin"
-    } else if n.starts_with("gruvbox") {
-        "gruvbox"
-    } else {
-        return None;
-    };
-    let light = n.contains("light") || n.ends_with("_day") || n.ends_with("latte");
-    let two_moods = matches!(family, "github" | "tokyo-night" | "catppuccin" | "gruvbox");
-    match (two_moods, light) {
-        (true, true) => Some((family, Some("light"))),
-        (true, false) => Some((family, Some("dark"))),
-        // A light version of a theme yumete has only dark.
-        (false, true) => None,
-        (false, false) => Some((family, None)),
-    }
-}
-
-/// The theme names yumete has, for the reason a theme was not carried over.
-const YUMETE_THEMES: &str = "ink, one-dark, github, monokai, dracula, tokyo-night, catppuccin, gruvbox, bw, morandi";
+/// **Themes are not carried over**: helix's, vim's and yumete's lists are
+/// not the same themes, so a match would be a guess.
+const THEME_NOT_CARRIED: &str = "themes are not carried over: pick one of yumete's with :theme";
 
 /// yumete's command for a word, by its name or one of its aliases: the
 /// name, which is what the import writes.
@@ -340,11 +306,7 @@ fn typable(line: &str) -> Result<String, String> {
     let helix = HELIX_ALIASES.iter().find(|(a, _)| *a == base).map_or(base, |&(_, name)| name);
     let (target, rest) = match helix {
         "set-option" | "toggle-option" => return option_command(helix, rest),
-        // `:theme catppuccin_mocha` names a helix theme.
-        "theme" if !rest.is_empty() => match helix_theme(rest) {
-            Some((family, _)) => ("theme", family.to_string()),
-            None => return Err(format!("yumete has no theme like {rest}")),
-        },
+        "theme" if !rest.is_empty() => return Err(THEME_NOT_CARRIED.to_string()),
         _ => (
             HELIX_COMMAND_RENAMES.iter().find(|(h, _)| *h == helix).map_or(helix, |&(_, y)| y),
             rest.to_string(),
@@ -514,7 +476,6 @@ fn bindable(key: &str) -> Result<(), String> {
 #[derive(Default)]
 struct Gathered {
     editor: Vec<String>,
-    theme: Vec<String>,
     keys: String,
     /// `[[lsp.<language>]]` tables from `languages.toml`, ready to write.
     lsp: String,
@@ -741,39 +702,6 @@ fn sub_table(
     }
 }
 
-/// **helix's `theme`**: one name, or `{ light, dark }`.
-fn theme(value: &toml::Value, got: &mut Gathered) {
-    let unlike = |name: &str| format!("theme = {}: yumete has no theme like it; it has {YUMETE_THEMES}", quote(name));
-    match value {
-        toml::Value::String(name) => match helix_theme(name) {
-            Some((family, mood)) => {
-                got.theme.push(format!("name = {}", quote(family)));
-                if let Some(mood) = mood {
-                    got.theme.push(format!("mode = {}", quote(mood)));
-                }
-                got.carried += 1;
-            }
-            None => got.skipped.push(unlike(name)),
-        },
-        toml::Value::Table(t) => {
-            let light = t.get("light").and_then(toml::Value::as_str);
-            let dark = t.get("dark").and_then(toml::Value::as_str);
-            match (light.and_then(helix_theme), dark.and_then(helix_theme)) {
-                (Some((a, _)), Some((b, _))) if a == b => {
-                    got.theme.push(format!("name = {}", quote(a)));
-                    got.theme.push(format!("mode = {}", quote("auto")));
-                    got.carried += 1;
-                }
-                _ => got.skipped.push(format!(
-                    "theme = {}: yumete follows the terminal's light or dark within one theme, and these are two",
-                    inline(value)
-                )),
-            }
-        }
-        _ => got.skipped.push(format!("theme = {}: not a theme name", inline(value))),
-    }
-}
-
 /// **helix's `config.toml` as yumete's**, or the reason it cannot be read.
 ///
 /// `languages` is the `languages.toml` beside it, when there is one: only
@@ -794,7 +722,7 @@ pub fn helix(source: &str, from: &Path, when: &str, beside: bool, languages: Opt
                 }
             }
             ("editor", toml::Value::Table(editor)) => editor_table(editor, &mut got),
-            ("theme", value) => theme(value, &mut got),
+            ("theme", _) => got.skipped.push(format!("theme: {THEME_NOT_CARRIED}")),
             _ => got.skipped.push(format!("{key}: no counterpart in yumete")),
         }
     }
@@ -812,13 +740,6 @@ pub fn helix(source: &str, from: &Path, when: &str, beside: bool, languages: Opt
     if !got.editor.is_empty() {
         text.push_str("\n[editor]\n");
         for line in &got.editor {
-            text.push_str(line);
-            text.push('\n');
-        }
-    }
-    if !got.theme.is_empty() {
-        text.push_str("\n[theme]\n");
-        for line in &got.theme {
             text.push_str(line);
             text.push('\n');
         }
@@ -1020,7 +941,7 @@ fn lazyvim(nvim: &Path, sign: &Path, when: &str, beside: bool, own: Result<&vim:
         + if surround { 4 } else { 0 };
     text.push_str(&config);
     if let Ok(own) = own {
-        text.push_str(&theme_and_keys(own));
+        text.push_str(&keys_of(own));
         skipped.extend(own.skipped.iter().cloned());
     }
     text.push_str(&not_carried(&skipped));
@@ -1059,16 +980,9 @@ fn said_lines(editor: &str, own: &vim::Own) -> String {
     out
 }
 
-/// The `[theme]` and `[keys.vim.…]` tables of a vim or Neovim import.
-fn theme_and_keys(own: &vim::Own) -> String {
+/// The `[keys.vim.…]` tables of a vim or Neovim import.
+fn keys_of(own: &vim::Own) -> String {
     let mut out = String::new();
-    if !own.theme.is_empty() {
-        out.push_str("\n[theme]\n");
-        for line in &own.theme {
-            out.push_str(line);
-            out.push('\n');
-        }
-    }
     out.push_str(&own.keys);
     out
 }
@@ -1087,7 +1001,7 @@ fn vim_file(what: &str, word: &str, from: &Path, version: &str, when: &str, besi
             text.push('\n');
         }
     }
-    text.push_str(&theme_and_keys(own));
+    text.push_str(&keys_of(own));
     text.push_str(&takes_over(&own.takes));
     text.push_str(&not_carried(&own.skipped));
     Imported { text, carried: own.carried, skipped: own.skipped.len() }
@@ -1600,7 +1514,7 @@ j = { k = "normal_mode" }
     }
 
     #[test]
-    fn helix_options_and_theme_are_translated() {
+    fn helix_options_are_translated_and_the_theme_is_not() {
         let out = sample().text;
         let editor = out.split("\n[editor]\n").nth(1).unwrap().split("\n\n").next().unwrap();
         for line in [
@@ -1617,23 +1531,20 @@ j = { k = "normal_mode" }
         ] {
             assert!(editor.lines().any(|l| l == line), "{line} missing from:\n{editor}");
         }
-        assert!(out.contains("\n[theme]\nname = \"catppuccin\"\nmode = \"dark\"\n"), "{out}");
-        assert_eq!(helix_theme("catppuccin_latte"), Some(("catppuccin", Some("light"))));
-        assert_eq!(helix_theme("onedark"), Some(("one-dark", None)));
-        assert_eq!(helix_theme("gruvbox_material_dark_hard"), None);
-        assert_eq!(helix_theme("rose_pine"), None);
+        assert!(!out.contains("[theme]"), "{out}");
+        assert!(out.contains(THEME_NOT_CARRIED), "{out}");
         let two = helix("theme = { light = \"github_light\", dark = \"github_dark\" }\n", Path::new("x"), "t", false, None)
             .unwrap()
             .text;
-        assert!(two.contains("name = \"github\"\nmode = \"auto\""), "{two}");
+        assert!(!two.contains("[theme]"), "{two}");
     }
 
     #[test]
     fn a_helix_import_is_a_config_the_editor_takes_without_a_word() {
         let imported = sample();
         assert_eq!(complaints(&imported.text), Vec::<String>::new(), "{}", imported.text);
-        // Ten settings, the theme, and nine bindings.
-        assert_eq!(imported.carried, 20);
+        // Ten settings and nine bindings; the theme is not carried.
+        assert_eq!(imported.carried, 19);
         // An empty helix config is still a clean one.
         let empty = helix("", Path::new("x"), "t", false, None).unwrap();
         assert_eq!(complaints(&empty.text), Vec::<String>::new(), "{}", empty.text);
@@ -1911,7 +1822,7 @@ language-servers = ["gopls", "golangci-lint-lsp"]
         for line in ["line_numbers = \"relative\"", "tab_width = 4", "indent_width = 4", "yank_flash = true"] {
             assert!(out.contains(line), "{line}: {out}");
         }
-        assert!(out.contains("[theme]\nname = \"tokyo-night\"\nmode = \"dark\"\n"), "{out}");
+        assert!(!out.contains("[theme]"), "{out}");
         assert!(out.contains("[keys.vim.normal.space]\nw = { run = \":write\", label = \"Save file\" }\n"), "{out}");
         assert!(out.contains("[keys.vim.normal.space.f]\nf = { run = \"file_picker\", label = \"Find files\" }\n"), "{out}");
         assert!(out.contains("C-s = \":write\"\n"), "{out}");
@@ -1980,7 +1891,7 @@ language-servers = ["gopls", "golangci-lint-lsp"]
         let out = &imported.text;
         assert_eq!(complaints(out), Vec::<String>::new(), "{out}");
         assert!(out.contains("indent_guides = true\nscrolloff = 10\n"), "{out}");
-        assert!(out.contains("\n[theme]\nname = \"catppuccin\"\nmode = \"dark\"\n"), "{out}");
+        assert!(!out.contains("[theme]"), "{out}");
         assert!(out.contains("[keys.vim.normal.space.b]\nd = \"no_op\"\n"), "{out}");
         assert!(out.contains("[keys.vim.normal.space.f]\nz = { run = \"global_recent_file_picker\", label = \"Old files\" }\n"), "{out}");
         assert!(out.contains("[keys.select]\ngsa = \"surround_add\""), "{out}");

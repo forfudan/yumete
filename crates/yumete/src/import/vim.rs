@@ -21,7 +21,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::Value;
 
-use super::{helix_theme, one_line, quote, toml_key, YUMETE_THEMES};
+use super::{one_line, quote, toml_key, THEME_NOT_CARRIED};
 
 /// Which editor a dump came from.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -172,7 +172,6 @@ impl Dump {
 pub(super) struct Own {
     /// `[editor]` lines, `key = value`, a comment after some.
     pub editor: Vec<String>,
-    pub theme: Vec<String>,
     /// The `[keys.vim.…]` sections, ready to write.
     pub keys: String,
     pub skipped: Vec<String>,
@@ -346,20 +345,9 @@ fn options(user: &Dump, base: &Dump, from: Source, own: &mut Own) {
             None => own.skipped.push(format!("mousescroll={ms}: no ver: step")),
         }
     }
-    // The theme.
     if user.colorscheme.is_some() && user.colorscheme != base.colorscheme {
         let name = user.colorscheme.clone().unwrap_or_default();
-        let background = user.string("background");
-        match vim_theme(&name, &background) {
-            Some((family, mood)) => {
-                own.theme.push(format!("name = {}", quote(family)));
-                if let Some(mood) = mood {
-                    own.theme.push(format!("mode = {}", quote(mood)));
-                }
-                own.carried += 1;
-            }
-            None => own.skipped.push(format!("colorscheme {name}: yumete has no theme like it; it has {YUMETE_THEMES}")),
-        }
+        own.skipped.push(format!("colorscheme {name}: {THEME_NOT_CARRIED}"));
     }
     // A highlight on yank (decision 10), and indent-blankline.
     let new = |a: &&Autocmd| !base.autocmds.contains(a);
@@ -411,21 +399,6 @@ fn options(user: &Dump, base: &Dump, from: Source, own: &mut Own) {
         .collect();
     if !rest.is_empty() {
         own.skipped.push(format!("options with no counterpart in yumete: {}", rest.join(", ")));
-    }
-}
-
-/// **A vim colour scheme's yumete theme**: helix's names with `-` for `_`,
-/// and the mood from the name, else from `background`.
-fn vim_theme(name: &str, background: &str) -> Option<(&'static str, Option<&'static str>)> {
-    let (family, mood) = helix_theme(&name.replace('-', "_"))?;
-    let n = name.to_ascii_lowercase();
-    let named = ["light", "day", "latte", "dark", "night", "storm", "moon", "mocha", "frappe", "macchiato"]
-        .iter()
-        .any(|m| n.contains(m));
-    match (mood, named, background) {
-        (Some(_), false, "light") => Some((family, Some("light"))),
-        (Some(_), false, _) => Some((family, Some("dark"))),
-        _ => Some((family, mood)),
     }
 }
 
@@ -1375,16 +1348,5 @@ mod tests {
         for to in BARE {
             assert!(has(to), "{to}");
         }
-    }
-
-    #[test]
-    fn vim_colour_schemes_find_yumete_s_themes() {
-        assert_eq!(vim_theme("tokyonight-day", "dark"), Some(("tokyo-night", Some("light"))));
-        assert_eq!(vim_theme("tokyonight", "dark"), Some(("tokyo-night", Some("dark"))));
-        assert_eq!(vim_theme("gruvbox", "light"), Some(("gruvbox", Some("light"))));
-        assert_eq!(vim_theme("catppuccin-mocha", "light"), Some(("catppuccin", Some("dark"))));
-        assert_eq!(vim_theme("onedark", "dark"), Some(("one-dark", None)));
-        assert_eq!(vim_theme("gruvbox-material", "dark"), None);
-        assert_eq!(vim_theme("habamax", "dark"), None);
     }
 }
