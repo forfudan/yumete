@@ -790,8 +790,7 @@ pub fn draw(frame: &mut ratatui::Frame, editor: &Editor, config: &yumete_config:
     let cell = crate::graphics::cell_pixels();
     match editor.preview_fit() {
         PreviewFit::Width => {
-            // One column is kept for the cursor's bar.
-            let (columns, rows) = width_cells((page.width, page.height), cell, room.width.saturating_sub(1));
+            let (columns, rows) = width_cells((page.width, page.height), cell, room.width);
             let cursor_row = board
                 .jump
                 .filter(|j| j.page == page.number)
@@ -806,7 +805,7 @@ pub fn draw(frame: &mut ratatui::Frame, editor: &Editor, config: &yumete_config:
             board.base = base;
             let picture = crate::graphics::show_page(preview, page.hash, &page.png, columns, rows);
             let spot = Rect {
-                x: room.x + 1 + room.width.saturating_sub(columns + 1) / 2,
+                x: room.x + room.width.saturating_sub(columns) / 2,
                 y: room.y,
                 width: columns,
                 height: (rows - top).min(room.height),
@@ -816,10 +815,9 @@ pub fn draw(frame: &mut ratatui::Frame, editor: &Editor, config: &yumete_config:
             mark_the_cursor(frame.buffer_mut(), area, spot, mark, ink.page().fg(ink.gold()));
         }
         PreviewFit::Page => {
-            let (columns, rows) =
-                crate::maths::cells_for((page.width, page.height), cell, (room.width.saturating_sub(1), room.height));
+            let (columns, rows) = crate::maths::cells_for((page.width, page.height), cell, (room.width, room.height));
             let picture = crate::graphics::show_page(preview, page.hash, &page.png, columns, rows);
-            let spot = Rect { x: room.x + 1 + room.width.saturating_sub(columns + 1) / 2, y: room.y, width: columns, height: rows };
+            let spot = Rect { x: room.x + room.width.saturating_sub(columns) / 2, y: room.y, width: columns, height: rows };
             crate::graphics::put_picture(frame.buffer_mut(), spot, picture);
             let mark = board
                 .jump
@@ -859,33 +857,31 @@ pub fn cursor_mark(row: i32, height: u16) -> CursorMark {
     }
 }
 
-/// **The cursor's line, marked beside the page**: a bar in the column left
-/// of the picture `spot` on the line tinymist says the cursor's text is on,
-/// or, out of view, arrows on the frame round `area` pointing the way.
-/// Drawn in cells, so the page is never painted again for it, and no
-/// export carries it.
+/// **The cursor's line, marked on the frame** round `area`: `▶` and `◀`
+/// on its two sides, on the row of the picture `spot` tinymist says the
+/// cursor's text is on; out of view, `▲` on its top or `▼` on its bottom
+/// pointing the way. Drawn in cells, so the page is never painted again for
+/// it, and no export carries it.
 fn mark_the_cursor(buf: &mut ratatui::buffer::Buffer, area: Rect, spot: Rect, mark: Option<CursorMark>, style: ratatui::style::Style) {
     let Some(mark) = mark else { return };
+    if area.x == 0 || area.y == 0 || area.width == 0 || area.height == 0 {
+        return;
+    }
     let mut put = |x: u16, y: u16, symbol: &str| {
         if let Some(c) = buf.cell_mut((x, y)) {
             c.set_symbol(symbol).set_style(style);
         }
     };
-    let row = match mark {
+    let middle = area.x + area.width / 2;
+    match mark {
         CursorMark::Row(row) => {
-            if spot.x > area.x && spot.height > 0 {
-                put(spot.x - 1, spot.y + row, "▐");
-            }
-            return;
+            let y = (spot.y + row).min(area.y + area.height - 1);
+            put(area.x - 1, y, "▶");
+            put(area.x + area.width, y, "◀");
         }
-        CursorMark::Above => 0,
-        CursorMark::Below => spot.height.max(1) - 1,
-    };
-    if area.x == 0 || area.y == 0 || area.height == 0 {
-        return;
+        CursorMark::Above => put(middle, area.y - 1, "▲"),
+        CursorMark::Below => put(middle, area.y + area.height, "▼"),
     }
-    put(area.x - 1, area.y + row.min(area.height - 1), "▶");
-    put(area.x + area.width, area.y + row.min(area.height - 1), "◀");
 }
 
 /// **Why the page window cannot be drawn for a file of `syntax`**, or `None`
@@ -928,10 +924,13 @@ mod tests {
         let spot = Rect::new(2, 1, 10, 6);
         let mut buf = ratatui::buffer::Buffer::empty(Rect::new(0, 0, 14, 8));
         mark_the_cursor(&mut buf, area, spot, Some(CursorMark::Row(2)), Default::default());
-        assert_eq!(buf[(1, 3)].symbol(), "▐", "the bar beside the page, on the cursor's row");
+        assert_eq!((buf[(0, 3)].symbol(), buf[(13, 3)].symbol()), ("▶", "◀"), "on the frame, on the cursor's row");
         let mut buf = ratatui::buffer::Buffer::empty(Rect::new(0, 0, 14, 8));
         mark_the_cursor(&mut buf, area, spot, Some(CursorMark::Below), Default::default());
-        assert_eq!((buf[(0, 6)].symbol(), buf[(13, 6)].symbol()), ("▶", "◀"), "arrows on the frame");
+        assert_eq!(buf[(7, 7)].symbol(), "▼", "below, on the bottom of the frame");
+        let mut buf = ratatui::buffer::Buffer::empty(Rect::new(0, 0, 14, 8));
+        mark_the_cursor(&mut buf, area, spot, Some(CursorMark::Above), Default::default());
+        assert_eq!(buf[(7, 0)].symbol(), "▲", "above, on its top");
     }
 
     #[test]

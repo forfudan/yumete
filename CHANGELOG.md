@@ -6,7 +6,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Added
 
-- **A Typst preview marks the cursor's line**: a gold bar beside the page on the line tinymist says the cursor's text is on, and arrows on the frame when that line is out of view.
+- **A Typst preview marks the cursor's line**: gold `▶` `◀` on the frame's two sides, on the line tinymist says the cursor's text is on; out of view, `▲` on the frame's top or `▼` on its bottom points the way.
 - **`:setl` (`:setlocal`)**, vim's, sets the same options as `:set` for this file, and on its own says their values.
 - **With helix's keys, Enter on an empty `:` line runs the last command again**, as helix does; with vim's it still does nothing.
 - **The settings panel's `/` search reads either Chinese script and full pinyin**: 「預覽」 and `yulan` both find 预览字体.
@@ -19,7 +19,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **The word count on the status line, and the outline behind heading folds, are worked out again when you return to Normal mode**, not on every key typed, so typing in a long book stays quick (with a fold closed, the outline still follows each key).
 - **`:vertical` is one switch**: `:vertical on` sets the page vertically, `:vertical off` across, and `:vertical` alone turns it round. `:horizontal` is gone and says where it went.
 - **The word list for completion is read once each time you enter Insert mode**, not on every key, so typing in a long book no longer reads the whole book per keystroke; a word typed now is offered from the next time you enter Insert mode.
-- **A preview is drawn in a frame**: thick and gold while the keys are in it, thin and quiet otherwise, so with two previews side by side the one with the keys is plain to see; the status line says `PRV` there too. In a Markdown preview, the page keeps the cursor's part of a long paragraph in view as you move or type through it, and a bar in the theme's gold stands beside the whole line the cursor is in (a paragraph, one list item or one line of code) (in the left margin, or along the top of a vertical page), and arrows on the frame point the way to it when it is out of view. The window's title line stays where it is.
+- **A preview is drawn in a frame**: thick and gold while the keys are in it, thin and quiet otherwise, so with two previews side by side the one with the keys is plain to see; the status line says `PRV` there too. In a Markdown preview, the page keeps the cursor's part of a long paragraph in view as you move or type through it, and a bar in the theme's gold stands beside the whole line the cursor is in (a paragraph, one list item or one line of code) (in the left margin, or along the top of a vertical page), and when it is out of view one arrow on the frame points the way to it (`▲` or `▼`, or `◀` or `▶` on a vertical page). The window's title line stays where it is.
 - **纵中横 (`[editor] tatechuyoko`) is off by default**, so every run of half-width characters on a vertical page is set the same way; set it to 2–8 to stand short numbers across in one cell.
 
 - **A preview opened from a vertical page goes below the text**, where the columns leave room, and beside it on a horizontal page.

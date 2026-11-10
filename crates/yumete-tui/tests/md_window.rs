@@ -126,7 +126,7 @@ fn a_markdown_preview_is_drawn_and_follows_the_cursor() {
     assert!(shown.contains('┌') && !shown.contains('┏'), "{shown}");
     // **The cursor's paragraph has a bar in the picture**; the frame's
     // arrows only point the way to it once it is out of view.
-    assert!(!shown.contains('▶'), "in view, no arrows: {shown}");
+    assert!(!shown.contains(['▶', '◀', '▲', '▼']), "in view, no arrows: {shown}");
     editor.on_key(yumete_core::input::Key::Ctrl('w'));
     editor.on_key(yumete_core::input::Key::Char('w'));
     let shown = frame(&mut editor, &config);

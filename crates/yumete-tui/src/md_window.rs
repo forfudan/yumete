@@ -552,8 +552,8 @@ fn paint_the_bar(picture: &mut yumete_mdview::Picture, span: (f32, f32), vertica
 }
 
 /// **The way to the cursor's line, marked on the frame** while it is out
-/// of view: `▶` `◀` on the side walls across a page, `▼` `▲` on the top and
-/// bottom walls down a vertical one, at the edge nearest to it.
+/// of view: one arrow, `▲` on the top wall or `▼` on the bottom across a
+/// page, `▶` on the right wall or `◀` on the left down a vertical one.
 fn mark_the_caret(buf: &mut ratatui::buffer::Buffer, area: Rect, shot: &Shot, style: ratatui::style::Style) {
     let Some(caret) = shot.caret else { return };
     if area.width == 0 || area.height == 0 || area.x == 0 || area.y == 0 {
@@ -575,18 +575,15 @@ fn mark_the_caret(buf: &mut ratatui::buffer::Buffer, area: Rect, shot: &Shot, st
             c.set_symbol(mark).set_style(style);
         }
     };
-    match shot.vertical {
-        false => {
-            let row = (along / cell.1.max(1) as f32).floor().clamp(0.0, (area.height - 1) as f32) as u16;
-            put(area.x - 1, area.y + row, "▶");
-            put(area.x + area.width, area.y + row, "◀");
-        }
-        true => {
-            let column = (along / cell.0.max(1) as f32).floor().clamp(0.0, (area.width - 1) as f32) as u16;
-            let x = area.x + area.width - 1 - column;
-            put(x, area.y - 1, "▼");
-            put(x, area.y + area.height, "▲");
-        }
+    // Out of view, one arrow on the frame points the way: up or down
+    // across the page, left or right along a vertical one, whose lines run
+    // from the right.
+    let (middle_x, middle_y) = (area.x + area.width / 2, area.y + area.height / 2);
+    match (shot.vertical, along < 0.0) {
+        (false, true) => put(middle_x, area.y - 1, "▲"),
+        (false, false) => put(middle_x, area.y + area.height, "▼"),
+        (true, true) => put(area.x + area.width, middle_y, "▶"),
+        (true, false) => put(area.x - 1, middle_y, "◀"),
     }
 }
 
