@@ -6,6 +6,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Added
 
+- **A Typst preview marks the cursor's line**: a gold bar beside the page on the line tinymist says the cursor's text is on, and arrows on the frame when that line is out of view.
 - **`:setl` (`:setlocal`)**, vim's, sets the same options as `:set` for this file, and on its own says their values.
 - **With helix's keys, Enter on an empty `:` line runs the last command again**, as helix does; with vim's it still does nothing.
 - **The settings panel's `/` search reads either Chinese script and full pinyin**: 「預覽」 and `yulan` both find 预览字体.
