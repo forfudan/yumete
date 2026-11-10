@@ -581,7 +581,7 @@ impl Editor {
     /// (`go_to_mark` says so too, in its own words).
     fn mark_place(&self, spot: &Spot) -> String {
         match spot {
-            Spot::InFile(path, line) => {
+            Spot::InFile(path, line, _) => {
                 let name = path.file_name().map_or_else(
                     || path.display().to_string(),
                     |n| n.to_string_lossy().into_owned(),

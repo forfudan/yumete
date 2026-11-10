@@ -636,6 +636,12 @@ zhs = "回到标记(再按一个字母)"
 en = "go to a mark (then a letter)"
 
 [[message]]
+# 命令說明：goto_mark_exact（草稿）
+key = "action.goto-mark-exact"
+zhs = "回到标记所在的那个字(再按一个字母)"
+en = "go to the very place of a mark (then a letter)"
+
+[[message]]
 # 命令說明：goto_mode
 key = "action.goto-mode"
 zhs = "g 组：跳转"

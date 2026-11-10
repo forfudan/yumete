@@ -25,6 +25,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Fixed
 
+- **With vim's keys, a mark is an operator's motion**: `d'a` takes the lines from the cursor to mark `a`, `` d`a `` the characters up to it, and `` `a `` goes to the mark's very column (`goto_mark_exact`), where `'a` goes to its line.
 - **With vim's keys, Visual `p` puts what it replaced in the unnamed register, Visual `P` replaces too and leaves the registers alone, and `gv` after `V` selects the same lines again**, an indent between them or not.
 - **With vim's keys, `.` repeats a Visual-mode change** on as much text from the cursor, as vim does: `vld.` takes two characters twice, `Vjd.` two lines twice, `v$d.` each line to its end.
 - **The Markdown preview's picture is made again as soon as its window changes size**, when the terminal is resized or the window moves to another side; it used to stay cut to the old size until a key was pressed.

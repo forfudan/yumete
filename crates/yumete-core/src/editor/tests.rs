@@ -39439,3 +39439,40 @@ fn visual_put_and_gv_behave_as_in_vim() {
     press(&mut ed, "Ggvd");
     assert_eq!(ed.current_buffer().text(), "c\n", "`gv` after `V` and Esc");
 }
+
+/// **A mark is a vim operator's motion** (`:h '`): `'a` the lines from here
+/// to the mark, `` `a `` the characters up to it, either way round.
+#[test]
+fn a_mark_is_an_operators_motion() {
+    let cases = [
+        ("a\nb\nc\nd\n", "majjd'a", "d\n"),
+        ("a\nb\nc\nd\n", "jjmaggd'a", "d\n"),
+        ("abcdef\n", "llmallld`a", "abf\n"),
+        ("abcdef\n", "lllmahhd`a", "adef\n"),
+        ("abc\ndef\n", "lmajly`aP", "abc\ndebc\ndef\n"),
+    ];
+    for (start, keys, end) in cases {
+        let mut ed = typed_vim(start);
+        press(&mut ed, keys);
+        assert_eq!(ed.current_buffer().text(), end, "{keys}");
+    }
+    let mut ed = typed_vim("abc\n");
+    press(&mut ed, "d'z");
+    assert_eq!(ed.current_buffer().text(), "abc\n", "a mark not set takes nothing");
+    assert_eq!(ed.mode(), Mode::Normal);
+}
+
+/// A mark set in a saved file keeps its column, so `` d`a `` stops there.
+#[test]
+fn a_mark_in_a_file_keeps_its_column() {
+    let (mut ed, dir) = a_markdown_note("mark-column");
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "gg0");
+    let before = ed.current_buffer().text();
+    press(&mut ed, "llma0`a");
+    assert_eq!(ed.cursor(), 2, "`` `a `` goes to the mark's column");
+    press(&mut ed, "0d`a");
+    let first: String = before.chars().skip(2).collect();
+    assert_eq!(ed.current_buffer().text(), first);
+    std::fs::remove_dir_all(&dir).ok();
+}

@@ -3084,6 +3084,8 @@ pub struct Editor {
     /// The keys that select again what a vim Visual operator acted on,
     /// put in front of [`Self::edit_keys`] when that operator is a change.
     edit_visual: Option<Vec<Key>>,
+    /// The mark being waited for is to be gone to exactly (vim's `` ` ``).
+    recall_exact: bool,
     /// Which buffer the command started in, and that buffer's revision.
     ///
     /// The buffer too: after `gn` the revision belongs to a *different* file,
@@ -4533,6 +4535,7 @@ impl Editor {
             count: None,
             edit_keys: Vec::new(),
             edit_visual: None,
+            recall_exact: false,
             edit_revision: (0, 0),
             last_edit_keys: Vec::new(),
             edit_was_insert: false,
@@ -5146,7 +5149,8 @@ impl Default for Editor {
 /// because there is nothing else to call it by.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Spot {
-    InFile(PathBuf, usize),
+    /// A file, the line and the column in it.
+    InFile(PathBuf, usize, usize),
     InBuffer(u64, usize),
 }
 

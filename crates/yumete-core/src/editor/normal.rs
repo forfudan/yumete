@@ -96,6 +96,10 @@ pub(super) const NORMAL_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::GotoPrevSentence, Editor::cmd_goto_prev_sentence, Key::Char('H')),
     (NormalCmd::AddMark, Editor::cmd_add_mark, Key::Char('M')),
     (NormalCmd::GotoMark, Editor::cmd_goto_mark, Key::Char('\'')),
+    (NormalCmd::GotoMarkExact, |e, _| {
+        e.recall_exact = true;
+        e.pending = Pending::Recall;
+    }, Key::Char('`')),
     (NormalCmd::ViewMode, Editor::cmd_view_mode, Key::Char('z')),
     (NormalCmd::StickyViewMode, Editor::cmd_sticky_view_mode, Key::Char('Z')),
     (NormalCmd::RightBracketMode, |e, cx| e.cmd_bracket_mode(cx.with_key(Key::Char(']'))), Key::Char(']')),
@@ -592,7 +596,7 @@ pub(super) const VIM_NORMAL: &[(Key, NormalCmd, Option<When>)] = &[
     (Key::Char('|'), NormalCmd::GotoColumn, None),
     (Key::Ctrl('r'), NormalCmd::VimRedo, None),
     (Key::Char('X'), NormalCmd::DeleteCharBackward, None),
-    (Key::Char('`'), NormalCmd::GotoMark, None),
+    (Key::Char('`'), NormalCmd::GotoMarkExact, None),
     // helix has no `'`; vim's is the mark's line (under helix the flavour
     // holds it as a yumete key).
     (Key::Char('\''), NormalCmd::GotoMark, None),

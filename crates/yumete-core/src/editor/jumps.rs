@@ -19,15 +19,31 @@ impl Editor {
         let rope = self.current_buffer().rope();
         let line = rope.char_to_line(self.sel.head().min(rope.len_chars()));
         let spot = match self.current_buffer().path() {
-            Some(path) => Spot::InFile(path.to_path_buf(), line),
+            Some(path) => Spot::InFile(path.to_path_buf(), line, self.sel.head() - rope.line_to_char(line)),
             None => Spot::InBuffer(self.current_buffer().id(), self.sel.head()),
         };
         self.marks.insert(name, spot);
         self.status = say!("goto.mark-set", name, self.current_buffer().display_name(), line + 1);
     }
 
-    /// Go back to the place a letter names (`' a`).
-    pub(super) fn go_to_mark(&mut self, name: char) {
+    /// **Where mark `name` stands in this buffer**, if it was set here: the
+    /// end of a vim operator's `'a` and `` `a ``.
+    pub(super) fn mark_here(&self, name: char) -> Option<usize> {
+        let rope = self.current_buffer().rope();
+        match self.marks.get(&name)? {
+            Spot::InFile(path, line, column) if self.current_buffer().path() == Some(path.as_path()) => {
+                let line = (*line).min(rope.len_lines().saturating_sub(1));
+                let width = crate::motion::line_text(rope, line).chars().count();
+                Some(rope.line_to_char(line) + (*column).min(width))
+            }
+            Spot::InBuffer(id, pos) if *id == self.current_buffer().id() => Some((*pos).min(rope.len_chars())),
+            _ => None,
+        }
+    }
+
+    /// Go back to the place a letter names (`' a`): its line, or with
+    /// `exact` the very place (vim's `` ` ``).
+    pub(super) fn go_to_mark(&mut self, name: char, exact: bool) {
         // `''` and ``` `` ```: where the last jump came from, and pressed
         // again, back (vim's).
         if matches!(name, '\'' | '`') {
@@ -66,7 +82,7 @@ impl Editor {
         };
         self.remember_jump();
         match spot {
-            Spot::InFile(path, line) => {
+            Spot::InFile(path, line, _) => {
                 if self.current_buffer().path() != Some(path.as_path()) {
                     if let Err(err) = self.open_file(&path) {
                         self.status = say!("buffer.cannot-open", path.display(), err);
@@ -74,6 +90,9 @@ impl Editor {
                     }
                 }
                 self.move_to_line(line + 1);
+                if let Some(at) = self.mark_here(name).filter(|_| exact) {
+                    self.set_cursor(at);
+                }
                 self.status = say!("goto.mark-in-another-file", name, self.current_buffer().display_name(), line + 1);
             }
             Spot::InBuffer(id, pos) => {

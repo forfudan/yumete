@@ -1170,6 +1170,42 @@ impl Editor {
                 return self.run_vim_step(op, step);
             }
         }
+        // **A mark is a motion** (`:h '`): `d'a` takes the lines from here
+        // to mark `a`, `` d`a `` the characters up to it, not its own.
+        if first.is_none() && matches!(c, '\'' | '`') {
+            self.pending = Pending::VimOperator { op, first: Some(c) };
+            return;
+        }
+        if let Some(quote @ ('\'' | '`')) = first {
+            self.count = None;
+            self.alias_count = None;
+            let Some(at) = self.mark_here(c) else {
+                self.status = say!("goto.no-such-mark", c);
+                return;
+            };
+            let here = self.sel.head();
+            let rope = self.current_buffer().rope();
+            if quote == '\'' {
+                let (a, b) = (rope.char_to_line(here), rope.char_to_line(at));
+                self.do_vim_lines(op, a.min(b), a.max(b));
+                if op == 'd' {
+                    let rope = self.current_buffer().rope();
+                    let at = motion::line_first_non_blank(rope, self.sel.head());
+                    self.move_head(at);
+                    self.sel.set_goal(None);
+                }
+                return;
+            }
+            let (start, end) = (here.min(at), here.max(at));
+            if start == end {
+                if op == 'c' && !self.refuse_readonly() {
+                    self.snapshot();
+                    self.enter_insert();
+                }
+                return;
+            }
+            return self.do_vim(op, motion::Span::Over { anchor: start, head: end - 1 });
+        }
         // A motion still owed a character (`df,`, `di(`) takes this one.
         if let Some(f) = first {
             if let Some(step) = crate::vim::step_for(&f.to_string(), grain, Some(c)) {
@@ -2172,8 +2208,9 @@ impl Editor {
             }
             Pending::Recall => {
                 self.pending = Pending::None;
+                let exact = std::mem::take(&mut self.recall_exact);
                 if let Key::Char(c) = key {
-                    self.go_to_mark(c);
+                    self.go_to_mark(c, exact);
                 }
                 return;
             }

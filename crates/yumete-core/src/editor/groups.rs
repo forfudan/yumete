@@ -925,7 +925,7 @@ pub(super) static GOTO: Group = Group {
         ch('J', NormalCmd::JoinSelectionsNoSpace, "hint.goto.join-without-a-space").when(Only::Vim),
         ch('`', NormalCmd::CaseMode, "action.case-mode").when(Only::Vim).flavor(FlavorItem::CaseMenu),
         // …and vim's own `` g` `` with the case menu off: to a mark.
-        ch('`', NormalCmd::GotoMark, "action.goto-mark").when(Only::Vim),
+        ch('`', NormalCmd::GotoMarkExact, "action.goto-mark-exact").when(Only::Vim),
     ],
     unknown: Unknown::Silent,
     sticky: false,
