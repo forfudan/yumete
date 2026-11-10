@@ -23,7 +23,7 @@ use yumete_cjk::{CategorySegmenter, DictionarySegmenter};
 /// given. A fixture must be the text it was handed.
 fn typed(text: &str) -> Editor {
     let mut ed = Editor::new();
-    ed.current_buffer_mut().set_syntax(crate::syntax::Syntax::Text);
+    ed.current_buffer_mut().set_syntax_by_hand(crate::syntax::Syntax::Text);
     // The text as given: auto-pairs would close every `(` it holds.
     ed.set_auto_pairs(crate::editor::AutoPairs::Off);
     ed.on_key(Key::Char('i'));
@@ -39531,4 +39531,21 @@ fn setlocal_sets_and_shows_this_buffers_options() {
     assert_eq!(ed.tab_stop(), 3);
     ed.execute(":setlocal").unwrap();
     assert!(ed.status().contains("ts=3"), "{}", ed.status());
+}
+
+/// **A new draft carries a `- ` list on** before it is known to be
+/// Markdown; a buffer set to plain text does not.
+#[test]
+fn a_new_draft_carries_a_list_on() {
+    let mut ed = Editor::new();
+    ed.on_key(Key::Char('i'));
+    press(&mut ed, "- a");
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.current_buffer().text(), "- a\n- ");
+    let mut ed = Editor::new();
+    ed.execute(":syntax text").unwrap();
+    ed.on_key(Key::Char('i'));
+    press(&mut ed, "- a");
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.current_buffer().text(), "- a\n", "plain text chosen keeps its dash");
 }

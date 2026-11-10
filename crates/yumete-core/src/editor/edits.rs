@@ -352,8 +352,11 @@ impl Editor {
     pub(super) fn continue_the_list(&mut self) -> bool {
         // Only where a `- ` *is* a list. In a novel it is a dash, and a
         // manuscript that gains markers it did not ask for is worse off than
-        // one that carries none down.
-        if self.syntax() != crate::syntax::Syntax::Markdown {
+        // one that carries none down. A draft whose kind is still guessed as
+        // it is written counts as Markdown: it is guessed again only outside
+        // Insert mode, so its first list would never be carried on.
+        let draft = self.current_buffer().sniffs_as_typed() && self.syntax() == crate::syntax::Syntax::Text;
+        if self.syntax() != crate::syntax::Syntax::Markdown && !draft {
             return false;
         }
         let rope = self.current_buffer().rope();
