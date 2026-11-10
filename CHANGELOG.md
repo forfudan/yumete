@@ -6,6 +6,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Added
 
+- **`:setl` (`:setlocal`)**, vim's, sets the same options as `:set` for this file, and on its own says their values.
 - **With helix's keys, Enter on an empty `:` line runs the last command again**, as helix does; with vim's it still does nothing.
 - **The settings panel's `/` search reads either Chinese script and full pinyin**: 「預覽」 and `yulan` both find 预览字体.
 - **A click gives the window under it the keys**: a text window takes the caret where it was clicked, a preview takes the keys as it is (its frame turns gold), and a click in the text takes the keys back from a sidebar.

@@ -617,6 +617,13 @@ find = "setf filetype 文件类型 文件類型"
 
 
 [[message]]
+# : 命令選單裏 setlocal 那一項的説明(commands 組)（草稿）
+key = "cmd.commands.setlocal"
+zhs = "vim 的 :setlocal，同 :set 那几项，只设当前缓冲区；不带参数则显示它们的值"
+en = "vim's :setlocal: the same options as :set, for this buffer; no argument shows their values"
+find = "setlocal setl ft filetype tabstop shiftwidth expandtab textwidth"
+
+[[message]]
 # : 命令選單裏 settings 那一項的説明(commands 組)（草稿）
 key = "cmd.commands.settings"
 zhs = "设置页：每项附有说明，改了就写入并生效，u 撤销"

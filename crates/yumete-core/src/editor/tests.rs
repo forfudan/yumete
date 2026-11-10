@@ -39521,3 +39521,14 @@ fn a_count_on_dollar_and_an_empty_change_go_as_in_vim() {
         assert_eq!(ed.current_buffer().text(), end, "{keys:?}");
     }
 }
+
+/// **vim's `:setl`** sets this buffer's options as `:set` does, and bare
+/// says what they are rather than opening the settings panel.
+#[test]
+fn setlocal_sets_and_shows_this_buffers_options() {
+    let mut ed = typed_vim("abc\n");
+    ed.execute(":setl ts=3").unwrap();
+    assert_eq!(ed.tab_stop(), 3);
+    ed.execute(":setlocal").unwrap();
+    assert!(ed.status().contains("ts=3"), "{}", ed.status());
+}

@@ -4342,6 +4342,22 @@ pub const COMMANDS: &[Entry] = &[
             })
         }),
     },
+    // vim's `:setlocal`: the same options, which are this buffer's here
+    // too; bare, it says what they are.
+    Entry {
+        name: "setlocal",
+        aliases: &["setl"],
+        help: "cmd.commands.setlocal",
+        needs: &[],
+        params: &[Param::Free("<選項>")],
+        build: Some(|p| {
+            let options = format!("{} {}", p.arg(0).unwrap_or(""), p.rest).trim().to_string();
+            Ok(Command::VimSet(match options.is_empty() {
+                true => "ft? ts? sw? et? tw?".to_string(),
+                false => options,
+            }))
+        }),
+    },
     Entry {
         name: "setfiletype",
         aliases: &["setf"],
