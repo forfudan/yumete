@@ -2624,9 +2624,10 @@ OPTIONS:
         --preview    Print a non-interactive preview instead of the editor.
         --import EDITOR
                      Write another editor's config into yumete's, once, and
-                     exit. helix: its config.toml, the keys, the settings
-                     yumete has and the theme. vim, nvim (or neovim): the
-                     settings, theme and maps yumete can take for certain.
+                     exit. helix: its config.toml, the keys and the
+                     settings yumete has. vim, nvim (or neovim): the
+                     settings and maps yumete can take for certain. No
+                     theme is carried over; pick one with :theme.
                      lazyvim: LazyVim's Space menu, the config the docs site
                      shows, with your own maps and options on top.
                      helix's import runs nothing. vim, nvim and lazyvim start
