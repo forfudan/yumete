@@ -39476,3 +39476,24 @@ fn a_mark_in_a_file_keeps_its_column() {
     assert_eq!(ed.current_buffer().text(), first);
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// **Enter on an empty `:` line runs the last command again** with helix's
+/// keys, as helix's prompt does; with vim's it does nothing.
+#[test]
+fn an_empty_command_line_repeats_the_last_command_with_helix_keys() {
+    let run = |ed: &mut Editor, line: &str| {
+        ed.on_key(Key::Char(':'));
+        press(ed, line);
+        ed.on_key(Key::Enter);
+    };
+    let mut ed = typed("aaa\n");
+    ed.execute(":keymap helix").unwrap();
+    run(&mut ed, "s/a/b/");
+    assert_eq!(ed.current_buffer().text(), "baa\n");
+    run(&mut ed, "");
+    assert_eq!(ed.current_buffer().text(), "bba\n", "the last command again");
+    let mut ed = typed_vim("aaa\n");
+    run(&mut ed, "s/a/b/");
+    run(&mut ed, "");
+    assert_eq!(ed.current_buffer().text(), "baa\n", "vim's does nothing");
+}

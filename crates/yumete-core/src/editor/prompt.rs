@@ -575,6 +575,10 @@ impl Editor {
                 let line = std::mem::take(&mut self.command_line);
                 self.command_caret = 0;
                 self.mode = Mode::Normal;
+                let line = match line.is_empty() && !self.settings_open && self.keymap_rules().empty_command_repeats {
+                    true => self.command_history.last().cloned().unwrap_or_default(),
+                    false => line,
+                };
                 // Not what is typed on the settings panel: its
                 // `:w` and `:q` are the panel's, and walking back through the
                 // editor's history should not step on them.

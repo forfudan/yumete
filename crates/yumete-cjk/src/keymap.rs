@@ -57,6 +57,9 @@ pub struct Rules {
     pub yank_every_selection: bool,
     /// A character delete stays on its line (vim's `x`).
     pub delete_stays_in_line: bool,
+    /// Enter on an empty `:` line runs the last command again (helix's);
+    /// vim's does nothing.
+    pub empty_command_repeats: bool,
 }
 
 impl Rules {
@@ -76,6 +79,7 @@ impl Rules {
         undo_at_typing_start: true,
         yank_every_selection: true,
         delete_stays_in_line: false,
+        empty_command_repeats: true,
     };
 
     pub const VIM: Rules = Rules {
@@ -94,6 +98,7 @@ impl Rules {
         undo_at_typing_start: false,
         yank_every_selection: false,
         delete_stays_in_line: true,
+        empty_command_repeats: false,
     };
 }
 
