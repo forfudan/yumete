@@ -2254,7 +2254,7 @@ impl Editor {
                     return self.rewrite_comment_spans(&spans, crate::comment::toggle_spans(&text_of(&spans), marks.0, marks.1), None);
                 }
                 // **Whole lines in prose: one pair on lines of their own**
-                // (the flavour's `block_comment_lines`).
+                // (`[editor] block_comment_lines`).
                 let prose = matches!(
                     syntax,
                     crate::syntax::Syntax::Markdown | crate::syntax::Syntax::Typst | crate::syntax::Syntax::Code(crate::code::Language::Html)
@@ -2264,7 +2264,7 @@ impl Editor {
                         && (b == rope.len_chars() || b == rope.line_to_char(rope.char_to_line(b)))
                 });
                 let several = spans.iter().any(|&(a, b, _)| rope.slice(a..b).to_string().trim_end().contains('\n'));
-                if prose && lines_only && several && self.flavor_on(yumete_cjk::FlavorItem::BlockCommentLines) {
+                if prose && lines_only && several && self.block_comment_lines {
                     let texts = text_of(&whole);
                     if crate::comment::would_nest(&texts, marks.0, marks.1) {
                         self.status = say!("comment.would-nest");

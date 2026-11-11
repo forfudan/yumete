@@ -3088,6 +3088,11 @@ pub struct Editor {
     recall_exact: bool,
     /// The `:` line was opened by vim's `:` from Visual mode.
     line_from_visual: bool,
+    /// `[editor] heading_folds`: each heading folds its section.
+    heading_folds: bool,
+    /// `[editor] block_comment_lines`: a block comment over whole lines in
+    /// prose puts its marks on lines of their own.
+    block_comment_lines: bool,
     /// Which buffer the command started in, and that buffer's revision.
     ///
     /// The buffer too: after `gn` the revision belongs to a *different* file,
@@ -4539,6 +4544,8 @@ impl Editor {
             edit_visual: None,
             recall_exact: false,
             line_from_visual: false,
+            heading_folds: true,
+            block_comment_lines: true,
             edit_revision: (0, 0),
             last_edit_keys: Vec::new(),
             edit_was_insert: false,

@@ -159,6 +159,14 @@ pub struct EditorConfig {
     /// it; `--import lazyvim` turns it on, as LazyVim does. Under vim `yap`
     /// and `yis` copy what was never shown selected.
     pub yank_flash: bool,
+    /// **Every Markdown and Typst heading is a fold over its section**, all
+    /// open at first; off, folds are only those made with `zf`.
+    pub heading_folds: bool,
+    /// **`Space C` over whole lines in Markdown, Typst or HTML** puts one
+    /// pair of marks on lines of their own at the lines' indent; off,
+    /// helix's: the marks inline at the first line's start and the last
+    /// line's end. Code is helix's either way.
+    pub block_comment_lines: bool,
     /// **helix's indent guides** (`[editor.indent-guides]`
     /// there, flattened as `soft_wrap` is): a rule at each level of a code
     /// line's leading blanks. Off, as helix has it. Code files only; never
@@ -526,6 +534,8 @@ impl Default for EditorConfig {
             preview_vertical: true,
             preview_font_family: String::new(),
             yank_flash: false,
+            heading_folds: true,
+            block_comment_lines: true,
             indent_guides: false,
             indent_guides_character: "│".to_string(),
             indent_guides_skip_levels: 0,
@@ -4006,6 +4016,9 @@ impl Config {
         Some(other) => problems.push(one_of("[keys] flavor", &other.to_string(), FlavorLevel::NAMES)),
     }
     for (id, on) in &raw.keys.flavor_items {
+        if FLAVOR_ITEMS_AS_SETTINGS.contains(&id.as_str()) && on.is_bool() {
+            continue;
+        }
         if FlavorItem::parse(id).is_none() {
             let ids = FlavorItem::ids();
             problems.push(said(
@@ -4588,6 +4601,10 @@ pub fn local_config_path(root: &Path) -> Option<PathBuf> {
 
 // ---- Raw (as-parsed) config with per-field merge -------------------------
 
+/// **`[editor]` settings also read under `[keys.flavor_items]`**, as the
+/// setting.
+const FLAVOR_ITEMS_AS_SETTINGS: &[&str] = &["heading_folds", "block_comment_lines"];
+
 /// `[editor] tatechuyoko`, as the file spells it.
 ///
 /// **Two shapes, one of them refused.** It is a count, and a `bool` is still
@@ -4735,6 +4752,8 @@ struct RawEditor {
     preview_vertical: Option<bool>,
     preview_font_family: Option<String>,
     yank_flash: Option<bool>,
+    heading_folds: Option<bool>,
+    block_comment_lines: Option<bool>,
     indent_guides: Option<bool>,
     indent_guides_character: Option<String>,
     indent_guides_skip_levels: Option<usize>,
@@ -4940,6 +4959,12 @@ impl RawConfig {
         }
         if other.editor.yank_flash.is_some() {
             self.editor.yank_flash = other.editor.yank_flash;
+        }
+        if other.editor.heading_folds.is_some() {
+            self.editor.heading_folds = other.editor.heading_folds;
+        }
+        if other.editor.block_comment_lines.is_some() {
+            self.editor.block_comment_lines = other.editor.block_comment_lines;
         }
         if other.editor.indent_guides.is_some() {
             self.editor.indent_guides = other.editor.indent_guides;
@@ -5389,6 +5414,12 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.yank_flash {
             config.editor.yank_flash = on;
+        }
+        if let Some(on) = self.editor.heading_folds {
+            config.editor.heading_folds = on;
+        }
+        if let Some(on) = self.editor.block_comment_lines {
+            config.editor.block_comment_lines = on;
         }
         if let Some(on) = self.editor.indent_guides {
             config.editor.indent_guides = on;
@@ -5965,6 +5996,15 @@ impl RawConfig {
             if let (Some(item), Some(on)) = (FlavorItem::parse(id), on.as_bool()) {
                 config.keys.flavor.items.insert(item, on);
             }
+            // A setting written under `[keys.flavor_items]` is read as the
+            // setting, unless `[editor]` says otherwise.
+            match (id.as_str(), on.as_bool()) {
+                ("heading_folds", Some(on)) if self.editor.heading_folds.is_none() => config.editor.heading_folds = on,
+                ("block_comment_lines", Some(on)) if self.editor.block_comment_lines.is_none() => {
+                    config.editor.block_comment_lines = on
+                }
+                _ => {}
+            }
         }
         if let Some(on) = self.keys.inherit.as_ref().and_then(toml::Value::as_bool) {
             config.keys.inherit = on;
@@ -6525,6 +6565,20 @@ args = [\"lsp\"]
 
 #[cfg(test)]
 mod tests {
+    /// **`heading_folds` and `block_comment_lines` are `[editor]`
+    /// settings**, on by default; written under `[keys.flavor_items]` they
+    /// are read as the setting without a complaint, and `[editor]` wins.
+    #[test]
+    fn heading_folds_and_block_comment_lines_are_settings_read_where_they_were() {
+        let (c, said) = Config::from_toml_saying("");
+        assert!(c.editor.heading_folds && c.editor.block_comment_lines && said.is_empty());
+        let (c, said) = Config::from_toml_saying("[keys.flavor_items]\nheading_folds = false\nblock_comment_lines = false\n");
+        assert!(!c.editor.heading_folds && !c.editor.block_comment_lines, "under [keys.flavor_items]");
+        assert!(said.is_empty(), "{said:?}");
+        let (c, _) = Config::from_toml_saying("[editor]\nheading_folds = true\n[keys.flavor_items]\nheading_folds = false\n");
+        assert!(c.editor.heading_folds, "[editor] wins");
+    }
+
     /// A Homebrew install must find `yume-data` on **both** platforms.
     ///
     /// The two formulae meet in `<prefix>/share/yumete` and nowhere else. On

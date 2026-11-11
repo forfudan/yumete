@@ -59,7 +59,7 @@ impl Editor {
     /// the window or a fold changed.
     pub(super) fn fold_view(&self) -> std::cell::Ref<'_, FoldView> {
         let buffer = self.current_buffer();
-        let headings = self.flavor_on(yumete_cjk::FlavorItem::HeadingFolds) && self.lists_here();
+        let headings = self.heading_folds && self.lists_here();
         let key = (buffer.id(), buffer.revision(), self.folds_window(), self.fold_generation, headings, buffer.syntax());
         // **The outline waits for Normal mode**: while typing, a view that
         // differs only by the edit stands, so a key typed does not rebuild the

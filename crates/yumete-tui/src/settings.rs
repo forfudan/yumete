@@ -564,6 +564,8 @@ fn apply_to_editor(config: &Config, editor: &mut Editor, layout: Option<yumete_c
     editor.set_tab_spaces(config.editor.tab_spaces);
     editor.set_tab_stop(config.editor.tab_width);
     editor.set_tatechuyoko(config.editor.tatechuyoko);
+    editor.set_heading_folds(config.editor.heading_folds);
+    editor.set_block_comment_lines(config.editor.block_comment_lines);
     editor.set_vertical_keys(config.editor.vertical_keys);
     editor.set_code_colours(config.editor.code_highlight);
     editor.set_hanging_punctuation(config.editor.hanging_punctuation);

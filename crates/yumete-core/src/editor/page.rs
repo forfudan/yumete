@@ -592,6 +592,19 @@ impl Editor {
     }
 
     /// How many half-width characters share a slot (緃中横); `0` for none.
+    /// `[editor] heading_folds`.
+    pub fn set_heading_folds(&mut self, on: bool) {
+        if self.heading_folds != on {
+            self.heading_folds = on;
+            self.fold_generation += 1;
+        }
+    }
+
+    /// `[editor] block_comment_lines`.
+    pub fn set_block_comment_lines(&mut self, on: bool) {
+        self.block_comment_lines = on;
+    }
+
     pub fn set_tatechuyoko(&mut self, at_most: usize) {
         self.tatechuyoko = at_most.min(crate::zong::TATECHUYOKO_MAX);
     }

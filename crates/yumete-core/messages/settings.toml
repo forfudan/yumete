@@ -149,6 +149,18 @@ en = "keep a copy beside unsaved files to recover from a crash"
 
 
 [[message]]
+# 設置面板：整行塊注釋的標記各占一行
+key = "settings.editor.block-comment-lines"
+zhs = "块注释标记各占一行"
+en = "block comment marks on their own lines"
+
+[[message]]
+# 設置面板說明
+key = "settings.editor.block-comment-lines.hint"
+zhs = "开：在 Markdown、Typst、HTML 中用 空格 C 注释多行时，<!-- 和 --> 各占一行。关：同 helix，标记放在首行开头和末行结尾。"
+en = "On: Space C over several whole lines in Markdown, Typst or HTML puts <!-- and --> on lines of their own. Off: as in helix, the marks go at the first line's start and the last line's end."
+
+[[message]]
 # 設置：字的码位
 key = "settings.editor.char-info"
 zhs = "字符信息"
@@ -255,6 +267,18 @@ en = "hard-wrap width"
 key = "settings.editor.hard-wrap.hint"
 zhs = ":hard-wrap 不带数字时用的宽度；改的是文件里的换行，不是显示"
 en = "what a bare :hard-wrap fills to; it rewrites the file's line breaks, not the display"
+
+[[message]]
+# 設置面板：標題折疊
+key = "settings.editor.heading-folds"
+zhs = "按标题折叠"
+en = "folds by heading"
+
+[[message]]
+# 設置面板：標題折疊的說明
+key = "settings.editor.heading-folds.hint"
+zhs = "开：Markdown 和 Typst 每个标题下的一节可以折叠，初始全部展开。关：同 vim，只有 zf 建的折叠。"
+en = "On: each Markdown or Typst heading folds its section; all start open. Off: vim's, only folds made with zf."
 
 [[message]]
 # 設置：首行縮進

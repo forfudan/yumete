@@ -368,33 +368,6 @@ flavor_items! {
         label: "keys.flavor.item.d-to-line-end",
         hint: "keys.flavor.item.d-to-line-end.hint",
     },
-    /// `Space C` over whole lines in Markdown, Typst or HTML puts one pair of
-    /// marks on lines of their own at the lines' indent (yumete's shape); off,
-    /// helix's: the marks inline at the
-    /// first line's start and the last line's end. Code is helix's either way.
-    BlockCommentLines => ItemInfo {
-        id: "block_comment_lines",
-        level: FlavorLevel::Basic,
-        keymaps: &[KeyPreset::Helix, KeyPreset::Vim],
-        keys: &[" C"],
-        vim_keys: None,
-        insert: false,
-        label: "keys.flavor.item.block-comment-lines",
-        hint: "keys.flavor.item.block-comment-lines.hint",
-    },
-    /// Every Markdown and Typst heading is a fold over its section, all
-    /// open at first; off, vim's own
-    /// default: folds are only those made with `zf`.
-    HeadingFolds => ItemInfo {
-        id: "heading_folds",
-        level: FlavorLevel::Basic,
-        keymaps: &[KeyPreset::Helix, KeyPreset::Vim],
-        keys: &[],
-        vim_keys: None,
-        insert: false,
-        label: "keys.flavor.item.heading-folds",
-        hint: "keys.flavor.item.heading-folds.hint",
-    },
     /// vim's `za` `zR` `zM` `zf` under helix, on `z` keys helix
     /// leaves free: helix has no folds, and the heading folds have no keys
     /// there otherwise. `zf` folds the selection's lines, helix's way round.

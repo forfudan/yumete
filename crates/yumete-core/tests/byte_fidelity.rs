@@ -205,7 +205,7 @@ fn joining_two_lines_takes_the_whole_break_however_long_it_is() {
 /// **A block comment must not write its two marks in the other kind of line.**
 ///
 /// `空格 C` over more than one line of prose puts `<!--` and `-->` on lines
-/// of their own (the flavour's `block_comment_lines`). Built with a literal
+/// of their own (`[editor] block_comment_lines`). Built with a literal
 /// `\n`, those two lines would leave a CRLF manuscript with two kinds of line
 /// in it, invisibly: the page strips `\r` either way. Code is commented inline, as
 /// helix does, and keeps its endings too.

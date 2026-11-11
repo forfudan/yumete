@@ -2574,18 +2574,6 @@ zhs = "开：G 不带数字时到末行行首，带数字到该行。关：同 h
 en = "On: G with no count goes to the start of the last line; with a count, to that line. Off: helix's G, which does nothing without a count."
 
 [[message]]
-# 風味項：整行塊注釋的標記各占一行
-key = "keys.flavor.item.block-comment-lines"
-zhs = "块注释标记各占一行"
-en = "block comment marks on their own lines"
-
-[[message]]
-# 風味項說明
-key = "keys.flavor.item.block-comment-lines.hint"
-zhs = "开：在 Markdown、Typst、HTML 中用 空格 C 注释多行时，<!-- 和 --> 各占一行。关：同 helix，标记放在首行开头和末行结尾。"
-en = "On: Space C over several whole lines in Markdown, Typst or HTML puts <!-- and --> on lines of their own. Off: as in helix, the marks go at the first line's start and the last line's end."
-
-[[message]]
 # 風味的一項：設置面板上的名字
 key = "keys.flavor.item.case-menu"
 zhs = "大小写与繁简菜单"
@@ -2669,18 +2657,6 @@ key = "keys.flavor.item.goto-extras.hint"
 zhs = "开：gz 按前两个字母跳转，gZ 按拼音跳转，g/ 搜索光标处的词，gL 打开任意链接；helix 下 gx 用浏览器打开网址，vim 下 gW 显示跳转标签。关：未绑定。"
 en = "On: gz jumps by first letters, gZ by pinyin, g/ searches the word under the cursor, gL follows any link; under helix gx opens a web address, under vim gW is the jump labels. Off: unbound."
 
-
-[[message]]
-# 風味項：標題折疊
-key = "keys.flavor.item.heading-folds"
-zhs = "按标题折叠"
-en = "folds by heading"
-
-[[message]]
-# 風味項：標題折疊的說明
-key = "keys.flavor.item.heading-folds.hint"
-zhs = "开：Markdown 和 Typst 每个标题下的一节可以折叠，初始全部展开。关：同 vim，只有 zf 建的折叠。"
-en = "On: each Markdown or Typst heading folds its section; all start open. Off: vim's, only folds made with zf."
 
 [[message]]
 # 風味項：helix 下的折疊鍵

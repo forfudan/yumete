@@ -16215,9 +16215,15 @@ fn comment_keys_follow_helix_and_keep_the_stand_off_shape_in_prose() {
     assert_eq!(text(&ed), "<!--\n甲。\n乙。\n-->\n");
     type_keys(&mut ed, " C");
     assert_eq!(text(&ed), "甲。\n乙。\n", "and back");
-    // Off, helix's inline shape.
+    // Off (`[editor] block_comment_lines = false`), helix's inline shape;
+    // the flavour has no say in it.
     let mut ed = markdown("甲。\n乙。\n");
     ed.set_flavor_level(yumete_cjk::FlavorLevel::Off);
+    press(&mut ed, "xx");
+    type_keys(&mut ed, " C");
+    assert_eq!(text(&ed), "<!--\n甲。\n乙。\n-->\n", "flavour off, setting on");
+    let mut ed = markdown("甲。\n乙。\n");
+    ed.set_block_comment_lines(false);
     press(&mut ed, "xx");
     type_keys(&mut ed, " C");
     assert_eq!(text(&ed), "<!-- 甲。\n乙。 -->\n");
@@ -35952,8 +35958,11 @@ fn headings_fold_their_sections_per_window() {
         assert!(!ed.fold_head(4) && !ed.line_is_folded(6), "drawn with its own folds");
     }
     assert!(ed.fold_head(4));
-    // Off: only `zf`'s.
+    // The flavour has no say in it; `[editor] heading_folds = false` leaves
+    // only `zf`'s.
     ed.execute(":keymap-yumete-flavor off").unwrap();
+    assert!(ed.fold_head(4), "flavour off, setting on");
+    ed.set_heading_folds(false);
     assert!(!ed.fold_head(4) && !ed.line_is_folded(6));
     press(&mut ed, "zc");
     assert_eq!(ed.status(), say!("fold.none-here"));
