@@ -52,6 +52,9 @@ pub(super) enum Only {
     Block,
     Md,
     File,
+    /// Another flavour item is on as well: a flavour row that two items
+    /// shape together.
+    Also(FlavorItem),
 }
 
 /// What a group's row is answered by.
@@ -358,6 +361,7 @@ impl Context {
             Only::Block => self.table == Some(Bounds::Block),
             Only::Md => self.table == Some(Bounds::Md),
             Only::File => self.table == Some(Bounds::WholeFile),
+            Only::Also(item) => self.has(Some(item)),
         }
     }
 

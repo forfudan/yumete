@@ -448,6 +448,11 @@ pub(super) const HELIX_NORMAL: &[(Key, NormalCmd)] = &[
 /// keymap only is said by the item, not by the row.
 pub(super) const FLAVOR_NORMAL: &[(Key, NormalCmd, FlavorItem, super::groups::Only)] = &[
     (Key::Char('`'), NormalCmd::CaseMode, FlavorItem::CaseMenu, Only::Helix),
+    // `d` and `c` delete without filling the register, `A-d` and `A-c` cut.
+    (Key::Char('d'), NormalCmd::DeleteSelectionNoyank, FlavorItem::DeleteKeepsRegister, Only::Always),
+    (Key::Char('c'), NormalCmd::ChangeSelectionNoyank, FlavorItem::DeleteKeepsRegister, Only::Always),
+    (Key::Alt('d'), NormalCmd::DeleteSelection, FlavorItem::DeleteKeepsRegister, Only::Always),
+    (Key::Alt('c'), NormalCmd::ChangeSelection, FlavorItem::DeleteKeepsRegister, Only::Always),
     (Key::Char('L'), NormalCmd::GotoNextSentence, FlavorItem::SentencesOnHL, Only::Always),
     (Key::Char('H'), NormalCmd::GotoPrevSentence, FlavorItem::SentencesOnHL, Only::Always),
     (Key::Char('M'), NormalCmd::AddMark, FlavorItem::MarksOnMQuote, Only::Always),
@@ -460,6 +465,9 @@ pub(super) const FLAVOR_NORMAL: &[(Key, NormalCmd, FlavorItem, super::groups::On
     (Key::Alt('k'), NormalCmd::MoveSelectedLinesUp, FlavorItem::MoveLines, Only::Always),
     (Key::Char('0'), NormalCmd::GotoLineStart, FlavorItem::LineStartKeys, Only::Always),
     (Key::Char('^'), NormalCmd::GotoFirstNonwhitespace, FlavorItem::LineStartKeys, Only::Always),
+    // With `delete_keeps_register` too, `D` follows `d` and `A-D` `A-d`.
+    (Key::Char('D'), NormalCmd::DeleteToLineEndNoyank, FlavorItem::DToLineEnd, Only::Also(FlavorItem::DeleteKeepsRegister)),
+    (Key::Alt('D'), NormalCmd::DeleteToLineEnd, FlavorItem::DToLineEnd, Only::Also(FlavorItem::DeleteKeepsRegister)),
     (Key::Char('D'), NormalCmd::DeleteToLineEnd, FlavorItem::DToLineEnd, Only::Always),
     (Key::Alt('D'), NormalCmd::DeleteToLineEndNoyank, FlavorItem::DToLineEnd, Only::Always),
     (Key::Esc, NormalCmd::NormalModeAndCollapse, FlavorItem::EscCollapses, Only::Always),
@@ -1769,11 +1777,10 @@ impl Editor {
         // `D` 被別名成 `d$`（`yumete-cjk/src/keymap.rs`），所以原生的 `D` 只在
         // 別名展開裏出現，而 vim 的 `x` 展開成 `;{n}D`，vim 的 `x` 就是進寄存
         // 器的。
-        // **開關關掉就對調**（`:yank-on-delete`）：`d`/`c` 刪
-        // 而不進，`A-d`/`A-c` 變成剪的那一對。寫了 `[keys.normal]` 那四行
-        // 的人走不到這裏——別名那一層在前面就把鍵換掉了。
-        let alt = matches!(key, Key::Alt('d') | Key::Alt('c'));
-        let cut = alt != self.yank_on_delete();
+        // **The action says whether it cuts**: `delete_selection` does,
+        // `delete_selection_noyank` does not. The flavour's
+        // `delete_keeps_register` swaps which key runs which.
+        let cut = !matches!(key, Key::Alt('d') | Key::Alt('c'));
         let op = match matches!(key, Key::Char('c') | Key::Alt('c')) {
             true => motion::Operator::Change { cut },
             false => match cut {
