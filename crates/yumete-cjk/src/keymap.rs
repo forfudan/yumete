@@ -38,8 +38,26 @@ pub struct Rules {
     /// Text objects follow vim's rules: a pair found ahead on the line, no
     /// second quote outward for a count.
     pub vim_text_objects: bool,
-    /// `"0` holds the last yank and `"1`–`"9` the last deletes of a line.
-    pub numbered_registers: bool,
+    /// vim's registers: `"0` holds the last yank and `"1`–`"9` the last
+    /// deletes of a line, an upper-case name (`"A`, `qA`) adds to its
+    /// register, and a register keeps whether it was taken by lines or by
+    /// characters.
+    pub vim_registers: bool,
+    /// vim's page: the view follows the cursor as nvim's `update_topline`
+    /// does (`scrolloff`, a far jump centred, `zt` `zz` `zb` with a count,
+    /// `C-d` keeping its count).
+    pub vim_scrolling: bool,
+    /// vim's jump list: one entry for a line, a closed file opened again by
+    /// its name, the cursor alone brought back.
+    pub vim_jump_list: bool,
+    /// vim's indent keys in Insert mode: Backspace in the indent takes a
+    /// level, Tab in the indent goes to the next `shiftwidth`
+    /// (`smarttab`), and an indent left empty goes when Insert ends.
+    pub vim_indent_keys: bool,
+    /// A search moves the caret to the match's first character, and in
+    /// Visual mode grows the one selection; helix's selects the match and
+    /// adds it as a selection of its own.
+    pub search_moves_caret: bool,
     /// Leaving Insert puts the caret back one.
     pub step_back_after_insert: bool,
     /// `r` replaces count characters from the caret, and `.` repeats the
@@ -71,7 +89,11 @@ impl Rules {
         find_moves_caret: false,
         vim_text_motions: false,
         vim_text_objects: false,
-        numbered_registers: false,
+        vim_registers: false,
+        vim_scrolling: false,
+        vim_jump_list: false,
+        vim_indent_keys: false,
+        search_moves_caret: false,
         step_back_after_insert: false,
         replace_from_caret: false,
         read_below_the_line: false,
@@ -82,6 +104,33 @@ impl Rules {
         empty_command_repeats: true,
     };
 
+    /// **Every rule by its name**, the message that says what it does, and
+    /// its value: what `:keymap-actions` and the docs list.
+    pub fn list(&self) -> [(&'static str, &'static str, bool); 20] {
+        [
+            ("vim_tables", "keys.rule.vim-tables", self.vim_tables),
+            ("caret_off_newline", "keys.rule.caret-off-newline", self.caret_off_newline),
+            ("find_in_line", "keys.rule.find-in-line", self.find_in_line),
+            ("till_stands_still", "keys.rule.till-stands-still", self.till_stands_still),
+            ("find_moves_caret", "keys.rule.find-moves-caret", self.find_moves_caret),
+            ("vim_text_motions", "keys.rule.vim-text-motions", self.vim_text_motions),
+            ("vim_text_objects", "keys.rule.vim-text-objects", self.vim_text_objects),
+            ("vim_registers", "keys.rule.vim-registers", self.vim_registers),
+            ("vim_scrolling", "keys.rule.vim-scrolling", self.vim_scrolling),
+            ("vim_jump_list", "keys.rule.vim-jump-list", self.vim_jump_list),
+            ("vim_indent_keys", "keys.rule.vim-indent-keys", self.vim_indent_keys),
+            ("search_moves_caret", "keys.rule.search-moves-caret", self.search_moves_caret),
+            ("step_back_after_insert", "keys.rule.step-back-after-insert", self.step_back_after_insert),
+            ("replace_from_caret", "keys.rule.replace-from-caret", self.replace_from_caret),
+            ("read_below_the_line", "keys.rule.read-below-the-line", self.read_below_the_line),
+            ("undo_restores_every_cursor", "keys.rule.undo-restores-every-cursor", self.undo_restores_every_cursor),
+            ("undo_at_typing_start", "keys.rule.undo-at-typing-start", self.undo_at_typing_start),
+            ("yank_every_selection", "keys.rule.yank-every-selection", self.yank_every_selection),
+            ("delete_stays_in_line", "keys.rule.delete-stays-in-line", self.delete_stays_in_line),
+            ("empty_command_repeats", "keys.rule.empty-command-repeats", self.empty_command_repeats),
+        ]
+    }
+
     pub const VIM: Rules = Rules {
         vim_tables: true,
         caret_off_newline: true,
@@ -90,7 +139,11 @@ impl Rules {
         find_moves_caret: true,
         vim_text_motions: true,
         vim_text_objects: true,
-        numbered_registers: true,
+        vim_registers: true,
+        vim_scrolling: true,
+        vim_jump_list: true,
+        vim_indent_keys: true,
+        search_moves_caret: true,
         step_back_after_insert: true,
         replace_from_caret: true,
         read_below_the_line: true,

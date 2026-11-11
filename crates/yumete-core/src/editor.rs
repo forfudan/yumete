@@ -4966,7 +4966,7 @@ impl Editor {
     /// Whether the page stays where a vim scroll left it, the cursor not
     /// having moved since (see `page_inset`).
     pub fn holds_the_page(&self) -> bool {
-        self.vim_keymap() && self.scrolled_at.get() == Some((self.sel.head(), self.current_buffer().revision()))
+        self.keymap_rules().vim_scrolling && self.scrolled_at.get() == Some((self.sel.head(), self.current_buffer().revision()))
     }
 
     /// `before`: whether a cursor off the page is above it.
@@ -4999,7 +4999,7 @@ impl Editor {
             // land where its scrolling functions count them to, a line or
             // two off any rule near the file's ends (see `vim_view`).
             let asked = self.scrolloff_asked.get().filter(|&so| 2 * so > last);
-            if let (true, Some(so), Aim::Top | Aim::Middle | Aim::Bottom) = (self.vim_keymap(), asked, aim) {
+            if let (true, Some(so), Aim::Top | Aim::Middle | Aim::Bottom) = (self.keymap_rules().vim_scrolling, asked, aim) {
                 let lines = crate::motion::last_line(self.current_buffer().rope()) + 1;
                 return Some(vim_view::z_row(aim, self.cursor_line(), lines, last + 1, so).min(last));
             }
@@ -5008,7 +5008,7 @@ impl Editor {
                 Aim::Middle => last / 2,
                 // vim never scrolls past the file's end for `zb`: the margin below is no more than the lines
                 // there are.
-                Aim::Bottom if self.vim_keymap() => {
+                Aim::Bottom if self.keymap_rules().vim_scrolling => {
                     let rope = self.current_buffer().rope();
                     let after = crate::motion::last_line(rope).saturating_sub(self.cursor_line());
                     last.saturating_sub(scrolloff.min(after))
@@ -5021,7 +5021,7 @@ impl Editor {
                 // Under vim the scrolls kept scrolloff themselves, and at
                 // the ends of the file none is kept (nvim's
                 // `cursor_correct`); the page stops at the file's end.
-                Aim::Row(row) if self.vim_keymap() => row.min(last),
+                Aim::Row(row) if self.keymap_rules().vim_scrolling => row.min(last),
                 Aim::Row(row) => row.max(scrolloff).min(last.saturating_sub(scrolloff)),
             });
         }
@@ -5030,7 +5030,7 @@ impl Editor {
         // leaves the last line at the top, inside scrolloff, and a count
         // typed next must not pull the page back.
         let here = (self.sel.head(), self.current_buffer().revision());
-        if self.vim_keymap() && distance.is_some() && !self.typewriter && self.scrolled_at.get() == Some(here) {
+        if self.keymap_rules().vim_scrolling && distance.is_some() && !self.typewriter && self.scrolled_at.get() == Some(here) {
             return None;
         }
         // Typewriter: the row being written stays in the middle and the paper
@@ -5038,7 +5038,7 @@ impl Editor {
         if self.typewriter {
             return Some(last / 2);
         }
-        let vim = self.vim_keymap();
+        let vim = self.keymap_rules().vim_scrolling;
         let centres = match self.centring {
             Some(Centring::OffPage) => true,
             // Until the cursor moves on (the wheel moves it with no key).

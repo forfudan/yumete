@@ -491,7 +491,7 @@ impl Editor {
     /// last line.
     fn screen_line_kept(&self, which: char, nth: usize) -> Option<usize> {
         let mut rows = self.page_rows()?;
-        let vim = self.vim_keymap();
+        let vim = self.keymap_rules().vim_scrolling;
         let end = self.last_row_end();
         if vim {
             while rows.len() > 1 && rows.last().is_some_and(|r| r.start > end) {
@@ -552,7 +552,7 @@ impl Editor {
     pub(super) fn scroll_the_page(&mut self, down: bool, n: usize) {
         let Some(rows) = self.page_rows() else { return };
         let height = self.window_rows(rows.len());
-        let vim = self.vim_keymap();
+        let vim = self.keymap_rules().vim_scrolling;
         let so = self.scrolloff_seen.get().min(height.saturating_sub(1) / 2);
         // vim's half below rounds up (`cursor_correct`; see `vim_margins`).
         let (above, below) = match vim {
@@ -633,7 +633,7 @@ impl Editor {
             return false;
         };
         let height = self.window_rows(rows.len());
-        if self.vim_keymap() {
+        if self.keymap_rules().vim_scrolling {
             self.vim_turn_a_page(down, count, &rows, height);
             return true;
         }
@@ -946,7 +946,7 @@ impl Editor {
     /// first as a jump, the column kept (`nv_zet`, measured in nvim). helix's
     /// take no count.
     pub(super) fn vim_aim_at_line(&mut self, count: Option<usize>) {
-        let Some(n) = count.filter(|_| self.vim_keymap()) else { return };
+        let Some(n) = count.filter(|_| self.keymap_rules().vim_scrolling) else { return };
         let rope = self.current_buffer().rope();
         let line = n.saturating_sub(1).min(motion::last_line(rope));
         let here = rope.char_to_line(self.sel.head());
@@ -1072,7 +1072,7 @@ impl Editor {
     pub(super) fn go_to_screen(&mut self, which: char, nth: usize) {
         let Some(line) = self.screen_line_kept(which, nth) else { return };
         // vim's `H` `M` `L` are jumps; helix's `gt` `gc` `gb` are not.
-        if !self.vim_keymap() {
+        if !self.keymap_rules().vim_scrolling {
             self.jumped = true;
             self.move_to_line(line + 1);
             return;
@@ -1097,7 +1097,7 @@ impl Editor {
     /// (`getvcol`), so `0` on a tab-indented line and then `k` or `gg`
     /// lands under the tab's end (as in nvim).
     fn stands_at_tab_end(&self, rope: &ropey::Rope, head: usize) -> bool {
-        self.as_vim() && self.mode == Mode::Normal && !self.extend && rope.get_char(head) == Some('\t')
+        self.keymap_rules().caret_off_newline && self.mode == Mode::Normal && !self.extend && rope.get_char(head) == Some('\t')
     }
 
     /// The column the cursor at `head` stands at in the page's measure `m`

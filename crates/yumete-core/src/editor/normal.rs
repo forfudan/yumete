@@ -2337,7 +2337,7 @@ impl Editor {
     /// view standing still. There the cursor moves
     /// and the grid follows it, as helix's does.
     fn half_page(&mut self, back: bool, count: Option<usize>) {
-        if self.vim_keymap()
+        if self.keymap_rules().vim_scrolling
             && self.layout() == Layout::Horizontal
             && !self.sel.is_plural()
             && !self.table_here()
@@ -2345,7 +2345,7 @@ impl Editor {
         {
             return;
         }
-        let count = match self.vim_keymap() {
+        let count = match self.keymap_rules().vim_scrolling {
             true => count.unwrap_or(1),
             false => 1,
         };

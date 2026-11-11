@@ -4828,7 +4828,7 @@ impl Editor {
             // vim's own: a bare `d` does not empty the cell, `dd` does.
             // `A-d` / `A-c` stay one stroke, and the helix preset is untouched.
             Key::Char(op @ ('d' | 'c' | 'y'))
-                if self.as_vim()
+                if self.vim_keymap()
                     && !self.extend
                     && self.sel.anchor() == self.sel.head() =>
             {
@@ -6787,7 +6787,7 @@ impl Editor {
         // The match itself becomes the selection, exactly as `/` leaves it —
         // on its last grapheme, not one past it; under vim the cursor stands
         // on the match's first character, as vim's `/` and `*` leave it.
-        let head = if self.as_vim() { from } else { head };
+        let head = if self.keymap_rules().search_moves_caret { from } else { head };
         self.sel.set_anchor(from);
         self.sel.set_head(head);
         self.extend = false;

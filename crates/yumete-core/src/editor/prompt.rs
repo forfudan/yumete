@@ -375,7 +375,7 @@ impl Editor {
         if self.delete_an_empty_pair() {
             return;
         }
-        if self.vim_keymap() && self.vim_backspace_in_the_indent() {
+        if self.keymap_rules().vim_indent_keys && self.vim_backspace_in_the_indent() {
             return;
         }
         self.delete_before_cursor();
@@ -443,7 +443,7 @@ impl Editor {
         // text; this keeps `sw`, as nvim's `softtabstop=-1` does: there is no
         // 'softtabstop' here, and at the factory `ts=8 sw=4` one Tab would
         // jump eight columns.
-        if the_files && self.vim_keymap() && !self.tab_spaces() && self.indent_width() != self.tab_stop() {
+        if the_files && self.keymap_rules().vim_indent_keys && !self.tab_spaces() && self.indent_width() != self.tab_stop() {
             if let Some((start, cols)) = self.caret_in_the_indent() {
                 let sw = self.indent_width();
                 let text = self.vim_indent_text((cols / sw + 1) * sw);

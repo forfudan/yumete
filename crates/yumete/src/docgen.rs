@@ -232,6 +232,25 @@ fn actions() -> String {
             let _ = writeln!(out, "| `{name}` | {} | {} |", cell(&say(help, &[])), column(&keys));
         }
     }
+        // **The rules**: the editing model each keymap brings, chosen as a set.
+    let _ = write!(
+        out,
+        "\n### {}\n\n{}\n\n| {} | {} | helix | vim |\n| --- | --- | --- | --- |\n",
+        say("keys.rules-head", &[]),
+        say("keys.rules-note", &[]),
+        say("keys.rules-name", &[]),
+        say("keys.actions-what", &[]),
+    );
+    let tick = |on: bool| if on { "✓" } else { "" };
+    for ((name, help, helix), (_, _, vim)) in KeyPreset::Helix.rules().list().iter().zip(KeyPreset::Vim.rules().list().iter()) {
+        let _ = writeln!(
+            out,
+            "| `{name}` | {} | {} | {} |",
+            cell(&say(help, &[])),
+            tick(*helix),
+            tick(*vim),
+        );
+    }
     out
 }
 

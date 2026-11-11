@@ -2977,6 +2977,144 @@ zhs = "键位：vim(x X 剪切字符、s 改一个字、V 选行、dd yy cc dw c
 en = "keymap: vim — x X cut a character, s changes one, V selects the line, dd yy cc dw cw, ^ $ 0"
 
 [[message]]
+# :keymap-actions 規則那一節：caret_off_newline 這條規則說什麽（草稿）
+key = "keys.rule.caret-off-newline"
+zhs = "光标不停在换行符上，h、l 在行首行尾停住"
+en = "the caret never stands on a line's break; h and l stop at the line's ends"
+
+[[message]]
+# :keymap-actions 規則那一節：delete_stays_in_line 這條規則說什麽（草稿）
+key = "keys.rule.delete-stays-in-line"
+zhs = "删字不跨行"
+en = "a character delete stays on its line"
+
+[[message]]
+# :keymap-actions 規則那一節：empty_command_repeats 這條規則說什麽（草稿）
+key = "keys.rule.empty-command-repeats"
+zhs = "空的 : 行按 Enter 重跑上一条命令"
+en = "Enter on an empty : line runs the last command again"
+
+[[message]]
+# :keymap-actions 規則那一節：find_in_line 這條規則說什麽（草稿）
+key = "keys.rule.find-in-line"
+zhs = "f、t 只在本行找"
+en = "f and t look on this line only"
+
+[[message]]
+# :keymap-actions 規則那一節：find_moves_caret 這條規則說什麽（草稿）
+key = "keys.rule.find-moves-caret"
+zhs = "f、t 只挪光标，不选中经过的字"
+en = "f and t move the caret without selecting what they cross"
+
+[[message]]
+# :keymap-actions 規則那一節：read_below_the_line 這條規則說什麽（草稿）
+key = "keys.rule.read-below-the-line"
+zhs = ":r 把文件放在光标所在行的下面"
+en = ":r puts the file under the cursor's line"
+
+[[message]]
+# :keymap-actions 規則那一節：replace_from_caret 這條規則說什麽（草稿）
+key = "keys.rule.replace-from-caret"
+zhs = "r 从光标起替换计数个字"
+en = "r replaces count characters from the caret"
+
+[[message]]
+# :keymap-actions 規則那一節：search_moves_caret 這條規則說什麽（草稿）
+key = "keys.rule.search-moves-caret"
+zhs = "搜索把光标移到匹配开头，而不是选中匹配"
+en = "a search moves the caret to the match's start rather than selecting the match"
+
+[[message]]
+# :keymap-actions 規則那一節：step_back_after_insert 這條規則說什麽（草稿）
+key = "keys.rule.step-back-after-insert"
+zhs = "离开插入模式时光标退一格"
+en = "leaving Insert mode puts the caret back one"
+
+[[message]]
+# :keymap-actions 規則那一節：till_stands_still 這條規則說什麽（草稿）
+key = "keys.rule.till-stands-still"
+zhs = "t 已贴着目标字时不动"
+en = "t stands still when it is already against its character"
+
+[[message]]
+# :keymap-actions 規則那一節：undo_at_typing_start 這條規則說什麽（草稿）
+key = "keys.rule.undo-at-typing-start"
+zhs = "撤销点从开始打字处算"
+en = "an undo point starts where typing began"
+
+[[message]]
+# :keymap-actions 規則那一節：undo_restores_every_cursor 這條規則說什麽（草稿）
+key = "keys.rule.undo-restores-every-cursor"
+zhs = "撤销时恢复所有光标"
+en = "undo puts back every cursor"
+
+[[message]]
+# :keymap-actions 規則那一節：vim_indent_keys 這條規則說什麽（草稿）
+key = "keys.rule.vim-indent-keys"
+zhs = "缩进里的退格和 Tab 按 shiftwidth 走，离开插入模式时去掉空着的缩进"
+en = "Backspace and Tab in the indent go by shiftwidth, and an indent left empty goes when Insert ends"
+
+[[message]]
+# :keymap-actions 規則那一節：vim_jump_list 這條規則說什麽（草稿）
+key = "keys.rule.vim-jump-list"
+zhs = "vim 的跳转表：一行只留一条，关掉的文件会重新打开"
+en = "vim's jump list: one entry for a line, a closed file opened again"
+
+[[message]]
+# :keymap-actions 規則那一節：vim_registers 這條規則說什麽（草稿）
+key = "keys.rule.vim-registers"
+zhs = "vim 的寄存器：0 号存最后一次复制，1–9 号存删掉的行，大写名字往寄存器里追加"
+en = "vim's registers: 0 holds the last yank, 1 to 9 the deleted lines, an upper-case name adds to its register"
+
+[[message]]
+# :keymap-actions 規則那一節：vim_scrolling 這條規則說什麽（草稿）
+key = "keys.rule.vim-scrolling"
+zhs = "页面照 vim 的方式跟随光标：scrolloff、远跳居中、zt zz zb 带计数"
+en = "the page follows the cursor as vim's does: scrolloff, a far jump centred, zt zz zb with a count"
+
+[[message]]
+# :keymap-actions 規則那一節：vim_tables 這條規則說什麽（草稿）
+key = "keys.rule.vim-tables"
+zhs = "用 vim 自己的 Normal 与插入模式键表，盖在 helix 的之上"
+en = "vim's own Normal and Insert tables, over helix's"
+
+[[message]]
+# :keymap-actions 規則那一節：vim_text_motions 這條規則說什麽（草稿）
+key = "keys.rule.vim-text-motions"
+zhs = "词、句、段按 vim 的规矩移动"
+en = "words, sentences and paragraphs move by vim's rules"
+
+[[message]]
+# :keymap-actions 規則那一節：vim_text_objects 這條規則說什麽（草稿）
+key = "keys.rule.vim-text-objects"
+zhs = "文本对象按 vim 的规矩"
+en = "text objects follow vim's rules"
+
+[[message]]
+# :keymap-actions 規則那一節：yank_every_selection 這條規則說什麽（草稿）
+key = "keys.rule.yank-every-selection"
+zhs = "多光标时 y 复制每一段选区"
+en = "y with several cursors copies every selection"
+
+[[message]]
+# :keymap-actions 規則那一節的標題（草稿）
+key = "keys.rules-head"
+zhs = "规则"
+en = "Rules"
+
+[[message]]
+# :keymap-actions 規則那一節：表頭第一欄（草稿）
+key = "keys.rules-name"
+zhs = "规则"
+en = "Rule"
+
+[[message]]
+# :keymap-actions 規則那一節的說明（草稿）
+key = "keys.rules-note"
+zhs = "规则是编辑模型：由键位整组选定，不逐条开关。"
+en = "Rules are the editing model: the keymap chooses them as a set, not one by one."
+
+[[message]]
 # 配置裏兩種寫法落到同一個鍵上，後寫的那一條算數，啓動時說一次
 key = "keys.spelt-twice"
 zhs = "{0} 替换了 {1}"

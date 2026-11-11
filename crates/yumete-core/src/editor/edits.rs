@@ -471,7 +471,7 @@ impl Editor {
     /// Mark the `len` characters before the caret as vim's autoindent, so
     /// `Esc` or Enter with nothing typed takes them back.
     pub(super) fn note_fresh_indent(&mut self, len: usize, recorded: bool) {
-        self.fresh_indent = (len > 0 && self.vim_keymap()).then(|| {
+        self.fresh_indent = (len > 0 && self.keymap_rules().vim_indent_keys).then(|| {
             let buffer = self.current_buffer();
             (buffer.id(), buffer.revision(), self.sel.head(), len, recorded)
         });
@@ -1415,7 +1415,7 @@ impl Editor {
         let n = keys.len();
         let text = crate::input::macro_text(&keys);
         let into = self.recording_into;
-        let (name, text) = match into.is_ascii_uppercase() && self.vim_keymap() {
+        let (name, text) = match into.is_ascii_uppercase() && self.keymap_rules().vim_registers {
             true => {
                 let name = into.to_ascii_lowercase();
                 (name, self.held(name) + &text)
@@ -1544,7 +1544,7 @@ impl Editor {
         // **vim keeps the kind with the register** (`:h linewise-register`):
         // `v$y` holds a line break but is charwise, so
         // `p` puts it inside the line, not on a line of its own.
-        let charwise = self.as_vim() && self.extend && !self.vim_lines && !self.lines_at_key && text.ends_with('\n');
+        let charwise = self.keymap_rules().vim_registers && self.extend && !self.vim_lines && !self.lines_at_key && text.ends_with('\n');
         let kept = named.is_none_or(|n| n.is_ascii_alphanumeric());
         for key in ['"'].into_iter().chain(named.filter(|n| n.is_ascii_alphanumeric()).map(|n| n.to_ascii_lowercase())).filter(|_| kept) {
             match charwise {
@@ -1562,7 +1562,7 @@ impl Editor {
             }
             // **vim's `"A` adds to register `a`** (`:h quote_alpha`): lines added to text, or text to lines,
             // make lines.
-            Some(name) if name.is_ascii_uppercase() && self.vim_keymap() => {
+            Some(name) if name.is_ascii_uppercase() && self.keymap_rules().vim_registers => {
                 let name = name.to_ascii_lowercase();
                 let mut held = self.held(name);
                 let mut text = text;
@@ -1596,7 +1596,7 @@ impl Editor {
                 // **vim's `"1`–`"9`: the last nine deletes of a line or more**
                 // (`:h quote1`), each pushing the older ones down.
                 let numbered = fresh
-                    && self.keymap_rules().numbered_registers
+                    && self.keymap_rules().vim_registers
                     && !self.storing_a_yank
                     && text.contains('\n');
                 if fresh {
@@ -1620,7 +1620,7 @@ impl Editor {
     /// `"ayy` then `p` puts that line. helix's `"` is a
     /// register like the others.
     fn unnamed_follows(&mut self, name: char) {
-        if self.vim_keymap() {
+        if self.keymap_rules().vim_registers {
             self.register_parts = self.registers.get(&name).cloned().unwrap_or_default();
             self.register = self.register_parts.concat();
         }
@@ -1715,7 +1715,7 @@ impl Editor {
         self.store(text.to_string());
         self.storing_a_yank = false;
         self.yank_whole_lines = whole;
-        if named.is_none() && self.keymap_rules().numbered_registers {
+        if named.is_none() && self.keymap_rules().vim_registers {
             self.registers.insert('0', self.register_parts.clone());
         }
     }
@@ -1730,7 +1730,7 @@ impl Editor {
             // 說得通的，而貼一個空字符串看起來像鍵没按上。
             Some('#') => (self.edit_nth.unwrap_or(0) + 1).to_string(),
             // `"Ap` puts register `a`, as vim's does.
-            Some(name) if name.is_ascii_uppercase() && self.vim_keymap() => self.held(name.to_ascii_lowercase()),
+            Some(name) if name.is_ascii_uppercase() && self.keymap_rules().vim_registers => self.held(name.to_ascii_lowercase()),
             Some(name) => match self.registers.get(&name) {
                 Some(parts) if parts.len() > 1 => Self::part_for(parts, self.edit_nth),
                 Some(parts) => parts.concat(),
@@ -1782,7 +1782,7 @@ impl Editor {
         // `v$y` holds `last one`, not `last one\n`, so `p` puts no empty line
         // after it.
         let range = match op {
-            _ if self.as_vim() && self.extend && !self.vim_lines && !self.lines_at_key => {
+            _ if self.keymap_rules().vim_registers && self.extend && !self.vim_lines && !self.lines_at_key => {
                 let rope = self.current_buffer().rope();
                 let len = rope.len_chars();
                 match range.1 == len && range.1 > range.0 && rope.get_char(len - 1) == Some('\n') {
@@ -1815,7 +1815,7 @@ impl Editor {
         self.storing_a_yank = false;
         // **vim's `"0` is the last yank** (`:h quote0`): a delete
         // fills the unnamed register, and `"0p` still has what was yanked.
-        if named.is_none() && self.keymap_rules().numbered_registers {
+        if named.is_none() && self.keymap_rules().vim_registers {
             self.registers.insert('0', self.register_parts.clone());
         }
         self.status = say!("edit.yanked-characters", end - start);
@@ -1912,7 +1912,7 @@ impl Editor {
         // two — which is exactly what the standard way of moving a paragraph
         // (`xy`, move, `p`) does most.
         let kind = named.filter(|n| n.is_ascii_alphanumeric()).map_or('"', |n| n.to_ascii_lowercase());
-        let line_wise = text.ends_with('\n') && !(self.as_vim() && self.charwise_breaks.contains(&kind));
+        let line_wise = text.ends_with('\n') && !(self.keymap_rules().vim_registers && self.charwise_breaks.contains(&kind));
         let (start, end) = (start, end.max(start));
         let at = if line_wise {
             let rope = self.current_buffer().rope();

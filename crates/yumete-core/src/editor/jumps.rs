@@ -168,7 +168,7 @@ impl Editor {
             return;
         }
         let here = self.jump_here();
-        let vim = self.vim_keymap();
+        let vim = self.keymap_rules().vim_jump_list;
         let line_of = |e: &Editor, jump: &Jump| {
             e.jump_place(jump).map(|(_, at)| e.current_line_of(jump.buffer, at))
         };
@@ -329,7 +329,7 @@ impl Editor {
             if self.buffer_with(jump.buffer).is_none() {
                 // A closed file: vim opens it again by its name; helix forgets
                 // its places. A buffer that never had a file can only be forgotten.
-                match (self.vim_keymap(), jump.path.clone()) {
+                match (self.keymap_rules().vim_jump_list, jump.path.clone()) {
                     (true, Some(path)) => {
                         self.walking_jumps = true;
                         let opened = self.open_file(&path);
@@ -374,7 +374,7 @@ impl Editor {
         }
         let buffer = &self.buffers[index];
         let carry = |at: usize| buffer.carried(jump.revision, at);
-        match self.vim_keymap() {
+        match self.keymap_rules().vim_jump_list {
             true => {
                 let head = jump.ranges.get(jump.primary).map_or(0, |r| carry(r.1));
                 self.move_head(head);

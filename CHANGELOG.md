@@ -6,6 +6,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Added
 
+- **`:keymap-actions` lists the rules**, the editing model each keymap brings (the caret off the line break, `f` on its line, vim's registers, vim's page, vim's jump list…), with what each does under helix and under vim; the actions page on the site lists them too. Page scrolling, the jump list, registers, the indent keys and where a search leaves the cursor are rules now, asked by name, rather than the actions asking which keymap is in use.
 - **The `:` lines, shell commands among them, and the searches are kept from one session to the next**: `Up` and `Down` reach what was typed last time, the last thousand of each. A private session keeps none.
 - **A Typst preview marks the cursor's line**: gold `▶` `◀` on the frame's two sides, on the line tinymist says the cursor's text is on; out of view, `▲` on the frame's top or `▼` on its bottom points the way.
 - **`:setl` (`:setlocal`)**, vim's, sets the same options as `:set` for this file, and on its own says their values.

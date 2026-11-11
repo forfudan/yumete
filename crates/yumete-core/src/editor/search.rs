@@ -177,7 +177,8 @@ impl Editor {
                 // `Movement::Extend` *pushes* the match and makes it primary;
                 // the selections already made stay. vim's visual `n` grows the
                 // one selection, and the vim keymap keeps that.
-                let vim = self.as_vim();
+                // `n` and `N` are twins and say which; `/` asks the rule.
+                let vim = self.acting_as_vim.unwrap_or(self.keymap_rules().search_moves_caret);
                 match (self.extend, vim) {
                     (true, false) => {
                         let mut found = crate::selection::Range::new(pos, head);

@@ -979,6 +979,26 @@ impl Editor {
                         ));
                     }
                 }
+                // **The rules**, the editing model each keymap brings.
+                let (helix_rules, vim_rules) = (yumete_cjk::Rules::HELIX.list(), yumete_cjk::Rules::VIM.list());
+                listing.push_str(&format!(
+                    "\n### {}\n\n{}\n\n| {} | {} | {} | {} |\n| --- | --- | --- | --- |\n",
+                    say!("keys.rules-head"),
+                    say!("keys.rules-note"),
+                    say!("keys.rules-name"),
+                    say!("keys.actions-what"),
+                    column("helix", !vim_now),
+                    column("vim", vim_now),
+                ));
+                let tick = |on: bool| if on { "✓" } else { "" };
+                for ((name, help, helix), (_, _, vim)) in helix_rules.iter().zip(vim_rules.iter()) {
+                    listing.push_str(&format!(
+                        "| `{name}` | {} | {} | {} |\n",
+                        crate::messages::say(help, &[]),
+                        tick(*helix),
+                        tick(*vim),
+                    ));
+                }
                 self.show_listing(listing, say!("keys.actions-title"));
                 Ok(CommandOutcome::Continue)
             }
