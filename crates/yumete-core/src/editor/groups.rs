@@ -1251,12 +1251,9 @@ pub(super) static WINDOW: Group = Group {
         ch('K', NormalCmd::MoveViewFarUp, "hint.region.to-edge").when(Only::Vim),
         ch('L', NormalCmd::MoveViewFarRight, "hint.region.to-edge").when(Only::Vim),
         ch('c', NormalCmd::VimCloseWindow, "hint.region.close-not-last").when(Only::Vim),
-        // vim opens a split above, so its rows say so.
-        ch('S', NormalCmd::HsplitAbove, "hint.region.split-above").when(Only::Vim),
-        ch('s', NormalCmd::HsplitAbove, "hint.region.split-above").when(Only::Vim),
-        ch('F', NormalCmd::GotoFileHsplitAbove, "hint.region.file-above").when(Only::Vim),
-        ch('f', NormalCmd::GotoFileHsplitAbove, "hint.region.file-above").when(Only::Vim),
-        ch('^', NormalCmd::GotoLastAccessedFileHsplit, "hint.region.last-file-above").when(Only::Vim),
+        ch('S', NormalCmd::Hsplit, "hint.region.split").when(Only::Vim),
+        ch('F', NormalCmd::GotoFileHsplit, "hint.region.file-below").when(Only::Vim),
+        ch('^', NormalCmd::GotoLastAccessedFileHsplit, "hint.region.last-file-below").when(Only::Vim),
         ch(':', NormalCmd::VimCommandMode, "action.command-mode").when(Only::Vim),
         ch('h', NormalCmd::JumpViewLeft, "hint.region.go"),
         ch('j', NormalCmd::JumpViewDown, "hint.region.go"),
@@ -1271,12 +1268,9 @@ pub(super) static WINDOW: Group = Group {
         ch('E', NormalCmd::GotoLeftSidebar, "hint.region.into-bar").flavor(FlavorItem::Sidebars),
         ch('I', NormalCmd::GotoRightSidebar, "hint.region.into-bar").flavor(FlavorItem::Sidebars),
         ch('s', NormalCmd::Hsplit, "hint.region.split"),
-        // vim opens a split on the left, helix on the right, whatever the
-        // page's direction.
-        ch('v', NormalCmd::VsplitLeft, "hint.region.split-left").when(Only::Vim),
         ch('v', NormalCmd::Vsplit, "hint.region.split-beside"),
         // vim's `C-w n` is the blank window below; helix's is a group.
-        ch('n', NormalCmd::NewWindowUp, "action.new-window-up").when(Only::Vim),
+        ch('n', NormalCmd::NewWindowDown, "action.new-window-down").when(Only::Vim),
         ch('n', NormalCmd::WindowNewMode, "hint.region.new"),
         ch('q', NormalCmd::Wclose, "hint.region.close"),
         ch('o', NormalCmd::Wonly, "hint.region.only"),

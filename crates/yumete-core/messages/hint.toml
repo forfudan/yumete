@@ -1146,10 +1146,10 @@ zhs = "上一个窗口"
 en = "previous window"
 
 [[message]]
-# C-w ^(vim)：上一個文件在上面開
-key = "hint.region.last-file-above"
-zhs = "上方打开上一个文件"
-en = "previous file, above"
+# C-w ^(vim)：上一個文件在上面開（草稿）
+key = "hint.region.last-file-below"
+zhs = "下方打开上一个文件"
+en = "previous file, below"
 
 [[message]]
 # C-w 提示：n 開一個空白窗口（helix 那裏是一組，後面跟 s 或 v）

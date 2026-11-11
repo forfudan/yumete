@@ -1106,9 +1106,8 @@ impl Editor {
     /// live one, on the same buffer at the same place, and the keys go to it.
     /// `false` when the tree would not split.
     pub(super) fn split_window(&mut self, how: crate::window::Split) -> bool {
-        // Under the vim keymap it opens above or to the left, as vim's does;
-        // helix's opens below or to the right.
-        self.split_window_on(how, self.vim_keymap())
+        // Below or to the right, under every keymap.
+        self.split_window_on(how, false)
     }
 
     /// Split, the new window `before` (above or to the left) or after.
@@ -1175,14 +1174,14 @@ impl Editor {
         }
     }
 
-    /// **vim's `C-w ^`**: the file before this one, in a new window above.
+    /// **vim's `C-w ^`**: the file before this one, in a new window below.
     /// No window when there is no such file (vim's E23).
     pub(super) fn goto_last_file_in_split(&mut self) {
         if self.last_file.and_then(|id| self.buffer_with(id)).is_none() {
             return self.goto_last_file();
         }
         let showing = self.current_buffer().id();
-        if self.split_window_on(crate::window::Split::Below, true) {
+        if self.split_window_on(crate::window::Split::Below, false) {
             self.goto_last_file();
             self.last_file = Some(showing);
         }

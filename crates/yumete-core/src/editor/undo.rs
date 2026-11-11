@@ -92,7 +92,7 @@ impl Editor {
             // not only the primary with the others left at their post-edit
             // places. vim has one cursor and its
             // rule for where it lands stays for one; several are yumete's own.
-            Some(every) if self.keymap_rules().undo_restores_every_cursor || every.is_plural() => {
+            Some(every) if self.keymap_rules().restores_every_selection || every.is_plural() => {
                 let len = self.current_buffer().rope().len_chars();
                 self.sel = every;
                 self.sel.map(|one| crate::selection::Range {

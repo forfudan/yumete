@@ -18,6 +18,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Changed
 
+- **The jumplist and `:read` are the same under every keymap**: the jumplist keeps a line once, keeps the places ahead when you jump after going back, and opens a closed file again; `:read` puts the file below the cursor's line. Whether `C-o` and undo bring back every selection or the cursor still follows the keymap. The site's new page [What follows your keymap](https://yumete.shurufa.app/reference/keymaps-and-yumete) says which behaviours follow helix or vim and which are yumete's.
 - **Some actions and commands no longer change with the keymap**: `gg`, `zf` and Visual-mode `:` are now twin actions, `vim_goto_file_start`, `vim_create_fold` and `vim_command_mode` beside their helix ones, so `:keymap-actions` says what each does; and `C-w w` with a count goes to that window, `:s` leaves the cursor on the last line it changed, and `r`, `gJ`, `zx` and the moves onto a closed fold behave as under vim, whichever keymap is in use. The flavour's `delete_keeps_register` now swaps which keys run `delete_selection` and `delete_selection_noyank` (and `D` and `A-D` with `d_to_line_end`), so each action always does what its name says. Folds by heading and block comments on lines of their own are `[editor]` settings, `heading_folds` and `block_comment_lines`, on by default and no longer turned off by the flavour's level; written under `[keys.flavor_items]` they are still read.
 - **`ye --import` no longer carries a theme over** from helix, vim or Neovim: their themes are not yumete's, so a match was a guess. The import says so; pick one with `:theme`.
 - **The word count on the status line, and the outline behind heading folds, are worked out again when you return to Normal mode**, not on every key typed, so typing in a long book stays quick (with a fold closed, the outline still follows each key).
@@ -27,7 +28,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **纵中横 (`[editor] tatechuyoko`) is off by default**, so every run of half-width characters on a vertical page is set the same way; set it to 2–8 to stand short numbers across in one cell.
 
 - **A preview opened from a vertical page goes below the text**, where the columns leave room, and beside it on a horizontal page.
-- **`␣wv` and `␣wnv` open the new window on the right on any page**, as helix does, where a vertical page used to open it on the left; with vim's keys `C-w v` opens it on the left, as vim does. Each side is an action of its own (`vsplit`, `vsplit_left`, `hsplit`, `hsplit_above`, `goto_file_hsplit_above`), so `:keymap-actions` names it and an action no longer changes with the keymap.
+- **New windows open below or to the right under every keymap and on any page**: `␣wv`, `␣wnv`, `:split`, `:vsplit`, `:hnew`, `:vnew`, and vim's `C-w s`, `C-w v`, `C-w n`, `C-w f` and `C-w ^`, where vim's keys and a vertical page used to open them on the left or above. Splitting is not a habit of the hands, so it is one behaviour; the other sides are actions of their own (`vsplit_left`, `hsplit_above`, `goto_file_hsplit_above`) for whoever binds them.
 - **Keys are spelled in English in every interface language**: `Space f`, as `Esc`, `Tab` and `C-o` already were.
 
 ### Fixed

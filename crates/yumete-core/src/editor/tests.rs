@@ -16117,7 +16117,7 @@ fn the_jump_list_follows_edits_files_and_windows() {
     back(&mut ed);
     assert_eq!(line(&ed), before, "the other window's jump is not this one's");
 
-    // A closed file: helix forgets it, vim opens it again.
+    // A closed file is opened again, under every keymap.
     for vim in [false, true] {
         let mut ed = Editor::new();
         if vim {
@@ -16130,7 +16130,7 @@ fn the_jump_list_follows_edits_files_and_windows() {
         ed.current = ed.buffers.len() - 1;
         back(&mut ed);
         let name = ed.current_buffer().display_name().to_string();
-        assert_eq!(name == "a.md", vim, "vim: {vim}, now in {name}");
+        assert_eq!(name, "a.md", "vim: {vim}");
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -26538,11 +26538,10 @@ fn a_shell_line_completes_file_names() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// `:read` puts a file in: helix's way at each selection's head, vim's on
-/// new lines below the cursor line. The helix answers are measured with
-/// helix 25.07.1 on `abc\ndef\n` and a file holding `INS\n`.
+/// `:read` puts a file in on new lines below the cursor line (vim's `:r`),
+/// under every keymap.
 #[test]
-fn read_puts_a_file_in_the_way_helix_and_vim_do() {
+fn read_puts_a_file_in_below_the_cursor_line() {
     let file = tmp().join(format!("yumete-read-{}.txt", std::process::id()));
     std::fs::write(&file, "INS\n").unwrap();
     let read = format!(":read {}", file.display());
@@ -26553,9 +26552,8 @@ fn read_puts_a_file_in_the_way_helix_and_vim_do() {
         ed.execute(&read).unwrap();
         ed.current_buffer().text().to_string()
     };
-    assert_eq!(helix("l"), "abINS\nc\ndef\n", "after the character under the cursor");
-    assert_eq!(helix("x"), "abc\nINS\ndef\n", "after the whole line");
-    assert_eq!(helix("ll"), "abcINS\n\ndef\n");
+    assert_eq!(helix("l"), "abc\nINS\ndef\n", "helix's keys, below the line too");
+    assert_eq!(helix("x"), "abc\nINS\ndef\n");
 
     let mut ed = typed("abc\ndef");
     ed.execute(":keymap vim").unwrap();
@@ -35563,12 +35561,12 @@ fn vims_window_keys_go_rearrange_and_close() {
     assert_eq!(ed.status(), refused, "C-w q in the last window is :q");
 }
 
-/// **A new window opens above or to the left under vim** (`nosplitbelow`,
-/// `nosplitright`; nvim), below or to the right under helix, and the keys go
-/// to it either way.
+/// **A new window opens below or to the right under every keymap**, and
+/// the keys go to it: splitting is not a habit of the hands, so it is one
+/// behaviour.
 #[test]
-fn a_new_window_opens_on_the_side_each_keymap_opens_it() {
-    for (vim, want) in [(false, 1), (true, 0)] {
+fn a_new_window_opens_below_or_to_the_right_under_every_keymap() {
+    for (vim, want) in [(false, 1), (true, 1)] {
         for key in ['s', 'v'] {
             let mut ed = typed("one\n");
             if vim {
@@ -36047,11 +36045,11 @@ fn the_session_gives_each_window_its_own_folds_when_one_is_dropped() {
     press(&mut ed, "jzfj");
     ed.on_key(Key::Ctrl('w'));
     ed.on_key(Key::Char('s'));
-    // The new window above has b's fold too, as a split copies them; open
+    // The new window below has b's fold too, as a split copies them; open
     // there, and then it shows a.txt.
     press(&mut ed, "zo");
     ed.open_file(&a).unwrap();
-    assert_eq!(ed.windows().index_of(ed.live_window()), Some(0));
+    assert_eq!(ed.windows().index_of(ed.live_window()), Some(1));
     ed.save_session();
     std::fs::remove_file(&a).unwrap();
 
@@ -38914,19 +38912,17 @@ fn switching_the_layout_moves_no_window() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// A split made on a 縱書 page opens with its new window on the left, and
-/// **keeps that side** when the page turns horizontal; the keys follow what
-/// **vim's keys are bound to vim's own actions**: `C-w v` is `vsplit_left`
-/// and opens on the left, `C-w s` is `hsplit_above`, so the actions list
-/// names each side, and no action changes with the keymap.
+/// **vim's `C-w v` opens on the right, as everyone's does**: splitting is
+/// not a habit of the hands, so it is one behaviour; `vsplit_left` and
+/// `hsplit_above` are actions of their own for whoever binds them.
 #[test]
-fn vim_window_keys_have_actions_of_their_own() {
+fn vim_window_keys_split_to_the_right_as_everyone_s_do() {
     let mut ed = typed_vim("那年冬天。\n");
     let one = ed.live_window();
     ed.on_key(Key::Ctrl('w'));
     ed.on_key(Key::Char('v'));
     let two = ed.live_window();
-    assert_eq!(window_columns(&ed), [(two, 0), (one, 41)], "vim's C-w v: on the left");
+    assert_eq!(window_columns(&ed), [(one, 0), (two, 41)], "vim's C-w v: on the right");
     for (name, label) in [("vsplit_left", "hint.region.split-left"), ("hsplit_above", "hint.region.split-above")] {
         assert_eq!(yumete_cjk::actions::action(name).map(|a| a.help), Some(label), "{name} is an action of its own");
     }

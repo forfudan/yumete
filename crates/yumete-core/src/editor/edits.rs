@@ -138,64 +138,41 @@ impl Editor {
         })
     }
 
+    /// Put `text` (a file `:read` took in) into the buffer: on new lines
+    /// below the cursor line, the cursor on the first of them (vim's `:r`),
+    /// under every keymap.
+    pub(super) fn read_in(&mut self, text: &str) {
+        self.snapshot();
+        let rope = self.current_buffer().rope();
+        let next = self.cursor_line() + 1;
+        let len = rope.len_chars();
+        let at = match next < rope.len_lines() {
+            true => rope.line_to_char(next),
+            false => len,
+        };
+        // The last line has no line break of its own to stand on.
+        let ending = self.current_buffer().ending();
+        let lead = match at == len && len > 0 && rope.char(len - 1) != '\n' {
+            true => ending,
+            false => "",
+        };
+        let tail = match text.ends_with('\n') {
+            true => "",
+            false => ending,
+        };
+        if self.overwrite(at, at, &format!("{lead}{text}{tail}")) {
+            let first = at + lead.chars().count();
+            self.sel.set_anchor(first);
+            self.sel.set_head(first);
+            self.clamp_cursor();
+        }
+    }
+
     /// Write `text` over `start..end`, unless a grid says either half must not
     /// happen.
     ///
     /// Both halves are checked *before* either runs, so a refusal leaves the
     /// buffer exactly as it was rather than half-edited.
-    /// Put `text` (a file `:read` took in) into the buffer. Under the vim
-    /// keymap it goes on new lines below the cursor line and the cursor moves
-    /// to the first of them, as vim's `:r`. Otherwise it goes in as it is at
-    /// the head of every selection, as helix's `:read` (measured with helix
-    /// 25.07.1: on `b` of `abc` it gives `ab` + the file + `c`).
-    pub(super) fn read_in(&mut self, text: &str) {
-        self.snapshot();
-        if self.keymap_rules().read_below_the_line {
-            let rope = self.current_buffer().rope();
-            let next = self.cursor_line() + 1;
-            let len = rope.len_chars();
-            let at = match next < rope.len_lines() {
-                true => rope.line_to_char(next),
-                false => len,
-            };
-            // The last line has no line break of its own to stand on.
-            let ending = self.current_buffer().ending();
-            let lead = match at == len && len > 0 && rope.char(len - 1) != '\n' {
-                true => ending,
-                false => "",
-            };
-            let tail = match text.ends_with('\n') {
-                true => "",
-                false => ending,
-            };
-            if self.overwrite(at, at, &format!("{lead}{text}{tail}")) {
-                let first = at + lead.chars().count();
-                self.sel.set_anchor(first);
-                self.sel.set_head(first);
-                self.clamp_cursor();
-            }
-            return;
-        }
-        let n = text.chars().count();
-        self.edit_each_from(false, |ed| {
-            let one = ed.sel.primary();
-            let (start, end) = ed.selection();
-            match one.head < one.anchor {
-                // A backward selection's head is its start; the text goes in
-                // there and the selection moves along after it.
-                true => {
-                    if ed.overwrite(start, start, text) {
-                        ed.sel.set_anchor(one.anchor + n);
-                        ed.sel.set_head(one.head + n);
-                    }
-                }
-                false => {
-                    ed.overwrite(end, end, text);
-                }
-            }
-        });
-    }
-
     pub(super) fn overwrite(&mut self, start: usize, end: usize, text: &str) -> bool {
         if let Some(why) = self
             .cell_refuses_cut(start..end)

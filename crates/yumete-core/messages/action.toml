@@ -3007,16 +3007,16 @@ zhs = "f、t 只挪光标，不选中经过的字"
 en = "f and t move the caret without selecting what they cross"
 
 [[message]]
-# :keymap-actions 規則那一節：read_below_the_line 這條規則說什麽（草稿）
-key = "keys.rule.read-below-the-line"
-zhs = ":r 把文件放在光标所在行的下面"
-en = ":r puts the file under the cursor's line"
-
-[[message]]
 # :keymap-actions 規則那一節：replace_from_caret 這條規則說什麽（草稿）
 key = "keys.rule.replace-from-caret"
 zhs = "r 从光标起替换计数个字"
 en = "r replaces count characters from the caret"
+
+[[message]]
+# :keymap-actions 規則那一節：restores_every_selection 這條規則說什麽（草稿）
+key = "keys.rule.restores-every-selection"
+zhs = "撤销与 C-o 恢复所有选区，而不只是光标"
+en = "undo and C-o put back every selection, not only the cursor"
 
 [[message]]
 # :keymap-actions 規則那一節：search_moves_caret 這條規則說什麽（草稿）
@@ -3043,22 +3043,10 @@ zhs = "撤销点从开始打字处算"
 en = "an undo point starts where typing began"
 
 [[message]]
-# :keymap-actions 規則那一節：undo_restores_every_cursor 這條規則說什麽（草稿）
-key = "keys.rule.undo-restores-every-cursor"
-zhs = "撤销时恢复所有光标"
-en = "undo puts back every cursor"
-
-[[message]]
 # :keymap-actions 規則那一節：vim_indent_keys 這條規則說什麽（草稿）
 key = "keys.rule.vim-indent-keys"
 zhs = "缩进里的退格和 Tab 按 shiftwidth 走，离开插入模式时去掉空着的缩进"
 en = "Backspace and Tab in the indent go by shiftwidth, and an indent left empty goes when Insert ends"
-
-[[message]]
-# :keymap-actions 規則那一節：vim_jump_list 這條規則說什麽（草稿）
-key = "keys.rule.vim-jump-list"
-zhs = "vim 的跳转表：一行只留一条，关掉的文件会重新打开"
-en = "vim's jump list: one entry for a line, a closed file opened again"
 
 [[message]]
 # :keymap-actions 規則那一節：vim_registers 這條規則說什麽（草稿）

@@ -1273,7 +1273,7 @@ pub const ALL: &[Action] = &[
     normal("action.move-view-far-up", NormalCmd::MoveViewFarUp),
     normal("action.move-view-far-right", NormalCmd::MoveViewFarRight),
     normal("hint.region.close-not-last", NormalCmd::VimCloseWindow),
-    normal("hint.region.last-file-above", NormalCmd::GotoLastAccessedFileHsplit),
+    normal("hint.region.last-file-below", NormalCmd::GotoLastAccessedFileHsplit),
     normal("hint.case.lower", NormalCmd::SwitchToLowercase),
     normal("hint.case.upper", NormalCmd::SwitchToUppercase),
     normal("hint.case.to-s", NormalCmd::ConvertToSimplified),
