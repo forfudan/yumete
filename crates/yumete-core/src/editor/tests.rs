@@ -39683,3 +39683,18 @@ fn gg_and_zf_are_twin_actions() {
     press(&mut ed, "j");
     assert_eq!(ed.cursor_line(), 2, "lines 1 and 2 are one closed fold");
 }
+
+/// **An empty `:` line shows the last command in grey**, as `/` shows the
+/// last pattern, so `Enter` says what it will run.
+#[test]
+fn an_empty_command_line_shows_the_last_command() {
+    let mut ed = typed("aaa\n");
+    ed.on_key(Key::Char(':'));
+    assert_eq!(ed.prompt_ghost(), "", "nothing typed yet, nothing to show");
+    press(&mut ed, "s/a/b/");
+    ed.on_key(Key::Enter);
+    ed.on_key(Key::Char(':'));
+    assert_eq!(ed.prompt_ghost(), "s/a/b/");
+    press(&mut ed, "w");
+    assert_ne!(ed.prompt_ghost(), "s/a/b/", "typing takes it away");
+}

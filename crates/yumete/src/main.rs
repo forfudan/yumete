@@ -773,7 +773,9 @@ fn main() -> ExitCode {
     // 個目録打開共用一份**。
     // Warning: **沒給路徑的那一支也要走 `book_root_of`**。只有一支走、另一支用生的 cwd 的話，`cd 卷一 && ye` 和 `ye .` 還是
     // 兩份會話。
-    editor.set_remembering(config.editor.remember && !private);
+    // A shot is a picture of the editor, not a session: it reads nothing of
+    // where you have been, so the same keys draw the same frame anywhere.
+    editor.set_remembering(config.editor.remember && !private && shot.is_none());
     let session_key = config_root.clone();
     if let Some(here) = session_key {
         editor.keep_session_in(yumete_config::data_dir().join("sessions"), &here);

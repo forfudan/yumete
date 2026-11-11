@@ -6,7 +6,11 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Changed
 
-- **Enter on an empty `:` line runs the last command again under every keymap**, as helix's does; under vim's keys it used to do nothing.
+- **Enter on an empty `:` line runs the last command again under every keymap**, as helix's does; under vim's keys it used to do nothing. The empty line shows that command in grey first, as `/` shows the last pattern and `:!` the last shell command.
+
+### Fixed
+
+- **`--shot` reads nothing of where you have been**, as `--private` does, so the same keys draw the same frame on any machine; an empty `:` line no longer showed a command from your own history there.
 
 ## 0.22.0 · 2026-11-11
 

@@ -476,6 +476,12 @@ impl Editor {
         if self.mode == Mode::Search && self.command_line.is_empty() {
             return self.last_search.clone();
         }
+        // **An empty `:` line guesses the last command**, as `/` guesses the
+        // last pattern: `Enter` there runs it again, and the grey says which.
+        // The settings panel's own line keeps no history.
+        if self.mode == Mode::Command && self.command_line.is_empty() && !self.settings_open {
+            return self.command_history.last().cloned().unwrap_or_default();
+        }
         // A shell line guesses the last shell command, as `/` guesses the last
         // pattern; Tab takes it.
         if self.mode == Mode::Command && command::shell_start(&self.command_line).is_some() {
