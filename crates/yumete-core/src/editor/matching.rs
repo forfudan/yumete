@@ -2759,19 +2759,16 @@ impl Editor {
         if self.vim_cannot_reach(self.current_buffer().rope(), pos) {
             return;
         }
-        // **Onto a closed fold, vim keeps the column wanted** on the fold's
+        // **Onto a closed fold, the column wanted is kept** on the fold's
         // first line (as nvim does). That line's text is off the page, so the
         // row alone would put the cursor at its end.
-        let pos = match self.vim_keymap() {
-            true => {
-                let rope = self.current_buffer().rope();
-                let line = rope.char_to_line(pos.min(rope.len_chars()));
-                match self.fold_head(line) {
-                    true => self.char_at_line_column(line, goal),
-                    false => pos,
-                }
+        let pos = {
+            let rope = self.current_buffer().rope();
+            let line = rope.char_to_line(pos.min(rope.len_chars()));
+            match self.fold_head(line) {
+                true => self.char_at_line_column(line, goal),
+                false => pos,
             }
-            false => pos,
         };
         let remembered = self.sel.goal();
         self.sel.set_head(pos);

@@ -2149,7 +2149,7 @@ impl Editor {
                 e.walk_table_hits(true);
             });
         } else {
-            if self.vim_keymap() {
+            if self.as_vim() {
                 self.remember_jump();
             }
             self.repeat(count, |e| e.repeat_search(e.search_forward));
@@ -2164,7 +2164,7 @@ impl Editor {
                 e.walk_table_hits(false);
             });
         } else {
-            if self.vim_keymap() {
+            if self.as_vim() {
                 self.remember_jump();
             }
             self.repeat(count, |e| e.repeat_search(!e.search_forward));

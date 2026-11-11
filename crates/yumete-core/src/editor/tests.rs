@@ -37641,11 +37641,11 @@ fn j_and_k_onto_a_closed_fold_keep_the_column() {
     assert_eq!((ed.cursor_line(), ed.cursor_column()), (2, 5));
 }
 
-/// **vim's `:s` leaves the cursor on the last line substituted**, on its
-/// first non-blank (`:h :s`, measured in nvim); with nothing found it stays.
-/// Helix has no `:s`, and its users keep the cursor.
+/// **`:s` leaves the cursor on the last line substituted**, on its first
+/// non-blank (vim's `:h :s`, measured in nvim), under either keymap; with
+/// nothing found it stays.
 #[test]
-fn vims_substitute_leaves_the_cursor_on_the_last_line_changed() {
+fn substitute_leaves_the_cursor_on_the_last_line_changed() {
     let text = "  a1\n    a2\nb3\n  a4\nb5\n";
     let mut ed = typed_vim(text);
     ed.execute(":%s/a/X/").unwrap();
@@ -37659,7 +37659,7 @@ fn vims_substitute_leaves_the_cursor_on_the_last_line_changed() {
     assert_eq!((ed.cursor_line(), ed.cursor_column()), (1, 4), "found, even if the text came out the same");
     let mut ed = typed(text);
     ed.execute(":%s/a/X/").unwrap();
-    assert_eq!(ed.cursor_line(), 0, "helix untouched");
+    assert_eq!(ed.cursor_line(), 3, "the same under helix's keys");
 }
 
 /// **vim's `>`/`<` and Insert Tab with `ts=4 sw=6 noet`** (nvim): `>>`
@@ -39636,4 +39636,21 @@ fn the_command_history_is_kept_for_the_next_session() {
     private.on_key(Key::Enter);
     assert_eq!(start(true).command_history, ["set ts=3"], "and writes none");
     std::fs::remove_dir_all(&data).ok();
+}
+
+/// **`C-w w` with a count goes to that window under either keymap**: one
+/// action, one meaning.
+#[test]
+fn a_count_on_ctrl_w_w_goes_to_that_window_under_helix_keys_too() {
+    let mut ed = typed("one\n");
+    ed.execute(":keymap helix").unwrap();
+    ed.execute(":vsplit").unwrap();
+    ed.execute(":vsplit").unwrap();
+    assert_eq!(ed.windows().len(), 3);
+    let order = ed.windows().leaves();
+    ed.focus_window(order[2]);
+    press(&mut ed, "1");
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
+    assert_eq!(ed.live_window(), order[0], "the first window, as vim's `1 C-w w`");
 }

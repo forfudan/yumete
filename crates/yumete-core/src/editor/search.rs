@@ -358,10 +358,10 @@ impl Editor {
             self.sel.set_anchor(self.sel.head());
             self.refresh_goal_column();
         }
-        // **vim's cursor goes to the last line substituted**, on its first
-        // non-blank, even when the text came out the same (`:h :s`, as nvim
-        // does). Helix has no `:s`; its users keep the cursor.
-        if let Some(line) = last_hit.filter(|_| self.vim_keymap()) {
+        // **The cursor goes to the last line substituted**, on its first
+        // non-blank, even when the text came out the same (vim's `:h :s`,
+        // as nvim does).
+        if let Some(line) = last_hit {
             let rope = self.current_buffer().rope();
             let line = line.min(motion::last_line(rope));
             let at = motion::line_first_non_blank(rope, rope.line_to_char(line));

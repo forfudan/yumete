@@ -128,7 +128,7 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::JoinSelectionsNoSpace, |e, cx| {
         // A group's key is not seen by `before_a_motion`: on a closed fold,
         // vim's `gJ` joins the line the cursor is hidden on, as `J` does.
-        if e.vim_keymap() && !e.extend {
+        if !e.extend {
             e.stand_where_hidden(true);
         }
         let n = match e.extend {
@@ -336,12 +336,12 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::GotoFoldStart, |e, _| e.fold_edge(false), Key::Char('z')),
     (NormalCmd::GotoFoldEnd, |e, _| e.fold_edge(true), Key::Char('z')),
     // ── C-w ────────────────────────────────────────────────────────────
-    // vim's `C-w w` `W` with a count go to that window; helix's take none.
-    (NormalCmd::RotateView, |e, cx| match cx.operator_count.filter(|_| e.vim_keymap()) {
+    // `C-w w` `W` with a count go to that window, as vim's do.
+    (NormalCmd::RotateView, |e, cx| match cx.operator_count {
         Some(n) => e.go_to_nth_window(n),
         None => e.next_region(),
     }, Key::Char('w')),
-    (NormalCmd::RotateViewReverse, |e, cx| match cx.operator_count.filter(|_| e.vim_keymap()) {
+    (NormalCmd::RotateViewReverse, |e, cx| match cx.operator_count {
         Some(n) => e.go_to_nth_window(n),
         None => e.previous_region(),
     }, Key::Char('W')),

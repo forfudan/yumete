@@ -301,7 +301,7 @@ impl Editor {
         self.cursor_back_into_the_fold();
     }
 
-    /// **Before a Normal command under vim**: a sideways move on a closed
+    /// **Before a Normal command**: a sideways move on a closed
     /// fold opens it and moves on its first line ('foldopen' has `hor`:
     /// `l` `$` `f` …), and a word motion from one starts past it, at the
     /// end of its last line or the start of its first, as vim's
@@ -312,7 +312,7 @@ impl Editor {
     /// leave the fold closed, `a` and `A` type there (as in nvim).
     pub(super) fn before_a_motion(&mut self, cmd: yumete_cjk::actions::NormalCmd) {
         use yumete_cjk::actions::NormalCmd as C;
-        if !self.vim_keymap() || self.pending != Pending::None || self.mode == Mode::Insert {
+        if self.pending != Pending::None || self.mode == Mode::Insert {
             return;
         }
         let line = self.cursor_line();
@@ -583,8 +583,7 @@ impl Editor {
             self.fold_generation += 1;
         }
         // Unset, vim's 'foldlevel' is 0: every fold closes.
-        let unset = if self.vim_keymap() { 0 } else { deepest };
-        self.apply_fold_level(level.unwrap_or(unset));
+        self.apply_fold_level(level.unwrap_or(0));
         match view {
             true => self.fold_view_cursor(),
             false => self.fold_stays_closed = true,
