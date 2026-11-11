@@ -2,7 +2,7 @@
 
 Written for people who use it to write, not for the commit log: each line says what you can *do*, and what changed under you. The numbers are the feature table in `docs/development.md` §5.2.
 
-## Unreleased
+## 0.22.0 · 2026-11-11
 
 ### Added
 
@@ -26,7 +26,6 @@ Written for people who use it to write, not for the commit log: each line says w
 - **The word list for completion is read once each time you enter Insert mode**, not on every key, so typing in a long book no longer reads the whole book per keystroke; a word typed now is offered from the next time you enter Insert mode.
 - **A preview is drawn in a frame**: thick and gold while the keys are in it, thin and quiet otherwise, so with two previews side by side the one with the keys is plain to see; the status line says `PRV` there too. In a Markdown preview, the page keeps the cursor's part of a long paragraph in view as you move or type through it, and a bar in the theme's gold stands beside the whole line the cursor is in (a paragraph, one list item or one line of code) (in the left margin, or along the top of a vertical page), and when it is out of view one arrow on the frame points the way to it (`▲` or `▼`, or `◀` or `▶` on a vertical page). The window's title line stays where it is.
 - **纵中横 (`[editor] tatechuyoko`) is off by default**, so every run of half-width characters on a vertical page is set the same way; set it to 2–8 to stand short numbers across in one cell.
-
 - **A preview opened from a vertical page goes below the text**, where the columns leave room, and beside it on a horizontal page.
 - **New windows open below or to the right under every keymap and on any page**: `␣wv`, `␣wnv`, `:split`, `:vsplit`, `:hnew`, `:vnew`, and vim's `C-w s`, `C-w v`, `C-w n`, `C-w f` and `C-w ^`, where vim's keys and a vertical page used to open them on the left or above. Splitting is not a habit of the hands, so it is one behaviour; the other sides are actions of their own (`vsplit_left`, `hsplit_above`, `goto_file_hsplit_above`) for whoever binds them.
 - **Keys are spelled in English in every interface language**: `Space f`, as `Esc`, `Tab` and `C-o` already were.
