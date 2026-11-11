@@ -18,26 +18,9 @@ use crate::motion;
 /// group by default.
 pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     // ── g ──────────────────────────────────────────────────────────────
-    (NormalCmd::GotoFileStart, |e, cx| {
-        // `g30g` — the group's own count — and `30gg`, vi's order.
-        let line = e.sequence_span().map(|(n, _)| n).or(cx.operator_count);
-        e.operator_count = None;
-        // vim's jumps leave a closed fold closed (its `foldopen` has no
-        // `jump`, measured in nvim).
-        e.fold_stays_closed = true;
-        // vim's `gg` keeps the column, as `G` does (`line_jump_keeps`).
-        let keep = e.vim_keymap().then(|| e.line_jump_keeps()).flatten();
-        match line.filter(|&n| n > 0) {
-            Some(n) => e.goto_grid_row(n),
-            None => {
-                e.remember_jump();
-                e.goto_motion(motion::Motion::FileStart);
-            }
-        }
-        if let Some(want) = keep {
-            e.land_at_column(e.cursor_line(), want);
-        }
-    }, Key::Char('g')),
+    (NormalCmd::GotoFileStart, |e, cx| e.go_to_the_file_start(cx.operator_count, false), Key::Char('g')),
+    // vim's `gg` keeps the column, as `G` does (`line_jump_keeps`).
+    (NormalCmd::VimGotoFileStart, |e, cx| e.go_to_the_file_start(cx.operator_count, true), Key::Char('g')),
     (NormalCmd::GotoFileEnd, |e, _| {
         e.fold_stays_closed = true;
         e.remember_jump();
@@ -288,10 +271,8 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     }, Key::Char('r')),
     // ── z: vim's folds ────────────────────────────────────────────────
     // vim's an operator, helix's the selection's lines (the flavour's `zf`).
-    (NormalCmd::CreateFold, |e, _| match e.vim_keymap() {
-        true => e.fold_operator(),
-        false => e.fold_selection(),
-    }, Key::Char('f')),
+    (NormalCmd::CreateFold, |e, _| e.fold_selection(), Key::Char('f')),
+    (NormalCmd::VimCreateFold, |e, _| e.fold_operator(), Key::Char('f')),
     (NormalCmd::CreateFoldLines, |e, cx| { let line = e.cursor_line(); e.fold_lines(line, line + cx.count.max(1) - 1) }, Key::Char('F')),
     (NormalCmd::OpenFold, |e, cx| e.fold_open(cx.count, false), Key::Char('o')),
     (NormalCmd::OpenFoldsRecursively, |e, cx| e.fold_open(cx.count, true), Key::Char('O')),
@@ -616,5 +597,29 @@ impl Editor {
     /// A request for the input method, which the front end carries out.
     fn ask_the_input_method(&mut self, what: &str) {
         self.scheme_request = Some(what.to_string());
+    }
+}
+
+impl Editor {
+    /// **`gg`**: the first line, or with a count that line of the grid;
+    /// `keep` holds the column, as vim's `gg` does.
+    fn go_to_the_file_start(&mut self, count: Option<usize>, keep: bool) {
+        // `g30g` — the group's own count — and `30gg`, vi's order.
+        let line = self.sequence_span().map(|(n, _)| n).or(count);
+        self.operator_count = None;
+        // A jump leaves a closed fold closed (vim's `foldopen` has no
+        // `jump`, measured in nvim).
+        self.fold_stays_closed = true;
+        let keep = keep.then(|| self.line_jump_keeps()).flatten();
+        match line.filter(|&n| n > 0) {
+            Some(n) => self.goto_grid_row(n),
+            None => {
+                self.remember_jump();
+                self.goto_motion(motion::Motion::FileStart);
+            }
+        }
+        if let Some(want) = keep {
+            self.land_at_column(self.cursor_line(), want);
+        }
     }
 }

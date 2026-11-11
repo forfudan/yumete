@@ -2805,7 +2805,7 @@ impl Editor {
     /// a keymap.
     pub(super) const COUNT_KEYS: &'static [(&'static [&'static [NormalCmd]], &'static str)] = &[
         (&[&[NormalCmd::VimJoinSelections, NormalCmd::JoinSelections]], "hint.count.join"),
-        (&[&[NormalCmd::GotoFileStart]], "hint.count.line"),
+        (&[&[NormalCmd::VimGotoFileStart, NormalCmd::GotoFileStart]], "hint.count.line"),
         (&[&[NormalCmd::VimGotoLine, NormalCmd::GotoLineOrLastLine, NormalCmd::GotoLine]], "hint.count.line"),
         (&[&[NormalCmd::RepeatFindChar, NormalCmd::RepeatLastMotion]], "hint.count.nth-find"),
         (
@@ -2919,6 +2919,7 @@ impl Editor {
     /// 同一件事兩種收尾，正是這個倉在防的那一族。
     pub(super) fn open_the_command_line(&mut self, line: &str) {
         self.mode = Mode::Command;
+        self.line_from_visual = false;
         self.command_line = line.to_string();
         self.command_caret = self.command_line.chars().count();
         self.completion = None;
@@ -2964,6 +2965,7 @@ pub(super) const MOTION_STEPS: &[(NormalCmd, &str)] = &[
     (NormalCmd::MoveVisualLineUp, "k"),
     (NormalCmd::GotoNextLineNonwhitespace, "+"),
     (NormalCmd::VimGotoLine, "G"),
+    (NormalCmd::VimGotoFileStart, "gg"),
     (NormalCmd::GotoFileStart, "gg"),
     (NormalCmd::JumpNextParagraph, "}"),
     (NormalCmd::JumpPrevParagraph, "{"),

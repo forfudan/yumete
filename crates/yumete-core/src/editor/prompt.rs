@@ -743,9 +743,10 @@ impl Editor {
     /// **Where vim's cursor goes when `:` leaves Visual** (`:h v_:`,
     /// measured in nvim): the start of the Visual area, which
     /// under `V` is the first line's start unless the cursor is the line
-    /// above. `None` outside vim's Visual mode.
+    /// above. `None` unless the line was opened by vim's `:` from Visual
+    /// mode.
     fn visual_start_for_the_line(&self) -> Option<usize> {
-        if !self.vim_keymap() || !self.extend {
+        if !self.line_from_visual || !self.extend {
             return None;
         }
         let (anchor, head) = (self.sel.anchor(), self.sel.head());

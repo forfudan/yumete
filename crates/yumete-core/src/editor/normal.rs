@@ -217,6 +217,13 @@ pub(super) const NORMAL_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::SearchPrev, |e, cx| e.acting(false, |e| e.cmd_search_prev(cx)), Key::Char('N')),
     (NormalCmd::VimSearchPrev, |e, cx| e.acting(true, |e| e.cmd_search_prev(cx)), Key::Char('N')),
     (NormalCmd::CommandMode, Editor::cmd_command_mode, Key::Char(':')),
+    // vim's `:` from Visual mode works on the Visual area, and leaving the
+    // line puts the cursor at its start (`:h v_:`).
+    (NormalCmd::VimCommandMode, |e, cx| {
+        let from_visual = e.extend;
+        e.cmd_command_mode(cx);
+        e.line_from_visual = from_visual;
+    }, Key::Char(':')),
     (NormalCmd::Suspend, |e, _| e.suspend_request = true, Key::Ctrl('z')),
     (NormalCmd::FormatSelections, |e, _| e.ask_format(), Key::Char('=')),
     (NormalCmd::ExpandSelection, |e, _| e.tree_select(super::tree_select::TreeStep::Expand), Key::Alt('o')),
@@ -586,6 +593,7 @@ pub(super) const VIM_NORMAL: &[(Key, NormalCmd, Option<When>)] = &[
     (Key::Char('J'), NormalCmd::VimJoinSelections, None),
     (Key::Char('~'), NormalCmd::VimSwitchCase, None),
     (Key::Char('G'), NormalCmd::VimGotoLine, None),
+    (Key::Char(':'), NormalCmd::VimCommandMode, None),
     (Key::Char('p'), NormalCmd::VimPasteAfter, None),
     (Key::Char('P'), NormalCmd::VimPasteBefore, None),
     (Key::Ctrl('a'), NormalCmd::VimIncrement, None),

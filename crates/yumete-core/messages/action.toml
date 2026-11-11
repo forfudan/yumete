@@ -2194,6 +2194,12 @@ zhs = "在光标后插入(vim 的 a)"
 en = "insert after the cursor (vim's a)"
 
 [[message]]
+# 命令說明：vim_command_mode（草稿）
+key = "action.vim-command-mode"
+zhs = "命令行，从可视模式打开时作用于选区(vim 的 :)"
+en = "command line, over the Visual area when opened from Visual mode (vim's :)"
+
+[[message]]
 # 命令說明：vim_decrement
 key = "action.vim-decrement"
 zhs = "光标处或其后的数字减一(vim 的 C-x)"
@@ -2210,6 +2216,13 @@ en = "delete the character under the cursor, never the line break (vim's x)"
 key = "action.vim-flip-selections"
 zhs = "换到选区的另一头(vim 可视模式的 o)"
 en = "to the other end of the selection (vim's Visual o)"
+
+[[message]]
+# 命令說明：vim_goto_file_start（草稿）
+key = "action.vim-goto-file-start"
+zhs = "文件开头，保留光标所在的列(vim 的 gg)"
+en = "start of file, keeping the column (vim's gg)"
+find = "開頭 开头 檔頭 档头 最前 start top gg"
 
 [[message]]
 # 命令說明：vim_goto_first_nonwhitespace

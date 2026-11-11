@@ -17,7 +17,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Changed
 
-- **Some actions and commands no longer change with the keymap**: `C-w w` with a count goes to that window, `:s` leaves the cursor on the last line it changed, and `r`, `gJ`, `zx` and the moves onto a closed fold behave as under vim, whichever keymap is in use.
+- **Some actions and commands no longer change with the keymap**: `gg`, `zf` and Visual-mode `:` are now twin actions, `vim_goto_file_start`, `vim_create_fold` and `vim_command_mode` beside their helix ones, so `:keymap-actions` says what each does; and `C-w w` with a count goes to that window, `:s` leaves the cursor on the last line it changed, and `r`, `gJ`, `zx` and the moves onto a closed fold behave as under vim, whichever keymap is in use.
 - **`ye --import` no longer carries a theme over** from helix, vim or Neovim: their themes are not yumete's, so a match was a guess. The import says so; pick one with `:theme`.
 - **The word count on the status line, and the outline behind heading folds, are worked out again when you return to Normal mode**, not on every key typed, so typing in a long book stays quick (with a fold closed, the outline still follows each key).
 - **`:vertical` is one switch**: `:vertical on` sets the page vertically, `:vertical off` across, and `:vertical` alone turns it round. `:horizontal` is gone and says where it went.

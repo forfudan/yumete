@@ -39654,3 +39654,27 @@ fn a_count_on_ctrl_w_w_goes_to_that_window_under_helix_keys_too() {
     ed.on_key(Key::Char('w'));
     assert_eq!(ed.live_window(), order[0], "the first window, as vim's `1 C-w w`");
 }
+
+/// **`gg` and `zf` are twins**: each keymap's key runs its own named
+/// action, and each action does one thing whichever keymap is in use.
+#[test]
+fn gg_and_zf_are_twin_actions() {
+    // vim's `gg` keeps the column, in Visual mode too; helix's goes to the
+    // file's start.
+    let mut ed = typed_vim("abcd\nabcd\nabcd\n");
+    press(&mut ed, "jjllgg");
+    assert_eq!((ed.cursor_line(), ed.cursor_column()), (0, 2));
+    let mut ed = typed_vim("abcd\nabcd\nabcd\n");
+    press(&mut ed, "jjllvgg");
+    assert_eq!((ed.cursor_line(), ed.cursor_column()), (0, 2), "vgg keeps it too");
+    let mut ed = typed("abcd\nabcd\nabcd\n");
+    ed.execute(":keymap helix").unwrap();
+    press(&mut ed, "jjllgg");
+    assert_eq!((ed.cursor_line(), ed.cursor_column()), (0, 0));
+    // vim's `zf` waits for a motion.
+    let mut ed = typed_vim("a\nb\nc\nd\n");
+    press(&mut ed, "zfj");
+    assert_eq!(ed.cursor_line(), 0);
+    press(&mut ed, "j");
+    assert_eq!(ed.cursor_line(), 2, "lines 1 and 2 are one closed fold");
+}

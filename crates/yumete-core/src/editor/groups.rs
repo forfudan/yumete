@@ -842,6 +842,8 @@ pub(super) static GOTO: Group = Group {
     rows: &[
         // Select mode's own (helix's select keymap): the same places,
         // reached by extending.
+        // vim's `gg` in Visual mode extends as every vim motion does.
+        ch('g', NormalCmd::VimGotoFileStart, "hint.goto.start-of-file").when(Only::Vim),
         ch('g', NormalCmd::ExtendToFileStart, "hint.goto.start-of-file").when(Only::Selecting),
         ch('g', NormalCmd::GotoFileStart, "hint.goto.start-of-file"),
         note("<N>g", "hint.goto.line-n"),
@@ -1094,7 +1096,7 @@ const VIEW_ROWS: &[Row] = &[
     ch('c', NormalCmd::AlignViewCenter, "hint.aim.middle").when(Only::Helix),
     // vim's folds (measured in nvim); `zc` `zj` `zk` are
     // helix's view keys under helix.
-    ch('f', NormalCmd::CreateFold, "hint.fold.create").when(Only::Vim),
+    ch('f', NormalCmd::VimCreateFold, "hint.fold.create").when(Only::Vim),
     ch('F', NormalCmd::CreateFoldLines, "hint.fold.create-lines").when(Only::Vim),
     ch('o', NormalCmd::OpenFold, "hint.fold.open").when(Only::Vim),
     ch('O', NormalCmd::OpenFoldsRecursively, "hint.fold.open-all-here").when(Only::Vim),
@@ -1251,7 +1253,7 @@ pub(super) static WINDOW: Group = Group {
         ch('F', NormalCmd::GotoFileHsplitAbove, "hint.region.file-above").when(Only::Vim),
         ch('f', NormalCmd::GotoFileHsplitAbove, "hint.region.file-above").when(Only::Vim),
         ch('^', NormalCmd::GotoLastAccessedFileHsplit, "hint.region.last-file-above").when(Only::Vim),
-        ch(':', NormalCmd::CommandMode, "action.command-mode").when(Only::Vim),
+        ch(':', NormalCmd::VimCommandMode, "action.command-mode").when(Only::Vim),
         ch('h', NormalCmd::JumpViewLeft, "hint.region.go"),
         ch('j', NormalCmd::JumpViewDown, "hint.region.go"),
         ch('k', NormalCmd::JumpViewUp, "hint.region.go"),
