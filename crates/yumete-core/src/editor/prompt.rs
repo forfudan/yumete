@@ -582,8 +582,8 @@ impl Editor {
                 // Not what is typed on the settings panel: its
                 // `:w` and `:q` are the panel's, and walking back through the
                 // editor's history should not step on them.
-                if !self.settings_open {
-                    remember_line(&mut self.command_history, &line);
+                if !self.settings_open && remember_line(&mut self.command_history, &line) {
+                    self.keep_in_the_history(':', &line);
                 }
                 let visual = self.visual_start_for_the_line();
                 let before = (self.sel.anchor(), self.sel.head());
@@ -983,7 +983,9 @@ impl Editor {
                 let pattern = std::mem::take(&mut self.command_line);
                 self.command_caret = 0;
                 self.mode = Mode::Normal;
-                remember_line(&mut self.search_history, &pattern);
+                if remember_line(&mut self.search_history, &pattern) {
+                    self.keep_in_the_history('/', &pattern);
+                }
                 if !pattern.is_empty() {
                     self.last_search = pattern;
                 }

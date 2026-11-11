@@ -20,6 +20,12 @@ const TABLES_FILE: &str = "tables.txt";
 /// may still decode in the old encoding, and its size gives it away.
 const ENCODINGS_FILE: &str = "encodings.txt";
 
+/// **The `:` lines and the searches, kept from one session to the next**,
+/// one a line: `:` or `/` and then what was typed. A line is added as it is
+/// typed, so two yumetes open at once both keep theirs; the file is cut back
+/// to the last [`super::HISTORY`] of each when it is read.
+const HISTORY_FILE: &str = "history.txt";
+
 /// **那份「我在哪些項目裏幹過活」**，同一個目錄，同一種形狀。
 ///
 /// Warning: **為什麽不寫進會話檔自己的頭一行。** 一份數據一個地方固然好，可是有
@@ -376,6 +382,52 @@ impl Editor {
         if !on {
             self.session_file = None;
             self.session_root = None;
+        }
+        self.read_the_history();
+    }
+
+    fn history_file(&self) -> Option<PathBuf> {
+        self.where_data.as_ref().filter(|_| self.remembers).map(|d| d.join(HISTORY_FILE))
+    }
+
+    /// **The history the last sessions kept**, under what this one has
+    /// typed already; the file is written again with no more than it keeps.
+    fn read_the_history(&mut self) {
+        let Some(file) = self.history_file() else { return };
+        let Ok(text) = std::fs::read_to_string(&file) else { return };
+        let (mut commands, mut searches) = (Vec::new(), Vec::new());
+        for line in text.lines() {
+            match line.split_at_checked(1) {
+                Some((":", rest)) => super::remember_line(&mut commands, rest),
+                Some(("/", rest)) => super::remember_line(&mut searches, rest),
+                _ => false,
+            };
+        }
+        for line in std::mem::take(&mut self.command_history) {
+            super::remember_line(&mut commands, &line);
+        }
+        for line in std::mem::take(&mut self.search_history) {
+            super::remember_line(&mut searches, &line);
+        }
+        let mut kept = String::new();
+        for line in &commands {
+            kept.push_str(&format!(":{line}\n"));
+        }
+        for line in &searches {
+            kept.push_str(&format!("/{line}\n"));
+        }
+        if kept != text {
+            let _ = std::fs::write(&file, kept);
+        }
+        (self.command_history, self.search_history) = (commands, searches);
+    }
+
+    /// Add one line typed now to the kept history.
+    pub(super) fn keep_in_the_history(&self, kind: char, line: &str) {
+        let Some(file) = self.history_file() else { return };
+        use std::io::Write as _;
+        if let Ok(mut out) = std::fs::OpenOptions::new().create(true).append(true).open(&file) {
+            let _ = writeln!(out, "{kind}{line}");
         }
     }
 

@@ -5174,20 +5174,21 @@ const SESSION_FILES: usize = 24;
 const SOURCE_MODE_FILES: usize = 200;
 
 /// How many lines of one prompt's history are kept.
-const HISTORY: usize = 100;
+const HISTORY: usize = 1000;
 
 /// Add a line to a prompt's history, newest last.
 ///
 /// An empty line is not history, and neither is the same line twice: pressing
 /// `Up` should walk through *different* things you have typed.
-fn remember_line(history: &mut Vec<String>, line: &str) {
-    if line.trim().is_empty() || history.last().map(String::as_str) == Some(line) {
-        return;
+fn remember_line(history: &mut Vec<String>, line: &str) -> bool {
+    if line.trim().is_empty() || line.contains('\n') || history.last().map(String::as_str) == Some(line) {
+        return false;
     }
     history.push(line.to_string());
     if history.len() > HISTORY {
         history.remove(0);
     }
+    true
 }
 
 /// Everything one `:s` was asked to do.

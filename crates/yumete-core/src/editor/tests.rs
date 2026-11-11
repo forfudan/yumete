@@ -39605,3 +39605,35 @@ fn esc_in_a_preview_asks_the_system_input_method_aside() {
     assert!(ed.take_say_it_again(), "Esc in the preview says it again");
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// **The `:` lines and the searches outlive the session**: what one
+/// editor typed, the next one on the same data directory walks back to,
+/// and a private one keeps nothing.
+#[test]
+fn the_command_history_is_kept_for_the_next_session() {
+    let data = std::env::temp_dir().join(format!("yumete-history-{}", std::process::id()));
+    std::fs::create_dir_all(&data).unwrap();
+    let start = |remember: bool| {
+        let mut ed = Editor::new();
+        ed.knows_its_paths(data.join("config.toml"), data.clone());
+        ed.set_remembering(remember);
+        ed
+    };
+    let mut ed = start(true);
+    ed.on_key(Key::Char(':'));
+    press(&mut ed, "set ts=3");
+    ed.on_key(Key::Enter);
+    ed.on_key(Key::Char('/'));
+    press(&mut ed, "needle");
+    ed.on_key(Key::Enter);
+    let next = start(true);
+    assert_eq!(next.command_history, ["set ts=3"]);
+    assert_eq!(next.search_history, ["needle"]);
+    let mut private = start(false);
+    assert!(private.command_history.is_empty(), "a private session reads none");
+    private.on_key(Key::Char(':'));
+    press(&mut private, "set ts=5");
+    private.on_key(Key::Enter);
+    assert_eq!(start(true).command_history, ["set ts=3"], "and writes none");
+    std::fs::remove_dir_all(&data).ok();
+}
