@@ -575,7 +575,9 @@ impl Editor {
                 let line = std::mem::take(&mut self.command_line);
                 self.command_caret = 0;
                 self.mode = Mode::Normal;
-                let line = match line.is_empty() && !self.settings_open && self.keymap_rules().empty_command_repeats {
+                // An empty line runs the last command again (helix's), under
+                // every keymap.
+                let line = match line.is_empty() && !self.settings_open {
                     true => self.command_history.last().cloned().unwrap_or_default(),
                     false => line,
                 };

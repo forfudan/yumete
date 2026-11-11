@@ -2989,12 +2989,6 @@ zhs = "删字不跨行"
 en = "a character delete stays on its line"
 
 [[message]]
-# :keymap-actions 規則那一節：empty_command_repeats 這條規則說什麽（草稿）
-key = "keys.rule.empty-command-repeats"
-zhs = "空的 : 行按 Enter 重跑上一条命令"
-en = "Enter on an empty : line runs the last command again"
-
-[[message]]
 # :keymap-actions 規則那一節：find_in_line 這條規則說什麽（草稿）
 key = "keys.rule.find-in-line"
 zhs = "f、t 只在本行找"

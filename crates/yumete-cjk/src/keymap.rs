@@ -71,9 +71,6 @@ pub struct Rules {
     pub yank_every_selection: bool,
     /// A character delete stays on its line (vim's `x`).
     pub delete_stays_in_line: bool,
-    /// Enter on an empty `:` line runs the last command again (helix's);
-    /// vim's does nothing.
-    pub empty_command_repeats: bool,
 }
 
 impl Rules {
@@ -95,12 +92,11 @@ impl Rules {
         undo_at_typing_start: true,
         yank_every_selection: true,
         delete_stays_in_line: false,
-        empty_command_repeats: true,
     };
 
     /// **Every rule by its name**, the message that says what it does, and
     /// its value: what `:keymap-actions` and the docs list.
-    pub fn list(&self) -> [(&'static str, &'static str, bool); 18] {
+    pub fn list(&self) -> [(&'static str, &'static str, bool); 17] {
         [
             ("vim_tables", "keys.rule.vim-tables", self.vim_tables),
             ("caret_off_newline", "keys.rule.caret-off-newline", self.caret_off_newline),
@@ -119,7 +115,6 @@ impl Rules {
             ("undo_at_typing_start", "keys.rule.undo-at-typing-start", self.undo_at_typing_start),
             ("yank_every_selection", "keys.rule.yank-every-selection", self.yank_every_selection),
             ("delete_stays_in_line", "keys.rule.delete-stays-in-line", self.delete_stays_in_line),
-            ("empty_command_repeats", "keys.rule.empty-command-repeats", self.empty_command_repeats),
         ]
     }
 
@@ -141,7 +136,6 @@ impl Rules {
         undo_at_typing_start: false,
         yank_every_selection: false,
         delete_stays_in_line: true,
-        empty_command_repeats: false,
     };
 }
 

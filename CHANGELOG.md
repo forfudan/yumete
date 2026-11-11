@@ -2,6 +2,12 @@
 
 Written for people who use it to write, not for the commit log: each line says what you can *do*, and what changed under you. The numbers are the feature table in `docs/development.md` §5.2.
 
+## Unreleased
+
+### Changed
+
+- **Enter on an empty `:` line runs the last command again under every keymap**, as helix's does; under vim's keys it used to do nothing.
+
 ## 0.22.0 · 2026-11-11
 
 ### Added
