@@ -338,10 +338,11 @@ pub enum Command {
     Lazygit { force: bool },
     /// `:files-yazi`.
     Yazi,
-    /// `:decimo` and `:decimo-replace`: what was written after the name,
-    /// an expression and decimo's options, and whether the result replaces
-    /// the selection rather than following it.
-    Decimo { args: String, replace: bool },
+    /// `:decimo`, `:decimo-replace` and `:decimo-append`: what was written
+    /// after the name (an expression and decimo's options for the first,
+    /// options alone for the two that evaluate the selection), and where the
+    /// value goes: at the cursor, in the selection's place, or after it.
+    Decimo { args: String, put: crate::editor::Put },
     /// `:keep-pipe <command>` — helix's `$` (`shell_keep_pipe`): the
     /// selections the command exits 0 on, given each as its input, are kept.
     KeepPipe(String),
@@ -5183,7 +5184,7 @@ pub const COMMANDS: &[Entry] = &[
         params: &[Param::Free("<表達式>")],
         build: Some(|p| match p.arg(0) {
             None => Err(CommandError::MissingArgument("decimo")),
-            Some(args) => Ok(Command::Decimo { args: args.to_string(), replace: false }),
+            Some(args) => Ok(Command::Decimo { args: args.to_string(), put: crate::editor::Put::Value }),
         }),
     },
     Entry {
@@ -5191,8 +5192,16 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.decimo-replace",
         needs: &[],
-        params: &[Param::Free("<表達式>")],
-        build: Some(|p| Ok(Command::Decimo { args: p.arg(0).unwrap_or("").to_string(), replace: true })),
+        params: &[Param::Free("<選項>")],
+        build: Some(|p| Ok(Command::Decimo { args: p.arg(0).unwrap_or("").to_string(), put: crate::editor::Put::Replace })),
+    },
+    Entry {
+        name: "decimo-append",
+        aliases: &[],
+        help: "cmd.commands.decimo-append",
+        needs: &[],
+        params: &[Param::Free("<選項>")],
+        build: Some(|p| Ok(Command::Decimo { args: p.arg(0).unwrap_or("").to_string(), put: crate::editor::Put::Equation })),
     },
     Entry {
         name: "pipe-to",

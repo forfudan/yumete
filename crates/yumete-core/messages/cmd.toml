@@ -201,15 +201,22 @@ find = "字數 字数 統計 统计 wordcount stats"
 [[message]]
 # : 命令選單裏 decimo 那一項的説明（草稿）
 key = "cmd.commands.decimo"
-zhs = "用 decimo 计算表达式，结果插在选区之后"
-en = "evaluate an expression with decimo and insert the result after the selection"
+zhs = "用 decimo 计算表达式，结果放在光标处"
+en = "evaluate an expression with decimo and put the result at the cursor"
 find = "計算 计算 精度 數學 数学 decimo calculate precision"
+
+[[message]]
+# : 命令選單裏 decimo-append 那一項的説明（草稿）
+key = "cmd.commands.decimo-append"
+zhs = "用 decimo 计算选中的文字，在它后面写上「= 结果」"
+en = "evaluate the selected text with decimo and write = and the result after it"
+find = "計算 计算 精度 數學 数学 等號 等号 decimo calculate precision append equals"
 
 [[message]]
 # : 命令選單裏 decimo-replace 那一項的説明（草稿）
 key = "cmd.commands.decimo-replace"
-zhs = "用 decimo 计算表达式（不写则计算选区），结果替换选区"
-en = "evaluate an expression with decimo (the selection when none is written) and replace the selection with the result"
+zhs = "用 decimo 计算选中的文字，结果替换它"
+en = "evaluate the selected text with decimo and replace it with the result"
 find = "計算 计算 精度 數學 数学 decimo calculate precision replace"
 
 [[message]]

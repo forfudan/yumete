@@ -1301,33 +1301,39 @@ impl Editor {
                 self.run_a_program(line, Some(chooser));
                 Ok(CommandOutcome::Continue)
             }
-            Command::Decimo { args, replace } => {
+            Command::Decimo { args, put } => {
+                use crate::editor::Put;
                 if self.current_buffer().is_readonly() {
                     self.status = say!("readonly.refused");
                     return Ok(CommandOutcome::Continue);
                 }
-                let (expression, options) = crate::editor::shell::decimo_words(&args);
-                // Nothing written to `:decimo-replace`: the selection is the
-                // expression.
-                let expression = match (expression.is_empty(), replace) {
-                    (true, true) => {
+                let (written, options) = crate::editor::shell::decimo_words(&args);
+                let name = match put {
+                    Put::Replace => "decimo-replace",
+                    Put::Equation => "decimo-append",
+                    _ => "decimo",
+                };
+                // `:decimo` evaluates what is written; the other two the
+                // selection, so a written expression there is a mistake.
+                let expression = match put {
+                    Put::Value => written,
+                    _ if !written.is_empty() => {
+                        self.status = say!("shell.decimo-selection-only", name);
+                        return Ok(CommandOutcome::Continue);
+                    }
+                    _ => {
                         let (start, end) = self.selection();
                         self.current_buffer().rope().slice(start..end).to_string().trim().to_string()
                     }
-                    _ => expression,
                 };
                 if expression.is_empty() {
-                    return Err(EditorError::Command(CommandError::MissingArgument(if replace { "decimo-replace" } else { "decimo" })));
+                    return Err(EditorError::Command(CommandError::MissingArgument(name)));
                 }
                 if !crate::editor::shell::on_path("decimo") {
                     self.status = say!("shell.decimo-missing");
                     return Ok(CommandOutcome::Continue);
                 }
                 let line = format!("decimo {} {options}", crate::editor::shell::quoted(&expression));
-                let put = match replace {
-                    true => crate::editor::Put::Replace,
-                    false => crate::editor::Put::Value,
-                };
                 self.ask_the_shell(line.trim_end().to_string(), put);
                 Ok(CommandOutcome::Continue)
             }

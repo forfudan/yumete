@@ -800,6 +800,9 @@ pub enum Put {
     /// but in front of a line break the selection ends on, so a value asked
     /// for at a line's end stays on that line.
     Value,
+    /// The selection kept and its value after it, ` = ` between them
+    /// (`:decimo-append`), on the selection's line as [`Put::Value`] is.
+    Equation,
 }
 
 /// What is done with a command's output.

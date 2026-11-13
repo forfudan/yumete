@@ -702,6 +702,12 @@ zhs = "没有找到 decimo；可用 brew install forfudan/tap/decimo 安装"
 en = "decimo is not installed; brew install forfudan/tap/decimo installs it"
 
 [[message]]
+# :decimo-replace、:decimo-append 後面寫了表達式；它們算的是選中的文字，{0} 是命令名（草稿）
+key = "shell.decimo-selection-only"
+zhs = "{0} 计算的是选中的文字，后面只写 decimo 的选项（如 -P 50）"
+en = "{0} evaluates the selected text; write only decimo's options after it (-P 50, say)"
+
+[[message]]
 # :! 或 :sh 跑完了
 key = "shell.done"
 zhs = "完成：{0}"

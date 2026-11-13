@@ -8,7 +8,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 - **`:git-lazygit` and `:files-yazi` hand the terminal to lazygit and yazi** and come back when you leave them: lazygit in the current file's repository, asking you to save first (`:git-lazygit!` does not ask), and yazi on the current file, where `Enter` opens the chosen files here. Files changed on disk meanwhile are read again.
 - **`:run-in-terminal <command>`** gives any program the whole terminal and comes back the moment it ends, with no key to press.
-- **`:decimo` and `:decimo-replace` put an arbitrary-precision value into the text**, with [decimo](https://github.com/forfudan/decimo) installed: `:decimo pi -P 50` at the cursor, on the same line, `:decimo-replace sqrt(e) -P 50` in its place, and `:decimo-replace -P 50` on its own evaluates the selected text.
+- **`:decimo` and `:decimo-replace` put an arbitrary-precision value into the text**, with [decimo](https://github.com/forfudan/decimo) installed: `:decimo pi -P 50` at the cursor, on the same line; `:decimo-replace -P 50` evaluates the selected text and puts the value in its place, and `:decimo-append -P 50` keeps it and writes ` = ` and the value after it.
 - **`:insert-output` and `:append-output`**, helix's names, are `:pipe-before` and `:pipe-after`.
 
 ### Changed

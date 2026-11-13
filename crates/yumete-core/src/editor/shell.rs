@@ -66,7 +66,7 @@ impl Editor {
                 let (start, end) = self.selection();
                 self.current_buffer().rope().slice(start..end).to_string()
             }
-            Put::Before | Put::After | Put::Value => String::new(),
+            Put::Before | Put::After | Put::Value | Put::Equation => String::new(),
         };
         self.shell_request = Some(crate::editor::Shell {
             line,
@@ -123,10 +123,11 @@ impl Editor {
                 joined = format!("{keep}{output}");
                 joined.as_str()
             }
-            Put::Value => {
+            Put::Value | Put::Equation => {
                 let value = output.trim_end_matches(['\n', '\r']);
                 let body = keep.trim_end_matches(['\n', '\r']);
-                joined = format!("{body}{value}{}", &keep[body.len()..]);
+                let between = if put == Put::Equation { " = " } else { "" };
+                joined = format!("{body}{between}{value}{}", &keep[body.len()..]);
                 joined.as_str()
             }
         };

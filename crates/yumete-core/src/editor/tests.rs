@@ -39822,3 +39822,29 @@ fn a_value_goes_after_the_caret_and_stays_on_its_line() {
     ed.provide_pipe_output("2\n", crate::editor::Put::Value);
     assert_eq!(ed.current_buffer().text(), "x=2\n", "after the character under the caret");
 }
+
+/// **`:decimo-append` keeps the expression and writes its value after it**,
+/// ` = ` between, on the same line; `:decimo-replace` and `:decimo-append`
+/// evaluate the selection, so an expression written after them is refused.
+#[test]
+fn decimo_append_writes_the_value_after_the_expression() {
+    let mut ed = typed("sqrt(2)\nnext\n");
+    press(&mut ed, "gg");
+    ed.sel.set_anchor(0);
+    ed.sel.set_head(7);
+    ed.provide_pipe_output("1.41421\n", crate::editor::Put::Equation);
+    assert_eq!(ed.current_buffer().text(), "sqrt(2) = 1.41421\nnext\n");
+    let mut ed = typed("sqrt(2)\n");
+    press(&mut ed, "%");
+    ed.execute(":decimo-replace sqrt(e)").unwrap();
+    assert!(ed.take_shell_request().is_none());
+    assert_eq!(ed.status(), say!("shell.decimo-selection-only", "decimo-replace"));
+    ed.execute(":decimo-append -P 5").unwrap();
+    match ed.take_shell_request() {
+        Some(shell) => {
+            assert_eq!(shell.line, "decimo 'sqrt(2)' '-P' '5'");
+            assert!(matches!(shell.how, crate::editor::How::Pipe(_, crate::editor::Put::Equation)));
+        }
+        None => assert_eq!(ed.status(), say!("shell.decimo-missing")),
+    }
+}
