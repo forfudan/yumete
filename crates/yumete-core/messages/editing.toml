@@ -720,6 +720,18 @@ zhs = "完成：{0}"
 en = "finished: {0}"
 
 [[message]]
+# :git-lazygit 而 lazygit 沒有裝（草稿）
+key = "shell.lazygit-missing"
+zhs = "没有找到 lazygit；可用 brew install lazygit 或 scoop install lazygit 安装"
+en = "lazygit is not installed; brew install lazygit or scoop install lazygit installs it"
+
+[[message]]
+# :git-lazygit 時還有沒存的檔，{0} 是個數（草稿）
+key = "shell.lazygit-unsaved"
+zhs = "还有 {0} 个文件没有保存，lazygit 看不到它们的改动；先 :wa，或用 :git-lazygit! 照样打开"
+en = "{0} files have unsaved changes lazygit cannot see; :wa first, or :git-lazygit! to open it anyway"
+
+[[message]]
 # :| 交出去的命令跑失敗了——失敗的答案不許蓋掉稿子
 key = "shell.left-alone"
 zhs = "原文未改动：{0}"
@@ -744,6 +756,12 @@ zhs = "命令在所有选区上都失败了，选区未改动"
 en = "the command failed on every selection; they are left as they were"
 
 [[message]]
+# 在 yazi 裏選了好幾個檔，都打開了，{0} 是個數（草稿）
+key = "shell.opened-chosen"
+zhs = "打开了 {0} 个文件"
+en = "opened {0} files"
+
+[[message]]
 # :!命令 跑完，螢幕還在命令那邊，等你看完
 key = "shell.press-any-key"
 zhs = "按任意键回到 yumete…"
@@ -757,6 +775,12 @@ en = "replaced, but the command said: {0}"
 
 
 # ── shot ──────────────────────────────────────────────────────────────
+
+[[message]]
+# :files-yazi 而 yazi 沒有裝（草稿）
+key = "shell.yazi-missing"
+zhs = "没有找到 yazi；可用 brew install yazi 或 scoop install yazi 安装"
+en = "yazi is not installed; brew install yazi or scoop install yazi installs it"
 
 [[message]]
 # 挖完了，名單寫出來給人看了(那個檔是覆蓋寫的，不會讀回來)

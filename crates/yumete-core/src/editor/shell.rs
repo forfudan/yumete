@@ -307,10 +307,14 @@ pub(crate) fn decimo_words(args: &str) -> (String, String) {
     (expression.join(" "), options.join(" "))
 }
 
-/// `word` as one word to a POSIX shell: in single quotes, a quote in it
-/// closed, escaped and opened again.
+/// `word` as one word to the shell commands run through: a POSIX shell's
+/// single quotes, a quote in it closed, escaped and opened again; on
+/// Windows `cmd.exe`'s double quotes, which a path cannot hold.
 pub(crate) fn quoted(word: &str) -> String {
-    format!("'{}'", word.replace('\'', "'\\''"))
+    match cfg!(windows) {
+        true => format!("\"{}\"", word.replace('"', "\\\"")),
+        false => format!("'{}'", word.replace('\'', "'\\''")),
+    }
 }
 
 /// Whether a program called `name` is on `PATH`.
@@ -319,4 +323,49 @@ pub(crate) fn on_path(name: &str) -> bool {
     std::env::split_paths(&path).any(|dir| {
         dir.join(name).is_file() || (cfg!(windows) && dir.join(format!("{name}.exe")).is_file())
     })
+}
+
+impl Editor {
+    /// **Give a program the terminal** in the current file's directory (the
+    /// working directory for a buffer with no file), and open the files it
+    /// writes to `chooser` when it ends.
+    pub(super) fn run_a_program(&mut self, line: String, chooser: Option<std::path::PathBuf>) {
+        let dir = self
+            .current_buffer()
+            .path()
+            .and_then(|p| p.parent())
+            .filter(|d| d.is_dir())
+            .map(|d| d.to_path_buf())
+            .unwrap_or_else(|| self.working_dir());
+        self.shell_request = Some(crate::editor::Shell {
+            line,
+            how: crate::editor::How::Program { dir, chooser },
+        });
+    }
+
+    /// **The files a program chose**, one path a line in `chosen` (yazi's
+    /// `--chooser-file`), opened in turn, the last one shown; what cannot be
+    /// opened is said.
+    pub fn open_chosen(&mut self, chosen: &str) {
+        let mut opened = 0usize;
+        for line in chosen.lines().map(str::trim).filter(|l| !l.is_empty()) {
+            match self.open_file(line) {
+                Ok(()) => opened += 1,
+                Err(err) => {
+                    self.status = say!("buffer.cannot-open", line, err);
+                    return;
+                }
+            }
+        }
+        if opened > 1 {
+            self.status = say!("shell.opened-chosen", opened.to_string());
+        }
+    }
+
+    /// **Look at the disk on the next turn** rather than at the next tick: a
+    /// program that had the terminal (lazygit) may have rewritten files.
+    pub fn check_the_disk_now(&mut self) {
+        self.last_disk_check = None;
+        self.reload_warned = false;
+    }
 }

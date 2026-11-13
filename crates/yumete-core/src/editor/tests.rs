@@ -39712,7 +39712,9 @@ fn insert_output_and_append_output_are_the_pipe_verbs() {
 
 /// **`:decimo` hands decimo the expression as one word** and its options as
 /// options: `sqrt(e)` is not the shell's, `-pi` is an expression, and
-/// `-P 50` or `--precision=50` are decimo's.
+/// `-P 50` or `--precision=50` are decimo's. A POSIX shell's quoting; decimo
+/// does not run on Windows.
+#[cfg(not(windows))]
 #[test]
 fn decimo_takes_its_expression_whole_and_its_options_as_options() {
     use crate::editor::shell::{decimo_words, quoted};
@@ -39739,4 +39741,66 @@ fn decimo_replace_reads_the_selection_when_nothing_is_written() {
     }
     let mut ed = typed("x\n");
     assert!(ed.execute(":decimo").is_err(), "an expression is needed");
+}
+
+/// **`:run-in-terminal` gives the program the terminal** in the current
+/// file's directory, with nothing to choose; `:git-lazygit` and
+/// `:files-yazi` say how to install what is missing, and lazygit waits for
+/// unsaved text unless forced.
+#[test]
+fn programs_get_the_terminal_in_the_file_s_directory() {
+    let dir = std::env::temp_dir().join(format!("yumete-program-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("a.md");
+    std::fs::write(&file, "one\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    ed.execute(":run-in-terminal htop").unwrap();
+    let shell = ed.take_shell_request().expect("a request");
+    assert_eq!(shell.line, "htop");
+    match shell.how {
+        crate::editor::How::Program { dir: at, chooser } => {
+            assert_eq!(at.canonicalize().unwrap(), dir.canonicalize().unwrap());
+            assert!(chooser.is_none());
+        }
+        other => panic!("{other:?}"),
+    }
+    // Unsaved text: lazygit is not opened over it, unless forced.
+    press(&mut ed, "ix");
+    ed.on_key(Key::Esc);
+    ed.execute(":git-lazygit").unwrap();
+    match crate::editor::shell::on_path("lazygit") {
+        true => {
+            assert!(ed.take_shell_request().is_none(), "waits for the unsaved file");
+            assert_eq!(ed.status(), say!("shell.lazygit-unsaved", "1"));
+            ed.execute(":git-lazygit!").unwrap();
+            assert_eq!(ed.take_shell_request().map(|s| s.line).as_deref(), Some("lazygit"));
+        }
+        false => assert_eq!(ed.status(), say!("shell.lazygit-missing")),
+    }
+    ed.execute(":yazi").unwrap();
+    match crate::editor::shell::on_path("yazi") {
+        true => match ed.take_shell_request().map(|s| s.how) {
+            Some(crate::editor::How::Program { chooser: Some(_), .. }) => {}
+            other => panic!("{other:?}"),
+        },
+        false => assert_eq!(ed.status(), say!("shell.yazi-missing")),
+    }
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **What yazi chose is opened**, every file, the last one shown.
+#[test]
+fn the_files_a_program_chose_are_opened() {
+    let dir = std::env::temp_dir().join(format!("yumete-chosen-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (a, b) = (dir.join("a.md"), dir.join("b.md"));
+    std::fs::write(&a, "a\n").unwrap();
+    std::fs::write(&b, "b\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_chosen(&format!("{}\n{}\n", a.display(), b.display()));
+    assert_eq!(ed.current_buffer().text(), "b\n");
+    assert!(ed.buffers.iter().any(|x| x.text() == "a\n"));
+    assert_eq!(ed.status(), say!("shell.opened-chosen", "2"));
+    std::fs::remove_dir_all(&dir).ok();
 }

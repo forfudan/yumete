@@ -332,6 +332,12 @@ pub enum Command {
     /// `:pipe-before` / `:pipe-after` / `:pipe-to` — the other three of
     /// helix's four (`!`, `A-!`, `A-|`); `:pipe` itself is [`Command::Pipe`].
     PipeInto(String, crate::editor::Put),
+    /// `:run-in-terminal`: the command gets the terminal until it ends.
+    RunInTerminal(String),
+    /// `:git-lazygit`; `force` opens it with changes still unsaved.
+    Lazygit { force: bool },
+    /// `:files-yazi`.
+    Yazi,
     /// `:decimo` and `:decimo-replace`: what was written after the name,
     /// an expression and decimo's options, and whether the result replaces
     /// the selection rather than following it.
@@ -1822,6 +1828,8 @@ const FORCEABLE: &[&str] = &[
     // `:wq!`, helix's `write-quit!`.
     "write-quit!",
     "reload!",
+    // Opened with unsaved text, which lazygit cannot see.
+    "git-lazygit!",
     "quit!",
     "export!",
     "export-as-preview!",
@@ -5152,6 +5160,22 @@ pub const COMMANDS: &[Entry] = &[
         }),
     },
     Entry {
+        name: "git-lazygit",
+        aliases: &["lazygit"],
+        help: "cmd.commands.git-lazygit",
+        needs: &[],
+        params: &[],
+        build: Some(|p| Ok(Command::Lazygit { force: p.force })),
+    },
+    Entry {
+        name: "files-yazi",
+        aliases: &["yazi"],
+        help: "cmd.commands.files-yazi",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::Yazi)),
+    },
+    Entry {
         name: "decimo",
         aliases: &[],
         help: "cmd.commands.decimo",
@@ -5575,6 +5599,17 @@ pub const COMMANDS: &[Entry] = &[
                 None => Err(CommandError::MissingArgument("run")),
                 Some(name) => Ok(Command::Language(name.to_string())),
             }
+        }),
+    },
+    Entry {
+        name: "run-in-terminal",
+        aliases: &[],
+        help: "cmd.commands.run-in-terminal",
+        needs: &[],
+        params: &[Param::Free("<命令>")],
+        build: Some(|p| match p.arg(0) {
+            None => Err(CommandError::MissingArgument("run-in-terminal")),
+            Some(line) => Ok(Command::RunInTerminal(line.to_string())),
         }),
     },
     Entry {

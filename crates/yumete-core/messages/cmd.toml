@@ -263,6 +263,13 @@ en = "file info: path, size, lines and characters, language, attached language s
 find = "檔案 档案 文件 信息 元數據 元数据 位置 大小 info file metadata"
 
 [[message]]
+# : 命令選單裏 files-yazi 那一項的説明（草稿）
+key = "cmd.commands.files-yazi"
+zhs = "在 yazi 里浏览文件，Enter 把选中的文件在这里打开"
+en = "browse files in yazi; Enter opens the chosen files here"
+find = "文件 瀏覽 浏览 目錄 目录 yazi files browse"
+
+[[message]]
 # : 命令選單裏 format 那一項的説明(commands 組)
 key = "cmd.commands.format"
 zhs = "按配置格式化此文件([language.markdown] format = …)"
@@ -275,6 +282,13 @@ key = "cmd.commands.git-diff"
 zhs = "与 git 中的版本逐词比较，默认比 HEAD"
 en = "compare with git word by word; HEAD unless a commit is named"
 find = "git diff 差異 差异 提交 改動 改动 版本"
+
+[[message]]
+# : 命令選單裏 git-lazygit 那一項的説明（草稿）
+key = "cmd.commands.git-lazygit"
+zhs = "在 lazygit 里看改动、暂存、提交，按 q 回来"
+en = "look at changes, stage and commit in lazygit; q comes back"
+find = "git 提交 改動 改动 暫存 暂存 lazygit commit stage"
 
 [[message]]
 # : 命令選單裏 git-show 那一項的説明(commands 組)
@@ -586,6 +600,13 @@ key = "cmd.commands.run"
 zhs = "运行配置中为该语言定义的命令"
 en = "run the command configured for this language"
 find = "運行 运行 執行 执行 命令 build"
+
+[[message]]
+# : 命令選單裏 run-in-terminal 那一項的説明（草稿）
+key = "cmd.commands.run-in-terminal"
+zhs = "把终端交给一个程序，它结束后回到编辑器"
+en = "give a program the terminal, and come back when it ends"
+find = "終端 终端 程序 外部 terminal program run"
 
 [[message]]
 # 命令：開搜索面板

@@ -1592,10 +1592,33 @@ pub fn run(
                             // back first; the next turn of the loop, which is
                             // after that program has finished, takes it again.
                             system_ime.release();
-                            match hand_over(&mut terminal, &want.line, &events, &editor.working_dir()) {
+                            match hand_over(&mut terminal, &want.line, &events, &editor.working_dir(), enhanced, all_keys) {
                                 Ok(()) => editor.set_status(say!("shell.finished", want.line)),
                                 Err(err) => editor.set_status(say!("shell.cannot-run", err)),
                             }
+                            editor.check_the_disk_now();
+                            last_caret = None;
+                        }
+                        // A program that draws the whole screen: back to the
+                        // editor the moment it ends, the files it chose
+                        // opened and the disk looked at again.
+                        How::Program { dir, chooser } => {
+                            system_ime.release();
+                            match hand_over_program(&mut terminal, &want.line, &dir, enhanced, all_keys) {
+                                Ok(status) => {
+                                    if let Some(file) = chooser {
+                                        if let Ok(chosen) = std::fs::read_to_string(&file) {
+                                            editor.open_chosen(&chosen);
+                                        }
+                                        let _ = std::fs::remove_file(&file);
+                                    } else if !status.success() {
+                                        editor.set_status(say!("shell.finished", format!("{} — {status}", want.line)));
+                                    }
+                                }
+                                Err(err) => editor.set_status(say!("shell.cannot-run", err)),
+                            }
+                            editor.check_the_disk_now();
+                            last_caret = None;
                         }
                         // Showing you the run: the complaints belong with the
                         // answer, since between them they are what happened.
@@ -2236,6 +2259,23 @@ fn spawn_reader() -> (std::sync::mpsc::Receiver<Arrival>, crate::server::Doorbel
         }
     });
     std::thread::spawn(move || loop {
+        // **Off the terminal while a program has it** ([`pause_the_reader`]):
+        // a reader still reading would take half the keys typed to it.
+        if READER_PAUSE.load(std::sync::atomic::Ordering::Acquire) {
+            READER_PAUSED.store(true, std::sync::atomic::Ordering::Release);
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            continue;
+        }
+        READER_PAUSED.store(false, std::sync::atomic::Ordering::Release);
+        // Waited for in slices, so a pause is seen within one.
+        match event::poll(std::time::Duration::from_millis(50)) {
+            Ok(false) => continue,
+            Ok(true) => {}
+            Err(err) => {
+                let _ = tx.send(Arrival::Terminal(Err(err)));
+                break;
+            }
+        }
         let outcome = event::read();
         let failed = outcome.is_err();
         // A send that fails means the loop has gone; so does an error, and it
@@ -2245,6 +2285,26 @@ fn spawn_reader() -> (std::sync::mpsc::Receiver<Arrival>, crate::server::Doorbel
         }
     });
     (rx, doorbell)
+}
+
+/// Asked of the key reader: stop reading the terminal ([`pause_the_reader`]).
+static READER_PAUSE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// The key reader's answer: it has stopped.
+static READER_PAUSED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// **Keep the key reader off the terminal** while a program has it, and
+/// return once it has let go, or after half a second.
+fn pause_the_reader() {
+    READER_PAUSE.store(true, std::sync::atomic::Ordering::Release);
+    let start = std::time::Instant::now();
+    while !READER_PAUSED.load(std::sync::atomic::Ordering::Acquire) && start.elapsed() < std::time::Duration::from_millis(500) {
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+}
+
+/// The key reader reads the terminal again.
+fn resume_the_reader() {
+    READER_PAUSE.store(false, std::sync::atomic::Ordering::Release);
 }
 
 /// What wakes the loop: the terminal, or a language server that has answered.
@@ -3019,6 +3079,26 @@ fn suspend_to_the_shell<B: ratatui::backend::Backend + io::Write>(
     if !cfg!(unix) {
         return Ok(false);
     }
+    step_aside(terminal, enhanced, all_keys)?;
+    #[cfg(unix)]
+    // Safety: raising a signal at this process; the shell's `fg` sends the
+    // `SIGCONT` that lets `raise` return.
+    unsafe {
+        libc::raise(libc::SIGTSTP);
+    }
+    step_back(terminal, enhanced, all_keys)?;
+    Ok(true)
+}
+
+/// **Give the terminal back as it was found**, for the shell (`C-z`) or a
+/// program (`:!`, `:run-in-terminal`): the keyboard protocol, mouse,
+/// pastes, cursor shape and colours as the terminal had them, the
+/// pictures freed, the main screen showing.
+fn step_aside<B: ratatui::backend::Backend + io::Write>(
+    terminal: &mut ratatui::Terminal<B>,
+    enhanced: bool,
+    all_keys: bool,
+) -> io::Result<()> {
     if enhanced {
         if all_keys {
             let _ = execute!(stdout(), PopKeyboardEnhancementFlags);
@@ -3040,17 +3120,28 @@ fn suspend_to_the_shell<B: ratatui::backend::Backend + io::Write>(
     let _ = terminal.show_cursor();
     ratatui::crossterm::terminal::disable_raw_mode()?;
     let _ = io::Write::flush(&mut stdout());
-    #[cfg(unix)]
-    // Safety: raising a signal at this process; the shell's `fg` sends the
-    // `SIGCONT` that lets `raise` return.
-    unsafe {
-        libc::raise(libc::SIGTSTP);
-    }
+    Ok(())
+}
+
+/// **Take the terminal again** after [`step_aside`], everything the editor
+/// asked of it asked again and the screen drawn afresh.
+fn step_back<B: ratatui::backend::Backend + io::Write>(
+    terminal: &mut ratatui::Terminal<B>,
+    enhanced: bool,
+    all_keys: bool,
+) -> io::Result<()> {
     ratatui::crossterm::terminal::enable_raw_mode()?;
     execute!(terminal.backend_mut(), ratatui::crossterm::terminal::EnterAlternateScreen)?;
     // The pictures may have gone with the screen; upload again.
     crate::graphics::forget();
-    let _ = execute!(stdout(), EnableMouseCapture, EnableBracketedPaste, EnableFocusChange);
+    let _ = execute!(
+        stdout(),
+        EnableMouseCapture,
+        EnableBracketedPaste,
+        // Asked for so a lost Shift release can be noticed: ⌘-Tab away with a
+        // modifier down and the release never arrives (see `ShiftTap`).
+        EnableFocusChange
+    );
     if enhanced {
         let base = KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
             | KeyboardEnhancementFlags::REPORT_EVENT_TYPES
@@ -3064,7 +3155,25 @@ fn suspend_to_the_shell<B: ratatui::backend::Backend + io::Write>(
         }
     }
     terminal.clear()?;
-    Ok(true)
+    Ok(())
+}
+
+/// **Give a program the terminal until it ends** (`:run-in-terminal`,
+/// lazygit, yazi), with no key asked for afterwards: a program that draws
+/// the whole screen has nothing left on it to read.
+fn hand_over_program<B: ratatui::backend::Backend + io::Write>(
+    terminal: &mut ratatui::Terminal<B>,
+    line: &str,
+    in_dir: &std::path::Path,
+    enhanced: bool,
+    all_keys: bool,
+) -> io::Result<std::process::ExitStatus> {
+    step_aside(terminal, enhanced, all_keys)?;
+    pause_the_reader();
+    let status = run_in_the_terminal(line, in_dir);
+    resume_the_reader();
+    step_back(terminal, enhanced, all_keys)?;
+    status
 }
 
 /// Give the terminal back, run the command in it, and take it again.
@@ -3079,19 +3188,13 @@ fn hand_over<B: ratatui::backend::Backend + io::Write>(
     line: &str,
     events: &std::sync::mpsc::Receiver<Arrival>,
     in_dir: &std::path::Path,
+    enhanced: bool,
+    all_keys: bool,
 ) -> io::Result<()> {
-    let _ = execute!(
-        stdout(),
-        DisableMouseCapture,
-        DisableBracketedPaste,
-        DisableFocusChange
-    );
-    ratatui::crossterm::terminal::disable_raw_mode()?;
-    execute!(
-        terminal.backend_mut(),
-        ratatui::crossterm::terminal::LeaveAlternateScreen
-    )?;
+    step_aside(terminal, enhanced, all_keys)?;
+    pause_the_reader();
     let status = run_in_the_terminal(line, in_dir);
+    resume_the_reader();
     println!();
     match &status {
         Ok(code) if code.success() => println!("[{line}]"),
@@ -3116,21 +3219,7 @@ fn hand_over<B: ratatui::backend::Backend + io::Write>(
             Ok(Arrival::HungUp) | Ok(Arrival::Terminal(Err(_))) | Err(_) => break,
         }
     }
-    execute!(
-        terminal.backend_mut(),
-        ratatui::crossterm::terminal::EnterAlternateScreen
-    )?;
-    // The pictures may have gone with the screen; upload again.
-    crate::graphics::forget();
-    let _ = execute!(
-        stdout(),
-        EnableMouseCapture,
-        EnableBracketedPaste,
-        // Asked for so a lost Shift release can be noticed: ⌘-Tab away with a
-        // modifier down and the release never arrives (see `ShiftTap`).
-        EnableFocusChange
-    );
-    terminal.clear()?;
+    step_back(terminal, enhanced, all_keys)?;
     status.map(|_| ())
 }
 

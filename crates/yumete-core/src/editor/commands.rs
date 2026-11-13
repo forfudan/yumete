@@ -1260,6 +1260,47 @@ impl Editor {
                 self.ask_the_shell(line, put);
                 Ok(CommandOutcome::Continue)
             }
+            Command::RunInTerminal(line) => {
+                self.run_a_program(line, None);
+                Ok(CommandOutcome::Continue)
+            }
+            Command::Lazygit { force } => {
+                if !crate::editor::shell::on_path("lazygit") {
+                    self.status = say!("shell.lazygit-missing");
+                    return Ok(CommandOutcome::Continue);
+                }
+                // lazygit sees what is on disk: unsaved text would be missing
+                // from what it stages and commits.
+                let unsaved = self.buffers.iter().filter(|b| b.is_modified() && b.path().is_some()).count();
+                if unsaved > 0 && !force {
+                    self.status = say!("shell.lazygit-unsaved", unsaved.to_string());
+                    return Ok(CommandOutcome::Continue);
+                }
+                self.run_a_program("lazygit".to_string(), None);
+                Ok(CommandOutcome::Continue)
+            }
+            Command::Yazi => {
+                if !crate::editor::shell::on_path("yazi") {
+                    self.status = say!("shell.yazi-missing");
+                    return Ok(CommandOutcome::Continue);
+                }
+                // yazi writes what Enter chose to this file and leaves, rather
+                // than opening it in an editor of its own.
+                let chooser = std::env::temp_dir().join(format!("yumete-yazi-{}.txt", std::process::id()));
+                let _ = std::fs::remove_file(&chooser);
+                // Opened on the current file, which yazi then has selected.
+                let start = match self.current_buffer().path() {
+                    Some(path) => path.to_path_buf(),
+                    None => self.working_dir(),
+                };
+                let line = format!(
+                    "yazi --chooser-file={} {}",
+                    crate::editor::shell::quoted(&chooser.to_string_lossy()),
+                    crate::editor::shell::quoted(&start.to_string_lossy())
+                );
+                self.run_a_program(line, Some(chooser));
+                Ok(CommandOutcome::Continue)
+            }
             Command::Decimo { args, replace } => {
                 if self.current_buffer().is_readonly() {
                     self.status = say!("readonly.refused");

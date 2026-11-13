@@ -819,6 +819,10 @@ pub enum How {
     /// Run it once on each selection, given as its input, and keep the
     /// selections it exits 0 on (helix's `$`, `:keep-pipe`).
     Keep(Vec<String>),
+    /// Give a program the whole terminal in `dir` and take it back when it
+    /// ends, with no key asked for (`:run-in-terminal`, lazygit, yazi); the
+    /// files it names in `chooser`, when it writes one, are opened.
+    Program { dir: PathBuf, chooser: Option<PathBuf> },
 }
 
 /// A file to hand to the typesetter, or a typesetter to stop.
