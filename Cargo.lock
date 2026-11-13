@@ -3090,6 +3090,7 @@ dependencies = [
  "memmap2",
  "parley",
  "vello_cpu",
+ "yeslogic-fontconfig-sys",
  "yumete-cjk",
  "yumete-core",
 ]

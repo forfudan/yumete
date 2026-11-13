@@ -10,6 +10,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Fixed
 
+- **On Linux, the Markdown preview finds the fonts it is given when a `fonts.conf` puts a face of its own before every match** (`prepend_first`, bound `strong`): fontconfig lists the family's files, and the preview reads them. 漢字 used to come out as empty boxes, or not at all, and `[editor] preview_font_family` seemed to do nothing.
 - **`--shot` reads nothing of where you have been**, as `--private` does, so the same keys draw the same frame on any machine; an empty `:` line no longer showed a command from your own history there.
 
 ## 0.22.0 · 2026-11-11
