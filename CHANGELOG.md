@@ -13,6 +13,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Changed
 
+- **The prompts of `s`, `S`, `A-k` and `A-K` end in a colon in Chinese**, `选出: ` as `搜索: ` does; the gold colour already says the line is a regular expression.
 - **Enter on an empty `:` line runs the last command again under every keymap**, as helix's does; under vim's keys it used to do nothing. The empty line shows that command in grey first, as `/` shows the last pattern and `:!` the last shell command.
 
 ### Fixed

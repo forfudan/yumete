@@ -891,13 +891,13 @@ en = "Zong {0}, Heng {1}"
 [[message]]
 # 提示行：`A-k` 只留匹配的
 key = "ui.prompt-keep"
-zhs = "只留/"
+zhs = "只留: "
 en = "keep:"
 
 [[message]]
 # 提示行：`A-K` 去掉匹配的
 key = "ui.prompt-remove"
-zhs = "去掉/"
+zhs = "去掉: "
 en = "remove:"
 
 [[message]]
@@ -933,7 +933,7 @@ en = "wide search: "
 [[message]]
 # 提示行：`s` 選出匹配
 key = "ui.prompt-select"
-zhs = "选出/"
+zhs = "选出: "
 en = "select:"
 
 [[message]]
@@ -945,7 +945,7 @@ en = "Shell: "
 [[message]]
 # 提示行：`S` 按匹配切開
 key = "ui.prompt-split"
-zhs = "切开/"
+zhs = "切开: "
 en = "split:"
 
 [[message]]

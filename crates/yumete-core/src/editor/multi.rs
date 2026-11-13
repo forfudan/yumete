@@ -33,10 +33,10 @@ impl Sift {
     /// 那一行說不出它要做什麼，而這四件事做完的樣子差得很遠（選出、切開、只留、去掉）。
     pub fn prefix(self) -> &'static str {
         match self {
-            Sift::Select => "選出/",
-            Sift::Split => "切開/",
-            Sift::Keep => "只留/",
-            Sift::Drop => "去掉/",
+            Sift::Select => "選出: ",
+            Sift::Split => "切開: ",
+            Sift::Keep => "只留: ",
+            Sift::Drop => "去掉: ",
         }
     }
 }
