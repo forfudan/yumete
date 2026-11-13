@@ -1927,6 +1927,12 @@ zhs = "第 {0} / {1} 项"
 en = "{0} of {1}"
 
 [[message]]
+# 設置頁裏 `/` 搜設置名那一行的提示詞，搜完也寫在狀態行上（草稿）
+key = "settings.prompt-search"
+zhs = "搜索设置: "
+en = "search settings: "
+
+[[message]]
 # 设置面板：一个数字项可取的范围，{0} 到 {1}（草稿）
 key = "settings.range"
 zhs = "{0} 到 {1}"

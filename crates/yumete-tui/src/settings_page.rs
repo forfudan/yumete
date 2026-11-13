@@ -414,7 +414,7 @@ impl Seat {
             Key::Char('/') if !on_page => {
                 page.typing = Some(Typing::Search);
                 let text = page.search.clone();
-                editor.open_value_line("/", &text);
+                editor.open_value_line(&say!("settings.prompt-search"), &text);
             }
             Key::Enter | Key::Char(' ') if on_page => {
                 page.page_press();
@@ -1361,7 +1361,7 @@ fn draw_status_line(buf: &mut ratatui::buffer::Buffer, panel: &Panel, config: &C
         let label = panel.here().map(|s| s.label).unwrap_or("settings.keys.flavor-items");
         said_left.push_str(&format!(" › {}", said(label)));
     } else if !panel.search.is_empty() {
-        said_left.push_str(&format!("   /{}", panel.search));
+        said_left.push_str(&format!("   {}{}", say!("settings.prompt-search"), panel.search));
     }
     let position = match (panel.page.is_none(), rows) {
         (true, 1..) => say!("settings.position", panel.row + 1, rows),
@@ -2304,7 +2304,7 @@ mod tests {
         keys(&mut seat, &mut ed, &[Key::Enter]);
         assert_eq!(page(&seat).search, "font");
         let drawn = shot(page(&seat), 110, 34);
-        assert!(drawn.contains("/font"), "{drawn}");
+        assert!(drawn.contains(&format!("{}font", say!("settings.prompt-search"))), "{drawn}");
         assert!(drawn.contains(&say!("settings.keys-searched").chars().take(6).collect::<String>()), "{drawn}");
         keys(&mut seat, &mut ed, &[Key::Esc]);
         assert!(page(&seat).search.is_empty() && page(&seat).found.is_none());
