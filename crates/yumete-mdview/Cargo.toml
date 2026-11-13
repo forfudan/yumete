@@ -37,3 +37,11 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg"]
 harfrust = "0.12"
 yumete-cjk = {path = "../yumete-cjk"}
 yumete-core = {path = "../yumete-core"}
+
+# **A family fontconfig's matching hides from fontique**
+# (`fonts::find_unmatched`): its files listed by fontconfig, opened at run
+# time as fontique opens it, and mapped rather than read. Both already
+# under fontique, at these versions. MIT; Apache-2.0 / MIT.
+[target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies]
+yeslogic-fontconfig-sys = { version = "6", features = ["dlopen"] }
+memmap2 = "0.9"

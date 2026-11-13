@@ -153,6 +153,95 @@ fn split_list(list: &str) -> Option<(String, String)> {
     (!named.is_empty() || !generic.is_empty()).then(|| (named.join(", "), generic.join(", ")))
 }
 
+/// **Find the faces of `stacks` the font library cannot.** fontique knows
+/// every installed family by name, but asked for one it asks fontconfig for
+/// its best matches and keeps them only while they are that family's. A
+/// `fonts.conf` that puts a face of its own before whatever was asked for
+/// (`prepend_first`, bound `strong`, on every pattern `sans-serif` is in, and
+/// fontconfig adds `sans-serif` to every pattern) answers each such question
+/// with that face first, so no family but it is ever found, and a page's 漢字
+/// are all the missing glyph of a Latin face. A family fontique knows but
+/// cannot match is read from the files fontconfig lists for it
+/// ([`listed_files`]). Nothing on a system whose fontconfig matches as
+/// asked: every family is found and nothing is listed.
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+pub(crate) fn find_unmatched(fonts: &mut parley::FontContext, stacks: &[&str]) {
+    let mut read: std::collections::HashSet<std::path::PathBuf> = std::collections::HashSet::new();
+    for name in stacks.iter().flat_map(|s| s.split(',')).map(|n| n.trim().trim_matches(['\'', '"'])) {
+        // A name fontique does not know at all is not installed, and one it
+        // finds needs nothing; only one known but not matched is listed.
+        if name.is_empty() || fonts.collection.family_id(name).is_none() || fonts.collection.family_by_name(name).is_some() {
+            continue;
+        }
+        for file in listed_files(name) {
+            if !read.insert(file.clone()) {
+                continue;
+            }
+            // Mapped, not read: a CJK collection is twenty megabytes a
+            // weight, and only the glyphs drawn are ever looked at.
+            let Ok(opened) = std::fs::File::open(&file) else { continue };
+            // SAFETY: a font file the system installed, mapped read-only; it
+            // is not written to while a preview is open.
+            let Ok(mapped) = (unsafe { memmap2::Mmap::map(&opened) }) else { continue };
+            fonts.collection.register_fonts(fontique::Blob::new(std::sync::Arc::new(mapped)), None);
+        }
+    }
+}
+
+/// Elsewhere the system's own font library is asked, and it finds what is
+/// installed.
+#[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
+pub(crate) fn find_unmatched(_fonts: &mut parley::FontContext, _stacks: &[&str]) {}
+
+/// **The files fontconfig lists for `family`**, every face of it, as
+/// `fc-list` lists them: a listing applies none of `fonts.conf`'s rules, so
+/// one that answers every match with a face of its own does not hide the
+/// family asked for. Asked of the fontconfig fontique opened, in this
+/// process; empty when there is no fontconfig.
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+fn listed_files(family: &str) -> Vec<std::path::PathBuf> {
+    use fontconfig_sys::constants::{FC_FAMILY, FC_FILE};
+    use fontconfig_sys::statics::{LIB, LIB_RESULT};
+    use std::os::unix::ffi::OsStrExt;
+    let Ok(name) = std::ffi::CString::new(family) else { return Vec::new() };
+    if LIB_RESULT.is_err() {
+        return Vec::new();
+    }
+    let mut files = Vec::new();
+    // SAFETY: fontconfig's own calls on objects made here and destroyed here;
+    // each file name is copied out before the set that holds it is destroyed.
+    unsafe {
+        let pattern = (LIB.FcPatternCreate)();
+        let objects = (LIB.FcObjectSetCreate)();
+        if !pattern.is_null() && !objects.is_null() {
+            (LIB.FcPatternAddString)(pattern, FC_FAMILY.as_ptr(), name.as_ptr().cast());
+            (LIB.FcObjectSetAdd)(objects, FC_FILE.as_ptr());
+            let set = (LIB.FcFontList)(std::ptr::null_mut(), pattern, objects);
+            if !set.is_null() {
+                for k in 0..(*set).nfont.max(0) as usize {
+                    let font = *(*set).fonts.add(k);
+                    let mut file: *mut fontconfig_sys::FcChar8 = std::ptr::null_mut();
+                    let found = (LIB.FcPatternGetString)(font, FC_FILE.as_ptr(), 0, &mut file);
+                    if found == fontconfig_sys::FcResultMatch && !file.is_null() {
+                        let bytes = std::ffi::CStr::from_ptr(file.cast()).to_bytes();
+                        files.push(std::path::PathBuf::from(std::ffi::OsStr::from_bytes(bytes)));
+                    }
+                }
+                (LIB.FcFontSetDestroy)(set);
+            }
+        }
+        if !objects.is_null() {
+            (LIB.FcObjectSetDestroy)(objects);
+        }
+        if !pattern.is_null() {
+            (LIB.FcPatternDestroy)(pattern);
+        }
+    }
+    files.sort();
+    files.dedup();
+    files
+}
+
 /// The faces a writing system is set in. `list` is `[export] font_family`;
 /// with an empty one the system's own faces are asked for.
 pub(crate) fn families(han: Han, list: &str) -> Families {
@@ -176,6 +265,20 @@ pub(crate) fn families(han: Han, list: &str) -> Families {
 
 #[cfg(test)]
 mod tests {
+    /// **A family fontconfig knows is listed by its files**, whatever its
+    /// `fonts.conf` does to matching: the first family fontique knows, read
+    /// back as files that exist. Nothing to ask on a system with no fonts.
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    #[test]
+    fn a_family_fontconfig_knows_is_listed_by_its_files() {
+        let mut fonts = parley::FontContext::new();
+        let Some(name) = fonts.collection.family_names().next().map(str::to_string) else { return };
+        let files = super::listed_files(&name);
+        assert!(!files.is_empty(), "{name} is installed, so fontconfig lists its files");
+        assert!(files.iter().all(|f| f.exists()), "{files:?}");
+        assert!(super::listed_files("No Such Family Anywhere").is_empty());
+    }
+
     use super::*;
 
     #[test]
