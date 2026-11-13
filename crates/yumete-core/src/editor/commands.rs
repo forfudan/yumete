@@ -2396,3 +2396,47 @@ impl Editor {
         saved
     }
 }
+
+impl Editor {
+    /// **What a switch command would turn round**, for the line under `:` that
+    /// says 「現在：開」 before Enter is pressed.
+    ///
+    /// The line is read the way Enter would read it, so the answer comes from
+    /// the same field the command flips and a switch cannot be listed under one
+    /// name and looked up under another. `None` for a line that is not a switch,
+    /// for a switch with nothing to switch here (a table command away from a
+    /// table), and for the two the front end keeps: `:theme-fill` and
+    /// `:yume-autocompletion`.
+    pub fn switch_state(&self, line: &str) -> Option<bool> {
+        let head = line.strip_prefix(':').unwrap_or(line).split_whitespace().next()?;
+        Some(match command::parse(head).ok()? {
+            Command::ReloadAuto(_) => self.reload_auto,
+            Command::SetReadonly(_) => self.current_buffer().is_readonly(),
+            Command::SetLayout(None) => self.layout() == Layout::Vertical,
+            Command::RenderRuby { dialect, .. } => self.ruby_configured().contains(dialect),
+            Command::SetNumberFill(_) => self.number_fill,
+            Command::SetDiffGutter(_) => self.diff_gutter,
+            Command::SetHanging(_) => self.hanging,
+            Command::Preview(_) => self.preview_here_on_screen() || self.preview_at.is_some(),
+            Command::PreviewWindow(_) => self.preview_here_on_screen(),
+            Command::PreviewBrowser(_) => self.preview_at.is_some(),
+            Command::PreviewVertical(_) => self.preview_vertical,
+            Command::PreviewTheme(_) => self.preview_theme,
+            Command::SetSentences(_) => self.sentences(),
+            Command::SetSoftWrap(_) => self.soft_wrap(),
+            Command::ShowDetail(_) => {
+                self.table.as_ref()?;
+                self.show_detail.unwrap_or_else(|| self.detail_opens_here())
+            }
+            Command::SetTypewriter(_) => self.typewriter,
+            Command::SetFocus(_) => self.focus,
+            Command::SetMeter(_) => self.meter,
+            Command::SetNote(_) => self.notes,
+            Command::SetCode(_) => self.code_colours,
+            Command::SetTableNumbers(_) => self.table_numbers,
+            Command::SetTableHeader(_) => self.table.as_ref()?.schema.header,
+            Command::Sidebar(panel, _) => self.showing(Editor::view_of(panel)?).is_some(),
+            _ => return None,
+        })
+    }
+}

@@ -101,6 +101,11 @@ fn in_force(config: &Config) -> ThemeConfig {
 /// reader's, not a property of 墨香.
 static FILL: AtomicU8 = AtomicU8::new(0);
 
+/// Whether a coloured run gets a ground now, for the `:` panel to say.
+pub fn fill_in_force(config: &Config) -> bool {
+    in_force(config).fill
+}
+
 /// Say whether a coloured run gets a ground, and answer what is in force now.
 ///
 /// `:theme-fill` on its own flips it, as every switch does.

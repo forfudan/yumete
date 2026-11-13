@@ -39848,3 +39848,28 @@ fn decimo_append_writes_the_value_after_the_expression() {
         None => assert_eq!(ed.status(), say!("shell.decimo-missing")),
     }
 }
+
+/// Every `on`/`off` command says what it is now under `:`, so one added
+/// without a line in `switch_state` is caught here. The front end answers
+/// for its two, and the table ones answer only on a table.
+#[test]
+fn every_switch_says_what_it_is_now() {
+    let ed = Editor::new();
+    let elsewhere = ["theme-fill", "yume", "yume-autocompletion", "table-detail", "table-header"];
+    let mut seen = 0;
+    let mut silent = Vec::new();
+    for e in crate::command::COMMANDS {
+        let switch = e.params.iter().any(|p| p.words().is_some_and(|w| w.iter().map(|w| w.name).eq(["on", "off"])));
+        if !switch || elsewhere.contains(&e.name) {
+            continue;
+        }
+        if ed.switch_state(e.name).is_none() {
+            silent.push(e.name);
+        }
+        seen += 1;
+    }
+    assert!(silent.is_empty(), "these do not say what they are now: {silent:?}");
+    assert!(seen > 20, "only {seen} switches found");
+    assert_eq!(ed.switch_state(":view-focus"), Some(false));
+    assert_eq!(ed.switch_state("goto 3"), None);
+}

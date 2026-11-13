@@ -6133,7 +6133,7 @@ fn draw(
     // of the footer: the command row is *below* it, so a panel that stopped at
     // the command row would be drawn over the position readout.
     let footer = status_area;
-    panels.extend(draw_command_menu(frame, editor, config, area, footer));
+    panels.extend(draw_command_menu(frame, editor, config, ime, area, footer));
     panels.extend(draw_search_hint(frame, editor, config, area, footer));
     panels.extend(draw_lookfor_menu(frame, editor, config, area, footer));
     panels.extend(draw_reference_menu(frame, editor, config, area, footer));
@@ -6903,6 +6903,10 @@ struct List<'a> {
     /// 一段一行，太長的自己折，可以多行，隨內容高矮。空的就是沒有說明塊，也沒有
     /// 那道橫線。
     about: &'a [String],
+    /// **What a switch is now**, the last line of the block, with the word
+    /// inked: gold for on, quiet for off. `None` for every list but the `:`
+    /// panel on a switch command.
+    state: Option<bool>,
     /// **撑滿終端的寬度**，右邊空着也認：那片空白是留給說明的。
     wide: bool,
     /// **下邊框壓在狀態欄那一行上**（同 helix）：命令行和它之間
@@ -7035,6 +7039,7 @@ fn draw_list(
         footer,
         columns,
         about,
+        state,
         wide,
         over_status,
         deep_as_the_page,
@@ -7186,10 +7191,21 @@ fn draw_list(
         false => (inner + 2).min(area.width as usize) as u16,
     };
     // 說明折到框裏那麼寬，一段一段地折。
-    let said: Vec<String> = about
+    let mut said: Vec<String> = about
         .iter()
         .flat_map(|p| fold_to_width(p, width.saturating_sub(3) as usize))
         .collect();
+    // 「現在：」 and the word apart, so that only the word takes the colour.
+    let now = state.map(|on| {
+        let word = match on {
+            true => say!("label.on"),
+            false => say!("label.off"),
+        };
+        (say!("ui.switch-now"), word, on)
+    });
+    if let Some((head, word, _)) = &now {
+        said.push(format!("{head}{word}"));
+    }
     // 說明塊 ＋ 一道橫線，兩樣一起加在高度上（定下來的是「panel grows」）。
     //
     // Warning: **腳注那一行要讓出來**：舊形狀的高度是 `deep + 3`，那個 3 是上邊框、
@@ -7254,7 +7270,20 @@ fn draw_list(
     if !said.is_empty() {
         for (n, line) in said.iter().enumerate() {
             // 和單子上那幾行同一個左邊：框內一格，再一格。
-            put_text(buf, menu.x + 2, menu.y + 1 + n as u16, menu.x + width - 1, line, text);
+            let y = menu.y + 1 + n as u16;
+            match &now {
+                Some((head, word, on)) if n + 1 == said.len() => {
+                    let x = put_text(buf, menu.x + 2, y, menu.x + width - 1, head, text);
+                    let lit = match on {
+                        true => ground.fg(ink.gold()),
+                        false => quiet,
+                    };
+                    put_text(buf, x, y, menu.x + width - 1, word, lit);
+                }
+                _ => {
+                    put_text(buf, menu.x + 2, y, menu.x + width - 1, line, text);
+                }
+            }
         }
         if ruled {
             let y = menu.y + 1 + said.len() as u16;
@@ -8573,6 +8602,7 @@ fn draw_search_hint(
         List {
             deep_as_the_page: false,
             about: &about,
+            state: None,
             wide: true,
             over_status: true,
             // 沒有單子——整扇面板就是那兩句話，底下那道橫線不必畫。
@@ -8653,6 +8683,7 @@ fn draw_command_menu(
     frame: &mut Frame,
     editor: &Editor,
     config: &Config,
+    ime: &ImeSession,
     area: Rect,
     status: Rect,
 ) -> Option<Rect> {
@@ -8758,6 +8789,12 @@ fn draw_command_menu(
     // Spread across the window: the command list is short entries and there
     // are a couple of dozen of them, which is exactly the shape that wants
     // columns.
+    // **A switch says what it is now**, before Enter turns it round. Only for
+    // a line that names a command, not one still empty or misspelt.
+    let state = match about.is_empty() {
+        true => None,
+        false => editor.switch_state(typed).or_else(|| switch_held_here(typed, config, ime)),
+    };
     let title = say!("ui.commands");
     let menu = draw_list(
         frame,
@@ -8768,6 +8805,7 @@ fn draw_command_menu(
         List {
             deep_as_the_page: false,
             about: &about,
+            state,
             wide: true,
             over_status: true,
             items: &items,
@@ -8784,6 +8822,19 @@ fn draw_command_menu(
         },
     );
     joined(frame, menu)
+}
+
+/// **The switches the front end keeps**, for the `:` panel's 「現在」 line:
+/// the core cannot see the theme's fill or the input method.
+fn switch_held_here(line: &str, config: &Config, ime: &ImeSession) -> Option<bool> {
+    use yumete_core::command::Command;
+    let head = line.strip_prefix(':').unwrap_or(line).split_whitespace().next()?;
+    match yumete_core::command::parse(head).ok()? {
+        Command::ThemeFill(_) => Some(crate::theme::fill_in_force(config)),
+        Command::Yume(_) => Some(ime.holding_the_keys()),
+        Command::YumeAutocompletion(_) => Some(ime.prediction_enabled()),
+        _ => None,
+    }
 }
 
 /// The `[^` and `](#` panel — the same shape as the `:` menu, in the text
@@ -8832,6 +8883,7 @@ fn draw_reference_menu(
         List {
             deep_as_the_page: false,
             about: &[],
+            state: None,
             wide: false,
             over_status: false,
             items: &items,
@@ -8894,6 +8946,7 @@ fn draw_lookfor_menu(
             List {
                 deep_as_the_page: true,
                 about: &[],
+                state: None,
                 wide: false,
                 over_status: false,
                 items: &[],
@@ -8946,6 +8999,7 @@ fn draw_lookfor_menu(
         List {
             deep_as_the_page: true,
             about: &about,
+            state: None,
             wide: true,
             over_status: true,
             items: &items,
