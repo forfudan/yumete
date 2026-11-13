@@ -324,6 +324,22 @@ pub(crate) fn quoted(word: &str) -> String {
     }
 }
 
+/// **A new folder of this run's own** in the temp folder: made, never found,
+/// so it cannot be one somebody else put there, and only this user may
+/// write in it.
+pub(crate) fn own_temp_dir(what: &str) -> std::io::Result<std::path::PathBuf> {
+    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos());
+    let dir = std::env::temp_dir().join(format!("yumete-{what}-{}-{stamp}", std::process::id()));
+    let mut builder = std::fs::DirBuilder::new();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        builder.mode(0o700);
+    }
+    builder.create(&dir)?;
+    Ok(dir)
+}
+
 /// Whether a program called `name` is on `PATH`.
 pub(crate) fn on_path(name: &str) -> bool {
     let Some(path) = std::env::var_os("PATH") else { return false };

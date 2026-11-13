@@ -935,7 +935,9 @@ fn main() -> ExitCode {
     // **The last import's report**, once, in a read-only buffer of its own:
     // what came over is in the config, and what it took from yumete and
     // where that went is read here, beside the text.
-    if !private && shot.is_none() {
+    // Only for a run that draws: `--preview`, a pipe and `--timing` would
+    // take it and show it to nobody.
+    if drawing && !private && shot.is_none() {
         if let Some(report) = import::take_report() {
             editor.open_report(&yumete_core::say!("ui.import-report"), &report);
         }

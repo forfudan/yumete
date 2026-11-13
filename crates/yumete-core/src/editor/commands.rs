@@ -1286,8 +1286,17 @@ impl Editor {
                 }
                 // yazi writes what Enter chose to this file and leaves, rather
                 // than opening it in an editor of its own.
-                let chooser = std::env::temp_dir().join(format!("yumete-yazi-{}.txt", std::process::id()));
-                let _ = std::fs::remove_file(&chooser);
+                //
+                // In a folder made for this run and nobody else's: in a temp
+                // folder other users share, a file whose name they can guess
+                // could be put there, or linked, before yazi writes it.
+                let chooser = match crate::editor::shell::own_temp_dir("yazi") {
+                    Ok(dir) => dir.join("chosen.txt"),
+                    Err(err) => {
+                        self.status = say!("shell.cannot-run", err);
+                        return Ok(CommandOutcome::Continue);
+                    }
+                };
                 // Opened on the current file, which yazi then has selected.
                 let start = match self.current_buffer().path() {
                     Some(path) => path.to_path_buf(),

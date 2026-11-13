@@ -20,6 +20,10 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Fixed
 
+- **On Windows, `:decimo`, `:files-yazi` and any `:!` line with quotes in it reach the program as typed**: cmd.exe was handed the line quoted a second time, so `decimo "1+1"` arrived with the quote marks inside its argument. A program that is not installed now says so there too.
+- **The import report waits for a run that shows it**: `ye --preview`, output to a pipe and `--timing` no longer take it away unseen.
+- **`:files-yazi` keeps yazi's answer in a folder of its own** rather than at a name other users of the machine could guess.
+
 - **The command palette and `:keymap-actions` no longer show a key your config turned into a group**: with `[keys.normal.space.f]`, the file picker is not shown on `Space f` any more.
 
 - **A program run with `:!` gets every key typed to it**: the editor used to go on reading the terminal and take some of them. It also gets the terminal as it was, without the editor's keyboard protocol or pictures, files it changed are read again when it ends, and the key pressed to come back reaches the editor, not the system's input method. A program that is not installed says so on the status line.

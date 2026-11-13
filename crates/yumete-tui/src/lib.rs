@@ -1611,12 +1611,16 @@ pub fn run(
                                             editor.open_chosen(&chosen);
                                         }
                                         let _ = std::fs::remove_file(&file);
+                                        if let Some(dir) = file.parent() {
+                                            let _ = std::fs::remove_dir(dir);
+                                        }
                                     } else if !status.success() {
                                         // The shell's own word for it went to the
                                         // screen the editor has just taken back.
                                         let program = want.line.split_whitespace().next().unwrap_or("").to_string();
                                         editor.set_status(match status.code() {
-                                            Some(127) => say!("shell.program-not-found", program),
+                                            // A POSIX shell's 127, and cmd.exe's 9009.
+                                            Some(127 | 9009) => say!("shell.program-not-found", program),
                                             Some(126) => say!("shell.program-not-runnable", program),
                                             _ => say!("shell.finished", format!("{} — {status}", want.line)),
                                         });
@@ -3446,7 +3450,13 @@ fn shell_command(line: &str, in_dir: &std::path::Path) -> std::process::Command 
         let mut command = std::process::Command::new(shell);
         // `/C` and not `/c`: identical to `cmd.exe`, and it reads as a flag
         // rather than as a stray letter in the line being run.
-        command.arg("/C").arg(line);
+        //
+        // Warning: **the line goes over as written, in one pair of quotes that
+        // `/S` takes off.** `arg` would quote it again the C runtime's way,
+        // each `"` as `\"`, and cmd.exe does not read `\"`: `decimo "1+1"`
+        // would reach decimo with the quote marks in its argument.
+        use std::os::windows::process::CommandExt;
+        command.arg("/S").arg("/C").raw_arg(format!("\"{line}\""));
         command.current_dir(in_dir);
         command
     }

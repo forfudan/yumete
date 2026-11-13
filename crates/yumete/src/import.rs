@@ -1495,11 +1495,12 @@ fn report(path: &Path, beside: bool, imported: &Imported) -> String {
 }
 
 /// **The last import's report, taken**: read and removed, so it is shown
-/// once.
+/// once. A file that cannot be removed is shown all the same, and again at
+/// the next start, rather than never.
 pub fn take_report() -> Option<String> {
     let path = report_path();
     let text = std::fs::read_to_string(&path).ok()?;
-    std::fs::remove_file(&path).ok()?;
+    let _ = std::fs::remove_file(&path);
     Some(text)
 }
 
