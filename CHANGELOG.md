@@ -9,6 +9,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **`:git-lazygit` and `:files-yazi` hand the terminal to lazygit and yazi** and come back when you leave them: lazygit in the current file's repository, asking you to save first (`:git-lazygit!` does not ask), and yazi on the current file, where `Enter` opens the chosen files here. Files changed on disk meanwhile are read again.
 - **`:run-in-terminal <command>`** gives any program the whole terminal and comes back the moment it ends, with no key to press.
 - **`:decimo` and `:decimo-replace` put an arbitrary-precision value into the text**, with [decimo](https://github.com/forfudan/decimo) installed: `:decimo pi -P 50` at the cursor, on the same line; `:decimo-replace -P 50` evaluates the selected text and puts the value in its place, and `:decimo-append -P 50` keeps it and writes ` = ` and the value after it.
+- **An import says where yumete's taken keys went.** When your vim, Neovim, LazyVim or helix maps take one of yumete's `Space` keys, the imported file, the terminal and a read-only report the editor opens the next time it starts list each one and where its command is now (`Space b  open the buffer picker: now Space ,`).
 - **On/off commands say what they are now** in the `:` panel, under what they do: `Now: on` in gold, `Now: off` dimmed, for `:vertical`, `:view-focus`, `:sidebar-outline`, `:theme-fill` and the other switches.
 - **`:insert-output` and `:append-output`**, helix's names, are `:pipe-before` and `:pipe-after`.
 
@@ -18,6 +19,8 @@ Written for people who use it to write, not for the commit log: each line says w
 - **Enter on an empty `:` line runs the last command again under every keymap**, as helix's does; under vim's keys it used to do nothing. The empty line shows that command in grey first, as `/` shows the last pattern and `:!` the last shell command.
 
 ### Fixed
+
+- **The command palette and `:keymap-actions` no longer show a key your config turned into a group**: with `[keys.normal.space.f]`, the file picker is not shown on `Space f` any more.
 
 - **A program run with `:!` gets every key typed to it**: the editor used to go on reading the terminal and take some of them. It also gets the terminal as it was, without the editor's keyboard protocol or pictures, files it changed are read again when it ends, and the key pressed to come back reaches the editor, not the system's input method. A program that is not installed says so on the status line.
 - **A shell command's complaint on the status line is plain text**: the colours many commands write even into a pipe used to show as escape codes.

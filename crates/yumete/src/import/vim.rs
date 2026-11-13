@@ -175,8 +175,6 @@ pub(super) struct Own {
     /// The `[keys.vim.…]` sections, ready to write.
     pub keys: String,
     pub skipped: Vec<String>,
-    /// Keys of yumete's that an imported map took, with what they did.
-    pub takes: Vec<String>,
     pub carried: usize,
     /// A run written with `@`.
     pub runs: bool,
@@ -825,29 +823,15 @@ struct Keymap {
     commands: Vec<yumete_core::editor::DocCommand>,
     normal: Vec<(Vec<String>, String)>,
     select: Vec<(Vec<String>, String)>,
-    /// The keys of yumete's Space menu, as its rows spell them, and what
-    /// the row says, in English as the file is.
-    space: Vec<(String, String)>,
 }
 
 impl Keymap {
     fn new() -> Keymap {
         let docs = yumete_core::Editor::keymap_for_docs(yumete_config::KeyPreset::Vim, yumete_config::Flavor::default());
-        let english = |tag: &str| {
-            yumete_core::messages::table().get(tag).map(|e| e.en).filter(|en| !en.is_empty()).unwrap_or(tag).to_string()
-        };
-        let space = docs
-            .menus
-            .iter()
-            .filter(|m| m.title == "hint.space.title")
-            .flat_map(|m| m.rows.iter())
-            .flat_map(|(keys, says)| keys.split(" / ").map(|k| (k.to_string(), english(says))).collect::<Vec<_>>())
-            .collect();
         Keymap {
             commands: yumete_core::Editor::commands_for_docs(),
             normal: docs.normal.into_iter().map(|k| (k.keys, k.run)).collect(),
             select: docs.select.into_iter().map(|k| (k.keys, k.run)).collect(),
-            space,
         }
     }
 
@@ -1069,7 +1053,6 @@ fn keys(user: &Dump, base: &Dump, from: Source, own: &mut Own) {
     mine.sort_by(|a, b| (&a.mode, &a.lhs).cmp(&(&b.mode, &b.lhs)));
     let mut written = Written::default();
     let mut already: Vec<String> = Vec::new();
-    let mut taken: BTreeSet<String> = BTreeSet::new();
     for map in mine {
         let say = |own: &mut Own, why: &str| own.skipped.push(format!("{}: {why}", shown(map, leader)));
         let targets = match tables(&map.mode) {
@@ -1130,15 +1113,6 @@ fn keys(user: &Dump, base: &Dump, from: Source, own: &mut Own) {
                         Some(desc) => format!("{{ run = {value}, label = {} }}", quote(&one_line(desc))),
                         None => value,
                     };
-                    // A key of yumete's Space menu, taken (decision 16): said
-                    // once, with what yumete had there.
-                    let had = keymap.space.iter().find(|(k, _)| *k == spelt[1]);
-                    if let (true, Some((key, says))) = (from != Source::LazyVim, had) {
-                        if taken.insert(key.clone()) {
-                            let still = if key == "w" { "; the group is still on C-w" } else { "" };
-                            own.takes.push(format!("<leader>{key}: yumete's Space {key} ({says}{still})"));
-                        }
-                    }
                     written.put(path, spelt[spelt.len() - 1].clone(), line)
                 }
                 false => {

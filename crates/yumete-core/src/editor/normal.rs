@@ -914,7 +914,8 @@ impl Editor {
             }
             None => true,
         };
-        if let Some(run) = self.normal_keys_for(name).filter(|run| !aliases.contains_key(run) && reaches(run)) {
+        let taken = |run: &str| aliases.contains_key(run) || self.normal_tree.opens(run);
+        if let Some(run) = self.normal_keys_for(name).filter(|run| !taken(run) && reaches(run)) {
             return Some(shown(run));
         }
         let mut mine: Vec<String> = aliases

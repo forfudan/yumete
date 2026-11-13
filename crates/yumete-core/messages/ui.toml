@@ -793,6 +793,12 @@ zhs = "记录：开"
 en = "record: on"
 
 [[message]]
+# `--import` 之後下一次打開時那個只讀緩衝區的名字（草稿）
+key = "ui.import-report"
+zhs = "导入报告"
+en = "Import report"
+
+[[message]]
 # 界面語言現在是哪一種(`:language`)
 key = "ui.language-now"
 zhs = "界面语言：{0}"

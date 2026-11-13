@@ -471,25 +471,10 @@ fn the_locale() -> yumete_core::messages::Language {
     yumete_core::messages::Language::Traditional
 }
 
-/// The settings that belong to one editor.
-fn apply_to_editor(config: &Config, editor: &mut Editor, layout: Option<yumete_core::zong::Layout>) {
-    // **`remember = false` takes hold without a restart**: unticked in the
-    // panel, the session is not written at the next quit.
-    // Only off: turning it on needs the session's place, worked out at start.
-    if !config.editor.remember {
-        editor.set_remembering(false);
-    }
-    // How much ruby is laid out. Both ruby syntaxes are always read, so
-    // there is no per-dialect switch here.
-    editor
-        .execute(match config.editor.show_ruby {
-            true => ":ruby-render full",
-            // 中階，不是 `off`：沒人要看的讀音也還是讀音，所以字數知道「錢塘」是
-            // 兩個字而標記一個都不是（#283）。
-            false => ":ruby-render basic",
-        })
-        .ok();
-    // The key trees are laid once, after every setter.
+/// **The config's keys, laid on an editor**: the bindings, the preset and
+/// the flavour, and nothing that asks the terminal or sets the process — so
+/// an import can see where its keys put yumete's commands.
+pub fn lay_keys(config: &Config, editor: &mut Editor) {
     editor.lay_keys_once(|editor| {
         editor.set_key_aliases(config.keys.normal.clone());
         editor.set_select_aliases(config.keys.select.clone());
@@ -510,6 +495,28 @@ fn apply_to_editor(config: &Config, editor: &mut Editor, layout: Option<yumete_c
         // 鍵位那一層的事，所以擺在一起。
         editor.set_flavor(config.keys.flavor.clone());
     });
+}
+
+/// The settings that belong to one editor.
+fn apply_to_editor(config: &Config, editor: &mut Editor, layout: Option<yumete_core::zong::Layout>) {
+    // **`remember = false` takes hold without a restart**: unticked in the
+    // panel, the session is not written at the next quit.
+    // Only off: turning it on needs the session's place, worked out at start.
+    if !config.editor.remember {
+        editor.set_remembering(false);
+    }
+    // How much ruby is laid out. Both ruby syntaxes are always read, so
+    // there is no per-dialect switch here.
+    editor
+        .execute(match config.editor.show_ruby {
+            true => ":ruby-render full",
+            // 中階，不是 `off`：沒人要看的讀音也還是讀音，所以字數知道「錢塘」是
+            // 兩個字而標記一個都不是（#283）。
+            false => ":ruby-render basic",
+        })
+        .ok();
+    // The key trees are laid once, after every setter.
+    lay_keys(config, editor);
     use yumete_core::actions::Place;
     editor.set_place_bindings(Place::Prompt, config.keys.prompt.clone());
     editor.set_place_bindings(Place::Picker, config.keys.picker.clone());

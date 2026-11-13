@@ -146,6 +146,9 @@ pub struct Imported {
     pub carried: usize,
     /// Items listed under `# Not carried over:`.
     pub skipped: usize,
+    /// yumete's commands whose Space key the config took, and where each is
+    /// now: the file lists them, and so does the report the editor opens.
+    pub moved: Vec<String>,
 }
 
 /// The header's first lines, shared by the imports. `word` is what was
@@ -746,8 +749,10 @@ pub fn helix(source: &str, from: &Path, when: &str, beside: bool, languages: Opt
     }
     text.push_str(&got.keys);
     text.push_str(&got.lsp);
+    let moved = moved(&text);
+    text.push_str(&takes_over(&moved));
     text.push_str(&not_carried(&got.skipped));
-    Ok(Imported { text, carried: got.carried, skipped: got.skipped.len() })
+    Ok(Imported { text, carried: got.carried, skipped: got.skipped.len(), moved })
 }
 
 /// helix's names for the servers yumete starts, where the name is not the
@@ -944,8 +949,10 @@ fn lazyvim(nvim: &Path, sign: &Path, when: &str, beside: bool, own: Result<&vim:
         text.push_str(&keys_of(own));
         skipped.extend(own.skipped.iter().cloned());
     }
+    let moved = moved(&text);
+    text.push_str(&takes_over(&moved));
     text.push_str(&not_carried(&skipped));
-    Imported { text, carried: carried + carried_own - overlap, skipped: skipped.len() }
+    Imported { text, carried: carried + carried_own - overlap, skipped: skipped.len(), moved }
 }
 
 /// **What a config that stopped at an error lost**, for the header:
@@ -1002,18 +1009,63 @@ fn vim_file(what: &str, word: &str, from: &Path, version: &str, when: &str, besi
         }
     }
     text.push_str(&keys_of(own));
-    text.push_str(&takes_over(&own.takes));
+    let moved = moved(&text);
+    text.push_str(&takes_over(&moved));
     text.push_str(&not_carried(&own.skipped));
-    Imported { text, carried: own.carried, skipped: own.skipped.len() }
+    Imported { text, carried: own.carried, skipped: own.skipped.len(), moved }
 }
 
-/// **The keys of yumete's that imported maps took**, before the list of
-/// what did not come over: these did, and replaced something.
-fn takes_over(takes: &[String]) -> String {
+/// **Where each command of yumete's Space menu is under `config`**, for
+/// the ones whose key it took: `Space b  buffer picker: now Space ,`.
+///
+/// Read off the keys themselves, not off the maps that were written: the
+/// config is laid on an editor beside one with the same keymap and nothing
+/// bound, and a command whose key differs between the two has moved. So a
+/// LazyVim layout, a reader's `<leader>` maps and a helix `[keys.normal.space]`
+/// are one question, and a map that took a key yumete already had elsewhere
+/// is not listed at all.
+fn moved(config: &str) -> Vec<String> {
+    let config = yumete_config::Config::from_toml(config);
+    let mut bare = yumete_config::Config::default();
+    bare.keys.preset = config.keys.preset;
+    bare.keys.flavor = config.keys.flavor.clone();
+    let mut before = yumete_core::Editor::new();
+    let mut after = yumete_core::Editor::new();
+    yumete_tui::settings::lay_keys(&bare, &mut before);
+    yumete_tui::settings::lay_keys(&config, &mut after);
+    let english = |tag: &str| {
+        yumete_core::messages::table().get(tag).map(|e| e.en).filter(|en| !en.is_empty()).unwrap_or(tag).to_string()
+    };
+    let palette = after.keys_now("command_palette");
+    let mut out: Vec<(String, String)> = Vec::new();
+    for (name, help, ..) in yumete_core::Editor::commands_for_docs() {
+        // A key under Space, not Space itself: a leader on <Nop> is said
+        // where the maps are.
+        let under = |k: &String| k.strip_prefix("Space ").is_some_and(|rest| !rest.trim().is_empty());
+        let Some(was) = before.keys_now(name).filter(under) else { continue };
+        let now = after.keys_now(name);
+        if now.as_deref() == Some(was.as_str()) {
+            continue;
+        }
+        let to = match (now, &palette) {
+            (Some(now), _) => format!("now {now}"),
+            (None, Some(palette)) => format!("no key now; {palette} (every command) still runs it"),
+            (None, None) => String::from("no key now"),
+        };
+        out.push((was.clone(), format!("{was}  {}: {to}", english(help))));
+    }
+    out.sort();
+    out.dedup();
+    out.into_iter().map(|(_, line)| line).collect()
+}
+
+/// **The keys of yumete's that imported maps took**, and where what was
+/// there went, before the list of what did not come over.
+fn takes_over(moved: &[String]) -> String {
     let mut out = String::new();
-    if !takes.is_empty() {
-        out.push_str("\n# Takes over yumete's keys:\n");
-        for line in takes {
+    if !moved.is_empty() {
+        out.push_str("\n# Takes over yumete's keys; where what they did is now:\n");
+        for line in moved {
             out.push_str("#   ");
             out.push_str(&one_line(line));
             out.push('\n');
@@ -1395,7 +1447,60 @@ pub fn run(which: &str) -> ExitCode {
     if beside {
         println!("config.toml was already there, so this went beside it; copy what you want into config.toml");
     }
+    if !imported.moved.is_empty() {
+        let n = imported.moved.len();
+        println!("{n} of yumete's Space key{} now do{} what your config says; where what they did is now:", if n == 1 { "" } else { "s" }, if n == 1 { "es" } else { "" });
+        for line in imported.moved.iter().take(SUMMARY) {
+            println!("  {line}");
+        }
+        if n > SUMMARY {
+            println!("  and {} more", n - SUMMARY);
+        }
+    }
+    // Kept for the editor to open next time; a report that cannot be kept
+    // is still at the end of the file.
+    let report = report(&path, beside, &imported);
+    if std::fs::create_dir_all(yumete_config::data_dir()).and_then(|()| std::fs::write(report_path(), report)).is_ok() {
+        println!("yumete shows the whole report the next time it starts");
+    }
     ExitCode::SUCCESS
+}
+
+/// How many moved keys the terminal prints before 「and N more」.
+const SUMMARY: usize = 5;
+
+fn report_path() -> PathBuf {
+    yumete_config::data_dir().join("import-report.txt")
+}
+
+/// **The report the editor opens after an import**: where the config went,
+/// then the two lists from the end of the file, as text rather than
+/// comments.
+fn report(path: &Path, beside: bool, imported: &Imported) -> String {
+    let mut out = format!("Imported into {}\n", path.display());
+    if beside {
+        out.push_str("config.toml was already there, so this went beside it and is not in use yet.\n");
+    }
+    let lists = ["\n# Takes over yumete's keys", "\n# Not carried over:"]
+        .iter()
+        .filter_map(|head| imported.text.find(head))
+        .min()
+        .map(|at| &imported.text[at..])
+        .unwrap_or("\n# Nothing was left out, and no key of yumete's was taken.\n");
+    for line in lists.lines() {
+        out.push_str(line.strip_prefix("# ").or_else(|| line.strip_prefix('#')).unwrap_or(line));
+        out.push('\n');
+    }
+    out
+}
+
+/// **The last import's report, taken**: read and removed, so it is shown
+/// once.
+pub fn take_report() -> Option<String> {
+    let path = report_path();
+    let text = std::fs::read_to_string(&path).ok()?;
+    std::fs::remove_file(&path).ok()?;
+    Some(text)
 }
 
 #[cfg(test)]
@@ -1469,6 +1574,20 @@ j = { k = "normal_mode" }
 
     fn sample() -> Imported {
         helix(SAMPLE, Path::new("/home/me/.config/helix/config.toml"), "2026-11-06 17:30", false, Some("[[language]]\nname = \"rust\"\n")).unwrap()
+    }
+
+    /// The report the editor opens is the file's two lists as plain text,
+    /// with the moved keys first, and says when the config is not in use.
+    #[test]
+    fn the_report_is_the_file_s_lists_without_the_comment_marks() {
+        let mut imported = sample();
+        imported.text.push_str("\n# Takes over yumete's keys; where what they did is now:\n#   Space b  x: now Space ,\n");
+        let said = report(Path::new("/c/config.imported.toml"), true, &imported);
+        assert!(said.starts_with("Imported into /c/config.imported.toml\nconfig.toml was already there"), "{said}");
+        assert!(said.contains("\nNot carried over:\n"), "{said}");
+        assert!(!said.lines().any(|l| l.starts_with('#')), "{said}");
+        let quiet = Imported { text: String::from("[keys]\n"), carried: 1, skipped: 0, moved: Vec::new() };
+        assert!(report(Path::new("/c/config.toml"), false, &quiet).contains("Nothing was left out"));
     }
 
     #[test]
@@ -1839,9 +1958,11 @@ language-servers = ["gopls", "golangci-lint-lsp"]
         assert!(list.contains("o ie: yumete has no Operator-pending table"), "{list}");
         assert!(list.contains("TextYankPost autocommand (a Lua function with no description or group): "), "{list}");
         assert!(!list.contains("<leader>w"), "it was carried: {list}");
-        let (_, takes) = out.split_once("# Takes over yumete's keys:\n").expect("the keys taken");
+        let (_, takes) = out.split_once("# Takes over yumete's keys; where what they did is now:\n").expect("the keys taken");
         let takes = takes.split("\n\n").next().unwrap();
-        assert_eq!(takes, "#   <leader>f: yumete's Space f (file picker (project))\n#   <leader>w: yumete's Space w (region; the group is still on C-w)");
+        // `<leader>w` took the window group, whose every command is still on
+        // `C-w`, so it is not one of them.
+        assert_eq!(takes, "#   Space f  open the file picker: now Space ff");
         assert!(list.contains("options with no counterpart in yumete: clipboard\n"), "{list}");
         assert!(list.contains("1 map already does the same in yumete: n K"), "{list}");
         // The leader on <Nop> is left without a word (decision 13), and so is

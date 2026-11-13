@@ -252,6 +252,13 @@ impl KeyTree {
         self.over.get(&place_of(group)?).copied()
     }
 
+    /// Whether pressing `run` opens a group here rather than running what
+    /// the keymap had on it: a reader's `[keys.normal.space.f]` makes
+    /// `Space f` a group, and the file picker is not on it any more.
+    pub(super) fn opens(&self, run: &str) -> bool {
+        self.nodes.iter().any(|n| n.path == run)
+    }
+
     /// Whether a run at the top level takes these keys (vim's `ZZ`): the
     /// keys then never reach a group row of the same spelling.
     pub(super) fn takes(&self, path: &str) -> bool {

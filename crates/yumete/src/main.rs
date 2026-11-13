@@ -932,6 +932,14 @@ fn main() -> ExitCode {
             false => editor.set_status(note),
         }
     }
+    // **The last import's report**, once, in a read-only buffer of its own:
+    // what came over is in the config, and what it took from yumete and
+    // where that went is read here, beside the text.
+    if !private && shot.is_none() {
+        if let Some(report) = import::take_report() {
+            editor.open_report(&yumete_core::say!("ui.import-report"), &report);
+        }
+    }
     mark("session", &mut marks);
     // Which ruby dialect to lay out: whatever the config names, else the one
     // the file's extension implies.
