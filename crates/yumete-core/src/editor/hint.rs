@@ -631,6 +631,13 @@ impl Editor {
         out
     }
 
+    /// **Keys are still being waited for**: a count, a `g`, an operator, a
+    /// register's name, whatever the hint row would speak of. `Esc` then
+    /// cancels them and means nothing more.
+    pub fn is_waiting_for_keys(&self) -> bool {
+        self.pending_keys().is_some()
+    }
+
     pub fn pending_menu(&self) -> Option<(String, KeyRows)> {
         match self.pending_keys()? {
             Hint::Keys(title, keys) => Some((title, keys)),

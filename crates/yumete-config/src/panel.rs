@@ -367,6 +367,20 @@ pub struct Shown {
     pub under: Option<(Layer, String)>,
 }
 
+/// **What a cell being edited shows**: its text, where the caret and the
+/// selection are, in characters, and the mode word of its editor.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CellView {
+    pub text: String,
+    pub caret: usize,
+    /// The selected characters, `start..end`; empty when there is none.
+    pub selection: (usize, usize),
+    /// `NOR`, `INS`, `SEL`: what the status line puts after `CEL.`.
+    pub word: String,
+    /// The caret is a bar between characters, as in Insert.
+    pub bar: bool,
+}
+
 /// **那扇面板。**
 #[derive(Debug, Clone)]
 pub struct Panel {
@@ -383,6 +397,9 @@ pub struct Panel {
     /// **Every key shown**, `?`: a short window gives the keys one row, and
     /// this asks for all of them.
     pub all_keys: bool,
+    /// **The value being edited in its cell**, as the cell's editor left it
+    /// after the last key: `None` on the rows.
+    pub cell: Option<CellView>,
     /// **A page is open**, on this row of it. Which page is the
     /// row it was opened from ([`Panel::subpage`]). `None` is the ordinary
     /// list.
@@ -433,8 +450,6 @@ struct Stepped {
 /// What the command row is typing for the panel.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Typing {
-    /// The value of the row under the cursor.
-    Value,
     /// The search: the list narrows as it is typed.
     Search,
     /// **What follows a `:`**: the keys of `:e notes.md` are the line's, not
@@ -603,6 +618,7 @@ impl Panel {
             found: None,
             row: 0,
             all_keys: false,
+            cell: None,
             page: None,
             popup: None,
             refusal: None,

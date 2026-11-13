@@ -842,12 +842,16 @@ pub fn run(
         if editor.take_say_it_again() {
             system_ime.say_it_again();
         }
-        system_ime.want(!composes_here(editor) || yume_has_the_keys);
+        // A value typed in the settings panel's cell is typing too.
+        let typing_in_a_cell = settings.panel.as_ref().and_then(|p| p.cell.as_ref()).is_some_and(|c| c.bar);
+        system_ime.want(!(composes_here(editor) || typing_in_a_cell) || yume_has_the_keys);
         // 挑選器只有打字這一層，走的是 `is_prompt()` 那條路，豎線是對的。
         // **Typing a value in the settings panel is typing**: the
         // editor stays in Normal behind the panel, so its mode alone would
         // leave a block over the value being typed.
-        let typing_a_setting = settings.panel.as_ref().is_some_and(|p| p.typing.is_some());
+        let typing_a_setting = settings.panel.as_ref().is_some_and(|p| {
+            p.typing.is_some() || p.cell.as_ref().is_some_and(|c| c.bar)
+        });
         let (shown, shape) = caret_now(editor, typing_a_setting);
         if last_mode != Some(shown) {
             let (mode, _) = shown;
@@ -1491,49 +1495,75 @@ pub fn run(
                 // 設置面板開着：鍵歸它；它打字的時候（一項的值、搜索）鍵還給命令行。
                 // **Not `continue`**: a key the panel takes may write a
                 // change, and the reload below has to run for it to take effect.
+                settings.composing = ime.is_composing();
                 let taken = settings.took(editor, map_key(code, mods));
-                // The stand-in for a Shift this terminal cannot report (#339).
-                // It asks yume the same question the tap does, so a rebound
-                // Shift is rebound here too; outside a place that composes
-                // there is nothing to commit, so it is only the switch.
-                // Warning: **not in vim's Normal mode**: there `C-^` is
-                // vim's previous file, and the key goes to the keymap. While
-                // typing it is vim's own `i_CTRL-^`, the language switch.
-                let vims_own = !composes_here(editor)
-                    && editor.mode() == Mode::Normal
-                    && editor.key_preset() == yumete_core::KeyPreset::Vim
-                    && mods.contains(KeyModifiers::CONTROL)
-                    && matches!(code, KeyCode::Char('^' | '6'));
-                if !taken && ime.available()
-                    && ime.engaged()
-                    && !vims_own
-                    && language_key(config).is_some_and(|k| is_language_key(k, code, mods))
-                {
-                    borrowed.answered_in(editor.mode());
-                    match composes_here(editor) {
-                        true => {
-                            if ime.press_modifier(FuncKey::ShiftL) {
-                                editor.insert_committed(&ime.take_committed());
+                // **A value in its cell is typed with its own editor**: the
+                // keys the panel gives back, and the IME, go to it as they go
+                // to the text, and it goes back to the panel after the key.
+                let mut lent = match taken {
+                    false => settings.lend_cell(),
+                    true => None,
+                };
+                let main = &mut *editor;
+                let (quit, answered) = {
+                    let editor: &mut Editor = match lent.as_deref_mut() {
+                        Some(cell) => cell,
+                        None => main,
+                    };
+                    // The stand-in for a Shift this terminal cannot report (#339).
+                    // It asks yume the same question the tap does, so a rebound
+                    // Shift is rebound here too; outside a place that composes
+                    // there is nothing to commit, so it is only the switch.
+                    // Warning: **not in vim's Normal mode**: there `C-^` is
+                    // vim's previous file, and the key goes to the keymap. While
+                    // typing it is vim's own `i_CTRL-^`, the language switch.
+                    let vims_own = !composes_here(editor)
+                        && editor.mode() == Mode::Normal
+                        && editor.key_preset() == yumete_core::KeyPreset::Vim
+                        && mods.contains(KeyModifiers::CONTROL)
+                        && matches!(code, KeyCode::Char('^' | '6'));
+                    if !taken && ime.available()
+                        && ime.engaged()
+                        && !vims_own
+                        && language_key(config).is_some_and(|k| is_language_key(k, code, mods))
+                    {
+                        borrowed.answered_in(editor.mode());
+                        match composes_here(editor) {
+                            true => {
+                                if ime.press_modifier(FuncKey::ShiftL) {
+                                    editor.insert_committed(&ime.take_committed());
+                                }
+                            }
+                            false => ime.toggle_language(),
+                        }
+                        (false, true)
+                    } else {
+                        let consumed = !taken && composes_here(editor)
+                            && ime.available()
+                            && ime.engaged()
+                            && ime_handle(ime, editor, code, mods);
+                        let mut quit = false;
+                        if !consumed && !taken {
+                            if let Some(k) = map_key(code, mods) {
+                                // Kept for the crash report, and for nothing else: a
+                                // push of a `Copy` enum into a ring of 64 (#300).
+                                diag::note_key(k);
+                                diag::beat(diag::Stage::Key, 0);
+                                quit = editor.on_key(k) == KeyOutcome::Quit;
                             }
                         }
-                        false => ime.toggle_language(),
+                        (quit, false)
                     }
-                    continue;
+                };
+                // The cell's editor never ends the session: a `ZZ` in a cell
+                // is nothing.
+                match lent {
+                    Some(cell) => settings.take_back_cell(cell),
+                    None if quit => break Ok(()),
+                    None => {}
                 }
-                let consumed = !taken && composes_here(editor)
-                    && ime.available()
-                    && ime.engaged()
-                    && ime_handle(ime, editor, code, mods);
-                if !consumed && !taken {
-                    if let Some(k) = map_key(code, mods) {
-                        // Kept for the crash report, and for nothing else: a
-                        // push of a `Copy` enum into a ring of 64 (#300).
-                        diag::note_key(k);
-                        diag::beat(diag::Stage::Key, 0);
-                        if editor.on_key(k) == KeyOutcome::Quit {
-                            break Ok(());
-                        }
-                    }
+                if answered {
+                    continue;
                 }
                 // `:scheme` and `:chaifen` configure the IME, which the core
                 // cannot reach; each leaves a request here and the answer goes
@@ -4218,7 +4248,7 @@ fn show(target: &str) {
 /// read, and rightly — it would let any program on the far end of a pipe empty
 /// your clipboard into a file. So this asks the machine the editor is running
 /// on, and says so plainly when there is nothing to ask.
-fn read_clipboard() -> Option<String> {
+pub(crate) fn read_clipboard() -> Option<String> {
     for (program, args) in [
         ("pbpaste", &[][..]),
         ("wl-paste", &["--no-newline"][..]),
@@ -6225,9 +6255,15 @@ fn draw(
     // *manuscript's* cells, and the characters being typed are in a box in a
     // panel. Previewing them on the page would put them where they are not.
     let shape = candidate_shape(editor, ime);
-    let panel =
-        shape == PanelDisplay::Box || picker_caret.is_some() || panel_caret.is_some();
-    let composing_here = composes_here(editor) && ime.available() && ime.is_composing();
+    // **A value typed in its cell, in the settings panel**: the editor
+    // behind the panel is in Normal, and the box stands under the cell.
+    let typing_in_a_cell = settings.and_then(|p| p.cell.as_ref()).is_some_and(|c| c.bar);
+    let cell_caret: std::cell::Cell<Option<Position>> = std::cell::Cell::new(None);
+    let panel = shape == PanelDisplay::Box
+        || picker_caret.is_some()
+        || panel_caret.is_some()
+        || typing_in_a_cell;
+    let composing_here = (composes_here(editor) || typing_in_a_cell) && ime.available() && ime.is_composing();
     let candidate_panel = panel && composing_here;
     // …and the same string beside the caret, where the eyes are.
     draw_hud(
@@ -6361,6 +6397,10 @@ fn draw(
             // list, and one panel wearing a different skin from the other reads as a
             // different program.
             let (at_x, at_y) = match editor.prompt() {
+                _ if cell_caret.get().is_some() => {
+                    let at = cell_caret.get().expect("just checked");
+                    (at.x, at.y)
+                }
                 _ if picker_caret.is_some() => {
                     let at = picker_caret.expect("just checked");
                     (at.x, at.y)
@@ -6510,6 +6550,7 @@ fn draw(
             // (its caret is drawn into the page); the panel's bar is shown.
             crate::backend::keep_the_cursor_hidden(false);
             frame.set_cursor_position(at);
+            cell_caret.set(Some(at));
         }
         // **No command row, and something said**: with `command_line = false`
         // the status line it would fall to is under the page, so it is said

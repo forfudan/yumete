@@ -1011,8 +1011,29 @@ impl Editor {
         }
     }
 
+    /// **This editor as a field**: one value to edit with every key of the
+    /// text, for the settings panel's cell. The value is the whole buffer,
+    /// the caret at its start, in Normal; or, for `c`, taken away and typed
+    /// over in Insert, one change that `u` takes back whole.
+    pub fn open_field(&mut self, text: &str, change: bool) {
+        self.add_buffer(Buffer::from_text(text));
+        self.set_cursor(0);
+        if change {
+            self.snapshot();
+            let all = self.current_buffer().char_count();
+            self.edit_remove(0..all);
+            self.set_cursor(0);
+            self.enter_insert();
+        }
+    }
+
+    /// The value in the field ([`Editor::open_field`]), as it stands.
+    pub fn field_text(&self) -> String {
+        self.current_buffer().rope().to_string()
+    }
+
     /// **Open the command row for a value a front end asks for**:
-    /// the settings panel's one-line editor and its search. The same line as
+    /// the settings panel's search. The same line as
     /// `:` — its keys, the IME, a paste at the caret — with `label` before
     /// it; Enter and Esc hand back ([`Editor::take_value_answer`]).
     pub fn open_value_line(&mut self, label: &str, text: &str) {

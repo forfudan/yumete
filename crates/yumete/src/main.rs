@@ -1763,6 +1763,16 @@ fn press(
         if settings.took(editor, Some(key)) {
             continue;
         }
+        // **A value in its cell is typed with its own editor**, as the loop
+        // lends it: the IME's span and every other key go to it.
+        if let Some(mut cell) = settings.lend_cell() {
+            if !(composing && yumete_tui::offline_ime_key(ime, &mut cell, key)) {
+                cell.on_key(key);
+            }
+            settings.take_back_cell(cell);
+            settings.settle(editor);
+            continue;
+        }
         // **走輸入法的那一段**（`\{ime}` 之間）。
         //
         // Warning: **這裏不許自己寫一份派發**。手抄一份「打字要用的那幾個鍵」——碼、

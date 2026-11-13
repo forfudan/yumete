@@ -26,7 +26,7 @@ use ratatui::widgets::Clear;
 use ratatui::Frame;
 
 use yumete_config::panel::{
-    all_rows, FlavorRow, FlavorSection, ItemFrom, Layer, Panel, Refusal, SaveError, Saved, Subpage, Typing,
+    all_rows, CellView, FlavorRow, FlavorSection, ItemFrom, Layer, Panel, Refusal, SaveError, Saved, Subpage, Typing,
 };
 use yumete_config::settings_ui::{Kind, Setting, GROUPS};
 use yumete_config::Config;
@@ -279,6 +279,9 @@ pub struct Seat {
     /// Where `"+p` reads the system clipboard from; `None` is the machine's
     /// own (`pbpaste` and its kin). A test hands in its own.
     pub clipboard: Option<fn() -> Option<String>>,
+    /// Where the cell's editor reads the keys it lays; `None` is the config
+    /// the editor loads. A test hands in its own.
+    pub config: Option<fn(&std::path::Path) -> Config>,
     /// The status line holds what the panel said about a row: it goes when
     /// the cursor or a value moves ([`Seat::say`]).
     row_said: bool,
@@ -287,9 +290,18 @@ pub struct Seat {
     /// A theme is being tried on the screen.
     trying: bool,
     /// **A file was found changed outside, and nobody may have read so**:
-    /// the key that found it opened the value line over the
-    /// news. The write that follows says it instead.
+    /// the key that found it opened a cell over the news. The write that
+    /// follows says it instead.
     outside: bool,
+    /// **The cell's own editor**, while a value is edited in its cell: every
+    /// key of the text, its undo and the IME, on one value. The loop lends
+    /// it the keys the panel gives back ([`Seat::lend_cell`]).
+    cell: Option<Box<Editor>>,
+    /// The value the cell opened with: left so, nothing is written.
+    cell_from: String,
+    /// **The IME holds a half-typed word**, set by the loop before each key:
+    /// `Enter` then commits the word instead of writing the value.
+    pub composing: bool,
 }
 
 impl Seat {
@@ -305,8 +317,9 @@ impl Seat {
 
     /// **這一鍵歸面板嗎？** 歸就收下並回 `true`。
     ///
-    /// While a value or the search is typed the keys are the command row's —
-    /// the `:` line's keys and the IME — and this gives them back.
+    /// While the search or a `:` is typed the keys are the command row's, and
+    /// while a value is in its cell they are the cell's editor's, but for the
+    /// `Esc` and `Enter` that write it: those it gives back.
     pub fn took(&mut self, editor: &mut Editor, key: Option<Key>) -> bool {
         if self.panel.is_none() {
             return false;
@@ -314,6 +327,11 @@ impl Seat {
         let noticed = self.notice(editor);
         if editor.mode().is_prompt() {
             return false;
+        }
+        // **The keys typed in a cell are its own**, as a line's are: the news
+        // they came in over is the write's to say.
+        if self.cell.is_some() {
+            return self.took_in_cell(editor, key);
         }
         // Said, and the key after it came in plain sight of it.
         if !noticed {
@@ -421,6 +439,12 @@ impl Seat {
                 return self.write(editor);
             }
             Key::Enter | Key::Char(' ') if page.types_here() => self.edit(editor, None),
+            // **`c` empties the cell and types a new value**, as `c` does
+            // to a table's cell.
+            Key::Char('c') if page.types_here() => {
+                let text = page.typing_from();
+                self.open_cell(editor, text, true);
+            }
             Key::Enter => {
                 page.change();
                 return self.write(editor);
@@ -528,15 +552,119 @@ impl Seat {
         }
     }
 
-    /// **Open the one-line editor on the row**: the command row, the `:`
-    /// line's own keys, with the row's name before it. `text` replaces the
-    /// value (a paste); else the value is there to change.
+    /// **Into the row's cell** to edit its value. `text` replaces the value
+    /// (a paste); else the value is there to change.
     fn edit(&mut self, editor: &mut Editor, text: Option<String>) {
         let Some(page) = self.panel.as_mut() else { return };
-        let Some(setting) = page.here() else { return };
         let text = text.unwrap_or_else(|| page.typing_from());
-        page.typing = Some(Typing::Value);
-        editor.open_value_line(&format!("{}: ", said(setting.label)), &text);
+        self.open_cell(editor, text, false);
+    }
+
+    /// **Into the cell** (`CEL.NOR`, or `CEL.INS` emptied for `c`): a fresh editor
+    /// on the value with the keys the config lays, and the unnamed register
+    /// of the text, so a `p` there puts what was copied.
+    fn open_cell(&mut self, editor: &mut Editor, text: String, change: bool) {
+        let Some(page) = self.panel.as_mut() else { return };
+        if page.here().is_none() {
+            return;
+        }
+        let config = match self.config {
+            Some(load) => load(&editor.root()),
+            None => Config::load_reporting_from(&editor.root()).0,
+        };
+        let mut cell = Box::new(Editor::new());
+        crate::settings::lay_keys(&config, &mut cell);
+        let copied = editor.register_contents(None);
+        if !copied.is_empty() {
+            cell.yank_text(&copied);
+        }
+        cell.open_field(&text, change);
+        page.refusal = None;
+        page.cell = Some(view_of(&cell));
+        self.cell = Some(cell);
+        // What the row holds now, not what the cell opened with: a `p` that
+        // put a new value in the cell is a change.
+        self.cell_from = page.typing_from();
+    }
+
+    /// **A key while a value is in its cell**: `Esc` with nothing left to
+    /// cancel, or `Enter` with no word half-typed, writes it and goes back to
+    /// the row; every other key is the cell's editor's, given back to the loop.
+    fn took_in_cell(&mut self, editor: &mut Editor, key: Option<Key>) -> bool {
+        let Some(cell) = self.cell.as_ref() else { return false };
+        let Some(key) = key else { return true };
+        let normal = cell.mode() == yumete_core::input::Mode::Normal;
+        let idle = normal && !cell.is_waiting_for_keys() && !cell.is_extending() && !cell.has_many_selections();
+        let writes = match key {
+            Key::Esc => idle,
+            Key::Enter => idle || (cell.mode() == yumete_core::input::Mode::Insert && !self.composing),
+            _ => false,
+        };
+        if !writes {
+            return false;
+        }
+        let Some(page) = self.panel.as_ref() else { return true };
+        let before = page.spot();
+        let said = self.leave_cell(editor);
+        self.say(editor, before, said);
+        true
+    }
+
+    /// **Out of the cell, writing**: a value the config takes is written and
+    /// the cell closes; one it refuses stays in the cell, the reason under
+    /// the row.
+    fn leave_cell(&mut self, editor: &mut Editor) -> Option<String> {
+        let cell = self.cell.as_ref()?;
+        let text = cell.field_text();
+        let page = self.panel.as_mut()?;
+        // **Left as it opened, nothing is written**: an `Enter` and an `Esc`
+        // on a factory value must not write it into the file.
+        let unchanged = text == self.cell_from;
+        if !unchanged && !page.commit_value(&text) {
+            return None;
+        }
+        let cell = self.cell.take()?;
+        page.cell = None;
+        page.refusal = None;
+        // What was copied in the cell is the text's to put, as from a row.
+        let copied = cell.register_contents(None);
+        if !copied.is_empty() && copied != editor.register_contents(None) {
+            editor.yank_text(&copied);
+        }
+        match unchanged {
+            true => None,
+            false => self.write(editor),
+        }
+    }
+
+    /// **The cell's editor, lent to the loop for one key**: the IME and the
+    /// keys go to it as they go to the text. `None` on the rows.
+    pub fn lend_cell(&mut self) -> Option<Box<Editor>> {
+        self.cell.take()
+    }
+
+    /// **The cell's editor back after its key**: a command line or a search
+    /// it opened is closed (a cell has none), the clipboard it asked for is
+    /// read, and the page shows what the key did.
+    pub fn take_back_cell(&mut self, mut cell: Box<Editor>) {
+        if cell.mode().is_prompt() {
+            cell.on_key(Key::Esc);
+        }
+        if let Some(how) = cell.take_clipboard_read() {
+            let read = self.clipboard.unwrap_or(crate::read_clipboard);
+            if let Some(text) = read() {
+                cell.provide_clipboard(&text, how);
+            }
+        }
+        if let Some(page) = self.panel.as_mut() {
+            page.cell = Some(view_of(&cell));
+        }
+        self.cell = Some(cell);
+    }
+
+    /// Whether a value is being edited in its cell.
+    pub fn in_cell(&self) -> bool {
+        self.cell.is_some()
     }
 
     /// **Write what the key changed**, and say where: every confirmed change
@@ -613,14 +741,20 @@ impl Seat {
     }
 
     /// **Text pasted through the terminal** (bracketed paste, ⌘V): it takes
-    /// the value's place, in the editor, for `Enter` to keep.
-    /// While the command row is typing, the paste is its, at the caret.
+    /// the value's place, in its cell, for `Esc` to write.
+    /// In a cell or on the command row, the paste is theirs, at the caret.
     /// Gives whether it was the panel's.
     pub fn pasted(&mut self, editor: &mut Editor, text: &str) -> bool {
         if self.panel.is_none() {
             return false;
         }
         let _ = self.notice(editor);
+        // **Pasted into the cell**, at its caret, one line.
+        if let Some(mut cell) = self.lend_cell() {
+            cell.paste_text(&one_line(text));
+            self.take_back_cell(cell);
+            return true;
+        }
         let Some(page) = self.panel.as_ref() else { return false };
         // Text pasted into a value being typed is the line's, and what the
         // editor says of it is a row message: it goes when the value does.
@@ -664,7 +798,8 @@ impl Seat {
         }
         let noticed = self.notice(editor);
         let Some(page) = self.panel.as_mut() else { return false };
-        if editor.mode().is_prompt() {
+        // A value in its cell keeps the keys until `Esc` or `Enter`.
+        if editor.mode().is_prompt() || self.cell.is_some() {
             return true;
         }
         let before = page.spot();
@@ -747,29 +882,6 @@ impl Seat {
         }
         let Some(page) = self.panel.as_mut() else { return };
         match (page.typing, editor.take_value_answer()) {
-            (Some(Typing::Value), Some(Some(text))) => {
-                page.typing = None;
-                match page.commit_value(&text) {
-                    true => {
-                        let said = self.write(editor);
-                        if let Some(said) = said {
-                            editor.set_status(said);
-                            self.row_said = true;
-                        }
-                    }
-                    // Refused: the value is typed again, the reason under
-                    // the row.
-                    false => self.edit(editor, Some(text)),
-                }
-            }
-            (Some(Typing::Value), Some(None)) => {
-                page.typing = None;
-                page.refusal = None;
-                if self.row_said {
-                    editor.set_status(String::new());
-                    self.row_said = false;
-                }
-            }
             // What was typed after a `:`: the habit of closing, or a word
             // that it is not taken. Nothing of it ever reaches the panel or
             // the document.
@@ -830,10 +942,31 @@ impl Seat {
     fn close(&mut self, editor: &mut Editor) {
         self.untry();
         editor.close_value_line();
+        self.cell = None;
         self.panel = None;
         self.row_said = false;
         editor.set_settings_open(false);
         editor.set_status(String::new());
+    }
+}
+
+/// **What the cell shows**, read off its editor after a key.
+fn view_of(cell: &Editor) -> CellView {
+    let text = cell.field_text();
+    let (start, end) = cell.selection();
+    let selection = match cell.has_selection() {
+        true => (start, end),
+        false => (0, 0),
+    };
+    let word = cell.mode_label().unwrap_or_default();
+    // The word after `CEL.`: a grid's prefix, if the editor gave one, is off.
+    let word = word.rsplit('.').next().unwrap_or_default().to_string();
+    CellView {
+        text,
+        caret: cell.cursor(),
+        selection,
+        word,
+        bar: cell.mode() == yumete_core::input::Mode::Insert,
     }
 }
 
@@ -1034,8 +1167,8 @@ fn source_of(panel: &Panel, setting: &Setting) -> String {
     }
 }
 
-/// **畫一頁。** The caret is the command row's while a value is typed, so
-/// this gives none.
+/// **畫一頁。** Gives the terminal's caret while a value is typed in its
+/// cell (a bar, in Insert); a search's caret is the command row's.
 pub fn draw(
     frame: &mut Frame,
     panel: &Panel,
@@ -1108,7 +1241,7 @@ pub fn draw(
     // **Only the keys that work now**: the list, a page, a
     // choice's list, a value typed, a search typed.
     let keys = match (panel.typing, panel.popup.is_some(), panel.subpage().filter(|_| panel.page.is_some())) {
-        (Some(Typing::Value), _, _) => say!("settings.keys-editing"),
+        _ if panel.cell.is_some() => say!("settings.keys-cell"),
         // The `:` line takes no IME, so no `C-^`.
         (Some(Typing::Command), _, _) => say!("settings.keys-command"),
         (Some(Typing::Search), _, _) => say!("settings.keys-search"),
@@ -1247,7 +1380,7 @@ pub fn draw(
         }
         lines.push(Line::Row(i));
         if i == panel.row {
-            if let (Some(Typing::Value), Some(why)) = (panel.typing, &panel.refusal) {
+            if let (true, Some(why)) = (panel.cell.is_some(), &panel.refusal) {
                 lines.push(Line::Refused(refusal_said(why)));
             }
             if let Some(popup) = &panel.popup {
@@ -1280,6 +1413,7 @@ pub fn draw(
     }
     FIRST.with(|f| f.set(first));
     let mut y = top;
+    let mut caret = None;
     let mut last = first;
     for line in lines.iter().skip(first) {
         if y >= list_ends {
@@ -1309,7 +1443,9 @@ pub fn draw(
                 let setting = rows[*i];
                 let here = *i == panel.row;
                 hit(y, from, right, Hit::Row(*i));
-                draw_row(buf, panel, setting, here, (&ink, ground), &col, y);
+                if let Some(at) = draw_row(buf, panel, setting, here, (&ink, ground), &col, y) {
+                    caret = Some(at);
+                }
             }
         }
         y += 1;
@@ -1339,7 +1475,7 @@ pub fn draw(
         }
         put_text(buf, area.x + 2, y, right, row, text);
     }
-    None
+    caret
 }
 
 /// **The page's status line**, the text's own strip at the same place:
@@ -1354,8 +1490,11 @@ fn draw_status_line(buf: &mut ratatui::buffer::Buffer, panel: &Panel, config: &C
             cell.set_symbol(" ").set_style(bar);
         }
     }
-    let mode = "TBL.NOR";
-    let mut at = put_text(buf, x + 1, y, right, mode, bar.fg(ink.gold()).add_modifier(Modifier::BOLD)) + 2;
+    let mode = match panel.cell.as_ref() {
+        Some(cell) => format!("CEL.{}", cell.word),
+        None => "TBL.NOR".to_string(),
+    };
+    let mut at = put_text(buf, x + 1, y, right, &mode, bar.fg(ink.gold()).add_modifier(Modifier::BOLD)) + 2;
     let mut said_left = format!("{}   {}", say!("settings.title"), say!("settings.writing-into", said(panel.into.layer().label())));
     if panel.page.is_some() {
         let label = panel.here().map(|s| s.label).unwrap_or("settings.keys.flavor-items");
@@ -1398,7 +1537,7 @@ fn draw_row(
     (ink, ground): (&crate::theme::Palette, ratatui::style::Style),
     col: &Columns,
     y: u16,
-) {
+) -> Option<ratatui::layout::Position> {
     let from = col.name;
     let right = col.right;
     let shown = panel.shown(setting);
@@ -1440,7 +1579,13 @@ fn draw_row(
         (false, Layer::Factory) => ground.fg(ink.text()),
         (false, _) => ground.fg(ink.azure()),
     };
-    put_text(buf, col.value, y, col.source, &crate::elide(&value, room), value_style);
+    let caret = match panel.cell.as_ref().filter(|_| here) {
+        Some(cell) => draw_cell(buf, cell, (ink, band), col.value, col.source.saturating_sub(1), y),
+        None => {
+            put_text(buf, col.value, y, col.source, &crate::elide(&value, room), value_style);
+            None
+        }
+    };
     if source_at > col.value + 2 {
         let style = match shown.from {
             Layer::Factory => band.fg(ink.quiet()),
@@ -1448,6 +1593,61 @@ fn draw_row(
         };
         put_text(buf, source_at, y, right, &source, style);
     }
+    caret
+}
+
+/// **The value in its cell, being edited**: as its editor has it, the
+/// selection on its ground, the caret a block in Normal and the terminal's
+/// bar in Insert (given back for the loop to place). A value longer than the
+/// cell slides so the caret stays in sight.
+fn draw_cell(
+    buf: &mut ratatui::buffer::Buffer,
+    cell: &CellView,
+    (ink, band): (&crate::theme::Palette, ratatui::style::Style),
+    x: u16,
+    end: u16,
+    y: u16,
+) -> Option<ratatui::layout::Position> {
+    let room = end.saturating_sub(x) as usize;
+    if room == 0 {
+        return None;
+    }
+    // A line break is one mark: a value is one line.
+    let chars: Vec<char> = cell.text.chars().map(|c| if c == '\n' { '↵' } else { c }).collect();
+    let wide = |c: char| yumete_cjk::char_width(c).max(1);
+    let caret = cell.caret.min(chars.len());
+    let mut first = 0;
+    while first < caret && chars[first..caret].iter().map(|&c| wide(c)).sum::<usize>() + 2 > room {
+        first += 1;
+    }
+    let text = band.fg(ink.text());
+    let mut at = x;
+    let mut shown = None;
+    for (i, &c) in chars.iter().enumerate().skip(first) {
+        let w = wide(c) as u16;
+        if at + w > end {
+            break;
+        }
+        let mut style = text;
+        if i >= cell.selection.0 && i < cell.selection.1 {
+            style = style.bg(ink.selection());
+        }
+        if i == caret {
+            shown = Some(ratatui::layout::Position::new(at, y));
+            if !cell.bar {
+                style = style.add_modifier(Modifier::REVERSED);
+            }
+        }
+        put_text(buf, at, y, end, &c.to_string(), style);
+        at += w;
+    }
+    if caret >= chars.len() && at < end {
+        if !cell.bar {
+            put_text(buf, at, y, end, " ", text.add_modifier(Modifier::REVERSED));
+        }
+        shown = Some(ratatui::layout::Position::new(at, y));
+    }
+    shown.filter(|_| cell.bar)
 }
 
 /// **The three layers of the row**, one a line, the one in force in gold;
@@ -2049,15 +2249,23 @@ mod tests {
         }
         ed.on_key(Key::Esc);
         ed.set_settings_open(true);
-        (ed, Seat { panel: Some(panel), ..Default::default() })
+        (ed, Seat { panel: Some(panel), config: Some(|_| Config::default()), ..Default::default() })
     }
 
-    /// Keys as the loop gives them: the panel first, the editor when the
-    /// panel gives them back, and the panel settled after each.
+    /// Keys as the loop gives them: the panel first, the cell's editor or the
+    /// text's when the panel gives them back, and the panel settled after each.
     fn keys(seat: &mut Seat, ed: &mut Editor, keys: &[Key]) {
         for key in keys {
             if !seat.took(ed, Some(*key)) {
-                ed.on_key(*key);
+                match seat.lend_cell() {
+                    Some(mut cell) => {
+                        cell.on_key(*key);
+                        seat.take_back_cell(cell);
+                    }
+                    None => {
+                        ed.on_key(*key);
+                    }
+                }
             }
             seat.settle(ed);
         }
@@ -2173,41 +2381,73 @@ mod tests {
         seat.panel.as_mut().expect("open")
     }
 
-    /// **A number is typed on the `:` line's own editor**, its name before
-    /// it; Enter writes a value the config takes, and a value it refuses is
-    /// typed again with the reason under the row.
+    /// **A number is edited in its cell** with the text's keys (`CEL.NOR`):
+    /// `Esc` writes a value the config takes, and a value it refuses stays
+    /// in the cell with the reason under the row. `c` on the row empties the
+    /// cell and types; one cell is one `u`.
     #[test]
-    fn a_number_is_typed_on_the_command_row_and_checked() {
+    fn a_number_is_edited_in_its_cell_and_checked() {
         let dir = scratch("number");
         let (mut ed, mut seat) = seated(&dir, "", "editor.pages_vertical");
+        let cell = |seat: &Seat| page(seat).cell.clone();
         keys(&mut seat, &mut ed, &[Key::Enter]);
-        assert_eq!(ed.mode(), Mode::Value);
-        assert_eq!(ed.value_typed(), Some("1"));
-        assert!(ed.prompt_label().unwrap().contains(&say!("settings.editor.pages-vertical")));
+        assert_eq!(ed.mode(), Mode::Normal, "the editor behind the panel stays where it was");
+        assert_eq!(cell(&seat).map(|c| (c.text, c.word)), Some(("1".to_string(), "NOR".to_string())));
         let drawn = shot(page(&seat), 110, 34);
-        assert!(drawn.contains(&say!("settings.keys-editing").chars().take(8).collect::<String>()), "{drawn}");
-        // The `:` line's own keys: C-u empties it.
-        keys(&mut seat, &mut ed, &[Key::Ctrl('u')]);
-        assert_eq!(ed.value_typed(), Some(""));
+        assert!(drawn.contains("CEL.NOR"), "{drawn}");
+        assert!(drawn.contains(&say!("settings.keys-cell").chars().take(6).collect::<String>()), "{drawn}");
+        // The text's keys: helix's `c` changes the character under the caret.
+        keys(&mut seat, &mut ed, &[Key::Char('c')]);
+        assert_eq!(cell(&seat).map(|c| (c.text, c.word, c.bar)), Some((String::new(), "INS".to_string(), true)));
+        assert!(shot(page(&seat), 110, 34).contains("CEL.INS"));
         keys(&mut seat, &mut ed, &chars("99"));
-        keys(&mut seat, &mut ed, &[Key::Enter]);
-        assert_eq!(ed.mode(), Mode::Value, "typed again");
-        assert_eq!(ed.value_typed(), Some("99"));
+        // The first Esc leaves Insert, the second writes: refused, kept.
+        keys(&mut seat, &mut ed, &[Key::Esc, Key::Esc]);
+        assert_eq!(cell(&seat).map(|c| c.text), Some("99".to_string()), "kept in the cell");
         assert!(!file(&dir).contains("pages_vertical"));
         let drawn = shot(page(&seat), 110, 34);
         let why = say!("settings.refused.out-of-range", say!("settings.range", 1, 4));
         let (_, at) = find_on(&drawn, &why);
         let (_, row) = find_on(&drawn, &say!("settings.editor.pages-vertical"));
         assert_eq!(at, row + 1, "under the row:\n{drawn}");
-        keys(&mut seat, &mut ed, &[Key::Backspace, Key::Backspace, Key::Char('3'), Key::Enter]);
-        assert_eq!(ed.mode(), Mode::Normal);
+        // `x` takes the line, `c` changes it, Enter writes from Insert.
+        keys(&mut seat, &mut ed, &[Key::Char('x'), Key::Char('c'), Key::Char('3'), Key::Enter]);
+        assert!(cell(&seat).is_none());
         assert!(file(&dir).contains("pages_vertical = 3"), "{}", file(&dir));
         assert!(page(&seat).refusal.is_none());
-        // Esc leaves the value as it is.
-        keys(&mut seat, &mut ed, &[Key::Char(' '), Key::Char('4'), Key::Esc]);
-        assert_eq!(ed.mode(), Mode::Normal);
+        // Esc on a value left as it was writes nothing.
+        keys(&mut seat, &mut ed, &[Key::Enter, Key::Esc]);
+        assert!(cell(&seat).is_none());
         assert!(file(&dir).contains("pages_vertical = 3"));
-        assert!(seat.panel.is_some(), "Esc on the editor does not close the panel");
+        assert!(seat.panel.is_some(), "Esc in the cell does not close the panel");
+        // `c` on the row: an empty cell, typed into at once.
+        keys(&mut seat, &mut ed, &[Key::Char('c'), Key::Char('2'), Key::Char('2'), Key::Backspace, Key::Esc, Key::Esc]);
+        assert!(file(&dir).contains("pages_vertical = 2"), "{}", file(&dir));
+        // Everything done in the cell is one `u`.
+        keys(&mut seat, &mut ed, &[Key::Char('u')]);
+        assert!(file(&dir).contains("pages_vertical = 3"), "{}", file(&dir));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// **The cell's keys are the config's**: under the vim keys `fx` finds,
+    /// `D` deletes to the end and `a` appends, and an `Esc` that cancels a
+    /// pending `f` does not write.
+    #[test]
+    fn a_cell_takes_the_keys_the_config_lays() {
+        let dir = scratch("cell-vim");
+        let (mut ed, mut seat) = seated(&dir, "", "export.page");
+        seat.config = Some(|_| Config::from_toml("[keys]\npreset = \"vim\"\n"));
+        let cell = |seat: &Seat| page(seat).cell.as_ref().map(|c| c.text.clone());
+        keys(&mut seat, &mut ed, &[Key::Char('c')]);
+        keys(&mut seat, &mut ed, &chars("137x195"));
+        keys(&mut seat, &mut ed, &[Key::Esc, Key::Char('0'), Key::Char('f'), Key::Esc]);
+        assert_eq!(cell(&seat).as_deref(), Some("137x195"), "an Esc that cancels `f` stays in the cell");
+        keys(&mut seat, &mut ed, &[Key::Char('f'), Key::Char('x'), Key::Char('D'), Key::Char('a')]);
+        keys(&mut seat, &mut ed, &chars("x200"));
+        assert_eq!(cell(&seat).as_deref(), Some("137x200"));
+        keys(&mut seat, &mut ed, &[Key::Esc, Key::Esc]);
+        assert!(cell(&seat).is_none());
+        assert!(file(&dir).contains("page = \"137x200\""), "{}", file(&dir));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -2240,18 +2480,25 @@ mod tests {
         assert_eq!(ed.register_contents(None), "a5");
         assert_eq!(ed.status(), say!("settings.yanked", "a5"));
         ed.yank_text("b6\n");
+        let cell = |seat: &Seat| page(seat).cell.as_ref().map(|c| c.text.clone());
         keys(&mut seat, &mut ed, &[Key::Char('p')]);
-        assert_eq!(ed.value_typed(), Some("b6"));
+        assert_eq!(cell(&seat).as_deref(), Some("b6"));
         keys(&mut seat, &mut ed, &[Key::Enter]);
         assert!(file(&dir).contains("page = \"b6\""), "{}", file(&dir));
-        assert!(seat.pasted(&mut ed, "letter\n"));
-        assert_eq!(ed.value_typed(), Some("letter"));
-        // While typing, a paste is the line's, at its caret.
-        assert!(!seat.pasted(&mut ed, "x"));
-        ed.paste_text("-");
-        assert_eq!(ed.value_typed(), Some("letter-"));
-        keys(&mut seat, &mut ed, &[Key::Esc]);
-        assert_eq!(ed.status(), "", "what the paste said goes with the value");
+        assert!(seat.pasted(&mut ed, "a4\n"));
+        assert_eq!(cell(&seat).as_deref(), Some("a4"));
+        // In the cell, a paste is the cell's, at its caret: `c` takes the
+        // `a`, and the paste goes where it was.
+        keys(&mut seat, &mut ed, &[Key::Char('c')]);
+        keys(&mut seat, &mut ed, &[Key::Char('4')]);
+        assert!(seat.pasted(&mut ed, "b"));
+        assert_eq!(cell(&seat).as_deref(), Some("4b4"));
+        keys(&mut seat, &mut ed, &[Key::Esc, Key::Char('x'), Key::Char('c')]);
+        assert!(seat.pasted(&mut ed, "b5"));
+        assert_eq!(cell(&seat).as_deref(), Some("b5"));
+        keys(&mut seat, &mut ed, &[Key::Esc, Key::Esc]);
+        assert!(cell(&seat).is_none());
+        assert!(file(&dir).contains("page = \"b5\""), "{}", file(&dir));
         page_mut(&mut seat).go_to("editor.soft_wrap", |_| Vec::new());
         keys(&mut seat, &mut ed, &[Key::Char('p')]);
         assert_eq!(ed.status(), say!("settings.paste-nowhere"));
@@ -2391,9 +2638,9 @@ mod tests {
         assert_eq!(ed.status(), say!("settings.no-such-setting", "no.such"));
         assert_eq!(page(&seat).here().map(|s| s.path()).as_deref(), Some("editor.indent"), "stays");
         assert!(seat.panel.is_some());
-        // A value typed is still the IME's.
-        keys(&mut seat, &mut ed, &[Key::Enter]);
-        assert!(ed.mode() == Mode::Value && !ed.value_line_is_plain());
+        // A value is typed in its cell, in Insert, where the IME composes.
+        keys(&mut seat, &mut ed, &[Key::Enter, Key::Char('i')]);
+        assert!(page(&seat).cell.as_ref().is_some_and(|c| c.bar));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -2447,8 +2694,8 @@ mod tests {
         seat.watch(&mut ed);
         assert_eq!(ed.status(), "", "once");
         keys(&mut seat, &mut ed, &[Key::Enter]);
-        assert_eq!(ed.value_typed(), Some("9"), "the editor starts from the file as it is");
-        keys(&mut seat, &mut ed, &[Key::Ctrl('u'), Key::Char('5'), Key::Enter]);
+        assert_eq!(page(&seat).cell.as_ref().map(|c| c.text.as_str()), Some("9"), "the cell starts from the file as it is");
+        keys(&mut seat, &mut ed, &[Key::Char('c'), Key::Char('5'), Key::Enter]);
         assert_eq!(file(&dir), "[editor]\nscrolloff = 5 # a\nindent = 2\nruler = 80\n");
         keys(&mut seat, &mut ed, &[Key::Char('u')]);
         assert_eq!(file(&dir), "[editor]\nscrolloff = 9 # a\nindent = 2\nruler = 80\n", "back to 9, not 3");
@@ -2460,11 +2707,10 @@ mod tests {
         page_mut(&mut seat).go_to("editor.soft_wrap", |_| Vec::new());
         keys(&mut seat, &mut ed, &[Key::Char(' ')]);
         assert!(file(&dir).contains("soft_wrap = false") && !file(&dir).contains("scrolloff"), "{}", file(&dir));
-        // Found by the key that opens the value line, which covers the news:
-        // the write says it instead.
+        // Found by the key that opens the cell: the write says it.
         std::fs::remove_file(dir.join("config.toml")).unwrap();
         page_mut(&mut seat).go_to("editor.ruler", |_| Vec::new());
-        keys(&mut seat, &mut ed, &[Key::Enter, Key::Ctrl('u'), Key::Char('8'), Key::Char('0'), Key::Enter]);
+        keys(&mut seat, &mut ed, &[Key::Char('c'), Key::Char('8'), Key::Char('0'), Key::Enter]);
         assert_eq!(ed.status(), say!("settings.saved-moved", shorten(&dir.join("config.toml"))));
         assert_eq!(file(&dir).trim(), "[editor]\nruler = 80");
         let _ = std::fs::remove_dir_all(&dir);
@@ -2519,20 +2765,25 @@ mod tests {
     fn a_single_character_setting_refuses_two_or_none() {
         let dir = scratch("one-char");
         let (mut ed, mut seat) = seated(&dir, "", "editor.indent_symbol");
-        for bad in ["", "ab"] {
-            keys(&mut seat, &mut ed, &[Key::Enter, Key::Ctrl('u')]);
-            keys(&mut seat, &mut ed, &chars(bad));
-            keys(&mut seat, &mut ed, &[Key::Enter]);
-            assert_eq!(ed.mode(), Mode::Value, "{bad:?} typed again");
-            assert!(matches!(&page(&seat).refusal, Some(Refusal::Loader(said)) if said.contains("indent_symbol")), "{bad:?}");
-            keys(&mut seat, &mut ed, &[Key::Esc]);
-        }
-        assert!(!file(&dir).contains("indent_symbol"));
-        keys(&mut seat, &mut ed, &[Key::Enter, Key::Ctrl('u'), Key::Char('¶'), Key::Enter]);
+        keys(&mut seat, &mut ed, &[Key::Char('c')]);
+        keys(&mut seat, &mut ed, &chars("ab"));
+        keys(&mut seat, &mut ed, &[Key::Enter]);
+        assert!(page(&seat).cell.is_some(), "two kept in the cell");
+        assert!(matches!(&page(&seat).refusal, Some(Refusal::Loader(said)) if said.contains("indent_symbol")));
+        // Taken back to the value it opened with, Esc writes nothing.
+        keys(&mut seat, &mut ed, &[Key::Esc, Key::Char('u'), Key::Esc]);
+        assert!(page(&seat).cell.is_none());
+        assert!(!file(&dir).contains("indent_symbol"), "{}", file(&dir));
+        keys(&mut seat, &mut ed, &[Key::Char('c'), Key::Char('¶'), Key::Enter]);
         assert!(file(&dir).contains("indent_symbol = \"¶\""), "{}", file(&dir));
+        // None at all is refused too.
+        keys(&mut seat, &mut ed, &[Key::Char('c'), Key::Enter]);
+        assert!(matches!(&page(&seat).refusal, Some(Refusal::Loader(said)) if said.contains("indent_symbol")));
+        keys(&mut seat, &mut ed, &[Key::Esc, Key::Char('u'), Key::Esc]);
+        assert!(page(&seat).cell.is_none() && file(&dir).contains("indent_symbol = \"¶\""));
         page_mut(&mut seat).go_to("editor.indent_guides_character", |_| Vec::new());
-        keys(&mut seat, &mut ed, &[Key::Enter, Key::Ctrl('u'), Key::Char('字'), Key::Enter]);
-        assert_eq!(ed.mode(), Mode::Value, "a guide is one cell wide");
+        keys(&mut seat, &mut ed, &[Key::Char('c'), Key::Char('字'), Key::Enter]);
+        assert!(page(&seat).cell.is_some(), "a guide is one cell wide");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
