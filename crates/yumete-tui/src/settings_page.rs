@@ -26,7 +26,7 @@ use ratatui::widgets::Clear;
 use ratatui::Frame;
 
 use yumete_config::panel::{
-    all_rows, FlavorRow, FlavorSection, ItemFrom, Layer, Panel, Refusal, SaveError, Saved, Subpage, Typing, Which,
+    all_rows, FlavorRow, FlavorSection, ItemFrom, Layer, Panel, Refusal, SaveError, Saved, Subpage, Typing,
 };
 use yumete_config::settings_ui::{Kind, Setting, GROUPS};
 use yumete_config::Config;
@@ -75,6 +75,19 @@ use crate::put_text;
 
 /// 左邊那張組目録有多寬（全角格）。
 const GROUPS_WIDE: u16 = 14;
+
+/// **Below this width the groups' column goes first**: `h` `l` walk the
+/// groups without it, and each group's name is on its heading row.
+const GROUPS_FROM: u16 = 80;
+
+/// **Below this height the keys take one row**, so the list keeps its rows.
+const KEYS_FOLD_FROM: u16 = 24;
+
+thread_local! {
+    /// The first line of the list last drawn: the list scrolls only when the
+    /// cursor comes within `scrolloff` of an edge, as the text does.
+    static FIRST: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
 
 /// **一段話折成幾行**，按顯示寬度。
 ///
@@ -172,12 +185,14 @@ struct Columns {
     value: u16,
     /// 頁的右邊。
     right: u16,
+    /// 來源那一欄的格線：值寫到它前面，來源寫在它後面。
+    source: u16,
 }
 
 impl Columns {
-    fn of(area: Rect, panel: &Panel) -> Columns {
+    fn of(area: Rect, panel: &Panel, groups: u16) -> Columns {
         let right = area.x + area.width;
-        let name = area.x + GROUPS_WIDE + 2;
+        let name = area.x + groups + 2;
         let room = right.saturating_sub(name).saturating_sub(SOURCE_WIDE);
         let rows = all_rows();
         let widest = |it: &mut dyn Iterator<Item = String>| it.map(|t| yumete_cjk::str_width(&t) as u16).max().unwrap_or(0);
@@ -193,7 +208,11 @@ impl Columns {
             // six, and `clamp(6, room)` panics.
             false => room.saturating_sub(want_value.min(room / 2)).max(6).min(room),
         };
-        Columns { name, value: name + name_wide, right }
+        let value = name + name_wide;
+        // As wide as the longest source the rows say now (「本項目（全局也設了）」),
+        // so a source is never cut.
+        let source_wide = widest(&mut rows.iter().map(|s| source_of(panel, s))).max(4) + 2;
+        Columns { name, value, right, source: right.saturating_sub(source_wide).max(value + 1) }
     }
 }
 
@@ -432,6 +451,7 @@ impl Seat {
                 return Some(say!("settings.yanked", value));
             }
             Key::Tab => page.flip_into(),
+            Key::Char('?') => page.all_keys = !page.all_keys,
             Key::Char('e') => return self.open_the_file(editor),
             Key::Char('q') => self.close(editor),
             // **`Esc` steps back**: off a page, then off a search, and no
@@ -1038,7 +1058,12 @@ pub fn draw(
     }
     frame.render_widget(Clear, area);
     let rows = panel.rows();
-    let col = Columns::of(area, panel);
+    // **The groups' column only where there is room for it** (`GROUPS_FROM`).
+    let groups = match area.width >= GROUPS_FROM {
+        true => GROUPS_WIDE,
+        false => 0,
+    };
+    let col = Columns::of(area, panel, groups);
     let right = col.right;
     let buf = frame.buffer_mut();
     for y in area.y..area.y + area.height {
@@ -1049,49 +1074,35 @@ pub fn draw(
         }
     }
 
-    // ---- 頂上那一行：標題、兩個標籤（全局／本項目，`Tab` 換），右邊是那一份檔 ----
+    // ---- 頂上那一行：三欄的名字 ---------------------------------------------
     //
-    // **Both files are always there as tabs**: the one written
-    // into is lit. A search in force follows them.
-    let mut x = area.x + 1;
-    let title = say!("settings.title");
-    put_text(buf, x, area.y, right, &title, head);
-    x += yumete_cjk::str_width(&title) as u16 + 2;
-    for which in [Which::Global, Which::Local] {
-        let name = format!(" {} ", said(which.layer().label()));
-        put_text(buf, x, area.y, right, &name, if which == panel.into { on } else { quiet });
-        x += yumete_cjk::str_width(&name) as u16 + 1;
+    // **The page's title, the layer written into and the file are on the
+    // status line at its foot**, where the text's mode and file are: this row
+    // names the columns, as a table's heading does.
+    if panel.page.is_none() {
+        let rule = ground.fg(ink.rule());
+        put_text(buf, col.name, area.y, col.value, &say!("settings.column.name"), head);
+        put_text(buf, col.value.saturating_sub(1), area.y, right, "┆", rule);
+        put_text(buf, col.value, area.y, col.source, &say!("settings.column.value"), head);
+        put_text(buf, col.source, area.y, right, "┆", rule);
+        put_text(buf, col.source + 1, area.y, right, &say!("settings.column.source"), head);
     }
-    if panel.page.is_some() {
-        let label = panel.here().map(|s| s.label).unwrap_or("settings.keys.flavor-items");
-        let crumb = format!(" › {}", said(label));
-        put_text(buf, x, area.y, right, &crumb, head);
-        x += yumete_cjk::str_width(&crumb) as u16;
-    } else if !panel.search.is_empty() {
-        let search = format!(" /{}", panel.search);
-        put_text(buf, x, area.y, right, &search, head);
-        x += yumete_cjk::str_width(&search) as u16;
-    }
-    let sheet = panel.sheet();
-    let where_to = match (&sheet.path, sheet.there) {
-        (Some(p), true) => shorten(p),
-        // **那個檔還沒有就在名字後面加一個 `+`**：寫第一項的時候它是被建出來的。
-        (Some(p), false) => format!("{}+", shorten(p)),
-        (None, _) => say!("settings.no-file"),
+
+    // ---- 最底下一行：和正文同一條狀態行 ----------------------------------------
+    let bottom = match area.height >= 3 {
+        true => {
+            let y = area.y + area.height - 1;
+            draw_status_line(buf, panel, config, area.x, right, y, rows.len());
+            y
+        }
+        false => area.y + area.height,
     };
-    let room = right.saturating_sub(x + 2) as usize;
-    if room > 4 {
-        let line = crate::elide_head(&where_to, room - 1);
-        let wide = yumete_cjk::str_width(&line) as u16;
-        put_text(buf, right.saturating_sub(wide + 1), area.y, right, &line, text);
-    }
 
     // ---- 底下那幾塊有多高，上面那一欄就剩多少 --------------------------------
     //
     // 從下往上排：鍵那一塊、一條橫線、說明那一塊（這一行是什麼、
     // 取什麼值、三層各說了什麼）。說明和鍵都可以折成幾行。
-    let split = area.x + GROUPS_WIDE;
-    let bottom = area.y + area.height;
+    let split = area.x + groups;
     let note_wide = right.saturating_sub(split + 3) as usize;
     let note_rows: Vec<String> = note_lines(panel).iter().flat_map(|line| fold(line, note_wide)).collect();
     // **Only the keys that work now**: the list, a page, a
@@ -1112,7 +1123,17 @@ pub fn draw(
         (None, false, None) if !panel.search.is_empty() => say!("settings.keys-searched"),
         (None, false, None) => say!("settings.keys"),
     };
-    let keys_rows = fold_pairs(&keys, right.saturating_sub(area.x + 2) as usize);
+    let mut keys_rows = fold_pairs(&keys, right.saturating_sub(area.x + 2) as usize);
+    // **A short window gives the keys one row**, and `?` the rest: the
+    // list's rows are worth more than keys a glance at the row already shows.
+    if area.height < KEYS_FOLD_FROM && keys_rows.len() > 1 && !panel.all_keys {
+        let more = say!("settings.keys-more");
+        let wide = right.saturating_sub(area.x + 2) as usize;
+        // Whole pairs, as many as fit before `? 全部鍵`.
+        let room = wide.saturating_sub(yumete_cjk::str_width(&more) + 2);
+        let first = fold_pairs(&keys, room).into_iter().next().unwrap_or_default();
+        keys_rows = vec![format!("{}  {more}", first.trim_end_matches(','))];
+    }
     // Warning: **矮窗口上一塊一塊地讓**：先讓說明那一塊，鍵那一塊最後讓。
     let room = bottom.saturating_sub(area.y + 3);
     let keys_high = (keys_rows.len() as u16 + 1).min(room);
@@ -1131,7 +1152,7 @@ pub fn draw(
                 cell.set_symbol("─").set_style(quiet);
             }
         }
-        if let Some(join) = join {
+        if let (Some(join), true) = (join, groups > 0) {
             if let Some(cell) = buf.cell_mut((split, y)) {
                 cell.set_symbol(join).set_style(quiet);
             }
@@ -1143,14 +1164,14 @@ pub fn draw(
     if foot < bottom && foot > area.y + 1 {
         rule(buf, foot, area.x, Some("┴"));
     }
-    for y in area.y + 2..foot {
+    for y in (area.y + 2..foot).filter(|_| groups > 0) {
         if let Some(cell) = buf.cell_mut((split, y)) {
             cell.set_symbol("│").set_style(quiet);
         }
     }
     if block_high > 0 && block_at > area.y + 2 {
-        rule(buf, block_at.saturating_sub(1), split + 1, None);
-        if let Some(cell) = buf.cell_mut((split, block_at.saturating_sub(1))) {
+        rule(buf, block_at.saturating_sub(1), split + (groups > 0) as u16, None);
+        if let (Some(cell), true) = (buf.cell_mut((split, block_at.saturating_sub(1))), groups > 0) {
             cell.set_symbol("├").set_style(quiet);
         }
     }
@@ -1177,13 +1198,13 @@ pub fn draw(
         0 => 0,
         _ => here_group.saturating_sub(room_for_groups - 1),
     };
-    for (i, named) in GROUPS.iter().enumerate().skip(first_group) {
+    for (i, named) in GROUPS.iter().enumerate().skip(first_group).filter(|_| groups > 0) {
         let y = area.y + 2 + (i - first_group) as u16;
         if y >= foot {
             break;
         }
         let name = said(named.label);
-        let pad = (GROUPS_WIDE as usize).saturating_sub(yumete_cjk::str_width(&name) + 2);
+        let pad = (groups as usize).saturating_sub(yumete_cjk::str_width(&name) + 2);
         put_text(buf, area.x, y, split, &format!("  {name}{}", " ".repeat(pad)), if i == here_group { head } else { text });
         hit(y, area.x, split, Hit::Group(i));
     }
@@ -1239,14 +1260,25 @@ pub fn draw(
     }
     // **光標走到哪，那一行就跳進畫面**，連同它下面那幾行；它上面
     // 那一組的標題放得下就一起放。
+    //
+    // **It scrolls as the text does**: the first line stays where it was
+    // until the cursor comes within `scrolloff` lines of an edge, rather than
+    // the cursor riding the bottom edge all the way down.
     let room = list_ends.saturating_sub(top) as usize;
+    let off = config.editor.scrolloff.min(room.saturating_sub(1) / 2);
+    let was = FIRST.with(|f| f.get()).min(lines.len().saturating_sub(1));
     let mut first = match room {
         0 => cursor_line,
-        _ => (cursor_end + 1).saturating_sub(room).min(cursor_line),
+        _ => {
+            let low = (cursor_end + 1 + off).min(lines.len()).saturating_sub(room);
+            let high = cursor_line.saturating_sub(off);
+            was.clamp(low.min(high), high)
+        }
     };
     if first == cursor_line && first > 0 && matches!(lines[first - 1], Line::Heading(_)) && cursor_end - first + 2 <= room {
         first -= 1;
     }
+    FIRST.with(|f| f.set(first));
     let mut y = top;
     let mut last = first;
     for line in lines.iter().skip(first) {
@@ -1310,6 +1342,52 @@ pub fn draw(
     None
 }
 
+/// **The page's status line**, the text's own strip at the same place:
+/// the mode word in gold where `NOR` stands, the page, the layer a change is
+/// written into (`Tab` turns it), its file, and how far down the list the
+/// cursor is.
+fn draw_status_line(buf: &mut ratatui::buffer::Buffer, panel: &Panel, config: &Config, x: u16, right: u16, y: u16, rows: usize) {
+    let ink = crate::theme::Palette::of(config);
+    let bar = crate::status_bar_style(config);
+    for at in x..right {
+        if let Some(cell) = buf.cell_mut((at, y)) {
+            cell.set_symbol(" ").set_style(bar);
+        }
+    }
+    let mode = "TBL.NOR";
+    let mut at = put_text(buf, x + 1, y, right, mode, bar.fg(ink.gold()).add_modifier(Modifier::BOLD)) + 2;
+    let mut said_left = format!("{}   {}", say!("settings.title"), say!("settings.writing-into", said(panel.into.layer().label())));
+    if panel.page.is_some() {
+        let label = panel.here().map(|s| s.label).unwrap_or("settings.keys.flavor-items");
+        said_left.push_str(&format!(" › {}", said(label)));
+    } else if !panel.search.is_empty() {
+        said_left.push_str(&format!("   /{}", panel.search));
+    }
+    let position = match (panel.page.is_none(), rows) {
+        (true, 1..) => say!("settings.position", panel.row + 1, rows),
+        _ => String::new(),
+    };
+    let position_wide = yumete_cjk::str_width(&position) as u16;
+    // Three spaces before the position, as on the text's status line.
+    let ends = right.saturating_sub(position_wide + 4);
+    at = put_text(buf, at, y, ends, &said_left, bar);
+    // The file, as much of it as fits, its head given up first.
+    let sheet = panel.sheet();
+    let file = match (&sheet.path, sheet.there) {
+        (Some(p), true) => shorten(p),
+        // **那個檔還沒有就在名字後面加一個 `+`**：寫第一項的時候它是被建出來的。
+        (Some(p), false) => format!("{}+", shorten(p)),
+        (None, _) => say!("settings.no-file"),
+    };
+    let room = ends.saturating_sub(at + 3) as usize;
+    if room > 4 {
+        put_text(buf, at + 3, y, ends, &crate::elide_head(&file, room), bar.fg(ink.quiet()));
+    }
+    if !position.is_empty() {
+        put_text(buf, right.saturating_sub(position_wide + 1), y, right, &position, bar);
+    }
+}
+
 /// One row: the mark of a row set in the file switched to, the name, the
 /// value, and where the value comes from.
 fn draw_row(
@@ -1341,21 +1419,28 @@ fn draw_row(
     }
     let label = crate::elide(&said(setting.label), col.value.saturating_sub(from + 1) as usize);
     put_text(buf, from, y, col.value.saturating_sub(1), &label, band.fg(ink.text()));
-    // The source at the right end, quiet for the factory's.
+    // **Rules between the columns, as a table's**, gold on either side of the
+    // value under the cursor: the cell a change goes into.
+    let rule = match here {
+        true => band.fg(ink.gold()),
+        false => ground.fg(ink.rule()),
+    };
+    put_text(buf, col.value.saturating_sub(1), y, right, "┆", rule);
+    put_text(buf, col.source, y, right, "┆", rule);
+    // The source in its own column, quiet for the factory's.
     let source = match setting.kind {
         Kind::Page => String::new(),
         _ => source_of(panel, setting),
     };
-    let source_wide = yumete_cjk::str_width(&source) as u16;
-    let source_at = right.saturating_sub(source_wide + 1).max(col.value);
+    let source_at = col.source + 1;
     let value = row_value(panel, setting, &shown.value);
-    let room = source_at.saturating_sub(col.value + 2) as usize;
+    let room = col.source.saturating_sub(col.value + 1) as usize;
     let value_style = match (here, shown.from) {
         (true, _) => band.fg(ink.gold()).add_modifier(Modifier::REVERSED),
         (false, Layer::Factory) => ground.fg(ink.text()),
         (false, _) => ground.fg(ink.azure()),
     };
-    put_text(buf, col.value, y, source_at, &crate::elide(&value, room), value_style);
+    put_text(buf, col.value, y, col.source, &crate::elide(&value, room), value_style);
     if source_at > col.value + 2 {
         let style = match shown.from {
             Layer::Factory => band.fg(ink.quiet()),
@@ -1914,6 +1999,7 @@ pub(crate) fn shorten(path: &std::path::Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use yumete_config::panel::Which;
     use yumete_core::input::Mode;
 
     /// **畫一頁，讀回來。** 用真的緩衝區。
@@ -2447,6 +2533,44 @@ mod tests {
         page_mut(&mut seat).go_to("editor.indent_guides_character", |_| Vec::new());
         keys(&mut seat, &mut ed, &[Key::Enter, Key::Ctrl('u'), Key::Char('字'), Key::Enter]);
         assert_eq!(ed.mode(), Mode::Value, "a guide is one cell wide");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// **The list scrolls as the text does**: walking down, the cursor stops
+    /// `scrolloff` rows short of the bottom rather than riding the edge.
+    #[test]
+    fn the_list_keeps_scrolloff_rows_under_the_cursor() {
+        let dir = scratch("scrolloff");
+        let (mut ed, mut seat) = seated(&dir, "", "editor.layout");
+        let off = Config::default().editor.scrolloff;
+        for _ in 0..30 {
+            keys(&mut seat, &mut ed, &[Key::Char('j')]);
+            let _ = shot(page(&seat), 100, 34);
+        }
+        let drawn = shot(page(&seat), 100, 34);
+        let here = said(page(&seat).here().unwrap().label);
+        let lines: Vec<&str> = drawn.lines().collect();
+        let at = lines.iter().position(|l| l.contains(&format!(" {here} "))).expect("the cursor's row is drawn");
+        let more = lines.iter().position(|l| l.contains('↓')).unwrap_or(lines.len());
+        assert!(more - at > off, "{off} rows under the cursor, not {}:\n{drawn}", more - at - 1);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// **A narrow window gives up the groups' column first**, and a short
+    /// one gives the keys one row, `?` showing them all.
+    #[test]
+    fn a_narrow_window_drops_the_groups_and_a_short_one_folds_the_keys() {
+        let dir = scratch("narrow");
+        let (mut ed, mut seat) = seated(&dir, "", "editor.layout");
+        let wide = shot(page(&seat), 100, 34);
+        let narrow = shot(page(&seat), 70, 34);
+        assert!(wide.lines().nth(3).is_some_and(|l| l.contains('│')), "{wide}");
+        assert!(!narrow.lines().nth(3).is_some_and(|l| l.contains('│')), "{narrow}");
+        let more = say!("settings.keys-more");
+        assert!(shot(page(&seat), 70, 20).contains(&more));
+        assert!(!shot(page(&seat), 70, 34).contains(&more), "a tall window has room for every key");
+        keys(&mut seat, &mut ed, &[Key::Char('?')]);
+        assert!(!shot(page(&seat), 70, 20).contains(&more), "? shows them all");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

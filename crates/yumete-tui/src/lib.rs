@@ -3470,6 +3470,16 @@ fn shell_command(line: &str, in_dir: &std::path::Path) -> std::process::Command 
     }
 }
 
+/// **The status line's strip**, for the editor and for every page that puts
+/// one at its foot (`:settings`).
+pub(crate) fn status_bar_style(config: &Config) -> Style {
+    let ink = crate::theme::Palette::of(config);
+    match config.theme.status_bar {
+        yumete_config::StatusBar::Sunken => Style::default().bg(ink.sunken()).fg(ink.text()),
+        yumete_config::StatusBar::Raised => ink.ground(yumete_config::rung::CHROME).fg(ink.text()),
+    }
+}
+
 /// `~` at the front of a path, the way a shell would read it.
 ///
 /// The config crate's, so that a `~` in a command line and a `~` in
@@ -14298,12 +14308,7 @@ fn draw_status(
     // least. Sinking goes the other way, below the page instead of above it,
     // and on a light theme there is nothing below white so the strip rises
     // as before (`Palette::sunken`).
-    let bar = match config.theme.status_bar {
-        yumete_config::StatusBar::Sunken => Style::default().bg(ink.sunken()).fg(ink.text()),
-        yumete_config::StatusBar::Raised => {
-            ink.ground(yumete_config::rung::CHROME).fg(ink.text())
-        }
-    };
+    let bar = status_bar_style(config);
     // The sidebar does not take the whole status line to list its keys. It has
     // the row below for that, and taking this one as well would mean losing
     // the file name and the position for as long as the sidebar has focus.
@@ -16868,9 +16873,10 @@ fn squeezed(text: &str) -> String {
         // **Two rows at the foot**: the last is the command row,
         // blank while nothing is said, and the page's keys stand above it.
         assert!(last.trim().is_empty(), "the command row is blank: {last:?}");
-        assert!((2..5).any(|up| row(h - up).contains("jk")), "the keys above it");
+        assert!(row(h - 2).contains("TBL.NOR"), "the page's own status line above it: {:?}", row(h - 2));
+        assert!((3..6).any(|up| row(h - up).contains("jk")), "the keys above that");
         // **On the panel's ground.**
-        let panel_bg = buf.cell((w - 1, h - 2)).unwrap().bg;
+        let panel_bg = buf.cell((w - 1, h - 3)).unwrap().bg;
         assert!((0..w).all(|x| buf.cell((x, h - 1)).unwrap().bg == panel_bg), "the blank row is the panel's");
 
         // A message goes on the command row and leaves the keys alone.

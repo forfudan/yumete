@@ -111,6 +111,24 @@ zhs = "{0} 在外面改过了，已重新读入"
 en = "{0} was changed outside and has been read again"
 
 [[message]]
+# 設置頁表頭第一欄的名字（草稿）
+key = "settings.column.name"
+zhs = "设置"
+en = "Setting"
+
+[[message]]
+# 設置頁表頭第三欄的名字：值從哪一層來（草稿）
+key = "settings.column.source"
+zhs = "来源"
+en = "From"
+
+[[message]]
+# 設置頁表頭第二欄的名字（草稿）
+key = "settings.column.value"
+zhs = "值"
+en = "Value"
+
+[[message]]
 # 設置：歧义宽度
 key = "settings.editor.ambiguous-width"
 zhs = "歧义宽度"
@@ -1211,6 +1229,12 @@ zhs = "jk 选择, Enter 确定, Esc 取消"
 en = "jk choose, Enter take it, Esc cancel"
 
 [[message]]
+# 窗口矮時設置頁的鍵只剩一行，行末這一句說按 ? 看全部（草稿）
+key = "settings.keys-more"
+zhs = "? 全部键"
+en = "? all keys"
+
+[[message]]
 # 设置面板：搜索什么也没找到时能按的键（草稿）
 key = "settings.keys-no-match"
 zhs = "/ 再搜, u 撤销, C-r 重做, Tab 全局/项目, e 打开文件, Esc 清除搜索, q 关闭"
@@ -1897,6 +1921,12 @@ zhs = "不同底色"
 en = "tint"
 
 [[message]]
+# 設置頁狀態行右端：光標在第幾項，共幾項（草稿）
+key = "settings.position"
+zhs = "第 {0} / {1} 项"
+en = "{0} of {1}"
+
+[[message]]
 # 设置面板：一个数字项可取的范围，{0} 到 {1}（草稿）
 key = "settings.range"
 zhs = "{0} 到 {1}"
@@ -2075,6 +2105,12 @@ en = "undone; removed {0}"
 key = "settings.unread"
 zhs = "{0}配置文件读不进来（第 {1} 行：{2}），其中的设置都没有生效，面板不会写入它"
 en = "the {0} config file cannot be read (line {1}: {2}): none of its settings is in force, and the panel will not write it"
+
+[[message]]
+# 設置頁狀態行：改動寫進哪一層，{0} 是「全局」或「本項目」，Tab 換（草稿）
+key = "settings.writing-into"
+zhs = "写入{0}"
+en = "writing to {0}"
 
 [[message]]
 # 设置面板：按 y 复制了这一项的值。{0} 是值（草稿）

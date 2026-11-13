@@ -380,6 +380,9 @@ pub struct Panel {
     pub found: Option<Vec<usize>>,
     /// The row the cursor is on, of [`Panel::rows`].
     pub row: usize,
+    /// **Every key shown**, `?`: a short window gives the keys one row, and
+    /// this asks for all of them.
+    pub all_keys: bool,
     /// **A page is open**, on this row of it. Which page is the
     /// row it was opened from ([`Panel::subpage`]). `None` is the ordinary
     /// list.
@@ -599,6 +602,7 @@ impl Panel {
             into: Which::Global,
             found: None,
             row: 0,
+            all_keys: false,
             page: None,
             popup: None,
             refusal: None,
