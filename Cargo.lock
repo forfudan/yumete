@@ -3087,6 +3087,7 @@ dependencies = [
  "harfrust",
  "icu_provider",
  "image",
+ "memmap2",
  "parley",
  "vello_cpu",
  "yumete-cjk",

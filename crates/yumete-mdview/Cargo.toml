@@ -37,3 +37,9 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg"]
 harfrust = "0.12"
 yumete-cjk = {path = "../yumete-cjk"}
 yumete-core = {path = "../yumete-core"}
+
+# **A font file mapped rather than read**, for a family fontconfig's
+# matching hides from fontique (`fonts::find_unmatched`). Already under
+# fontique, at this version. Apache-2.0 / MIT.
+[target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
+memmap2 = "0.9"

@@ -153,6 +153,68 @@ fn split_list(list: &str) -> Option<(String, String)> {
     (!named.is_empty() || !generic.is_empty()).then(|| (named.join(", "), generic.join(", ")))
 }
 
+/// **Find the faces of `stacks` the font library cannot.** Asked for a
+/// family, fontique asks fontconfig for its best matches and keeps them only
+/// while they are that family's. A `fonts.conf` that puts a face of its own
+/// before whatever was asked for (`prepend_first`, bound `strong`, on every
+/// pattern `sans-serif` is in — and fontconfig adds `sans-serif` to every
+/// pattern) answers each such question with that face first, so no family
+/// but it is ever found, and a page's 漢字 are all the missing glyph of a
+/// Latin face. `fc-list` lists what is installed, with no matching and so
+/// none of that; a family in a stack the library cannot find is read from
+/// the files it names. Nothing on a system whose fontconfig matches as
+/// asked: each family is found, and `fc-list` is never run.
+#[cfg(all(unix, not(target_os = "macos")))]
+pub(crate) fn find_unmatched(fonts: &mut parley::FontContext, stacks: &[&str]) {
+    use std::collections::{HashMap, HashSet};
+    // Every family's files by its names, lower-cased, read once a process.
+    static INSTALLED: std::sync::OnceLock<HashMap<String, Vec<std::path::PathBuf>>> = std::sync::OnceLock::new();
+    let mut read: HashSet<&std::path::Path> = HashSet::new();
+    for name in stacks.iter().flat_map(|s| s.split(',')).map(|n| n.trim().trim_matches(['\'', '"'])) {
+        if name.is_empty() || fonts.collection.family_by_name(name).is_some() {
+            continue;
+        }
+        let installed = INSTALLED.get_or_init(|| {
+            let mut map: HashMap<String, Vec<std::path::PathBuf>> = HashMap::new();
+            let listed = std::process::Command::new("fc-list")
+                .args(["-f", "%{file}\t%{family}\n"])
+                .stdin(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .output();
+            let Ok(listed) = listed else { return map };
+            for line in String::from_utf8_lossy(&listed.stdout).lines() {
+                let Some((file, names)) = line.split_once('\t') else { continue };
+                // A family has a name in each language it is named in, with
+                // `,` between them and `\` before a character of the format's.
+                for name in names.split(',') {
+                    let files = map.entry(name.replace('\\', "").to_lowercase()).or_default();
+                    if !files.iter().any(|f| f.as_os_str() == file) {
+                        files.push(file.into());
+                    }
+                }
+            }
+            map
+        });
+        for file in installed.get(&name.to_lowercase()).into_iter().flatten() {
+            if !read.insert(file) {
+                continue;
+            }
+            // Mapped, not read: a CJK collection is twenty megabytes a
+            // weight, and only the glyphs drawn are ever looked at.
+            let Ok(opened) = std::fs::File::open(file) else { continue };
+            // SAFETY: a font file the system installed, mapped read-only; it
+            // is not written to while a preview is open.
+            let Ok(mapped) = (unsafe { memmap2::Mmap::map(&opened) }) else { continue };
+            fonts.collection.register_fonts(fontique::Blob::new(std::sync::Arc::new(mapped)), None);
+        }
+    }
+}
+
+/// Elsewhere the system's own font library is asked, and it finds what is
+/// installed.
+#[cfg(not(all(unix, not(target_os = "macos"))))]
+pub(crate) fn find_unmatched(_fonts: &mut parley::FontContext, _stacks: &[&str]) {}
+
 /// The faces a writing system is set in. `list` is `[export] font_family`;
 /// with an empty one the system's own faces are asked for.
 pub(crate) fn families(han: Han, list: &str) -> Families {

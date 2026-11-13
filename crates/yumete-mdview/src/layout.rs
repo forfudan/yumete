@@ -217,7 +217,7 @@ pub(crate) struct Engine {
 
 impl Engine {
     pub fn new(theme: Theme, scale: f32, base_dir: PathBuf, formulas: Box<dyn Formulas>) -> Engine {
-        Engine {
+        let mut engine = Engine {
             fonts: FontContext::new(),
             lcx: LayoutContext::new(),
             theme,
@@ -236,6 +236,17 @@ impl Engine {
             vertical: None,
             upright: std::collections::HashMap::new(),
             shapers: std::collections::HashMap::new(),
+        };
+        engine.find_unmatched();
+        engine
+    }
+
+    /// See [`crate::fonts::find_unmatched`]: the faces of every stack, found
+    /// where the font library does not find them.
+    fn find_unmatched(&mut self) {
+        let families = self.families.clone();
+        for f in &families {
+            crate::fonts::find_unmatched(&mut self.fonts, &[&f.sans, &f.mono, &f.emphasis, &f.cjk_first]);
         }
     }
 
@@ -246,6 +257,7 @@ impl Engine {
         }
         self.font_list = list.to_string();
         self.families = [Han::Simplified, Han::Traditional, Han::Japanese].map(|h| Arc::new(families(h, list)));
+        self.find_unmatched();
         true
     }
 
