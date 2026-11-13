@@ -39501,6 +39501,15 @@ fn an_empty_command_line_repeats_the_last_command() {
     run(&mut ed, "s/a/b/");
     run(&mut ed, "");
     assert_eq!(ed.current_buffer().text(), "bba\n", "under vim's keys too");
+    // The kept history is a session before this one: its last line may be
+    // the `:wq` that ended it, so Enter does not reach back to it, and the
+    // grey does not offer it.
+    let mut ed = typed("aaa\n");
+    ed.command_history.push(String::from("s/a/b/"));
+    ed.on_key(Key::Char(':'));
+    assert_eq!(ed.prompt_ghost(), "", "nothing run in this session yet");
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.current_buffer().text(), "aaa\n", "the session before is not repeated");
 }
 
 /// **Small vim counts and empty changes** (measured in nvim): `2$` is the

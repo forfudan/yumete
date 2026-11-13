@@ -575,12 +575,15 @@ impl Editor {
                 let line = std::mem::take(&mut self.command_line);
                 self.command_caret = 0;
                 self.mode = Mode::Normal;
-                // An empty line runs the last command again (helix's), under
-                // every keymap.
+                // An empty line runs the last command of this session again
+                // (helix's), under every keymap.
                 let line = match line.is_empty() && !self.settings_open {
-                    true => self.command_history.last().cloned().unwrap_or_default(),
+                    true => self.last_command_here.clone().unwrap_or_default(),
                     false => line,
                 };
+                if !self.settings_open && !line.trim().is_empty() {
+                    self.last_command_here = Some(line.clone());
+                }
                 // Not what is typed on the settings panel: its
                 // `:w` and `:q` are the panel's, and walking back through the
                 // editor's history should not step on them.

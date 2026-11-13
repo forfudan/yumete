@@ -2469,6 +2469,11 @@ pub struct Editor {
     lookfor_focus: usize,
     /// The `:` lines run this session, newest last.
     command_history: Vec<String>,
+    /// **The last `:` line run in this session**, for an empty line's Enter
+    /// and its grey guess. Not the kept history's last line: that may be the
+    /// `:wq` that ended the session before, and a stray `:` Enter at start
+    /// would run it again.
+    last_command_here: Option<String>,
     /// The `/` patterns searched for this session, newest last.
     search_history: Vec<String>,
     /// How far back through a history `Up` has walked.
@@ -4372,6 +4377,7 @@ impl Editor {
             command_caret: 0,
             lookfor_focus: 0,
             command_history: Vec::new(),
+            last_command_here: None,
             search_history: Vec::new(),
             history_at: None,
             history_shell: false,
