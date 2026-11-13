@@ -1326,7 +1326,7 @@ impl Editor {
                 let line = format!("decimo {} {options}", crate::editor::shell::quoted(&expression));
                 let put = match replace {
                     true => crate::editor::Put::Replace,
-                    false => crate::editor::Put::After,
+                    false => crate::editor::Put::Value,
                 };
                 self.ask_the_shell(line.trim_end().to_string(), put);
                 Ok(CommandOutcome::Continue)

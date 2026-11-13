@@ -768,6 +768,18 @@ zhs = "按任意键回到 yumete…"
 en = "press any key to return to yumete…"
 
 [[message]]
+# :run-in-terminal 等：shell 找不到那個程序（退出碼 127），{0} 是程序名（草稿）
+key = "shell.program-not-found"
+zhs = "没有找到 {0}"
+en = "{0} was not found"
+
+[[message]]
+# :run-in-terminal 等：那個程序不能執行（退出碼 126），{0} 是程序名（草稿）
+key = "shell.program-not-runnable"
+zhs = "{0} 无法运行"
+en = "{0} cannot be run"
+
+[[message]]
 # :| 把選區交出去，命令跑成了卻還在 stderr 上説了話
 key = "shell.replaced-with-complaints"
 zhs = "已替换，但命令输出：{0}"

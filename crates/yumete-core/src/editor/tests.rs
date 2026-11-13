@@ -39804,3 +39804,21 @@ fn the_files_a_program_chose_are_opened() {
     assert_eq!(ed.status(), say!("shell.opened-chosen", "2"));
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// **A value asked for at a line's end stays on that line** (`:decimo`):
+/// with the caret on the line break it goes in front of the break, its own
+/// line break dropped; on a character it goes after that character.
+#[test]
+fn a_value_goes_after_the_caret_and_stays_on_its_line() {
+    let mut ed = typed("pi = \nnext\n");
+    ed.sel.set_anchor(5);
+    ed.sel.set_head(5);
+    assert_eq!(ed.current_buffer().rope().char(5), '\n', "the caret on the line break");
+    ed.provide_pipe_output("3.14159\n", crate::editor::Put::Value);
+    assert_eq!(ed.current_buffer().text(), "pi = 3.14159\nnext\n");
+    let mut ed = typed("x=\n");
+    ed.sel.set_anchor(1);
+    ed.sel.set_head(1);
+    ed.provide_pipe_output("2\n", crate::editor::Put::Value);
+    assert_eq!(ed.current_buffer().text(), "x=2\n", "after the character under the caret");
+}

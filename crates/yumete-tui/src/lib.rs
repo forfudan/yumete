@@ -1592,7 +1592,7 @@ pub fn run(
                             // back first; the next turn of the loop, which is
                             // after that program has finished, takes it again.
                             system_ime.release();
-                            match hand_over(&mut terminal, &want.line, &events, &editor.working_dir(), enhanced, all_keys) {
+                            match hand_over(&mut terminal, &want.line, &events, &editor.working_dir(), enhanced, all_keys, &mut system_ime) {
                                 Ok(()) => editor.set_status(say!("shell.finished", want.line)),
                                 Err(err) => editor.set_status(say!("shell.cannot-run", err)),
                             }
@@ -1612,7 +1612,14 @@ pub fn run(
                                         }
                                         let _ = std::fs::remove_file(&file);
                                     } else if !status.success() {
-                                        editor.set_status(say!("shell.finished", format!("{} — {status}", want.line)));
+                                        // The shell's own word for it went to the
+                                        // screen the editor has just taken back.
+                                        let program = want.line.split_whitespace().next().unwrap_or("").to_string();
+                                        editor.set_status(match status.code() {
+                                            Some(127) => say!("shell.program-not-found", program),
+                                            Some(126) => say!("shell.program-not-runnable", program),
+                                            _ => say!("shell.finished", format!("{} — {status}", want.line)),
+                                        });
                                     }
                                 }
                                 Err(err) => editor.set_status(say!("shell.cannot-run", err)),
@@ -3190,11 +3197,16 @@ fn hand_over<B: ratatui::backend::Backend + io::Write>(
     in_dir: &std::path::Path,
     enhanced: bool,
     all_keys: bool,
+    system_ime: &mut crate::system_ime::SystemIme,
 ) -> io::Result<()> {
     step_aside(terminal, enhanced, all_keys)?;
     pause_the_reader();
     let status = run_in_the_terminal(line, in_dir);
     resume_the_reader();
+    // **The key that comes back is the editor's**: the system's input
+    // method, given to the program, is set aside again, or it composes the
+    // key pressed to return and nothing reaches the editor.
+    system_ime.want(true);
     println!();
     match &status {
         Ok(code) if code.success() => println!("[{line}]"),

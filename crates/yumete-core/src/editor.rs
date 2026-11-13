@@ -796,6 +796,10 @@ pub enum Put {
     After,
     /// `A-|` — nothing comes back. For sending text *out*.
     Nowhere,
+    /// One value (`:decimo`): its line break dropped, after the selection
+    /// but in front of a line break the selection ends on, so a value asked
+    /// for at a line's end stays on that line.
+    Value,
 }
 
 /// What is done with a command's output.
