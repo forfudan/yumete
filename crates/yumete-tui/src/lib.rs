@@ -2890,13 +2890,39 @@ struct Ran {
 
 impl Ran {
     /// The one line worth putting on the status bar.
+    /// The first line of what the command complained of, without the
+    /// terminal colours many commands write even into a pipe: the status
+    /// line would show their escapes as text.
     fn why(&self) -> String {
-        self.complained
+        let plain = without_escapes(&self.complained);
+        plain
             .lines()
             .find(|l| !l.trim().is_empty())
             .map(str::to_string)
             .unwrap_or_else(|| say!("shell.failed"))
     }
+}
+
+/// `text` without its terminal escape sequences (`ESC [ … m` and the other
+/// CSI ones, and a lone `ESC` with the character after it).
+fn without_escapes(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c != '\u{1b}' {
+            out.push(c);
+            continue;
+        }
+        // CSI: parameters and intermediates, then one final byte.
+        if let Some('[') = chars.next() {
+            for c in chars.by_ref() {
+                if ('@'..='~').contains(&c) {
+                    break;
+                }
+            }
+        }
+    }
+    out
 }
 
 /// **跑一條命令，`C-c` 只打中它，不打中編輯器。**
@@ -16112,6 +16138,16 @@ mod preview_wire {
 // 就寫在 `messages.rs::source` 的註釋裏。
 #[cfg(test)]
 mod tests {
+    /// **A command's coloured complaint reaches the status line plain**:
+    /// decimo writes `Error:` in bold red even into a pipe.
+    #[test]
+    fn a_complaint_loses_its_terminal_colours() {
+        let said = "\u{1b}[1m\u{1b}[91mError\u{1b}[0m\u{1b}[1m: \u{1b}[0msqrt() is undefined\n  sqrt(-1)\n";
+        assert_eq!(super::without_escapes(said), "Error: sqrt() is undefined\n  sqrt(-1)\n");
+        let ran = super::Ran { said: String::new(), complained: said.to_string(), ok: false };
+        assert_eq!(ran.why(), "Error: sqrt() is undefined");
+    }
+
 /// 把一行畫出來的字裏「寬字後面那個空格」擠掉，好照字面對句子（#497）。
 ///
 /// `row_text` 逐格取符號，而一個漢字佔兩格——第二格是空的，所以「行 1, 列 1」裏

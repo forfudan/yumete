@@ -332,6 +332,10 @@ pub enum Command {
     /// `:pipe-before` / `:pipe-after` / `:pipe-to` — the other three of
     /// helix's four (`!`, `A-!`, `A-|`); `:pipe` itself is [`Command::Pipe`].
     PipeInto(String, crate::editor::Put),
+    /// `:decimo` and `:decimo-replace`: what was written after the name,
+    /// an expression and decimo's options, and whether the result replaces
+    /// the selection rather than following it.
+    Decimo { args: String, replace: bool },
     /// `:keep-pipe <command>` — helix's `$` (`shell_keep_pipe`): the
     /// selections the command exits 0 on, given each as its input, are kept.
     KeepPipe(String),
@@ -5095,7 +5099,7 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "pipe-before",
-        aliases: &[],
+        aliases: &["insert-output"],
         help: "cmd.commands.pipe-before",
         needs: &[],
         params: &[Param::Free("<命令>")],
@@ -5106,7 +5110,7 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "pipe-after",
-        aliases: &[],
+        aliases: &["append-output"],
         help: "cmd.commands.pipe-after",
         needs: &[],
         params: &[Param::Free("<命令>")],
@@ -5146,6 +5150,25 @@ pub const COMMANDS: &[Entry] = &[
             None => Err(CommandError::MissingArgument("keep-pipe")),
             Some(line) => Ok(Command::KeepPipe(line.to_string())),
         }),
+    },
+    Entry {
+        name: "decimo",
+        aliases: &[],
+        help: "cmd.commands.decimo",
+        needs: &[],
+        params: &[Param::Free("<表達式>")],
+        build: Some(|p| match p.arg(0) {
+            None => Err(CommandError::MissingArgument("decimo")),
+            Some(args) => Ok(Command::Decimo { args: args.to_string(), replace: false }),
+        }),
+    },
+    Entry {
+        name: "decimo-replace",
+        aliases: &[],
+        help: "cmd.commands.decimo-replace",
+        needs: &[],
+        params: &[Param::Free("<表達式>")],
+        build: Some(|p| Ok(Command::Decimo { args: p.arg(0).unwrap_or("").to_string(), replace: true })),
     },
     Entry {
         name: "pipe-to",
@@ -8501,6 +8524,7 @@ mod tests {
                     "gr" => ":gr x".to_string(),
                     "ex" => ":ex html".to_string(),
                     "md" => ":md footnote".to_string(),
+                    "insert-output" | "append-output" => format!(":{alias} date"),
                     alias => format!(":{alias}"),
                 };
                 assert!(parse(&line).is_ok(), "alias {alias} does not parse");

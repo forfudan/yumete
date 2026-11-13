@@ -4,12 +4,18 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ## Unreleased
 
+### Added
+
+- **`:decimo` and `:decimo-replace` put an arbitrary-precision value into the text**, with [decimo](https://github.com/forfudan/decimo) installed: `:decimo pi -P 50` after the selection, `:decimo-replace sqrt(e) -P 50` in its place, and `:decimo-replace -P 50` on its own evaluates the selected text.
+- **`:insert-output` and `:append-output`**, helix's names, are `:pipe-before` and `:pipe-after`.
+
 ### Changed
 
 - **Enter on an empty `:` line runs the last command again under every keymap**, as helix's does; under vim's keys it used to do nothing. The empty line shows that command in grey first, as `/` shows the last pattern and `:!` the last shell command.
 
 ### Fixed
 
+- **A shell command's complaint on the status line is plain text**: the colours many commands write even into a pipe used to show as escape codes.
 - **On Linux, the Markdown preview finds the fonts it is given when a `fonts.conf` puts a face of its own before every match** (`prepend_first`, bound `strong`): fontconfig lists the family's files, and the preview reads them. 漢字 used to come out as empty boxes, or not at all, and `[editor] preview_font_family` seemed to do nothing.
 - **`--shot` reads nothing of where you have been**, as `--private` does, so the same keys draw the same frame on any machine; an empty `:` line no longer showed a command from your own history there.
 

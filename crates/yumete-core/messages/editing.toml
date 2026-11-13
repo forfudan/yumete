@@ -696,6 +696,12 @@ zhs = "此处无法挂起"
 en = "cannot suspend here"
 
 [[message]]
+# :decimo 而 decimo 沒有裝（草稿）
+key = "shell.decimo-missing"
+zhs = "没有找到 decimo；可用 brew install forfudan/tap/decimo 安装"
+en = "decimo is not installed; brew install forfudan/tap/decimo installs it"
+
+[[message]]
 # :! 或 :sh 跑完了
 key = "shell.done"
 zhs = "完成：{0}"

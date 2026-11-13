@@ -280,3 +280,43 @@ impl Editor {
         }
     }
 }
+
+/// **decimo's options among the words written after `:decimo`**, and the
+/// expression the rest of them make: `sqrt(e) -P 50` is `sqrt(e)` and
+/// `-P 50`. Only decimo's own option names are options, so `-pi` is an
+/// expression; an option that takes a value takes the next word.
+pub(crate) fn decimo_words(args: &str) -> (String, String) {
+    const VALUED: &[&str] = &["-P", "--precision", "-R", "--rounding-mode", "--delimiter"];
+    const BARE: &[&str] = &["-S", "--scientific", "-E", "--engineering", "--pad"];
+    let (mut expression, mut options): (Vec<&str>, Vec<String>) = (Vec::new(), Vec::new());
+    let mut words = args.split_whitespace();
+    while let Some(word) = words.next() {
+        let name = word.split('=').next().unwrap_or(word);
+        let glued = word.len() > 2 && VALUED.iter().any(|v| v.len() == 2 && word.starts_with(v));
+        if VALUED.contains(&word) {
+            options.push(quoted(word));
+            if let Some(value) = words.next() {
+                options.push(quoted(value));
+            }
+        } else if BARE.contains(&word) || glued || (word.contains('=') && VALUED.contains(&name)) {
+            options.push(quoted(word));
+        } else {
+            expression.push(word);
+        }
+    }
+    (expression.join(" "), options.join(" "))
+}
+
+/// `word` as one word to a POSIX shell: in single quotes, a quote in it
+/// closed, escaped and opened again.
+pub(crate) fn quoted(word: &str) -> String {
+    format!("'{}'", word.replace('\'', "'\\''"))
+}
+
+/// Whether a program called `name` is on `PATH`.
+pub(crate) fn on_path(name: &str) -> bool {
+    let Some(path) = std::env::var_os("PATH") else { return false };
+    std::env::split_paths(&path).any(|dir| {
+        dir.join(name).is_file() || (cfg!(windows) && dir.join(format!("{name}.exe")).is_file())
+    })
+}

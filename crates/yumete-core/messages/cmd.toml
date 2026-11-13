@@ -199,6 +199,20 @@ en = "word count; `:count-progress` for today, `:count-target` for a daily goal"
 find = "字數 字数 統計 统计 wordcount stats"
 
 [[message]]
+# : 命令選單裏 decimo 那一項的説明（草稿）
+key = "cmd.commands.decimo"
+zhs = "用 decimo 计算表达式，结果插在选区之后"
+en = "evaluate an expression with decimo and insert the result after the selection"
+find = "計算 计算 精度 數學 数学 decimo calculate precision"
+
+[[message]]
+# : 命令選單裏 decimo-replace 那一項的説明（草稿）
+key = "cmd.commands.decimo-replace"
+zhs = "用 decimo 计算表达式（不写则计算选区），结果替换选区"
+en = "evaluate an expression with decimo (the selection when none is written) and replace the selection with the result"
+find = "計算 计算 精度 數學 数学 decimo calculate precision replace"
+
+[[message]]
 # : 命令選單裏 diff 那一項的説明(commands 組)
 key = "cmd.commands.diff"
 zhs = "查看改动：按词比较，而非按行"

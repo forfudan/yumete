@@ -39698,3 +39698,45 @@ fn an_empty_command_line_shows_the_last_command() {
     press(&mut ed, "w");
     assert_ne!(ed.prompt_ghost(), "s/a/b/", "typing takes it away");
 }
+
+/// **`:insert-output` and `:append-output` are helix's names** for
+/// `:pipe-before` and `:pipe-after`: the output before or after the
+/// selection, nothing fed in.
+#[test]
+fn insert_output_and_append_output_are_the_pipe_verbs() {
+    use crate::command::{parse, Command};
+    use crate::editor::Put;
+    assert_eq!(parse(":insert-output date"), Ok(Command::PipeInto("date".to_string(), Put::Before)));
+    assert_eq!(parse(":append-output date"), Ok(Command::PipeInto("date".to_string(), Put::After)));
+}
+
+/// **`:decimo` hands decimo the expression as one word** and its options as
+/// options: `sqrt(e)` is not the shell's, `-pi` is an expression, and
+/// `-P 50` or `--precision=50` are decimo's.
+#[test]
+fn decimo_takes_its_expression_whole_and_its_options_as_options() {
+    use crate::editor::shell::{decimo_words, quoted};
+    assert_eq!(decimo_words("sqrt(e) -P 50"), ("sqrt(e)".to_string(), "'-P' '50'".to_string()));
+    assert_eq!(decimo_words("1 / 3 + pi --pad -P50"), ("1 / 3 + pi".to_string(), "'--pad' '-P50'".to_string()));
+    assert_eq!(decimo_words("-pi * 2 --precision=20"), ("-pi * 2".to_string(), "'--precision=20'".to_string()));
+    assert_eq!(decimo_words("-P 30"), (String::new(), "'-P' '30'".to_string()));
+    assert_eq!(quoted("it's"), "'it'\\''s'");
+}
+
+/// **`:decimo-replace` with no expression evaluates the selection**, and
+/// `:decimo` asks for one; when decimo is installed the line run is its.
+#[test]
+fn decimo_replace_reads_the_selection_when_nothing_is_written() {
+    let mut ed = typed("sqrt(2)\n");
+    press(&mut ed, "%");
+    ed.execute(":decimo-replace -P 10").unwrap();
+    match ed.take_shell_request() {
+        Some(shell) => {
+            assert_eq!(shell.line, "decimo 'sqrt(2)' '-P' '10'");
+            assert!(matches!(shell.how, crate::editor::How::Pipe(_, crate::editor::Put::Replace)));
+        }
+        None => assert_eq!(ed.status(), say!("shell.decimo-missing"), "decimo is not installed here"),
+    }
+    let mut ed = typed("x\n");
+    assert!(ed.execute(":decimo").is_err(), "an expression is needed");
+}
