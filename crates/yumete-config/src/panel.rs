@@ -400,6 +400,9 @@ pub struct Panel {
     /// **The value being edited in its cell**, as the cell's editor left it
     /// after the last key: `None` on the rows.
     pub cell: Option<CellView>,
+    /// **The redo key the hints name**, as the text's keymap has it: `U` or
+    /// `C-r`. The panel takes both.
+    pub redo_key: String,
     /// **A page is open**, on this row of it. Which page is the
     /// row it was opened from ([`Panel::subpage`]). `None` is the ordinary
     /// list.
@@ -619,6 +622,7 @@ impl Panel {
             row: 0,
             all_keys: false,
             cell: None,
+            redo_key: "C-r".to_string(),
             page: None,
             popup: None,
             refusal: None,

@@ -1447,13 +1447,7 @@ pub fn draw(
                     // `fg` patch keeps it: a rule drawn first and tinted
                     // after would have its own glyph painted over.
                     if view.layer.the_cell_is_the_unit(editor.mode()) {
-                        let from = x.saturating_sub(1);
-                        let upto = (x + w + 1).min(right);
-                        for cx in from..upto {
-                            if let Some(cell) = buf.cell_mut((cx, y)) {
-                                cell.set_style(cell.style().bg(ink.faint_wash()));
-                            }
-                        }
+                        tint_the_cell(buf, &ink, x.saturating_sub(1), (x + w + 1).min(right), y);
                     }
                     // **The seam keeps its own glyph and turns 金** — the #407
                     // rule, the same in CEL mode as in NOR (dashed and golden),
@@ -1858,4 +1852,16 @@ fn wrapped(text: &str, width: usize) -> Vec<String> {
         out.pop();
     }
     out
+}
+
+/// **The cell under the cursor at the top layer**, `from..upto` on row `y`,
+/// edges included: the faint wash that says the whole cell is the unit.
+/// One look for every grid, the text's tables and the settings panel's, so
+/// a change here changes both.
+pub(crate) fn tint_the_cell(buf: &mut ratatui::buffer::Buffer, ink: &crate::theme::Palette, from: u16, upto: u16, y: u16) {
+    for cx in from..upto {
+        if let Some(cell) = buf.cell_mut((cx, y)) {
+            cell.set_style(cell.style().bg(ink.faint_wash()));
+        }
+    }
 }

@@ -466,9 +466,11 @@ impl Seat {
                 };
             }
             Key::Char('u') => return self.replay(editor, true),
-            Key::Ctrl('r') => return self.replay(editor, false),
+            // **Redo is either editor's**: helix's `U` and vim's `C-r`.
+            Key::Char('U') | Key::Ctrl('r') => return self.replay(editor, false),
             Key::Char('"') => self.register = Some(None),
-            Key::Char('p') => return self.paste_register(editor, named.flatten()),
+            // `P` too: a value is replaced whole, so there is no before.
+            Key::Char('p' | 'P') => return self.paste_register(editor, named.flatten()),
             Key::Char('y') => {
                 let value = page.value_here()?;
                 editor.yank_text(&value);
@@ -881,6 +883,7 @@ impl Seat {
             }
         }
         let Some(page) = self.panel.as_mut() else { return };
+        page.redo_key = redo_key(editor);
         match (page.typing, editor.take_value_answer()) {
             // What was typed after a `:`: the habit of closing, or a word
             // that it is not taken. Nothing of it ever reaches the panel or
@@ -948,6 +951,16 @@ impl Seat {
         editor.set_settings_open(false);
         editor.set_status(String::new());
     }
+}
+
+/// **The redo key the hints name**: the one the text's keymap puts redo on
+/// now, of the two the panel takes (helix's `U`, vim's `C-r`).
+fn redo_key(editor: &Editor) -> String {
+    ["redo", "vim_redo"]
+        .iter()
+        .filter_map(|name| editor.keys_now(name))
+        .find(|key| key == "U" || key == "C-r")
+        .unwrap_or_else(|| "C-r".to_string())
 }
 
 /// **What the cell shows**, read off its editor after a key.
@@ -1246,15 +1259,15 @@ pub fn draw(
         (Some(Typing::Command), _, _) => say!("settings.keys-command"),
         (Some(Typing::Search), _, _) => say!("settings.keys-search"),
         (None, true, _) => say!("settings.keys-list"),
-        (None, false, Some(Subpage::Flavor)) => say!("settings.keys-flavor-page"),
-        (None, false, Some(Subpage::Annotation)) => say!("settings.keys-annotation-page"),
+        (None, false, Some(Subpage::Flavor)) => say!("settings.keys-flavor-page", &panel.redo_key),
+        (None, false, Some(Subpage::Annotation)) => say!("settings.keys-annotation-page", &panel.redo_key),
         // **Not a key that does nothing**: with no row there is
         // nothing to change or reset, and a page's row has no value to copy
         // or put back.
-        (None, false, None) if rows.is_empty() => say!("settings.keys-no-match"),
-        (None, false, None) if panel.here().is_some_and(|s| s.kind == Kind::Page) => say!("settings.keys-page-row"),
-        (None, false, None) if !panel.search.is_empty() => say!("settings.keys-searched"),
-        (None, false, None) => say!("settings.keys"),
+        (None, false, None) if rows.is_empty() => say!("settings.keys-no-match", &panel.redo_key),
+        (None, false, None) if panel.here().is_some_and(|s| s.kind == Kind::Page) => say!("settings.keys-page-row", &panel.redo_key),
+        (None, false, None) if !panel.search.is_empty() => say!("settings.keys-searched", &panel.redo_key),
+        (None, false, None) => say!("settings.keys", &panel.redo_key, "\"+p"),
     };
     let mut keys_rows = fold_pairs(&keys, right.saturating_sub(area.x + 2) as usize);
     // **A short window gives the keys one row**, and `?` the rest: the
@@ -1574,10 +1587,9 @@ fn draw_row(
     let source_at = col.source + 1;
     let value = row_value(panel, setting, &shown.value);
     let room = col.source.saturating_sub(col.value + 1) as usize;
-    let value_style = match (here, shown.from) {
-        (true, _) => band.fg(ink.gold()).add_modifier(Modifier::REVERSED),
-        (false, Layer::Factory) => ground.fg(ink.text()),
-        (false, _) => ground.fg(ink.azure()),
+    let value_style = match shown.from {
+        Layer::Factory => band.fg(ink.text()),
+        _ => band.fg(ink.azure()),
     };
     let caret = match panel.cell.as_ref().filter(|_| here) {
         Some(cell) => draw_cell(buf, cell, (ink, band), col.value, col.source.saturating_sub(1), y),
@@ -1586,6 +1598,12 @@ fn draw_row(
             None
         }
     };
+    // **The cell under the cursor, as a table's at its top layer**: the
+    // whole cell washed, rule to rule, the one look every grid has
+    // ([`crate::table::tint_the_cell`]). In the cell, the caret says it.
+    if here && panel.cell.is_none() {
+        crate::table::tint_the_cell(buf, ink, col.value.saturating_sub(1), (col.source + 1).min(right), y);
+    }
     if source_at > col.value + 2 {
         let style = match shown.from {
             Layer::Factory => band.fg(ink.quiet()),
@@ -2322,8 +2340,9 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// **A switch is written at once, `u` writes it back, `C-r` again**
-    /// (save model A): no 「未保存」, nothing to ask on leaving.
+    /// **A switch is written at once, `u` writes it back, `C-r` or `U`
+    /// again** (save model A): no 「未保存」, nothing to ask on leaving. The
+    /// hints name the redo key the text's keymap uses.
     #[test]
     fn a_change_is_written_at_once_and_u_takes_it_back() {
         let dir = scratch("write");
@@ -2341,7 +2360,15 @@ mod tests {
         assert_eq!(file(&dir), "# mine\n[editor]\nindent = 4\n");
         assert_eq!(ed.status(), say!("settings.nothing-to-undo"));
         keys(&mut seat, &mut ed, &[Key::Ctrl('r')]);
-        assert!(file(&dir).contains("soft_wrap = false"));
+        assert!(file(&dir).contains("soft_wrap = false"), "{}", file(&dir));
+        keys(&mut seat, &mut ed, &[Key::Char('U')]);
+        assert!(file(&dir).contains("soft_wrap = true"), "{}", file(&dir));
+        // Helix's keymap: the hints say `U`; vim's: `C-r`.
+        let hint = |seat: &Seat| shot(page(seat), 200, 34);
+        assert!(hint(&seat).contains("U 重做") || hint(&seat).contains("U redo"), "{}", hint(&seat));
+        ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
+        keys(&mut seat, &mut ed, &[Key::Char('j'), Key::Char('k')]);
+        assert!(hint(&seat).contains("C-r 重做") || hint(&seat).contains("C-r redo"), "{}", hint(&seat));
         // `q` closes, with nothing to ask.
         keys(&mut seat, &mut ed, &[Key::Char('q')]);
         assert!(seat.panel.is_none());
@@ -2744,18 +2771,18 @@ mod tests {
         let foot = |p: &Panel| shot(p, 200, 34).lines().rev().take(4).collect::<Vec<_>>().join("\n");
         p.go_to("keys.flavor_items", |_| Vec::new());
         let drawn = foot(&p);
-        assert!(drawn.contains(&say!("settings.keys-page-row")), "{drawn}");
+        assert!(drawn.contains(&say!("settings.keys-page-row", "C-r")), "{drawn}");
         for gone in ["r ", "y ", "p "] {
-            assert!(!say!("settings.keys-page-row").contains(&format!(", {gone}")), "{gone}");
+            assert!(!say!("settings.keys-page-row", "C-r").contains(&format!(", {gone}")), "{gone}");
         }
         p.go_to("ime.annotation_modes", |_| Vec::new());
-        assert!(foot(&p).contains(&say!("settings.keys-page-row")));
+        assert!(foot(&p).contains(&say!("settings.keys-page-row", "C-r")));
         p.search = "zzzq".into();
         p.narrow(Some(Vec::new()));
         let drawn = foot(&p);
-        assert!(drawn.contains(&say!("settings.keys-no-match")), "{drawn}");
+        assert!(drawn.contains(&say!("settings.keys-no-match", "C-r")), "{drawn}");
         for gone in ["Enter", "␣", "Space", ", r "] {
-            assert!(!say!("settings.keys-no-match").contains(gone), "{gone}");
+            assert!(!say!("settings.keys-no-match", "C-r").contains(gone), "{gone}");
         }
     }
 

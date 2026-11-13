@@ -1193,16 +1193,16 @@ zhs = "Normal 模式下请系统输入法让开，以免按键被它拦截"
 en = "while yumete reads the keys itself (Normal mode, the command line), ask the system's input method to step aside, so it does not eat them"
 
 [[message]]
-# 设置面板：列表里能按的键（草稿）
+# 设置面板：列表里能按的键；{0} 是重做键（U 或 C-r，跟着正文的键位），{1} 是系统剪贴板那一句键（"+p）（草稿）
 key = "settings.keys"
-zhs = "jk 上下, hl 换组, / 搜索, Enter 修改, ␣ 切换, r 重置, u 撤销, C-r 重做, p 粘贴, y 复制, Tab 全局/项目, e 打开文件, q 关闭"
-en = "jk move, hl group, / search, Enter change, Space toggle, r reset, u undo, C-r redo, p paste, y copy, Tab global/project, e open file, q close"
+zhs = "jk 上下, hl 换组, / 搜索, Enter 修改, ␣ 切换, r 重置, u 撤销, {0} 重做, p 粘贴, {1} 粘贴剪贴板, y 复制, Tab 全局/项目, e 打开文件, q 关闭"
+en = "jk move, hl group, / search, Enter change, Space toggle, r reset, u undo, {0} redo, p paste, {1} paste the clipboard, y copy, Tab global/project, e open file, q close"
 
 [[message]]
-# 设置面板：注解模式那一页能按的键（草稿）
+# 设置面板：注解模式那一页能按的键；{0} 是重做键（U 或 C-r，跟着正文的键位）（草稿）
 key = "settings.keys-annotation-page"
-zhs = "jk 上下, Enter 切换, r 重置, u 撤销, C-r 重做, Tab 全局/项目, e 打开文件, Esc 返回, q 关闭"
-en = "jk move, Enter toggle, r reset, u undo, C-r redo, Tab global/project, e open file, Esc back, q close"
+zhs = "jk 上下, Enter 切换, r 重置, u 撤销, {0} 重做, Tab 全局/项目, e 打开文件, Esc 返回, q 关闭"
+en = "jk move, Enter toggle, r reset, u undo, {0} redo, Tab global/project, e open file, Esc back, q close"
 
 [[message]]
 # 設置面板：值在格子裏編輯時能按的鍵（草稿）
@@ -1217,10 +1217,10 @@ zhs = "Enter 执行, Esc 取消, ←→ Home End 移动, C-w 删词, C-u 清空"
 en = "Enter run, Esc cancel, ←→ Home End move, C-w delete a word, C-u clear"
 
 [[message]]
-# 设置面板：风味各项那一页能按的键（草稿）
+# 设置面板：风味各项那一页能按的键；{0} 是重做键（U 或 C-r，跟着正文的键位）（草稿）
 key = "settings.keys-flavor-page"
-zhs = "jk 上下, Enter 切换, r 跟随档位, u 撤销, C-r 重做, Tab 全局/项目, e 打开文件, Esc 返回, q 关闭"
-en = "jk move, Enter toggle, r follow the level, u undo, C-r redo, Tab global/project, e open file, Esc back, q close"
+zhs = "jk 上下, Enter 切换, r 跟随档位, u 撤销, {0} 重做, Tab 全局/项目, e 打开文件, Esc 返回, q 关闭"
+en = "jk move, Enter toggle, r follow the level, u undo, {0} redo, Tab global/project, e open file, Esc back, q close"
 
 [[message]]
 # 设置面板：选项弹出的列表里能按的键（草稿）
@@ -1235,16 +1235,16 @@ zhs = "? 全部键"
 en = "? all keys"
 
 [[message]]
-# 设置面板：搜索什么也没找到时能按的键（草稿）
+# 设置面板：搜索什么也没找到时能按的键；{0} 是重做键（U 或 C-r，跟着正文的键位）（草稿）
 key = "settings.keys-no-match"
-zhs = "/ 再搜, u 撤销, C-r 重做, Tab 全局/项目, e 打开文件, Esc 清除搜索, q 关闭"
-en = "/ search again, u undo, C-r redo, Tab global/project, e open file, Esc clear the search, q close"
+zhs = "/ 再搜, u 撤销, {0} 重做, Tab 全局/项目, e 打开文件, Esc 清除搜索, q 关闭"
+en = "/ search again, u undo, {0} redo, Tab global/project, e open file, Esc clear the search, q close"
 
 [[message]]
-# 设置面板：光标在风味各项、注解模式这种打开一页的行上时能按的键（草稿）
+# 设置面板：光标在风味各项、注解模式这种打开一页的行上时能按的键；{0} 是重做键（U 或 C-r，跟着正文的键位）（草稿）
 key = "settings.keys-page-row"
-zhs = "jk 上下, hl 换组, / 搜索, Enter 打开, u 撤销, C-r 重做, Tab 全局/项目, e 打开文件, q 关闭"
-en = "jk move, hl group, / search, Enter open, u undo, C-r redo, Tab global/project, e open file, q close"
+zhs = "jk 上下, hl 换组, / 搜索, Enter 打开, u 撤销, {0} 重做, Tab 全局/项目, e 打开文件, q 关闭"
+en = "jk move, hl group, / search, Enter open, u undo, {0} redo, Tab global/project, e open file, q close"
 
 [[message]]
 # 设置面板：在底下那一行输入搜索时能按的键（草稿）
@@ -1253,10 +1253,10 @@ zhs = "输入就筛选, Enter 确定, Esc 清除"
 en = "type to narrow, Enter keep, Esc clear"
 
 [[message]]
-# 设置面板：搜索之后的列表里能按的键，Esc 清掉搜索（草稿）
+# 设置面板：搜索之后的列表里能按的键，Esc 清掉搜索；{0} 是重做键（U 或 C-r，跟着正文的键位）（草稿）
 key = "settings.keys-searched"
-zhs = "jk 上下, hl 换组, / 再搜, Enter 修改, ␣ 切换, r 重置, u 撤销, C-r 重做, Tab 全局/项目, Esc 清除搜索, q 关闭"
-en = "jk move, hl group, / search again, Enter change, Space toggle, r reset, u undo, C-r redo, Tab global/project, Esc clear the search, q close"
+zhs = "jk 上下, hl 换组, / 再搜, Enter 修改, ␣ 切换, r 重置, u 撤销, {0} 重做, Tab 全局/项目, Esc 清除搜索, q 关闭"
+en = "jk move, hl group, / search again, Enter change, Space toggle, r reset, u undo, {0} redo, Tab global/project, Esc clear the search, q close"
 
 [[message]]
 # 設置：Yumete 鍵位風味
@@ -1427,7 +1427,7 @@ zhs = "本层没有设这一项，已在跟随下一层"
 en = "this layer does not set it; it already follows the layer below"
 
 [[message]]
-# 设置面板：按 C-r，而没有可以重做的改动（草稿）
+# 设置面板：按重做键（U 或 C-r），而没有可以重做的改动（草稿）
 key = "settings.nothing-to-redo"
 zhs = "没有可以重做的改动"
 en = "nothing to redo"
@@ -1945,13 +1945,13 @@ zhs = "0，或 {0} 到 {1}"
 en = "0, or {0} to {1}"
 
 [[message]]
-# 设置面板：按 C-r 重做了一步，写进了文件。{0} 是写了的文件（草稿）
+# 设置面板：按重做键重做了一步，写进了文件。{0} 是写了的文件（草稿）
 key = "settings.redone"
 zhs = "已重做，已写入 {0}"
 en = "redone; written to {0}"
 
 [[message]]
-# 设置面板：按 C-r 重做了一步，结果是删掉文件。{0} 是删掉的文件（草稿）
+# 设置面板：按重做键重做了一步，结果是删掉文件。{0} 是删掉的文件（草稿）
 key = "settings.redone-removed"
 zhs = "已重做，已删除 {0}"
 en = "redone; removed {0}"
