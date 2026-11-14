@@ -30,7 +30,7 @@ impl Editor {
     /// end of a vim operator's `'a` and `` `a ``.
     pub(super) fn mark_here(&self, name: char) -> Option<usize> {
         let rope = self.current_buffer().rope();
-        match self.marks.get(&name)? {
+        match &self.mark_named(name)? {
             Spot::InFile(path, line, column) if self.current_buffer().path() == Some(path.as_path()) => {
                 let line = (*line).min(rope.len_lines().saturating_sub(1));
                 let width = crate::motion::line_text(rope, line).chars().count();
@@ -76,7 +76,7 @@ impl Editor {
             self.set_cursor(pos);
             return;
         }
-        let Some(spot) = self.marks.get(&name).cloned() else {
+        let Some(spot) = self.mark_named(name) else {
             self.status = say!("goto.no-such-mark", name);
             return;
         };
@@ -104,6 +104,22 @@ impl Editor {
                 self.set_cursor(pos.min(self.current_buffer().rope().len_chars()));
                 self.status = say!("goto.mark-in-this-file", name);
             }
+        }
+    }
+
+    /// A mark by its name: a letter set with `m`/`M`, or vim's `[` and `]`,
+    /// where the last change or yank began and ended.
+    fn mark_named(&self, name: char) -> Option<Spot> {
+        match name {
+            '[' | ']' => {
+                let (start, end) = self.current_buffer().change_span()?;
+                let pos = match name {
+                    '[' => start,
+                    _ => end,
+                };
+                Some(Spot::InBuffer(self.current_buffer().id(), pos))
+            }
+            _ => self.marks.get(&name).cloned(),
         }
     }
 

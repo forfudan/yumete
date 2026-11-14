@@ -34,6 +34,12 @@ impl Editor {
     /// Handle a single key press according to the current mode.
     pub fn on_key(&mut self, key: Key) -> KeyOutcome {
         let was = self.before_a_change();
+        // A key outside Insert begins a new change for `` `[ `` and `` `] ``;
+        // the keys of one Insert session are one change with the command
+        // that opened it (`cw` and what it typed).
+        if was.0 != Mode::Insert {
+            self.current_buffer_mut().close_change_span();
+        }
         let opened_from_top = self.pending == Pending::None;
         let outcome = self.on_key_now(key);
         match self.pending {

@@ -39888,3 +39888,47 @@ fn every_switch_says_what_it_is_now() {
     assert_eq!(ed.switch_state(":view-focus"), Some(false));
     assert_eq!(ed.switch_state("goto 3"), None);
 }
+
+/// **vim's `` `[ `` and `` `] ``**: where the last change or yank began and
+/// ended. Each row is nvim 0.12's `getpos("'[")` / `getpos("']")` after the
+/// keys, on the same three lines, as character offsets.
+#[test]
+fn the_last_change_and_yank_are_marks_as_in_vim() {
+    let text = "alpha beta gamma\ndelta epsilon\nzeta eta theta\n";
+    let ends = |keys: &str| -> (usize, usize) {
+        let mut ed = typed_vim(text);
+        press(&mut ed, "gg0");
+        for c in keys.chars() {
+            ed.on_key(match c {
+                '\u{1b}' => Key::Esc,
+                c => Key::Char(c),
+            });
+        }
+        press(&mut ed, "`[");
+        let start = ed.sel.head();
+        press(&mut ed, "`]");
+        (start, ed.sel.head())
+    };
+    for (keys, want) in [
+        ("yiw", (0, 4)),
+        ("wyw", (6, 10)),
+        ("wdw", (6, 6)),
+        ("wxxx", (6, 6)),
+        ("wcwXY\u{1b}", (6, 8)),
+        ("iABC\u{1b}", (0, 3)),
+        // `'] ` is past the line's end (nvim's col 20 of 19); the cursor that
+        // goes there stops on the last character, as vim's does.
+        ("AXYZ\u{1b}", (16, 18)),
+        ("yiwP", (0, 4)),
+        ("yiwp", (1, 5)),
+        ("yyp", (17, 32)),
+    ] {
+        assert_eq!(ends(keys), want, "{keys:?}");
+    }
+    // An operator takes them as it takes a letter's mark, exclusive as `d`a`
+    // is: `d`]` from the line's start stops before the yank's last character
+    // (nvim leaves `a gamma`).
+    let mut ed = typed_vim(text);
+    press(&mut ed, "wyiw0d`]");
+    assert_eq!(ed.current_buffer().text(), "a gamma\ndelta epsilon\nzeta eta theta\n");
+}

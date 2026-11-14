@@ -208,6 +208,18 @@ impl Editor {
         self.applied(done)
     }
 
+    /// **A yank or a put leaves `` `] `` on its last character**, not past it
+    /// as typing does; a whole line's last character is the one before its
+    /// line break (nvim: `yyp` gives `` `] `` on the pasted line's last letter).
+    fn mark_change_to_last(&mut self, start: usize, end: usize) {
+        let rope = self.current_buffer().rope();
+        let mut last = end.saturating_sub(1).max(start);
+        while last > start && rope.get_char(last) == Some('\n') {
+            last -= 1;
+        }
+        self.current_buffer_mut().set_change_span(start, last);
+    }
+
     /// Take the buffer's answer to an edit, and say so if it refused.
     ///
     /// `true` means the text moved and the caller may move the state around it
@@ -1796,6 +1808,7 @@ impl Editor {
             self.registers.insert('0', self.register_parts.clone());
         }
         self.status = say!("edit.yanked-characters", end - start);
+        self.mark_change_to_last(start, end);
         self.light_the_yank((start, end));
     }
 
@@ -1858,6 +1871,15 @@ impl Editor {
     /// Paste the register after (`p`) or before (`P`) the selection, and select
     /// the pasted text. Does nothing when the register is empty.
     pub(super) fn paste(&mut self, after: bool) {
+        let before = (self.current_buffer().id(), self.current_buffer().revision());
+        self.paste_now(after);
+        let put = (self.current_buffer().id(), self.current_buffer().revision());
+        if let Some((start, end)) = self.current_buffer().change_span().filter(|_| put != before) {
+            self.mark_change_to_last(start, end);
+        }
+    }
+
+    fn paste_now(&mut self, after: bool) {
         // `"+p` asks the front end for the system clipboard and pastes what
         // comes back, the way `Space p` does.
         if matches!(self.pending_register, Some('+' | '*')) {

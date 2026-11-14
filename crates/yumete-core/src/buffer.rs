@@ -288,6 +288,14 @@ pub struct Buffer {
     /// by `gi`). Kept here so it is per buffer and moves with the text before
     /// it, as vim's marks do.
     insert_stop: Option<usize>,
+    /// **vim's `` `[ `` and `` `] ``** in this buffer: where the last change or
+    /// yank began and ended. `end` is past the last character typed (nvim:
+    /// `iABC` leaves `` `] `` on the character after `C`), and on the last one
+    /// for a yank or a put, which say so with [`Buffer::set_change_span`].
+    change_span: Option<(usize, usize)>,
+    /// Whether the next edit joins `change_span` (one command's several
+    /// edits: `cw`'s delete and what it typed) or starts it afresh.
+    change_span_open: bool,
     /// **Each window's folds in this buffer**, moved by every
     /// edit and kept in the undo points; see [`crate::fold`].
     folds: crate::fold::FoldMap,
@@ -512,6 +520,8 @@ impl Buffer {
             changes: Vec::new(),
             changes_at: 0,
             insert_stop: None,
+            change_span: None,
+            change_span_open: false,
             folds: crate::fold::FoldMap::new(),
             line_edits: Vec::new(),
             local: Local::default(),
@@ -586,6 +596,8 @@ impl Buffer {
             changes: Vec::new(),
             changes_at: 0,
             insert_stop: None,
+            change_span: None,
+            change_span_open: false,
             folds: crate::fold::FoldMap::new(),
             line_edits: Vec::new(),
             local: Local::default(),
@@ -759,6 +771,8 @@ impl Buffer {
             changes: Vec::new(),
             changes_at: 0,
             insert_stop: None,
+            change_span: None,
+            change_span_open: false,
             folds: crate::fold::FoldMap::new(),
             line_edits: Vec::new(),
             local: Local::default(),
@@ -1275,6 +1289,40 @@ impl Buffer {
         Ok(())
     }
 
+    /// Where the last change or yank began and ended (vim's `` `[ `` and
+    /// `` `] ``); see the field.
+    pub fn change_span(&self) -> Option<(usize, usize)> {
+        let len = self.rope.len_chars();
+        self.change_span.map(|(start, end)| (start.min(len), end.min(len)))
+    }
+
+    /// The span a yank or a put names, its end on the last character.
+    pub fn set_change_span(&mut self, start: usize, end: usize) {
+        self.change_span = Some((start, end));
+    }
+
+    /// The next edit starts a new change: a key outside Insert was pressed.
+    pub fn close_change_span(&mut self) {
+        self.change_span_open = false;
+    }
+
+    /// Grow the change span over an edit at `at` that took `taken` characters
+    /// out and put `put` in. Within one change the marks already there move
+    /// with the text and the span widens to cover the new edit (`cw`: the
+    /// delete leaves both at the word, the typing carries `` `] `` past it).
+    fn widen_change_span(&mut self, at: usize, taken: usize, put: usize) {
+        let shift = |pos: usize| match pos {
+            pos if pos < at => pos,
+            pos if pos < at + taken => at,
+            pos => pos - taken + put,
+        };
+        self.change_span = Some(match self.change_span {
+            Some((start, end)) if self.change_span_open => (shift(start).min(at), shift(end).max(at + put)),
+            _ => (at, at + put),
+        });
+        self.change_span_open = true;
+    }
+
     /// Where the last Insert here stopped (`gi`); see the field.
     pub fn insert_stop(&self) -> Option<usize> {
         self.insert_stop.map(|at| at.min(self.rope.len_chars()))
@@ -1287,6 +1335,7 @@ impl Buffer {
 
     /// Note an edit in [`Self::edit_log`].
     fn log_edit(&mut self, at: usize, taken: usize, put: usize) {
+        self.widen_change_span(at, taken, put);
         self.edit_log.push_back((self.revision, at, taken, put));
         if self.edit_log.len() > EDIT_LOG {
             self.edit_log.pop_front();
