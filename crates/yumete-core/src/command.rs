@@ -753,9 +753,8 @@ pub enum Command {
     /// `:changed-files` — the files git reports and the unsaved buffers
     /// (`空格 g`).
     ChangedFiles,
-    /// `:outline [n]` — the outline down to level `n`; `0` closes it, and
-    /// bare reports (which replaced `:toc` and its 「go to the
-    /// nth heading」).
+    /// `:sidebar-outline-level [n]` — the outline down to level `n`; `0`
+    /// closes it, and bare reports.
     Outline(Option<usize>),
     /// `:table-jump 木` — go to the row this table names by that character.
     GotoRow(String),
@@ -1366,7 +1365,7 @@ pub fn set_setting_names(names: &[(&str, &'static str)]) {
 /// longer form of a spelling that is printed (`setfiletype` beside `setf`).
 /// They are declared in the entry's `aliases` like every other, so they parse
 /// and the manual's command table lists them; this only keeps a menu row short.
-pub const QUIET: &[&str] = &["setfiletype"];
+pub const QUIET: &[&str] = &["setfiletype", "outline", "out"];
 
 /// **Whether the words after `:settings` are vim's `:set` words** and not a
 /// setting's name. A setting is named by its path, which is always
@@ -5385,11 +5384,25 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "sidebar-outline",
-        aliases: &[],
+        aliases: &["outline", "out", "ou"],
         help: "cmd.sidebar.outline",
         needs: &[],
         params: &[Param::Words { of: SWITCH, default: None }],
         build: Some(|p| Ok(Command::Sidebar(crate::sidebar::Panel::Outline, switched(p)))),
+    },
+    Entry {
+        name: "sidebar-outline-level",
+        aliases: &[],
+        help: "cmd.sidebar.outline-level",
+        needs: &[],
+        params: &[Param::Free("<級>")],
+        build: Some(|p| {
+            // As `:goto`: `number`'s error is already the right one.
+            Ok(Command::Outline(match p.arg(0) {
+                None => None,
+                Some(_) => Some(p.number(0)?),
+            }))
+        }),
     },
     Entry {
         name: "sidebar-search",
@@ -6099,20 +6112,6 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|p| Ok(Command::GitDiff(p.arg(0).map(|s| s.to_string())))),
     },
     Entry {
-        name: "outline",
-        aliases: &[],
-        help: "cmd.commands.outline",
-        needs: &[],
-        params: &[Param::Free("<級>")],
-        build: Some(|p| {
-            // As `:goto`: `number`'s error is already the right one.
-            Ok(Command::Outline(match p.arg(0) {
-                None => None,
-                Some(_) => Some(p.number(0)?),
-            }))
-        }),
-    },
-    Entry {
         name: "ruby",
         aliases: &[],
         help: "cmd.commands.ruby",
@@ -6276,8 +6275,8 @@ const RENAMED: &[(&str, &str)] = &[
     ("sidebar", "sidebar-explorer sidebar-info"),
     ("sidebar-left", "sidebar-explorer sidebar-info"),
     ("sidebar-right", "sidebar-explorer sidebar-info"),
-    // One command a panel; `:toc` is `:outline`.
-    ("toc", "outline"),
+    // One command a panel; `:toc` is the outline's.
+    ("toc", "sidebar-outline"),
     ("wiki-panel", "sidebar-info"),
     ("sav", "write-as"),
     ("saveas", "write-as"),
@@ -6479,15 +6478,22 @@ pub fn expand_bang(line: &str, previous: Option<&str>) -> Option<String> {
 /// every other, each group in alphabetical order. A family's head stands for
 /// its family (`recent-`, and `write` for `write-all` and the rest).
 pub const COMMON: &[&str] = &[
-    "buffer", "count", "exit", "export", "goto", "help", "open", "outline", "preview", "quit",
-    "recent-", "replace", "search", "settings", "theme", "vertical", "write",
+    "buffer", "count", "exit", "export", "goto", "help", "open", "preview", "quit", "recent-",
+    "replace", "search", "settings", "sidebar-outline", "theme", "vertical", "write",
 ];
 
 /// Whether `name` is one of [`COMMON`] or of a common family.
+///
+/// **Only a one-word name heads a family**, as in the menu's fold: `write`
+/// stands for `write-all`, while `sidebar-outline` is one member of the
+/// `sidebar-` family and stands for nothing under it.
 pub fn is_common(name: &str) -> bool {
     COMMON.iter().any(|head| match head.strip_suffix('-') {
         Some(stem) => name.starts_with(stem) && name[stem.len()..].starts_with('-'),
-        None => name == *head || name.strip_prefix(head).is_some_and(|rest| rest.starts_with('-')),
+        None => {
+            name == *head
+                || (!head.contains('-') && name.strip_prefix(head).is_some_and(|rest| rest.starts_with('-')))
+        }
     })
 }
 
@@ -6597,7 +6603,12 @@ fn complete_within_stripped(line: &str, folding: bool) -> (usize, Vec<Choice>) {
         // it would fold into a bare `write-` row that sorts above `:exit` — so
         // `:x` and Tab would write `:write-`. A row reached by its shortcut is
         // not reached through its family, and stands as itself.
-        let by_name = |c: &Choice| c.under.is_empty() && c.name.starts_with(typed);
+        //
+        // **Nor a common command inside a family**: `sidebar-outline` is
+        // typed every day, so it stands with the other common ones and the
+        // `sidebar-` row counts the rest.
+        let common_member = |c: &Choice| c.name.contains('-') && COMMON.contains(&c.name);
+        let by_name = |c: &Choice| c.under.is_empty() && c.name.starts_with(typed) && !common_member(c);
         let mut counted: Vec<(&str, usize)> = Vec::new();
         for c in choices.iter().filter(|c| by_name(c)) {
             let head = head_of(c.name);
@@ -8696,8 +8707,15 @@ mod tests {
                 .find(|e| e.aliases.contains(quiet))
                 .unwrap_or_else(|| panic!("`{quiet}` is no command's spelling"));
             assert!(parse(&format!(":{quiet}")).is_ok(), "{quiet}");
-            let row = complete("").into_iter().find(|c| c.name == entry.name).map(|c| c.shown());
-            assert!(row.as_ref().is_some_and(|row| !row.contains(quiet)), "{quiet} is printed: {row:?}");
+            // The bracketed spellings, word by word: `outline` is a quiet
+            // spelling of `sidebar-outline` and also a part of its name.
+            let row = complete(entry.name).into_iter().find(|c| c.name == entry.name);
+            let spelt = row.as_ref().map(|c| c.spelt().unwrap_or_default());
+            assert!(
+                spelt.as_ref().is_some_and(|s| !s.split(' ').any(|w| w == *quiet)),
+                "{quiet} is printed: {:?}",
+                row.map(|c| c.shown())
+            );
         }
     }
 
@@ -8755,6 +8773,29 @@ mod tests {
         assert_eq!(names("e").first().map(String::as_str), Some("open"));
         assert_eq!(names("w").first().map(String::as_str), Some("write"));
         assert_eq!(names("ru"), ["ruby", "rules", "run"]);
+    }
+
+    /// **`:outline` opens and closes the outline**, as a writer expects of the
+    /// word; how deep it lists is a second command beside it.
+    #[test]
+    fn outline_is_the_outline_sidebars_switch() {
+        use crate::sidebar::Panel;
+        for word in [":sidebar-outline", ":outline", ":out", ":ou"] {
+            assert_eq!(parse(word), Ok(Command::Sidebar(Panel::Outline, Switch::Flip)), "{word}");
+        }
+        assert_eq!(parse(":outline off"), Ok(Command::Sidebar(Panel::Outline, Switch::To(false))));
+        assert_eq!(parse(":sidebar-outline-level 2"), Ok(Command::Outline(Some(2))));
+        assert_eq!(parse(":sidebar-outline-level 0"), Ok(Command::Outline(Some(0))));
+        assert_eq!(parse(":sidebar-outline-level"), Ok(Command::Outline(None)));
+        assert!(parse(":outline 2").is_err(), "a level is not the switch's");
+        // The row names the one short spelling; the longer ones are quiet.
+        // It stands with the common commands, outside the folded `sidebar-`.
+        let all = complete("");
+        let row = all.iter().find(|c| c.name == "sidebar-outline").map(|c| c.shown());
+        assert_eq!(row.as_deref(), Some("sidebar-outline (ou)"));
+        let family = all.iter().find(|c| c.name == "sidebar-").and_then(|c| c.family);
+        let members = COMMANDS.iter().filter(|e| e.name.starts_with("sidebar-")).count();
+        assert_eq!(family, Some(members - 1), "the `sidebar-` row counts all but the outline");
     }
 
     #[test]
@@ -8963,7 +9004,7 @@ mod tests {
             "check-usage",
             "search",
             "diff",
-            "outline",
+            "sidebar-outline-level",
             "export",
             "ruby",
             "yume",

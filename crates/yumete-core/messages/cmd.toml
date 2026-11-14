@@ -608,13 +608,6 @@ en = "open a file"
 find = "打開 打开 開檔 开档 edit file"
 
 [[message]]
-# : 命令選單裏 outline 那一項的説明(commands 組)（草稿）
-key = "cmd.commands.outline"
-zhs = "大纲只列到第几级；`0` 关闭；不带参数报告状态"
-en = "how many heading levels the outline lists; `0` closes it; bare reports"
-find = "目錄 目录 標題 标题 大綱 大纲 級別 级别 toc headings levels"
-
-[[message]]
 # : 命令選單裏 pipe 那一項的説明(commands 組)
 key = "cmd.commands.pipe"
 zhs = "将选区传给终端命令，用输出替换选区"
@@ -1968,6 +1961,13 @@ en = "show or hide the links in the left sidebar; the cursor goes into it"
 key = "cmd.sidebar.outline"
 zhs = "打开或关闭左侧栏的大纲，打开时光标移过去"
 en = "show or hide the outline in the left sidebar; the cursor goes into it"
+
+[[message]]
+# : 命令選單裏 sidebar-outline-level 那一項的説明（草稿）
+key = "cmd.sidebar.outline-level"
+zhs = "侧栏大纲只列到第几级；`0` 关闭；不带参数报告状态"
+en = "how many heading levels the outline sidebar lists; `0` closes it; bare reports"
+find = "目錄 目录 標題 标题 大綱 大纲 級別 级别 toc headings levels"
 
 [[message]]
 # : 命令選單裏 sidebar-search 那一項的説明（草稿）

@@ -676,7 +676,7 @@ impl Editor {
         }
     }
 
-    /// **What bare `:outline` answers**: open or closed, how deep, and how
+    /// **What bare `:sidebar-outline-level` answers**: open or closed, how deep, and how
     /// many headings that shows.
     pub(super) fn outline_report(&self) -> String {
         let all = self.outline();
@@ -691,7 +691,7 @@ impl Editor {
         }
     }
 
-    /// Whether `:outline N` lets a heading of this level into the list.
+    /// Whether `:sidebar-outline-level N` lets a heading of this level into the list.
     fn outline_shows(&self, level: usize) -> bool {
         self.outline_levels.is_none_or(|n| level <= n)
     }

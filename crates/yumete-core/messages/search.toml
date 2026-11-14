@@ -207,25 +207,25 @@ en = "no matching command; try other words, or backspace to `:`"
 # ── lsp ──────────────────────────────────────────────
 
 [[message]]
-# :outline 報告裏的級別，沒設過級數時（草稿）
+# :sidebar-outline-level 報告裏的級別，沒設過級數時（草稿）
 key = "outline.all-levels"
 zhs = "全部级别"
 en = "every level"
 
 [[message]]
-# :outline 報告，大綱關着：{0} 是列到哪一級，{1} 是會列出的標題數（草稿）
+# :sidebar-outline-level 報告，大綱關着：{0} 是列到哪一級，{1} 是會列出的標題數（草稿）
 key = "outline.closed"
 zhs = "大纲：已关闭，{0}，{1} 个标题"
 en = "outline: closed, {0}, {1} heading(s)"
 
 [[message]]
-# :outline 報告裏的級別，`:outline N` 設過之後（草稿）
+# :sidebar-outline-level 報告裏的級別，`:sidebar-outline-level N` 設過之後（草稿）
 key = "outline.down-to"
 zhs = "列到第 {0} 级"
 en = "down to level {0}"
 
 [[message]]
-# :outline 報告，大綱開着：{0} 是列到哪一級，{1} 是列出的標題數（草稿）
+# :sidebar-outline-level 報告，大綱開着：{0} 是列到哪一級，{1} 是列出的標題數（草稿）
 key = "outline.open"
 zhs = "大纲：已打开，{0}，{1} 个标题"
 en = "outline: open, {0}, {1} heading(s)"

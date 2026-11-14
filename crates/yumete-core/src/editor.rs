@@ -2826,7 +2826,7 @@ pub struct Editor {
     /// number, and a 28-column 拆分表 gives no way to count to 17 except by
     /// counting. One row, and the numeric keys become usable.
     table_numbers: bool,
-    /// How deep the outline lists, set by `:outline N`; `None` lists every
+    /// How deep the outline lists, set by `:sidebar-outline-level N`; `None` lists every
     /// level.
     outline_levels: Option<usize>,
     /// Whether a 碼表 is loaded, as last reported by the front end.

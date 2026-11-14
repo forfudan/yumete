@@ -6764,21 +6764,32 @@ fn the_outline_is_the_hashes_a_writer_already_types() {
     assert_eq!(headings[0], (0, 1, "第一章".to_string()));
     assert_eq!(headings[2], (4, 2, "二".to_string()));
 
-    // `:outline 2` opens the outline down to level 2: 附記 is left out.
-    ed.execute(":outline 2").unwrap();
+    // `:sidebar-outline-level 2` opens the outline down to level 2: 附記 is
+    // left out.
+    ed.execute(":sidebar-outline-level 2").unwrap();
     let rows = ed.panel(crate::sidebar::Side::Left).unwrap().rows().to_vec();
     assert_eq!(rows.len(), 3, "{rows:?}");
     assert!(!rows.last().unwrap().is_dir, "二 has nothing under it at this depth");
     assert_eq!(ed.status(), say!("outline.open", say!("outline.down-to", 2), 3));
-    // `:outline 0` closes it, and a bare `:outline` only reports.
-    ed.execute(":outline 0").unwrap();
+    // `0` closes it, and the bare command only reports.
+    ed.execute(":sidebar-outline-level 0").unwrap();
     assert!(ed.panel(crate::sidebar::Side::Left).is_none());
-    ed.execute(":outline").unwrap();
+    ed.execute(":sidebar-outline-level").unwrap();
     assert!(ed.panel(crate::sidebar::Side::Left).is_none(), "bare opens nothing");
     assert_eq!(ed.status(), say!("outline.closed", say!("outline.down-to", 2), 3));
     // The panel's own switch keeps the depth it was given.
     ed.execute(":sidebar-outline").unwrap();
     assert_eq!(ed.panel(crate::sidebar::Side::Left).unwrap().rows().len(), 3);
+    // **`:outline` is the switch**, under each of its spellings: each one
+    // flips the outline sidebar, the same as `:sidebar-outline`.
+    for word in [":outline", ":out", ":ou"] {
+        ed.execute(word).unwrap();
+        assert!(ed.showing(crate::sidebar::View::Outline).is_none(), "{word} closes it");
+        ed.execute(word).unwrap();
+        assert!(ed.showing(crate::sidebar::View::Outline).is_some(), "{word} opens it");
+    }
+    // A number is the level command's, not the switch's.
+    assert!(ed.execute(":outline 2").is_err());
 }
 
 #[test]

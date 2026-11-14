@@ -802,13 +802,13 @@ impl Editor {
                     return Ok(CommandOutcome::Continue);
                 }
                 match levels {
-                    // `:outline 0` closes it…
+                    // `:sidebar-outline-level 0` closes it…
                     Some(0) => {
                         if let Some(side) = self.showing(crate::sidebar::View::Outline) {
                             self.close_panel(side);
                         }
                     }
-                    // …`:outline 2` shows headings down to level 2, and opens
+                    // …`:sidebar-outline-level 2` shows headings down to level 2, and opens
                     // the outline with the keys if it is not up…
                     Some(n) => {
                         self.outline_levels = Some(n);
