@@ -129,6 +129,14 @@ jobs:
           path: yume-tables
           key: yume-tables-${{ matrix.os }}-${{ steps.yume-package.outputs.name }}
 
+      # **A CJK font for the preview's tests.** The Markdown preview lays text
+      # out with the machine's fonts, and the tests that read a PDF's text back
+      # or count a CJK paragraph's wrapped lines need one that has the
+      # characters; macOS and Windows ship one, the Ubuntu image does not.
+      - name: CJK font
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq fonts-noto-cjk
+
       # `--locked` so a stale `Cargo.lock` is a failure here rather than a
       # surprise in `release.yaml`, which builds with it too.
       #
