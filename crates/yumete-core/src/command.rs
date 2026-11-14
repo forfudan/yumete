@@ -5850,6 +5850,14 @@ pub const COMMANDS: &[Entry] = &[
         }),
     },
     Entry {
+        name: "genda-whole",
+        aliases: &[],
+        help: "cmd.commands.genda-whole",
+        needs: &[],
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::Genda(crate::genda::Ask::Whole(switched(p))))),
+    },
+    Entry {
         name: "genda-top",
         aliases: &["gt"],
         help: "cmd.commands.genda-top",

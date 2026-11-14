@@ -45,6 +45,9 @@ pub enum Ask {
     History,
     /// A segment length; `None` is 全文.
     Length(Option<usize>),
+    /// `:genda-whole`: the whole article as one segment, or back to the
+    /// length chosen.
+    Whole(crate::command::Switch),
     /// Another article.
     Article(Choice),
     /// An article of the `N` most frequent 漢字 in a scope (`:genda-top`
@@ -79,11 +82,12 @@ pub struct Switches {
     pub hint: bool,
     pub auto: bool,
     pub clean: bool,
+    pub whole: bool,
 }
 
 impl Default for Switches {
     fn default() -> Self {
-        Switches { hint: false, auto: true, clean: false }
+        Switches { hint: false, auto: true, clean: false, whole: false }
     }
 }
 
@@ -985,6 +989,17 @@ impl Record {
             0 => say!("genda.line.first"),
             n => say!("genda.line.retry", n),
         });
+        // The details no community field holds, before the signature: a
+        // pasted line carries all the history shows of the segment.
+        if let Some(s) = &self.strokes {
+            parts.push(say!("genda.line.pairs", s.pairs));
+            parts.push(say!("genda.line.alternation-rate", format!("{:.2}", s.alternation_rate())));
+            parts.push(say!("genda.line.alternating", half(s.alternating)));
+            parts.push(say!("genda.line.same-hand", half(s.same_hand)));
+            if s.top_count > 0 {
+                parts.push(say!("genda.line.top-key", format!("{}×{}", s.top_key, s.top_count)));
+            }
+        }
         parts.push(say!("genda.line.ime", self.ime_name()));
         parts.push(format!("yumete v{}", self.version));
         parts.join(" ")
@@ -1136,9 +1151,14 @@ pub fn day_number(year: i64, month: u32, day: u32) -> i64 {
 }
 
 /// **The whole history as TSV**, a header row first: what a spreadsheet takes
-/// from the clipboard.
+/// from the clipboard. Every column of the history, the details too; a
+/// field not measured is an empty cell, which a spreadsheet leaves out of
+/// a sum or a mean, where the table's `—` would be text.
 pub fn tsv(records: &[Record]) -> String {
-    let clean = |s: &str| s.replace(['\t', '\n', '\r'], " ");
+    let clean = |s: &str| match s {
+        "—" => String::new(),
+        _ => s.replace(['\t', '\n', '\r'], " "),
+    };
     let mut out = columns().join("\t");
     for record in records {
         out.push('\n');
@@ -1433,7 +1453,14 @@ mod tests {
             han: 20,
             han_in_words: 10,
             keys: Some(Keys { keys: 75, backspaces: 1, picks: 2 }),
-            strokes: Some(Strokes { equivalence: 111.0, pairs: 74, ..Strokes::default() }),
+            strokes: Some(Strokes {
+                equivalence: 111.0,
+                pairs: 74,
+                alternating: 40.5,
+                same_hand: 29.5,
+                top_key: "Space".into(),
+                top_count: 20,
+            }),
             peak_chars: 10,
             peak_millis: 4_000,
             stay_millis: 1_234,
@@ -1458,23 +1485,45 @@ mod tests {
             say!("genda.line.word-rate", "50.00"),
             say!("genda.line.picks", 2),
             say!("genda.line.first"),
+            say!("genda.line.pairs", 74),
+            say!("genda.line.alternation-rate", "57.86"),
+            say!("genda.line.alternating", "40.5"),
+            say!("genda.line.same-hand", "29.5"),
+            say!("genda.line.top-key", "Space×20"),
             say!("genda.line.ime", "靈明"),
             "yumete v0.22".to_string(),
         ]
         .join(" ");
         assert_eq!(record.score_line(), want);
+        // Whatever the history's foot shows of a record, its line carries.
+        for (label, value) in record.details() {
+            assert!(want.contains(&value), "{label} {value} not in {want}");
+        }
         let again = Record { retry: 2, keys: None, strokes: None, scheme: String::new(), ..record.clone() };
         let line = again.score_line();
         assert!(line.contains(&say!("genda.line.retry", 2)), "{line}");
         assert!(line.contains(&say!("genda.line.ime", say!("genda.system-ime"))), "{line}");
         assert!(!line.contains(&say!("genda.line.picks", 2)), "{line}");
         assert!(!line.contains(&say!("genda.line.equivalence", "1.50")), "{line}");
+        assert!(!line.contains(&say!("genda.line.pairs", 74)), "{line}");
         assert!(line.contains(&say!("genda.line.peak", "150.00")), "{line}");
-        let table = tsv(&[record, again]);
+        let table = tsv(&[record.clone(), again]);
         let rows: Vec<&str> = table.lines().collect();
         assert_eq!(rows.len(), 3);
         assert_eq!(rows[0], columns().join("\t"));
         assert!(rows.iter().all(|row| row.split('\t').count() == columns().len()));
+        // Every detail has its column; one not measured is an empty cell.
+        let heads: Vec<&str> = rows[0].split('\t').collect();
+        let measured: Vec<&str> = rows[1].split('\t').collect();
+        let unmeasured: Vec<&str> = rows[2].split('\t').collect();
+        for (label, value) in record.details() {
+            let at = heads.iter().position(|h| *h == label).unwrap_or_else(|| panic!("{label} has no column"));
+            assert_eq!(measured[at], value, "{label}");
+        }
+        for label in [say!("genda.label.kps"), say!("genda.label.equivalence"), say!("genda.label.top-key")] {
+            let at = heads.iter().position(|h| *h == label).unwrap();
+            assert_eq!(unmeasured[at], "", "{label}");
+        }
         assert_eq!(clock_text(83_004), "1:23.004");
     }
 

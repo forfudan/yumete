@@ -13,7 +13,7 @@
 //! ╭ 累计 ────────────╮│ 段  速度    击键  码长  当量  字数  错字 │
 //! │ 段数   2         ││ 2   112.40  5.82  2.80  1.42  25    0    │
 //! ╰──────────────────╯╰────────────────────────────────────────╯
-//!  F3 重打  C-p 下一段  C-u 上一段  C-l 乱序  Tab 历史  Esc 暂停  C-e 错字 …
+//!  F3 重打  C-p 下一段  C-u 上一段  C-l 乱序  Tab 历史  Esc 暂停  C-o 全文 …
 //! ```
 //!
 //! The code hint sits on the article box's bottom wall; in the pad a 漢字
@@ -140,6 +140,8 @@ struct Page {
     order: Vec<char>,
     shuffled: bool,
     length: Option<usize>,
+    /// The last length given as a number, which 全文 turned off goes back to.
+    chosen: usize,
     index: usize,
     /// Attempts begun at each segment, for 重打.
     tries: Vec<usize>,
@@ -274,7 +276,7 @@ impl Seat {
         }
         let Some(key) = key else { return true };
         match key {
-            Key::Ctrl('p' | 'u' | 'l' | 'e' | 's') => {
+            Key::Ctrl('p' | 'u' | 'l' | 'e' | 's' | 'o') => {
                 if composing {
                     ime.escape();
                 }
@@ -283,6 +285,7 @@ impl Seat {
                     Key::Ctrl('u') => self.step(editor, false),
                     Key::Ctrl('e') => self.drill(editor, false),
                     Key::Ctrl('s') => self.drill(editor, true),
+                    Key::Ctrl('o') => self.set_whole(editor, Switch::Flip),
                     _ => self.shuffle(editor),
                 }
                 return true;
@@ -434,17 +437,8 @@ impl Seat {
                 Ask::Copy => self.copy(editor),
                 Ask::CopyHistory => self.copy_history(editor),
                 Ask::History => self.history(editor),
-                Ask::Length(length) => {
-                    if let Some(page) = self.page.as_mut() {
-                        page.length = length;
-                        page.index = 0;
-                        self.restart();
-                        editor.set_status(match length {
-                            Some(n) => say!("genda.length-set", n),
-                            None => say!("genda.length-all"),
-                        });
-                    }
-                }
+                Ask::Length(length) => self.set_length(editor, length),
+                Ask::Whole(switch) => self.set_whole(editor, switch),
                 Ask::Article(Choice::Buffer) => {
                     if let Some((name, text)) = article.clone() {
                         self.replace_article(editor, name, genda::strip(&text));
@@ -486,7 +480,35 @@ impl Seat {
             }
         }
         self.look_up_the_hint(ime);
-        editor.set_genda_switches(genda::Switches { hint: self.hint, auto: !self.manual_next, clean: self.goal.clean });
+        let whole = self.page.as_ref().is_some_and(|p| p.length.is_none());
+        editor.set_genda_switches(genda::Switches { hint: self.hint, auto: !self.manual_next, clean: self.goal.clean, whole });
+    }
+
+    /// **A segment length**, `None` for 全文, from the article's first
+    /// segment: the segments are cut afresh, and a place in one cut names
+    /// nothing in another.
+    fn set_length(&mut self, editor: &mut Editor, length: Option<usize>) {
+        let Some(page) = self.page.as_mut() else { return };
+        page.length = length;
+        if let Some(n) = length {
+            page.chosen = n;
+        }
+        page.index = 0;
+        self.restart();
+        editor.set_status(match length {
+            Some(n) => say!("genda.length-set", n),
+            None => say!("genda.length-all"),
+        });
+    }
+
+    /// **全文 or the length chosen** (`:genda-whole`, C-o).
+    fn set_whole(&mut self, editor: &mut Editor, switch: Switch) {
+        let Some(page) = self.page.as_ref() else { return };
+        let length = match switch.over(page.length.is_none()) {
+            true => None,
+            false => Some(page.chosen),
+        };
+        self.set_length(editor, length);
     }
 
     /// **The next character's code**, while the hint is on, Yume holds the
@@ -577,6 +599,7 @@ impl Seat {
             chars,
             shuffled: false,
             length: Some(genda::DEFAULT_LENGTH),
+            chosen: genda::DEFAULT_LENGTH,
             index: 0,
             tries: Vec::new(),
             counted: false,
@@ -876,7 +899,7 @@ pub fn draw(frame: &mut Frame, seat: &Seat, config: &Config, area: Rect) -> Opti
         _ => say!("genda.hints"),
     };
     let foot_y = area.y + area.height - 1;
-    put_text(frame.buffer_mut(), area.x + 1, foot_y, area.x + area.width, &hints, base.fg(ink.quiet()));
+    put_text(frame.buffer_mut(), area.x + 1, foot_y, area.x + area.width, &whole_hints(&hints, area.width.saturating_sub(1) as usize), base.fg(ink.quiet()));
     let body = Rect { height: area.height - 1, ..area };
     let ring_with_foot = |frame: &mut Frame, rect: Rect, title: String, foot: Option<String>| -> Rect {
         crate::chrome::draw(frame, rect, &crate::chrome::Ring {
@@ -957,6 +980,24 @@ pub fn draw(frame: &mut Frame, seat: &Seat, config: &Config, area: Rect) -> Opti
     let pad = seat.pad.as_ref()?;
     let caret = draw_pad(frame, pad, &page.run, ink, base, inner);
     caret.filter(|_| seat.typing())
+}
+
+/// **The foot's hints that fit in `room` cells**, whole: the hints are
+/// parted by two spaces, and one cut in half (`C-t 提`) names a key and no
+/// deed, so those that do not fit are left out from the end.
+fn whole_hints(hints: &str, room: usize) -> String {
+    let mut out = String::new();
+    for hint in hints.split("  ") {
+        let wanted = match out.is_empty() {
+            true => hint.to_string(),
+            false => format!("{out}  {hint}"),
+        };
+        if yumete_cjk::str_width(&wanted) > room {
+            break;
+        }
+        out = wanted;
+    }
+    out
 }
 
 /// **The right column's rows**: the article box's and the pad's. With the
@@ -1247,7 +1288,7 @@ fn draw_pad(frame: &mut Frame, pad: &Editor, run: &Run, ink: Palette, base: Styl
 /// under it ([`Record::details`]).
 const TABLE_COLUMNS: [usize; 13] = [0, 1, 2, 3, 4, 6, 7, 8, 11, 12, 13, 14, 15];
 
-/// **The history**, newest first, the picked row in the band's colour, and
+/// **The history**, newest first, the picked row inked across, and
 /// its details at the foot.
 fn draw_history(frame: &mut Frame, page: &Page, ink: Palette, base: Style, inner: Rect) {
     // Two rows of details and one between, when the table keeps three of its own.
@@ -1297,8 +1338,11 @@ fn draw_history(frame: &mut Frame, page: &Page, ink: Palette, base: Style, inner
     let first = page.picked.saturating_sub(room.saturating_sub(1));
     for (n, row) in rows.iter().enumerate().skip(first).take(room) {
         let y = inner.y + 1 + (n - first) as u16;
+        // The picked row is inked, ink and ground changing places, as the
+        // `:` menu's pick and a focused sidebar's row are: a quiet band
+        // between rows of the same ink is lost.
         let style = match n == page.picked {
-            true => base.fg(ink.text()).bg(ink.band()),
+            true => ink.reversed(base.fg(ink.text())),
             false => base.fg(ink.text()),
         };
         if n == page.picked {
@@ -1730,6 +1774,113 @@ mod tests {
         assert_eq!((shown(200), shown(72), shown(40), shown(1)), (13, 11, 6, 2));
         let at_72 = fitted(&widths, 72);
         assert!(!at_72[11] && !at_72[12] && at_72[10]);
+    }
+
+    #[test]
+    fn the_foot_leaves_out_a_hint_that_does_not_fit_whole() {
+        assert_eq!(whole_hints("F3 重打  C-t 提示", 20), "F3 重打  C-t 提示");
+        assert_eq!(whole_hints("F3 重打  C-t 提示", 15), "F3 重打");
+        assert_eq!(whole_hints("F3 重打  C-t 提示", 3), "");
+    }
+
+    /// A record whose key fields and hands were measured, as under Yume.
+    fn measured(segment: usize) -> Record {
+        Record {
+            segment,
+            chars: 3,
+            millis: 3000,
+            keys: Some(genda::Keys { keys: 9, backspaces: 0, picks: 0 }),
+            strokes: Some(genda::Strokes {
+                equivalence: 12.0,
+                pairs: 8,
+                alternating: 5.5,
+                same_hand: 2.5,
+                top_key: "Space".into(),
+                top_count: 3,
+            }),
+            peak_chars: 3,
+            peak_millis: 1500,
+            stay_millis: 800,
+            stay_text: "二".into(),
+            scheme: "靈明".into(),
+            ..Record::default()
+        }
+    }
+
+    #[test]
+    fn the_picked_history_row_is_inked_across() {
+        let (mut ed, mut ime, mut seat) = opened("一二三四五六", 3);
+        if let Some(page) = seat.page.as_mut() {
+            page.history = vec![measured(1), measured(2), measured(3)];
+        }
+        keys(&mut seat, &mut ed, &mut ime, &[Key::Tab, Key::Char('j')]);
+        let (buffer, rows) = drawn(&seat, 100, 30);
+        let ink = Palette::of(&Config::default());
+        // The ring's top, the heads, then the rows newest first: 3, 2, 1.
+        let (other, picked) = (2, 3);
+        assert!(rows[1].contains(&say!("genda.label.segment")), "{}", rows[1]);
+        // From wall to wall: the first cell and the last inside the ring.
+        for x in [1, 98] {
+            let cell = buffer.cell((x, picked as u16)).unwrap();
+            assert_eq!((cell.bg, cell.fg), (ink.text(), crate::chrome::panel_ground(ink)), "x {x}");
+        }
+        assert_eq!(buffer.cell((1, other as u16)).unwrap().bg, crate::chrome::panel_ground(ink));
+    }
+
+    #[test]
+    fn copying_carries_the_details_the_table_has_no_column_for() {
+        let (mut ed, mut ime, mut seat) = opened("一二三四五六", 3);
+        let record = measured(1);
+        if let Some(page) = seat.page.as_mut() {
+            page.history = vec![record.clone()];
+        }
+        keys(&mut seat, &mut ed, &mut ime, &[Key::Tab, Key::Char('y')]);
+        let line = ed.take_clipboard_request().unwrap();
+        assert_eq!(line, record.score_line());
+        for (label, value) in record.details() {
+            assert!(line.contains(&value), "{label} {value}: {line}");
+        }
+        assert!(line.contains(&say!("genda.line.top-key", "Space×3")), "{line}");
+        keys(&mut seat, &mut ed, &mut ime, &[Key::Char('Y')]);
+        let table = ed.take_clipboard_request().unwrap();
+        let (heads, row) = (table.lines().next().unwrap(), table.lines().nth(1).unwrap());
+        for (label, value) in record.details() {
+            let at = heads.split('\t').position(|h| h == label).unwrap();
+            assert_eq!(row.split('\t').nth(at), Some(value.as_str()), "{label}");
+        }
+    }
+
+    #[test]
+    fn c_o_and_genda_whole_flip_between_the_length_and_the_whole_article() {
+        let (mut ed, mut ime, mut seat) = opened("一二三四五六七八九十", 3);
+        keys(&mut seat, &mut ed, &mut ime, &typed("\n"));
+        keys(&mut seat, &mut ed, &mut ime, &[Key::Ctrl('p')]);
+        assert_eq!(page(&seat).index, 1);
+        keys(&mut seat, &mut ed, &mut ime, &[Key::Ctrl('o')]);
+        assert_eq!((page(&seat).length, page(&seat).index, page(&seat).count()), (None, 0, 1));
+        assert_eq!(page(&seat).run.target().len(), 10);
+        assert_eq!(ed.status(), say!("genda.length-all"));
+        assert!(seat.typing());
+        // Back to the length chosen, from the first segment.
+        keys(&mut seat, &mut ed, &mut ime, &typed("一二"));
+        keys(&mut seat, &mut ed, &mut ime, &[Key::Ctrl('o')]);
+        assert_eq!((page(&seat).length, page(&seat).index), (Some(3), 0));
+        assert_eq!(page(&seat).run.target(), &['一', '二', '三']);
+        assert_eq!(ed.status(), say!("genda.length-set", 3));
+        // The command, and `:genda-length` choosing what off goes back to.
+        keys(&mut seat, &mut ed, &mut ime, &typed("\u{1b}"));
+        command(&mut seat, &mut ed, &mut ime, "genda-whole on");
+        assert_eq!(page(&seat).length, None);
+        keys(&mut seat, &mut ed, &mut ime, &typed("\u{1b}"));
+        command(&mut seat, &mut ed, &mut ime, "genda-whole on");
+        assert_eq!(page(&seat).length, None);
+        keys(&mut seat, &mut ed, &mut ime, &typed("\u{1b}"));
+        command(&mut seat, &mut ed, &mut ime, "genda-length 4");
+        keys(&mut seat, &mut ed, &mut ime, &typed("\u{1b}"));
+        command(&mut seat, &mut ed, &mut ime, "genda-length all");
+        keys(&mut seat, &mut ed, &mut ime, &typed("\u{1b}"));
+        command(&mut seat, &mut ed, &mut ime, "genda-whole");
+        assert_eq!(page(&seat).length, Some(4));
     }
 
     impl Seat {

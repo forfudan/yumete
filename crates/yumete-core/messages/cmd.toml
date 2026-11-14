@@ -459,6 +459,13 @@ en = "typing trainer: the N most frequent Chinese characters in the text files u
 find = "跟打 字頻 字频 常用字 頻率 频率 top frequency genda working gtw"
 
 [[message]]
+# : 命令選單裏 genda-whole 的説明：整篇文章一段打完，關掉回到原來的段長（草稿）
+key = "cmd.commands.genda-whole"
+zhs = "跟打：整篇文章作为一段，on/off，不带参数则切换；关掉回到原来的段长"
+en = "typing trainer: the whole article as one segment; on/off, bare flips; off goes back to the length chosen"
+find = "跟打 全文 整篇 一段 段長 段长 whole article segment genda"
+
+[[message]]
 # 命令：:git-diff —— 跟 git 裏那一份比，逐詞
 key = "cmd.commands.git-diff"
 zhs = "与 git 中的版本逐词比较，默认比 HEAD"

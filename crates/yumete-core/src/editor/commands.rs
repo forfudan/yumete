@@ -2493,6 +2493,7 @@ impl Editor {
             Command::Genda(crate::genda::Ask::Hint(_)) => self.genda_switches.hint,
             Command::Genda(crate::genda::Ask::Auto(_)) => self.genda_switches.auto,
             Command::Genda(crate::genda::Ask::GoalClean(_)) => self.genda_switches.clean,
+            Command::Genda(crate::genda::Ask::Whole(_)) => self.genda_switches.whole,
             _ => return None,
         })
     }

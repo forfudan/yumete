@@ -254,8 +254,8 @@ en = "code hint on (shown while typing with Yume)"
 [[message]]
 # : 跟打頁打字時底行的鍵位提示（草稿）
 key = "genda.hints"
-zhs = "F3 重打  C-p 下一段  C-u 上一段  C-l 乱序  Tab 历史  Esc 暂停  C-e 错字  C-s 慢字  C-t 提示"
-en = "F3 again  C-p next  C-u previous  C-l shuffle  Tab history  Esc pause  C-e missed  C-s slow  C-t hint"
+zhs = "F3 重打  C-p 下一段  C-u 上一段  C-l 乱序  Tab 历史  Esc 暂停  C-o 全文  C-e 错字  C-s 慢字  C-t 提示"
+en = "F3 again  C-p next  C-u previous  C-l shuffle  Tab history  Esc pause  C-o whole  C-e missed  C-s slow  C-t hint"
 
 [[message]]
 # : 跟打頁看歷史時底行的鍵位提示（草稿）
@@ -486,6 +486,18 @@ zhs = "每段 {0} 字"
 en = "{0} characters a segment"
 
 [[message]]
+# : 成績行裏互擊次數那一項，空格算半次（不加空格）（草稿）
+key = "genda.line.alternating"
+zhs = "互击{0}"
+en = "alt{0}"
+
+[[message]]
+# : 成績行裏左右手互擊率那一項，{0} 是兩位小數（不加空格）（草稿）
+key = "genda.line.alternation-rate"
+zhs = "互击率{0}%"
+en = "altrate{0}%"
+
+[[message]]
 # : 成績行裏字數那一項（不加空格）（草稿）
 key = "genda.line.chars"
 zhs = "字数{0}"
@@ -540,6 +552,12 @@ zhs = "击键{0}"
 en = "kps{0}"
 
 [[message]]
+# : 成績行裏有效按鍵組合那一項（不加空格）（草稿）
+key = "genda.line.pairs"
+zhs = "有效组合{0}"
+en = "pairs{0}"
+
+[[message]]
 # : 跟打成績行裏的峰值，{0} 是速度（草稿）
 key = "genda.line.peak"
 zhs = "峰值{0}"
@@ -556,6 +574,12 @@ en = "picks{0}"
 key = "genda.line.retry"
 zhs = "重打{0}"
 en = "retry{0}"
+
+[[message]]
+# : 成績行裏同手次數那一項，空格算半次（不加空格）（草稿）
+key = "genda.line.same-hand"
+zhs = "同手{0}"
+en = "same{0}"
 
 [[message]]
 # : 成績行裏第幾段那一項（不加空格）（草稿）
@@ -580,6 +604,12 @@ en = "stay{0}"
 key = "genda.line.time"
 zhs = "用时{0}"
 en = "time{0}"
+
+[[message]]
+# : 成績行裏最常用按鍵那一項，{0} 形如 Space×20（草稿）
+key = "genda.line.top-key"
+zhs = "常用键:{0}"
+en = "topkey:{0}"
 
 [[message]]
 # : 成績行裏打詞率那一項（不加空格）（草稿）
