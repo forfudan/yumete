@@ -697,7 +697,7 @@ impl Editor {
 
     /// If the command that just ended changed the buffer, it is what `.`
     /// repeats.
-    fn finish_watching(&mut self) {
+    pub(super) fn finish_watching(&mut self) {
         if self.mode != Mode::Normal || self.pending != Pending::None {
             return;
         }
@@ -1133,8 +1133,13 @@ impl Editor {
         // the `s` motion」. It is not one ([`VIM_MOTIONS`]), which is the same
         // hole vim-surround moved into in the first place.
         if first.is_none() && c == 's' && matches!(op, 'd' | 'c' | 'y') {
-            self.count = None;
-            self.alias_count = None;
+            // `2ds(` and `2cst` reach that many pairs out (vim-surround's
+            // `v:count1`), as helix's `2md(` does.
+            self.settle_alias_count();
+            let count = self.count.take();
+            if op != 'y' {
+                self.operator_count = count;
+            }
             self.pending = match op {
                 'd' => Pending::SurroundOff,
                 'c' => Pending::SurroundFrom,
@@ -1991,6 +1996,13 @@ impl Editor {
     pub(super) fn fan_out(&mut self, waiting: Pending, acting: Key, primary: bool, run: &dyn Fn(&mut Editor)) {
         // vim's `]p` `[p` put, which is an edit; helix's are paragraph moves.
         let vim_put = self.vim_keymap() && matches!(waiting, Pending::Hop { .. }) && matches!(acting, Key::Char('p' | 'P'));
+        // A name `ys`/`cs` asks for is asked once; the answer reaches every
+        // cursor (`Editor::answer_surround_name`).
+        if let Key::Char(c) = acting {
+            if matches!(waiting, Pending::Surround | Pending::SurroundTo(_)) && self.surround_asks_a_name(c) {
+                return run(self);
+            }
+        }
         if !vim_put
             && (multi::each_selection_key(&waiting, acting)
                 || (waiting == self.pending && self.copies_every_selection(acting)))

@@ -38,6 +38,10 @@ pub struct Rules {
     /// Text objects follow vim's rules: a pair found ahead on the line, no
     /// second quote outward for a count.
     pub vim_text_objects: bool,
+    /// Surround speaks vim-surround: an opening bracket puts a space inside
+    /// and takes the spaces inside off, `b` `B` `r` `a` name `)` `}` `]`
+    /// `>`, and `t` and `f` ask for a tag or a function's name.
+    pub vim_surround: bool,
     /// vim's registers: `"0` holds the last yank and `"1`–`"9` the last
     /// deletes of a line, an upper-case name (`"A`, `qA`) adds to its
     /// register, and a register keeps whether it was taken by lines or by
@@ -82,6 +86,7 @@ impl Rules {
         find_moves_caret: false,
         vim_text_motions: false,
         vim_text_objects: false,
+        vim_surround: false,
         vim_registers: false,
         vim_scrolling: false,
         vim_indent_keys: false,
@@ -96,7 +101,7 @@ impl Rules {
 
     /// **Every rule by its name**, the message that says what it does, and
     /// its value: what `:keymap-actions` and the docs list.
-    pub fn list(&self) -> [(&'static str, &'static str, bool); 17] {
+    pub fn list(&self) -> [(&'static str, &'static str, bool); 18] {
         [
             ("vim_tables", "keys.rule.vim-tables", self.vim_tables),
             ("caret_off_newline", "keys.rule.caret-off-newline", self.caret_off_newline),
@@ -105,6 +110,7 @@ impl Rules {
             ("find_moves_caret", "keys.rule.find-moves-caret", self.find_moves_caret),
             ("vim_text_motions", "keys.rule.vim-text-motions", self.vim_text_motions),
             ("vim_text_objects", "keys.rule.vim-text-objects", self.vim_text_objects),
+            ("vim_surround", "keys.rule.vim-surround", self.vim_surround),
             ("vim_registers", "keys.rule.vim-registers", self.vim_registers),
             ("vim_scrolling", "keys.rule.vim-scrolling", self.vim_scrolling),
             ("vim_indent_keys", "keys.rule.vim-indent-keys", self.vim_indent_keys),
@@ -126,6 +132,7 @@ impl Rules {
         find_moves_caret: true,
         vim_text_motions: true,
         vim_text_objects: true,
+        vim_surround: true,
         vim_registers: true,
         vim_scrolling: true,
         vim_indent_keys: true,

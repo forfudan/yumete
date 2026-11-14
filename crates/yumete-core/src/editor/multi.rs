@@ -1161,7 +1161,7 @@ fn common_ends(a: &ropey::Rope, b: &ropey::Rope) -> (usize, usize) {
 /// Where `at` lands after `changes` (`(at, removed, inserted)`, in the order
 /// made): before a change it stays, after it it moves by the difference,
 /// inside what was removed it goes to the change's start.
-fn through(changes: &[(usize, usize, usize)], mut at: usize) -> usize {
+pub(super) fn through(changes: &[(usize, usize, usize)], mut at: usize) -> usize {
     for &(start, removed, inserted) in changes {
         if at < start {
             continue;

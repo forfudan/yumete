@@ -1103,6 +1103,9 @@ impl Editor {
             None => {
                 if let Key::Char(c) = key {
                     self.type_into_prompt(c);
+                    if c == '>' && self.asking_for_a_tag() {
+                        self.value_command(PlaceCmd::Confirm);
+                    }
                 }
             }
         }
@@ -1113,7 +1116,9 @@ impl Editor {
         match name {
             PlaceCmd::NormalMode => {
                 self.close_value_line();
-                self.value_answer = Some(None);
+                if !self.answer_surround_name(None) {
+                    self.value_answer = Some(None);
+                }
             }
             // An empty value is one to hand back (the check says whether it
             // may be), so backspacing to empty does not leave; Esc does.
@@ -1122,7 +1127,9 @@ impl Editor {
                 let text = std::mem::take(&mut self.command_line);
                 self.command_caret = 0;
                 self.mode = Mode::Normal;
-                self.value_answer = Some(Some(text));
+                if !self.answer_surround_name(Some(&text)) {
+                    self.value_answer = Some(Some(text));
+                }
             }
             other => self.edit_prompt(other),
         }

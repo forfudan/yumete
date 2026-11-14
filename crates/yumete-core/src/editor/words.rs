@@ -870,6 +870,11 @@ impl Editor {
         // document it is usually Chinese text. Committed characters go wherever
         // the mode is collecting them, not always into the buffer.
         if self.mode.types_into_command_line() {
+            // What a change asked for on the value line (`ysiwt` and the tag
+            // after it) is part of the keys `.` plays back.
+            if !self.repeating_edit && !self.expanding_alias {
+                self.edit_keys.extend(text.chars().map(Key::Char));
+            }
             // At the caret, not at the end. The prompt has ← → Home End, and
             // committing 中文 into the middle of a
             // pattern that has already been typed is exactly what you go back
@@ -969,7 +974,11 @@ impl Editor {
                 // 收下第一個字符之後**自己要掛一個新的**（它要兩個：舊的那一對、
                 // 新的那一對）。第一版在這一句後面又抹了一次，於是 `mr「『` 做出
                 // 來的是「錢塘江『上」。
-                if super::multi::each_selection_key(&waiting, Key::Char(c)) {
+                let asks = matches!(waiting, Pending::Surround | Pending::SurroundTo(_)) && self.surround_asks_a_name(c);
+                if asks {
+                    // Asked once, whatever the number of cursors.
+                    self.answer_with_char(waiting, c);
+                } else if super::multi::each_selection_key(&waiting, Key::Char(c)) {
                     self.each_selection(move |e| {
                         e.pending = Pending::None;
                         e.answer_with_char(waiting, c);
@@ -990,9 +999,14 @@ impl Editor {
             if self.pending == Pending::None {
                 self.operator_count = None;
             }
-            // `m` `s` is in there and the delimiter is not — never let `.`
-            // replay half of a command.
-            self.edit_keys.clear();
+            // The delimiter goes into what `.` replays after `m` `s`, as a
+            // typed one does: `ms「` is the whole command.
+            // The commit ends the command as the key would have, so it is
+            // what `.` repeats from here.
+            if let Some(c) = text.chars().next().filter(|_| !self.repeating_edit && !self.expanding_alias) {
+                self.edit_keys.push(Key::Char(c));
+                self.finish_watching();
+            }
             return;
         }
         // Warning: **上屏不自己開一個撤銷點——它加入正在進行的那一次插入。**

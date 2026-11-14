@@ -3055,6 +3055,12 @@ zhs = "页面照 vim 的方式跟随光标：scrolloff、远跳居中、zt zz zb
 en = "the page follows the cursor as vim's does: scrolloff, a far jump centred, zt zz zb with a count"
 
 [[message]]
+# :keymap-actions 規則那一節：vim_surround 這條規則說什麽（草稿）
+key = "keys.rule.vim-surround"
+zhs = "包围照 vim-surround：开括号在里面加空格、去掉里面的空格，b B r a 指 ) } ] >，t 和 f 问标签名和函数名"
+en = "surround follows vim-surround: an opening bracket adds spaces inside and takes them off, b B r a name ) } ] >, t and f ask for a tag or a function name"
+
+[[message]]
 # :keymap-actions 規則那一節：vim_tables 這條規則說什麽（草稿）
 key = "keys.rule.vim-tables"
 zhs = "用 vim 自己的 Normal 与插入模式键表，盖在 helix 的之上"

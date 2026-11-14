@@ -392,6 +392,18 @@ zhs = "那个寄存器是空的"
 en = "that register is empty"
 
 [[message]]
+# vim 鍵位 ysiwf：問要包上的函數名，命令行上那一行的標籤（草稿）
+key = "edit.surround-ask-function"
+zhs = "函数名："
+en = "function: "
+
+[[message]]
+# vim 鍵位 ysiwt：問要包上的標籤，命令行上那一行的標籤，後面接着打的就是標籤名（草稿）
+key = "edit.surround-ask-tag"
+zhs = "<"
+en = "<"
+
+[[message]]
 # 撤銷，已經到最早
 key = "edit.undo-at-oldest"
 zhs = "已是最早改动"

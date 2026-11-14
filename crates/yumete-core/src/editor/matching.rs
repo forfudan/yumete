@@ -1855,6 +1855,9 @@ impl Editor {
         if self.refuse_readonly() {
             return;
         }
+        if self.keymap_rules().vim_surround {
+            return self.vim_surround_add(c);
+        }
         // Any character wraps as a pair of itself (helix's `surround_add`): `ms*` makes `*斜*`, `ms~` half of a strikethrough.
         let (open, close) = pair_of(c).unwrap_or((c, c));
         self.surround_with(&open.to_string(), &close.to_string());
@@ -1871,7 +1874,7 @@ impl Editor {
         self.surround_with(ending, ending);
     }
 
-    fn surround_with(&mut self, open: &str, close: &str) {
+    pub(super) fn surround_with(&mut self, open: &str, close: &str) {
         let (start, end) = self.selection();
         let end = end.max(start);
         self.snapshot();
@@ -1891,6 +1894,10 @@ impl Editor {
         // highlight showed. A longer mark (a CRLF line break) moves it on.
         let marks = open.chars().count() + close.chars().count();
         self.sel.set_head(end + marks - 1);
+        // vim-surround ends its put with `` `[ ``: the caret on the opener.
+        if self.keymap_rules().vim_surround {
+            self.sel.set_head(start);
+        }
         self.clamp_cursor();
     }
 
@@ -1903,7 +1910,7 @@ impl Editor {
     /// Warning: **It does not answer `mdm`**: `m` is the nearest pair only, so
     /// `mdm` on `[字](網址)` takes only `[` and `]` and leaves `字(網址)`, as
     /// helix's does, and `mdk` takes the link.
-    fn markup_around_the_cursor(&self) -> Option<(usize, usize, usize, usize)> {
+    pub(super) fn markup_around_the_cursor(&self) -> Option<(usize, usize, usize, usize)> {
         match (self.markup_object_span(true), self.markup_object_span(false)) {
             (
                 motion::Span::Over { anchor: out, head: out_end },
@@ -1945,6 +1952,9 @@ impl Editor {
         which: char,
         count: usize,
     ) -> Option<(usize, usize, usize, usize)> {
+        if self.keymap_rules().vim_surround {
+            return self.vim_pair_to_take_off(which, count);
+        }
         if which == 'k' {
             // Marks rarely nest, and a count is not theirs to read.
             return self.markup_around_the_cursor();
@@ -2014,7 +2024,7 @@ impl Editor {
         let count = self.pair_count();
         let pair_of_one = |e: &Self| match pending {
             Pending::SurroundOff => e.pair_to_take_off(c, count).map(|(a, _, _, d)| (a, d)),
-            Pending::SurroundTo(from) => e.pair_to_change(from, count),
+            Pending::SurroundTo(from) => e.pair_to_replace(from, count).map(|(a, _, _, d)| (a, d)),
             _ => Some((0, 0)),
         };
         if !matches!(pending, Pending::SurroundOff | Pending::SurroundTo(_)) {
@@ -2059,7 +2069,7 @@ impl Editor {
         let mut which = 0;
         for one in &ranges {
             self.sel = crate::selection::Selections::one(*one);
-            let Some((open, close)) = self.pair_to_change(from, count) else {
+            let Some((open, inn, inn_end, close_end)) = self.pair_to_replace(from, count) else {
                 self.sel = was;
                 self.status = match pair_of(from) {
                     Some((open, close)) => say!("edit.no-pair-around", open, close),
@@ -2070,8 +2080,8 @@ impl Editor {
             if *one == primary {
                 which = points.len();
             }
-            points.push(crate::selection::Range::at(open));
-            points.push(crate::selection::Range::at(close));
+            points.push(crate::selection::Range::new(open, inn - 1));
+            points.push(crate::selection::Range::new(inn_end, close_end - 1));
         }
         let mut shown = crate::selection::Selections::one(points[0]);
         shown.rebuild(points, which);
@@ -2130,6 +2140,9 @@ impl Editor {
     pub(super) fn surround_replace(&mut self, from: char, to: char, count: usize) {
         if self.refuse_readonly() {
             return;
+        }
+        if self.keymap_rules().vim_surround {
+            return self.vim_surround_change(from, to, count);
         }
         let (new_open, new_close) = pair_of(to).unwrap_or((to, to));
         let Some((start, end)) = self.pair_to_change(from, count) else {

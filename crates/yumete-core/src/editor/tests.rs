@@ -4923,6 +4923,175 @@ fn vim_keys_spell_surround_the_way_vim_surround_does() {
     assert_ne!(ed.current_buffer().text(), "甲乙\n", "helix 鍵位下不認 ds");
 }
 
+/// Keys for the vim-surround tests: `\n` is Enter and `\x1b` Esc.
+fn press_vim_surround(ed: &mut Editor, keys: &str) {
+    for c in keys.chars() {
+        ed.on_key(match c {
+            '\n' => Key::Enter,
+            '\x1b' => Key::Esc,
+            c => Key::Char(c),
+        });
+    }
+}
+
+/// `text` under the vim keymap, `keys` pressed from the top; the text after.
+fn vim_surround(text: &str, keys: &str) -> String {
+    let mut ed = typed_vim(text);
+    press_vim_surround(&mut ed, keys);
+    ed.current_buffer().text().to_string()
+}
+
+/// **An opening bracket puts a space inside, a closing one does not**
+/// (vim-surround's `surround.txt`: 「Similar behavior can be found with (,
+/// {, and [ (but not <), which append an additional space to the inside」),
+/// and taking a pair off by its opener takes the spaces inside with it.
+#[test]
+fn vim_surround_opening_brackets_put_a_space_inside() {
+    assert_eq!(vim_surround("hello\n", "ysiw("), "( hello )\n");
+    assert_eq!(vim_surround("hello\n", "ysiw)"), "(hello)\n");
+    assert_eq!(vim_surround("hello\n", "ysiw["), "[ hello ]\n");
+    assert_eq!(vim_surround("hello\n", "ysiw]"), "[hello]\n");
+    assert_eq!(vim_surround("hello\n", "ysiw{"), "{ hello }\n");
+    assert_eq!(vim_surround("hello\n", "ysiw}"), "{hello}\n");
+    assert_eq!(vim_surround("hello\n", "ysiw>"), "<hello>\n", "> wraps; < asks for a tag");
+    assert_eq!(vim_surround("hello world\n", "yss("), "( hello world )\n");
+    // The examples of `surround.txt`.
+    assert_eq!(vim_surround("if x>3 {\n", "3lysW("), "if ( x>3 ) {\n");
+    assert_eq!(vim_surround("[123+4*56]/2\n", "lcs])"), "(123+4*56)/2\n");
+    // Taking off: the opener trims, the closer keeps.
+    assert_eq!(vim_surround("( hello )\n", "3lds("), "hello\n");
+    assert_eq!(vim_surround("( hello )\n", "3lds)"), " hello \n");
+    assert_eq!(vim_surround("{  a  }\n", "3lds{"), "a\n");
+    assert_eq!(vim_surround("(hello)\n", "lcs)["), "[ hello ]\n");
+    assert_eq!(vim_surround("( hello )\n", "3lcs(]"), "[hello]\n");
+    // `s:opfunc` ends with `` `[ ``: the caret on the opener.
+    let mut ed = typed_vim("say hello\n");
+    press(&mut ed, "wysiw)");
+    assert_eq!((ed.sel.anchor(), ed.sel.head()), (4, 4), "on the (");
+    // helix's `ms(` stays one character each side.
+    let mut ed = typed("hello\n");
+    press(&mut ed, "ggwms(");
+    assert_eq!(ed.current_buffer().text(), "(hello)\n", "helix: no space");
+}
+
+/// **`b` `B` `r` `a` are `)` `}` `]` `>`** (vim-surround), and `q` is a
+/// straight quote (mini.surround, which yumete reads onto these keys).
+/// Any other letter puts nothing, as vim-surround's 「with the exception of
+/// alphabetic characters」 says.
+#[test]
+fn vim_surround_takes_the_letter_aliases() {
+    assert_eq!(vim_surround("hello\n", "ysiwb"), "(hello)\n");
+    assert_eq!(vim_surround("hello\n", "ysiwB"), "{hello}\n");
+    assert_eq!(vim_surround("hello\n", "ysiwr"), "[hello]\n");
+    assert_eq!(vim_surround("hello\n", "ysiwa"), "<hello>\n");
+    assert_eq!(vim_surround("hello\n", "ysiwq"), "\"hello\"\n");
+    assert_eq!(vim_surround("hello\n", "ysiwx"), "hello\n", "an unnamed letter puts nothing");
+    assert_eq!(vim_surround("hello\n", "ysiws"), " hello\n", "s: a space before");
+    assert_eq!(vim_surround("( a )\n", "2ldsb"), " a \n", "b is ), which keeps the spaces");
+    assert_eq!(vim_surround("{a}\n", "ldsB"), "a\n");
+    assert_eq!(vim_surround("[a]\n", "ldsr"), "a\n");
+    assert_eq!(vim_surround("<a>\n", "ldsa"), "a\n");
+    assert_eq!(vim_surround("x 'a' y\n", "3ldsq"), "x a y\n");
+    assert_eq!(vim_surround("(a)\n", "lcsbB"), "{a}\n");
+    assert_eq!(vim_surround("[a]\n", "lcsrq"), "\"a\"\n");
+    // helix has none of them: any character wraps as itself.
+    let mut ed = typed("hello\n");
+    press(&mut ed, "ggwmsb");
+    assert_eq!(ed.current_buffer().text(), "bhellob\n");
+}
+
+/// **The aliases reach mini.surround's keys**: its import binds `gsa` to
+/// `@ys`, `gsd` to `@ds` and `gsr` to `@cs`.
+#[test]
+fn mini_surround_keys_take_the_same_aliases() {
+    let mut ed = typed_vim("hello\n");
+    let mut aliases = std::collections::HashMap::new();
+    aliases.insert("gsa".to_string(), "@ys".to_string());
+    aliases.insert("gsd".to_string(), "@ds".to_string());
+    aliases.insert("gsr".to_string(), "@cs".to_string());
+    ed.set_key_aliases(aliases);
+    press_vim_surround(&mut ed, "gsaiwb");
+    assert_eq!(ed.current_buffer().text(), "(hello)\n");
+    press_vim_surround(&mut ed, "lgsrbq");
+    assert_eq!(ed.current_buffer().text(), "\"hello\"\n");
+    press_vim_surround(&mut ed, "gsaiwtem\n");
+    assert_eq!(ed.current_buffer().text(), "\"<em>hello</em>\"\n");
+    press_vim_surround(&mut ed, "gsdt");
+    assert_eq!(ed.current_buffer().text(), "\"hello\"\n");
+}
+
+/// **`t` asks for a tag** on the value line, which takes it with the input
+/// method off; `<` asks too, and a `>` typed there ends the answer
+/// (vim-surround maps it to `><CR>`). `dst` takes the tags off, `cst`
+/// changes them and keeps the attributes unless the answer ends in `>`.
+#[test]
+fn vim_surround_t_asks_for_a_tag() {
+    let mut ed = typed_vim("hello\n");
+    press_vim_surround(&mut ed, "ysiwt");
+    assert_eq!(ed.mode(), Mode::Value, "the value line asks");
+    press_vim_surround(&mut ed, "em\n");
+    assert_eq!(ed.current_buffer().text(), "<em>hello</em>\n");
+    assert_eq!(ed.mode(), Mode::Normal);
+    assert_eq!(ed.take_value_answer(), None, "the answer is the editor's, not a front end's");
+
+    assert_eq!(vim_surround("hello\n", "ysiw<em>"), "<em>hello</em>\n", "> ends it");
+    assert_eq!(vim_surround("hello\n", "ysiwta href=\"x\"\n"), "<a href=\"x\">hello</a>\n");
+    assert_eq!(vim_surround("hello\n", "ysiwtbr/\n"), "<br />hello\n");
+    assert_eq!(vim_surround("hello\n", "ysiwt\x1b"), "hello\n", "Esc: nothing");
+    assert_eq!(vim_surround("hello\n", "ysiwt\n"), "hello\n", "an empty answer: nothing");
+
+    assert_eq!(vim_surround("<em>hello</em>\n", "6ldst"), "hello\n");
+    assert_eq!(vim_surround("<em>hello</em>\n", "dst"), "hello\n", "the caret on a tag is in its pair");
+    assert_eq!(vim_surround("<b><i>x</i></b>\n", "6ldst"), "<b>x</b>\n", "the innermost");
+    assert_eq!(vim_surround("<b><i>x</i></b>\n", "6l2dst"), "<i>x</i>\n", "a count goes out");
+    assert_eq!(
+        vim_surround("\"Look ma, I'm HTML!\"\n", "lcs\"<q>"),
+        "<q>Look ma, I'm HTML!</q>\n",
+        "surround.txt's example"
+    );
+    assert_eq!(vim_surround("<p class=\"x\">hi</p>\n", "14lcsttdiv\n"), "<div class=\"x\">hi</div>\n");
+    assert_eq!(vim_surround("<p class=\"x\">hi</p>\n", "14lcst<div>"), "<div>hi</div>\n");
+    assert_eq!(vim_surround("<em>hi</em>\n", "4lcst)"), "(hi)\n");
+}
+
+/// **`f` asks for a function's name** (vim-surround's `ysiwf`), `F` puts
+/// spaces inside its brackets; `dsf` takes the name and the brackets off
+/// (mini.surround's, which yumete reads onto `ds`).
+#[test]
+fn vim_surround_f_asks_for_a_function() {
+    assert_eq!(vim_surround("hello\n", "ysiwfprint\n"), "print(hello)\n");
+    assert_eq!(vim_surround("hello\n", "ysiwFprint\n"), "print( hello )\n");
+    assert_eq!(vim_surround("hello\n", "ysiwfprint(\n"), "print(hello)\n", "a ( typed at the end is the one");
+    assert_eq!(vim_surround("print(hello)\n", "7ldsf"), "hello\n");
+    assert_eq!(vim_surround("print(hello)\n", "dsf"), "hello\n", "the caret on the name");
+    assert_eq!(vim_surround("a(b(c))\n", "4ldsf"), "a(c)\n", "the innermost call");
+    assert_eq!(vim_surround("a(b(c))\n", "4l2dsf"), "b(c)\n");
+    assert_eq!(vim_surround("x (y)\n", "3ldsf"), "x (y)\n", "brackets with no name are not a call");
+    assert_eq!(vim_surround("f(a)\n", "2lcsfb"), "(a)\n");
+    assert_eq!(vim_surround("(a)\n", "lcsbfg\n"), "g(a)\n");
+}
+
+/// **`.` repeats a surround**: the add, the delete, the change, and a name
+/// asked for, which `.` gives again without asking.
+#[test]
+fn vim_dot_repeats_a_surround() {
+    assert_eq!(vim_surround("one two\n", "ysiw($."), "( one ) ( two )\n");
+    assert_eq!(vim_surround("(a) (b)\n", "lds)4l."), "a b\n");
+    assert_eq!(vim_surround("(a) (b)\n", "lcs)]4l."), "[a] [b]\n");
+    assert_eq!(vim_surround("one two\n", "ysiwtem\n$."), "<em>one</em> <em>two</em>\n");
+    assert_eq!(vim_surround("one two\n", "ysiwfg\n$."), "g(one) g(two)\n");
+    assert_eq!(vim_surround("<i>a</i> <i>b</i>\n", "3ldst5l."), "a b\n");
+    // The character after `ys` may come from the input method, as a commit
+    // (#414): the commit ends the command, and `.` has it too.
+    for (commit, after, want) in [("(", "$.", "( one ) ( two )\n"), ("「", "$.", "「one」 「two」\n"), ("t", "em\n$.", "<em>one</em> <em>two</em>\n")] {
+        let mut ed = typed_vim("one two\n");
+        press(&mut ed, "ysiw");
+        ed.insert_committed(commit);
+        press_vim_surround(&mut ed, after);
+        assert_eq!(ed.current_buffer().text(), want, "{commit}");
+    }
+}
+
 /// **vim 鍵位下 `m` 是設標記**。
 ///
 /// 讓得出來是因為 match 那一族在 vim 鍵位下另有拼法：`%` 跳配對、`di(`/`vi(`
