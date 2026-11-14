@@ -3775,20 +3775,19 @@ fn tab_cycles_the_command_completion() {
     for c in "ru".chars() {
         ed.on_key(Key::Char(c));
     }
-    // Tab walks the matches, writing each onto the line — `rules`, `run` and
-    // `ruby` all start with `ru`, in the order the table lists them.
-    // （`rules` 是 #424 加的，所以它排在最前。）
+    // Tab walks the matches, writing each onto the line — `ruby`, `rules`
+    // and `run` all start with `ru`, in the menu's alphabetical order.
+    ed.on_key(Key::Tab);
+    assert_eq!(ed.prompt(), Some((":", "ruby")), "one `ruby` family now, folded (#369)");
     ed.on_key(Key::Tab);
     assert_eq!(ed.prompt(), Some((":", "rules")));
     ed.on_key(Key::Tab);
     assert_eq!(ed.prompt(), Some((":", "run")));
-    ed.on_key(Key::Tab);
-    assert_eq!(ed.prompt(), Some((":", "ruby")), "one `ruby` family now, folded (#369)");
     // …and the prefix is remembered rather than re-read from the line, so
     // walking back returns to the same one instead of starting over from
     // what Tab just wrote.
     ed.on_key(Key::BackTab);
-    assert_eq!(ed.prompt(), Some((":", "run")));
+    assert_eq!(ed.prompt(), Some((":", "rules")));
 
     // Typing abandons the completion, so the next Tab starts from the line.
     ed.on_key(Key::Char('x'));
@@ -3853,11 +3852,11 @@ fn ctrl_p_and_ctrl_n_walk_the_history_while_tab_walks_the_menu() {
         ed.on_key(Key::Char(c));
     }
     ed.on_key(Key::Tab);
-    assert_eq!(ed.prompt(), Some((":", "rules")));
+    assert_eq!(ed.prompt(), Some((":", "ruby")));
     ed.on_key(Key::Tab);
-    assert_eq!(ed.prompt(), Some((":", "run")));
-    ed.on_key(Key::BackTab);
     assert_eq!(ed.prompt(), Some((":", "rules")));
+    ed.on_key(Key::BackTab);
+    assert_eq!(ed.prompt(), Some((":", "ruby")));
 }
 
 /// 同一對鍵在 `::` 那張單子上。

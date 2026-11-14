@@ -6132,6 +6132,33 @@ pub fn expand_bang(line: &str, previous: Option<&str>) -> Option<String> {
     Some(out)
 }
 
+/// **The commands a writer types every day**: the menu lists them first, then
+/// every other, each group in alphabetical order. A family's head stands for
+/// its family (`recent-`, and `write` for `write-all` and the rest).
+pub const COMMON: &[&str] = &[
+    "buffer", "count", "exit", "export", "goto", "help", "open", "outline", "preview", "quit",
+    "recent-", "replace", "search", "settings", "theme", "vertical", "write",
+];
+
+/// Whether `name` is one of [`COMMON`] or of a common family.
+pub fn is_common(name: &str) -> bool {
+    COMMON.iter().any(|head| match head.strip_suffix('-') {
+        Some(stem) => name.starts_with(stem) && name[stem.len()..].starts_with('-'),
+        None => name == *head || name.strip_prefix(head).is_some_and(|rest| rest.starts_with('-')),
+    })
+}
+
+/// **The order of the menu's top level**: the command whose name or short
+/// name is exactly what was typed first (`:e` is `:open`, so the grey guess
+/// never reads `:exit`), then the common commands, then the rest, each
+/// alphabetical by name (`!command` as `command`).
+fn in_menu_order(typed: &str, found: &mut [&Entry]) {
+    found.sort_by_cached_key(|e| {
+        let named = !typed.is_empty() && (e.name == typed || e.aliases.contains(&typed));
+        (!named, !is_common(e.name), e.name.trim_start_matches('!').to_lowercase())
+    });
+}
+
 pub fn complete(prefix: &str) -> Vec<Choice> {
     complete_at(prefix).1
 }
@@ -6326,13 +6353,16 @@ fn complete_within_stripped(line: &str, folding: bool) -> (usize, Vec<Choice>) {
     // One row of the top level, however it was reached.
     let row = one_row;
     let mut choices: Vec<Choice> = match words.first() {
-        None => COMMANDS
-            .iter()
-            .filter(|e| {
-                e.name.starts_with(typed) || e.aliases.iter().any(|a| a.starts_with(typed))
-            })
-            .map(row)
-            .collect(),
+        None => {
+            let mut found: Vec<&Entry> = COMMANDS
+                .iter()
+                .filter(|e| {
+                    e.name.starts_with(typed) || e.aliases.iter().any(|a| a.starts_with(typed))
+                })
+                .collect();
+            in_menu_order(typed, &mut found);
+            found.into_iter().map(row).collect()
+        }
         // **The same walk the parser walks** (§5.2.2 fault 1): `walk` resolves
         // the head by prefix and picks each word below it the same way, so the
         // menu answers `:tab ` exactly as it answers `:table `.
@@ -8079,13 +8109,13 @@ mod tests {
             ruby,
             [
                 "ruby",
-                "ruby-render",
                 "ruby-auto",
                 "ruby-auto-rare",
+                "ruby-format",
                 "ruby-html",
-                "ruby-typst",
                 "ruby-markdown",
-                "ruby-format"
+                "ruby-render",
+                "ruby-typst"
             ]
         );
         let render: Vec<String> = complete("ruby-render").iter().map(Choice::written).collect();
@@ -8100,13 +8130,13 @@ mod tests {
             rub,
             [
                 "ruby",
-                "ruby-render",
                 "ruby-auto",
                 "ruby-auto-rare",
+                "ruby-format",
                 "ruby-html",
-                "ruby-typst",
                 "ruby-markdown",
-                "ruby-format"
+                "ruby-render",
+                "ruby-typst"
             ]
         );
         // The words a finished command takes, under the command itself.
@@ -8261,6 +8291,29 @@ mod tests {
         assert!(matches!(parse(":yume-x"), Err(CommandError::Unknown(_))));
     }
 
+    /// **The menu lists the common commands first, then the rest**, each
+    /// group alphabetical, folded into their families; a name typed whole
+    /// (`:e` is `:open`'s) comes before either.
+    #[test]
+    fn the_menu_lists_the_common_commands_first_each_group_alphabetical() {
+        let names = |typed: &str| complete(typed).iter().map(|c| c.name.to_string()).collect::<Vec<_>>();
+        let all = names("");
+        let common: Vec<String> = all.iter().take_while(|n| is_common(n)).cloned().collect();
+        assert_eq!(common.len(), COMMON.len(), "{all:?}");
+        let key = |n: &String| n.trim_start_matches('!').to_lowercase();
+        for group in [&all[..common.len()], &all[common.len()..]] {
+            assert!(group.windows(2).all(|w| key(&w[0]) <= key(&w[1])), "{group:?}");
+        }
+        assert!(all[common.len()..].iter().all(|n| !is_common(n)));
+        // Every common name is a command or a family's head.
+        for head in COMMON {
+            assert!(COMMANDS.iter().any(|e| e.name == *head || e.name.starts_with(head)), "{head}");
+        }
+        assert_eq!(names("e").first().map(String::as_str), Some("open"));
+        assert_eq!(names("w").first().map(String::as_str), Some("write"));
+        assert_eq!(names("ru"), ["ruby", "rules", "run"]);
+    }
+
     #[test]
     fn a_space_offers_what_may_follow_the_command() {
         // The point of the whole arrangement: nobody has to remember an
@@ -8339,7 +8392,7 @@ mod tests {
         assert!(complete("quit ").is_empty());
         assert_eq!(
             complete("quit").iter().map(|e| e.name).collect::<Vec<_>>(),
-            ["quit", "quit-window", "quit-others", "quit-all"]
+            ["quit", "quit-all", "quit-others", "quit-window"]
         );
         // **`:qa` is in the list as itself** (#363): an alias is another name
         // for the command, not a shortcut to it, so it narrows like a name.
