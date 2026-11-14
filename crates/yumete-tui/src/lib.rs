@@ -7244,7 +7244,7 @@ fn draw_list(
     let inner = widths
         .iter()
         .sum::<usize>()
-        .max(yumete_cjk::str_width(footer) + 1)
+        .max(yumete_cjk::str_width(footer) + 2)
         .max(yumete_cjk::str_width(title) + 2);
     // **撑滿終端**：右邊那片空白不是浪費，是說明塊的地方。
     let width = match wide {
@@ -26857,7 +26857,7 @@ fn squeezed(text: &str) -> String {
         );
         // …written on the bottom border, as every floating panel writes its
         // count, and not on a row of its own.
-        assert!(text.contains(&format!("╰1/{total}")), "the count stands on the floor");
+        assert!(text.contains(&format!("╰ 1/{total} ─")), "the count stands on the floor");
         // The menu is a handful of rows, not the screen: **two thirds of the
         // window is the ceiling**, rings included (#372).
         let (rows, _) = menu_shape(&buffer);

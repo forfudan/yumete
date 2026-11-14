@@ -77,9 +77,11 @@ pub fn draw(frame: &mut Frame, rect: Rect, ring: &Ring) -> Rect {
     }
     let inner = block.inner(rect);
     block.render(rect, frame.buffer_mut());
-    // The foot is written after the wall, over it: one cell in from the
-    // corner, the same inset as the title.
+    // The foot is written after the wall, over it, with a cell of air either
+    // side — `╰ 1/87 ──`, as the title is `╭ 命令 ──` and as a floating panel
+    // writes its count, so the three left edges line up.
     if let Some((text, style)) = &ring.foot {
+        let text = format!(" {text} ");
         if rect.height >= 2 {
             let y = rect.y + rect.height - 1;
             let room = rect.width.saturating_sub(2) as usize;
