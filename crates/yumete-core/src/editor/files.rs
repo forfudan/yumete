@@ -2044,9 +2044,10 @@ impl Editor {
 
     /// **`:export-as-preview [FORMAT] [PATH]`**: the file the
     /// way its preview draws it — see what you get. A Markdown file as the
-    /// HTML page of its preview ([`crate::as_preview`]), a Typst file as the
-    /// PDF of the document its preview typesets. The format is the one this
-    /// kind of preview has when it is left off; the path, the rules and the
+    /// HTML page of its preview ([`crate::as_preview`]) or as its PDF, the
+    /// preview's own layout in long pages; a Typst file as the PDF of the
+    /// document its preview typesets. The format is the one this kind of
+    /// preview has first when it is left off; the path, the rules and the
     /// messages are `:export`'s.
     pub(super) fn export_as_preview(&mut self, words: &str, force: bool) -> Result<CommandOutcome, EditorError> {
         use crate::as_preview::Format;
@@ -2089,10 +2090,92 @@ impl Editor {
                 }
             },
         };
-        match format {
-            Format::Html => self.export_markdown_as_preview(path.as_deref(), force),
-            Format::Pdf => self.export_typst_as_preview(path.as_deref(), force),
+        match (format, kind) {
+            (Format::Html, _) => self.export_markdown_as_preview(path.as_deref(), force),
+            (Format::Pdf, PreviewKind::Markdown) => self.export_markdown_as_pdf(path.as_deref(), force),
+            (Format::Pdf, PreviewKind::Typst) => self.export_typst_as_preview(path.as_deref(), force),
         }
+    }
+
+    /// **The Markdown document an `:export-as-preview` writes**: this file,
+    /// or the one the preview tab the keys are in shows — its path if it
+    /// has one, and its text, the open buffer's where one holds it.
+    fn markdown_document_here(&self) -> Result<(Option<PathBuf>, String), EditorError> {
+        let here = self.current_buffer();
+        Ok(match here.preview_main() {
+            Some(main) => {
+                let main = main.to_path_buf();
+                let text = match self.text_of(&main) {
+                    Some((_, _, text)) => text,
+                    None => std::fs::read_to_string(&main).map_err(EditorError::Io)?,
+                };
+                (Some(main), text)
+            }
+            None => (here.path().map(Path::to_path_buf), here.text()),
+        })
+    }
+
+    /// The file `:export-as-preview` writes: the path given, else the
+    /// document's own with `format`'s extension.
+    fn as_preview_target(&self, path: Option<&str>, source: Option<&Path>, format: crate::as_preview::Format) -> Result<PathBuf, EditorError> {
+        match (path, source) {
+            (Some(path), _) => Ok(self.here_path(path)),
+            (None, Some(source)) => Ok(source.with_extension(format.extension())),
+            (None, None) => Err(EditorError::NoFileName),
+        }
+    }
+
+    /// The title an exported page is given: the document's file name, else
+    /// the buffer's.
+    fn as_preview_title(&self, source: Option<&Path>) -> String {
+        match source.and_then(Path::file_name) {
+            Some(name) => name.to_string_lossy().into_owned(),
+            None => self.current_buffer().display_name(),
+        }
+    }
+
+    /// **The Markdown preview as a PDF**: its own layout, drawn by the front
+    /// end into long pages ([`crate::as_preview::PdfMaker`]), in the fonts,
+    /// colours and direction of the preview on the screen, as wide as the
+    /// preview's window when one shows the document.
+    fn export_markdown_as_pdf(&mut self, path: Option<&str>, force: bool) -> Result<CommandOutcome, EditorError> {
+        let Some(maker) = self.preview_pdf.clone() else {
+            self.status = say!("export.as-preview-no-look");
+            return Ok(CommandOutcome::Continue);
+        };
+        let (source, text) = self.markdown_document_here()?;
+        let format = crate::as_preview::Format::Pdf;
+        let target = self.as_preview_target(path, source.as_deref(), format)?;
+        if self.refuse_to_overwrite_as(&target, force, "export-as-preview") {
+            return Ok(CommandOutcome::Continue);
+        }
+        // The preview tab showing the document: the one the keys are in, or
+        // any whose file it is.
+        let here = self.current_buffer();
+        let preview = match here.preview_main() {
+            Some(_) => Some(here.id()),
+            None => source.as_deref().and_then(|s| self.previews().into_iter().find(|(_, main)| main == s).map(|(id, _)| id)),
+        };
+        let title = self.as_preview_title(source.as_deref());
+        let job = crate::as_preview::PdfJob {
+            text: &text,
+            title: &title,
+            fonts: self.preview_fonts(),
+            base: source.as_deref().and_then(Path::parent),
+            ruby: self.export.dialects(),
+            vertical: self.markdown_preview_vertical().then_some((self.export.latin, self.export.hanging)),
+            preview,
+        };
+        let written = match maker(&job) {
+            Ok(bytes) => bytes,
+            Err(why) => {
+                self.status = say!("export.as-preview-pdf-failed", why);
+                return Ok(CommandOutcome::Continue);
+            }
+        };
+        crate::buffer::write_binary_atomically(&target, &written).map_err(EditorError::Io)?;
+        self.status = say!("export.wrote", target.display());
+        Ok(CommandOutcome::Continue)
     }
 
     /// The Markdown preview as an HTML page: the export's page, in the
@@ -2103,23 +2186,8 @@ impl Editor {
             self.status = say!("export.as-preview-no-look");
             return Ok(CommandOutcome::Continue);
         };
-        let here = self.current_buffer();
-        let (source, text) = match here.preview_main() {
-            Some(main) => {
-                let main = main.to_path_buf();
-                let text = match self.text_of(&main) {
-                    Some((_, _, text)) => text,
-                    None => std::fs::read_to_string(&main).map_err(EditorError::Io)?,
-                };
-                (Some(main), text)
-            }
-            None => (here.path().map(Path::to_path_buf), here.text()),
-        };
-        let target = match (path, &source) {
-            (Some(path), _) => self.here_path(path),
-            (None, Some(source)) => source.with_extension(crate::as_preview::Format::Html.extension()),
-            (None, None) => return Err(EditorError::NoFileName),
-        };
+        let (source, text) = self.markdown_document_here()?;
+        let target = self.as_preview_target(path, source.as_deref(), crate::as_preview::Format::Html)?;
         if self.refuse_to_overwrite_as(&target, force, "export-as-preview") {
             return Ok(CommandOutcome::Continue);
         }
@@ -2132,10 +2200,7 @@ impl Editor {
         // `[editor] preview_font_family` names others.
         settings.fonts = self.preview_fonts().to_string();
         let look = looker(&text, &settings.fonts);
-        let title = match source.as_deref().and_then(Path::file_name) {
-            Some(name) => name.to_string_lossy().into_owned(),
-            None => self.current_buffer().display_name(),
-        };
+        let title = self.as_preview_title(source.as_deref());
         let style = crate::export::Style {
             settings,
             title,
@@ -2669,6 +2734,47 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
+    /// **`:export-as-preview pdf` of a Markdown file** asks the front end
+    /// for the PDF of its preview, with the preview's fonts and the file's
+    /// folder, and writes what comes back beside the file as `.pdf`, under
+    /// `:export`'s rules; what the front end could not draw is said, and
+    /// nothing is written. Without the front end's word, nothing is either.
+    #[test]
+    fn a_markdown_preview_is_written_as_the_pdf_the_front_end_draws() {
+        static ASKED: std::sync::Mutex<Vec<(String, String, Option<PathBuf>)>> = std::sync::Mutex::new(Vec::new());
+        let dir = folder("md-pdf");
+        let path = dir.join("頁.md");
+        std::fs::write(&path, "# 題
+
+一段話。
+").unwrap();
+        let mut ed = editor_on(&path);
+        ed.execute(":export-as-preview pdf").unwrap();
+        assert_eq!(ed.status(), say!("export.as-preview-no-look"));
+        ed.set_preview_pdf(std::sync::Arc::new(|job: &crate::as_preview::PdfJob| {
+            ASKED.lock().unwrap().push((job.title.to_string(), job.fonts.to_string(), job.base.map(Path::to_path_buf)));
+            match job.text.contains("壞") {
+                true => Err("broken".to_string()),
+                false => Ok(format!("%PDF-1.7 {}", job.text).into_bytes()),
+            }
+        }));
+        ed.set_preview_fonts("'Screen Sans'");
+        ed.execute(":export-as-preview pdf").unwrap();
+        let target = dir.join("頁.pdf");
+        assert_eq!(ed.status(), say!("export.wrote", target.display()));
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "%PDF-1.7 # 題\n\n一段話。\n");
+        assert_eq!(ASKED.lock().unwrap().pop(), Some(("頁.md".to_string(), "'Screen Sans'".to_string(), Some(dir.clone()))));
+        ed.execute(":export-as-preview pdf").unwrap();
+        assert_eq!(ed.status(), say!("export.target-exists-for", target.display(), "export-as-preview"));
+        let broken = dir.join("壞.md");
+        std::fs::write(&broken, "壞了。\n").unwrap();
+        ed.execute(&format!(":open {}", broken.display())).unwrap();
+        ed.execute(":export-as-preview pdf").unwrap();
+        assert_eq!(ed.status(), say!("export.as-preview-pdf-failed", "broken"));
+        assert!(!dir.join("壞.pdf").exists());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     /// **A format word the file's preview does not have is said so**, with
     /// the ones it has; a word that is no format at all is said so too; a
     /// file with no preview has nothing to export this way.
@@ -2682,10 +2788,8 @@ mod tests {
         std::fs::write(&typ, "話。\n").unwrap();
         std::fs::write(&txt, "話。\n").unwrap();
         let mut ed = editor_on(&md);
-        ed.execute(":export-as-preview pdf").unwrap();
-        assert_eq!(ed.status(), say!("export.as-preview-not-this-kind", "pdf", "html"));
         ed.execute(":export-as-preview docx").unwrap();
-        assert_eq!(ed.status(), say!("export.as-preview-no-such-format", "docx", "html"));
+        assert_eq!(ed.status(), say!("export.as-preview-no-such-format", "docx", "html, pdf"));
         ed.execute(&format!(":open {}", typ.display())).unwrap();
         ed.execute(":export-as-preview html").unwrap();
         assert_eq!(ed.status(), say!("export.as-preview-not-this-kind", "html", "pdf"));

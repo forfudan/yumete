@@ -9,6 +9,7 @@
 //!                [--han sc|tc|ja] [--no-squeeze] [--screens 3 | --all] [--at-line N]
 //!                [--vertical [--latin turn|jlreq] [--hanging]]
 //!                [--out DIR] [--bench] [--export-html PAGE.html]
+//!                [--export-pdf DOC.pdf]
 //! ```
 //!
 //! `--vertical` sets the page as the preview of a vertical text window does
@@ -22,7 +23,8 @@
 //!
 //! `--export-html` also writes the page `:export-as-preview` makes of the
 //! file in the same colours, direction and Latin setting, to lay beside the
-//! pictures.
+//! pictures. `--export-pdf` writes the PDF `:export-as-preview pdf` makes
+//! of the very layout the pictures are drawn from.
 //!
 //! `--width` and `--height` are the picture's, in device pixels; `--scale`
 //! is device pixels to a CSS pixel. `--at-line` starts the first screen at
@@ -53,6 +55,7 @@ pub fn run(args: &[String]) -> ExitCode {
     let mut hanging = false;
     let mut out = PathBuf::from(".");
     let mut page: Option<PathBuf> = None;
+    let mut pdf: Option<PathBuf> = None;
     let mut it = args.iter();
     while let Some(arg) = it.next() {
         let mut value = |name: &str| -> Option<String> {
@@ -70,6 +73,7 @@ pub fn run(args: &[String]) -> ExitCode {
             "--at-line" => at_line = value("--at-line").and_then(|v| v.parse().ok()),
             "--out" => out = value("--out").map(PathBuf::from).unwrap_or(out),
             "--export-html" => page = value("--export-html").map(PathBuf::from),
+            "--export-pdf" => pdf = value("--export-pdf").map(PathBuf::from),
             "--theme" => dark = value("--theme").is_some_and(|v| v == "dark"),
             "--palette" => palette = value("--palette").unwrap_or(palette),
             "--han" => {
@@ -99,7 +103,7 @@ pub fn run(args: &[String]) -> ExitCode {
         }
     }
     let Some(file) = file else {
-        eprintln!("usage: ye --md-render <file.md> [--width N] [--scale S] [--height N] [--theme light|dark] [--palette ink|github|<theme>] [--han sc|tc|ja] [--screens N | --all] [--at-line N] [--vertical [--latin turn|jlreq] [--hanging]] [--out DIR] [--bench] [--export-html PAGE.html]");
+        eprintln!("usage: ye --md-render <file.md> [--width N] [--scale S] [--height N] [--theme light|dark] [--palette ink|github|<theme>] [--han sc|tc|ja] [--screens N | --all] [--at-line N] [--vertical [--latin turn|jlreq] [--hanging]] [--out DIR] [--bench] [--export-html PAGE.html] [--export-pdf DOC.pdf]");
         return ExitCode::from(2);
     };
     let text = match std::fs::read_to_string(&file) {
@@ -174,6 +178,19 @@ pub fn run(args: &[String]) -> ExitCode {
         t_cold,
         t_new
     );
+
+    if let Some(pdf) = &pdf {
+        let t = Instant::now();
+        let title = file.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let written = preview.pdf(&title).and_then(|bytes| std::fs::write(pdf, &bytes).map(|_| bytes.len()).map_err(|e| e.to_string()));
+        match written {
+            Ok(len) => println!("{} ({len} bytes): {:.1} ms", pdf.display(), ms(t)),
+            Err(e) => {
+                eprintln!("yumete: --md-render: {}: {e}", pdf.display());
+                return ExitCode::FAILURE;
+            }
+        }
+    }
 
     let start = at_line.map_or(0.0, |l| preview.y_for_line(l));
     let mut y = start;

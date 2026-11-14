@@ -3389,6 +3389,10 @@ pub struct Editor {
     /// `:export-as-preview`: handed over by the front end, which owns the
     /// theme and the preview's fonts. `None` until it is.
     preview_look: Option<crate::as_preview::Looker>,
+    /// **How the Markdown preview is drawn as a PDF**, for
+    /// `:export-as-preview pdf`: handed over by the front end, which owns
+    /// the layout. `None` until it is.
+    preview_pdf: Option<crate::as_preview::PdfMaker>,
     /// **A PDF being typeset for `:export-as-preview`**, on a
     /// thread of its own.
     typesetting: Option<files::Typesetting>,
@@ -4641,6 +4645,7 @@ impl Editor {
             preview_at: None,
             formula_painter: None,
             preview_look: None,
+            preview_pdf: None,
             typesetting: None,
             preview_fit: PreviewFit::default(),
             preview_theme: false,
@@ -4911,6 +4916,13 @@ impl Editor {
     /// over again whenever the theme or the mood changes.
     pub fn set_preview_look(&mut self, looker: crate::as_preview::Looker) {
         self.preview_look = Some(looker);
+    }
+
+    /// **Say how the Markdown preview is drawn as a PDF**,
+    /// which `:export-as-preview pdf` writes. The front end hands it over
+    /// again whenever the theme or the mood changes.
+    pub fn set_preview_pdf(&mut self, maker: crate::as_preview::PdfMaker) {
+        self.preview_pdf = Some(maker);
     }
 
     /// The running typesetter's address, for the status bar and for `:preview`.

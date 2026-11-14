@@ -45,7 +45,7 @@ pub struct Ink {
 pub(crate) enum Attach {
     Pic(Pix),
     /// A ruby base and its reading, both centred in the box.
-    Ruby { base: Box<Layout<Ink>>, reading: Box<Layout<Ink>> },
+    Ruby { base: Box<Text>, reading: Box<Text> },
 }
 
 /// Laid-out text: the layout, what its inline boxes hold, where each
@@ -94,6 +94,11 @@ pub(crate) struct Run {
     pub glyphs: Vec<vello_cpu::Glyph>,
     /// Where they fall, in the block's coordinates.
     pub bounds: Rect,
+    /// **The characters they show**, and each glyph's stretch of them: what
+    /// a PDF of the page writes beside the glyphs, so its text can be
+    /// selected and searched.
+    pub text: String,
+    pub spans: Vec<std::ops::Range<usize>>,
 }
 
 /// **A top-level block, laid out**: what it draws, how tall it is, the
@@ -461,7 +466,7 @@ impl Engine {
                         baseline: b.layout.first_baseline(),
                         vertical_align: VerticalAlign::BASELINE,
                     });
-                    attach.push(Attach::Ruby { base: Box::new(b.layout), reading: Box::new(r.layout) });
+                    attach.push(Attach::Ruby { base: Box::new(b), reading: Box::new(r) });
                 }
             }
             let shows = match &run.kind {

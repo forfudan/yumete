@@ -331,6 +331,12 @@ zhs = "这个文件的预览不能导出为 {0}，可用 {1}"
 en = "this file's preview does not export as {0}; it exports as {1}"
 
 [[message]]
+# :export-as-preview pdf 画 Markdown 预览的 PDF 时出了错，{0} 是出错的原因（草稿）
+key = "export.as-preview-pdf-failed"
+zhs = "没能画出 PDF：{0}"
+en = "could not draw the PDF: {0}"
+
+[[message]]
 # :export 的 font= 后面是空的（草稿：教加引号）
 key = "export.no-fonts"
 zhs = "font= 后面要写字体，例如 font=Songti；含空格或逗号的字体列表要加引号，例如 font='Songti SC, serif'"

@@ -6,6 +6,8 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Added
 
+- **`:export-as-preview pdf` writes a Markdown file exactly as its preview draws it**, into long PDF pages whose text you can select and search: the preview's fonts, colours, line breaks and direction, as wide as the preview's window. A document taller than 200 inches is split between paragraphs, since many readers will not open a taller page; `:export pdf` still typesets with Typst.
+- **The Markdown preview follows the cursor to the exact line it is drawn on**, however much bold, link addresses or other hidden markup comes before it in a long paragraph, on vertical pages too.
 - **New commands from helix**: `:sort` (sorts several selections among themselves, or the selected lines, or the whole buffer; `-r`/`!` reverse, `-i`/`i` ignore case), `:buffer-close-others` (`:bco`), `:buffer-close-all` (`:bca`) and `:write-buffer-close` (`:wbc`); helix configs that use them now import.
 - **vim's `` `[ `` and `` `] ``** go to where the last change or yank began and ended, `'[` and `']` to their lines, and an operator takes them as it takes a letter's mark (`` d`] ``).
 - **`:git-lazygit` and `:files-yazi` hand the terminal to lazygit and yazi** and come back when you leave them: lazygit in the current file's repository, asking you to save first (`:git-lazygit!` does not ask), and yazi on the current file, where `Enter` opens the chosen files here. Files changed on disk meanwhile are read again.

@@ -35,8 +35,19 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg"]
 # font's vertical forms and metrics (`vert`, `vmtx`, `VORG`). Already under
 # parley, at this version. Apache-2.0 / MIT.
 harfrust = "0.12"
+# **The preview as a PDF** (`:export-as-preview pdf`): the layout's own
+# glyphs written as text in their embedded, subset fonts, so the page can be
+# selected and searched. Without its default features: the text is shaped by
+# parley already (`simple-text` would bring a second shaper), and of
+# `raster-images` only raw pixels are used, for pictures and formulas.
+# MIT / Apache-2.0.
+krilla = { version = "0.8.2", default-features = false, features = ["raster-images"] }
 yumete-cjk = {path = "../yumete-cjk"}
 yumete-core = {path = "../yumete-core"}
+
+# Only the tests read a PDF back, to see its pages and its text.
+[dev-dependencies]
+lopdf = { version = "0.47", default-features = false }
 
 # **A family fontconfig's matching hides from fontique**
 # (`fonts::find_unmatched`): its files listed by fontconfig, opened at run

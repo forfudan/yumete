@@ -92,8 +92,14 @@ impl Want {
     /// 16 pixels, near the terminal's own type, and a Retina terminal's
     /// taller cell twice that.
     pub fn scale(&self) -> f32 {
-        (self.cell.1.max(1) as f32 / 20.0).clamp(0.5, 4.0)
+        scale_of(self.cell)
     }
+}
+
+/// **Device pixels to a CSS pixel for a cell this size**: a cell 20 pixels
+/// tall sets the body at 16 pixels.
+fn scale_of(cell: (u16, u16)) -> f32 {
+    (cell.1.max(1) as f32 / 20.0).clamp(0.5, 4.0)
 }
 
 /// A job for a worker: new text if there is any, where the file is, and
@@ -297,6 +303,41 @@ fn work(inbox: mpsc::Receiver<Job>, out: mpsc::Sender<Shot>) {
     }
 }
 
+/// **How wide the PDF of a preview no window shows is**, in CSS pixels: an
+/// A4 sheet's width at 96 pixels to the inch.
+pub const PDF_WIDTH: f32 = 794.0;
+
+/// Device pixels to a CSS pixel in a PDF: pictures and formulas are drawn
+/// at twice the screen's plain density, sharp when the page is enlarged.
+const PDF_SCALE: f32 = 2.0;
+
+/// **The Markdown preview of `job` as a PDF** in `theme`: laid out as the
+/// preview lays it out, as wide as the preview's window when one shows it
+/// (and, down a vertical page, as tall), else [`PDF_WIDTH`].
+pub fn pdf_of(job: &yumete_core::as_preview::PdfJob, theme: &Theme) -> Result<Vec<u8>, String> {
+    let window = job.preview.and_then(cells_of).map(|(columns, rows)| {
+        let cell = crate::graphics::cell_pixels();
+        let scale = scale_of(cell);
+        (columns as f32 * cell.0.max(1) as f32 / scale, rows as f32 * cell.1.max(1) as f32 / scale)
+    });
+    let (width, height) = window.unwrap_or((PDF_WIDTH, 0.0));
+    let options = Options {
+        width: (width * PDF_SCALE).round() as u32,
+        scale: PDF_SCALE,
+        theme: theme.clone(),
+        base_dir: job.base.map(PathBuf::from).unwrap_or_default(),
+    };
+    let mut preview = Preview::new(options, Box::new(crate::tex::Ratex));
+    preview.set_ruby(job.ruby);
+    preview.set_fonts(job.fonts);
+    if let Some((latin, hanging)) = job.vertical {
+        preview.set_height((height * PDF_SCALE).round() as u32);
+        preview.set_vertical(Some(yumete_mdview::Vertical { latin, hanging }));
+    }
+    preview.set_text(job.text);
+    preview.pdf(job.title)
+}
+
 /// **The Markdown previews**, owned by the loop: one a tab, by its id.
 #[derive(Default)]
 pub struct MdPreviews {
@@ -350,6 +391,8 @@ impl MdPreviews {
             self.looked = Some(theme.clone());
             let palette = theme.clone();
             editor.set_preview_look(Arc::new(move |text: &str, fonts: &str| yumete_mdview::look::look(&palette, fonts, text)));
+            let palette = theme.clone();
+            editor.set_preview_pdf(Arc::new(move |job: &yumete_core::as_preview::PdfJob| pdf_of(job, &palette)));
         }
         for (id, main) in previews {
             let shown = editor.preview_on_screen(id);

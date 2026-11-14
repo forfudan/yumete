@@ -213,6 +213,14 @@ impl VText {
     }
 }
 
+/// **Words shown by `n` glyphs together**, each glyph given all of them:
+/// a run turned or set across in one square, whose glyphs do not answer to
+/// its characters one by one.
+fn whole(words: String, n: usize) -> (String, Vec<Range<usize>>) {
+    let all = 0..words.len();
+    (words, vec![all; n])
+}
+
 /// A half-width character: below U+1100, where the CJK blocks begin, and
 /// neither a space nor a control.
 fn half_width(c: char) -> bool {
@@ -847,7 +855,7 @@ impl Engine {
             }
             let words: String = col.iter().map(|(u, _)| &vt.shown[u.text.clone()]).collect();
             out.cols.push((-x, words));
-            self.emit(col, axis, top, out);
+            self.emit(col, Some(&vt.shown), axis, top, out);
             // Ruby: each reading centred on its base, right of the column.
             let mut seen: Vec<u16> = Vec::new();
             for (u, _) in col {
@@ -872,15 +880,23 @@ impl Engine {
                     .collect();
                 // Clear of the base's square by a tenth of it.
                 let r_thick = reading.iter().map(|r| r.thick).fold(0.0, f32::max);
-                self.emit(&placed, axis + 0.6 * size + r_thick / 2.0, top, out);
+                self.emit(&placed, None, axis + 0.6 * size + r_thick / 2.0, top, out);
             }
             x -= p;
         }
         right - x
     }
 
-    /// **Draw `units`** down the column whose axis is `axis`, from `top`.
-    fn emit(&self, units: &[(Unit, f32)], axis: f32, top: f32, out: &mut Out) {
+    /// **Draw `units`** down the column whose axis is `axis`, from `top`;
+    /// `shown` is the text their stretches are of, where they have one.
+    fn emit(&self, units: &[(Unit, f32)], shown: Option<&str>, axis: f32, top: f32, out: &mut Out) {
+        // What a unit shows: its stretch of the text, else its character.
+        let words = |u: &Unit| -> String {
+            match shown.and_then(|t| t.get(u.text.clone())).filter(|w| !w.is_empty()) {
+                Some(w) => w.to_string(),
+                None => u.ch.to_string(),
+            }
+        };
         let px = self.scale;
         // Grounds first: code, highlights, keys.
         let mut n = 0;
@@ -915,28 +931,33 @@ impl Engine {
                     let same = batch.as_ref().is_some_and(|b| b.font == *font && b.size == *size && b.color == u.ink.color && b.coords == *coords);
                     if !same {
                         flush(&mut batch, out);
-                        batch = Some(Run { font: font.clone(), size: *size, coords: coords.clone(), color: u.ink.color, transform: Affine::IDENTITY, glyphs: Vec::new(), bounds: cell });
+                        batch = Some(Run { font: font.clone(), size: *size, coords: coords.clone(), color: u.ink.color, transform: Affine::IDENTITY, glyphs: Vec::new(), bounds: cell, text: String::new(), spans: Vec::new() });
                     }
                     if let Some(b) = batch.as_mut() {
                         b.glyphs.push(glyph);
                         b.bounds = b.bounds.union(cell);
+                        let from = b.text.len();
+                        b.text.push_str(&words(u));
+                        b.spans.push(from..b.text.len());
                     }
                 }
                 Look::Turn { font, coords, size, glyphs, base } => {
                     flush(&mut batch, out);
                     let transform = Affine::translate(((axis + base) as f64, y as f64)) * Affine::rotate(std::f64::consts::FRAC_PI_2);
-                    let glyphs = glyphs.iter().map(|&(id, x, gy)| vello_cpu::Glyph { id, x, y: gy }).collect();
+                    let glyphs: Vec<vello_cpu::Glyph> = glyphs.iter().map(|&(id, x, gy)| vello_cpu::Glyph { id, x, y: gy }).collect();
                     let bounds = rect(axis - u.thick / 2.0 - size * 0.2, y, u.thick + size * 0.4, u.adv);
-                    out.items.push(Item::Glyphs(Box::new(Run { font: font.clone(), size: *size, coords: coords.clone(), color: u.ink.color, transform, glyphs, bounds })));
+                    let (text, spans) = whole(words(u), glyphs.len());
+                    out.items.push(Item::Glyphs(Box::new(Run { font: font.clone(), size: *size, coords: coords.clone(), color: u.ink.color, transform, glyphs, bounds, text, spans })));
                 }
                 Look::Across { font, coords, size, glyphs, width, room, base, shift } => {
                     flush(&mut batch, out);
                     let sx = if *width > *room { room / width } else { 1.0 };
                     let x0 = axis + shift - width * sx / 2.0;
                     let transform = Affine::translate((x0 as f64, (y + base) as f64)) * Affine::scale_non_uniform(sx as f64, 1.0);
-                    let glyphs = glyphs.iter().map(|&(id, x, gy)| vello_cpu::Glyph { id, x, y: gy }).collect();
+                    let glyphs: Vec<vello_cpu::Glyph> = glyphs.iter().map(|&(id, x, gy)| vello_cpu::Glyph { id, x, y: gy }).collect();
                     let bounds = rect(x0 - size * 0.2, y, width * sx + size * 0.4, u.adv.max(*size));
-                    out.items.push(Item::Glyphs(Box::new(Run { font: font.clone(), size: *size, coords: coords.clone(), color: u.ink.color, transform, glyphs, bounds })));
+                    let (text, spans) = whole(words(u), glyphs.len());
+                    out.items.push(Item::Glyphs(Box::new(Run { font: font.clone(), size: *size, coords: coords.clone(), color: u.ink.color, transform, glyphs, bounds, text, spans })));
                 }
                 Look::Pic { pix, w, h, turned } => {
                     flush(&mut batch, out);
@@ -1567,10 +1588,13 @@ impl Engine {
                 let same = batch.as_ref().is_some_and(|b| b.font == c.font && b.size == c.size && b.color == c.color && b.coords == c.coords);
                 if !same {
                     flush(&mut batch, out);
-                    batch = Some(Run { font: c.font.clone(), size: c.size, coords: c.coords.clone(), color: c.color, transform: turn, glyphs: Vec::new(), bounds: rect(right - y0 - lh, top + x, lh, 0.0) });
+                    batch = Some(Run { font: c.font.clone(), size: c.size, coords: c.coords.clone(), color: c.color, transform: turn, glyphs: Vec::new(), bounds: rect(right - y0 - lh, top + x, lh, 0.0), text: String::new(), spans: Vec::new() });
                 }
                 if let Some(b) = batch.as_mut() {
                     b.glyphs.extend(c.glyphs.iter().map(|&(id, gx, gy)| vello_cpu::Glyph { id, x: x + gx, y: y0 + base + gy }));
+                    let from = b.text.len();
+                    b.text.push_str(&code.text[c.at.clone()]);
+                    b.spans.extend(std::iter::repeat_n(from..b.text.len(), c.glyphs.len()));
                     b.bounds = b.bounds.union(rect(right - y0 - lh, top + x, lh, c.adv));
                 }
                 stops_of(&code.pieces, &code.text, c.at.clone(), None, (*u + y0, lh), (top + x, top + x + c.adv), &mut out.stops);

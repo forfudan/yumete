@@ -9,6 +9,8 @@
 //!   editor's theme in the mood shown), YFM read as the preview reads it
 //!   (callouts, front matter, code in colour), and vertical exactly when the
 //!   preview is (`[editor] preview_vertical` and the text window vertical).
+//!   As `pdf`, it is the preview's own layout drawn into long pages, its
+//!   type as text in embedded fonts, by the front end ([`PdfMaker`]).
 //! - **Typst** becomes the PDF the `typst` compiler makes of the file the
 //!   preview typesets (`editor/files.rs`).
 //!
@@ -193,13 +195,40 @@ impl Colours {
 /// preview_font_family`, else `[export] font_family`).
 pub type Looker = std::sync::Arc<dyn Fn(&str, &str) -> Look + Send + Sync>;
 
-/// **What a preview can be written out as.** Room is left for the Markdown
-/// preview's pictures (`png`, `pdf`) later.
+/// **A Markdown document to be drawn as a PDF** the way its preview lays it
+/// out: everything the preview is told besides the front end's own colours
+/// and window.
+#[derive(Debug, Clone)]
+pub struct PdfJob<'a> {
+    pub text: &'a str,
+    /// The PDF's title: the file's name.
+    pub title: &'a str,
+    /// The preview's fonts ([`crate::Editor::preview_fonts`]).
+    pub fonts: &'a str,
+    /// Where a picture's relative path starts.
+    pub base: Option<&'a std::path::Path>,
+    /// `[export] ruby_*`.
+    pub ruby: crate::ruby::Dialects,
+    /// Set vertically, with `[export] vertical_latin` and `hanging`, exactly
+    /// when the preview is.
+    pub vertical: Option<(crate::export::Latin, bool)>,
+    /// The preview tab that shows this document, if one does: the PDF is
+    /// as wide as its window.
+    pub preview: Option<u64>,
+}
+
+/// **What the front end answers when asked for the PDF of a Markdown
+/// preview** ([`PdfJob`]): the file's bytes, or why there are none. The
+/// front end owns the layout (`yumete-mdview`), as it owns the look.
+pub type PdfMaker = std::sync::Arc<dyn Fn(&PdfJob) -> Result<Vec<u8>, String> + Send + Sync>;
+
+/// **What a preview can be written out as.**
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Format {
     /// The Markdown preview, as an HTML page.
     Html,
-    /// The Typst preview's document, as a PDF.
+    /// A PDF: the Markdown preview drawn as long pages, or the Typst
+    /// preview's document.
     Pdf,
 }
 
@@ -230,7 +259,7 @@ impl Format {
     /// **What a preview of `kind` can be written as**, the default first.
     pub fn for_preview(kind: crate::buffer::PreviewKind) -> &'static [Format] {
         match kind {
-            crate::buffer::PreviewKind::Markdown => &[Format::Html],
+            crate::buffer::PreviewKind::Markdown => &[Format::Html, Format::Pdf],
             crate::buffer::PreviewKind::Typst => &[Format::Pdf],
         }
     }

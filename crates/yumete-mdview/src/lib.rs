@@ -11,7 +11,9 @@
 //!   text did not change (only moved) keeps its layout, so an edit costs the
 //!   blocks it touched;
 //! - `paint` draws a viewport (a top and a height) with vello_cpu, so the
-//!   front end asks for what is on screen, not for one giant picture.
+//!   front end asks for what is on screen, not for one giant picture;
+//!   `pdf` writes the same layout whole, as the PDF of
+//!   `:export-as-preview pdf` ([`Preview::pdf`]).
 //!
 //! [`Preview`] holds the three together, with the map between source lines
 //! and heights the preview needs to follow the cursor
@@ -31,9 +33,11 @@ pub mod theme;
 
 mod layout;
 mod paint;
+mod pdf;
 mod vertical;
 
 pub use caret::Caret;
+pub use pdf::MAX_PAGE_PT;
 pub use vertical::Vertical;
 
 use std::collections::HashMap;

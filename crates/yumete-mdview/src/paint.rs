@@ -224,6 +224,7 @@ fn draw_layout(ctx: &mut RenderContext, res: &mut Resources, layout: &Layout<Ink
                 PositionedLayoutItem::InlineBox(bx) => match attach.get(bx.id as usize) {
                     Some(Attach::Pic(p)) => draw_pic(ctx, p, ox + bx.x as f64, oy + bx.y as f64, bx.width as f64, bx.height as f64),
                     Some(Attach::Ruby { base, reading }) => {
+                        let (base, reading) = (&base.layout, &reading.layout);
                         let bxx = ox + bx.x as f64;
                         let bxy = oy + bx.y as f64;
                         let w = bx.width as f64;
