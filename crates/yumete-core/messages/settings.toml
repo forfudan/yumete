@@ -1049,6 +1049,12 @@ zhs = "编辑"
 en = "editing"
 
 [[message]]
+# 設置面板：組——導出（草稿）
+key = "settings.group.export"
+zhs = "导出"
+en = "export"
+
+[[message]]
 # 設置面板：組——文件
 key = "settings.group.files"
 zhs = "文件"
@@ -1083,6 +1089,12 @@ en = "layout"
 key = "settings.group.marks"
 zhs = "标记"
 en = "marks"
+
+[[message]]
+# 設置面板：組——預覽（草稿）
+key = "settings.group.preview"
+zhs = "预览"
+en = "preview"
 
 [[message]]
 # 設置：候選旁的注解
