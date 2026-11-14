@@ -1500,8 +1500,8 @@ pub struct ThemeConfig {
     /// whoever wants the code to sit in a box.
     pub fill: bool,
     /// **How much of its ink a window you are not in keeps**, in percent:
-    /// 95, a little, so two windows still compare; 100 is vim's and helix's,
-    /// which do not dim at all.
+    /// 100 by default, as vim and helix, since every window's status line
+    /// already says which one has the keys; lower to fade the others.
     pub inactive: u16,
     /// **How much ink focus mode leaves the paragraphs you are not writing**,
     /// in percent: 50, so the one being written stands out.
@@ -2860,7 +2860,7 @@ impl Default for ThemeConfig {
             lime_dark: (0xAA, 0xC7, 0x77),
             lime_light: (0x51, 0x6F, 0x21),
             fill: false,
-            inactive: 95,
+            inactive: 100,
             focus: 50,
             dark_only: false,
             pinned: None,
@@ -5862,7 +5862,7 @@ impl RawConfig {
             config.theme.fill = fill;
         }
         if let Some(inactive) = self.theme.inactive {
-            config.theme.inactive = as_declared(problems, "theme", "inactive", inactive.into(), 95) as u16;
+            config.theme.inactive = as_declared(problems, "theme", "inactive", inactive.into(), 100) as u16;
         }
         if let Some(focus) = self.theme.focus {
             config.theme.focus = as_declared(problems, "theme", "focus", focus.into(), 50) as u16;

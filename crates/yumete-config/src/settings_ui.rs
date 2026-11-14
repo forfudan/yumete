@@ -930,7 +930,7 @@ pub const SETTINGS: &[Setting] = &[
         kind: Kind::Count { low: 50, high: 100, zero: None },
         label: "settings.theme.inactive",
         hint: "settings.theme.inactive.hint",
-        factory: "95",
+        factory: "100",
     },
     Setting {
         table: "theme",
