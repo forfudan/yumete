@@ -1219,14 +1219,14 @@ en = "off by default: the word model loads as usual, and the code table waits fo
 [[message]]
 # settings: suppress the system-level Yume IME in normal mode
 key = "settings.ime.system"
-zhs = "Normal 模式下让开系统输入法"
-en = "move the system input method aside in Normal mode"
+zhs = "Normal 模式下让开系统宇梦输入法"
+en = "move the system Yume input method aside in Normal mode"
 
 [[message]]
 # 設置：让开系统输入法——一句話
 key = "settings.ime.system.hint"
-zhs = "Normal 模式下请系统输入法让开，以免按键被它拦截"
-en = "while yumete reads the keys itself (Normal mode, the command line), ask the system's input method to step aside, so it does not eat them"
+zhs = "Normal 模式下请系统宇梦输入法让开，以免按键被它拦截"
+en = "while yumete reads the keys itself (Normal mode, the command line), ask the system's Yume input method to step aside, so it does not eat them"
 
 [[message]]
 # 设置面板：列表里能按的键；{0} 是重做键（U 或 C-r，跟着正文的键位），{1} 是系统剪贴板那一句键（"+p）（草稿）
