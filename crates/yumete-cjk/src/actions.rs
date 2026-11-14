@@ -1459,10 +1459,11 @@ pub const ALL: &[Action] = &[
 
 /// **The places that take keys and are not modes of the text** (step 9 of
 /// the keymap plan): a prompt (`:`, `/`, `::`, a reading, and a
-/// picker's query), a picker's list (and the `::` palette's), a sidebar, and
-/// a box of a panel's form. helix hard-codes these keys; here each place has
-/// a table in the config (`[keys.prompt]`, `[keys.picker]`, `[keys.sidebar]`,
-/// `[keys.field]`) and commands of its own.
+/// picker's query), a picker's list (and the `::` palette's), a sidebar, a
+/// box of a panel's form, and a preview window. helix hard-codes these keys;
+/// here each place has a table in the config (`[keys.prompt]`,
+/// `[keys.picker]`, `[keys.sidebar]`, `[keys.field]`, `[keys.preview]`) and
+/// commands of its own.
 ///
 /// A name the text's keymap has too (`move_char_left`, `page_down`) is
 /// reused where it means the same thing in that place, so one name is one
@@ -1479,10 +1480,15 @@ pub enum Place {
     /// A box of a panel's form (the search panel's 找什麼, 換成什麼…), which
     /// takes the prompt's keys too, its own winning.
     Field,
+    /// A preview window (a typeset page, a Markdown preview): a page holds
+    /// no text, so its keys scroll it, and the commands that make sense
+    /// with no text (another window, another tab, a picker, the jump list)
+    /// can be bound there too.
+    Preview,
 }
 
 impl Place {
-    pub const ALL: [Place; 4] = [Place::Prompt, Place::Picker, Place::Sidebar, Place::Field];
+    pub const ALL: [Place; 5] = [Place::Prompt, Place::Picker, Place::Sidebar, Place::Field, Place::Preview];
 
     /// The table's name in the config: `[keys.prompt]`.
     pub fn name(self) -> &'static str {
@@ -1491,6 +1497,7 @@ impl Place {
             Place::Picker => "picker",
             Place::Sidebar => "sidebar",
             Place::Field => "field",
+            Place::Preview => "preview",
         }
     }
 
@@ -1506,6 +1513,7 @@ impl Place {
             Place::Picker => PICKER,
             Place::Sidebar => SIDEBAR,
             Place::Field => FIELD,
+            Place::Preview => PREVIEW,
         }
     }
 
@@ -1517,6 +1525,7 @@ impl Place {
             Place::Picker => &[Place::Picker, Place::Prompt],
             Place::Sidebar => &[Place::Sidebar],
             Place::Field => &[Place::Field, Place::Prompt],
+            Place::Preview => &[Place::Preview],
         }
     }
 
@@ -1610,6 +1619,13 @@ place_commands! {
     WindowMode = "window_mode",
     NextField = "next_field",
     PrevField = "prev_field",
+    HalfPageDown = "half_page_down",
+    HalfPageUp = "half_page_up",
+    NextPage = "next_page",
+    PrevPage = "prev_page",
+    GotoMode = "goto_mode",
+    JumpBackward = "jump_backward",
+    JumpForward = "jump_forward",
 }
 
 /// A place's command and what it does there (help first, so the messages
@@ -1681,6 +1697,49 @@ pub const SIDEBAR: &[Action] = &[
     place("action.window-mode", PlaceCmd::WindowMode),
 ];
 
+/// **A preview window's**: its own scroll keys, then the Normal commands
+/// that make sense where there is no text — another window, another tab, a
+/// picker, the jump list, the command line and the key groups. Nothing that
+/// edits or moves a caret: a page has neither.
+pub const PREVIEW: &[Action] = &[
+    place("action.preview-next-row", PlaceCmd::MoveLineDown),
+    place("action.preview-prev-row", PlaceCmd::MoveLineUp),
+    place("action.preview-across-left", PlaceCmd::MoveCharLeft),
+    place("action.preview-across-right", PlaceCmd::MoveCharRight),
+    place("action.half-page-down", PlaceCmd::HalfPageDown),
+    place("action.half-page-up", PlaceCmd::HalfPageUp),
+    place("action.preview-screen-down", PlaceCmd::PageDown),
+    place("action.preview-screen-up", PlaceCmd::PageUp),
+    place("action.preview-next-page", PlaceCmd::NextPage),
+    place("action.preview-prev-page", PlaceCmd::PrevPage),
+    place("action.preview-first-page", PlaceCmd::GotoFileStart),
+    place("action.preview-last-page", PlaceCmd::GotoLastLine),
+    place("action.preview-goto-mode", PlaceCmd::GotoMode),
+    place("action.sidebar-normal-mode", PlaceCmd::NormalMode),
+    normal("action.command-mode", NormalCmd::CommandMode),
+    normal("action.space-mode", NormalCmd::SpaceMode),
+    normal("action.window-mode", NormalCmd::WindowMode),
+    normal("action.jump-backward", NormalCmd::JumpBackward),
+    normal("action.jump-forward", NormalCmd::JumpForward),
+    normal("action.jump-view-left", NormalCmd::JumpViewLeft),
+    normal("action.jump-view-down", NormalCmd::JumpViewDown),
+    normal("action.jump-view-up", NormalCmd::JumpViewUp),
+    normal("action.jump-view-right", NormalCmd::JumpViewRight),
+    normal("action.next-region", NormalCmd::RotateView),
+    normal("hint.region.previous", NormalCmd::RotateViewReverse),
+    normal("hint.region.close", NormalCmd::Wclose),
+    normal("action.next-buffer", NormalCmd::GotoNextBuffer),
+    normal("action.prev-buffer", NormalCmd::GotoPreviousBuffer),
+    normal("hint.goto.last-file", NormalCmd::GotoLastAccessedFile),
+    normal("action.file-picker", NormalCmd::FilePicker),
+    normal("action.buffer-picker", NormalCmd::BufferPicker),
+    normal("hint.open.recent-files", NormalCmd::RecentFilePicker),
+    normal("hint.space.jumplist", NormalCmd::JumplistPicker),
+    normal("hint.space.last-picker", NormalCmd::LastPicker),
+    normal("action.command-menu", NormalCmd::CommandPalette),
+    normal("action.quit", NormalCmd::Quit),
+];
+
 #[cfg(test)]
 mod no_two_alike {
     use super::*;
@@ -1711,6 +1770,8 @@ mod no_two_alike {
             }
         }
         assert_eq!(Place::Picker.bound("save_file"), None, "a Normal command is not a picker's");
+        assert_eq!(Place::Preview.bound("delete_selection"), None, "a page has no text to edit");
+        assert!(Place::Preview.bound("jump_view_left").is_some(), "another window is a preview's");
         // Every Normal command the enum declares is in `ALL` once, so the
         // config, the palette and the docs know it.
         for cmd in NormalCmd::ALL {

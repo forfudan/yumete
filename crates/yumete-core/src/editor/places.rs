@@ -1,8 +1,8 @@
-//! **A prompt's, a picker's and a sidebar's keys, each a named command**
-//! (step 9 of the keymap plan). helix hard-codes these keys and
+//! **A prompt's, a picker's, a sidebar's and a preview's keys, each a named
+//! command** (step 9 of the keymap plan). helix hard-codes these keys and
 //! nobody can rebind them; here each place has a default table, and the
-//! reader's own (`[keys.prompt]`, `[keys.picker]`, `[keys.sidebar]`) is read
-//! before it.
+//! reader's own (`[keys.prompt]`, `[keys.picker]`, `[keys.sidebar]`,
+//! `[keys.preview]`) is read before it.
 //!
 //! A picker takes the prompt's keys too, for its query, and its own win
 //! where both name a key: helix's rule ("Prompt keybinds also work in
@@ -11,7 +11,8 @@
 //! way.
 //!
 //! The names are listed in `yumete_cjk::actions::Place`; what each does is
-//! said where the place's keys are answered (`prompt.rs`, `sidebar.rs`).
+//! said where the place's keys are answered (`prompt.rs`, `sidebar.rs`,
+//! `page_preview.rs`).
 
 use super::*;
 use yumete_cjk::actions::PlaceCmd;
@@ -99,6 +100,53 @@ pub(super) const SIDEBAR_KEYS: &[(Key, PlaceCmd)] = &[
     (Key::Ctrl('w'), PlaceCmd::WindowMode),
 ];
 
+/// **A preview's default keys**: a PDF reader's under vim (as Zathura and
+/// evil-collection have them). `J` and `K` are a whole page, `g` waits for
+/// the key after it ([`PREVIEW_G_KEYS`]), and `:`, `Space`, `C-w`, `C-o` and
+/// `C-i` reach what they reach in the text.
+pub(super) const PREVIEW_KEYS: &[(Key, PlaceCmd)] = &[
+    (Key::Char('j'), PlaceCmd::MoveLineDown),
+    (Key::Down, PlaceCmd::MoveLineDown),
+    (Key::Enter, PlaceCmd::MoveLineDown),
+    (Key::Char('k'), PlaceCmd::MoveLineUp),
+    (Key::Up, PlaceCmd::MoveLineUp),
+    (Key::Char('h'), PlaceCmd::MoveCharLeft),
+    (Key::Left, PlaceCmd::MoveCharLeft),
+    (Key::Char('l'), PlaceCmd::MoveCharRight),
+    (Key::Right, PlaceCmd::MoveCharRight),
+    (Key::Ctrl('d'), PlaceCmd::HalfPageDown),
+    (Key::Ctrl('u'), PlaceCmd::HalfPageUp),
+    (Key::Ctrl('f'), PlaceCmd::PageDown),
+    (Key::PageDown, PlaceCmd::PageDown),
+    (Key::Ctrl('b'), PlaceCmd::PageUp),
+    (Key::PageUp, PlaceCmd::PageUp),
+    (Key::Char('J'), PlaceCmd::NextPage),
+    (Key::Char('K'), PlaceCmd::PrevPage),
+    (Key::Char('g'), PlaceCmd::GotoMode),
+    (Key::Home, PlaceCmd::GotoFileStart),
+    (Key::Char('G'), PlaceCmd::GotoLastLine),
+    (Key::End, PlaceCmd::GotoLastLine),
+    (Key::Esc, PlaceCmd::NormalMode),
+    (Key::Char(':'), PlaceCmd::CommandMode),
+    (Key::Char(' '), PlaceCmd::SpaceMode),
+    (Key::Ctrl('w'), PlaceCmd::WindowMode),
+    (Key::Ctrl('o'), PlaceCmd::JumpBackward),
+    (Key::Ctrl('i'), PlaceCmd::JumpForward),
+];
+
+/// **The key after a preview's `g`**: `gg` the top (a count before it, the
+/// page of that number), and the tabs — helix's `gn`, `gp` and `ga`, vim's
+/// `gt` and `gT`, whatever the keymap: a preview is a tab, and this is how a
+/// tab is left.
+pub(super) const PREVIEW_G_KEYS: &[(char, &str)] = &[
+    ('g', "goto_file_start"),
+    ('n', "goto_next_buffer"),
+    ('t', "goto_next_buffer"),
+    ('p', "goto_previous_buffer"),
+    ('T', "goto_previous_buffer"),
+    ('a', "goto_last_accessed_file"),
+];
+
 /// The default table of a place.
 pub(super) fn place_keys(place: Place) -> &'static [(Key, PlaceCmd)] {
     match place {
@@ -106,7 +154,19 @@ pub(super) fn place_keys(place: Place) -> &'static [(Key, PlaceCmd)] {
         Place::Picker => PICKER_KEYS,
         Place::Field => FIELD_KEYS,
         Place::Sidebar => SIDEBAR_KEYS,
+        Place::Preview => PREVIEW_KEYS,
     }
+}
+
+/// **A place's default runs of keys**, internal spelling: its table's
+/// keys, and in a preview the two-key runs its `g` begins (`gg`, `gn`).
+fn default_runs(place: Place) -> Vec<(String, &'static str)> {
+    let mut runs: Vec<(String, &'static str)> =
+        place_keys(place).iter().map(|(key, cmd)| (super::keys::key_internal(*key), cmd.name())).collect();
+    if place == Place::Preview {
+        runs.extend(PREVIEW_G_KEYS.iter().map(|(c, name)| (format!("g{c}"), *name)));
+    }
+    runs
 }
 
 /// A place's command for the docs: its name, its help, and its keys.
@@ -133,14 +193,14 @@ impl Editor {
 
     /// **A line of the reader's own that follows them into `place`**
     /// (`[keys] inherit`): a `[keys.normal]` line into a
-    /// sidebar, a `[keys.insert]` one into a prompt, when it is one key
-    /// naming one command the place has. Read after the place's own table
+    /// sidebar or a preview, a `[keys.insert]` one into a prompt, when it is
+    /// one key naming one command the place has. Read after the place's own table
     /// and before its defaults, so a Colemak reader's `n =
     /// "move_line_down"` walks a sidebar too; the defaults of Normal mode
     /// never come over (its `J` joins, a sidebar's pages). `no_op` stays
     /// where it was written: unbinding a key in the text leaves the
     /// sidebar's alone.
-    fn inherited(&self, place: Place, typed: &str) -> Option<String> {
+    pub(super) fn inherited(&self, place: Place, typed: &str) -> Option<String> {
         self.lines_that_follow(place).into_iter().find(|(key, _)| key == typed).map(|(_, name)| name)
     }
 
@@ -152,17 +212,21 @@ impl Editor {
         let normal = self.normal_lines_in_force();
         let from: Vec<(String, &Vec<String>)> = match place {
             _ if !self.place_inherits => return Vec::new(),
-            Place::Sidebar => normal.iter().map(|(k, v)| (k.clone(), v)).collect(),
+            Place::Sidebar | Place::Preview => normal.iter().map(|(k, v)| (k.clone(), v)).collect(),
             Place::Prompt => self.insert_aliases.iter().map(|(k, v)| (k.clone(), v)).collect(),
             Place::Picker | Place::Field => return Vec::new(),
         };
         // helix's names for `j` and `k` are the visual ones; in a list a row
         // is a row, so they mean the place's own line moves (a Colemak
-        // `n = "move_visual_line_down"` walks the file tree).
+        // `n = "move_visual_line_down"` walks the file tree, and scrolls a
+        // preview a row). helix's `C-d` and `C-u` move the caret with the
+        // half page; a page has no caret, so they are its half pages.
         fn in_a_list(name: &str) -> &str {
             match name {
                 "move_visual_line_down" => "move_line_down",
                 "move_visual_line_up" => "move_line_up",
+                "page_cursor_half_down" => "half_page_down",
+                "page_cursor_half_up" => "half_page_up",
                 other => other,
             }
         }
@@ -227,6 +291,11 @@ impl Editor {
                 Mode::Ruby => self.on_ruby_key(key),
                 Mode::Picker => self.on_picker_key(key),
                 Mode::Normal if self.sidebar_focused() => self.on_sidebar_key(key),
+                Mode::Normal if self.page_window_has_the_keys() => {
+                    if !self.on_page_window_key(key) {
+                        self.on_normal_key(key);
+                    }
+                }
                 Mode::Normal => self.on_normal_key(key),
                 Mode::Insert => self.insert_typed(key),
                 Mode::Field => self.on_field_key(key),
@@ -237,7 +306,7 @@ impl Editor {
     }
 
     /// Install a place's lines (`[keys.prompt]`, `[keys.picker]`,
-    /// `[keys.sidebar]`).
+    /// `[keys.sidebar]`, `[keys.field]`, `[keys.preview]`).
     pub fn set_place_bindings<C: crate::editor::BindingCommands>(&mut self, place: Place, lines: HashMap<String, C>) {
         self.place_bindings[place as usize] = lines
             .into_iter()
@@ -251,10 +320,15 @@ impl Editor {
     pub(super) fn keys_in_place(&self, place: Place, name: &str) -> Vec<String> {
         let mine = &self.place_bindings[place as usize];
         let taken = |key: &String| mine.contains_key(key) || self.inherited(place, key).is_some();
-        let mut keys: Vec<String> = place_keys(place)
-            .iter()
-            .filter(|(_, one)| one.name() == name)
-            .map(|(key, _)| super::keys::key_internal(*key))
+        // A run a preview's `g` begins holds while `g` still waits.
+        let taken = |key: &String| match key.chars().count() {
+            1 => taken(key),
+            _ => key.chars().next().is_some_and(|first| taken(&first.to_string())),
+        };
+        let mut keys: Vec<String> = default_runs(place)
+            .into_iter()
+            .filter(|(_, one)| *one == name)
+            .map(|(key, _)| key)
             .filter(|key| !taken(key))
             .collect();
         let mut theirs: Vec<String> = mine
@@ -332,10 +406,10 @@ impl Editor {
                     .actions()
                     .iter()
                     .map(|action| {
-                        let keys = place_keys(place)
-                            .iter()
-                            .filter(|(_, cmd)| cmd.name() == action.name)
-                            .map(|(key, _)| super::keys::key_internal(*key))
+                        let keys = default_runs(place)
+                            .into_iter()
+                            .filter(|(_, name)| *name == action.name)
+                            .map(|(key, _)| key)
                             .collect();
                         (action.name, action.help, keys)
                     })
@@ -405,15 +479,17 @@ mod tests {
 
     /// And every command a place lists has a default key or is one the
     /// reader binds (helix's `first_entry`/`last_entry`, which `Home`/`End`
-    /// are not, since here they move the caret).
+    /// are not, since here they move the caret; and the Normal commands a
+    /// preview lists, which the reader's lines reach).
     #[test]
     fn a_place_command_without_a_key_is_named_here() {
         let unbound = [PlaceCmd::FirstEntry, PlaceCmd::LastEntry];
         for place in Place::ALL {
             for action in place.actions() {
-                let keyed = place_keys(place).iter().any(|(_, name)| name.name() == action.name)
+                let keyed = default_runs(place).iter().any(|(_, name)| *name == action.name)
                     || place.chain()[1..].iter().any(|&p| place_keys(p).iter().any(|(_, n)| n.name() == action.name));
-                let left_unbound = unbound.iter().any(|cmd| cmd.name() == action.name);
+                let left_unbound = unbound.iter().any(|cmd| cmd.name() == action.name)
+                    || (place == Place::Preview && PlaceCmd::from_name(action.name).is_none());
                 assert!(keyed || left_unbound, "`{}` has no key in {}", action.name, place.name());
             }
         }

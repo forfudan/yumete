@@ -595,37 +595,50 @@ impl Editor {
         self.preview_vertical && self.layout_chosen() == crate::zong::Layout::Vertical
     }
 
-    /// **A key in a preview**: the scroll keys move the page, `:`, `C-w`,
-    /// `Space`, `C-o` and `C-i` go on to the command line, the key groups
-    /// and the jump list, and nothing else does anything — there is no text
-    /// here to move in or edit. `true` when the key was taken here.
+    /// **A key in a preview**, by the preview's table ([`Place::Preview`]):
+    /// the reader's `[keys.preview]` line for it, then a one-key
+    /// `[keys.normal]` line naming a command a preview has (`[keys]
+    /// inherit`), then the default (`places.rs`, `PREVIEW_KEYS`). A key
+    /// nothing names does nothing: there is no text here to move in or
+    /// edit, so the preset's `x` is not a preview's. `true` when the key is
+    /// taken here; `false` hands it on to Normal mode.
     ///
-    /// The keys are a PDF reader's under vim (as Zathura and
-    /// evil-collection have them): `gg` and `G` the top and bottom, `J` and
-    /// `K` a whole page, and a count before `G` or `gg` the page of that
-    /// number. `gn`, `gp`, `ga`, `gt` and `gT` go to another tab; under vim,
-    /// `ZZ` and `ZQ` close the window as anywhere.
+    /// A count before a key goes to the page's own commands (`5G`, the page
+    /// of that number). Under vim, `ZZ` and `ZQ` close the window as
+    /// anywhere.
+    ///
+    /// [`Place::Preview`]: yumete_cjk::actions::Place::Preview
     pub(super) fn on_page_window_key(&mut self, key: Key) -> bool {
+        // **A key a sequence is waiting for is the sequence's, not the
+        // page's.** `C-w` arrives with `pending` set (the caller asks that
+        // already, `on_key`); a flat line of the reader's (`"<space>ff"`)
+        // arrives with `alias_held` set instead, and read here its second
+        // key would be eaten, the line never finished and the held prefix
+        // left to eat the keys after it. `Esc` goes on too, and lets go of
+        // what is held.
+        if !self.alias_held.is_empty() {
+            return false;
+        }
         let mut count = self.page_count.take();
         if std::mem::take(&mut self.page_g) {
-            match key {
-                Key::Char('g') => self.page_steps.push(count.map_or(PageStep::Top, PageStep::Goto)),
-                // **The tabs from a preview**: helix's `gn`,
-                // `gp` and `ga`, and vim's `gt` and `gT`, whatever the keymap
-                // — a preview is a tab, and this is how a tab is left.
-                Key::Char('n' | 't') => self.next_buffer(),
-                Key::Char('p' | 'T') => self.prev_buffer(),
-                Key::Char('a') => self.goto_last_file(),
-                // A `g` that is nothing else here takes its count.
+            let after = match key {
+                Key::Char(c) => super::places::PREVIEW_G_KEYS.iter().find(|(k, _)| *k == c).map(|(_, name)| *name),
+                _ => None,
+            };
+            match after {
+                Some("goto_file_start") => self.page_steps.push(count.map_or(PageStep::Top, PageStep::Goto)),
+                Some("goto_next_buffer") => self.next_buffer(),
+                Some("goto_previous_buffer") => self.prev_buffer(),
+                Some("goto_last_accessed_file") => self.goto_last_file(),
                 _ => {}
             }
-            if matches!(key, Key::Char('g' | 'n' | 't' | 'p' | 'T' | 'a')) {
+            if after.is_some() {
                 return true;
             }
             // Any other key after a `g` is its own key, without the count.
             count = None;
         }
-        // **vim's way out**: `ZZ` is `:x` and `ZQ` is `:q!`,
+        // **vim's way out**: `ZZ` is `:x` and `ZQ` is `:quit!`,
         // which in a preview close its window, or leave from the last one.
         if std::mem::take(&mut self.page_z) {
             match key {
@@ -635,46 +648,104 @@ impl Editor {
             }
             return true;
         }
-        if key == Key::Char('Z') && self.vim_keymap() {
+        let place = yumete_cjk::actions::Place::Preview;
+        let typed = super::keys::key_internal(key);
+        let theirs = !self.expanding_alias
+            && !typed.is_empty()
+            && (self.place_bindings[place as usize].contains_key(&typed) || self.inherited(place, &typed).is_some());
+        if key == Key::Char('Z') && self.vim_keymap() && !theirs {
             self.page_z = true;
             return true;
         }
-        let times = count.unwrap_or(1) as i32;
-        let step = match key {
-            Key::Char(':') | Key::Ctrl('w') | Key::Char(' ') | Key::Ctrl('o') | Key::Ctrl('i') => return false,
-            // **Esc asks the system's input method aside again**, as it does
-            // in Normal mode in the text: the keys here are commands too.
-            Key::Esc => {
-                self.say_it_again = true;
-                return true;
-            }
-            Key::Char(digit @ '0'..='9') if digit != '0' || count.is_some() => {
+        // A count is the page's, typed before its command.
+        if let Key::Char(digit @ '0'..='9') = key {
+            if !theirs && (digit != '0' || count.is_some()) {
                 let digit = digit.to_digit(10).unwrap_or(0) as usize;
                 self.page_count = Some(count.unwrap_or(0).saturating_mul(10).saturating_add(digit));
                 return true;
             }
-            Key::Char('g') => {
+        }
+        let Some(commands) = self.commands_in(place, key) else {
+            return true;
+        };
+        // **A default that is a Normal command is Normal mode's key**: `:`,
+        // `Space`, `C-w`, `C-o` and `C-i` reach there what they reach in the
+        // text, the reader's lines that begin with them included. A line of
+        // theirs that names the default's own command is the default.
+        let default = super::places::PREVIEW_KEYS.iter().find(|(k, _)| *k == key).map(|(_, cmd)| vec![cmd.name().to_string()]);
+        let as_default = !theirs || default.as_ref() == Some(&commands);
+        if as_default && !commands.iter().all(|one| Self::a_page_command(one).is_some()) {
+            return false;
+        }
+        for one in &commands {
+            match Self::a_page_command(one) {
+                Some(cmd) => self.page_command(cmd, count),
+                None => self.run_binding(std::slice::from_ref(one)),
+            }
+            if self.quit_from_binding {
+                break;
+            }
+        }
+        true
+    }
+
+    /// The preview's own command a name is, if it is one: the scroll keys,
+    /// `g` and `Esc`. The rest of a preview's names are Normal commands.
+    fn a_page_command(name: &str) -> Option<yumete_cjk::actions::PlaceCmd> {
+        use yumete_cjk::actions::PlaceCmd::*;
+        yumete_cjk::actions::PlaceCmd::from_name(name).filter(|cmd| {
+            matches!(
+                cmd,
+                MoveLineDown
+                    | MoveLineUp
+                    | MoveCharLeft
+                    | MoveCharRight
+                    | HalfPageDown
+                    | HalfPageUp
+                    | PageDown
+                    | PageUp
+                    | NextPage
+                    | PrevPage
+                    | GotoFileStart
+                    | GotoLastLine
+                    | GotoMode
+                    | NormalMode
+            )
+        })
+    }
+
+    /// **One of the preview's own commands**, `count` times where it moves.
+    fn page_command(&mut self, cmd: yumete_cjk::actions::PlaceCmd, count: Option<usize>) {
+        use yumete_cjk::actions::PlaceCmd;
+        let times = count.unwrap_or(1) as i32;
+        let step = match cmd {
+            PlaceCmd::MoveLineDown => PageStep::Rows(times),
+            PlaceCmd::MoveLineUp => PageStep::Rows(-times),
+            PlaceCmd::MoveCharLeft => PageStep::Across(times),
+            PlaceCmd::MoveCharRight => PageStep::Across(-times),
+            PlaceCmd::HalfPageDown => PageStep::Halves(times),
+            PlaceCmd::HalfPageUp => PageStep::Halves(-times),
+            PlaceCmd::PageDown => PageStep::Screens(times),
+            PlaceCmd::PageUp => PageStep::Screens(-times),
+            PlaceCmd::NextPage => PageStep::Pages(times),
+            PlaceCmd::PrevPage => PageStep::Pages(-times),
+            PlaceCmd::GotoFileStart => count.map_or(PageStep::Top, PageStep::Goto),
+            PlaceCmd::GotoLastLine => count.map_or(PageStep::Bottom, PageStep::Goto),
+            // `g` waits for the key after it, the count kept for `gg`.
+            PlaceCmd::GotoMode => {
                 self.page_g = true;
                 self.page_count = count;
-                return true;
+                return;
             }
-            Key::Char('j') | Key::Down | Key::Enter => PageStep::Rows(times),
-            Key::Char('k') | Key::Up => PageStep::Rows(-times),
-            Key::Char('h') | Key::Left => PageStep::Across(times),
-            Key::Char('l') | Key::Right => PageStep::Across(-times),
-            Key::Ctrl('d') => PageStep::Halves(times),
-            Key::Ctrl('u') => PageStep::Halves(-times),
-            Key::Ctrl('f') | Key::PageDown => PageStep::Screens(times),
-            Key::Ctrl('b') | Key::PageUp => PageStep::Screens(-times),
-            Key::Char('J') => PageStep::Pages(times),
-            Key::Char('K') => PageStep::Pages(-times),
-            Key::Home => PageStep::Top,
-            Key::Char('G') => count.map_or(PageStep::Bottom, PageStep::Goto),
-            Key::End => PageStep::Bottom,
-            _ => return true,
+            // **Esc asks the system's input method aside again**, as it does
+            // in Normal mode in the text: the keys here are commands too.
+            PlaceCmd::NormalMode => {
+                self.say_it_again = true;
+                return;
+            }
+            _ => return,
         };
         self.page_steps.push(step);
-        true
     }
 }
 

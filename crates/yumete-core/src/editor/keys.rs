@@ -188,8 +188,9 @@ impl Editor {
             self.on_sidebar_key(key);
             return KeyOutcome::Continue;
         }
-        // **A page window holds no text**: its keys scroll the
-        // page, and only `:` and `C-w` go on.
+        // **A page window holds no text**: its keys are read by the
+        // preview's table (`[keys.preview]`, `page_preview.rs`), and only
+        // what that table hands on reaches Normal mode.
         if self.page_window_has_the_keys()
             && self.mode == Mode::Normal
             && self.pending == Pending::None

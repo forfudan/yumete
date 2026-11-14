@@ -411,6 +411,11 @@ const YOUR_OWN_KEYS: &[&str] = &["src/from/lazyvim.md"];
 /// Take it off this list in the commit that adds the row.
 const NOT_IN_A_MENU_YET: &[&str] = &[];
 
+/// **Keys of a preview window's own table** (`[keys.preview]`, its `g`
+/// group): the generated table lists them, and the text's `g` menu, which
+/// this test asks, has no `T`.
+const A_PREVIEWS_OWN: &[&str] = &["gT"];
+
 #[test]
 fn every_key_sequence_the_documents_print_is_one_the_editor_offers() {
     let mut asked = 0;
@@ -425,6 +430,7 @@ fn every_key_sequence_the_documents_print_is_one_the_editor_offers() {
             if NOT_A_SEQUENCE.contains(&quote.as_str())
                 || DISOWNED_KEYS.contains(&quote.as_str())
                 || NOT_IN_A_MENU_YET.contains(&quote.as_str())
+                || A_PREVIEWS_OWN.contains(&quote.as_str())
             {
                 continue;
             }

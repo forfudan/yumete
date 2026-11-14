@@ -2940,6 +2940,9 @@ pub struct KeyConfig {
     pub sidebar: HashMap<String, Vec<String>>,
     /// A panel box's lines (`[keys.field]`), read before `[keys.prompt]`.
     pub field: HashMap<String, Vec<String>>,
+    /// A preview window's lines (`[keys.preview]`): the page's scroll keys
+    /// and the commands that make sense where there is no text.
+    pub preview: HashMap<String, Vec<String>>,
     /// **The names of a reader's own groups**, by the keys that open them
     /// (`label = "My tools"` in `[keys.normal.space.x]` → `"<space>x"`):
     /// the title of that group's menu. helix cannot name one.
@@ -2966,7 +2969,7 @@ pub struct KeyConfig {
     pub flavor: Flavor,
     /// **The reader's own keys follow them into the places** (`[keys]
     /// inherit`, on at the factory): a `[keys.normal]` line of
-    /// one key naming one command a sidebar has works in the sidebar, and a
+    /// one key naming one command a sidebar or a preview has works there, and a
     /// `[keys.insert]` one in a prompt and a picker. The place's own table
     /// wins, and the defaults never come over (Emacs's remap by command).
     pub inherit: bool,
@@ -2983,6 +2986,7 @@ impl Default for KeyConfig {
             picker: HashMap::new(),
             sidebar: HashMap::new(),
             field: HashMap::new(),
+            preview: HashMap::new(),
             labels: HashMap::new(),
             shapes: yumete_cjk::KeyShapes::default(),
             helix: KeymapKeys::default(),
@@ -3717,6 +3721,7 @@ impl Config {
                                 || !parsed.keys.picker.is_empty()
                                 || !parsed.keys.sidebar.is_empty()
                                 || !parsed.keys.field.is_empty()
+                                || !parsed.keys.preview.is_empty()
                                 || !parsed.keys.helix.is_empty()
                                 || !parsed.keys.vim.is_empty();
                             if bound {
@@ -3729,6 +3734,7 @@ impl Config {
                                 parsed.keys.picker.clear();
                                 parsed.keys.sidebar.clear();
                                 parsed.keys.field.clear();
+                                parsed.keys.preview.clear();
                                 // One keymap's own lines are key bindings too.
                                 parsed.keys.helix = RawKeymapKeys::default();
                                 parsed.keys.vim = RawKeymapKeys::default();
@@ -4879,6 +4885,8 @@ struct RawKeys {
     sidebar: toml::Table,
     #[serde(default)]
     field: toml::Table,
+    #[serde(default)]
+    preview: toml::Table,
     /// `[keys.helix.*]` and `[keys.vim.*]`: one keymap's own lines.
     #[serde(default)]
     helix: RawKeymapKeys,
@@ -5293,6 +5301,7 @@ impl RawConfig {
         merge_key_tables(&mut self.keys.picker, other.keys.picker);
         merge_key_tables(&mut self.keys.sidebar, other.keys.sidebar);
         merge_key_tables(&mut self.keys.field, other.keys.field);
+        merge_key_tables(&mut self.keys.preview, other.keys.preview);
         for (mine, theirs) in [(&mut self.keys.helix, other.keys.helix), (&mut self.keys.vim, other.keys.vim)] {
             merge_key_tables(&mut mine.normal, theirs.normal);
             merge_key_tables(&mut mine.select, theirs.select);
@@ -5951,6 +5960,7 @@ impl RawConfig {
         config.keys.picker = read_place_table(Place::Picker, &self.keys.picker, problems);
         config.keys.sidebar = read_place_table(Place::Sidebar, &self.keys.sidebar, problems);
         config.keys.field = read_place_table(Place::Field, &self.keys.field, problems);
+        config.keys.preview = read_place_table(Place::Preview, &self.keys.preview, problems);
         for (word, raw, out) in [
             ("helix", &self.keys.helix, &mut config.keys.helix),
             ("vim", &self.keys.vim, &mut config.keys.vim),
@@ -5982,10 +5992,10 @@ impl RawConfig {
         }
         for (name, _) in &self.keys.strays {
             problems.push(said(
-                format!("[keys.{name}]：沒有這張表，跳過了。有 normal、select、insert、table、prompt、picker、sidebar、field"),
+                format!("[keys.{name}]：沒有這張表，跳過了。有 normal、select、insert、table、prompt、picker、sidebar、field、preview"),
                 format!(
                     "[keys.{name}] is not a table yumete reads, so it was skipped; \
-                     the tables are normal, select, insert, table, prompt, picker, sidebar and field"
+                     the tables are normal, select, insert, table, prompt, picker, sidebar, field and preview"
                 ),
             ));
         }
@@ -7540,6 +7550,11 @@ mod key_tables {
             "C-s" = ":write"
             gg = "goto_file_start"
             z = { z = "no_op" }
+
+            [keys.preview]
+            J = "next_page"
+            "C-h" = "jump_view_left"
+            x = "delete_selection"
             "#,
         );
         let get = |table: &HashMap<String, Vec<String>>, k: &str| table.get(k).cloned().unwrap_or_default();
@@ -7549,6 +7564,9 @@ mod key_tables {
         assert_eq!(get(&c.keys.picker, "C-k"), ["prev_entry", "prev_entry"]);
         assert_eq!(get(&c.keys.sidebar, "n"), ["move_line_down"]);
         assert_eq!(get(&c.keys.sidebar, "C-s"), [":write"]);
+        assert_eq!(get(&c.keys.preview, "J"), ["next_page"]);
+        assert_eq!(get(&c.keys.preview, "C-h"), ["jump_view_left"]);
+        assert!(!c.keys.preview.contains_key("x"), "a page has no text to delete");
         assert!(c.keys.inherit, "the reader's keys follow them in at the factory");
         assert!(!Config::from_toml_saying("[keys]\ninherit = false\n").0.keys.inherit);
         assert!(!c.keys.picker.contains_key("C-s"), "a Normal command is not a picker's");
@@ -7556,7 +7574,8 @@ mod key_tables {
         assert!(problems.iter().any(|p| p.contains("save_file")), "{problems:?}");
         assert!(problems.iter().any(|p| p.contains("[keys.sidebar] gg")), "{problems:?}");
         assert!(problems.iter().any(|p| p.contains("[keys.sidebar] z")), "{problems:?}");
-        assert_eq!(problems.len(), 3, "{problems:?}");
+        assert!(problems.iter().any(|p| p.contains("delete_selection")), "{problems:?}");
+        assert_eq!(problems.len(), 4, "{problems:?}");
     }
 
     /// A project's `[keys.normal.space]` adds to the global one's, as

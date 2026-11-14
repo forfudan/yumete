@@ -38419,6 +38419,191 @@ fn a_preview_is_a_tab_shown_in_a_window() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// Lines for `[keys.normal]` or a place's table, written as the config writes
+/// them.
+fn key_lines(pairs: &[(&str, &str)]) -> HashMap<String, String> {
+    pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+}
+
+/// **A one-key line of the reader's naming a command a preview has follows
+/// them into it** (`[keys] inherit`, as into a sidebar): `C-h` to
+/// `jump_view_left` leaves the preview's window, a `<tab>` to
+/// `goto_next_buffer` leaves its tab, and a flat line of theirs
+/// (`<space>j`) finishes instead of the page eating its second key. The
+/// keys no line of theirs names still scroll.
+#[test]
+fn a_key_the_reader_bound_is_theirs_in_a_page_window() {
+    let (mut ed, dir) = a_typst_book("reader-keys");
+    let main = dir.join("main.typ");
+    let text = ed.live_window();
+    let page = ed.open_page_window(main.clone()).unwrap();
+    ed.set_key_aliases(key_lines(&[("C-h", "jump_view_left"), ("<tab>", "goto_next_buffer"), (" j", "goto_next_buffer")]));
+    press(&mut ed, " ww");
+    assert_eq!(ed.live_window(), page);
+    assert!(ed.page_window_has_the_keys());
+    // **`C-h` is the reader's**, so it leaves, and scrolls nothing.
+    ed.on_key(Key::Ctrl('h'));
+    assert_eq!(ed.live_window(), text, "C-h went to the window on the left");
+    assert!(!ed.page_window_has_the_keys());
+    assert_eq!(ed.take_page_steps(), Vec::new(), "a key of theirs is no scroll");
+    // **`<tab>` is the reader's**: it shows the next tab in the preview's
+    // window, the file the preview typesets.
+    press(&mut ed, " ww");
+    assert!(ed.page_window_has_the_keys());
+    ed.on_key(Key::Tab);
+    assert!(!ed.page_window_has_the_keys(), "Tab left the preview's tab");
+    assert_eq!(ed.current_buffer().path(), Some(main.as_path()));
+    // **A flat line of theirs** (`<space>j`): the second key is the line's,
+    // not the page's.
+    press(&mut ed, "gn");
+    assert!(ed.page_window_has_the_keys(), "gn shows the preview again");
+    press(&mut ed, " j");
+    assert!(!ed.page_window_has_the_keys(), "<space>j ran: the next tab");
+    assert_eq!(ed.take_page_steps(), Vec::new(), "and the `j` scrolled nothing");
+    // The page keeps the keys no line of theirs names.
+    press(&mut ed, "gn");
+    press(&mut ed, "kgg");
+    assert_eq!(ed.take_page_steps(), vec![PageStep::Rows(-1), PageStep::Top]);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **A line of more than one key stays in the text**: binding `gh` leaves
+/// the preview's `g` alone, so `gg` still goes to the top and `gn` to the
+/// next tab.
+#[test]
+fn a_two_key_line_leaves_the_pages_g_alone() {
+    let (mut ed, dir) = a_typst_book("gh");
+    let main = dir.join("main.typ");
+    ed.open_page_window(main.clone()).unwrap();
+    ed.set_key_aliases(key_lines(&[("gh", "goto_line_start")]));
+    press(&mut ed, " ww");
+    assert!(ed.page_window_has_the_keys());
+    press(&mut ed, "G");
+    press(&mut ed, "gg");
+    press(&mut ed, "3gg");
+    assert_eq!(ed.take_page_steps(), vec![PageStep::Bottom, PageStep::Top, PageStep::Goto(3)]);
+    press(&mut ed, "gn");
+    assert!(!ed.page_window_has_the_keys(), "gn went to the next tab");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **helix's names for the caret's moves mean the page's own scroll**:
+/// `j = "move_visual_line_down"` still scrolls a row, a Colemak `n` bound to
+/// it scrolls too, and `C-d`'s `page_cursor_half_down` is the page's half
+/// page.
+#[test]
+fn the_texts_names_scroll_a_preview() {
+    let (mut ed, dir) = a_typst_book("visual");
+    let main = dir.join("main.typ");
+    ed.open_page_window(main.clone()).unwrap();
+    ed.set_key_aliases(key_lines(&[
+        ("j", "move_visual_line_down"),
+        ("n", "move_visual_line_down"),
+        ("e", "move_visual_line_up"),
+        ("m", "page_cursor_half_down"),
+    ]));
+    press(&mut ed, " ww");
+    assert!(ed.page_window_has_the_keys());
+    press(&mut ed, "jn2em");
+    assert_eq!(
+        ed.take_page_steps(),
+        vec![PageStep::Rows(1), PageStep::Rows(1), PageStep::Rows(-2), PageStep::Halves(1)]
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **A `[keys.normal]` line wins over the preview's default, and
+/// `[keys.preview]` over both**: `J = "goto_next_buffer"` switches tab in a
+/// preview too, and `[keys.preview] J = "next_page"` gives the page its `J`
+/// back. `[keys] inherit = false` keeps the text's lines out.
+#[test]
+fn the_previews_own_table_comes_first() {
+    let (mut ed, dir) = a_typst_book("own-table");
+    let main = dir.join("main.typ");
+    let text = ed.live_window();
+    let page = ed.open_page_window(main.clone()).unwrap();
+    ed.set_key_aliases(key_lines(&[("J", "goto_next_buffer"), ("C-h", "jump_view_left")]));
+    press(&mut ed, " ww");
+    press(&mut ed, "J");
+    assert!(!ed.page_window_has_the_keys(), "J went to the next tab");
+    assert_eq!(ed.take_page_steps(), Vec::new());
+    press(&mut ed, "gn");
+    assert!(ed.page_window_has_the_keys());
+    ed.set_place_bindings(yumete_cjk::actions::Place::Preview, key_lines(&[("J", "next_page"), ("n", "move_line_down"), ("C-l", "jump_view_right")]));
+    press(&mut ed, "J2n");
+    assert_eq!(ed.take_page_steps(), vec![PageStep::Pages(1), PageStep::Rows(2)], "the preview's own lines");
+    assert!(ed.page_window_has_the_keys());
+    // **Off**: the text's `C-h` is not the preview's any more, and does
+    // nothing here.
+    ed.set_place_inheritance(false);
+    ed.on_key(Key::Ctrl('h'));
+    assert_eq!(ed.live_window(), page, "C-h did not leave");
+    assert!(ed.page_window_has_the_keys());
+    assert_eq!(ed.take_page_steps(), Vec::new());
+    // A line of the preview's own still holds.
+    ed.set_place_bindings(yumete_cjk::actions::Place::Preview, key_lines(&[("C-h", "jump_view_left")]));
+    ed.on_key(Key::Ctrl('h'));
+    assert_eq!(ed.live_window(), text, "[keys.preview] C-h left");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **Esc lets go of a half-typed line in a page window**: the page does not
+/// answer the Esc itself while a line of the reader's is held, and the line
+/// can be typed again from its first key.
+#[test]
+fn esc_lets_go_of_a_half_typed_line_in_a_page_window() {
+    let (mut ed, dir) = a_typst_book("let-go");
+    let main = dir.join("main.typ");
+    ed.open_page_window(main.clone()).unwrap();
+    ed.set_key_aliases(key_lines(&[(" zq", ":preview-fit page")]));
+    press(&mut ed, " ww");
+    assert!(ed.page_window_has_the_keys());
+    ed.on_key(Key::Char(' '));
+    assert!(ed.pending_keys().is_some(), "the line is being typed");
+    ed.on_key(Key::Esc);
+    assert!(ed.pending_keys().is_none(), "Esc let go of what was held");
+    // The whole line again, from its first key.
+    press(&mut ed, " zq");
+    assert_eq!(ed.preview_fit(), PreviewFit::Page, "the line ran");
+    assert_eq!(ed.take_page_steps(), Vec::new(), "and the page did not take its keys");
+    assert_eq!(ed.mode(), Mode::Normal);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **The preset's keys are not the page's**: under the vim keymap `x` is the
+/// preset's `vim_delete_char_forward`, and a page holds no text for it to
+/// cut, so nothing in a preview's table names it.
+#[test]
+fn the_presets_keys_are_not_the_pages() {
+    let (mut ed, dir) = a_typst_book("preset");
+    let main = dir.join("main.typ");
+    ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
+    ed.open_page_window(main.clone()).unwrap();
+    press(&mut ed, " ww");
+    assert!(ed.page_window_has_the_keys());
+    let before = ed.text_of(&main).map(|(_, _, text)| text);
+    press(&mut ed, "x");
+    assert!(ed.page_window_has_the_keys());
+    assert_eq!(ed.text_of(&main).map(|(_, _, text)| text), before, "the vim `x` cut nothing");
+    assert_eq!(ed.take_page_steps(), Vec::new());
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **`:keymap-actions` lists a preview's keys as they are**: the defaults,
+/// the runs its `g` begins, and a line of the reader's.
+#[test]
+fn a_previews_keys_are_listed() {
+    let mut ed = Editor::new();
+    ed.set_place_bindings(yumete_cjk::actions::Place::Preview, key_lines(&[("n", "move_line_down")]));
+    let keys = ed.keys_in_place(yumete_cjk::actions::Place::Preview, "move_line_down");
+    assert!(keys.contains(&"j".to_string()) && keys.contains(&"n".to_string()), "{keys:?}");
+    assert!(ed.keys_in_place(yumete_cjk::actions::Place::Preview, "goto_file_start").contains(&"gg".to_string()));
+    assert!(ed.keys_in_place(yumete_cjk::actions::Place::Preview, "goto_next_buffer").contains(&"gn".to_string()));
+    ed.set_place_bindings(yumete_cjk::actions::Place::Preview, key_lines(&[("g", "goto_file_start")]));
+    let keys = ed.keys_in_place(yumete_cjk::actions::Place::Preview, "goto_next_buffer");
+    assert!(!keys.contains(&"gn".to_string()), "`g` bound to something else: no `gn` {keys:?}");
+}
+
 /// **Nothing in a preview is text**: no Insert, no edit, no save, no draft,
 /// no file for a language server, nothing for `:wa` or `:q` to stop on, and
 /// `:readonly off` does not unlock it.

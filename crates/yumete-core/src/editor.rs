@@ -2647,9 +2647,9 @@ pub struct Editor {
     /// keys of one held while the next key decides (`j` of `jk`).
     insert_aliases: HashMap<String, Vec<String>>,
     insert_held: String,
-    /// A prompt's, a picker's and a sidebar's bindings (`[keys.prompt]`…),
+    /// A prompt's, a picker's, a sidebar's, a field's and a preview's bindings (`[keys.prompt]`…),
     /// by `yumete_cjk::actions::Place`, internal spelling.
-    place_bindings: [HashMap<String, Vec<String>>; 4],
+    place_bindings: [HashMap<String, Vec<String>>; 5],
     /// `[keys] inherit`: the reader's Normal and Insert lines follow them
     /// into the sidebar and the prompts (see `places.rs`).
     place_inherits: bool,

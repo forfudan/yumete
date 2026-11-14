@@ -1588,6 +1588,72 @@ zhs = "上一个面板"
 en = "previous panel"
 
 [[message]]
+# 命令說明：預覽窗口裏的 move_char_left（h），頁面往左捲一列（草稿）
+key = "action.preview-across-left"
+zhs = "页面向左滚一列"
+en = "scroll the page a column left"
+
+[[message]]
+# 命令說明：預覽窗口裏的 move_char_right（l），頁面往右捲一列（草稿）
+key = "action.preview-across-right"
+zhs = "页面向右滚一列"
+en = "scroll the page a column right"
+
+[[message]]
+# 命令說明：預覽窗口裏的 goto_file_start（gg），到第一頁，前面有數字就到那一頁（草稿）
+key = "action.preview-first-page"
+zhs = "到开头，带数字到那一页"
+en = "the top, or the page of the count"
+
+[[message]]
+# 命令說明：預覽窗口裏的 goto_mode（g），等下一個鍵：g 到開頭，n、p、a 換標籤頁（草稿）
+key = "action.preview-goto-mode"
+zhs = "g 组：开头、换标签页"
+en = "g group: the top, another tab"
+
+[[message]]
+# 命令說明：預覽窗口裏的 goto_last_line（G），到最後，前面有數字就到那一頁（草稿）
+key = "action.preview-last-page"
+zhs = "到末尾，带数字到那一页"
+en = "the bottom, or the page of the count"
+
+[[message]]
+# 命令說明：預覽窗口裏的 next_page（J），到下一頁紙（草稿）
+key = "action.preview-next-page"
+zhs = "下一页"
+en = "the next page"
+
+[[message]]
+# 命令說明：預覽窗口裏的 move_line_down（j），頁面往下捲一行（草稿）
+key = "action.preview-next-row"
+zhs = "页面向下滚一行"
+en = "scroll the page a row down"
+
+[[message]]
+# 命令說明：預覽窗口裏的 prev_page（K），到上一頁紙（草稿）
+key = "action.preview-prev-page"
+zhs = "上一页"
+en = "the previous page"
+
+[[message]]
+# 命令說明：預覽窗口裏的 move_line_up（k），頁面往上捲一行（草稿）
+key = "action.preview-prev-row"
+zhs = "页面向上滚一行"
+en = "scroll the page a row up"
+
+[[message]]
+# 命令說明：預覽窗口裏的 page_down（C-f、PageDown），往下翻一屏（草稿）
+key = "action.preview-screen-down"
+zhs = "向下翻一屏"
+en = "a screen down"
+
+[[message]]
+# 命令說明：預覽窗口裏的 page_up（C-b、PageUp），往上翻一屏（草稿）
+key = "action.preview-screen-up"
+zhs = "向上翻一屏"
+en = "a screen up"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.quit"
 zhs = "关闭此区；最后一个窗口则退出编辑器"
