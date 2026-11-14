@@ -40537,6 +40537,8 @@ fn the_outline_follows_an_edited_heading_without_being_focused() {
     ed.on_key(Key::Enter);
     assert_eq!(ed.panel_focus(), None, "the keys are back in the text");
     assert_eq!(outline_titles(&ed), ["Alpha", "Beta"]);
+    // The fast path, however long this machine took for the first build.
+    ed.outline_cost = std::time::Duration::ZERO;
     press(&mut ed, "A changed");
     assert_eq!(outline_titles(&ed), ["Alpha changed", "Beta"], "typing in Insert renames the row");
     ed.on_key(Key::Esc);
@@ -40563,6 +40565,7 @@ fn the_outline_follows_typst_headings() {
     ed.execute(":sidebar-outline").unwrap();
     ed.on_key(Key::Enter);
     assert_eq!(outline_titles(&ed), ["One"]);
+    ed.outline_cost = std::time::Duration::ZERO;
     press(&mut ed, "Go== Two");
     ed.on_key(Key::Esc);
     assert_eq!(outline_titles(&ed), ["One", "Two"]);
@@ -40655,6 +40658,9 @@ fn the_outline_follows_a_reload() {
     ed.on_key(Key::Enter);
     assert_eq!(outline_titles(&ed), ["Old"]);
     std::fs::write(&file, "# New\n\ntext\n\n## More\n").unwrap();
+    // The fast path, whatever this machine took for the first build: a slow
+    // runner would otherwise wait for the pause, which a test does not take.
+    ed.outline_cost = std::time::Duration::ZERO;
     press(&mut ed, ":reload");
     ed.on_key(Key::Enter);
     assert_eq!(outline_titles(&ed), ["New", "More"], "{}", ed.status());
