@@ -40453,6 +40453,37 @@ fn a_grid_in_one_window_does_not_take_the_other() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// **Going back to a `.csv` window from deep in a long file** asks whether
+/// the csv is a grid with the csv window's own place, not with the long
+/// file's offset: that one is past the csv's end and the rope panics.
+#[test]
+fn back_to_a_csv_window_from_deep_in_a_long_file() {
+    let dir = tmp().join(format!("yumete-grid-deep-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let long = dir.join("long.typ");
+    let list = dir.join("list.csv");
+    let text: String = (0..400).map(|n| format!("Line {n} of a long chapter, plain words.\n")).collect();
+    std::fs::write(&long, &text).unwrap();
+    std::fs::write(&list, "name,age\nann,3\nbob,4\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&long).unwrap();
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('v'));
+    ed.execute(&format!(":e {}", list.display())).unwrap();
+    assert!(ed.grid_has_the_pane(), "the csv window is a grid: {}", ed.status());
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
+    assert_eq!(ed.current_buffer().path(), Some(long.as_path()));
+    ed.on_key(Key::Char('G'));
+    assert!(ed.sel.head() > 1000, "deep in the long file");
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
+    assert_eq!(ed.current_buffer().path(), Some(list.as_path()));
+    assert!(ed.grid_has_the_pane(), "the csv window is a grid again: {}", ed.status());
+    assert!(ed.sel.head() <= ed.current_buffer().rope().len_chars());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// **`:genda-top-working` counts what `:word-discover-working` reads**: the
 /// text files under the working directory, hidden and ignored ones left out,
 /// and opens the page on the most frequent 漢字.

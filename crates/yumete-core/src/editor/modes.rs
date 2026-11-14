@@ -642,7 +642,8 @@ impl Editor {
 
     /// The 0-based line the cursor is on.
     pub fn cursor_line(&self) -> usize {
-        self.current_buffer().rope().char_to_line(self.caret())
+        let rope = self.current_buffer().rope();
+        rope.char_to_line(self.caret().min(rope.len_chars()))
     }
 
     /// The 0-based **character** column the cursor is at within its line.

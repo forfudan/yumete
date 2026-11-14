@@ -1359,20 +1359,14 @@ impl Editor {
         // been edited while this one was not looking — and the file it names
         // may have been closed, in which case there is nowhere to go and
         // saying so is the whole of the right answer.
-        match self.buffer_with(pane.buffer) {
-            // Through the same door `gn` uses: whether *this* file is a grid,
-            // and every memo about the one being left, are re-asked there. Set
-            // directly, the schema of a 拆分表 followed you into a chapter and
-            // `o` wrote 「,,」 into your novel.
+        let moves = match self.buffer_with(pane.buffer) {
             Some(index) if index != self.current => {
                 let at = self.sel.head();
                 self.buffers[self.current].save_cursor(at);
                 self.current = index;
-                self.forget_the_document();
-                // The buffer list and the outline are about this file now.
-                self.refresh_sidebar();
+                true
             }
-            Some(_) => {}
+            Some(_) => false,
             None => {
                 self.windows.close(window);
                 for buffer in &mut self.buffers {
@@ -1381,15 +1375,31 @@ impl Editor {
                 self.status = say!("pane.file-was-closed");
                 return false;
             }
-        }
+        };
+        // **The pane's place goes in before anything asks about the file.**
+        // The selection still holds offsets into the file being left until
+        // this, and the questions below (is this file a grid, which rows are
+        // its table) read the caret: a place deep in a long chapter asked of
+        // a short `.csv` is past its end, and the rope panics. A pane keeps
+        // one range, so the other selections stay with the window left.
         let len = self.current_buffer().rope().len_chars();
         pane.cursor = pane.cursor.min(len);
         pane.anchor = pane.anchor.min(len);
+        self.sel.keep_primary();
         self.sel.set_head(pane.cursor);
         self.sel.set_anchor(pane.anchor);
         self.sel.set_goal(pane.goal_column);
         self.sel.set_goal_slot(pane.goal_slot);
         self.extend = pane.extend;
+        // Through the same door `gn` uses: whether *this* file is a grid,
+        // and every memo about the one being left, are re-asked there. Set
+        // directly, the schema of a 拆分表 followed you into a chapter and
+        // `o` wrote 「,,」 into your novel.
+        if moves {
+            self.forget_the_document();
+            // The buffer list and the outline are about this file now.
+            self.refresh_sidebar();
+        }
         // Each window walks its own jump list.
         let mut here = here;
         here.jumps = std::mem::replace(&mut self.jumps, std::mem::take(&mut pane.jumps));

@@ -39,6 +39,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Fixed
 
+- **Moving into a window that shows a `.csv` from deep in a longer file, or resuming such a session with `ye -r`, no longer crashes.**
 - **The outline sidebar follows the text as you write**: a heading renamed, added, deleted, undone or reloaded from disk shows at once, without saving or moving into the sidebar. In a long document it updates as soon as you pause typing. The buffer list's `+` follows edits and saves the same way.
 - **A `.csv` in one window no longer draws the other window's prose as a table.**
 - **On Windows, `:decimo`, `:files-yazi` and any `:!` line with quotes in it reach the program as typed**: cmd.exe was handed the line quoted a second time, so `decimo "1+1"` arrived with the quote marks inside its argument. A program that is not installed now says so there too.
