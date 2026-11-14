@@ -1258,7 +1258,7 @@ impl Editor {
     }
 
     /// The smallest window a split may make.
-    pub(super) const WINDOW_MIN_ROWS: u16 = 2;
+    pub(super) const WINDOW_MIN_ROWS: u16 = 3;
     pub(super) const WINDOW_MIN_COLUMNS: u16 = 8;
 
     /// The text area the front end laid the windows out in this frame.

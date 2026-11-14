@@ -148,10 +148,13 @@ impl Editor {
         // Warning: **匹配只有一個字的時候兩種問法一樣**——那時光標就在開頭上，所以
         // 拿一個字母去試看不出這個分別。
         let found = if forward {
-            search_forward(rope, &look, (self.sel.head() + 1).min(len), within)
+            search_forward(rope, &look, (self.sel.head() + 1).min(len), within.clone())
         } else {
-            search_backward(rope, &look, self.sel.anchor().min(self.sel.head()), within)
+            search_backward(rope, &look, self.sel.anchor().min(self.sel.head()), within.clone())
         };
+        let counted = found.map(|(pos, _)| super::count_matches(rope, &look, within, pos));
+        let id = self.current_buffer().id();
+        let revision = self.current_buffer().revision();
 
         match found {
             // The match itself becomes the selection. Every motion leaves one —
@@ -163,6 +166,14 @@ impl Editor {
                 // covers the cursor's own grapheme.
                 let end = end.min(len);
                 let head = motion::prev_grapheme(rope, end).max(pos);
+                self.search_stand = counted.map(|(nth, total)| super::SearchStand {
+                    buffer: id,
+                    revision,
+                    from: pos,
+                    to: end.max(pos + 1),
+                    nth,
+                    total,
+                });
                 // **選區模式裏搜索是延伸，不是跳走**（對齊 helix）。
                 // helix 的 select 下 `n`/`N` 綁的是 `extend_search_next`/`_prev`
                 // （`default.rs:359-360`），而 `/` 的 `search` 在 select 下走
@@ -216,9 +227,26 @@ impl Editor {
             // 己的旗標，不另外實現一套）；面板那一路要是把穿好衣服的那一整條存進
             // `last_search`，找不到的時候狀態欄就寫着「找不到：(?i)zhongguo」，而那
             // 四個字符不是打的人寫的。
-            None if scoped => self.status = say!("find.not-in-table", as_typed(&pattern)),
-            None => self.status = say!("find.not-found", as_typed(&pattern)),
+            None if scoped => {
+                self.search_stand = None;
+                self.status = say!("find.not-in-table", as_typed(&pattern));
+            }
+            None => {
+                self.search_stand = None;
+                self.status = say!("find.not-found", as_typed(&pattern));
+            }
         }
+    }
+
+    /// **`[3/17]`: which match the caret stands in, and of how many** — vim's
+    /// `searchcount()`, shown after `/`, `n` and `N`. Gone once the caret
+    /// leaves the match or the text changes, so it never counts a stale list.
+    pub fn search_index(&self) -> Option<(usize, usize)> {
+        let stand = self.search_stand?;
+        let buffer = self.current_buffer();
+        let here = self.caret();
+        let fresh = stand.buffer == buffer.id() && stand.revision == buffer.revision();
+        (fresh && (stand.from..stand.to).contains(&here)).then_some((stand.nth, stand.total))
     }
 
     // ---- Substitute (Feature #15) -----------------------------------------

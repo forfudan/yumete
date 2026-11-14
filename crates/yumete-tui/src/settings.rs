@@ -259,6 +259,10 @@ pub fn complaints(config: &Config) -> Vec<String> {
     if !word.is_empty() && !matches!(word, "text" | "all" | "off") {
         said.push(format!("[editor] status_count = \"{word}\" 只能是 text、all、off"));
     }
+    let word = config.editor.inactive_status.trim();
+    if !word.is_empty() && !matches!(word, "line" | "rule") {
+        said.push(format!("[editor] inactive_status = \"{word}\" 只能是 line、rule"));
+    }
     let word = config.editor.preview_fit.trim();
     if !word.is_empty() && yumete_core::editor::PreviewFit::parse(word).is_none() {
         said.push(format!("[editor] preview_fit = \"{word}\" 只能是 width、page"));

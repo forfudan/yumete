@@ -187,8 +187,8 @@ en = "character info"
 [[message]]
 # 設置：字的码位——一句話
 key = "settings.editor.char-info.hint"
-zhs = "在状态栏右端显示光标处字符的 Unicode 码位和区块名"
-en = "show the code point and Unicode block of the character under the cursor at the right of the status line"
+zhs = "在状态栏右端显示光标处字符的 Unicode 码位"
+en = "show the code point of the character under the cursor at the right of the status line"
 
 [[message]]
 # 設置：代码上色
@@ -297,6 +297,18 @@ en = "folds by heading"
 key = "settings.editor.heading-folds.hint"
 zhs = "开：Markdown 和 Typst 每个标题下的一节可以折叠，初始全部展开。关：同 vim，只有 zf 建的折叠。"
 en = "On: each Markdown or Typst heading folds its section; all start open. Off: vim's, only folds made with zf."
+
+[[message]]
+# 設置：没有焦点的窗口怎么画状态栏（草稿）
+key = "settings.editor.inactive-status"
+zhs = "非焦点窗口的状态栏"
+en = "status line of other windows"
+
+[[message]]
+# 設置：没有焦点的窗口怎么画状态栏——一句話（草稿）
+key = "settings.editor.inactive-status.hint"
+zhs = "没有焦点的窗口：整条变淡的状态栏，或一条只写文件名的细线"
+en = "a window without the keys: a faded status line, or a thin rule with only the file name"
 
 [[message]]
 # 設置：首行縮進
@@ -1629,6 +1641,18 @@ en = "editor"
 key = "settings.pick.ground.terminal"
 zhs = "终端背景"
 en = "terminal"
+
+[[message]]
+# 設置：非焦点窗口状态栏 line（草稿）
+key = "settings.pick.inactive-status.line"
+zhs = "变淡的整条"
+en = "faded line"
+
+[[message]]
+# 設置：非焦点窗口状态栏 rule（草稿）
+key = "settings.pick.inactive-status.rule"
+zhs = "细线"
+en = "thin rule"
 
 [[message]]
 # 設置：段首记号——换颜色

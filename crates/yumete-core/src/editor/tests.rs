@@ -34517,7 +34517,7 @@ fn a_blank_window_opens_below_or_beside_on_a_buffer_of_its_own() {
     vim.on_key(Key::Ctrl('n'));
     assert_eq!(vim.windows().len(), 2, "vim: C-w C-n opens it at once");
     let (placed, _) = vim.windows().place(crate::window::Area::new(0, 0, 80, 21));
-    assert_eq!(placed[1].area.y, 11, "below");
+    assert_eq!(placed[1].area.y, 10, "below, the upper window's status line the boundary");
 }
 
 /// `:line-numbers`: a word sets how the gutter counts for the session, bare

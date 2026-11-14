@@ -2427,6 +2427,17 @@ impl Offering {
 /// Where a shell line's word starts and what it may become.
 type ShellChoices = Option<(usize, Vec<String>)>;
 
+/// Where a search landed, for the status line's `[3/17]`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct SearchStand {
+    pub(crate) buffer: u64,
+    pub(crate) revision: u64,
+    pub(crate) from: usize,
+    pub(crate) to: usize,
+    pub(crate) nth: usize,
+    pub(crate) total: usize,
+}
+
 /// The editor: a non-empty list of open buffers and the index of the active one.
 pub struct Editor {
     buffers: Vec<Buffer>,
@@ -2625,6 +2636,11 @@ pub struct Editor {
     /// The last search pattern and direction (Feature #14).
     last_search: String,
     search_forward: bool,
+    /// **Which match `/`, `n` or `N` landed on, and of how many** (vim's
+    /// `searchcount()`): the buffer and its revision, the match's span, its
+    /// number and the total. The status line shows it while the caret is
+    /// still inside that match in that text.
+    search_stand: Option<SearchStand>,
     /// Normal-mode bindings from the config (Feature #23): a run of keys,
     /// in the internal spelling, and the commands it runs.
     key_aliases: HashMap<String, Vec<String>>,
@@ -4439,6 +4455,7 @@ impl Editor {
             page_columns: 10,
             last_search: String::new(),
             search_forward: true,
+            search_stand: None,
             key_aliases: HashMap::new(),
             user_aliases: HashMap::new(),
             user_select: HashMap::new(),
@@ -5567,6 +5584,37 @@ fn search_forward(
     scan(rope, look, start_line, within.end, from).or_else(|| {
         scan(rope, look, within.start, start_line + 1, rope.line_to_char(within.start))
     })
+}
+
+/// **Which match starts at `at`, and how many there are** within `lines`:
+/// `(nth, total)`, `nth` counted from one. One pass over the lines, the
+/// same per-line spans `/` and `n` walk.
+fn count_matches(rope: &Rope, look: &find::Look, within: std::ops::Range<usize>, at: usize) -> (usize, usize) {
+    let mut before = 0usize;
+    let mut total = 0usize;
+    if within.start >= within.end {
+        return (1, 1);
+    }
+    let mut start = rope.line_to_char(within.start);
+    for slice in rope.lines_at(within.start).take(within.end - within.start) {
+        let owned;
+        let text: &str = match slice.as_str() {
+            Some(text) => text,
+            None => {
+                owned = slice.to_string();
+                &owned
+            }
+        };
+        let (text, _) = line_body(text);
+        for (a, _) in look.spans(text) {
+            total += 1;
+            if start + a < at {
+                before += 1;
+            }
+        }
+        start += slice.len_chars();
+    }
+    ((before + 1).min(total.max(1)), total.max(1))
 }
 
 /// The first match at or after `from` within `lines`, searching forward, as a

@@ -127,6 +127,19 @@ impl Editor {
         self.sel.is_plural()
     }
 
+    /// **`2/5`: the primary's number and how many selections there are**,
+    /// as helix's status line writes it — `None` with only one, where the
+    /// count would say nothing.
+    pub fn selection_counter(&self) -> Option<(usize, usize)> {
+        self.sel.is_plural().then(|| (self.sel.primary_index() + 1, self.sel.len()))
+    }
+
+    /// **The register a macro is being recorded into**, while it is:
+    /// helix's and vim's `@q` mark.
+    pub fn recording_register(&self) -> Option<char> {
+        self.recording.as_ref().map(|_| self.recording_into)
+    }
+
     /// **主選區以外的那幾段**，各自照 [`Self::selection`] 的辦法撐開一個字素
     /// （#405）。
     ///

@@ -399,6 +399,12 @@ pub struct EditorConfig {
     /// `"off"`. Counted by
     /// Word's rule, the same as `:count` and the daily target.
     pub status_count: String,
+    /// **How a window without the keys draws its status line**: `"line"`
+    /// (default) — the full line in faded ink, naming only the file, `[+]`
+    /// and the lock, the mode's place left blank so the name stays put as
+    /// the keys move (helix's); `"rule"` — a thin rule with the name and
+    /// `[+]` in it, so the one window with a ground is the one with the keys.
+    pub inactive_status: String,
     /// **The Unicode alarm** (#252): tint the cells where a
     /// zero-width or bidi control hides, and spaces that are not U+0020.
     pub unicode_alarm: bool,
@@ -585,6 +591,7 @@ impl Default for EditorConfig {
             hard_wrap: 0,
             char_info: true,
             status_count: "text".to_string(),
+            inactive_status: "line".to_string(),
             unicode_alarm: true,
             command_line: true,
             signature: true,
@@ -4817,6 +4824,7 @@ struct RawEditor {
     hard_wrap: Option<usize>,
     char_info: Option<bool>,
     status_count: Option<String>,
+    inactive_status: Option<String>,
     unicode_alarm: Option<bool>,
     command_line: Option<bool>,
     signature: Option<bool>,
@@ -5125,6 +5133,9 @@ impl RawConfig {
         }
         if other.editor.char_info.is_some() {
             self.editor.char_info = other.editor.char_info;
+        }
+        if other.editor.inactive_status.is_some() {
+            self.editor.inactive_status = other.editor.inactive_status.clone();
         }
         if other.editor.status_count.is_some() {
             self.editor.status_count = other.editor.status_count.clone();
@@ -5655,6 +5666,9 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.char_info {
             config.editor.char_info = on;
+        }
+        if let Some(which) = self.editor.inactive_status {
+            config.editor.inactive_status = which;
         }
         if let Some(which) = self.editor.status_count {
             config.editor.status_count = which;

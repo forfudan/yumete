@@ -46,7 +46,7 @@ use ratatui::crossterm::terminal::supports_keyboard_enhancement;
 use ratatui::layout::{Position, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph, Widget};
+use ratatui::widgets::{Clear, Paragraph};
 use ratatui::Frame;
 
 use yumete_config::{Config, LineNumbers};
@@ -496,7 +496,7 @@ pub fn fit_the_page(
     // 面板站在正文和狀態行之間，和 [`draw`] 給它的 `room` 是同一塊。
     let area = Rect::new(0, 0, width, height);
     let areas = page_areas(editor, config, area, 0);
-    let room = areas.status.y.saturating_sub(area.y).max(1);
+    let room = areas.floor.saturating_sub(area.y).max(1);
     PANEL_ROOM.store(usize::from(room), std::sync::atomic::Ordering::Relaxed);
     let fits = page_for_window(wish, room);
     // **行在哪裏斷，也要在按鍵之前答。** 只有真畫那一步答（[`frame_to`]）的話，
@@ -510,7 +510,7 @@ pub fn fit_the_page(
     // **挑選器擺不下就不許開着**（見 [`picker_box`]）。問在這裏，是
     // 因為這一支是「每一幀一次、離屏那一支在按鍵之前一次」的那個鉤子——窄窗口
     // 下的行為要 `--shot` 也看得見。
-    let for_a_picker = Rect::new(0, 0, width, areas.status.y.saturating_sub(area.y).max(1));
+    let for_a_picker = Rect::new(0, 0, width, areas.floor.saturating_sub(area.y).max(1));
     editor.note_picker_room(match picker_box(for_a_picker) {
         Some(_) => None,
         None => Some(picker_height(for_a_picker) > for_a_picker.height),
@@ -937,7 +937,7 @@ pub fn run(
             // 畫的那一支算得出來，而 `PageUp`/`PageDown` 跑在核心裏。同上一句，
             // 上一幀的答案——窗口沒改大小的話兩幀一樣。
             editor.note_picker_rows(picker_depth(picker_height(Rect {
-                height: areas.status.y.max(1),
+                height: areas.floor.max(1),
                 ..Rect::new(0, 0, size.width, size.height)
             })));
             // **…以及這一頁真畫了哪一段**（#406）：`gw` 的落腳點只算屏幕上的，而
@@ -5835,14 +5835,18 @@ struct Areas {
     /// nothing in it is zero columns wide, which is how the page stays exactly
     /// as wide as it was before there were two.
     panels: [Rect; 2],
-    /// The windows, in the tree's order (`Windows::leaves`) — always one
-    /// at least. Which holds the keys is [`Editor::live_pane`], an index
-    /// into this, and it is a different question on purpose: splitting
-    /// must not make a window change its place under its viewport.
+    /// The windows' writing, in the tree's order (`Windows::leaves`) —
+    /// always one at least. Which holds the keys is [`Editor::live_pane`],
+    /// an index into this, and it is a different question on purpose:
+    /// splitting must not make a window change its place under its viewport.
     panes: Vec<Rect>,
-    /// The rules between windows, each with the window on its far side,
-    /// whose caption it carries.
-    dividers: Vec<(Rect, yumete_core::window::WindowId)>,
+    /// **Each window's own status line**, the row under its writing, in the
+    /// same order as `panes`. In a stack the upper window's line is the
+    /// boundary between the two, as in helix and vim.
+    lines: Vec<Rect>,
+    /// The rules between windows side by side, running down through the
+    /// status-line row so the two lines read as two.
+    dividers: Vec<Rect>,
     tabs: Rect,
     /// **The sidebars' blocks at the two ends of the tab line**, by [`Side`]:
     /// zero wide when there is no tab line, the setting is off
@@ -5855,9 +5859,16 @@ struct Areas {
     /// all — the page is two rows shorter and nothing else changes, the same
     /// arithmetic the tab bar and the command row already do.
     head: Rect,
-    /// What the page itself is drawn into.
+    /// What the windows are laid out in: their writing and their status
+    /// lines.
     text: Rect,
+    /// The status line of the window with the keys.
     status: Rect,
+    /// **The row the floating panels stand on**: menus, the picker and the
+    /// candidate panel stop above it. The bottom row of the windows — their
+    /// status lines — with a command row under it; without one, the line of
+    /// the window with the keys, which is where a `:` is then typed.
+    floor: u16,
     /// **The bottom row of all, or none** (#302): where `:` and `/` are typed,
     /// where a message about what just happened lands, and where the keys you
     /// can press are listed.
@@ -5884,26 +5895,29 @@ fn window_at(
     let head_rows = 2 * u16::from(!editor.grid_has_the_pane() && editor.table_head_is_off_the_page(top));
     let areas = page_areas(editor, config, Rect::new(0, 0, size.width, size.height), head_rows);
     let leaves = editor.windows().leaves();
+    // A window's status line is the window's too: a click on it goes there.
     areas.panes.iter().enumerate().find_map(|(i, a)| {
-        let inside = mouse.column >= a.x && mouse.column < a.x + a.width && mouse.row >= a.y && mouse.row < a.y + a.height;
+        let bottom = areas.lines.get(i).map_or(a.y + a.height, |l| l.y + l.height);
+        let inside = mouse.column >= a.x && mouse.column < a.x + a.width && mouse.row >= a.y && mouse.row < bottom;
         inside.then(|| leaves.get(i).copied()).flatten()
     })
 }
 
 fn page_areas(editor: &Editor, config: &Config, area: Rect, head_rows: u16) -> Areas {
-    // Two rows at the foot, answering two questions. The upper one is *where
-    // am I* and never changes shape; the one below it is *what am I typing,
-    // what just happened, and what can I press*, and is blank when it is none
-    // of the three. Splitting them is what lets the status line stay still: a
-    // message never pushes the position along the line or takes it away, and
-    // a `:` never replaces the whole row.
+    // **Each window ends in its own status line; the command row under them
+    // all is one.** A status line answers *where am I* for the window it
+    // stands under; the row below answers *what am I typing, what just
+    // happened, and what can I press*, and is blank when it is none of the
+    // three. Splitting them is what lets a status line stay still: a message
+    // never pushes the position along the line or takes it away, and a `:`
+    // never replaces the whole row.
     let command_rows = u16::from(config.editor.command_line && area.height > 4);
-    let body_h = area.height.saturating_sub(command_rows + 1);
-    let status = Rect::new(area.x, area.y + body_h, area.width, 1);
-    let command = Rect::new(area.x, area.y + body_h + 1, area.width, command_rows);
+    let body_h = area.height.saturating_sub(command_rows);
+    let command = Rect::new(area.x, area.y + body_h, area.width, command_rows);
     // A panel takes its columns off its own side; set vertically the left is
     // still the left, because the 縱 fill from the right edge and the page
-    // simply ends sooner.
+    // simply ends sooner. **Its box reaches the command row**: a sidebar is
+    // no window — its frame and its name say what it is — and has no line.
     // Warning: **兩側一起算**：右側若拿 `area.width - left`，它就是「左側剩下的那點的
     // 1/3」——同一檔在右邊比在左邊窄一大截（60 欄下 20 對 13）。超了是兩邊一起按
     // 比例縮。
@@ -5918,8 +5932,9 @@ fn page_areas(editor: &Editor, config: &Config, area: Rect, head_rows: u16) -> A
         area.width.saturating_sub(left + right),
         body_h,
     );
-    // The tab bar takes the row off the top of what is left.
-    let (tabs, page) = match config.editor.tabs.showing(editor.buffer_count()) && body.height > 1 {
+    // The tab bar takes the row off the top of what is left — when a row of
+    // writing and the status line are still left under it.
+    let (tabs, page) = match config.editor.tabs.showing(editor.buffer_count()) && body.height > 2 {
         true => (
             Rect::new(body.x, body.y, body.width, 1),
             Rect::new(body.x, body.y + 1, body.width, body.height - 1),
@@ -5940,38 +5955,43 @@ fn page_areas(editor: &Editor, config: &Config, area: Rect, head_rows: u16) -> A
         false => (tabs, [Rect::new(tabs.x, tabs.y, 0, 0); 2]),
     };
     // …and the column bar takes its rows off what the tab bar left, for the
-    // same reason and by the same arithmetic.
-    let head_rows = head_rows.min(page.height.saturating_sub(1));
+    // same reason and by the same arithmetic, leaving a row of writing and
+    // the status line.
+    let head_rows = head_rows.min(page.height.saturating_sub(2));
     let head = Rect::new(page.x, page.y, page.width, head_rows);
-    let page = Rect::new(page.x, page.y + head_rows, page.width, page.height - head_rows);
-    // The detail panel is the bottom layer of the right slot, taken off before
-    // the tab bar like every other panel — so the tab bar does not run over
-    // the top of it (#293).
-    let text = page;
+    let text = Rect::new(page.x, page.y + head_rows, page.width, page.height - head_rows);
     // 工作區 (Feature #176). **The cut runs across the direction the text
     // advances in**: 橫排 advances downward, so the panes are 上下; 縱書
     // advances leftward, so they are 左右 and the second takes the left. That
     // is what keeps the measure untouched — both panes keep the full width in
     // 橫排 and the full height in 縱書, so not one row rewraps and not one 縱
-    // is shortened. A divider carries the boundary and the caption.
-    // **The windows, laid out by the editor's tree.** Two
-    // slots still, until the viewports follow the tree (stage 2); a split
-    // opened from a 縱書 page puts its second half on the left, and keeps
-    // it there whatever page the keys are on.
+    // is shortened.
     let text_area = yumete_core::window::Area::new(text.x, text.y, text.width, text.height);
     editor.note_text_area(text_area);
     let (placed, rules) = editor.windows().place(text_area);
     let rect = |a: yumete_core::window::Area| Rect::new(a.x, a.y, a.width, a.height);
-    let mut panes: Vec<Rect> = placed.iter().map(|p| rect(p.area)).collect();
-    if panes.is_empty() {
-        panes.push(text);
+    let mut windows: Vec<Rect> = placed.iter().map(|p| rect(p.area)).collect();
+    if windows.is_empty() {
+        windows.push(text);
     }
-    // The caption names the window being read: the far side unless that is
-    // the live one, then the near side.
-    let dividers: Vec<(Rect, yumete_core::window::WindowId)> = rules
+    // **The last row of every window is its status line**, and what is
+    // above it is the writing.
+    let (panes, lines): (Vec<Rect>, Vec<Rect>) = windows
         .iter()
-        .map(|r| (rect(r.area), if r.second == editor.live_window() { r.first } else { r.second }))
-        .collect();
+        .map(|w| {
+            let writing = w.height.saturating_sub(1);
+            (
+                Rect::new(w.x, w.y, w.width, writing),
+                Rect::new(w.x, w.y + writing, w.width, w.height.min(1)),
+            )
+        })
+        .unzip();
+    let dividers: Vec<Rect> = rules.iter().map(|r| rect(r.area)).collect();
+    let status = lines.get(editor.live_pane()).copied().unwrap_or(lines[0]);
+    let floor = match command_rows {
+        0 => status.y,
+        _ => command.y.saturating_sub(1).max(area.y),
+    };
     Areas {
         panels,
         tabs,
@@ -5979,8 +5999,10 @@ fn page_areas(editor: &Editor, config: &Config, area: Rect, head_rows: u16) -> A
         head,
         text,
         panes,
+        lines,
         dividers,
         status,
+        floor,
         command,
     }
 }
@@ -6020,11 +6042,13 @@ fn draw<'a>(
         head: head_area,
         text: text_area,
         status: status_area,
+        lines: status_lines,
+        floor,
         command: command_area,
     } = areas.clone();
     // Where a `:` or `/` is typed. Its own row when there is one; the status
-    // line when the window is too short for two, because a prompt with nowhere
-    // to be drawn is a prompt nobody can answer.
+    // line of the window with the keys when the window is too short for two,
+    // because a prompt with nowhere to be drawn is a prompt nobody can answer.
     let prompt_area = match command_area.height {
         0 => status_area,
         _ => command_area,
@@ -6074,23 +6098,16 @@ fn draw<'a>(
         // **A window showing a preview draws the page, not text.**
         if let Some(&id) = leaves.get(which).filter(|&&id| editor.is_page_window(id)) {
             let kind = editor.preview_in(id).and_then(|p| editor.preview_kind_of(p));
-            // **A frame round the picture says which preview has the keys**:
-            // a picture has no caret to show it. Thick and gold for the one
-            // with the keys, thin and quiet for the rest; the window's title
-            // line stays where it is, whatever the window shows.
+            // **Its status line says which preview has the keys**, as any
+            // window's does: `PRV` and a ground on the one with them. No
+            // frame round the picture, only a blank cell of margin all round,
+            // where the arrows pointing at the caret's paragraph stand.
             let framed = rect.width > 2 && rect.height > 2;
             let inside = match framed {
                 true => {
                     let ink = crate::theme::Palette::of(config);
-                    let focused = which == live;
-                    let ring = Block::default()
-                        .borders(Borders::ALL)
-                        .border_type(if focused { BorderType::Thick } else { BorderType::Plain })
-                        .border_style(ink.page().fg(if focused { ink.gold() } else { ink.quiet() }))
-                        .style(ink.page());
-                    let inside = ring.inner(*rect);
-                    ring.render(*rect, frame.buffer_mut());
-                    inside
+                    frame.render_widget(Paragraph::new("").style(ink.page()), *rect);
+                    Rect::new(rect.x + 1, rect.y + 1, rect.width - 2, rect.height - 2)
                 }
                 false => *rect,
             };
@@ -6219,9 +6236,8 @@ fn draw<'a>(
             cursor = at;
         }
     }
-    for (rule, far) in &dividers {
-        let caption = editor.pane_of(*far).map(|p| p.caption.as_str());
-        draw_divider(frame, config, *rule, caption);
+    for rule in &dividers {
+        draw_divider(frame, config, *rule);
     }
     let (cursor_x, cursor_y) = cursor;
 
@@ -6231,14 +6247,29 @@ fn draw<'a>(
     // would be a panel with a hole in it.
     let mut panels: Vec<Rect> = Vec::new();
 
-    draw_status(frame, editor, config, ime, status_area, tab_area, command_area.height == 1);
-    if command_area.height == 1 {
+    // **One status line per window.** The window with the keys gets the
+    // whole readout; the others say only which file they show. With the keys
+    // in a sidebar no window has them, so every window draws the quiet kind —
+    // unless there is no command row, when the sidebar's keys are listed on
+    // the line of the window the keys go back to.
+    let command_row = command_area.height == 1;
+    let keys_in_a_window = !editor.sidebar_focused() || !command_row;
+    for (which, line) in status_lines.iter().enumerate() {
+        if line.width == 0 || line.height == 0 {
+            continue;
+        }
+        match (which == live && keys_in_a_window, leaves.get(which)) {
+            (true, _) | (false, None) => draw_status(frame, editor, config, ime, *line, tab_area, command_row),
+            (false, Some(&id)) => draw_other_status(frame, editor, config, id, *line),
+        }
+    }
+    if command_row {
         draw_command(frame, editor, config, ime, command_area, crate::theme::Palette::of(config).page());
     }
-    // The floating panels stack upward from the status line, which is the top
-    // of the footer: the command row is *below* it, so a panel that stopped at
-    // the command row would be drawn over the position readout.
-    let footer = status_area;
+    // The floating panels stack upward from the floor: the bottom row of the
+    // windows, where their status lines are, so a menu never covers a
+    // position readout or the command row a `:` is typed in.
+    let footer = Rect::new(area.x, floor, area.width, 1);
     panels.extend(draw_command_menu(frame, editor, config, ime, area, footer));
     panels.extend(draw_search_hint(frame, editor, config, area, footer));
     panels.extend(draw_lookfor_menu(frame, editor, config, area, footer));
@@ -6249,7 +6280,7 @@ fn draw<'a>(
     // Warning: **選擇器也不許蓋頁腳**——和候選框那一條是同一個（#387）。窗口高 14 的
     // 時候它的下邊框會壓在狀態行上，畫出來是 `-- PIC╰────────╯ Latin`。這一行寫死
     // 在頁腳之上，往後改成什麼形狀都不會壓過去。
-    let room = Rect { height: status_area.y.saturating_sub(area.y).max(1), ..area };
+    let room = Rect { height: floor.saturating_sub(area.y).max(1), ..area };
     let picker = draw_picker(frame, editor, config, ime, room);
     let picker_caret = picker.map(|(caret, _)| caret);
     panels.extend(picker.and_then(|(_, list)| list));
@@ -6490,7 +6521,7 @@ fn draw<'a>(
             // the status line keeps the command row below it clear too, which it
             // has to be: the caret the panel belongs to is standing in it.
             let room = Rect {
-                height: status_area.y.saturating_sub(area.y).max(1),
+                height: floor.saturating_sub(area.y).max(1),
                 ..area
             };
             // **編碼那一列畫不畫**：這一幀沒有把它寫進正文，纔輪到面板寫。
@@ -6567,7 +6598,7 @@ fn draw<'a>(
     let seek_rows = editor.seek_rows();
     if !seek_rows.is_empty() {
         let room = Rect {
-            height: status_area.y.saturating_sub(area.y).max(1),
+            height: floor.saturating_sub(area.y).max(1),
             ..area
         };
         let what = Floating { rows: seek_rows, lit: None, keep_off_the_caret: false };
@@ -7482,8 +7513,9 @@ fn draw_list(
 /// What the mark under the caret says: a half-typed command, or a half-typed
 /// code (Feature #211).
 ///
-/// Two callers with one answer — the HUD row and the status line's right edge —
-/// so the two surfaces can never disagree about what is being typed.
+/// Two callers with one answer — the HUD row and the command row's right end
+/// (the status line's, with no command row) — so the two surfaces can never
+/// disagree about what is being typed.
 ///
 /// **編碼不走這一支。** 它站在底行那一條候選的前頭；這裏和狀態行右端再各寫一份
 /// 的話，就只是同一串碼畫三次。
@@ -7499,7 +7531,7 @@ fn hud_line(editor: &Editor) -> String {
 
 /// The **HUD**: what you have typed, beside the caret.
 ///
-/// The status line's right edge is where vi has always put this, and it is
+/// The command row's right end is where vim's showcmd puts this, and it is
 /// twenty rows from where the eyes are. So it is drawn twice: there, and here,
 /// one row under the caret — small, 金 on the band, and gone the moment the
 /// command completes. What it says is [`hud_line`]'s to decide.
@@ -14415,12 +14447,14 @@ fn draw_horizontal(
     (caret, next_page)
 }
 
-/// Draw the status line: where am I, and nothing else.
+/// Draw the status line of the window with the keys: where am I, and
+/// nothing else.
 ///
-/// `command_row` says whether the row below exists. When it does not — a window
-/// too short for two, or `[editor] command_line = false` — this line has to
-/// take in the three things that row would have carried: a `:` or `/` being
-/// typed, a message about what just happened, and the sidebar's keys.
+/// `command_row` says whether the row below the windows exists. When it does
+/// not — a window too short for two, or `[editor] command_line = false` — this
+/// line has to take in the things that row would have carried: a `:` or `/`
+/// being typed, a message about what just happened, the sidebar's keys, the
+/// keys typed so far and the session's standing marks.
 fn draw_status(
     frame: &mut Frame,
     editor: &Editor,
@@ -14430,14 +14464,6 @@ fn draw_status(
     tab_area: Rect,
     command_row: bool,
 ) {
-    let buffer = editor.current_buffer();
-    // **A preview has no text**: no place in it, no count, and
-    // no lock to mention — its name is all the line says of it.
-    let page = editor.page_window_has_the_keys();
-    let count = match page {
-        true => String::new(),
-        false => status_count_of(editor, config),
-    };
     let ink = crate::theme::Palette::of(config);
     // **A raised strip, or a sunken one — never a reversal.** Reversing gave a
     // white bar under a dark page: the loudest thing on the screen, saying the
@@ -14448,12 +14474,19 @@ fn draw_status(
     // The sidebar does not take the whole status line to list its keys. It has
     // the row below for that, and taking this one as well would mean losing
     // the file name and the position for as long as the sidebar has focus.
-    // **The second half of the pair is the mode word**, and it is empty on
-    // every shape of this line but the last: the sidebar's own row starts with
-    // its keys, and an open prompt starts with `:` or 「搜索:」. Only the
-    // ordinary line begins with the mode, and only it gets the gold below.
-    let (status, mode) = if editor.sidebar_focused() && !command_row {
-        (say!("ui.sidebar-mode", editor.sidebar_keys()), String::new())
+    // **The second of the three is the mode word**, and it is empty on every
+    // shape of this line but the last: the sidebar's own row starts with its
+    // keys, and an open prompt starts with `:` or 「搜索:」. Only the ordinary
+    // line begins with the mode, and only it gets the gold below.
+    let (status, mode, tail) = if editor.sidebar_focused() && !command_row {
+        let keys = say!("ui.sidebar-mode", editor.sidebar_keys());
+        let readout = char_info(editor, config);
+        let used = yumete_cjk::str_width(&keys) + 2;
+        let tail = readout
+            .into_iter()
+            .find(|t| yumete_cjk::str_width(t) + 2 < (status_area.width as usize).saturating_sub(used))
+            .unwrap_or_default();
+        (keys, String::new(), tail)
     } else if let (false, Some(_)) = (command_row, editor.prompt()) {
         // A value line is fitted as on its own row ([`prompt_view`]), where
         // the caret is put, and stops short of the tag.
@@ -14491,239 +14524,8 @@ fn draw_status(
         );
         return;
     } else {
-        let dirty = if buffer.is_modified() { " [+]" } else { "" };
-        // A recovered draft is worth a standing tag, not just the one-off notice
-        // at open: the status line is cleared by the next keystroke, and the
-        // writer must still be able to see that `:recover` has something to do.
-        let draft = if buffer.recovered_draft().is_some() {
-            " [draft]"
-        } else {
-            ""
-        };
-        // Locked, and said so standing (Feature #213). A writer who cannot type
-        // needs to know that from the screen and not from the status line's
-        // memory of a refusal three keystrokes ago.
-        let locked = match buffer.is_readonly() && !page {
-            true => say!("ui.readonly-tag"),
-            false => String::new(),
-        };
-        // **The encoding, only when it is not UTF-8**, as helix
-        // shows it: a Big5 file says so standing, so a save that refuses 简 is
-        // never a surprise.
-        let encoded = match buffer.encoding() == yumete_core::encoding::UTF_8 {
-            true => String::new(),
-            false => format!(" [{}]", yumete_core::encoding::name(buffer.encoding())),
-        };
-        // 中/英 + scheme, in every mode — Normal included (#337): it is what
-        // the next `i` will land in, and there is no other way to find out.
-        let ime_tag = match standing_language_tag(ime).as_str() {
-            "" => String::new(),
-            tag => format!("{tag} "),
-        };
-        // With more than one file open, say which — unless the tab bar is up,
-        // which says it better and already says it.
-        let (n, total) = editor.buffer_position();
-        let which = if total > 1 && !tabs_show_everything(editor, config, tab_area) {
-            format!(" [{n}/{total}]")
-        } else {
-            String::new()
-        };
-        // A running typesetter is a **process**, holding a port and a few
-        // hundred megabytes for as long as it runs. It said its address once,
-        // hours ago, and nothing since — so it gets a standing mark, the way a
-        // recovered draft does.
-        let preview = match editor.preview_at().is_some() {
-            true => " [preview]",
-            false => "",
-        };
-        // Where you are, and nothing else. What just happened is the row
-        // below's question — and with no command row it comes back here, because
-        // a message nobody can see is not a message.
-        let (where_bare, where_short) = match page {
-            true => (String::new(), String::new()),
-            false => (position_of(editor), position_short(editor)),
-        };
-        // **The live count rides after the position** and is the
-        // first thing to give way: it says how long the file is, and the
-        // position says where you are, which is what this line is for.
-        let where_ = match count.is_empty() {
-            true => where_bare.clone(),
-            false => format!("{where_bare}   {count}"),
-        };
-        // **Whole fields give way, in order — the line is never cut through a
-        // word.** One `format!` sliced on a narrow window would turn
-        // `long.csv   Ln 1, Col 1` at twenty columns into `long.c`, losing the
-        // position first — the one thing the status line exists to answer
-        // (#394). The order below is what a writer needs in a tmux sliver,
-        // from the last to go to the first: the mode, then where the caret
-        // is, then that there is unsaved work, then which file, then
-        // everything else.
-        //
-        // Warning: **`[n/total]` outranks the file name**, which looks backwards until
-        // you notice when it is drawn at all: only when the tab bar could not
-        // show every file — and the bar does carry the name of the one you are
-        // in. So the name is the duplicate here and the fraction is the only
-        // copy of what it says.
-        // Warning: **Not `-- NORMAL --`.** Twelve cells for one word, on
-        // the one line where everything else gives way when the window narrows.
-        // Three letters and no dashes, painted in gold below — the dashes were
-        // vi's way of making it stand out, and a colour does that in one cell
-        // instead of eight. Five modes draw nothing at all: [`Mode::label`]
-        // says which, and why.
-        let mode = editor.mode_label().unwrap_or_default();
-        let pieces: [(String, u8); 7] = [
-            (match mode.is_empty() {
-                true => String::new(),
-                false => format!("{mode}  "),
-            }, 0),
-            (ime_tag, 5),
-            (buffer.display_name(), 4),
-            (dirty.to_string(), 1),
-            (format!("{locked}{draft}{encoded}"), 2),
-            (preview.to_string(), 6),
-            (which, 3),
-        ];
-        // **有話要說而底下那一行正被 `:`/`/` 佔着，就說在這一行上。**
-        // 那一行上畫着提示符的時候它輪不到消息——「窗口要 36 欄纔擺得下搜索面板」
-        // 這一類當場退回行內搜索的話就得在這裏說。那一行空着的時候照舊歸它說，
-        // 不會說兩遍。
-        let taken = command_row && editor.prompt().is_none();
-        let message = match taken || editor.status().is_empty() {
-            true => String::new(),
-            false => editor.status().to_string(),
-        };
-        // Warning: **那兩格是畫出來的，不是算出來的。** 這一行畫的是
-        // 「行首一格留白 ＋ 模式 ＋ 轉圈那一格 ＋ 其餘」，轉不轉都佔着（見下面
-        // 那段註釋），所以左半邊真正能用的比 `width` 少兩格。按整個寬度
-        // 算的話，算到頭「剛好擺得下」的那一行到了屏幕上被切掉兩格——26 欄下
-        // 「窗口過窄，改用行內搜索」畫出來是「窗口過窄，改用行內搜」。
-        // 右半邊那一支（`fits`）也減了 2，兩邊是同一筆賬。
-        let room = (status_area.width as usize).saturating_sub(2);
-        let build = |give: u8, gap: usize, where_: &str| -> String {
-            let left: String = pieces
-                .iter()
-                .filter(|(_, rank)| *rank == 0 || *rank < give)
-                .map(|(text, _)| text.as_str())
-                .collect::<Vec<_>>()
-                .concat();
-            let left = left.trim_end();
-            // **左邊什麼都不剩了就別再留那三格。** 那三格是名字與話之
-            // 間的距離；名字讓完之後它只是在把話往外推，而被推出去的是話的尾巴。
-            let lead = match left.is_empty() || message.is_empty() {
-                true => "",
-                false => "   ",
-            };
-            let gap = " ".repeat(gap);
-            // 末尾那一段空隙是給位置讀數留的，位置讓完之後它什麼都不隔。
-            format!("{left}{lead}{message}{gap}{where_}")
-                .trim_end()
-                .to_string()
-        };
-        // **The gap goes before the writing does.** One column over is not a
-        // reason to lose `[20/20]` whole: the three spaces between the name and
-        // the position are the cheapest thing on the line, so they are spent
-        // first, and only then does a field give way.
-        let mut give = 7u8;
-        let mut gap = 3usize;
-        let mut where_ = where_.as_str();
-        let line = loop {
-            let line = build(give, gap, where_);
-            if yumete_cjk::str_width(&line) <= room {
-                break line;
-            }
-            // The count goes first, before even the gap, and a narrow window
-            // keeps the line as it would be without it.
-            if where_ != where_bare && where_ != where_short && !where_.is_empty() {
-                where_ = &where_bare;
-                continue;
-            }
-            if gap > 1 {
-                gap = 1;
-                continue;
-            }
-            // Warning: **字 goes before any field does** (#500). It is the third
-            // number of three, and the other two are what the status line
-            // exists to answer; a name or a `[3/20]` is worth more than it.
-            // Warning: **空了就別再換回短的**——底下那一步會把它整個丟掉，而這一步
-            // 認的是「還不是短的那一份」，兩步會互相把對方的結果改回去，轉不出來
-            // （比如 24 欄上）。
-            if !where_.is_empty() && where_ != where_short {
-                where_ = &where_short;
-                continue;
-            }
-            // The mode and the position are the floor; below that the terminal
-            // is too narrow for anything and the renderer's own cut answers.
-            if give == 0 {
-                // Warning: **一句話贏過位置。** 位置一直在那裏，剛發生
-                // 的事只說一次——26 欄的窗口上兩個都擺不下時把話截一半
-                // （「窗口過窄，改用行內搜」），截掉的恰恰是它要說的那一半。
-                if !message.is_empty() && !where_.is_empty() {
-                    where_ = "";
-                    continue;
-                }
-                break line;
-            }
-            give -= 1;
-        };
-        (line, mode)
+        ordinary_status(editor, config, ime, status_area, tab_area, command_row)
     };
-
-    // What the 字 under the cursor *is*, pushed to the right edge so it never
-    // moves the position readout around. A rare 漢字 that came out as a box is
-    // the case this answers: `U+2B740 · CJK Unified Ideographs Extension D`
-    // says the character is fine and the font is not.
-    // **What has been typed so far**, where vi has put it since 1976 and where
-    // Helix puts it: the far right of the status line, so `30d` and `3d` are
-    // not told apart by memory. It takes the place of the character readout
-    // while a command is half-typed — that readout is about the character you
-    // are standing on, and right now you are in the middle of saying
-    // something.
-    // The same string the HUD carries — and the reason the HUD may give up on
-    // finding a row: whatever happens beside the caret, it is also here.
-    let typed = hud_line(editor);
-    let right = match typed.is_empty() {
-        true => char_info(editor, config),
-        false => [typed, String::new(), String::new()],
-    };
-    // Warning: **那個 `2` 不是空隙，是行首那一格加行尾那一格。** 只算它的話，
-    // 算到頭剛好用完的時候兩半**貼在一起**：36 欄下畫出來的是
-    // `行 1, 列 1, 字 1U+0023`，而 38 欄下是 `字 1# U+0023`——那個 `#` 正是它要
-    // 說明的字，讀起來像位置欄裏多了一個井號。所以再要一格，當作真的空隙。
-    //
-    // Warning: **只要一格，不要兩格。** 要兩格的話，本來擠得下「`字 5 a U+0061`」
-    // 的那幾個寬度會把那個 `a` 整個讓掉——而 `a` 正是這一段要說明的東西，為了
-    // 多一格空白把它扔掉是賠本的（兩張金樣攔着）。寫成 `+ 2 < room`
-    // 而不是 `+ 2 + 1 <= room`，是同一句話（clippy 的寫法）。
-    let fits = |status: &str| -> &str {
-        let room = (status_area.width as usize)
-            .saturating_sub(yumete_cjk::str_width(status));
-        right
-            .iter()
-            .map(String::as_str)
-            .find(|t| !t.is_empty() && yumete_cjk::str_width(t) + 2 < room)
-            .unwrap_or("")
-    };
-    // Three stages of giving way — block name, then the 字, then the readout
-    // altogether — and the left side is never squeezed.
-    //
-    // Warning: **…and a fourth, one field to the left** (#500). 字 made the position
-    // six cells wider, and the position is this line's floor — so at sixty
-    // cells it pushed the readout off entirely, and the readout is the only
-    // thing on the screen that answers 「is the character wrong, or the font?」.
-    // 行 and 列 place the caret; 字 is the extra one. So when keeping 字 costs
-    // the whole readout, 字 is what goes.
-    // The count goes before any of the readout does, here as in the loop
-    // above: before its block name, before 字.
-    let wanted = !right[0].is_empty() && fits(&status) != right[0];
-    let status = match wanted && !count.is_empty() {
-        true => status.replacen(&format!("   {count}"), "", 1),
-        false => status,
-    };
-    let status = match fits(&status).is_empty() && right.iter().any(|t| !t.is_empty()) {
-        true => status.replace(&position_of(editor), &position_short(editor)),
-        false => status,
-    };
-    let tail = fits(&status);
     // **左邊留一格，轉圈那八個點在 `NOR` 後面。**
     //
     // 一、行首空一格，和下面的命令行對齊。
@@ -14736,7 +14538,7 @@ fn draw_status(
     // NOR ＋ 空格 ＋ 那一格 ＋ 空格 ＋ 檔名」，轉不轉都一樣寬。
     let used = yumete_cjk::str_width(&status) + 2;
     let room = (status_area.width as usize).saturating_sub(used);
-    let gap = room.saturating_sub(yumete_cjk::str_width(tail));
+    let gap = room.saturating_sub(yumete_cjk::str_width(&tail));
     // **The mode word is the only thing on this line that is not「where you
     // are」** — the file, the position, the character readout all answer that,
     // and this one answers「what will the next key do」. So it is the one thing
@@ -14784,6 +14586,428 @@ fn draw_status(
     );
 }
 
+/// What a status line keeps, worked down field by field as the window
+/// narrows ([`ordinary_status`]).
+struct Kept {
+    search: bool,
+    preview: bool,
+    count: bool,
+    gap: usize,
+    ime: bool,
+    /// Which of the right end's lengths is shown; past the last, none.
+    right: usize,
+    zi: bool,
+    locks: bool,
+    which: bool,
+    /// How wide the file name may be; `None` for whole.
+    name: Option<usize>,
+    recording: bool,
+    selections: bool,
+    dirty: bool,
+    position: bool,
+}
+
+/// The ordinary line of the window with the keys: the line, the mode word
+/// it starts with, and what goes at its right end.
+///
+/// **Whole fields give way, in order — the line is never cut through a
+/// word.** One `format!` sliced on a narrow window would turn
+/// `long.csv   Ln 1, Col 1` at twenty columns into `long.c`, losing the
+/// position first — the one thing the status line exists to answer (#394).
+/// From the first to go to the last: the search index, `[preview]`, the
+/// count, the spaces before the position, the language tag, the code point,
+/// the position's 字, the encoding and the other marks of the file, `[n/total]`,
+/// the file name (cut from the left, its extension kept), the recording mark,
+/// the selections, `[+]`, the position — and the mode never.
+fn ordinary_status(
+    editor: &Editor,
+    config: &Config,
+    ime: &ImeSession,
+    status_area: Rect,
+    tab_area: Rect,
+    command_row: bool,
+) -> (String, String, String) {
+    let buffer = editor.current_buffer();
+    // **A preview has no text**: no place in it, no count, and
+    // no lock to mention — its name is all the line says of it.
+    let page = editor.page_window_has_the_keys();
+    let count = match page {
+        true => String::new(),
+        false => status_count_of(editor, config),
+    };
+    let dirty = if buffer.is_modified() { " [+]" } else { "" };
+    // A recovered draft is worth a standing tag, not just the one-off notice
+    // at open: the status line is cleared by the next keystroke, and the
+    // writer must still be able to see that `:recover` has something to do.
+    let draft = if buffer.recovered_draft().is_some() { " [draft]" } else { "" };
+    // Locked, and said so standing (Feature #213). A writer who cannot type
+    // needs to know that from the screen and not from the status line's
+    // memory of a refusal three keystrokes ago.
+    let locked = match buffer.is_readonly() && !page {
+        true => say!("ui.readonly-tag"),
+        false => String::new(),
+    };
+    // **The encoding, only when it is not UTF-8**, as helix
+    // shows it: a Big5 file says so standing, so a save that refuses 简 is
+    // never a surprise. **The line ending likewise, only when it is not LF.**
+    let encoded = match buffer.encoding() == yumete_core::encoding::UTF_8 {
+        true => String::new(),
+        false => format!(" [{}]", yumete_core::encoding::name(buffer.encoding())),
+    };
+    let crlf = match buffer.ending() == "\r\n" && !page {
+        true => " [CRLF]",
+        false => "",
+    };
+    let locks = format!("{locked}{draft}{encoded}{crlf}");
+    // 中/英 + scheme, in every mode — Normal included (#337): it is what
+    // the next `i` will land in, and there is no other way to find out.
+    let ime_tag = match standing_language_tag(ime).as_str() {
+        "" => String::new(),
+        tag => format!("{tag} "),
+    };
+    // With more than one file open, say which — unless the tab bar is up,
+    // which says it better and already says it.
+    // Warning: **`[n/total]` outranks the file name**, which looks backwards until
+    // you notice when it is drawn at all: only when the tab bar could not
+    // show every file — and the bar does carry the name of the one you are
+    // in. So the name is the duplicate here and the fraction is the only
+    // copy of what it says.
+    let (n, total) = editor.buffer_position();
+    let which = if total > 1 && !tabs_show_everything(editor, config, tab_area) {
+        format!(" [{n}/{total}]")
+    } else {
+        String::new()
+    };
+    // **The session's standing marks belong to the command row**; with no
+    // command row they come here, since a mark nobody can see is not one.
+    let (recording, preview) = match command_row {
+        true => (String::new(), String::new()),
+        false => (
+            editor.recording_register().map(|r| format!(" @{r}")).unwrap_or_default(),
+            match editor.preview_at().is_some() {
+                true => " [preview]".to_string(),
+                false => String::new(),
+            },
+        ),
+    };
+    let (position_full, position_bare) = match page {
+        true => (String::new(), String::new()),
+        false => (position_of(editor), position_short(editor)),
+    };
+    // **`2/5`: which selection is the primary, of how many** — only with more
+    // than one, as helix writes it.
+    let selections = editor
+        .selection_counter()
+        .map(|(n, of)| format!("{n}/{of}"))
+        .unwrap_or_default();
+    // **`[3/17]`: which match the caret stands in** after `/`, `n` or `N`,
+    // until it leaves the match (vim's `searchcount()`).
+    let search = editor
+        .search_index()
+        .map(|(n, of)| format!("[{n}/{of}]"))
+        .unwrap_or_default();
+    // Warning: **Not `-- NORMAL --`.** Twelve cells for one word, on
+    // the one line where everything else gives way when the window narrows.
+    // Three letters and no dashes, painted in gold below — the dashes were
+    // vi's way of making it stand out, and a colour does that in one cell
+    // instead of eight. Five modes draw nothing at all: [`Mode::label`]
+    // says which, and why.
+    let mode = editor.mode_label().unwrap_or_default();
+    let mode_field = match mode.is_empty() {
+        true => String::new(),
+        false => format!("{mode}  "),
+    };
+    // **有話要說而底下那一行正被 `:`/`/` 佔着，就說在這一行上。**
+    // 那一行上畫着提示符的時候它輪不到消息——「窗口要 36 欄纔擺得下搜索面板」
+    // 這一類當場退回行內搜索的話就得在這裏說。那一行空着的時候照舊歸它說，
+    // 不會說兩遍。
+    let taken = command_row && editor.prompt().is_none();
+    let message = match taken || editor.status().is_empty() {
+        true => String::new(),
+        false => editor.status().to_string(),
+    };
+    // **What has been typed so far** stands at the command row's right end,
+    // where vim's showcmd and helix put it; with no command row it is here,
+    // taking the place of the character readout — that readout is about the
+    // character you are standing on, and right now you are in the middle of
+    // saying something.
+    let typed = match command_row {
+        true => String::new(),
+        false => hud_line(editor),
+    };
+    let right: Vec<String> = match typed.is_empty() {
+        true => char_info(editor, config),
+        false => vec![typed],
+    };
+    let name = buffer.display_name();
+    let width = status_area.width as usize;
+    let build = |k: &Kept| -> String {
+        let name = match k.name {
+            None => name.clone(),
+            Some(room) => shorten_name(&name, room),
+        };
+        let mut left = String::new();
+        left.push_str(&mode_field);
+        if k.ime {
+            left.push_str(&ime_tag);
+        }
+        left.push_str(&name);
+        if k.dirty {
+            left.push_str(dirty);
+        }
+        if k.locks {
+            left.push_str(&locks);
+        }
+        if k.which {
+            left.push_str(&which);
+        }
+        if k.preview {
+            left.push_str(&preview);
+        }
+        if k.recording {
+            left.push_str(&recording);
+        }
+        let left = left.trim_end();
+        // **左邊什麼都不剩了就別再留那三格。** 那三格是名字與話之
+        // 間的距離；名字讓完之後它只是在把話往外推，而被推出去的是話的尾巴。
+        let lead = match left.is_empty() || message.is_empty() {
+            true => "",
+            false => "   ",
+        };
+        let position = match (k.position, k.zi) {
+            (false, _) => "",
+            (true, true) => position_full.as_str(),
+            (true, false) => position_bare.as_str(),
+        };
+        // **The live count rides after the position** and is the
+        // first thing to give way of the two: it says how long the file is,
+        // and the position says where you are, which is what this line is for.
+        let readout: Vec<&str> = [
+            position,
+            if k.selections { selections.as_str() } else { "" },
+            if k.count { count.as_str() } else { "" },
+            if k.search { search.as_str() } else { "" },
+        ]
+        .into_iter()
+        .filter(|t| !t.is_empty())
+        .collect();
+        let readout = readout.join("   ");
+        let gap = match readout.is_empty() {
+            true => String::new(),
+            false => " ".repeat(k.gap),
+        };
+        // 末尾那一段空隙是給位置讀數留的，位置讓完之後它什麼都不隔。
+        format!("{left}{lead}{message}{gap}{readout}").trim_end().to_string()
+    };
+    // Warning: **那兩格是畫出來的，不是算出來的。** 這一行畫的是
+    // 「行首一格留白 ＋ 模式 ＋ 轉圈那一格 ＋ 其餘」，轉不轉都佔着，所以左半邊
+    // 真正能用的比 `width` 少兩格。右端那一段也減了 2，兩邊是同一筆賬。
+    //
+    // Warning: **右端要的不只是自己那幾格。** 只算它的話，算到頭剛好用完的時候
+    // 兩半**貼在一起**：`行 1, 列 1, 字 1U+0023`。所以再要一格，當作真的空隙。
+    let tail = |k: &Kept, line: &str| -> Option<String> {
+        let t = right.get(k.right).filter(|t| !t.is_empty())?;
+        let room = width.saturating_sub(yumete_cjk::str_width(line) + 2);
+        (yumete_cjk::str_width(t) + 2 < room).then(|| t.clone())
+    };
+    let fits = |k: &Kept, line: &str| -> bool {
+        yumete_cjk::str_width(line) + 2 <= width
+            && (right.get(k.right).is_none_or(|t| t.is_empty()) || tail(k, line).is_some())
+    };
+    let mut k = Kept {
+        search: true,
+        preview: true,
+        count: true,
+        gap: 3,
+        ime: true,
+        right: 0,
+        zi: true,
+        locks: true,
+        which: true,
+        name: None,
+        recording: true,
+        selections: true,
+        dirty: true,
+        position: true,
+    };
+    let line = loop {
+        let line = build(&k);
+        if fits(&k, &line) {
+            break line;
+        }
+        // Each step takes one thing away, the cheapest first; a step that
+        // has nothing left to take passes to the next.
+        if k.search && !search.is_empty() {
+            k.search = false;
+        } else if k.preview && !preview.is_empty() {
+            k.preview = false;
+        } else if k.count && !count.is_empty() {
+            k.count = false;
+        } else if k.gap > 1 {
+            // **The gap goes before the writing does.** One column over is
+            // not a reason to lose `[20/20]` whole.
+            k.gap = 1;
+        } else if k.ime && !ime_tag.is_empty() {
+            k.ime = false;
+        } else if k.right < right.len() && !right.iter().all(String::is_empty) {
+            k.right += 1;
+        } else if k.zi && position_full != position_bare {
+            // Warning: **字 goes before any field does** (#500). It is the third
+            // number of three, and the other two are what the status line
+            // exists to answer; a name or a `[3/20]` is worth more than it.
+            k.zi = false;
+        } else if k.locks && !locks.is_empty() {
+            k.locks = false;
+        } else if k.which && !which.is_empty() {
+            k.which = false;
+        } else if name_can_shrink(&name, k.name) {
+            let now = k.name.unwrap_or_else(|| yumete_cjk::str_width(&name));
+            k.name = Some(now.saturating_sub(1));
+        } else if k.recording && !recording.is_empty() {
+            k.recording = false;
+        } else if k.selections && !selections.is_empty() {
+            k.selections = false;
+        } else if k.dirty && !dirty.is_empty() {
+            k.dirty = false;
+        } else if k.position && !position_full.is_empty() {
+            // Warning: **一句話贏過位置。** 位置一直在那裏，剛發生
+            // 的事只說一次——擺不下時把話截一半，截掉的恰恰是它要說的那一半。
+            k.position = false;
+        } else {
+            // The mode is the floor; below it the terminal is too narrow for
+            // anything and the renderer's own cut answers.
+            break line;
+        }
+    };
+    let tail = tail(&k, &line).unwrap_or_default();
+    (line, mode, tail)
+}
+
+/// **A file name cut to `room` cells from the left, its extension kept**:
+/// `…集市（初稿）.md`. The end of a name is what tells two drafts apart, and
+/// the extension says what kind of file it is. Empty when not even `….md`
+/// fits.
+fn shorten_name(name: &str, room: usize) -> String {
+    if yumete_cjk::str_width(name) <= room {
+        return name.to_string();
+    }
+    let ext = match name.rfind('.') {
+        Some(at) if at > 0 => &name[at..],
+        _ => "",
+    };
+    let stem = &name[..name.len() - ext.len()];
+    let fixed = 1 + yumete_cjk::str_width(ext);
+    if room < fixed {
+        return String::new();
+    }
+    let mut kept: Vec<&str> = Vec::new();
+    let mut wide = fixed;
+    for g in yumete_cjk::graphemes(stem).collect::<Vec<_>>().into_iter().rev() {
+        let w = yumete_cjk::grapheme_width(g);
+        if wide + w > room {
+            break;
+        }
+        wide += w;
+        kept.push(g);
+    }
+    kept.reverse();
+    format!("…{}{ext}", kept.concat())
+}
+
+/// Whether [`shorten_name`] at a cell less than `now` still says something.
+fn name_can_shrink(name: &str, now: Option<usize>) -> bool {
+    let at = now.unwrap_or_else(|| yumete_cjk::str_width(name));
+    at > 0 && !name.is_empty()
+}
+
+/// **The status line of a window without the keys**: which file it shows,
+/// whether it has unsaved changes, and whether it is locked — nothing about a
+/// caret that is not there.
+///
+/// Two ways, by `[editor] inactive_status`. `"line"`: the full line on the
+/// same ground as the live one, in faded ink, the mode's place left blank so
+/// the name does not jump as the keys move from window to window (helix's).
+/// `"rule"`: a thin rule with the name in it, so the one window with a
+/// ground under its line is the one with the keys. As the window narrows
+/// the blank place goes first, then the lock, then the name is cut from the
+/// left; `[+]` stays.
+fn draw_other_status(frame: &mut Frame, editor: &Editor, config: &Config, id: yumete_core::window::WindowId, area: Rect) {
+    // The live window's own buffer when the keys are in a sidebar; any
+    // other window's through its pane.
+    let _viewing = editor.pane_of(id).map(|pane| editor.view_pane(pane));
+    let buffer = editor.current_buffer();
+    let page = editor.is_page_window(id);
+    let name = buffer.display_name();
+    let dirty = match buffer.is_modified() {
+        true => " [+]",
+        false => "",
+    };
+    let locked = match buffer.is_readonly() && !page {
+        true => say!("ui.readonly-tag"),
+        false => String::new(),
+    };
+    let ink = crate::theme::Palette::of(config);
+    let width = area.width as usize;
+    let rule = config.editor.inactive_status.trim() == "rule";
+    // What stands before the name: the live line's mode place (a cell, the
+    // three letters, the spinner's cell with its air), or the rule's two
+    // cells and a space.
+    let (lead, fixed) = match rule {
+        true => (3usize, 1usize),
+        false => (7usize, 1usize),
+    };
+    let after = |lead: usize, name: &str, lock: &str| lead + yumete_cjk::str_width(name) + yumete_cjk::str_width(dirty) + yumete_cjk::str_width(lock) + fixed;
+    let mut lead_now = lead;
+    // The rule carries the name and `[+]` only: it is a boundary, and the
+    // lock is the full line's to say.
+    let mut lock = match rule {
+        true => "",
+        false => locked.as_str(),
+    };
+    let mut shown = name.clone();
+    if after(lead_now, &shown, lock) > width {
+        lead_now = 1;
+    }
+    if after(lead_now, &shown, lock) > width {
+        lock = "";
+    }
+    if after(lead_now, &shown, lock) > width {
+        let room = width.saturating_sub(lead_now + yumete_cjk::str_width(dirty) + fixed);
+        shown = shorten_name(&name, room);
+    }
+    let buf = frame.buffer_mut();
+    match rule {
+        false => {
+            let bar = status_bar_style(config);
+            let quiet = bar.fg(ink.quiet());
+            for x in area.x..area.x + area.width {
+                if let Some(cell) = buf.cell_mut((x, area.y)) {
+                    cell.set_symbol(" ").set_style(bar);
+                }
+            }
+            let text = format!("{shown}{dirty}{lock}");
+            put_text(buf, area.x + lead_now as u16, area.y, area.x + area.width, &drawable(&text), quiet);
+        }
+        true => {
+            let line = ink.page().fg(ink.rule());
+            for x in area.x..area.x + area.width {
+                if let Some(cell) = buf.cell_mut((x, area.y)) {
+                    cell.set_symbol("─").set_style(line);
+                }
+            }
+            let end = area.x + area.width;
+            let mut x = area.x + lead_now.saturating_sub(1) as u16;
+            let text = format!(" {shown}");
+            put_text(buf, x, area.y, end, &drawable(&text), ink.page().fg(ink.quiet()));
+            x += yumete_cjk::str_width(&text) as u16;
+            // `[+]` in gold, as on the tab line: unsaved work is the one
+            // thing about another window worth catching the eye.
+            put_text(buf, x, area.y, end, dirty, ink.page().fg(ink.gold()));
+            x += yumete_cjk::str_width(dirty) as u16;
+            put_text(buf, x, area.y, end, " ", ink.page());
+        }
+    }
+}
 
 /// Whether `row` has any reading over it — which costs it a screen row.
 fn row_has_reading(editor: &Editor, rope: &yumete_core::Rope, row: &wrap::Row) -> bool {
@@ -15153,42 +15377,18 @@ fn reading_line(
     })
 }
 
-/// The rule between two work areas, and the caption of the one being read.
+/// The rule between two windows side by side: a `│` down the whole height,
+/// the status-line row included, so the two lines read as two.
 ///
-/// The boundary and the label for one row: 橫排 gets a `─` across the page
-/// with the caption at its left, 縱書 a `│` down it and no caption — a line of
-/// text cannot be written down one cell, and the status line says it instead.
-fn draw_divider(frame: &mut Frame, config: &Config, area: Rect, caption: Option<&str>) {
+/// No caption: every window names its own file on its own status line.
+fn draw_divider(frame: &mut Frame, config: &Config, area: Rect) {
     let ink = crate::theme::Palette::of(config);
     let rule = ink.page().fg(ink.rule());
     let buf = frame.buffer_mut();
-    let across = area.height == 1;
     for y in area.y..area.y + area.height {
         for x in area.x..area.x + area.width {
             if let Some(cell) = buf.cell_mut((x, y)) {
-                cell.set_symbol(match across {
-                    true => "─",
-                    false => "│",
-                })
-                .set_style(rule);
-            }
-        }
-    }
-    // 金墨, because a caption is not prose. It names the pane being *read* —
-    // the one you are standing in is named by the status line, which has said
-    // where you are all along.
-    if across {
-        if let Some(caption) = caption {
-            if !caption.is_empty() {
-                let text = format!(" {caption} ");
-                put_text(
-                    buf,
-                    area.x + 2,
-                    area.y,
-                    area.x + area.width,
-                    &text,
-                    ink.page().fg(ink.gold()),
-                );
+                cell.set_symbol("│").set_style(rule);
             }
         }
     }
@@ -15494,6 +15694,31 @@ fn draw_command(
     // so it never reads as an advertisement. In furniture ink, as line
     // numbers and an unlit tab, so it reads as the frame rather than as
     // something said. The same in every language.
+    // **The right end is the session's**: what has been typed so far (vim's
+    // showcmd, helix's pending keys) and the marks that are about no one
+    // window — a macro being recorded, a typesetter running. They stand
+    // there while nothing is typed on the row, and step aside for a prompt,
+    // which takes the whole row above. What the row says on its left wins
+    // when the two would meet.
+    let marks: Vec<String> = [
+        hud_line(editor),
+        editor.recording_register().map(|r| format!("@{r}")).unwrap_or_default(),
+        match editor.preview_at().is_some() {
+            true => "[preview]".to_string(),
+            false => String::new(),
+        },
+    ]
+    .into_iter()
+    .filter(|t| !t.is_empty())
+    .collect();
+    if !marks.is_empty() {
+        let text = marks.join("  ");
+        let wide = yumete_cjk::str_width(&text) as u16;
+        if right > wide + x {
+            put_text(buf, right - wide, area.y, right, &drawable(&text), page.fg(ink.gold()));
+        }
+        return;
+    }
     if config.editor.signature && x == area.x + 1 {
         const SIGNATURE: &str = "yumete";
         let wide = yumete_cjk::str_width(SIGNATURE) as u16;
@@ -15870,25 +16095,25 @@ fn position_in(editor: &Editor, full: bool) -> String {
     }
 }
 
-/// What to say about the character under the cursor, in three lengths.
+/// What to say about the character under the cursor: its code point,
+/// `U+6625`, in as many lengths as it can give way in.
 ///
-/// Three strings rather than one, so a narrow terminal drops what it has to and
-/// keeps the rest instead of dropping all of it: the block name goes first,
-/// then the 字 itself — which is on the page under the cursor anyway, so the
-/// bare `U+51AC` still answers the question the readout exists for (is the
-/// character wrong, or is the font?). The last stage earns its keep because
-/// the language tag (#337) stands on every line and takes ten cells with it.
-fn char_info(editor: &Editor, config: &Config) -> [String; 3] {
-    let nothing = || [String::new(), String::new(), String::new()];
+/// The code point alone, not the character — it is on the page under the
+/// cursor already — and not its Unicode block, which a status line per window
+/// has no room for. It still answers the question the readout exists for: is
+/// the character wrong, or the font? An invisible character the Unicode alarm
+/// tints keeps its name, in a longer first length: that name is the only way
+/// to tell what is hidden there.
+fn char_info(editor: &Editor, config: &Config) -> Vec<String> {
     if !config.editor.char_info || editor.prompt().is_some() {
-        return nothing();
+        return Vec::new();
     }
     // **A table with no rows has no character under the caret**: the caret
     // waits on the header line, and the grid draws that line frozen at the top
-    // and never as a row — so 「名 U+540D」 there would name a cell the reader
+    // and never as a row — so 「U+540D」 there would name a cell the reader
     // cannot see, beside a row number that already says 「—」.
     if editor.table_is_rowless() {
-        return nothing();
+        return Vec::new();
     }
     // **The Unicode alarm names what the tint stands for** (#252): the tinted
     // cell is an ordinary character, and the reason it is tinted is hidden
@@ -15896,48 +16121,21 @@ fn char_info(editor: &Editor, config: &Config) -> [String; 3] {
     if let Some(c) = editor.alarm_at_cursor().filter(|_| config.editor.unicode_alarm) {
         let point = yumete_cjk::blocks::codepoint(c);
         let name = yumete_core::alarm::name(c).unwrap_or_default();
-        return [format!("{point} · {name}"), point.clone(), point];
+        return vec![format!("{point} · {name}"), point];
     }
     // **一個字簇，不是一個碼位**。屏幕上的一個「字」可以是好幾個：
     // 帶異體字選擇符的漢字是漢字 ＋ 一個 Plane-14 的標籤，`🈚️` 是 U+1F21A ＋
     // U+FE0F。按碼位問，這一欄說的是那一串的頭一個——而讀者指着的是整個，同
     // `空格 n` 那一扇（`glosses`）。
     let Some(g) = editor.grapheme_at_cursor().filter(|g| !g.is_empty()) else {
-        return nothing();
+        return Vec::new();
     };
     // 逐個寫 `U+`，不把後面幾個接在頭一個屁股上：`U+3402+E0101` 讀起來像一個
     // 碼位多了條尾巴。
-    let point = g
-        .chars()
-        .map(yumete_cjk::blocks::codepoint)
-        .collect::<Vec<_>>()
-        .join(" ");
-    // **A character with no printable form is named, not shown** (#375). The
-    // readout put the character itself at the front, and for a TAB that is a
-    // literal `\t` handed to the terminal: nought cells to `char_width`, so the
-    // line was measured as fitting, and a jump to the next tab stop to the
-    // terminal, so it did not — it overflowed the last column, wrapped, and
-    // made the frame a row taller than the screen. That is #377 as well: a
-    // frame too tall scrolls the terminal, and the frame before it stays on
-    // the screen, which is the page smeared over itself.
     //
-    // The same shape as #374, one floor up: a tab counted as nothing by a
-    // measure and advanced over by whoever draws it. There is nothing to show
-    // for `U+0009`, so it shows nothing and says the name.
-    // Warning: **問的是底字畫不畫得出來，不是整簇佔幾格**。`grapheme_width` 給
-    // ASCII 控制符記一格（那是給頁面排版用的，見它自己的說明），拿它問就把 `\t`
-    // 當成畫得出來的字——#375 原樣回來。底字的 `char_width` 纔是那一條問的。
-    let shows = g.chars().next().is_some_and(|c| yumete_cjk::char_width(c) > 0);
-    let short = match shows {
-        false => point.clone(),
-        true => format!("{g} {point}"),
-    };
-    // 區塊名問的是**底字**：一個異體字選擇符自己在 Variation Selectors
-    // Supplement 裏，而讀者要知道的是那個漢字在哪一區。
-    match g.chars().next().and_then(yumete_cjk::blocks::block_of) {
-        Some(block) => [format!("{short} · {block}"), short, point],
-        None => [short.clone(), short, point],
-    }
+    // A character with no printable form — a TAB — is said by its code point
+    // like any other, never handed to the terminal (#375).
+    vec![g.chars().map(yumete_cjk::blocks::codepoint).collect::<Vec<_>>().join(" ")]
 }
 
 /// Draw the floating candidate panel below the cursor (Feature #28).
@@ -16710,6 +16908,250 @@ fn squeezed(text: &str) -> String {
         }
         assert!(ruled > 0, "有詞被畫了線");
         assert!(ruled < 24, "不是整行都畫——那就沒有分界了");
+    }
+
+    /// **One window looks as it always did**: the writing, then its status
+    /// line, then the command row — no row more and none less.
+    #[test]
+    fn one_window_keeps_one_status_line_above_the_command_row() {
+        let editor = editor_with("那年冬天\n");
+        let config = Config::default();
+        let areas = page_areas(&editor, &config, Rect::new(0, 0, 60, 8), 0);
+        assert_eq!(areas.panes, [Rect::new(0, 0, 60, 6)]);
+        assert_eq!(areas.lines, [Rect::new(0, 6, 60, 1)]);
+        assert_eq!(areas.command, Rect::new(0, 7, 60, 1));
+        assert!(areas.dividers.is_empty());
+        let buffer = render(&editor, &config, 60, 8);
+        let line = status_line(&buffer);
+        assert!(line.starts_with(" NOR   [scratch] [+]   行 1, 列 1, 字 1"), "{line:?}");
+        assert!(line.trim_end().ends_with("U+90A3"), "{line:?}");
+    }
+
+    /// **Two windows side by side, each with its own line**: the one with
+    /// the keys has the readout, the other only its file name, its mode's
+    /// place blank; the rule runs down through the line row between them.
+    #[test]
+    fn two_windows_side_by_side_have_a_line_each_and_the_rule_between() {
+        let mut editor = editor_with("那年冬天\n");
+        let config = Config::default();
+        editor.execute(":vsplit").unwrap();
+        let areas = page_areas(&editor, &config, Rect::new(0, 0, 81, 10), 0);
+        assert_eq!(areas.lines.len(), 2);
+        assert!(areas.lines.iter().all(|l| l.y == 8), "both lines at the windows' foot: {:?}", areas.lines);
+        assert_eq!(areas.dividers.len(), 1);
+        let rule = areas.dividers[0];
+        assert_eq!((rule.y, rule.height), (0, 9), "the rule runs through the line row");
+        let buffer = render(&editor, &config, 81, 10);
+        assert_eq!(at(&buffer, rule.x, 8), "│");
+        let live = areas.lines[editor.live_pane()];
+        let other = areas.lines[1 - editor.live_pane()];
+        let text = |r: Rect| (r.x..r.x + r.width).map(|x| at(&buffer, x, r.y)).collect::<String>();
+        assert!(text(live).starts_with(" NOR"), "{:?}", text(live));
+        let quiet = text(other);
+        assert!(quiet.starts_with("       [scratch] [+]"), "the mode's place is blank: {quiet:?}");
+        assert!(!quiet.contains("行") && !quiet.contains("U+"), "only the name: {quiet:?}");
+        // Same ground as the live line, fainter ink.
+        let bar = status_bar_style(&config);
+        assert_eq!(buffer[(other.x + 7, other.y)].style().bg, bar.bg);
+        assert_ne!(buffer[(other.x + 7, other.y)].style().fg, buffer[(live.x + 7, live.y)].style().fg);
+        // No rule carries a window's name.
+        assert!((0..10).all(|y| !row_text(&buffer, y).contains("──")), "no caption row");
+    }
+
+    /// **Three windows, two of them stacked**: no row between the stacked
+    /// two — the upper one's status line is the boundary — and the screen
+    /// spends exactly the rows one window does.
+    #[test]
+    fn a_stack_has_no_rule_row_the_upper_line_is_the_boundary() {
+        let mut editor = editor_with("那年冬天\n");
+        let config = Config::default();
+        editor.execute(":vsplit").unwrap();
+        editor.execute(":hsplit").unwrap();
+        let areas = page_areas(&editor, &config, Rect::new(0, 0, 81, 20), 0);
+        assert_eq!(areas.dividers.len(), 1, "only the beside rule");
+        let mut ys: Vec<u16> = areas.lines.iter().map(|l| l.y).collect();
+        ys.sort();
+        assert_eq!(ys.len(), 3);
+        assert_eq!(ys[2], 18, "two lines at the foot");
+        assert_eq!(ys[1], 18);
+        let upper = ys[0];
+        let stacked: Vec<usize> = (0..3).filter(|&i| areas.panes[i].x == areas.panes[editor.live_pane()].x).collect();
+        assert_eq!(stacked.len(), 2);
+        let below = stacked.iter().map(|&i| areas.panes[i]).max_by_key(|p| p.y).unwrap();
+        assert_eq!(below.y, upper + 1, "the lower window starts right under the upper line");
+        let rows: u16 = stacked.iter().map(|&i| areas.panes[i].height + 1).sum();
+        assert_eq!(rows, 19, "the two windows and their lines fill the column: {areas:?}");
+    }
+
+    /// **縱書 windows stand side by side**, each with its line at the foot.
+    #[test]
+    fn vertical_windows_have_their_lines_at_the_foot() {
+        let mut editor = editor_with("那年冬天\n");
+        editor.set_layout(WritingLayout::Vertical);
+        let config = vertical_config();
+        editor.execute(":vsplit").unwrap();
+        let buffer = render_vertical(&mut editor, &config, 100, 16);
+        let line = row_text(&buffer, 14);
+        assert!(line.contains("NOR") && line.contains("縱 1"), "{line:?}");
+        assert!(line.contains('│'), "the rule runs through it: {line:?}");
+        assert_eq!(line.matches("[scratch]").count(), 2, "a name on each: {line:?}");
+    }
+
+    /// **A sidebar keeps its frame and gets no line**: its box reaches the
+    /// row above the command row, and the window's line starts beside it.
+    /// With the keys in the sidebar the window's line is the quiet kind.
+    #[test]
+    fn a_sidebar_reaches_the_command_row_and_has_no_line() {
+        let mut editor = editor_with("那年冬天\n");
+        let config = Config::default();
+        editor.toggle_sidebar(Side::Left);
+        let areas = page_areas(&editor, &config, Rect::new(0, 0, 100, 12), 0);
+        let panel = areas.panels[Side::Left as usize];
+        assert_eq!(panel.y + panel.height, 11, "down to the command row");
+        assert_eq!(areas.lines[0].x, panel.x + panel.width, "the line starts beside it");
+        let buffer = render(&editor, &config, 100, 12);
+        let corner = at(&buffer, panel.x, 10);
+        assert!(["╚", "└", "╰", "┗"].contains(&corner.as_str()), "the box's corner on the line row: {corner:?}");
+        assert!(status_line(&buffer).contains("NOR"));
+        // The keys into the sidebar: no window has them.
+        editor.on_key(Key::Ctrl('w'));
+        editor.on_key(Key::Char('w'));
+        assert!(editor.sidebar_focused());
+        let buffer = render(&editor, &config, 100, 12);
+        let line = status_line(&buffer);
+        assert!(!line.contains("NOR") && line.contains("[scratch]"), "{line:?}");
+    }
+
+    /// **A grid in one window and prose in another** each get a line; the
+    /// grid's says where in the table the caret is.
+    #[test]
+    fn a_table_window_has_its_own_line() {
+        let dir = tmp().join(format!("yumete-status-csv-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("t.csv"), "名,數\n甲,1\n乙,2\n").unwrap();
+        let mut editor = Editor::new();
+        editor.execute(&format!(":open {}", dir.join("t.csv").display())).unwrap();
+        editor.execute(":vsplit").unwrap();
+        let config = Config::default();
+        let buffer = render(&editor, &config, 81, 10);
+        let line = status_line(&buffer);
+        assert!(line.contains("TBL.NOR") && line.contains("[名]"), "{line:?}");
+        assert_eq!(line.matches("t.csv").count(), 2, "both windows name the file: {line:?}");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// **A narrow window's line gives way in order**: the position outlasts
+    /// the file name, `[+]` outlasts it too, and a long name is cut from the
+    /// left with its extension kept.
+    #[test]
+    fn a_narrow_window_gives_way_in_order() {
+        assert_eq!(shorten_name("第三章集市初稿.md", 12), "…集市初稿.md");
+        assert_eq!(shorten_name("plan.md", 20), "plan.md");
+        assert_eq!(shorten_name("plan.md", 3), "");
+        let mut editor = editor_with("那年冬天\n");
+        let config = Config::default();
+        let line = status_line(&render(&editor, &config, 30, 8));
+        assert!(squeezed(&line).contains("行 1, 列 1"), "{line:?}");
+        assert!(line.contains("[+]"), "{line:?}");
+        assert!(!line.contains("U+"), "the code point went first: {line:?}");
+        // The other window, narrow: the blank place goes, then the name is
+        // cut; `[+]` stays.
+        editor.execute(":vsplit").unwrap();
+        let buffer = render(&editor, &config, 31, 8);
+        let areas = page_areas(&editor, &config, Rect::new(0, 0, 31, 8), 0);
+        let other = areas.lines[1 - editor.live_pane()];
+        let quiet = (other.x..other.x + other.width).map(|x| at(&buffer, x, other.y)).collect::<String>();
+        assert!(quiet.contains("[+]"), "{quiet:?}");
+        assert!(quiet.trim_start().starts_with("[scr") || quiet.trim_start().starts_with('…'), "{quiet:?}");
+    }
+
+    /// **`inactive_status = "rule"`**: the other window draws a thin rule
+    /// with its name and `[+]` in it, on the page's ground.
+    #[test]
+    fn the_rule_setting_draws_other_windows_as_a_thin_rule() {
+        let mut editor = editor_with("那年冬天\n");
+        let mut config = Config::default();
+        config.editor.inactive_status = "rule".to_string();
+        editor.execute(":vsplit").unwrap();
+        let buffer = render(&editor, &config, 81, 10);
+        let areas = page_areas(&editor, &config, Rect::new(0, 0, 81, 10), 0);
+        let other = areas.lines[1 - editor.live_pane()];
+        let quiet = (other.x..other.x + other.width).map(|x| at(&buffer, x, other.y)).collect::<String>();
+        assert!(quiet.starts_with("── [scratch] [+] ──"), "{quiet:?}");
+        assert_eq!(buffer[(other.x, other.y)].style().bg, ink(&config).page().bg, "on the page's ground");
+        assert!(status_line(&buffer).contains("NOR"), "the live line is the full one");
+    }
+
+    /// **`2/5`, `[CRLF]` and `[3/17]` appear only when they say something**:
+    /// more than one selection, a line ending that is not LF, and the caret
+    /// standing in a match a search just found.
+    #[test]
+    fn the_line_shows_selections_line_ending_and_search_index_when_they_matter() {
+        let config = Config::default();
+        let mut editor = editor_with("甲乙\n甲乙\n甲乙\n");
+        let line = status_line(&render(&editor, &config, 100, 8));
+        assert!(!line.contains("1/1") && !line.contains("CRLF") && !line.contains("/3]"), "{line:?}");
+        // Two selections: `C` copies the caret down.
+        editor.on_key(Key::Char('C'));
+        assert!(editor.has_many_selections());
+        let line = status_line(&render(&editor, &config, 100, 8));
+        assert!(line.contains("   2/2"), "{line:?}");
+        editor.on_key(Key::Char(','));
+        // A search: the caret stands in the second of three matches.
+        editor.on_key(Key::Char('/'));
+        editor.on_key(Key::Char('乙'));
+        editor.on_key(Key::Enter);
+        editor.on_key(Key::Char('n'));
+        let line = status_line(&render(&editor, &config, 100, 8));
+        let (n, of) = editor.search_index().expect("standing in a match");
+        assert_eq!(of, 3);
+        assert!(line.contains(&format!("[{n}/3]")), "{line:?}");
+        // …until the caret leaves it.
+        editor.on_key(Key::Char('h'));
+        editor.on_key(Key::Char('h'));
+        assert_eq!(editor.search_index(), None);
+        assert!(!status_line(&render(&editor, &config, 100, 8)).contains("/3]"));
+        // A CRLF file says so.
+        let dir = tmp().join(format!("yumete-status-crlf-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("w.txt"), "a\r\nb\r\n").unwrap();
+        let mut editor = Editor::new();
+        editor.execute(&format!(":open {}", dir.join("w.txt").display())).unwrap();
+        let line = status_line(&render(&editor, &config, 100, 8));
+        assert!(line.contains("w.txt [CRLF]"), "{line:?}");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// **The session's marks and the keys typed so far stand at the command
+    /// row's right end**, not on any window's line; a prompt takes the row
+    /// and they step aside. With no command row they come back to the line.
+    #[test]
+    fn recording_and_pending_keys_stand_on_the_command_row() {
+        let mut editor = editor_with("那年冬天\n");
+        editor.set_key_preset(yumete_cjk::KeyPreset::Vim);
+        let mut config = Config::default();
+        config.editor.signature = false;
+        editor.on_key(Key::Char('q'));
+        editor.on_key(Key::Char('a'));
+        assert_eq!(editor.recording_register(), Some('a'));
+        let buffer = render(&editor, &config, 80, 8);
+        assert!(command_line(&buffer).trim_end().ends_with("@a"), "{:?}", command_line(&buffer));
+        assert!(!status_line(&buffer).contains("@a"));
+        // A half-typed `g` stands beside it.
+        editor.on_key(Key::Char('g'));
+        let buffer = render(&editor, &config, 80, 8);
+        assert!(command_line(&buffer).trim_end().ends_with("g  @a"), "{:?}", command_line(&buffer));
+        assert!(!status_line(&buffer).trim_end().ends_with('g'));
+        editor.on_key(Key::Esc);
+        // A prompt takes the whole row.
+        editor.on_key(Key::Char(':'));
+        assert!(!command_line(&render(&editor, &config, 80, 8)).contains("@a"));
+        editor.on_key(Key::Esc);
+        // No command row: the line carries them.
+        config.editor.command_line = false;
+        editor.on_key(Key::Char('g'));
+        let line = row_text(&render(&editor, &config, 80, 8), 7);
+        assert!(line.contains(" @a") && line.trim_end().ends_with('g'), "{line:?}");
     }
 
     /// **A click gives the window under it the keys**: `window_at` names
@@ -17562,7 +18004,7 @@ fn squeezed(text: &str) -> String {
         let look = vertical::Look::of(editor, config);
         // From the page's own rectangle, exactly as the event loop does it —
         // otherwise these tests would be asking about a page nobody draws.
-        let page = page_areas(editor, config, Rect::new(0, 0, w, h), 0).text;
+        let page = page_areas(editor, config, Rect::new(0, 0, w, h), 0).panes[0];
         editor.set_zong_length(vertical::zong_length_for(config, page.height, lines, look));
         render_with(editor, config, ime, w, h)
     }
@@ -18082,17 +18524,16 @@ fn squeezed(text: &str) -> String {
         let mut editor = editor_with("ch\t錐\n");
         editor.on_key(Key::Char('l'));
         editor.on_key(Key::Char('l'));
-        let [long, short, _] = char_info(&editor, &config);
-        assert!(!long.contains('\t'), "{long:?}");
-        assert!(!short.contains('\t'), "{short:?}");
-        assert!(long.starts_with("U+0009"), "{long:?}");
+        let said = char_info(&editor, &config);
+        assert!(said.iter().all(|t| !t.contains('\t')), "{said:?}");
+        assert_eq!(said, ["U+0009"]);
     }
 
-    /// **狀態欄右端說的是一個字簇，不是一個碼位**。
+    /// **狀態欄右端說的是一個字簇，不是一個碼位**，而且只寫碼位：
     ///
     /// `㐂󠄁` 是 U+3402 ＋ 一個異體字選擇符，這一欄要寫兩個碼位，不只 `U+3402`——同一
-    /// 幀裏 `空格 n` 那一扇也寫着兩個碼位。區塊名問的是底字：選擇符自己在
-    /// Variation Selectors Supplement 裏，而讀者要知道的是那個漢字在哪一區。
+    /// 幀裏 `空格 n` 那一扇也寫着兩個碼位。字本身與區塊名都不寫：字就在光標底下，
+    /// 區塊名在一扇窗一條狀態行上擺不下。
     #[test]
     fn the_readout_names_every_code_point_of_a_cluster() {
         let config = Config::default();
@@ -18100,13 +18541,10 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Char('g'));
         editor.on_key(Key::Char('g'));
         editor.on_key(Key::Char('0'));
-        let [long, short, point] = char_info(&editor, &config);
-        assert_eq!(point, "U+3402 U+E0101", "{point:?}");
-        assert_eq!(short, "\u{3402}\u{E0101} U+3402 U+E0101", "{short:?}");
-        assert!(long.ends_with("Extension A"), "區塊名問的是底字：{long:?}");
+        assert_eq!(char_info(&editor, &config), ["U+3402 U+E0101"]);
         // 走過整個字簇之後是下一個字，不是那個選擇符。
         editor.on_key(Key::Char('l'));
-        assert_eq!(char_info(&editor, &config)[2], "U+0061");
+        assert_eq!(char_info(&editor, &config), ["U+0061"]);
     }
 
     /// The second latch on its own, which is the one that does not depend on
@@ -18180,14 +18618,16 @@ fn squeezed(text: &str) -> String {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// A character that *has* a form is still shown beside its code point —
-    /// the readout exists to answer「is this the character I think it is」.
+    /// **The readout is the code point alone**: the character is on the page
+    /// under the cursor already, and its block name has no room on a line
+    /// that each window has its own of.
     #[test]
-    fn a_character_with_a_form_is_still_shown() {
+    fn the_readout_is_the_code_point_alone() {
         let editor = editor_with("錐\n");
         let buffer = render_with(&editor, &Config::default(), no_ime(), 80, 8);
         let row = status_line(&buffer);
-        assert!(row.contains("錐 U+9310"), "{row:?}");
+        assert!(row.trim_end().ends_with("  U+9310"), "{row:?}");
+        assert!(!row.contains("錐 U+9310") && !row.contains("CJK"), "{row:?}");
     }
 
     /// #379, the design: 「在顶部预留一个信息栏（两行：列号+列名）。
@@ -23988,9 +24428,13 @@ fn squeezed(text: &str) -> String {
         // row: a row holds four keys and `空格` has fourteen. The row keeps
         // what it was always for — what just happened — and the two surfaces
         // stop saying the same thing.
+        // What stands on the row is only the key typed so far, at its right
+        // end (vim's showcmd).
         for key in ['m', 'g', ' '] {
             editor.on_key(Key::Char(key));
-            assert_eq!(hint(&editor).trim(), "", "{key} belongs to the panel");
+            let typed = editor.typed_so_far().replace(' ', "");
+            assert!(!typed.is_empty());
+            assert_eq!(hint(&editor).trim(), typed, "{key} belongs to the panel");
             editor.on_key(Key::Esc);
         }
     }
@@ -24471,7 +24915,7 @@ fn squeezed(text: &str) -> String {
         editor.set_layout(WritingLayout::Vertical);
         let config = vertical_config();
         let area = Rect::new(0, 0, 40, 20);
-        let page = page_areas(&editor, &config, area, 0).text;
+        let page = page_areas(&editor, &config, area, 0).panes[0];
         // Twenty rows, less the status line and the command row.
         assert_eq!(page.height, 18, "the page is not the terminal");
         let look = vertical::Look::of(&editor, &config);
@@ -25624,13 +26068,16 @@ fn squeezed(text: &str) -> String {
 
         let buffer = render(&editor, &config, 40, 9);
         let rows: Vec<String> = (0..9).map(|y| row_text(&buffer, y).trim_end().to_string()).collect();
-        let divider = rows.iter().position(|r| r.starts_with('─')).expect("a rule between them");
-        assert!(rows[divider].contains("yi.md"), "the caption still names 乙 的檔: {:?}", rows[divider]);
+        // The upper window's own status line is the boundary; the lower
+        // window's line, at the bottom, names 乙 的檔.
+        let divider = rows.iter().position(|r| r.contains("NOR")).expect("the live window's line");
+        assert!(rows[divider].contains("jia.md"), "the live line names 甲: {:?}", rows[divider]);
         assert!(
             rows[..divider].iter().any(|r| r == "甲甲甲"),
             "the live half is where the keys are: {rows:?}"
         );
         assert_eq!(rows[divider + 1], "乙乙乙", "and the other half is what it says it is: {rows:?}");
+        assert!(rows[7].contains("yi.md") && !rows[7].contains("NOR"), "the other line names 乙: {rows:?}");
 
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -25710,9 +26157,11 @@ fn squeezed(text: &str) -> String {
         assert_eq!(editor.live_pane(), 1, "點名就過去了");
         let buffer = render(&editor, &config, 40, 9);
         let rows: Vec<String> = (0..9).map(|y| row_text(&buffer, y).trim_end().to_string()).collect();
-        let divider = rows.iter().position(|r| r.starts_with('─')).expect("a rule between them");
+        // The upper window's status line is the boundary, quiet: the keys
+        // are below.
+        let divider = rows.iter().position(|r| r.contains("[scratch]")).expect("the upper window's line");
         assert!(divider > 0 && divider + 1 < 9, "an equal cut: {rows:?}");
-        assert!(rows[divider].contains("[scratch]"), "the caption: {:?}", rows[divider]);
+        assert!(!rows[divider].contains("NOR"), "the upper line is the quiet kind: {:?}", rows[divider]);
         // Both halves show the file.
         assert_eq!(rows[0], "第一行");
         assert_eq!(rows[divider + 1], "第一行");
@@ -26147,8 +26596,8 @@ fn squeezed(text: &str) -> String {
         let buffer = render_with(&editor, &config, &ime, 100, 10);
         let line = row(&buffer, 100);
         assert!(
-            line.contains("U+90A3") && line.contains("CJK Unified Ideographs"),
-            "the 字 is named at the right edge: {line:?}"
+            line.trim_end().ends_with("U+90A3") && !line.contains("CJK Unified Ideographs"),
+            "the 字 is named at the right edge, by its code point: {line:?}"
         );
         // Warning: **左邊留一格**，和下面的命令行對齊——底下那一行本來就從第二
         // 格起。那一格同時是轉圈那八個點的位子——見
@@ -26161,16 +26610,21 @@ fn squeezed(text: &str) -> String {
         let buffer = render_with(&editor, &config, &ime, 90, 10);
         assert!(row(&buffer, 90).contains("U+51AC"), "冬");
 
-        // A narrow line gives up the block name before the code point, and the
-        // position readout is never squeezed.
+        // A narrow line gives up the count, then the language tag, before the
+        // code point, and the position readout is never squeezed.
+        for width in 44u16..=90 {
+            let line = row(&render_with(&editor, &config, &ime, width, 10), width);
+            if line.contains("靈") {
+                assert!(line.contains("U+51AC"), "{width}: the tag goes before the code point: {line:?}");
+            }
+            if line.contains("U+51AC") {
+                assert!(squeezed(&line).contains("行 1, 列 5"), "{width}: position kept: {line:?}");
+            }
+        }
         let buffer = render_with(&editor, &config, &ime, 60, 10);
         let line = row(&buffer, 60);
         assert!(line.contains("U+51AC"), "the code point survives: {line:?}");
-        assert!(!line.contains("CJK Unified"), "the block name gives way first");
         assert!(squeezed(&line).contains("行 1, 列 5"), "position kept: {line:?}");
-        // And the standing 中/ABC tag (#337) is not what pays for it: the 字
-        // itself is, because it is already on the page under the cursor.
-        assert!(line.contains("靈"), "the language tag stands: {line:?}");
 
         // Narrower still and it says nothing rather than truncating.
         let buffer = render_with(&editor, &config, &ime, 44, 10);
@@ -27359,10 +27813,9 @@ fn squeezed(text: &str) -> String {
 
     /// **The status line's readout lines up on a 字根 too**.
     ///
-    /// For a non-PUA character the row shows the char, a space and the code
-    /// point; a 字根 must show the same, with no space missing in the middle
-    /// and none left over at the end — the row is placed against `str_width`,
-    /// which counts a 字根 two, so ratatui must draw it as two.
+    /// For a non-PUA character the row ends in its code point; a 字根 must end
+    /// on the same column, with nothing left over at the end — the row is
+    /// placed against `str_width`.
     #[test]
     fn the_status_readout_lines_up_on_a_private_use_character() {
         let config = Config::default();
@@ -27385,15 +27838,11 @@ fn squeezed(text: &str) -> String {
         // Both run to the same last column: neither finishes one short of the
         // edge.
         assert_eq!(han_end, root_end, "both readouts end on the same column");
-        // Two cells for the character, one blank, then its code point —
-        // the same shape for either kind.
-        let at = |cells: &[String], c: &str| {
-            (0..80usize).find(|&x| cells[x] == c).expect("the character is on the line")
-        };
-        for (cells, c) in [(&han, "\u{9fb4}"), (&root, "\u{f860}")] {
-            let x = at(cells, c);
-            assert_eq!(cells[x + 2].trim(), "", "a blank after the two cells: {:?}", &cells[x..x + 4]);
-            assert_eq!(cells[x + 3], "U", "then the code point: {:?}", &cells[x..x + 6]);
+        // The code point alone, the same shape for either kind.
+        for (cells, end, point) in [(&han, han_end, "U+9FB4"), (&root, root_end, "U+F860")] {
+            let from = end as usize + 1 - point.len();
+            assert_eq!(cells[from..=end as usize].concat(), point, "{:?}", &cells[from - 3..=end as usize]);
+            assert_eq!(cells[from - 1].trim(), "", "a blank before it");
         }
     }
 

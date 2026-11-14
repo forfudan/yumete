@@ -402,6 +402,10 @@ impl Windows {
     /// to the last. A **beside** row opened from the right is laid out
     /// from the right, as a 縱書 page reads — each split by its own order,
     /// never by the page the keys are on now.
+    ///
+    /// **Only a beside split has a rule.** Every window's area ends in its
+    /// own status line, so in a stack the upper window's line is the
+    /// boundary, as in helix and vim: a rule there would be a second one.
     pub fn place(&self, area: Area) -> (Vec<Placed>, Vec<Rule>) {
         fn go(node: &Node, area: Area, out: &mut Vec<Placed>, rules: &mut Vec<Rule>) {
             let Some((how, rtl)) = lie_of(node) else {
@@ -417,7 +421,8 @@ impl Windows {
                 Split::Below => area.height,
                 Split::Beside => area.width,
             };
-            let share = length.saturating_sub(n - 1) / n;
+            let gap = u16::from(how == Split::Beside);
+            let share = length.saturating_sub((n - 1) * gap) / n;
             let mut from = 0u16;
             for (i, child) in row.iter().enumerate() {
                 let last = i + 1 == row.len();
@@ -443,10 +448,10 @@ impl Windows {
                     }
                 };
                 go(child, part, out, rules);
-                if !last {
+                if !last && gap > 0 {
                     rules.push(Rule { area: rule, how, first: last_leaf(child), second: first_leaf(row[i + 1]) });
                 }
-                from = (from + size + 1).min(length);
+                from = (from + size + gap).min(length);
             }
         }
         let mut out = Vec::new();
@@ -464,8 +469,8 @@ impl Windows {
         let (x, y) = match direction {
             Direction::Left => (me.x.checked_sub(2)?, me.y + me.height / 2),
             Direction::Right => (me.x + me.width + 1, me.y + me.height / 2),
-            Direction::Up => (me.x + me.width / 2, me.y.checked_sub(2)?),
-            Direction::Down => (me.x + me.width / 2, me.y + me.height + 1),
+            Direction::Up => (me.x + me.width / 2, me.y.checked_sub(1)?),
+            Direction::Down => (me.x + me.width / 2, me.y + me.height),
         };
         placed.iter().find(|p| p.id != id && p.area.contains(x, y)).map(|p| p.id)
     }
@@ -640,10 +645,10 @@ mod tests {
         let mut w = Windows::one();
         w.split(1, Split::Below);
         let (placed, rules) = w.place(Area::new(0, 0, 80, 24));
-        assert_eq!(placed[0].area, Area::new(0, 0, 80, 11));
-        assert_eq!(rules[0].area, Area::new(0, 11, 80, 1));
+        // Stacked, the upper window's own status line is the boundary.
+        assert_eq!(placed[0].area, Area::new(0, 0, 80, 12));
+        assert!(rules.is_empty());
         assert_eq!(placed[1].area, Area::new(0, 12, 80, 12));
-        assert_eq!((rules[0].first, rules[0].second), (1, 2));
 
         let mut w = Windows::one();
         w.split_on(1, Split::Beside, false, true);
@@ -688,8 +693,8 @@ mod tests {
     }
 
     /// A row shares its room equally, however its splits were made, as
-    /// nvim's and helix's do: three stacked in 40 rows less
-    /// two rules, three beside after `C-w L` from a column.
+    /// nvim's and helix's do: three stacked in 40 rows, three beside
+    /// after `C-w L` from a column less two rules.
     #[test]
     fn a_row_shares_its_room_equally() {
         let mut w = Windows::one();
@@ -697,10 +702,10 @@ mod tests {
         w.split(two, Split::Below);
         let (placed, rules) = w.place(Area::new(0, 0, 80, 40));
         let heights: Vec<_> = placed.iter().map(|p| p.area.height).collect();
-        assert_eq!(heights, [12, 12, 14]);
-        assert_eq!(rules.len(), 2);
+        assert_eq!(heights, [13, 13, 14]);
+        assert!(rules.is_empty());
         assert_eq!(placed[1].area.y, 13);
-        assert_eq!(rules[1].area.y, 25);
+        assert_eq!(placed[2].area.y, 26);
         // vim's new window goes first: the tree is (3 / 2) / 1.
         let mut w = Windows::one();
         let two = w.split_on(1, Split::Below, true, false).unwrap();

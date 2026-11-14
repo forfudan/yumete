@@ -120,17 +120,20 @@ fn a_markdown_preview_is_drawn_and_follows_the_cursor() {
     frame(&mut editor, &config);
     md.follow(&mut editor, &config);
 
-    // **The frame says which window has the keys**: thin while the text
-    // has them, thick once the preview does.
+    // **The status lines say which window has the keys**, as for any two
+    // windows: `NOR` on the text's while it has them, `PRV` on the preview's
+    // once it does. No frame round the picture.
     let shown = frame(&mut editor, &config);
-    assert!(shown.contains('┌') && !shown.contains('┏'), "{shown}");
+    assert!(!shown.contains(['┌', '┏']), "no frame: {shown}");
+    assert!(shown.contains("NOR") && !shown.contains("PRV"), "{shown}");
     // **The cursor's paragraph has a bar in the picture**; the frame's
     // arrows only point the way to it once it is out of view.
     assert!(!shown.contains(['▶', '◀', '▲', '▼']), "in view, no arrows: {shown}");
     editor.on_key(yumete_core::input::Key::Ctrl('w'));
     editor.on_key(yumete_core::input::Key::Char('w'));
     let shown = frame(&mut editor, &config);
-    assert!(shown.contains('┏') && !shown.contains('┌'), "{shown}");
+    assert!(shown.contains("PRV") && !shown.contains("NOR"), "{shown}");
+    assert!(!shown.contains(['┌', '┏']), "no frame: {shown}");
     editor.on_key(yumete_core::input::Key::Ctrl('w'));
     editor.on_key(yumete_core::input::Key::Char('w'));
     md.follow(&mut editor, &config);

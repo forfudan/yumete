@@ -245,6 +245,11 @@ const EDITOR_STATUS_COUNT_WAYS: &[Choice] = &[
     Choice { word: "off", label: "settings.pick.status-count.off" },
 ];
 
+const EDITOR_INACTIVE_STATUS_WAYS: &[Choice] = &[
+    Choice { word: "line", label: "settings.pick.inactive-status.line" },
+    Choice { word: "rule", label: "settings.pick.inactive-status.rule" },
+];
+
 const EDITOR_INDENT_HINT_WAYS: &[Choice] = &[
     Choice { word: "none", label: "settings.pick.indent-hint.none" },
     Choice { word: "symbol", label: "settings.pick.indent-hint.symbol" },
@@ -826,6 +831,15 @@ pub const SETTINGS: &[Setting] = &[
         label: "settings.editor.status-count",
         hint: "settings.editor.status-count.hint",
         factory: r#""text""#,
+    },
+    Setting {
+        table: "editor",
+        key: "inactive_status",
+        group: Group::Interface,
+        kind: Kind::Pick(EDITOR_INACTIVE_STATUS_WAYS),
+        label: "settings.editor.inactive-status",
+        hint: "settings.editor.inactive-status.hint",
+        factory: r#""line""#,
     },
     Setting {
         table: "editor",
