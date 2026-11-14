@@ -1023,6 +1023,9 @@ pub fn run(
             // 到下一次按鍵纔看得見側欄跟上。指紋對得上它立刻回來，所以每一幀問
             // 一次不花什麼。
             editor.refresh_the_edited_file();
+            // The 大綱 and the buffer list, rebuilt when the text under them
+            // moved — a stamp compare on every other frame.
+            editor.keep_the_lists_current();
             // The detail is the last frame's cost in milliseconds: if the loop
             // stalls here, the stall line says whether drawing was already
             // expensive before it stopped (#359).
@@ -1427,6 +1430,8 @@ pub fn run(
                 editor.docs_due_in(),
                 // The signature asked again once the typing has been still.
                 editor.signature_due_in(),
+                // A long 大綱, rebuilt once the typing has been still.
+                editor.lists_due_in(),
                 // The settings panel's files, changed outside while it is open.
                 settings.due_in(),
                 // The typing trainer's clock, shown running.

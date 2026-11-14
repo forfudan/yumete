@@ -16,6 +16,22 @@ pub enum Region {
     Side(crate::sidebar::Side),
 }
 
+/// **What a pushed list was built from**: the parts of the editor its rows
+/// are a function of, compared to see whether they are stale.
+#[derive(Debug, Clone, PartialEq)]
+pub(super) enum Built {
+    /// The 大綱: this buffer at this revision, read as this markup, this deep.
+    Outline {
+        buffer: u64,
+        revision: u64,
+        syntax: crate::syntax::Syntax,
+        levels: Option<usize>,
+    },
+    /// The buffer list: which one is current, and every buffer's id, `+` and
+    /// name folded into one number.
+    Buffers { current: usize, roster: u64 },
+}
+
 impl Editor {
     // ---- The side panels (Feature #94, #293) -------------------------------
 
@@ -705,17 +721,100 @@ impl Editor {
     /// Fill the sidebar with whatever its current view shows.
     ///
     /// The tree builds its own rows from the file system; the other two are the
-    /// editor's own knowledge, so they are pushed in from here.
-    /// Refreshed when it is asked for, not on every keystroke.
-    ///
-    /// Building the outline walks the document, and doing that per key is a
-    /// trap. Headings do not change
-    /// while a sentence is being typed, so the views are rebuilt when the
-    /// sidebar is opened, focused, switched, or the file under it changes —
-    /// every moment a reader is about to look at it.
+    /// editor's own knowledge, so they are pushed in from here. Asked for by
+    /// name when the panel is opened, focused, switched or folded; between
+    /// those, [`Self::keep_the_lists_current`] rebuilds whatever the text has
+    /// moved under.
     pub(super) fn refresh_sidebar(&mut self) {
         for side in crate::sidebar::Side::BOTH {
             self.refresh_panel(side);
+        }
+    }
+
+    /// **The pushed lists follow what they are built from**, after every key
+    /// and on every drawn frame.
+    ///
+    /// The 大綱 and the buffer list keep rows rather than working them out per
+    /// frame, so something has to say when those rows are stale. The answer is
+    /// a stamp, not a moment: each slot remembers what its rows were built
+    /// from ([`Built`]) and is built again exactly when that differs — an
+    /// edit, an undo, a reload, a save that takes the `+` away — and never on a
+    /// frame where nothing moved. Saving, or walking into the panel, is not
+    /// what makes a renamed heading show.
+    ///
+    /// Warning: **A long outline waits for the typing to stop.** Building the
+    /// 大綱 walks the whole document (and a Typst master file reads every
+    /// chapter it includes), a few milliseconds for a book of 2000 headings.
+    /// So when the last build took longer than [`Self::OUTLINE_EVERY_KEY`] the
+    /// rebuild is put off until the text has stood still for
+    /// [`Self::OUTLINE_IDLE`] — the debounce aerial and outline.nvim keep — and
+    /// [`Self::lists_due_in`] wakes the loop for it. A short one follows every
+    /// key.
+    pub fn keep_the_lists_current(&mut self) {
+        let owed = self.panel_owed.take();
+        for side in crate::sidebar::Side::BOTH {
+            let Some(view) = self.panel(side).map(|p| p.view()) else { continue };
+            let Some(source) = self.built_from(view) else { continue };
+            if self.panel_built[side as usize].as_ref() == Some(&source) {
+                continue;
+            }
+            if view == crate::sidebar::View::Outline && self.outline_cost > Self::OUTLINE_EVERY_KEY {
+                let since = match &owed {
+                    Some((was, since)) if *was == source => *since,
+                    _ => std::time::Instant::now(),
+                };
+                if since.elapsed() < Self::OUTLINE_IDLE {
+                    self.panel_owed = Some((source, since));
+                    continue;
+                }
+            }
+            self.refresh_panel(side);
+        }
+    }
+
+    /// The longest a 大綱 build may take and still follow every key.
+    pub const OUTLINE_EVERY_KEY: std::time::Duration = std::time::Duration::from_millis(2);
+
+    /// How long the text stands still before a long 大綱 is built again.
+    pub const OUTLINE_IDLE: std::time::Duration = std::time::Duration::from_millis(150);
+
+    /// When the loop has to wake for a 大綱 rebuild that is waiting on the
+    /// typing; `None` when none is.
+    pub fn lists_due_in(&self) -> Option<std::time::Duration> {
+        self.panel_owed
+            .as_ref()
+            .map(|(_, since)| Self::OUTLINE_IDLE.saturating_sub(since.elapsed()))
+    }
+
+    /// How many times a slot's rows were built from the text.
+    #[cfg(test)]
+    pub(super) fn panel_builds(&self) -> u64 {
+        self.panel_builds
+    }
+
+    /// What a view's rows are built from, for the views whose rows are pushed
+    /// in and follow the text; `None` for the rest, which are rebuilt only when
+    /// asked (the tree reads the disk, the links read the saved project) or
+    /// drawn live.
+    fn built_from(&self, view: crate::sidebar::View) -> Option<Built> {
+        match view {
+            crate::sidebar::View::Outline => {
+                let buffer = self.current_buffer();
+                Some(Built::Outline {
+                    buffer: buffer.id(),
+                    revision: buffer.revision(),
+                    syntax: buffer.syntax(),
+                    levels: self.outline_levels,
+                })
+            }
+            crate::sidebar::View::Buffers => {
+                let mut roster = DefaultHasher::new();
+                for buffer in &self.buffers {
+                    (buffer.id(), buffer.is_modified(), buffer.display_name()).hash(&mut roster);
+                }
+                Some(Built::Buffers { current: self.current, roster: roster.finish() })
+            }
+            _ => None,
         }
     }
 
@@ -725,6 +824,15 @@ impl Editor {
         let Some(view) = self.panel(side).map(|p| p.view()) else {
             return;
         };
+        let built = self.built_from(view);
+        if built.is_some() {
+            self.panel_builds += 1;
+            if self.panel_owed.as_ref().is_some_and(|(owed, _)| Some(owed) == built.as_ref()) {
+                self.panel_owed = None;
+            }
+        }
+        self.panel_built[side as usize] = built;
+        let began = std::time::Instant::now();
         let rows = match view {
             View::Explorer => {
                 if let Some(panel) = self.panel_mut(side) {
@@ -754,7 +862,11 @@ impl Editor {
                 aside: None,
                 })
                 .collect(),
-            View::Outline => self.outline_rows(),
+            View::Outline => {
+                let rows = self.outline_rows();
+                self.outline_cost = began.elapsed();
+                rows
+            }
             // 雙鏈: sections of links, or the file among its neighbours.
             View::Links => self.links_rows(),
             // Its own store, its own shape: a form and a list of hits, not

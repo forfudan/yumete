@@ -51,6 +51,7 @@ impl Editor {
         }
         self.leave_an_empty_group();
         self.settle_folds();
+        self.keep_the_lists_current();
         self.keep_the_signature_up(was);
         self.settle_the_change(was);
         self.sniff_the_scratch();

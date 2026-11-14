@@ -40486,3 +40486,146 @@ fn genda_top_working_counts_the_working_directorys_text_files() {
     assert!(ed.take_genda_asks().is_empty() && ed.take_genda_article().is_none());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+
+/// The 大綱's titles, with the indent and the fold mark left out.
+fn outline_titles(ed: &Editor) -> Vec<String> {
+    let side = ed.showing(crate::sidebar::View::Outline).expect("the outline is open");
+    ed.panel(side).unwrap().rows().iter().map(|r| r.name.trim().to_string()).collect()
+}
+
+/// **The 大綱 follows the text, not the save or the focus.** A heading
+/// renamed in the text is renamed in the panel on the same key, with the keys
+/// still in the text and nothing saved; so are one added, one taken away, and
+/// an undo.
+#[test]
+fn the_outline_follows_an_edited_heading_without_being_focused() {
+    let mut ed = markdown("# Alpha\n\nbody\n\n## Beta\n\nmore\n");
+    ed.execute(":sidebar-outline").unwrap();
+    // `Enter` on 「Alpha」: into the text, the keys with it.
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.panel_focus(), None, "the keys are back in the text");
+    assert_eq!(outline_titles(&ed), ["Alpha", "Beta"]);
+    press(&mut ed, "A changed");
+    assert_eq!(outline_titles(&ed), ["Alpha changed", "Beta"], "typing in Insert renames the row");
+    ed.on_key(Key::Esc);
+    // A heading added below the last line, one level deeper.
+    press(&mut ed, "Go");
+    press(&mut ed, "### Gamma");
+    ed.on_key(Key::Esc);
+    assert_eq!(outline_titles(&ed), ["Alpha changed", "Beta", "Gamma"]);
+    // Undone, it goes again.
+    press(&mut ed, "u");
+    assert_eq!(outline_titles(&ed), ["Alpha changed", "Beta"]);
+    // A heading taken away: its hash deleted, it is prose.
+    press(&mut ed, "ggd");
+    assert_eq!(outline_titles(&ed), ["Beta"], "{:?}", ed.current_buffer().rope().line(0).to_string());
+    assert_eq!(ed.panel_focus(), None, "nothing moved the keys into the panel");
+}
+
+/// **Typst headings follow the same way** — a different reader of the text,
+/// the same stamp.
+#[test]
+fn the_outline_follows_typst_headings() {
+    let mut ed = typed("= One\n\ntext\n");
+    ed.execute(":syntax typst").unwrap();
+    ed.execute(":sidebar-outline").unwrap();
+    ed.on_key(Key::Enter);
+    assert_eq!(outline_titles(&ed), ["One"]);
+    press(&mut ed, "Go== Two");
+    ed.on_key(Key::Esc);
+    assert_eq!(outline_titles(&ed), ["One", "Two"]);
+}
+
+/// **A list nothing moved under is not built again.** Cursor motions and
+/// frames leave the revision alone, so the stamp is compared and the rows are
+/// left as they are.
+#[test]
+fn an_unchanged_outline_is_not_rebuilt() {
+    let mut text = String::new();
+    for i in 0..300 {
+        text.push_str(&format!("## Part {i}\n\nA line of prose.\n\n"));
+    }
+    let mut ed = markdown(&text);
+    ed.execute(":sidebar-outline").unwrap();
+    ed.on_key(Key::Enter);
+    let built = ed.panel_builds();
+    for _ in 0..50 {
+        press(&mut ed, "j");
+        ed.keep_the_lists_current();
+    }
+    press(&mut ed, "G");
+    assert_eq!(ed.panel_builds(), built, "motions and frames build nothing");
+    // A debug build is slow enough to be debounced; this asks the other half.
+    ed.outline_cost = std::time::Duration::ZERO;
+    press(&mut ed, "o");
+    ed.on_key(Key::Esc);
+    assert!(ed.panel_builds() > built, "an edit does");
+}
+
+/// **A long 大綱 waits for the typing to stop** — and is built once it has.
+#[test]
+fn a_long_outline_is_rebuilt_once_the_typing_stops() {
+    let mut ed = markdown("# Alpha\n\nbody\n");
+    ed.execute(":sidebar-outline").unwrap();
+    ed.on_key(Key::Enter);
+    // As if the last build had been slow.
+    ed.outline_cost = Editor::OUTLINE_EVERY_KEY * 4;
+    press(&mut ed, "A x");
+    assert_eq!(outline_titles(&ed), ["Alpha"], "not on every key while it is slow");
+    let wait = ed.lists_due_in().expect("a rebuild is owed");
+    assert!(wait <= Editor::OUTLINE_IDLE);
+    ed.keep_the_lists_current();
+    assert_eq!(outline_titles(&ed), ["Alpha"], "a frame before the pause builds nothing");
+    std::thread::sleep(Editor::OUTLINE_IDLE + std::time::Duration::from_millis(20));
+    ed.keep_the_lists_current();
+    assert_eq!(outline_titles(&ed), ["Alpha x"]);
+    assert_eq!(ed.lists_due_in(), None, "nothing more is owed");
+}
+
+/// **The buffer list's `+` follows the edit and the save**, as the 大綱 does.
+#[test]
+fn the_buffer_list_follows_the_modified_mark() {
+    let dir = tmp().join(format!("yumete-buflist-plus-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("one.md");
+    std::fs::write(&file, "text\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    ed.execute(":sidebar-buffers").unwrap();
+    ed.panel_focus = None;
+    let name = |ed: &Editor| {
+        let side = ed.showing(crate::sidebar::View::Buffers).unwrap();
+        ed.panel(side).unwrap().rows()[0].name.clone()
+    };
+    assert!(!name(&ed).ends_with('+'), "{}", name(&ed));
+    press(&mut ed, "ix");
+    ed.on_key(Key::Esc);
+    assert!(name(&ed).ends_with(" +"), "an edit marks it: {}", name(&ed));
+    press(&mut ed, ":w");
+    ed.on_key(Key::Enter);
+    assert!(!name(&ed).ends_with('+'), "a save clears it: {}", name(&ed));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **A file read again from the disk** is a new revision, so the 大綱 follows
+/// it as it follows an edit.
+#[test]
+fn the_outline_follows_a_reload() {
+    let dir = tmp().join(format!("yumete-outline-reload-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("one.md");
+    std::fs::write(&file, "# Old\n\ntext\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    ed.execute(":sidebar-outline").unwrap();
+    ed.on_key(Key::Enter);
+    assert_eq!(outline_titles(&ed), ["Old"]);
+    std::fs::write(&file, "# New\n\ntext\n\n## More\n").unwrap();
+    press(&mut ed, ":reload");
+    ed.on_key(Key::Enter);
+    assert_eq!(outline_titles(&ed), ["New", "More"], "{}", ed.status());
+    let _ = std::fs::remove_dir_all(&dir);
+}

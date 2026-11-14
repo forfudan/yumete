@@ -3921,6 +3921,17 @@ pub struct Editor {
     /// is [`Editor::side_for`]'s answer, one function, and the day it reads a
     /// setting instead of returning `Left` nothing else here changes.
     panels: [Option<crate::sidebar::Sidebar>; 2],
+    /// What each slot's pushed rows were built from — see
+    /// [`Editor::keep_the_lists_current`].
+    panel_built: [Option<sidebar::Built>; 2],
+    /// A 大綱 rebuild put off while the typing goes on: what it will be built
+    /// from, and since when that has stood.
+    panel_owed: Option<(sidebar::Built, std::time::Instant)>,
+    /// How long the last 大綱 took to build, which decides whether the next
+    /// one follows the key or waits for the typing to stop.
+    outline_cost: std::time::Duration,
+    /// How many times a slot's rows were built from the text.
+    panel_builds: u64,
     /// The panel each side showed when it was last closed, which opening the
     /// side again brings back, not always the first.
     last_view: [Option<crate::sidebar::View>; 2],
@@ -4810,6 +4821,10 @@ impl Editor {
             last_picker: None,
             preview: RefCell::new(None),
             panels: [None, None],
+            panel_built: [None, None],
+            panel_owed: None,
+            outline_cost: std::time::Duration::ZERO,
+            panel_builds: 0,
             last_view: [None, None],
             width: [crate::sidebar::Width::default(); 2],
             window: (u16::MAX, u16::MAX),

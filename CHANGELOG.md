@@ -39,6 +39,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Fixed
 
+- **The outline sidebar follows the text as you write**: a heading renamed, added, deleted, undone or reloaded from disk shows at once, without saving or moving into the sidebar. In a long document it updates as soon as you pause typing. The buffer list's `+` follows edits and saves the same way.
 - **A `.csv` in one window no longer draws the other window's prose as a table.**
 - **On Windows, `:decimo`, `:files-yazi` and any `:!` line with quotes in it reach the program as typed**: cmd.exe was handed the line quoted a second time, so `decimo "1+1"` arrived with the quote marks inside its argument. A program that is not installed now says so there too.
 - **The import report waits for a run that shows it**: `ye --preview`, output to a pipe and `--timing` no longer take it away unseen.
