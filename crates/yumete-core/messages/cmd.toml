@@ -654,8 +654,8 @@ find = "搜索 搜尋 搜寻 查找 尋找 寻找 全文 grep find search 工作
 [[message]]
 # : 命令選單裏 settings 那一項的説明(commands 組)（草稿）
 key = "cmd.commands.settings"
-zhs = "设置页：每项附有说明，改了就写入并生效，u 撤销；也认 vim 的 ft=、ts=、sw=、et、tw= 写法"
-en = "settings page, each item explained; a change is written at once, u undoes it; also takes vim's ft=, ts=, sw=, et, tw="
+zhs = "设置页：每项附有说明，改了就写入并生效，u 撤销；跟 vim 的 ft=python ts=2 则只设当前文件"
+en = "settings page, each item explained; a change is written at once, u undoes it; vim's ft=python ts=2 set this file only"
 find = "設置 设置 配置 選項 选项 偏好 首選項 首选项 settings preferences config options set ft filetype tabstop shiftwidth expandtab textwidth"
 
 [[message]]
