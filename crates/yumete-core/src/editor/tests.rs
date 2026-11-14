@@ -38250,6 +38250,98 @@ fn a_preview_is_a_tab_shown_in_a_window() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **A key the reader bound is theirs in a page too**: `C-h` to
+/// `jump_view_left` leaves the preview's window, a `<tab>` to
+/// `goto_next_buffer` leaves its tab, and a flat line of theirs (`<space>j`)
+/// finishes instead of the page eating its second key. The keys no line of
+/// theirs names still scroll.
+#[test]
+fn a_key_the_reader_bound_is_theirs_in_a_page_window() {
+    let (mut ed, dir) = a_typst_book("reader-keys");
+    let main = dir.join("main.typ");
+    let text = ed.live_window();
+    let page = ed.open_page_window(main.clone()).unwrap();
+    ed.set_key_aliases(
+        [
+            ("C-h".to_string(), "jump_view_left".to_string()),
+            ("<tab>".to_string(), "goto_next_buffer".to_string()),
+            (" j".to_string(), "goto_next_buffer".to_string()),
+        ]
+        .into_iter()
+        .collect(),
+    );
+    press(&mut ed, " ww");
+    assert_eq!(ed.live_window(), page);
+    assert!(ed.page_window_has_the_keys());
+    // **`C-h` is the reader's**, so it leaves — and scrolls nothing.
+    ed.on_key(Key::Ctrl('h'));
+    assert_eq!(ed.live_window(), text, "C-h went to the window on the left");
+    assert!(!ed.page_window_has_the_keys());
+    assert_eq!(ed.take_page_steps(), Vec::new(), "a key of theirs is no scroll");
+    // **`<tab>` is the reader's**: it shows the next tab in the preview's
+    // window, the file the preview typesets.
+    press(&mut ed, " ww");
+    assert!(ed.page_window_has_the_keys());
+    ed.on_key(Key::Tab);
+    assert!(!ed.page_window_has_the_keys(), "Tab left the preview's tab");
+    assert_eq!(ed.current_buffer().path(), Some(main.as_path()));
+    // **A flat line of theirs** (`<space>j`): the second key is the line's,
+    // not the page's — it used to be swallowed, and the held `<space>` with
+    // it.
+    press(&mut ed, "gn");
+    assert!(ed.page_window_has_the_keys(), "gn shows the preview again");
+    press(&mut ed, " j");
+    assert!(!ed.page_window_has_the_keys(), "<space>j ran: the next tab");
+    assert_eq!(ed.take_page_steps(), Vec::new(), "and the `j` scrolled nothing");
+    // The page keeps the keys no line of theirs names.
+    press(&mut ed, "gn");
+    press(&mut ed, "kgg");
+    assert_eq!(ed.take_page_steps(), vec![PageStep::Rows(-1), PageStep::Top]);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **Esc lets go of a half-typed line in a page window**: the held prefix
+/// used to stay, because the page answered the Esc itself, and the line
+/// could not be typed again.
+#[test]
+fn esc_lets_go_of_a_half_typed_line_in_a_page_window() {
+    let (mut ed, dir) = a_typst_book("let-go");
+    let main = dir.join("main.typ");
+    ed.open_page_window(main.clone()).unwrap();
+    ed.set_key_aliases([(" zq".to_string(), ":preview-fit page".to_string())].into_iter().collect());
+    press(&mut ed, " ww");
+    assert!(ed.page_window_has_the_keys());
+    ed.on_key(Key::Char(' '));
+    assert!(ed.pending_keys().is_some(), "the line is being typed");
+    ed.on_key(Key::Esc);
+    assert!(ed.pending_keys().is_none(), "Esc let go of what was held");
+    // The whole line again, from its first key.
+    press(&mut ed, " zq");
+    assert_eq!(ed.preview_fit(), PreviewFit::Page, "the line ran");
+    assert_eq!(ed.take_page_steps(), Vec::new(), "and the page did not take its keys");
+    assert_eq!(ed.mode(), Mode::Normal);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **The preset's keys are not the page's**: under the vim keymap `x` is the
+/// preset's `vim_delete_char_forward`, and a page holds no text for it to
+/// cut. Only the reader's own lines come over.
+#[test]
+fn the_presets_keys_are_not_the_pages() {
+    let (mut ed, dir) = a_typst_book("preset");
+    let main = dir.join("main.typ");
+    ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
+    ed.open_page_window(main.clone()).unwrap();
+    press(&mut ed, " ww");
+    assert!(ed.page_window_has_the_keys());
+    let before = ed.text_of(&main).map(|(_, _, text)| text);
+    press(&mut ed, "x");
+    assert!(ed.page_window_has_the_keys());
+    assert_eq!(ed.text_of(&main).map(|(_, _, text)| text), before, "the vim `x` cut nothing");
+    assert_eq!(ed.take_page_steps(), Vec::new());
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **Nothing in a preview is text**: no Insert, no edit, no save, no draft,
 /// no file for a language server, nothing for `:wa` or `:q` to stop on, and
 /// `:readonly off` does not unlock it.

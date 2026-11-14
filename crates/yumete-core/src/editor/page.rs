@@ -824,6 +824,14 @@ impl Editor {
             .collect()
     }
 
+    /// Whether one of the reader's own lines begins with `typed` — its
+    /// first key, or the start of a longer run (`gh` begins with `g`).
+    /// [`Self::normal_lines_in_force`] without building the map, since a
+    /// preview asks this of every key that arrives.
+    pub(super) fn reads_a_line_starting_with(&self, typed: &str) -> bool {
+        self.reader_keys.iter().any(|k| k.starts_with(typed))
+    }
+
     /// The names the reader gave groups (`label`), this keymap's own over
     /// the shared ones.
     #[cfg(test)]
@@ -957,6 +965,12 @@ impl Editor {
         self.table_tree = self.lay_tree(&preset, &table, false);
         self.table_select_tree = self.lay_tree(&select_preset, &table_select, true);
         self.key_aliases = all;
+        self.reader_keys = self
+            .user_aliases
+            .keys()
+            .chain(self.keymap_user[keymap_index(self.key_preset)].normal.keys())
+            .map(|k| yumete_cjk::actions::written(k))
+            .collect();
         self.alias_held.clear();
         self.node_held = None;
     }

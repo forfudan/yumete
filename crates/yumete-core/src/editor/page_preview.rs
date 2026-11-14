@@ -595,10 +595,30 @@ impl Editor {
         self.preview_vertical && self.layout_chosen() == crate::zong::Layout::Vertical
     }
 
+    /// Whether one of the reader's own Normal-mode lines begins with
+    /// `key` — the key itself, the first key of a longer run of theirs
+    /// (`gh` begins with `g`), or the key that opens a group of theirs.
+    fn a_line_of_reading_begins_with(&self, key: Key) -> bool {
+        // `Esc` is unbindable on purpose (`typed_as`): it lets go of a held
+        // sequence, which the text does for it, so it stays the page's.
+        if key == Key::Esc {
+            return false;
+        }
+        let typed = super::keys::key_internal(key);
+        !typed.is_empty() && (self.reads_a_line_starting_with(&typed) || self.root_node(&typed).is_some())
+    }
+
     /// **A key in a preview**: the scroll keys move the page, `:`, `C-w`,
     /// `Space`, `C-o` and `C-i` go on to the command line, the key groups
     /// and the jump list, and nothing else does anything — there is no text
     /// here to move in or edit. `true` when the key was taken here.
+    ///
+    /// **The reader's own lines come first**: a key they bound is theirs in
+    /// a page too, so `C-h` to `jump_view_left` leaves this window and a
+    /// `Tab` to `goto_next_buffer` leaves this tab. Only their lines count —
+    /// the preset's `x` is not here, a page holding no text to cut. A line
+    /// that begins with a key the page scrolls by (`j`, `g`) takes that key
+    /// from the page, which is what binding it means.
     ///
     /// The keys are a PDF reader's under vim (as Zathura and
     /// evil-collection have them): `gg` and `G` the top and bottom, `J` and
@@ -606,6 +626,25 @@ impl Editor {
     /// number. `gn`, `gp`, `ga`, `gt` and `gT` go to another tab; under vim,
     /// `ZZ` and `ZQ` close the window as anywhere.
     pub(super) fn on_page_window_key(&mut self, key: Key) -> bool {
+        // **A key a sequence is waiting for is the sequence's, not the
+        // page's.** `C-w` arrives with `pending` set (the caller asks that
+        // already, `on_key`); a flat line of the reader's (`"<space>ff"`,
+        // `"gh"`) arrives with `alias_held` set instead, and reading its
+        // second key here used to eat it — the line never finished and the
+        // held prefix stayed to eat the keys after it.
+        if !self.alias_held.is_empty() {
+            return false;
+        }
+        // **A key the reader bound is theirs, here as everywhere** — see the
+        // doc above. The page's half-typed commands go with the key: a `g`
+        // that began nothing must not leave `page_g` behind for the reader's
+        // next key.
+        if self.a_line_of_reading_begins_with(key) {
+            self.page_count = None;
+            self.page_g = false;
+            self.page_z = false;
+            return false;
+        }
         let mut count = self.page_count.take();
         if std::mem::take(&mut self.page_g) {
             match key {

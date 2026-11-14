@@ -183,7 +183,8 @@ impl Editor {
             return KeyOutcome::Continue;
         }
         // **A page window holds no text**: its keys scroll the
-        // page, and only `:` and `C-w` go on.
+        // page, and only `:`, `C-w`, `Space`, `C-o`/`C-i` and the reader's
+        // own lines (`page_preview.rs`) go on.
         if self.page_window_has_the_keys()
             && self.mode == Mode::Normal
             && self.pending == Pending::None

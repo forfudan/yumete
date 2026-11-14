@@ -2628,6 +2628,12 @@ pub struct Editor {
     /// Normal-mode bindings from the config (Feature #23): a run of keys,
     /// in the internal spelling, and the commands it runs.
     key_aliases: HashMap<String, Vec<String>>,
+    /// **The reader's own Normal-mode lines, spelled**: `[keys.normal]` and
+    /// `[keys.vim.normal]`, the internal spelling of each key. A preview
+    /// asks it whether a key is theirs, so their lines come first in a page
+    /// too. The preset's lines are *not* here: a page holds no text for the
+    /// vim `x` to cut.
+    reader_keys: Vec<String>,
     /// The layers `key_aliases` is laid from (#428): the reader's own lines
     /// (the preset's are under them), and select mode's.
     user_aliases: HashMap<String, Vec<String>>,
@@ -4420,6 +4426,7 @@ impl Editor {
             last_search: String::new(),
             search_forward: true,
             key_aliases: HashMap::new(),
+            reader_keys: Vec::new(),
             user_aliases: HashMap::new(),
             user_select: HashMap::new(),
             keymap_user: Default::default(),

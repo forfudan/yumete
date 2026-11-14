@@ -188,6 +188,16 @@ fn a_markdown_preview_is_drawn_and_follows_the_cursor() {
     editor.on_key(Key::Char('w'));
     assert_eq!(editor.live_window(), text);
 
+    // **A key the reader bound is theirs in a preview too**: `C-h` leaves the
+    // preview for the text window instead of being swallowed.
+    editor.on_key(Key::Ctrl('w'));
+    editor.on_key(Key::Char('w'));
+    assert!(editor.page_window_has_the_keys());
+    editor.set_key_aliases([("C-h".to_string(), "jump_view_left".to_string())].into_iter().collect());
+    editor.on_key(Key::Ctrl('h'));
+    assert_eq!(editor.live_window(), text, "C-h went to the window on the left");
+    assert!(!editor.page_window_has_the_keys());
+
     // **A window made narrower**: the next picture is its new size.
     let (old_columns, _) = md_window::cells_of(preview).unwrap();
     let ime = ImeSession::empty(Scheme::LINGMING);
