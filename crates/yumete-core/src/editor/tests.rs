@@ -40242,3 +40242,28 @@ fn wbc_saves_then_closes() {
     assert_eq!(ed.current_buffer().text(), "乙");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// **The grid is the live window's**: with a `.csv` taking its window, the
+/// other window, drawn on a prose file, is not drawn in the table's columns.
+#[test]
+fn a_grid_in_one_window_does_not_take_the_other() {
+    let dir = tmp().join(format!("yumete-grid-other-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let notes = dir.join("notes.md");
+    let list = dir.join("list.csv");
+    std::fs::write(&notes, "春天的早晨，河边的柳树发了新芽。\n第二行文字。\n").unwrap();
+    std::fs::write(&list, "name,age\nann,3\nbob,4\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&notes).unwrap();
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('v'));
+    ed.execute(&format!(":e {}", list.display())).unwrap();
+    assert!(ed.grid_has_the_pane(), "the csv window is a grid: {}", ed.status());
+    {
+        let other = ed.windows().leaves().into_iter().find(|&w| w != ed.live_window()).expect("two windows");
+        let _look = ed.view_pane(ed.pane_of(other).expect("its pane"));
+        assert!(!ed.grid_has_the_pane(), "the prose window is drawn as prose");
+    }
+    assert!(ed.grid_has_the_pane(), "and the live one still is a grid");
+    let _ = std::fs::remove_dir_all(&dir);
+}

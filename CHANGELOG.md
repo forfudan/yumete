@@ -31,6 +31,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Fixed
 
+- **A `.csv` in one window no longer draws the other window's prose as a table.**
 - **On Windows, `:decimo`, `:files-yazi` and any `:!` line with quotes in it reach the program as typed**: cmd.exe was handed the line quoted a second time, so `decimo "1+1"` arrived with the quote marks inside its argument. A program that is not installed now says so there too.
 - **The import report waits for a run that shows it**: `ye --preview`, output to a pipe and `--timing` no longer take it away unseen.
 - **`:files-yazi` keeps yazi's answer in a folder of its own** rather than at a name other users of the machine could guess.

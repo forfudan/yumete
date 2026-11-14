@@ -1354,6 +1354,12 @@ impl Editor {
         let Some(view) = self.table.as_ref() else {
             return false;
         };
+        // **The grid is the live window's**: another window being drawn
+        // (`view_pane`) on a different file shows that file as its own
+        // document, not in the live table's columns.
+        if self.viewing.get().is_some_and(|v| v.buffer != self.current) {
+            return false;
+        }
         view.takes_the_pane()
             && (view.bounds == Bounds::WholeFile || self.table_row_span().is_some())
     }
