@@ -236,7 +236,7 @@ fn number(value: &str, low: usize, high: usize) -> Option<usize> {
 
 /// A file type by vim's name, when yumete has that syntax. Only plain names
 /// are looked up (`[A-Za-z0-9._-]`); `a.b` is its first part yumete knows.
-fn syntax_named(value: &str) -> Option<crate::syntax::Syntax> {
+pub(crate) fn syntax_named(value: &str) -> Option<crate::syntax::Syntax> {
     if value.is_empty() || !value.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-')) {
         return None;
     }

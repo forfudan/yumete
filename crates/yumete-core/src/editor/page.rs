@@ -1267,7 +1267,7 @@ impl Editor {
     }
 
     /// A new window holding a new empty buffer, the keys in it: `C-w n`,
-    /// `:hnew`, `:vnew`. The window it was split from keeps what it showed,
+    /// `:hsplit-new`, `:vsplit-new`. The window it was split from keeps what it showed,
     /// even when that is the empty buffer yumete starts with.
     pub(super) fn new_window(&mut self, how: crate::window::Split) -> bool {
         if !self.split_window(how) {

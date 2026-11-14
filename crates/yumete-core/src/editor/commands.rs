@@ -1002,15 +1002,14 @@ impl Editor {
                 self.show_listing(listing, say!("keys.actions-title"));
                 Ok(CommandOutcome::Continue)
             }
-            // **vim's `:set` and `:setf`**: read as a modeline is read, so they take exactly what
-            // a modeline takes (`ft`, `ts`, `sw`, `et`, `tw`) into this
-            // buffer, and the file type as one set by hand.
+            // **vim's `:set` words**, after `:settings` or `:settings-buffer`: read as a
+            // modeline is read, so they take exactly what a modeline takes (`ft`, `ts`,
+            // `sw`, `et`, `tw`) into this buffer, and the file type as one set by hand.
             //
             // **A question is answered**: `:set ts?`, and
             // `:set ts` bare for an option with a value, says `ts=4`, as vim
             // does. A file type nobody knows is said to be one, not an option
-            // `:set` does not take, and `:setf` with nothing after it says
-            // the file type.
+            // `:set` does not take.
             Command::VimSet(options) => {
                 let mut answers = Vec::new();
                 let mut sets = Vec::new();
@@ -1082,7 +1081,9 @@ impl Editor {
             }
             Command::SetSyntax(name) => {
                 match name {
-                    Some(name) => match crate::syntax::Syntax::parse(&name) {
+                    // vim's file types too (`typescriptreact`, `markdown.pandoc`),
+                    // `:setf` being one of this command's spellings.
+                    Some(name) => match crate::syntax::Syntax::parse(&name).or_else(|| crate::modeline::syntax_named(&name)) {
                         Some(syntax) => {
                             self.set_syntax(syntax);
                             self.status = say!("render.markup-is", syntax.name());

@@ -326,18 +326,18 @@ en = "keys and commands, opened as a searchable file"
 find = "幫助 帮助 说明 説明 手冊 手册 keys manual"
 
 [[message]]
-# : 命令選單裏 hnew 那一項的説明
-key = "cmd.commands.hnew"
-zhs = "在下方打开空白窗口（同 C-w n s）"
-en = "open a blank window below (as C-w n s)"
-find = "分窗 分屏 新建 空白 split window 窗口 上下 below hnew"
-
-[[message]]
 # : 命令選單裏 hsplit 那一項的説明
 key = "cmd.commands.hsplit"
 zhs = "在下方分出窗口（同 C-w s）；可带文件名"
 en = "split a window below (as C-w s), optionally opening a file"
 find = "分窗 分屏 split window 窗口 上下 below hsplit"
+
+[[message]]
+# : 命令選單裏 hsplit-new 那一項的説明
+key = "cmd.commands.hsplit-new"
+zhs = "在下方打开空白窗口（同 C-w n s）"
+en = "open a blank window below (as C-w n s)"
+find = "分窗 分屏 新建 空白 split window 窗口 上下 below hsplit-new hnew"
 
 [[message]]
 # : 命令選單裏 indent 那一項的説明(commands 組)
@@ -616,6 +616,13 @@ en = "give a program the terminal, and come back when it ends"
 find = "終端 终端 程序 外部 terminal program run"
 
 [[message]]
+# : 命令選單裏 run-shell-in-buffer 那一項的説明(commands 組)
+key = "cmd.commands.run-shell-in-buffer"
+zhs = "运行命令，输出放进一个缓冲区"
+en = "run a command and show its output in a buffer"
+find = "命令 終端 终端 外部 shell command output sh"
+
+[[message]]
 # 命令：開搜索面板
 key = "cmd.commands.search"
 zhs = "打开搜索面板：可跨文件，选项更多"
@@ -643,41 +650,20 @@ zhs = "在工作目录中搜索"
 en = "search the working directory"
 find = "搜索 搜尋 搜寻 查找 尋找 寻找 全文 grep find search 工作 路徑 路径 目錄 目录 working cwd"
 
-[[message]]
-# : 命令選單裏 set 那一項的説明(commands 組)
-key = "cmd.commands.set"
-zhs = "vim 的 :set，支持 modeline 的几项：ft、ts、sw、et、tw；不带参数则打开设置面板"
-en = "vim's :set for modeline options: ft, ts, sw, et, tw; no argument opens the settings panel"
-find = "set ft filetype tabstop shiftwidth expandtab textwidth 文件类型 文件類型"
-
-[[message]]
-# : 命令選單裏 setfiletype 那一項的説明(commands 組)
-key = "cmd.commands.setfiletype"
-zhs = "vim 的 :setf，同 :set ft="
-en = "vim's :setf, as :set ft="
-find = "setf filetype 文件类型 文件類型"
-
-
-[[message]]
-# : 命令選單裏 setlocal 那一項的説明(commands 組)（草稿）
-key = "cmd.commands.setlocal"
-zhs = "vim 的 :setlocal，同 :set 那几项，只设当前缓冲区；不带参数则显示它们的值"
-en = "vim's :setlocal: the same options as :set, for this buffer; no argument shows their values"
-find = "setlocal setl ft filetype tabstop shiftwidth expandtab textwidth"
 
 [[message]]
 # : 命令選單裏 settings 那一項的説明(commands 組)（草稿）
 key = "cmd.commands.settings"
-zhs = "设置页：每项附有说明，改了就写入并生效，u 撤销"
-en = "settings page, each item explained; a change is written at once, u undoes it"
-find = "設置 设置 配置 選項 选项 偏好 首選項 首选项 settings preferences config options"
+zhs = "设置页：每项附有说明，改了就写入并生效，u 撤销；也认 vim 的 ft=、ts=、sw=、et、tw= 写法"
+en = "settings page, each item explained; a change is written at once, u undoes it; also takes vim's ft=, ts=, sw=, et, tw="
+find = "設置 设置 配置 選項 选项 偏好 首選項 首选项 settings preferences config options set ft filetype tabstop shiftwidth expandtab textwidth"
 
 [[message]]
-# : 命令選單裏 sh 那一項的説明(commands 組)
-key = "cmd.commands.sh"
-zhs = "运行命令，输出放进一个缓冲区"
-en = "run a command and show its output in a buffer"
-find = "命令 終端 终端 外部 shell command output"
+# : 命令選單裏 settings-buffer 那一項的説明(commands 組)（草稿）
+key = "cmd.commands.settings-buffer"
+zhs = "只设当前缓冲区的 ft、ts、sw、et、tw；不带参数则显示它们的值"
+en = "set ft, ts, sw, et and tw for this buffer only; no argument shows their values"
+find = "settings-buffer setlocal setl ft filetype tabstop shiftwidth expandtab textwidth"
 
 [[message]]
 # : 命令選單裏 !command 那一項的説明(commands 組)
@@ -714,7 +700,7 @@ find = "替換 替换 取代 正則 正则 sed regex"
 key = "cmd.commands.syntax"
 zhs = "文件的标记语言(不带参数显示当前值)"
 en = "the markup this file uses (no argument shows the current one)"
-find = "語法 语法 標記 标记 高亮 highlight filetype"
+find = "語法 语法 標記 标记 高亮 highlight filetype setf 文件类型 文件類型"
 
 [[message]]
 # : 命令選單裏 table 那一項的説明(commands 組)：`:table` 新建一張表
@@ -729,13 +715,6 @@ key = "cmd.commands.table-render"
 zhs = "表格显示：源码、基本、全窗；不带参数显示当前模式"
 en = "table display: source, basic or window view; no argument shows the current one"
 find = "表格 視圖 视图 源碼 源码 基本 全窗 render 級别 级别"
-
-[[message]]
-# : 命令選單裏 tabnew 那一項的説明(commands 組)
-key = "cmd.commands.tabnew"
-zhs = "vim 的 :tabnew：新建空缓冲区，带文件名则打开该文件"
-en = "vim's :tabnew: a new scratch buffer, or the named file"
-find = "tabnew tabe tabedit new 新建 标签 標籤"
 
 [[message]]
 # : 命令選單裏 theme 那一項的説明(commands 組)
@@ -773,14 +752,6 @@ en = "undo the last change"
 find = "撤銷 撤销 復原 复原 後悔 后悔"
 
 [[message]]
-# : 命令選單裏 update 那一項的説明(commands 組)
-key = "cmd.commands.update"
-zhs = "有改动才保存，不退出(简写 `:up`)"
-zht = "有改動纔保存，不退出(簡寫 `:up`)"
-en = "save if changed, and stay (short: :up)"
-find = "改過纔存 改过才存 存檔 存档 update up"
-
-[[message]]
 # : 命令選單裏 version 那一項的説明
 key = "cmd.commands.version"
 zhs = "版本号，以及配置、数据、日志的位置"
@@ -802,18 +773,18 @@ en = "in vertical text, whether hjkl follow the text or the screen"
 find = "hjkl 鍵位 键位 方向 移動 移动 竪排 竖排 邏輯 逻辑 視覺 视觉 keys motion logical visual"
 
 [[message]]
-# : 命令選單裏 vnew 那一項的説明
-key = "cmd.commands.vnew"
-zhs = "在旁边打开空白窗口（同 C-w n v）"
-en = "open a blank window beside (as C-w n v)"
-find = "分窗 分屏 新建 空白 split window 窗口 左右 beside vnew"
-
-[[message]]
 # : 命令選單裏 vsplit 那一項的説明
 key = "cmd.commands.vsplit"
 zhs = "在旁边分出窗口（同 C-w v）；可带文件名"
 en = "split a window beside (as C-w v), optionally opening a file"
 find = "分窗 分屏 split window 窗口 左右 beside vsplit"
+
+[[message]]
+# : 命令選單裏 vsplit-new 那一項的説明
+key = "cmd.commands.vsplit-new"
+zhs = "在旁边打开空白窗口（同 C-w n v）"
+en = "open a blank window beside (as C-w n v)"
+find = "分窗 分屏 新建 空白 split window 窗口 左右 beside vsplit-new vnew"
 
 [[message]]
 # : 命令選單裏 wheel 那一項的説明(commands 組)
@@ -856,6 +827,14 @@ key = "cmd.commands.write"
 zhs = "保存；带路径则另存副本，`:write-as` 会切换到新文件"
 en = "save; with a path, save a copy (`:write-as` switches to it)"
 find = "保存 存檔 存档 寫入 写入 save wa"
+
+[[message]]
+# : 命令選單裏 write-if-changed 那一項的説明(commands 組)
+key = "cmd.commands.write-if-changed"
+zhs = "有改动才保存，不退出(简写 `:up`)"
+zht = "有改動纔保存，不退出(簡寫 `:up`)"
+en = "save if changed, and stay (short: :up)"
+find = "改過纔存 改过才存 存檔 存档 update up"
 
 [[message]]
 # 存好再退出。連字號：這是兩個並列的動作，不是 write 的一種

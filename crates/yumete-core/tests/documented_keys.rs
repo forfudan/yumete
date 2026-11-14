@@ -169,6 +169,7 @@ const DISOWNED: &[&str] = &[
     // vim's, named on the 「Coming from vim」 page to say they are not here.
     ":g",
     ":normal",
+    ":tabnew",
     // 連那個不帶參數的互換也一併沒了：「沒有人想互換，想的是轉成竪排」。
     ":layout",
     ":lay",

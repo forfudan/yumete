@@ -27845,7 +27845,7 @@ fn a_float_with_nothing_more_to_show_lets_the_page_turn() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// **vim's `:set`, `:setf`, `:ene` and `:tabnew`**: `:set` takes what a
+/// **vim's `:set`, `:setf` and `:ene`**: `:set` takes what a
 /// modeline takes, into this buffer.
 #[test]
 fn vims_set_setf_ene_and_tabnew() {
@@ -27855,7 +27855,12 @@ fn vims_set_setf_ene_and_tabnew() {
     assert_eq!((ed.tab_stop(), ed.indent_width(), ed.tab_spaces()), (2, 2, true));
     ed.execute(":setf rust").unwrap();
     assert_eq!(ed.syntax().name(), crate::syntax::Syntax::parse("rust").unwrap().name());
+    // A word that is not one of vim's five is a setting's name: the panel
+    // goes looking for it, and says so when there is none.
     ed.execute(":set nu").unwrap();
+    assert!(ed.take_settings_request());
+    assert_eq!(ed.take_settings_target().as_deref(), Some("nu"));
+    ed.execute(":set nu?").unwrap();
     assert!(ed.status().contains("nu"), "says what it does not take: {}", ed.status());
     ed.execute(":se tw=60").unwrap();
     assert_eq!(ed.current_buffer().local().text_width, Some(60));
@@ -27879,20 +27884,22 @@ fn vims_set_setf_ene_and_tabnew() {
     assert_eq!(ed.syntax().name(), "rust", "nothing changed");
     ed.execute(":setf").unwrap();
     assert_eq!(ed.status(), say!("render.markup-is", "rust"));
+    // vim's file type names, which `:setf` was given for.
+    ed.execute(":setf typescriptreact").unwrap();
+    assert_eq!(ed.syntax().name(), crate::syntax::Syntax::parse("tsx").unwrap().name());
+    ed.execute(":setf rust").unwrap();
     ed.execute(":set ts=4 tw?").unwrap();
     assert_eq!(ed.status(), format!("{} tw=60", say!("cmd.set-took", "ts=4")));
     let Err(said) = ed.execute(":ene other.txt") else { panic!(":ene takes nothing") };
     assert!(said.to_string().starts_with(&say!("cmd.takes-nothing-after-it", "ene", "other.txt")), "{said}");
     let tabs = ed.buffer_count();
-    ed.execute(":tabnew").unwrap();
-    assert_eq!(ed.buffer_count(), tabs + 1, ":tabnew");
     ed.execute(":ene").unwrap();
-    assert_eq!(ed.buffer_count(), tabs + 2, ":ene");
-    // `:tabn` is vim's `:tabnext`, not a prefix of `:tabnew`: it opens
-    // nothing and says where the walk is.
-    for word in [":tabn", ":tabnext", ":tabne"] {
+    assert_eq!(ed.buffer_count(), tabs + 1, ":ene");
+    // `:tabn` is vim's `:tabnext`: it opens nothing and says where the walk
+    // is; vim's `:tabnew` is no spelling here, a file being `:open`'s.
+    for word in [":tabn", ":tabnext", ":tabne", ":tabnew"] {
         assert!(ed.execute(word).is_err(), "{word}");
-        assert_eq!(ed.buffer_count(), tabs + 2, "{word} opened nothing");
+        assert_eq!(ed.buffer_count(), tabs + 1, "{word} opened nothing");
     }
 }
 

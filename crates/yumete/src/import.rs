@@ -266,9 +266,7 @@ const HELIX_COMMAND_RENAMES: &[(&str, &str)] = &[
     ("set-language", "syntax"),
     ("insert-output", "pipe-before"),
     ("append-output", "pipe-after"),
-    ("run-shell-command", "sh"),
-    ("vsplit-new", "vnew"),
-    ("hsplit-new", "hnew"),
+    ("run-shell-command", "run-shell-in-buffer"),
     ("config-reload", "reload-config"),
 ];
 
@@ -1767,7 +1765,7 @@ language-servers = ["gopls", "golangci-lint-lsp"]
         for name in ["one-dark", "github", "monokai", "dracula", "tokyo-night", "catppuccin", "gruvbox"] {
             assert!(yumete_config::ThemeConfig::named(name).is_some(), "{name}");
         }
-        for (alias, line) in [("w", ":write"), ("r x.md", ":read x.md"), ("u", ":update"), ("lang rust", ":syntax rust")] {
+        for (alias, line) in [("w", ":write"), ("r x.md", ":read x.md"), ("u", ":write-if-changed"), ("lang rust", ":syntax rust")] {
             assert_eq!(typable(&format!(":{alias}")).as_deref(), Ok(line), "{alias}");
         }
         assert_eq!(typable(":toggle soft-wrap.enable").as_deref(), Ok(":view-wrap"));

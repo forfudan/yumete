@@ -179,7 +179,7 @@ pub enum Command {
     /// leave. vi's `:x` and helix's `:exit`, with the one thing that tells it
     /// apart from `:wq`.
     Exit(Option<String>),
-    /// `:update` (alias `:up`) — **save only if the file changed**, and stay.
+    /// `:write-if-changed` (`:update`, `:up`) — **save only if the file changed**, and stay.
     /// `:write` with the same gate: the timestamp of a file nobody touched is
     /// what `make`, rsync and a sync folder all read as 「this changed」.
     Update,
@@ -228,8 +228,8 @@ pub enum Command {
     /// `:vsplit [file]` / `:hsplit [file]`: a new window beside or below the
     /// live one, showing `file` when one is named.
     SplitWindow { how: crate::window::Split, file: Option<String> },
-    /// `:vnew` / `:hnew` — a new window beside or below, on a new empty
-    /// buffer (helix's commands).
+    /// `:vsplit-new` / `:hsplit-new` — a new window beside or below, on a new
+    /// empty buffer (helix's names; vim's `:vnew` / `:hnew` are spellings).
     NewWindow(crate::window::Split),
     /// `:hard-wrap [<columns>]`: the selection or the unit under the cursor
     /// re-filled under the syntax's own rules; `None` asks the setting
@@ -654,7 +654,7 @@ pub enum Command {
     /// `:yume-installed` — the 碼表 the *system* has, which is `builtin`'s
     /// other half: one binary, two tables, and a way back from either.
     InstalledScheme,
-    /// `:sh <cmd>` — run it and bring the output back into a buffer, or
+    /// `:run-shell-in-buffer <cmd>` (`:sh`) — run it and bring the output back into a buffer, or
     /// `:!<cmd>` — step out of the way and let it use the terminal
     /// (Feature #129).
     Shell { line: String, interactive: bool },
@@ -669,7 +669,8 @@ pub enum Command {
     /// `:syntax [markdown|typst]` — which markup this file is in
     /// (Feature #106). No argument says what it was guessed to be.
     SetSyntax(Option<String>),
-    /// vim's `:set`, as far as a modeline goes: `ft`, `ts`, `sw`, `et`, `tw`.
+    /// vim's `:set` words, as far as a modeline goes: `ft`, `ts`, `sw`, `et`,
+    /// `tw` — given to `:settings` (`:set`) or `:settings-buffer` (`:setlocal`).
     VimSet(String),
     /// `:keymap [helix|vim]` — lay a shipped keymap under the reader's own
     /// aliases; bare reports which (#428).
@@ -1333,6 +1334,24 @@ pub fn set_setting_names(names: &[(&str, &'static str)]) {
 }
 
 /// The settings `:settings` offers.
+/// **Spellings that work and are not printed** beside the name in a menu: a
+/// longer form of a spelling that is printed (`setfiletype` beside `setf`).
+/// They are declared in the entry's `aliases` like every other, so they parse
+/// and the manual's command table lists them; this only keeps a menu row short.
+pub const QUIET: &[&str] = &["setfiletype"];
+
+/// **Whether the words after `:settings` are vim's `:set` words** and not a
+/// setting's name. A setting is named by its path, which is always
+/// `table.key`, or by its label; neither has an `=` or a trailing `?`, and
+/// none is one of the five options vim's `:set` is taken for here.
+fn vim_options(text: &str) -> bool {
+    const OPTIONS: &[&str] = &[
+        "ft", "filetype", "ts", "tabstop", "sw", "shiftwidth", "tw", "textwidth",
+        "et", "expandtab", "noet", "noexpandtab",
+    ];
+    text.split_whitespace().all(|word| word.contains('=') || word.ends_with('?') || OPTIONS.contains(&word))
+}
+
 pub fn setting_names() -> &'static [Word] {
     SETTING_NAMES.get().copied().unwrap_or(&[])
 }
@@ -2059,9 +2078,12 @@ impl Choice {
     ///
     /// What that leaves out is a **clipped name** longer than two — `syn`,
     /// `red`, `rel` — which says only 「the first three letters work」, and the
-    /// prefix rule already says that about every command.
+    /// prefix rule already says that about every command; and the
+    /// [`QUIET`] ones, which a shorter spelling beside them already stands for.
     pub fn spelt(&self) -> Option<String> {
-        let worth = |spelling: &str| spelling.chars().count() <= 2 || !self.name.starts_with(spelling);
+        let worth = |spelling: &str| {
+            !QUIET.contains(&spelling) && (spelling.chars().count() <= 2 || !self.name.starts_with(spelling))
+        };
         let declared: Vec<&str> = self
             .alias
             .iter()
@@ -3195,17 +3217,17 @@ pub const COMMANDS: &[Entry] = &[
         }),
     },
     Entry {
-        name: "vnew",
-        aliases: &[],
-        help: "cmd.commands.vnew",
+        name: "vsplit-new",
+        aliases: &["vnew", "vne"],
+        help: "cmd.commands.vsplit-new",
         needs: &[],
         params: &[],
         build: Some(|_| Ok(Command::NewWindow(crate::window::Split::Beside))),
     },
     Entry {
-        name: "hnew",
-        aliases: &[],
-        help: "cmd.commands.hnew",
+        name: "hsplit-new",
+        aliases: &["hnew"],
+        help: "cmd.commands.hsplit-new",
         needs: &[],
         params: &[],
         build: Some(|_| Ok(Command::NewWindow(crate::window::Split::Below))),
@@ -3223,6 +3245,8 @@ pub const COMMANDS: &[Entry] = &[
             })
         }),
     },
+    // A buffer with no name, in this window. A file by its name, whether it
+    // is on disk yet or not, is `:open`'s; in a new window, `:hsplit`'s.
     Entry {
         name: "new",
         aliases: &["enew", "ene"],
@@ -3230,21 +3254,6 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[],
         build: Some(|_| Ok(Command::NewBuffer)),
-    },
-    // vim's `:tabnew`: a tab here is a file, so it is a new
-    // scratch, or the file it names.
-    Entry {
-        name: "tabnew",
-        aliases: &["tabe", "tabedit"],
-        help: "cmd.commands.tabnew",
-        needs: &[],
-        params: &[Param::Path],
-        build: Some(|p| {
-            Ok(match p.arg(0) {
-                Some(path) => Command::Open(path.to_string()),
-                None => Command::NewBuffer,
-            })
-        }),
     },
     Entry {
         name: "write",
@@ -3611,9 +3620,9 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|p| Ok(Command::Exit(p.arg(0).map(|s| s.to_string())))),
     },
     Entry {
-        name: "update",
-        aliases: &["up"],
-        help: "cmd.commands.update",
+        name: "write-if-changed",
+        aliases: &["update", "up"],
+        help: "cmd.commands.write-if-changed",
         needs: &[],
         params: &[],
         build: Some(|_| Ok(Command::Update)),
@@ -4340,27 +4349,12 @@ pub const COMMANDS: &[Entry] = &[
         params: &[Param::Path],
         build: Some(|p| Ok(Command::UserTable(p.need(0)?.to_string()))),
     },
+    // vim's `:setlocal` words, for this buffer — which is where `:settings`
+    // puts them too; bare, it says what they are.
     Entry {
-        name: "set",
-        aliases: &["se"],
-        help: "cmd.commands.set",
-        needs: &[],
-        params: &[Param::Free("<選項>")],
-        // Bare, the settings panel, as it has been; with options, vim's.
-        build: Some(|p| {
-            let options = format!("{} {}", p.arg(0).unwrap_or(""), p.rest).trim().to_string();
-            Ok(match options.is_empty() {
-                true => Command::Settings(None),
-                false => Command::VimSet(options),
-            })
-        }),
-    },
-    // vim's `:setlocal`: the same options, which are this buffer's here
-    // too; bare, it says what they are.
-    Entry {
-        name: "setlocal",
-        aliases: &["setl"],
-        help: "cmd.commands.setlocal",
+        name: "settings-buffer",
+        aliases: &["setlocal", "setl"],
+        help: "cmd.commands.settings-buffer",
         needs: &[],
         params: &[Param::Free("<選項>")],
         build: Some(|p| {
@@ -4372,16 +4366,8 @@ pub const COMMANDS: &[Entry] = &[
         }),
     },
     Entry {
-        name: "setfiletype",
-        aliases: &["setf"],
-        help: "cmd.commands.setfiletype",
-        needs: &[],
-        params: &[Param::Free("<文件類型>")],
-        build: Some(|p| Ok(Command::VimSet(format!("ft={}", p.arg(0).unwrap_or(""))))),
-    },
-    Entry {
         name: "syntax",
-        aliases: &["syn"],
+        aliases: &["syn", "setf", "setfiletype"],
         help: "cmd.commands.syntax",
         needs: &[],
         params: &[Param::WordsOr { of: SYNTAXES, default: None, or: "<語法>" }],
@@ -4401,14 +4387,14 @@ pub const COMMANDS: &[Entry] = &[
         }),
     },
     Entry {
-        name: "sh",
-        aliases: &[],
-        help: "cmd.commands.sh",
+        name: "run-shell-in-buffer",
+        aliases: &["sh"],
+        help: "cmd.commands.run-shell-in-buffer",
         needs: &[],
         params: &[Param::Free("<命令>")],
         build: Some(|p| {
             match p.arg(0) {
-                None => Err(CommandError::MissingArgument("sh")),
+                None => Err(CommandError::MissingArgument("run-shell-in-buffer")),
                 Some(line) => Ok(Command::Shell {
                     line: line.to_string(),
                     interactive: false,
@@ -4912,8 +4898,7 @@ pub const COMMANDS: &[Entry] = &[
         // as `ruby` makes or edits a reading. 「Which view」 is `:table-render`'s
         // question, so walking in is what asking for a view does.
         name: "table",
-        // Declared, so `:tabnew` leaves the short forms the
-        // menu teaches where they were.
+        // Declared, so the short forms the menu teaches stay `:table`'s.
         aliases: &["ta", "tab"],
         help: "cmd.commands.table",
         needs: &[],
@@ -5639,11 +5624,19 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "settings",
-        aliases: &[],
+        aliases: &["set", "se"],
         help: "cmd.commands.settings",
         needs: &[],
         params: &[Param::Settings],
-        build: Some(|p| Ok(Command::Settings(p.arg(0).map(str::to_string)))),
+        // Bare, the panel; a setting's name, the panel on that row; vim's
+        // option words (`ft=markdown`, `ts=4`, `et`, `tw?`), set as vim sets them.
+        build: Some(|p| {
+            Ok(match p.arg(0).map(str::trim).filter(|text| !text.is_empty()) {
+                None => Command::Settings(None),
+                Some(text) if vim_options(text) => Command::VimSet(text.to_string()),
+                Some(text) => Command::Settings(Some(text.to_string())),
+            })
+        }),
     },
     Entry {
         name: "resume",
@@ -5940,7 +5933,7 @@ const RENAMED: &[(&str, &str)] = &[
     ("saveas", "write-as"),
     ("source", "render"),
     // **vim's tab walk is the buffer walk here**: a tab is a file. Without
-    // these `:tabn` would reach `:tabnew` by prefix and open a scratch.
+    // these `:tabn` would say it knows no such command.
     ("tabn", "buffer-next"),
     ("tabne", "buffer-next"),
     ("tabnext", "buffer-next"),
@@ -6100,7 +6093,7 @@ pub fn by_segment(line: &str) -> Vec<Choice> {
 /// line to the terminal: `!ls` gives 1, `pipe sort` gives 5. A word still
 /// being typed (`pipe` with no space after it) is not a verb yet.
 pub fn shell_start(line: &str) -> Option<usize> {
-    const VERBS: &[&str] = &["sh", "pipe", "pipe-before", "pipe-after", "pipe-to"];
+    const VERBS: &[&str] = &["run-shell-in-buffer", "pipe", "pipe-before", "pipe-after", "pipe-to"];
     let lead = line.len() - line.trim_start().len();
     let body = &line[lead..];
     if body.starts_with('!') {
@@ -7999,7 +7992,7 @@ mod tests {
         // A head, its declared short spelling, and how many stand behind it —
         // the count last, where it reads as a remark about the row rather than
         // part of the name.
-        assert_eq!(row("", "write"), ":write (w) +4");
+        assert_eq!(row("", "write"), ":write (w) +5");
         // A family with no head of its own keeps the hyphen, which is what
         // says it is a family and not a command, and nothing else: `view-w` is
         // `view-wrap`'s spelling, not the thirteen's.
@@ -8009,7 +8002,7 @@ mod tests {
         assert_eq!(row("", "markdown-"), ":markdown- +2");
         // …while a name that merely begins the same way is no relation:
         // `shot` starts with `sh` and belongs to nobody.
-        assert_eq!(row("", "sh"), ":sh");
+        assert_eq!(row("", "shot"), ":shot");
         // **A clipped name longer than two is left out**, declared or not:
         // `red` is `:redo`'s own alias and says nothing `:re` did not.
         assert_eq!(row("", "redo"), ":redo");
@@ -8226,9 +8219,9 @@ mod tests {
         // alias and the menu lists those first.
         assert_eq!(short("yume"), Some("yum"));
         assert_eq!(short("render"), Some("ren"), "recover and redo are in the way");
-        assert_eq!(short("sh"), None, "nothing shorter than the whole word");
+        assert_eq!(short("cd"), None, "nothing shorter than the whole word");
         // `r` and `ro` are both taken — the second by `:readonly`'s alias —
-        // so `:table-jump` is offered with no short form at all, the way `:sh` is.
+        // so `:table-jump` is offered with no short form at all, the way `:cd` is.
         assert_eq!(short("row"), None, "`ro` is `:readonly`'s");
         // Over what `complete` actually hands the menu, not over a second
         // derivation of it — the menu prints `Choice::short`, so that is the
@@ -8294,6 +8287,55 @@ mod tests {
     /// **The menu lists the common commands first, then the rest**, each
     /// group alphabetical, folded into their families; a name typed whole
     /// (`:e` is `:open`'s) comes before either.
+    #[test]
+    fn a_quiet_spelling_parses_and_is_not_printed() {
+        for quiet in QUIET {
+            let entry = COMMANDS
+                .iter()
+                .find(|e| e.aliases.contains(quiet))
+                .unwrap_or_else(|| panic!("`{quiet}` is no command's spelling"));
+            assert!(parse(&format!(":{quiet}")).is_ok(), "{quiet}");
+            let row = complete("").into_iter().find(|c| c.name == entry.name).map(|c| c.shown());
+            assert!(row.as_ref().is_some_and(|row| !row.contains(quiet)), "{quiet} is printed: {row:?}");
+        }
+    }
+
+    #[test]
+    fn vims_names_are_spellings_of_yumetes_own() {
+        use crate::window::Split;
+        // The full name is yumete's; vim's and helix's words reach it.
+        for word in [":vsplit-new", ":vnew", ":vne"] {
+            assert_eq!(parse(word), Ok(Command::NewWindow(Split::Beside)), "{word}");
+        }
+        for word in [":hsplit-new", ":hnew"] {
+            assert_eq!(parse(word), Ok(Command::NewWindow(Split::Below)), "{word}");
+        }
+        for word in [":write-if-changed", ":update", ":up"] {
+            assert_eq!(parse(word), Ok(Command::Update), "{word}");
+        }
+        // A buffer with no name is `:new`; a file by its name is `:open`'s.
+        // vim's tab pages have no counterpart, and no spelling here.
+        for word in [":new", ":enew", ":ene"] {
+            assert_eq!(parse(word), Ok(Command::NewBuffer), "{word}");
+        }
+        assert!(matches!(parse(":enew a.md"), Err(CommandError::TakesNoArgument { command: "enew", .. })));
+        for word in [":tabnew", ":tabe", ":tabedit"] {
+            assert!(parse(word).is_err(), "{word}");
+        }
+        // `:settings` takes vim's option words beside a setting's name.
+        for word in [":settings ts=4 et", ":set ts=4 et", ":se ts=4 et"] {
+            assert_eq!(parse(word), Ok(Command::VimSet("ts=4 et".into())), "{word}");
+        }
+        assert_eq!(parse(":set tw?"), Ok(Command::VimSet("tw?".into())));
+        assert_eq!(parse(":set"), Ok(Command::Settings(None)));
+        assert_eq!(parse(":settings editor.indent"), Ok(Command::Settings(Some("editor.indent".into()))));
+        assert_eq!(parse(":setl ts=2"), Ok(Command::VimSet("ts=2".into())));
+        assert_eq!(parse(":setf rust"), Ok(Command::SetSyntax(Some("rust".into()))));
+        // `:sh`'s line is still a shell line under its new name.
+        assert_eq!(shell_start("sh ls"), Some(3));
+        assert_eq!(shell_start("run-shell-in-buffer ls"), Some(20));
+    }
+
     #[test]
     fn the_menu_lists_the_common_commands_first_each_group_alphabetical() {
         let names = |typed: &str| complete(typed).iter().map(|c| c.name.to_string()).collect::<Vec<_>>();
@@ -8567,7 +8609,7 @@ mod tests {
                     Param::Settings => String::new(),
                     // A word only this command knows the shape of.
                     Param::Free(_) => match name {
-                        "grep" | "run" | "pipe" | "sh" | "replace" => "x",
+                        "grep" | "run" | "pipe" | "run-shell-in-buffer" | "replace" => "x",
                         "table-new" => "3x4",
                         _ => "1",
                     }
@@ -8621,7 +8663,7 @@ mod tests {
                     "gr" => ":gr x".to_string(),
                     "ex" => ":ex html".to_string(),
                     "md" => ":md footnote".to_string(),
-                    "insert-output" | "append-output" => format!(":{alias} date"),
+                    "insert-output" | "append-output" | "sh" => format!(":{alias} date"),
                     alias => format!(":{alias}"),
                 };
                 assert!(parse(&line).is_ok(), "alias {alias} does not parse");

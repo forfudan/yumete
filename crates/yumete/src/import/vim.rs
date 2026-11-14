@@ -547,14 +547,14 @@ const VIM_EX: &[(&[&str], &str)] = &[
     (&["wq"], ":write-quit"),
     (&["wqa", "wqall", "xa", "xall"], ":write-quit-all"),
     (&["x", "xit", "exi", "exit"], ":exit"),
-    (&["up", "update"], ":update"),
+    (&["up", "update"], ":write-if-changed"),
     (&["q", "quit"], ":quit"),
     (&["qa", "qall", "quita", "quitall"], ":quit-all"),
     (&["ene", "enew"], ":new"),
     (&["sp", "split"], ":hsplit"),
     (&["vs", "vsplit"], ":vsplit"),
-    (&["new"], ":hnew"),
-    (&["vne", "vnew"], ":vnew"),
+    (&["new"], ":hsplit-new"),
+    (&["vne", "vnew"], ":vsplit-new"),
     (&["on", "only"], ":quit-others"),
     (&["clo", "close"], ":quit-window"),
     (&["bn", "bnext"], ":buffer-next"),
@@ -572,7 +572,7 @@ const VIM_EX: &[(&[&str], &str)] = &[
 
 /// Commands that take nothing after them here.
 const BARE: &[&str] = &[
-    ":write-all", ":write-quit-all", ":quit-all", ":new", ":hnew", ":vnew", ":quit-others", ":quit-window",
+    ":write-all", ":write-quit-all", ":quit-all", ":new", ":hsplit-new", ":vsplit-new", ":quit-others", ":quit-window",
     ":buffer-next", ":buffer-previous", ":undo", ":redo", ":pwd", ":sidebar-explorer",
 ];
 
