@@ -7153,19 +7153,19 @@ fn draw_list(
     // Two caps say the same thing about every list, which is what makes a
     // place on the page worth learning.
     let (mut widths, deep) = if columns {
-        // **Two thirds of the window, footer and rings included** —— 半扇窗在
-        // 24 行的窗口下是 9 行 × 6 欄 ＝ 54 格，裝不下所有命令：
+        // **Two thirds of the window, rings included** —— 半扇窗在
+        // 24 行的窗口下是 10 行 × 6 欄 ＝ 60 格，裝不下所有命令：
         //
         // | 窗口高 | 單子 | 容量 | 正文還剩 |
         // | --- | --- | --- | --- |
-        // | 12 | 5 | 30 | 4 |
-        // | 24 | **13** | **78** | 8 |
-        // | 36 | 21 | 126 | 12 |
+        // | 12 | 6 | 36 | 4 |
+        // | 24 | **14** | **84** | 8 |
+        // | 36 | 22 | 132 | 12 |
         //
-        // Warning: **那個 3 不許拿掉**：框綫兩道加頁腳一行是真佔地方的，
-        // 面板高 ＝ 行數 ＋ 3。拿掉它等於讓面板高過說好的那個比例，而矮窗口
-        // 上「還剩幾行正文」正是這條規矩在守的東西。要更寬就動比例，別動它。
-        let half = (area.height as usize * 2 / 3).saturating_sub(3);
+        // Warning: **那個 2 不許拿掉**：上下兩道框綫是真佔地方的（計數寫在下邊框
+        // 上，不佔行），面板高 ＝ 行數 ＋ 2。拿掉它等於讓面板高過說好的那個比例，
+        // 而矮窗口上「還剩幾行正文」正是這條規矩在守的東西。要更寬就動比例，別動它。
+        let half = (area.height as usize * 2 / 3).saturating_sub(2);
         // **How many columns the width holds**, measured off the widest entry
         // the whole list has rather than off the ones left after typing — a
         // column is only as wide as its own longest row, so this is the
@@ -7185,10 +7185,10 @@ fn draw_list(
         let deep = deep.min(items.len().max(1));
         // …and never taller than the page will actually take. The cap above
         // is a taste rule; this one is arithmetic, and it is load-bearing:
-        // the panel is `deep + 3` rows, and one row too many does not clip —
+        // the panel is `deep + 2` rows, and one row too many does not clip —
         // the guard below returns `None` and **nothing is drawn at all**.
         let deep = deep.min((area.height.min(bottom.saturating_sub(area.y)) as usize)
-            .saturating_sub(3))
+            .saturating_sub(2))
             .max(1);
         (lay(deep, 0), deep)
     } else {
@@ -7196,19 +7196,19 @@ fn draw_list(
         // all — so it stays the glanceable eight and scrolls. A ranked list
         // asks for the page's own rule instead.
         let tall = match deep_as_the_page {
-            true => (area.height as usize * 2 / 3).saturating_sub(3).max(1),
+            true => (area.height as usize * 2 / 3).saturating_sub(2).max(1),
             false => MENU_ROWS,
         };
         let deep = items.len().clamp(1, tall);
-        // 同上面那一支：框綫兩道加頁腳一行是真佔地方的，高一行就整扇不畫。
+        // 同上面那一支：框綫兩道是真佔地方的，高一行就整扇不畫。
         let deep = deep
-            .min((area.height.min(bottom.saturating_sub(area.y)) as usize).saturating_sub(3))
+            .min((area.height.min(bottom.saturating_sub(area.y)) as usize).saturating_sub(2))
             .max(1);
         (lay(deep, 0).into_iter().take(1).collect(), deep)
     };
     let across = widths.len().max(1);
-    // The entries, the footer, and the ring above and below them.
-    let height = (deep + 3) as u16;
+    // The entries and the ring above and below them; the count is on the ring.
+    let height = (deep + 2) as u16;
     if height > area.height || bottom < height {
         return None;
     }
@@ -7269,8 +7269,6 @@ fn draw_list(
     }
     // 說明塊 ＋ 一道橫線，兩樣一起加在高度上（定下來的是「panel grows」）。
     //
-    // Warning: **腳注那一行要讓出來**：舊形狀的高度是 `deep + 3`，那個 3 是上邊框、
-    // 腳注、下邊框；計數搬到下邊框上之後那一行空着，於是單子底下多一條空白。
     // 橫線隔的是說明和單子；單子空着就不畫它，也不佔那一行。
     let ruled = !said.is_empty() && !items.is_empty();
     let block = match said.is_empty() {
@@ -7281,7 +7279,7 @@ fn draw_list(
         (true, _) => height,
         // 單子空着：整扇面板就是上下兩道框夾着那一段話。
         (false, true) => said.len() as u16 + 2,
-        (false, false) => height + block as u16 - 1,
+        (false, false) => height + block as u16,
     };
     if height > area.height {
         return None;
@@ -7298,7 +7296,7 @@ fn draw_list(
     crate::chrome::draw(frame, menu, &crate::chrome::Ring {
         open_sides: false,
         // 計數寫在下邊框上，省一行——標題寫在上邊框上，同一個辦法。
-        foot: match said.is_empty() {
+        foot: match footer.is_empty() {
             true => None,
             false => Some((
                 footer.to_string(),
@@ -7389,17 +7387,6 @@ fn draw_list(
                 put_text(buf, at, y, end, note, note_style);
             }
         }
-    }
-    // 舊形狀的腳注還在它那一行上；有說明塊的時候它已經搬到下邊框去了。
-    if said.is_empty() {
-        put_text(
-            buf,
-            menu.x + 1,
-            menu.y + 1 + deep as u16,
-            menu.x + width - 1,
-            footer,
-            quiet,
-        );
     }
     Some(menu)
 }
@@ -26868,12 +26855,15 @@ fn squeezed(text: &str) -> String {
             text.contains(&format!("1/{total}")),
             "how much more there is"
         );
+        // …written on the bottom border, as every floating panel writes its
+        // count, and not on a row of its own.
+        assert!(text.contains(&format!("╰1/{total}")), "the count stands on the floor");
         // The menu is a handful of rows, not the screen: **two thirds of the
-        // window is the ceiling**, footer and rings included (#372).
+        // window is the ceiling**, rings included (#372).
         let (rows, _) = menu_shape(&buffer);
         assert!(!rows.is_empty(), "a menu was drawn");
         assert!(
-            rows.len() + 3 <= 24 * 2 / 3,
+            rows.len() + 2 <= 24 * 2 / 3,
             "two thirds of a 24-row window, and the menu took {}",
             rows.len()
         );
@@ -26965,8 +26955,8 @@ fn squeezed(text: &str) -> String {
             match rule {
                 // 有說明塊：橫線到下邊框之間全是條目。
                 Some(rule) => (foot - rule - 1) as usize,
-                // 沒有說明塊：上邊框到下邊框之間還夾着腳注那一行，它不是條目。
-                None => (foot - top - 2) as usize,
+                // 沒有說明塊：上邊框到下邊框之間全是條目，計數在下邊框上。
+                None => (foot - top - 1) as usize,
             }
         };
         let before = rows_in(&tall);
@@ -26984,16 +26974,16 @@ fn squeezed(text: &str) -> String {
     #[test]
     fn the_command_menu_leaves_a_short_window_something_to_look_at() {
         // The eight-row floor keeps a menu worth opening on a small window,
-        // but on a twelve-row terminal eight rows and a footer is nine of the
+        // but on a twelve-row terminal eight rows and two rings are ten of the
         // twelve — the page it is a menu *for* would be gone. Two thirds is
-        // where the floor stops: five rows of commands, four of the page.
+        // where the floor stops: six rows of commands, four of the page.
         let config = Config::default();
         let mut editor = editor_with("那年冬天");
         editor.on_key(Key::Char(':'));
         let buffer = render_with(&editor, &config, no_ime(), 120, 12);
         let (rows, _) = menu_shape(&buffer);
         assert!(!rows.is_empty(), "a menu at all");
-        assert!(rows.len() <= 5, "at most two thirds, footer and all: {rows:?}");
+        assert!(rows.len() <= 6, "at most two thirds, rings and all: {rows:?}");
     }
 
     /// A real 碼表 in each table mode, for looking at (#374).
@@ -27300,10 +27290,10 @@ fn squeezed(text: &str) -> String {
 
         // The list runs *down* first and then across, like a list of files:
         // more than one column, and no taller than a menu is allowed to be on
-        // a window this short — half of it, footer and rings included.
+        // a window this short — two thirds of it, rings included.
         let (rows, columns) = menu_shape(&buffer);
         assert!(
-            rows.len() <= 28 * 2 / 3 - 3,
+            rows.len() <= 28 * 2 / 3 - 2,
             "a menu is glanced at, not read: {rows:?}"
         );
         assert!(columns.len() >= 3, "several columns: {columns:?}");
