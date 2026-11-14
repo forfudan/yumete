@@ -237,6 +237,12 @@ jobs:
       # nothing, and fails a release build that could not get them; the smoke
       # test below types with them.
 
+      # A CJK font for the preview's text tests, as in `test.yaml`: the Ubuntu
+      # images ship none.
+      - name: CJK font
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq fonts-noto-cjk
+
       # **The tests run here too.** A release built from a tree that does not
       # pass them is the one build where nobody would notice in time.
       # `--locked` here as well as on the build: without it this step quietly
