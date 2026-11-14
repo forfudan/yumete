@@ -26,6 +26,7 @@ pub mod tex;
 pub mod server;
 pub mod settings;
 pub mod settings_page;
+pub mod genda_page;
 pub mod system_ime;
 pub mod terminal_window;
 pub mod typed_ahead;
@@ -228,7 +229,31 @@ pub fn frame_to_text(
     height: u16,
     /* 那扇設置面板，`--keys` 開過的話 */ settings: Option<&yumete_config::panel::Panel>,
 ) -> String {
-    frame_to(editor, config, ime, width, height, false, settings)
+    frame_to(editor, config, ime, width, height, false, Pages { settings, genda: None })
+}
+
+/// [`frame_to_text`] with every page `--keys` may have opened over the text.
+pub fn frame_to_text_with(editor: &mut Editor, config: &Config, ime: &ImeSession, width: u16, height: u16, pages: Pages) -> String {
+    frame_to(editor, config, ime, width, height, false, pages)
+}
+
+/// [`frame_to_html`] with every page `--keys` may have opened over the text.
+pub fn frame_to_html_with(editor: &mut Editor, config: &Config, ime: &ImeSession, width: u16, height: u16, pages: Pages) -> String {
+    frame_to(editor, config, ime, width, height, true, pages)
+}
+
+/// **The pages that cover the text while they are open**: the settings
+/// panel and the typing trainer, each drawn over the whole window.
+#[derive(Clone, Copy, Default)]
+pub struct Pages<'a> {
+    pub settings: Option<&'a yumete_config::panel::Panel>,
+    pub genda: Option<&'a genda_page::Seat>,
+}
+
+impl<'a> From<Option<&'a yumete_config::panel::Panel>> for Pages<'a> {
+    fn from(settings: Option<&'a yumete_config::panel::Panel>) -> Self {
+        Pages { settings, genda: None }
+    }
 }
 
 /// The same frame **with its colours**, as one self-contained HTML `<pre>`.
@@ -246,7 +271,7 @@ pub fn frame_to_html(
     height: u16,
     /* 那扇設置面板，`--keys` 開過的話 */ settings: Option<&yumete_config::panel::Panel>,
 ) -> String {
-    frame_to(editor, config, ime, width, height, true, settings)
+    frame_to(editor, config, ime, width, height, true, Pages { settings, genda: None })
 }
 
 fn frame_to(
@@ -256,8 +281,9 @@ fn frame_to(
     width: u16,
     height: u16,
     html: bool,
-    settings: Option<&yumete_config::panel::Panel>,
+    pages: Pages,
 ) -> String {
+    let settings = pages.settings;
     // **The mood, before the first cell is painted.** `run` settles this and
     // the shot did not, so every picture came out in the theme's default mood
     // however loudly the config said `mode = "dark"` — 48 frames of a
@@ -349,13 +375,13 @@ fn frame_to(
             Some(yumete_config::panel::local_sheet_path(&editor.root())),
         )
     });
-    let settings = settings.or(mine.as_ref());
+    let pages = Pages { settings: settings.or(mine.as_ref()), ..pages };
     // **欠着的那一次 `gw` 要先畫一幀纔算得出來**（#406）：落腳點只算屏幕上的，而
     // 哪一段在屏幕上是畫的時候量的。主循環是「畫完 `continue` 再畫一幀」，這一支
     // 沒有下一幀，所以自己先畫一幀丟掉。
     if editor.take_owed_jump() {
         terminal
-            .draw(|frame| draw(frame, editor, config, ime, &mut viewport, settings))
+            .draw(|frame| draw(frame, editor, config, ime, &mut viewport, pages))
             .expect("one frame to measure the page by");
         if let Some((a, b)) = viewport[editor.live_pane()].drawn_span {
             editor.set_page_span(a, b);
@@ -365,7 +391,7 @@ fn frame_to(
     // `go`/`gu` 同病，同一道門（§5.73）。
     if let Some(only_han) = editor.take_owed_seek() {
         terminal
-            .draw(|frame| draw(frame, editor, config, ime, &mut viewport, settings))
+            .draw(|frame| draw(frame, editor, config, ime, &mut viewport, pages))
             .expect("one frame to measure the page by");
         if let Some((a, b)) = viewport[editor.live_pane()].drawn_span {
             editor.set_page_span(a, b);
@@ -373,7 +399,7 @@ fn frame_to(
         editor.run_owed_seek(only_han);
     }
     terminal
-        .draw(|frame| draw(frame, editor, config, ime, &mut viewport, settings))
+        .draw(|frame| draw(frame, editor, config, ime, &mut viewport, pages))
         .expect("draw one frame");
     let buffer = terminal.backend().buffer();
     match html {
@@ -702,6 +728,8 @@ pub fn run(
     // Warning: 開、收鍵、存、關那一整圈在 `settings_page::Seat` 裏，**`--keys` 走的是
     // 同一支**：兩份抄本會分岔。
     let mut settings = crate::settings_page::Seat::default();
+    // **跟打** (`:genda`), the same shape: its keys, its pad, its page.
+    let mut genda = crate::genda_page::Seat::default();
     if let Some(said) = adopt_an_orphan() {
         editor.set_status(said);
     }
@@ -843,7 +871,8 @@ pub fn run(
             system_ime.say_it_again();
         }
         // A value typed in the settings panel's cell is typing too.
-        let typing_in_a_cell = settings.panel.as_ref().and_then(|p| p.cell.as_ref()).is_some_and(|c| c.bar);
+        let typing_in_a_cell =
+            settings.panel.as_ref().and_then(|p| p.cell.as_ref()).is_some_and(|c| c.bar) || genda.typing();
         system_ime.want(!(composes_here(editor) || typing_in_a_cell) || yume_has_the_keys);
         // 挑選器只有打字這一層，走的是 `is_prompt()` 那條路，豎線是對的。
         // **Typing a value in the settings panel is typing**: the
@@ -851,7 +880,7 @@ pub fn run(
         // leave a block over the value being typed.
         let typing_a_setting = settings.panel.as_ref().is_some_and(|p| {
             p.typing.is_some() || p.cell.as_ref().is_some_and(|c| c.bar)
-        });
+        }) || genda.typing();
         let (shown, shape) = caret_now(editor, typing_a_setting);
         if last_mode != Some(shown) {
             let (mode, _) = shown;
@@ -1030,7 +1059,7 @@ pub fn run(
             }
             let began = std::time::Instant::now();
             let completed = match terminal
-                .draw(|frame| draw(frame, editor, config, ime, &mut viewport, settings.panel.as_ref()))
+                .draw(|frame| draw(frame, editor, config, ime, &mut viewport, Pages { settings: settings.panel.as_ref(), genda: Some(&genda) }))
             {
                 Ok(completed) => completed,
                 Err(err) => break Err(err),
@@ -1400,6 +1429,8 @@ pub fn run(
                 editor.signature_due_in(),
                 // The settings panel's files, changed outside while it is open.
                 settings.due_in(),
+                // The typing trainer's clock, shown running.
+                genda.due_in(),
                 // Warning: **磁碟那一眼是鬧鐘之一，不是它自己一條路。** 自動重載若在這一段
                 // **之前**自己 `recv_timeout(兩秒)` 然後 `continue`，它一開——而它是出廠
                 // 默認——底下這張鬧鐘表整個算不到：跟着光標那一問的三百毫秒要等到兩秒
@@ -1482,7 +1513,17 @@ pub fn run(
                 // swallowed so it never reaches the editor.
                 match shift.update(&key) {
                     ShiftResult::Tap(tapped) => {
-                        answer_a_shift_tap(ime, editor, &mut borrowed, tapped, settings.open());
+                        // Mid-code in the typing trainer's pad, the tap commits
+                        // the code there; elsewhere it is the switch alone.
+                        match genda.lend_pad_for_tap(ime) {
+                            Some(mut pad) => {
+                                answer_a_shift_tap(ime, &mut pad, &mut borrowed, tapped, false);
+                                genda.take_back_pad(editor, pad);
+                            }
+                            None => {
+                                answer_a_shift_tap(ime, editor, &mut borrowed, tapped, settings.open());
+                            }
+                        }
                         continue;
                     }
                     ShiftResult::Consumed => continue,
@@ -1496,7 +1537,8 @@ pub fn run(
                 // **Not `continue`**: a key the panel takes may write a
                 // change, and the reload below has to run for it to take effect.
                 settings.composing = ime.is_composing();
-                let taken = settings.took(editor, map_key(code, mods));
+                let taken = settings.took(editor, map_key(code, mods))
+                    || genda.took(editor, ime, map_key(code, mods), code == KeyCode::F(3));
                 // **A value in its cell is typed with its own editor**: the
                 // keys the panel gives back, and the IME, go to it as they go
                 // to the text, and it goes back to the panel after the key.
@@ -1504,11 +1546,17 @@ pub fn run(
                     false => settings.lend_cell(),
                     true => None,
                 };
+                // …and so is the typing trainer's pad.
+                let mut pad = match taken || lent.is_some() {
+                    false => genda.lend_pad(),
+                    true => None,
+                };
                 let main = &mut *editor;
                 let (quit, answered) = {
-                    let editor: &mut Editor = match lent.as_deref_mut() {
-                        Some(cell) => cell,
-                        None => main,
+                    let editor: &mut Editor = match (lent.as_deref_mut(), pad.as_deref_mut()) {
+                        (Some(cell), _) => cell,
+                        (None, Some(pad)) => pad,
+                        (None, None) => main,
                     };
                     // The stand-in for a Shift this terminal cannot report (#339).
                     // It asks yume the same question the tap does, so a rebound
@@ -1557,11 +1605,13 @@ pub fn run(
                 };
                 // The cell's editor never ends the session: a `ZZ` in a cell
                 // is nothing.
-                match lent {
-                    Some(cell) => settings.take_back_cell(cell),
-                    None if quit => break Ok(()),
-                    None => {}
+                match (lent, pad) {
+                    (Some(cell), _) => settings.take_back_cell(cell),
+                    (None, Some(pad)) => genda.take_back_pad(editor, pad),
+                    (None, None) if quit => break Ok(()),
+                    (None, None) => {}
                 }
+                genda.settle(editor, ime);
                 if answered {
                     continue;
                 }
@@ -1889,7 +1939,7 @@ pub fn run(
                     if loading_the_table(&tag, ime) {
                         editor.set_status(say!("ime.loading"));
                         if let Err(err) =
-                            terminal.draw(|frame| draw(frame, editor, config, ime, &mut viewport, None))
+                            terminal.draw(|frame| draw(frame, editor, config, ime, &mut viewport, Pages::default()))
                         {
                             break Err(err);
                         }
@@ -1973,6 +2023,7 @@ pub fn run(
             // terminal. It is inserted as writing, never run as keys.
             // **…unless the settings panel is open**: then it
             // is the panel's, and the document behind it is not touched.
+            Ok(Event::Paste(_)) if genda.pasted() => {}
             Ok(Event::Paste(text)) => {
                 if !settings.pasted(editor, &text) {
                     editor.paste_text(&text);
@@ -1984,6 +2035,8 @@ pub fn run(
             // picks a row, the wheel walks the list, and nothing reaches the
             // document behind it — no caret moved, no selection left, no
             // scroll — the `:` line over the panel included.
+            // The typing trainer is the keyboard's alone.
+            Ok(Event::Mouse(_)) if genda.open() => {}
             Ok(Event::Mouse(mouse)) if settings.open() => {
                 let pointer = match mouse.kind {
                     MouseEventKind::ScrollDown | MouseEventKind::ScrollUp => {
@@ -5932,15 +5985,18 @@ fn page_areas(editor: &Editor, config: &Config, area: Rect, head_rows: u16) -> A
     }
 }
 
-fn draw(
+fn draw<'a>(
     frame: &mut Frame,
     editor: &Editor,
     config: &Config,
     ime: &ImeSession,
     viewport: &mut Seats,
-    // 那扇設置面板開着的話，它蓋在正文上（底下兩行留着）。
-    settings: Option<&yumete_config::panel::Panel>,
+    // 那扇設置面板（或跟打頁）開着的話，它蓋在正文上（底下兩行留着）。
+    pages: impl Into<Pages<'a>>,
 ) {
+    let pages: Pages = pages.into();
+    let settings = pages.settings;
+    let genda = pages.genda.filter(|g| g.open());
     viewport.follow(&editor.windows().leaves());
     let area = frame.area();
     // **Two rows for a table's columns, and only once its own head has gone**
@@ -6257,7 +6313,9 @@ fn draw(
     let shape = candidate_shape(editor, ime);
     // **A value typed in its cell, in the settings panel**: the editor
     // behind the panel is in Normal, and the box stands under the cell.
-    let typing_in_a_cell = settings.and_then(|p| p.cell.as_ref()).is_some_and(|c| c.bar);
+    // …and the typing trainer's pad, held in Insert behind its page.
+    let typing_in_a_cell = settings.and_then(|p| p.cell.as_ref()).is_some_and(|c| c.bar)
+        || genda.is_some_and(|g| g.typing());
     let cell_caret: std::cell::Cell<Option<Position>> = std::cell::Cell::new(None);
     let panel = shape == PanelDisplay::Box
         || picker_caret.is_some()
@@ -6496,7 +6554,7 @@ fn draw(
             }
         }
     };
-    if settings.is_none() {
+    if settings.is_none() && genda.is_none() {
         candidates(frame, false);
     }
     // **按「那裏寫的什麼」跳的候選面板**（`go`/`gu`，§5.73）。
@@ -6574,6 +6632,36 @@ fn draw(
                 false => {
                     for x in foot.x..foot.x + foot.width {
                         if let Some(cell) = frame.buffer_mut().cell_mut((x, foot.y)) {
+                            cell.set_symbol(" ").set_style(ground);
+                        }
+                    }
+                }
+            }
+        }
+        candidates(frame, true);
+    }
+    // **The typing trainer covers the window as the settings page does**,
+    // the command row kept for what is said and for a `:` typed over it.
+    if let Some(seat) = genda {
+        let page_area = match command_area.height {
+            1 if command_area.y > area.y => Rect { height: command_area.y - area.y, ..area },
+            _ => area,
+        };
+        if let Some(at) = genda_page::draw(frame, seat, config, page_area) {
+            crate::backend::keep_the_cursor_hidden(false);
+            frame.set_cursor_position(at);
+            cell_caret.set(Some(at));
+        }
+        let ink = crate::theme::Palette::of(config);
+        let ground = ink.ground(yumete_config::rung::CHROME).fg(ink.text());
+        // Silent, the row is blank: the editor's own hints are about the
+        // document, which is not what the keys are on.
+        if command_area.height == 1 {
+            match editor.prompt().is_some() || !editor.status().is_empty() {
+                true => draw_command(frame, editor, config, ime, command_area, ground),
+                false => {
+                    for x in command_area.x..command_area.x + command_area.width {
+                        if let Some(cell) = frame.buffer_mut().cell_mut((x, command_area.y)) {
                             cell.set_symbol(" ").set_style(ground);
                         }
                     }

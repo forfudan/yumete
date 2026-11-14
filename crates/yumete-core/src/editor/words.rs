@@ -295,46 +295,14 @@ impl Editor {
         // said only 「没有找到」. A question that finds nothing must not also
         // take away the last answer.
         let had = self.take_detected_words();
-        let mut text = String::new();
-        let mut files = 0usize;
         // Warning: **這一篇，除非你說了別的** (#452). A project is usually not a
         // book: read whole, a repository's few hundred 拆分表 drown the chapter
         // the writer is actually in, and its own words never come out. The
         // statistics are ratios, so what is read *is* the question.
-        match self.discover_root(scope) {
-            None => {
-                files = 1;
-                text = self.current_buffer().text();
-            }
-            Some(root) => walk(&root, &mut |path| {
-                if text.len() >= DISCOVER_MAX_BYTES {
-                    return;
-                }
-                let open = self
-                    .buffers
-                    .iter()
-                    .find(|b| b.path() == Some(path))
-                    .map(|b| b.text());
-                let more = match open {
-                    Some(text) => text,
-                    // 最多讀到預算用完為止，而不是把整個檔吐進內存——見
-                    // `editor::read_some`。二進制也不認詞。
-                    None if crate::editor::looks_binary(path) => return,
-                    None => {
-                        let room = crate::editor::DISCOVER_MAX_BYTES.saturating_sub(text.len());
-                        match crate::editor::read_some(path, room) {
-                            Some(text) => text,
-                            None => return,
-                        }
-                    }
-                };
-                files += 1;
-                text.push_str(&more);
-                // The join, so a word cannot be found across the seam between
-                // two chapters that never touch.
-                text.push('\n');
-            }),
-        }
+        let (text, files) = match self.discover_root(scope) {
+            None => (self.current_buffer().text(), 1),
+            Some(root) => self.text_under(&root),
+        };
         let found = {
             let joins = |word: &str| self.segmenter.segment(word).len() == 1;
             crate::discover::words(&text, &joins)
@@ -391,6 +359,44 @@ impl Editor {
             false => say!("word.discover-found", total, path.display()),
         };
         Ok(())
+    }
+
+    /// **Every text file under `root`, read into one string**, and how many
+    /// files went in: an open buffer as it stands, a file on disk up to the
+    /// budget, binaries skipped, by [`walk`]'s rules (hidden and ignored files
+    /// left out). What 認詞 reads and what 跟打's 字頻 counts.
+    pub(super) fn text_under(&self, root: &Path) -> (String, usize) {
+        let mut text = String::new();
+        let mut files = 0usize;
+        walk(root, &mut |path| {
+            if text.len() >= DISCOVER_MAX_BYTES {
+                return;
+            }
+            let open = self
+                .buffers
+                .iter()
+                .find(|b| b.path() == Some(path))
+                .map(|b| b.text());
+            let more = match open {
+                Some(text) => text,
+                // 最多讀到預算用完為止，而不是把整個檔吐進內存——見
+                // `editor::read_some`。二進制也不認詞。
+                None if crate::editor::looks_binary(path) => return,
+                None => {
+                    let room = crate::editor::DISCOVER_MAX_BYTES.saturating_sub(text.len());
+                    match crate::editor::read_some(path, room) {
+                        Some(text) => text,
+                        None => return,
+                    }
+                }
+            };
+            files += 1;
+            text.push_str(&more);
+            // The join, so a word cannot be found across the seam between
+            // two chapters that never touch.
+            text.push('\n');
+        });
+        (text, files)
     }
 
     /// How far a 認詞 reads, as a root to walk — `None` is **this buffer**.

@@ -836,6 +836,36 @@ impl ImeSession {
         ImeSession::new(scheme, yumete_config::data_search_dirs())
     }
 
+    /// **The `n` most frequent 漢字 by Yume's 詞頻表**, most frequent first;
+    /// empty when the table is not loaded.
+    ///
+    /// A character's weight is the weights of every word it is in, added up:
+    /// counted as a word alone, 国 would rank far below where a text uses it.
+    ///
+    /// **One script only**: the table counts 简体 and 繁體 alike, so 个 and 個
+    /// would both be in the first five hundred. `simplified` leaves out what
+    /// the 簡繁 table calls traditional, and otherwise what it calls
+    /// simplified; with no such table nothing is left out.
+    pub fn frequent_chars(&self, n: usize, simplified: bool) -> Vec<char> {
+        let other_side = match simplified {
+            true => "[簡]",
+            false => "[繁]",
+        };
+        let table = self.engine.simp_trad();
+        let mut weight: std::collections::HashMap<char, f64> = std::collections::HashMap::new();
+        self.engine.unigram.for_each_with_prefix("", |word, w| {
+            for c in word.chars().filter(|&c| yumete_cjk::is_han(c)) {
+                *weight.entry(c).or_default() += w;
+            }
+        });
+        let mut ranked: Vec<(char, f64)> = weight
+            .into_iter()
+            .filter(|(c, _)| !table.get(*c).is_some_and(|forms| forms.starts_with(other_side)))
+            .collect();
+        ranked.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
+        ranked.into_iter().take(n).map(|(c, _)| c).collect()
+    }
+
     /// Just the language model: the word frequencies and the 詞彙表.
     ///
     /// These two files are **scheme-independent** — they are the language, not

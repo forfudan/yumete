@@ -37,6 +37,7 @@ pub mod encoding;
 pub mod epub;
 pub mod export;
 pub mod fold;
+pub mod genda;
 pub mod glyphs;
 pub mod hardwrap;
 pub mod input;

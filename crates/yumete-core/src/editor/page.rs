@@ -2206,6 +2206,81 @@ impl Editor {
         self.settings_target.take()
     }
 
+    /// **A `:genda-…` command**: `:genda` and `:genda-article buffer` read
+    /// the article off the buffer now, while the selection is the one it
+    /// was typed over; the rest need the page open.
+    pub(super) fn ask_the_typing_page(&mut self, ask: crate::genda::Ask) {
+        use crate::genda::{Ask, Choice};
+        if let Ask::Top(scope, n) = &ask {
+            self.ask_for_the_top(scope, *n);
+            return;
+        }
+        if matches!(ask, Ask::Open | Ask::Article(Choice::Buffer)) {
+            let (start, end) = self.selection();
+            let rope = self.current_buffer().rope();
+            let name = self.current_buffer().display_name();
+            self.genda_article = Some(match end.saturating_sub(start) > 1 {
+                true => (say!("genda.article.selection", name), rope.slice(start..end.min(rope.len_chars())).to_string()),
+                false => (name, rope.to_string()),
+            });
+        } else if !self.genda_open {
+            self.status = say!("genda.not-open");
+            return;
+        }
+        self.genda_asks.push(ask);
+    }
+
+    /// **`:genda-top` and its scopes**: the scope read the way 認詞 reads
+    /// it, its most frequent 漢字 counted into an article, and the page
+    /// opened on it (or its article changed, when it is open already).
+    fn ask_for_the_top(&mut self, scope: &crate::search_panel::Where, n: usize) {
+        use crate::search_panel::Where;
+        let text = match scope {
+            Where::Buffer => self.current_buffer().text(),
+            Where::Buffers => self
+                .buffers
+                .iter()
+                .filter(|b| !b.is_preview())
+                .map(|b| b.text())
+                .collect::<Vec<_>>()
+                .join("\n"),
+            Where::Working => self.text_under(&self.working_dir()).0,
+            Where::Project => self.text_under(&self.root()).0,
+            Where::Named(_) => return,
+        };
+        let top = crate::genda::top_chars(&text, n);
+        if top.is_empty() {
+            self.status = say!("genda.top-empty");
+            return;
+        }
+        let name = match scope {
+            Where::Buffer => say!("genda.top.buffer", top.len()),
+            Where::Buffers => say!("genda.top.buffers", top.len()),
+            Where::Working => say!("genda.top.working", top.len()),
+            _ => say!("genda.top.project", top.len()),
+        };
+        self.genda_article = Some((name, top.into_iter().collect()));
+        self.genda_asks.push(match self.genda_open {
+            true => crate::genda::Ask::Article(crate::genda::Choice::Buffer),
+            false => crate::genda::Ask::Open,
+        });
+    }
+
+    /// What the `:genda` family asked since the last look, oldest first.
+    pub fn take_genda_asks(&mut self) -> Vec<crate::genda::Ask> {
+        std::mem::take(&mut self.genda_asks)
+    }
+
+    /// The article read off the buffer by the last `:genda`.
+    pub fn take_genda_article(&mut self) -> Option<(String, String)> {
+        self.genda_article.take()
+    }
+
+    /// The front end opened or closed the typing page.
+    pub fn set_genda_open(&mut self, on: bool) {
+        self.genda_open = on;
+    }
+
     /// 前端進出那扇面板時說一聲。
     ///
     /// Warning: **核心要知道它開着**，因為 `:w` 與 `:q` 在那時說的是面板，不是緩衝區。

@@ -431,6 +431,12 @@ impl Editor {
         }
     }
 
+    /// **A file of the editor's own in the data directory**, or `None` when
+    /// there is none or this session keeps nothing (`--private`).
+    pub fn kept_file(&self, name: &str) -> Option<PathBuf> {
+        self.where_data.as_ref().filter(|_| self.remembers).map(|d| d.join(name))
+    }
+
     pub fn knows_its_paths(&mut self, config: PathBuf, data: PathBuf) {
         self.where_config = Some(config);
         self.where_data = Some(data);

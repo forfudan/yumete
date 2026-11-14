@@ -298,6 +298,104 @@ en = "format this file as configured ([language.markdown] format = …)"
 find = "格式化 排版 整理 formatter prettier"
 
 [[message]]
+# : 命令選單裏 genda 那一項的説明(commands 組)（草稿）
+key = "cmd.commands.genda"
+zhs = "跟打：把选区（没有选区则整个文件）分段来打，记速度、击键、码长、键准"
+en = "typing trainer: type the selection (or the whole file) in segments, timed, with speed, keys a second, code length and key accuracy"
+find = "跟打 跟打器 打字 練習 练习 測速 测速 速度 擊鍵 击键 碼長 码长 typing trainer practice speed wpm genda"
+
+[[message]]
+# : 命令選單裏 genda-article 那一項的説明(commands 組)（草稿）
+key = "cmd.commands.genda-article"
+zhs = "跟打：换文章，当前文件或宇浩字频里的常用单字"
+en = "typing trainer: another article, the current file or Yume's most frequent characters"
+find = "跟打 文章 常用字 單字 单字 字頻 字频 article common characters genda"
+
+[[message]]
+# : 命令選單裏 genda-copy 那一項的説明(commands 組)（草稿）
+key = "cmd.commands.genda-copy"
+zhs = "跟打：把最近一段（或历史里选中的那条）成绩复制到剪贴板"
+en = "typing trainer: copy the latest score line (or the one picked in the history)"
+find = "跟打 成績 成绩 複製 复制 剪貼板 剪贴板 copy score genda"
+
+[[message]]
+# : 命令選單裏 genda-copy-history 那一項的説明(commands 組)（草稿）
+key = "cmd.commands.genda-copy-history"
+zhs = "跟打：把全部历史成绩复制成表格（TSV，带表头）"
+en = "typing trainer: copy the whole history as a table (TSV, with a header row)"
+find = "跟打 歷史 历史 成績 成绩 表格 複製 复制 copy history tsv genda"
+
+[[message]]
+# : 命令選單裏 genda-history 那一項的説明(commands 組)（草稿）
+key = "cmd.commands.genda-history"
+zhs = "跟打：查看历史成绩，再按一次回到跟打"
+en = "typing trainer: the history of scores; again goes back to typing"
+find = "跟打 歷史 历史 記錄 记录 成績 成绩 history scores genda"
+
+[[message]]
+# : 命令選單裏 genda-length 那一項的説明(commands 組)（草稿）
+key = "cmd.commands.genda-length"
+zhs = "跟打：每段多少字，all 为全文"
+en = "typing trainer: characters a segment; all is the whole article"
+find = "跟打 段長 段长 字數 字数 每段 length segment genda"
+
+[[message]]
+# : 命令選單裏 genda-next 那一項的説明(commands 組)（草稿）
+key = "cmd.commands.genda-next"
+zhs = "跟打：下一段"
+en = "typing trainer: the next segment"
+find = "跟打 下一段 next segment genda"
+
+[[message]]
+# : 命令選單裏 genda-previous 那一項的説明(commands 組)（草稿）
+key = "cmd.commands.genda-previous"
+zhs = "跟打：上一段"
+en = "typing trainer: the previous segment"
+find = "跟打 上一段 previous segment genda"
+
+[[message]]
+# : 命令選單裏 genda-retry 那一項的説明(commands 組)（草稿）
+key = "cmd.commands.genda-retry"
+zhs = "跟打：重打这一段"
+en = "typing trainer: type this segment again"
+find = "跟打 重打 重來 重来 retry again genda"
+
+[[message]]
+# : 命令選單裏 genda-shuffle 那一項的説明(commands 組)（草稿）
+key = "cmd.commands.genda-shuffle"
+zhs = "跟打：打乱文章的字序，再按一次恢复"
+en = "typing trainer: shuffle the article's characters; again puts them back"
+find = "跟打 亂序 乱序 打亂 打乱 shuffle random genda"
+
+[[message]]
+# : 命令選單裏 genda-top 那一項的説明(commands 組)（草稿）
+key = "cmd.commands.genda-top"
+zhs = "跟打：当前文件里最常用的 N 个汉字（默认 500）"
+en = "typing trainer: the N most frequent Chinese characters in this file (500 by default)"
+find = "跟打 字頻 字频 常用字 頻率 频率 top frequency genda gt"
+
+[[message]]
+# : 命令選單裏 genda-top-buffers 那一項的説明(commands 組)（草稿）
+key = "cmd.commands.genda-top-buffers"
+zhs = "跟打：所有打开的文件里最常用的 N 个汉字"
+en = "typing trainer: the N most frequent Chinese characters in every open buffer"
+find = "跟打 字頻 字频 常用字 頻率 频率 top frequency genda buffers gtb"
+
+[[message]]
+# : 命令選單裏 genda-top-project 那一項的説明(commands 組)（草稿）
+key = "cmd.commands.genda-top-project"
+zhs = "跟打：项目里最常用的 N 个汉字"
+en = "typing trainer: the N most frequent Chinese characters in the project"
+find = "跟打 字頻 字频 常用字 頻率 频率 top frequency genda project gtp"
+
+[[message]]
+# : 命令選單裏 genda-top-working 那一項的説明(commands 組)（草稿）
+key = "cmd.commands.genda-top-working"
+zhs = "跟打：工作目录下文本文件里最常用的 N 个汉字"
+en = "typing trainer: the N most frequent Chinese characters in the text files under the working directory"
+find = "跟打 字頻 字频 常用字 頻率 频率 top frequency genda working gtw"
+
+[[message]]
 # 命令：:git-diff —— 跟 git 裏那一份比，逐詞
 key = "cmd.commands.git-diff"
 zhs = "与 git 中的版本逐词比较，默认比 HEAD"
@@ -1183,6 +1281,42 @@ find = "摺疊 折疊 折叠 收起 選中 选中 fold zf selection"
 key = "cmd.footnote-kinds.inline"
 zhs = "行内注 ^[…]，不放到文末"
 en = "an inline note ^[…], kept in place"
+
+[[message]]
+# : 命令選單裏 genda-article 的 buffer 那一項的説明(genda-articles 組)（草稿）
+key = "cmd.genda-articles.buffer"
+zhs = "当前文件的选区，没有选区则整个文件"
+en = "the selection in the current file, or the whole file"
+
+[[message]]
+# : 命令選單裏 genda-article 的 chars-1-500 那一項的説明(genda-articles 組)（草稿）
+key = "cmd.genda-articles.common-1"
+zhs = "常用单字前 500，取自宇浩字频"
+en = "the 500 most frequent characters, by Yume's frequencies"
+
+[[message]]
+# : 命令選單裏 genda-article 的 chars-501-1000 那一項的説明(genda-articles 組)（草稿）
+key = "cmd.genda-articles.common-2"
+zhs = "常用单字第 501 到 1000"
+en = "the next 500 most frequent characters"
+
+[[message]]
+# : 命令選單裏 genda-article 的 chars-1001-1500 那一項的説明(genda-articles 組)（草稿）
+key = "cmd.genda-articles.common-3"
+zhs = "常用单字第 1001 到 1500"
+en = "the 500 after those"
+
+[[message]]
+# : 命令選單裏 genda-length 的 all 那一項的説明(genda-lengths 組)（草稿）
+key = "cmd.genda-lengths.all"
+zhs = "全文一段"
+en = "the whole article in one segment"
+
+[[message]]
+# : 命令選單裏 genda-length 的數字那幾項的説明(genda-lengths 組)（草稿）
+key = "cmd.genda-lengths.n"
+zhs = "每段这么多字"
+en = "this many characters a segment"
 
 [[message]]
 # : 命令選單裏 color 那一項的説明(hints 組)

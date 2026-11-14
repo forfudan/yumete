@@ -729,6 +729,9 @@ pub enum Command {
     /// still walked, not typed: a command remembers its own name, not eight
     /// group names.
     Settings(Option<String>),
+    /// **`:genda` and its family** — the typing trainer's page; each member
+    /// is one thing the page does ([`crate::genda::Ask`]).
+    Genda(crate::genda::Ask),
     /// `:tutor` — a lesson, written into a file of the reader's own.
     Tutor,
     /// **`:resume` — take up this directory's last session.**
@@ -2549,6 +2552,38 @@ const LANES: &[Word] = &[
 ];
 
 /// 候選擺在哪——`:yume-panel` 的三個詞。
+/// How many characters `:genda-top` and its scopes take: the number typed,
+/// or [`crate::genda::DEFAULT_TOP`].
+fn genda_top_count(p: &Parsed) -> Result<usize, CommandError> {
+    match p.arg(0).map(str::trim) {
+        None | Some("") => Ok(crate::genda::DEFAULT_TOP),
+        Some(text) => match text.parse::<usize>() {
+            Ok(n) if n > 0 => Ok(n),
+            _ => Err(CommandError::InvalidArgument { command: p.name, value: text.to_string() }),
+        },
+    }
+}
+
+/// `:genda-length`: the presets, and `all` for 全文.
+const GENDA_LENGTHS: &[Word] = &[
+    Word { name: "10", help: "cmd.genda-lengths.n", needs: &[] },
+    Word { name: "15", help: "cmd.genda-lengths.n", needs: &[] },
+    Word { name: "25", help: "cmd.genda-lengths.n", needs: &[] },
+    Word { name: "50", help: "cmd.genda-lengths.n", needs: &[] },
+    Word { name: "100", help: "cmd.genda-lengths.n", needs: &[] },
+    Word { name: "200", help: "cmd.genda-lengths.n", needs: &[] },
+    Word { name: "500", help: "cmd.genda-lengths.n", needs: &[] },
+    Word { name: "all", help: "cmd.genda-lengths.all", needs: &[] },
+];
+
+/// `:genda-article`, in the order of [`crate::genda::ARTICLE_WORDS`].
+const GENDA_ARTICLES: &[Word] = &[
+    Word { name: "buffer", help: "cmd.genda-articles.buffer", needs: &[] },
+    Word { name: "chars-1-500", help: "cmd.genda-articles.common-1", needs: &[] },
+    Word { name: "chars-501-1000", help: "cmd.genda-articles.common-2", needs: &[] },
+    Word { name: "chars-1001-1500", help: "cmd.genda-articles.common-3", needs: &[] },
+];
+
 const PANELS: &[Word] = &[
     Word {
         name: "box",
@@ -5708,6 +5743,143 @@ pub const COMMANDS: &[Entry] = &[
                 Some(text) if vim_options(text) => Command::VimSet(text.to_string()),
                 Some(text) => Command::Settings(Some(text.to_string())),
             })
+        }),
+    },
+    Entry {
+        name: "genda",
+        aliases: &[],
+        help: "cmd.commands.genda",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::Genda(crate::genda::Ask::Open))),
+    },
+    Entry {
+        name: "genda-next",
+        aliases: &[],
+        help: "cmd.commands.genda-next",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::Genda(crate::genda::Ask::Next))),
+    },
+    Entry {
+        name: "genda-previous",
+        aliases: &[],
+        help: "cmd.commands.genda-previous",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::Genda(crate::genda::Ask::Previous))),
+    },
+    Entry {
+        name: "genda-retry",
+        aliases: &[],
+        help: "cmd.commands.genda-retry",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::Genda(crate::genda::Ask::Retry))),
+    },
+    Entry {
+        name: "genda-shuffle",
+        aliases: &[],
+        help: "cmd.commands.genda-shuffle",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::Genda(crate::genda::Ask::Shuffle))),
+    },
+    Entry {
+        name: "genda-copy",
+        aliases: &[],
+        help: "cmd.commands.genda-copy",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::Genda(crate::genda::Ask::Copy))),
+    },
+    Entry {
+        name: "genda-copy-history",
+        aliases: &[],
+        help: "cmd.commands.genda-copy-history",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::Genda(crate::genda::Ask::CopyHistory))),
+    },
+    Entry {
+        name: "genda-history",
+        aliases: &[],
+        help: "cmd.commands.genda-history",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::Genda(crate::genda::Ask::History))),
+    },
+    Entry {
+        name: "genda-length",
+        aliases: &[],
+        help: "cmd.commands.genda-length",
+        needs: &[],
+        params: &[Param::WordsOr {
+            of: GENDA_LENGTHS,
+            default: None,
+            or: "<字數>",
+        }],
+        // A value, not an action: how long a segment is. `all` is 全文.
+        build: Some(|p| match p.need(0)? {
+            "all" => Ok(Command::Genda(crate::genda::Ask::Length(None))),
+            _ => match p.number(0)? {
+                0 => Err(CommandError::InvalidArgument { command: p.name, value: "0".into() }),
+                n => Ok(Command::Genda(crate::genda::Ask::Length(Some(n)))),
+            },
+        }),
+    },
+    Entry {
+        name: "genda-top",
+        aliases: &["gt"],
+        help: "cmd.commands.genda-top",
+        needs: &[],
+        params: &[Param::Free("<字數>")],
+        build: Some(|p| {
+            Ok(Command::Genda(crate::genda::Ask::Top(crate::search_panel::Where::Buffer, genda_top_count(p)?)))
+        }),
+    },
+    Entry {
+        name: "genda-top-buffers",
+        aliases: &["gtb"],
+        help: "cmd.commands.genda-top-buffers",
+        needs: &[],
+        params: &[Param::Free("<字數>")],
+        build: Some(|p| {
+            Ok(Command::Genda(crate::genda::Ask::Top(crate::search_panel::Where::Buffers, genda_top_count(p)?)))
+        }),
+    },
+    Entry {
+        name: "genda-top-working",
+        aliases: &["gtw"],
+        help: "cmd.commands.genda-top-working",
+        needs: &[],
+        params: &[Param::Free("<字數>")],
+        build: Some(|p| {
+            Ok(Command::Genda(crate::genda::Ask::Top(crate::search_panel::Where::Working, genda_top_count(p)?)))
+        }),
+    },
+    Entry {
+        name: "genda-top-project",
+        aliases: &["gtp"],
+        help: "cmd.commands.genda-top-project",
+        needs: &[],
+        params: &[Param::Free("<字數>")],
+        build: Some(|p| {
+            Ok(Command::Genda(crate::genda::Ask::Top(crate::search_panel::Where::Project, genda_top_count(p)?)))
+        }),
+    },
+    Entry {
+        name: "genda-article",
+        aliases: &[],
+        help: "cmd.commands.genda-article",
+        needs: &[],
+        params: &[Param::Words { of: GENDA_ARTICLES, default: None }],
+        build: Some(|p| {
+            let word = p.need(0)?;
+            match crate::genda::Choice::from_word(word) {
+                Some(choice) => Ok(Command::Genda(crate::genda::Ask::Article(choice))),
+                None => Err(CommandError::InvalidArgument { command: p.name, value: word.to_string() }),
+            }
         }),
     },
     Entry {

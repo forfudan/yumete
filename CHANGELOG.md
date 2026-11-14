@@ -6,6 +6,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Added
 
+- **`:genda` is a typing trainer (跟打器)**: segments of the selection, the file, Yume's common characters, or the most frequent Chinese characters of the file, the open buffers, the working directory or the project (`:genda-top`, `-buffers`, `-working`, `-project`), with live marks, the community's score line (errors cost five characters each), a kept history copied as a line or as TSV, and the key counts when the built-in input method is on.
 - **`:export-as-preview pdf` writes a Markdown file exactly as its preview draws it**, into long PDF pages whose text you can select and search: the preview's fonts, colours, line breaks and direction, as wide as the preview's window. A document taller than 200 inches is split between paragraphs, since many readers will not open a taller page; `:export pdf` still typesets with Typst.
 - **The Markdown preview follows the cursor to the exact line it is drawn on**, however much bold, link addresses or other hidden markup comes before it in a long paragraph, on vertical pages too.
 - **New commands from helix**: `:sort` (sorts several selections among themselves, or the selected lines, or the whole buffer; `-r`/`!` reverse, `-i`/`i` ignore case), `:buffer-close-others` (`:bco`), `:buffer-close-all` (`:bca`) and `:write-buffer-close` (`:wbc`); helix configs that use them now import.

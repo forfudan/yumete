@@ -52,6 +52,8 @@ scenes() {
 大綱|90x24|:open OUTLINE\n:sidebar-outline\n
 符號挑選器|90x24|:open OUTLINE\n s
 設置頁|100x30|:settings\n
+跟打|100x30|:genda\n
+跟打-窄|70x24|:genda\n
 命令選單|80x20|:
 空格選單|80x20| 
 幫助|100x30|:help\n

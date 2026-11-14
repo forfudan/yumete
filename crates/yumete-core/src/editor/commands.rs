@@ -215,6 +215,10 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::SaveAs { path, force } => self.write_as(&path, force),
+            Command::Genda(ask) => {
+                self.ask_the_typing_page(ask);
+                Ok(CommandOutcome::Continue)
+            }
             // `:w!` 與 `:up` 同 `:w`：面板開着的時候它們說的也是面板。Warning: 不接的
             // 話，在設置頁上打 `:w!` 會**存眼前那一章**——看起來像設定存下去了。
             Command::WriteForce(_) | Command::Update if self.settings_open => {
@@ -312,6 +316,11 @@ impl Editor {
             // Warning: **`:qa` 和 `:q` 走同一條。** 不接的話它會把整個編輯器帶走，而
             // 面板攢的改動一聲不吭全丟——`Quit` 那一條的注釋寫着「不可逆」，而
             // `:qa` 正好從旁邊繞過去。關掉這一扇之後再按一次 `:qa` 纔是離開。
+            // The typing page, like the settings page, is what `:q` closes.
+            Command::Quit { .. } | Command::QuitAll { .. } if self.genda_open => {
+                self.genda_asks.push(crate::genda::Ask::Close);
+                Ok(CommandOutcome::Continue)
+            }
             Command::Quit { force } | Command::QuitAll { force } if self.settings_open => {
                 self.settings_close = Some(force);
                 Ok(CommandOutcome::Continue)

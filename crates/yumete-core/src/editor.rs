@@ -2916,6 +2916,14 @@ pub struct Editor {
     settings_save: bool,
     /// 面板開着時按過 `:q` —— `Some(force)`，`force` 是打了 `!`（不管没存的）。
     settings_close: Option<bool>,
+    /// **What the `:genda` family asked of the typing page**, for the front
+    /// end that holds it to take; the page itself is the front end's.
+    genda_asks: Vec<crate::genda::Ask>,
+    /// The article `:genda` (or `:genda-article buffer`) read off the buffer
+    /// when it was typed: `(name, text)`.
+    genda_article: Option<(String, String)>,
+    /// The typing page is open: `:q` closes it rather than the editor.
+    genda_open: bool,
     /// **`空格 k` 問出去的那一句**（#53 ③）——同上一個形狀。
     hover_query: Option<(PathBuf, usize, usize)>,
     /// **`C-n` 問出去的那一句**（#53 ④）——同上一個形狀。
@@ -4520,6 +4528,9 @@ impl Editor {
             settings_request: false,
             settings_target: None,
             settings_open: false,
+            genda_asks: Vec::new(),
+            genda_article: None,
+            genda_open: false,
             settings_save: false,
             settings_close: None,
             hover_query: None,

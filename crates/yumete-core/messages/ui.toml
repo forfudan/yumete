@@ -1,4 +1,4 @@
-# prefixes: ui label panel sidebar hud menu picker preview region pane theme show detail info fold
+# prefixes: ui genda label panel sidebar hud menu picker preview region pane theme show detail info fold
 #
 # What the editor says, one block per tag; see README.md beside this file.
 
@@ -40,6 +40,420 @@ en = "no fold here"
 key = "fold.not-made-with-zf"
 zhs = "此折叠来自标题，不是 zf 创建的，无法删除"
 en = "this fold comes from a heading; only folds made with zf can be deleted"
+
+[[message]]
+# : 跟打打完最後一段（草稿）
+key = "genda.all-done"
+zhs = "全文打完了：F3 重打，C-u 上一段"
+en = "the whole article is typed: F3 again, C-u back"
+
+[[message]]
+# : 跟打頁上那篇常用字文章的名字（第一個五百）（草稿）
+key = "genda.article.common-1"
+zhs = "常用单字 前500"
+en = "common characters 1–500"
+
+[[message]]
+# : 跟打頁上那篇常用字文章的名字（第二個五百）（草稿）
+key = "genda.article.common-2"
+zhs = "常用单字 中500"
+en = "common characters 501–1000"
+
+[[message]]
+# : 跟打頁上那篇常用字文章的名字（第三個五百）（草稿）
+key = "genda.article.common-3"
+zhs = "常用单字 后500"
+en = "common characters 1001–1500"
+
+[[message]]
+# : 跟打頁上的文章取自選區時的名字，{0} 是檔名（草稿）
+key = "genda.article.selection"
+zhs = "{0}（选区）"
+en = "{0} (selection)"
+
+[[message]]
+# : 跟打頁文章資料框與文章框的標題（草稿）
+key = "genda.box.article"
+zhs = "文章"
+en = "article"
+
+[[message]]
+# : 跟打頁歷史視圖的標題，{0} 是條數（草稿）
+key = "genda.box.history"
+zhs = "历史 · {0} 条"
+en = "history · {0}"
+
+[[message]]
+# : 跟打頁打字框的標題（草稿）
+key = "genda.box.pad"
+zhs = "跟打"
+en = "type here"
+
+[[message]]
+# : 跟打頁左上那個框的標題：這一段的成績（草稿）
+key = "genda.box.this"
+zhs = "本段"
+en = "this segment"
+
+[[message]]
+# : 跟打頁累計框的標題：這一次打開以來（草稿）
+key = "genda.box.total"
+zhs = "累计"
+en = "session"
+
+[[message]]
+# : 跟打把一條成績複製到剪貼板之後（草稿）
+key = "genda.copied"
+zhs = "已复制成绩"
+en = "score line copied"
+
+[[message]]
+# : 跟打把全部歷史複製成表格之後，{0} 是條數（草稿）
+key = "genda.copied-history"
+zhs = "已复制 {0} 条成绩（TSV）"
+en = "{0} scores copied (TSV)"
+
+[[message]]
+# : 開跟打頁時文章裏一個字都沒有（草稿）
+key = "genda.empty-article"
+zhs = "文章是空的，没有可打的字"
+en = "the article is empty: nothing to type"
+
+[[message]]
+# : 跟打時已在第一段又要上一段（草稿）
+key = "genda.first-segment"
+zhs = "已是第一段"
+en = "this is the first segment"
+
+[[message]]
+# : 跟打頁打字時底行的鍵位提示（草稿）
+key = "genda.hints"
+zhs = "F3 重打  C-p 下一段  C-u 上一段  C-l 乱序  Tab 历史  Esc 暂停"
+en = "F3 again  C-p next  C-u previous  C-l shuffle  Tab history  Esc pause"
+
+[[message]]
+# : 跟打頁看歷史時底行的鍵位提示（草稿）
+key = "genda.hints-history"
+zhs = "j k 选择  y 复制这条  Y 复制全部  Tab 返回"
+en = "j k pick  y copy this  Y copy all  Tab back"
+
+[[message]]
+# : 跟打頁暫停時底行的鍵位提示（草稿）
+key = "genda.hints-paused"
+zhs = "Enter 继续  y 复制成绩  Tab 历史  : 命令  Esc 关闭"
+en = "Enter go on  y copy score  Tab history  : command  Esc close"
+
+[[message]]
+# : 跟打歷史的文章一欄（草稿）
+key = "genda.label.article"
+zhs = "文章"
+en = "article"
+
+[[message]]
+# : 跟打累計框的平均速度一欄（草稿）
+key = "genda.label.average"
+zhs = "均速"
+en = "avg"
+
+[[message]]
+# : 跟打面板的退格一欄（草稿）
+key = "genda.label.backspaces"
+zhs = "退格"
+en = "bksp"
+
+[[message]]
+# : 跟打面板與歷史的字數一欄（草稿）
+key = "genda.label.chars"
+zhs = "字数"
+en = "chars"
+
+[[message]]
+# : 跟打面板與歷史的碼長一欄（草稿）
+key = "genda.label.code-length"
+zhs = "码长"
+en = "codelen"
+
+[[message]]
+# : 跟打面板與歷史的回改一欄（草稿）
+key = "genda.label.corrections"
+zhs = "回改"
+en = "fixed"
+
+[[message]]
+# : 跟打面板與歷史的用時一欄（草稿）
+key = "genda.label.elapsed"
+zhs = "用时"
+en = "time"
+
+[[message]]
+# : 跟打面板與歷史的錯字一欄（草稿）
+key = "genda.label.errors"
+zhs = "错字"
+en = "errors"
+
+[[message]]
+# : 跟打累計框的最快速度一欄（草稿）
+key = "genda.label.fastest"
+zhs = "最快"
+en = "best"
+
+[[message]]
+# : 跟打文章框的輸入法一欄（草稿）
+key = "genda.label.ime"
+zhs = "输入法"
+en = "ime"
+
+[[message]]
+# : 跟打面板與歷史的鍵準一欄（草稿）
+key = "genda.label.key-accuracy"
+zhs = "键准"
+en = "keyacc"
+
+[[message]]
+# : 跟打面板與歷史的擊鍵一欄（草稿）
+key = "genda.label.kps"
+zhs = "击键"
+en = "kps"
+
+[[message]]
+# : 跟打文章框的段長一欄（草稿）
+key = "genda.label.length"
+zhs = "段长"
+en = "length"
+
+[[message]]
+# : 跟打文章框的字序一欄（草稿）
+key = "genda.label.order"
+zhs = "字序"
+en = "order"
+
+[[message]]
+# : 跟打面板的選重一欄（草稿）
+key = "genda.label.picks"
+zhs = "选重"
+en = "picks"
+
+[[message]]
+# : 跟打歷史的重打一欄（草稿）
+key = "genda.label.retry"
+zhs = "重打"
+en = "retry"
+
+[[message]]
+# : 跟打歷史的段一欄（草稿）
+key = "genda.label.segment"
+zhs = "段"
+en = "seg"
+
+[[message]]
+# : 跟打累計框的段數一欄（草稿）
+key = "genda.label.segments"
+zhs = "段数"
+en = "segments"
+
+[[message]]
+# : 跟打面板與歷史的速度一欄（草稿）
+key = "genda.label.speed"
+zhs = "速度"
+en = "speed"
+
+[[message]]
+# : 跟打歷史的時間一欄（草稿）
+key = "genda.label.time"
+zhs = "时间"
+en = "time"
+
+[[message]]
+# : 跟打面板與歷史的打詞率一欄（草稿）
+key = "genda.label.word-rate"
+zhs = "打词"
+en = "words"
+
+[[message]]
+# : 跟打時已在最後一段又要下一段（草稿）
+key = "genda.last-segment"
+zhs = "已是最后一段"
+en = "this is the last segment"
+
+[[message]]
+# : 跟打把段長改成全文之後（草稿）
+key = "genda.length-all"
+zhs = "全文一段"
+en = "the whole article in one segment"
+
+[[message]]
+# : 跟打改了段長之後，{0} 是段長（草稿）
+key = "genda.length-set"
+zhs = "每段 {0} 字"
+en = "{0} characters a segment"
+
+[[message]]
+# : 成績行裏字數那一項（不加空格）（草稿）
+key = "genda.line.chars"
+zhs = "字数{0}"
+en = "chars{0}"
+
+[[message]]
+# : 成績行裏碼長那一項（不加空格）（草稿）
+key = "genda.line.code-length"
+zhs = "码长{0}"
+en = "codelen{0}"
+
+[[message]]
+# : 成績行裏回改那一項（不加空格）（草稿）
+key = "genda.line.corrections"
+zhs = "回改{0}"
+en = "fixed{0}"
+
+[[message]]
+# : 成績行裏錯字那一項（不加空格）（草稿）
+key = "genda.line.errors"
+zhs = "错字{0}"
+en = "errors{0}"
+
+[[message]]
+# : 成績行裏這一段是第一次打（草稿）
+key = "genda.line.first"
+zhs = "【首打】"
+en = "[first]"
+
+[[message]]
+# : 成績行裏輸入法那一項（草稿）
+key = "genda.line.ime"
+zhs = "输入法:{0}"
+en = "ime:{0}"
+
+[[message]]
+# : 成績行裏鍵準那一項（不加空格）（草稿）
+key = "genda.line.key-accuracy"
+zhs = "键准{0}%"
+en = "keyacc{0}%"
+
+[[message]]
+# : 成績行裏擊鍵那一項（不加空格）（草稿）
+key = "genda.line.kps"
+zhs = "击键{0}"
+en = "kps{0}"
+
+[[message]]
+# : 成績行裏選重那一項（不加空格）（草稿）
+key = "genda.line.picks"
+zhs = "选重{0}"
+en = "picks{0}"
+
+[[message]]
+# : 成績行裏重打那一項，{0} 是第幾次重打（草稿）
+key = "genda.line.retry"
+zhs = "重打{0}"
+en = "retry{0}"
+
+[[message]]
+# : 成績行裏第幾段那一項（不加空格）（草稿）
+key = "genda.line.segment"
+zhs = "第{0}段"
+en = "seg{0}"
+
+[[message]]
+# : 成績行裏速度那一項（不加空格）（草稿）
+key = "genda.line.speed"
+zhs = "速度{0}"
+en = "speed{0}"
+
+[[message]]
+# : 成績行裏用時那一項（不加空格）（草稿）
+key = "genda.line.time"
+zhs = "用时{0}"
+en = "time{0}"
+
+[[message]]
+# : 成績行裏打詞率那一項（不加空格）（草稿）
+key = "genda.line.word-rate"
+zhs = "打词{0}%"
+en = "words{0}%"
+
+[[message]]
+# : 選常用字文章時沒有宇浩的字頻數據（草稿）
+key = "genda.no-frequency"
+zhs = "没有宇浩字频数据，只能打当前文件"
+en = "no Yume frequency data here: only the current file can be typed"
+
+[[message]]
+# : 跟打要複製成績而一條都還沒有（草稿）
+key = "genda.no-record"
+zhs = "还没有成绩"
+en = "no scores yet"
+
+[[message]]
+# : 跟打頁沒開時打了 :genda-next 之類的命令（草稿）
+key = "genda.not-open"
+zhs = "跟打没有打开，先用 :genda"
+en = "the typing trainer is not open; :genda opens it"
+
+[[message]]
+# : 跟打文章框裏第幾段，{0} 是第幾段，{1} 是共幾段（草稿）
+key = "genda.part"
+zhs = "第 {0}/{1} 段"
+en = "segment {0}/{1}"
+
+[[message]]
+# : 跟打時按 Esc 暫停之後（草稿）
+key = "genda.paused"
+zhs = "已暂停：Enter 继续，Esc 关闭，: 输入命令"
+en = "paused: Enter goes on, Esc closes, : for a command"
+
+[[message]]
+# : 跟打時關掉亂序，回到原來的字序（草稿）
+key = "genda.shuffle-off"
+zhs = "顺序"
+en = "in order"
+
+[[message]]
+# : 跟打時打開亂序（草稿）
+key = "genda.shuffle-on"
+zhs = "乱序"
+en = "shuffled"
+
+[[message]]
+# : 成績行與面板上的輸入法一欄，用的是系統輸入法時（草稿）
+key = "genda.system-ime"
+zhs = "系统"
+en = "system"
+
+[[message]]
+# : :genda-top 之類的命令在範圍裏一個漢字都沒數到（草稿）
+key = "genda.top-empty"
+zhs = "这里没有汉字，没有可打的文章"
+en = "no Chinese characters here: nothing to type"
+
+[[message]]
+# : 跟打頁的文章取自當前文件的字頻時的名字，{0} 是字數（草稿）
+key = "genda.top.buffer"
+zhs = "本文件字频前 {0}"
+en = "this file's top {0} characters"
+
+[[message]]
+# : 跟打頁的文章取自所有打開的文件的字頻時的名字，{0} 是字數（草稿）
+key = "genda.top.buffers"
+zhs = "打开的文件字频前 {0}"
+en = "open buffers' top {0} characters"
+
+[[message]]
+# : 跟打頁的文章取自項目的字頻時的名字，{0} 是字數（草稿）
+key = "genda.top.project"
+zhs = "项目字频前 {0}"
+en = "project's top {0} characters"
+
+[[message]]
+# : 跟打頁的文章取自工作目錄的字頻時的名字，{0} 是字數（草稿）
+key = "genda.top.working"
+zhs = "工作目录字频前 {0}"
+en = "working directory's top {0} characters"
+
+[[message]]
+# : 跟打頁文章框裏段長一欄，段長是全文時（草稿）
+key = "genda.whole"
+zhs = "全文"
+en = "whole"
 
 [[message]]
 # :view-hud basic(出廠)——也是 :view-hud 不帶參數時的回答

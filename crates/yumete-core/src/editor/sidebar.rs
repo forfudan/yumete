@@ -2614,6 +2614,12 @@ impl Editor {
         self.refresh_goal_column();
     }
 
+    /// **Text a front end wants on the system clipboard**, sent the way
+    /// `Space y` sends it.
+    pub fn send_to_clipboard(&mut self, text: String) {
+        self.clipboard_request = Some(text);
+    }
+
     /// Take a pending clipboard copy, for the front end to send to the terminal.
     pub fn take_clipboard_request(&mut self) -> Option<String> {
         self.clipboard_request.take()

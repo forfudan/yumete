@@ -40267,3 +40267,37 @@ fn a_grid_in_one_window_does_not_take_the_other() {
     assert!(ed.grid_has_the_pane(), "and the live one still is a grid");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// **`:genda-top-working` counts what `:word-discover-working` reads**: the
+/// text files under the working directory, hidden and ignored ones left out,
+/// and opens the page on the most frequent 漢字.
+#[test]
+fn genda_top_working_counts_the_working_directorys_text_files() {
+    let dir = tmp().join(format!("yumete-genda-top-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("a.md"), "天天天地地人。\n").unwrap();
+    std::fs::write(dir.join("b.txt"), "地人人和\n").unwrap();
+    std::fs::write(dir.join(".hidden.md"), "鬼鬼鬼鬼鬼鬼\n").unwrap();
+    std::fs::write(dir.join(".gitignore"), "skip.md\n").unwrap();
+    std::fs::write(dir.join("skip.md"), "略略略略略略\n").unwrap();
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    ed.open_file(dir.join("a.md")).unwrap();
+    assert!(ed.execute("genda-top-working 3").is_ok(), "{}", ed.status());
+    let (name, text) = ed.take_genda_article().expect("an article");
+    // 天 3, 地 3, 人 3: a tie, by code point (人 U+4EBA, 地 U+5730, 天 U+5929).
+    assert_eq!(text, "人地天");
+    assert_eq!(name, say!("genda.top.working", 3));
+    assert_eq!(ed.take_genda_asks(), vec![crate::genda::Ask::Open]);
+    // The current file alone, and the default count.
+    assert!(ed.execute("gt").is_ok(), "{}", ed.status());
+    assert_eq!(ed.take_genda_article().map(|(_, t)| t).as_deref(), Some("天地人"));
+    let _ = ed.take_genda_asks();
+    // Nothing to count says so and opens nothing.
+    ed.new_buffer();
+    assert!(ed.execute("genda-top").is_ok(), "{}", ed.status());
+    assert_eq!(ed.status(), say!("genda.top-empty"));
+    assert!(ed.take_genda_asks().is_empty() && ed.take_genda_article().is_none());
+    let _ = std::fs::remove_dir_all(&dir);
+}
