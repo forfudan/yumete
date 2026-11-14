@@ -528,3 +528,187 @@ fn a_character_finds_its_visual_line() {
     let (a, b) = p.visual_span_of(0, n - 1).unwrap();
     assert!(a >= from && b <= to + 0.5 && b - a < (to - from) / 3.0, "{a} {b} in {from} {to}");
 }
+
+// ── Where a source character is drawn ───────────────────────────────────────
+
+/// **Where the layout drew the `nth` `needle` of the page's text**, found
+/// in the laid-out strings and read off parley's glyph runs: the top of its
+/// visual line, the line's height and its left edge, in the page's
+/// coordinates. The answer the caret map must give, worked out without it.
+fn drawn(p: &Preview, needle: char, nth: usize) -> (f32, f32, f32) {
+    let mut seen = 0;
+    for placed in &p.placed {
+        for item in &placed.laid.items {
+            let Item::Text { x, y, text } = item else { continue };
+            for (byte, c) in text.string.char_indices() {
+                if c != needle {
+                    continue;
+                }
+                seen += 1;
+                if seen <= nth {
+                    continue;
+                }
+                for line in text.layout.lines() {
+                    let m = line.metrics();
+                    for it in line.items() {
+                        let parley::PositionedLayoutItem::GlyphRun(g) = it else { continue };
+                        let mut pen = g.offset();
+                        for cluster in g.run().visual_clusters() {
+                            if cluster.text_range().start == byte {
+                                return (placed.y + y + m.block_min_coord, m.block_max_coord - m.block_min_coord, x + pen);
+                            }
+                            pen += cluster.advance();
+                        }
+                    }
+                }
+                panic!("{needle:?} #{nth} has no glyphs");
+            }
+        }
+    }
+    panic!("{needle:?} #{nth} is not drawn")
+}
+
+/// The column of the `nth` `needle` in source line `line` of `text`.
+fn column(text: &str, line: usize, needle: char, nth: usize) -> usize {
+    let l = text.lines().nth(line).unwrap();
+    l.chars().enumerate().filter(|&(_, c)| c == needle).nth(nth).unwrap().0
+}
+
+/// The caret at the `nth` `needle` of source line `line` is exactly where
+/// the layout drew the `drawn_nth` one of the page: the same visual line,
+/// the same place on it.
+#[track_caller]
+fn lands_on(p: &Preview, text: &str, line: usize, (needle, nth): (char, usize), drawn_nth: usize) {
+    let col = column(text, line, needle, nth);
+    let c = p.caret(line, col).unwrap_or_else(|| panic!("no caret at {line}:{col}"));
+    let (top, height, x) = drawn(p, needle, drawn_nth);
+    assert_eq!((c.line, c.thickness, c.at), (top, height, x), "{needle:?} at {line}:{col}");
+}
+
+/// **Hidden markup does not push the caret off its line, however much of
+/// it comes before**: a long paragraph with bold and a link with a long
+/// address in every phrase wraps over many lines, and a character near its
+/// end is followed to the very line and place it is drawn at. Reading the
+/// source column as a count of drawn characters lands far past it.
+#[test]
+fn the_caret_does_not_drift_over_hidden_markup() {
+    let mut line = String::new();
+    for k in 0..24 {
+        line.push_str(&format!("那年**冬天**雪下得[很大](https://example.com/{k}/a-long-address-that-is-never-drawn)，"));
+    }
+    line.push_str("山路终于封了。");
+    let text = format!("{line}\n");
+    let p = preview(&text, 360);
+    let lines = visual_lines(&p.placed[0].laid);
+    assert!(lines.len() > 10, "the paragraph wraps: {lines:?}");
+    lands_on(&p, &text, 0, ('终', 0), 0);
+    lands_on(&p, &text, 0, ('那', 23), 23);
+    lands_on(&p, &text, 0, ('冬', 12), 12);
+    lands_on(&p, &text, 0, ('那', 0), 0);
+    // The markup is most of the source: a column read as a drawn character
+    // would run off the paragraph's end long before the end of the source.
+    let drawn_chars: usize = lines.iter().map(|l| l.chars().count()).sum();
+    assert!(column(&text, 0, '冬', 12) > drawn_chars, "{drawn_chars}");
+}
+
+/// **A cursor on markup goes to the nearest character drawn**: on the
+/// opening `**`, the bold word's first character; on the closing one, just
+/// after its last; in a link's address, the nearer end of the link; past
+/// the line's end, just after its last character.
+#[test]
+fn a_cursor_on_markup_goes_to_the_nearest_character() {
+    let text = "前文**粗体**后文，见[链接](https://example.com/a/b/c/d)之后。\n";
+    let p = preview(text, 600);
+    let at = |needle: char| column(text, 0, needle, 0);
+    let caret = |col: usize| p.caret(0, col).unwrap();
+    let (top, _, before_cu) = drawn(&p, '粗', 0);
+    assert_eq!(caret(at('粗') - 1).at, before_cu, "the star next to 粗");
+    assert_eq!(caret(at('粗') - 2).at, before_cu, "the star as near 文 as 粗");
+    let (_, _, before_hou) = drawn(&p, '后', 0);
+    assert_eq!(caret(at('体') + 1).at, before_hou, "just after 体");
+    assert_eq!(caret(at('体') + 2).at, before_hou);
+    assert_eq!(caret(at('体') + 1).line, top);
+    let (_, _, before_zhi) = drawn(&p, '之', 0);
+    assert_eq!(caret(at('接') + 3).at, before_zhi, "`(h`, just after 接");
+    assert_eq!(caret(at('之') - 1).at, before_zhi, "`)`, just before 之");
+    assert_eq!(caret(at('链') - 1).at, drawn(&p, '链', 0).2, "`[`, just before 链");
+    let (_, _, before_stop) = drawn(&p, '。', 0);
+    let end = text.trim_end().chars().count();
+    assert!(caret(end).at > before_stop && caret(end + 5).at == caret(end).at);
+}
+
+/// **Inline code, Latin, a list's marker, a quote's `>`, a reference link,
+/// an indent, an escape and a note to self** each keep the columns after
+/// them exact; the last two hide characters inside one run of text.
+#[test]
+fn columns_stay_exact_past_code_prefixes_and_references() {
+    let text = "用 `let x = 1;` 写成，然后照做。\n\n- 项目 **一** 之后甲\n\n> 引用 [文][r] 里的乙\n\n  缩进的段落有丙\n\n转义\\*星号<!-- 不显示的话 -->之后丁\n\n[r]: https://example.com/reference/that/is/long\n";
+    let p = preview(text, 600);
+    lands_on(&p, text, 0, ('然', 0), 0);
+    lands_on(&p, text, 0, ('x', 0), 0);
+    lands_on(&p, text, 2, ('甲', 0), 0);
+    lands_on(&p, text, 4, ('乙', 0), 0);
+    lands_on(&p, text, 6, ('丙', 0), 0);
+    lands_on(&p, text, 8, ('星', 0), 0);
+    lands_on(&p, text, 8, ('丁', 0), 0);
+    // On the note, the nearer of 号 and 之.
+    let (_, _, before_zhi) = drawn(&p, '之', 1);
+    assert_eq!(p.caret(8, column(text, 8, '不', 0)).unwrap().at, before_zhi);
+}
+
+/// **Code keeps its columns**, a tab four spaces wide and a fence indented
+/// in a list.
+#[test]
+fn code_keeps_its_columns() {
+    let text = "- 一项\n\n  ```\n  \tlet 值 = 1;\n  ```\n";
+    let p = preview(text, 600);
+    lands_on(&p, text, 3, ('值', 0), 0);
+    lands_on(&p, text, 3, ('1', 0), 0);
+}
+
+/// **A table cell's columns count from where it stands in its row**, the
+/// same word in two cells told apart.
+#[test]
+fn table_cells_keep_their_columns() {
+    let text = "| 甲 | 甲 |\n| --- | --- |\n| 乙 **丙** | 乙 |\n";
+    let p = preview(text, 600);
+    lands_on(&p, text, 0, ('甲', 1), 1);
+    lands_on(&p, text, 2, ('丙', 0), 0);
+    lands_on(&p, text, 2, ('乙', 1), 1);
+}
+
+/// **Down a vertical page the caret is in the column that holds its
+/// character**: a long paragraph with markup in every phrase runs over
+/// columns, and the `nth` 那 of the source is in the column that has `nth`
+/// of them before it; down a column, the places run in the order of the text.
+#[test]
+fn a_vertical_caret_finds_its_column() {
+    let mut line = String::new();
+    for k in 0..16 {
+        line.push_str(&format!("那年**冬天**雪下得[很大](https://example.com/{k}/a-long-address)，"));
+    }
+    line.push_str("山路终于封了。");
+    let text = format!("{line}\n");
+    let mut p = Preview::new(options(800), Box::new(NoFormulas));
+    p.set_height(400);
+    p.set_vertical(Some(Vertical { latin: yumete_core::export::Latin::Turn, hanging: false }));
+    p.set_text(&text);
+    let (u, cols) = (p.placed[0].y, &p.placed[0].laid.cols);
+    assert!(cols.len() > 4, "the paragraph runs over columns");
+    for (needle, nth) in [('那', 0), ('那', 9), ('冬', 15), ('终', 0)] {
+        let mut seen = 0;
+        let (along, _) = cols
+            .iter()
+            .find(|(_, words)| {
+                seen += words.chars().filter(|&c| c == needle).count();
+                seen > nth
+            })
+            .unwrap();
+        let c = p.caret(0, column(&text, 0, needle, nth)).unwrap();
+        assert_eq!(c.line, u + along, "{needle} #{nth}");
+    }
+    let place = |needle: char| p.caret(0, column(&text, 0, needle, 0)).unwrap();
+    let (a, b, z) = (place('山'), place('路'), place('终'));
+    assert!(a.line != b.line || b.at > a.at, "{a:?} {b:?}");
+    assert!(b.line != z.line || z.at > b.at, "{b:?} {z:?}");
+}

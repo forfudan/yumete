@@ -38,6 +38,7 @@ use parley::{FontData, FontFamily, FontStyle, FontWeight, LineHeight, StylePrope
 use vello_cpu::kurbo::Affine;
 use yumete_core::export::{Latin, Orientation, CODE_HANG, CODE_HOOK};
 
+use crate::caret::{pieces_of, stops_of, Piece, Shows};
 use crate::layout::{closing_mark, ink_of, opening_mark, push_marks, ranged_at, rect, Ctx, Engine, Ink, Item, Laid, Out, Pix, Ranged, Run, Style};
 use crate::parse::{Align, Block, BlockKind, Callout, Inline, InlineKind, Marks};
 use crate::theme::Rgba;
@@ -178,6 +179,9 @@ pub(crate) struct Units {
     shown: String,
     /// Where each source line's text begins (byte, line).
     src: Vec<(usize, usize)>,
+    /// Where each stretch of the text stands in the source; a picture is the box
+    /// numbered by its place among the pictures.
+    pieces: Vec<Piece>,
     /// Each ruby's reading, read into units.
     readings: Vec<Vec<Unit>>,
     /// The type size.
@@ -197,6 +201,7 @@ pub(crate) struct VText {
     cols: Vec<Vec<(Unit, f32)>>,
     shown: String,
     src: Vec<(usize, usize)>,
+    pieces: Vec<Piece>,
     readings: Vec<Vec<Unit>>,
     size: f32,
 }
@@ -293,10 +298,12 @@ impl Engine {
         let mut atoms: Vec<(usize, Look, f32, f32)> = Vec::new();
         let mut rubies: Vec<(Range<usize>, String)> = Vec::new();
         let mut src: Vec<(usize, usize)> = Vec::new();
+        let mut pieces: Vec<Piece> = Vec::new();
         for run in runs {
             if src.last().is_none_or(|s| s.1 != run.line) {
                 src.push((text.len(), run.line));
             }
+            let (from, atoms_before) = (text.len(), atoms.len() as u64);
             match &run.kind {
                 InlineKind::Text { text: t, marks } => {
                     let a = text.len();
@@ -356,6 +363,12 @@ impl Engine {
                     rubies.push((a..text.len(), reading.clone()));
                 }
             }
+            let shows = match &run.kind {
+                InlineKind::Text { .. } => Shows::Chars,
+                _ if atoms.len() as u64 > atoms_before => Shows::Box(atoms_before),
+                _ => Shows::Whole,
+            };
+            pieces_of(run, from, &text[from..], shows, &mut pieces);
         }
         if src.is_empty() {
             src.push((0, 0));
@@ -742,7 +755,7 @@ impl Engine {
         for (k, (r, reading)) in rubies.into_iter().enumerate() {
             let id = readings.len() as u16;
             let small = Style { size: st.size * 0.5, weight: 400.0, color: st.color, ..st };
-            let run = [Inline { line: 0, kind: InlineKind::Text { text: reading, marks: Marks::default() } }];
+            let run = [Inline { line: 0, cols: Vec::new(), kind: InlineKind::Text { text: reading, marks: Marks::default() } }];
             let read = self.units(&run, small, f32::MAX);
             let length = read.length();
             readings.push(read.units);
@@ -794,7 +807,7 @@ impl Engine {
                 }
             }
         }
-        Units { units, shown, src, readings, size: st.size }
+        Units { units, shown, src, pieces, readings, size: st.size }
     }
 
     /// **`runs` in columns `len` long**: the first begins `first` down,
@@ -815,6 +828,7 @@ impl Engine {
     pub(crate) fn put(&self, vt: &VText, right: f32, top: f32, pitch: f32, out: &mut Out, line: usize) -> f32 {
         let mut x = right;
         let size = vt.size;
+        let mut pictures = 0;
         for col in &vt.cols {
             let thick = col.iter().map(|(u, _)| u.thick).fold(size, f32::max);
             let p = pitch.max(thick + (pitch - size));
@@ -823,8 +837,14 @@ impl Engine {
             let k = vt.src.partition_point(|s| s.0 <= first).saturating_sub(1);
             let src_line = vt.src.get(k).map_or(line, |s| s.1);
             out.marks.push((-x, src_line));
-            let from = vt.src.get(k).map_or(0, |s| s.0).min(first);
-            out.starts.push((-x, src_line, vt.shown.get(from..first).map_or(0, |s| s.chars().count())));
+            for (u, y) in col {
+                let picture = matches!(u.look, Look::Pic { .. }) && u.text.is_empty();
+                let boxed = picture.then(|| {
+                    pictures += 1;
+                    pictures - 1
+                });
+                stops_of(&vt.pieces, &vt.shown, u.text.clone(), boxed, (-x, p), (top + y, top + y + u.eff()), &mut out.stops);
+            }
             let words: String = col.iter().map(|(u, _)| &vt.shown[u.text.clone()]).collect();
             out.cols.push((-x, words));
             self.emit(col, axis, top, out);
@@ -967,7 +987,7 @@ fn breakable(units: &[Unit], k: usize) -> bool {
 
 /// **Break `units` into columns `len` long**, with 禁則, then justify them.
 fn columns(units: Units, len: f32, first: f32, rest: f32, hanging: bool, justify: bool) -> VText {
-    let Units { mut units, shown, src, readings, size } = units;
+    let Units { mut units, shown, src, pieces, readings, size } = units;
     // Each column: its units' indices and tops, and whether a break the
     // writer asked for ends it.
     let mut cols: Vec<(Vec<(usize, f32)>, bool)> = vec![(Vec::new(), false)];
@@ -1072,7 +1092,7 @@ fn columns(units: Units, len: f32, first: f32, rest: f32, hanging: bool, justify
     while out.len() > 1 && out.last().is_some_and(|c| c.is_empty()) {
         out.pop();
     }
-    VText { cols: out, shown, src, readings, size }
+    VText { cols: out, shown, src, pieces, readings, size }
 }
 
 /// **兩端對齊 down a column**: it ends flush at `len`. The room goes first a
@@ -1143,7 +1163,9 @@ pub(crate) fn caption_of(block: &Block) -> Option<Vec<Inline>> {
     let InlineKind::Text { text, marks } = &first.kind else { return None };
     let rest = text.strip_prefix("Table:").or_else(|| text.strip_prefix(':').filter(|_| text.starts_with(": ")))?;
     let mut out = runs.clone();
-    out[0] = Inline { line: first.line, kind: InlineKind::Text { text: rest.trim_start().to_string(), marks: *marks } };
+    let kept = rest.trim_start();
+    let cols = crate::parse::cols_after(&first.cols, text.chars().count() - kept.chars().count());
+    out[0] = Inline { line: first.line, cols, kind: InlineKind::Text { text: kept.to_string(), marks: *marks } };
     Some(out)
 }
 
@@ -1195,7 +1217,7 @@ impl Engine {
             _ => self.vblock(block, &mut u, page.top, page.len, &mut out, cx, page),
         }
         let (top, bottom) = self.vmargins(block, cx);
-        Laid { items: out.items, height: u, top, bottom, marks: out.marks, right: 0.0, cols: out.cols, starts: out.starts }
+        Laid { items: out.items, height: u, top, bottom, marks: out.marks, right: 0.0, cols: out.cols, stops: out.stops }
     }
 
     /// The room a block asks for before and after it, along the page.
@@ -1278,7 +1300,7 @@ impl Engine {
                     }
                     None => {
                         let st = Style { size: cx.size * 0.85, mono: true, color: self.theme.error, ..self.body(&cx) };
-                        let run = [Inline { line: first, kind: InlineKind::Text { text: tex.clone(), marks: Marks::default() } }];
+                        let run = [Inline { line: first, cols: Vec::new(), kind: InlineKind::Text { text: tex.clone(), marks: Marks::default() } }];
                         let vt = self.vtext(&run, st, len, 2.0 * em, 2.0 * em, false);
                         *u += self.put(&vt, -*u, top, PITCH * st.size, out, first);
                     }
@@ -1384,7 +1406,7 @@ impl Engine {
         if let Some(v) = self.vertical.as_mut() {
             v.latin = Latin::Jlreq;
         }
-        let run = [Inline { line, kind: InlineKind::Text { text: number.to_string(), marks: Marks::default() } }];
+        let run = [Inline { line, cols: Vec::new(), kind: InlineKind::Text { text: number.to_string(), marks: Marks::default() } }];
         let vt = self.vtext(&run, st, len, 0.0, 0.0, false);
         self.vertical = kept;
         vt
@@ -1393,8 +1415,8 @@ impl Engine {
     /// **Something set across on a vertical page**: front matter, HTML.
     #[allow(clippy::too_many_arguments)]
     fn island(&mut self, block: &Block, u: &mut f32, top: f32, len: f32, out: &mut Out, cx: Ctx, page: Page) {
-        if let BlockKind::Code { info, lines } = &block.kind {
-            return self.vcode(info, lines, block.lines, u, top, len, out, cx);
+        if let BlockKind::Code { info, lines, cols } = &block.kind {
+            return self.vcode(info, lines, cols, block.lines, u, top, len, out, cx);
         }
         let em = self.base();
         let room = (page.width * 0.75).min(48.0 * em).max(8.0 * em);
@@ -1442,13 +1464,13 @@ impl Engine {
     /// cells in, the cells keeping their places, with [`CODE_HOOK`] in the
     /// hang in the dim colour. The export's `pre` does the same in CSS.
     #[allow(clippy::too_many_arguments)]
-    fn vcode(&mut self, info: &str, lines: &[String], span: (usize, usize), u: &mut f32, top: f32, len: f32, out: &mut Out, cx: Ctx) {
+    fn vcode(&mut self, info: &str, lines: &[String], cols: &[usize], span: (usize, usize), u: &mut f32, top: f32, len: f32, out: &mut Out, cx: Ctx) {
         let px = self.scale;
         let pad = 16.0 * px;
         let st = self.code_style(&cx);
         let fenced = span.1 + 1 - span.0 > lines.len();
         let first = span.0 + usize::from(fenced);
-        let code = self.code_text(info, lines, first);
+        let code = self.code_text(info, lines, cols, first);
         let mut layout = self.code_layout(&code.text, &code.colours, st);
         layout.break_all_lines(None);
 
@@ -1551,6 +1573,7 @@ impl Engine {
                     b.glyphs.extend(c.glyphs.iter().map(|&(id, gx, gy)| vello_cpu::Glyph { id, x: x + gx, y: y0 + base + gy }));
                     b.bounds = b.bounds.union(rect(right - y0 - lh, top + x, lh, c.adv));
                 }
+                stops_of(&code.pieces, &code.text, c.at.clone(), None, (*u + y0, lh), (top + x, top + x + c.adv), &mut out.stops);
                 x += c.adv;
             }
             flush(&mut batch, out);
@@ -1577,7 +1600,7 @@ impl Engine {
         if !alt.trim().is_empty() {
             *u += 0.4 * em;
             let st = Style { size: em * 0.875, color: self.theme.muted, ..self.body(&cx) };
-            let run = [Inline { line, kind: InlineKind::Text { text: alt.to_string(), marks: Marks::default() } }];
+            let run = [Inline { line, cols: Vec::new(), kind: InlineKind::Text { text: alt.to_string(), marks: Marks::default() } }];
             let vt = self.vtext(&run, st, len - em, em, em, false);
             *u += self.put(&vt, -*u, top, PITCH * st.size, out, line);
         }
@@ -1619,7 +1642,7 @@ impl Engine {
         };
         let title_runs: Vec<Inline> = match title {
             Some(t) => t.to_vec(),
-            None => vec![Inline { line: span.0, kind: InlineKind::Text { text: default_title, marks: Marks::default() } }],
+            None => vec![Inline { line: span.0, cols: Vec::new(), kind: InlineKind::Text { text: default_title, marks: Marks::default() } }],
         };
         let u0 = *u;
         let at = out.items.len();

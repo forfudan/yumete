@@ -17,6 +17,7 @@ use parley::{
 use vello_cpu::kurbo::Rect;
 use vello_cpu::Pixmap;
 
+use crate::caret::{pieces_of, Piece, Shows, Stop};
 use crate::parse::{Align, Block, BlockKind, Callout, Inline, InlineKind, Item as ListItem, Marks};
 use crate::cache::Lru;
 use crate::fonts::{families, Families, Han};
@@ -47,12 +48,14 @@ pub(crate) enum Attach {
     Ruby { base: Box<Layout<Ink>>, reading: Box<Layout<Ink>> },
 }
 
-/// Laid-out text: the layout, what its inline boxes hold, and where each
-/// source line's text begins (byte, line).
+/// Laid-out text: the layout, what its inline boxes hold, where each
+/// source line's text begins (byte, line), and where each stretch of it
+/// stands in the source.
 pub(crate) struct Text {
     pub layout: Layout<Ink>,
     pub attach: Vec<Attach>,
     pub src: Vec<(usize, usize)>,
+    pub pieces: Vec<Piece>,
     /// The text laid out.
     pub string: String,
 }
@@ -63,6 +66,7 @@ pub(crate) struct CodeText {
     pub text: String,
     pub colours: Vec<(std::ops::Range<usize>, Rgba)>,
     pub src: Vec<(usize, usize)>,
+    pub pieces: Vec<Piece>,
 }
 
 /// **One thing drawn**, at a place within its top-level block.
@@ -106,10 +110,9 @@ pub(crate) struct Laid {
     /// A vertical page's columns: how far from the block's right edge each
     /// begins, and its words.
     pub cols: Vec<(f32, String)>,
-    /// Each visual line of text: its top, its source line, and how many
-    /// characters into that line's words it begins, so a cursor's character
-    /// finds the visual line that holds it.
-    pub starts: Vec<(f32, usize, usize)>,
+    /// Down a vertical page, where each drawn stretch of the source stands
+    /// (see [`crate::caret`]); across, the texts' pieces say.
+    pub stops: Vec<Stop>,
 }
 
 
@@ -378,10 +381,12 @@ impl Engine {
         let mut boxes: Vec<InlineBox> = Vec::new();
         let mut attach: Vec<Attach> = Vec::new();
         let mut src: Vec<(usize, usize)> = Vec::new();
+        let mut pieces: Vec<Piece> = Vec::new();
         for run in runs {
             if src.last().is_none_or(|s| s.1 != run.line) {
                 src.push((text.len(), run.line));
             }
+            let (from, boxes_before) = (text.len(), attach.len() as u64);
             match &run.kind {
                 InlineKind::Text { text: t, marks } => {
                     let a = text.len();
@@ -441,10 +446,10 @@ impl Engine {
                     }
                 }
                 InlineKind::Ruby { base, reading, marks } => {
-                    let base_run = [Inline { line: run.line, kind: InlineKind::Text { text: base.clone(), marks: *marks } }];
+                    let base_run = [Inline { line: run.line, cols: Vec::new(), kind: InlineKind::Text { text: base.clone(), marks: *marks } }];
                     let b = self.text(&base_run, st, None, Alignment::Start);
                     let small = Style { size: st.size * 0.5, line_height: 1.0, weight: 400.0, ..st };
-                    let reading_run = [Inline { line: run.line, kind: InlineKind::Text { text: reading.clone(), marks: Marks::default() } }];
+                    let reading_run = [Inline { line: run.line, cols: Vec::new(), kind: InlineKind::Text { text: reading.clone(), marks: Marks::default() } }];
                     let r = self.text(&reading_run, small, None, Alignment::Start);
                     let w = b.layout.width().max(r.layout.width());
                     boxes.push(InlineBox {
@@ -459,6 +464,12 @@ impl Engine {
                     attach.push(Attach::Ruby { base: Box::new(b.layout), reading: Box::new(r.layout) });
                 }
             }
+            let shows = match &run.kind {
+                InlineKind::Text { .. } => Shows::Chars,
+                _ if attach.len() as u64 > boxes_before => Shows::Box(boxes_before),
+                _ => Shows::Whole,
+            };
+            pieces_of(run, from, &text[from..], shows, &mut pieces);
         }
         if src.is_empty() {
             src.push((0, 0));
@@ -547,7 +558,7 @@ impl Engine {
         let mut layout = b.build(&text);
         layout.break_all_lines(width);
         layout.align(align, AlignmentOptions { align_when_overflowing: false, ..AlignmentOptions::default() });
-        Text { layout, attach, src, string: text }
+        Text { layout, attach, src, pieces, string: text }
     }
 
     /// The faces of each writing system: the document's, and the three a
@@ -558,7 +569,7 @@ impl Engine {
 
     /// Plain words in a style.
     fn words(&mut self, words: &str, st: Style, width: Option<f32>, align: Alignment) -> Text {
-        let run = [Inline { line: 0, kind: InlineKind::Text { text: words.to_string(), marks: Marks::default() } }];
+        let run = [Inline { line: 0, cols: Vec::new(), kind: InlineKind::Text { text: words.to_string(), marks: Marks::default() } }];
         self.text(&run, st, width, align)
     }
 
@@ -580,7 +591,7 @@ impl Engine {
         self.block(block, x, width, &mut y, &mut out, cx);
         let (top, bottom) = self.margins(block, cx);
         let right = out.items.iter().map(item_right).fold(x + width, f32::max);
-        Laid { items: out.items, height: y, top, bottom, marks: out.marks, right, cols: Vec::new(), starts: out.starts }
+        Laid { items: out.items, height: y, top, bottom, marks: out.marks, right, cols: Vec::new(), stops: Vec::new() }
     }
 
     /// The margins a block asks for above and below it.
@@ -619,9 +630,6 @@ impl Engine {
             let ln = t.src.get(k).map_or(base_line, |s| s.1);
             let top = y + line.metrics().block_min_coord;
             out.marks.push((top, ln));
-            let from = t.src.get(k).map_or(0, |s| s.0).min(start);
-            let column = t.string.get(from..start).map_or(0, |s| s.chars().count());
-            out.starts.push((top, ln, column));
         }
         out.items.push(Item::Text { x, y, text: Box::new(t) });
         h
@@ -680,7 +688,7 @@ impl Engine {
                 out.items.push(Item::Rect { r: rect(x, *y, w, 4.0 * px), fill: self.theme.border, radius: 0.0 });
                 *y += 4.0 * px;
             }
-            BlockKind::Code { info, lines } => self.code(info, lines, block.lines, x, w, y, out, cx),
+            BlockKind::Code { info, lines, cols } => self.code(info, lines, cols, block.lines, x, w, y, out, cx),
             BlockKind::Quote(body) => {
                 let y0 = *y;
                 let bar = 0.25 * self.base();
@@ -820,8 +828,9 @@ impl Engine {
 
     /// **A code block's text** as it is set: its lines joined, a tab as four
     /// spaces, each token's colour, and where each source line begins.
-    /// The first line of code is source line `first`.
-    pub(crate) fn code_text(&self, info: &str, lines: &[String], first: usize) -> CodeText {
+    /// The first line of code is source line `first`; line `k` begins at
+    /// source column `cols[k]`.
+    pub(crate) fn code_text(&self, info: &str, lines: &[String], cols: &[usize], first: usize) -> CodeText {
         let language = info.split_whitespace().next().and_then(yumete_core::code::Language::from_info);
         let painted = language.map(|lang| yumete_core::code::highlight(lang, lines));
         let mut runs = Vec::new();
@@ -866,11 +875,27 @@ impl Engine {
                 colours.push((a..text.len(), self.theme.token(*t)));
             }
         }
+        // Each line's characters one for one, a tab its four spaces.
+        let mut pieces: Vec<Piece> = Vec::new();
+        for &(at, line) in &src {
+            let k = line - first;
+            let Some(code) = lines.get(k) else { continue };
+            let mut byte = at;
+            for (c, ch) in code.chars().enumerate() {
+                let (width, shows) = if ch == '\t' { (4, Shows::Whole) } else { (ch.len_utf8(), Shows::Chars) };
+                let col = cols.get(k).copied().unwrap_or(0) + c;
+                match pieces.last_mut() {
+                    Some(p) if shows == Shows::Chars && p.shows == Shows::Chars && p.line == line && p.bytes.end == byte => p.bytes.end += width,
+                    _ => pieces.push(Piece { bytes: byte..byte + width, line, col, shows }),
+                }
+                byte += width;
+            }
+        }
         if text.is_empty() {
             text.push(' ');
             src.push((0, first));
         }
-        CodeText { text, colours, src }
+        CodeText { text, colours, src, pieces }
     }
 
     /// The style code is set in.
@@ -895,14 +920,14 @@ impl Engine {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn code(&mut self, info: &str, lines: &[String], span: (usize, usize), x: f32, w: f32, y: &mut f32, out: &mut Out, cx: Ctx) {
+    pub(crate) fn code(&mut self, info: &str, lines: &[String], cols: &[usize], span: (usize, usize), x: f32, w: f32, y: &mut f32, out: &mut Out, cx: Ctx) {
         let px = self.px();
         let pad = 16.0 * px;
         let st = self.code_style(&cx);
         // The first line of code: under the opening fence, if there is one.
         let fenced = span.1 + 1 - span.0 > lines.len();
         let first = span.0 + usize::from(fenced);
-        let CodeText { text, colours, src } = self.code_text(info, lines, first);
+        let CodeText { text, colours, src, pieces } = self.code_text(info, lines, cols, first);
         let mut layout = self.code_layout(&text, &colours, st);
         layout.break_all_lines(Some((w - 2.0 * pad).max(1.0)));
         layout.align(Alignment::Start, AlignmentOptions::default());
@@ -911,7 +936,7 @@ impl Engine {
         if fenced {
             out.marks.push((*y, span.0));
         }
-        let t = Text { layout, attach: Vec::new(), src, string: text };
+        let t = Text { layout, attach: Vec::new(), src, pieces, string: text };
         self.put_text(t, x + pad, *y + pad, out, first);
         *y += h;
     }
@@ -948,11 +973,11 @@ impl Engine {
         };
         let title_runs: Vec<Inline> = match title {
             Some(t) => t.to_vec(),
-            None => vec![Inline { line: span.0, kind: InlineKind::Text { text: default_title, marks: Marks::default() } }],
+            None => vec![Inline { line: span.0, cols: Vec::new(), kind: InlineKind::Text { text: default_title, marks: Marks::default() } }],
         };
         let title_runs = match kind {
             Callout::Details => {
-                let mut v = vec![Inline { line: span.0, kind: InlineKind::Text { text: "▾ ".to_string(), marks: Marks::default() } }];
+                let mut v = vec![Inline { line: span.0, cols: Vec::new(), kind: InlineKind::Text { text: "▾ ".to_string(), marks: Marks::default() } }];
                 v.extend(title_runs);
                 v
             }
@@ -1204,8 +1229,8 @@ pub(crate) struct Out {
     pub marks: Vec<(f32, usize)>,
     /// A vertical page's columns: where each begins and its words.
     pub cols: Vec<(f32, String)>,
-    /// See [`Laid::starts`].
-    pub starts: Vec<(f32, usize, usize)>,
+    /// See [`Laid::stops`].
+    pub stops: Vec<Stop>,
 }
 
 /// The baseline of the first text in `items`, from the block's top.

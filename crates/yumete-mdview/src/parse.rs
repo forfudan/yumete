@@ -41,8 +41,10 @@ pub struct Block {
 pub enum BlockKind {
     Heading { level: u8, text: Vec<Inline> },
     Paragraph(Vec<Inline>),
-    /// A fenced (or indented) code block: its info string and its lines.
-    Code { info: String, lines: Vec<String> },
+    /// A fenced (or indented) code block: its info string, its lines, and
+    /// the source column each line begins at (past a list's or a quote's
+    /// indent).
+    Code { info: String, lines: Vec<String>, cols: Vec<usize> },
     /// A display formula, `$$ … $$`, in TeX.
     Maths(String),
     Rule,
@@ -118,11 +120,31 @@ impl Callout {
     }
 }
 
-/// **One run of a paragraph**, with the source line it stands on.
+/// **One run of a paragraph**, with the source line it stands on and where
+/// in that line each of its characters stands.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Inline {
     pub line: usize,
+    /// **Where its characters stand in the source**, as (character of the run,
+    /// column of the source line, in characters): each pair begins a stretch
+    /// that follows the source one character for one, up to the next pair.
+    /// Hidden markup between two characters (`**`, a link's address) starts
+    /// a new stretch. A run drawn as one thing (a formula, ruby, a note's
+    /// number) has one pair, where its markup begins; a run the reader made
+    /// up has none.
+    pub cols: Vec<(usize, usize)>,
     pub kind: InlineKind,
+}
+
+/// The `cols` of a run that begins at source column `col`, if it has one.
+pub(crate) fn from_col(col: Option<usize>) -> Vec<(usize, usize)> {
+    col.map(|c| vec![(0, c)]).unwrap_or_default()
+}
+
+/// The `cols` of a text run with its first `n` characters taken off.
+pub(crate) fn cols_after(cols: &[(usize, usize)], n: usize) -> Vec<(usize, usize)> {
+    let k = cols.partition_point(|s| s.0 <= n).saturating_sub(1);
+    cols.get(k).into_iter().map(|&(at, col)| (0, col + n.saturating_sub(at))).chain(cols[(k + 1).min(cols.len())..].iter().map(|&(at, col)| (at - n, col))).collect()
 }
 
 /// What a run is.
@@ -200,11 +222,11 @@ fn every_ruby() -> yumete_core::ruby::Dialects {
 pub fn parse_with(text: &str, cache: &mut Cache) -> Vec<Block> {
     let lines = prepare(text);
     let ruby = cache.ruby.unwrap_or_else(every_ruby);
-    let mut reader = Reader { old: std::mem::take(&mut cache.runs), refs: link_definitions(&lines), ruby, ..Reader::default() };
+    let all: Vec<&str> = text.lines().collect();
+    let mut reader = Reader { old: std::mem::take(&mut cache.runs), refs: link_definitions(&lines), ruby, source: all.clone(), ..Reader::default() };
     let mut blocks = Vec::new();
     // Front matter: `---` on the first line, `key: value` under it, to a `---`.
     let mut from = 0;
-    let all: Vec<&str> = text.lines().collect();
     if all.first().is_some_and(|l| l.trim_end() == "---") && all.get(1).is_some_and(|l| metadata(l.trim())) {
         if let Some(close) = (1..all.len()).find(|&k| all[k].trim_end() == "---") {
             let kept = all[1..close].iter().map(|l| l.to_string()).collect();
@@ -361,9 +383,12 @@ fn link_definitions(lines: &[Line]) -> std::collections::BTreeMap<String, String
 /// `[label][]` and `[label]`, with an image's `!` before any of them, become
 /// `[text](address)` when `label` is defined, so the one inline reader reads
 /// them. Code spans, wiki links and footnotes are left alone.
-fn resolve_references(line: &str, refs: &std::collections::BTreeMap<String, String>) -> String {
+///
+/// With the text, where each of its characters stands in `line`: an address
+/// written in counts from the label it replaces.
+fn resolve_references(line: &str, refs: &std::collections::BTreeMap<String, String>) -> (String, Vec<usize>) {
     if refs.is_empty() || !line.contains('[') {
-        return line.to_string();
+        return (line.to_string(), (0..line.chars().count()).collect());
     }
     let chars: Vec<char> = line.chars().collect();
     let close_of = |from: usize| -> Option<usize> {
@@ -387,6 +412,22 @@ fn resolve_references(line: &str, refs: &std::collections::BTreeMap<String, Stri
         })
     };
     let mut out = String::with_capacity(line.len() + 16);
+    let mut at: Vec<usize> = Vec::with_capacity(chars.len() + 16);
+    // Characters `from..to` of the line, copied as they stand.
+    let copy = |out: &mut String, at: &mut Vec<usize>, from: usize, to: usize| {
+        out.extend(&chars[from..to]);
+        at.extend(from..to);
+    };
+    // `[text](address)` for `[text]` at `open..=close`, its address counted
+    // from `close + 1`.
+    let link = |out: &mut String, at: &mut Vec<usize>, open: usize, close: usize, a: &str| {
+        let text = chars[open + 1..close].len();
+        let written = format!("[{}]({a})", chars[open + 1..close].iter().collect::<String>());
+        let k = written.chars().count();
+        out.push_str(&written);
+        at.extend(open..=close);
+        at.extend((0..k - text - 2).map(|n| close + 1 + n));
+    };
     let mut i = 0;
     while i < chars.len() {
         let c = chars[i];
@@ -395,7 +436,7 @@ fn resolve_references(line: &str, refs: &std::collections::BTreeMap<String, Stri
             let ticks = chars[i..].iter().take_while(|&&t| t == '`').count();
             let shut = (i + ticks..chars.len()).find(|&k| chars[k..].iter().take_while(|&&t| t == '`').count() == ticks && (k == 0 || chars[k - 1] != '`'));
             let end = shut.map_or(i + ticks, |k| k + ticks);
-            out.extend(&chars[i..end]);
+            copy(&mut out, &mut at, i, end);
             i = end;
             continue;
         }
@@ -404,24 +445,24 @@ fn resolve_references(line: &str, refs: &std::collections::BTreeMap<String, Stri
             // `[[wiki]]` is skipped whole, so its inner `[` is not read.
             if c == '[' && chars.get(i + 1) == Some(&'[') {
                 if let Some(end) = (i + 2..chars.len().saturating_sub(1)).find(|&k| chars[k] == ']' && chars[k + 1] == ']') {
-                    out.extend(&chars[i..end + 2]);
+                    copy(&mut out, &mut at, i, end + 2);
                     i = end + 2;
                     continue;
                 }
             }
-            out.push(c);
+            copy(&mut out, &mut at, i, i + 1);
             i += 1;
             continue;
         }
         let Some(close) = close_of(i + 1) else {
-            out.push(c);
+            copy(&mut out, &mut at, i, i + 1);
             i += 1;
             continue;
         };
         let text: String = chars[i + 1..close].iter().collect();
         match chars.get(close + 1) {
             Some('(') | Some(':') => {
-                out.extend(&chars[i..=close]);
+                copy(&mut out, &mut at, i, close + 1);
                 i = close + 1;
             }
             Some('[') => match close_of(close + 2) {
@@ -429,26 +470,26 @@ fn resolve_references(line: &str, refs: &std::collections::BTreeMap<String, Stri
                     let label: String = chars[close + 2..end].iter().collect();
                     let label = if label.trim().is_empty() { text.clone() } else { label };
                     match address(&label) {
-                        Some(a) => out.push_str(&format!("[{text}]({a})")),
-                        None => out.extend(&chars[i..=end]),
+                        Some(a) => link(&mut out, &mut at, i, close, &a),
+                        None => copy(&mut out, &mut at, i, end + 1),
                     }
                     i = end + 1;
                 }
                 None => {
-                    out.extend(&chars[i..=close]);
+                    copy(&mut out, &mut at, i, close + 1);
                     i = close + 1;
                 }
             },
             _ => {
                 match address(&text) {
-                    Some(a) => out.push_str(&format!("[{text}]({a})")),
-                    None => out.extend(&chars[i..=close]),
+                    Some(a) => link(&mut out, &mut at, i, close, &a),
+                    None => copy(&mut out, &mut at, i, close + 1),
                 }
                 i = close + 1;
             }
         }
     }
-    out
+    (out, at)
 }
 
 /// Where a list item's marker is and what it says.
@@ -533,7 +574,9 @@ fn wrapper_line(body: &str) -> bool {
 const DEEPEST: usize = 32;
 
 #[derive(Default)]
-struct Reader {
+struct Reader<'a> {
+    /// The file's lines as written, where a run's columns are counted.
+    source: Vec<&'a str>,
     cited: Vec<String>,
     notes: Vec<Note>,
     /// The file's link reference definitions: label (folded) to address.
@@ -548,7 +591,18 @@ struct Reader {
     depth: usize,
 }
 
-impl Reader {
+impl Reader<'_> {
+    /// **The source column `text` begins at in line `no`**, in characters:
+    /// the lines read are the file's with a quote's `>`, a list's marker or
+    /// an indent taken off the front, or a note to self off the end.
+    fn column_of(&self, no: usize, text: &str) -> usize {
+        let Some(line) = self.source.get(no) else { return 0 };
+        match line.strip_suffix(text) {
+            Some(before) => before.chars().count(),
+            None => line.find(text).map_or(0, |b| line[..b].chars().count()),
+        }
+    }
+
     /// The number of footnote `name`, given at its first citation.
     fn cite(&mut self, name: &str) -> usize {
         match self.cited.iter().position(|c| c == name) {
@@ -633,9 +687,10 @@ impl Reader {
                     held.pop();
                 }
                 let span = (held[0].0, held[held.len() - 1].0);
+                let cols = held.iter().map(|(k, text)| self.column_of(*k, text)).collect();
                 out.push(Block {
                     lines: span,
-                    kind: BlockKind::Code { info: String::new(), lines: held.into_iter().map(|l| l.1).collect() },
+                    kind: BlockKind::Code { info: String::new(), lines: held.into_iter().map(|l| l.1).collect(), cols },
                 });
                 continue;
             }
@@ -645,6 +700,7 @@ impl Reader {
                 self.paragraph(&taken, &mut out);
                 let info = body.trim_start_matches(c).trim().to_string();
                 let mut held = Vec::new();
+                let mut cols = Vec::new();
                 let mut last = no;
                 i += 1;
                 while i < lines.len() {
@@ -655,9 +711,10 @@ impl Reader {
                         break;
                     }
                     let cut = lead(text).min(indent);
+                    cols.push(self.column_of(*k, &text[cut..]));
                     held.push(text[cut..].to_string());
                 }
-                out.push(Block { lines: (no, last), kind: BlockKind::Code { info, lines: held } });
+                out.push(Block { lines: (no, last), kind: BlockKind::Code { info, lines: held, cols } });
                 continue;
             }
             // A `:::` container, to the `:::` that closes it.
@@ -867,7 +924,7 @@ impl Reader {
             };
             if let Some(align) = align {
                 let head_line = no;
-                let head: Vec<Vec<Inline>> = mdtable::split(line).into_iter().map(|c| self.inlines(&[(no, c)])).collect();
+                let head = self.cells(no, line);
                 let align: Vec<Align> = align
                     .into_iter()
                     .map(|a| match a {
@@ -882,7 +939,7 @@ impl Reader {
                 let mut rows = Vec::new();
                 while i < lines.len() && !lines[i].1.trim().is_empty() && rowish(&lines[i].1) {
                     let (k, text) = &lines[i];
-                    let cells = mdtable::split(text).into_iter().map(|c| self.inlines(&[(*k, c)])).collect();
+                    let cells = self.cells(*k, text);
                     rows.push((*k, cells));
                     last = *k;
                     i += 1;
@@ -969,14 +1026,29 @@ impl Reader {
     /// **The runs of a paragraph's lines.** The lines are read as one text,
     /// so emphasis may run from one line to the next.
     fn inlines(&mut self, lines: &[Line]) -> Vec<Inline> {
+        let cols: Vec<usize> = lines.iter().map(|(no, text)| self.column_of(*no, text)).collect();
+        self.inlines_at(lines, &cols)
+    }
+
+    /// **The runs of a table row's cells**, each cell's columns counted
+    /// from where it stands in the row.
+    fn cells(&mut self, no: usize, row: &str) -> Vec<Vec<Inline>> {
+        let from = self.column_of(no, row);
+        let chars: Vec<char> = row.trim_end_matches(['\n', '\r']).chars().collect();
+        mdtable::cells(row).into_iter().map(|(a, b)| self.inlines_at(&[(no, chars[a..b].iter().collect())], &[from + a])).collect()
+    }
+
+    /// [`Self::inlines`], each line's text beginning at source column
+    /// `cols[k]`.
+    fn inlines_at(&mut self, lines: &[Line], cols: &[usize]) -> Vec<Inline> {
         use std::hash::{Hash, Hasher};
         let Some(base) = lines.first().map(|l| l.0) else { return Vec::new() };
         if lines.iter().any(|l| l.1.contains("[^")) {
-            return self.read_inlines(lines);
+            return self.read_inlines(lines, cols);
         }
         let mut h = std::collections::hash_map::DefaultHasher::new();
-        for (no, text) in lines {
-            (no - base, text).hash(&mut h);
+        for ((no, text), col) in lines.iter().zip(cols) {
+            (no - base, text, col).hash(&mut h);
         }
         // A reference link reads differently once its definition changes.
         if lines.iter().any(|l| l.1.contains('[')) {
@@ -986,7 +1058,7 @@ impl Reader {
         let mut runs = match self.old.remove(&key).or_else(|| self.new.get(&key).cloned()) {
             Some(kept) => kept,
             None => {
-                let mut read = self.read_inlines(lines);
+                let mut read = self.read_inlines(lines, cols);
                 for r in &mut read {
                     r.line -= base;
                 }
@@ -1000,27 +1072,36 @@ impl Reader {
         runs
     }
 
-    /// The runs of `lines`, read.
-    fn read_inlines(&mut self, lines: &[Line]) -> Vec<Inline> {
-        // The text, a `\n` between two lines, and where each line starts.
+    /// The runs of `lines`, read, line `k`'s text beginning at source
+    /// column `cols[k]`.
+    fn read_inlines(&mut self, lines: &[Line], cols: &[usize]) -> Vec<Inline> {
+        // The text, a `\n` between two lines, and where each line starts;
+        // the source column of each character, none for the `\n`s.
         let mut text = String::new();
         let mut starts: Vec<(usize, usize, bool)> = Vec::new(); // char start, line, hard break after
+        let mut col_of: Vec<Option<usize>> = Vec::new();
         let mut count = 0;
         for (k, (no, raw)) in lines.iter().enumerate() {
             let hard = raw.ends_with("  ") || raw.trim_end().ends_with('\\');
-            let mut body = resolve_references(raw.trim(), &self.refs);
+            let lead = raw.chars().take_while(|c| c.is_whitespace()).count() + cols.get(k).copied().unwrap_or(0);
+            let (mut body, mut at) = resolve_references(raw.trim(), &self.refs);
             if body.ends_with('\\') && k + 1 < lines.len() {
                 body.pop();
                 body.truncate(body.trim_end().len());
             }
+            at.truncate(body.chars().count());
             if k > 0 {
                 text.push('\n');
+                col_of.push(None);
                 count += 1;
             }
             starts.push((count, *no, hard));
             count += body.chars().count();
             text.push_str(&body);
+            col_of.extend(at.into_iter().map(|c| Some(lead + c)));
         }
+        col_of.push(None);
+        let at = |i: usize| from_col(col_of.get(i).copied().flatten());
         let chars: Vec<char> = text.chars().collect();
         let spans = markdown::spans(&text);
         let groups = yumete_core::ruby::groups(&chars, self.ruby);
@@ -1081,6 +1162,8 @@ impl Reader {
         }
         let mut next_group = 0;
         let mut out: Vec<Inline> = Vec::new();
+        // How many characters the last run has, while it is text.
+        let mut run_length = 0;
         let mut html = Marks::default();
         let mut spans_open: Vec<u8> = Vec::new();
         let mut i = 0;
@@ -1100,10 +1183,10 @@ impl Reader {
                     true => {
                         for (c, part) in base.chars().zip(parts) {
                             let (base, reading) = (c.to_string(), part.to_string());
-                            out.push(Inline { line, kind: InlineKind::Ruby { base, reading, marks } });
+                            out.push(Inline { line, cols: at(i), kind: InlineKind::Ruby { base, reading, marks } });
                         }
                     }
-                    false => out.push(Inline { line, kind: InlineKind::Ruby { base, reading, marks } }),
+                    false => out.push(Inline { line, cols: at(i), kind: InlineKind::Ruby { base, reading, marks } }),
                 }
                 i = group.end.max(i + 1);
                 continue;
@@ -1119,13 +1202,12 @@ impl Reader {
                         let hard = starts.get(k).is_some_and(|s| s.2);
                         let latin = |c: Option<&char>| c.is_some_and(|&c| yumete_cjk::char_width(c) == 1);
                         if in_code || (!hard && latin(chars.get(i.wrapping_sub(1))) && latin(chars.get(i + 1))) {
-                            push_text(&mut out, line, " ", marks_at(i, html, urls[i]));
+                            push_text(&mut out, &mut run_length, line, ' ', None, marks_at(i, html, urls[i]));
                         } else {
-                            out.push(Inline { line, kind: InlineKind::Break });
+                            out.push(Inline { line, cols: Vec::new(), kind: InlineKind::Break });
                         }
                     } else {
-                        let mut buf = [0u8; 4];
-                        push_text(&mut out, line, c.encode_utf8(&mut buf), marks_at(i, html, urls[i]));
+                        push_text(&mut out, &mut run_length, line, c, col_of[i], marks_at(i, html, urls[i]));
                     }
                     i += 1;
                 }
@@ -1137,7 +1219,7 @@ impl Reader {
                             Some(c) => {
                                 let alt: String = chars[span.end..c.start].iter().collect();
                                 let src = image_source(&chars[c.start..c.end].iter().collect::<String>());
-                                out.push(Inline { line, kind: InlineKind::Image { src, alt: alt.trim().to_string() } });
+                                out.push(Inline { line, cols: at(i), kind: InlineKind::Image { src, alt: alt.trim().to_string() } });
                                 i = c.end;
                             }
                             None => i += 1,
@@ -1151,7 +1233,7 @@ impl Reader {
                             (Some(body), Some(close)) => {
                                 let tex: String = chars[body.start..body.end].iter().collect();
                                 let display = span.end - span.start == 2;
-                                out.push(Inline { line, kind: InlineKind::Formula { tex: tex.trim().to_string(), display } });
+                                out.push(Inline { line, cols: at(i), kind: InlineKind::Formula { tex: tex.trim().to_string(), display } });
                                 i = close.end;
                             }
                             _ => i += 1,
@@ -1161,12 +1243,12 @@ impl Reader {
                         let name: String = chars[span.start..span.end].iter().collect();
                         let name = name.trim_start_matches("[^").trim_end_matches(':').trim_end_matches(']').to_string();
                         let n = self.cite(&name);
-                        out.push(Inline { line, kind: InlineKind::NoteRef(n) });
+                        out.push(Inline { line, cols: at(i), kind: InlineKind::NoteRef(n) });
                         i = span.end;
                     }
                     SpanKind::Html => {
                         let tag: String = chars[span.start..span.end].iter().collect();
-                        html_tag(&tag, &mut html, &mut spans_open, line, &mut out);
+                        html_tag(&tag, &mut html, &mut spans_open, (line, at(i)), &mut out);
                         i = span.end;
                     }
                     _ => i += 1,
@@ -1181,15 +1263,24 @@ impl Reader {
     }
 }
 
-/// Text appended to the last run when its marks are the same.
-fn push_text(out: &mut Vec<Inline>, line: usize, s: &str, marks: Marks) {
-    if let Some(Inline { line: was, kind: InlineKind::Text { text, marks: m } }) = out.last_mut() {
+/// **Character `c`, written at source column `col`**, appended to the last
+/// run when its marks are the same, a new stretch of the run's columns
+/// beginning where the source skipped markup; `length` is how many
+/// characters the last run has.
+fn push_text(out: &mut Vec<Inline>, length: &mut usize, line: usize, c: char, col: Option<usize>, marks: Marks) {
+    if let Some(Inline { line: was, cols, kind: InlineKind::Text { text, marks: m } }) = out.last_mut() {
         if *m == marks && *was == line {
-            text.push_str(s);
+            let follows = cols.last().is_some_and(|&(k, from)| Some(from + *length - k) == col);
+            if let (Some(col), false) = (col, follows) {
+                cols.push((*length, col));
+            }
+            text.push(c);
+            *length += 1;
             return;
         }
     }
-    out.push(Inline { line, kind: InlineKind::Text { text: s.to_string(), marks } });
+    *length = 1;
+    out.push(Inline { line, cols: from_col(col), kind: InlineKind::Text { text: c.to_string(), marks } });
 }
 
 /// The mark a span of `kind` puts on what it covers.
@@ -1208,17 +1299,17 @@ fn add_mark(m: &mut Marks, kind: SpanKind) {
 
 /// An HTML tag in the run of the text: `<br>` breaks, `<img>` is a picture,
 /// the phrase tags mark, anything else comes off.
-fn html_tag(tag: &str, html: &mut Marks, spans_open: &mut Vec<u8>, line: usize, out: &mut Vec<Inline>) {
+fn html_tag(tag: &str, html: &mut Marks, spans_open: &mut Vec<u8>, (line, cols): (usize, Vec<(usize, usize)>), out: &mut Vec<Inline>) {
     let lower = tag.to_ascii_lowercase();
     let closing = lower.starts_with("</");
     let name: String = lower.trim_start_matches("</").trim_start_matches('<').chars().take_while(|c| c.is_ascii_alphanumeric()).collect();
     let on = !closing;
     match name.as_str() {
-        "br" => out.push(Inline { line, kind: InlineKind::Break }),
+        "br" => out.push(Inline { line, cols: Vec::new(), kind: InlineKind::Break }),
         "img" if on => {
             let src = attribute(tag, "src").unwrap_or_default();
             let alt = attribute(tag, "alt").unwrap_or_default();
-            out.push(Inline { line, kind: InlineKind::Image { src, alt } });
+            out.push(Inline { line, cols, kind: InlineKind::Image { src, alt } });
         }
         "kbd" => html.kbd = on,
         "sup" => html.sup = on,
@@ -1585,7 +1676,7 @@ mod tests {
     #[test]
     fn code_blocks() {
         let blocks = parse("```rust\nfn main() {}\n```\n\n    indented\n    code\n\ntext\n");
-        assert_eq!(blocks[0], Block { lines: (0, 2), kind: BlockKind::Code { info: "rust".into(), lines: vec!["fn main() {}".into()] } });
+        assert_eq!(blocks[0], Block { lines: (0, 2), kind: BlockKind::Code { info: "rust".into(), lines: vec!["fn main() {}".into()], cols: vec![0] } });
         assert_eq!(blocks[1].lines, (4, 5));
         assert!(matches!(&blocks[1].kind, BlockKind::Code { lines, .. } if lines == &["indented", "code"]));
     }
