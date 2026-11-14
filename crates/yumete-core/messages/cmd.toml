@@ -312,6 +312,13 @@ en = "typing trainer: another article, the current file or Yume's most frequent 
 find = "跟打 文章 常用字 單字 单字 字頻 字频 article common characters genda"
 
 [[message]]
+# : 命令選單裏 genda-auto 的説明（草稿）
+key = "cmd.commands.genda-auto"
+zhs = "跟打：打完一段自动换到下一段，on/off，不带参数则切换"
+en = "typing trainer: a finished segment brings up the next by itself; on/off, bare flips"
+find = "跟打 自動 自动 換段 换段 下一段 auto next genda"
+
+[[message]]
 # : 命令選單裏 genda-copy 那一項的説明(commands 組)（草稿）
 key = "cmd.commands.genda-copy"
 zhs = "跟打：把最近一段（或历史里选中的那条）成绩复制到剪贴板"
@@ -324,6 +331,48 @@ key = "cmd.commands.genda-copy-history"
 zhs = "跟打：把全部历史成绩复制成表格（TSV，带表头）"
 en = "typing trainer: copy the whole history as a table (TSV, with a header row)"
 find = "跟打 歷史 历史 成績 成绩 表格 複製 复制 copy history tsv genda"
+
+[[message]]
+# : 命令選單裏 genda-goal 的説明（草稿）
+key = "cmd.commands.genda-goal"
+zhs = "跟打：说出达标条件；off 全部取消"
+en = "typing trainer: say the goal; off takes it all off"
+find = "跟打 達標 达标 目標 目标 條件 条件 goal genda"
+
+[[message]]
+# : 命令選單裏 genda-goal-accuracy 的説明（草稿）
+key = "cmd.commands.genda-goal-accuracy"
+zhs = "跟打：达标条件，键准至少百分之多少；off 或 0 取消"
+en = "typing trainer: goal, key accuracy of at least this percent; off or 0 takes it off"
+find = "跟打 達標 达标 目標 目标 鍵準 键准 goal accuracy genda"
+
+[[message]]
+# : 命令選單裏 genda-goal-clean 的説明（草稿）
+key = "cmd.commands.genda-goal-clean"
+zhs = "跟打：达标条件，一个错字都没有；on/off，不带参数则切换"
+en = "typing trainer: goal, not one error; on/off, bare flips"
+find = "跟打 達標 达标 目標 目标 無錯 无错 錯字 错字 goal clean errors genda"
+
+[[message]]
+# : 命令選單裏 genda-goal-kps 的説明（草稿）
+key = "cmd.commands.genda-goal-kps"
+zhs = "跟打：达标条件，击键至少每秒多少键；off 或 0 取消"
+en = "typing trainer: goal, at least this many keys a second; off or 0 takes it off"
+find = "跟打 達標 达标 目標 目标 擊鍵 击键 goal keys kps genda"
+
+[[message]]
+# : 命令選單裏 genda-goal-speed 的説明（草稿）
+key = "cmd.commands.genda-goal-speed"
+zhs = "跟打：达标条件，速度（错一罚五之后）至少多少字每分；off 或 0 取消"
+en = "typing trainer: goal, speed (after five off a mistake) of at least this many characters a minute; off or 0 takes it off"
+find = "跟打 達標 达标 目標 目标 速度 goal speed genda"
+
+[[message]]
+# : 命令選單裏 genda-hint 的説明（草稿）
+key = "cmd.commands.genda-hint"
+zhs = "跟打：在文章框下边显示下一个字的编码（取自当前宇浩方案），on/off，不带参数则切换"
+en = "typing trainer: the next character's code under the article, from the current Yume scheme; on/off, bare flips"
+find = "跟打 編碼 编码 提示 字提 碼提 码提 hint code genda"
 
 [[message]]
 # : 命令選單裏 genda-history 那一項的説明(commands 組)（草稿）
@@ -359,6 +408,20 @@ key = "cmd.commands.genda-retry"
 zhs = "跟打：重打这一段"
 en = "typing trainer: type this segment again"
 find = "跟打 重打 重來 重来 retry again genda"
+
+[[message]]
+# : 命令選單裏 genda-retry-slow 的説明（草稿）
+key = "cmd.commands.genda-retry-slow"
+zhs = "跟打：把上一段最慢的十个字拿来单打一段"
+en = "typing trainer: a segment of the last one's ten slowest characters"
+find = "跟打 慢字 重打 練習 练习 停留 retry slow genda"
+
+[[message]]
+# : 命令選單裏 genda-retry-wrong 的説明（草稿）
+key = "cmd.commands.genda-retry-wrong"
+zhs = "跟打：把上一段打错过的字（改对了的也算）拿来单打一段"
+en = "typing trainer: a segment of the characters the last one got wrong, put right or not"
+find = "跟打 錯字 错字 重打 練習 练习 retry wrong errors genda"
 
 [[message]]
 # : 命令選單裏 genda-shuffle 那一項的説明(commands 組)（草稿）
@@ -1305,6 +1368,12 @@ en = "the next 500 most frequent characters"
 key = "cmd.genda-articles.common-3"
 zhs = "常用单字第 1001 到 1500"
 en = "the 500 after those"
+
+[[message]]
+# : 命令選單裏 genda-goal 與它各條件的 off 那一項的説明(genda-goal 組)（草稿）
+key = "cmd.genda-goal.off"
+zhs = "取消"
+en = "off"
 
 [[message]]
 # : 命令選單裏 genda-length 的 all 那一項的説明(genda-lengths 組)（草稿）

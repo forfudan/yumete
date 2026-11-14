@@ -53,7 +53,8 @@ fn a_narrow_window_folds_the_left_column_into_one_row() {
 #[test]
 fn a_finished_segment_puts_its_score_line_on_the_command_row() {
     let dir = fixture("finish");
-    let frame = shot(&dir, "100x30", r":genda\n\e:genda-length 10\nabcdefghiX\bj");
+    // Wide enough for the whole score line on the command row.
+    let frame = shot(&dir, "140x30", r":genda\n\e:genda-length 10\nabcdefghiX\bj");
     let said = frame.lines().nth(29).unwrap_or_default();
     assert!(said.starts_with(" 第1段 速度"), "{frame}");
     assert!(said.contains("回改1") && said.contains("【首打】") && said.contains("输入法:系统"), "{frame}");
@@ -81,6 +82,26 @@ fn the_built_in_ime_composes_in_the_pad_and_its_keys_are_counted() {
     assert!(frame.contains("│tian"), "{frame}");
     let speed_row = frame.lines().nth(2).unwrap_or_default();
     assert!(speed_row.contains("击键") && !speed_row.contains('—'), "{frame}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn yumes_keys_give_the_equivalence_and_with_auto_off_a_finished_segment_stays() {
+    let dir = fixture("yume");
+    std::fs::write(dir.join("article.txt"), "天地玄黄，宇宙洪荒。日月盈昃，辰宿列张。\n").expect("an article");
+    let typing = r":genda\n\e:genda-length 10\n\e:genda-auto off\n\n\{ime}tiandi xuanhuang ,yuzhou honghuang .";
+    let frame = shot(&dir, "100x30", typing);
+    let rows: Vec<&str> = frame.lines().collect();
+    let said = rows[29];
+    assert!(said.contains("码长") && said.contains("当量") && said.contains("峰值") && said.contains("停留["), "{frame}");
+    assert!(said.find("码长") < said.find("当量") && said.find("用时") < said.find("峰值"), "{frame}");
+    assert!(rows[4].contains("当量") && !rows[4].contains('—'), "{frame}");
+    // Waiting for Enter: the segment typed is still in the pad, and the article box in hand.
+    assert!(frame.contains("│ 天地玄黄，宇宙洪荒。") && frame.contains("第 1/2 段"), "{frame}");
+    assert!(rows[28].contains("Enter 继续"), "{frame}");
+    let frame = shot(&dir, "100x30", &format!(r"{typing}\t"));
+    assert!(frame.lines().next().unwrap_or_default().contains("今日 10字"), "{frame}");
+    assert!(frame.contains("当量 1.") && frame.contains("常用键 N×5"), "{frame}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

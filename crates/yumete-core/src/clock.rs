@@ -35,6 +35,14 @@ pub fn when(at: std::time::SystemTime) -> String {
     format!("{mo:02}-{d:02} {h:02}:{mi:02}")
 }
 
+/// **The local calendar day a second falls on**, as a day number
+/// ([`crate::genda::day_number`]): what 跟打's daily figures count by, so a
+/// day ends at the reader's midnight and not at UTC's.
+pub fn local_day(seconds: i64) -> i64 {
+    let (y, mo, d, ..) = broken_down(seconds);
+    crate::genda::day_number(y, mo, d)
+}
+
 /// 本地時區裏，那一秒是幾年幾月幾日幾點幾分幾秒。
 #[cfg(unix)]
 fn broken_down(seconds: i64) -> (i64, u32, u32, u32, u32, u32) {

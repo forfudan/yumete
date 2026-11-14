@@ -2481,6 +2481,9 @@ impl Editor {
             Command::SetTableNumbers(_) => self.table_numbers,
             Command::SetTableHeader(_) => self.table.as_ref()?.schema.header,
             Command::Sidebar(panel, _) => self.showing(Editor::view_of(panel)?).is_some(),
+            Command::Genda(crate::genda::Ask::Hint(_)) => self.genda_switches.hint,
+            Command::Genda(crate::genda::Ask::Auto(_)) => self.genda_switches.auto,
+            Command::Genda(crate::genda::Ask::GoalClean(_)) => self.genda_switches.clean,
             _ => return None,
         })
     }

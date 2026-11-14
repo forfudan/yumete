@@ -50,8 +50,41 @@ pub enum Ask {
     /// An article of the `N` most frequent 漢字 in a scope (`:genda-top`
     /// and its scopes); the core counts them and hands the article over.
     Top(crate::search_panel::Where, usize),
+    /// `:genda-hint`: the next character's code beside the article.
+    Hint(crate::command::Switch),
+    /// `:genda-auto`: a finished segment brings up the next by itself.
+    Auto(crate::command::Switch),
+    /// One criterion of the goal, in hundredths; `0` takes it off.
+    GoalSpeed(u32),
+    GoalKps(u32),
+    GoalAccuracy(u32),
+    /// `:genda-goal-clean`: no errors.
+    GoalClean(crate::command::Switch),
+    /// `:genda-goal off`, every criterion off.
+    GoalOff,
+    /// `:genda-goal` with nothing after it: say the goal.
+    GoalShow,
+    /// A segment of the characters the last one got wrong.
+    RetryWrong,
+    /// A segment of the last one's slowest characters ([`SLOW`]).
+    RetrySlow,
     /// `:q` while the page is open.
     Close,
+}
+
+/// **The page's switches, as the `:` menu says them**: the page holds them
+/// and tells the core, which answers for every switch under `:`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Switches {
+    pub hint: bool,
+    pub auto: bool,
+    pub clean: bool,
+}
+
+impl Default for Switches {
+    fn default() -> Self {
+        Switches { hint: false, auto: true, clean: false }
+    }
 }
 
 /// Which article `:genda-article` names.
@@ -164,6 +197,248 @@ pub struct Stroke {
     pub composing: bool,
     /// The key was Backspace.
     pub backspace: bool,
+    /// Which key, for the 當量 and the hands; `None` for one they do not
+    /// count.
+    pub key: Option<Pressed>,
+}
+
+/// **A key as the 當量 and the hands count it**, by the names typepad's key
+/// heat map gives them: a letter is one key in either case.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Pressed {
+    /// A printing key; a letter in upper case.
+    Char(char),
+    Space,
+    Backspace,
+    Enter,
+    Tab,
+    /// A lone Shift tap: the terminal does not say which side, so it belongs
+    /// to neither hand.
+    Shift,
+}
+
+/// The keys of the left hand, Tab aside: the rows from `Q`, `A`, `Z` and
+/// `1` to the fifth column, and the shifted symbols over them.
+const LEFT_HAND: &str = "QWERTASDFGZXCVB12345`~!@#$%";
+
+/// The keys of the right hand, Backspace and Enter aside. 6 is on the right,
+/// as on a standard board.
+const RIGHT_HAND: &str = "YUIOPHJKLNM67890-=[]\\;',./^&*()_+{}|:\"<>?";
+
+impl Pressed {
+    /// The key a [`crate::input::Key`] is, when it is one the pad counts.
+    pub fn of(key: crate::input::Key) -> Option<Pressed> {
+        use crate::input::Key;
+        match key {
+            Key::Char(' ') => Some(Pressed::Space),
+            Key::Char(c) => Some(Pressed::Char(c.to_uppercase().next().unwrap_or(c))),
+            Key::Backspace => Some(Pressed::Backspace),
+            Key::Enter => Some(Pressed::Enter),
+            Key::Tab => Some(Pressed::Tab),
+            _ => None,
+        }
+    }
+
+    /// Its name, as the history shows the most used key.
+    pub fn name(self) -> String {
+        match self {
+            Pressed::Char(c) => c.to_string(),
+            Pressed::Space => "Space".into(),
+            Pressed::Backspace => "Backspace".into(),
+            Pressed::Enter => "Enter".into(),
+            Pressed::Tab => "Tab".into(),
+            Pressed::Shift => "Shift".into(),
+        }
+    }
+
+    /// `Some(true)` for the left hand, `Some(false)` for the right, `None`
+    /// for a key of neither (Space, Shift).
+    fn left_hand(self) -> Option<bool> {
+        match self {
+            Pressed::Tab => Some(true),
+            Pressed::Backspace | Pressed::Enter => Some(false),
+            Pressed::Char(c) if LEFT_HAND.contains(c) => Some(true),
+            Pressed::Char(c) if RIGHT_HAND.contains(c) => Some(false),
+            _ => None,
+        }
+    }
+
+    /// What the 當量 table calls it: a letter, `;`, or `' '` for Space.
+    fn in_table(self) -> Option<char> {
+        match self {
+            Pressed::Space => Some(' '),
+            Pressed::Char(c) if c.is_ascii_alphabetic() || c == ';' => Some(c),
+            _ => None,
+        }
+    }
+}
+
+/// **What a run's keys come to by the 當量 table and by the hands**, as
+/// typepad's key heat map counts them, kept as sums so every rate is
+/// derived on reading.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Strokes {
+    /// Σ 當量 over the adjacent pairs the table has.
+    pub equivalence: f64,
+    /// Those pairs: 有效按鍵組合.
+    pub pairs: usize,
+    /// 互擊 and 同手 over the adjacent pairs; a pair with Space counts half
+    /// to each, and a pair with a key of neither hand to none.
+    pub alternating: f64,
+    pub same_hand: f64,
+    /// 最常用按鍵 and how often it was struck.
+    pub top_key: String,
+    pub top_count: usize,
+}
+
+impl Strokes {
+    /// **Count a run of keys**, pair by adjacent pair.
+    pub fn count(keys: &[Pressed]) -> Strokes {
+        let mut out = Strokes::default();
+        for pair in keys.windows(2) {
+            let (a, b) = (pair[0], pair[1]);
+            if let Some(value) = a.in_table().zip(b.in_table()).and_then(|(x, y)| crate::equivalence::of(x, y)) {
+                out.equivalence += value;
+                out.pairs += 1;
+            }
+            if a == Pressed::Space || b == Pressed::Space {
+                out.alternating += 0.5;
+                out.same_hand += 0.5;
+                continue;
+            }
+            match (a.left_hand(), b.left_hand()) {
+                (Some(x), Some(y)) if x != y => out.alternating += 1.0,
+                (Some(_), Some(_)) => out.same_hand += 1.0,
+                _ => {}
+            }
+        }
+        let mut counts: std::collections::BTreeMap<Pressed, usize> = std::collections::BTreeMap::new();
+        for &key in keys {
+            *counts.entry(key).or_default() += 1;
+        }
+        // The first of the most struck in key order, so a tie always names the same key.
+        if let Some((key, n)) = counts.into_iter().fold(None::<(Pressed, usize)>, |best, (k, n)| match best {
+            Some((_, m)) if m >= n => best,
+            _ => Some((k, n)),
+        }) {
+            out.top_key = key.name();
+            out.top_count = n;
+        }
+        out
+    }
+
+    /// 按鍵組合平均當量: the mean over the pairs the table has.
+    pub fn mean(&self) -> f64 {
+        match self.pairs {
+            0 => 0.0,
+            n => self.equivalence / n as f64,
+        }
+    }
+
+    /// 左右手互擊率 in percent.
+    pub fn alternation_rate(&self) -> f64 {
+        let all = self.alternating + self.same_hand;
+        match all > 0.0 {
+            true => self.alternating / all * 100.0,
+            false => 0.0,
+        }
+    }
+}
+
+/// **峰值 is the best stretch of at least this many characters**, from the
+/// end of one commit to the end of another: long enough that one quick word
+/// is not a peak, short enough to find a fast run inside a 25-character
+/// segment. A segment no longer than this has the whole segment for its peak.
+pub const PEAK: usize = 10;
+
+/// How many characters `:genda-retry-slow` takes at most.
+pub const SLOW: usize = 10;
+
+/// **A goal a segment must reach before the page moves on**; nothing set is
+/// no goal.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct Goal {
+    /// 速度 at least this, after 錯一罰五.
+    pub speed: Option<f64>,
+    /// 擊鍵 at least this.
+    pub kps: Option<f64>,
+    /// 鍵準 at least this, in percent.
+    pub accuracy: Option<f64>,
+    /// No errors.
+    pub clean: bool,
+}
+
+impl Goal {
+    pub fn is_set(&self) -> bool {
+        self.speed.is_some() || self.kps.is_some() || self.accuracy.is_some() || self.clean
+    }
+
+    /// **The criteria `record` falls short of**, as the goal reads them;
+    /// empty when it is met. A key field the record could not measure
+    /// (the system's input method) is passed over, not failed: a goal
+    /// nobody could reach under that input method would hold the page on
+    /// one segment for good.
+    pub fn missed(&self, record: &Record) -> Vec<String> {
+        let mut out = Vec::new();
+        if let Some(want) = self.speed.filter(|&want| record.penalised() < want) {
+            out.push(say!("genda.goal.speed", number(want)));
+        }
+        if let (Some(want), Some(kps)) = (self.kps, record.keys_per_second()) {
+            if kps < want {
+                out.push(say!("genda.goal.kps", number(want)));
+            }
+        }
+        if let (Some(want), Some(accuracy)) = (self.accuracy, record.key_accuracy()) {
+            if accuracy < want {
+                out.push(say!("genda.goal.accuracy", number(want)));
+            }
+        }
+        if self.clean && record.errors > 0 {
+            out.push(say!("genda.goal.clean"));
+        }
+        out
+    }
+
+    /// The goal as the 文章 box and the status line say it.
+    pub fn text(&self) -> String {
+        let mut parts = Vec::new();
+        if let Some(v) = self.speed {
+            parts.push(say!("genda.goal.speed", number(v)));
+        }
+        if let Some(v) = self.kps {
+            parts.push(say!("genda.goal.kps", number(v)));
+        }
+        if let Some(v) = self.accuracy {
+            parts.push(say!("genda.goal.accuracy", number(v)));
+        }
+        if self.clean {
+            parts.push(say!("genda.goal.clean"));
+        }
+        match parts.is_empty() {
+            true => say!("genda.goal.none"),
+            false => parts.join(" "),
+        }
+    }
+}
+
+/// A goal's value as it was typed: `120`, `6.5`.
+fn number(v: f64) -> String {
+    let text = format!("{v:.2}");
+    text.trim_end_matches('0').trim_end_matches('.').to_string()
+}
+
+/// A hundredths value of [`Ask`], as a goal holds it; `0` is none.
+pub fn from_hundredths(v: u32) -> Option<f64> {
+    (v > 0).then(|| v as f64 / 100.0)
+}
+
+/// **A goal's value as typed**, in hundredths: `120` → 12000, `off` or `0` → 0.
+pub fn hundredths(text: &str) -> Option<u32> {
+    if text == "off" {
+        return Some(0);
+    }
+    let v: f64 = text.parse().ok()?;
+    (0.0..1e6).contains(&v).then(|| (v * 100.0).round() as u32)
 }
 
 /// One commit group still open, for 打詞率.
@@ -199,6 +474,19 @@ pub struct Run {
     han_in_words: usize,
     group: Group,
     last_commit: Option<Duration>,
+    /// The keys, in order, while every one came through the built-in IME.
+    pressed: Vec<Pressed>,
+    /// For each typed position: the run's clock when it was committed, and
+    /// which commit it came in (one burst is one commit).
+    stamps: Vec<(Duration, u32)>,
+    commits: u32,
+    /// The run's clock at the last change to the text.
+    last_change: Duration,
+    /// 停留: the longest wait before a commit, the commit it was, and what
+    /// came in it.
+    stay: Option<(Duration, u32, String)>,
+    /// Positions ever committed wrong, put right later or not.
+    missed: std::collections::BTreeSet<usize>,
 }
 
 /// What a finished run counted, before anything is divided.
@@ -278,6 +566,9 @@ impl Run {
         if stroke.backspace && stroke.composing {
             self.backspaces += 1;
         }
+        if let Some(key) = stroke.key.filter(|_| self.measured) {
+            self.pressed.push(key);
+        }
     }
 
     /// The key just counted committed a candidate that was not the first.
@@ -299,11 +590,32 @@ impl Run {
         if gone > 0 && stroke.backspace && !stroke.composing {
             self.corrections += gone;
         }
+        let clock = self.elapsed(now);
+        self.stamps.truncate(same);
         let added = &new[same..];
         if !added.is_empty() {
             let join = !stroke.yume && gone == 0 && self.last_commit.is_some_and(|at| now.saturating_sub(at) < BURST);
             self.commit(added, join);
             self.last_commit = Some(now);
+            if !join {
+                self.commits += 1;
+            }
+            let id = self.commits;
+            for (k, c) in added.iter().enumerate() {
+                self.stamps.push((clock, id));
+                if self.target.get(same + k) != Some(c) {
+                    self.missed.insert(same + k);
+                }
+            }
+            let wait = clock.saturating_sub(self.last_change);
+            match &mut self.stay {
+                Some((_, at, text)) if join && *at == id => text.extend(added),
+                Some((longest, ..)) if join || wait <= *longest => {}
+                stay => *stay = Some((wait, id, added.iter().collect())),
+            }
+        }
+        if gone > 0 || !added.is_empty() {
+            self.last_change = clock;
         }
         self.typed = new;
         self.settle(now)
@@ -336,6 +648,7 @@ impl Run {
             return false;
         }
         self.typed.truncate(n);
+        self.stamps.truncate(n);
         let took = self.elapsed(now);
         self.running_since = None;
         self.done = Some((took, self.errors()));
@@ -357,13 +670,128 @@ impl Run {
         }
     }
 
+    /// **Which typed positions came in a word**: a 漢字 in a commit of two
+    /// or more characters that are not punctuation, the same commits
+    /// 打詞率 counts. Under an input method the editor cannot see, a commit
+    /// is a burst of characters ([`BURST`]), so the marks are as near as
+    /// that guess.
+    pub fn word_marks(&self) -> Vec<bool> {
+        let mut words: std::collections::HashMap<u32, usize> = std::collections::HashMap::new();
+        for (c, (_, id)) in self.typed.iter().zip(&self.stamps) {
+            if c.is_alphanumeric() {
+                *words.entry(*id).or_default() += 1;
+            }
+        }
+        self.typed
+            .iter()
+            .zip(&self.stamps)
+            .map(|(&c, (_, id))| yumete_cjk::is_han(c) && words.get(id).is_some_and(|&n| n >= 2))
+            .collect()
+    }
+
+    /// The commits of the typed text, in order: each one's first position,
+    /// its length and the clock at its end.
+    fn commit_spans(&self) -> Vec<(usize, usize, Duration)> {
+        let mut spans: Vec<(usize, usize, Duration)> = Vec::new();
+        for (i, &(at, id)) in self.stamps.iter().enumerate() {
+            match spans.last_mut() {
+                Some((start, len, end)) if self.stamps[*start].1 == id => {
+                    *len += 1;
+                    *end = at;
+                }
+                _ => spans.push((i, 1, at)),
+            }
+        }
+        spans
+    }
+
+    /// **峰值**: the best stretch of at least [`PEAK`] characters, from the
+    /// end of one commit (or the first key) to the end of another, as
+    /// characters and time; the whole run when it is no longer than that.
+    fn peak(&self) -> (usize, Duration) {
+        let spans = self.commit_spans();
+        let n = self.stamps.len();
+        let whole = (n, self.stamps.last().map_or(Duration::ZERO, |s| s.0));
+        if n <= PEAK {
+            return whole;
+        }
+        let mut best: Option<(usize, Duration)> = None;
+        for first in 0..spans.len() {
+            let from = match first {
+                0 => Duration::ZERO,
+                _ => spans[first - 1].2,
+            };
+            let mut chars = 0;
+            for &(_, len, end) in &spans[first..] {
+                chars += len;
+                if chars < PEAK {
+                    continue;
+                }
+                let took = end.saturating_sub(from);
+                let better = best.is_none_or(|(c, t)| chars as u128 * t.as_micros() > c as u128 * took.as_micros());
+                if !took.is_zero() && better {
+                    best = Some((chars, took));
+                }
+                break;
+            }
+        }
+        best.unwrap_or(whole)
+    }
+
+    /// **The run's slowest characters**, at most `n` and each once, slowest
+    /// first: a commit's wait shared out among the characters it brought,
+    /// so a word typed slowly is not counted as that many slow characters.
+    /// The article's characters, not what was typed in their place; spaces
+    /// are not drilled.
+    pub fn slowest(&self, n: usize) -> Vec<char> {
+        let mut costs: Vec<(Duration, usize)> = Vec::new();
+        let mut before = Duration::ZERO;
+        for (start, len, end) in self.commit_spans() {
+            let each = end.saturating_sub(before) / len as u32;
+            costs.extend((start..start + len).map(|i| (each, i)));
+            before = end;
+        }
+        costs.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+        let mut out: Vec<char> = Vec::new();
+        for (_, i) in costs {
+            match self.target.get(i) {
+                Some(&c) if !c.is_whitespace() && !out.contains(&c) => out.push(c),
+                _ => {}
+            }
+            if out.len() == n {
+                break;
+            }
+        }
+        out
+    }
+
+    /// **The characters the run got wrong**, each once, in the article's
+    /// order: every position ever committed wrong, put right after or not.
+    pub fn missed(&self) -> Vec<char> {
+        let mut out: Vec<char> = Vec::new();
+        for &i in &self.missed {
+            match self.target.get(i) {
+                Some(&c) if !c.is_whitespace() && !out.contains(&c) => out.push(c),
+                _ => {}
+            }
+        }
+        out
+    }
+
     /// The counts so far, as a record would keep them; `at` is the clock.
     pub fn record(&self, now: Duration) -> Record {
         let chars = match self.done {
             Some(_) => self.target.len(),
             None => self.typed.len(),
         };
+        let (peak_chars, peak_took) = self.peak();
+        let (stay, stay_text) = self.stay.as_ref().map_or((Duration::ZERO, String::new()), |(wait, _, text)| (*wait, text.clone()));
         Record {
+            peak_chars,
+            peak_millis: peak_took.as_millis() as u64,
+            stay_millis: stay.as_millis() as u64,
+            stay_text,
+            strokes: (self.measured && self.started).then(|| Strokes::count(&self.pressed)),
             chars,
             errors: self.errors(),
             millis: self.elapsed(now).as_millis() as u64,
@@ -416,6 +844,19 @@ pub struct Record {
     /// Only with the built-in IME holding every key.
     #[serde(default)]
     pub keys: Option<Keys>,
+    /// The 當量 and the hands, likewise.
+    #[serde(default)]
+    pub strokes: Option<Strokes>,
+    /// 峰值: the characters and the time of the best stretch ([`PEAK`]).
+    #[serde(default)]
+    pub peak_chars: usize,
+    #[serde(default)]
+    pub peak_millis: u64,
+    /// 停留: the longest wait before a commit, and what that commit brought.
+    #[serde(default)]
+    pub stay_millis: u64,
+    #[serde(default)]
+    pub stay_text: String,
     /// The scheme's name; empty under the system's input method.
     #[serde(default)]
     pub scheme: String,
@@ -469,6 +910,24 @@ impl Record {
         Some(((keys.keys as f64 - lost) / keys.keys as f64 * 100.0).max(0.0))
     }
 
+    /// 按鍵組合平均當量, only with the built-in IME holding every key.
+    pub fn equivalence(&self) -> Option<f64> {
+        self.strokes.as_ref().map(Strokes::mean)
+    }
+
+    /// 峰值, characters a minute over the best stretch.
+    pub fn peak(&self) -> f64 {
+        per_minute(self.peak_chars as f64, self.peak_millis as f64 / 1000.0)
+    }
+
+    /// 停留 as the score line writes it, `[字]1.23s`; empty before any commit.
+    pub fn stay_text(&self) -> String {
+        match self.stay_text.is_empty() {
+            true => String::new(),
+            false => format!("[{}]{:.2}s", self.stay_text, self.stay_millis as f64 / 1000.0),
+        }
+    }
+
     /// 打詞率 in percent.
     pub fn word_rate(&self) -> f64 {
         match self.han {
@@ -502,9 +961,18 @@ impl Record {
             parts.push(say!("genda.line.kps", format!("{kps:.2}")));
             parts.push(say!("genda.line.code-length", format!("{len:.2}")));
         }
+        if let Some(equivalence) = self.equivalence() {
+            parts.push(say!("genda.line.equivalence", format!("{equivalence:.2}")));
+        }
         parts.push(say!("genda.line.chars", self.chars));
         parts.push(say!("genda.line.errors", self.errors));
         parts.push(say!("genda.line.time", clock_text(self.millis)));
+        if self.peak_chars > 0 {
+            parts.push(say!("genda.line.peak", format!("{:.2}", self.peak())));
+        }
+        if !self.stay_text.is_empty() {
+            parts.push(say!("genda.line.stay", self.stay_text()));
+        }
         parts.push(say!("genda.line.corrections", self.corrections));
         if let Some(accuracy) = self.key_accuracy() {
             parts.push(say!("genda.line.key-accuracy", format!("{accuracy:.2}")));
@@ -526,21 +994,46 @@ impl Record {
     /// field not measured is `—`.
     pub fn cells(&self) -> Vec<String> {
         let or_dash = |v: Option<f64>, f: fn(f64) -> String| v.map_or_else(|| "—".to_string(), f);
+        let strokes = self.strokes.as_ref();
+        let stroked = |f: &dyn Fn(&Strokes) -> String| strokes.map_or_else(|| "—".to_string(), f);
         vec![
             crate::clock::when(std::time::UNIX_EPOCH + Duration::from_secs(self.at)),
             self.segment.to_string(),
             self.speed_text(),
             or_dash(self.keys_per_second(), |v| format!("{v:.2}")),
             or_dash(self.code_length(), |v| format!("{v:.2}")),
+            or_dash(self.equivalence(), |v| format!("{v:.2}")),
             self.chars.to_string(),
             self.errors.to_string(),
             clock_text(self.millis),
+            format!("{:.2}", self.peak()),
+            match self.stay_text.is_empty() {
+                true => "—".to_string(),
+                false => self.stay_text(),
+            },
             self.corrections.to_string(),
             or_dash(self.key_accuracy(), |v| format!("{v:.2}%")),
             format!("{:.2}%", self.word_rate()),
             self.retry.to_string(),
             self.article.clone(),
+            stroked(&|s| s.pairs.to_string()),
+            stroked(&|s| format!("{:.2}%", s.alternation_rate())),
+            stroked(&|s| half(s.alternating)),
+            stroked(&|s| half(s.same_hand)),
+            stroked(&|s| match s.top_count {
+                0 => "—".to_string(),
+                n => format!("{}×{n}", s.top_key),
+            }),
         ]
+    }
+
+    /// **The details of the record**, label and value, for the history's
+    /// foot: what the table is too narrow to hold.
+    pub fn details(&self) -> Vec<(String, String)> {
+        let heads = columns();
+        let cells = self.cells();
+        // 當量, 峰值, 停留, then the hands after the article.
+        [5, 9, 10, 16, 17, 18, 19, 20].iter().map(|&i| (heads[i].clone(), cells[i].clone())).collect()
     }
 
     /// One JSON line.
@@ -557,15 +1050,89 @@ pub fn columns() -> Vec<String> {
         say!("genda.label.speed"),
         say!("genda.label.kps"),
         say!("genda.label.code-length"),
+        say!("genda.label.equivalence"),
         say!("genda.label.chars"),
         say!("genda.label.errors"),
         say!("genda.label.elapsed"),
+        say!("genda.label.peak"),
+        say!("genda.label.stay"),
         say!("genda.label.corrections"),
         say!("genda.label.key-accuracy"),
         say!("genda.label.word-rate"),
         say!("genda.label.retry"),
         say!("genda.label.article"),
+        say!("genda.label.pairs"),
+        say!("genda.label.alternation-rate"),
+        say!("genda.label.alternating"),
+        say!("genda.label.same-hand"),
+        say!("genda.label.top-key"),
     ]
+}
+
+/// A count that may hold a half (a pair with Space): `12`, `12.5`.
+fn half(v: f64) -> String {
+    match v.fract() == 0.0 {
+        true => format!("{v:.0}"),
+        false => format!("{v:.1}"),
+    }
+}
+
+/// **The history day by day**, for the 累計 box and the history's title.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Daily {
+    pub today_chars: usize,
+    pub today_millis: u64,
+    pub chars: usize,
+    /// Days with at least one record.
+    pub days: usize,
+    /// Days in a row with a record, up to today, or up to yesterday while
+    /// today has none yet: a streak is not broken before the day is out.
+    pub streak: usize,
+}
+
+impl Daily {
+    /// **Add up `records` by day**: `day_of` turns a record's seconds into a
+    /// day number (the local calendar day, in the front end), and `today` is
+    /// that number for now. A record with no time is counted in the total
+    /// characters and on no day.
+    pub fn of(records: &[Record], day_of: impl Fn(u64) -> i64, today: i64) -> Daily {
+        let mut out = Daily::default();
+        let mut days = std::collections::BTreeSet::new();
+        for record in records {
+            out.chars += record.chars;
+            if record.at == 0 {
+                continue;
+            }
+            let day = day_of(record.at);
+            days.insert(day);
+            if day == today {
+                out.today_chars += record.chars;
+                out.today_millis += record.millis;
+            }
+        }
+        out.days = days.len();
+        let mut day = match days.contains(&today) {
+            true => today,
+            false => today - 1,
+        };
+        while days.contains(&day) {
+            out.streak += 1;
+            day -= 1;
+        }
+        out
+    }
+}
+
+/// The day number of a calendar date: days since 1970-01-01, by the
+/// proleptic Gregorian calendar.
+pub fn day_number(year: i64, month: u32, day: u32) -> i64 {
+    let y = if month <= 2 { year - 1 } else { year };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let m = month as i64;
+    let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + day as i64 - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146_097 + doe - 719_468
 }
 
 /// **The whole history as TSV**, a header row first: what a spreadsheet takes
@@ -645,9 +1212,9 @@ mod tests {
         Duration::from_millis(n)
     }
 
-    const YUME: Stroke = Stroke { yume: true, composing: false, backspace: false };
-    const CODE: Stroke = Stroke { yume: true, composing: true, backspace: false };
-    const SYSTEM: Stroke = Stroke { yume: false, composing: false, backspace: false };
+    const YUME: Stroke = Stroke { yume: true, composing: false, backspace: false, key: None };
+    const CODE: Stroke = Stroke { yume: true, composing: true, backspace: false, key: None };
+    const SYSTEM: Stroke = Stroke { yume: false, composing: false, backspace: false, key: None };
 
     fn run(target: &str) -> Run {
         Run::new(target.chars().collect())
@@ -834,6 +1401,18 @@ mod tests {
             han: 25,
             han_in_words: 10,
             keys: Some(Keys { keys: 80, backspaces: 3, picks: 1 }),
+            strokes: Some(Strokes {
+                equivalence: 92.5,
+                pairs: 70,
+                alternating: 40.5,
+                same_hand: 29.5,
+                top_key: "Space".into(),
+                top_count: 20,
+            }),
+            peak_chars: 11,
+            peak_millis: 3_300,
+            stay_millis: 1_250,
+            stay_text: "天地".into(),
             scheme: "靈明".into(),
             article: "一篇".into(),
             version: "0.22".into(),
@@ -854,6 +1433,11 @@ mod tests {
             han: 20,
             han_in_words: 10,
             keys: Some(Keys { keys: 75, backspaces: 1, picks: 2 }),
+            strokes: Some(Strokes { equivalence: 111.0, pairs: 74, ..Strokes::default() }),
+            peak_chars: 10,
+            peak_millis: 4_000,
+            stay_millis: 1_234,
+            stay_text: "地".into(),
             scheme: "靈明".into(),
             version: "0.22".into(),
             ..Record::default()
@@ -863,9 +1447,12 @@ mod tests {
             say!("genda.line.speed", "80.00/100.00"),
             say!("genda.line.kps", "5.00"),
             say!("genda.line.code-length", "3.00"),
+            say!("genda.line.equivalence", "1.50"),
             say!("genda.line.chars", 25),
             say!("genda.line.errors", 1),
             say!("genda.line.time", "0:15.000"),
+            say!("genda.line.peak", "150.00"),
+            say!("genda.line.stay", "[地]1.23s"),
             say!("genda.line.corrections", 2),
             say!("genda.line.key-accuracy", "90.67"),
             say!("genda.line.word-rate", "50.00"),
@@ -876,17 +1463,173 @@ mod tests {
         ]
         .join(" ");
         assert_eq!(record.score_line(), want);
-        let again = Record { retry: 2, keys: None, scheme: String::new(), ..record.clone() };
+        let again = Record { retry: 2, keys: None, strokes: None, scheme: String::new(), ..record.clone() };
         let line = again.score_line();
         assert!(line.contains(&say!("genda.line.retry", 2)), "{line}");
         assert!(line.contains(&say!("genda.line.ime", say!("genda.system-ime"))), "{line}");
         assert!(!line.contains(&say!("genda.line.picks", 2)), "{line}");
+        assert!(!line.contains(&say!("genda.line.equivalence", "1.50")), "{line}");
+        assert!(line.contains(&say!("genda.line.peak", "150.00")), "{line}");
         let table = tsv(&[record, again]);
         let rows: Vec<&str> = table.lines().collect();
         assert_eq!(rows.len(), 3);
         assert_eq!(rows[0], columns().join("\t"));
         assert!(rows.iter().all(|row| row.split('\t').count() == columns().len()));
         assert_eq!(clock_text(83_004), "1:23.004");
+    }
+
+    fn keyed(key: Pressed) -> Stroke {
+        Stroke { key: Some(key), ..CODE }
+    }
+
+    #[test]
+    fn strokes_count_the_pairs_and_the_hands_as_typepad_does() {
+        use Pressed::*;
+        let s = Strokes::count(&[Char('D'), Char('K'), Space, Char('J'), Char('J'), Backspace, Shift]);
+        // dk 1.1, k␣ 1.2, ␣j 1.4, jj 1.3; J–Backspace and Backspace–Shift are not in the table.
+        assert_eq!(s.pairs, 4);
+        assert_eq!(format!("{:.2}", s.mean()), "1.25");
+        // D–K across; each pair with Space half and half; J–J and J–Backspace one hand; Shift neither.
+        assert_eq!((s.alternating, s.same_hand), (2.0, 3.0));
+        assert_eq!(format!("{:.2}", s.alternation_rate()), "40.00");
+        assert_eq!((s.top_key.as_str(), s.top_count), ("J", 2));
+        // Space twice is half and half too, and in no table; a tie names the first key.
+        let s = Strokes::count(&[Space, Space]);
+        assert_eq!((s.pairs, s.alternating, s.same_hand), (0, 0.5, 0.5));
+        assert_eq!(Strokes::count(&[Char('B'), Char('A')]).top_key, "A");
+        assert_eq!(Strokes::count(&[]), Strokes::default());
+        assert_eq!(Pressed::of(crate::input::Key::Char('a')), Some(Char('A')));
+        assert_eq!(Pressed::of(crate::input::Key::Char(' ')), Some(Space));
+        assert_eq!(Pressed::of(crate::input::Key::Left), None);
+    }
+
+    #[test]
+    fn a_run_keeps_its_keys_only_while_the_built_in_ime_holds_them() {
+        let mut r = run("天地");
+        for key in [Pressed::Char('D'), Pressed::Char('K'), Pressed::Space] {
+            r.key(keyed(key), ms(0));
+        }
+        r.text_now("天地", YUME, ms(500));
+        let record = r.record(ms(500));
+        assert_eq!(record.strokes.as_ref().map(|s| s.pairs), Some(2));
+        assert_eq!(record.equivalence().map(|v| format!("{v:.2}")), Some("1.15".into()));
+        let mut r = run("天地");
+        r.key(keyed(Pressed::Char('D')), ms(0));
+        r.key(Stroke { key: Some(Pressed::Char('K')), ..SYSTEM }, ms(10));
+        r.text_now("天地", SYSTEM, ms(500));
+        assert_eq!(r.record(ms(500)).strokes, None);
+    }
+
+    /// 一二 slowly, then the other ten at 300 ms each.
+    fn slow_start() -> Run {
+        let mut r = run("一二三四五六七八九十百千");
+        r.key(YUME, ms(0));
+        let chars: Vec<char> = r.target().to_vec();
+        let mut typed = String::new();
+        for (i, c) in chars.iter().enumerate() {
+            typed.push(*c);
+            let at = match i {
+                0 => 2000,
+                n => 4500 + 300 * (n as u64 - 1),
+            };
+            r.text_now(&typed, YUME, ms(at));
+        }
+        r
+    }
+
+    #[test]
+    fn the_peak_is_the_best_stretch_of_ten_from_one_commit_to_another() {
+        let r = slow_start();
+        assert!(r.finished());
+        let record = r.record(ms(9999));
+        // From 二 at 4.5 s to 千 at 7.5 s: ten characters in three seconds.
+        assert_eq!((record.peak_chars, record.peak_millis), (10, 3000));
+        assert_eq!(format!("{:.2}", record.peak()), "200.00");
+        // A segment no longer than the stretch is its own peak.
+        let mut short = run("天地");
+        short.key(YUME, ms(0));
+        short.text_now("天地", YUME, ms(600));
+        assert_eq!(short.record(ms(600)).peak(), 200.0);
+    }
+
+    #[test]
+    fn the_stay_is_the_longest_wait_before_a_commit_and_what_it_brought() {
+        let record = slow_start().record(ms(9999));
+        assert_eq!((record.stay_millis, record.stay_text.as_str()), (2500, "二"));
+        assert_eq!(record.stay_text(), "[二]2.50s");
+        // A word that waited is the stay as a whole, joined bursts and all.
+        let mut r = run("天地人和");
+        r.key(SYSTEM, ms(0));
+        r.text_now("天", SYSTEM, ms(0));
+        r.text_now("天地", SYSTEM, ms(900));
+        r.text_now("天地人", SYSTEM, ms(905));
+        r.text_now("天地人和", SYSTEM, ms(1000));
+        assert_eq!(r.record(ms(1000)).stay_text, "地人");
+    }
+
+    #[test]
+    fn the_slowest_share_a_commits_wait_and_the_missed_count_what_was_put_right() {
+        assert_eq!(slow_start().slowest(3), vec!['二', '一', '三']);
+        assert_eq!(slow_start().slowest(SLOW).len(), SLOW);
+        let mut r = run("天地人和");
+        r.key(YUME, ms(0));
+        r.text_now("天地", YUME, ms(1000));
+        r.text_now("天地入", YUME, ms(1100));
+        let back = Stroke { backspace: true, ..YUME };
+        r.text_now("天地", back, ms(1200));
+        r.text_now("天地人", YUME, ms(1300));
+        r.text_now("天地人和", YUME, ms(1400));
+        assert_eq!(r.missed(), vec!['人']);
+        // The word waited a second, 500 ms a character, against 300 for 人 and 100 for 和.
+        assert_eq!(r.slowest(2), vec!['天', '地']);
+        assert_eq!(r.word_marks(), vec![true, true, false, false]);
+    }
+
+    #[test]
+    fn under_the_system_ime_a_burst_is_marked_a_word() {
+        let mut r = run("天地人。");
+        r.text_now("天", SYSTEM, ms(0));
+        r.text_now("天地", SYSTEM, ms(3));
+        r.text_now("天地人", SYSTEM, ms(400));
+        r.text_now("天地人。", SYSTEM, ms(403));
+        // 人 came with a punctuation mark only: one character, not a word.
+        assert_eq!(r.word_marks(), vec![true, true, false, false]);
+    }
+
+    #[test]
+    fn a_goal_names_what_a_record_misses() {
+        let goal = Goal { speed: Some(120.0), kps: Some(6.0), accuracy: None, clean: true };
+        assert!(goal.is_set() && !Goal::default().is_set());
+        assert_eq!(goal.text(), [say!("genda.goal.speed", "120"), say!("genda.goal.kps", "6"), say!("genda.goal.clean")].join(" "));
+        assert_eq!(Goal::default().text(), say!("genda.goal.none"));
+        let record = Record { chars: 25, errors: 1, millis: 10_000, ..Record::default() };
+        // 150 a minute, 120 after five off the one error; no keys measured, so 擊鍵 is passed over.
+        assert_eq!(goal.missed(&record), vec![say!("genda.goal.clean")]);
+        let slow = Record { millis: 15_000, ..record.clone() };
+        assert_eq!(goal.missed(&slow), vec![say!("genda.goal.speed", "120"), say!("genda.goal.clean")]);
+        let keyed = Record { errors: 0, keys: Some(Keys { keys: 50, ..Keys::default() }), ..record };
+        assert_eq!(goal.missed(&keyed), vec![say!("genda.goal.kps", "6")]);
+        assert_eq!(hundredths("6.5"), Some(650));
+        assert_eq!(hundredths("off"), Some(0));
+        assert_eq!(hundredths("0"), Some(0));
+        assert_eq!(hundredths("-1"), None);
+        assert_eq!(hundredths("fast"), None);
+        assert_eq!(from_hundredths(650), Some(6.5));
+        assert_eq!(from_hundredths(0), None);
+    }
+
+    #[test]
+    fn the_days_add_up_by_calendar_day_with_a_streak_up_to_today() {
+        let day = |d: u64, chars: usize| Record { at: d * 86_400 + 3600, chars, millis: 1000, ..Record::default() };
+        let records = [day(7, 10), day(9, 20), day(10, 30), day(10, 40), Record { chars: 5, ..Record::default() }];
+        let daily = Daily::of(&records, |s| (s / 86_400) as i64, 10);
+        assert_eq!(daily, Daily { today_chars: 70, today_millis: 2000, chars: 105, days: 3, streak: 2 });
+        // Tomorrow, before its first segment, the streak still stands.
+        assert_eq!(Daily::of(&records, |s| (s / 86_400) as i64, 11).streak, 2);
+        assert_eq!(Daily::of(&records, |s| (s / 86_400) as i64, 12).streak, 0);
+        assert_eq!(day_number(1970, 1, 1), 0);
+        assert_eq!(day_number(2000, 2, 29), 11_016);
+        assert_eq!(day_number(2026, 11, 14), 20_771);
     }
 
     #[test]

@@ -2564,6 +2564,16 @@ fn genda_top_count(p: &Parsed) -> Result<usize, CommandError> {
     }
 }
 
+/// A criterion of `:genda-goal-…`, in hundredths: a number, or `off` or `0`
+/// for none.
+fn genda_goal_value(p: &Parsed) -> Result<u32, CommandError> {
+    let text = p.need(0)?;
+    crate::genda::hundredths(text).ok_or_else(|| CommandError::InvalidArgument { command: p.name, value: text.to_string() })
+}
+
+/// `:genda-goal` and each of its criteria: `off`.
+const GENDA_GOAL: &[Word] = &[Word { name: "off", help: "cmd.genda-goal.off", needs: &[] }];
+
 /// `:genda-length`: the presets, and `all` for 全文.
 const GENDA_LENGTHS: &[Word] = &[
     Word { name: "10", help: "cmd.genda-lengths.n", needs: &[] },
@@ -5883,6 +5893,83 @@ pub const COMMANDS: &[Entry] = &[
         }),
     },
     Entry {
+        name: "genda-hint",
+        aliases: &[],
+        help: "cmd.commands.genda-hint",
+        needs: &[],
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::Genda(crate::genda::Ask::Hint(switched(p))))),
+    },
+    Entry {
+        name: "genda-auto",
+        aliases: &[],
+        help: "cmd.commands.genda-auto",
+        needs: &[],
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::Genda(crate::genda::Ask::Auto(switched(p))))),
+    },
+    Entry {
+        name: "genda-goal",
+        aliases: &[],
+        help: "cmd.commands.genda-goal",
+        needs: &[],
+        params: &[Param::Words { of: GENDA_GOAL, default: None }],
+        // Bare, it says the goal; `off` takes every criterion off.
+        build: Some(|p| match p.arg(0) {
+            None => Ok(Command::Genda(crate::genda::Ask::GoalShow)),
+            Some("off") => Ok(Command::Genda(crate::genda::Ask::GoalOff)),
+            Some(word) => Err(CommandError::InvalidArgument { command: p.name, value: word.to_string() }),
+        }),
+    },
+    Entry {
+        name: "genda-goal-speed",
+        aliases: &[],
+        help: "cmd.commands.genda-goal-speed",
+        needs: &[],
+        params: &[Param::WordsOr { of: GENDA_GOAL, default: None, or: "<字/分>" }],
+        build: Some(|p| Ok(Command::Genda(crate::genda::Ask::GoalSpeed(genda_goal_value(p)?)))),
+    },
+    Entry {
+        name: "genda-goal-kps",
+        aliases: &[],
+        help: "cmd.commands.genda-goal-kps",
+        needs: &[],
+        params: &[Param::WordsOr { of: GENDA_GOAL, default: None, or: "<鍵/秒>" }],
+        build: Some(|p| Ok(Command::Genda(crate::genda::Ask::GoalKps(genda_goal_value(p)?)))),
+    },
+    Entry {
+        name: "genda-goal-accuracy",
+        aliases: &[],
+        help: "cmd.commands.genda-goal-accuracy",
+        needs: &[],
+        params: &[Param::WordsOr { of: GENDA_GOAL, default: None, or: "<%>" }],
+        build: Some(|p| Ok(Command::Genda(crate::genda::Ask::GoalAccuracy(genda_goal_value(p)?)))),
+    },
+    Entry {
+        name: "genda-goal-clean",
+        aliases: &[],
+        help: "cmd.commands.genda-goal-clean",
+        needs: &[],
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::Genda(crate::genda::Ask::GoalClean(switched(p))))),
+    },
+    Entry {
+        name: "genda-retry-wrong",
+        aliases: &[],
+        help: "cmd.commands.genda-retry-wrong",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::Genda(crate::genda::Ask::RetryWrong))),
+    },
+    Entry {
+        name: "genda-retry-slow",
+        aliases: &[],
+        help: "cmd.commands.genda-retry-slow",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::Genda(crate::genda::Ask::RetrySlow))),
+    },
+    Entry {
         name: "resume",
         aliases: &[],
         help: "cmd.commands.resume",
@@ -7320,6 +7407,29 @@ fn parse_substitution(input: &str) -> Option<Result<Command, CommandError>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The typing trainer's switches and goal: `on`/`off` or bare, a number
+    /// or `off`, and a criterion is a command of its own.
+    #[test]
+    fn the_typing_trainers_switches_and_goal_parse() {
+        use crate::genda::Ask;
+        let genda = |line: &str| match parse(line) {
+            Ok(Command::Genda(ask)) => Some(ask),
+            _ => None,
+        };
+        assert_eq!(genda(":genda-hint"), Some(Ask::Hint(Switch::Flip)));
+        assert_eq!(genda(":genda-auto off"), Some(Ask::Auto(Switch::To(false))));
+        assert_eq!(genda(":genda-goal-speed 120"), Some(Ask::GoalSpeed(12_000)));
+        assert_eq!(genda(":genda-goal-kps 6.5"), Some(Ask::GoalKps(650)));
+        assert_eq!(genda(":genda-goal-accuracy off"), Some(Ask::GoalAccuracy(0)));
+        assert_eq!(genda(":genda-goal-clean on"), Some(Ask::GoalClean(Switch::To(true))));
+        assert_eq!(genda(":genda-goal"), Some(Ask::GoalShow));
+        assert_eq!(genda(":genda-goal off"), Some(Ask::GoalOff));
+        assert_eq!(genda(":genda-retry-wrong"), Some(Ask::RetryWrong));
+        assert_eq!(genda(":genda-retry-slow"), Some(Ask::RetrySlow));
+        assert!(parse(":genda-goal-speed fast").is_err());
+        assert!(parse(":genda-goal speed 120").is_err());
+    }
 
     #[test]
     fn parses_open_and_aliases() {

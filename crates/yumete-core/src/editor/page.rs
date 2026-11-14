@@ -2281,6 +2281,11 @@ impl Editor {
         self.genda_open = on;
     }
 
+    /// The typing page's switches changed, or it is telling them first.
+    pub fn set_genda_switches(&mut self, switches: crate::genda::Switches) {
+        self.genda_switches = switches;
+    }
+
     /// 前端進出那扇面板時說一聲。
     ///
     /// Warning: **核心要知道它開着**，因為 `:w` 與 `:q` 在那時說的是面板，不是緩衝區。

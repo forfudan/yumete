@@ -4,12 +4,17 @@
 //! ╭ 本段 ────────────╮╭ 常用单字 前500 ─────────────────────────╮
 //! │ 速度   112.40    ││ 的一是了不在有个人这上中大为来我到出要 │
 //! │ 击键     5.82    ││ 以时和地们得可下对生也子就过能他会多发 │
-//! ╰──────────────────╯╰────────────────────────────────────────╯
+//! │ 当量     1.42    ││                                        │
+//! ╰──────────────────╯╰ 的 a ──────────────────────────────────╯
 //! ╭ 文章 ────────────╮╭ 跟打 · 靈明 ───────────────────────────╮
-//! │ 第 3/9 段        ││ 的一是了不在有个人这上中大为来我到出要 │
+//! │ 段长 25 第 3/9 段││ 的一是了不在有个人这上中大为来我到出要 │
+//! │ 目标 速度≥120    ││                                        │
 //! ╰──────────────────╯╰────────────────────────────────────────╯
-//!  F3 重打  C-p 下一段  C-u 上一段  C-l 乱序  Tab 历史  Esc 暂停
+//!  F3 重打  C-p 下一段  C-u 上一段  C-l 乱序  Tab 历史  Esc 暂停  C-e 错字 …
 //! ```
+//!
+//! The code hint sits on the article box's bottom wall; in the pad a 漢字
+//! that came in a word is gold.
 //!
 //! The model is [`yumete_core::genda`]; this file holds the page, lends the
 //! loop the pad (an [`Editor`] held in Insert mode, so the IME composes,
@@ -25,7 +30,8 @@ use ratatui::style::{Modifier, Style};
 use ratatui::Frame;
 
 use yumete_config::Config;
-use yumete_core::genda::{self, Ask, Choice, Mark, Record, Run, Stroke, Totals};
+use yumete_core::command::Switch;
+use yumete_core::genda::{self, Ask, Choice, Daily, Goal, Mark, Pressed, Record, Run, Stroke, Totals};
 use yumete_core::input::{Key, Mode};
 use yumete_core::say;
 use yumete_core::Editor;
@@ -59,6 +65,12 @@ pub struct Seat {
     pending: Option<Pending>,
     /// Yume's most frequent characters, worked out the first time asked.
     common: Option<Vec<char>>,
+    /// `:genda-hint`, `:genda-auto` (kept the other way round, so the
+    /// default is on) and the goal: the reader's choices, kept while the
+    /// editor runs, through the page closing and opening again.
+    hint: bool,
+    manual_next: bool,
+    goal: Goal,
 }
 
 struct Pending {
@@ -72,6 +84,38 @@ struct Pending {
 enum View {
     Typing,
     History,
+}
+
+/// **A segment of one run's missed or slow characters**, typed in place
+/// of the article's segment until it is done.
+#[derive(Clone)]
+struct Drill {
+    label: String,
+    chars: Vec<char>,
+    /// The segment it was drawn from, from 1.
+    segment: usize,
+    /// Attempts at it before this one, for 重打.
+    tries: usize,
+}
+
+/// What comes after a finished segment: brought up at once, or on Enter
+/// while `:genda-auto` is off.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Then {
+    /// The segment after.
+    Next,
+    /// The same one, the goal not met.
+    Again,
+    /// The drill is done: back to the article's segment in hand.
+    Back,
+}
+
+/// What 重打 brings back before the next run's first key: the segment just
+/// finished, or the drill.
+#[derive(Clone)]
+enum Redo {
+    Segment(usize),
+    Drill(Drill),
 }
 
 struct Page {
@@ -100,6 +144,18 @@ struct Page {
     /// the system's input method.
     scheme: String,
     file: Option<PathBuf>,
+    drill: Option<Drill>,
+    /// The latest finished run's missed and slow characters; `None` before
+    /// one is finished.
+    last_missed: Option<Vec<char>>,
+    last_slow: Vec<char>,
+    /// A finished segment waiting for Enter, `:genda-auto` being off.
+    waiting: Option<Then>,
+    redo: Option<Redo>,
+    /// The next character and its code, while the hint is on and Yume has
+    /// a code for it.
+    hint: Option<String>,
+    daily: Daily,
 }
 
 impl Page {
@@ -108,7 +164,33 @@ impl Page {
     }
 
     fn target(&self) -> Vec<char> {
-        self.order[genda::segment(self.order.len(), self.length, self.index)].to_vec()
+        match &self.drill {
+            Some(drill) => drill.chars.clone(),
+            None => self.order[genda::segment(self.order.len(), self.length, self.index)].to_vec(),
+        }
+    }
+
+    /// The attempts counted for what is being typed: the drill's, or the segment's.
+    fn tries_mut(&mut self) -> Option<&mut usize> {
+        match &mut self.drill {
+            Some(drill) => Some(&mut drill.tries),
+            None => self.tries.get_mut(self.index),
+        }
+    }
+
+    /// The history by local calendar day, for the 累計 box and the history's title.
+    fn add_up_the_days(&mut self) {
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+        let today = yumete_core::clock::local_day(now as i64);
+        self.daily = Daily::of(&self.history, |at| yumete_core::clock::local_day(at as i64), today);
+    }
+
+    /// The article box's name: the article's, or the drill's after it.
+    fn title(&self) -> String {
+        match &self.drill {
+            Some(drill) => format!("{} · {}", self.name, drill.label),
+            None => self.name.clone(),
+        }
     }
 
     fn ime_label(&self) -> String {
@@ -172,15 +254,23 @@ impl Seat {
         }
         let Some(key) = key else { return true };
         match key {
-            Key::Ctrl('p' | 'u' | 'l') => {
+            Key::Ctrl('p' | 'u' | 'l' | 'e' | 's') => {
                 if composing {
                     ime.escape();
                 }
                 match key {
                     Key::Ctrl('p') => self.step(editor, true),
                     Key::Ctrl('u') => self.step(editor, false),
+                    Key::Ctrl('e') => self.drill(editor, false),
+                    Key::Ctrl('s') => self.drill(editor, true),
                     _ => self.shuffle(editor),
                 }
+                return true;
+            }
+            // The hint leaves a code being composed alone: it changes what
+            // is shown, not what is typed.
+            Key::Ctrl('t') => {
+                self.set_hint(editor, ime, Switch::Flip);
                 return true;
             }
             Key::Char(':') if !self.typing() => return false,
@@ -208,6 +298,11 @@ impl Seat {
                     page.run.resume(now);
                     editor.set_status(String::new());
                 }
+                Key::Enter => {
+                    if let Some(then) = page.waiting.take() {
+                        self.go_on(then);
+                    }
+                }
                 Key::Esc => self.close(editor),
                 Key::Char('y') => self.copy(editor),
                 Key::Tab => self.history(editor),
@@ -231,7 +326,12 @@ impl Seat {
             }
             _ => {}
         }
-        let stroke = Stroke { yume: ime.holding_the_keys(), composing, backspace: key == Key::Backspace };
+        let stroke = Stroke {
+            yume: ime.holding_the_keys(),
+            composing,
+            backspace: key == Key::Backspace,
+            key: Pressed::of(key),
+        };
         let first = match composing && ime.page() == 0 {
             true => ime.page_candidates().first().map(|c| c.text.clone()).unwrap_or_default(),
             false => String::new(),
@@ -256,7 +356,7 @@ impl Seat {
         if !self.typing() || !(ime.holding_the_keys() && ime.is_composing()) {
             return None;
         }
-        let stroke = Stroke { yume: true, composing: true, backspace: false };
+        let stroke = Stroke { yume: true, composing: true, backspace: false, key: Some(Pressed::Shift) };
         let at = self.clock();
         self.page.as_mut()?.run.key(stroke, at);
         self.pending = Some(Pending { stroke, first: String::new(), at });
@@ -341,8 +441,102 @@ impl Seat {
                         false => self.replace_article(editor, Choice::band_name(band), chars),
                     }
                 }
+                Ask::Hint(switch) => self.set_hint(editor, ime, switch),
+                Ask::Auto(switch) => {
+                    self.manual_next = !switch.over(!self.manual_next);
+                    editor.set_status(match self.manual_next {
+                        false => say!("genda.auto-on"),
+                        true => say!("genda.auto-off"),
+                    });
+                    // Turned on over a segment waiting for Enter, it goes on at once.
+                    if !self.manual_next {
+                        if let Some(then) = self.page.as_mut().and_then(|p| p.waiting.take()) {
+                            self.go_on(then);
+                        }
+                    }
+                }
+                Ask::GoalSpeed(v) => self.set_goal(editor, |g| g.speed = genda::from_hundredths(v)),
+                Ask::GoalKps(v) => self.set_goal(editor, |g| g.kps = genda::from_hundredths(v)),
+                Ask::GoalAccuracy(v) => self.set_goal(editor, |g| g.accuracy = genda::from_hundredths(v)),
+                Ask::GoalClean(switch) => self.set_goal(editor, |g| g.clean = switch.over(g.clean)),
+                Ask::GoalOff => self.set_goal(editor, |g| *g = Goal::default()),
+                Ask::GoalShow => self.set_goal(editor, |_| {}),
+                Ask::RetryWrong => self.drill(editor, false),
+                Ask::RetrySlow => self.drill(editor, true),
             }
         }
+        self.look_up_the_hint(ime);
+        editor.set_genda_switches(genda::Switches { hint: self.hint, auto: !self.manual_next, clean: self.goal.clean });
+    }
+
+    /// **The next character's code**, while the hint is on, Yume holds the
+    /// keys and its table has a code for it: `字 code`, and the candidate's
+    /// place after when it is not the first.
+    fn look_up_the_hint(&mut self, ime: &ImeSession) {
+        let on = self.hint && ime.holding_the_keys();
+        let Some(page) = self.page.as_mut() else { return };
+        let next = page.run.target().get(page.run.typed().len()).copied();
+        page.hint = match (on && page.view == View::Typing && !page.run.finished(), next) {
+            (true, Some(c)) => ime.quickest_code(&c.to_string()).map(|(code, place)| match place {
+                0 => format!("{c} {code}"),
+                n => format!("{c} {code} {}", n + 1),
+            }),
+            _ => None,
+        };
+    }
+
+    fn set_hint(&mut self, editor: &mut Editor, ime: &ImeSession, switch: Switch) {
+        self.hint = switch.over(self.hint);
+        self.look_up_the_hint(ime);
+        editor.set_status(match (self.hint, ime.holding_the_keys()) {
+            (false, _) => say!("genda.hint-off"),
+            (true, true) => say!("genda.hint-on"),
+            (true, false) => say!("genda.hint-unavailable"),
+        });
+    }
+
+    /// Change the goal, or not, and say it.
+    fn set_goal(&mut self, editor: &mut Editor, change: impl FnOnce(&mut Goal)) {
+        change(&mut self.goal);
+        editor.set_status(say!("genda.goal-is", self.goal.text()));
+    }
+
+    /// **错字重打 / 慢字重打**: a segment of the latest finished run's missed
+    /// characters, or of its slowest ([`genda::SLOW`]).
+    fn drill(&mut self, editor: &mut Editor, slow: bool) {
+        let Some(page) = self.page.as_mut() else { return };
+        let Some(missed) = page.last_missed.clone() else {
+            editor.set_status(say!("genda.no-last"));
+            return;
+        };
+        let chars = match slow {
+            true => page.last_slow.clone(),
+            false => missed,
+        };
+        if chars.is_empty() {
+            editor.set_status(say!("genda.no-wrong"));
+            return;
+        }
+        let label = match slow {
+            true => say!("genda.drill.slow"),
+            false => say!("genda.drill.wrong"),
+        };
+        let segment = page.latest.as_ref().map_or(page.index + 1, |r| r.segment);
+        page.drill = Some(Drill { label, chars, segment, tries: 0 });
+        page.waiting = None;
+        editor.set_status(String::new());
+        self.load();
+    }
+
+    /// **Bring up what comes after a finished segment.**
+    fn go_on(&mut self, then: Then) {
+        let Some(page) = self.page.as_mut() else { return };
+        match then {
+            Then::Next => page.index += 1,
+            Then::Again => {}
+            Then::Back => page.drill = None,
+        }
+        self.load();
     }
 
     fn start(&mut self, editor: &mut Editor, ime: &ImeSession, name: String, chars: Vec<char>) {
@@ -379,7 +573,17 @@ impl Seat {
                 false => String::new(),
             },
             file,
+            drill: None,
+            last_missed: None,
+            last_slow: Vec::new(),
+            waiting: None,
+            redo: None,
+            hint: None,
+            daily: Daily::default(),
         });
+        if let Some(page) = self.page.as_mut() {
+            page.add_up_the_days();
+        }
         editor.set_genda_open(true);
         editor.set_status(String::new());
         self.restart();
@@ -404,15 +608,16 @@ impl Seat {
         if let Some(page) = self.page.as_mut() {
             page.tries = vec![0; page.count()];
             page.index = page.index.min(page.count().saturating_sub(1));
+            page.drill = None;
         }
         self.load();
     }
 
-    /// **A fresh run at the segment in hand**, with an empty pad.
+    /// **A fresh run at the segment in hand** (or the drill), with an empty pad.
     fn load(&mut self) {
         let Some(page) = self.page.as_mut() else { return };
         if page.run.started() && !page.counted {
-            if let Some(tries) = page.tries.get_mut(page.index) {
+            if let Some(tries) = page.tries_mut() {
                 *tries += 1;
             }
         }
@@ -420,6 +625,8 @@ impl Seat {
         page.counted = false;
         page.all_done = false;
         page.held = false;
+        page.waiting = None;
+        page.redo = None;
         page.view = View::Typing;
         let mut pad = Box::new(Editor::new());
         pad.open_field("", true);
@@ -429,6 +636,8 @@ impl Seat {
 
     fn step(&mut self, editor: &mut Editor, on: bool) {
         let Some(page) = self.page.as_mut() else { return };
+        // Out of a drill, the step is from the article's segment in hand.
+        page.drill = None;
         let count = page.count();
         match on {
             true if page.index + 1 >= count => {
@@ -447,13 +656,16 @@ impl Seat {
     }
 
     /// **重打**: the segment in hand, or, before its first key, the one just
-    /// finished, which is what a hand reaching for F3 straight after a
-    /// segment wants again.
+    /// finished (a drill too), which is what a hand reaching for F3 straight
+    /// after a segment wants again.
     fn retry(&mut self, editor: &mut Editor) {
         let Some(page) = self.page.as_mut() else { return };
-        let just_done = page.latest.as_ref().is_some_and(|r| r.segment == page.index);
-        if !page.run.started() && just_done && !page.all_done {
-            page.index -= 1;
+        if !page.run.started() {
+            match page.redo.take() {
+                Some(Redo::Segment(index)) => page.index = index,
+                Some(Redo::Drill(drill)) => page.drill = Some(drill),
+                None => {}
+            }
         }
         editor.set_status(String::new());
         self.load();
@@ -493,24 +705,31 @@ impl Seat {
         editor.set_status(String::new());
     }
 
-    /// **The segment is done**: kept, added up, said, and the next one up.
+    /// **The segment is done**: kept, added up, said, and what comes after
+    /// brought up, or left for Enter while `:genda-auto` is off. A goal not
+    /// met brings up the same segment again.
     fn finish(&mut self, editor: &mut Editor) {
         let now = self.clock();
+        let goal = self.goal;
+        let manual = self.manual_next;
         let Some(page) = self.page.as_mut() else { return };
-        let retry = page.tries.get(page.index).copied().unwrap_or(0);
-        if let Some(tries) = page.tries.get_mut(page.index) {
+        let retry = page.tries_mut().map_or(0, |tries| {
             *tries += 1;
-        }
+            *tries - 1
+        });
         page.counted = true;
         let record = Record {
             at: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs()),
-            segment: page.index + 1,
+            segment: page.drill.as_ref().map_or(page.index + 1, |d| d.segment),
             retry,
             scheme: page.scheme.clone(),
-            article: page.name.clone(),
+            article: page.title(),
             version: version(),
             ..page.run.record(now)
         };
+        page.last_missed = Some(page.run.missed());
+        page.last_slow = page.run.slowest(genda::SLOW);
+        let missed = goal.missed(&record);
         if let Some(file) = &page.file {
             if let Some(dir) = file.parent() {
                 let _ = std::fs::create_dir_all(dir);
@@ -520,16 +739,34 @@ impl Seat {
                 let _ = writeln!(out, "{}", record.to_line());
             }
         }
-        editor.set_status(record.score_line());
+        editor.set_status(match missed.is_empty() {
+            true => record.score_line(),
+            false => format!("{} {}", say!("genda.goal-missed", missed.join(" ")), record.score_line()),
+        });
         page.totals.add(&record);
         page.history.push(record.clone());
         page.latest = Some(record);
-        match page.index + 1 < page.count() {
-            true => {
-                page.index += 1;
-                self.load();
+        page.add_up_the_days();
+        let then = match () {
+            _ if !missed.is_empty() => Then::Again,
+            _ if page.drill.is_some() => Then::Back,
+            _ if page.index + 1 < page.count() => Then::Next,
+            _ => {
+                page.all_done = true;
+                return;
             }
-            false => page.all_done = true,
+        };
+        if manual {
+            page.waiting = Some(then);
+            return;
+        }
+        let redo = match &page.drill {
+            Some(drill) => Redo::Drill(drill.clone()),
+            None => Redo::Segment(page.index),
+        };
+        self.go_on(then);
+        if let Some(page) = self.page.as_mut() {
+            page.redo = Some(redo);
         }
     }
 
@@ -600,7 +837,7 @@ pub fn draw(frame: &mut Frame, seat: &Seat, config: &Config, area: Rect) -> Opti
     if area.height < 4 || area.width < 20 {
         return None;
     }
-    let hints = match (page.view, seat.paused() || page.all_done) {
+    let hints = match (page.view, seat.paused() || page.all_done || page.waiting.is_some()) {
         (View::History, _) => say!("genda.hints-history"),
         (_, true) => say!("genda.hints-paused"),
         _ => say!("genda.hints"),
@@ -608,18 +845,25 @@ pub fn draw(frame: &mut Frame, seat: &Seat, config: &Config, area: Rect) -> Opti
     let foot_y = area.y + area.height - 1;
     put_text(frame.buffer_mut(), area.x + 1, foot_y, area.x + area.width, &hints, base.fg(ink.quiet()));
     let body = Rect { height: area.height - 1, ..area };
-    let ring = |frame: &mut Frame, rect: Rect, title: String| -> Rect {
+    let ring_with_foot = |frame: &mut Frame, rect: Rect, title: String, foot: Option<String>| -> Rect {
         crate::chrome::draw(frame, rect, &crate::chrome::Ring {
             rounded: config.panel.rounded,
             open_sides: false,
             border: base.fg(ink.rule()),
             ground: base,
             title: Some((title, base.fg(ink.gold()))),
-            foot: None,
+            foot: foot.map(|text| (text, base.fg(ink.text()))),
         })
     };
+    let ring = |frame: &mut Frame, rect: Rect, title: String| ring_with_foot(frame, rect, title, None);
     if page.view == View::History {
-        let inner = ring(frame, body, say!("genda.box.history", page.history.len()));
+        let d = &page.daily;
+        let title = format!(
+            "{} · {}",
+            say!("genda.box.history", page.history.len()),
+            say!("genda.daily.title", d.today_chars, hours(d.today_millis), d.chars, d.days, d.streak),
+        );
+        let inner = ring(frame, body, title);
         draw_history(frame, page, ink, base, inner);
         return None;
     }
@@ -633,7 +877,7 @@ pub fn draw(frame: &mut Frame, seat: &Seat, config: &Config, area: Rect) -> Opti
     };
     let right = match left {
         Some(left) => {
-            draw_left(frame, page, &record, (ink, base), left, &ring);
+            draw_left(frame, (page, seat.goal), &record, (ink, base), left, &ring);
             right
         }
         None => {
@@ -641,6 +885,7 @@ pub fn draw(frame: &mut Frame, seat: &Seat, config: &Config, area: Rect) -> Opti
                 (say!("genda.label.speed"), record.speed_text()),
                 (say!("genda.label.kps"), dash_or(record.keys_per_second(), |v| format!("{v:.2}"))),
                 (say!("genda.label.code-length"), dash_or(record.code_length(), |v| format!("{v:.2}"))),
+                (say!("genda.label.equivalence"), dash_or(record.equivalence(), |v| format!("{v:.2}"))),
                 (say!("genda.label.errors"), record.errors.to_string()),
                 (say!("genda.label.elapsed"), genda::clock_text(record.millis)),
                 (String::new(), say!("genda.part", page.index + 1, page.count())),
@@ -663,7 +908,7 @@ pub fn draw(frame: &mut Frame, seat: &Seat, config: &Config, area: Rect) -> Opti
     let top = (right.height * 11 / 20).max(3);
     let article = Rect { height: top, ..right };
     let pad_rect = Rect { y: right.y + top, height: right.height - top, ..right };
-    let inner = ring(frame, article, page.name.clone());
+    let inner = ring_with_foot(frame, article, page.title(), page.hint.clone());
     draw_article(frame, page, ink, base, inner);
     let inner = ring(frame, pad_rect, format!("{} · {}", say!("genda.box.pad"), page.ime_label()));
     if page.all_done {
@@ -671,13 +916,19 @@ pub fn draw(frame: &mut Frame, seat: &Seat, config: &Config, area: Rect) -> Opti
         return None;
     }
     let pad = seat.pad.as_ref()?;
-    let caret = draw_pad(frame, pad, ink, base, inner);
+    let caret = draw_pad(frame, pad, &page.run, ink, base, inner);
     caret.filter(|_| seat.typing())
+}
+
+/// `h:mm:ss`, for a day's time at the keys.
+fn hours(millis: u64) -> String {
+    let s = millis / 1000;
+    format!("{}:{:02}:{:02}", s / 3600, s / 60 % 60, s % 60)
 }
 
 fn draw_left(
     frame: &mut Frame,
-    page: &Page,
+    (page, goal): (&Page, Goal),
     record: &Record,
     (ink, base): (Palette, Style),
     left: Rect,
@@ -689,6 +940,7 @@ fn draw_left(
         (say!("genda.label.speed"), record.speed_text()),
         (say!("genda.label.kps"), keyed(record.keys_per_second(), |v| format!("{v:.2}"))),
         (say!("genda.label.code-length"), keyed(record.code_length(), |v| format!("{v:.2}"))),
+        (say!("genda.label.equivalence"), keyed(record.equivalence(), |v| format!("{v:.2}"))),
         (say!("genda.label.key-accuracy"), keyed(record.key_accuracy(), |v| format!("{v:.2}%"))),
         (say!("genda.label.corrections"), record.corrections.to_string()),
         (say!("genda.label.backspaces"), keys.map_or("—".into(), |k| k.backspaces.to_string())),
@@ -698,13 +950,17 @@ fn draw_left(
         (say!("genda.label.elapsed"), genda::clock_text(record.millis)),
         (say!("genda.label.chars"), format!("{}/{}", record.chars, page.run.target().len().max(record.chars))),
     ];
+    // The article's name is the article box's title, beside it.
     let info = vec![
-        (String::new(), page.name.clone()),
+        // One row for both, so the 累計 box below keeps a row for today.
         (
             say!("genda.label.length"),
-            page.length.map_or_else(|| say!("genda.whole"), |n| n.to_string()),
+            format!(
+                "{}  {}",
+                page.length.map_or_else(|| say!("genda.whole"), |n| n.to_string()),
+                say!("genda.part", page.index + 1, page.count()),
+            ),
         ),
-        (String::new(), say!("genda.part", page.index + 1, page.count())),
         (
             say!("genda.label.order"),
             match page.shuffled {
@@ -713,14 +969,19 @@ fn draw_left(
             },
         ),
         (say!("genda.label.ime"), page.ime_label()),
+        (say!("genda.label.goal"), goal.text()),
     ];
     let t = &page.totals;
+    let d = &page.daily;
     let total = vec![
         (say!("genda.label.segments"), t.segments.to_string()),
         (say!("genda.label.average"), format!("{:.2}", t.speed())),
         (say!("genda.label.kps"), keyed(t.keys_per_second(), |v| format!("{v:.2}"))),
         (say!("genda.label.code-length"), keyed(t.code_length(), |v| format!("{v:.2}"))),
         (say!("genda.label.fastest"), format!("{:.2}", t.fastest)),
+        (say!("genda.label.today"), say!("genda.daily.today", d.today_chars, hours(d.today_millis))),
+        (say!("genda.label.overall"), say!("genda.daily.overall", d.chars, d.days)),
+        (say!("genda.label.streak"), say!("genda.daily.streak", d.streak)),
     ];
     let boxes = [
         (say!("genda.box.this"), this),
@@ -800,13 +1061,20 @@ fn draw_article(frame: &mut Frame, page: &Page, ink: Palette, base: Style, inner
     }
 }
 
-/// **What has been typed**, wrapped, with its caret.
-fn draw_pad(frame: &mut Frame, pad: &Editor, ink: Palette, base: Style, inner: Rect) -> Option<Position> {
+/// **What has been typed**, wrapped, with its caret; a 漢字 that came in a
+/// word in gold, the picture of 打詞率 ([`Run::word_marks`]).
+fn draw_pad(frame: &mut Frame, pad: &Editor, run: &Run, ink: Palette, base: Style, inner: Rect) -> Option<Position> {
     let text: Vec<char> = pad.field_text().chars().collect();
     let width = inner.width.saturating_sub(2) as usize;
     if width == 0 || inner.height == 0 {
         return None;
     }
+    // The marks go by the run's positions, which are the pad's while it
+    // holds nothing the run strips (a line break).
+    let marks = match genda::strip(&pad.field_text()).len() == text.len() {
+        true => run.word_marks(),
+        false => Vec::new(),
+    };
     let caret = pad.cursor().min(text.len());
     let starts = rows_of(&text, width);
     let at_row = starts.iter().rposition(|&s| s <= caret).unwrap_or(0);
@@ -820,7 +1088,11 @@ fn draw_pad(frame: &mut Frame, pad: &Editor, ink: Palette, base: Style, inner: R
             if i == caret {
                 shown = Some(Position::new(x, y));
             }
-            x = put_text(frame.buffer_mut(), x, y, inner.x + inner.width, &c.to_string(), base.fg(ink.text()));
+            let ink_of = match marks.get(i) {
+                Some(true) => ink.gold(),
+                _ => ink.text(),
+            };
+            x = put_text(frame.buffer_mut(), x, y, inner.x + inner.width, &c.to_string(), base.fg(ink_of));
         }
         if caret >= end && r == at_row {
             shown = Some(Position::new(x.min(inner.x + inner.width - 1), y));
@@ -829,10 +1101,37 @@ fn draw_pad(frame: &mut Frame, pad: &Editor, ink: Palette, base: Style, inner: R
     shown
 }
 
-/// **The history**, newest first, the picked row in the band's colour.
+/// The history table's columns, of [`genda::columns`]: up to the article,
+/// less 當量, 峰值 and 停留, so the article still fits a hundred columns.
+/// Those and what follows the article are in the picked row's details
+/// under it ([`Record::details`]).
+const TABLE_COLUMNS: [usize; 13] = [0, 1, 2, 3, 4, 6, 7, 8, 11, 12, 13, 14, 15];
+
+/// **The history**, newest first, the picked row in the band's colour, and
+/// its details at the foot.
 fn draw_history(frame: &mut Frame, page: &Page, ink: Palette, base: Style, inner: Rect) {
-    let heads = genda::columns();
-    let rows: Vec<Vec<String>> = page.history.iter().rev().map(Record::cells).collect();
+    // Two rows of details and one between, when the table keeps three of its own.
+    let inner = match (inner.height >= 6, page.history.iter().rev().nth(page.picked)) {
+        (true, Some(record)) => {
+            let top = inner.y + inner.height - 2;
+            let end = inner.x + inner.width;
+            let details = record.details();
+            let (first, second) = details.split_at(3);
+            for (row, items) in [first, second].into_iter().enumerate() {
+                let mut x = inner.x + 1;
+                for (label, value) in items {
+                    x = put_text(frame.buffer_mut(), x, top + row as u16, end, label, base.fg(ink.quiet()));
+                    x = put_text(frame.buffer_mut(), x + 1, top + row as u16, end, value, base.fg(ink.text()));
+                    x += 3;
+                }
+            }
+            Rect { height: inner.height - 3, ..inner }
+        }
+        _ => inner,
+    };
+    let pick = |all: Vec<String>| -> Vec<String> { TABLE_COLUMNS.iter().map(|&i| all[i].clone()).collect() };
+    let heads = pick(genda::columns());
+    let rows: Vec<Vec<String>> = page.history.iter().rev().map(|r| pick(r.cells())).collect();
     let mut widths: Vec<usize> = heads.iter().map(|h| yumete_cjk::str_width(h)).collect();
     for row in &rows {
         for (w, cell) in widths.iter_mut().zip(row) {
@@ -1011,5 +1310,166 @@ mod tests {
         keys(&mut seat, &mut ed, &mut ime, &typed("\u{1b}"));
         command(&mut seat, &mut ed, &mut ime, "genda-shuffle");
         assert_eq!(seat.page.as_ref().unwrap().order, seat.page.as_ref().unwrap().chars);
+    }
+
+    /// The page open on `text` in segments of `length`, held so a command can be typed.
+    fn opened(text: &str, length: usize) -> (Editor, ImeSession, Seat) {
+        let (mut ed, mut ime, mut seat) = seated(text, None);
+        command(&mut seat, &mut ed, &mut ime, "genda");
+        keys(&mut seat, &mut ed, &mut ime, &typed("\u{1b}"));
+        command(&mut seat, &mut ed, &mut ime, &format!("genda-length {length}"));
+        keys(&mut seat, &mut ed, &mut ime, &typed("\u{1b}"));
+        (ed, ime, seat)
+    }
+
+    fn page(seat: &Seat) -> &Page {
+        seat.page.as_ref().unwrap()
+    }
+
+    #[test]
+    fn with_auto_off_a_finished_segment_waits_for_enter() {
+        let (mut ed, mut ime, mut seat) = opened("一二三四五六七八九", 3);
+        command(&mut seat, &mut ed, &mut ime, "genda-auto off");
+        assert_eq!(ed.status(), say!("genda.auto-off"));
+        keys(&mut seat, &mut ed, &mut ime, &typed("\n一二三"));
+        assert!(page(&seat).waiting.is_some() && page(&seat).run.finished());
+        assert!(!seat.typing());
+        // Typed keys go nowhere while it waits; Enter brings up the next.
+        keys(&mut seat, &mut ed, &mut ime, &typed("四"));
+        assert_eq!((page(&seat).index, page(&seat).run.typed().len()), (0, 3));
+        keys(&mut seat, &mut ed, &mut ime, &typed("\n"));
+        assert_eq!(page(&seat).run.target(), &['四', '五', '六']);
+        // F3 while waiting types the same segment again.
+        keys(&mut seat, &mut ed, &mut ime, &typed("四五六"));
+        seat.took(&mut ed, &mut ime, None, true);
+        assert_eq!((page(&seat).index, page(&seat).run.started()), (1, false));
+        assert!(page(&seat).waiting.is_none());
+    }
+
+    #[test]
+    fn a_goal_not_met_brings_the_segment_up_again() {
+        let (mut ed, mut ime, mut seat) = opened("一二三四五六", 3);
+        command(&mut seat, &mut ed, &mut ime, "genda-goal-clean");
+        assert_eq!(ed.status(), say!("genda.goal-is", say!("genda.goal.clean")));
+        keys(&mut seat, &mut ed, &mut ime, &typed("\n一十三"));
+        assert!(ed.status().starts_with(&say!("genda.goal-missed", say!("genda.goal.clean"))), "{}", ed.status());
+        assert_eq!((page(&seat).index, page(&seat).run.started()), (0, false));
+        keys(&mut seat, &mut ed, &mut ime, &typed("一二三"));
+        assert!(ed.status().contains(&say!("genda.line.retry", 1)), "{}", ed.status());
+        assert_eq!(page(&seat).index, 1);
+        keys(&mut seat, &mut ed, &mut ime, &typed("\u{1b}"));
+        command(&mut seat, &mut ed, &mut ime, "genda-goal-speed 120");
+        command(&mut seat, &mut ed, &mut ime, "genda-goal off");
+        assert_eq!(seat.goal, Goal::default());
+        command(&mut seat, &mut ed, &mut ime, "genda-goal-kps 6.5");
+        assert_eq!(seat.goal.kps, Some(6.5));
+        command(&mut seat, &mut ed, &mut ime, "genda-goal-kps off");
+        assert_eq!(seat.goal.kps, None);
+    }
+
+    #[test]
+    fn the_missed_and_the_slow_make_a_drill_and_then_the_article_goes_on() {
+        let (mut ed, mut ime, mut seat) = opened("天地人和春夏秋冬", 4);
+        keys(&mut seat, &mut ed, &mut ime, &[Key::Ctrl('e')]);
+        assert_eq!(ed.status(), say!("genda.no-last"));
+        keys(&mut seat, &mut ed, &mut ime, &typed("\n天他\u{8}地人和"));
+        assert_eq!(page(&seat).index, 1);
+        keys(&mut seat, &mut ed, &mut ime, &[Key::Ctrl('e')]);
+        assert_eq!(page(&seat).run.target(), &['地']);
+        assert!(page(&seat).title().ends_with(&say!("genda.drill.wrong")));
+        keys(&mut seat, &mut ed, &mut ime, &typed("地"));
+        let latest = page(&seat).latest.clone().unwrap();
+        assert_eq!((latest.segment, latest.chars), (1, 1));
+        assert!(latest.article.ends_with(&say!("genda.drill.wrong")));
+        // Back to the segment it was drawn after, and F3 brings the drill again.
+        assert_eq!(page(&seat).run.target(), &['春', '夏', '秋', '冬']);
+        seat.took(&mut ed, &mut ime, None, true);
+        assert_eq!(page(&seat).run.target(), &['地']);
+        keys(&mut seat, &mut ed, &mut ime, &typed("地"));
+        assert!(ed.status().contains(&say!("genda.line.retry", 1)), "{}", ed.status());
+        // The slowest of a one-character drill is that character.
+        keys(&mut seat, &mut ed, &mut ime, &[Key::Ctrl('s')]);
+        assert_eq!(page(&seat).run.target(), &['地']);
+        keys(&mut seat, &mut ed, &mut ime, &typed("地春夏秋冬"));
+        assert_eq!(page(&seat).index, 1);
+        assert_eq!(page(&seat).history.len(), 5);
+        assert!(page(&seat).all_done);
+        keys(&mut seat, &mut ed, &mut ime, &[Key::Ctrl('e')]);
+        assert_eq!(ed.status(), say!("genda.no-wrong"));
+    }
+
+    #[test]
+    fn the_hint_shows_the_next_characters_code_while_yume_holds_the_keys() {
+        let (mut ed, _, mut seat) = seated("天地", None);
+        let mut ime = ImeSession::from_table_text(yumete_ime::Scheme::LINGMING, "ab 天\nab 夫\ncd 地\n");
+        command(&mut seat, &mut ed, &mut ime, "genda");
+        assert_eq!(page(&seat).hint, None);
+        keys(&mut seat, &mut ed, &mut ime, &[Key::Ctrl('t')]);
+        assert_eq!(ed.status(), say!("genda.hint-on"));
+        assert_eq!(page(&seat).hint.as_deref(), Some("天 ab"));
+        keys(&mut seat, &mut ed, &mut ime, &typed("天"));
+        assert_eq!(page(&seat).hint.as_deref(), Some("地 cd"));
+        keys(&mut seat, &mut ed, &mut ime, &[Key::Ctrl('t')]);
+        assert_eq!(page(&seat).hint, None);
+        // Under the system's input method there is no code to show.
+        let (mut ed, mut ime, mut seat) = seated("天地", None);
+        command(&mut seat, &mut ed, &mut ime, "genda");
+        keys(&mut seat, &mut ed, &mut ime, &[Key::Ctrl('t')]);
+        assert_eq!(ed.status(), say!("genda.hint-unavailable"));
+        assert_eq!(page(&seat).hint, None);
+    }
+
+    #[test]
+    fn yumes_keys_give_the_equivalence_and_the_day_is_added_up() {
+        let (mut ed, _, mut seat) = seated("dk;a", None);
+        let mut ime = ImeSession::from_table_text(yumete_ime::Scheme::LINGMING, "ab 天\n");
+        command(&mut seat, &mut ed, &mut ime, "genda");
+        keys(&mut seat, &mut ed, &mut ime, &typed("dk;a"));
+        let latest = page(&seat).latest.clone().unwrap();
+        let strokes = latest.strokes.clone().unwrap();
+        // dk 1.1, k; 1.7, ;a 1.2.
+        assert_eq!((strokes.pairs, format!("{:.2}", strokes.mean())), (3, "1.33".to_string()));
+        assert!(ed.status().contains(&say!("genda.line.equivalence", "1.33")), "{}", ed.status());
+        assert_eq!((page(&seat).daily.today_chars, page(&seat).daily.streak), (4, 1));
+    }
+
+    /// The pad drawn after a word and a single character: the word in gold.
+    #[test]
+    fn a_word_is_drawn_in_gold_in_the_pad() {
+        let (mut ed, mut ime, mut seat) = opened("天地人和", 4);
+        keys(&mut seat, &mut ed, &mut ime, &typed("\n"));
+        // A commit of two characters, then one of one.
+        let mut pad = seat.lend_pad_for_test();
+        pad.insert_committed("天地");
+        seat.take_back_pad(&mut ed, pad);
+        let mut pad = seat.lend_pad_for_test();
+        pad.insert_committed("人");
+        seat.take_back_pad(&mut ed, pad);
+        let config = Config::default();
+        crate::theme::settle(&config, None);
+        let mut terminal = ratatui::Terminal::new(ratatui::backend::TestBackend::new(100, 30)).unwrap();
+        terminal.draw(|frame| {
+            draw(frame, &seat, &config, Rect::new(0, 0, 100, 30));
+        })
+        .unwrap();
+        let buffer = terminal.backend().buffer().clone();
+        let text = crate::buffer_to_text(&buffer);
+        let (y, row) = text.lines().enumerate().find(|(_, l)| l.contains("天地人") && !l.contains('和')).unwrap();
+        let x = yumete_cjk::str_width(&row[..row.find('天').unwrap()]) as u16;
+        let ink = Palette::of(&config);
+        let fg = |dx: u16| buffer.cell((x + dx, y as u16)).map(|c| c.fg);
+        let (gold, text) = (Some(ink.gold()), Some(ink.text()));
+        assert_eq!((fg(0), fg(2), fg(4)), (gold, gold, text));
+    }
+
+    impl Seat {
+        /// The pad, lent as for a key the built-in IME held, so what is put
+        /// in it before it comes back is one commit.
+        fn lend_pad_for_test(&mut self) -> Box<Editor> {
+            let at = self.clock();
+            let stroke = Stroke { yume: true, ..Stroke::default() };
+            self.pending = Some(Pending { stroke, first: String::new(), at });
+            self.pad.take().expect("the pad")
+        }
     }
 }

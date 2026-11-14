@@ -2924,6 +2924,8 @@ pub struct Editor {
     genda_article: Option<(String, String)>,
     /// The typing page is open: `:q` closes it rather than the editor.
     genda_open: bool,
+    /// The typing page's switches, as it last said them.
+    genda_switches: crate::genda::Switches,
     /// **`空格 k` 問出去的那一句**（#53 ③）——同上一個形狀。
     hover_query: Option<(PathBuf, usize, usize)>,
     /// **`C-n` 問出去的那一句**（#53 ④）——同上一個形狀。
@@ -4531,6 +4533,7 @@ impl Editor {
             genda_asks: Vec::new(),
             genda_article: None,
             genda_open: false,
+            genda_switches: crate::genda::Switches::default(),
             settings_save: false,
             settings_close: None,
             hover_query: None,

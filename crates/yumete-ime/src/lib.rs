@@ -866,6 +866,33 @@ impl ImeSession {
         ranked.into_iter().take(n).map(|(c, _)| c).collect()
     }
 
+    /// **The quickest code for `text` in the scheme's own table**, for the
+    /// typing trainer's hint: the fewest keys, a candidate after the first
+    /// costing one key more to pick; then the earlier candidate. Gives the
+    /// code and the candidate's place (`0` for the first). `None` with no
+    /// table loaded, or a text it has no code for.
+    ///
+    /// The place is the table's order, before the user's words and the
+    /// adaptive order move it, so a hint can be one place off for a
+    /// character the user has taught the engine.
+    pub fn quickest_code(&self, text: &str) -> Option<(String, usize)> {
+        if !self.available {
+            return None;
+        }
+        let table = &self.engine.table;
+        table
+            .codes_for(text, false)
+            .into_iter()
+            .filter_map(|code| {
+                let place = table.exact(&code).iter().position(|t| t == text)?;
+                Some((code, place))
+            })
+            .min_by(|(a, i), (b, j)| {
+                let cost = |code: &str, place: usize| code.chars().count() + usize::from(place > 0);
+                cost(a, *i).cmp(&cost(b, *j)).then(i.cmp(j)).then(a.cmp(b))
+            })
+    }
+
     /// Just the language model: the word frequencies and the 詞彙表.
     ///
     /// These two files are **scheme-independent** — they are the language, not
@@ -3075,6 +3102,21 @@ mod annotation_modes {
         assert_eq!(fit_fields(&fields, 3, width), "氵…");
         // Never between a letter and its mark.
         assert_eq!(fit_fields(&["ae\u{301}b"], 2, width), "a…");
+    }
+
+    /// The hint's code: the fewest keys, a pick off the first counting one.
+    #[test]
+    fn the_quickest_code_counts_a_pick_as_a_key() {
+        let ime = ImeSession::from_table_text(Scheme::LINGMING, "xj 相\nxj 想\nxjk 想\nxjkl 相\nab 天\nabc 地\nab 地\n");
+        assert_eq!(ime.quickest_code("相"), Some(("xj".into(), 0)));
+        // 想: second on `xj` costs three, first on `xjk` costs three; the first place wins.
+        assert_eq!(ime.quickest_code("想"), Some(("xjk".into(), 0)));
+        assert_eq!(ime.quickest_code("地"), Some(("abc".into(), 0)));
+        assert_eq!(ime.quickest_code("人"), None);
+        // Second on two keys beats first on four.
+        let ime = ImeSession::from_table_text(Scheme::LINGMING, "xj 相\nxj 想\nxjkl 想\n");
+        assert_eq!(ime.quickest_code("想"), Some(("xj".into(), 1)));
+        assert_eq!(ImeSession::empty(Scheme::LINGMING).quickest_code("相"), None);
     }
 
     /// `/` while typing steps through the modes, then off, as yume's does;

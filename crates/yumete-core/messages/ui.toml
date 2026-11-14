@@ -72,6 +72,18 @@ zhs = "{0}（选区）"
 en = "{0} (selection)"
 
 [[message]]
+# : 跟打關掉自動換段之後（草稿）
+key = "genda.auto-off"
+zhs = "自动换段：关（Enter 或 C-p 换段）"
+en = "next segment by itself: off (Enter or C-p moves on)"
+
+[[message]]
+# : 跟打打開自動換段之後（草稿）
+key = "genda.auto-on"
+zhs = "自动换段：开"
+en = "next segment by itself: on"
+
+[[message]]
 # : 跟打頁文章資料框與文章框的標題（草稿）
 key = "genda.box.article"
 zhs = "文章"
@@ -114,6 +126,42 @@ zhs = "已复制 {0} 条成绩（TSV）"
 en = "{0} scores copied (TSV)"
 
 [[message]]
+# : 跟打累計框總計一欄的值，{0} 字數，{1} 天數（草稿）
+key = "genda.daily.overall"
+zhs = "{0}字 {1}天"
+en = "{0} chars {1} days"
+
+[[message]]
+# : 跟打累計框連續一欄的值，{0} 天數（草稿）
+key = "genda.daily.streak"
+zhs = "{0}天"
+en = "{0} days"
+
+[[message]]
+# : 跟打歷史視圖標題後半：今日字數用時、總字數天數、連續天數（草稿）
+key = "genda.daily.title"
+zhs = "今日 {0}字 {1} · 总计 {2}字 {3}天 · 连续 {4}天"
+en = "today {0} chars {1} · all {2} chars {3} days · streak {4} days"
+
+[[message]]
+# : 跟打累計框今日一欄的值，{0} 字數，{1} 用時（草稿）
+key = "genda.daily.today"
+zhs = "{0}字 {1}"
+en = "{0} chars {1}"
+
+[[message]]
+# : 跟打慢字重打那一段的名字（草稿）
+key = "genda.drill.slow"
+zhs = "慢字重打"
+en = "slow characters"
+
+[[message]]
+# : 跟打錯字重打那一段的名字（草稿）
+key = "genda.drill.wrong"
+zhs = "错字重打"
+en = "missed characters"
+
+[[message]]
 # : 開跟打頁時文章裏一個字都沒有（草稿）
 key = "genda.empty-article"
 zhs = "文章是空的，没有可打的字"
@@ -126,10 +174,70 @@ zhs = "已是第一段"
 en = "this is the first segment"
 
 [[message]]
+# : 跟打說出或改了達標條件之後，{0} 是條件（草稿）
+key = "genda.goal-is"
+zhs = "达标条件：{0}"
+en = "goal: {0}"
+
+[[message]]
+# : 跟打一段沒達標、重打這一段時，{0} 是沒達到的條件，後面接成績行（草稿）
+key = "genda.goal-missed"
+zhs = "未达标（{0}），重打本段 ·"
+en = "goal missed ({0}), again ·"
+
+[[message]]
+# : 跟打達標條件：鍵準至少多少，{0} 是百分數（草稿）
+key = "genda.goal.accuracy"
+zhs = "键准≥{0}%"
+en = "keyacc≥{0}%"
+
+[[message]]
+# : 跟打達標條件：沒有錯字（草稿）
+key = "genda.goal.clean"
+zhs = "无错"
+en = "no errors"
+
+[[message]]
+# : 跟打達標條件：擊鍵至少多少，{0} 是數（草稿）
+key = "genda.goal.kps"
+zhs = "击键≥{0}"
+en = "kps≥{0}"
+
+[[message]]
+# : 跟打沒有設達標條件（草稿）
+key = "genda.goal.none"
+zhs = "无"
+en = "none"
+
+[[message]]
+# : 跟打達標條件：速度至少多少，{0} 是數（草稿）
+key = "genda.goal.speed"
+zhs = "速度≥{0}"
+en = "speed≥{0}"
+
+[[message]]
+# : 跟打關掉編碼提示之後（草稿）
+key = "genda.hint-off"
+zhs = "编码提示：关"
+en = "code hint off"
+
+[[message]]
+# : 跟打打開編碼提示之後（草稿）
+key = "genda.hint-on"
+zhs = "编码提示：开"
+en = "code hint on"
+
+[[message]]
+# : 跟打打開編碼提示，但宇浩輸入法沒有接管鍵盤或沒有碼表（草稿）
+key = "genda.hint-unavailable"
+zhs = "编码提示：开（要在宇浩输入法打字时才有）"
+en = "code hint on (shown while typing with Yume)"
+
+[[message]]
 # : 跟打頁打字時底行的鍵位提示（草稿）
 key = "genda.hints"
-zhs = "F3 重打  C-p 下一段  C-u 上一段  C-l 乱序  Tab 历史  Esc 暂停"
-en = "F3 again  C-p next  C-u previous  C-l shuffle  Tab history  Esc pause"
+zhs = "F3 重打  C-p 下一段  C-u 上一段  C-l 乱序  Tab 历史  Esc 暂停  C-e 错字  C-s 慢字  C-t 提示"
+en = "F3 again  C-p next  C-u previous  C-l shuffle  Tab history  Esc pause  C-e missed  C-s slow  C-t hint"
 
 [[message]]
 # : 跟打頁看歷史時底行的鍵位提示（草稿）
@@ -142,6 +250,18 @@ en = "j k pick  y copy this  Y copy all  Tab back"
 key = "genda.hints-paused"
 zhs = "Enter 继续  y 复制成绩  Tab 历史  : 命令  Esc 关闭"
 en = "Enter go on  y copy score  Tab history  : command  Esc close"
+
+[[message]]
+# : 跟打歷史的互擊次數一欄，空格算半次（草稿）
+key = "genda.label.alternating"
+zhs = "互击"
+en = "alt"
+
+[[message]]
+# : 跟打歷史的左右手互擊率一欄（草稿）
+key = "genda.label.alternation-rate"
+zhs = "互击率"
+en = "alt%"
 
 [[message]]
 # : 跟打歷史的文章一欄（草稿）
@@ -186,6 +306,12 @@ zhs = "用时"
 en = "time"
 
 [[message]]
+# : 跟打面板與歷史的當量一欄：按鍵組合平均當量（草稿）
+key = "genda.label.equivalence"
+zhs = "当量"
+en = "equiv"
+
+[[message]]
 # : 跟打面板與歷史的錯字一欄（草稿）
 key = "genda.label.errors"
 zhs = "错字"
@@ -196,6 +322,12 @@ en = "errors"
 key = "genda.label.fastest"
 zhs = "最快"
 en = "best"
+
+[[message]]
+# : 跟打文章資料框的達標條件一欄（草稿）
+key = "genda.label.goal"
+zhs = "目标"
+en = "goal"
 
 [[message]]
 # : 跟打文章框的輸入法一欄（草稿）
@@ -228,6 +360,24 @@ zhs = "字序"
 en = "order"
 
 [[message]]
+# : 跟打累計框的總計一欄：歷史裏全部（草稿）
+key = "genda.label.overall"
+zhs = "总计"
+en = "all"
+
+[[message]]
+# : 跟打歷史的有效按鍵組合總數一欄（計入當量的按鍵對）（草稿）
+key = "genda.label.pairs"
+zhs = "有效组合"
+en = "pairs"
+
+[[message]]
+# : 跟打歷史的峰值一欄：最快一截的速度（草稿）
+key = "genda.label.peak"
+zhs = "峰值"
+en = "peak"
+
+[[message]]
 # : 跟打面板的選重一欄（草稿）
 key = "genda.label.picks"
 zhs = "选重"
@@ -238,6 +388,12 @@ en = "picks"
 key = "genda.label.retry"
 zhs = "重打"
 en = "retry"
+
+[[message]]
+# : 跟打歷史的同手次數一欄，空格算半次（草稿）
+key = "genda.label.same-hand"
+zhs = "同手"
+en = "same"
 
 [[message]]
 # : 跟打歷史的段一欄（草稿）
@@ -258,10 +414,34 @@ zhs = "速度"
 en = "speed"
 
 [[message]]
+# : 跟打歷史的停留一欄：上屏前等得最久的那一下（草稿）
+key = "genda.label.stay"
+zhs = "停留"
+en = "stay"
+
+[[message]]
+# : 跟打累計框的連續天數一欄（草稿）
+key = "genda.label.streak"
+zhs = "连续"
+en = "streak"
+
+[[message]]
 # : 跟打歷史的時間一欄（草稿）
 key = "genda.label.time"
 zhs = "时间"
 en = "time"
+
+[[message]]
+# : 跟打累計框的今日一欄（草稿）
+key = "genda.label.today"
+zhs = "今日"
+en = "today"
+
+[[message]]
+# : 跟打歷史的最常用按鍵一欄，值形如 Space×20（草稿）
+key = "genda.label.top-key"
+zhs = "常用键"
+en = "top key"
 
 [[message]]
 # : 跟打面板與歷史的打詞率一欄（草稿）
@@ -306,6 +486,12 @@ zhs = "回改{0}"
 en = "fixed{0}"
 
 [[message]]
+# : 跟打成績行裏的當量，{0} 是兩位小數（草稿）
+key = "genda.line.equivalence"
+zhs = "当量{0}"
+en = "equiv{0}"
+
+[[message]]
 # : 成績行裏錯字那一項（不加空格）（草稿）
 key = "genda.line.errors"
 zhs = "错字{0}"
@@ -336,6 +522,12 @@ zhs = "击键{0}"
 en = "kps{0}"
 
 [[message]]
+# : 跟打成績行裏的峰值，{0} 是速度（草稿）
+key = "genda.line.peak"
+zhs = "峰值{0}"
+en = "peak{0}"
+
+[[message]]
 # : 成績行裏選重那一項（不加空格）（草稿）
 key = "genda.line.picks"
 zhs = "选重{0}"
@@ -360,6 +552,12 @@ zhs = "速度{0}"
 en = "speed{0}"
 
 [[message]]
+# : 跟打成績行裏的停留，{0} 形如 [字]1.23s（草稿）
+key = "genda.line.stay"
+zhs = "停留{0}"
+en = "stay{0}"
+
+[[message]]
 # : 成績行裏用時那一項（不加空格）（草稿）
 key = "genda.line.time"
 zhs = "用时{0}"
@@ -378,10 +576,22 @@ zhs = "没有宇浩字频数据，只能打当前文件"
 en = "no Yume frequency data here: only the current file can be typed"
 
 [[message]]
+# : 跟打要錯字或慢字重打，還沒有打完過一段（草稿）
+key = "genda.no-last"
+zhs = "还没有打完一段"
+en = "no segment finished yet"
+
+[[message]]
 # : 跟打要複製成績而一條都還沒有（草稿）
 key = "genda.no-record"
 zhs = "还没有成绩"
 en = "no scores yet"
+
+[[message]]
+# : 跟打要錯字重打，上一段一個字都沒打錯（草稿）
+key = "genda.no-wrong"
+zhs = "上一段没有打错的字"
+en = "the last segment had nothing wrong"
 
 [[message]]
 # : 跟打頁沒開時打了 :genda-next 之類的命令（草稿）
