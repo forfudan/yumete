@@ -8,13 +8,23 @@
 //! ╰──────────────────╯╰ 的 a ──────────────────────────────────╯
 //! ╭ 文章 ────────────╮╭ 跟打 · 靈明 ───────────────────────────╮
 //! │ 段长 25 第 3/9 段││ 的一是了不在有个人这上中大为来我到出要 │
-//! │ 目标 速度≥120    ││                                        │
+//! │ 目标 速度≥120    │╰────────────────────────────────────────╯
+//! ╰──────────────────╯╭ 成绩 ──────────────────────────────────╮
+//! ╭ 累计 ────────────╮│ 段  速度    击键  码长  当量  字数  错字 │
+//! │ 段数   2         ││ 2   112.40  5.82  2.80  1.42  25    0    │
 //! ╰──────────────────╯╰────────────────────────────────────────╯
 //!  F3 重打  C-p 下一段  C-u 上一段  C-l 乱序  Tab 历史  Esc 暂停  C-e 错字 …
 //! ```
 //!
 //! The code hint sits on the article box's bottom wall; in the pad a 漢字
-//! that came in a word is gold.
+//! that came in a word is gold. Under the pad, from [`TABLE_FROM`] rows,
+//! the results: this session's segments newest first, then the earlier
+//! history dimmed. A finished segment says only its number and speed on
+//! the command row; the whole score line is the table's row and `y`'s.
+//!
+//! Esc while a code is composed clears the code; Esc otherwise pauses, and
+//! another Esc keeps the page paused, because a shape-code hand presses Esc
+//! twice to be sure. `q` while paused closes, as `:q` does.
 //!
 //! The model is [`yumete_core::genda`]; this file holds the page, lends the
 //! loop the pad (an [`Editor`] held in Insert mode, so the IME composes,
@@ -45,6 +55,11 @@ const HISTORY_FILE: &str = "genda.jsonl";
 
 /// Below this many columns the left column folds into one row of figures.
 const WIDE: u16 = 80;
+
+/// **From this many rows of page** (a terminal of 24) the right column has
+/// the results table under the pad; below it, the article and the pad
+/// share the column, and the figures are the left column's or the one row's.
+const TABLE_FROM: u16 = 23;
 
 /// How often the open page redraws while its clock runs.
 const CLOCK_TICK: Duration = Duration::from_millis(250);
@@ -133,12 +148,17 @@ struct Page {
     run: Run,
     view: View,
     history: Vec<Record>,
+    /// How many of `history` were read from the file at opening: those
+    /// after are this session's.
+    earlier: usize,
     /// The history row picked, counted from the newest.
     picked: usize,
     totals: Totals,
     latest: Option<Record>,
     all_done: bool,
-    /// Esc stopped the page: keys wait for Enter, and a second Esc closes.
+    /// Esc stopped the page: keys wait for Enter, `q` closes, and another
+    /// Esc stays (a shape-code hand presses Esc again to be sure a code is
+    /// cleared, and that must not close the page).
     held: bool,
     /// The scheme's name while the built-in IME holds the keys; empty under
     /// the system's input method.
@@ -303,7 +323,7 @@ impl Seat {
                         self.go_on(then);
                     }
                 }
-                Key::Esc => self.close(editor),
+                Key::Char('q') => self.close(editor),
                 Key::Char('y') => self.copy(editor),
                 Key::Tab => self.history(editor),
                 _ => {}
@@ -562,6 +582,7 @@ impl Seat {
             counted: false,
             run: Run::default(),
             view: View::Typing,
+            earlier: history.len(),
             history,
             picked: 0,
             totals: Totals::default(),
@@ -739,10 +760,18 @@ impl Seat {
                 let _ = writeln!(out, "{}", record.to_line());
             }
         }
-        editor.set_status(match missed.is_empty() {
-            true => record.score_line(),
-            false => format!("{} {}", say!("genda.goal-missed", missed.join(" ")), record.score_line()),
-        });
+        // A short line: the whole score line is the table's row and `y`'s.
+        let said = |typing: bool| {
+            let short = match typing {
+                true => say!("genda.done-typing", record.segment, record.speed_text()),
+                false => say!("genda.done", record.segment, record.speed_text()),
+            };
+            match missed.is_empty() {
+                true => short,
+                false => format!("{} {short}", say!("genda.goal-missed", missed.join(" "))),
+            }
+        };
+        let (ready, typing) = (said(false), said(true));
         page.totals.add(&record);
         page.history.push(record.clone());
         page.latest = Some(record);
@@ -753,13 +782,17 @@ impl Seat {
             _ if page.index + 1 < page.count() => Then::Next,
             _ => {
                 page.all_done = true;
+                editor.set_status(ready);
                 return;
             }
         };
         if manual {
             page.waiting = Some(then);
+            editor.set_status(ready);
             return;
         }
+        // The next run takes the keys at once, so `y` waits for Esc.
+        editor.set_status(typing);
         let redo = match &page.drill {
             Some(drill) => Redo::Drill(drill.clone()),
             None => Redo::Segment(page.index),
@@ -905,9 +938,15 @@ pub fn draw(frame: &mut Frame, seat: &Seat, config: &Config, area: Rect) -> Opti
     if right.height < 6 {
         return None;
     }
-    let top = (right.height * 11 / 20).max(3);
+    let (top, pad_height) = split(right.height, area.height >= TABLE_FROM);
     let article = Rect { height: top, ..right };
-    let pad_rect = Rect { y: right.y + top, height: right.height - top, ..right };
+    let pad_rect = Rect { y: right.y + top, height: pad_height, ..right };
+    let results = right.height - top - pad_height;
+    if results >= 3 {
+        let rect = Rect { y: pad_rect.y + pad_height, height: results, ..right };
+        let inner = ring(frame, rect, say!("genda.box.results"));
+        draw_results(frame, page, ink, base, inner);
+    }
     let inner = ring_with_foot(frame, article, page.title(), page.hint.clone());
     draw_article(frame, page, ink, base, inner);
     let inner = ring(frame, pad_rect, format!("{} · {}", say!("genda.box.pad"), page.ime_label()));
@@ -918,6 +957,107 @@ pub fn draw(frame: &mut Frame, seat: &Seat, config: &Config, area: Rect) -> Opti
     let pad = seat.pad.as_ref()?;
     let caret = draw_pad(frame, pad, &page.run, ink, base, inner);
     caret.filter(|_| seat.typing())
+}
+
+/// **The right column's rows**: the article box's and the pad's. With the
+/// table, about two sevenths and a quarter, the table taking the rest, so a
+/// taller window shows more rows of results; without, the article a little
+/// over half.
+fn split(height: u16, table: bool) -> (u16, u16) {
+    match table {
+        true => ((height * 2 / 7).max(5), (height / 4).max(4)),
+        false => {
+            let top = (height * 11 / 20).max(3);
+            (top, height - top)
+        }
+    }
+}
+
+/// The results table's columns, of [`genda::columns`]: 段 速度 擊鍵 碼長
+/// 當量 字數 錯字 用時 回改 鍵準 打詞 時間 文章.
+const RESULT_COLUMNS: [usize; 13] = [1, 2, 3, 4, 5, 6, 7, 8, 11, 12, 13, 0, 15];
+
+/// The article column, the last: it counts this many cells when the
+/// columns are fitted, and a longer name is cut at the panel's edge.
+const ARTICLE_CELLS: usize = 8;
+
+/// **The order the table gives its columns up in** when the panel is too
+/// narrow, as places in [`RESULT_COLUMNS`]: the article and the clock time
+/// first (the history has both, and this session's rows follow one
+/// another), then 打詞, 鍵準, 回改 and 當量; 段 and 速度 are never given up.
+const GIVEN_UP: [usize; 11] = [12, 11, 10, 9, 8, 4, 7, 6, 5, 3, 2];
+
+/// **Which columns fit in `room` cells**, given each one's width: a cell
+/// before the first and two between, the columns in [`GIVEN_UP`] order
+/// left out until the rest fit.
+fn fitted(widths: &[usize], room: usize) -> Vec<bool> {
+    let mut kept = vec![true; widths.len()];
+    let wanted = |kept: &[bool]| {
+        let shown: Vec<usize> = widths.iter().zip(kept).filter(|(_, k)| **k).map(|(w, _)| *w).collect();
+        1 + shown.iter().sum::<usize>() + 2 * shown.len().saturating_sub(1)
+    };
+    for &place in &GIVEN_UP {
+        if wanted(&kept) <= room {
+            break;
+        }
+        if let Some(k) = kept.get_mut(place) {
+            *k = false;
+        }
+    }
+    kept
+}
+
+/// **The results under the pad**, newest first: this session's segments,
+/// the latest in gold, then the history's earlier records dimmed, as many
+/// as fit. Tab shows them all, with their details.
+fn draw_results(frame: &mut Frame, page: &Page, ink: Palette, base: Style, inner: Rect) {
+    if inner.height == 0 || inner.width < 4 {
+        return;
+    }
+    let end = inner.x + inner.width;
+    let pick = |all: Vec<String>| -> Vec<String> { RESULT_COLUMNS.iter().map(|&i| all[i].clone()).collect() };
+    let heads = pick(genda::columns());
+    let room = inner.height.saturating_sub(1) as usize;
+    let rows: Vec<(Vec<String>, Style)> = page
+        .history
+        .iter()
+        .enumerate()
+        .rev()
+        .take(room)
+        .map(|(i, record)| {
+            let style = match () {
+                _ if i < page.earlier => base.fg(ink.furniture()),
+                _ if i + 1 == page.history.len() => base.fg(ink.gold()),
+                _ => base.fg(ink.text()),
+            };
+            (pick(record.cells()), style)
+        })
+        .collect();
+    let mut widths: Vec<usize> = heads.iter().map(|h| yumete_cjk::str_width(h)).collect();
+    for (row, _) in &rows {
+        for (w, cell) in widths.iter_mut().zip(row) {
+            *w = (*w).max(yumete_cjk::str_width(cell));
+        }
+    }
+    let mut fitting = widths.clone();
+    if let Some(last) = fitting.last_mut() {
+        *last = (*last).min(ARTICLE_CELLS);
+    }
+    let kept = fitted(&fitting, inner.width as usize);
+    let put_row = |frame: &mut Frame, y: u16, cells: &[String], style: Style| {
+        let mut x = inner.x + 1;
+        for ((cell, w), _) in cells.iter().zip(&widths).zip(&kept).filter(|(_, k)| **k) {
+            put_text(frame.buffer_mut(), x, y, end, cell, style);
+            x = x.saturating_add(*w as u16 + 2);
+        }
+    };
+    put_row(frame, inner.y, &heads, base.fg(ink.quiet()));
+    if rows.is_empty() && room > 0 {
+        put_text(frame.buffer_mut(), inner.x + 1, inner.y + 1, end, &say!("genda.no-record"), base.fg(ink.quiet()));
+    }
+    for (n, (row, style)) in rows.iter().enumerate() {
+        put_row(frame, inner.y + 1 + n as u16, row, *style);
+    }
 }
 
 /// `h:mm:ss`, for a day's time at the keys.
@@ -1234,9 +1374,9 @@ mod tests {
         keys(&mut seat, &mut ed, &mut ime, &typed("\u{1b}"));
         command(&mut seat, &mut ed, &mut ime, "genda-length 10");
         keys(&mut seat, &mut ed, &mut ime, &typed("abcdefghiX\u{8}j"));
-        let said = ed.status().to_string();
-        assert!(said.starts_with(&say!("genda.line.segment", 1)), "{said}");
-        assert!(said.contains(&say!("genda.line.first")), "{said}");
+        let latest = seat.page.as_ref().unwrap().latest.clone().unwrap();
+        assert_eq!(ed.status(), say!("genda.done-typing", 1, latest.speed_text()));
+        assert!(latest.score_line().contains(&say!("genda.line.first")));
         let page = seat.page.as_ref().unwrap();
         assert_eq!(page.index, 1);
         assert_eq!(page.run.target(), &['k', 'l', 'm', 'n', 'o']);
@@ -1247,7 +1387,7 @@ mod tests {
         // F3 before the next segment's first key types the one just done again.
         seat.took(&mut ed, &mut ime, None, true);
         keys(&mut seat, &mut ed, &mut ime, &typed("abcdefghij"));
-        assert!(ed.status().contains(&say!("genda.line.retry", 1)), "{}", ed.status());
+        assert_eq!(seat.page.as_ref().unwrap().latest.as_ref().map(|r| r.retry), Some(1));
         // A page opened again reads the two records back.
         keys(&mut seat, &mut ed, &mut ime, &typed("\u{1b}"));
         command(&mut seat, &mut ed, &mut ime, "q");
@@ -1258,7 +1398,7 @@ mod tests {
     }
 
     #[test]
-    fn esc_holds_the_page_and_a_second_esc_closes_it() {
+    fn esc_holds_the_page_a_second_esc_stays_and_q_closes_it() {
         let (mut ed, mut ime, mut seat) = seated("天地玄黄", None);
         command(&mut seat, &mut ed, &mut ime, "genda");
         keys(&mut seat, &mut ed, &mut ime, &typed("天\u{1b}"));
@@ -1269,6 +1409,8 @@ mod tests {
         keys(&mut seat, &mut ed, &mut ime, &typed("\n地"));
         assert_eq!(seat.page.as_ref().unwrap().run.typed(), &['天', '地']);
         keys(&mut seat, &mut ed, &mut ime, &typed("\u{1b}\u{1b}"));
+        assert!(seat.open() && seat.paused());
+        keys(&mut seat, &mut ed, &mut ime, &typed("q"));
         assert!(!seat.open());
     }
 
@@ -1281,7 +1423,7 @@ mod tests {
         command(&mut seat, &mut ed, &mut ime, "genda-copy");
         assert_eq!(ed.status(), say!("genda.no-record"));
         keys(&mut seat, &mut ed, &mut ime, &typed("\n天地玄黄"));
-        let line = ed.status().to_string();
+        let line = page(&seat).latest.as_ref().unwrap().score_line();
         keys(&mut seat, &mut ed, &mut ime, &[Key::Char('y')]);
         assert_eq!(ed.take_clipboard_request().as_deref(), Some(line.as_str()));
         keys(&mut seat, &mut ed, &mut ime, &[Key::Tab, Key::Char('Y')]);
@@ -1355,7 +1497,7 @@ mod tests {
         assert!(ed.status().starts_with(&say!("genda.goal-missed", say!("genda.goal.clean"))), "{}", ed.status());
         assert_eq!((page(&seat).index, page(&seat).run.started()), (0, false));
         keys(&mut seat, &mut ed, &mut ime, &typed("一二三"));
-        assert!(ed.status().contains(&say!("genda.line.retry", 1)), "{}", ed.status());
+        assert_eq!(page(&seat).latest.as_ref().map(|r| r.retry), Some(1));
         assert_eq!(page(&seat).index, 1);
         keys(&mut seat, &mut ed, &mut ime, &typed("\u{1b}"));
         command(&mut seat, &mut ed, &mut ime, "genda-goal-speed 120");
@@ -1386,7 +1528,7 @@ mod tests {
         seat.took(&mut ed, &mut ime, None, true);
         assert_eq!(page(&seat).run.target(), &['地']);
         keys(&mut seat, &mut ed, &mut ime, &typed("地"));
-        assert!(ed.status().contains(&say!("genda.line.retry", 1)), "{}", ed.status());
+        assert_eq!(page(&seat).latest.as_ref().map(|r| r.retry), Some(1));
         // The slowest of a one-character drill is that character.
         keys(&mut seat, &mut ed, &mut ime, &[Key::Ctrl('s')]);
         assert_eq!(page(&seat).run.target(), &['地']);
@@ -1429,8 +1571,12 @@ mod tests {
         let strokes = latest.strokes.clone().unwrap();
         // dk 1.1, k; 1.7, ;a 1.2.
         assert_eq!((strokes.pairs, format!("{:.2}", strokes.mean())), (3, "1.33".to_string()));
-        assert!(ed.status().contains(&say!("genda.line.equivalence", "1.33")), "{}", ed.status());
+        assert!(latest.score_line().contains(&say!("genda.line.equivalence", "1.33")));
         assert_eq!((page(&seat).daily.today_chars, page(&seat).daily.streak), (4, 1));
+        // In the results table the key fields are measured: no `—`.
+        let (_, rows) = drawn(&seat, 100, 30);
+        let row = &rows[table_heads(&rows) + 1];
+        assert!(row.contains("1.33") && !row.contains('—'), "{row}");
     }
 
     /// The pad drawn after a word and a single character: the word in gold.
@@ -1460,6 +1606,130 @@ mod tests {
         let fg = |dx: u16| buffer.cell((x + dx, y as u16)).map(|c| c.fg);
         let (gold, text) = (Some(ink.gold()), Some(ink.text()));
         assert_eq!((fg(0), fg(2), fg(4)), (gold, gold, text));
+    }
+
+    /// The page drawn at `width` by `height`, as a buffer and as text rows.
+    fn drawn(seat: &Seat, width: u16, height: u16) -> (ratatui::buffer::Buffer, Vec<String>) {
+        let config = Config::default();
+        crate::theme::settle(&config, None);
+        let mut terminal = ratatui::Terminal::new(ratatui::backend::TestBackend::new(width, height)).unwrap();
+        terminal
+            .draw(|frame| {
+                draw(frame, seat, &config, Rect::new(0, 0, width, height));
+            })
+            .unwrap();
+        let buffer = terminal.backend().buffer().clone();
+        let text = crate::buffer_to_text(&buffer);
+        (buffer, text.lines().map(str::to_string).collect())
+    }
+
+    /// The row of the results table's heads.
+    fn table_heads(rows: &[String]) -> usize {
+        rows.iter().position(|l| l.contains(&say!("genda.box.results"))).expect("the results panel") + 1
+    }
+
+    /// The colour of the first cell of row `y` inside the results panel.
+    fn first_cell_ink(buffer: &ratatui::buffer::Buffer, rows: &[String], y: usize) -> Option<ratatui::style::Color> {
+        let row = &rows[y];
+        let wall = row.find("││").expect("the panel's wall") + "││".len();
+        let x = yumete_cjk::str_width(&row[..wall]) as u16 + 1;
+        buffer.cell((x, y as u16)).map(|c| c.fg)
+    }
+
+    #[test]
+    fn the_results_table_lists_the_segments_newest_first_the_latest_in_gold() {
+        let (mut ed, mut ime, mut seat) = opened("一二三四五六七八九", 3);
+        keys(&mut seat, &mut ed, &mut ime, &typed("\n一二三四十六"));
+        let latest = page(&seat).latest.clone().unwrap();
+        assert_eq!((latest.segment, latest.errors), (2, 1));
+        // The command row has a short line; `y`, after Esc, copies the whole score line.
+        assert_eq!(ed.status(), say!("genda.done-typing", 2, latest.speed_text()));
+        keys(&mut seat, &mut ed, &mut ime, &typed("\u{1b}y"));
+        assert_eq!(ed.take_clipboard_request(), Some(latest.score_line()));
+        let (buffer, rows) = drawn(&seat, 100, 30);
+        let head = table_heads(&rows);
+        let heads = &rows[head];
+        let at = |name: &str| heads.find(name).unwrap_or_else(|| panic!("{name} in {heads}"));
+        assert!(at(&say!("genda.label.segment")) < at(&say!("genda.label.speed")));
+        assert!(at(&say!("genda.label.speed")) < at(&say!("genda.label.kps")));
+        let (newer, older) = (&rows[head + 1], &rows[head + 2]);
+        assert!(newer.contains("││ 2 ") && newer.contains(&latest.speed_text()), "{newer}");
+        assert!(older.contains("││ 1 ") && !older.contains('/'), "{older}");
+        // Under the system's input method the key fields are not measured.
+        assert!(newer.contains('—'), "{newer}");
+        assert!(!rows[head + 3].contains("││ 3 "), "{}", rows[head + 3]);
+        let ink = Palette::of(&Config::default());
+        assert_eq!(first_cell_ink(&buffer, &rows, head + 1), Some(ink.gold()));
+        assert_eq!(first_cell_ink(&buffer, &rows, head + 2), Some(ink.text()));
+    }
+
+    #[test]
+    fn with_auto_off_or_at_the_end_the_short_line_says_y_alone() {
+        let (mut ed, mut ime, mut seat) = opened("一二三", 3);
+        keys(&mut seat, &mut ed, &mut ime, &typed("\n一二三"));
+        assert!(page(&seat).all_done);
+        let latest = page(&seat).latest.clone().unwrap();
+        assert_eq!(ed.status(), say!("genda.done", 1, latest.speed_text()));
+    }
+
+    #[test]
+    fn the_history_read_at_opening_is_dimmed_under_this_sessions_rows() {
+        let (mut ed, mut ime, mut seat) = opened("一二三四五六", 3);
+        let before = Record { segment: 9, chars: 3, millis: 3000, ..Record::default() };
+        if let Some(page) = seat.page.as_mut() {
+            page.history.insert(0, before);
+            page.earlier = 1;
+        }
+        let (buffer, rows) = drawn(&seat, 100, 30);
+        let ink = Palette::of(&Config::default());
+        let head = table_heads(&rows);
+        assert!(rows[head + 1].contains("││ 9 "), "{}", rows[head + 1]);
+        assert_eq!(first_cell_ink(&buffer, &rows, head + 1), Some(ink.furniture()));
+        keys(&mut seat, &mut ed, &mut ime, &typed("\n一二三"));
+        let (buffer, rows) = drawn(&seat, 100, 30);
+        assert!(rows[head + 1].contains("││ 1 "), "{}", rows[head + 1]);
+        assert_eq!(first_cell_ink(&buffer, &rows, head + 1), Some(ink.gold()));
+        assert!(rows[head + 2].contains("││ 9 "), "{}", rows[head + 2]);
+        assert_eq!(first_cell_ink(&buffer, &rows, head + 2), Some(ink.furniture()));
+    }
+
+    #[test]
+    fn a_narrow_table_gives_up_the_article_the_clock_and_the_rates_first() {
+        let (mut ed, mut ime, mut seat) = opened("一二三四五六", 3);
+        keys(&mut seat, &mut ed, &mut ime, &typed("\n一二三"));
+        let has = |row: &str, name: &str| row.contains(&yumete_core::messages::say(name, &[]));
+        let kept = [
+            "genda.label.segment",
+            "genda.label.speed",
+            "genda.label.kps",
+            "genda.label.code-length",
+            "genda.label.chars",
+            "genda.label.errors",
+            "genda.label.elapsed",
+        ];
+        let (_, wide) = drawn(&seat, 140, 34);
+        let heads = &wide[table_heads(&wide)];
+        for name in kept.iter().chain(&["genda.label.word-rate", "genda.label.time", "genda.label.article"]) {
+            assert!(has(heads, name), "{name}: {heads}");
+        }
+        // Seventy columns: the left column folds and the table keeps the seven.
+        let (_, narrow) = drawn(&seat, 70, 24);
+        let heads = &narrow[table_heads(&narrow)];
+        for name in kept {
+            assert!(has(heads, name), "{name}: {heads}");
+        }
+        for name in ["genda.label.word-rate", "genda.label.time", "genda.label.article"] {
+            assert!(!has(heads, name), "{name}: {heads}");
+        }
+        // Under 24 rows there is no table.
+        let (_, short) = drawn(&seat, 100, 22);
+        assert!(!short.iter().any(|l| l.contains(&say!("genda.box.results"))));
+        // The order the columns are given up in.
+        let widths = [2, 6, 4, 4, 4, 4, 4, 8, 4, 4, 6, 11, 8];
+        let shown = |room| fitted(&widths, room).iter().filter(|k| **k).count();
+        assert_eq!((shown(200), shown(72), shown(40), shown(1)), (13, 11, 6, 2));
+        let at_72 = fitted(&widths, 72);
+        assert!(!at_72[11] && !at_72[12] && at_72[10]);
     }
 
     impl Seat {

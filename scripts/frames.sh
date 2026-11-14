@@ -54,6 +54,7 @@ scenes() {
 設置頁|100x30|:settings\n
 跟打|100x30|:genda\n
 跟打-窄|70x24|:genda\n
+跟打-成績|100x30|:genda\n\e:genda-length 10\n那年冬天，雪下得早。山路斷了、她在门口站
 命令選單|80x20|:
 空格選單|80x20| 
 幫助|100x30|:help\n

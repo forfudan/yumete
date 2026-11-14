@@ -51,16 +51,30 @@ fn a_narrow_window_folds_the_left_column_into_one_row() {
 }
 
 #[test]
-fn a_finished_segment_puts_its_score_line_on_the_command_row() {
+fn a_finished_segment_says_a_short_line_and_adds_a_row_to_the_results() {
     let dir = fixture("finish");
-    // Wide enough for the whole score line on the command row.
-    let frame = shot(&dir, "140x30", r":genda\n\e:genda-length 10\nabcdefghiX\bj");
-    let said = frame.lines().nth(29).unwrap_or_default();
-    assert!(said.starts_with(" 第1段 速度"), "{frame}");
-    assert!(said.contains("回改1") && said.contains("【首打】") && said.contains("输入法:系统"), "{frame}");
-    // No key fields under an input method the editor cannot see.
-    assert!(!said.contains("击键") && !said.contains("键准"), "{frame}");
-    assert!(frame.contains("第 2/4 段"), "{frame}");
+    let frame = shot(&dir, "100x30", r":genda\n\e:genda-length 10\nabcdefghiX\bjklmnoXqrst");
+    let rows: Vec<&str> = frame.lines().collect();
+    // The next segment took the keys at once, so `y` waits for Esc.
+    assert_eq!(rows[29].trim_end(), " 第2段 速度166.67/333.33 · Esc y 复制成绩", "{frame}");
+    let head = rows.iter().position(|r| r.contains("╭ 成绩")).expect("the results panel") + 1;
+    assert!(rows[head].contains("段  速度") && rows[head].contains("回改"), "{frame}");
+    // Newest first; no key fields under an input method the editor cannot see.
+    assert!(rows[head + 1].contains("│ 2   166.67/333.33  —"), "{frame}");
+    assert!(rows[head + 2].contains("│ 1   272.73 ") && rows[head + 2].contains("0:02.200  1 "), "{frame}");
+    assert!(frame.contains("第 3/4 段"), "{frame}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn esc_clears_a_code_then_pauses_and_only_q_closes() {
+    let dir = fixture("esc");
+    let frame = shot(&dir, "100x30", r":genda\n\{ime}tian\e");
+    assert!(!frame.contains("│tian") && !frame.contains("已暂停"), "{frame}");
+    let frame = shot(&dir, "100x30", r":genda\n\{ime}tian\e\e\e");
+    assert!(frame.contains("已暂停") && frame.contains("Enter 继续  q 关闭"), "{frame}");
+    let frame = shot(&dir, "100x30", r":genda\n\{ime}tian\e\eq");
+    assert!(!frame.contains("本段"), "{frame}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -92,16 +106,17 @@ fn yumes_keys_give_the_equivalence_and_with_auto_off_a_finished_segment_stays() 
     let typing = r":genda\n\e:genda-length 10\n\e:genda-auto off\n\n\{ime}tiandi xuanhuang ,yuzhou honghuang .";
     let frame = shot(&dir, "100x30", typing);
     let rows: Vec<&str> = frame.lines().collect();
-    let said = rows[29];
-    assert!(said.contains("码长") && said.contains("当量") && said.contains("峰值") && said.contains("停留["), "{frame}");
-    assert!(said.find("码长") < said.find("当量") && said.find("用时") < said.find("峰值"), "{frame}");
+    assert_eq!(rows[29].trim_end(), " 第1段 速度85.71 · y 复制成绩", "{frame}");
     assert!(rows[4].contains("当量") && !rows[4].contains('—'), "{frame}");
+    // The results row has the key fields the built-in IME counted.
+    let head = rows.iter().position(|r| r.contains("╭ 成绩")).expect("the results panel") + 1;
+    assert!(rows[head].contains("当量") && rows[head + 1].contains("│ 1 ") && !rows[head + 1].contains('—'), "{frame}");
     // Waiting for Enter: the segment typed is still in the pad, and the article box in hand.
     assert!(frame.contains("│ 天地玄黄，宇宙洪荒。") && frame.contains("第 1/2 段"), "{frame}");
     assert!(rows[28].contains("Enter 继续"), "{frame}");
     let frame = shot(&dir, "100x30", &format!(r"{typing}\t"));
     assert!(frame.lines().next().unwrap_or_default().contains("今日 10字"), "{frame}");
-    assert!(frame.contains("当量 1.") && frame.contains("常用键 N×5"), "{frame}");
+    assert!(frame.contains("当量 1.") && frame.contains("常用键 N×5") && frame.contains("峰值 ") && frame.contains("停留 ["), "{frame}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -111,6 +126,8 @@ fn the_family_needs_the_page_open() {
     let frame = shot(&dir, "60x8", r":genda-next\n");
     assert!(frame.contains("跟打没有打开"), "{frame}");
     let frame = shot(&dir, "60x8", r":genda\n\e\e");
+    assert!(frame.contains("已暂停") && frame.contains("速度"), "{frame}");
+    let frame = shot(&dir, "60x8", r":genda\n\e\eq");
     assert!(frame.contains("abcdefghij") && !frame.contains("本段"), "{frame}");
     let _ = std::fs::remove_dir_all(&dir);
 }
