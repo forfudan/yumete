@@ -308,6 +308,7 @@ fn view_lines(editor: &Editor) -> Vec<String> {
         format!("view-meter {}", on(editor.meter())),
         format!("view-diff {}", on(editor.diff_gutter())),
         format!("view-code {}", on(editor.code_colours())),
+        format!("view-line-breaks {}", on(editor.line_breaks())),
         match editor.long_line() {
             Some(upto) => format!("view-long-line {upto}"),
             None => "view-long-line off".to_string(),
@@ -605,6 +606,7 @@ fn apply_to_editor(config: &Config, editor: &mut Editor, layout: Option<yumete_c
         editor.set_table_rules(rules);
     }
     editor.set_number_fill(config.editor.line_number_fill);
+    editor.set_line_breaks(config.editor.show_line_breaks);
     editor.set_diff_gutter(config.editor.diff_gutter);
     editor.set_modeline(config.editor.modeline);
     if let Some(level) = yumete_core::problem::level_from_word(&config.editor.end_of_line_diagnostics) {

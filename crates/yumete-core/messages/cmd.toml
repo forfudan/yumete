@@ -2261,6 +2261,13 @@ en = "cursor hint: off, pill, panel"
 find = "提示 光標 光标 面板 藥丸 药丸 hud"
 
 [[message]]
+# : 命令菜单里 line-breaks 那一项的说明(view 组)（草稿）
+key = "cmd.view.line-breaks"
+zhs = "换行符：在每个以换行结束的行尾画一个淡色 ␊"
+en = "line breaks: a faint ␊ after every line that ends in a line break"
+find = "換行 换行 換行符 换行符 行尾 回車 回车 折行 newline eol list listchars whitespace"
+
+[[message]]
 # : 命令選單裏 line-numbers 那一項的説明(view 組)
 key = "cmd.view.line-numbers"
 zhs = "行号：absolute 绝对、relative 相对光标、none 不显示；不带参数显示当前模式"

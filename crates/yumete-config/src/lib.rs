@@ -317,6 +317,12 @@ pub struct EditorConfig {
     /// Whether code in a fence is coloured by its own grammar (#420). On by
     /// default; `:view-code` toggles.
     pub code_highlight: bool,
+    /// Whether a quiet `␊` is drawn after the last character of every line
+    /// that ends in a line break, so that with soft wrap on a break the writer
+    /// typed can be told from a row the window folded (helix's
+    /// `whitespace.render.newline`, vim's `listchars=eol:`). Off by default;
+    /// `:view-line-breaks` toggles.
+    pub show_line_breaks: bool,
     /// Whether 句讀 hang in the margin beside the character they follow rather
     /// than taking a square each (標點旁置). Off by default; `:view-hanging` toggles.
     pub hanging_punctuation: bool,
@@ -565,6 +571,7 @@ impl Default for EditorConfig {
             usage_groups: Vec::new(),
             tatechuyoko: 0,
             code_highlight: true,
+            show_line_breaks: false,
             hanging_punctuation: false,
             soft_wrap: true,
             insert_final_newline: true,
@@ -4795,6 +4802,7 @@ struct RawEditor {
     usage_groups: Option<Vec<String>>,
     tatechuyoko: Option<RawTatechuyoko>,
     code_highlight: Option<bool>,
+    show_line_breaks: Option<bool>,
     hanging_punctuation: Option<bool>,
     soft_wrap: Option<bool>,
     insert_final_newline: Option<bool>,
@@ -5075,6 +5083,9 @@ impl RawConfig {
         }
         if other.editor.code_highlight.is_some() {
             self.editor.code_highlight = other.editor.code_highlight;
+        }
+        if other.editor.show_line_breaks.is_some() {
+            self.editor.show_line_breaks = other.editor.show_line_breaks;
         }
         if other.editor.hanging_punctuation.is_some() {
             self.editor.hanging_punctuation = other.editor.hanging_punctuation;
@@ -5591,6 +5602,9 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.code_highlight {
             config.editor.code_highlight = on;
+        }
+        if let Some(on) = self.editor.show_line_breaks {
+            config.editor.show_line_breaks = on;
         }
         if let Some(on) = self.editor.hanging_punctuation {
             config.editor.hanging_punctuation = on;

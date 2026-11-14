@@ -572,6 +572,14 @@ impl Editor {
                 };
                 Ok(CommandOutcome::Continue)
             }
+            Command::SetLineBreaks(on) => {
+                self.line_breaks = on.over(self.line_breaks);
+                self.status = match self.line_breaks {
+                    true => say!("layout.line-breaks-on"),
+                    false => say!("layout.line-breaks-off"),
+                };
+                Ok(CommandOutcome::Continue)
+            }
             Command::SetEolDiagnostics(word) => {
                 if let Some(level) = word.as_deref().and_then(crate::problem::level_from_word) {
                     self.end_of_line_diagnostics = level;
@@ -2478,6 +2486,7 @@ impl Editor {
             Command::SetMeter(_) => self.meter,
             Command::SetNote(_) => self.notes,
             Command::SetCode(_) => self.code_colours,
+            Command::SetLineBreaks(_) => self.line_breaks,
             Command::SetTableNumbers(_) => self.table_numbers,
             Command::SetTableHeader(_) => self.table.as_ref()?.schema.header,
             Command::Sidebar(panel, _) => self.showing(Editor::view_of(panel)?).is_some(),

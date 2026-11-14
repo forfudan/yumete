@@ -136,6 +136,18 @@ zhs = "缩进宽度：{0} 格"
 en = "indent width: {0}"
 
 [[message]]
+# :view-line-breaks off — 行尾不再画换行符（草稿）
+key = "layout.line-breaks-off"
+zhs = "换行符：不显示"
+en = "line breaks: hidden"
+
+[[message]]
+# :view-line-breaks on — 每个以换行结束的行尾画一个淡色 ␊（草稿）
+key = "layout.line-breaks-on"
+zhs = "换行符：显示(行尾的 ␊ 是真换行)"
+en = "line breaks: shown (a ␊ ends each real line)"
+
+[[message]]
 # 行號那一條有自己的底色
 key = "layout.line-numbers-on-a-band"
 zhs = "行号：有底色"

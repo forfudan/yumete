@@ -394,6 +394,9 @@ pub enum Command {
     SetNote(Switch),
     /// `:view-code` — fenced code in its own grammar's colours (#420).
     SetCode(Switch),
+    /// `:view-line-breaks` — a quiet mark after every line that ends in a
+    /// line break.
+    SetLineBreaks(Switch),
     /// `:view-long-line`：一行長過多少列就不上色。`None` ＝裸的，報告現在多少。
     SetLongLine(Option<Option<usize>>),
     /// `:table-numbers` — the row of column numbers above the header.
@@ -4698,6 +4701,14 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|p| Ok(Command::SetCode(switched(p)))),
     },
     Entry {
+        name: "view-line-breaks",
+        aliases: &[],
+        help: "cmd.view.line-breaks",
+        needs: &[],
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::SetLineBreaks(switched(p)))),
+    },
+    Entry {
         // **一行長過多少列就不上色**。vim 的 `synmaxcol`，同數
         // （3000），只是這裏管得寬一點——標記、語法、分詞三筆賬一起摔，所以名字
         // 說的是「長的行」而不是「語法」。裸的報告現在多少，同 `:view-hud`。
@@ -8350,7 +8361,7 @@ mod tests {
         // A family with no head of its own keeps the hyphen, which is what
         // says it is a family and not a command, and nothing else: `view-w` is
         // `view-wrap`'s spelling, not the thirteen's.
-        assert_eq!(row("", "view-"), ":view- +19");
+        assert_eq!(row("", "view-"), ":view- +20");
         assert_eq!(row("", "check-"), ":check- +6");
         // …and a stem is a stem however many are under it.
         assert_eq!(row("", "markdown-"), ":markdown- +2");

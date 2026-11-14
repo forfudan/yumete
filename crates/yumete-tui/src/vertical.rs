@@ -1738,10 +1738,34 @@ pub fn draw(
         // `A` on several lines, makes cursors nobody sees.
         let ends_line = matches!(rope.get_char(zong.end), None | Some('\n'));
         let foot = text_top + slots.len() as u16;
-        if ends_line
-            && foot < area.y + area.height
-            && secondary.iter().chain(&flashed).any(|&(from, to)| from <= zong.end && to > zong.end)
-        {
+        let on_break = secondary.iter().chain(&flashed).any(|&(from, to)| from <= zong.end && to > zong.end);
+        // **The line break, shown** (`:view-line-breaks`), in that same slot:
+        // the one past the 縱's last character, which the page keeps spare for
+        // the caret, so the mark takes nothing from the writing. Hung right as
+        // a narrow character is, in the gutter's ink. Only where the 縱 ends a
+        // line that has a break — not the last line of a file with none, and
+        // not a closed fold's line, whose break is the fold's.
+        // Where the line's text stops: before its `\n`, and before the `\r`
+        // of a `\r\n`, which the slots leave out as well.
+        let text_end = |next: usize| match next >= 2 && rope.char(next - 2) == '\r' {
+            true => next - 2,
+            false => next - 1,
+        };
+        let mark_break = editor.line_breaks()
+            && zong.line + 1 < rope.len_lines()
+            && zong.end >= text_end(rope.line_to_char(zong.line + 1))
+            && !editor.fold_head(zong.line)
+            && foot < area.y + area.height;
+        if mark_break {
+            // The block's ground runs to the 縱's length and no further.
+            let ground = match foot < text_top + metrics.zong_len as u16 {
+                true => crate::block_style(markup.block(zong.line), ink).unwrap_or(ink.page()),
+                false => ink.page(),
+            };
+            let quiet = ground.fg(ink.furniture());
+            let style = if on_break { quiet.patch(sel_style) } else { quiet };
+            put_slot_right(buf, x, foot, &yumete_cjk::LINE_FEED_PICTURE.to_string(), style);
+        } else if ends_line && foot < area.y + area.height && on_break {
             put_slot(buf, x, foot, " ", sel_style);
         }
     }

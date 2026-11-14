@@ -659,6 +659,18 @@ zhs = "不带文件名启动时：打开空白文档，还是恢复上次的文�
 en = "when started with no file: a blank page, or the files that were open last time"
 
 [[message]]
+# 设置：行尾画不画换行符（草稿）
+key = "settings.editor.show-line-breaks"
+zhs = "显示换行符"
+en = "show line breaks"
+
+[[message]]
+# 设置：行尾画不画换行符——一句话（草稿）
+key = "settings.editor.show-line-breaks.hint"
+zhs = "在每个以换行结束的行尾画一个淡色 ␊，开着自动折行时能分清真换行和折出来的行"
+en = "draw a faint ␊ after every line that ends in a line break, to tell it from a soft-wrapped row"
+
+[[message]]
 # 設置：排出注音
 key = "settings.editor.show-ruby"
 zhs = "显示注音"

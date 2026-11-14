@@ -3041,6 +3041,9 @@ pub struct Editor {
     rules: Vec<usize>,
     /// Whether the line-number band carries a ground of its own.
     number_fill: bool,
+    /// Whether a quiet mark is drawn after every line that ends in a line
+    /// break (`:view-line-breaks`).
+    line_breaks: bool,
     /// 改動條：行號旁邊那一格說不說「這一行跟 git 那一份不一樣」（#55/#298）。
     diff_gutter: bool,
     /// 每個 buffer 一份 git 逐行差，連着**算它的時候那個 revision**。
@@ -4564,6 +4567,7 @@ impl Editor {
             window_history: Vec::new(),
             rules: Vec::new(),
             number_fill: false,
+            line_breaks: false,
             diff_gutter: false,
             vcs: HashMap::new(),
             vcs_base: HashMap::new(),

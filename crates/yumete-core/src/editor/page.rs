@@ -1495,6 +1495,16 @@ impl Editor {
         self.number_fill = on;
     }
 
+    /// Whether a quiet mark stands after every line that ends in a line break.
+    pub fn line_breaks(&self) -> bool {
+        self.line_breaks
+    }
+
+    /// Draw the line-break mark, or leave the line ends bare.
+    pub fn set_line_breaks(&mut self, on: bool) {
+        self.line_breaks = on;
+    }
+
     // ---- 改動條（#55/#298）------------------------------------------------
 
     /// 行號旁邊那一格說不說 git 的改動。

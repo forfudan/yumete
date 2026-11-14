@@ -665,6 +665,15 @@ pub const SETTINGS: &[Setting] = &[
     },
     Setting {
         table: "editor",
+        key: "show_line_breaks",
+        group: Group::Marks,
+        kind: Kind::Tick,
+        label: "settings.editor.show-line-breaks",
+        hint: "settings.editor.show-line-breaks.hint",
+        factory: "false",
+    },
+    Setting {
+        table: "editor",
         key: "show_ruby",
         group: Group::Marks,
         kind: Kind::Tick,

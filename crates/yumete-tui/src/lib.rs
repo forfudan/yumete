@@ -14153,8 +14153,28 @@ fn draw_horizontal(
             }
             at = to;
         }
-        if !break_cell.is_empty() {
-            spans.push(Span::styled(break_cell, sel_style));
+        // **The line break, shown** (`:view-line-breaks`): the table's own `␊`,
+        // in the gutter's ink, in the cell the break already owns — the one a
+        // cursor resting on the break is drawn in, so a selection reaching
+        // over it lights the mark. Drawn, never measured: it goes only where
+        // that cell is still on the page, and a row that fills its width
+        // goes without, rather than pushing a character onto the next row.
+        // Not after a last line with no break, nor on a closed fold's line,
+        // whose break is the fold's.
+        let mark_break = editor.line_breaks()
+            && ends_line
+            && row.line + 1 < rope.len_lines()
+            && !editor.fold_head(row.line)
+            && spans.iter().map(|s| yumete_cjk::str_width(&s.content)).sum::<usize>()
+                < text_area.width as usize + left;
+        match (mark_break, break_cell.is_empty()) {
+            (true, bare) => {
+                let quiet = fill.fg(ink.furniture());
+                let style = if bare { quiet } else { quiet.patch(sel_style) };
+                spans.push(Span::styled(yumete_cjk::LINE_FEED_PICTURE.to_string(), style));
+            }
+            (false, false) => spans.push(Span::styled(break_cell, sel_style)),
+            (false, true) => {}
         }
         // **helix's end-of-line diagnostic**: the loudest message
         // of the line, two cells after its last row, in the lane's ink, cut
@@ -20836,6 +20856,108 @@ fn squeezed(text: &str) -> String {
         }
         // …and the text below it is not on the band.
         assert_ne!(buffer[(28, head)].style().bg, band);
+    }
+
+    /// The rows of a horizontal page as text, the gutter included.
+    fn page_rows(buffer: &ratatui::buffer::Buffer) -> Vec<String> {
+        (0..buffer.area.height).map(|y| row_text(buffer, y).trim_end().to_string()).collect()
+    }
+
+    /// **`[editor] show_line_breaks`**: the table's `␊` after every line that
+    /// ends in a line break, in the gutter's ink, and nowhere while it is off.
+    #[test]
+    fn a_line_break_is_marked_with_the_tables_glyph_when_asked() {
+        let mut config = Config::default();
+        config.editor.show_segmentation = false;
+        let text = "first\nsecond\n\nlast";
+        let mark = yumete_cjk::LINE_FEED_PICTURE;
+
+        let mut editor = editor_with(text);
+        crate::settings::view_back_to_config(&mut editor, &config);
+        assert!(!editor.line_breaks(), "off out of the box");
+        let off = render_wrapped(&mut editor, &config, 30, 8);
+        assert!(page_rows(&off).iter().all(|row| !row.contains(mark)), "{:#?}", page_rows(&off));
+
+        config.editor.show_line_breaks = true;
+        crate::settings::view_back_to_config(&mut editor, &config);
+        assert!(editor.line_breaks(), "the config turns it on");
+        let on = render_wrapped(&mut editor, &config, 30, 8);
+        let rows = page_rows(&on);
+        let ends = |row: &str| row.ends_with(mark);
+        assert!(ends(&rows[0]) && rows[0].contains("first"), "{rows:#?}");
+        assert!(ends(&rows[1]) && rows[1].contains("second"), "{rows:#?}");
+        assert!(ends(&rows[2]), "a blank line has its break too: {rows:#?}");
+        // **No mark after a last line with no line break.**
+        assert!(rows[3].contains("last") && !rows[3].contains(mark), "{rows:#?}");
+        // The rows are the same rows, mark aside.
+        let stripped: Vec<String> = rows.iter().map(|r| r.replace(mark, "").trim_end().to_string()).collect();
+        assert_eq!(stripped, page_rows(&off));
+
+        // Quiet: the gutter's ink, the way a line number is drawn.
+        let y = 0;
+        let x = (0..30).find(|&x| on[(x, y)].symbol() == mark.to_string()).expect("the mark");
+        assert_eq!(on[(x, y)].style().fg, Some(ink(&config).furniture()));
+
+        // `:view-line-breaks` flips it, and the `:` line reads the switch.
+        editor.execute(":view-line-breaks").unwrap();
+        assert!(!editor.line_breaks());
+        assert_eq!(editor.switch_state(":view-line-breaks"), Some(false));
+        editor.execute(":view-line-breaks on").unwrap();
+        assert!(editor.line_breaks());
+    }
+
+    /// **The mark never moves the writing.** A row that wraps keeps the
+    /// break where it was, and a last row that fills the width goes without
+    /// a mark rather than pushing a character onto a row of its own.
+    #[test]
+    fn the_line_break_mark_does_not_change_the_wrap() {
+        let mut config = Config::default();
+        config.editor.show_segmentation = false;
+        let w = 24u16;
+        let gutter = gutter_in(w as usize, 3, config.editor.line_numbers, false);
+        let room = w as usize - gutter;
+        let full = "x".repeat(room);
+        let long = "word ".repeat(10);
+        let text = format!("{full}\n{long}\nend");
+        let mark = yumete_cjk::LINE_FEED_PICTURE;
+
+        let mut editor = editor_with(&text);
+        let off = page_rows(&render_wrapped(&mut editor, &config, w, 12));
+        editor.set_line_breaks(true);
+        let on = page_rows(&render_wrapped(&mut editor, &config, w, 12));
+
+        assert!(on[0].ends_with(&full) && !on[0].contains(mark), "a full row has no room: {on:#?}");
+        let stripped: Vec<String> = on.iter().map(|r| r.replace(mark, "").trim_end().to_string()).collect();
+        assert_eq!(stripped, off, "every row breaks where it did");
+        // The long line's own last row carries it, and only that one.
+        let marked = on.iter().filter(|row| row.contains(mark)).count();
+        assert_eq!(marked, 1, "{on:#?}");
+    }
+
+    /// A vertical page puts the mark in the slot under a 縱's last character —
+    /// the slot it keeps spare for the caret — and only where the line breaks.
+    #[test]
+    fn a_line_break_is_marked_under_the_zong_that_ends_it() {
+        let config = vertical_config();
+        let mut editor = editor_with("春江\n潮水連海");
+        let off = render_vertical(&mut editor, &config, 30, 12);
+        editor.set_line_breaks(true);
+        let on = render_vertical(&mut editor, &config, 30, 12);
+        let mark = yumete_cjk::LINE_FEED_PICTURE.to_string();
+        let cells = |buffer: &ratatui::buffer::Buffer| -> Vec<(u16, u16)> {
+            let area = buffer.area;
+            (0..area.height)
+                .flat_map(|y| (0..area.width).map(move |x| (x, y)))
+                .filter(|&at| buffer[at].symbol() == mark)
+                .collect()
+        };
+        assert!(cells(&off).is_empty());
+        let marks = cells(&on);
+        assert_eq!(marks.len(), 1, "the first line breaks, the last does not: {marks:?}");
+        let (x, y) = marks[0];
+        // Under 「江」, in the same 縱 (hung right, so one of its two cells).
+        let above = |at: u16| on[(at, y - 1)].symbol().to_string();
+        assert!(above(x) == "江" || above(x - 1) == "江", "{}", above(x));
     }
 
     #[test]
