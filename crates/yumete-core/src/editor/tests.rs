@@ -39932,3 +39932,144 @@ fn the_last_change_and_yank_are_marks_as_in_vim() {
     press(&mut ed, "wyiw0d`]");
     assert_eq!(ed.current_buffer().text(), "a gamma\ndelta epsilon\nzeta eta theta\n");
 }
+
+/// **`:sort` with one selection is vim's**: the selected lines, or every line
+/// when nothing is selected, by code point; `!` reverses, `i` ignores case and
+/// keeps equal lines in their order (vim's `:sort i` gives `a B b C`).
+#[test]
+fn sort_orders_the_selected_lines_or_the_whole_buffer() {
+    let text = "丙\nb\n甲\nA\na\n";
+    let mut ed = typed_vim(text);
+    ed.execute(":sort").unwrap();
+    assert_eq!(ed.current_buffer().text(), "A\na\nb\n丙\n甲\n");
+    assert_eq!(ed.caret(), 0, "the cursor at the start of the range, as vim's");
+    press(&mut ed, "u");
+    assert_eq!(ed.current_buffer().text(), text, "one undo");
+    ed.execute(":sort!").unwrap();
+    assert_eq!(ed.current_buffer().text(), "甲\n丙\nb\na\nA\n");
+    ed.execute(":sort -r").unwrap();
+    assert_eq!(ed.current_buffer().text(), "甲\n丙\nb\na\nA\n", "helix's flag, the same order");
+
+    let mut ed = typed_vim("B\na\nC\nb\n");
+    ed.execute(":sort i").unwrap();
+    assert_eq!(ed.current_buffer().text(), "a\nB\nb\nC\n");
+
+    // A Visual selection is the range; the lines outside it stay.
+    let mut ed = typed_vim("d\nc\nb\na\n");
+    press(&mut ed, "jVj");
+    ed.execute(":sort").unwrap();
+    assert_eq!(ed.current_buffer().text(), "d\nb\nc\na\n");
+
+    // A last line without a newline is sorted as a line, and stays without one.
+    let mut ed = typed_vim("b\na");
+    ed.execute(":sort").unwrap();
+    assert_eq!(ed.current_buffer().text(), "a\nb");
+}
+
+/// **`:sort` with several selections is helix's**: the selections' texts
+/// sorted among themselves, the boundaries kept, the selections kept.
+#[test]
+fn sort_with_several_selections_sorts_their_texts() {
+    let split = |text: &str| {
+        let mut ed = typed(text);
+        press(&mut ed, "%S,");
+        ed.on_key(Key::Enter);
+        ed
+    };
+    let mut ed = split("c,b,a");
+    ed.execute(":sort").unwrap();
+    assert_eq!(ed.current_buffer().text(), "a,b,c");
+    ed.execute(":sort --reverse").unwrap();
+    assert_eq!(ed.current_buffer().text(), "c,b,a");
+
+    // By code point: 丙 U+4E19, 乙 U+4E59, 甲 U+7532.
+    let mut ed = split("乙,甲,丙");
+    ed.execute(":sort").unwrap();
+    assert_eq!(ed.current_buffer().text(), "丙,乙,甲");
+
+    // Texts of other lengths move, and every selection goes with its text.
+    let mut ed = split("ccc,a,bb");
+    ed.execute(":sort").unwrap();
+    assert_eq!(ed.current_buffer().text(), "a,bb,ccc");
+    let rope = ed.current_buffer().rope().clone();
+    let spans: Vec<String> = ed
+        .sel
+        .iter()
+        .map(|r| {
+            let (a, b) = r.span();
+            rope.slice(a..crate::motion::next_grapheme(&rope, b)).to_string()
+        })
+        .collect();
+    assert_eq!(spans, ["a", "bb", "ccc"]);
+    press(&mut ed, "u");
+    assert_eq!(ed.current_buffer().text(), "ccc,a,bb", "one undo");
+
+    // `-i` is stable, as helix's `sort_by` is.
+    let mut ed = split("b,A,a,B");
+    ed.execute(":sort -i").unwrap();
+    assert_eq!(ed.current_buffer().text(), "A,a,b,B");
+}
+
+/// **`:buffer-close-others` and `:buffer-close-all`, helix's `:bco` `:bca`**:
+/// the clean ones close, an unsaved one stays and comes on screen, and `!`
+/// closes it too.
+#[test]
+fn bco_and_bca_close_the_clean_buffers_and_keep_the_unsaved() {
+    let three = || {
+        let mut ed = Editor::new();
+        ed.on_key(Key::Char('i'));
+        type_keys(&mut ed, "甲");
+        ed.on_key(Key::Esc);
+        ed.execute(":new").unwrap();
+        ed.execute(":new").unwrap();
+        ed
+    };
+    let mut ed = three();
+    assert_eq!(ed.buffers.len(), 3);
+    assert_eq!(ed.execute(":bco").unwrap(), CommandOutcome::Continue);
+    assert_eq!(ed.buffers.len(), 2, "the clean other one closed");
+    assert_eq!(ed.current_buffer().text(), "甲", "the unsaved one is shown");
+    ed.execute(":bco!").unwrap();
+    assert_eq!(ed.buffers.len(), 1);
+    assert_eq!(ed.current_buffer().text(), "甲", ":bco never closes this one");
+
+    let mut ed = three();
+    ed.execute(":bca").unwrap();
+    assert_eq!(ed.buffers.len(), 1);
+    assert_eq!(ed.current_buffer().text(), "甲");
+    ed.execute(":bca!").unwrap();
+    assert_eq!(ed.buffers.len(), 1);
+    assert_eq!(ed.current_buffer().text(), "", "an empty scratch is left");
+    assert!(!ed.current_buffer().is_modified());
+
+    // A window showing a closed buffer goes with it.
+    let mut ed = Editor::new();
+    ed.execute(":vsplit-new").unwrap();
+    ed.execute(":bco").unwrap();
+    assert_eq!(ed.buffers.len(), 1);
+}
+
+/// **`:write-buffer-close`, helix's `:wbc`**: saved, then closed; a save that
+/// did not happen leaves it open.
+#[test]
+fn wbc_saves_then_closes() {
+    let dir = tmp().join(format!("yumete-wbc-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("一.md");
+    std::fs::write(&file, "一\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    ed.current_buffer_mut().insert(0, "零").unwrap();
+    ed.execute(":new").unwrap();
+    ed.execute(":bp").unwrap();
+    assert_eq!(ed.execute(":wbc").unwrap(), CommandOutcome::Continue);
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), "零一\n");
+    assert_eq!(ed.buffers.len(), 1, "closed after the save");
+    // No file name: nothing saved, nothing closed.
+    ed.on_key(Key::Char('i'));
+    type_keys(&mut ed, "乙");
+    ed.on_key(Key::Esc);
+    assert!(matches!(ed.execute(":wbc"), Err(EditorError::NoFileName)));
+    assert_eq!(ed.current_buffer().text(), "乙");
+    let _ = std::fs::remove_dir_all(&dir);
+}

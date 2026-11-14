@@ -688,6 +688,63 @@ impl Editor {
         self.clamp_cursor();
     }
 
+    /// **`:sort`**: with several selections helix's, their texts sorted among
+    /// themselves ([`Self::sort_selections`]); with one, vim's `:sort` on the
+    /// lines it covers, or on the whole buffer when nothing is selected.
+    ///
+    /// By code point, as both of them compare: a run of 漢字 comes out in
+    /// Unicode order, not by reading or by stroke. The sort is stable, so
+    /// lines equal under `insensitive` keep their order, as vim's `:sort i`
+    /// and helix's `-i` keep it.
+    pub(super) fn sort(&mut self, reverse: bool, insensitive: bool) {
+        if self.refuse_readonly() {
+            return;
+        }
+        if self.sel.is_plural() {
+            self.sort_selections(reverse, insensitive);
+            return;
+        }
+        let rope = self.current_buffer().rope();
+        // The line after the last newline is no line when it is empty.
+        let lines = match rope.len_lines() > 1 && rope.line(rope.len_lines() - 1).len_chars() == 0 {
+            true => rope.len_lines() - 1,
+            false => rope.len_lines(),
+        };
+        let (first, last) = match self.has_selection() {
+            true => {
+                let (start, end) = self.selection();
+                (rope.char_to_line(start), rope.char_to_line(end.saturating_sub(1).max(start)))
+            }
+            false => (0, lines.saturating_sub(1)),
+        };
+        let last = last.min(lines.saturating_sub(1)).max(first);
+        let from = rope.line_to_char(first);
+        let to = rope.line_to_char(last) + rope.line(last).len_chars();
+        let was: String = rope.slice(from..to).chars().collect();
+        let ended = was.ends_with('\n');
+        let mut rows: Vec<String> = (first..=last)
+            .map(|n| rope.line(n).to_string().trim_end_matches(['\n', '\r']).to_string())
+            .collect();
+        sort_texts(&mut rows, reverse, insensitive);
+        let ending = self.current_buffer().ending().to_string();
+        let mut out = rows.join(&ending);
+        if ended {
+            out.push_str(&ending);
+        }
+        if out == was {
+            return;
+        }
+        self.snapshot();
+        if !self.overwrite(from, to, &out) {
+            return;
+        }
+        // vim leaves the cursor at the start of the range.
+        self.sel.set_anchor(from);
+        self.sel.set_head(from);
+        self.clamp_cursor();
+        self.refresh_goal_column();
+    }
+
     /// Rewrite every character of the selection through `f` (`~`, `` ` ``).
     pub(super) fn map_selection(&mut self, f: impl Fn(char) -> String) {
         let (start, selected) = self.selection();
@@ -1179,6 +1236,21 @@ impl Editor {
         }
         self.clamp_cursor();
     }
+}
+
+/// `:sort`'s order, helix's comparators: by code point, `insensitive` on the
+/// lower-cased texts, and stable either way.
+pub(super) fn sort_texts(texts: &mut [String], reverse: bool, insensitive: bool) {
+    texts.sort_by(|a, b| {
+        let order = match insensitive {
+            true => a.to_lowercase().cmp(&b.to_lowercase()),
+            false => a.cmp(b),
+        };
+        match reverse {
+            true => order.reverse(),
+            false => order,
+        }
+    });
 }
 
 /// Where the first `sign` stands in `line`, as byte offsets, outside a

@@ -164,6 +164,20 @@ en = "open files: list, switch, close"
 find = "緩衝區 缓冲区 檔案 文件 分頁 標籤 tabs files switch bn bp bc"
 
 [[message]]
+# : 命令菜单里 buffer-close-all 那一项的说明（草稿）
+key = "cmd.commands.buffer-close-all"
+zhs = "关闭所有文件，有未保存改动的留下(`buffer-close-all!` 放弃改动)"
+en = "close every file, keeping those with unsaved changes (`buffer-close-all!` discards them)"
+find = "关闭所有 關閉所有 全部关闭 全部關閉 close all bca buffer"
+
+[[message]]
+# : 命令菜单里 buffer-close-others 那一项的说明（草稿）
+key = "cmd.commands.buffer-close-others"
+zhs = "关闭其他文件，有未保存改动的留下(`buffer-close-others!` 放弃改动)"
+en = "close every other file, keeping those with unsaved changes (`buffer-close-others!` discards them)"
+find = "关闭其他 關閉其他 其他文件 close others bco buffer"
+
+[[message]]
 # : 命令選單裏 cd 那一項的説明
 key = "cmd.commands.cd"
 zhs = "切换工作目录"
@@ -680,6 +694,13 @@ en = "screenshot: to the clipboard by default, or a file in Downloads with `png`
 find = "截圖 截图 圖片 图片 存圖 存图 screenshot png html 剪貼簿 剪贴簿"
 
 [[message]]
+# : 命令菜单里 sort 那一项的说明（草稿）
+key = "cmd.commands.sort"
+zhs = "排序：多个选区时排各选区的内容，否则排选中的行，无选区时排整个文件；按码位，-r 倒序，-i 不分大小写"
+en = "sort the selections' texts when there are several, else the selected lines, or every line; by code point, -r reversed, -i ignoring case"
+find = "排序 倒序 逆序 sort reverse lines 行"
+
+[[message]]
 # : 命令選單裏 split-join 那一項的説明(commands 組)
 key = "cmd.commands.split-join"
 zhs = "把光标所在括号里的各项拆成每行一项，或合并回一行"
@@ -827,6 +848,13 @@ key = "cmd.commands.write"
 zhs = "保存；带路径则另存副本，`:write-as` 会切换到新文件"
 en = "save; with a path, save a copy (`:write-as` switches to it)"
 find = "保存 存檔 存档 寫入 写入 save wa"
+
+[[message]]
+# : 命令菜单里 write-buffer-close 那一项的说明（草稿）
+key = "cmd.commands.write-buffer-close"
+zhs = "保存这个文件，然后关闭它"
+en = "save this file, then close it"
+find = "保存并关闭 存了再关 存檔關閉 write close wbc buffer"
 
 [[message]]
 # : 命令選單裏 write-if-changed 那一項的説明(commands 組)

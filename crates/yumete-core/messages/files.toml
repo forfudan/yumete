@@ -48,6 +48,12 @@ zhs = "已关闭"
 en = "closed"
 
 [[message]]
+# :buffer-close-others 或 :buffer-close-all 关完了，没有留下的（草稿）
+key = "buffer.closed-many"
+zhs = "已关闭 {0} 个文件"
+en = "closed {0} files"
+
+[[message]]
 # 關掉一個緩衝區，切到下一個
 key = "buffer.closed-now-showing"
 zhs = "已关闭 {0}，当前为 {1} [{2}/{3}]"
@@ -152,6 +158,12 @@ en = "there are unsaved changes — add ! to override"
 
 
 # ── cell ──────────────────────────────────────────────────────────────
+
+[[message]]
+# :buffer-close-others 或 :buffer-close-all 关了一些，有未保存改动的没关；当前切到其中一个（草稿）
+key = "buffer.unsaved-kept"
+zhs = "已关闭 {0} 个文件，{1} 个有未保存的改动没有关闭，当前为 {2}(加 ! 强制关闭)"
+en = "closed {0} files; {1} with unsaved changes kept, now {2} — add ! to close them"
 
 [[message]]
 # :cd - 而没有上一個

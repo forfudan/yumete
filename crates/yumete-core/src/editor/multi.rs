@@ -845,6 +845,50 @@ impl super::Editor {
         self.say_the_merge(merged);
     }
 
+    /// **`:sort` over several selections** (helix's `sort`): the texts sorted,
+    /// the first in order put into the first selection, the next into the
+    /// next. The boundaries stay where they are, as [`Self::rotate_contents`]
+    /// keeps them; one undo point.
+    pub(super) fn sort_selections(&mut self, reverse: bool, insensitive: bool) {
+        let rope = self.current_buffer().rope().clone();
+        let mut out: Vec<Range> = self.sel.iter().copied().collect();
+        let mut texts: Vec<String> = out
+            .iter()
+            .map(|one| {
+                let (a, b) = self.drawn(*one);
+                rope.slice(a..b).chars().collect()
+            })
+            .collect();
+        let was = texts.clone();
+        super::verbs::sort_texts(&mut texts, reverse, insensitive);
+        if texts == was {
+            return;
+        }
+        self.snapshot();
+        let grouping = self.current_buffer_mut().begin_undo_group();
+        for nth in (0..out.len()).rev() {
+            let (a, b) = self.drawn(out[nth]);
+            let now = texts[nth].chars().count();
+            if !self.edit_remove(a..b) || !self.edit_insert(a, &texts[nth]) {
+                break;
+            }
+            out[nth] = self.from_drawn(a, a + now);
+            let moved = now as isize - (b - a) as isize;
+            if moved != 0 {
+                for one in out.iter_mut().skip(nth + 1) {
+                    one.anchor = (one.anchor as isize + moved).max(0) as usize;
+                    one.head = (one.head as isize + moved).max(0) as usize;
+                }
+            }
+        }
+        self.current_buffer_mut().end_undo_group(grouping);
+        let which = self.sel.primary_index().min(out.len().saturating_sub(1));
+        let merged = self.sel.rebuild(out, which);
+        self.clamp_cursor();
+        self.refresh_goal_column();
+        self.say_the_merge(merged);
+    }
+
     /// **只留主選區**（`,`）。
     pub(super) fn keep_primary_selection(&mut self) {
         match self.sel.keep_primary() {

@@ -695,6 +695,10 @@ impl Editor {
                 self.align_lines(&sign);
                 Ok(CommandOutcome::Continue)
             }
+            Command::Sort { reverse, insensitive } => {
+                self.sort(reverse, insensitive);
+                Ok(CommandOutcome::Continue)
+            }
             Command::SplitJoin => {
                 self.edit_each(|e| e.split_join_here());
                 Ok(CommandOutcome::Continue)
@@ -727,6 +731,28 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::CloseBuffer { force } => self.close_buffer(force),
+            Command::CloseOtherBuffers { force } => self.close_buffers(false, force),
+            Command::CloseAllBuffers { force } => self.close_buffers(true, force),
+            // On the settings panel it is `:wq` there: the panel saved and shut,
+            // the chapter behind it left alone.
+            Command::WriteBufferClose { .. } if self.settings_open => {
+                self.settings_save = true;
+                self.settings_close = Some(false);
+                Ok(CommandOutcome::Continue)
+            }
+            Command::WriteBufferClose { .. } if self.page_window_has_the_keys() => {
+                self.status = say!("preview.nothing-to-write");
+                Ok(CommandOutcome::Continue)
+            }
+            Command::WriteBufferClose { path, force } => {
+                // Only a save of the buffer's own file closes it: a question
+                // asked first leaves it open to be answered, and a copy written
+                // elsewhere (`:w path` is a copy here) leaves its changes unsaved.
+                match self.write_forcing(path.as_deref(), force)? {
+                    Wrote::Saved if !self.current_buffer().is_modified() => self.close_buffer(false),
+                    _ => Ok(CommandOutcome::Continue),
+                }
+            }
             Command::Export { format, words, force } => self.export(&format, &words, force),
             Command::ExportAsPreview { words, force } => self.export_as_preview(&words, force),
             Command::Conflicts => {

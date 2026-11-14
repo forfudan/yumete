@@ -225,6 +225,12 @@ pub enum Command {
     Reflow(Option<usize>),
     /// mini.align: the selected lines lined up on a sign, `=` when none is given.
     Align(String),
+    /// `:sort` — helix's with several selections: their texts sorted among
+    /// themselves, each put back into one of the selections in order. With one
+    /// selection, vim's: the lines it covers sorted, or every line of the
+    /// buffer when nothing is selected. By code point; `reverse` from `!`
+    /// (vim) or `-r` (helix), `insensitive` from `i` (vim) or `-i` (helix).
+    Sort { reverse: bool, insensitive: bool },
     /// `:vsplit [file]` / `:hsplit [file]`: a new window beside or below the
     /// live one, showing `file` when one is named.
     SplitWindow { how: crate::window::Split, file: Option<String> },
@@ -691,6 +697,22 @@ pub enum Command {
     PreviousBuffer,
     /// `:buffer-close` (alias `:bd`), `:bd!` — close the active buffer.
     CloseBuffer {
+        force: bool,
+    },
+    /// `:buffer-close-others` (helix's `:bco`) — close every buffer but this
+    /// one. A buffer with unsaved changes stays unless `force`.
+    CloseOtherBuffers {
+        force: bool,
+    },
+    /// `:buffer-close-all` (helix's `:bca`) — close every buffer, this one
+    /// too. A buffer with unsaved changes stays unless `force`.
+    CloseAllBuffers {
+        force: bool,
+    },
+    /// `:write-buffer-close [path]` (helix's `:wbc`) — write this buffer, then
+    /// close it when the write went through. `force` writes the way `:w!` does.
+    WriteBufferClose {
+        path: Option<String>,
         force: bool,
     },
     /// `:buffers` (alias `:ls`) — name every open buffer.
@@ -1839,6 +1861,11 @@ const FORCEABLE: &[&str] = &[
     // and onto a word: `:bclose!` is now `:buffer-close!`, and a bang belongs
     // to the line it ends, not to `buffer`.
     "buffer-close!",
+    "buffer-close-others!",
+    "buffer-close-all!",
+    "write-buffer-close!",
+    // vim's `:sort!`, in reverse.
+    "sort!",
     "write!",
     "quit-all!",
     // `:wqa!`: overwrite what changed outside, as `:w!` does,
@@ -3300,6 +3327,14 @@ pub const COMMANDS: &[Entry] = &[
                 force: p.force,
             })
         }),
+    },
+    Entry {
+        name: "write-buffer-close",
+        aliases: &["wbc"],
+        help: "cmd.commands.write-buffer-close",
+        needs: &[],
+        params: &[Param::Path],
+        build: Some(|p| Ok(Command::WriteBufferClose { path: p.arg(0).map(|s| s.to_string()), force: p.force })),
     },
     Entry {
         name: "recover",
@@ -4830,6 +4865,27 @@ pub const COMMANDS: &[Entry] = &[
         params: &[Param::Free("<符號>")],
         build: Some(|p| Ok(Command::Align(p.arg(0).unwrap_or("=").to_string()))),
     },
+    // **helix's flags and vim's both**: `-r`/`--reverse` and
+    // `-i`/`--insensitive` are helix's spellings, `!` and `i` vim's. vim's
+    // `r` is not taken: there it sorts on a pattern's match, not in reverse.
+    Entry {
+        name: "sort",
+        aliases: &[],
+        help: "cmd.commands.sort",
+        needs: &[],
+        params: &[Param::Free("-r｜-i")],
+        build: Some(|p| {
+            let (mut reverse, mut insensitive) = (p.force, false);
+            for word in p.arg(0).unwrap_or("").split_whitespace() {
+                match word {
+                    "-r" | "--reverse" => reverse = true,
+                    "-i" | "--insensitive" | "i" => insensitive = true,
+                    _ => return Err(CommandError::InvalidArgument { command: "sort", value: word.to_string() }),
+                }
+            }
+            Ok(Command::Sort { reverse, insensitive })
+        }),
+    },
     Entry {
         name: "split-join",
         aliases: &[],
@@ -5573,6 +5629,22 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[],
         build: Some(|p| Ok(Command::CloseBuffer { force: p.force })),
+    },
+    Entry {
+        name: "buffer-close-others",
+        aliases: &["bco"],
+        help: "cmd.commands.buffer-close-others",
+        needs: &[],
+        params: &[],
+        build: Some(|p| Ok(Command::CloseOtherBuffers { force: p.force })),
+    },
+    Entry {
+        name: "buffer-close-all",
+        aliases: &["bca"],
+        help: "cmd.commands.buffer-close-all",
+        needs: &[],
+        params: &[],
+        build: Some(|p| Ok(Command::CloseAllBuffers { force: p.force })),
     },
     Entry {
         name: "format",
@@ -7992,7 +8064,7 @@ mod tests {
         // A head, its declared short spelling, and how many stand behind it —
         // the count last, where it reads as a remark about the row rather than
         // part of the name.
-        assert_eq!(row("", "write"), ":write (w) +5");
+        assert_eq!(row("", "write"), ":write (w) +6");
         // A family with no head of its own keeps the hyphen, which is what
         // says it is a family and not a command, and nothing else: `view-w` is
         // `view-wrap`'s spelling, not the thirteen's.
@@ -8149,14 +8221,42 @@ mod tests {
         assert_eq!(parse(":wq!"), Ok(Command::WriteQuit { path: None, force: true }));
         assert_eq!(
             complete("bc").iter().map(|e| e.name).collect::<Vec<_>>(),
-            ["buffer-close"]
+            ["buffer-close", "buffer-close-all", "buffer-close-others"]
         );
+        assert_eq!(parse(":bc"), Ok(Command::CloseBuffer { force: false }));
         // …and `:b` keeps the family together.
         let under_b: Vec<&str> = complete("b").iter().map(|e| e.name).collect();
         for want in ["buffer", "buffer-close", "buffer-next", "buffer-previous"] {
             assert!(want == "buffer" || under_b.contains(&want), "{want} missing from {under_b:?}");
         }
         assert!(complete("zzz").is_empty());
+    }
+
+    /// helix's typable commands, by helix's names and short spellings; `:sort`
+    /// by helix's flags and vim's.
+    #[test]
+    fn helix_buffer_commands_and_sort_parse() {
+        assert_eq!(parse(":bco"), Ok(Command::CloseOtherBuffers { force: false }));
+        assert_eq!(parse(":buffer-close-others!"), Ok(Command::CloseOtherBuffers { force: true }));
+        assert_eq!(parse(":bca"), Ok(Command::CloseAllBuffers { force: false }));
+        assert_eq!(parse(":bca!"), Ok(Command::CloseAllBuffers { force: true }));
+        assert_eq!(parse(":wbc"), Ok(Command::WriteBufferClose { path: None, force: false }));
+        assert_eq!(
+            parse(":wbc! 二.md"),
+            Ok(Command::WriteBufferClose { path: Some("二.md".into()), force: true })
+        );
+        let sort = |reverse, insensitive| Ok(Command::Sort { reverse, insensitive });
+        assert_eq!(parse(":sort"), sort(false, false));
+        assert_eq!(parse(":sort!"), sort(true, false));
+        assert_eq!(parse(":sort -r"), sort(true, false));
+        assert_eq!(parse(":sort --reverse --insensitive"), sort(true, true));
+        assert_eq!(parse(":sort -i"), sort(false, true));
+        assert_eq!(parse(":sort! i"), sort(true, true));
+        assert_eq!(
+            parse(":sort r"),
+            Err(CommandError::InvalidArgument { command: "sort", value: "r".into() }),
+            "vim's `r` sorts on a match, so it is refused rather than read as reverse"
+        );
     }
 
     #[test]
@@ -8611,6 +8711,7 @@ mod tests {
                     Param::Free(_) => match name {
                         "grep" | "run" | "pipe" | "run-shell-in-buffer" | "replace" => "x",
                         "table-new" => "3x4",
+                        "sort" => "-r",
                         _ => "1",
                     }
                     .to_string(),

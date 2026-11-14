@@ -1243,6 +1243,61 @@ impl Editor {
         Ok(CommandOutcome::Continue)
     }
 
+    /// `:buffer-close-others` and, with `all`, `:buffer-close-all` — helix's
+    /// `:bco` and `:bca`.
+    ///
+    /// As helix's `buffer_close_by_ids_impl`: **what can be closed is closed,
+    /// and a buffer with unsaved changes stays** unless `force`. With some
+    /// left, the screen goes to the first of them when the one on it has
+    /// nothing unsaved, so `!` is a decision about a file in view, as `:qa`
+    /// shows the file holding the exit up.
+    pub(super) fn close_buffers(&mut self, all: bool, force: bool) -> Result<CommandOutcome, EditorError> {
+        let here = self.buffers[self.current].id();
+        let others: Vec<u64> = self.buffers.iter().map(|b| b.id()).filter(|&id| id != here).collect();
+        let mut kept: Vec<u64> = Vec::new();
+        let mut closed = 0;
+        for id in others {
+            let Some(i) = self.buffer_with(id) else { continue };
+            if self.buffers[i].is_preview() {
+                closed += usize::from(self.close_preview(id));
+                continue;
+            }
+            if !force && self.buffers[i].is_modified() {
+                kept.push(id);
+                continue;
+            }
+            self.buffers[i].clear_swap();
+            self.buffers.remove(i);
+            if self.current > i {
+                self.current -= 1;
+            }
+            closed += 1;
+        }
+        let ids: Vec<u64> = self.buffers.iter().map(|b| b.id()).collect();
+        self.drop_windows_showing(|buffer| !ids.contains(&buffer));
+        self.refresh_sidebar();
+        if all && self.buffer_with(here).is_some() {
+            let current = self.current_buffer();
+            if force || current.is_preview() || !current.is_modified() {
+                self.close_buffer(force)?;
+                closed += 1;
+            } else {
+                kept.insert(0, here);
+            }
+        }
+        if kept.is_empty() {
+            self.status = say!("buffer.closed-many", closed);
+            return Ok(CommandOutcome::Continue);
+        }
+        if !self.current_buffer().is_modified() {
+            if let Some(i) = self.buffer_with(kept[0]) {
+                self.show_buffer(i);
+            }
+        }
+        self.status = say!("buffer.unsaved-kept", closed, kept.len(), self.buffer_name());
+        Ok(CommandOutcome::Continue)
+    }
+
     /// Let go of everything that was about the document you were just in.
     ///
     /// **One list, called from every place the document changes** — closing a

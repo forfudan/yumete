@@ -6,6 +6,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Added
 
+- **New commands from helix**: `:sort` (sorts several selections among themselves, or the selected lines, or the whole buffer; `-r`/`!` reverse, `-i`/`i` ignore case), `:buffer-close-others` (`:bco`), `:buffer-close-all` (`:bca`) and `:write-buffer-close` (`:wbc`); helix configs that use them now import.
 - **vim's `` `[ `` and `` `] ``** go to where the last change or yank began and ended, `'[` and `']` to their lines, and an operator takes them as it takes a letter's mark (`` d`] ``).
 - **`:git-lazygit` and `:files-yazi` hand the terminal to lazygit and yazi** and come back when you leave them: lazygit in the current file's repository, asking you to save first (`:git-lazygit!` does not ask), and yazi on the current file, where `Enter` opens the chosen files here. Files changed on disk meanwhile are read again.
 - **`:run-in-terminal <command>`** gives any program the whole terminal and comes back the moment it ends, with no key to press.

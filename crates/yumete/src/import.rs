@@ -1769,7 +1769,17 @@ language-servers = ["gopls", "golangci-lint-lsp"]
             assert_eq!(typable(&format!(":{alias}")).as_deref(), Ok(line), "{alias}");
         }
         assert_eq!(typable(":toggle soft-wrap.enable").as_deref(), Ok(":view-wrap"));
-        assert!(typable(":buffer-close-others").is_err());
+        for (helix, line) in [
+            (":bco", ":buffer-close-others"),
+            (":bcloseother!", ":buffer-close-others!"),
+            (":bca!", ":buffer-close-all!"),
+            (":buffer-close-all", ":buffer-close-all"),
+            (":wbc", ":write-buffer-close"),
+            (":sort --reverse -i", ":sort --reverse -i"),
+        ] {
+            assert_eq!(typable(helix).as_deref(), Ok(line), "{helix}");
+        }
+        assert!(typable(":cquit").is_err());
         assert_eq!(typable(":set soft-wrap.enable false").as_deref(), Ok(":view-wrap off"));
         assert_eq!(typable(":set soft-wrap.enable true").as_deref(), Ok(":view-wrap on"));
     }
