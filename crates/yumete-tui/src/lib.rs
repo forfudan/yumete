@@ -22875,9 +22875,11 @@ fn squeezed(text: &str) -> String {
         let page = where_report(&ime);
         assert!(page.contains(&say!("yume.where.words-app")), "{page}");
         assert!(page.contains(&say!("yume.where.words-own")), "{page}");
-        let app_line = say!("yume.where.words-file", "data/lingming_user_dict.txt", 2);
+        // The path as this system writes it: `data\\…` on Windows.
+        let native = |a: &str, b: &str| std::path::Path::new(a).join(b).display().to_string();
+        let app_line = say!("yume.where.words-file", native("data", "lingming_user_dict.txt"), 2);
         assert!(page.contains(&app_line), "{page}");
-        let own_line = say!("yume.where.words-file", "lingming/user_dict.txt", 1);
+        let own_line = say!("yume.where.words-file", native("lingming", "user_dict.txt"), 1);
         assert!(page.contains(&own_line), "{page}");
         for word in ["你们", "他们", "她们"] {
             assert!(!page.contains(word), "an entry leaked: {word}");
