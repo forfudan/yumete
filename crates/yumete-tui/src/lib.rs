@@ -1575,18 +1575,19 @@ pub fn run(
                     // It asks yume the same question the tap does, so a rebound
                     // Shift is rebound here too; outside a place that composes
                     // there is nothing to commit, so it is only the switch.
-                    // Warning: **not in vim's Normal mode**: there `C-^` is
-                    // vim's previous file, and the key goes to the keymap. While
-                    // typing it is vim's own `i_CTRL-^`, the language switch.
-                    let vims_own = !composes_here(editor)
-                        && editor.mode() == Mode::Normal
-                        && editor.key_preset() == yumete_core::KeyPreset::Vim
+                    // Warning: **`C-^` is vim's in vim's Normal mode**: the
+                    // previous file, so the key goes to the keymap even when it
+                    // is the one named. While typing it is vim's own
+                    // `i_CTRL-^`, the language switch, whatever key is named.
+                    let caret = editor.key_preset() == yumete_core::KeyPreset::Vim
                         && mods.contains(KeyModifiers::CONTROL)
                         && matches!(code, KeyCode::Char('^' | '6'));
+                    let vims_own = caret && !composes_here(editor) && editor.mode() == Mode::Normal;
+                    let vims_switch = caret && composes_here(editor);
                     if !taken && ime.available()
                         && ime.engaged()
                         && !vims_own
-                        && language_key(config).is_some_and(|k| is_language_key(k, code, mods))
+                        && (vims_switch || language_key(config).is_some_and(|k| is_language_key(k, code, mods)))
                     {
                         borrowed.answered_in(editor.mode());
                         match composes_here(editor) {
@@ -30435,22 +30436,24 @@ fn squeezed(text: &str) -> String {
         let mut config = Config::default();
         let want = language_key(&config).expect("bound out of the box");
 
-        // Apple Terminal sends 0x1E, which crossterm reads back as `6`.
+        // Out of the box it is `C-\`, Emacs's `toggle-input-method`.
+        // Apple Terminal sends 0x1C, which crossterm reads back as `4`.
         assert!(is_language_key(
             want,
-            KeyCode::Char('6'),
+            KeyCode::Char('4'),
             KeyModifiers::CONTROL
         ));
         // A Kitty-protocol terminal sends the character that was typed.
         assert!(is_language_key(
             want,
-            KeyCode::Char('^'),
-            KeyModifiers::CONTROL | KeyModifiers::SHIFT
+            KeyCode::Char('\\'),
+            KeyModifiers::CONTROL
         ));
         assert!(
-            !is_language_key(want, KeyCode::Char('6'), KeyModifiers::NONE),
-            "a bare 6 is a count, not a language switch"
+            !is_language_key(want, KeyCode::Char('4'), KeyModifiers::NONE),
+            "a bare 4 is a count, not a language switch"
         );
+        assert!(!is_language_key(want, KeyCode::Char('6'), KeyModifiers::CONTROL), "C-^ is vim's");
 
         config.editor.language_key = "A-l".to_string();
         let want = language_key(&config).expect("A- is a name too");

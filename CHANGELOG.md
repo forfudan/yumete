@@ -28,6 +28,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Changed
 
+- **The stand-in for a Shift tap is `C-\` by default** (`[editor] language_key`), the key Emacs switches its input method with, instead of `C-^`: under the vim keys `C-^` is vim's previous file in Normal mode, so a terminal without the Kitty protocol had no key to switch 中/英 there. While typing, vim's `C-^` still switches.
 - **The 中/ABC sign is the last thing a narrow status line gives up**: the scheme's name goes first (`[中]`), and whatever fits again comes back, so a narrow line never shows a blank stretch while something is missing.
 - **A long message shortens the paths in it in the middle**, keeping the file name and the sentence after it; what still does not fit ends in `…`.
 - **The candidate panel's colours**: the highlighted candidate is a gold bar across the whole panel (down the whole column in vertical layout, the whole cell in the one-row strips), the keys still owed after a candidate are gold, and the numbers and annotations are grey.

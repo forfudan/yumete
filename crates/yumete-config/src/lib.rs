@@ -557,7 +557,7 @@ impl Default for EditorConfig {
             auto_pairs: "basic".to_string(),
             indent_symbol: "↵".to_string(),
             table_rules: "line dash".to_string(),
-            language_key: "C-^".to_string(),
+            language_key: "C-\\".to_string(),
             show_segmentation: true,
             word_level: yumete_cjk::WordLevel::default(),
             word_mark: yumete_cjk::WordMark::default(),

@@ -2983,7 +2983,7 @@ In Insert mode, type to insert; Esc returns to Normal. With the input method on
 other schemes need the Yume data. Type a code to see candidates, Space or 1–9
 to select, -/= to page, Backspace to edit, Esc to cancel; tap Shift to switch
 中/ABC (needs the Kitty keyboard protocol; otherwise [editor] language_key,
-C-^ by default)."
+C-\\ by default)."
     );
 }
 

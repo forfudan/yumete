@@ -1366,7 +1366,7 @@ pub const SETTINGS: &[Setting] = &[
         kind: Kind::Text,
         label: "settings.editor.language-key",
         hint: "settings.editor.language-key.hint",
-        factory: r#""C-^""#,
+        factory: r#""C-\\""#,
     },
     Setting {
         table: "editor",
