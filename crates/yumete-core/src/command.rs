@@ -609,6 +609,9 @@ pub enum Command {
     YumeCharset(Option<String>),
     /// `:yume-charset-sort original|common|tonggui|harmonic` — 字集排序.
     YumeCharsetSort(Option<String>),
+    /// `:yume-single-char both|primary|strict` — 單字派, the copy for the
+    /// 上屏方式 in force. `None` steps to the next, as Yume's ⌃⇧D does.
+    YumeSingleChar(Option<String>),
     /// `:yume-lanes tonggui|tongfan|tai|common|harmonic|guji|gang|default` —
     /// 整句字集軌: one lane first (added when it is not one yet), or Yume's
     /// order. `None` asks.
@@ -2485,6 +2488,25 @@ const CHARSETS: &[Word] = &[
     },
 ];
 
+/// 單字派——`:yume-single-char` 的三個詞，yume 自己的名字，⌃⇧D 輪換的次序。
+const SINGLE_CHARS: &[Word] = &[
+    Word {
+        name: "both",
+        help: "ime.single-char.both",
+        needs: &[],
+    },
+    Word {
+        name: "primary",
+        help: "ime.single-char.primary",
+        needs: &[],
+    },
+    Word {
+        name: "strict",
+        help: "ime.single-char.strict",
+        needs: &[],
+    },
+];
+
 /// 字集排序——`:yume-charset-sort` 的四個詞。
 const CHARSET_SORTS: &[Word] = &[
     Word {
@@ -4279,7 +4301,9 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "yume-scheme",
-        aliases: &[],
+        // `yume-s` by name: by prefix it begins `yume-single-char` too, and
+        // `:yume-s l` is the whole of starting to type.
+        aliases: &["yume-s"],
         help: "cmd.yume.scheme",
         needs: &[],
         params: &[Param::Schemes],
@@ -4332,6 +4356,14 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[Param::Words { of: CHARSETS, default: None }],
         build: Some(|p| Ok(Command::YumeCharset(p.arg(0).map(str::to_string)))),
+    },
+    Entry {
+        name: "yume-single-char",
+        aliases: &[],
+        help: "cmd.yume.single-char",
+        needs: &[],
+        params: &[Param::Words { of: SINGLE_CHARS, default: None }],
+        build: Some(|p| Ok(Command::YumeSingleChar(p.arg(0).map(str::to_string)))),
     },
     Entry {
         name: "yume-charset-sort",
@@ -7796,6 +7828,20 @@ mod tests {
         assert!(parse(":lay").is_err());
         // 而 `:vertical-keys` 是另一條，一個字都没被搶走。
         assert_eq!(parse(":vertical-keys"), Ok(Command::SetVerticalKeys(None)));
+    }
+
+    /// 單字派: yume's three words, and bare is the step ⌃⇧D takes — the
+    /// front end knows which copy is in force, so the parser says only that.
+    #[test]
+    fn single_char_takes_yumes_three_words() {
+        assert_eq!(parse(":yume-single-char"), Ok(Command::YumeSingleChar(None)));
+        for word in ["both", "primary", "strict"] {
+            assert_eq!(
+                parse(&format!(":yume-single-char {word}")),
+                Ok(Command::YumeSingleChar(Some(word.into())))
+            );
+        }
+        assert!(parse(":yume-single-char words").is_err());
     }
 
     #[test]

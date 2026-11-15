@@ -1012,6 +1012,15 @@ fn main() -> ExitCode {
         &config.ime.lanes,
     );
     let charsets_at_load = charsets.clone();
+    // 單字派, both copies, Yume's defaults unless said.
+    let single_chars = yumete_ime::SingleChars::from_words(
+        &config.ime.single_char,
+        &config.ime.sentence_single_char,
+        &config.ime.word_show,
+    );
+    // **The app's word lists and yumete's own** are read and written only by a
+    // session somebody types in: a picture or a preview reads nobody's words.
+    let keeps_words = shot.is_none() && !force_preview && !timing && std::io::stdout().is_terminal();
     // Read after the first frame rather than before it — see `yumete_tui::
     // Deferred`. Everything it loads is a keystroke away; the page is not.
     let annotation_at_load = annotation.clone();
@@ -1033,9 +1042,13 @@ fn main() -> ExitCode {
         // After, not before: the line above may have replaced the session
         // wholesale with one built from the installed tables.
         ime.set_charsets(charsets_at_load.clone());
+        ime.set_single_chars(single_chars);
         ime.set_commit_strategy(commit);
         ime.set_panel_display(panel);
         ime.set_inline_preedit(preedit);
+        if keeps_words {
+            ime.set_user_word_roots(yumete_ime::UserWordRoots::of_this_machine());
+        }
         said
     };
     // A preview prints and exits: there is no frame to be after, so it is read
@@ -1184,6 +1197,7 @@ fn main() -> ExitCode {
             // 同**，而真機各
             // 畫各的。配置那一族的畫面就離屏審不了。
             ime.set_charsets(charsets.clone());
+            ime.set_single_chars(single_chars);
             ime.set_commit_strategy(commit);
             ime.set_panel_display(panel);
             ime.set_inline_preedit(preedit);

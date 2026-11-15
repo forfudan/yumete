@@ -657,6 +657,28 @@ pub fn apply_ime(config: &Config, ime: &mut crate::ImeSession) {
         &config.ime.charset_sort,
         &config.ime.lanes,
     ));
+    // 單字派, both copies, and the words 主單副詞 still shows.
+    ime.set_single_chars(yumete_ime::SingleChars::from_words(
+        &config.ime.single_char,
+        &config.ime.sentence_single_char,
+        &config.ime.word_show,
+    ));
+}
+
+/// **單字派 is pushed by a reload** — both copies and `word_show`, read
+/// from the config words.
+#[cfg(test)]
+#[test]
+fn single_char_is_pushed_from_the_config() {
+    let config = Config::from_toml(
+        "[ime]\nsingle_char = \"strict\"\nsentence_single_char = \"primary\"\nword_show = [\"three\"]\n",
+    );
+    let mut ime = crate::ImeSession::from_table_text(yumete_ime::Scheme::LINGMING, "a 啊\n");
+    apply_ime(&config, &mut ime);
+    let got = ime.single_chars();
+    assert_eq!(got.char_by_char, yumete_ime::SingleCharMode::Strict);
+    assert_eq!(got.sentence, yumete_ime::SingleCharMode::Primary);
+    assert!(got.word_show.show_three && !got.word_show.show_two);
 }
 
 #[cfg(test)]
@@ -692,7 +714,13 @@ mod every_setting_is_pushed_here {
         // 是因為啓動那一趟會把整個輸入法會話**換掉**（`ImeSession::language_only`），
         // 換完的那一個沒聽過 `apply_ime`。所以釘的是「這個檔裏也有」，不是「那邊
         // 沒有」。
-        for needle in ["set_ambiguous_wide", "messages::set_language", "set_commit_strategy", "set_charsets"] {
+        for needle in [
+            "set_ambiguous_wide",
+            "messages::set_language",
+            "set_commit_strategy",
+            "set_charsets",
+            "set_single_chars",
+        ] {
             assert!(here.contains(needle), "{needle} 要在這個檔裏也推一遍");
         }
     }

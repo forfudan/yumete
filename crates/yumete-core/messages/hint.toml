@@ -2087,6 +2087,12 @@ zhs = "选择方案"
 en = "pick a scheme"
 
 [[message]]
+# 空格 z d：單字派那一組（宇夢的 ⌃⇧D）（草稿）
+key = "hint.yume.single-char"
+zhs = "单字派"
+en = "single characters"
+
+[[message]]
 # 空格 z s：字集排序那一組（宇夢的字串）
 key = "hint.yume.sort"
 zhs = "字集排序"

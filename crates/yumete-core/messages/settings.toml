@@ -1205,6 +1205,30 @@ zhs = "用哪套输入方案。拼音、灵明、星陈为内置，其他方案�
 en = "which scheme to type with. Pinyin, Lingming and Xingchen are built in; the others need installing"
 
 [[message]]
+# 設置：單字派（整句那一份）（草稿）
+key = "settings.ime.sentence-single-char"
+zhs = "单字派（整句）"
+en = "single characters, whole sentence"
+
+[[message]]
+# 設置：單字派（整句）——一句話（草稿）
+key = "settings.ime.sentence-single-char.hint"
+zhs = "整句上屏时，候选中出不出词"
+en = "whether the candidates offer words when committing whole sentences"
+
+[[message]]
+# 設置：單字派（逐字那一份）（草稿）
+key = "settings.ime.single-char"
+zhs = "单字派（逐字）"
+en = "single characters, char by char"
+
+[[message]]
+# 設置：單字派（逐字）——一句話（草稿）
+key = "settings.ime.single-char.hint"
+zhs = "延迟上屏与唯一上屏时，候选中出不出词"
+en = "whether the candidates offer words when committing character by character"
+
+[[message]]
 # 設置：启动就载入码表
 key = "settings.ime.start"
 zhs = "启动时加载码表"

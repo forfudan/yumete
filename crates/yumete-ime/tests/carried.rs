@@ -197,7 +197,7 @@ fn a_scheme_switch_keeps_abc_and_prediction() {
     assert!(!ime.is_chinese(), "ABC after the switch");
     assert_eq!(ime.prediction_enabled(), prediction);
     let mut builtin = ImeSession::builtin(Scheme::PINYIN).expect("carried");
-    builtin.carry_settings_from(&ime);
+    builtin.carry_settings_from(&mut ime);
     assert!(!builtin.is_chinese());
     assert_eq!(builtin.prediction_enabled(), prediction);
 }

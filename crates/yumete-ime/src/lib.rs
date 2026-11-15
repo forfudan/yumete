@@ -22,6 +22,9 @@
 
 pub mod reading;
 pub mod segment;
+pub mod user_words;
+#[cfg(test)]
+mod user_words_tests;
 
 use std::borrow::Cow;
 use std::path::{Path, PathBuf};
@@ -42,6 +45,9 @@ use yume_core::{
 pub use reading::YumeReader;
 pub use yume_core::{CharsetFilterMode, CharsetSortMode};
 pub use segment::YumeSegmenter;
+pub use user_words::{ReadFile, UserWordRoots};
+pub use yume_core::engine::WordDisplayPrefs;
+pub use yume_core::SingleCharMode;
 pub use yumete_config::{AnnotationMode, PanelDisplay, InlinePreedit};
 // A frontend that reads [`DataProblem`] has to be able to name its `kind`, and
 // it has no yume-core of its own.
@@ -589,6 +595,14 @@ pub struct ImeSession {
     /// 字集過濾、字集排序、整句字集軌, kept here so a scheme switch, which
     /// builds a new engine, keeps them.
     charsets: Charsets,
+    /// 單字派, both copies, kept for the same reason.
+    single_chars: SingleChars,
+    /// Where the app's word lists and yumete's own are, once the front end
+    /// has said. Kept apart from what was read: a session with no 碼表 yet
+    /// reads nothing, and passes the roots on to the one that has.
+    user_roots: Option<UserWordRoots>,
+    /// What was read from them for this scheme, and what is learned.
+    user_words: Option<user_words::UserWords>,
 }
 
 /// **字集過濾、字集排序與整句字集軌**, as Yume's own front ends
@@ -648,6 +662,84 @@ impl Charsets {
     }
 }
 
+/// **單字派**: whether the candidates offer words, as Yume keeps it — two
+/// copies, one for each kind of 上屏方式, and the words 主單副詞 still shows.
+///
+/// Two copies because the two ways of committing want opposite things. Typing
+/// character by character (延遲, 唯一) there is no sentence lattice for a word
+/// to be noise in, and typing a word's code is asking for the word; in 整句 a
+/// word in the 碼表 is an edge that outweighs the characters it covers. So the
+/// defaults are Yume's: 字詞同出 for the first, 嚴格單字 for the second.
+///
+/// A scheme that does not filter (拼音, `single_char_filter = false`) ignores
+/// both, and so do 反查 and 詞首大寫. The user's own words show in every mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SingleChars {
+    /// 逐字 — 延遲上屏 and 唯一上屏.
+    pub char_by_char: SingleCharMode,
+    /// 整句.
+    pub sentence: SingleCharMode,
+    /// 主單副詞偏好設置: which words 主單副詞 still shows. All off, as in Yume.
+    pub word_show: WordDisplayPrefs,
+}
+
+impl Default for SingleChars {
+    fn default() -> Self {
+        SingleChars {
+            char_by_char: SingleCharMode::Both,
+            sentence: SingleCharMode::Strict,
+            word_show: WordDisplayPrefs::default(),
+        }
+    }
+}
+
+impl SingleChars {
+    /// From the config's words (`[ime] single_char`, `sentence_single_char`,
+    /// `word_show`); a word yume does not know keeps the default.
+    pub fn from_words(single: &str, sentence: &str, word_show: &[String]) -> Self {
+        let mut out = SingleChars::default();
+        if let Some(m) = SingleCharMode::from_str_tag(single) {
+            out.char_by_char = m;
+        }
+        if let Some(m) = SingleCharMode::from_str_tag(sentence) {
+            out.sentence = m;
+        }
+        let on = |w: &str| word_show.iter().any(|s| s == w);
+        out.word_show = WordDisplayPrefs {
+            show_two: on("two"),
+            show_three: on("three"),
+            show_four: on("four"),
+            show_longer: on("longer"),
+            show_whitelist: on("whitelist"),
+        };
+        out
+    }
+
+    /// The order a bare `:yume-single-char` steps through, Yume's ⌃⇧D:
+    /// 字詞同出 → 主單副詞 → 嚴格單字.
+    pub fn next(mode: SingleCharMode) -> SingleCharMode {
+        match mode {
+            SingleCharMode::Both => SingleCharMode::Primary,
+            SingleCharMode::Primary => SingleCharMode::Strict,
+            SingleCharMode::Strict => SingleCharMode::Both,
+        }
+    }
+
+    fn of(engine: &Engine) -> Self {
+        SingleChars {
+            char_by_char: engine.single_char_mode(),
+            sentence: engine.sentence_single_char_mode(),
+            word_show: engine.word_prefs(),
+        }
+    }
+
+    fn apply(&self, engine: &mut Engine) {
+        engine.set_single_char_mode(self.char_by_char);
+        engine.set_sentence_single_char_mode(self.sentence);
+        engine.set_word_prefs(self.word_show);
+    }
+}
+
 impl ImeSession {
     /// Build a session for `scheme`, loading its data tables from `data_dirs`
     /// (the first directory containing a given file wins). [`available`] is
@@ -675,6 +767,9 @@ impl ImeSession {
             panel_room: true,
             engaged: true,
             charsets: Charsets::default(),
+            single_chars: SingleChars::default(),
+            user_roots: None,
+            user_words: None,
         }
     }
 
@@ -716,6 +811,7 @@ impl ImeSession {
         // 靈明's rules are the ones yumete knows; a foreign table is driven by
         // them until it says otherwise, which for a shape scheme is right.
         engine.set_scheme_by_tag(Scheme::LINGMING.tag());
+        SingleChars::default().apply(&mut engine);
         Ok(ImeSession {
             engine,
             scheme: Scheme::LINGMING,
@@ -732,6 +828,9 @@ impl ImeSession {
             panel_room: true,
             engaged: true,
             charsets: Charsets::default(),
+            single_chars: SingleChars::default(),
+            user_roots: None,
+            user_words: None,
         })
     }
 
@@ -769,6 +868,9 @@ impl ImeSession {
             panel_room: true,
             engaged: true,
             charsets: Charsets::default(),
+            single_chars: SingleChars::default(),
+            user_roots: None,
+            user_words: None,
         }
     }
 
@@ -928,6 +1030,9 @@ impl ImeSession {
             panel_room: true,
             engaged: true,
             charsets: Charsets::default(),
+            single_chars: SingleChars::default(),
+            user_roots: None,
+            user_words: None,
         }
     }
 
@@ -954,12 +1059,16 @@ impl ImeSession {
             panel_room: true,
             engaged: true,
             charsets: Charsets::default(),
+            single_chars: SingleChars::default(),
+            user_roots: None,
+            user_words: None,
         }
     }
 
     /// Wrap a pre-built engine (used in tests and by callers assembling their own
     /// tables). The session is marked available.
     pub fn from_engine(engine: Engine, scheme: Scheme) -> Self {
+        let single_chars = SingleChars::of(&engine);
         ImeSession {
             engine,
             scheme,
@@ -976,6 +1085,9 @@ impl ImeSession {
             panel_room: true,
             engaged: true,
             charsets: Charsets::default(),
+            single_chars,
+            user_roots: None,
+            user_words: None,
         }
     }
 
@@ -987,6 +1099,7 @@ impl ImeSession {
         table.load_text(table_text);
         let mut engine = Engine::new(table);
         engine.set_scheme_by_tag(scheme.tag());
+        SingleChars::default().apply(&mut engine);
         ImeSession {
             engine,
             scheme,
@@ -1003,6 +1116,9 @@ impl ImeSession {
             panel_room: true,
             engaged: true,
             charsets: Charsets::default(),
+            single_chars: SingleChars::default(),
+            user_roots: None,
+            user_words: None,
         }
     }
 
@@ -1072,6 +1188,101 @@ impl ImeSession {
         self.charsets = charsets;
     }
 
+    /// 單字派, both copies.
+    pub fn single_chars(&self) -> SingleChars {
+        self.single_chars
+    }
+
+    /// Set them, now and for every scheme this session switches to.
+    pub fn set_single_chars(&mut self, single_chars: SingleChars) {
+        single_chars.apply(&mut self.engine);
+        self.single_chars = single_chars;
+    }
+
+    /// Whether this scheme filters by 單字派 at all. 拼音 does not: its words
+    /// come from the sentence lattice, and a filter would leave it nothing.
+    pub fn single_char_applies(&self) -> bool {
+        self.engine.single_char_filter()
+    }
+
+    /// Whether the 上屏方式 in force is 整句 — which copy of 單字派 answers.
+    pub fn single_char_is_sentence(&self) -> bool {
+        self.engine.active_is_sentence()
+    }
+
+    /// The 單字派 copy for the 上屏方式 in force.
+    pub fn active_single_char(&self) -> SingleCharMode {
+        self.engine.active_single_char_mode()
+    }
+
+    /// Set the copy for the 上屏方式 in force; the other stays.
+    pub fn set_active_single_char(&mut self, mode: SingleCharMode) {
+        self.engine.set_active_single_char_mode(mode);
+        let word_show = self.single_chars.word_show;
+        self.single_chars = SingleChars { word_show, ..SingleChars::of(&self.engine) };
+    }
+
+    /// **Where the Yume app's word lists and yumete's own are** — said once
+    /// by the front end, and passed on to every session that replaces this
+    /// one. Read for this scheme at once when it has a 碼表; a session typing
+    /// from a table file of its own reads none, its codes being somebody
+    /// else's.
+    pub fn set_user_word_roots(&mut self, roots: UserWordRoots) {
+        self.save_learning();
+        self.user_roots = Some(roots);
+        self.user_words = None;
+        self.read_user_words();
+    }
+
+    fn read_user_words(&mut self) {
+        let Some(roots) = self.user_roots.clone() else {
+            return;
+        };
+        if !self.available || self.table_file.is_some() {
+            return;
+        }
+        let tag = self.scheme.tag();
+        self.user_words = Some(user_words::UserWords::load(&mut self.engine, roots, tag));
+    }
+
+    /// Write what this session learned to yumete's own files: words, 調頻,
+    /// 固頂. Cheap when nothing changed; the front end calls it on leaving
+    /// Insert, on losing focus and on the way out.
+    pub fn save_learning(&mut self) {
+        if let Some(words) = &mut self.user_words {
+            words.save(&mut self.engine);
+        }
+    }
+
+    /// Read the word lists again if a file changed since — the app saved, or
+    /// a file was edited by hand. Gives whether anything was read.
+    pub fn refresh_user_words(&mut self) -> bool {
+        match &mut self.user_words {
+            Some(words) => words.refresh(&mut self.engine),
+            None => false,
+        }
+    }
+
+    /// The word-list files read for this scheme, the app's and yumete's own,
+    /// with how many entries each held.
+    pub fn user_files_read(&self) -> &[ReadFile] {
+        self.user_words.as_ref().map_or(&[], |w| w.files_read())
+    }
+
+    /// The folders the word lists are looked for in, once the front end said.
+    pub fn user_word_roots(&self) -> Option<&UserWordRoots> {
+        self.user_roots.as_ref()
+    }
+
+    /// Remove a word from yumete's own 用户詞庫 — what it learned, never the
+    /// app's. Gives how many lines went.
+    pub fn forget_own_word(&mut self, word: &str) -> usize {
+        match &mut self.user_words {
+            Some(words) => words.forget(&mut self.engine, word),
+            None => 0,
+        }
+    }
+
     /// The lanes that decode right now: a filter other than every character
     /// keeps only the lanes that cover it, and a scheme may lock its own.
     pub fn active_lanes(&self) -> Vec<String> {
@@ -1094,10 +1305,13 @@ impl ImeSession {
         let mode = self.annotation_wanted.clone();
         // 中/ABC and 輸入預測 live in the engine, and are the writer's too.
         let (chinese, prediction) = (self.is_chinese(), self.prediction_enabled());
+        // What the old scheme learned goes to its own files before its engine goes.
+        self.save_learning();
         // Warning: **換方案也要退得到出廠表**：`new` 與這一支走同一個
         // `build_engine`，內嵌的那一層在 `locate` 裏，兩條路不會分家。
         let (mut engine, available, problems, builtin) = build_engine(scheme, &self.data_dirs);
         self.charsets.apply(&mut engine);
+        self.single_chars.apply(&mut engine);
         self.builtin = builtin;
         // 上一個方案若是從一個上傳的碼表載的，那個檔名不再說的是這一個。
         self.table_file = None;
@@ -1111,6 +1325,8 @@ impl ImeSession {
         self.set_annotation_modes(&modes);
         self.set_annotation(mode.as_deref());
         self.keep_engine_state(chinese, prediction);
+        self.user_words = None;
+        self.read_user_words();
         available
     }
 
@@ -1124,11 +1340,19 @@ impl ImeSession {
 
     /// **Take the writer's settings from the session this one replaces**
     /// (`:yume-builtin`, `:yume-installed`, the first scheme loaded): the
-    /// page size, 字集, annotation, 上屏方式, panel, preedit, 中/ABC and
+    /// page size, 字集, 單字派, annotation, 上屏方式, panel, preedit, 中/ABC and
     /// 輸入預測. A setting left behind looked like one that did not stick.
-    pub fn carry_settings_from(&mut self, old: &ImeSession) {
+    ///
+    /// The old session's learning is saved, and its word-list folders are
+    /// this one's too, read for this scheme.
+    pub fn carry_settings_from(&mut self, old: &mut ImeSession) {
+        old.save_learning();
         self.set_page_size(old.page_size());
         self.set_charsets(old.charsets().clone());
+        self.set_single_chars(old.single_chars());
+        if let Some(roots) = old.user_roots.clone() {
+            self.set_user_word_roots(roots);
+        }
         self.carry_annotation_from(old);
         self.set_commit_strategy(old.commit_override());
         self.set_panel_display(old.panel_display());
@@ -1344,8 +1568,20 @@ impl ImeSession {
     }
 
     /// Take and clear any committed text produced by the last action.
+    ///
+    /// What the engine learned with it — a new word, a shorter code, a pin —
+    /// is taken too and kept (see [`user_words`]), so its queues do not grow.
     pub fn take_committed(&mut self) -> String {
-        self.engine.take_committed()
+        let text = self.engine.take_committed();
+        match &mut self.user_words {
+            Some(words) => words.collect(&mut self.engine),
+            None => {
+                self.engine.take_new_codes();
+                self.engine.take_new_words();
+                self.engine.take_new_pinyin_words();
+            }
+        }
+        text
     }
 
     /// The current display mode (Latin / Normal / Raw / Reverse / Sentence /
@@ -2552,8 +2788,9 @@ fn build_engine(scheme: Scheme, dirs: &[PathBuf]) -> (Engine, bool, Vec<DataProb
         }
     }
 
-    // Yume's 字集 defaults, until the session is told otherwise.
+    // Yume's 字集 and 單字派 defaults, until the session is told otherwise.
     Charsets::default().apply(&mut engine);
+    SingleChars::default().apply(&mut engine);
     (engine, dictionary, problems, carried)
 }
 

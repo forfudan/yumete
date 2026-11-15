@@ -1181,6 +1181,12 @@ impl Editor {
                 self.scheme_request = Some(format!("charset-sort:{}", word.unwrap_or_default()));
                 Ok(CommandOutcome::Continue)
             }
+            // 單字派 too; bare is `next`, the step ⌃⇧D takes.
+            Command::YumeSingleChar(word) => {
+                let word = word.unwrap_or_else(|| "next".to_string());
+                self.scheme_request = Some(format!("single-char:{word}"));
+                Ok(CommandOutcome::Continue)
+            }
             Command::YumeLanes(word) => {
                 self.scheme_request = Some(format!("lanes:{}", word.unwrap_or_default()));
                 Ok(CommandOutcome::Continue)

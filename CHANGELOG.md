@@ -6,6 +6,8 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Added
 
+- **Single-character mode (单字派) like the Yume app, in two copies**: character by character (default 字词同出) and whole sentence (default 严格单字): `[ime] single_char`, `sentence_single_char`, `word_show`, two settings rows, `:yume-single-char` and `Space z d`.
+- **yumete reads the Yume app's word lists, 固顶 pins and 调频** (never writing them), re-reads them when the app saves, and keeps what it learns in files of its own, so learning on 拼音 and 冰雪 is no longer lost on exit; `:yume-where` lists them.
 - **`:genda`: in the history (`Tab`), `d` deletes the picked record from the kept history and `u` brings deletions back where they stood, latest first, until you leave the history; the totals follow. Typing `:` over the page shows the command menu.**
 - **`:genda`: the picked row in the history stands out in full ink; copying a score line or the history includes every detail field** (pairs, alternation, hands, top key), with unmeasured TSV cells left empty; `C-o` or `:genda-whole` switches between the segment length and the whole article.
 - **`:genda` shows a results table under the pad** (this session's segments newest first, the latest in gold, earlier records dimmed, columns dropped to fit). After a segment the command row says only its number and speed, and `y` copies the full score line. A second `Esc` keeps the page paused instead of closing it, so an extra `Esc` to clear a code is safe; `q` (or `:q`) closes.

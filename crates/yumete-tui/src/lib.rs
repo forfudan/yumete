@@ -748,6 +748,9 @@ pub fn run(
         });
     }
     let mut last_mode = None;
+    // Whether the last frame was typing — the edges are when the word lists
+    // are looked at again and when what was learned is written.
+    let mut was_composing = false;
     // **讓開** — the system's own input method, held aside while yumete wants
     // the keys (see [`system_ime`]). Its `Drop` puts the input source back, so
     // leaving this function restores it however it is left, a panic included.
@@ -865,6 +868,18 @@ pub fn run(
         // preedit, the candidate panel and the lone-Shift tap light up
         // together with it, and so does this.
         let yume_has_the_keys = ime.holding_the_keys();
+        // **The word lists follow the typing**: read again on the way in if the
+        // app saved since, and what was learned written on the way out.
+        let composing = composes_here(editor) && yume_has_the_keys;
+        if composing != was_composing {
+            match composing {
+                true => {
+                    ime.refresh_user_words();
+                }
+                false => ime.save_learning(),
+            }
+            was_composing = composing;
+        }
         // **Normal 下按過 Esc 而它没別的事可做**：把挂起再說一遍。
         // 抹掉信念，下面那一句自己會重發——它本來就是冪等的。
         if editor.take_say_it_again() {
@@ -2141,13 +2156,19 @@ pub fn run(
                 // somebody else's, and arriving there in a layout yumete
                 // chose is worse than anything this feature prevents.
                 system_ime.set_focus(false);
+                ime.save_learning();
             }
-            Ok(Event::FocusGained) => system_ime.set_focus(true),
+            Ok(Event::FocusGained) => {
+                system_ime.set_focus(true);
+                ime.refresh_user_words();
+            }
             Ok(_) => {}
             Err(err) => break Err(err),
         }
     };
 
+    // What this session learned is written before the process goes.
+    ime.save_learning();
     // A preview server outlives nothing: it was started for this session and
     // has no reason to go on holding a port after it.
     if let Some(mut running) = job.take() {
@@ -4658,7 +4679,47 @@ pub fn settings_request(ime: &mut ImeSession, tag: &str) -> Option<String> {
     if let Some(word) = tag.strip_prefix("lanes:") {
         return Some(lanes_method(ime, word));
     }
+    if let Some(word) = tag.strip_prefix("single-char:") {
+        return Some(single_char_method(ime, word));
+    }
     None
+}
+
+/// 單字派's value in the interface's language: Yume's own names.
+pub fn single_char_label(mode: yumete_ime::SingleCharMode) -> String {
+    use yumete_ime::SingleCharMode as M;
+    match mode {
+        M::Both => say!("ime.single-char.both"),
+        M::Primary => say!("ime.single-char.primary"),
+        M::Strict => say!("ime.single-char.strict"),
+    }
+}
+
+/// `:yume-single-char`: `next` steps the copy for the 上屏方式 in force the
+/// way Yume's ⌃⇧D does, a word sets it, `""` asks. A scheme that does not
+/// filter (拼音) is set all the same — the copy is the writer's, kept for the
+/// next scheme — and says it changes nothing here.
+fn single_char_method(ime: &mut ImeSession, word: &str) -> String {
+    let now = ime.active_single_char();
+    let want = match word {
+        "" => now,
+        "next" => yumete_ime::SingleChars::next(now),
+        word => match yumete_ime::SingleCharMode::from_str_tag(word) {
+            Some(mode) => mode,
+            None => return say!("ime.charset-no-such", word),
+        },
+    };
+    if want != now {
+        ime.set_active_single_char(want);
+    }
+    if !ime.single_char_applies() {
+        return say!("ime.single-char-inert", ime.scheme_name());
+    }
+    let copy = match ime.single_char_is_sentence() {
+        true => say!("ime.single-char.copy.sentence"),
+        false => say!("ime.single-char.copy.char"),
+    };
+    say!("ime.single-char-is", copy, single_char_label(ime.active_single_char()))
 }
 
 /// 字集過濾's value in the interface's language: Yume's own names.
@@ -4824,6 +4885,7 @@ fn loading_the_table(tag: &str, ime: &ImeSession) -> bool {
             || tag.starts_with("charset:")
             || tag.starts_with("charset-sort:")
             || tag.starts_with("lanes:")
+            || tag.starts_with("single-char:")
             || tag.starts_with("panel:")
             || tag.starts_with("menu:")
             || tag.starts_with("predict:") =>
@@ -4967,6 +5029,7 @@ fn where_report(ime: &ImeSession) -> String {
             }
         }
     }
+    words_report(&mut out, ime);
     // 沒有表的時候由這一頭說——`table_source` 住在一個沒有文案表的 crate 裏。
     let now = match source_said(ime) {
         Some(said) => said,
@@ -4974,6 +5037,46 @@ fn where_report(ime: &ImeSession) -> String {
     };
     let _ = writeln!(out, "\n{}", say!("yume.where.now", now));
     out
+}
+
+/// **The word lists read for this scheme**: the Yume app's, which yumete
+/// only reads, then yumete's own. Paths and counts, never an entry — what a
+/// writer taught an input method is theirs, and this page may be shared.
+fn words_report(out: &mut String, ime: &ImeSession) {
+    use std::fmt::Write as _;
+    let read = ime.user_files_read();
+    for (own, head) in [(false, say!("yume.where.words-app")), (true, say!("yume.where.words-own"))] {
+        let _ = writeln!(out, "\n{head}");
+        let files: Vec<_> = read.iter().filter(|f| f.own == own).collect();
+        let root = ime.user_word_roots().and_then(|r| match own {
+            true => r.own.clone(),
+            false => r.app.clone(),
+        });
+        if let Some(root) = &root {
+            let _ = writeln!(out, "    {}", root.display());
+        }
+        match (files.is_empty(), root.is_some() && ime.available()) {
+            (true, false) => {
+                let _ = writeln!(out, "        {}", say!("yume.where.words-unread"));
+            }
+            (true, true) => {
+                let _ = writeln!(out, "        {}", say!("yume.where.nothing"));
+            }
+            (false, _) => {
+                for file in files {
+                    let shown = match &root {
+                        Some(root) => file.path.strip_prefix(root).unwrap_or(&file.path),
+                        None => &file.path,
+                    };
+                    let _ = writeln!(
+                        out,
+                        "        {}",
+                        say!("yume.where.words-file", shown.display(), file.entries)
+                    );
+                }
+            }
+        }
+    }
 }
 
 /// Where the 碼表 in use came from, in words (`:yume-which`, `:yume ?`).
@@ -5022,6 +5125,14 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
             PanelDisplay::Box => head,
             display => format!("{head} · {}", say!("scheme.panel-is", panel_name(display))),
         };
+        // 單字派, the copy for the 上屏方式 in force, where the scheme has one.
+        let head = match ime.available() && ime.single_char_applies() {
+            true => format!(
+                "{head} · {}",
+                say!("ime.single-char-state", single_char_label(ime.active_single_char()))
+            ),
+            false => head,
+        };
         // 內嵌也只在不是出廠那一檔的時候纔報，理由同上：出廠的樣子不用告訴人。
         let head = match ime.inline_preedit() {
             InlinePreedit::Off => head,
@@ -5046,7 +5157,13 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
         return match ImeSession::from_table_file(&path) {
             Ok(mut table) => {
                 table.set_page_size(ime.page_size());
+                ime.save_learning();
+                // Kept for the next scheme: a table of one's own reads no word lists.
+                if let Some(roots) = ime.user_word_roots().cloned() {
+                    table.set_user_word_roots(roots);
+                }
                 table.set_charsets(ime.charsets().clone());
+                table.set_single_chars(ime.single_chars());
                 table.carry_annotation_from(ime);
                 table.set_commit_strategy(ime.commit_override());
                 table.set_panel_display(ime.panel_display());
@@ -22662,6 +22779,7 @@ fn squeezed(text: &str) -> String {
             "charset:tonggui",
             "charset-sort:original",
             "lanes:tai",
+            "single-char:next",
         ] {
             assert!(settings_request(&mut ime, tag).is_some(), "{tag} 沒人答");
         }
@@ -22698,6 +22816,73 @@ fn squeezed(text: &str) -> String {
         // A new scheme keeps them: the session re-applies them to its engine.
         ime.set_scheme(Scheme::XINGCHEN);
         assert_eq!(ime.charsets().filter, yumete_ime::CharsetFilterMode::Tonggui);
+    }
+
+    /// **單字派**: bare steps the copy for the 上屏方式 in force in Yume's
+    /// order and says the copy and the value in Yume's words; a word sets it;
+    /// `:yume-which` shows it; 拼音 says it changes nothing there.
+    #[test]
+    fn single_char_steps_and_says_yumes_names() {
+        use yumete_ime::SingleCharMode as M;
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "a 啊\n");
+        let said = single_char_method(&mut ime, "next");
+        assert_eq!(ime.single_chars().char_by_char, M::Primary);
+        assert!(said.contains(&say!("ime.single-char.primary")), "{said}");
+        assert!(said.contains(&say!("ime.single-char.copy.char")), "{said}");
+        single_char_method(&mut ime, "next");
+        assert_eq!(ime.single_chars().char_by_char, M::Strict);
+        single_char_method(&mut ime, "next");
+        assert_eq!(ime.single_chars().char_by_char, M::Both);
+        // Under 整句 the other copy moves, and the line says which.
+        commit_method(&mut ime, "fluency");
+        let said = single_char_method(&mut ime, "both");
+        assert_eq!(ime.single_chars().sentence, M::Both);
+        assert_eq!(ime.single_chars().char_by_char, M::Both);
+        assert!(said.contains(&say!("ime.single-char.copy.sentence")), "{said}");
+        let said = single_char_method(&mut ime, "");
+        assert!(said.contains(&say!("ime.single-char.both")), "{said}");
+        let said = single_char_method(&mut ime, "words");
+        assert!(said.contains("words"), "{said}");
+        let said = switch_scheme(&mut ime, "?", &Config::default());
+        assert!(said.contains(&say!("ime.single-char-state", say!("ime.single-char.both"))), "{said}");
+        // 拼音 does not filter: set all the same, and said so.
+        let mut pinyin = ImeSession::from_table_text(Scheme::PINYIN, "a 啊\n");
+        let said = single_char_method(&mut pinyin, "strict");
+        assert!(said.contains(pinyin.scheme_name()), "{said}");
+        assert_eq!(said, say!("ime.single-char-inert", pinyin.scheme_name()));
+        let said = switch_scheme(&mut pinyin, "?", &Config::default());
+        assert!(!said.contains(&say!("ime.single-char.strict")), "{said}");
+    }
+
+    /// **`:yume-where` names the word-list files it read, and how many entries
+    /// each held — never an entry.** The folders are made up for the test.
+    #[test]
+    fn where_lists_the_word_files_without_their_words() {
+        let base = std::env::temp_dir().join(format!("yumete-where-words-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let (app, own) = (base.join("app"), base.join("own"));
+        std::fs::create_dir_all(app.join("data")).unwrap();
+        std::fs::write(app.join("data/lingming_user_dict.txt"), "你们\tjk\n他们\tdf\n").unwrap();
+        std::fs::create_dir_all(own.join("lingming")).unwrap();
+        std::fs::write(own.join("lingming/user_dict.txt"), "她们\tdf\n").unwrap();
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "jk 你\n");
+        let page = where_report(&ime);
+        assert!(page.contains(&say!("yume.where.words-unread")), "{page}");
+        ime.set_user_word_roots(yumete_ime::UserWordRoots {
+            app: Some(app.clone()),
+            own: Some(own.clone()),
+        });
+        let page = where_report(&ime);
+        assert!(page.contains(&say!("yume.where.words-app")), "{page}");
+        assert!(page.contains(&say!("yume.where.words-own")), "{page}");
+        let app_line = say!("yume.where.words-file", "data/lingming_user_dict.txt", 2);
+        assert!(page.contains(&app_line), "{page}");
+        let own_line = say!("yume.where.words-file", "lingming/user_dict.txt", 1);
+        assert!(page.contains(&own_line), "{page}");
+        for word in ["你们", "他们", "她们"] {
+            assert!(!page.contains(word), "an entry leaked: {word}");
+        }
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     /// #211: the setting, the command, and the question, in the writer's words.

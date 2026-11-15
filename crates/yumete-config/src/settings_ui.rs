@@ -288,6 +288,13 @@ const IME_CHARSETS: &[Choice] = &[
     Choice { word: "harmonic", label: "ime.charset.harmonic" },
 ];
 
+/// 單字派, yume's words with Yume's own names, in the order ⌃⇧D steps.
+const IME_SINGLE_CHARS: &[Choice] = &[
+    Choice { word: "both", label: "ime.single-char.both" },
+    Choice { word: "primary", label: "ime.single-char.primary" },
+    Choice { word: "strict", label: "ime.single-char.strict" },
+];
+
 /// 字集排序.
 const IME_CHARSET_SORTS: &[Choice] = &[
     Choice { word: "original", label: "ime.sort.original" },
@@ -981,6 +988,25 @@ pub const SETTINGS: &[Setting] = &[
         hint: "settings.ime.charset-sort.hint",
         factory: r#""common""#,
     },
+    // **單字派兩行**，同 Yume：逐字與整句各一份，出廠一個字詞同出、一個嚴格單字。
+    Setting {
+        table: "ime",
+        key: "single_char",
+        group: Group::Ime,
+        kind: Kind::Pick(IME_SINGLE_CHARS),
+        label: "settings.ime.single-char",
+        hint: "settings.ime.single-char.hint",
+        factory: r#""both""#,
+    },
+    Setting {
+        table: "ime",
+        key: "sentence_single_char",
+        group: Group::Ime,
+        kind: Kind::Pick(IME_SINGLE_CHARS),
+        label: "settings.ime.sentence-single-char",
+        hint: "settings.ime.sentence-single-char.hint",
+        factory: r#""strict""#,
+    },
     Setting {
         table: "ime",
         key: "start",
@@ -1351,6 +1377,10 @@ pub const LATER: &[&str] = &[
     // lane with up and down; this one has ticks and values only. `Space z g`
     // and `:yume-lanes` put one first meanwhile.
     "ime.lanes",
+    // Five ticks for 主單副詞 (two, three, four, longer, the whitelist): a
+    // row of ticks of its own, as Yume's 更多詞語功能設置 has. The config holds
+    // them meanwhile.
+    "ime.word_show",
     "editor.usage_groups",
     "editor.syntax",
     // Warning: **二十四個色位（十二個色 × 深淺兩套）收在二級入口裏，不攤在第一層。**

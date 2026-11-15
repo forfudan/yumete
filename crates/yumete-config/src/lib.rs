@@ -726,12 +726,26 @@ pub struct ImeConfig {
     /// `tai`, so a 拼音 sentence keeps to one script and the other script is
     /// offered as a sentence of its own. An empty list turns them off.
     pub lanes: Vec<String>,
+    /// 單字派 while typing character by character (延遲, 唯一上屏): `both`
+    /// (字詞同出, the default), `primary` (主單副詞) or `strict` (嚴格單字).
+    pub single_char: String,
+    /// 單字派 while typing whole sentences (整句): `strict` by default, as in
+    /// Yume — a word in the 碼表 is an edge that outweighs its characters.
+    pub sentence_single_char: String,
+    /// The words 主單副詞 still shows: any of `two`, `three`, `four`,
+    /// `longer` (five and up) and `whitelist` (Yume's 常用詞語白名單). Empty by
+    /// default, so 主單副詞 shows single characters and the writer's own words.
+    pub word_show: Vec<String>,
 }
 
 /// The words `[ime] charset` takes.
 pub const CHARSET_WORDS: &[&str] = &["all", "common", "tonggui", "harmonic"];
 /// The words `[ime] charset_sort` takes.
 pub const CHARSET_SORT_WORDS: &[&str] = &["original", "common", "tonggui", "harmonic"];
+/// The words `[ime] single_char` and `sentence_single_char` take, yume's own.
+pub const SINGLE_CHAR_WORDS: &[&str] = &["both", "primary", "strict"];
+/// The words `[ime] word_show` takes.
+pub const WORD_SHOW_WORDS: &[&str] = &["two", "three", "four", "longer", "whitelist"];
 /// The charsets a lane may be, yume's named seven.
 pub const LANE_WORDS: &[&str] = &["tonggui", "tongfan", "tai", "common", "harmonic", "guji", "gang"];
 
@@ -916,6 +930,9 @@ impl Default for ImeConfig {
             charset: "all".to_string(),
             charset_sort: "common".to_string(),
             lanes: ["tonggui", "tongfan", "tai"].map(String::from).to_vec(),
+            single_char: "both".to_string(),
+            sentence_single_char: "strict".to_string(),
+            word_show: Vec::new(),
         }
     }
 }
@@ -4496,6 +4513,31 @@ pub fn yume_data_dirs() -> Vec<PathBuf> {
     dirs
 }
 
+/// **The Yume app's own user folder** — where it keeps the words the writer
+/// taught it (`data/<tag>_user_dict.txt`) and each scheme's 調頻 and 固頂
+/// (`schemes/<tag>/`). yumete reads these and never writes them.
+///
+/// One folder per platform, the app's: `~/Library/Application Support/Yume`,
+/// `%APPDATA%\Yume`, `$XDG_DATA_HOME/yume`. `None` with no home to find it in;
+/// whether it exists is the caller's question.
+pub fn yume_user_dir() -> Option<PathBuf> {
+    #[cfg(windows)]
+    {
+        appdata_dir().map(|appdata| appdata.join("Yume"))
+    }
+    #[cfg(target_os = "macos")]
+    {
+        home_dir().map(|home| home.join("Library").join("Application Support").join("Yume"))
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        match env::var("XDG_DATA_HOME") {
+            Ok(dir) if !dir.is_empty() => Some(PathBuf::from(dir).join("yume")),
+            _ => home_dir().map(|home| home.join(".local").join("share").join("yume")),
+        }
+    }
+}
+
 /// The `yume/` under each of `$XDG_DATA_DIRS`, with the spec's default applied.
 ///
 /// Handed its input rather than reading the environment, so the default can be
@@ -4732,6 +4774,9 @@ struct RawIme {
     charset: Option<String>,
     charset_sort: Option<String>,
     lanes: Option<Vec<String>>,
+    single_char: Option<String>,
+    sentence_single_char: Option<String>,
+    word_show: Option<Vec<String>>,
     /// `[ime.annotation_modes.<name>]`: a field ticked or not, by name.
     #[serde(default)]
     annotation_modes: toml::Table,
@@ -5196,6 +5241,15 @@ impl RawConfig {
         }
         if other.ime.lanes.is_some() {
             self.ime.lanes = other.ime.lanes.clone();
+        }
+        if other.ime.single_char.is_some() {
+            self.ime.single_char = other.ime.single_char.clone();
+        }
+        if other.ime.sentence_single_char.is_some() {
+            self.ime.sentence_single_char = other.ime.sentence_single_char.clone();
+        }
+        if other.ime.word_show.is_some() {
+            self.ime.word_show = other.ime.word_show.clone();
         }
         // Field by field, as `[keys.flavor_items]`: a project can tick one
         // field of a mode without restating the rest.
@@ -5785,6 +5839,18 @@ impl RawConfig {
                 .into_iter()
                 .filter(|l| LANE_WORDS.contains(&l.as_str()))
                 .collect();
+        }
+        if let Some(word) = self.ime.single_char.filter(|w| SINGLE_CHAR_WORDS.contains(&w.as_str())) {
+            config.ime.single_char = word;
+        }
+        if let Some(word) =
+            self.ime.sentence_single_char.filter(|w| SINGLE_CHAR_WORDS.contains(&w.as_str()))
+        {
+            config.ime.sentence_single_char = word;
+        }
+        if let Some(words) = self.ime.word_show {
+            config.ime.word_show =
+                words.into_iter().filter(|w| WORD_SHOW_WORDS.contains(&w.as_str())).collect();
         }
         config.ime.annotation_modes = annotation_modes_from(&self.ime.annotation_modes);
         if let Some(word) = self.ime.annotation {
@@ -7127,6 +7193,25 @@ mod tests {
         assert_eq!(c.editor.line_numbers, LineNumbers::Absolute);
         assert_eq!(c.theme.mode, Mode::Auto);
         assert_eq!(c.theme.dark.ink, ThemeConfig::default().dark.ink);
+    }
+
+    /// 單字派: Yume's defaults — 字詞同出 character by character, 嚴格單字 in
+    /// 整句, no extra words for 主單副詞 — and yume's words when written; a
+    /// word yume does not know keeps the default.
+    #[test]
+    fn single_char_reads_yumes_words() {
+        let none = Config::from_toml("");
+        assert_eq!(none.ime.single_char, "both");
+        assert_eq!(none.ime.sentence_single_char, "strict");
+        assert!(none.ime.word_show.is_empty());
+        let config = Config::from_toml(
+            "[ime]\nsingle_char = \"primary\"\nsentence_single_char = \"both\"\nword_show = [\"two\", \"longer\", \"six\"]\n",
+        );
+        assert_eq!(config.ime.single_char, "primary");
+        assert_eq!(config.ime.sentence_single_char, "both");
+        assert_eq!(config.ime.word_show, ["two", "longer"]);
+        let typo = Config::from_toml("[ime]\nsingle_char = \"single\"\n");
+        assert_eq!(typo.ime.single_char, "both");
     }
 
     /// 資料在哪，讀者自己說得算 —— and `~` means what it does in a shell.

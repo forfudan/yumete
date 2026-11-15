@@ -2746,6 +2746,13 @@ en = "start typing: load a scheme (with no name, the configured one)"
 find = "輸入法 输入法 方案 碼表 码表 scheme"
 
 [[message]]
+# `:` 命令選單裏 yume-single-char 那一項的説明(yume 組)（草稿）
+key = "cmd.yume.single-char"
+zhs = "单字派：字词同出、主单副词、严格单字，单用就轮换"
+en = "single characters: words and characters, characters first, or characters only; alone, the next one"
+find = "輸入法 输入法 單字派 单字派 單字 单字 single char words"
+
+[[message]]
 # : 命令選單裏 table 那一項的説明(yume 組)
 key = "cmd.yume.table"
 zhs = "用你自己的码表(Rime 的 .dict.yaml 也行)"

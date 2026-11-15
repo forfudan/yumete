@@ -410,6 +410,7 @@ impl Pending {
             Pending::YumeValue('m') => &YUME_COMMIT,
             Pending::YumeValue('p') => &YUME_PANEL,
             Pending::YumeValue('0') => &YUME_CHARSET,
+            Pending::YumeValue('d') => &YUME_SINGLE_CHAR,
             Pending::YumeValue('s') => &YUME_SORT,
             Pending::YumeValue('g') => &YUME_LANES,
             Pending::YumeValue('b') => &YUME_BUILTIN,
@@ -448,6 +449,7 @@ pub(super) const GROUPS: &[&Group] = &[
     &YUME_PANEL,
     &YUME_PREEDIT,
     &YUME_CHARSET,
+    &YUME_SINGLE_CHAR,
     &YUME_SORT,
     &YUME_LANES,
     &YUME_BUILTIN,
@@ -1401,12 +1403,12 @@ pub(super) static OPEN: Group = Group {
 /// the value under it is a letter of that value's own name.
 ///
 /// Warning: **The letters Yume uses and yumete has no answer for stay empty**
-/// — `O U D L H K J A .`. Lining the two up is only worth doing if the day
+/// — `O U L H K J A .`. Lining the two up is only worth doing if the day
 /// yumete grows one of those, the letter is already the same on both sides
 /// and nobody's hand has to change. `0` is Yume's 字集過濾 and is ours too;
 /// it opens the values rather than cycling them, as the other
-/// value letters here do. `s` 字集排序, `g` 整句字集軌 and `b` the built-in
-/// schemes have no Yume letter.
+/// value letters here do, and so does `d` 單字派 (Yume's ⌃⇧D cycles). `s`
+/// 字集排序, `g` 整句字集軌 and `b` the built-in schemes have no Yume letter.
 pub(super) static YUME: Group = Group {
     name: "yume",
     pending: Pending::Yume,
@@ -1428,6 +1430,7 @@ pub(super) static YUME: Group = Group {
         ch('8', NormalCmd::YumeMenuSize8, "hint.yume.menu-size"),
         ch('9', NormalCmd::YumeMenuSize9, "hint.yume.menu-size"),
         ch('0', NormalCmd::YumeCharsetMode, "hint.yume.charset"),
+        ch('d', NormalCmd::YumeSingleCharMode, "hint.yume.single-char"),
         ch('s', NormalCmd::YumeSortMode, "hint.yume.sort"),
         ch('g', NormalCmd::YumeLanesMode, "hint.yume.lanes"),
         ch('b', NormalCmd::YumeBuiltinMode, "hint.yume.builtin"),
@@ -1506,6 +1509,25 @@ pub(super) static YUME_CHARSET: Group = Group {
         ch('c', NormalCmd::YumeCharsetCommon, "ime.charset.common"),
         ch('s', NormalCmd::YumeCharsetTonggui, "ime.charset.tonggui"),
         ch('t', NormalCmd::YumeCharsetHarmonic, "ime.charset.harmonic"),
+    ],
+    unknown: Unknown::SayKeys("hint.yume.after-z"),
+    sticky: false,
+    ctrl_is_plain: false,
+    before: None,
+    after: None,
+};
+
+/// 單字派: a letter of each value's Yume name — 字詞同出 is `b` (both),
+/// 主單副詞 `p`, 嚴格單字 `s`.
+pub(super) static YUME_SINGLE_CHAR: Group = Group {
+    name: "yume_single_char",
+    pending: Pending::YumeValue('d'),
+    title: "hint.yume.single-char",
+    opener: NormalCmd::YumeSingleCharMode,
+    rows: &[
+        ch('b', NormalCmd::YumeSingleCharBoth, "ime.single-char.both"),
+        ch('p', NormalCmd::YumeSingleCharPrimary, "ime.single-char.primary"),
+        ch('s', NormalCmd::YumeSingleCharStrict, "ime.single-char.strict"),
     ],
     unknown: Unknown::SayKeys("hint.yume.after-z"),
     sticky: false,

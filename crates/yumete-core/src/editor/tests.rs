@@ -2918,6 +2918,10 @@ fn the_yume_group_asks_the_front_end_what_each_key_means() {
         (" zgj", "lanes:tonggui"),
         (" zgf", "lanes:tongfan"),
         (" zgt", "lanes:tai"),
+        // 單字派: `d` is Yume's ⌃⇧D, opening the three values.
+        (" zdb", "single-char:both"),
+        (" zdp", "single-char:primary"),
+        (" zds", "single-char:strict"),
         // `b`: the scheme carried in the binary, whatever is installed.
         (" zbp", "! pinyin"),
         (" zbl", "! lingming"),
@@ -3617,6 +3621,17 @@ fn a_command_says_what_it_is_waiting_for() {
     ed.execute(":view-hanging").unwrap();
     assert!(!ed.hanging_punctuation());
     assert!(!ed.status().contains("需要"), "{}", ed.status());
+}
+
+/// `:yume-single-char` rides it too; bare is the step to the next value,
+/// and with no 碼表 it is a setting kept for later, as `:yume-charset` is.
+#[test]
+fn single_char_rides_the_same_channel() {
+    let mut ed = Editor::new();
+    ed.execute(":yume-single-char").unwrap();
+    assert_eq!(ed.take_scheme_request().as_deref(), Some("single-char:next"));
+    ed.execute(":yume-single-char strict").unwrap();
+    assert_eq!(ed.take_scheme_request().as_deref(), Some("single-char:strict"));
 }
 
 #[test]
