@@ -15,6 +15,12 @@ zhs = "换行会把此行拆成两行"
 en = "a line break would split this row in two"
 
 [[message]]
+# 表格裏往格子中寫 |，而 | 是分格的牆；{0} 是轉義的寫法 \|（草稿）
+key = "cell.refuses-pipe"
+zhs = "'|' 分隔格子——格子里要写，写成 {0}"
+en = "'|' separates the cells; to write one in a cell, write {0}"
+
+[[message]]
 # 表格模式下往格子裏貼或打一個製表符
 key = "cell.refuses-tab"
 zhs = "单元格里不能有制表符"
@@ -418,6 +424,12 @@ en = "aligned"
 key = "table.looks-delimited"
 zhs = "此文件似乎以 {0} 分列，已用表格模式打开，␣t o 回到源码"
 en = "this file looks {0}-delimited, so it opens as a table; ␣t o for the source"
+
+[[message]]
+# 表格裏一行比別的行少了格子，缺的那一格畫的記號（草稿）
+key = "table.missing-cell"
+zhs = "⟨缺⟩"
+en = "⟨missing⟩"
 
 [[message]]
 # :table 在段落中間按下——新建一張表會把那一段寫壞，所以不猜，攔住

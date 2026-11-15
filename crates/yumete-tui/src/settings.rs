@@ -115,7 +115,7 @@ impl ConfigWatch {
                     false => Severity::Warn,
                 };
                 let said = match f.fatal {
-                    true => format!("{}——{}", f.said, say!("config.whole-file-dropped")),
+                    true => say!("config.said-and-dropped", f.said, say!("config.whole-file-dropped")),
                     false => f.said,
                 };
                 say(f.line, loud, said)
@@ -224,48 +224,45 @@ fn config_files(editor: &Editor) -> Vec<std::path::PathBuf> {
     out
 }
 
+/// `at = "word"` is not one of `names`, in the reader's language.
+fn only(at: &str, word: &str, names: &[&str]) -> String {
+    say!("config.only-one-of", at, format!("\"{word}\""), names.join(&say!("cmd.takes.separator")))
+}
+
 pub fn complaints(config: &Config) -> Vec<String> {
     let mut said = Vec::new();
     let word = config.editor.syntax.trim();
     if !word.is_empty() && yumete_core::syntax::Syntax::parse(word).is_none() {
-        said.push(format!(
-            "[editor] syntax = \"{word}\" 不是一種語法——:syntax 按一下 Tab 看有哪些"
-        ));
+        said.push(say!("config.not-a-syntax", "[editor] syntax", format!("\"{word}\"")));
     }
     for (name, language) in &config.syntax.by_name {
         if yumete_core::syntax::Syntax::parse(language).is_none() {
-            said.push(format!(
-                "[syntax] {name} = \"{language}\" 不是一種語法——:syntax 按一下 Tab 看有哪些"
-            ));
+            said.push(say!("config.not-a-syntax", format!("[syntax] {name}"), format!("\"{language}\"")));
         }
     }
     let word = config.editor.table_rules.trim();
     if !word.is_empty() && yumete_core::table::Rules::parse(word).is_none() {
-        said.push(format!(
-            "[editor] table_rules = \"{word}\" 只能是 off、color、line、line dash、line double"
-        ));
+        said.push(only("[editor] table_rules", word, &["off", "color", "line", "line dash", "line double"]));
     }
     let word = config.editor.indent_hint.trim();
     if !word.is_empty() && yumete_core::zong::IndentHint::parse(word).is_none() {
-        said.push(format!(
-            "[editor] indent_hint = \"{word}\" 只能是 none、color、symbol"
-        ));
+        said.push(only("[editor] indent_hint", word, &["none", "color", "symbol"]));
     }
     let word = config.editor.auto_pairs.trim();
     if !word.is_empty() && yumete_core::editor::AutoPairs::parse(word).is_none() {
-        said.push(format!("[editor] auto_pairs = \"{word}\" 只能是 off、basic、full"));
+        said.push(only("[editor] auto_pairs", word, &["off", "basic", "full"]));
     }
     let word = config.editor.status_count.trim();
     if !word.is_empty() && !matches!(word, "text" | "all" | "off") {
-        said.push(format!("[editor] status_count = \"{word}\" 只能是 text、all、off"));
+        said.push(only("[editor] status_count", word, &["text", "all", "off"]));
     }
     let word = config.editor.inactive_status.trim();
     if !word.is_empty() && !matches!(word, "line" | "rule") {
-        said.push(format!("[editor] inactive_status = \"{word}\" 只能是 line、rule"));
+        said.push(only("[editor] inactive_status", word, &["line", "rule"]));
     }
     let word = config.editor.preview_fit.trim();
     if !word.is_empty() && yumete_core::editor::PreviewFit::parse(word).is_none() {
-        said.push(format!("[editor] preview_fit = \"{word}\" 只能是 width、page"));
+        said.push(only("[editor] preview_fit", word, &["width", "page"]));
     }
     said
 }

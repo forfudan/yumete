@@ -1,4 +1,4 @@
-# prefixes: help intro tutor version cli shot need start
+# prefixes: help intro tutor version cli shot need start docgen
 #
 # What the editor says, one block per tag; see README.md beside this file.
 
@@ -28,6 +28,162 @@ en = "{0}'s table is not installed — :yume-scheme picks another"
 
 
 # ── cmd ───────────────────────────────────────────────────────────────
+
+[[message]]
+# 網站上生成的命令表的表頭：參數（草稿）
+key = "docgen.arguments"
+zhs = "参数"
+en = "Arguments"
+
+[[message]]
+# 網站上生成的鍵表裏，一個鍵等於按另一串鍵；{0} 是那串鍵（草稿）
+key = "docgen.as-keys"
+zhs = "同 {0}"
+en = "as {0}"
+
+[[message]]
+# 網站上生成的命令表（ye --docgen）的表頭：命令（草稿）
+key = "docgen.command"
+zhs = "命令"
+en = "Command"
+
+[[message]]
+# 網站上生成的設置表的表頭：出廠值（草稿）
+key = "docgen.default"
+zhs = "默认值"
+en = "Default"
+
+[[message]]
+# 網站上生成的語言表的表頭：出廠用的語言服務器（草稿）
+key = "docgen.factory-server"
+zhs = "出厂服务器"
+en = "Server at the factory"
+
+[[message]]
+# 網站上生成的動作表的表頭：插入模式下的鍵那一欄（草稿）
+key = "docgen.insert"
+zhs = "插入模式"
+en = "Insert"
+
+[[message]]
+# 網站上生成的鍵表的小節標題：插入模式（草稿）
+key = "docgen.insert-mode"
+zhs = "插入模式"
+en = "Insert mode"
+
+[[message]]
+# 網站上生成的風味表的表頭：一項（草稿）
+key = "docgen.item"
+zhs = "项"
+en = "Item"
+
+[[message]]
+# 網站上生成的風味表裏那一大節的標題：每一項改了什麼（草稿）
+key = "docgen.item-changes-head"
+zhs = "每一项改了什么"
+en = "What each item changes"
+
+[[message]]
+# 網站上生成的鍵表的表頭：一個鍵（草稿）
+key = "docgen.key"
+zhs = "键"
+en = "Key"
+
+[[message]]
+# 網站上生成的動作表裏，提示行、挑選器、側欄那幾張表的表頭：按鍵（草稿）
+key = "docgen.keys"
+zhs = "按键"
+en = "Keys"
+
+[[message]]
+# 網站上生成的風味表裏，一項只改鍵的行為、不改鍵對應的命令時寫的那句（草稿）
+key = "docgen.keys-only"
+zhs = "它改变的是这些键的行为，而不是它们运行哪条命令。"
+en = "It changes what its keys do, not which command they run."
+
+[[message]]
+# 網站上生成的語言表的表頭：程序語言（草稿）
+key = "docgen.language"
+zhs = "语言"
+en = "Language"
+
+[[message]]
+# 網站上生成的語言表的表頭：配置裏 [lsp.…] 那個鍵（草稿）
+key = "docgen.lsp-key"
+zhs = "`[lsp.…]` 键"
+en = "`[lsp.…]` key"
+
+[[message]]
+# 網站上生成的鍵表的小節標題：普通模式（草稿）
+key = "docgen.normal-mode"
+zhs = "普通模式"
+en = "Normal mode"
+
+[[message]]
+# 網站上生成的動作表裏那一節的表頭：這個鍵等於按什麼（草稿）
+key = "docgen.plays"
+zhs = "等于"
+en = "Plays"
+
+[[message]]
+# 網站上生成的 helix 鍵表的小節標題：選擇模式（草稿）
+key = "docgen.select-mode"
+zhs = "选择模式"
+en = "Select mode"
+
+[[message]]
+# 網站上生成的設置表的表頭：設置項（草稿）
+key = "docgen.setting"
+zhs = "设置"
+en = "Setting"
+
+[[message]]
+# 網站上生成的動作表的小節標題：表格網格裏的鍵（草稿）
+key = "docgen.table-grid-head"
+zhs = "表格网格中（`[keys.table]`）"
+en = "In a table's grid (`[keys.table]`)"
+
+[[message]]
+# 網站上生成的風味表裏，兩套鍵位不同時分開寫；{0} 是鍵位名 helix 或 vim（草稿）
+key = "docgen.under"
+zhs = "{0} 键位下："
+en = "Under {0}:"
+
+[[message]]
+# 網站上生成的動作表的小節標題：vim 裏等於另一串鍵的那些鍵（草稿）
+key = "docgen.vim-plays-head"
+zhs = "vim 中等于另一串键的键"
+en = "vim keys that play other keys"
+
+[[message]]
+# 網站上生成的 vim 鍵表的小節標題：可視模式（草稿）
+key = "docgen.visual-mode"
+zhs = "可视模式"
+en = "Visual mode"
+
+[[message]]
+# 網站上生成的各張表的表頭：作用（草稿）
+key = "docgen.what-it-does"
+zhs = "作用"
+en = "What it does"
+
+[[message]]
+# 網站上生成的風味表的表頭：在哪裏（普通模式、某個菜單）（草稿）
+key = "docgen.where"
+zhs = "位置"
+en = "Where"
+
+[[message]]
+# 網站上生成的風味表的表頭：開着這一項時（草稿）
+key = "docgen.with-item"
+zhs = "开启此项"
+en = "With the item"
+
+[[message]]
+# 網站上生成的風味表的表頭：關掉這一項時（草稿）
+key = "docgen.without-item"
+zhs = "关闭此项"
+en = "Without it"
 
 [[message]]
 # 中文幫助：給選中的字注音

@@ -1041,56 +1041,38 @@ fn elsewhere(command: &str, value: &str, takes: String) -> String {
 /// **What is missing after `command`**, for 「`:pipe` wants a command after
 /// it」: the last parameter that is a path or free text — what a command that
 /// also takes words cannot do without (`:table-find` needs its text, not its
-/// axis) — else its first word list. `None` when there is nothing to say in
-/// the reader's language.
+/// axis) — else its first word list. `None` for a command not in the table
+/// that has nothing to say.
 fn wanted_after(command: &str) -> Option<String> {
     let Some(entry) = COMMANDS.iter().find(|e| e.name == command) else {
         return match command {
-            "!" => Some(say!("cmd.arg.command")),
+            "!" => Some(placeholder("cmd.arg.command")),
             "substitute" => Some(say!("cmd.takes.substitute")),
             _ => None,
         };
     };
     let free = entry.params.iter().rev().find(|p| matches!(p, Param::Path | Param::Free(_)));
     match free {
-        Some(Param::Path) => Some(say!("cmd.arg.path")),
-        Some(Param::Free(declared)) => placeholder(declared),
+        Some(Param::Path) => Some(placeholder("cmd.arg.path")),
+        Some(Param::Free(tag)) => Some(placeholder(tag)),
         _ => {
             let param = entry.params.iter().find(|p| p.words().is_some_and(|w| !w.is_empty()))?;
             let words = one_of(param.words()?);
             Some(match param {
-                Param::WordsOr { or, .. } => match placeholder(or) {
-                    Some(other) => say!("cmd.takes.or", words, other),
-                    None => words,
-                },
+                Param::WordsOr { or, .. } => say!("cmd.takes.or", words, placeholder(or)),
                 _ => words,
             })
         }
     }
 }
 
-/// **A placeholder in the reader's language**. The `:` menu draws a
-/// parameter's placeholder as it is declared; a sentence says it in the
-/// language of the sentence around it. `None` for one with no translation,
-/// so the sentence is not half in another language.
-fn placeholder(declared: &str) -> Option<String> {
-    Some(match declared {
-        "<命令>" => say!("cmd.arg.command"),
-        "<表達式>" => say!("cmd.arg.expression"),
-        "<字符串>" => say!("cmd.arg.text"),
-        "<列名>" => say!("cmd.arg.row-name"),
-        "<格式> [<格式>]" => say!("cmd.arg.formats"),
-        "<名字>" => say!("cmd.arg.name"),
-        "<新名>" => say!("cmd.arg.new-name"),
-        "<分隔符>" => say!("cmd.arg.delimiter"),
-        "<欄號>" => say!("cmd.arg.column"),
-        "<行號>" => say!("cmd.arg.line"),
-        "<字數>" => say!("cmd.arg.count"),
-        "<字/分>" => say!("cmd.arg.per-minute"),
-        "<鍵/秒>" => say!("cmd.arg.per-second"),
-        "<%>" => say!("cmd.arg.percent"),
-        _ => return None,
-    })
+/// **A parameter's placeholder in the reader's language** — `<line number>`,
+/// `<行号>`, `<行號>`. The table holds the tag of a `cmd.arg.*` message, never
+/// the words, and everything that shows a placeholder asks here: the `:`
+/// menu, `:help commands`, the refusals and the generated command tables. A
+/// literal in the table would be one language shown to every reader.
+pub fn placeholder(tag: &str) -> String {
+    crate::messages::say(tag, &[])
 }
 
 /// Parse a single command line, with or without a leading `:`.
@@ -1317,8 +1299,8 @@ pub enum Param {
         of: &'static [Word],
         default: Option<&'static str>,
     },
-    /// One of these words, **or anything else** — `or` is the placeholder to
-    /// show for the anything.
+    /// One of these words, **or anything else** — `or` is the tag of the
+    /// placeholder to show for the anything ([`placeholder`]).
     ///
     /// Not a mixture for its own sake: `:view-wrap-width` takes `0` and it
     /// also takes a measure, and a reader who cannot see the word has to be
@@ -1344,8 +1326,9 @@ pub enum Param {
     /// the front end hands the list over ([`set_setting_names`]). Anything
     /// else is taken too, for the panel to answer.
     Settings,
-    /// Anything at all; the string is the placeholder to show while typing.
-    /// Takes the whole of what is left, so it may hold spaces.
+    /// Anything at all; the string is the tag of the placeholder to show
+    /// while typing ([`placeholder`]). Takes the whole of what is left, so it
+    /// may hold spaces.
     Free(&'static str),
 }
 
@@ -1387,22 +1370,23 @@ impl Param {
         matches!(self, Param::WordsOr { .. } | Param::Options(_) | Param::Settings)
     }
 
-    /// What may follow, for a listing: `<檔名>`, `on|off`, or a placeholder.
+    /// What may follow, for a listing: `<path>`, `on｜off`, or a placeholder,
+    /// in the reader's language.
     pub fn hint(&self) -> String {
         // A hundred names do not make a hint.
         if let Param::Settings = self {
-            return say!("cmd.arg.setting");
+            return placeholder("cmd.arg.setting");
         }
         if let Param::Options(of) = self {
             let mut out: String = of.iter().map(|w| w.name).collect::<Vec<_>>().join("｜");
             out.push('｜');
-            out.push_str(&say!("cmd.arg.path"));
+            out.push_str(&placeholder("cmd.arg.path"));
             return out;
         }
         if let Param::WordsOr { of, or, .. } = self {
             let mut out: String = of.iter().map(|w| w.name).collect::<Vec<_>>().join("｜");
             out.push('｜');
-            out.push_str(or);
+            out.push_str(&placeholder(or));
             return out;
         }
         match self.words() {
@@ -1412,8 +1396,8 @@ impl Param {
                 .collect::<Vec<_>>()
                 .join("｜"),
             None => match self {
-                Param::Path => say!("cmd.arg.path"),
-                Param::Free(what) => (*what).to_string(),
+                Param::Path => placeholder("cmd.arg.path"),
+                Param::Free(tag) => placeholder(tag),
                 _ => String::new(),
             },
         }
@@ -3725,7 +3709,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.goto",
         needs: &[],
-        params: &[Param::Free("<行號>")],
+        params: &[Param::Free("cmd.arg.line")],
         // Warning: **讀不懂的數字不是「没給」**。`:goto abc` 不許答「goto 後面要跟
         // 一個參數」——參數明明給了。
         // [`Parsed::number`] 手裏就有對的那一句（「goto：不認得「abc」」），
@@ -3753,7 +3737,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.count.target",
         needs: &[],
-        params: &[Param::Free("<字數>｜off")],
+        params: &[Param::Free("cmd.arg.count-or-off")],
         build: Some(|p| {
             // A bare `:count-target` is the question, not half a command:
             // somebody who types it wants to know what the target is and how
@@ -3938,7 +3922,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &["cquit", "cq"],
         help: "cmd.quit.error",
         needs: &[],
-        params: &[Param::Free("<0–255>")],
+        params: &[Param::Free("cmd.arg.exit-status")],
         build: Some(|p| {
             let code = match p.arg(0) {
                 None => 1,
@@ -4000,7 +3984,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &["ear"],
         help: "cmd.commands.earlier",
         needs: &[],
-        params: &[Param::Free("<步數>｜<時間>")],
+        params: &[Param::Free("cmd.arg.steps-or-time")],
         build: Some(|p| match UndoSpan::parse(p.arg(0)) {
             Some(span) => Ok(Command::Earlier(span)),
             None => Err(CommandError::Wants {
@@ -4015,7 +3999,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &["lat"],
         help: "cmd.commands.later",
         needs: &[],
-        params: &[Param::Free("<步數>｜<時間>")],
+        params: &[Param::Free("cmd.arg.steps-or-time")],
         build: Some(|p| match UndoSpan::parse(p.arg(0)) {
             Some(span) => Ok(Command::Later(span)),
             None => Err(CommandError::Wants {
@@ -4049,7 +4033,7 @@ pub const COMMANDS: &[Entry] = &[
         params: &[Param::WordsOr {
             of: WORD_MARKS,
             default: None,
-            or: "字色｜墨色",
+            or: "cmd.arg.word-mark-other",
         }],
         build: Some(|p| {
             // **One choice, `off` among the ways**, not `on|off` beside the
@@ -4078,7 +4062,7 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         // Warning: **自由文本，不是一張詞表**：這裏收的是詞條名，而詞條名是這本書自己
         // 的話（「朱宇浩」「洞庭湖」），没有哪張表列得完。
-        params: &[Param::Free("<詞條名>")],
+        params: &[Param::Free("cmd.arg.wiki-entry")],
         build: Some(|p| {
             // **不帶名字也開那扇面板，空着查**：`:wiki` 就是
             // 「翻百科」，天天用的是這個。那一份報告挑走了，叫 `:wiki-where`。
@@ -4320,7 +4304,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &["vk"],
         help: "cmd.commands.vertical-keys",
         needs: &[],
-        params: &[Param::WordsOr { of: VERTICAL_KEY_WAYS, default: None, or: "<logical｜visual>" }],
+        params: &[Param::WordsOr { of: VERTICAL_KEY_WAYS, default: None, or: "cmd.arg.vertical-keys-other" }],
         build: Some(|p| match p.arg(0) {
             None => Ok(Command::SetVerticalKeys(None)),
             Some(word) => yumete_cjk::VerticalKeys::parse(word)
@@ -4336,7 +4320,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.theme",
         needs: &[],
-        params: &[Param::WordsOr { of: THEMES, default: None, or: "<主題名>" }],
+        params: &[Param::WordsOr { of: THEMES, default: None, or: "cmd.arg.theme" }],
         build: Some(|p| {
             // 「墨香」 and `moxiang` are the same word. Which names exist is the
             // front end's business — it is the one holding the colours — so an
@@ -4379,7 +4363,7 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         // `zht`, `zhs`, `en` are the names shown; `zh`, `tc`,
         // `sc` and the other spellings `Language::parse` knows still work.
-        params: &[Param::WordsOr { of: LANGUAGES, default: None, or: "<語言>" }],
+        params: &[Param::WordsOr { of: LANGUAGES, default: None, or: "cmd.arg.language" }],
         build: Some(|p| {
             // Bare, it is the question — the status line says which is on.
             match p.arg(0) {
@@ -4452,7 +4436,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.rules",
         needs: &[],
-        params: &[Param::Free("<欄>…｜off")],
+        params: &[Param::Free("cmd.arg.columns-or-off")],
         build: Some(|p| {
             Ok(Command::Rules(match p.arg(0) {
                 // **光禿禿的 `:rules` ＝ 80 和 100**：Python 的文檔字串一道，
@@ -4585,7 +4569,7 @@ pub const COMMANDS: &[Entry] = &[
         help: "cmd.yume.annotation",
         needs: &[Need::Scheme],
         // 草稿: the placeholder.
-        params: &[Param::WordsOr { of: ANNOTATIONS, default: None, or: "<模式名>" }],
+        params: &[Param::WordsOr { of: ANNOTATIONS, default: None, or: "cmd.arg.mode-name" }],
         build: Some(|p| Ok(Command::YumeAnnotation(p.arg(0).map(str::to_string)))),
     },
     Entry {
@@ -4596,7 +4580,7 @@ pub const COMMANDS: &[Entry] = &[
         params: &[Param::WordsOr {
             of: COMMITS,
             default: None,
-            or: "auto",
+            or: "cmd.arg.auto",
         }],
         build: Some(|p| {
             // On its own it is the question — which of the three is answering.
@@ -4679,7 +4663,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.yume.menu-size",
         needs: &[],
-        params: &[Param::Free("<1–9>")],
+        params: &[Param::Free("cmd.arg.one-to-nine")],
         build: Some(|p| {
             // On its own it is the question, like `:yume-panel`.
             if p.arg(0).is_none() {
@@ -4730,7 +4714,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &["setlocal", "setl"],
         help: "cmd.commands.settings-buffer",
         needs: &[],
-        params: &[Param::Free("<選項>")],
+        params: &[Param::Free("cmd.arg.options")],
         build: Some(|p| {
             let options = format!("{} {}", p.arg(0).unwrap_or(""), p.rest).trim().to_string();
             Ok(Command::VimSet(match options.is_empty() {
@@ -4744,7 +4728,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &["syn", "setf", "setfiletype"],
         help: "cmd.commands.syntax",
         needs: &[],
-        params: &[Param::WordsOr { of: SYNTAXES, default: None, or: "<語法>" }],
+        params: &[Param::WordsOr { of: SYNTAXES, default: None, or: "cmd.arg.syntax" }],
         build: Some(|p| Ok(Command::SetSyntax(p.arg(0).map(|w| w.to_string())))),
     },
     Entry {
@@ -4752,7 +4736,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.pipe",
         needs: &[],
-        params: &[Param::Free("<命令>")],
+        params: &[Param::Free("cmd.arg.command")],
         build: Some(|p| {
             match p.arg(0) {
                 None => Err(CommandError::MissingArgument("pipe")),
@@ -4765,7 +4749,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &["sh"],
         help: "cmd.commands.run-shell-in-buffer",
         needs: &[],
-        params: &[Param::Free("<命令>")],
+        params: &[Param::Free("cmd.arg.command")],
         build: Some(|p| {
             match p.arg(0) {
                 None => Err(CommandError::MissingArgument("run-shell-in-buffer")),
@@ -4791,7 +4775,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "settings.editor.which-wrap.hint",
         needs: &[],
-        params: &[Param::Free("<字母>")],
+        params: &[Param::Free("cmd.arg.letters")],
         build: Some(|p| Ok(Command::WhichWrap(p.arg(0).map(str::to_string)))),
     },
     Entry {
@@ -4826,7 +4810,7 @@ pub const COMMANDS: &[Entry] = &[
         params: &[Param::WordsOr {
             of: WRAP_WIDTH,
             default: None,
-            or: "<幾欄>",
+            or: "cmd.arg.width",
         }],
         build: Some(|p| match p.arg(0) {
             None => Ok(Command::SetMeasure(None)),
@@ -4844,7 +4828,7 @@ pub const COMMANDS: &[Entry] = &[
         params: &[Param::WordsOr {
             of: WRAP_HEIGHT,
             default: None,
-            or: "<幾字>",
+            or: "cmd.arg.characters",
         }],
         build: Some(|p| match p.arg(0) {
             None => Ok(Command::SetZongMeasure(None)),
@@ -4877,7 +4861,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.view.pages-horizontal",
         needs: &[],
-        params: &[Param::Free("<1–4>")],
+        params: &[Param::Free("cmd.arg.one-to-four")],
         build: Some(|p| match p.arg(0) {
             None => Ok(Command::SetPagesHorizontal(None)),
             Some(_) => Ok(Command::SetPagesHorizontal(Some(p.number_in(0, 1, 4)?))),
@@ -4888,7 +4872,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.view.pages-vertical",
         needs: &[],
-        params: &[Param::Free("<1–4>")],
+        params: &[Param::Free("cmd.arg.one-to-four")],
         build: Some(|p| match p.arg(0) {
             None => Ok(Command::SetPagesVertical(None)),
             Some(_) => Ok(Command::SetPagesVertical(Some(p.number_in(0, 1, 4)?))),
@@ -5000,7 +4984,7 @@ pub const COMMANDS: &[Entry] = &[
             default: None,
             // 數的是**字**，不是列：量一行有多少列要逐字量寬度，
             // 而那正是這道閘要省的開銷。見 `Editor::LONG_LINE`。
-            or: "<幾字>",
+            or: "cmd.arg.characters",
         }],
         build: Some(|p| {
             Ok(Command::SetLongLine(match p.arg(0) {
@@ -5110,7 +5094,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.indent",
         needs: &[],
-        params: &[Param::WordsOr { of: INDENT_LEVELS, default: None, or: "<幾格，至多 8>" }],
+        params: &[Param::WordsOr { of: INDENT_LEVELS, default: None, or: "cmd.arg.indent-level" }],
         build: Some(|p| {
             // A number is the *width*; a word is the level. `:indent 4` on a
             // page at 中階 widens the indent and still does not fold, because
@@ -5157,7 +5141,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.indent.width",
         needs: &[],
-        params: &[Param::Free("<幾格，1–16>")],
+        params: &[Param::Free("cmd.arg.indent-width")],
         build: Some(|p| {
             Ok(Command::SetIndentWidth(match p.arg(0) {
                 None => None,
@@ -5170,7 +5154,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.hard-wrap",
         needs: &[],
-        params: &[Param::Free("<幾欄>")],
+        params: &[Param::Free("cmd.arg.width")],
         build: Some(|p| match p.arg(0) {
             None => Ok(Command::HardWrap(None)),
             Some(_) => Ok(Command::HardWrap(Some(p.number(0)?))),
@@ -5181,7 +5165,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.align",
         needs: &[],
-        params: &[Param::Free("<符號>")],
+        params: &[Param::Free("cmd.arg.symbol")],
         build: Some(|p| Ok(Command::Align(p.arg(0).unwrap_or("=").to_string()))),
     },
     // **helix's flags and vim's both**: `-r`/`--reverse` and
@@ -5192,7 +5176,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.sort",
         needs: &[],
-        params: &[Param::Free("-r｜-i")],
+        params: &[Param::Free("cmd.arg.sort-flags")],
         build: Some(|p| {
             let (mut reverse, mut insensitive) = (p.force, false);
             for word in p.arg(0).unwrap_or("").split_whitespace() {
@@ -5224,7 +5208,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.reflow",
         needs: &[],
-        params: &[Param::Free("<幾欄>")],
+        params: &[Param::Free("cmd.arg.width")],
         build: Some(|p| match p.arg(0) {
             None => Ok(Command::Reflow(None)),
             Some(_) => Ok(Command::Reflow(Some(p.number(0)?))),
@@ -5283,7 +5267,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &["ta", "tab"],
         help: "cmd.commands.table",
         needs: &[],
-        params: &[Param::Free("<行>x<欄>")],
+        params: &[Param::Free("cmd.arg.rows-by-columns")],
         build: Some(|p| {
             // 「迅速在 markdown 中插入一個三行四列表格」 (#276). Two numbers,
             // 行 then 欄. **`rows` counts the heading**: the rule row
@@ -5366,7 +5350,7 @@ pub const COMMANDS: &[Entry] = &[
             Param::WordsOr {
                 of: RULES,
                 default: None,
-                or: "<樣式>",
+                or: "cmd.arg.style",
             },
             Param::Words {
                 of: STROKES,
@@ -5395,7 +5379,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.table.sort",
         needs: &[Need::Table],
-        params: &[Param::Free("<欄> a｜d …")],
+        params: &[Param::Free("cmd.arg.sort-keys")],
         build: Some(|p| {
             // `:table-sort 1 a 2 d 4 a` — column, direction, column,
             // direction. Nothing at all sorts by the column you are in.
@@ -5482,7 +5466,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &["insert-output"],
         help: "cmd.commands.pipe-before",
         needs: &[],
-        params: &[Param::Free("<命令>")],
+        params: &[Param::Free("cmd.arg.command")],
         build: Some(|p| match p.arg(0) {
             None => Err(CommandError::MissingArgument("pipe-before")),
             Some(line) => Ok(Command::PipeInto(line.to_string(), crate::editor::Put::Before)),
@@ -5493,7 +5477,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &["append-output"],
         help: "cmd.commands.pipe-after",
         needs: &[],
-        params: &[Param::Free("<命令>")],
+        params: &[Param::Free("cmd.arg.command")],
         build: Some(|p| match p.arg(0) {
             None => Err(CommandError::MissingArgument("pipe-after")),
             Some(line) => Ok(Command::PipeInto(line.to_string(), crate::editor::Put::After)),
@@ -5525,7 +5509,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.keep-pipe",
         needs: &[],
-        params: &[Param::Free("<命令>")],
+        params: &[Param::Free("cmd.arg.command")],
         build: Some(|p| match p.arg(0) {
             None => Err(CommandError::MissingArgument("keep-pipe")),
             Some(line) => Ok(Command::KeepPipe(line.to_string())),
@@ -5552,7 +5536,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.decimo",
         needs: &[],
-        params: &[Param::Free("<表達式>")],
+        params: &[Param::Free("cmd.arg.expression")],
         build: Some(|p| match p.arg(0) {
             None => Err(CommandError::MissingArgument("decimo")),
             Some(args) => Ok(Command::Decimo { args: args.to_string(), put: crate::editor::Put::Value }),
@@ -5563,7 +5547,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.decimo-replace",
         needs: &[],
-        params: &[Param::Free("<選項>")],
+        params: &[Param::Free("cmd.arg.options")],
         build: Some(|p| Ok(Command::Decimo { args: p.arg(0).unwrap_or("").to_string(), put: crate::editor::Put::Replace })),
     },
     Entry {
@@ -5571,7 +5555,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.decimo-append",
         needs: &[],
-        params: &[Param::Free("<選項>")],
+        params: &[Param::Free("cmd.arg.options")],
         build: Some(|p| Ok(Command::Decimo { args: p.arg(0).unwrap_or("").to_string(), put: crate::editor::Put::Equation })),
     },
     Entry {
@@ -5579,7 +5563,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.pipe-to",
         needs: &[],
-        params: &[Param::Free("<命令>")],
+        params: &[Param::Free("cmd.arg.command")],
         build: Some(|p| match p.arg(0) {
             None => Err(CommandError::MissingArgument("pipe-to")),
             Some(line) => Ok(Command::PipeInto(line.to_string(), crate::editor::Put::Nowhere)),
@@ -5670,7 +5654,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.sidebar.outline-level",
         needs: &[],
-        params: &[Param::Free("<級>")],
+        params: &[Param::Free("cmd.arg.level")],
         build: Some(|p| {
             Ok(Command::Outline(match p.arg(0) {
                 None => None,
@@ -5750,7 +5734,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.table.delimiter",
         needs: &[],
-        params: &[Param::Free("<分隔符>")],
+        params: &[Param::Free("cmd.arg.delimiter")],
         build: Some(|p| {
             let word = p.need(0)?;
             crate::table::delimiter_named(word)
@@ -5767,7 +5751,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.table.hide",
         needs: &[Need::Table],
-        params: &[Param::Free("<欄號>")],
+        params: &[Param::Free("cmd.arg.column")],
         build: Some(|p| Ok(Command::HideTableColumn { column: p.number(0)?, hide: true })),
     },
     Entry {
@@ -5775,7 +5759,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.table.show",
         needs: &[Need::Table],
-        params: &[Param::Free("<欄號>")],
+        params: &[Param::Free("cmd.arg.column")],
         build: Some(|p| Ok(Command::HideTableColumn { column: p.number(0)?, hide: false })),
     },
     Entry {
@@ -5783,7 +5767,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.table.jump",
         needs: &[Need::Table],
-        params: &[Param::Free("<列名>")],
+        params: &[Param::Free("cmd.arg.row-name")],
         build: Some(|p| {
             // Was `:row` (§5.2.3 ④): `row` under `:table` would have meant
             // the axis, and the axis is what `find` takes.
@@ -5799,9 +5783,9 @@ pub const COMMANDS: &[Entry] = &[
             Param::WordsOr {
                 of: AXIS,
                 default: None,
-                or: "<字符串>",
+                or: "cmd.arg.text",
             },
-            Param::Free("<字符串>"),
+            Param::Free("cmd.arg.text"),
         ],
         build: Some(|p| {
             // Was `:search`, whose two words *are* the axis (§5.2.3 ④). With
@@ -5826,7 +5810,7 @@ pub const COMMANDS: &[Entry] = &[
         help: "cmd.table.paste",
         needs: &[],
         // 和 `convert-table` 同一張參數表——一格 `Free`，詞在裏面自己分。
-        params: &[Param::Free("<格式> [<格式>]")],
+        params: &[Param::Free("cmd.arg.formats")],
         build: Some(|p| {
             let shape = |word: &str| {
                 crate::table::Shape::named(word).ok_or(CommandError::Wants {
@@ -5860,7 +5844,7 @@ pub const COMMANDS: &[Entry] = &[
         // （路徑和 `:grep` 的文字裏都可能有空格），所以兩格 `Free` 的第二格永遠
         // 是空的——`:convert-table csv tsv` 會把 `"csv tsv"` 整個當成一個格式名
         // 去認。詞在這裏自己分。
-        params: &[Param::Free("<格式> [<格式>]")],
+        params: &[Param::Free("cmd.arg.formats")],
         build: Some(|p| {
             let shape = |word: &str| {
                 crate::table::Shape::named(word).ok_or(CommandError::Wants {
@@ -5899,7 +5883,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.wheel",
         needs: &[],
-        params: &[Param::Free("<幾行，1–10>")],
+        params: &[Param::Free("cmd.arg.wheel-lines")],
         build: Some(|p| {
             Ok(Command::SetWheelStep(match p.arg(0) {
                 None => None,
@@ -6012,7 +5996,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.run",
         needs: &[],
-        params: &[Param::Free("<名字>")],
+        params: &[Param::Free("cmd.arg.name")],
         build: Some(|p| {
             match p.arg(0) {
                 None => Err(CommandError::MissingArgument("run")),
@@ -6025,7 +6009,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.run-in-terminal",
         needs: &[],
-        params: &[Param::Free("<命令>")],
+        params: &[Param::Free("cmd.arg.command")],
         build: Some(|p| match p.arg(0) {
             None => Err(CommandError::MissingArgument("run-in-terminal")),
             Some(line) => Ok(Command::RunInTerminal(line.to_string())),
@@ -6135,7 +6119,7 @@ pub const COMMANDS: &[Entry] = &[
         params: &[Param::WordsOr {
             of: GENDA_LENGTHS,
             default: None,
-            or: "<字數>",
+            or: "cmd.arg.count",
         }],
         // A value, not an action: how long a segment is. `all` is 全文.
         build: Some(|p| match p.need(0)? {
@@ -6156,7 +6140,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &["gt"],
         help: "cmd.commands.genda-top",
         needs: &[],
-        params: &[Param::Free("<字數>")],
+        params: &[Param::Free("cmd.arg.count")],
         build: Some(|p| {
             Ok(Command::Genda(crate::genda::Ask::Top(crate::search_panel::Where::Buffer, genda_top_count(p)?)))
         }),
@@ -6166,7 +6150,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &["gtb"],
         help: "cmd.commands.genda-top-buffers",
         needs: &[],
-        params: &[Param::Free("<字數>")],
+        params: &[Param::Free("cmd.arg.count")],
         build: Some(|p| {
             Ok(Command::Genda(crate::genda::Ask::Top(crate::search_panel::Where::Buffers, genda_top_count(p)?)))
         }),
@@ -6176,7 +6160,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &["gtw"],
         help: "cmd.commands.genda-top-working",
         needs: &[],
-        params: &[Param::Free("<字數>")],
+        params: &[Param::Free("cmd.arg.count")],
         build: Some(|p| {
             Ok(Command::Genda(crate::genda::Ask::Top(crate::search_panel::Where::Working, genda_top_count(p)?)))
         }),
@@ -6186,7 +6170,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &["gtp"],
         help: "cmd.commands.genda-top-project",
         needs: &[],
-        params: &[Param::Free("<字數>")],
+        params: &[Param::Free("cmd.arg.count")],
         build: Some(|p| {
             Ok(Command::Genda(crate::genda::Ask::Top(crate::search_panel::Where::Project, genda_top_count(p)?)))
         }),
@@ -6239,7 +6223,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.genda-goal-speed",
         needs: &[],
-        params: &[Param::WordsOr { of: GENDA_GOAL, default: None, or: "<字/分>" }],
+        params: &[Param::WordsOr { of: GENDA_GOAL, default: None, or: "cmd.arg.per-minute" }],
         build: Some(|p| Ok(Command::Genda(crate::genda::Ask::GoalSpeed(genda_goal_value(p)?)))),
     },
     Entry {
@@ -6247,7 +6231,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.genda-goal-kps",
         needs: &[],
-        params: &[Param::WordsOr { of: GENDA_GOAL, default: None, or: "<鍵/秒>" }],
+        params: &[Param::WordsOr { of: GENDA_GOAL, default: None, or: "cmd.arg.per-second" }],
         build: Some(|p| Ok(Command::Genda(crate::genda::Ask::GoalKps(genda_goal_value(p)?)))),
     },
     Entry {
@@ -6255,7 +6239,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.genda-goal-accuracy",
         needs: &[],
-        params: &[Param::WordsOr { of: GENDA_GOAL, default: None, or: "<%>" }],
+        params: &[Param::WordsOr { of: GENDA_GOAL, default: None, or: "cmd.arg.percent" }],
         build: Some(|p| Ok(Command::Genda(crate::genda::Ask::GoalAccuracy(genda_goal_value(p)?)))),
     },
     Entry {
@@ -6335,7 +6319,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &["h"],
         help: "cmd.commands.help",
         needs: &[],
-        params: &[Param::WordsOr { of: HELP_SECTIONS, default: None, or: "<題目>" }],
+        params: &[Param::WordsOr { of: HELP_SECTIONS, default: None, or: "cmd.arg.topic" }],
         build: Some(|p| Ok(Command::Help(p.arg(0).map(|w| w.to_string())))),
     },
     Entry {
@@ -6373,7 +6357,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.lsp-rename",
         needs: &[],
-        params: &[Param::Free("<新名>")],
+        params: &[Param::Free("cmd.arg.new-name")],
         build: Some(|p| Ok(Command::LspRename(p.need(0)?.to_string()))),
     },
     Entry {
@@ -6381,7 +6365,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.git-show",
         needs: &[],
-        params: &[Param::Free("<提交>")],
+        params: &[Param::Free("cmd.arg.commit")],
         build: Some(|p| Ok(Command::GitShow(p.arg(0).map(|s| s.to_string())))),
     },
     Entry {
@@ -6389,7 +6373,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.git-diff",
         needs: &[],
-        params: &[Param::Free("<提交>")],
+        params: &[Param::Free("cmd.arg.commit")],
         build: Some(|p| Ok(Command::GitDiff(p.arg(0).map(|s| s.to_string())))),
     },
     Entry {
@@ -9193,7 +9177,8 @@ mod tests {
         let free = complete("goto ");
         assert_eq!(free.len(), 1);
         assert_eq!(free[0].name, "", "nothing to complete");
-        assert!(free[0].help.contains("行號"), "but it says what to type");
+        assert_eq!(free[0].help, "cmd.arg.line", "but it says what to type");
+        assert!(placeholder(free[0].help).contains("行號"), "in the reader's language");
 
         // A path is the caller's business, and a word nothing accepts is
         // nothing rather than the whole list again.

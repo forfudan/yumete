@@ -1483,7 +1483,7 @@ pub fn draw(
                 }
             }
             if ragged && cells.len() < columns && k == 0 {
-                put_text(buf, x.min(right), y, right, "⟨缺⟩", quiet.patch(torn));
+                put_text(buf, x.min(right), y, right, &yumete_core::say!("table.missing-cell"), quiet.patch(torn));
             }
         }
         y += tall as u16;
@@ -1603,7 +1603,7 @@ pub fn draw_detail(
             // draws, and each written line wrapped on its own — one function
             // for both, so the panel and the cell cannot show a value two ways.
             (Some(text), _) => cell_lines(text, width, true),
-            (None, _) => vec!["⟨缺⟩".to_string()],
+            (None, _) => vec![yumete_core::say!("table.missing-cell")],
         })
         .collect();
     // Far enough up that the *last* row of the field the cursor is in is still

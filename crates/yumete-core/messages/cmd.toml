@@ -31,88 +31,184 @@ en = "no annotation"
 find = "注解 關 关 off"
 
 [[message]]
-# 命令少了參數時説的佔位：欄號（:table-hide）（草稿）
+# 命令參數的佔位：:yume-commit 除了列出的詞以外也認的那個詞（草稿）
+key = "cmd.arg.auto"
+zhs = "auto"
+en = "auto"
+
+[[message]]
+# 命令參數的佔位：幾個字，:view-wrap-height、:view-long-line（草稿）
+key = "cmd.arg.characters"
+zhs = "<几字>"
+en = "<characters>"
+
+[[message]]
+# 命令參數的佔位：欄號（:table-hide）（草稿）
 key = "cmd.arg.column"
 zhs = "<栏号>"
 en = "<column number>"
 
 [[message]]
-# 命令少了參數時説的佔位：一條外部命令（草稿）
+# 命令參數的佔位：一欄或幾欄，或 off（:rules）（草稿）
+key = "cmd.arg.columns-or-off"
+zhs = "<栏>…｜off"
+en = "<column>…｜off"
+
+[[message]]
+# 命令參數的佔位：一條外部命令（草稿）
 key = "cmd.arg.command"
 zhs = "<命令>"
 en = "<command>"
 
 [[message]]
-# 命令少了參數時説的佔位：字數（:genda-length）（草稿）
+# 命令參數的佔位：一次提交（:git-show、:git-diff）（草稿）
+key = "cmd.arg.commit"
+zhs = "<提交>"
+en = "<commit>"
+
+[[message]]
+# 命令參數的佔位：字數（:genda-length）（草稿）
 key = "cmd.arg.count"
 zhs = "<字数>"
 en = "<number of characters>"
 
 [[message]]
-# 命令少了參數時説的佔位：分隔符（:table-delimiter）（草稿）
+# 命令參數的佔位：字數或 off（:count-target）（草稿）
+key = "cmd.arg.count-or-off"
+zhs = "<字数>｜off"
+en = "<number of characters>｜off"
+
+[[message]]
+# 命令參數的佔位：分隔符（:table-delimiter）（草稿）
 key = "cmd.arg.delimiter"
 zhs = "<分隔符>"
 en = "<delimiter>"
 
 [[message]]
-# 命令少了參數時説的佔位：一個表達式（:decimo）（草稿）
+# 命令參數的佔位：退出狀態，0 到 255（:quit-error）（草稿）
+key = "cmd.arg.exit-status"
+zhs = "<0–255>"
+en = "<0–255>"
+
+[[message]]
+# 命令參數的佔位：一個表達式（:decimo）（草稿）
 key = "cmd.arg.expression"
 zhs = "<表达式>"
 en = "<expression>"
 
 [[message]]
-# 命令少了參數時説的佔位：一到兩個表格格式（:paste-table）（草稿）
+# 命令參數的佔位：一到兩個表格格式（:paste-table）（草稿）
 key = "cmd.arg.formats"
 zhs = "<格式> [<格式>]"
 en = "<format> [<format>]"
 
 [[message]]
-# 命令少了參數時説的佔位：行號（:goto）（草稿）
+# 命令參數的佔位：首行縮進幾格，至多 8（:indent）（草稿）
+key = "cmd.arg.indent-level"
+zhs = "<几格，至多 8>"
+en = "<width, up to 8>"
+
+[[message]]
+# 命令參數的佔位：縮進寬度幾格，1 到 16（:indent-width）（草稿）
+key = "cmd.arg.indent-width"
+zhs = "<几格，1–16>"
+en = "<width, 1–16>"
+
+[[message]]
+# 命令參數的佔位：界面語言（:language）（草稿）
+key = "cmd.arg.language"
+zhs = "<语言>"
+en = "<language>"
+
+[[message]]
+# 命令參數的佔位：幾個字母（:which-wrap）（草稿）
+key = "cmd.arg.letters"
+zhs = "<字母>"
+en = "<letters>"
+
+[[message]]
+# 命令參數的佔位：大綱列到第幾級標題（:sidebar-outline-level）（草稿）
+key = "cmd.arg.level"
+zhs = "<级>"
+en = "<level>"
+
+[[message]]
+# 命令參數的佔位：行號（:goto）（草稿）
 key = "cmd.arg.line"
 zhs = "<行号>"
 en = "<line number>"
 
 [[message]]
-# 命令少了參數時説的佔位：一個名字（:run）（草稿）
+# 命令參數的佔位：注解模式的名字（:yume-annotation）（草稿）
+key = "cmd.arg.mode-name"
+zhs = "<模式名>"
+en = "<mode name>"
+
+[[message]]
+# 命令參數的佔位：一個名字（:run）（草稿）
 key = "cmd.arg.name"
 zhs = "<名字>"
 en = "<name>"
 
 [[message]]
-# 命令少了參數時説的佔位：新名字（:lsp-rename）（草稿）
+# 命令參數的佔位：新名字（:lsp-rename）（草稿）
 key = "cmd.arg.new-name"
 zhs = "<新名字>"
 en = "<new name>"
 
 [[message]]
-# : 命令選單裏，吃一個路徑的命令後面畫的佔位
+# 命令參數的佔位：1 到 4（:view-pages-horizontal、:view-pages-vertical）（草稿）
+key = "cmd.arg.one-to-four"
+zhs = "<1–4>"
+en = "<1–4>"
+
+[[message]]
+# 命令參數的佔位：1 到 9（:yume-menu-size）（草稿）
+key = "cmd.arg.one-to-nine"
+zhs = "<1–9>"
+en = "<1–9>"
+
+[[message]]
+# 命令參數的佔位：選項（:settings-buffer、:decimo-replace、:decimo-append）（草稿）
+key = "cmd.arg.options"
+zhs = "<选项>"
+en = "<options>"
+
+[[message]]
+# 命令參數的佔位：一個路徑
 key = "cmd.arg.path"
 zhs = "<路径>"
 en = "<path>"
 
 [[message]]
-# 命令少了參數時説的佔位：每分鐘字數（:genda-goal-speed）（草稿）
+# 命令參數的佔位：每分鐘字數（:genda-goal-speed）（草稿）
 key = "cmd.arg.per-minute"
 zhs = "<字/分>"
 en = "<characters a minute>"
 
 [[message]]
-# 命令少了參數時説的佔位：每秒鍵數（:genda-goal-kps）（草稿）
+# 命令參數的佔位：每秒鍵數（:genda-goal-kps）（草稿）
 key = "cmd.arg.per-second"
 zhs = "<键/秒>"
 en = "<keys a second>"
 
 [[message]]
-# 命令少了參數時説的佔位：百分比（:genda-goal-accuracy）（草稿）
+# 命令參數的佔位：百分比（:genda-goal-accuracy）（草稿）
 key = "cmd.arg.percent"
 zhs = "<%>"
 en = "<%>"
 
 [[message]]
-# 命令少了參數時説的佔位：表格一行的名字（:table-jump）（草稿）
+# 命令參數的佔位：表格一行的名字（:table-jump）（草稿）
 key = "cmd.arg.row-name"
 zhs = "<行名>"
 en = "<row name>"
+
+[[message]]
+# 命令參數的佔位：新表格的行數與欄數，如 3x4（:table）（草稿）
+key = "cmd.arg.rows-by-columns"
+zhs = "<行>x<栏>"
+en = "<rows>x<columns>"
 
 [[message]]
 # : 命令菜单里，:settings 后面画的占位：一项设置的名字（草稿）
@@ -121,10 +217,88 @@ zhs = "<设置项>"
 en = "<setting>"
 
 [[message]]
-# 命令少了參數時説的佔位：要找的字（:table-find）（草稿）
+# 命令參數的佔位：排序的開關（:sort）（草稿）
+key = "cmd.arg.sort-flags"
+zhs = "-r｜-i"
+en = "-r｜-i"
+
+[[message]]
+# 命令參數的佔位：按哪一欄、升序 a 還是降序 d，可以幾組（:table-sort）（草稿）
+key = "cmd.arg.sort-keys"
+zhs = "<栏> a｜d …"
+en = "<column> a｜d …"
+
+[[message]]
+# 命令參數的佔位：撤銷幾步，或回到多久以前（:earlier、:later）（草稿）
+key = "cmd.arg.steps-or-time"
+zhs = "<步数>｜<时间>"
+en = "<steps>｜<time>"
+
+[[message]]
+# 命令參數的佔位：表格線的樣式（:table-rules）（草稿）
+key = "cmd.arg.style"
+zhs = "<样式>"
+en = "<style>"
+
+[[message]]
+# 命令參數的佔位：按哪個符號對齊（:align）（草稿）
+key = "cmd.arg.symbol"
+zhs = "<符号>"
+en = "<character>"
+
+[[message]]
+# 命令參數的佔位：語法的名字（:syntax）（草稿）
+key = "cmd.arg.syntax"
+zhs = "<语法>"
+en = "<syntax>"
+
+[[message]]
+# 命令參數的佔位：要找的字（:table-find）（草稿）
 key = "cmd.arg.text"
 zhs = "<字符串>"
 en = "<text>"
+
+[[message]]
+# 命令參數的佔位：主題的名字（:theme）（草稿）
+key = "cmd.arg.theme"
+zhs = "<主题名>"
+en = "<theme name>"
+
+[[message]]
+# 命令參數的佔位：:help 的題目（草稿）
+key = "cmd.arg.topic"
+zhs = "<题目>"
+en = "<topic>"
+
+[[message]]
+# 命令參數的佔位：logical、visual 的別的寫法，界面語言裏的那一種（:vertical-keys）（草稿）
+key = "cmd.arg.vertical-keys-other"
+zhs = "逻辑｜视觉"
+en = "text｜screen"
+
+[[message]]
+# 命令參數的佔位：滾輪每格幾行，1 到 10（:wheel）（草稿）
+key = "cmd.arg.wheel-lines"
+zhs = "<几行，1–10>"
+en = "<lines, 1–10>"
+
+[[message]]
+# 命令參數的佔位：寬度，幾欄（:view-wrap-width、:hard-wrap、:reflow）（草稿）
+key = "cmd.arg.width"
+zhs = "<几栏>"
+en = "<columns>"
+
+[[message]]
+# 命令參數的佔位：維基詞條的名字（:wiki）（草稿）
+key = "cmd.arg.wiki-entry"
+zhs = "<词条名>"
+en = "<entry name>"
+
+[[message]]
+# 命令參數的佔位：color、ink、tint、line 的別的寫法，界面語言裏的那一種（:word-mark）（草稿）
+key = "cmd.arg.word-mark-other"
+zhs = "颜色｜字色｜底色｜线"
+en = "hue｜fg｜bg｜rule"
 
 [[message]]
 # : 命令選單裏 column 那一項的説明(axis 組)

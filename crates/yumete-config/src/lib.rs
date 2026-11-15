@@ -3214,7 +3214,7 @@ fn one_character(text: &str, narrow: bool) -> bool {
 /// **A complaint in the language the editor speaks**: the Chinese, and the
 /// English beside it. The language is
 /// [`yumete_cjk::speaks_english`], set by the front end before it loads.
-fn said(zh: String, en: String) -> String {
+pub(crate) fn said(zh: String, en: String) -> String {
     match yumete_cjk::speaks_english() {
         true => en,
         false => zh,

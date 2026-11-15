@@ -163,7 +163,7 @@ impl WordMark {
             // Taking that spelling here would put the reader on the mode they
             // did not ask for.
             "ink" | "fg" | "字色" | "文字" | "明度" => Some(WordMark::Ink),
-            "color" | "colour" | "hue" | "色相" | "顏色" | "颜色" => Some(WordMark::Color),
+            "color" | "colour" | "hue" | "色相" | "顏色" | "顔色" | "颜色" => Some(WordMark::Color),
             "line" | "rule" | "sep" | "separator" | "underline" | "線" | "线" => {
                 Some(WordMark::Line)
             }

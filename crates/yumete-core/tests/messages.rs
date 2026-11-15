@@ -230,6 +230,16 @@ fn said() -> BTreeMap<String, String> {
         tags.extend(literals(&text, "word: Some("));
         // `Wants::Said("cmd.takes.sort")` —— 拒收一個參數時，說它收什麼的那一句。
         tags.extend(literals(&text, "Wants::Said("));
+        // A parameter's placeholder (`Param::Free("cmd.arg.line")`, the `or:` of
+        // a `Param::WordsOr`), said through `command::placeholder` wherever it
+        // is shown.
+        tags.extend(literals(&text, "Param::Free("));
+        tags.extend(literals(&text, "or: "));
+        tags.extend(literals(&text, "placeholder("));
+        // A generated page's own words (`yumete/src/docgen.rs`): a heading,
+        // and the first column of a header row (the others follow `", `).
+        tags.extend(literals(&text, "word("));
+        tags.extend(literals(&text, "header(&["));
         // A place's command and its description (`place("action.confirm",
         // PlaceCmd::Confirm)` in `yumete-cjk/src/actions.rs`).
         tags.extend(literals(&text, "place("));

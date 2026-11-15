@@ -987,7 +987,7 @@ fn main() -> ExitCode {
     let settings: Vec<(String, &'static str)> =
         yumete_config::panel::all_rows().iter().map(|s| (s.path(), s.label)).collect();
     yumete_core::command::set_setting_names(&settings.iter().map(|(p, l)| (p.as_str(), *l)).collect::<Vec<_>>());
-    mark("方案", &mut marks);
+    mark("schemes", &mut marks);
     let wanted = Scheme::from_tag(&config.ime.scheme).unwrap_or_else(Scheme::first);
     let page_size = config.panel.page_size;
     let annotation = (config.ime.annotation_modes.clone(), config.ime.annotation.clone());
@@ -1072,7 +1072,7 @@ fn main() -> ExitCode {
     // 答得出——所以這一格撥在這裏，不跟着 `set_ime_available` 走：那一支只在
     // 真去載方案的那幾條路上叫得到，而 `空格 n` 一開始就按得動。
     editor.set_chaifen_available(ime.chaifen_available());
-    mark("輸入法", &mut marks);
+    mark("ime", &mut marks);
     // Word segmentation, driving `w`/`b`/`e` and the overlay. Best first:
     //
     // 1. Yume's own language model (Feature #63) — 1.25M weighted entries plus
@@ -1099,14 +1099,14 @@ fn main() -> ExitCode {
     } else {
         editor.set_status(opening_said.unwrap_or_default());
     }
-    mark("分詞", &mut marks);
+    mark("words", &mut marks);
     if timing {
         let mut last = std::time::Duration::default();
         for (what, at) in &marks {
             println!("{what:>8}  {:.1?}", *at - last);
             last = *at;
         }
-        println!("{:>8}  {last:.1?}", "合計");
+        println!("{:>8}  {last:.1?}", "total");
         return ExitCode::SUCCESS;
     }
 
@@ -1359,7 +1359,7 @@ fn main() -> ExitCode {
         // 拍出來永遠是「問問這是什麽……」，看着像功能壞了。字典不在這裏——它是
         // `frame_to` 自己答得了的。
         if editor.take_hover_query().is_some() {
-            unheard.push("空格 k / 空格 K".into());
+            unheard.push("Space k / Space K".into());
         }
         if editor.take_definition_query().is_some() {
             unheard.push("gd".into());

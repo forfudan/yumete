@@ -7048,7 +7048,7 @@ impl Editor {
                 None => crate::mdtable::has_bare_pipe(text, escaped),
             };
             if walls {
-                return Some("'|' 分隔格子——格子裏要寫，寫成 \\|".to_string());
+                return Some(say!("cell.refuses-pipe", "\\|"));
             }
             return text.chars().find_map(|c| self.cell_refuses_shape(c));
         }

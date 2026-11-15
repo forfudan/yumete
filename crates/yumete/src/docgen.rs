@@ -10,6 +10,27 @@ use std::fmt::Write as _;
 use std::path::Path;
 use yumete_core::messages::{say, set_language, Language};
 
+/// A message in the language being written, for a heading or a table's
+/// header row: the pages are written once per language, so their own words
+/// are too.
+fn word(tag: &str) -> String {
+    say(tag, &[])
+}
+
+/// A table's header row and its rule, from the tags of its columns. A
+/// column that is a name in every language (`helix`, `vim`) is written as
+/// it is.
+fn header(columns: &[&str]) -> String {
+    let named: Vec<String> = columns
+        .iter()
+        .map(|c| match c.starts_with("docgen.") || c.starts_with("keys.") {
+            true => word(c),
+            false => c.to_string(),
+        })
+        .collect();
+    format!("| {} |\n|{}\n", named.join(" | "), " --- |".repeat(columns.len()))
+}
+
 /// A table cell: one line, its pipes escaped.
 fn cell(text: &str) -> String {
     text.replace('\n', " ").replace('|', "\\|")
@@ -30,7 +51,7 @@ fn code(text: &str) -> String {
 }
 
 fn commands() -> String {
-    let mut out = String::from("| Command | Arguments | What it does |\n| --- | --- | --- |\n");
+    let mut out = header(&["docgen.command", "docgen.arguments", "docgen.what-it-does"]);
     for entry in yumete_core::command::COMMANDS {
         let mut name = format!("`:{}`", entry.name);
         for alias in entry.aliases {
@@ -61,7 +82,7 @@ fn what_runs(run: &str) -> String {
             Some(yumete_core::actions::Bound::Named(action)) => say(action.help, &[]),
             Some(yumete_core::actions::Bound::Command(line)) => code(&format!(":{line}")),
             Some(yumete_core::actions::Bound::Keys(keys)) => {
-                format!("as {}", code(&keys_written(&presses(&keys.replace("{n}", "")))))
+                yumete_core::say!("docgen.as-keys", code(&keys_written(&presses(&keys.replace("{n}", "")))))
             }
             None => one.to_string(),
         })
@@ -111,10 +132,10 @@ fn no_flavor() -> Flavor {
 }
 
 /// What a keymap calls a selection being extended.
-fn select_mode(preset: KeyPreset) -> &'static str {
+fn select_mode(preset: KeyPreset) -> String {
     match preset {
-        KeyPreset::Helix => "Select mode",
-        KeyPreset::Vim => "Visual mode",
+        KeyPreset::Helix => word("docgen.select-mode"),
+        KeyPreset::Vim => word("docgen.visual-mode"),
     }
 }
 
@@ -124,19 +145,25 @@ fn keymap(preset: KeyPreset) -> String {
     let DocKeymap { normal, select, insert, menus } = Editor::keymap_for_docs(preset, no_flavor());
     let mut out = String::new();
     let keys_table = |out: &mut String, title: &str, keys: &[yumete_core::editor::DocKey]| {
-        let _ = writeln!(out, "## {title}\n\n| Key | What it does | Command |\n| --- | --- | --- |");
+        let _ = write!(out, "## {title}\n\n{}", header(&["docgen.key", "docgen.what-it-does", "docgen.command"]));
         for (written, run) in by_run(keys) {
             let _ = writeln!(out, "| {} | {} | {} |", written.join(" "), cell(&what_runs(&run)), code(&cell(&run)));
         }
         out.push('\n');
     };
-    keys_table(&mut out, "Normal mode", &normal);
-    keys_table(&mut out, select_mode(preset), &select);
-    keys_table(&mut out, "Insert mode", &insert);
+    keys_table(&mut out, &word("docgen.normal-mode"), &normal);
+    keys_table(&mut out, &select_mode(preset), &select);
+    keys_table(&mut out, &word("docgen.insert-mode"), &insert);
     for menu in &menus {
         let (_, row_keys) = menu_keys(menu);
         let ways: Vec<String> = menu.opened_by.iter().map(|k| code(&keys_written(k))).collect();
-        let _ = writeln!(out, "## {} ({})\n\n| Key | What it does |\n| --- | --- |", say(menu.title, &[]), ways.join(", "));
+        let _ = write!(
+            out,
+            "## {} ({})\n\n{}",
+            say(menu.title, &[]),
+            ways.join(", "),
+            header(&["docgen.key", "docgen.what-it-does"])
+        );
         for (keys, what) in &menu.rows {
             let keys = match row_keys(keys) {
                 k if k.is_empty() => k,
@@ -193,7 +220,7 @@ fn keys_written(keys: &[String]) -> String {
 /// under helix's keymap, under vim's, and in Insert mode (step 7 of the
 /// keymap plan): so every key the editor has is on the site.
 fn actions() -> String {
-    let mut out = String::from("| Command | What it does | helix | vim | Insert |\n| --- | --- | --- | --- | --- |\n");
+    let mut out = header(&["docgen.command", "docgen.what-it-does", "helix", "vim", "docgen.insert"]);
     let column = |keys: &[Vec<String>]| -> String {
         // `C-j` and Enter are one byte, and so are `C-i` and Tab: listed once.
         let mut written: Vec<String> = Vec::new();
@@ -214,19 +241,24 @@ fn actions() -> String {
             column(&insert),
         );
     }
-    out.push_str("\n### vim keys that play other keys\n\n| Key | Plays |\n| --- | --- |\n");
+    let _ = write!(out, "\n### {}\n\n{}", word("docgen.vim-plays-head"), header(&["docgen.key", "docgen.plays"]));
     for (key, run) in yumete_core::editor::Editor::vim_runs_for_docs() {
         let _ = writeln!(out, "| {} | {} |", code(&cell(&keys_written(&[key]))), code(&cell(&run)));
     }
     // A table's grid: what each key means there, by command (`[keys.table]`).
-    out.push_str("\n### In a table's grid (`[keys.table]`)\n\n| Key | Command |\n| --- | --- |\n");
+    let _ = write!(out, "\n### {}\n\n{}", word("docgen.table-grid-head"), header(&["docgen.key", "docgen.command"]));
     for (key, names) in yumete_core::editor::Editor::table_keys_for_docs() {
         let names: Vec<String> = names.iter().map(|n| format!("`{n}`")).collect();
         let _ = writeln!(out, "| {} | {} |", code(&cell(&keys_written(&[key]))), names.join(" "));
     }
     // A prompt's, a picker's and a sidebar's (step 9), each under its table.
     for (place, rows) in yumete_core::editor::Editor::place_commands_for_docs() {
-        let _ = writeln!(out, "\n### `[keys.{}]`\n\n| Command | What it does | Keys |\n| --- | --- | --- |", place.name());
+        let _ = write!(
+            out,
+            "\n### `[keys.{}]`\n\n{}",
+            place.name(),
+            header(&["docgen.command", "docgen.what-it-does", "docgen.keys"])
+        );
         for (name, help, keys) in rows {
             let keys: Vec<Vec<String>> = keys.into_iter().map(|k| vec![k]).collect();
             let _ = writeln!(out, "| `{name}` | {} | {} |", cell(&say(help, &[])), column(&keys));
@@ -235,11 +267,10 @@ fn actions() -> String {
         // **The rules**: the editing model each keymap brings, chosen as a set.
     let _ = write!(
         out,
-        "\n### {}\n\n{}\n\n| {} | {} | helix | vim |\n| --- | --- | --- | --- |\n",
+        "\n### {}\n\n{}\n\n{}",
         say("keys.rules-head", &[]),
         say("keys.rules-note", &[]),
-        say("keys.rules-name", &[]),
-        say("keys.actions-what", &[]),
+        header(&["keys.rules-name", "keys.actions-what", "helix", "vim"]),
     );
     let tick = |on: bool| if on { "✓" } else { "" };
     for ((name, help, helix), (_, _, vim)) in KeyPreset::Helix.rules().list().iter().zip(KeyPreset::Vim.rules().list().iter()) {
@@ -282,10 +313,10 @@ struct Listed {
 fn listed(preset: KeyPreset, flavor: Flavor) -> Vec<Listed> {
     let DocKeymap { normal, select, insert, menus } = Editor::keymap_for_docs(preset, flavor);
     let mut out = Vec::new();
-    for (place, keys) in [("Normal mode", &normal), (select_mode(preset), &select), ("Insert mode", &insert)] {
+    for (place, keys) in [(word("docgen.normal-mode"), &normal), (select_mode(preset), &select), (word("docgen.insert-mode"), &insert)] {
         for key in keys {
             let pressed = keys_written(&key.keys);
-            out.push(Listed { place: place.to_string(), within: pressed.clone(), pressed, what: what_runs(&key.run) });
+            out.push(Listed { place: place.clone(), within: pressed.clone(), pressed, what: what_runs(&key.run) });
         }
     }
     // A menu's rows are compared within it: `vim_space_menu` moves the
@@ -347,7 +378,7 @@ fn flavor() -> String {
         }
     };
     for level in [FlavorLevel::Basic, FlavorLevel::Full] {
-        let _ = writeln!(out, "## `{}`\n\n| Item | helix | vim | What it does |\n| --- | --- | --- | --- |", level.name());
+        let _ = write!(out, "## `{}`\n\n{}", level.name(), header(&["docgen.item", "helix", "vim", "docgen.what-it-does"]));
         for item in FlavorItem::ALL.iter().copied().filter(|i| i.info().level == level) {
             let _ = writeln!(
                 out,
@@ -360,18 +391,18 @@ fn flavor() -> String {
         }
         out.push('\n');
     }
-    out.push_str("## What each item changes\n\n");
+    let _ = write!(out, "## {}\n\n", word("docgen.item-changes-head"));
     for item in FlavorItem::ALL.iter().copied() {
         let info = item.info();
         let _ = writeln!(out, "### `{}` {{#{}}}\n\n{}\n", info.id, info.id, cell(&say(info.hint, &[])));
         let per: Vec<(KeyPreset, Vec<[String; 4]>)> =
             info.keymaps.iter().map(|preset| (*preset, item_changes(item, *preset))).collect();
         if per.iter().all(|(_, rows)| rows.is_empty()) {
-            out.push_str("It changes what its keys do, not which command they run.\n\n");
+            let _ = write!(out, "{}\n\n", word("docgen.keys-only"));
             continue;
         }
         let table = |out: &mut String, rows: &[[String; 4]]| {
-            out.push_str("| Where | Key | With the item | Without it |\n| --- | --- | --- | --- |\n");
+            out.push_str(&header(&["docgen.where", "docgen.key", "docgen.with-item", "docgen.without-item"]));
             for [place, key, on, off] in rows {
                 let key = match key.is_empty() {
                     true => String::new(),
@@ -386,9 +417,11 @@ fn flavor() -> String {
             [(_, a), (_, b)] if a == b => table(&mut out, a),
             several => {
                 for (preset, rows) in several {
-                    let _ = writeln!(out, "Under {}:\n", preset.name());
+                    let _ = writeln!(out, "{}\n", yumete_core::say!("docgen.under", preset.name()));
                     match rows.is_empty() {
-                        true => out.push_str("It changes what its keys do, not which command they run.\n\n"),
+                        true => {
+                            let _ = write!(out, "{}\n\n", word("docgen.keys-only"));
+                        }
                         false => table(&mut out, rows),
                     }
                 }
@@ -402,7 +435,12 @@ fn settings() -> String {
     use yumete_config::settings_ui::{Kind, GROUPS, SETTINGS};
     let mut out = String::new();
     for group in GROUPS {
-        let _ = writeln!(out, "### {}\n\n| Setting | Default | What it does |\n| --- | --- | --- |", say(group.label, &[]));
+        let _ = write!(
+            out,
+            "### {}\n\n{}",
+            say(group.label, &[]),
+            header(&["docgen.setting", "docgen.default", "docgen.what-it-does"])
+        );
         for s in SETTINGS.iter().filter(|s| s.group == group.group) {
             let choices = match s.kind {
                 Kind::Pick(ways) | Kind::PickOr(ways) => format!(
@@ -430,7 +468,7 @@ fn settings() -> String {
 
 fn languages() -> String {
     let servers = yumete_config::factory_servers();
-    let mut out = String::from("| Language | `[lsp.…]` key | Server at the factory |\n| --- | --- | --- |\n");
+    let mut out = header(&["docgen.language", "docgen.lsp-key", "docgen.factory-server"]);
     for language in yumete_core::code::Language::ALL {
         let name = language.name();
         let server = servers

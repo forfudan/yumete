@@ -95,6 +95,11 @@ impl Shape {
     }
 }
 
+/// `name` holds a value where a table has to go, in the reader's language.
+fn not_a_table(name: &str) -> String {
+    crate::said(format!("{name} 不是一張表"), format!("{name} is not a table"))
+}
+
 /// **一份 toml，改幾處，字節級別地不動別的。**
 ///
 /// `text` 是檔裏原樣的那一份（空字串 ＝ 還没有這個檔）。`changes` 是
@@ -107,7 +112,7 @@ pub fn rewrite(text: &str, changes: &[(String, Change)]) -> Result<String, Strin
         // `表.鍵`, or `表.子表.鍵` for a table inside a table
         // (`keys.flavor_items.esc_collapses`).
         let Some((tables, key)) = path.rsplit_once('.') else {
-            return Err(format!("{path} 不是「表.鍵」"));
+            return Err(crate::said(format!("{path} 不是「表.鍵」"), format!("{path} is not table.key")));
         };
         let tables: Vec<&str> = tables.split('.').collect();
         match change {
@@ -154,7 +159,7 @@ pub fn rewrite(text: &str, changes: &[(String, Change)]) -> Result<String, Strin
                 }
                 let mut inline = entry.is_inline_table();
                 let Some(mut t) = entry.as_table_like_mut() else {
-                    return Err(format!("{} 不是一張表", tables[0]));
+                    return Err(not_a_table(tables[0]));
                 };
                 for name in &tables[1..] {
                     // A table that is not there yet is written the way the
@@ -169,11 +174,11 @@ pub fn rewrite(text: &str, changes: &[(String, Change)]) -> Result<String, Strin
                         );
                     }
                     let Some(item) = t.get_mut(name) else {
-                        return Err(format!("{name} 不是一張表"));
+                        return Err(not_a_table(name));
                     };
                     inline |= item.is_inline_table();
                     let Some(inner) = item.as_table_like_mut() else {
-                        return Err(format!("{name} 不是一張表"));
+                        return Err(not_a_table(name));
                     };
                     t = inner;
                 }

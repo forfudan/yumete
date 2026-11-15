@@ -27,6 +27,18 @@ zhs = "找不到配置文件位置"
 en = "config file location unknown"
 
 [[message]]
+# 配置檔裏一項寫了不認識的語法名；{0} 是哪一項（[editor] syntax），{1} 是寫的值，帶引號（草稿）
+key = "config.not-a-syntax"
+zhs = "{0} = {1} 不是一种语法——:syntax 按一下 Tab 看有哪些"
+en = "{0} = {1} is not a syntax; :syntax and Tab list them"
+
+[[message]]
+# 配置檔裏一項的值不在可選的詞裏；{0} 是哪一項，{1} 是寫的值，帶引號，{2} 是可選的詞，已用分隔符連好（草稿）
+key = "config.only-one-of"
+zhs = "{0} = {1} 只能是 {2}"
+en = "{0} = {1}: only {2}"
+
+[[message]]
 # :reload-config 讀到的設定檔有毛病
 key = "config.reload-said"
 zhs = "已重新加载设置，但有提示：{0}"
@@ -37,6 +49,12 @@ en = "settings reloaded, with a note: {0}"
 key = "config.reloaded"
 zhs = "已重新加载设置"
 en = "settings reloaded"
+
+[[message]]
+# 配置檔裏一條診斷，而這一條讓整份配置不生效；{0} 是那條診斷，{1} 是「整份不生效」那句（草稿）
+key = "config.said-and-dropped"
+zhs = "{0}——{1}"
+en = "{0}; {1}"
 
 [[message]]
 # 配置檔裏這一條讓整份都不生效(畫在那一行上的那條診斷)

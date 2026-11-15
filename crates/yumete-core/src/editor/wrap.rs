@@ -508,7 +508,7 @@ fn spell_one(key: crate::input::Key) -> String {
         Key::Esc => "Esc".into(),
         Key::Enter => "Enter".into(),
         Key::Tab => "Tab".into(),
-        Key::Backspace => "退格".into(),
+        Key::Backspace => "Backspace".into(),
         Key::Ctrl(c) => format!("C-{c}"),
         Key::Alt(c) => format!("A-{c}"),
         other => format!("{other:?}"),
