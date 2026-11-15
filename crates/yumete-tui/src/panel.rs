@@ -362,6 +362,36 @@ pub(crate) fn key_columns(
     }
 }
 
+/// [`clip`] for a row drawn in several colours: the parts are cut where the
+/// whole row would be, and the `…` wears the colour of the part it cuts.
+pub(crate) fn clip_parts<S: Copy>(parts: Vec<(String, S)>, cells: usize) -> Vec<(String, S)> {
+    let whole: usize = parts.iter().map(|(text, _)| yumete_cjk::str_width(text)).sum();
+    if whole <= cells {
+        return parts;
+    }
+    let budget = cells.saturating_sub(yumete_cjk::str_width("…"));
+    let mut out: Vec<(String, S)> = Vec::with_capacity(parts.len());
+    let mut used = 0;
+    for (text, style) in parts {
+        let mut kept = String::new();
+        for g in yumete_cjk::graphemes(&text) {
+            let w = yumete_cjk::grapheme_width(g).max(1);
+            if used + w > budget {
+                kept.push('…');
+                out.push((kept, style));
+                return out;
+            }
+            kept.push_str(g);
+            used += w;
+        }
+        out.push((kept, style));
+    }
+    if let Some((last, _)) = out.last_mut() {
+        last.push('…');
+    }
+    out
+}
+
 pub(crate) fn clip(text: &str, cells: usize) -> String {
     if yumete_cjk::str_width(text) <= cells {
         return text.to_string();

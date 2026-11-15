@@ -1959,10 +1959,12 @@ pub fn draw(
 /// panel and bar match the editor's theme. Its own `[panel] ink` and `paper`
 /// would stay a dark box on a light theme. It is drawn as the other floats
 /// are, the completion list among them: their ground and ring, candidates in
-/// the text's ink, the code a step back (the vertical panel's numbers too).
-/// The highlighted candidate is inverted, the text's ink as its ground: the
-/// selection's colour stands only 1.6–2.2:1 off the ground, too faint in a
-/// one-line strip. The box, the strips and the vertical panel all read this.
+/// the text's ink, the code, the numbers and the annotations a step back, and
+/// the keys still owed in 金, the theme's one warm colour, because they are
+/// what the next keystrokes are. The highlighted candidate stands on 金 across
+/// the whole panel, every glyph on it in the paper's colour: the selection's
+/// colour stands only 1.6–2.2:1 off the ground, too faint in a one-line strip.
+/// The box, the strips and the vertical panel all read this.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Skin {
     paper: Color,
@@ -1970,6 +1972,7 @@ pub struct Skin {
     text: Color,
     helper: Color,
     highlight: Color,
+    completion: Color,
 }
 
 impl Skin {
@@ -1985,11 +1988,17 @@ impl Skin {
     pub fn text(self) -> Color {
         self.text
     }
-    /// Numbers and the code, one step back from the candidates.
+    /// Numbers, the code and the annotations, one step back from the
+    /// candidates.
     pub fn helper(self) -> Color {
         self.helper
     }
-    /// The ground of the highlighted candidate, and the text on it.
+    /// The keys still owed after a candidate (`犬 a`).
+    pub fn completion(self) -> Color {
+        self.completion
+    }
+    /// The ground of the highlighted candidate; every glyph on it is
+    /// [`Skin::on_highlight`].
     pub fn highlight(self) -> Color {
         self.highlight
     }
@@ -2006,7 +2015,8 @@ impl From<&Config> for Skin {
             border: ink.rule(),
             text: ink.text(),
             helper: ink.quiet(),
-            highlight: ink.text(),
+            highlight: ink.gold(),
+            completion: ink.gold(),
         }
     }
 }
@@ -2027,7 +2037,6 @@ pub fn draw_candidate_panel(
     cursor_y: u16,
     show_code: bool,
 ) {
-    let skin = Skin::from(config);
     let candidates = ime.page_candidates();
     // A code with no candidates still gets a panel — with nothing but the code
     // in it. In 形碼 a dead code is the ordinary way to mistype, the code lives
@@ -2036,10 +2045,30 @@ pub fn draw_candidate_panel(
     //
     // Warning: **除非編碼這一幀寫進了正文**：那時它有地方待，而一個只裝
     // 着一列碼、沒有一個候選的框是白遮一片稿子。
-    if candidates.is_empty() && (!show_code || ime.display_buffer().is_empty()) {
+    let code = match show_code {
+        true => ime.display_buffer(),
+        false => String::new(),
+    };
+    if candidates.is_empty() && code.is_empty() {
         return;
     }
-    let highlight = ime.highlight();
+    let at = (cursor_x, cursor_y);
+    draw_candidate_columns(frame, config, area, at, &code, &candidates, ime.highlight());
+}
+
+/// The panel [`draw_candidate_panel`] draws, from what it read off the
+/// session: the `code` heading the rightmost column (empty for none), the
+/// page of `candidates`, and which of them is `highlight`ed.
+pub(crate) fn draw_candidate_columns(
+    frame: &mut Frame,
+    config: &Config,
+    area: Rect,
+    (cursor_x, cursor_y): (u16, u16),
+    code: &str,
+    candidates: &[Candidate],
+    highlight: usize,
+) {
+    let skin = Skin::from(config);
 
     // Everything in the panel is a 縱, the 下標 included: one character to a
     // row, hung against the slot's right edge so the letters line up as a single
@@ -2052,10 +2081,7 @@ pub fn draw_candidate_panel(
     // 縱書. `Dyu_Do_Ne` set one letter to a row is nine rows of nothing, and
     // with 拆分 on it made the panel taller than the page it was covering.
     // 編碼那一列：內嵌的時候不畫，那一段已經在正文裏了。
-    let header = match show_code {
-        true => packed(&ime.display_buffer()),
-        false => Vec::new(),
-    };
+    let header = packed(code);
     // Each column is the number, a blank row, then the candidate. The gap is
     // what stops the number reading as the first character of the word.
     // Column 0 is the header; the candidates run leftward from column 1, the
@@ -2151,31 +2177,44 @@ pub fn draw_candidate_panel(
         let x = (inner.x + inner.width).checked_sub(offset)?;
         (x >= inner.x).then_some(x)
     };
+    let owed = ground.fg(skin.completion());
     for (i, column) in columns.iter().enumerate() {
         let Some(x) = column_x(i) else {
             break;
         };
+        // Column 0 is the header, which is never highlighted; the candidates
+        // start at 1, so their number is `i - 1`.
+        let lit = i > 0 && i - 1 == highlight;
+        // **The highlight is a bar down the whole panel**, ring to ring, as
+        // the box's runs border to border: the columns are of every length.
+        if lit {
+            for cy in inner.y..inner.y + inner.height {
+                for dx in 0..SLOT_WIDTH {
+                    if let Some(cell) = buf.cell_mut((x + dx, cy)) {
+                        cell.set_symbol(" ").set_style(chosen);
+                    }
+                }
+            }
+        }
+        let (text_rows, owed_rows) = candidates.get(i.wrapping_sub(1)).map_or((0, 0), |c| {
+            let text_rows = 2 + graphemes(&c.text).count();
+            (text_rows, text_rows + graphemes(&c.completion).count())
+        });
+        let annotated = comment_from.get(i).copied().unwrap_or(usize::MAX);
         for (slot, symbol) in column.iter().enumerate() {
             let cy = top + slot as u16;
             if cy >= inner.y + inner.height {
                 break;
             }
-            // Column 0 is the header, which is never highlighted; the
-            // candidates start at 1, so their number is `i - 1`. Within a
-            // column the number and the 下標 sit a shade back from the
-            // candidate itself, so the three separate by weight alone.
-            let text_rows = candidates
-                .get(i.wrapping_sub(1))
-                .map_or(0, |c| 2 + graphemes(&c.text).count());
-            let annotated = comment_from.get(i).copied().unwrap_or(usize::MAX);
-            let style = if i == 0 || slot >= annotated {
-                // The 拆分 is an aside, so it stays quiet even under the
-                // candidate that is chosen.
-                dim
-            } else if i - 1 == highlight {
+            // Within a column the number and the 拆分 sit a shade back from
+            // the candidate and the keys still owed stand out in 金, so the
+            // parts separate without a rule between them.
+            let style = if lit {
                 chosen
-            } else if slot == 0 || slot >= text_rows {
+            } else if i == 0 || slot == 0 || slot >= annotated {
                 dim
+            } else if (text_rows..owed_rows).contains(&slot) {
+                owed
             } else {
                 ground
             };
@@ -2264,11 +2303,12 @@ pub fn draw_candidate_strip(
         if !slots.is_empty() {
             slots.push((String::new(), ground));
         }
-        let style = match i == highlight {
-            true => chosen,
-            false => ground,
+        // The highlighted candidate is one piece of 金, its number included.
+        let (mark, style) = match i == highlight {
+            true => (chosen, chosen),
+            false => (dim, ground),
         };
-        slots.push((index_mark(&config.panel.markers, i), dim));
+        slots.push((index_mark(&config.panel.markers, i), mark));
         for g in graphemes(&cand.text) {
             slots.push((g.to_string(), style));
         }

@@ -31,6 +31,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Changed
 
+- **The candidate panel's colours**: the highlighted candidate is a gold bar across the whole panel (down the whole column in vertical layout, the whole cell in the one-row strips), the keys still owed after a candidate are gold, and the numbers and annotations are grey.
 - **`[editor] word_completion` defaults to 7**, as helix's `trigger-length`; Chinese characters still take half as many, so 4. `:yume-words`'s `/` search is typed with the built-in Yume (candidates shown, Shift switches 中/英).
 - **The `Space n` character lookup names its rows in the interface language**, and config complaints come in 简体 when the interface is `zhs`.
 - **Command arguments are shown in the interface language everywhere**: the `:` menu, `:help commands`, the refusals and the site's command tables say `<line number>` in English, not `<行號>`; the site's generated tables have their headers in each page's language. Config complaints about syntax, table_rules, indent_hint and similar keys, the pipe-in-a-cell refusal, and the mark for a missing table cell are translated too.
@@ -53,6 +54,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Fixed
 
+- **With the code shown in the text (`inline_preedit = preview`), the candidate box no longer greys out the first candidate as if it were the code, nor highlights the second one.**
 - **A lone Shift switches 中/英 in the settings panel's `/` search**, its `:` line and while editing a value, as on every other prompt.
 - **Moving into a window that shows a `.csv` from deep in a longer file, or resuming such a session with `ye -r`, no longer crashes.**
 - **The outline sidebar follows the text as you write**: a heading renamed, added, deleted, undone or reloaded from disk shows at once, without saving or moving into the sidebar. In a long document it updates as soon as you pause typing. The buffer list's `+` follows edits and saves the same way.

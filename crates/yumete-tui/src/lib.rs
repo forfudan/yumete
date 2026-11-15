@@ -6766,7 +6766,10 @@ fn draw<'a>(
             height: floor.saturating_sub(area.y).max(1),
             ..area
         };
-        let what = Floating { rows: seek_rows, lit: None, keep_off_the_caret: false };
+        let mut rows = seek_rows.into_iter();
+        let head = rows.next();
+        let rows = rows.map(PanelRow::from).collect();
+        let what = Floating { head, rows, lit: None, keep_off_the_caret: false };
         draw_panel_rows(frame, config, room, cursor_x, cursor_y, what);
     }
     // **設置面板鋪滿整個窗口**：設置界面是獨佔的全屏，蓋掉下方的狀態欄和命令欄。
@@ -16335,8 +16338,9 @@ fn char_info(editor: &Editor, config: &Config) -> Vec<String> {
 /// Draw the floating candidate panel below the cursor (Feature #28).
 ///
 /// The first line is the preedit (raw / segmented code); the rows below are the
-/// current page's candidates as `n. 候選 下標`, with the highlighted one
-/// reversed. The panel is clamped to stay within `area`.
+/// current page's candidates as `n 候選 下標`, with the highlighted one on the
+/// highlight's ground from border to border (see [`vertical::Skin`]). The panel
+/// is clamped to stay within `area`.
 #[allow(clippy::too_many_arguments)]
 fn draw_candidate_panel(
     frame: &mut Frame,
@@ -16358,40 +16362,42 @@ fn draw_candidate_panel(
     let shortcut = ime.shortcut_rows();
     if !shortcut.is_empty() {
         let room = area.width.saturating_sub(4).min(56);
-        let mut rows = vec![say!("ime.shortcut")];
-        rows.extend(shortcut_lines(&shortcut, room));
-        let what = Floating { rows, lit: None, keep_off_the_caret: false };
+        let head = Some(say!("ime.shortcut"));
+        let rows = shortcut_lines(&shortcut, room).into_iter().map(PanelRow::from).collect();
+        let what = Floating { head, rows, lit: None, keep_off_the_caret: false };
         return draw_panel_rows(frame, config, area, cursor_x, cursor_y, what);
     }
 
-    // Build the content lines: preedit header, then the candidates.
-    let mut rows: Vec<String> = Vec::with_capacity(candidates.len() + 1);
-    if show_code {
-        rows.push(ime.display_buffer());
-    } else if candidates.is_empty() {
+    // The preedit heads the panel, unless it stands in the text already.
+    if !show_code && candidates.is_empty() {
         // 編碼在正文裏，這裏又沒有候選：一個空框沒有可說的。
         return;
     }
-    rows.extend(candidate_rows(config, &candidates, area.width));
-
-    let what = Floating { rows, lit: Some(highlight), keep_off_the_caret: true };
+    let what = Floating {
+        head: show_code.then(|| ime.display_buffer()),
+        rows: candidate_rows(config, &candidates, area.width),
+        lit: Some(highlight),
+        keep_off_the_caret: true,
+    };
     draw_panel_rows(frame, config, area, cursor_x, cursor_y, what);
 }
 
 /// The box's candidate rows, in a window `width` cells wide: the marker, the
 /// candidate and the keys still owed, then its annotation.
-fn candidate_rows(config: &Config, candidates: &[Candidate], width: u16) -> Vec<String> {
+fn candidate_rows(config: &Config, candidates: &[Candidate], width: u16) -> Vec<PanelRow> {
     // The same markers the vertical panel uses: `[panel] markers` is one
     // setting, and a reader who set 圈碼 does not want ASCII digits back the
     // moment they switch to horizontal.
-    let lefts: Vec<String> = candidates
+    let lefts: Vec<PanelRow> = candidates
         .iter()
         .enumerate()
         .map(|(i, cand)| {
-            let mut left = format!("{} {}", vertical::index_mark(&config.panel.markers, i), cand.text);
+            let mut left = PanelRow::default();
+            left.push(vertical::index_mark(&config.panel.markers, i), Tone::Quiet);
+            left.push(format!(" {}", cand.text), Tone::Text);
             if !cand.completion.is_empty() {
-                left.push(' ');
-                left.push_str(&cand.completion);
+                left.push(" ".to_string(), Tone::Text);
+                left.push(cand.completion.clone(), Tone::Gold);
             }
             left
         })
@@ -16400,18 +16406,21 @@ fn candidate_rows(config: &Config, candidates: &[Candidate], width: u16) -> Vec<
     // at the same place, after the widest candidate, and the panel widens to
     // hold them. What the window cannot hold goes a field at a time, with
     // `…` (see [`yumete_ime::fit_fields`]).
-    let left_wide = lefts.iter().map(|l| yumete_cjk::str_width(l)).max().unwrap_or(0);
+    let left_wide = lefts.iter().map(PanelRow::width).max().unwrap_or(0);
     let room = (width as usize).saturating_sub(2 + left_wide + CANDIDATE_GAP);
     let mut rows = Vec::with_capacity(candidates.len());
-    for (left, cand) in lefts.into_iter().zip(candidates) {
+    for (mut row, cand) in lefts.into_iter().zip(candidates) {
         let fields = cand.fields();
         if fields.is_empty() || room < 2 {
-            rows.push(left);
+            rows.push(row);
             continue;
         }
-        let pad = left_wide + CANDIDATE_GAP - yumete_cjk::str_width(&left);
+        let pad = left_wide + CANDIDATE_GAP - row.width();
         let note = yumete_ime::fit_fields(&fields, room, yumete_cjk::str_width);
-        rows.push(format!("{left}{}{note}", " ".repeat(pad)));
+        row.push(" ".repeat(pad), Tone::Text);
+        // The fields and their ` · ` are one aside, so one colour.
+        row.push(note, Tone::Quiet);
+        rows.push(row);
     }
     rows
 }
@@ -16508,11 +16517,18 @@ fn draw_candidate_row(
         used = yumete_cjk::str_width(&code);
         spans.push(Span::styled(code, Style::default().bg(skin.paper()).fg(skin.helper())));
     }
+    let chosen = Style::default().bg(skin.highlight()).fg(skin.on_highlight());
     for (i, cand) in candidates.iter().enumerate() {
         let cell = candidate_cell(config, i, &cand.text);
-        let style = match i == lit {
-            true => Style::default().bg(skin.highlight()).fg(skin.on_highlight()),
-            false => Style::default().bg(skin.paper()).fg(skin.text()),
+        // The number a step back, as in the box; the highlighted cell is one
+        // piece of 金, its number included.
+        let mark = vertical::index_mark(&config.panel.markers, i);
+        let parts: Vec<(String, Style)> = match i == lit {
+            true => vec![(cell.clone(), chosen)],
+            false => {
+                let text = cell[mark.len()..].to_string();
+                vec![(mark, ground.fg(skin.helper())), (text, ground)]
+            }
         };
         let gap = match spans.is_empty() {
             true => 0,
@@ -16523,7 +16539,9 @@ fn draw_candidate_row(
         // 走到這一枝的只有「一條都放不下」那一種。
         if used + gap + yumete_cjk::str_width(&cell) > room {
             if spans.is_empty() {
-                spans.push(Span::styled(crate::panel::clip(&cell, room), style));
+                for (text, style) in crate::panel::clip_parts(parts, room) {
+                    spans.push(Span::styled(text, style));
+                }
             }
             break;
         }
@@ -16532,7 +16550,7 @@ fn draw_candidate_row(
             used += gap;
         }
         used += yumete_cjk::str_width(&cell);
-        spans.push(Span::styled(cell, style));
+        spans.extend(parts.into_iter().map(|(text, style)| Span::styled(text, style)));
     }
     // **先把那一行擦乾淨**：`Paragraph` 的 `style` 只改樣式不改字符（ratatui 的
     // `set_style`），於是 [`draw_command`] 已經寫在這一行上的東西——鍵位提示、
@@ -16598,20 +16616,53 @@ fn shortcut_lines(rows: &[(String, String)], room: u16) -> Vec<String> {
         .collect()
 }
 
-/// Frame `rows` in the floating panel below the caret, lighting row `lit`
-/// (counted from the first row **after** the header).
-///
-/// Shared by the candidate list and 快捷符號 because the frame, the placing and
-/// the clamping are the same job — only the rows and whether anything is
-/// selected differ. `lit` is `None` for 快捷符號: nothing there is selected,
-/// and a lit first row would read as 「press Space for this one」.
+/// Which of the panel's colours a piece of a row is drawn in (see
+/// [`vertical::Skin`]). The highlighted row ignores it: every glyph on it is
+/// the paper's colour on 金.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Tone {
+    /// A candidate, or a row that is not a candidate at all.
+    Text,
+    /// The number and the annotation.
+    Quiet,
+    /// The keys still owed.
+    Gold,
+}
+
+/// **One row of a floating panel**, in pieces that may differ in colour.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct PanelRow(Vec<(String, Tone)>);
+
+impl PanelRow {
+    fn push(&mut self, text: String, tone: Tone) {
+        self.0.push((text, tone));
+    }
+    fn width(&self) -> usize {
+        self.0.iter().map(|(text, _)| yumete_cjk::str_width(text)).sum()
+    }
+    /// The row as it reads, without its colours.
+    fn text(&self) -> String {
+        self.0.iter().map(|(text, _)| text.as_str()).collect()
+    }
+}
+
+/// A row in one colour: 快捷符號, the seek list, the code.
+impl From<String> for PanelRow {
+    fn from(text: String) -> PanelRow {
+        PanelRow(vec![(text, Tone::Text)])
+    }
+}
+
 /// **一扇浮在光標旁邊的框裏裝着什麽**。
 ///
 /// 三個呼叫方穿同一個框：候選面板、快捷符號表、多字母定位。
 struct Floating {
-    /// 一行一條，第一行多半是碼串或者標題。
-    rows: Vec<String>,
-    /// 哪一條是選中的（候選面板的首選）。
+    /// 打頭那一行，退一步的顏色：碼串或者標題。候選面板在碼寫進了正文的
+    /// 時候沒有這一行。
+    head: Option<String>,
+    /// 一行一條，不算打頭那一行。
+    rows: Vec<PanelRow>,
+    /// `rows` 裏哪一條是選中的（候選面板的首選）。
     lit: Option<usize>,
     /// **這一扇不許蓋住光標那一行。**
     ///
@@ -16621,6 +16672,12 @@ struct Floating {
     keep_off_the_caret: bool,
 }
 
+/// Frame `what` in the floating panel below the caret, lighting its `lit` row.
+///
+/// Shared by the candidate list and 快捷符號 because the frame, the placing and
+/// the clamping are the same job — only the rows and whether anything is
+/// selected differ. `lit` is `None` for 快捷符號: nothing there is selected,
+/// and a lit first row would read as 「press Space for this one」.
 fn draw_panel_rows(
     frame: &mut Frame,
     config: &Config,
@@ -16629,17 +16686,19 @@ fn draw_panel_rows(
     cursor_y: u16,
     what: Floating,
 ) {
-    let Floating { rows, lit, keep_off_the_caret } = what;
+    let Floating { mut head, rows, lit, keep_off_the_caret } = what;
     let skin = vertical::Skin::from(config);
     // Size the panel to its content (plus borders), clamped to the text area.
     let content_w = rows
         .iter()
-        .map(|r| yumete_cjk::str_width(r) as u16)
+        .map(PanelRow::width)
+        .chain(head.as_deref().map(yumete_cjk::str_width))
         .max()
-        .unwrap_or(0);
+        .unwrap_or(0) as u16;
     let inner_w = content_w.max(4);
     let panel_w = (inner_w + 2).min(area.width.max(1));
-    let panel_h = (rows.len() as u16 + 2).min(area.height.max(1));
+    let lines = rows.len() + usize::from(head.is_some());
+    let panel_h = (lines as u16 + 2).min(area.height.max(1));
 
     // Prefer just below the cursor; flip above if it would overflow the bottom.
     let x = cursor_x.min(area.x + area.width.saturating_sub(panel_w));
@@ -16672,17 +16731,22 @@ fn draw_panel_rows(
         true if below_room >= above_room => (cursor_y + 1, below_room),
         true => (cursor_y - above_room, above_room),
     };
-    // 縮過了就少畫幾條，而**選中那一條必須留着**——讀者是照着它按的。
-    let (rows, lit) = match !keep_off_the_caret || panel_h as usize >= rows.len() + 2 {
+    // 縮過了就少畫幾條，而**選中那一條必須留着**——讀者是照着它按的。只騰得出
+    // 一行的時候，打頭那一行讓給它。
+    let (rows, lit) = match !keep_off_the_caret || panel_h as usize >= lines + 2 {
         true => (rows, lit),
         false => {
-            let keep = (panel_h as usize).saturating_sub(2).max(1);
+            let inner_h = (panel_h as usize).saturating_sub(2).max(1);
+            if inner_h < 2 {
+                head = None;
+            }
+            let keep = (inner_h - usize::from(head.is_some())).max(1);
             let first = match lit {
                 Some(at) if at >= keep => at + 1 - keep,
                 _ => 0,
             };
-            let kept: Vec<String> = rows.into_iter().skip(first).take(keep).collect();
-            (kept, lit.map(|at| at.saturating_sub(first)))
+            let kept: Vec<PanelRow> = rows.into_iter().skip(first).take(keep).collect();
+            (kept, lit.map(|at| at - first))
         }
     };
     // **And then clamped into `area` whatever the caret said.** Neither branch
@@ -16705,7 +16769,11 @@ fn draw_panel_rows(
     // 省略號用的是 `chrome` 那一族的 [`crate::panel::clip`]，它還知道
     // 「…」在 `ambiguous_width = "wide"` 底下佔兩格。
     let room = panel_w.saturating_sub(2) as usize;
-    let mut rows: Vec<String> = rows.into_iter().map(|r| crate::panel::clip(&r, room)).collect();
+    let mut head = head.map(|h| crate::panel::clip(&h, room));
+    let mut rows: Vec<PanelRow> = rows
+        .into_iter()
+        .map(|r| PanelRow(crate::panel::clip_parts(r.0, room)))
+        .collect();
     // Warning: **高度也要加省略號，不只是寬度。** 上面那一段說的是一行太長；這裏是
     // **行太多**：`panel_h` 把面板夾到窗口那麼高，剩下的行就沒了。
     //
@@ -16718,36 +16786,46 @@ fn draw_panel_rows(
     // 字**，記得住的人按下去就該出來。所以這裏要說的是「下面還有」，不是「下面
     // 沒有」。
     let fits = panel_h.saturating_sub(2) as usize;
-    if rows.len() > fits && fits > 0 {
-        rows.truncate(fits);
-        if let Some(last) = rows.last_mut() {
-            *last = "…".to_string();
+    if rows.len() + usize::from(head.is_some()) > fits && fits > 0 {
+        match fits.checked_sub(usize::from(head.is_some())) {
+            Some(body) if body > 0 => {
+                rows.truncate(body);
+                if let Some(last) = rows.last_mut() {
+                    *last = PanelRow::from("…".to_string());
+                }
+            }
+            _ => {
+                head = Some("…".to_string());
+                rows.clear();
+            }
         }
     }
-    let mut lines: Vec<Line> = Vec::with_capacity(rows.len());
+    let ground = Style::default().bg(skin.paper()).fg(skin.text());
+    let chosen = Style::default().bg(skin.highlight()).fg(skin.on_highlight());
+    let tone = |tone: Tone| match tone {
+        Tone::Text => ground,
+        Tone::Quiet => ground.fg(skin.helper()),
+        Tone::Gold => ground.fg(skin.completion()),
+    };
+    let mut lines: Vec<Line> = Vec::with_capacity(rows.len() + 1);
+    if let Some(head) = head {
+        // The code as typed, a shade back from the candidates.
+        lines.push(Line::from(Span::styled(head, ground.fg(skin.helper()))));
+    }
     for (i, row) in rows.into_iter().enumerate() {
-        if i == 0 {
-            // The code as typed, a shade back from the candidates.
-            lines.push(Line::from(Span::styled(
-                row,
-                Style::default().bg(skin.paper()).fg(skin.helper()),
-            )));
-        } else if lit == Some(i - 1) {
-            lines.push(Line::from(Span::styled(
-                row,
-                Style::default()
-                    .bg(skin.highlight())
-                    .fg(skin.on_highlight()),
-            )));
+        let line = if lit == Some(i) {
+            // **The highlight is a bar across the panel**, not a patch as long
+            // as its own row: the rows are of every length, and a bar that
+            // stops where the text stops reads as part of the text.
+            let pad = room.saturating_sub(row.width());
+            Line::from(Span::styled(format!("{}{}", row.text(), " ".repeat(pad)), chosen))
         } else {
-            lines.push(Line::from(Span::styled(
-                row,
-                Style::default().bg(skin.paper()).fg(skin.text()),
-            )));
-        }
+            let spans: Vec<Span> = row.0.into_iter().map(|(text, t)| Span::styled(text, tone(t))).collect();
+            Line::from(spans)
+        };
+        lines.push(line);
     }
 
-    let ground = Style::default().bg(skin.paper()).fg(skin.text());
     let inner = crate::chrome::draw(frame, panel, &crate::chrome::Ring {
         foot: None,
         rounded: config.panel.rounded,
@@ -21860,14 +21938,213 @@ fn squeezed(text: &str) -> String {
         let cands = [cand("相", "", "木目 · xj · xiāng · U+76F8"), cand("想", "k", "相心 · xjk · xiǎng · U+60F3")];
         let config = Config::default();
         let start = |row: &str, glyph: char| yumete_cjk::str_width(&row[..row.find(glyph).unwrap()]);
-        let wide = candidate_rows(&config, &cands, 80);
+        let wide: Vec<String> = candidate_rows(&config, &cands, 80).iter().map(PanelRow::text).collect();
         assert_eq!(start(&wide[0], '木'), start(&wide[1], '相'), "{wide:?}");
         assert!(wide[0].ends_with("U+76F8"), "{wide:?}");
         // Room for two fields: the rest goes whole, and `…` says so.
         let left = start(&wide[0], '木');
-        let narrow = candidate_rows(&config, &cands, (left + 2 + 14) as u16);
+        let narrow: Vec<String> =
+            candidate_rows(&config, &cands, (left + 2 + 14) as u16).iter().map(PanelRow::text).collect();
         assert!(narrow[0].ends_with("木目 · xj · …"), "{narrow:?}");
         assert!(narrow.iter().all(|r| yumete_cjk::str_width(r) <= left + 14), "{narrow:?}");
+    }
+
+    /// Two candidates in neutral text, the second owing a key and both
+    /// annotated, for the colour tests below.
+    fn coloured_candidates() -> [Candidate; 2] {
+        let cand = |text: &str, completion: &str, comment: &str| Candidate {
+            text: text.into(),
+            completion: completion.into(),
+            comment: comment.into(),
+            ..Candidate::default()
+        };
+        [cand("一", "", "甲 · a · U+4E00"), cand("二", "q", "丙丁 · ab · U+4E8C")]
+    }
+
+    /// Where `symbol` is drawn, first row first.
+    fn cell_of(buffer: &ratatui::buffer::Buffer, symbol: &str) -> (u16, u16) {
+        (0..buffer.area.height)
+            .flat_map(|y| (0..buffer.area.width).map(move |x| (x, y)))
+            .find(|&(x, y)| buffer[(x, y)].symbol() == symbol)
+            .unwrap_or_else(|| panic!("{symbol:?} is not on the screen"))
+    }
+
+    /// **The box's rows in their parts' colours** (scheme E1): the number and
+    /// the annotation quiet, the keys still owed in 金, the candidate in the
+    /// text's ink; the highlighted row 金 from border to border, every glyph on
+    /// it the paper's colour.
+    #[test]
+    fn the_box_colours_a_row_by_its_parts_and_lights_it_border_to_border() {
+        let config = Config::default();
+        crate::theme::settle(&config, None);
+        let skin = vertical::Skin::from(&config);
+        let cands = coloured_candidates();
+        let mut terminal = Terminal::new(TestBackend::new(40, 8)).unwrap();
+        terminal
+            .draw(|frame| {
+                let what = Floating {
+                    head: Some("ab".to_string()),
+                    rows: candidate_rows(&config, &cands, 40),
+                    lit: Some(0),
+                    keep_off_the_caret: false,
+                };
+                draw_panel_rows(frame, &config, Rect::new(0, 0, 40, 8), 0, 0, what);
+            })
+            .unwrap();
+        let shot = terminal.backend().buffer().clone();
+        let fg = |at: (u16, u16)| shot[at].style().fg;
+        let bg = |at: (u16, u16)| shot[at].style().bg;
+
+        // The row that is not highlighted.
+        let (_, y2) = cell_of(&shot, "二");
+        assert_eq!(fg(cell_of(&shot, "２")), Some(skin.helper()), "the number is quiet");
+        assert_eq!(fg(cell_of(&shot, "二")), Some(skin.text()), "the candidate is in the text's ink");
+        assert_eq!(fg(cell_of(&shot, "q")), Some(skin.completion()), "the keys still owed are 金");
+        assert_eq!(skin.completion(), crate::theme::Palette::of(&config).gold());
+        assert_eq!(fg(cell_of(&shot, "丙")), Some(skin.helper()), "the annotation is quiet");
+        let dot = (0..40).find(|&x| shot[(x, y2)].symbol() == "·").expect("a separator on that row");
+        assert_eq!(fg((dot, y2)), Some(skin.helper()), "and so are its separators");
+        assert_eq!(bg(cell_of(&shot, "二")), Some(skin.paper()));
+
+        // The highlighted row, from the left border to the right one.
+        let (_, y1) = cell_of(&shot, "一");
+        let left = (0..40).find(|&x| shot[(x, y1)].symbol() == "│").expect("the left border");
+        let right = (left + 1..40).find(|&x| shot[(x, y1)].symbol() == "│").expect("the right border");
+        assert!(right - left > 20, "the box is as wide as the longer row");
+        for x in left + 1..right {
+            let cell = &shot[(x, y1)];
+            // A wide glyph's second cell is the renderer's, not ours.
+            if x > left + 1 && yumete_cjk::str_width(shot[(x - 1, y1)].symbol()) == 2 {
+                continue;
+            }
+            assert_eq!(cell.style().bg, Some(skin.highlight()), "column {x} of the highlighted row");
+            assert_eq!(cell.style().fg, Some(skin.on_highlight()), "column {x} of the highlighted row");
+        }
+        assert_eq!(skin.highlight(), crate::theme::Palette::of(&config).gold());
+        assert_eq!(shot[(right - 1, y1)].symbol(), " ", "the last inner column is the bar, not text");
+    }
+
+    /// **快捷符號 and the seek list keep one colour**: the parts are the
+    /// candidate rows' alone.
+    #[test]
+    fn a_panel_of_plain_rows_stays_in_the_text_ink() {
+        let config = Config::default();
+        crate::theme::settle(&config, None);
+        let skin = vertical::Skin::from(&config);
+        let mut terminal = Terminal::new(TestBackend::new(30, 6)).unwrap();
+        terminal
+            .draw(|frame| {
+                let what = Floating {
+                    head: Some("title".to_string()),
+                    rows: vec![PanelRow::from("k 甲".to_string())],
+                    lit: None,
+                    keep_off_the_caret: false,
+                };
+                draw_panel_rows(frame, &config, Rect::new(0, 0, 30, 6), 0, 0, what);
+            })
+            .unwrap();
+        let shot = terminal.backend().buffer().clone();
+        assert_eq!(shot[cell_of(&shot, "k")].style().fg, Some(skin.text()));
+        assert_eq!(shot[cell_of(&shot, "甲")].style().fg, Some(skin.text()));
+        assert_eq!(shot[cell_of(&shot, "t")].style().fg, Some(skin.helper()));
+    }
+
+    /// **With the code in the text the box has no heading**, so the first
+    /// candidate is a candidate: in its own ink, and the one lit when it is the
+    /// highlight.
+    #[test]
+    fn with_the_code_inline_the_first_row_is_the_first_candidate() {
+        let mut editor = Editor::new();
+        editor.set_hud(Hud::Basic);
+        editor.on_key(Key::Char('i'));
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 一 二 三\n");
+        ime.set_inline_preedit(InlinePreedit::Preview);
+        ime.input('b');
+        settle_inline_candidate(&mut editor, &ime);
+        let config = Config::default();
+        let buffer = render_with(&editor, &config, &ime, 40, 12);
+        let skin = vertical::Skin::from(&config);
+        assert_eq!(buffer[cell_of(&buffer, "１")].style().bg, Some(skin.highlight()));
+        assert_eq!(buffer[cell_of(&buffer, "２")].style().bg, Some(skin.paper()));
+        assert_eq!(buffer[cell_of(&buffer, "２")].style().fg, Some(skin.helper()));
+    }
+
+    /// The vertical panel wears the box's colours a quarter turn round: the
+    /// highlighted column 金 ring to ring, the others with a quiet number and
+    /// annotation and the keys still owed in 金.
+    #[test]
+    fn the_vertical_panel_colours_a_column_by_its_parts_and_lights_it_ring_to_ring() {
+        let config = vertical_config();
+        crate::theme::settle(&config, None);
+        let skin = vertical::Skin::from(&config);
+        let cands = coloured_candidates();
+        let mut terminal = Terminal::new(TestBackend::new(30, 30)).unwrap();
+        terminal
+            .draw(|frame| {
+                let area = Rect::new(0, 0, 30, 30);
+                vertical::draw_candidate_columns(frame, &config, area, (28, 0), "ab", &cands, 0);
+            })
+            .unwrap();
+        let shot = terminal.backend().buffer().clone();
+        let fg = |at: (u16, u16)| shot[at].style().fg;
+
+        // The column that is not highlighted.
+        assert_eq!(fg(cell_of(&shot, "２")), Some(skin.helper()), "the number is quiet");
+        assert_eq!(fg(cell_of(&shot, "二")), Some(skin.text()), "the candidate is in the text's ink");
+        assert_eq!(fg(cell_of(&shot, "q")), Some(skin.completion()), "the keys still owed are 金");
+        assert_eq!(fg(cell_of(&shot, "丙")), Some(skin.helper()), "the annotation is quiet");
+
+        // The highlighted column, from the top of the ring to the bottom.
+        let (x1, _) = cell_of(&shot, "一");
+        let top = (0..30).find(|&y| shot[(x1, y)].symbol() == "─").expect("the top of the ring");
+        let bottom = (top + 1..30).find(|&y| shot[(x1, y)].symbol() == "─").expect("the bottom");
+        assert!(bottom - top > 8, "the panel is as deep as the annotated column");
+        for y in top + 1..bottom {
+            for x in [x1, x1 + 1] {
+                if yumete_cjk::str_width(shot[(x - 1, y)].symbol()) == 2 && x == x1 + 1 {
+                    continue;
+                }
+                assert_eq!(shot[(x, y)].style().bg, Some(skin.highlight()), "({x}, {y})");
+                assert_eq!(shot[(x, y)].style().fg, Some(skin.on_highlight()), "({x}, {y})");
+            }
+        }
+        assert_eq!(fg(cell_of(&shot, "１")), Some(skin.on_highlight()));
+        assert_eq!(fg(cell_of(&shot, "甲")), Some(skin.on_highlight()), "its annotation too");
+    }
+
+    /// The strips light a whole cell, its number included, and set the other
+    /// numbers back.
+    #[test]
+    fn the_strips_light_the_whole_cell_and_quiet_the_other_numbers() {
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 一 二 三\n");
+        ime.input('b');
+        for vertical_strip in [false, true] {
+            let config = match vertical_strip {
+                true => vertical_config(),
+                false => Config::default(),
+            };
+            crate::theme::settle(&config, None);
+            let skin = vertical::Skin::from(&config);
+            let mut terminal = Terminal::new(TestBackend::new(30, 16)).unwrap();
+            terminal
+                .draw(|frame| match vertical_strip {
+                    true => {
+                        let area = Rect::new(0, 0, 30, 16);
+                        vertical::draw_candidate_strip(frame, &ime, &config, area, 20, 0, false);
+                    }
+                    false => draw_candidate_row(frame, &ime, &config, Rect::new(0, 0, 30, 1), false),
+                })
+                .unwrap();
+            let shot = terminal.backend().buffer().clone();
+            let style = |s: &str| shot[cell_of(&shot, s)].style();
+            for lit in ["１", "一"] {
+                assert_eq!(style(lit).bg, Some(skin.highlight()), "{lit} vertical: {vertical_strip}");
+                assert_eq!(style(lit).fg, Some(skin.on_highlight()), "{lit} vertical: {vertical_strip}");
+            }
+            assert_eq!(style("２").fg, Some(skin.helper()), "vertical: {vertical_strip}");
+            assert_eq!(style("２").bg, Some(skin.paper()), "vertical: {vertical_strip}");
+            assert_eq!(style("二").fg, Some(skin.text()), "vertical: {vertical_strip}");
+        }
     }
 
     /// The number of rows between the panel's top and bottom border.
@@ -23072,8 +23349,8 @@ fn squeezed(text: &str) -> String {
             .flat_map(|y| (0..buffer.area.width).map(move |x| (x, y)))
             .find(|&(x, y)| buffer[(x, y)].symbol() == "吧")
             .expect("first candidate");
-        // The highlighted candidate is inverted, in the theme's colours.
-        assert_eq!(buffer[cand].style().bg, Some(ink.text()), "highlight");
+        // The highlighted candidate stands on the theme's 金.
+        assert_eq!(buffer[cand].style().bg, Some(ink.gold()), "highlight");
         assert_eq!(buffer[cand].style().fg, Some(crate::chrome::panel_ground(ink)));
     }
 
@@ -27017,7 +27294,7 @@ fn squeezed(text: &str) -> String {
     fn a_candidate_too_wide_for_the_panel_says_it_was_cut() {
         let config = Config::default();
         crate::theme::settle(&config, None);
-        let rows = vec![
+        let rows = [
             "jjjj".to_string(),
             "１ 付出".to_string(),
             "２ 优生优育".to_string(),
@@ -27035,7 +27312,12 @@ fn squeezed(text: &str) -> String {
                         area,
                         0,
                         0,
-                        Floating { rows: rows.clone(), lit: Some(1), keep_off_the_caret: false },
+                        Floating {
+                            head: Some(rows[0].clone()),
+                            rows: rows[1..].iter().cloned().map(PanelRow::from).collect(),
+                            lit: Some(1),
+                            keep_off_the_caret: false,
+                        },
                     );
                 })
                 .unwrap();
@@ -27062,7 +27344,12 @@ fn squeezed(text: &str) -> String {
                         area,
                         0,
                         0,
-                        Floating { rows: rows.clone(), lit: Some(1), keep_off_the_caret: false },
+                        Floating {
+                            head: Some(rows[0].clone()),
+                            rows: rows[1..].iter().cloned().map(PanelRow::from).collect(),
+                            lit: Some(1),
+                            keep_off_the_caret: false,
+                        },
                     );
             })
             .unwrap();
