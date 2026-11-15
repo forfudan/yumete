@@ -2476,7 +2476,7 @@ en = "{0}, or {1}"
 # :sidebar-outline-level 收的參數（草稿）
 key = "cmd.takes.outline-level"
 zhs = "整数：大纲列到第几级标题，0 关闭大纲"
-en = "a whole number: the deepest heading level to list, 0 closes the outline"
+en = "a whole number of heading levels, 0 to close"
 
 [[message]]
 # :export pdf：PDF 不是 :export 的格式，是 :export-as-preview 的；{0} 是 :export 收的格式（草稿）

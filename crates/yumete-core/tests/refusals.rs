@@ -60,7 +60,7 @@ fn the_named_refusals_read_as_they_should() {
         ),
         (
             ":sidebar-outline-level x",
-            "sidebar-outline-level does not take 'x': it takes a whole number: the deepest heading level to list, 0 closes the outline",
+            "sidebar-outline-level does not take 'x': it takes a whole number of heading levels, 0 to close",
         ),
         (":indent-width 40", "indent-width does not take '40': it takes a whole number from 1 to 16"),
         (":indent 9", "indent does not take '9': it takes one of off, basic, full, or a whole number from 0 to 8"),
