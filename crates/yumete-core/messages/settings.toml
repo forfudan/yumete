@@ -1181,6 +1181,18 @@ zhs = "编码打完后何时上屏：等下一键、只剩一个候选时，或�
 en = "when a finished code commits: on the next key, when only one candidate is left, or as a whole sentence"
 
 [[message]]
+# 設置：記住在 yumete 裏學到的（草稿）
+key = "settings.ime.learn"
+zhs = "记住在 yumete 里学到的"
+en = "keep what yumete learns"
+
+[[message]]
+# 設置：記住學到的——一句話（草稿）
+key = "settings.ime.learn.hint"
+zhs = "默认关闭：只读宇梦 App 的词库、调频、固顶，学到的不写盘。打开后另存一份在 yumete 自己的文件夹，不碰 App 的文件；:yume-words 查看和删除"
+en = "off by default: the Yume app's words, order and pins are read and nothing learned is written. On, yumete keeps its own files beside the app's and never writes the app's; :yume-words looks at them and deletes"
+
+[[message]]
 # 設置：Normal 模式下讓開其他輸入法
 key = "settings.ime.others"
 zhs = "Normal 模式下让开其他输入法"

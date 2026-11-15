@@ -585,6 +585,18 @@ zhs = "{0}. {1}"
 en = "{0}. {1}"
 
 [[message]]
+# `:yume-where`：學習關着（草稿）
+key = "yume.where.learn-off"
+zhs = "学习：关（[ime] learn = false），学到的不写盘；这里已有的照样读"
+en = "Learning: off ([ime] learn = false); nothing learned is written, and what is already here is still read"
+
+[[message]]
+# `:yume-where`：學習開着（草稿）
+key = "yume.where.learn-on"
+zhs = "学习：开（[ime] learn = true），学到的写进上面这个文件夹，:yume-words 查看和删除"
+en = "Learning: on ([ime] learn = true); what is learned goes into the folder above, and :yume-words looks at it and deletes"
+
+[[message]]
 # `:yume-where`：數據在哪
 key = "yume.where.name"
 zhs = "数据位置"
@@ -643,3 +655,327 @@ en = "What yumete learned:"
 key = "yume.where.words-unread"
 zhs = "（未读取）"
 en = "(not read)"
+
+[[message]]
+# 詞庫頁說明框：應用的條目刪不了（草稿）
+key = "yume.words.after.app"
+zhs = "这条在宇梦 App 里，要在 App 里删"
+en = "this is in the Yume app; delete it there"
+
+[[message]]
+# 詞庫頁說明框：刪掉兩邊都有的調頻之後，{0} 是應用的次數（草稿）
+key = "yume.words.after.freq-both"
+zhs = "回到宇梦 App 的 {0} 次；App 那一条要在 App 里删"
+en = "back to the Yume app's {0}; the app's row is deleted in the app"
+
+[[message]]
+# 詞庫頁說明框：刪掉 yumete 的調頻之後（草稿）
+key = "yume.words.after.freq-own"
+zhs = "这个排序回到没调过的样子；当场生效"
+en = "the order goes back to as it was before; at once"
+
+[[message]]
+# 詞庫頁說明框：刪掉兩邊都有的固頂之後（草稿）
+key = "yume.words.after.pin-both"
+zhs = "回到宇梦 App 的固顶；App 那一条要在 App 里删"
+en = "back to the Yume app's pin; the app's row is deleted in the app"
+
+[[message]]
+# 詞庫頁說明框：刪掉 yumete 的固頂之後（草稿）
+key = "yume.words.after.pin-own"
+zhs = "这个码下的先后回到原来的样子；当场生效"
+en = "the order on this code goes back; at once"
+
+[[message]]
+# 詞庫頁說明框：刪掉兩邊都有的詞之後（草稿）
+key = "yume.words.after.word-both"
+zhs = "只删 yumete 这一份；宇梦 App 那一份还在，这个词照样出，这一行也留着"
+en = "only yumete's copy goes; the Yume app's stays, so the word still comes and the row stays"
+
+[[message]]
+# 詞庫頁說明框：刪掉 yumete 的詞之後（草稿）
+key = "yume.words.after.word-own"
+zhs = "打 {0} 不再出「{1}」；当场生效，不用重开"
+en = "{0} no longer gives {1}, at once"
+
+[[message]]
+# 詞庫頁：欄名「編碼」（草稿）
+key = "yume.words.column.code"
+zhs = "编码"
+en = "Code"
+
+[[message]]
+# 詞庫頁：欄名「次數」（草稿）
+key = "yume.words.column.count"
+zhs = "次数"
+en = "Times"
+
+[[message]]
+# 詞庫頁：欄名「位次」（草稿）
+key = "yume.words.column.place"
+zhs = "位次"
+en = "Place"
+
+[[message]]
+# 詞庫頁：欄名「來源」（草稿）
+key = "yume.words.column.source"
+zhs = "来源"
+en = "From"
+
+[[message]]
+# 詞庫頁：欄名「詞」（草稿）
+key = "yume.words.column.word"
+zhs = "词"
+en = "Word"
+
+[[message]]
+# 詞庫頁：y 複製了一條（草稿）
+key = "yume.words.copied"
+zhs = "已复制这一条"
+en = "row copied"
+
+[[message]]
+# 詞庫頁：Y 複製了整頁，{0} 條（草稿）
+key = "yume.words.copied-page"
+zhs = "已复制这一页（{0} 条，TSV）"
+en = "list copied ({0} rows, TSV)"
+
+[[message]]
+# 詞庫頁：刪掉一條調頻之後（草稿）
+key = "yume.words.deleted-freq"
+zhs = "已删除 {0} 下「{1}」的调频 · u 恢复"
+en = "deleted the order of {1} on {0} · u puts it back"
+
+[[message]]
+# 詞庫頁：刪掉一條固頂之後（草稿）
+key = "yume.words.deleted-pin"
+zhs = "已删除 {0} 下「{1}」的固顶 · u 恢复"
+en = "deleted the pin of {1} on {0} · u puts it back"
+
+[[message]]
+# 詞庫頁：刪掉一個詞之後。{0} 詞，{1} 條編碼（草稿）
+key = "yume.words.deleted-word"
+zhs = "已删除「{0}」（{1} 条）· u 恢复"
+en = "deleted {0} ({1} lines) · u puts it back"
+
+[[message]]
+# 詞庫頁說明框：應用的調頻（草稿）
+key = "yume.words.detail.freq-app"
+zhs = "{0} 下选过「{1}」：宇梦 App 记了 {2} 次；yumete 只读"
+en = "{1} chosen on {0}: the Yume app counted {2}; yumete only reads it"
+
+[[message]]
+# 詞庫頁說明框：兩邊都有的調頻。{2} yumete 的次數，{3} 應用的，{4} 合計（草稿）
+key = "yume.words.detail.freq-both"
+zhs = "{0} 下选过「{1}」：yumete 记了 {2} 次，宇梦 App 记了 {3} 次，合起来算 {4} 次"
+en = "{1} chosen on {0}: yumete counted {2}, the Yume app {3}; together they count {4}"
+
+[[message]]
+# 詞庫頁說明框：yumete 的調頻。{0} 碼，{1} 詞，{2} 次（草稿）
+key = "yume.words.detail.freq-own"
+zhs = "{0} 下选过「{1}」：yumete 记了 {2} 次"
+en = "{1} chosen on {0}: yumete counted {2}"
+
+[[message]]
+# 詞庫頁說明框：應用的固頂（草稿）
+key = "yume.words.detail.pin-app"
+zhs = "{0} 下把「{1}」固定在第 {2} 位（宇梦 App 的）；yumete 只读"
+en = "{1} pinned at place {2} on {0} (the Yume app's); yumete only reads it"
+
+[[message]]
+# 詞庫頁說明框：yumete 的固頂。{0} 碼，{1} 詞，{2} 位次（草稿）
+key = "yume.words.detail.pin-own"
+zhs = "{0} 下把「{1}」固定在第 {2} 位（yumete 固定的）"
+en = "{1} pinned at place {2} on {0} (pinned in yumete)"
+
+[[message]]
+# 詞庫頁說明框：應用取消的固頂（草稿）
+key = "yume.words.detail.unpin-app"
+zhs = "{0} 下取消了「{1}」的固顶（宇梦 App 的）；yumete 只读"
+en = "{1} unpinned on {0} (the Yume app's); yumete only reads it"
+
+[[message]]
+# 詞庫頁說明框：yumete 取消了一個固頂（位次 0）（草稿）
+key = "yume.words.detail.unpin-own"
+zhs = "{0} 下取消了「{1}」的固顶（在 yumete 里取消的）"
+en = "{1} unpinned on {0} (unpinned in yumete)"
+
+[[message]]
+# 詞庫頁說明框：應用的詞（草稿）
+key = "yume.words.detail.word-app"
+zhs = "「{0}」：宇梦 App 的词，编码 {1}；yumete 只读"
+en = "{0}: a word of the Yume app's, typed {1}; yumete only reads it"
+
+[[message]]
+# 詞庫頁說明框：兩邊都有的詞。{0} 詞，{1} yumete 的編碼，{2} 應用的編碼（草稿）
+key = "yume.words.detail.word-both"
+zhs = "「{0}」：yumete 学到的编码 {1}，宇梦 App 里也有（{2}）"
+en = "{0}: yumete learned it as {1}, and the Yume app has it too ({2})"
+
+[[message]]
+# 詞庫頁說明框：yumete 學到的詞。{0} 詞，{1} 編碼（草稿）
+key = "yume.words.detail.word-own"
+zhs = "「{0}」：yumete 学到的词，编码 {1}"
+en = "{0}: a word yumete learned, typed {1}"
+
+[[message]]
+# 詞庫頁：這一份 yumete 一條都沒學到（草稿）
+key = "yume.words.empty"
+zhs = "yumete 在这里还什么都没学到。Tab 看宇梦 App 的"
+en = "yumete has learned nothing here yet. Tab shows the Yume app's"
+
+[[message]]
+# 詞庫頁：連應用的也是空的（草稿）
+key = "yume.words.empty-all"
+zhs = "这里是空的"
+en = "Nothing here"
+
+[[message]]
+# 詞庫頁說明框：檔案和第幾行（草稿）
+key = "yume.words.file-line"
+zhs = "{0} 第 {1} 行"
+en = "{0}, line {1}"
+
+[[message]]
+# 詞庫頁：底下的鍵（草稿）
+key = "yume.words.keys"
+zhs = "jk 上下, hl 换页, / 搜索, d 删除, u 恢复, y 复制这条, Y 复制这一页, Tab 只看 yumete/连应用的, s 换方案, q 关闭"
+en = "jk up/down, hl list, / search, d delete, u put back, y copy the row, Y copy the list, Tab yumete only/with the app's, s next scheme, q close"
+
+[[message]]
+# 詞庫頁：搜索打字時底下的鍵（草稿）
+key = "yume.words.keys-search"
+zhs = "Enter 确定, Esc 清掉搜索, 退格 删一个字"
+en = "Enter keep, Esc clear the search, Backspace delete a character"
+
+[[message]]
+# 詞庫頁：左欄「調頻」（草稿）
+key = "yume.words.kind.freq"
+zhs = "调频"
+en = "Order"
+
+[[message]]
+# 詞庫頁：左欄「固頂」（草稿）
+key = "yume.words.kind.pins"
+zhs = "固顶"
+en = "Pinned"
+
+[[message]]
+# 詞庫頁：左欄「拼音調頻」，有共用拼音詞典的方案纔有（草稿）
+key = "yume.words.kind.pinyin-freq"
+zhs = "拼音调频"
+en = "Pinyin order"
+
+[[message]]
+# 詞庫頁：左欄「詞庫」（草稿）
+key = "yume.words.kind.words"
+zhs = "词库"
+en = "Words"
+
+[[message]]
+# 詞庫頁說明框：「刪掉之後」那一格的標籤（草稿）
+key = "yume.words.label.after"
+zhs = "删掉之后"
+en = "Deleted"
+
+[[message]]
+# 詞庫頁說明框：「在」那一格的標籤（草稿）
+key = "yume.words.label.in"
+zhs = "在"
+en = "In"
+
+[[message]]
+# 詞庫頁：表下面還有幾條（草稿）
+key = "yume.words.more"
+zhs = "↓ 还有 {0} 条"
+en = "↓ {0} more"
+
+[[message]]
+# 詞庫頁：搜不到（草稿）
+key = "yume.words.no-match"
+zhs = "没有符合「{0}」的"
+en = "Nothing matches {0}"
+
+[[message]]
+# 詞庫頁：這一頁沒有條目可複製或刪（草稿）
+key = "yume.words.no-row"
+zhs = "这一页没有条目"
+en = "no row here"
+
+[[message]]
+# 詞庫頁：沒有可恢復的（草稿）
+key = "yume.words.nothing-to-restore"
+zhs = "没有可恢复的"
+en = "nothing to put back"
+
+[[message]]
+# 詞庫頁：狀態行右端，第幾條／共幾條（草稿）
+key = "yume.words.position"
+zhs = "第 {0} / {1} 条"
+en = "{0} / {1}"
+
+[[message]]
+# 詞庫頁：在應用的條目上按 d（草稿）
+key = "yume.words.refused-app"
+zhs = "这条在宇梦 App 里，要在 App 里删"
+en = "this is in the Yume app; delete it there"
+
+[[message]]
+# 詞庫頁：那一條是別的方案的（草稿）
+key = "yume.words.restore-other-scheme"
+zhs = "那一条是另一个方案的，换回去再恢复"
+en = "that one belongs to another scheme; switch back to put it back"
+
+[[message]]
+# 詞庫頁：u 放回去了（草稿）
+key = "yume.words.restored"
+zhs = "已恢复"
+en = "put back"
+
+[[message]]
+# 詞庫頁：狀態行，搜索框（草稿）
+key = "yume.words.search"
+zhs = "搜索：{0}"
+en = "search: {0}"
+
+[[message]]
+# 詞庫頁：狀態行，Tab 攤開了應用的條目（草稿）
+key = "yume.words.show-all"
+zhs = "连应用的"
+en = "with the app's"
+
+[[message]]
+# 詞庫頁：狀態行，Tab 收起了應用的條目（草稿）
+key = "yume.words.show-own"
+zhs = "只看 yumete"
+en = "yumete only"
+
+[[message]]
+# 詞庫頁：來源一欄，只在宇夢 App 裏（草稿）
+key = "yume.words.source.app"
+zhs = "应用"
+en = "app"
+
+[[message]]
+# 詞庫頁：來源一欄，兩邊都有（草稿）
+key = "yume.words.source.both"
+zhs = "yumete＋应用"
+en = "yumete + app"
+
+[[message]]
+# 詞庫頁：來源一欄，只在 yumete 自己那一份裏（草稿）
+key = "yume.words.source.own"
+zhs = "yumete"
+en = "yumete"
+
+[[message]]
+# 詞庫頁：狀態行上的頁名（草稿）
+key = "yume.words.title"
+zhs = "yumete 学到的词"
+en = "What yumete learned"
+
+[[message]]
+# 詞庫頁：詞庫還沒讀（碼表沒載入）（草稿）
+key = "yume.words.unread"
+zhs = "词库还没有读：先载入一张码表（:yume-scheme）"
+en = "The word lists are not read: load a code table first (:yume-scheme)"

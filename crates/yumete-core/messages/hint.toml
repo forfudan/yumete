@@ -2175,3 +2175,9 @@ en = "where the data is"
 key = "hint.yume.which"
 zhs = "查看码表来源"
 en = "where the code table came from"
+
+[[message]]
+# ␣z 輸入法那一組：yumete 學到的詞（宇夢的 ⌃⇧U）（草稿）
+key = "hint.yume.words"
+zhs = "yumete 学到的词"
+en = "what yumete learned"

@@ -1016,6 +1016,17 @@ pub const SETTINGS: &[Setting] = &[
         hint: "settings.ime.start.hint",
         factory: "false",
     },
+    // **Off at the factory**: yumete reads the Yume app's words, order and
+    // pins and writes nothing of its own until this is ticked.
+    Setting {
+        table: "ime",
+        key: "learn",
+        group: Group::Ime,
+        kind: Kind::Tick,
+        label: "settings.ime.learn",
+        hint: "settings.ime.learn.hint",
+        factory: "false",
+    },
     Setting {
         table: "ime",
         key: "system",

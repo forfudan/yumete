@@ -97,7 +97,7 @@ thread_local! {
 /// **The key row folded between its pairs**, so a key never ends one row
 /// with what it does beginning the next. The pairs are the ones `, ` stands between; a pair wider than the row is
 /// folded as text is.
-fn fold_pairs(text: &str, wide: usize) -> Vec<String> {
+pub(crate) fn fold_pairs(text: &str, wide: usize) -> Vec<String> {
     let mut rows: Vec<String> = Vec::new();
     let mut line = String::new();
     let pairs: Vec<&str> = text.split(", ").collect();

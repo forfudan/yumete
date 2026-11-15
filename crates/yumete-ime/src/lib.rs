@@ -45,7 +45,7 @@ use yume_core::{
 pub use reading::YumeReader;
 pub use yume_core::{CharsetFilterMode, CharsetSortMode};
 pub use segment::YumeSegmenter;
-pub use user_words::{ReadFile, UserWordRoots};
+pub use user_words::{Deleted, Held, ReadFile, UserWordRoots, WordList, WordRow};
 pub use yume_core::engine::WordDisplayPrefs;
 pub use yume_core::SingleCharMode;
 pub use yumete_config::{AnnotationMode, PanelDisplay, InlinePreedit};
@@ -603,6 +603,9 @@ pub struct ImeSession {
     user_roots: Option<UserWordRoots>,
     /// What was read from them for this scheme, and what is learned.
     user_words: Option<user_words::UserWords>,
+    /// Whether what is learned is written to yumete's own files (`[ime]
+    /// learn`). Off, yumete only reads the Yume app's.
+    learn: bool,
 }
 
 /// **字集過濾、字集排序與整句字集軌**, as Yume's own front ends
@@ -770,6 +773,7 @@ impl ImeSession {
             single_chars: SingleChars::default(),
             user_roots: None,
             user_words: None,
+            learn: false,
         }
     }
 
@@ -831,6 +835,7 @@ impl ImeSession {
             single_chars: SingleChars::default(),
             user_roots: None,
             user_words: None,
+            learn: false,
         })
     }
 
@@ -871,6 +876,7 @@ impl ImeSession {
             single_chars: SingleChars::default(),
             user_roots: None,
             user_words: None,
+            learn: false,
         }
     }
 
@@ -1033,6 +1039,7 @@ impl ImeSession {
             single_chars: SingleChars::default(),
             user_roots: None,
             user_words: None,
+            learn: false,
         }
     }
 
@@ -1062,6 +1069,7 @@ impl ImeSession {
             single_chars: SingleChars::default(),
             user_roots: None,
             user_words: None,
+            learn: false,
         }
     }
 
@@ -1088,6 +1096,7 @@ impl ImeSession {
             single_chars,
             user_roots: None,
             user_words: None,
+            learn: false,
         }
     }
 
@@ -1119,6 +1128,7 @@ impl ImeSession {
             single_chars: SingleChars::default(),
             user_roots: None,
             user_words: None,
+            learn: false,
         }
     }
 
@@ -1242,7 +1252,59 @@ impl ImeSession {
             return;
         }
         let tag = self.scheme.tag();
-        self.user_words = Some(user_words::UserWords::load(&mut self.engine, roots, tag));
+        self.user_words = Some(user_words::UserWords::load(&mut self.engine, roots, tag, self.learn));
+    }
+
+    /// **Whether what is learned is kept** (`[ime] learn`). Off — the default
+    /// — nothing is written, and the engine's queues of new words are emptied
+    /// unread; yumete's own files are read either way. Turning it off writes
+    /// what was learned up to here first.
+    pub fn set_learn(&mut self, on: bool) {
+        self.learn = on;
+        if let Some(words) = &mut self.user_words {
+            words.set_learn(&mut self.engine, on);
+        }
+    }
+
+    pub fn learn(&self) -> bool {
+        self.learn
+    }
+
+    /// Whether the word lists have been read for this scheme — a 碼表 loaded
+    /// and the front end having said where they are.
+    pub fn word_lists_read(&self) -> bool {
+        self.user_words.is_some()
+    }
+
+    /// The lists the words page shows for this scheme.
+    pub fn word_lists(&self) -> Vec<WordList> {
+        self.user_words.as_ref().map_or_else(Vec::new, |w| w.lists())
+    }
+
+    /// Every row of a list, yumete's and the Yume app's.
+    pub fn word_rows(&self, list: WordList) -> Vec<WordRow> {
+        self.user_words.as_ref().map_or_else(Vec::new, |w| w.rows(list))
+    }
+
+    /// yumete's own file for a list.
+    pub fn own_word_file(&self, list: WordList) -> Option<PathBuf> {
+        self.user_words.as_ref().and_then(|w| w.own_file(list))
+    }
+
+    /// **Delete yumete's copy of a row**, in its file and in the engine at
+    /// once. `None` when yumete holds nothing for it (a row of the app's).
+    pub fn delete_own_row(&mut self, list: WordList, row: &WordRow) -> Option<Deleted> {
+        let words = self.user_words.as_mut()?;
+        words.delete(&mut self.engine, list, row)
+    }
+
+    /// Put back what [`Self::delete_own_row`] took. `false` when it was
+    /// another scheme's.
+    pub fn restore_own_row(&mut self, deleted: Deleted) -> bool {
+        match &mut self.user_words {
+            Some(words) => words.restore(&mut self.engine, deleted),
+            None => false,
+        }
     }
 
     /// Write what this session learned to yumete's own files: words, 調頻,
@@ -1347,6 +1409,7 @@ impl ImeSession {
     /// this one's too, read for this scheme.
     pub fn carry_settings_from(&mut self, old: &mut ImeSession) {
         old.save_learning();
+        self.set_learn(old.learn());
         self.set_page_size(old.page_size());
         self.set_charsets(old.charsets().clone());
         self.set_single_chars(old.single_chars());

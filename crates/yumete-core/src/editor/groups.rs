@@ -1399,11 +1399,11 @@ pub(super) static OPEN: Group = Group {
 /// Yume has many shortcuts of its own on ⌃⇧ and a letter, and the two line
 /// up as far as they can. So the letter
 /// under `z` is **Yume's own ⌃⇧ letter** wherever Yume has one (`m` 上屏方式,
-/// `y` 輸入預測, `i` 選方案, `n` 下一個方案, `/` 注解, `3`–`9` 一頁幾條), and
-/// the value under it is a letter of that value's own name.
+/// `y` 輸入預測, `i` 選方案, `n` 下一個方案, `/` 注解, `u` 用戶詞庫, `3`–`9`
+/// 一頁幾條), and the value under it is a letter of that value's own name.
 ///
 /// Warning: **The letters Yume uses and yumete has no answer for stay empty**
-/// — `O U L H K J A .`. Lining the two up is only worth doing if the day
+/// — `O L H K J A .`. Lining the two up is only worth doing if the day
 /// yumete grows one of those, the letter is already the same on both sides
 /// and nobody's hand has to change. `0` is Yume's 字集過濾 and is ours too;
 /// it opens the values rather than cycling them, as the other
@@ -1438,6 +1438,7 @@ pub(super) static YUME: Group = Group {
         ch('t', NormalCmd::YumeInstalledTable, "hint.yume.table"),
         ch('w', NormalCmd::YumeTableSource, "hint.yume.which"),
         ch('W', NormalCmd::YumeDataLocation, "hint.yume.where"),
+        ch('u', NormalCmd::YumeWords, "hint.yume.words"),
     ],
     unknown: Unknown::SayKeys("hint.yume.after-z"),
     sticky: false,

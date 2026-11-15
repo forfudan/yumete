@@ -3004,3 +3004,10 @@ en = "the current scheme and where its table came from"
 find = "輸入法 输入法 方案 現在 现在 which"
 
 # ── command ───────────────────────────────────────────────────────────
+
+[[message]]
+# yumete 學到的詞：查看、刪除（草稿）
+key = "cmd.yume.words"
+zhs = "yumete 学到的词、调频、固顶：查看和删除"
+en = "the words, order and pins yumete learned: look and delete"
+find = "输入法 词库 调频 固顶 删除 学习 words learn delete"

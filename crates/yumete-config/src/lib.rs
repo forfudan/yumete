@@ -736,6 +736,11 @@ pub struct ImeConfig {
     /// `longer` (five and up) and `whitelist` (Yume's 常用詞語白名單). Empty by
     /// default, so 主單副詞 shows single characters and the writer's own words.
     pub word_show: Vec<String>,
+    /// Whether what yumete learns while typing is kept (自動調頻, 造詞,
+    /// 動態碼長, 固頂). Off by default: yumete reads the Yume app's words,
+    /// order and pins and writes nothing. On, what it learns goes to files of
+    /// its own under the data directory — never into the app's.
+    pub learn: bool,
 }
 
 /// The words `[ime] charset` takes.
@@ -933,6 +938,7 @@ impl Default for ImeConfig {
             single_char: "both".to_string(),
             sentence_single_char: "strict".to_string(),
             word_show: Vec::new(),
+            learn: false,
         }
     }
 }
@@ -4777,6 +4783,7 @@ struct RawIme {
     single_char: Option<String>,
     sentence_single_char: Option<String>,
     word_show: Option<Vec<String>>,
+    learn: Option<bool>,
     /// `[ime.annotation_modes.<name>]`: a field ticked or not, by name.
     #[serde(default)]
     annotation_modes: toml::Table,
@@ -5220,6 +5227,9 @@ impl RawConfig {
         }
         if other.ime.data_dirs.is_some() {
             self.ime.data_dirs = other.ime.data_dirs.clone();
+        }
+        if other.ime.learn.is_some() {
+            self.ime.learn = other.ime.learn;
         }
         if other.ime.start.is_some() {
             self.ime.start = other.ime.start;
@@ -5807,6 +5817,9 @@ impl RawConfig {
         }
         if let Some(scheme) = self.ime.scheme {
             config.ime.scheme = scheme;
+        }
+        if let Some(learn) = self.ime.learn {
+            config.ime.learn = learn;
         }
         if let Some(start) = self.ime.start {
             config.ime.start = start;

@@ -325,6 +325,11 @@ impl Editor {
                 self.genda_asks.push(crate::genda::Ask::Close);
                 Ok(CommandOutcome::Continue)
             }
+            // The words page too: `:q` closes the page in front.
+            Command::Quit { .. } | Command::QuitAll { .. } | Command::QuitError { .. } if self.word_page_open => {
+                self.word_page_close = true;
+                Ok(CommandOutcome::Continue)
+            }
             Command::Quit { force } | Command::QuitAll { force } | Command::QuitError { force, .. }
                 if self.settings_open =>
             {
@@ -1168,6 +1173,11 @@ impl Editor {
             // follow the paths with `gf`.
             Command::YumeWhere => {
                 self.scheme_request = Some(String::from("where"));
+                Ok(CommandOutcome::Continue)
+            }
+            // The page reads and deletes through the IME the front end holds.
+            Command::YumeWords => {
+                self.word_page_request = true;
                 Ok(CommandOutcome::Continue)
             }
             Command::FileInfo => {

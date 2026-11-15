@@ -1021,6 +1021,7 @@ fn main() -> ExitCode {
     // **The app's word lists and yumete's own** are read and written only by a
     // session somebody types in: a picture or a preview reads nobody's words.
     let keeps_words = shot.is_none() && !force_preview && !timing && std::io::stdout().is_terminal();
+    let learn = config.ime.learn;
     // Read after the first frame rather than before it — see `yumete_tui::
     // Deferred`. Everything it loads is a keystroke away; the page is not.
     let annotation_at_load = annotation.clone();
@@ -1047,6 +1048,7 @@ fn main() -> ExitCode {
         ime.set_panel_display(panel);
         ime.set_inline_preedit(preedit);
         if keeps_words {
+            ime.set_learn(learn);
             ime.set_user_word_roots(yumete_ime::UserWordRoots::of_this_machine());
         }
         said
@@ -1161,6 +1163,7 @@ fn main() -> ExitCode {
     yumete_tui::set_build(VERSION);
     let mut settings_page = None;
     let mut genda_page = yumete_tui::genda_page::Seat::default();
+    let mut words_page = yumete_tui::words_page::Seat::default();
     if let Some(pressed) = &keys {
         // Warning: **`\{ime}` 之後那幾個鍵走輸入法**。`--keys` 一律直接叫
         // `editor.on_key` 的話，**離屏拍不到任何 preedit**——而輸入法是這個編輯器最不一樣
@@ -1218,7 +1221,7 @@ fn main() -> ExitCode {
         // 一個緩衝區自己收攤——`ConfigWatch` 記着版本號。
         let mut watch = yumete_tui::settings::ConfigWatch::default();
         watch.follow(&mut editor);
-        (settings_page, genda_page) = press(&mut editor, pressed, &config, &mut ime, shot);
+        (settings_page, genda_page, words_page) = press(&mut editor, pressed, &config, &mut ime, shot);
         watch.follow(&mut editor);
         // …and `:check-config` is answered **after** the keys, because it is a
         // key that asks. Reading two small files is not 「needs the loop」.
@@ -1400,7 +1403,7 @@ fn main() -> ExitCode {
                 &ime,
                 width,
                 height,
-                yumete_tui::Pages { settings: settings_page.as_ref(), genda: Some(&genda_page) },
+                yumete_tui::Pages { settings: settings_page.as_ref(), genda: Some(&genda_page), words: Some(&words_page) },
             ),
             false => yumete_tui::frame_to_text_with(
                 &mut editor,
@@ -1408,7 +1411,7 @@ fn main() -> ExitCode {
                 &ime,
                 width,
                 height,
-                yumete_tui::Pages { settings: settings_page.as_ref(), genda: Some(&genda_page) },
+                yumete_tui::Pages { settings: settings_page.as_ref(), genda: Some(&genda_page), words: Some(&words_page) },
             ),
         };
         // **A reader that walks away is not an error.** `--shot | head -5`, or a
@@ -1597,12 +1600,13 @@ fn press(
     config: &yumete_config::Config,
     ime: &mut ImeSession,
     shot: Option<(u16, u16)>,
-) -> (Option<yumete_config::panel::Panel>, yumete_tui::genda_page::Seat) {
+) -> (Option<yumete_config::panel::Panel>, yumete_tui::genda_page::Seat, yumete_tui::words_page::Seat) {
     let mut settings = yumete_tui::settings_page::Seat::default();
     // The typing trainer, on a clock that moves 200 ms a key: a picture of
     // its figures comes out the same every time.
     let mut genda = yumete_tui::genda_page::Seat::default();
     genda.tick = Some(200);
+    let mut words = yumete_tui::words_page::Seat::default();
     // **`\{ime}` 撥一下這一格**：往後那幾個鍵交給輸入法，再按一次撥回來。
     let mut composing = false;
     let mut chars = keys.chars().peekable();
@@ -1795,6 +1799,11 @@ fn press(
             genda.settle(editor, ime);
             continue;
         }
+        // What yumete learned: every key but `:` is the page's.
+        if words.took(editor, ime, Some(key)) {
+            words.settle(editor, ime);
+            continue;
+        }
         if let Some(mut pad) = genda.lend_pad() {
             if !(composing && yumete_tui::offline_ime_key(ime, &mut pad, key)) {
                 pad.on_key(key);
@@ -1829,6 +1838,7 @@ fn press(
         editor.on_key(key);
         settings.settle(editor);
         genda.settle(editor, ime);
+        words.settle(editor, ime);
         // Warning: **`gw` 的標籤要等一幀纔算得出來**（#406）：落腳點只算屏幕上的，而哪一
         // 段在屏幕上是**畫的時候**量的。一批鍵是一次餵完的，所以餵到欠着的那一刻
         // 先畫一幀丟掉——不然 `--keys='gwf'` 裏那個 `f` 落到正文上當成別的鍵，而
@@ -1845,7 +1855,7 @@ fn press(
     // **最後一個鍵欠下的那幾件也要做完**：迴圈頂上那一下只補得了鍵**之間**的，
     // 而 `R y` 正是按在最後，`\{space}f` 也是（見 [`catch_up_with_the_loop`]）。不補這一下，照片上是「按了 `y`，什麼都沒發生」。
     catch_up_with_the_loop(editor, config, ime);
-    (settings.panel, genda)
+    (settings.panel, genda, words)
 }
 
 /// **管道那一邊的那幾個開關**（`ye --grep`）。

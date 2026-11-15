@@ -427,6 +427,7 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::YumeInstalledTable, |e, _| e.ask_the_input_method("~"), Key::Char('t')),
     (NormalCmd::YumeTableSource, |e, _| e.ask_the_input_method("?"), Key::Char('w')),
     (NormalCmd::YumeDataLocation, |e, _| e.ask_the_input_method("where"), Key::Char('W')),
+    (NormalCmd::YumeWords, |e, _| e.run_the_line(":yume-words"), Key::Char('u')),
     (NormalCmd::YumeCommitDefault, |e, _| e.run_the_line(":yume-commit default"), Key::Char('0')),
     (NormalCmd::YumeCommitDelayed, |e, _| e.run_the_line(":yume-commit delayed"), Key::Char('d')),
     (NormalCmd::YumeCommitUnique, |e, _| e.run_the_line(":yume-commit unique"), Key::Char('u')),
@@ -599,7 +600,7 @@ impl Editor {
     }
 
     /// A request for the input method, which the front end carries out.
-    fn ask_the_input_method(&mut self, what: &str) {
+    pub fn ask_the_input_method(&mut self, what: &str) {
         self.scheme_request = Some(what.to_string());
     }
 }

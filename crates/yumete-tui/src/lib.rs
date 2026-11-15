@@ -27,6 +27,7 @@ pub mod server;
 pub mod settings;
 pub mod settings_page;
 pub mod genda_page;
+pub mod words_page;
 pub mod system_ime;
 pub mod terminal_window;
 pub mod typed_ahead;
@@ -229,7 +230,7 @@ pub fn frame_to_text(
     height: u16,
     /* 那扇設置面板，`--keys` 開過的話 */ settings: Option<&yumete_config::panel::Panel>,
 ) -> String {
-    frame_to(editor, config, ime, width, height, false, Pages { settings, genda: None })
+    frame_to(editor, config, ime, width, height, false, Pages { settings, genda: None, words: None })
 }
 
 /// [`frame_to_text`] with every page `--keys` may have opened over the text.
@@ -248,11 +249,12 @@ pub fn frame_to_html_with(editor: &mut Editor, config: &Config, ime: &ImeSession
 pub struct Pages<'a> {
     pub settings: Option<&'a yumete_config::panel::Panel>,
     pub genda: Option<&'a genda_page::Seat>,
+    pub words: Option<&'a words_page::Seat>,
 }
 
 impl<'a> From<Option<&'a yumete_config::panel::Panel>> for Pages<'a> {
     fn from(settings: Option<&'a yumete_config::panel::Panel>) -> Self {
-        Pages { settings, genda: None }
+        Pages { settings, genda: None, words: None }
     }
 }
 
@@ -271,7 +273,7 @@ pub fn frame_to_html(
     height: u16,
     /* 那扇設置面板，`--keys` 開過的話 */ settings: Option<&yumete_config::panel::Panel>,
 ) -> String {
-    frame_to(editor, config, ime, width, height, true, Pages { settings, genda: None })
+    frame_to(editor, config, ime, width, height, true, Pages { settings, genda: None, words: None })
 }
 
 fn frame_to(
@@ -730,6 +732,8 @@ pub fn run(
     let mut settings = crate::settings_page::Seat::default();
     // **跟打** (`:genda`), the same shape: its keys, its pad, its page.
     let mut genda = crate::genda_page::Seat::default();
+    // **What yumete learned** (`:yume-words`), the same shape again.
+    let mut words = crate::words_page::Seat::default();
     if let Some(said) = adopt_an_orphan() {
         editor.set_status(said);
     }
@@ -1077,7 +1081,7 @@ pub fn run(
             }
             let began = std::time::Instant::now();
             let completed = match terminal
-                .draw(|frame| draw(frame, editor, config, ime, &mut viewport, Pages { settings: settings.panel.as_ref(), genda: Some(&genda) }))
+                .draw(|frame| draw(frame, editor, config, ime, &mut viewport, Pages { settings: settings.panel.as_ref(), genda: Some(&genda), words: Some(&words) }))
             {
                 Ok(completed) => completed,
                 Err(err) => break Err(err),
@@ -1558,7 +1562,8 @@ pub fn run(
                 // change, and the reload below has to run for it to take effect.
                 settings.composing = ime.is_composing();
                 let taken = settings.took(editor, map_key(code, mods))
-                    || genda.took(editor, ime, map_key(code, mods), code == KeyCode::F(3));
+                    || genda.took(editor, ime, map_key(code, mods), code == KeyCode::F(3))
+                    || words.took(editor, ime, map_key(code, mods));
                 // **A value in its cell is typed with its own editor**: the
                 // keys the panel gives back, and the IME, go to it as they go
                 // to the text, and it goes back to the panel after the key.
@@ -1632,6 +1637,7 @@ pub fn run(
                     (None, None) => {}
                 }
                 genda.settle(editor, ime);
+                words.settle(editor, ime);
                 if answered {
                     continue;
                 }
@@ -2043,7 +2049,7 @@ pub fn run(
             // terminal. It is inserted as writing, never run as keys.
             // **…unless the settings panel is open**: then it
             // is the panel's, and the document behind it is not touched.
-            Ok(Event::Paste(_)) if genda.pasted() => {}
+            Ok(Event::Paste(_)) if genda.pasted() || words.pasted() => {}
             Ok(Event::Paste(text)) => {
                 if !settings.pasted(editor, &text) {
                     editor.paste_text(&text);
@@ -2056,7 +2062,7 @@ pub fn run(
             // document behind it — no caret moved, no selection left, no
             // scroll — the `:` line over the panel included.
             // The typing trainer is the keyboard's alone.
-            Ok(Event::Mouse(_)) if genda.open() => {}
+            Ok(Event::Mouse(_)) if genda.open() || words.open() => {}
             Ok(Event::Mouse(mouse)) if settings.open() => {
                 let pointer = match mouse.kind {
                     MouseEventKind::ScrollDown | MouseEventKind::ScrollUp => {
@@ -5077,6 +5083,12 @@ fn words_report(out: &mut String, ime: &ImeSession) {
             }
         }
     }
+    // Whether anything goes into yumete's own folder, and where to look at it.
+    let learn = match ime.learn() {
+        true => say!("yume.where.learn-on"),
+        false => say!("yume.where.learn-off"),
+    };
+    let _ = writeln!(out, "    {learn}");
 }
 
 /// Where the 碼表 in use came from, in words (`:yume-which`, `:yume ?`).
@@ -5158,6 +5170,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
             Ok(mut table) => {
                 table.set_page_size(ime.page_size());
                 ime.save_learning();
+                table.set_learn(ime.learn());
                 // Kept for the next scheme: a table of one's own reads no word lists.
                 if let Some(roots) = ime.user_word_roots().cloned() {
                     table.set_user_word_roots(roots);
@@ -6141,6 +6154,7 @@ fn draw<'a>(
     let pages: Pages = pages.into();
     let settings = pages.settings;
     let genda = pages.genda.filter(|g| g.open());
+    let words = pages.words.filter(|w| w.open());
     viewport.follow(&editor.windows().leaves());
     let area = frame.area();
     // **Two rows for a table's columns, and only once its own head has gone**
@@ -6529,7 +6543,7 @@ fn draw<'a>(
         //
         // 什麼都不做，於是這一幀沒人設光標，ratatui 自己把它藏起來——同設置頁
         // 那一支。
-    } else if settings.is_some() {
+    } else if settings.is_some() || words.is_some() {
         // **設置頁蓋住了正文，所以正文的光標不算數**：「設置」左側不許有光標。
         // 這一支什麼都不做，於是這一幀沒人設光標，
         // ratatui 就把它藏起來（`Terminal::draw` 裏 `None => hide_cursor()`）。
@@ -6707,7 +6721,7 @@ fn draw<'a>(
             }
         }
     };
-    if settings.is_none() && genda.is_none() {
+    if settings.is_none() && genda.is_none() && words.is_none() {
         candidates(frame, false);
     }
     // **按「那裏寫的什麼」跳的候選面板**（`go`/`gu`，§5.73）。
@@ -6825,6 +6839,30 @@ fn draw<'a>(
         // editor's own, standing on the same floor as over the text.
         draw_command_menu(frame, editor, config, ime, area, footer);
         candidates(frame, true);
+    }
+    // **What yumete learned covers the window too**, the command row kept for
+    // what is said and for a `:` typed over it.
+    if let Some(seat) = words {
+        let page_area = match command_area.height {
+            1 if command_area.y > area.y => Rect { height: command_area.y - area.y, ..area },
+            _ => area,
+        };
+        words_page::draw(frame, seat, ime, config, page_area);
+        let ink = crate::theme::Palette::of(config);
+        let ground = ink.ground(yumete_config::rung::CHROME).fg(ink.text());
+        if command_area.height == 1 {
+            match editor.prompt().is_some() || !editor.status().is_empty() {
+                true => draw_command(frame, editor, config, ime, command_area, ground),
+                false => {
+                    for x in command_area.x..command_area.x + command_area.width {
+                        if let Some(cell) = frame.buffer_mut().cell_mut((x, command_area.y)) {
+                            cell.set_symbol(" ").set_style(ground);
+                        }
+                    }
+                }
+            }
+        }
+        draw_command_menu(frame, editor, config, ime, area, footer);
     }
     // Last, and over everything: the editor is stopped behind it (#295).
     draw_query(frame, editor, config, area);
@@ -22875,6 +22913,7 @@ fn squeezed(text: &str) -> String {
         let page = where_report(&ime);
         assert!(page.contains(&say!("yume.where.words-app")), "{page}");
         assert!(page.contains(&say!("yume.where.words-own")), "{page}");
+        assert!(page.contains(&say!("yume.where.learn-off")), "learning, off by default: {page}");
         // The path as this system writes it: `data\\…` on Windows.
         let native = |a: &str, b: &str| std::path::Path::new(a).join(b).display().to_string();
         let app_line = say!("yume.where.words-file", native("data", "lingming_user_dict.txt"), 2);

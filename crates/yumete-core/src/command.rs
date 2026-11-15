@@ -617,6 +617,9 @@ pub enum Command {
     /// `:yume-where` — the six places 碼表 and 字料 are looked for, and what
     /// each of them holds. Opens as a buffer; see `yumete_tui::where_report`.
     YumeWhere,
+    /// `:yume-words` — the page of what yumete learned (用户詞庫, 調頻, 固頂),
+    /// with the Yume app's beside it, read only. The page is the front end's.
+    YumeWords,
     /// `:yume-commit delayed|unique|fluency` — 上屏方式: when a finished code
     /// goes to the page. `None` asks which one is in force (Feature #209).
     YumeCommit(Option<String>),
@@ -4545,6 +4548,14 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[],
         build: Some(|_| Ok(Command::YumeWhere)),
+    },
+    Entry {
+        name: "yume-words",
+        aliases: &[],
+        help: "cmd.yume.words",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::YumeWords)),
     },
     Entry {
         name: "yume-which",

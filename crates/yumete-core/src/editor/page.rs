@@ -2319,6 +2319,24 @@ impl Editor {
         self.genda_open = on;
     }
 
+    /// **`:yume-words` was typed** — the front end opens the words page.
+    pub fn take_word_page_request(&mut self) -> bool {
+        std::mem::take(&mut self.word_page_request)
+    }
+
+    /// The front end opened or closed the words page.
+    pub fn set_word_page_open(&mut self, on: bool) {
+        self.word_page_open = on;
+        if !on {
+            self.word_page_close = false;
+        }
+    }
+
+    /// `:q` while the words page is open.
+    pub fn take_word_page_close(&mut self) -> bool {
+        std::mem::take(&mut self.word_page_close)
+    }
+
     /// The typing page's switches changed, or it is telling them first.
     pub fn set_genda_switches(&mut self, switches: crate::genda::Switches) {
         self.genda_switches = switches;

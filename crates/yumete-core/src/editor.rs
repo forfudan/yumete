@@ -2970,6 +2970,12 @@ pub struct Editor {
     genda_article: Option<(String, String)>,
     /// The typing page is open: `:q` closes it rather than the editor.
     genda_open: bool,
+    /// `:yume-words` asked for the words page, for the front end to open.
+    word_page_request: bool,
+    /// The words page is open: `:q` closes it rather than the editor.
+    word_page_open: bool,
+    /// `:q` while the words page is open.
+    word_page_close: bool,
     /// The typing page's switches, as it last said them.
     genda_switches: crate::genda::Switches,
     /// **`空格 k` 問出去的那一句**（#53 ③）——同上一個形狀。
@@ -4606,6 +4612,9 @@ impl Editor {
             genda_asks: Vec::new(),
             genda_article: None,
             genda_open: false,
+            word_page_request: false,
+            word_page_open: false,
+            word_page_close: false,
             genda_switches: crate::genda::Switches::default(),
             settings_save: false,
             settings_close: None,

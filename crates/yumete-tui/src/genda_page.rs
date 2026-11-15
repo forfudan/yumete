@@ -2042,7 +2042,7 @@ mod tests {
     fn the_colon_menu_is_drawn_over_the_page() {
         let (mut ed, mut ime, mut seat) = opened("一二三四五六", 3);
         keys(&mut seat, &mut ed, &mut ime, &typed(":genda-l"));
-        let pages = crate::Pages { settings: None, genda: Some(&seat) };
+        let pages = crate::Pages { settings: None, genda: Some(&seat), words: None };
         let text = crate::frame_to_text_with(&mut ed, &Config::default(), &ime, 100, 30, pages);
         assert!(text.contains(&say!("ui.commands")), "{text}");
         assert!(text.contains(":genda-length 10"), "{text}");

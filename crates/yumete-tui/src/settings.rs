@@ -663,6 +663,8 @@ pub fn apply_ime(config: &Config, ime: &mut crate::ImeSession) {
         &config.ime.sentence_single_char,
         &config.ime.word_show,
     ));
+    // Whether what is learned is kept, yumete's own files beside the app's.
+    ime.set_learn(config.ime.learn);
 }
 
 /// **單字派 is pushed by a reload** — both copies and `word_show`, read
@@ -679,6 +681,17 @@ fn single_char_is_pushed_from_the_config() {
     assert_eq!(got.char_by_char, yumete_ime::SingleCharMode::Strict);
     assert_eq!(got.sentence, yumete_ime::SingleCharMode::Primary);
     assert!(got.word_show.show_three && !got.word_show.show_two);
+}
+
+/// **`[ime] learn` is pushed by a reload**, off at the factory.
+#[cfg(test)]
+#[test]
+fn learning_is_pushed_from_the_config() {
+    let mut ime = crate::ImeSession::from_table_text(yumete_ime::Scheme::LINGMING, "a 啊\n");
+    apply_ime(&Config::default(), &mut ime);
+    assert!(!ime.learn());
+    apply_ime(&Config::from_toml("[ime]\nlearn = true\n"), &mut ime);
+    assert!(ime.learn());
 }
 
 #[cfg(test)]
