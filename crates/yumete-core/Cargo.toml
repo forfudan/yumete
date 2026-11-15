@@ -30,6 +30,12 @@ serde = {version = "1", features = ["derive"]}
 # on that wire is JSON, and it was already in the lock file.
 serde_json = "1"
 toml = "0.8"
+# **Word files** (`:export docx`, `ye --import-word`). All three are in the
+# lock file through other crates: `zip` builds the tables, `imagesize` measures pictures
+# for the PDF, and `roxmltree` is the reader the SVG stack ships with.
+zip = { version = "2.2", default-features = false, features = ["deflate"] }
+imagesize = "0.14"
+roxmltree = "0.21"
 ropey = { version = "1.6", default-features = false, features = ["simd"] }
 yumete-cjk = {path = "../yumete-cjk"}
 

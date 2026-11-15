@@ -56,7 +56,7 @@ fn the_named_refusals_read_as_they_should() {
     let en = [
         (
             ":export pdf",
-            "export does not take 'pdf': it takes one of html, typst, epub, csv, tsv; for a PDF, :export-as-preview pdf",
+            "export does not take 'pdf': it takes one of html, typst, epub, docx, csv, tsv; for a PDF, :export-as-preview pdf",
         ),
         (
             ":sidebar-outline-level x",
@@ -75,7 +75,7 @@ fn the_named_refusals_read_as_they_should() {
     let zhs = [
         (":indent-width 40", "indent-width 不接受「40」，可填 1 到 16 的整数"),
         (":sort -x", "sort 不接受「-x」，可填 -r(倒序)、-i(不分大小写)"),
-        (":export pdf", "export 不接受「pdf」，可填 html、typst、epub、csv、tsv；PDF 请用 :export-as-preview pdf"),
+        (":export pdf", "export 不接受「pdf」，可填 html、typst、epub、docx、csv、tsv；PDF 请用 :export-as-preview pdf"),
         (":pipe", "pipe 后面要写 <命令>"),
     ];
     let got_zhs: Vec<(String, String)> = zhs.iter().map(|(line, _)| (line.to_string(), says(line))).collect();

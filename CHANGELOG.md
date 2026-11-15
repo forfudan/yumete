@@ -6,6 +6,8 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Added
 
+- **`:export docx` (and `ye --export docx`) writes a Word document**: headings in Word's own Heading styles, lists, quotations, tables, code, links, real Word footnotes, readings as Word's phonetic guide, pictures, and the front matter as the file's title, author and dates. Vertical layout and hanging punctuation are not set in it yet, and the export says so.
+- **`ye --import-word` turns Word files into Markdown**: a `.docx`, a `.doc`, or every one in a folder, each `.md` beside it or under `--out` in the same tree. Headings only from Word's Heading styles, every paragraph kept as it is, the file's properties as front matter. Needs pandoc; a `.doc` needs LibreOffice or macOS's `textutil`. Never writes over an existing `.md` without `--overwrite`.
 - **Typing `#` after the page in a wiki link (`[[雨夜#`) lists that file's headings**, found the way `gd` finds the page; `[[#` lists this file's.
 
 ### Changed

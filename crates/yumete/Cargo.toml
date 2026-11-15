@@ -33,3 +33,7 @@ yumete-ime = {path = "../yumete-ime"}
 yumete-mdview = {path = "../yumete-mdview"}
 yumete-tables = {path = "../yumete-tables"}
 yumete-tui = {path = "../yumete-tui"}
+
+# The Word tests build their own small .docx files.
+[dev-dependencies]
+zip = { version = "2.2", default-features = false, features = ["deflate"] }

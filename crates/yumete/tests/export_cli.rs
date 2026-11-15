@@ -88,9 +88,9 @@ fn a_table_file_exports_as_tsv() {
 #[test]
 fn a_bad_format_and_a_missing_file_say_so() {
     let root = fixture("bad");
-    let out = ye().args(["--export", "docx", "x.md"]).output().unwrap();
+    let out = ye().args(["--export", "odt", "x.md"]).output().unwrap();
     assert_eq!(out.status.code(), Some(2));
-    assert!(String::from_utf8_lossy(&out.stderr).contains("docx"));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("odt"));
     let out = ye().args(["--export", "html"]).arg(root.join("nope.md")).output().unwrap();
     assert!(!out.status.success());
     assert!(String::from_utf8_lossy(&out.stderr).contains("not a file"));

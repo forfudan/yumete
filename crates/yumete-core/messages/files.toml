@@ -1,4 +1,4 @@
-# prefixes: buffer file recover write readonly reload autoreload recent export cd data progress encoding
+# prefixes: buffer file recover write readonly reload autoreload recent export import-word cd data progress encoding
 #
 # What the editor says, one block per tag; see README.md beside this file.
 
@@ -355,10 +355,10 @@ zhs = "font= 后面要写字体，例如 font=Songti；含空格或逗号的字�
 en = "font= wants a font list, such as font=Songti; quote a list with a space or a comma in it, such as font='Songti SC, serif'"
 
 [[message]]
-# :export 給了不認得的格式（草稿：加了 epub）
+# :export 給了不認得的格式（草稿：加了 docx）
 key = "export.no-such-format"
-zhs = "没有「{0}」格式：可用 html、typst、epub，或 csv、tsv(光标所在表格)"
-en = "no format '{0}': html, typst, epub, or csv/tsv for the table under the cursor"
+zhs = "没有「{0}」格式：可用 html、typst、epub、docx，或 csv、tsv(光标所在表格)"
+en = "no format '{0}': html, typst, epub, docx, or csv/tsv for the table under the cursor"
 
 [[message]]
 # :export 的 page= 后面不是纸张（草稿）
@@ -377,6 +377,12 @@ en = "no such word '{0}': vertical, horizontal, hanging, no-hanging, ruby-html, 
 key = "export.no-typst"
 zhs = "没有找到 typst 命令，没有导出：可从 https://github.com/typst/typst/releases 获取，或 brew install typst"
 en = "typst is not installed, so nothing was exported: get it from https://github.com/typst/typst/releases, or brew install typst"
+
+[[message]]
+# ye --export docx：导出设置里开着 Word 导出做不到的项（竖排、标点悬挂、jlreq），{0} 是这几项的名字，用逗号隔开；文件照样导出了（草稿）
+key = "export.not-for-docx"
+zhs = "Word 导出暂不支持 {0}，已略去"
+en = "{0}: not set in a Word export yet, so left out"
 
 [[message]]
 # ye --export typst 或 pdf：导出设置里开着 Typst 做不到的项（竖排、标点悬挂、jlreq），{0} 是这几项的名字，用逗号隔开；文件照样导出了（草稿）
@@ -476,6 +482,12 @@ en = "exported {0}"
 key = "export.wrote-from-disk"
 zhs = "已导出 {0}，用的是磁盘上的文件：有 {1} 个打开的文件改动未保存"
 en = "exported {0} from the files on disk: {1} open files have unsaved changes"
+
+[[message]]
+# :export docx 写好了文件，但导出设置里开着 Word 导出做不到的项（竖排、标点悬挂、jlreq），{1} 是这几项的名字，用逗号隔开（草稿）
+key = "export.wrote-not-for-docx"
+zhs = "已导出 {0}；Word 导出暂不支持 {1}，已略去"
+en = "exported {0}; {1}: not set in a Word export yet, so left out"
 
 [[message]]
 # :export typst 写好了文件，但导出设置里开着 Typst 做不到的项（竖排、标点悬挂、jlreq），{1} 是这几项的名字，用逗号隔开（草稿）
@@ -644,6 +656,48 @@ en = "location"
 key = "file.yes"
 zhs = "是"
 en = "yes"
+
+[[message]]
+# ye --import-word：要写的 .md（或图片文件夹）已经存在，没加 --overwrite 就不覆盖。{0} 是那个路径（草稿）
+key = "import-word.exists"
+zhs = "{0} 已存在，没有覆盖；要覆盖请加 --overwrite"
+en = "{0} is already there and was left as it is; add --overwrite to write over it"
+
+[[message]]
+# ye --import-word：.doc 要先转成 .docx，但 textutil（macOS）和 LibreOffice 都没有（草稿）
+key = "import-word.no-doc-converter"
+zhs = "旧版 .doc 要先转成 .docx，需要 macOS 的 textutil 或 LibreOffice（soffice），这里都没有；可在 Word 里另存为 .docx"
+en = "an old .doc has to be made a .docx first, with macOS's textutil or LibreOffice (soffice), and neither is here; Word's Save As .docx does it too"
+
+[[message]]
+# ye --import-word：机器上没有 pandoc（草稿）
+key = "import-word.no-pandoc"
+zhs = "转换 Word 文件需要 PATH 上有 pandoc：brew install pandoc，或见 https://pandoc.org/installing.html"
+en = "converting a Word file needs pandoc on the PATH: brew install pandoc, or see https://pandoc.org/installing.html"
+
+[[message]]
+# ye --import-word：文件扩展名是 .docx，但里面不是 Word 文档（草稿）
+key = "import-word.not-a-docx"
+zhs = "读不出 Word 文档：文件已损坏，或不是 .docx"
+en = "no Word document could be read from it: the file is damaged or is not a .docx"
+
+[[message]]
+# ye --import-word：命令行上给的路径不存在（草稿）
+key = "import-word.not-there"
+zhs = "没有这个文件或文件夹"
+en = "no such file or folder"
+
+[[message]]
+# ye --import-word：命令行上给的文件不是 .doc 或 .docx（草稿）
+key = "import-word.not-word"
+zhs = "不是 Word 文件（.doc 或 .docx）"
+en = "not a Word file (.doc or .docx)"
+
+[[message]]
+# ye --import-word：两个源文件会写到同一个 .md（例如 a.doc 和 a.docx），两个都不转。{0} 是另一个源文件，{1} 是那个 .md（草稿）
+key = "import-word.same-target"
+zhs = "没有转换：它和 {0} 都会写到 {1}；请分开转换并用 --out 指定"
+en = "not converted: it and {0} would both be written to {1}; convert them one at a time with --out"
 
 [[message]]
 # :count-progress 但寫不進 .yumete/progress.tsv

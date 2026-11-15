@@ -107,6 +107,10 @@ pub enum Format {
     /// in a zip a reader app opens, vertical and turning right to left when
     /// the editor is. See [`crate::epub`].
     Epub,
+    /// **A Word document**: real OOXML, the manuscript's
+    /// headings in Word's own Heading styles, its notes Word's footnotes and
+    /// its readings Word's phonetic guide. See [`crate::docx`].
+    Docx,
 }
 
 impl Format {
@@ -116,6 +120,7 @@ impl Format {
             "html" | "htm" => Some(Format::Html),
             "typst" | "typ" => Some(Format::Typst),
             "epub" => Some(Format::Epub),
+            "docx" => Some(Format::Docx),
             _ => None,
         }
     }
@@ -126,6 +131,7 @@ impl Format {
             Format::Html => "html",
             Format::Typst => "typ",
             Format::Epub => "epub",
+            Format::Docx => "docx",
         }
     }
 }
@@ -459,10 +465,10 @@ const MARGIN_SIDE: f64 = 0.10;
 /// a Chinese book is set in. The screen page has no measure at all — its
 /// lines fill the window across, its 縱 fill it down — so the paper alone
 /// says how long a line is in print.
-const PRINT_SIZE_PT: f64 = 10.5;
+pub(crate) const PRINT_SIZE_PT: f64 = 10.5;
 /// The 行距, as a multiple of the character. One number, used both to set
 /// `line-height` and to say how many 行 the paper then holds.
-const LINE_HEIGHT: f64 = 1.8;
+pub(crate) const LINE_HEIGHT: f64 = 1.8;
 
 /// What one export is given: how to set the page, and what it is setting.
 #[derive(Debug, Clone)]
@@ -611,6 +617,7 @@ pub fn export(text: &str, format: Format, style: &Style) -> String {
         Format::Html => html(text, style),
         Format::Typst => typst(text, style),
         Format::Epub => crate::epub::chapter(text, style).0,
+        Format::Docx => crate::docx::document_xml(text, style),
     }
 }
 
@@ -618,12 +625,13 @@ pub fn export(text: &str, format: Format, style: &Style) -> String {
 pub fn export_file(text: &str, format: Format, style: &Style) -> Vec<u8> {
     match format {
         Format::Epub => crate::epub::book(text, style),
+        Format::Docx => crate::docx::document(text, style),
         _ => export(text, format, style).into_bytes(),
     }
 }
 
 /// One block of the manuscript.
-enum Block {
+pub(crate) enum Block {
     Heading(usize, String),
     Paragraph(Vec<String>),
     /// A fenced code block, fence lines and all, exactly as it was written.
@@ -740,7 +748,7 @@ fn callout_kind(word: &str) -> Option<usize> {
 }
 
 /// A footnote's name and the lines of its text, `[^1]: …`.
-type Note = (String, Vec<String>);
+pub(crate) type Note = (String, Vec<String>);
 
 /// The manuscript as blocks, and its footnotes' texts taken out of the flow.
 ///
@@ -749,7 +757,7 @@ type Note = (String, Vec<String>);
 /// **the Typst export too**: unread, its opening `---` would be a rule and
 /// its closing one would make the lines between a heading,
 /// `== title: … lang: …`.
-fn blocks(text: &str, source: crate::syntax::Syntax, yfm: bool) -> (Vec<Block>, Vec<Note>) {
+pub(crate) fn blocks(text: &str, source: crate::syntax::Syntax, yfm: bool) -> (Vec<Block>, Vec<Note>) {
     let mut lines: Vec<String> = text.lines().map(str::to_string).collect();
     let mut notes = Vec::new();
     let markdown = !matches!(source, crate::syntax::Syntax::Typst | crate::syntax::Syntax::Text);
@@ -1472,7 +1480,7 @@ fn render(
 
 /// **Where the link whose words are `chars[start..end]` goes**: the target
 /// of `[words](target "title")`, or the address of `<address>`.
-fn link_target(chars: &[char], start: usize, end: usize) -> Option<String> {
+pub(crate) fn link_target(chars: &[char], start: usize, end: usize) -> Option<String> {
     if start > 0 && chars[start - 1] == '<' && chars.get(end) == Some(&'>') {
         return Some(chars[start..end].iter().collect());
     }
@@ -1512,7 +1520,7 @@ fn url_attribute(path: &str) -> String {
 /// the PDF): its `$…$` and `$$…$$` go over as written text, escaped, as
 /// before Markdown drew them as maths. A formula and its dollars are one
 /// construct.
-fn without_maths(mut marks: Vec<crate::markdown::Span>) -> Vec<crate::markdown::Span> {
+pub(crate) fn without_maths(mut marks: Vec<crate::markdown::Span>) -> Vec<crate::markdown::Span> {
     use crate::markdown::Kind;
     let maths: Vec<(usize, u8)> = marks.iter().filter(|s| s.kind == Kind::Math).map(|s| (s.construct, s.depth)).collect();
     marks.retain(|s| !maths.contains(&(s.construct, s.depth)));
@@ -2075,7 +2083,7 @@ fn escape_typst_prose(text: &str) -> String {
 
 /// `text` with each entity reference read as its character, and the whole,
 /// those characters too, put through `escape`.
-fn with_entities_read(text: &str, escape: fn(&str) -> String) -> String {
+pub(crate) fn with_entities_read(text: &str, escape: fn(&str) -> String) -> String {
     let mut out = String::with_capacity(text.len());
     let mut rest = text;
     while let Some(at) = rest.find('&') {
@@ -2546,7 +2554,7 @@ fn painted_code(lines: &[String]) -> Option<Vec<String>> {
 /// **A fenced block's code**: its lines but the fence that opens it and the
 /// one that closes it, if one does — a block left open has no closing
 /// fence, and its last line is code.
-fn code_inside(lines: &[String]) -> &[String] {
+pub(crate) fn code_inside(lines: &[String]) -> &[String] {
     let Some((first, rest)) = lines.split_first() else { return lines };
     let closed = fence_of(first.trim_start()).is_some_and(|(c, n)| rest.last().is_some_and(|last| closes_fence(last, c, n)));
     &rest[..rest.len() - usize::from(closed)]
@@ -2724,7 +2732,7 @@ const NOTE_CLOSE: char = '\u{FDD1}';
 
 /// A footnote mark's name as the body carries it: the brackets, the caret
 /// and every backslash gone.
-fn note_name(text: &str) -> String {
+pub(crate) fn note_name(text: &str) -> String {
     text.chars().filter(|c| !matches!(c, '\\' | '[' | ']' | '^' | ':')).collect()
 }
 
@@ -2988,7 +2996,7 @@ fn typst(text: &str, style: &Style) -> String {
 /// faces by intent and names none of them for Typst: Typst's own type and
 /// its fallback to what is installed is the nearest thing. Empty when
 /// nothing is named, and no `font:` is written.
-fn typst_fonts(css: &str) -> Vec<String> {
+pub(crate) fn typst_fonts(css: &str) -> Vec<String> {
     const GENERIC: &[&str] = &[
         "serif", "sans-serif", "monospace", "cursive", "fantasy", "system-ui", "ui-serif", "ui-sans-serif", "ui-monospace",
         "ui-rounded", "emoji", "math", "fangsong", "blinkmacsystemfont",

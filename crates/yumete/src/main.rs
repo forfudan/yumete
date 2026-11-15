@@ -148,8 +148,8 @@ fn main() -> ExitCode {
     // `--encoding=big5`: what the files named are written in, for files that
     // cannot be told, as `:open ++enc=big5` says it inside.
     let mut force_encoding: Option<String> = None;
-    // `--export FMT`: write the files named out as html, typst, epub, csv, tsv
-    // or pdf and exit — the editor's own `:export`, with `typst compile` for the
+    // `--export FMT`: write the files named out as html, typst, epub, docx,
+    // csv, tsv or pdf and exit — the editor's own `:export`, with `typst compile` for the
     // last. `--out` is where; one file only, then.
     let mut export: Option<String> = None;
     let mut out: Option<String> = None;
@@ -199,6 +199,10 @@ fn main() -> ExitCode {
     // `--import helix`, `lazyvim`, `vim` or `nvim`: another editor's config
     // written once into ours, then exit. See `import.rs`.
     let mut import: Option<String> = None;
+    // `--import-word`: the Word files and folders named, each a `.md` beside
+    // it or under `--out`, then exit. See `yumete_core::word`.
+    let mut import_word = false;
+    let mut overwrite = false;
     let mut g = Grep::default();
     // **還欠着一個值的那個旗標**。
     //
@@ -297,6 +301,8 @@ fn main() -> ExitCode {
             s if s.starts_with("--out=") => out = Some(s["--out=".len()..].to_string()),
             "--import" => owed = Some("--import"),
             s if s.starts_with("--import=") => import = Some(s["--import=".len()..].to_string()),
+            "--import-word" => import_word = true,
+            "--overwrite" => overwrite = true,
             "--files" => owed = Some("--files"),
             s if s.starts_with("--files=") => listing = Some(s["--files=".len()..].to_string()),
             "--ignore-case" => {
@@ -586,6 +592,17 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
         return import::run(&which);
+    }
+    if import_word {
+        if grep.is_some() || listing.is_some() || export.is_some() {
+            eprintln!("yumete: --import-word converts Word files and exits; it takes no search or export");
+            return ExitCode::from(2);
+        }
+        return run_import_word(&files, out.as_deref(), overwrite);
+    }
+    if overwrite {
+        eprintln!("yumete: --overwrite only means something with --import-word");
+        return ExitCode::from(2);
     }
     if grep.is_some() && listing.is_some() {
         eprintln!("yumete: --grep and --files ask two different questions; pick one");
@@ -2010,6 +2027,51 @@ fn what_was_not_looked_at(editor: &Editor, what: &str) -> bool {
     incomplete
 }
 
+/// `ye --import-word PATH… [--out DIR] [--overwrite]`: each Word file, and
+/// each one in a folder named, written out as Markdown. The path written goes
+/// to stdout, one a line; anything wrong goes to stderr, and the exit is
+/// non-zero when any file was not converted.
+fn run_import_word(paths: &[String], out: Option<&str>, overwrite: bool) -> ExitCode {
+    use yumete_core::word;
+    if paths.is_empty() {
+        eprintln!("yumete: --import-word wants a Word file or a folder of them");
+        return ExitCode::from(2);
+    }
+    if !word::pandoc_is_installed() {
+        eprintln!("yumete: {}", yumete_core::say!("import-word.no-pandoc"));
+        return ExitCode::from(1);
+    }
+    let paths: Vec<std::path::PathBuf> =
+        paths.iter().map(|p| std::path::PathBuf::from(yumete_config::expand_tilde(p))).collect();
+    let out = out.map(|o| std::path::PathBuf::from(yumete_config::expand_tilde(o)));
+    let options = word::Options { out, overwrite };
+    let planned = word::plan(&paths, &options);
+    if planned.is_empty() {
+        eprintln!("yumete: --import-word found no .doc or .docx there");
+        return ExitCode::FAILURE;
+    }
+    let mut failed = false;
+    for (source, target) in planned {
+        let done = target.and_then(|target| word::convert(&source, &target, overwrite).map(|media| (target, media)));
+        match done {
+            Ok((target, media)) => {
+                println!("{}", target.display());
+                if let Some(media) = media {
+                    println!("{}", media.display());
+                }
+            }
+            Err(why) => {
+                eprintln!("yumete: {}: {why}", source.display());
+                failed = true;
+            }
+        }
+    }
+    match failed {
+        true => ExitCode::FAILURE,
+        false => ExitCode::SUCCESS,
+    }
+}
+
 /// `ye --export FMT [WORD…] FILE…`: each file written out beside itself with the new
 /// extension, or at `--out` when one file is named. The path written goes to
 /// stdout, one a line, so a script can pick it up; anything wrong goes to
@@ -2026,9 +2088,9 @@ fn run_export(
     guess: Option<&'static yumete_core::encoding::Encoding>,
 ) -> ExitCode {
     let format = format.trim().to_ascii_lowercase();
-    let known = ["html", "htm", "typst", "typ", "epub", "csv", "tsv", "pdf"];
+    let known = ["html", "htm", "typst", "typ", "epub", "docx", "csv", "tsv", "pdf"];
     if !known.contains(&format.as_str()) {
-        eprintln!("yumete: --export takes html, typst, epub, csv, tsv or pdf, not '{format}'");
+        eprintln!("yumete: --export takes html, typst, epub, docx, csv, tsv or pdf, not '{format}'");
         return ExitCode::from(2);
     }
     // **The export's words**, as `:export` takes them:
@@ -2077,6 +2139,10 @@ fn run_export(
     let ignored = yumete_core::export::typst_ignores(editor.export_settings());
     if matches!(format.as_str(), "typst" | "typ" | "pdf") && !ignored.is_empty() {
         eprintln!("yumete: {}", yumete_core::say!("export.not-for-typst", ignored.join(", ")));
+    }
+    let ignored = yumete_core::docx::ignores(editor.export_settings());
+    if format == "docx" && !ignored.is_empty() {
+        eprintln!("yumete: {}", yumete_core::say!("export.not-for-docx", ignored.join(", ")));
     }
     let sources: Vec<std::path::PathBuf> =
         files.iter().map(|f| std::path::PathBuf::from(yumete_config::expand_tilde(f))).collect();
@@ -2756,8 +2822,8 @@ SEARCHING FROM THE SHELL:
                      Several directories may be named, and a FILE may be named
                      instead of a directory.
 
-        --export FMT Write each FILE out as html, typst, epub, csv, tsv or
-                     pdf and exit: beside the file with the new extension,
+        --export FMT Write each FILE out as html, typst, epub, docx, csv,
+                     tsv or pdf and exit: beside the file with the new extension,
                      or at --out PATH when one file is named. An existing
                      file is written over, as a compiler's would be. The
                      [export] settings of your config apply, as with :export
@@ -2779,6 +2845,22 @@ SEARCHING FROM THE SHELL:
                      images resolved from its own folder; Markdown goes
                      through the editor's Typst export first.
         --out PATH   Where --export writes, when one file is named.
+
+        --import-word PATH…
+                     Convert Word files to Markdown and exit: each .docx or
+                     .doc named, and every one in a folder named and the
+                     folders under it. Each .md goes beside its source, or
+                     under --out DIR in the same tree (one file named:
+                     --out may name the .md itself). pandoc reads the file
+                     (brew install pandoc); a .doc is made a .docx first by
+                     macOS's textutil or by LibreOffice. A heading is a
+                     paragraph in one of Word's Heading styles and nothing
+                     else, and each Word paragraph stays one. The file's
+                     title, author, created and modified, and its name as
+                     source, go in front matter. Pictures go in a
+                     NAME.assets folder beside the .md. A source is never
+                     changed, and an .md already there is left alone
+                     unless --overwrite is given.
 
         --files PAT  Print every file whose name matches PAT, best first, and
                      exit — fd's walk with fzf's matching (`fd | fzf -f`), and
@@ -2931,7 +3013,7 @@ KEYS (Normal mode, Helix-style):
               :recover         use or drop a crash-recovery draft
               :buffer  :buffer-next  :buffer-previous  :buffer-close
               :search-project  :outline  across the project / this file's headings
-              :export html|typst|epub|csv|tsv   write it out
+              :export html|typst|epub|docx|csv|tsv   write it out
               :vertical [on|off]        :view-margin [never|dense|loose|always]
               :yume-annotation  the annotation beside candidates:
                               off, next, or a mode (multi, double)

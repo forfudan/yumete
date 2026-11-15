@@ -3379,6 +3379,7 @@ dependencies = [
  "yumete-mdview",
  "yumete-tables",
  "yumete-tui",
+ "zip",
 ]
 
 [[package]]
@@ -3408,10 +3409,12 @@ dependencies = [
  "encoding_rs",
  "ferrous-opencc",
  "ignore",
+ "imagesize",
  "libc",
  "regex",
  "regex-syntax",
  "ropey",
+ "roxmltree 0.21.2",
  "serde",
  "serde_json",
  "streaming-iterator",
@@ -3441,6 +3444,7 @@ dependencies = [
  "tree-sitter-yaml",
  "windows-sys 0.59.0",
  "yumete-cjk",
+ "zip",
 ]
 
 [[package]]

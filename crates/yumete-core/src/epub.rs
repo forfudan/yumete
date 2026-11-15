@@ -919,7 +919,7 @@ fn identifier(text: &str, title: &str) -> String {
 }
 
 /// Now, in UTC, as EPUB's `dcterms:modified` wants it: `2026-11-08T01:02:03Z`.
-fn utc_now() -> String {
+pub(crate) fn utc_now() -> String {
     let seconds = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs() as i64);

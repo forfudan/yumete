@@ -798,7 +798,7 @@ pub enum Command {
     /// `:clipboard` — the 選擇器 over everything that could be pasted, which
     /// `空格 "` also opens.
     PasteMenu,
-    /// `:export html|typst|epub [path]`, and `:export!` over a file that is
+    /// `:export html|typst|epub|docx [path]`, and `:export!` over a file that is
     /// already there — write the manuscript out for a typesetter.
     Export {
         format: String,
@@ -3199,6 +3199,11 @@ const EXPORT_FORMATS: &[Word] = &[
     Word {
         name: "epub",
         help: "cmd.export.epub",
+        needs: &[],
+    },
+    Word {
+        name: "docx",
+        help: "cmd.export.docx",
         needs: &[],
     },
     // A grid, not a page: these come from the table under the cursor. See

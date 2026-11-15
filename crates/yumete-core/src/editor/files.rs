@@ -2103,13 +2103,17 @@ impl Editor {
         // Written the way a save is written: whole, or not at all.
         crate::buffer::write_binary_atomically(&target, &written).map_err(EditorError::Io)?;
         // What Typst cannot set is said, not left to be found in the PDF.
-        let ignored = match format {
-            crate::export::Format::Typst => crate::export::typst_ignores(&style.settings),
-            _ => Vec::new(),
-        };
-        self.status = match ignored.is_empty() {
-            true => say!("export.wrote", target.display()),
-            false => say!("export.wrote-not-for-typst", target.display(), ignored.join(", ")),
+        // And what a Word file does not set, as plainly.
+        self.status = match format {
+            crate::export::Format::Typst => match crate::export::typst_ignores(&style.settings) {
+                ignored if ignored.is_empty() => say!("export.wrote", target.display()),
+                ignored => say!("export.wrote-not-for-typst", target.display(), ignored.join(", ")),
+            },
+            crate::export::Format::Docx => match crate::docx::ignores(&style.settings) {
+                ignored if ignored.is_empty() => say!("export.wrote", target.display()),
+                ignored => say!("export.wrote-not-for-docx", target.display(), ignored.join(", ")),
+            },
+            _ => say!("export.wrote", target.display()),
         };
         Ok(CommandOutcome::Continue)
     }
