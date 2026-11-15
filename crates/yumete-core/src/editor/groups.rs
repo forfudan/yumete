@@ -471,7 +471,7 @@ impl Editor {
         // `md_region().is_none()`, which is *also* true of a Markdown table
         // nobody has opened yet — standing in one would offer the delimited
         // file's keys.
-        let table = match self.table.as_ref().map(|v| v.bounds) {
+        let table = match self.table().map(|v| v.bounds) {
             Some(Bounds::Block) if self.block_region().is_some() => Some(Bounds::Block),
             Some(Bounds::Md) if self.md_region().is_some() => Some(Bounds::Md),
             Some(Bounds::WholeFile) => Some(Bounds::WholeFile),

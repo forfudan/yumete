@@ -22,7 +22,7 @@ impl Editor {
     /// `gf` already reads, because that is the shape every answer in this
     /// editor has.
     pub(super) fn check_table(&mut self) {
-        let Some(view) = self.table.as_ref() else {
+        let Some(view) = self.table() else {
             self.status = say!("table.not-in-a-table");
             return;
         };
@@ -57,7 +57,7 @@ impl Editor {
         let rope = self.current_buffer().rope();
         // The rule row is punctuation, not a row — it is the one line in a
         // Markdown table that is *meant* to hold nothing but dashes.
-        let rule = self.table.as_ref().and_then(|v| match v.bounds {
+        let rule = self.table().and_then(|v| match v.bounds {
             Bounds::WholeFile => None,
             _ => self.prose_region().and_then(|r| r.rule),
         });

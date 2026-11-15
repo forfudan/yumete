@@ -1305,6 +1305,13 @@ impl Editor {
     /// different subsets of this would leave a grid on after its table was
     /// closed and a hit list answering `n` in a file it had never seen.
     pub(super) fn forget_the_document(&mut self) {
+        self.forget_the_document_but_its_grid();
+        self.table_on_open();
+    }
+
+    /// [`Self::forget_the_document`], all but whether the file is a grid —
+    /// for a window that already knows how it reads its file.
+    pub(super) fn forget_the_document_but_its_grid(&mut self) {
         // What was said about the last document's file, and when its disk was
         // last looked at, are not facts about this one: a warning latched on
         // buffer A must not silence the warning buffer B has coming (#214).
@@ -1316,7 +1323,6 @@ impl Editor {
         // revision now, so they are simply not an answer while you are
         // elsewhere — and they are one again when you come back to the file
         // and the text they were found in.
-        self.table_on_open();
         // A window naming a buffer that is gone is not a window.
         let ids: Vec<u64> = self.buffers.iter().map(|b| b.id()).collect();
         self.drop_windows_showing(|buffer| !ids.contains(&buffer));
@@ -2469,8 +2475,8 @@ impl Editor {
             Some(region) => {
                 Ok::<_, (usize, usize)>(crate::mdtable::to_delimited(&self.md_lines(region), delimiter))
             }
-            None if self.table.as_ref().is_some_and(|v| v.bounds == Bounds::WholeFile) => {
-                let from = self.table.as_ref().map(|v| v.schema.delimiter).unwrap_or(',');
+            None if self.table().is_some_and(|v| v.bounds == Bounds::WholeFile) => {
+                let from = self.table().map(|v| v.schema.delimiter).unwrap_or(',');
                 let text = self.current_buffer().text();
                 let mut out = Vec::new();
                 for source in text.lines() {

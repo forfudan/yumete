@@ -532,7 +532,7 @@ impl Editor {
         if crossed {
             return;
         }
-        if !self.table.as_ref().is_some_and(|view| view.takes_the_pane()) {
+        if !self.table().is_some_and(|view| view.takes_the_pane()) {
             return;
         }
         if self.current_buffer().id() != buffer {
@@ -648,7 +648,7 @@ impl Editor {
     /// places: a mode that forty movement functions have to switch on is a
     /// mode that one of them will leave off.
     pub(super) fn find_the_table_here(&mut self) {
-        if self.table.is_some() || !self.table_view_opens_itself() {
+        if self.table().is_some() || !self.table_view_opens_itself() {
             return;
         }
         // **Not while the table is being typed.** The grid refuses a `|` in a

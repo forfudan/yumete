@@ -67,9 +67,41 @@ pub(super) const TABLE_KEYS: &[(Key, NormalCmd)] = &[
 impl Editor {
     // ---- Table mode (Feature #118) ----------------------------------------
 
-    /// The grid this file is being read as, if it is being read as one.
+    /// The grid this file is being read as, if it is being read as one —
+    /// while another window is being drawn ([`Self::view_pane`]), the grid
+    /// *that* window keeps.
+    ///
+    /// **Every reader of the grid goes through this**, and only the ones
+    /// that change it read the field: a window's table is drawn in its own
+    /// columns, layer and header, and a reader that went to the field would
+    /// lay the live window's ruler and padding over a file it never saw.
     pub fn table(&self) -> Option<&TableView> {
-        self.table.as_ref()
+        match self.viewing.get() {
+            Some(v) if v.window != self.live => self.panes.get(&v.window).and_then(|p| p.table.view()),
+            // A pane outside the windows is drawn as a page unless it is on
+            // the live window's own file.
+            Some(v) if v.buffer != self.current => None,
+            _ => self.table.as_ref(),
+        }
+    }
+
+    /// The live window's grid as a window keeps it without the keys.
+    pub(super) fn kept_table(&self) -> super::PaneTable {
+        super::PaneTable::Kept { view: self.table.clone(), turned: self.turned_for_table.is_some() }
+    }
+
+    /// Take up `view` as the live window's grid — what a window kept when
+    /// the keys left it — turning a 縱書 page across again when it had
+    /// been turned for it.
+    pub(super) fn take_up_the_table(&mut self, view: Option<TableView>, turned: bool) {
+        self.table = view;
+        if self.table.is_some() {
+            if turned {
+                self.turn_for_table();
+            }
+            // The file may have been written in another window since.
+            self.rescan_records();
+        }
     }
 
     /// **Which layer of the grid the keys are in** — the one question the
@@ -85,7 +117,7 @@ impl Editor {
     /// ask [`Self::table_here`] first gets the answer a grid opens with
     /// rather than a second shape of nothing.
     pub fn table_layer(&self) -> Layer {
-        let Some(view) = self.table.as_ref() else {
+        let Some(view) = self.table() else {
             return Layer::default();
         };
         match self.layers_here() {
@@ -210,7 +242,7 @@ impl Editor {
     }
 
     pub fn grid_is_drawn(&self) -> bool {
-        self.table.as_ref().is_some_and(|view| view.pane)
+        self.table().is_some_and(|view| view.pane)
     }
 
     /// Whether the separator is `|` — three file characters, one drawn wall.
@@ -221,7 +253,7 @@ impl Editor {
     /// with it, so nothing there is worth hiding.
     pub(super) fn grid_separator_is_a_pipe(&self) -> bool {
         matches!(
-            self.table.as_ref().map(|view| view.separator),
+            self.table().map(|view| view.separator),
             Some(Separator::Pipe)
         )
     }
@@ -241,7 +273,7 @@ impl Editor {
         // saying what this data is, and a row of it that happens to open with
         // a pipe does not get to overrule them.
         if self.md_row_at_cursor()
-            && self.table.as_ref().map(|v| v.bounds) != Some(Bounds::WholeFile)
+            && self.table().map(|v| v.bounds) != Some(Bounds::WholeFile)
         {
             // A line that opens with `|` inside a fenced block is *an example
             // of* a table — the manual has several — and reformatting one
@@ -264,7 +296,7 @@ impl Editor {
         // A schema'd file and a 碼表 block are somebody's claim on the buffer
         // and still win here; an `Md` view is only the level being read.
         if self.syntax() == crate::syntax::Syntax::Markdown
-            && matches!(self.table.as_ref().map(|v| v.bounds), None | Some(Bounds::Md))
+            && matches!(self.table().map(|v| v.bounds), None | Some(Bounds::Md))
         {
             if let Some(line) = self.first_md_table_line() {
                 if self.enter_md_table_at(line, pane) {
@@ -622,7 +654,7 @@ impl Editor {
             // written down: nothing guessed about it, so there is nothing to
             // take back, and the level itself already covers the session.
             if let Some(path) = self.current_buffer().path().map(Path::to_path_buf) {
-                if self.table.is_some() && self.delimited_text_file().is_some() {
+                if self.table().is_some() && self.delimited_text_file().is_some() {
                     self.remember_source_mode(&path, true);
                 }
             }
@@ -633,7 +665,7 @@ impl Editor {
         }
         // Asked for a level again, on a file the reader had sent back to
         // source: that is the way back in, and it withdraws the note.
-        if self.table.is_none() {
+        if self.table().is_none() {
             if let Some(delimiter) = self.delimited_text_file() {
                 if let Some(path) = self.current_buffer().path().map(Path::to_path_buf) {
                     self.remember_source_mode(&path, false);
@@ -681,7 +713,7 @@ impl Editor {
         if want == TableLevel::Off {
             // Nothing is being read as a grid, so there is nothing to put
             // down — and 「本來就不在表格裏」 is the answer to the question.
-            if self.table.is_none() && self.table_level == TableLevel::Off {
+            if self.table().is_none() && self.table_level == TableLevel::Off {
                 self.status = say!("table.already-off");
                 return;
             }
@@ -697,7 +729,7 @@ impl Editor {
         // 文件任何位置通過 ti tt 進入表格視圖」 — so this is not
         // `table_here()`, which is false in the paragraph between two tables
         // and is the right answer for the *keys*.
-        if !(self.table_here() || self.table.as_ref().is_some_and(|v| v.is_file_wide()))
+        if !(self.table_here() || self.table().is_some_and(|v| v.is_file_wide()))
             && !self.enter_table_as(false)
         {
             // `enter_table_as` has already said why, and the level stands:
@@ -713,7 +745,7 @@ impl Editor {
     /// it was asked for from is untouched, which is what lets `空格 t q` give
     /// the window back with nothing written down.
     pub(super) fn ask_for_the_table_window(&mut self) {
-        if !(self.table_here() || self.table.as_ref().is_some_and(|v| v.is_file_wide()))
+        if !(self.table_here() || self.table().is_some_and(|v| v.is_file_wide()))
             && !self.enter_table_as(true)
         {
             return;
@@ -831,7 +863,7 @@ impl Editor {
         }
         // A delimiter chosen for this file before (`:table-delimiter`) opens
         // it as a grid without the sniffer's say.
-        if self.table.is_none() && problems.is_empty() {
+        if self.table().is_none() && problems.is_empty() {
             if let Some(delimiter) = self.table_choice_for(&path).delimiter {
                 self.attach_text_grid(delimiter);
                 self.apply_table_choice(&path);
@@ -847,7 +879,7 @@ impl Editor {
         // A schema that did not parse has already said so, and it was
         // written *about this file* — guessing over the top of that reply
         // would answer a question nobody asked.
-        if self.table.is_none() && problems.is_empty() && !self.wants_source_mode(&path) {
+        if self.table().is_none() && problems.is_empty() && !self.wants_source_mode(&path) {
             if let Some(delimiter) = self.delimited_text_file() {
                 self.attach_text_grid(delimiter);
                 self.apply_table_choice(&path);
@@ -874,7 +906,7 @@ impl Editor {
         //
         // 上面那扇門（schema 旁置）已經給過全窗表格；這一扇管的是**没有 schema
         // 的 `.csv`**：不只把列對齊，也不必人自己再按一次 `空格 t t`。
-        if self.table.is_none() && problems.is_empty() && self.names_itself_a_grid(&path) {
+        if self.table().is_none() && problems.is_empty() && self.names_itself_a_grid(&path) {
             self.enter_table();
         }
         // An old `.yumete/tables` schema that names this file is said, last,
@@ -909,7 +941,7 @@ impl Editor {
             }
             self.seat_in_a_cell();
         }
-        if self.table.is_none() && self.table_view_opens_itself() && self.syntax() == crate::syntax::Syntax::Markdown {
+        if self.table().is_none() && self.table_view_opens_itself() && self.syntax() == crate::syntax::Syntax::Markdown {
             if let Some(first) = self.first_md_table_line() {
                 let header = self.line_text(first).unwrap_or_default();
                 self.table = Some(TableView {
@@ -993,11 +1025,11 @@ impl Editor {
     /// the view was built, since it decides what the columns are.
     fn apply_table_choice(&mut self, path: &Path) {
         let choice = self.table_choice_for(path);
-        let header_now = self.table.as_ref().map(|v| v.schema.header);
+        let header_now = self.table().map(|v| v.schema.header);
         if let (Some(want), Some(now)) = (choice.header, header_now) {
             // A package beside the data outranks the memory: it is the file's
             // own word, and the memory is only what somebody once pressed.
-            let by_a_package = self.table.as_ref().is_some_and(|v| !v.from.as_os_str().is_empty());
+            let by_a_package = self.table().is_some_and(|v| !v.from.as_os_str().is_empty());
             if want != now && !by_a_package {
                 let said = self.status.clone();
                 self.set_table_header(Some(want));
@@ -1032,7 +1064,7 @@ impl Editor {
     /// **`:table-hide 7` / `:table-show 7`**: a column drawn at no width, or
     /// drawn again — remembered for this file, never written beside it.
     pub(super) fn hide_table_column(&mut self, column: usize, hide: bool) {
-        let Some(view) = self.table.as_ref() else {
+        let Some(view) = self.table() else {
             self.status = say!("table.not-in-a-table");
             return;
         };
@@ -1174,7 +1206,7 @@ impl Editor {
     /// the grid back. A mode scoped to the thing it is about never has to be
     /// turned off.
     pub(super) fn table_here(&self) -> bool {
-        match self.table.as_ref().map(|v| v.bounds) {
+        match self.table().map(|v| v.bounds) {
             Some(Bounds::WholeFile) => true,
             // Both of the in-document kinds are a grid for the lines they
             // occupy and nowhere else, which is the same question and now one
@@ -1351,15 +1383,11 @@ impl Editor {
     /// mode — and the header is still on the screen, which is the one thing
     /// such a file still has.
     pub fn grid_has_the_pane(&self) -> bool {
-        let Some(view) = self.table.as_ref() else {
+        // A window being drawn without the keys answers with its own grid
+        // ([`Self::table`]), or with none.
+        let Some(view) = self.table() else {
             return false;
         };
-        // **The grid is the live window's**: another window being drawn
-        // (`view_pane`) on a different file shows that file as its own
-        // document, not in the live table's columns.
-        if self.viewing.get().is_some_and(|v| v.buffer != self.current) {
-            return false;
-        }
         view.takes_the_pane()
             && (view.bounds == Bounds::WholeFile || self.table_row_span().is_some())
     }
@@ -1410,7 +1438,7 @@ impl Editor {
 
     /// The rows of the table **that line** is in — see [`Self::prose_region_at`].
     pub fn table_row_span_at(&self, line: usize) -> Option<(usize, usize)> {
-        let view = self.table.as_ref()?;
+        let view = self.table()?;
         let last_line = self.grid_last_line();
         match view.bounds {
             // **And a whole file that is one table can have no rows either**,
@@ -1451,7 +1479,7 @@ impl Editor {
     ///
     /// Zero outside the window, so a caller can subtract it either way.
     pub fn table_row_base(&self) -> usize {
-        match self.table.as_ref().is_some_and(|view| view.takes_the_pane()) {
+        match self.table().is_some_and(|view| view.takes_the_pane()) {
             true => self.table_row_span().map(|(first, _)| first).unwrap_or(0),
             false => 0,
         }
@@ -1466,7 +1494,7 @@ impl Editor {
     /// paid only by a file that has one, and those are small.
     pub fn table_row_index(&self, line: usize) -> usize {
         let base = self.table_row_base();
-        let Some(starts) = self.table.as_ref().and_then(|v| v.record_starts.as_ref()) else {
+        let Some(starts) = self.table().and_then(|v| v.record_starts.as_ref()) else {
             return line.saturating_sub(base);
         };
         starts
@@ -1493,7 +1521,7 @@ impl Editor {
 
     /// The headings of the table **that line** is in — see [`Self::prose_region_at`].
     pub fn table_headings_at(&self, line: usize) -> Vec<String> {
-        let named = || match self.table.as_ref() {
+        let named = || match self.table() {
             Some(view) => view
                 .schema
                 .columns
@@ -1502,7 +1530,7 @@ impl Editor {
                 .collect(),
             None => Vec::new(),
         };
-        let Some(view) = self.table.as_ref() else {
+        let Some(view) = self.table() else {
             return Vec::new();
         };
         if view.bounds == Bounds::WholeFile || !view.schema.header {
@@ -1537,7 +1565,7 @@ impl Editor {
 
     /// How many columns the table **that line** is in has.
     pub fn table_column_count_at(&self, line: usize) -> usize {
-        let Some(view) = self.table.as_ref() else {
+        let Some(view) = self.table() else {
             return 0;
         };
         match view.bounds {
@@ -1572,7 +1600,7 @@ impl Editor {
     /// grid it was drawn out of the table the *cursor* was in — its own rows,
     /// its own headings, its own column count, all from the wrong table.
     pub fn prose_region_at(&self, line: usize) -> Option<crate::mdtable::Region> {
-        let view = self.table.as_ref()?;
+        let view = self.table()?;
         let bounds = view.bounds;
         let separator = view.separator;
         // Keyed by the buffer's **id**, not by its index — see `blocks_through`.
@@ -1706,7 +1734,7 @@ impl Editor {
     /// with no `| --- |` under it, a single-column line that merely opens with
     /// a pipe, and a table quoted inside a fenced block are all prose.
     pub fn table_lines_at(&self, line: usize) -> Option<(usize, usize)> {
-        let view = self.table.as_ref()?;
+        let view = self.table()?;
         match view.bounds {
             // 「csv 文件等同于一个从第一行到最后一行都是表格的普通文本文件」.
             Bounds::WholeFile => {
@@ -1800,14 +1828,14 @@ impl Editor {
     /// [`Wall`](crate::mdtable::Wall), so the padding, the walls and the ruler
     /// cannot come to disagree about what a cell is.
     pub(super) fn wall_of_view(&self) -> Option<crate::mdtable::Wall> {
-        match self.table.as_ref()?.separator {
+        match self.table()?.separator {
             Separator::Pipe => Some(crate::mdtable::Wall::Pipe),
             Separator::Delimiter(c) => Some(crate::mdtable::Wall::Between(c)),
         }
     }
 
     pub fn wall_columns(&self, line: usize) -> Vec<usize> {
-        let Some(view) = self.table.as_ref() else {
+        let Some(view) = self.table() else {
             return Vec::new();
         };
         if view.pane || self.table_level == TableLevel::Off {
@@ -1991,7 +2019,7 @@ impl Editor {
     /// Markdown surgery, none of which mean anything to a block that is being
     /// read where it lies and never rewritten.
     pub fn md_region(&self) -> Option<crate::mdtable::Region> {
-        match self.table.as_ref().map(|v| v.bounds) {
+        match self.table().map(|v| v.bounds) {
             Some(Bounds::Md) => self.prose_region(),
             _ => None,
         }
@@ -1999,7 +2027,7 @@ impl Editor {
 
     /// The delimited block the cursor is in (#216).
     pub fn block_region(&self) -> Option<crate::mdtable::Region> {
-        match self.table.as_ref().map(|v| v.bounds) {
+        match self.table().map(|v| v.bounds) {
             Some(Bounds::Block) => self.prose_region(),
             _ => None,
         }
@@ -2906,7 +2934,7 @@ impl Editor {
     /// line is short still has the columns its body rows have, and a sort by
     /// one of them is a sort a reader can mean.
     pub(super) fn table_columns(&self) -> usize {
-        let Some(view) = self.table.as_ref() else {
+        let Some(view) = self.table() else {
             return 0;
         };
         if let Some((_, parts)) = self.md_parts() {
@@ -2950,7 +2978,7 @@ impl Editor {
         if self.refuse_readonly() {
             return;
         }
-        let Some(view) = self.table.as_ref() else {
+        let Some(view) = self.table() else {
             self.status = say!("table.not-in-a-table");
             return;
         };
@@ -3474,7 +3502,7 @@ impl Editor {
     /// line break or taken one away, and **nowhere near a frame**: the scan
     /// reads every line of the file.
     pub(super) fn rescan_records(&mut self) {
-        let Some(view) = self.table.as_ref() else {
+        let Some(view) = self.table() else {
             return;
         };
         let Separator::Delimiter(delimiter) = view.separator else {
@@ -3482,6 +3510,15 @@ impl Editor {
         };
         let first = usize::from(view.schema.header);
         let starts = self.scan_record_starts(first, delimiter);
+        // Another window on this file reads its records off the same lines.
+        let id = self.buffers[self.current].id();
+        for pane in self.panes.values_mut().filter(|p| p.buffer == id) {
+            if let super::PaneTable::Kept { view: Some(view), .. } = &mut pane.table {
+                if view.separator == Separator::Delimiter(delimiter) && usize::from(view.schema.header) == first {
+                    view.record_starts = starts.clone();
+                }
+            }
+        }
         if let Some(view) = self.table.as_mut() {
             view.record_starts = starts;
         }
@@ -3500,7 +3537,7 @@ impl Editor {
     /// instead would be a scan from the table's top per row per frame, which on
     /// a 123,380-line 拆分表 is the table squared.
     pub(super) fn record_first(&self, line: usize) -> usize {
-        let Some(starts) = self.table.as_ref().and_then(|v| v.record_starts.as_ref()) else {
+        let Some(starts) = self.table().and_then(|v| v.record_starts.as_ref()) else {
             return line;
         };
         // The last boundary at or before `line`. Nothing before the first
@@ -3518,7 +3555,7 @@ impl Editor {
     /// continuation lines are not rows of their own, in the drawing, in the
     /// click map or in the scroll that keeps a row whole.
     pub fn record_height(&self, line: usize) -> usize {
-        let Some(starts) = self.table.as_ref().and_then(|v| v.record_starts.as_ref()) else {
+        let Some(starts) = self.table().and_then(|v| v.record_starts.as_ref()) else {
             return 1;
         };
         let nth = starts.partition_point(|&start| start <= line);
@@ -3561,7 +3598,7 @@ impl Editor {
     /// number in sight already means a row of this table. Elsewhere a number
     /// is the file's line, because elsewhere the file is what is on the page.
     pub(crate) fn grid_row_line(&self, nth: usize) -> Option<usize> {
-        let view = self.table.as_ref()?;
+        let view = self.table()?;
         if !view.takes_the_pane() {
             return None;
         }
@@ -3645,7 +3682,7 @@ impl Editor {
     /// of one cannot hold a line break at all.
     pub fn cell_shown(&self, source: &str, span: (usize, usize)) -> String {
         let text = crate::table::cell_text(source, span);
-        match self.table.as_ref().map(|view| view.separator) {
+        match self.table().map(|view| view.separator) {
             Some(Separator::Delimiter(_)) => crate::table::unquote(&text),
             _ => text,
         }
@@ -3653,7 +3690,7 @@ impl Editor {
 
     /// Where every cell of a line begins and ends, in characters from its start.
     pub fn row_cells(&self, line: usize) -> Vec<(usize, usize)> {
-        let Some(view) = &self.table else {
+        let Some(view) = self.table() else {
             return Vec::new();
         };
         let rope = self.current_buffer().rope();
@@ -3686,7 +3723,7 @@ impl Editor {
     /// you came here to fill it — has a content span of zero characters and
     /// would not be drawn at all.
     pub fn row_cell_boxes(&self, line: usize) -> Vec<(usize, usize)> {
-        let Some(view) = &self.table else {
+        let Some(view) = self.table() else {
             return Vec::new();
         };
         let rope = self.current_buffer().rope();
@@ -3709,7 +3746,7 @@ impl Editor {
 
     /// Which cell of which row the cursor is in.
     pub fn cell_position(&self) -> Option<(usize, usize)> {
-        self.table.as_ref()?;
+        self.table()?;
         let rope = self.current_buffer().rope();
         let line = self.record_first(rope.char_to_line(self.caret().min(rope.len_chars())));
         Some((line, self.cell_holding(line, self.caret()).unwrap_or(0)))
@@ -3753,7 +3790,7 @@ impl Editor {
     /// two spans are the same answer.
     pub fn value_span(&self, from: usize, to: usize) -> (usize, usize) {
         if !matches!(
-            self.table.as_ref().map(|view| view.separator),
+            self.table().map(|view| view.separator),
             Some(Separator::Delimiter(_))
         ) {
             return (from, to);
@@ -3893,7 +3930,7 @@ impl Editor {
         let Some((from, to)) = self.cell_span_to_edit(line, cell) else {
             return false;
         };
-        let text = match self.table.as_ref().map(|view| view.separator) {
+        let text = match self.table().map(|view| view.separator) {
             Some(Separator::Delimiter(d)) => crate::table::quote_for(value, d),
             // A `|` table has no quoting; its one escape is `\|`, and a cell of
             // it cannot hold a line break at all — so the guard still answers
@@ -3901,7 +3938,7 @@ impl Editor {
             _ => value.to_string(),
         };
         let done = match matches!(
-            self.table.as_ref().map(|view| view.separator),
+            self.table().map(|view| view.separator),
             Some(Separator::Delimiter(_))
         ) {
             true => self.without_cell_guard(|e| e.overwrite(from, to, &text)),
@@ -3920,7 +3957,7 @@ impl Editor {
     /// ([`Self::cell_takes_a_line_break`]) because the key that makes one is
     /// not a `Char`.
     pub(super) fn cell_needs_quoting_for(&self, c: char) -> bool {
-        match self.table.as_ref().map(|view| view.separator) {
+        match self.table().map(|view| view.separator) {
             Some(Separator::Delimiter(d)) => c == d || c == '"',
             _ => false,
         }
@@ -3978,7 +4015,7 @@ impl Editor {
 
     pub(super) fn cell_takes_a_line_break(&self) -> bool {
         matches!(
-            self.table.as_ref().map(|view| view.separator),
+            self.table().map(|view| view.separator),
             Some(Separator::Delimiter(_))
         )
     }
@@ -3992,7 +4029,7 @@ impl Editor {
     /// file does not grow a pair of quotes for a visit. `false` when the cell
     /// cannot be found, or the table is not a delimited one.
     pub(super) fn quote_the_cell(&mut self) -> bool {
-        let Some(Separator::Delimiter(_)) = self.table.as_ref().map(|view| view.separator) else {
+        let Some(Separator::Delimiter(_)) = self.table().map(|view| view.separator) else {
             return false;
         };
         if self.the_cell_is_quoted() {
@@ -4053,7 +4090,7 @@ impl Editor {
         // the span between the quotes **is** the value.
         let value = crate::table::unquote(&source);
         let within = self.caret().saturating_sub(first).min(value.chars().count());
-        let delimiter = match self.table.as_ref().map(|view| view.separator) {
+        let delimiter = match self.table().map(|view| view.separator) {
             Some(Separator::Delimiter(d)) => d,
             _ => return,
         };
@@ -4313,7 +4350,7 @@ impl Editor {
         let Some((_, cell)) = self.cell_position() else {
             return;
         };
-        let d = self.table.as_ref().map(|v| v.schema.delimiter).unwrap_or(',');
+        let d = self.table().map(|v| v.schema.delimiter).unwrap_or(',');
         let lines = self.record_lines();
         // **A value holding the delimiter is refused, not filtered.** It used
         // to be stripped out character by character, which is the same silent
@@ -4391,7 +4428,7 @@ impl Editor {
         let Some((_, cell)) = self.cell_position() else {
             return;
         };
-        let Some(view) = self.table.as_ref() else { return };
+        let Some(view) = self.table() else { return };
         let (d, header) = (view.schema.delimiter, view.schema.header);
         let lines = self.record_lines();
         if let Some((r, _)) = values.iter().enumerate().find(|(_, v)| v.contains(d)) {
@@ -4484,7 +4521,7 @@ impl Editor {
         let Some((line, cell)) = self.cell_position() else {
             return;
         };
-        let Some(view) = self.table.as_ref() else { return };
+        let Some(view) = self.table() else { return };
         let (d, width) = (view.schema.delimiter, view.schema.columns.len());
         if cell + columns > width {
             self.status = say!("table.paste-does-not-fit", width);
@@ -4543,7 +4580,7 @@ impl Editor {
     /// Not an error to be refused: a table editor is the tool for *fixing*
     /// such a row, and one bad line must not lock the file.
     pub fn row_is_ragged(&self, line: usize) -> bool {
-        if self.table.is_none() {
+        if self.table().is_none() {
             return false;
         }
         // The last line of a file that ends in a newline is empty, and an empty
@@ -4598,7 +4635,7 @@ impl Editor {
         // where there is one, is drawn rather than written, so nothing ever
         // lands on it.
         if let Some(region) = self.prose_region() {
-            let goal = self.table.as_ref().map(|v| v.goal).unwrap_or(0);
+            let goal = self.table().map(|v| v.goal).unwrap_or(0);
             if let Some(want) = self.md_next_row(&region, line, down) {
                 self.go_to_cell(want, goal);
                 return;
@@ -4611,7 +4648,7 @@ impl Editor {
             // it — where `table_here()` is false, so `hjkl` are letters again.
             // The full-screen grid has no prose to walk into, and there the
             // edge still stops.
-            if !may_leave || !self.table.as_ref().is_some_and(|v| v.in_prose()) {
+            if !may_leave || !self.table().is_some_and(|v| v.in_prose()) {
                 return;
             }
             let last = self.grid_last_line();
@@ -4633,7 +4670,7 @@ impl Editor {
         // this path as for the character path.
         let last = self.grid_last_line();
         let want = self.next_row(line, down).unwrap_or(line).min(last);
-        let goal = self.table.as_ref().map(|v| v.goal).unwrap_or(0);
+        let goal = self.table().map(|v| v.goal).unwrap_or(0);
         self.go_to_cell(want, goal);
     }
 
@@ -4686,7 +4723,7 @@ impl Editor {
 
     /// Whether column `i` is drawn, and so worth stopping in.
     pub fn column_shows(&self, i: usize) -> bool {
-        self.table.as_ref().is_none_or(|v| v.schema.shows(i))
+        self.table().is_none_or(|v| v.schema.shows(i))
     }
 
     /// The first or last cell of the row.
@@ -5158,7 +5195,7 @@ impl Editor {
 
     /// Whether the cursor is on a header row that names the columns.
     fn on_header_row(&self) -> bool {
-        let Some(view) = self.table.as_ref() else {
+        let Some(view) = self.table() else {
             return false;
         };
         if !view.schema.header {
@@ -5177,7 +5214,7 @@ impl Editor {
     /// is what the row above them already draws (#184). `None` flips it,
     /// because a file is asked this once and never again.
     pub(super) fn set_table_header(&mut self, want: Option<bool>) {
-        let Some(view) = self.table.as_ref() else {
+        let Some(view) = self.table() else {
             self.status = say!("table.not-in-a-table");
             return;
         };
@@ -5283,7 +5320,7 @@ impl Editor {
     /// the status bar, not a file. The file is
     /// `:table-schema write`.
     pub(super) fn report_schema(&mut self) {
-        let Some(view) = self.table.as_ref() else {
+        let Some(view) = self.table() else {
             self.status = say!("table.not-in-a-table");
             return;
         };
@@ -5304,7 +5341,7 @@ impl Editor {
     /// `datapackage.json` beside the data — made when there is none, this
     /// file's resource replaced when there is.
     pub(super) fn write_schema(&mut self) {
-        let Some(view) = self.table.as_ref() else {
+        let Some(view) = self.table() else {
             self.status = say!("table.not-in-a-table");
             return;
         };
@@ -5464,7 +5501,7 @@ impl Editor {
                 _ => self.record_first(line - 1),
             },
         };
-        let header = usize::from(self.table.as_ref().is_some_and(|v| v.schema.header));
+        let header = usize::from(self.table().is_some_and(|v| v.schema.header));
         if other > last || other < header || line < header {
             self.status = say!("table.no-further");
             return;
@@ -5591,7 +5628,7 @@ impl Editor {
             // along. A `.csv` opened straight into the window was on no level
             // at all, and there giving the window back **is** leaving.
             Key::Char('q') => {
-                if self.table.is_none() {
+                if self.table().is_none() {
                     self.status = say!("table.already-off");
                     return;
                 }
@@ -5866,7 +5903,7 @@ impl Editor {
     /// The next table, or the one before if this was the last: the reader is
     /// asking to look at a table, and the nearest one is the answer.
     pub(super) fn snap_into_the_grid(&mut self) {
-        let Some(view) = self.table.as_ref() else {
+        let Some(view) = self.table() else {
             return;
         };
         if !view.pane || view.bounds == Bounds::WholeFile {
@@ -5961,7 +5998,7 @@ impl Editor {
         }
         self.remember_jump();
         self.goto_line(line + 1);
-        if self.table.is_none() {
+        if self.table().is_none() {
             self.enter_table();
         }
         // A table's first line is its header, and the grid draws that frozen
@@ -6208,7 +6245,7 @@ impl Editor {
             self.status = say!("edit.nothing-yanked-yet");
             return;
         }
-        let Some(view) = &self.table else { return };
+        let Some(view) = self.table() else { return };
         let (separator, columns) = (view.separator, view.schema.columns.len());
         let body = text.trim_end_matches(['\n', '\r']);
         // A row: the right number of cells. A Markdown row says what it is by
@@ -6399,7 +6436,7 @@ impl Editor {
     /// **One line of text, cut into cells the way this file cuts them** — one
     /// cell when it holds no delimiter at all.
     fn text_as_a_run(&self, body: &str) -> Vec<String> {
-        let Some(view) = self.table.as_ref() else {
+        let Some(view) = self.table() else {
             return Vec::new();
         };
         if body.contains(['\n', '\r']) {
@@ -6567,7 +6604,7 @@ impl Editor {
             return;
         }
         let asked = named.clone();
-        let view = self.table.as_ref().expect("table_here");
+        let view = self.table().expect("table_here");
         // No column is declared a link:
         // with no argument the search runs over every column but the key
         // column — 「who uses this」 is asked of the cells that name rows, not
@@ -6865,13 +6902,13 @@ impl Editor {
     /// in a `.csv`.
     ///
     /// The one answer every gate asks for. A gate opening with
-    /// `self.table.as_ref()?` would be off whenever `:table` is — which is the
+    /// `self.table()?` would be off whenever `:table` is — which is the
     /// state a table in a manuscript is normally edited in, and the state the
     /// 拆分表 is in whenever the project has no schema file. A `.csv` is a
     /// grid because of its own name; a `|` table is a grid because of what is
     /// written there.
     pub(super) fn grid_shape_here(&self) -> Option<Separator> {
-        if let Some(view) = self.table.as_ref() {
+        if let Some(view) = self.table() {
             return Some(view.separator);
         }
         let extension = self
@@ -6941,7 +6978,7 @@ impl Editor {
         // writer has said so. What is *rewritten in bulk* — `:s`, `:replace`,
         // `:ruby-format`, `gJ` — asks [`Self::grid_shape_here`] instead, which
         // does not care whether `:table` is on.
-        let view = self.table.as_ref()?;
+        let view = self.table()?;
         if !self.table_here() {
             return None;
         }
@@ -6990,7 +7027,7 @@ impl Editor {
     /// inserted. Without the position the editor forbade the one spelling its
     /// own manual told a writer to use.
     pub(super) fn cell_refuses_text_at(&self, at: Option<usize>, text: &str) -> Option<String> {
-        let view = self.table.as_ref()?;
+        let view = self.table()?;
         if self.table_bypass.get() || !self.table_here() {
             return None;
         }
@@ -7058,7 +7095,7 @@ impl Editor {
 
     /// Whether a cut over `range` reaches into a grid at all.
     ///
-    /// **Not `self.table.is_some()`.** A `.md` holding one table anywhere is
+    /// **Not `self.table().is_some()`.** A `.md` holding one table anywhere is
     /// opened with a grid view so its columns are drawn straight away
     /// (`table_on_open`), and asking only whether that view exists made every
     /// paragraph in the file refuse to give up its line break: `d` at the end
@@ -7071,7 +7108,7 @@ impl Editor {
     /// cut *part* way can lose a delimiter, and a cut that swallows whole rows
     /// takes their delimiters with them and leaves every surviving row intact.
     fn cut_reaches_a_grid(&self, range: &std::ops::Range<usize>) -> bool {
-        match self.table.as_ref().map(|v| v.bounds) {
+        match self.table().map(|v| v.bounds) {
             None => false,
             Some(Bounds::WholeFile) => true,
             // The level is one word for two halves — see `table_here()`.
@@ -7106,7 +7143,7 @@ impl Editor {
         let tail = rope.char_to_line(range.end.saturating_sub(1).min(last));
         let Some(region) = self.prose_region_at(head).or_else(|| self.prose_region_at(tail)) else {
             // A `.csv` is a table with no region of its own: it is the file.
-            return matches!(self.table.as_ref().map(|v| v.bounds), Some(Bounds::WholeFile))
+            return matches!(self.table().map(|v| v.bounds), Some(Bounds::WholeFile))
                 && range.start == 0
                 && range.end >= last;
         };
@@ -7186,7 +7223,7 @@ impl Editor {
             (false, true) => text.trim_start_matches('\n'),
             (false, false) => return false,
         };
-        let Some(view) = self.table.as_ref() else {
+        let Some(view) = self.table() else {
             return false;
         };
         let rope = self.current_buffer().rope();
@@ -7293,7 +7330,7 @@ impl Editor {
         }
         // The escape again: `\|` inside a cell is not a boundary, so taking it
         // out is not taking a boundary out.
-        if self.table.as_ref().map(|v| v.separator) == Some(Separator::Pipe) {
+        if self.table().map(|v| v.separator) == Some(Separator::Pipe) {
             let text = rope.slice(range.clone()).to_string();
             return (text.contains(['\n', '\r']) || self.walls_change(range, ""))
                 .then(|| say!("table.divider-cannot-be-deleted"));
@@ -7320,7 +7357,7 @@ impl Editor {
         // The width is **this** table's (#283) — `o` in the second table of a
         // document was opening a row as wide as the first one.
         let columns = self.table_column_count_at(self.cursor_line());
-        match &self.table {
+        match self.table() {
             Some(view) => match view.separator {
                 Separator::Pipe => crate::mdtable::blank_row(columns),
                 Separator::Delimiter(d) => d.to_string().repeat(columns.saturating_sub(1)),
@@ -7347,7 +7384,7 @@ impl Editor {
     /// a 123,380-row table means `/^木,` and hoping no other row starts that
     /// way.
     pub(super) fn goto_row(&mut self, key: &str) {
-        let Some(view) = self.table.as_ref() else {
+        let Some(view) = self.table() else {
             self.status = say!("table.not-in-a-table");
             return;
         };
@@ -7397,7 +7434,7 @@ impl Editor {
         &self,
         f: impl FnOnce(&HashMap<char, usize>) -> T,
     ) -> Option<T> {
-        let view = self.table.as_ref()?;
+        let view = self.table()?;
         let key = view.schema.key.as_deref()?;
         let at = view.schema.index_of(key)?;
         let rope_lines = self.current_buffer().line_count();
@@ -7471,7 +7508,7 @@ impl Editor {
 
     /// Whether the cursor is in the column whose values are the row keys.
     fn cursor_in_key_column(&self) -> bool {
-        let Some(view) = &self.table else {
+        let Some(view) = self.table() else {
             return false;
         };
         let Some(key) = view.schema.key.as_deref() else {

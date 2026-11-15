@@ -86,7 +86,7 @@ impl Editor {
     /// holds the pane, and the whole buffer otherwise (#354).
     fn search_rows(&self) -> std::ops::Range<usize> {
         let all = 0..self.current_buffer().rope().len_lines();
-        if !self.table.as_ref().is_some_and(|view| view.takes_the_pane()) {
+        if !self.table().is_some_and(|view| view.takes_the_pane()) {
             return all;
         }
         match self.table_row_span() {

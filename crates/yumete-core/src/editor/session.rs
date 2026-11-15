@@ -958,6 +958,27 @@ impl Editor {
         self.restore_folds();
     }
 
+    /// **Each window rebuilt without the keys reads its file as opening it
+    /// would** — a `.csv` as its grid — and is drawn so before the keys
+    /// ever reach it: the keys visit it and come back, and the order the
+    /// windows were last in is left as it was.
+    fn ask_every_window_its_grid(&mut self) {
+        let home = self.live;
+        let history = self.window_history.clone();
+        let unasked: Vec<_> = self
+            .panes
+            .iter()
+            .filter(|(_, pane)| matches!(pane.table, super::PaneTable::Unasked))
+            .map(|(&id, _)| id)
+            .collect();
+        for window in unasked {
+            if self.switch_to(window) {
+                self.switch_to(home);
+            }
+        }
+        self.window_history = history;
+    }
+
     fn restore_window_layout(&mut self) {
         let Some(file) = self.session_file.clone() else { return };
         let Ok(text) = std::fs::read_to_string(Self::windows_file(&file)) else { return };
@@ -1039,9 +1060,11 @@ impl Editor {
                         seen: vec![buffer.id()],
                         preview: false,
                         half_page: None,
+                        table: super::PaneTable::Unasked,
                     },
                 );
             }
+            self.ask_every_window_its_grid();
             if let Some(id) = keys_in {
                 self.switch_to(id);
             }

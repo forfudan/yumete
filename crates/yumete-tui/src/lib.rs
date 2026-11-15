@@ -27755,6 +27755,95 @@ fn squeezed(text: &str) -> String {
         assert_eq!(walls(&buffer), [false; 4], "鍵在正文裏，誰都不金");
     }
 
+    /// The text of each window of a two-window frame, cut at the divider
+    /// that stands in the same column on every text row.
+    fn two_halves(buffer: &ratatui::buffer::Buffer) -> (String, String) {
+        let rows = buffer.area.height.saturating_sub(3);
+        let at = (0..buffer.area.width)
+            .find(|&x| (0..rows).all(|y| buffer[(x, y + 1)].symbol() == "\u{2502}"))
+            .expect("a divider") as usize;
+        let mut left = String::new();
+        let mut right = String::new();
+        for y in 0..rows {
+            let row: Vec<&str> = (0..buffer.area.width).map(|x| buffer[(x, y + 1)].symbol()).collect();
+            left.push_str(&row[..at].concat());
+            left.push('\n');
+            right.push_str(&row[at + 1..].concat());
+            right.push('\n');
+        }
+        (left, right)
+    }
+
+    /// **A csv window keeps its grid when the keys leave it** — to a page
+    /// or to another csv — and a page beside a grid carries none of it: no
+    /// column-number ruler, no cells padded out to the live table's widths.
+    #[test]
+    fn a_csv_window_is_drawn_as_its_grid_without_the_keys() {
+        let dir = tmp().join(format!("yumete-grid-windows-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("list.csv"), "name,qty,note\napple,3,red fruit\npear,12,green\n").unwrap();
+        std::fs::write(dir.join("b.csv"), "city,pop\nOslo,700\nRome,2800\n").unwrap();
+        std::fs::write(dir.join("notes.txt"), "Some prose here.\nSecond line of text.\n").unwrap();
+        let config = Config::default();
+        let beside = |other: &str| {
+            let mut editor = Editor::new();
+            editor.open_file(dir.join("list.csv")).unwrap();
+            editor.on_key(Key::Ctrl('w'));
+            editor.on_key(Key::Char('v'));
+            editor.execute(&format!(":e {}", dir.join(other).display())).unwrap();
+            editor
+        };
+
+        let mut editor = beside("b.csv");
+        let (left, right) = two_halves(&render(&editor, &config, 100, 12));
+        assert!(left.contains("\u{2506}apple\u{2506}3  \u{2506}"), "the left window is its own grid:\n{left}");
+        assert!(!left.contains("apple,"), "not the source:\n{left}");
+        assert!(right.contains("\u{2506}Oslo\u{2506}"), "{right}");
+        editor.on_key(Key::Ctrl('w'));
+        editor.on_key(Key::Char('w'));
+        let (left, right) = two_halves(&render(&editor, &config, 100, 12));
+        assert!(left.contains("\u{2506}apple\u{2506}"), "{left}");
+        assert!(right.contains("\u{2506}Oslo\u{2506}700 \u{2506}"), "and so is the right one:\n{right}");
+
+        let mut editor = beside("notes.txt");
+        let (left, right) = two_halves(&render(&editor, &config, 100, 12));
+        assert!(left.contains("\u{2506}apple\u{2506}"), "{left}");
+        assert!(right.contains("Some prose here."), "{right}");
+        editor.on_key(Key::Ctrl('w'));
+        editor.on_key(Key::Char('w'));
+        let (_, right) = two_halves(&render(&editor, &config, 100, 12));
+        assert!(right.contains("Some prose here."), "the page is drawn as written:\n{right}");
+        assert!(!right.contains('\u{2506}'), "with no grid in it:\n{right}");
+        assert!(right.lines().next().unwrap_or("").contains("Some prose"), "and no ruler over it:\n{right}");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// **Two windows on one long csv scroll on their own**: each is drawn
+    /// around its own row.
+    #[test]
+    fn two_windows_on_one_csv_scroll_on_their_own() {
+        let dir = tmp().join(format!("yumete-grid-scroll-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut text = String::from("key,value\n");
+        for n in 1..=60 {
+            text.push_str(&format!("row{n},v{n}\n"));
+        }
+        std::fs::write(dir.join("long.csv"), text).unwrap();
+        let mut editor = Editor::new();
+        editor.open_file(dir.join("long.csv")).unwrap();
+        editor.on_key(Key::Ctrl('w'));
+        editor.on_key(Key::Char('v'));
+        for c in "50j".chars() {
+            editor.on_key(Key::Char(c));
+        }
+        let (left, right) = two_halves(&render(&editor, &Config::default(), 100, 12));
+        assert!(right.contains("row51"), "the right window at its row:\n{right}");
+        assert!(left.contains("row1\u{2506}") && !left.contains("row51"), "the left one at its own:\n{left}");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     /// **A 字根 takes the two cells it is drawn in**.
     ///
     /// Annex #11 calls the private-use area Ambiguous, so the width crate

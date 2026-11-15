@@ -162,7 +162,7 @@ impl Editor {
     pub(super) fn detail_is_a_panel(&self) -> bool {
         self.detail_visible()
             && (self.detail_shows_a_row()
-                || self.table.as_ref().is_some_and(|view| view.takes_the_pane()))
+                || self.table().is_some_and(|view| view.takes_the_pane()))
     }
 
     /// Whether that layer of that slot has anything in it to look at.

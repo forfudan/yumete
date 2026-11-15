@@ -2500,7 +2500,7 @@ impl Editor {
         // then `w` back onto `t`).
         let pane = self.grid_has_the_pane();
         if pane && self.grid_is_drawn() && !self.grid_separator_is_a_pipe() {
-            if let Some(Separator::Delimiter(d)) = self.table.as_ref().map(|v| v.separator) {
+            if let Some(Separator::Delimiter(d)) = self.table().map(|v| v.separator) {
                 let text = crate::motion::line_text(rope, line);
                 for (at, _) in text.chars().enumerate().filter(|&(_, c)| c == d) {
                     hidden.push((at, at + 1));

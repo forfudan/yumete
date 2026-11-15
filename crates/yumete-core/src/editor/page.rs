@@ -1070,6 +1070,8 @@ impl Editor {
             seen: self.seen_here.clone(),
             preview: true,
             half_page: None,
+            // The same file at another place: read the same way.
+            table: self.kept_table(),
         };
         match self.other_window() {
             Some(window) => {
@@ -1090,6 +1092,7 @@ impl Editor {
         // one document and shows another — and `空格 w` then goes to the one it
         // names.
         let buffer = self.current_buffer().id();
+        let table = self.kept_table();
         match self.other_window().and_then(|w| self.panes.get_mut(&w)) {
             Some(pane) => {
                 pane.buffer = buffer;
@@ -1097,6 +1100,7 @@ impl Editor {
                 pane.anchor = at;
                 pane.highlight = highlight;
                 pane.caption = caption;
+                pane.table = table;
             }
             None => self.open_split(at, highlight, caption),
         }
@@ -1146,6 +1150,8 @@ impl Editor {
             seen: self.seen_here.clone(),
             preview: false,
             half_page: None,
+            // …and its grid, as it keeps its folds.
+            table: self.kept_table(),
         };
         let Some(fresh) = self.windows.split_on(self.live, how, before, rtl) else {
             return false;
@@ -1354,6 +1360,7 @@ impl Editor {
             seen: Vec::new(),
             preview: false,
             half_page: None,
+            table: self.kept_table(),
         };
         // The place is clamped rather than trusted: the other pane may have
         // been edited while this one was not looking — and the file it names
@@ -1391,12 +1398,21 @@ impl Editor {
         self.sel.set_goal(pane.goal_column);
         self.sel.set_goal_slot(pane.goal_slot);
         self.extend = pane.extend;
-        // Through the same door `gn` uses: whether *this* file is a grid,
-        // and every memo about the one being left, are re-asked there. Set
-        // directly, the schema of a 拆分表 followed you into a chapter and
-        // `o` wrote 「,,」 into your novel.
+        // **The grid goes with the window it is drawn in**: the one being
+        // left keeps its table, layer and goal cell in its pane, and the one
+        // entered takes back its own — never the live one's, or the schema
+        // of a 拆分表 followed you into a chapter and `o` wrote 「,,」 into
+        // your novel. Only a window that never had the keys asks its file
+        // what it is, through the same door `gn` uses.
+        self.leave_table_quietly();
         if moves {
-            self.forget_the_document();
+            self.forget_the_document_but_its_grid();
+        }
+        match std::mem::take(&mut pane.table) {
+            super::PaneTable::Kept { view, turned } => self.take_up_the_table(view, turned),
+            super::PaneTable::Unasked => self.table_on_open(),
+        }
+        if moves {
             // The buffer list and the outline are about this file now.
             self.refresh_sidebar();
         }
@@ -1468,6 +1484,7 @@ impl Editor {
                 pane.goal_slot = None;
                 pane.highlight = None;
                 pane.caption = caption;
+                pane.table = super::PaneTable::Unasked;
             }
         }
     }

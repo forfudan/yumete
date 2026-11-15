@@ -575,7 +575,7 @@ impl super::Editor {
     /// 「這一欄每行一個光標」往後做成 `空格 t` 底下的一條命令，不讓通用的複製鍵去撞格子
     /// 的邊界（§5.13.12b 五：不留鍵）。
     fn can_be_plural(&mut self) -> bool {
-        if self.table.as_ref().is_some_and(|view| view.takes_the_pane()) {
+        if self.table().is_some_and(|view| view.takes_the_pane()) {
             self.status = say!("selection.not-in-a-table");
             return false;
         }

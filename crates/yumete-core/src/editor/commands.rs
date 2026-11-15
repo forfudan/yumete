@@ -1740,7 +1740,7 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::SetTableHeader(want) => {
-                let now = self.table.as_ref().map(|view| view.schema.header);
+                let now = self.table().map(|view| view.schema.header);
                 self.set_table_header(now.map(|now| want.over(now)));
                 Ok(CommandOutcome::Continue)
             }
@@ -1788,7 +1788,7 @@ impl Editor {
                 // so asking 「which am I now」 wants exactly them. 全窗 is asked
                 // first because it is not a level: it is drawn over whichever
                 // one the reader came from.
-                self.status = match self.table.as_ref().is_some_and(|v| v.pane) {
+                self.status = match self.table().is_some_and(|v| v.pane) {
                     true => say!("table.already-the-window"),
                     false => match self.table_level {
                         TableLevel::Off => say!("table.already-off"),
@@ -2478,7 +2478,7 @@ impl Editor {
             Command::SetSentences(_) => self.sentences(),
             Command::SetSoftWrap(_) => self.soft_wrap(),
             Command::ShowDetail(_) => {
-                self.table.as_ref()?;
+                self.table()?;
                 self.show_detail.unwrap_or_else(|| self.detail_opens_here())
             }
             Command::SetTypewriter(_) => self.typewriter,
@@ -2488,7 +2488,7 @@ impl Editor {
             Command::SetCode(_) => self.code_colours,
             Command::SetLineBreaks(_) => self.line_breaks,
             Command::SetTableNumbers(_) => self.table_numbers,
-            Command::SetTableHeader(_) => self.table.as_ref()?.schema.header,
+            Command::SetTableHeader(_) => self.table()?.schema.header,
             Command::Sidebar(panel, _) => self.showing(Editor::view_of(panel)?).is_some(),
             Command::Genda(crate::genda::Ask::Hint(_)) => self.genda_switches.hint,
             Command::Genda(crate::genda::Ask::Auto(_)) => self.genda_switches.auto,

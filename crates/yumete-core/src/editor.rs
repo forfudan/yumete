@@ -72,6 +72,36 @@ pub struct Pane {
     preview: bool,
     /// vim's 'scroll' for this window ([`Editor::half_page`]).
     half_page: Option<(usize, usize)>,
+    /// The grid this window reads its file as.
+    table: PaneTable,
+}
+
+/// **The grid a window without the keys is showing** — its layer, bounds,
+/// schema and goal cell, kept as it was when the keys left.
+///
+/// A table is how that window shows its file, the way its folds and its
+/// place are: moving the keys elsewhere does not change it, and bringing
+/// them back finds the same layer and the same cell, without asking the
+/// file again what it is.
+#[derive(Debug, Clone, Default)]
+pub(crate) enum PaneTable {
+    /// Nobody has asked: the window was handed its file without the keys
+    /// ever having been in it (a resumed session, a closed tab it fell back
+    /// from). The file is asked what it is when the keys arrive.
+    #[default]
+    Unasked,
+    /// What the window showed when the keys left it — `None` for a page —
+    /// and whether it had turned a 縱書 page across to show it.
+    Kept { view: Option<TableView>, turned: bool },
+}
+
+impl PaneTable {
+    fn view(&self) -> Option<&TableView> {
+        match self {
+            PaneTable::Kept { view, .. } => view.as_ref(),
+            PaneTable::Unasked => None,
+        }
+    }
 }
 
 /// **One place in a jump list**.
@@ -3474,6 +3504,9 @@ pub struct Editor {
     /// open clears it, and walking out of a guessed block clears it. What the
     /// *reader asked for* is [`Editor::table_level`], which survives all of
     /// that because a preference that clears itself is not a preference.
+    ///
+    /// **The live window's.** Every other window keeps its own in its
+    /// [`Pane`] and is drawn from it ([`Editor::table`]).
     table: Option<TableView>,
     /// The one thing opening a file had to say, kept apart from the status.
     ///
@@ -5208,7 +5241,7 @@ impl Editor {
     pub fn table_status(&self) -> Option<String> {
         // There has to *be* a view; nothing else about it is wanted here any
         // more (see the note on the tail below).
-        self.table.as_ref()?;
+        self.table()?;
         if !self.table_here() {
             return None;
         }

@@ -189,7 +189,7 @@ impl Editor {
 
     /// Whether any line of `text` would not be a row of this grid.
     fn rows_break_the_grid(&self, text: &str) -> Option<String> {
-        let view = self.table.as_ref()?;
+        let view = self.table()?;
         // **The table the cursor is in, not the one it was entered in** (#283):
         // a document holds as many tables as somebody typed, and filtering the
         // five-column one through `sort` while the view still carried the

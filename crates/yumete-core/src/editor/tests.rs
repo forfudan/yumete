@@ -40495,6 +40495,235 @@ fn back_to_a_csv_window_from_deep_in_a_long_file() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// A directory holding a three-column `list.csv` and `other`, opened as two
+/// windows side by side: the csv on the left, `other` on the right with the
+/// keys.
+fn a_csv_window_beside(tag: &str, other: (&str, &str)) -> (PathBuf, Editor) {
+    let dir = tmp().join(format!("yumete-grid-{tag}-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("list.csv"), "name,qty,note\napple,3,red fruit\npear,12,green\nplum,7,small\n").unwrap();
+    std::fs::write(dir.join(other.0), other.1).unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(dir.join("list.csv")).unwrap();
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('v'));
+    ed.execute(&format!(":e {}", dir.join(other.0).display())).unwrap();
+    (dir, ed)
+}
+
+/// The window without the keys.
+fn the_other_window(ed: &Editor) -> crate::window::WindowId {
+    ed.windows().leaves().into_iter().find(|&w| w != ed.live_window()).expect("two windows")
+}
+
+/// **A csv window keeps its grid when the keys go to a page**: drawn
+/// without them it is the same table, its own columns and header, and the
+/// page beside it carries no table pieces.
+#[test]
+fn a_csv_window_keeps_its_grid_without_the_keys() {
+    let (dir, ed) = a_csv_window_beside("keeps", ("notes.txt", "Some prose here.\nSecond line of text.\n"));
+    assert!(!ed.grid_has_the_pane(), "the page with the keys is a page");
+    assert!(ed.table().is_none());
+    assert!(ed.table_ruler_on_line(0).is_empty(), "no ruler over the page");
+    {
+        let _look = ed.view_pane(ed.pane_of(the_other_window(&ed)).unwrap());
+        assert!(ed.grid_has_the_pane(), "the csv window is drawn as its grid");
+        assert_eq!(ed.table().map_or(0, |v| v.schema.columns.len()), 3);
+        assert!(ed.table().is_some_and(|v| v.schema.header), "its header frozen");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **Two csv windows each draw their own table**: the window left is not
+/// drawn as source under the live table's column ruler and padding. The
+/// keys move one cell, never the other window's.
+#[test]
+fn two_csv_windows_each_keep_their_own_grid() {
+    let (dir, mut ed) = a_csv_window_beside("two", ("b.csv", "city,pop\nOslo,700\nRome,2800\n"));
+    assert!(ed.grid_has_the_pane(), "{}", ed.status());
+    assert_eq!(ed.table().map_or(0, |v| v.schema.columns.len()), 2);
+    let left = the_other_window(&ed);
+    let peeked = |ed: &Editor| {
+        let _look = ed.view_pane(ed.pane_of(left).unwrap());
+        (ed.grid_has_the_pane(), ed.table().map_or(0, |v| v.schema.columns.len()), ed.cell_position())
+    };
+    let before = peeked(&ed);
+    assert!(before.0, "the csv window left is still a grid");
+    assert_eq!(before.1, 3, "in its own columns");
+    // Keys go to the live table only.
+    ed.on_key(Key::Char('l'));
+    ed.on_key(Key::Char('j'));
+    assert_eq!(ed.cell_position(), Some((2, 1)), "{}", ed.status());
+    assert_eq!(peeked(&ed), before, "the other grid did not move");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **Going back to a csv window finds the cell and the layer it was left
+/// on**, not a grid asked again from the top.
+#[test]
+fn back_to_a_csv_window_finds_its_cell_and_layer() {
+    let (dir, mut ed) = a_csv_window_beside("back", ("notes.txt", "Some prose here.\nSecond line of text.\n"));
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
+    assert!(ed.grid_has_the_pane());
+    press(&mut ed, "jjl");
+    ed.on_key(Key::Enter);
+    let (cell, layer, at) = (ed.cell_position(), ed.table_layer(), ed.cursor());
+    assert_eq!(cell, Some((3, 1)), "{}", ed.status());
+    assert_eq!(layer, crate::table::layer::Layer::Inside, "{}", ed.status());
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
+    assert!(ed.table().is_none(), "the page has no grid");
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
+    assert_eq!((ed.cell_position(), ed.table_layer(), ed.cursor()), (cell, layer, at));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **Two windows on one csv each keep their own cell and layer.**
+#[test]
+fn two_windows_on_one_csv_keep_their_own_cells() {
+    let dir = tmp().join(format!("yumete-grid-same-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let list = dir.join("list.csv");
+    std::fs::write(&list, "name,qty,note\napple,3,red fruit\npear,12,green\nplum,7,small\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&list).unwrap();
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('v'));
+    assert!(ed.grid_has_the_pane(), "the split window is the same grid");
+    press(&mut ed, "jjll");
+    ed.on_key(Key::Enter);
+    let right = (ed.cell_position(), ed.table_layer());
+    assert_eq!(right.0, Some((3, 2)), "{}", ed.status());
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
+    assert_eq!(ed.cell_position(), Some((1, 0)), "the left window's own cell");
+    assert_eq!(ed.table_layer(), crate::table::layer::Layer::Whole, "and its own layer");
+    {
+        let _look = ed.view_pane(ed.pane_of(the_other_window(&ed)).unwrap());
+        assert_eq!((ed.cell_position(), ed.table_layer()), right, "the right one drawn where it was left");
+    }
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
+    assert_eq!((ed.cell_position(), ed.table_layer()), right);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **A `t t` table in one window, prose in another**: the full-window grid
+/// stays that window's when the keys go to the prose, and comes back with
+/// them.
+#[test]
+fn a_full_window_table_stays_with_its_window() {
+    let dir = tmp().join(format!("yumete-grid-tt-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let doc = dir.join("doc.md");
+    let prose = dir.join("prose.md");
+    std::fs::write(&doc, "Intro line.\n\n| a | b |\n| --- | --- |\n| one | two |\n| three | four |\n").unwrap();
+    std::fs::write(&prose, "Plain words.\nMore plain words.\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&doc).unwrap();
+    ed.execute("goto 5").unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+    press(&mut ed, " tt");
+    assert!(ed.grid_has_the_pane(), "{}", ed.status());
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('v'));
+    ed.execute(&format!(":e {}", prose.display())).unwrap();
+    assert!(!ed.grid_has_the_pane(), "the prose window is prose");
+    {
+        let _look = ed.view_pane(ed.pane_of(the_other_window(&ed)).unwrap());
+        assert!(ed.grid_has_the_pane(), "the table window is drawn as its grid");
+    }
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
+    assert!(ed.grid_has_the_pane(), "and is one again with the keys: {}", ed.status());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **Beside a 縱書 page a csv window still draws its grid**, and a page
+/// its schema turned across is turned only while the keys are in it.
+#[test]
+fn a_csv_window_beside_a_vertical_page() {
+    let (dir, csv) = a_table("zong-window");
+    let notes = dir.join("notes.md");
+    std::fs::write(&notes, "春天的早晨，河边的柳树发了新芽。\n第二行文字。\n").unwrap();
+    let mut ed = Editor::new();
+    ed.set_layout(Layout::Vertical);
+    ed.open_file(&notes).unwrap();
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('v'));
+    ed.execute(&format!(":e {}", csv.display())).unwrap();
+    assert_eq!(ed.layout(), Layout::Horizontal, "a grid is read across");
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
+    assert_eq!(ed.layout(), Layout::Vertical, "the page is 縱書 again");
+    {
+        let _look = ed.view_pane(ed.pane_of(the_other_window(&ed)).unwrap());
+        assert!(ed.grid_has_the_pane(), "the csv window is still its grid");
+    }
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
+    assert_eq!(ed.layout(), Layout::Horizontal);
+    assert!(ed.grid_has_the_pane());
+    let _ = std::fs::remove_dir_all(&dir);
+
+    // A `.csv` with no schema opens its grid without turning the page, and
+    // coming back to it does not turn it either.
+    let (dir, mut ed) = a_csv_window_beside("zong-plain", ("notes.md", "春天的早晨。\n第二行。\n"));
+    ed.set_layout(Layout::Vertical);
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
+    assert!(ed.grid_has_the_pane());
+    assert_eq!(ed.layout(), Layout::Vertical, "{}", ed.status());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **A resumed session draws its csv windows as grids** before the keys
+/// have been in them.
+#[test]
+fn resumed_csv_windows_come_back_as_grids() {
+    let dir = tmp().join(format!("yumete-grid-resume-{}", std::process::id()));
+    let work = dir.join("work");
+    let data = dir.join("data");
+    std::fs::create_dir_all(&work).unwrap();
+    std::fs::create_dir_all(&data).unwrap();
+    let list = work.join("list.csv");
+    let notes = work.join("notes.md");
+    std::fs::write(&list, "name,qty\napple,3\npear,12\n").unwrap();
+    std::fs::write(&notes, "Plain words.\nMore plain words.\n").unwrap();
+    let fresh = || {
+        let mut ed = Editor::new();
+        ed.knows_its_paths(dir.join("config"), data.clone());
+        ed.keep_session_in(data.join("sessions"), &work);
+        ed
+    };
+    let mut ed = fresh();
+    ed.open_file(&list).unwrap();
+    ed.on_key(Key::Char('j'));
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('v'));
+    ed.execute(&format!(":open {}", notes.display())).unwrap();
+    ed.save_session();
+
+    let mut back = fresh();
+    assert!(back.restore_session() > 0);
+    back.restore_windows();
+    assert_eq!(back.current_buffer().path(), Some(notes.as_path()), "the keys where they were");
+    assert!(back.table().is_none());
+    let csv = the_other_window(&back);
+    {
+        let _look = back.view_pane(back.pane_of(csv).unwrap());
+        assert!(back.grid_has_the_pane(), "the csv window is drawn as its grid");
+        assert_eq!(back.cell_position(), Some((2, 0)), "on the row it was left on");
+    }
+    back.on_key(Key::Ctrl('w'));
+    back.on_key(Key::Char('w'));
+    assert!(back.grid_has_the_pane());
+    assert_eq!(back.cell_position(), Some((2, 0)));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// **`:genda-top-working` counts what `:word-discover-working` reads**: the
 /// text files under the working directory, hidden and ignored ones left out,
 /// and opens the page on the most frequent 漢字.

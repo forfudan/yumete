@@ -405,6 +405,7 @@ impl Editor {
             seen: vec![preview],
             preview: false,
             half_page: None,
+            table: super::PaneTable::Kept { view: None, turned: false },
         });
         Some(fresh)
     }

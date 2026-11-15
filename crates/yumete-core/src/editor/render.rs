@@ -966,7 +966,7 @@ impl Editor {
     /// standing on a row of it: how a cell is *drawn* is a preference about
     /// the view, and a reader who has scrolled off the rows still owns it.
     pub(super) fn the_pane_is_on(&self) -> bool {
-        self.table.as_ref().is_some_and(|view| view.takes_the_pane())
+        self.table().is_some_and(|view| view.takes_the_pane())
     }
 
     /// Whether the cap bites where the reader is standing.
@@ -1030,7 +1030,7 @@ impl Editor {
     /// a table quoted in a code block is writing *about* a table.
     pub(super) fn wall_here(&self, line: usize) -> Option<crate::mdtable::Wall> {
         if let Some(crate::editor::Separator::Delimiter(c)) =
-            self.table.as_ref().map(|view| view.separator)
+            self.table().map(|view| view.separator)
         {
             return self
                 .table_lines_at(line)

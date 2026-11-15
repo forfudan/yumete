@@ -25,6 +25,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Changed
 
+- **A table is how its window shows the file**: a `.csv`/`.tsv` grid or a `Space t t` table stays a grid, with its own columns, header, scroll and cell, when the keys go to another window, and comes back on the same cell and layer. Two windows on one csv keep their own place, and `ye -r` brings csv windows back as grids. Moving from one csv window to another no longer leaves the first drawn as source with the other table's column ruler and padding.
 - **`:outline` opens and closes the outline sidebar**, as `:sidebar-outline` does; `:out` and `:ou` work too. How many heading levels it lists moves to `:sidebar-outline-level N` (`0` closes it, bare reports), and `:sidebar-outline` takes `:outline`'s place among the everyday commands at the top of the `:` menu.
 - **Windows without the keys are no longer faded by default** (`[theme] inactive` = 100): every window's status line already says which one has them.
 - **Each window has its own status line**, at its foot. The window with the keys shows the full readout; the others show their file name, `[+]` and lock in faded ink, or a thin rule with `[editor] inactive_status = "rule"`. Stacked windows share no rule row, previews lose their frame for a status line, and sidebars reach the command line. The readout is the code point alone. `2/5` (selections), `[CRLF]` and `[3/17]` (search match) appear when they apply. Pending keys, `@q` and `[preview]` move to the command line's right end.

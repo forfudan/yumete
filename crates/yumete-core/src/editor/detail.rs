@@ -139,7 +139,7 @@ impl Editor {
     /// Not the header and not the `|---|` — neither is a row, and both would
     /// otherwise be shown as one with every field empty.
     fn in_a_table_row(&self) -> bool {
-        let Some(view) = self.table.as_ref() else {
+        let Some(view) = self.table() else {
             return false;
         };
         let line = self.cursor_line();
@@ -164,7 +164,7 @@ impl Editor {
     /// row that is actually above the cursor.
     pub(super) fn schema_here(&self) -> Option<std::borrow::Cow<'_, crate::table::Schema>> {
         use std::borrow::Cow;
-        let view = self.table.as_ref()?;
+        let view = self.table()?;
         match view.bounds {
             // **Only a `|` table has a header to read back.** A guessed block
             // is walked out afresh every time the cursor enters one
@@ -612,7 +612,7 @@ impl Editor {
 
     /// What a table row is, field by field.
     fn row_detail(&self) -> Option<Detail> {
-        let view = self.table.as_ref()?;
+        let view = self.table()?;
         let schema = self.schema_here()?;
         let (line, cell) = self.cell_position()?;
         // The header names the columns; it is not a row and has no fields.
@@ -705,7 +705,7 @@ impl Editor {
     /// for it**: any cell outside the key column is
     /// read this way, since the key column's own cell *is* its row.
     fn cell_links(&self) -> Vec<(char, Option<usize>)> {
-        let Some(view) = &self.table else {
+        let Some(view) = self.table() else {
             return Vec::new();
         };
         let Some(key) = view.schema.key.as_deref() else {
