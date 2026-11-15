@@ -30565,7 +30565,7 @@ fn the_file_report_says_what_this_file_is() {
     ed.set_root(&dir);
     ed.open_file(&file).unwrap();
 
-    let page = ed.file_report(Some("marksman（在跑）".into()));
+    let page = ed.file_report(Some("marksman（在跑）".into()), true);
     for want in [
         &say!("file.title"),
         &say!("file.where"),
@@ -30584,12 +30584,12 @@ fn the_file_report_says_what_this_file_is() {
     let (han, _, _) = ed.counts_of(&ed.current_buffer().rope().to_string());
     assert!(page.contains(&format!("| {} | {han} |", say!("file.han"))), "{page}");
     // 没有服務器的時候那一行整個不寫，而不是寫一個空格。
-    let bare = ed.file_report(None);
+    let bare = ed.file_report(None, false);
     assert!(!bare.contains(&say!("file.servers")), "{bare}");
 
     // **還没存過的草稿**：位置和大小都說「還没存過」，不說一個假路徑。
     let draft = Editor::new();
-    let page = draft.file_report(None);
+    let page = draft.file_report(None, false);
     assert_eq!(page.matches(&say!("file.never-saved")).count(), 2, "{page}");
 
     std::fs::remove_dir_all(&dir).ok();
@@ -30615,10 +30615,17 @@ fn the_file_report_counts_the_diagnostics_beside_the_servers() {
     };
 
     // No server in question and nothing said: no row.
-    assert_eq!(row(&ed.file_report(None)), None);
+    assert_eq!(row(&ed.file_report(None, false)), None);
     // A server, a clean file: the row says so in numbers.
-    let clean = row(&ed.file_report(Some("srv (running)".into())));
+    let clean = row(&ed.file_report(Some("srv (running)".into()), true));
     assert_eq!(clean, Some(format!("| {} | {} |", say!("file.problems"), say!("file.problem-counts", 0, 0, 0))));
+    // A server that was not found checked nothing: no zeros for it.
+    let missing = ed.file_report(Some("not found".into()), false);
+    assert!(missing.contains("not found") && row(&missing).is_none(), "{missing}");
+    // **No empty heading**: the table's first row is a real one.
+    let lines: Vec<&str> = missing.lines().filter(|l| l.starts_with('|')).collect();
+    assert!(lines[0].starts_with(&format!("| {} |", say!("file.where"))), "{missing}");
+    assert_eq!(lines[1], "| --- | --- |");
 
     let path = ed.current_buffer().path().unwrap().to_path_buf();
     let one = |line, severity| Problem {
@@ -30636,7 +30643,7 @@ fn the_file_report_counts_the_diagnostics_beside_the_servers() {
     );
     assert_eq!(ed.problem_counts(), [1, 2, 2]);
     // Said even with no server row: the diagnostics are there to count.
-    let counted = row(&ed.file_report(None));
+    let counted = row(&ed.file_report(None, false));
     assert_eq!(counted, Some(format!("| {} | {} |", say!("file.problems"), say!("file.problem-counts", 1, 2, 2))));
 
     std::fs::remove_dir_all(&dir).ok();
@@ -40784,6 +40791,64 @@ fn wbc_saves_then_closes() {
     ed.on_key(Key::Esc);
     assert!(matches!(ed.execute(":wbc"), Err(EditorError::NoFileName)));
     assert_eq!(ed.current_buffer().text(), "乙");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **`:wbc path` writes the buffer under that path and closes it**, as
+/// helix's does: the file on disk has the text, the buffer is gone, and its
+/// own file is left as it was. A path that is already a file is refused
+/// without `!`, and nothing closes.
+#[test]
+fn wbc_with_a_path_writes_there_and_closes() {
+    let dir = tmp().join(format!("yumete-wbc-path-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("one.md");
+    std::fs::write(&file, "one\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    ed.current_buffer_mut().insert(0, "zero ").unwrap();
+    ed.execute(":new").unwrap();
+    ed.execute(":bp").unwrap();
+    let there = dir.join("two.md");
+    std::fs::write(&there, "taken\n").unwrap();
+    assert!(ed.execute(&format!(":wbc {}", there.display())).is_err());
+    assert_eq!(ed.buffers.len(), 2, "a refused write closes nothing");
+    std::fs::remove_file(&there).unwrap();
+    ed.execute(&format!(":wbc {}", there.display())).unwrap();
+    assert_eq!(std::fs::read_to_string(&there).unwrap(), "zero one\n");
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), "one\n", "its own file is untouched");
+    assert_eq!(ed.buffers.len(), 1, "closed after the write");
+    // Its own path, spelled out: an ordinary save, then closed.
+    ed.open_file(&file).unwrap();
+    ed.current_buffer_mut().insert(0, "again ").unwrap();
+    ed.execute(&format!(":wbc {}", file.display())).unwrap();
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), "again one\n");
+    assert!(ed.buffers.iter().all(|b| b.path() != Some(file.as_path())));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **`:bco` closes the windows whose files it closed**, as helix's does: a
+/// window opened on a file by `:vsplit path` has shown nothing else, so it
+/// goes with the file rather than turning into a second view of this one.
+#[test]
+fn bco_closes_the_window_of_a_file_opened_in_a_split() {
+    let dir = tmp().join(format!("yumete-bco-split-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let a = dir.join("a.txt");
+    let b = dir.join("b.txt");
+    std::fs::write(&a, "alpha\n").unwrap();
+    std::fs::write(&b, "beta\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&a).unwrap();
+    ed.execute(&format!(":vsplit {}", b.display())).unwrap();
+    assert_eq!(ed.windows().leaves().len(), 2);
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('h'));
+    assert_eq!(ed.current_buffer().path(), Some(a.as_path()));
+    ed.execute(":bco").unwrap();
+    assert_eq!(ed.buffers.len(), 1);
+    assert_eq!(ed.windows().leaves().len(), 1, "b's window went with b");
+    assert_eq!(ed.current_buffer().path(), Some(a.as_path()));
     let _ = std::fs::remove_dir_all(&dir);
 }
 

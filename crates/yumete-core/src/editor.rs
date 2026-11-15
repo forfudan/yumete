@@ -3713,6 +3713,9 @@ pub struct Editor {
     /// **The value line takes keys as they are, no IME**: the
     /// settings panel's `:` line, a command as the editor's own `:` is.
     value_plain: bool,
+    /// **The value line is a search through text**, so it opens in whatever
+    /// 中/英 the writer was in, as `/` does, rather than in 英.
+    value_keeps_language: bool,
     /// The value typed, handed back: `Some(text)` on Enter, `None` on Esc.
     value_answer: Option<Option<String>>,
     /// How many half-width characters share a slot in vertical layout (緃中横);
@@ -4833,6 +4836,7 @@ impl Editor {
             ruby_target: None,
             value_label: String::new(),
             value_plain: false,
+            value_keeps_language: false,
             value_answer: None,
             completion: None,
             reference: None,

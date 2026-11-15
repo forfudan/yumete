@@ -191,6 +191,12 @@ zhs = "[中 {0}]"
 en = "[中 {0}]"
 
 [[message]]
+# 狀態欄窄得放不下方案名時的中文標記（草稿）
+key = "ime.chinese-tag-bare"
+zhs = "[中]"
+en = "[中]"
+
+[[message]]
 # 整句字集軌：common 那一軌的名字（宇夢的字串）
 key = "ime.lane.common"
 zhs = "常用繁简汉字"

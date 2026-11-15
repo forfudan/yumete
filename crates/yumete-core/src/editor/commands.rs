@@ -717,6 +717,11 @@ impl Editor {
                     return Ok(CommandOutcome::Continue);
                 }
                 if let Some(file) = file {
+                    // **A window opened on a file has shown only that file**,
+                    // as helix's `:vsplit path`: closing the file closes the
+                    // window rather than turning it into a second view of the
+                    // one it was split from.
+                    self.seen_here.clear();
                     self.open_file(self.here_path(file.as_ref())).map_err(EditorError::Io)?;
                 }
                 Ok(CommandOutcome::Continue)
@@ -778,10 +783,26 @@ impl Editor {
                 self.status = say!("preview.nothing-to-write");
                 Ok(CommandOutcome::Continue)
             }
+            // **With a path, the buffer is written under it and closed**, as
+            // helix's `:wbc path`: the file it is written to becomes its own,
+            // the way `:write-as` makes it, so nothing is left unsaved when it
+            // goes. A refusal or a question asked first leaves it open.
+            Command::WriteBufferClose { path: Some(path), force }
+                if self.buffer_holding(&self.here_path(&path)) != Some(self.current) =>
+            {
+                self.write_as(&path, force)?;
+                let target = self.here_path(&path);
+                let written = self.query.is_none()
+                    && !self.current_buffer().is_modified()
+                    && self.current_buffer().path().is_some_and(|p| p == target);
+                match written {
+                    true => self.close_buffer(false),
+                    false => Ok(CommandOutcome::Continue),
+                }
+            }
             Command::WriteBufferClose { path, force } => {
                 // Only a save of the buffer's own file closes it: a question
-                // asked first leaves it open to be answered, and a copy written
-                // elsewhere (`:w path` is a copy here) leaves its changes unsaved.
+                // asked first leaves it open to be answered.
                 match self.write_forcing(path.as_deref(), force)? {
                     Wrote::Saved if !self.current_buffer().is_modified() => self.close_buffer(false),
                     _ => Ok(CommandOutcome::Continue),

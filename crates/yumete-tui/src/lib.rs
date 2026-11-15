@@ -923,7 +923,12 @@ pub fn run(
             // would keep the composition running, and give nothing back on
             // the way out either.
             if ime.available() {
-                let door = borrowed.crossing(last_mode.map(|(m, _)| m), mode, ime.is_chinese());
+                let door = borrowed.crossing_into(
+                    last_mode.map(|(m, _)| m),
+                    mode,
+                    editor.prompt_opens_in_english(),
+                    ime.is_chinese(),
+                );
                 if door.escape && ime.is_composing() {
                     ime.escape();
                 }
@@ -1344,8 +1349,9 @@ pub fn run(
         // 行只有前端知道。擺在 `follow` 後面：剛打開的那一份要先起得了服務器，
         // 這一行纔不是空的。
         if editor.take_file_info_request() {
-            let said = standing_in_words(&servers.standing(editor, config));
-            let report = editor.file_report(said);
+            let standing = servers.standing(editor, config);
+            let checking = matches!(standing, crate::server::Standing::Serving(_));
+            let report = editor.file_report(standing_in_words(&standing), checking);
             editor.open_report(&say!("file.title"), &report);
             editor.set_status(say!("file.opened"));
         }
@@ -2616,13 +2622,22 @@ struct AtTheDoor {
 }
 
 impl Borrow {
-    /// Crossing out of `was` into `now`, with the engine in `chinese`.
+    /// `crossing_into`, the mode alone saying whether the line opens in 英.
+    #[cfg(test)]
+    fn crossing(&mut self, was: Option<Mode>, now: Mode, chinese: bool) -> AtTheDoor {
+        self.crossing_into(was, now, now.prompt_opens_in_english(), chinese)
+    }
+
+    /// Crossing out of `was` into `now`, with the engine in `chinese`, and
+    /// `english` when the line crossed into opens in 英 — the editor's
+    /// answer, since one kind of value line is a search through text and
+    /// keeps the language ([`Editor::prompt_opens_in_english`]).
     ///
     /// `:` and `::` are **one** prompt for this purpose (Feature #224):
     /// stepping between them is not leaving the command line, and handing
     /// Insert its language back on the way *in* to `::` would put 中文 on a
     /// line that is about to be typed in 英.
-    fn crossing(&mut self, was: Option<Mode>, now: Mode, chinese: bool) -> AtTheDoor {
+    fn crossing_into(&mut self, was: Option<Mode>, now: Mode, english: bool, chinese: bool) -> AtTheDoor {
         let was_prompt = was.is_some_and(Mode::is_prompt);
         if was_prompt && !now.is_prompt() {
             // Only one way round: a prompt opened from 英, during which
@@ -2640,7 +2655,7 @@ impl Borrow {
             self.owed = Some(chinese);
             return AtTheDoor {
                 escape: true,
-                toggle: now.prompt_opens_in_english() && chinese,
+                toggle: english && chinese,
             };
         }
         AtTheDoor::default()
@@ -14900,12 +14915,15 @@ fn server_cell(cell: ServerCell, ink: crate::theme::Palette, bar: Style) -> Span
 
 /// What a status line keeps, worked down field by field as the window
 /// narrows ([`ordinary_status`]).
+#[derive(Clone)]
 struct Kept {
     search: bool,
     preview: bool,
     count: bool,
     gap: usize,
     ime: bool,
+    /// The scheme's name inside the language tag: `[中 靈明]` or `[中]`.
+    scheme: bool,
     /// Which of the right end's lengths is shown; past the last, none.
     right: usize,
     zi: bool,
@@ -14919,6 +14937,19 @@ struct Kept {
     position: bool,
 }
 
+impl Kept {
+    /// These fields, with whatever one step took between `before` and
+    /// `after` given back as `before` had it.
+    fn given_back(&self, before: &Kept, after: &Kept) -> Kept {
+        let mut k = self.clone();
+        macro_rules! back {
+            ($($f:ident),*) => {$(if before.$f != after.$f { k.$f = before.$f; })*};
+        }
+        back!(search, preview, count, gap, ime, scheme, right, zi, locks, which, name, recording, selections, dirty, position);
+        k
+    }
+}
+
 /// The ordinary line of the window with the keys: the line, the mode word
 /// it starts with, and what goes at its right end.
 ///
@@ -14927,10 +14958,20 @@ struct Kept {
 /// `long.csv   Ln 1, Col 1` at twenty columns into `long.c`, losing the
 /// position first — the one thing the status line exists to answer (#394).
 /// From the first to go to the last: the search index, `[preview]`, the
-/// count, the spaces before the position, the language tag, the code point,
-/// the position's 字, the encoding and the other marks of the file, `[n/total]`,
-/// the file name (cut from the left, its extension kept), the recording mark,
-/// the selections, `[+]`, the position — and the mode never.
+/// count, the spaces before the position, the code point, the position's 字,
+/// the scheme's name in the language tag (`[中 靈明]` becomes `[中]`), the
+/// encoding and the other marks of the file, `[n/total]`, the file name (cut
+/// from the left, its extension kept), the recording mark, the selections,
+/// `[+]`, the position, the language tag itself — and the mode never.
+///
+/// **The language tag is the last field to go** because its absence is a
+/// statement of its own: no tag means the input method is off, and a letter
+/// typed next will land as itself. A tag dropped for room would say that
+/// falsely.
+///
+/// **Then whatever fits again comes back**: a field taken away early for
+/// room that a later step freed is put back, cheapest last, so the line never
+/// shows blank cells while something it could have said is missing.
 fn ordinary_status(
     editor: &Editor,
     config: &Config,
@@ -14976,6 +15017,10 @@ fn ordinary_status(
     let ime_tag = match standing_language_tag(ime).as_str() {
         "" => String::new(),
         tag => format!("{tag} "),
+    };
+    let ime_bare = match ime.available() && ime.engaged() && ime.is_chinese() {
+        true => format!("{} ", say!("ime.chinese-tag-bare")),
+        false => ime_tag.clone(),
     };
     // With more than one file open, say which — unless the tab bar is up,
     // which says it better and already says it.
@@ -15034,9 +15079,14 @@ fn ordinary_status(
     // 這一類當場退回行內搜索的話就得在這裏說。那一行空着的時候照舊歸它說，
     // 不會說兩遍。
     let taken = command_row && editor.prompt().is_none();
+    // Fitted beforehand to what is left when every field but the mode and
+    // the language tag has given way, so a long one never takes those two.
     let message = match taken || editor.status().is_empty() {
         true => String::new(),
-        false => editor.status().to_string(),
+        false => {
+            let floor = yumete_cjk::str_width(&mode_field) + yumete_cjk::str_width(&ime_bare) + 3 + 2;
+            fit_said(editor.status(), (status_area.width as usize).saturating_sub(floor))
+        }
     };
     // **What has been typed so far** stands at the command row's right end,
     // where vim's showcmd and helix put it; with no command row it is here,
@@ -15061,7 +15111,7 @@ fn ordinary_status(
         let mut left = String::new();
         left.push_str(&mode_field);
         if k.ime {
-            left.push_str(&ime_tag);
+            left.push_str(if k.scheme { &ime_tag } else { &ime_bare });
         }
         left.push_str(&name);
         if k.dirty {
@@ -15132,6 +15182,7 @@ fn ordinary_status(
         count: true,
         gap: 3,
         ime: true,
+        scheme: true,
         right: 0,
         zi: true,
         locks: true,
@@ -15142,13 +15193,15 @@ fn ordinary_status(
         dirty: true,
         position: true,
     };
-    let line = loop {
+    let mut taken: Vec<Kept> = Vec::new();
+    let mut line = loop {
         let line = build(&k);
         if fits(&k, &line) {
             break line;
         }
         // Each step takes one thing away, the cheapest first; a step that
         // has nothing left to take passes to the next.
+        let before = k.clone();
         if k.search && !search.is_empty() {
             k.search = false;
         } else if k.preview && !preview.is_empty() {
@@ -15159,8 +15212,6 @@ fn ordinary_status(
             // **The gap goes before the writing does.** One column over is
             // not a reason to lose `[20/20]` whole.
             k.gap = 1;
-        } else if k.ime && !ime_tag.is_empty() {
-            k.ime = false;
         } else if k.right < right.len() && !right.iter().all(String::is_empty) {
             k.right += 1;
         } else if k.zi && position_full != position_bare {
@@ -15168,6 +15219,10 @@ fn ordinary_status(
             // number of three, and the other two are what the status line
             // exists to answer; a name or a `[3/20]` is worth more than it.
             k.zi = false;
+        } else if k.scheme && ime_tag != ime_bare {
+            // `[中]` still says what the next letter does; which scheme
+            // will take it is the part a narrow window can spare.
+            k.scheme = false;
         } else if k.locks && !locks.is_empty() {
             k.locks = false;
         } else if k.which && !which.is_empty() {
@@ -15185,14 +15240,137 @@ fn ordinary_status(
             // Warning: **一句話贏過位置。** 位置一直在那裏，剛發生
             // 的事只說一次——擺不下時把話截一半，截掉的恰恰是它要說的那一半。
             k.position = false;
+        } else if k.ime && !ime_tag.is_empty() {
+            k.ime = false;
         } else {
             // The mode is the floor; below it the terminal is too narrow for
             // anything and the renderer's own cut answers.
             break line;
         }
+        taken.push(before);
     };
+    // **What a later step made room for comes back**, the dearest first:
+    // each state the loop left behind differs from the next by one field,
+    // so putting that one field back on the line as it stands is a single
+    // try, kept when it fits.
+    let afters: Vec<Kept> = taken.iter().skip(1).cloned().chain(std::iter::once(k.clone())).collect();
+    for (before, after) in taken.iter().zip(&afters).rev().skip(1) {
+        let tried = k.given_back(before, after);
+        let built = build(&tried);
+        if fits(&tried, &built) {
+            k = tried;
+            line = built;
+        }
+    }
     let tail = tail(&k, &line).unwrap_or_default();
     (line, mode, tail)
+}
+
+/// **Something said, fitted to `room` cells with its point kept** — the one
+/// place every message on the command row and the status line is fitted.
+///
+/// A path is what a message has least to lose in: it is long, and its point
+/// is its last name. So paths are shortened first, **in the middle**, each
+/// down to `…/book.pdf` at the least (`/private/var/…/export-d4/book.pdf`),
+/// the widest first; the sentence around them is left whole. Only when that
+/// is not enough is the end cut, and the cut is said with a `…` rather than
+/// left to look like the whole of it.
+fn fit_said(text: &str, room: usize) -> String {
+    let mut said = text.to_string();
+    loop {
+        let over = yumete_cjk::str_width(&said).saturating_sub(room);
+        if over == 0 {
+            return said;
+        }
+        let widest = paths_in(&said)
+            .into_iter()
+            .map(|(at, path)| (at, path, path_floor(path)))
+            .filter(|&(_, path, floor)| yumete_cjk::str_width(path) > floor)
+            .max_by_key(|&(_, path, floor)| yumete_cjk::str_width(path) - floor);
+        let Some((at, path, floor)) = widest else { break };
+        let wide = yumete_cjk::str_width(path);
+        let short = shorten_path(path, wide.saturating_sub(over).max(floor));
+        said = format!("{}{short}{}", &said[..at], &said[at + path.len()..]);
+    }
+    if room == 0 {
+        return String::new();
+    }
+    let mut kept = String::new();
+    let mut wide = 0;
+    for g in yumete_cjk::graphemes(&said) {
+        let w = yumete_cjk::grapheme_width(g);
+        if wide + w + 1 > room {
+            break;
+        }
+        wide += w;
+        kept.push_str(g);
+    }
+    format!("{}…", kept.trim_end())
+}
+
+/// The paths in a message, by byte offset: a run without spaces, its
+/// quotes and closing punctuation taken off, that starts at a root (`/`,
+/// `~`, `.`) or has two slashes in it — so `up/down` is not one.
+fn paths_in(said: &str) -> Vec<(usize, &str)> {
+    let mut found = Vec::new();
+    let mut at = 0;
+    for word in said.split(' ') {
+        let start = at;
+        at += word.len() + 1;
+        let open: &[char] = &['\'', '"', '`', '(', '「', '『', '‘', '“'];
+        let close: &[char] = &['\'', '"', '`', ')', '」', '』', '’', '”', ',', '.', ':', ';', '，', '。', '：', '；'];
+        let bare = word.trim_start_matches(open);
+        let lead = word.len() - bare.len();
+        let bare = bare.trim_end_matches(close);
+        let rooted = bare.starts_with('/') || bare.starts_with("~/") || bare.starts_with("./") || bare.starts_with("../");
+        if bare.contains('/') && (rooted || bare.matches('/').count() >= 2) {
+            found.push((start + lead, bare));
+        }
+    }
+    found
+}
+
+/// How far [`shorten_path`] may take a path: `…/` and its last name.
+fn path_floor(path: &str) -> usize {
+    let last = path.trim_end_matches('/').rsplit('/').next().unwrap_or(path);
+    yumete_cjk::str_width(last) + 2
+}
+
+/// A path cut to `room` cells **in the middle**: the folder it starts from,
+/// `…`, and the end — its last name whole, and as much of the folders just
+/// above it as fits, since those say which copy of the file it is.
+fn shorten_path(path: &str, room: usize) -> String {
+    if yumete_cjk::str_width(path) <= room {
+        return path.to_string();
+    }
+    let parts: Vec<&str> = yumete_cjk::graphemes(path).collect();
+    let floor = path_floor(path);
+    // A third of what is spare goes to the head, the rest to the tail.
+    let spare = room.saturating_sub(floor);
+    let head_room = spare / 3;
+    let mut head = String::new();
+    let mut head_wide = 0;
+    for g in &parts {
+        let w = yumete_cjk::grapheme_width(g);
+        if head_wide + w > head_room {
+            break;
+        }
+        head_wide += w;
+        head.push_str(g);
+    }
+    let tail_room = room.saturating_sub(head_wide + 1);
+    let mut tail: Vec<&str> = Vec::new();
+    let mut tail_wide = 0;
+    for g in parts.iter().rev() {
+        let w = yumete_cjk::grapheme_width(g);
+        if tail_wide + w > tail_room {
+            break;
+        }
+        tail_wide += w;
+        tail.push(g);
+    }
+    tail.reverse();
+    format!("{head}…{}", tail.concat())
 }
 
 /// **A file name cut to `room` cells from the left, its extension kept**:
@@ -15957,7 +16135,10 @@ fn draw_command(
     };
     match editor.hint() {
         Hint::Quiet => {}
-        Hint::Says(text) => put(&text, news, &mut x),
+        Hint::Says(text) => {
+            let room = right.saturating_sub(x) as usize;
+            put(&fit_said(&text, room), news, &mut x)
+        }
         // **The panel has this.** A row holds four keys and `空格` has
         // fourteen, so a half-pressed sequence is drawn as a list you can read
         // down; the row keeps what it is for — what just happened.
@@ -17472,6 +17653,61 @@ fn squeezed(text: &str) -> String {
         let quiet = (other.x..other.x + other.width).map(|x| at(&buffer, x, other.y)).collect::<String>();
         assert!(quiet.contains("[+]"), "{quiet:?}");
         assert!(quiet.trim_start().starts_with("[scr") || quiet.trim_start().starts_with('…'), "{quiet:?}");
+    }
+
+    /// **A long message keeps its point**: a path in it is shortened in the
+    /// middle, its file name whole, and the sentence after it survives; what
+    /// still does not fit is cut at the end with a `…`, never silently.
+    #[test]
+    fn a_long_message_shortens_its_path_before_its_sentence() {
+        let path = "/private/var/folders/zr/somewhere/deep/a-long-folder-name/book.pdf";
+        let said = format!("{path} already exists; `:export-as-preview!` overwrites it");
+        assert_eq!(fit_said(&said, 200), said, "room enough: as it is");
+        let fitted = fit_said(&said, 80);
+        assert!(yumete_cjk::str_width(&fitted) <= 80, "{fitted:?}");
+        assert!(fitted.starts_with("/priv"), "where it starts from: {fitted:?}");
+        assert!(fitted.contains("…") && fitted.contains("/book.pdf already exists"), "{fitted:?}");
+        assert!(fitted.ends_with("overwrites it"), "the sentence is whole: {fitted:?}");
+        let quoted = format!("exported `{path}`");
+        let fitted = fit_said(&quoted, 40);
+        assert!(fitted.ends_with("/book.pdf`") && yumete_cjk::str_width(&fitted) <= 40, "{fitted:?}");
+        // `up/down` is not a path: nothing to shorten, so the end is cut.
+        let plain = "jk up/down, hl list, / search, d delete, u put back, q close";
+        let fitted = fit_said(plain, 30);
+        assert!(fitted.contains("up/down") && fitted.ends_with('…'), "{fitted:?}");
+        assert!(yumete_cjk::str_width(&fitted) <= 30, "{fitted:?}");
+        // On the command row, through the editor.
+        let mut editor = editor_with("");
+        editor.set_status(said.clone());
+        let row = command_line(&render(&editor, &Config::default(), 80, 6));
+        assert!(row.trim_end().ends_with("overwrites it"), "{row:?}");
+    }
+
+    /// **The language tag outlasts every field but the mode**, the scheme's
+    /// name going first (`[中]`), and nothing taken away for room leaves
+    /// blank cells behind: a line without its code point has no run of
+    /// spaces the code point would have fitted into.
+    #[test]
+    fn the_language_tag_is_the_last_field_to_give_way() {
+        let config = Config::default();
+        let mut editor = editor_with("筆記本\n");
+        editor.on_key(Key::Up);
+        let ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八\n");
+        let mut bare = false;
+        for w in 14..=90u16 {
+            let line = status_line(&render_with(&editor, &config, &ime, w, 6));
+            let line = line.trim_end();
+            assert!(line.contains("[中"), "{w} columns: the tag went: {line:?}");
+            bare |= line.contains("[中]");
+            if !line.contains("U+") && line.contains("1, ") {
+                let run = line.split(|c| c != ' ').map(str::len).max().unwrap_or(0);
+                assert!(run < "U+7B46".len() + 3, "{w} columns: room left blank: {line:?}");
+            }
+            if line.contains("[中]") {
+                assert!(!line.contains("U+") && !line.contains("字 1"), "{w}: the name went before these: {line:?}");
+            }
+        }
+        assert!(bare, "some width shows the tag without the scheme's name");
     }
 
     /// **`inactive_status = "rule"`**: the other window draws a thin rule
@@ -27447,13 +27683,14 @@ fn squeezed(text: &str) -> String {
         let buffer = render_with(&editor, &config, &ime, 90, 10);
         assert!(row(&buffer, 90).contains("U+51AC"), "冬");
 
-        // A narrow line gives up the count, then the language tag, before the
-        // code point, and the position readout is never squeezed.
+        // A narrow line gives up the count, then the code point, before the
+        // language tag says less, and the position readout is never squeezed.
         for width in 44u16..=90 {
             let line = row(&render_with(&editor, &config, &ime, width, 10), width);
-            if line.contains("靈") {
-                assert!(line.contains("U+51AC"), "{width}: the tag goes before the code point: {line:?}");
+            if line.contains("U+51AC") {
+                assert!(line.contains("靈"), "{width}: the code point goes before the tag: {line:?}");
             }
+            assert!(line.contains("[中"), "{width}: the tag stays: {line:?}");
             if line.contains("U+51AC") {
                 assert!(squeezed(&line).contains("行 1, 列 5"), "{width}: position kept: {line:?}");
             }

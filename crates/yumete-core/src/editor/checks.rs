@@ -433,15 +433,13 @@ impl Editor {
             .find(|p| p.is_file());
         let data = self.where_data.clone();
         let mut out = format!("# {} {}\n\n", say!("version.title"), self.build);
-        out.push_str("| | |\n| --- | --- |\n");
-        let mut row = |name: String, what: String| {
-            out.push_str(&format!("| {name} | {what} |\n"));
-        };
-        row(say!("version.keymap"), self.key_preset().name().to_string());
-        row(say!("version.config-global"), shown(global));
-        row(say!("version.config-local"), shown(local));
-        row(say!("version.data"), shown(data.clone()));
-        row(say!("version.log"), shown(data.map(|d| d.join("yumete.log"))));
+        out.push_str(&super::files::name_value_table(&[
+            (say!("version.keymap"), self.key_preset().name().to_string()),
+            (say!("version.config-global"), shown(global)),
+            (say!("version.config-local"), shown(local)),
+            (say!("version.data"), shown(data.clone())),
+            (say!("version.log"), shown(data.map(|d| d.join("yumete.log")))),
+        ]));
         self.show_listing(out, say!("version.title"));
     }
 

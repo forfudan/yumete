@@ -186,7 +186,7 @@ impl Editor {
         std::mem::take(&mut self.file_info_request)
     }
 
-    pub fn file_report(&self, servers: Option<String>) -> String {
+    pub fn file_report(&self, servers: Option<String>, checking: bool) -> String {
         let buffer = self.current_buffer();
         let path = buffer.path().map(|p| p.to_path_buf());
         let text = buffer.rope().to_string();
@@ -196,10 +196,8 @@ impl Editor {
             false => say!("file.no"),
         };
         let mut out = format!("# {}  {}\n\n", say!("file.title"), buffer.display_name());
-        out.push_str("| | |\n| --- | --- |\n");
-        let mut row = |name: String, what: String| {
-            out.push_str(&format!("| {name} | {what} |\n"));
-        };
+        let mut rows: Vec<(String, String)> = Vec::new();
+        let mut row = |name: String, what: String| rows.push((name, what));
         match &path {
             Some(path) => row(say!("file.where"), format!("`{}`", path.display())),
             None => row(say!("file.where"), say!("file.never-saved")),
@@ -236,16 +234,18 @@ impl Editor {
         row(say!("file.root"), format!("`{}`", self.project_root().display()));
         // The diagnostics beside the servers that said them: the same three
         // numbers the status line's cell is drawn from. Said whenever a server
-        // is in question or anything has been said, so a clean file under a
-        // running server reads 「0, 0, 0」 rather than nothing.
+        // is `checking` the file or anything has been said, so a clean file
+        // under a running server reads 「0, 0, 0」 rather than nothing — and a
+        // server that was not found, having checked nothing, gets no zeros.
         let [errors, warnings, info] = self.problem_counts();
         let counted = errors + warnings + info > 0;
         if let Some(servers) = servers {
             row(say!("file.servers"), servers);
-            row(say!("file.problems"), say!("file.problem-counts", errors, warnings, info));
-        } else if counted {
+        }
+        if checking || counted {
             row(say!("file.problems"), say!("file.problem-counts", errors, warnings, info));
         }
+        out.push_str(&name_value_table(&rows));
         out
     }
 
@@ -2694,6 +2694,20 @@ impl Editor {
         self.status = say!("encoding.forgot", path.display(), crate::encoding::name(encoding));
         None
     }
+}
+
+/// **Names and values as a Markdown table, with no empty heading**: the
+/// first pair is the heading row. A table with nothing to head its columns
+/// would otherwise begin with a blank row and a rule under it.
+pub(super) fn name_value_table(rows: &[(String, String)]) -> String {
+    let mut out = String::new();
+    for (i, (name, what)) in rows.iter().enumerate() {
+        out.push_str(&format!("| {name} | {what} |\n"));
+        if i == 0 {
+            out.push_str("| --- | --- |\n");
+        }
+    }
+    out
 }
 
 #[cfg(test)]

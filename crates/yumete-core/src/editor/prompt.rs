@@ -1040,6 +1040,25 @@ impl Editor {
         self.open_line_for_a_value(label, text, false);
     }
 
+    /// **The command row for a search through text** a front end takes —
+    /// the words page's `/`: [`Editor::open_value_line`], opened in the
+    /// language the writer was in, as the editor's own `/` is, because what
+    /// it looks for is Chinese as often as not.
+    pub fn open_value_search_line(&mut self, label: &str, text: &str) {
+        self.open_line_for_a_value(label, text, false);
+        self.value_keeps_language = true;
+    }
+
+    /// Whether the line open now starts in 英 rather than in the language
+    /// it was opened from ([`Mode::prompt_opens_in_english`], and the value
+    /// line by which kind it is).
+    pub fn prompt_opens_in_english(&self) -> bool {
+        match self.mode {
+            Mode::Value => !self.value_keeps_language,
+            mode => mode.prompt_opens_in_english(),
+        }
+    }
+
     /// **The command row for a command a front end takes**, so the settings
     /// panel's `:` line does not compose `q` with the IME:
     /// [`Editor::open_value_line`], but keys go in as they are, as on the
@@ -1055,6 +1074,7 @@ impl Editor {
 
     fn open_line_for_a_value(&mut self, label: &str, text: &str, plain: bool) {
         self.value_plain = plain;
+        self.value_keeps_language = false;
         self.value_label = label.to_string();
         self.command_line = text.to_string();
         self.command_caret = self.command_line.chars().count();

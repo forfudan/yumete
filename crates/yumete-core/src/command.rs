@@ -5972,7 +5972,7 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "buffer-close-others",
-        aliases: &["bco"],
+        aliases: &["bco", "bcloseother"],
         help: "cmd.commands.buffer-close-others",
         needs: &[],
         params: &[],
@@ -5980,7 +5980,7 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "buffer-close-all",
-        aliases: &["bca"],
+        aliases: &["bca", "bcloseall"],
         help: "cmd.commands.buffer-close-all",
         needs: &[],
         params: &[],
@@ -8868,6 +8868,10 @@ mod tests {
         assert_eq!(parse(":buffer-close-others!"), Ok(Command::CloseOtherBuffers { force: true }));
         assert_eq!(parse(":bca"), Ok(Command::CloseAllBuffers { force: false }));
         assert_eq!(parse(":bca!"), Ok(Command::CloseAllBuffers { force: true }));
+        assert_eq!(parse(":bcloseother"), Ok(Command::CloseOtherBuffers { force: false }));
+        assert_eq!(parse(":bcloseother!"), Ok(Command::CloseOtherBuffers { force: true }));
+        assert_eq!(parse(":bcloseall"), Ok(Command::CloseAllBuffers { force: false }));
+        assert_eq!(parse(":bcloseall!"), Ok(Command::CloseAllBuffers { force: true }));
         assert_eq!(parse(":wbc"), Ok(Command::WriteBufferClose { path: None, force: false }));
         assert_eq!(
             parse(":wbc! 二.md"),

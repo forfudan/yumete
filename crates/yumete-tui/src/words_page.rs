@@ -76,6 +76,15 @@ struct Page {
     kept: Vec<(WordList, String, String)>,
     /// The first row drawn, kept between frames so the list scrolls.
     first: Cell<usize>,
+    /// **The scheme `s` turned the page to**, read beside the one that
+    /// types; `None` while the page shows the scheme that types. `s` is a
+    /// question about what to look at, so it leaves the input method as it
+    /// was — the status line still says what the next letter does.
+    other: Option<ImeSession>,
+    /// A file was written through [`Page::other`]: the scheme that types
+    /// may share it (a 拼音 record several schemes keep), so it looks again
+    /// when the page closes.
+    wrote_beside: bool,
 }
 
 /// The list's own name.
@@ -134,15 +143,21 @@ fn matches(row: &WordRow, search: &str) -> bool {
 }
 
 impl Page {
+    /// The session whose words the page shows.
+    fn session<'a>(&'a self, ime: &'a ImeSession) -> &'a ImeSession {
+        self.other.as_ref().unwrap_or(ime)
+    }
+
     fn list(&self, ime: &ImeSession) -> Option<WordList> {
-        let lists = ime.word_lists();
+        let lists = self.session(ime).word_lists();
         lists.get(self.list.min(lists.len().saturating_sub(1))).copied()
     }
 
     /// The rows of `list` this page shows: yumete's, the app's after `Tab`
     /// (and those `d` left as the app's), narrowed by the search.
     fn rows(&self, ime: &ImeSession, list: WordList, searched: bool) -> Vec<WordRow> {
-        ime.word_rows(list)
+        self.session(ime)
+            .word_rows(list)
             .into_iter()
             .filter(|r| {
                 r.held != Held::App
@@ -157,6 +172,25 @@ impl Page {
         match self.list(ime) {
             Some(list) => (Some(list), self.rows(ime, list, true)),
             None => (None, Vec::new()),
+        }
+    }
+
+    /// `s`: **the next scheme whose 碼表 is there**, in menu order, round to
+    /// the start — the one that types read from `ime` itself, any other
+    /// read beside it.
+    fn turn_to_the_next_scheme(&mut self, ime: &ImeSession) {
+        let start = self.session(ime).scheme();
+        let mut next = start.next();
+        while next != start {
+            if next == ime.scheme() && ime.available() {
+                self.other = None;
+                return;
+            }
+            if let Some(other) = ime.word_lists_of(next) {
+                self.other = Some(other);
+                return;
+            }
+            next = next.next();
         }
     }
 }
@@ -179,7 +213,7 @@ impl Seat {
             return false;
         }
         let Some(key) = key else { return true };
-        let lists = ime.word_lists().len().max(1);
+        let lists = page.session(ime).word_lists().len().max(1);
         match key {
             Key::Char(':') => return false,
             Key::Char('j') | Key::Down => page.row += 1,
@@ -201,7 +235,7 @@ impl Seat {
                 page.search.clear();
                 page.searching = true;
                 page.row = 0;
-                editor.open_value_line(&say!("yume.words.search", ""), "");
+                editor.open_value_search_line(&say!("yume.words.search", ""), "");
             }
             Key::Esc => page.search.clear(),
             Key::Tab => {
@@ -212,13 +246,15 @@ impl Seat {
             Key::Char('u') => self.restore(editor, ime),
             Key::Char('y') => self.copy(editor, ime, false),
             Key::Char('Y') => self.copy(editor, ime, true),
-            // The next scheme, as `空格 z n`: the page shows what that one types.
+            // The next scheme in menu order, as `空格 z n` walks them; the
+            // page shows that one's words, and the one that types stays.
             Key::Char('s') => {
-                editor.ask_the_input_method("scheme:next");
+                page.turn_to_the_next_scheme(ime);
+                page.list = 0;
                 page.row = 0;
                 page.kept.clear();
             }
-            Key::Char('q') => self.close(editor),
+            Key::Char('q') => self.close(editor, ime),
             _ => {}
         }
         self.clamp(ime);
@@ -246,7 +282,12 @@ impl Seat {
             editor.set_status(say!("yume.words.refused-app"));
             return;
         }
-        let Some(gone) = ime.delete_own_row(list, row) else {
+        page.wrote_beside |= page.other.is_some();
+        let session = match page.other.as_mut() {
+            Some(other) => other,
+            None => ime,
+        };
+        let Some(gone) = session.delete_own_row(list, row) else {
             editor.set_status(say!("yume.words.refused-app"));
             return;
         };
@@ -268,14 +309,19 @@ impl Seat {
             editor.set_status(say!("yume.words.nothing-to-restore"));
             return;
         };
-        if gone.tag() != ime.scheme().tag() {
+        page.wrote_beside |= page.other.is_some();
+        let session = match page.other.as_mut() {
+            Some(other) => other,
+            None => ime,
+        };
+        if gone.tag() != session.scheme().tag() {
             page.deleted.push(gone);
             editor.set_status(say!("yume.words.restore-other-scheme"));
             return;
         }
         let list = gone.list();
-        ime.restore_own_row(gone);
-        if let Some(at) = ime.word_lists().iter().position(|l| *l == list) {
+        session.restore_own_row(gone);
+        if let Some(at) = session.word_lists().iter().position(|l| *l == list) {
             page.list = at;
         }
         editor.set_status(say!("yume.words.restored"));
@@ -317,7 +363,7 @@ impl Seat {
             editor.set_word_page_open(true);
         }
         if editor.take_word_page_close() {
-            self.close(editor);
+            self.close(editor, ime);
         }
         // The search narrows as it is typed; Enter keeps it, Esc clears it.
         if let Some(page) = self.page.as_mut().filter(|p| p.searching) {
@@ -340,11 +386,13 @@ impl Seat {
         }
     }
 
-    fn close(&mut self, editor: &mut Editor) {
+    fn close(&mut self, editor: &mut Editor, ime: &mut ImeSession) {
         if self.page.as_ref().is_some_and(|p| p.searching) {
             editor.close_value_line();
         }
-        self.page = None;
+        if self.page.take().is_some_and(|p| p.wrote_beside) {
+            ime.refresh_user_words();
+        }
         editor.set_word_page_open(false);
         editor.set_status(String::new());
     }
@@ -449,7 +497,7 @@ pub fn draw(frame: &mut Frame, seat: &Seat, ime: &ImeSession, config: &Config, a
     for y in area.y..area.y + area.height {
         fill(buf, area.x, right, y, ground);
     }
-    let lists = ime.word_lists();
+    let lists = page.session(ime).word_lists();
     let (list, rows) = page.shown(ime);
     let at = page.row.min(rows.len().saturating_sub(1));
     let side = match area.width >= LISTS_FROM {
@@ -469,7 +517,7 @@ pub fn draw(frame: &mut Frame, seat: &Seat, ime: &ImeSession, config: &Config, a
             true => say!("yume.words.show-all"),
             false => say!("yume.words.show-own"),
         };
-        let mut said = format!("{}   {}   {show}", say!("yume.words.title"), ime.scheme_name());
+        let mut said = format!("{}   {}   {show}", say!("yume.words.title"), page.session(ime).scheme_name());
         if page.searching || !page.search.is_empty() {
             said.push_str(&format!("   {}", say!("yume.words.search", &page.search)));
         }
@@ -876,5 +924,56 @@ mod tests {
         let mut editor = Editor::new();
         let seat = opened(&mut editor, &mut ime);
         assert!(shot(&seat, &ime).contains(&say!("yume.words.unread")));
+    }
+
+    /// **Before the input method was ever turned on**, the page names the
+    /// scheme the session was made for, not the placeholder its empty
+    /// engine holds.
+    #[test]
+    fn a_session_with_no_table_names_its_own_scheme() {
+        let mut ime = ImeSession::empty(Scheme::PINYIN);
+        let mut editor = Editor::new();
+        let seat = opened(&mut editor, &mut ime);
+        let frame = shot(&seat, &ime);
+        assert!(frame.contains("宇浩拼音") && !frame.contains("靈明"), "{frame}");
+    }
+
+    /// **The `/` line keeps the language the writer was in**, as the
+    /// editor's own `/` does; the settings panel's value line still opens
+    /// in 英.
+    #[test]
+    fn the_search_line_keeps_the_language() {
+        let (mut ime, ..) = session("keeps");
+        let mut editor = Editor::new();
+        let mut seat = opened(&mut editor, &mut ime);
+        typed(&mut seat, &mut editor, &mut ime, &[Key::Char('/')]);
+        assert_eq!(editor.mode(), Mode::Value);
+        assert!(!editor.prompt_opens_in_english());
+        let mut borrow = crate::Borrow::default();
+        let door = borrow.crossing_into(Some(Mode::Normal), Mode::Value, editor.prompt_opens_in_english(), true);
+        assert!(!door.toggle, "中 stays 中");
+        typed(&mut seat, &mut editor, &mut ime, &[Key::Esc]);
+        editor.open_value_line("value: ", "");
+        assert!(editor.prompt_opens_in_english());
+    }
+
+    /// **`s` turns the page, not the input method**: the scheme that types
+    /// and its 中/英 are as they were, while the page reads another's words.
+    #[test]
+    fn s_shows_another_scheme_and_leaves_the_one_that_types() {
+        let (mut ime, ..) = session("turn");
+        let chinese = ime.is_chinese();
+        let mut editor = Editor::new();
+        let mut seat = opened(&mut editor, &mut ime);
+        press(&mut seat, &mut editor, &mut ime, "s");
+        assert_eq!(ime.scheme(), Scheme::LINGMING, "the one that types stays");
+        assert_eq!(ime.is_chinese(), chinese);
+        let page = seat.page.as_ref().unwrap();
+        if let Some(other) = &page.other {
+            assert_ne!(other.scheme(), Scheme::LINGMING);
+            assert!(shot(&seat, &ime).contains(other.scheme_name()));
+        }
+        press(&mut seat, &mut editor, &mut ime, "q");
+        assert_eq!(ime.scheme(), Scheme::LINGMING);
     }
 }

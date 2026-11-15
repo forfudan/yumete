@@ -1184,8 +1184,36 @@ impl ImeSession {
     }
 
     /// The active scheme's display name (方案名, e.g. `靈明`).
+    ///
+    /// **A session with no 碼表 answers from the scheme**, not the engine:
+    /// the engine of a language-only session was never given a scheme, and
+    /// the name it holds is a placeholder rather than the one asked for.
     pub fn scheme_name(&self) -> &str {
-        self.engine.scheme_name()
+        if self.available {
+            return self.engine.scheme_name();
+        }
+        match (self.scheme.factory_name(), self.scheme.found_name()) {
+            (Some(name), _) => name,
+            (None, "") => self.scheme.tag(),
+            (None, found) => found,
+        }
+    }
+
+    /// **Another scheme's word lists, read from where this session reads
+    /// its own**: a session for `scheme` from the same folders, the same
+    /// word roots and the same `learn`, that nothing types into — so the
+    /// words page can show a scheme without making it the one that types.
+    /// `None` when that scheme's 碼表 is not there.
+    pub fn word_lists_of(&self, scheme: Scheme) -> Option<ImeSession> {
+        let mut other = ImeSession::new(scheme, self.data_dirs.clone());
+        if !other.available {
+            return None;
+        }
+        other.learn = self.learn;
+        if let Some(roots) = self.user_roots.clone() {
+            other.set_user_word_roots(roots);
+        }
+        Some(other)
     }
 
     /// 字集過濾、字集排序、整句字集軌 in force.
