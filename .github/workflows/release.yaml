@@ -372,7 +372,7 @@ jobs:
           # on: the fetch step can only see that the file is a division table,
           # not that *this* reader accepts it.
           printf '阻\n' > "$RUNNER_TEMP/c.md"
-          split=$("$YE" --shot=60x12 --keys='\{space}n' "$RUNNER_TEMP/c.md")
+          split=$("$YE" --lang=zh --shot=60x12 --keys='\{space}n' "$RUNNER_TEMP/c.md")
           printf '%s\n' "$split" >&2
           if ! printf '%s' "$split" | grep -q '宇浩全息拆分'; then
             echo "!! no 拆分表 in this build: 空格 n has nothing to say about 阻" >&2

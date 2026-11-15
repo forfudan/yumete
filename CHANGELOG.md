@@ -52,6 +52,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Fixed
 
+- **On a narrow window the `Space n` lookup keeps one column** and says how many rows are left, instead of two columns whose values were all cut to `…`.
 - **The vim keymap matches vim where the hands expect it**: `dj`, `d<CR>`, `>j` and the like on the last line fail as in vim; `<CR>`, `+` and `-` stay when they cannot move; `ds` and `cs` reach the next pair on the line; the cursor after a surround and its undo, `'[` and `']` (first non-blank), and `` `] `` after case changes, puts, surrounds, `:sort`, `J` and `u` are vim's; `:sort!` reverses ties as vim does; `"1p..` steps through the numbered registers, and `"-`, `".`, `":`, `"/` and `"%` paste what vim pastes; the pending keys read `ds`, `cs`, `ysiw` and `S`, not helix's names.
 - **With the built-in input method on, a letter the surround menu lists** (`md` `m`, `ds` `t`, `ys` `b`) picks that entry instead of starting a pinyin code.
 - **`:decimo-replace`, `:decimo-append` and `:pipe` from vim's Visual mode act on the whole selection**: they put the value over one character and could duplicate a line. If the text changes while the command runs, the output is not put in. `:decimo` says it inserted, not replaced.

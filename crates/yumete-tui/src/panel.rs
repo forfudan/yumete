@@ -902,7 +902,13 @@ pub fn draw(
             // long line — 「寫作進度：今天寫了多少，離目標還有多少」 — would
             // otherwise hold the whole menu to a single column and cut *keys*
             // to keep a sentence whole.
-            let least = key_w + 2 + 8;
+            // A field list is read row by row, so its narrowest column holds
+            // its widest label and a value: two columns of 「character sets  …」
+            // are worse than one column and 「there is more」.
+            let least = match panel.reading {
+                true => keys.iter().map(|(k, _)| yumete_cjk::str_width(k)).max().unwrap_or(0).max(key_w) + 2 + 8,
+                false => key_w + 2 + 8,
+            };
             let most = ((widest + 2) / (least + 2)).max(1);
             // **A key menu grows downward only to stop cutting meanings.**
             // Capped at half the page, depth it could not have would be
@@ -917,8 +923,16 @@ pub fn draw(
             // is deeper than the room, and the menu is as it was.
             // A field list is read, not scanned, and keeps to its room.
             let full = (tall.saturating_sub(2) as usize).max(1);
+            // A field list grows downward too, but only to stop cutting
+            // values: on a narrow page two columns of 「character sets  …」
+            // say nothing, and one deeper column says everything.
             let deep_max = match panel.reading {
-                true => deep_max,
+                true => (deep_max..=full.max(deep_max))
+                    .find(|&d| {
+                        let laid = key_columns(keys, key_w, widest, most, d);
+                        laid.shown == keys.len() && laid.cut == 0
+                    })
+                    .unwrap_or(deep_max),
                 false => {
                     let (back, on) = caret.keep;
                     let (from, to) = match vertical {
