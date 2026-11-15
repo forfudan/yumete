@@ -5197,7 +5197,8 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
                     n => format!("{loaded} · {}", say!("ime.table-skipped", n)),
                 }
             }
-            Err(why) => why,
+            Err(yumete_ime::TableRefused::Unread(why)) => why,
+            Err(yumete_ime::TableRefused::NoRows(path)) => say!("ime.table-no-rows", path.display()),
         };
     }
     // The three states, by name (#290). The lone-Shift tap crosses between
@@ -8486,7 +8487,7 @@ fn band_rows(row: &yumete_core::diff::DraftRow, head: String, room: usize) -> Ve
     if let Some((ch, answer)) = editor.dictionary_afloat() {
         let rows: Vec<(String, String)> = match answer {
             Some(found) => {
-                let mut rows: Vec<(String, String)> = found.rows.clone();
+                let mut rows: Vec<(String, String)> = found.said_rows();
                 // **「沒有拆法」寫在下面，隔一行**（同邊欄那一半）。
                 // 一行空名字的在 `Body::Keys` 裏畫得淡——上面幾行是這個字的事實，
                 // 這一句是這一次查詢的事實。
@@ -22688,8 +22689,8 @@ fn squeezed(text: &str) -> String {
         editor.take_dictionary_query();
         editor.set_dictionary("那", yumete_core::editor::Found {
             rows: vec![
-                ("拆分".to_string(), "刀二阝".to_string()),
-                ("分節編碼".to_string(), "vf-b".to_string()),
+                ("拆分", "刀二阝".to_string()),
+                ("分節編碼", "vf-b".to_string()),
             ],
             divided: true,
         });
@@ -22735,8 +22736,8 @@ fn squeezed(text: &str) -> String {
         let long = "nà_nā_nuó_nuò_né_ne_nèi_nǎ_něi".to_string();
         editor.set_dictionary("那", yumete_core::editor::Found {
             rows: vec![
-                ("讀音".to_string(), long.clone()),
-                ("編碼".to_string(), "WSGu".to_string()),
+                ("讀音", long.clone()),
+                ("編碼", "WSGu".to_string()),
             ],
             divided: true,
         });

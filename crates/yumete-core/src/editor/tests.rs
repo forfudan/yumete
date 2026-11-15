@@ -12635,8 +12635,8 @@ fn the_dictionary_asks_about_the_character_under_the_cursor() {
 
     ed.set_dictionary("那", crate::editor::Found {
         rows: vec![
-            ("拆分".to_string(), "刀二阝".to_string()),
-            ("編碼".to_string(), "vfb".to_string()),
+            ("拆分", "刀二阝".to_string()),
+            ("編碼", "vfb".to_string()),
         ],
         divided: true,
     });
@@ -12854,7 +12854,7 @@ fn an_answer_for_a_character_nobody_is_asking_about_now_is_dropped() {
     ed.take_dictionary_query();
     ed.look_up("年");
     ed.set_dictionary("那", crate::editor::Found {
-        rows: vec![("拆分".to_string(), "刀二阝".to_string())],
+        rows: vec![("拆分", "刀二阝".to_string())],
         divided: true,
     });
     assert_eq!(ed.dictionary().map(|(ch, _)| ch), Some("年"));

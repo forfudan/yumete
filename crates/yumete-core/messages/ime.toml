@@ -257,6 +257,87 @@ zhs = "正在加载码表…"
 en = "loading the 碼表…"
 
 [[message]]
+# （草稿）查字（空格 n）的一行：这个字所在的 Unicode 区块
+key = "ime.lookup.block"
+zhs = "统一码区块"
+en = "Unicode block"
+
+[[message]]
+# （草稿）查字（空格 n）的一行：这个字在哪几个字集里
+key = "ime.lookup.charset"
+zhs = "字集"
+en = "character sets"
+
+[[message]]
+# （草稿）查字（空格 n）的一行：这个字在当前方案里的编码
+key = "ime.lookup.code"
+zhs = "编码"
+en = "code"
+
+[[message]]
+# （草稿）查字（空格 n）的一行：这个字的 Unicode 码位
+key = "ime.lookup.codepoint"
+zhs = "统一码"
+en = "Unicode"
+
+[[message]]
+# （草稿）查字（空格 n）的一行：方案字根表编码时用到的拆分
+key = "ime.lookup.division"
+zhs = "方案拆分"
+en = "scheme division"
+
+[[message]]
+# （草稿）查字（空格 n）的一行：宇浩全息拆分表里的拆分，不分方案
+key = "ime.lookup.full-division"
+zhs = "宇浩全息拆分"
+en = "full division"
+
+[[message]]
+# （草稿）查字（空格 n）的一行：拆分表给这个字的注释
+key = "ime.lookup.note"
+zhs = "注释"
+zht = "注釋"
+en = "note"
+
+[[message]]
+# （草稿）查字（空格 n）的一行：这个字的读音
+key = "ime.lookup.reading"
+zhs = "读音"
+zht = "讀音"
+en = "reading"
+
+[[message]]
+# （草稿）查字（空格 n）的一行：按字根分节写出的编码
+key = "ime.lookup.segmented"
+zhs = "分节编码"
+en = "code by root"
+
+[[message]]
+# （草稿）查字（空格 n）：一个字有几种拆法时，同一字形的另一种（兼容）拆法的小标题
+key = "ime.lookup.source.compatible"
+zhs = "兼"
+en = "alternative"
+
+[[message]]
+# （草稿）查字（空格 n）：一个字有几种拆法时，香港字形那一种的小标题
+key = "ime.lookup.source.hong-kong"
+zhs = "港"
+en = "Hong Kong"
+
+[[message]]
+# （草稿）查字（空格 n）：一个字有几种拆法时，大陆字形那一种的小标题
+key = "ime.lookup.source.mainland"
+zhs = "陆"
+en = "mainland"
+
+[[message]]
+# （草稿）查字（空格 n）：一个字有几种拆法时，台湾字形那一种的小标题
+key = "ime.lookup.source.taiwan"
+zhs = "台"
+zht = "臺"
+en = "Taiwan"
+
+[[message]]
 # :yume-menu-size ——候選面板一頁幾條
 key = "ime.menu-size-is"
 zhs = "每页 {0} 个候选"
@@ -447,6 +528,12 @@ en = "{0} · 碼表 {1} · annotation {2} · commit {3}"
 key = "ime.table-loaded"
 zhs = "码表：{0}"
 en = "碼表: {0}"
+
+[[message]]
+# （草稿）:yume-scheme =路径 读了那个文件，可是里面没有一行是码表的条目
+key = "ime.table-no-rows"
+zhs = "{0}：读不出码表"
+en = "{0}: no code table rows in this file"
 
 [[message]]
 # :yume-table 裝上了，但檔案裏有幾條長得放不進碼表，跳過了

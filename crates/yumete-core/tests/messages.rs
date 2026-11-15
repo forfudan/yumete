@@ -119,7 +119,15 @@ fn source(relative: &str) -> String {
     // Warning: **模組的名字不限**：`yumete-config` 有兩個（`runner_tests` 與 `tests`），
     // 而釘死 `mod tests` 會把前一個整段當成生產代碼掃進來，於是 `r.argv("x.md")`
     // 裏那個 `x.md` 被讀成一個沒有條目的標籤。
-    let text = match text.find("\n#[cfg(test)]\nmod ") {
+    //
+    // Warning: **帶身子的那個模組**：`#[cfg(test)] mod user_words_tests;` 只是宣告
+    // 一個別的檔（`yumete-ime` 的第二十幾行），切在那裏就把整個 `lib.rs` 丟了。
+    let opener = "\n#[cfg(test)]\nmod ";
+    let body = text.match_indices(opener).map(|(at, _)| at).find(|&at| {
+        let line = text[at + opener.len()..].lines().next().unwrap_or("");
+        line.trim_end().ends_with('{')
+    });
+    let text = match body {
         Some(at) => &text[..at],
         None => &text[..],
     };
@@ -258,6 +266,12 @@ fn said() -> BTreeMap<String, String> {
         // `:sidebar <panel>` became one command a panel.
         // Only labels: a match arm hands back file names and key names too.
         tags.extend(literals(&text, "=> ").into_iter().filter(|t| t.starts_with("label.")));
+        // A row name the character lookup hands back (`yumete-ime`'s
+        // `glosses`): that crate has no message table, so the tag rides along
+        // as the first of a pair and the panel says it as it draws.
+        let lookup = |t: &String| t.starts_with("ime.lookup.");
+        tags.extend(literals(&text, "(").into_iter().filter(lookup));
+        tags.extend(literals(&text, "=> ").into_iter().filter(lookup));
         for tag in tags.into_iter().filter(|t| is_tag(t)) {
             out.entry(tag).or_insert_with(|| file.to_string());
         }

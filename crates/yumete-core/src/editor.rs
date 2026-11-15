@@ -224,9 +224,10 @@ type FoldMap = ((u64, u64), Vec<bool>, (usize, usize));
 
 /// 字典面板裏的一欄：欄名跟欄裏的字（「拆分」——「刀二阝」）。
 ///
-/// 哪幾欄、叫什麼名字，是拆分表說的事，核心不認它們——所以是兩個字串而不是一支
-/// 枚舉。
-pub type Gloss = (String, String);
+/// 哪幾欄是拆分表說的事，核心不認它們——所以不是一支枚舉。欄名是一個**消息標籤**
+/// （`ime.lookup.code`），畫的時候纔照讀者的語言說出來（[`Found::said_rows`]）：
+/// 查表的那一層沒有消息表。
+pub type Gloss = (&'static str, String);
 
 /// 字典面板查一個字查到的東西。
 ///
@@ -239,6 +240,17 @@ pub struct Found {
     pub rows: Vec<Gloss>,
     /// 拆分表裏有沒有這個字。
     pub divided: bool,
+}
+
+impl Found {
+    /// The rows, each name said in the reader's language. Said as it is
+    /// drawn, so a change of language reaches a panel already open.
+    pub fn said_rows(&self) -> Vec<(String, String)> {
+        self.rows
+            .iter()
+            .map(|(tag, value)| (crate::messages::say(tag, &[]), value.clone()))
+            .collect()
+    }
 }
 
 /// Every line's block and every merge conflict in the document, against the

@@ -793,13 +793,14 @@ impl ImeSession {
     /// nothing survives is not a 碼表, and says so.
     ///
     /// [`table_skipped`]: ImeSession::table_skipped
-    pub fn from_table_file(path: &Path) -> Result<Self, String> {
-        let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    pub fn from_table_file(path: &Path) -> Result<Self, TableRefused> {
+        let text = std::fs::read_to_string(path)
+            .map_err(|e| TableRefused::Unread(format!("{}: {e}", path.display())))?;
         let (text, skipped) = weed_overlong(&text);
         let mut table = CodeTable::new();
         table.load_text(&text);
         if table.count() == 0 {
-            return Err(format!("{}：讀不出碼表", path.display()));
+            return Err(TableRefused::NoRows(path.to_path_buf()));
         }
         let dirs = yumete_config::data_search_dirs();
         let mut engine = Engine::new(CodeTable::new());
@@ -1751,12 +1752,8 @@ impl ImeSession {
             // apart: one 拆法 is the ordinary case and a lone「陸」above it is
             // a row spent saying nothing.
             if found.len() > 1 {
-                let label = sources
-                    .get(i)
-                    .map(|s| s.label())
-                    .filter(|l| !l.is_empty())
-                    .unwrap_or("陸");
-                out.push((label.to_string(), String::new()));
+                let label = sources.get(i).copied().map(source_tag).unwrap_or("ime.lookup.source.mainland");
+                out.push((label, String::new()));
             }
             let division = match a.decomposition.is_empty() {
                 true => &a.own_decomposition,
@@ -1768,16 +1765,16 @@ impl ImeSession {
             let reading = a.reading.replace('_', " ");
             let charset = a.charset.replace('-', " ");
             for (name, value) in [
-                ("方案拆分", division),
-                ("編碼", &a.code),
-                ("分節編碼", &a.segmented),
-                ("宇浩全息拆分", &a.full_decomposition),
-                ("讀音", &reading),
-                ("注釋", &a.note),
-                ("字集", &charset),
+                ("ime.lookup.division", division),
+                ("ime.lookup.code", &a.code),
+                ("ime.lookup.segmented", &a.segmented),
+                ("ime.lookup.full-division", &a.full_decomposition),
+                ("ime.lookup.reading", &reading),
+                ("ime.lookup.note", &a.note),
+                ("ime.lookup.charset", &charset),
             ] {
                 if !value.is_empty() {
-                    out.push((name.to_string(), value.clone()));
+                    out.push((name, value.clone()));
                 }
             }
         }
@@ -1790,7 +1787,7 @@ impl ImeSession {
         // 逐個寫 `U+`——`U+1F21A+FE0F` 讀起來像一個碼位加了條尾巴。
         let points: Vec<String> = ch.chars().map(yumete_cjk::blocks::codepoint).collect();
         if !points.is_empty() {
-            out.push(("統一碼".to_string(), points.join(" ")));
+            out.push(("ime.lookup.codepoint", points.join(" ")));
         }
         // 區塊問的是**底字**：一個異體字選擇符自己在 Variation Selectors
         // Supplement 裏，而讀者要知道的是那個漢字在哪一區。同狀態欄那一格。
@@ -1798,7 +1795,7 @@ impl ImeSession {
         // 名字照英文寫，和狀態欄一致：Unicode 的區塊名本來就是
         // 標準英文術語，拿它去別處查也是查英文。
         if let Some(block) = ch.chars().next().and_then(yumete_cjk::blocks::block_of) {
-            out.push(("統一碼區塊".to_string(), block.to_string()));
+            out.push(("ime.lookup.block", block.to_string()));
         }
         Lookup { rows: out, divided: !found.is_empty() }
     }
@@ -2224,11 +2221,37 @@ fn locate(dirs: &[PathBuf], relative: &str) -> Option<Found> {
 pub struct Lookup {
     /// The fields, in the order they are drawn. Never empty: every character
     /// has a code point.
-    pub rows: Vec<(String, String)>,
+    ///
+    /// **The name is a message tag** (`ime.lookup.code`), not words: this
+    /// crate has no message table, and the panel says the name in the
+    /// reader's language when it draws it (`messages/ime.toml`).
+    pub rows: Vec<(&'static str, String)>,
     /// Whether the 拆分表 had this character.
     pub divided: bool,
 }
 
+
+/// Why [`ImeSession::from_table_file`] took no table. The front end words
+/// it: this crate has no message table.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TableRefused {
+    /// The file could not be read: its path and the system's reason.
+    Unread(String),
+    /// The file was read, and not one line of it is a code table's row.
+    NoRows(PathBuf),
+}
+
+/// The message tag of the heading over one source's run of rows: the place
+/// whose 字形 the 拆法 follows, or 兼 for a second 拆法 of the same shape.
+fn source_tag(source: yume_core::annotation::ChaifenSource) -> &'static str {
+    use yume_core::annotation::ChaifenSource;
+    match source {
+        ChaifenSource::G => "ime.lookup.source.mainland",
+        ChaifenSource::T => "ime.lookup.source.taiwan",
+        ChaifenSource::H => "ime.lookup.source.hong-kong",
+        ChaifenSource::Jian(_) => "ime.lookup.source.compatible",
+    }
+}
 
 /// **沒有方案也查得出一個字**。
 ///
@@ -2885,15 +2908,15 @@ mod tests {
             return;
         }
         let got = ime.glosses("行");
-        let named = |n: &str| got.rows.iter().find(|(name, _)| name == n).map(|(_, v)| v.as_str());
-        assert_eq!(named("宇浩全息拆分"), Some("彳亍"), "{got:?}");
-        assert_eq!(named("統一碼"), Some("U+884C"), "{got:?}");
+        let named = |n: &str| got.rows.iter().find(|(name, _)| *name == n).map(|(_, v)| v.as_str());
+        assert_eq!(named("ime.lookup.full-division"), Some("彳亍"), "{got:?}");
+        assert_eq!(named("ime.lookup.codepoint"), Some("U+884C"), "{got:?}");
         // **分隔符是空格，不是 `_` 和 `-`**：核心那兩個記號是
         // 存的寫法，讀的人看見的該是幾個並列的東西。
-        assert_eq!(named("讀音"), Some("háng xíng héng xìng hàng"), "{got:?}");
-        assert!(named("字集").is_some_and(|s| !s.contains('-')), "{got:?}");
+        assert_eq!(named("ime.lookup.reading"), Some("háng xíng héng xìng hàng"), "{got:?}");
+        assert!(named("ime.lookup.charset").is_some_and(|s| !s.contains('-')), "{got:?}");
         // 字根層要方案，沒方案就一行都不該有。
-        for gone in ["編碼", "分節編碼", "方案拆分"] {
+        for gone in ["ime.lookup.code", "ime.lookup.segmented", "ime.lookup.division"] {
             assert_eq!(named(gone), None, "{gone} 要方案纔算數：{got:?}");
         }
     }
@@ -2908,9 +2931,9 @@ mod tests {
             return;
         }
         let got = ime.glosses("\u{3402}\u{E0101}");
-        let named = |n: &str| got.rows.iter().find(|(name, _)| name == n).map(|(_, v)| v.as_str());
-        assert_eq!(named("統一碼"), Some("U+3402 U+E0101"), "{got:?}");
-        assert!(named("宇浩全息拆分").is_some(), "{got:?}");
+        let named = |n: &str| got.rows.iter().find(|(name, _)| *name == n).map(|(_, v)| v.as_str());
+        assert_eq!(named("ime.lookup.codepoint"), Some("U+3402 U+E0101"), "{got:?}");
+        assert!(named("ime.lookup.full-division").is_some(), "{got:?}");
     }
 
     /// **碼位和區塊答得了每一個字，不只是表裏那些**。
@@ -2921,26 +2944,26 @@ mod tests {
     fn every_character_has_a_code_point_and_a_block_even_a_symbol() {
         let ime = ImeSession::empty(Scheme::LINGMING);
         let named = |got: &Lookup, n: &str| {
-            got.rows.iter().find(|(name, _)| name == n).map(|(_, v)| v.clone())
+            got.rows.iter().find(|(name, _)| *name == n).map(|(_, v)| v.clone())
         };
         // 一個符號：表裏沒有它，而這兩行照樣答得出。
         let got = ime.glosses("※");
         assert!(!got.divided, "符號不在拆分表裏");
-        assert_eq!(named(&got, "統一碼").as_deref(), Some("U+203B"), "{got:?}");
+        assert_eq!(named(&got, "ime.lookup.codepoint").as_deref(), Some("U+203B"), "{got:?}");
         assert_eq!(
-            named(&got, "統一碼區塊").as_deref(),
+            named(&got, "ime.lookup.block").as_deref(),
             Some("General Punctuation"),
             "{got:?}"
         );
         // 一個拉丁字母也一樣。
         let got = ime.glosses("a");
-        assert_eq!(named(&got, "統一碼").as_deref(), Some("U+0061"), "{got:?}");
-        assert_eq!(named(&got, "統一碼區塊").as_deref(), Some("Basic Latin"), "{got:?}");
+        assert_eq!(named(&got, "ime.lookup.codepoint").as_deref(), Some("U+0061"), "{got:?}");
+        assert_eq!(named(&got, "ime.lookup.block").as_deref(), Some("Basic Latin"), "{got:?}");
         // **區塊問的是底字**：異體字選擇符自己在別的區裏，而讀者問的是那個漢字。
         let got = ime.glosses("\u{3402}\u{E0101}");
-        assert_eq!(named(&got, "統一碼").as_deref(), Some("U+3402 U+E0101"), "{got:?}");
+        assert_eq!(named(&got, "ime.lookup.codepoint").as_deref(), Some("U+3402 U+E0101"), "{got:?}");
         assert_eq!(
-            named(&got, "統一碼區塊").as_deref(),
+            named(&got, "ime.lookup.block").as_deref(),
             Some("CJK Unified Ideographs Extension A"),
             "{got:?}"
         );
@@ -2949,8 +2972,8 @@ mod tests {
             let got = ime.glosses("行");
             assert!(got.divided, "{got:?}");
             let last: Vec<&str> =
-                got.rows.iter().rev().take(2).map(|(n, _)| n.as_str()).collect();
-            assert_eq!(last, ["統一碼區塊", "統一碼"], "兩行在最後，區塊貼着碼位");
+                got.rows.iter().rev().take(2).map(|(n, _)| *n).collect();
+            assert_eq!(last, ["ime.lookup.block", "ime.lookup.codepoint"], "兩行在最後，區塊貼着碼位");
         }
     }
 
@@ -3346,7 +3369,7 @@ mod weeding {
 
         let prose = dir.join("prose.txt");
         std::fs::write(&prose, "第一章\n\n那年冬天很冷。\n").expect("fixture file");
-        assert!(ImeSession::from_table_file(&prose).is_err());
+        assert!(matches!(ImeSession::from_table_file(&prose), Err(TableRefused::NoRows(_))));
 
         let _ = std::fs::remove_dir_all(&dir);
     }

@@ -97,7 +97,7 @@ impl Shape {
 
 /// `name` holds a value where a table has to go, in the reader's language.
 fn not_a_table(name: &str) -> String {
-    crate::said(format!("{name} 不是一張表"), format!("{name} is not a table"))
+    crate::said(format!("{name} 不是一张表"), format!("{name} 不是一張表"), format!("{name} is not a table"))
 }
 
 /// **一份 toml，改幾處，字節級別地不動別的。**
@@ -112,7 +112,7 @@ pub fn rewrite(text: &str, changes: &[(String, Change)]) -> Result<String, Strin
         // `表.鍵`, or `表.子表.鍵` for a table inside a table
         // (`keys.flavor_items.esc_collapses`).
         let Some((tables, key)) = path.rsplit_once('.') else {
-            return Err(crate::said(format!("{path} 不是「表.鍵」"), format!("{path} is not table.key")));
+            return Err(crate::said(format!("{path} 不是「表.键」"), format!("{path} 不是「表.鍵」"), format!("{path} is not table.key")));
         };
         let tables: Vec<&str> = tables.split('.').collect();
         match change {

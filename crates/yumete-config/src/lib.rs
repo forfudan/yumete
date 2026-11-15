@@ -3174,10 +3174,11 @@ impl Runner {
     /// rather than a command that runs and does something else.
     pub fn fault(&self) -> Option<String> {
         if self.run.trim().is_empty() {
-            return Some(said("空的命令".to_string(), "the command is empty".to_string()));
+            return Some(said("空的命令".to_string(), "空的命令".to_string(), "the command is empty".to_string()));
         }
         if let Some(c) = self.run.chars().find(|c| "|;&<>`$".contains(*c)) {
             return Some(said(
+                format!("命令里有 '{c}'——这里不经过 shell，管道和重定向不会照你想的跑"),
                 format!("命令裏有 '{c}'——這裏不經過 shell，管道和重定向不會照你想的跑"),
                 format!("the command has '{c}': it does not run through a shell, so pipes and redirects do not work"),
             ));
@@ -3186,11 +3187,12 @@ impl Runner {
         while let Some(at) = rest.find('{') {
             let after = &rest[at + 1..];
             let Some(end) = after.find('}') else {
-                return Some(said("{ 没有配對的 }".to_string(), "a { with no }".to_string()));
+                return Some(said("{ 没有配对的 }".to_string(), "{ 没有配對的 }".to_string(), "a { with no }".to_string()));
             };
             let name = &after[..end];
             if !["file", "dir", "name"].contains(&name) {
                 return Some(said(
+                    format!("不认识的占位符 {{{name}}}——只有 {{file}} {{dir}} {{name}}"),
                     format!("不認識的佔位符 {{{name}}}——只有 {{file}} {{dir}} {{name}}"),
                     format!("unknown placeholder {{{name}}}; only {{file}} {{dir}} {{name}}"),
                 ));
@@ -3198,7 +3200,7 @@ impl Runner {
             rest = &after[end + 1..];
         }
         if self.argv("x").is_none() {
-            return Some(said("引號没有配對".to_string(), "a quote with no partner".to_string()));
+            return Some(said("引号没有配对".to_string(), "引號没有配對".to_string(), "a quote with no partner".to_string()));
         }
         None
     }
@@ -3211,13 +3213,19 @@ fn one_character(text: &str, narrow: bool) -> bool {
     yumete_cjk::grapheme_count(text) == 1 && (!narrow || yumete_cjk::str_width(text) == 1)
 }
 
-/// **A complaint in the language the editor speaks**: the Chinese, and the
-/// English beside it. The language is
-/// [`yumete_cjk::speaks_english`], set by the front end before it loads.
-pub(crate) fn said(zh: String, en: String) -> String {
-    match yumete_cjk::speaks_english() {
-        true => en,
-        false => zh,
+/// **A complaint in the language the editor speaks**: Simplified, Traditional
+/// and English, side by side so a complaint is written in one place. The
+/// language is [`yumete_cjk::speaks_english`] and
+/// [`yumete_cjk::speaks_simplified`], set by the front end before it loads.
+///
+/// The config crate sits below the messages table (`yumete-core` does not
+/// depend on it, and it must not depend on the editor core), so its
+/// complaints carry their own three forms rather than a tag.
+pub(crate) fn said(zhs: String, zht: String, en: String) -> String {
+    match (yumete_cjk::speaks_english(), yumete_cjk::speaks_simplified()) {
+        (true, _) => en,
+        (false, true) => zhs,
+        (false, false) => zht,
     }
 }
 
@@ -3235,18 +3243,19 @@ fn one_of(at: &str, word: &str, names: &[&str]) -> String {
     };
     said(
         format!("{at} = \"{word}\" 只能是 {zh}"),
+        format!("{at} = \"{word}\" 只能是 {zh}"),
         format!("{at} = \"{word}\": only {en}"),
     )
 }
 
 /// `low` to `high`, as a complaint says a range.
 fn span(low: usize, high: usize) -> String {
-    said(format!("{low} 到 {high}"), format!("{low} to {high}"))
+    said(format!("{low} 到 {high}"), format!("{low} 到 {high}"), format!("{low} to {high}"))
 }
 
 /// 0, or `low` to `high`: a range that 0 also turns off.
 fn zero_or(low: usize, high: usize) -> String {
-    said(format!("0，或者 {low} 到 {high}"), format!("0, or {low} to {high}"))
+    said(format!("0，或者 {low} 到 {high}"), format!("0，或者 {low} 到 {high}"), format!("0, or {low} to {high}"))
 }
 
 /// The ways `[ime] commit` is written.
@@ -3724,6 +3733,7 @@ impl Config {
                             // line stopped working would never learn why.
                             if parsed.editor.screenshot.take().is_some() {
                                 problems.push(said(
+                                    format!("{}：screenshot 只认全域设定——它经过 shell", local.display()),
                                     format!("{}：screenshot 只認全域設定——它經過 shell", local.display()),
                                     format!(
                                         "{}: screenshot is read from the global config only, since it runs through the shell",
@@ -3777,6 +3787,10 @@ impl Config {
                                 parsed.keys.vim = RawKeymapKeys::default();
                                 problems.push(said(
                                     format!(
+                                        "{}：[keys.normal] 只认全域设定——一串按键里放得下一整行命令行",
+                                        local.display()
+                                    ),
+                                    format!(
                                         "{}：[keys.normal] 只認全域設定——一串按鍵裏放得下一整行命令行",
                                         local.display()
                                     ),
@@ -3814,6 +3828,7 @@ impl Config {
     // way to find out that the question is now spelled `word_level`.
     if raw.editor.segmentation_threshold.is_some() {
         problems.push(said(
+            "segmentation_threshold 已经没有了——改成 word_level = \"strict\"/\"balanced\"/\"full\"".to_string(),
             "segmentation_threshold 已經没有了——改成 word_level = \"strict\"/\"balanced\"/\"full\"".to_string(),
             "segmentation_threshold is gone: write word_level = \"strict\"/\"balanced\"/\"full\"".to_string(),
         ));
@@ -3821,6 +3836,7 @@ impl Config {
     // On/off is `word_mark`'s `off`.
     if raw.editor.show_segmentation.is_some() {
         problems.push(said(
+            "show_segmentation 已经没有了——改成 word_mark = \"off\"".to_string(),
             "show_segmentation 已經没有了——改成 word_mark = \"off\"".to_string(),
             "show_segmentation is gone: write word_mark = \"off\"".to_string(),
         ));
@@ -3829,6 +3845,7 @@ impl Config {
     // rather than kept as a switch that cannot switch.
     if raw.editor.ruby_dialects.is_some() {
         problems.push(said(
+            "ruby_dialects 已经没有了——两种注音写法本来就都认".to_string(),
             "ruby_dialects 已經没有了——兩種注音寫法本來就都認".to_string(),
             "ruby_dialects is gone: both ruby syntaxes are always read".to_string(),
         ));
@@ -3840,6 +3857,9 @@ impl Config {
     // that decision for a reader who asked for a longer group.
     if let Some(RawTatechuyoko::Switch(on)) = raw.editor.tatechuyoko {
         problems.push(said(
+            format!(
+                "tatechuyoko = {on} 现在要写成一个数——一格装几个半角字，{TATECHUYOKO_CLASSIC} 是老办法，最多 {TATECHUYOKO_MAX}，0 是关"
+            ),
             format!(
                 "tatechuyoko = {on} 現在要寫成一個數——一格裝幾個半角字，{TATECHUYOKO_CLASSIC} 是老辦法，最多 {TATECHUYOKO_MAX}，0 是關"
             ),
@@ -3915,6 +3935,7 @@ impl Config {
         if let Some(word) = value.as_deref() {
             if parse_hex(word).is_none() {
                 problems.push(said(
+                    format!("{name} = \"{word}\" 只能是一个 #RRGGBB"),
                     format!("{name} = \"{word}\" 只能是一個 #RRGGBB"),
                     format!("{name} = \"{word}\": only a #RRGGBB colour"),
                 ));
@@ -3973,6 +3994,7 @@ impl Config {
     if let Some(word) = raw.theme.name.as_deref() {
         if !word.trim().is_empty() && ThemeConfig::named(word).is_none() {
             problems.push(said(
+                format!("[theme] name = \"{word}\" 不是主题的名字——:theme 按一下 Tab 看有哪些"),
                 format!("[theme] name = \"{word}\" 不是主題的名字——:theme 按一下 Tab 看有哪些"),
                 format!("[theme] name = \"{word}\" is not a theme; :theme and Tab list them"),
             ));
@@ -4036,6 +4058,7 @@ impl Config {
     if let Some(other) = raw.keys.inherit.as_ref().filter(|v| !v.is_bool()) {
         problems.push(said(
             format!("[keys] inherit = {other}：只能是 true 或 false"),
+            format!("[keys] inherit = {other}：只能是 true 或 false"),
             format!("[keys] inherit = {other}: only true or false"),
         ));
     }
@@ -4048,6 +4071,7 @@ impl Config {
                 false => "off",
             };
             problems.push(said(
+                format!("[keys] flavor = {on}：风味现在分三档，改写成 flavor = \"{word}\""),
                 format!("[keys] flavor = {on}：風味現在分三檔，改寫成 flavor = \"{word}\""),
                 format!("[keys] flavor = {on}: the flavour has three levels now; write flavor = \"{word}\""),
             ));
@@ -4065,11 +4089,13 @@ impl Config {
         if FlavorItem::parse(id).is_none() {
             let ids = FlavorItem::ids();
             problems.push(said(
+                format!("[keys.flavor_items] {id}：没有这一项，只能是 {}", ids.join("、")),
                 format!("[keys.flavor_items] {id}：没有這一項，只能是 {}", ids.join("、")),
                 format!("[keys.flavor_items] {id}: no such item; only {}", ids.join(", ")),
             ));
         } else if !on.is_bool() {
             problems.push(said(
+                format!("[keys.flavor_items] {id} = {on}：只能是 true 或 false"),
                 format!("[keys.flavor_items] {id} = {on}：只能是 true 或 false"),
                 format!("[keys.flavor_items] {id} = {on}: only true or false"),
             ));
@@ -4102,10 +4128,12 @@ impl Config {
     // 草稿: the Chinese of the ones below.
     match raw.editor.show_chaifen.as_ref().and_then(toml::Value::as_bool) {
         Some(true) => problems.push(said(
+            "[editor] show_chaifen 已经没有了，改写成 [ime] annotation = \"double\"".to_string(),
             "[editor] show_chaifen 已經没有了，改寫成 [ime] annotation = \"double\"".to_string(),
             "[editor] show_chaifen is gone; write [ime] annotation = \"double\"".to_string(),
         )),
         _ if raw.editor.show_chaifen.is_some() => problems.push(said(
+            "[editor] show_chaifen 已经没有了，删掉这一行就是（出厂不显示注解）".to_string(),
             "[editor] show_chaifen 已經没有了，刪掉這一行就是（出廠不顯示注解）".to_string(),
             "[editor] show_chaifen is gone; delete the line (no annotation is the factory setting)".to_string(),
         )),
@@ -4122,6 +4150,7 @@ impl Config {
     for (name, ticks) in &raw.ime.annotation_modes {
         let Some(ticks) = ticks.as_table() else {
             problems.push(said(
+                format!("[ime.annotation_modes] {name}：要写成一张表，每一栏 true 或 false"),
                 format!("[ime.annotation_modes] {name}：要寫成一張表，每一欄 true 或 false"),
                 format!("[ime.annotation_modes] {name}: a table of fields, each true or false"),
             ));
@@ -4129,6 +4158,7 @@ impl Config {
         };
         if !annotation_name_usable(name) {
             problems.push(said(
+                format!("[ime.annotation_modes] {name}：这个名字用不了（off、next 和带点的名字不行），跳过了"),
                 format!("[ime.annotation_modes] {name}：這個名字用不了（off、next 和帶點的名字不行），跳過了"),
                 format!("[ime.annotation_modes] {name}: a mode cannot be called that (off, next, or a name with a dot); skipped"),
             ));
@@ -4137,11 +4167,13 @@ impl Config {
         for (field, on) in ticks {
             if !ANNOTATION_FIELDS.contains(&field.as_str()) {
                 problems.push(said(
+                    format!("[ime.annotation_modes.{name}] {field}：没有这一栏，只能是 {}", ANNOTATION_FIELDS.join("、")),
                     format!("[ime.annotation_modes.{name}] {field}：没有這一欄，只能是 {}", ANNOTATION_FIELDS.join("、")),
                     format!("[ime.annotation_modes.{name}] {field}: no such field; only {}", ANNOTATION_FIELDS.join(", ")),
                 ));
             } else if !on.is_bool() {
                 problems.push(said(
+                    format!("[ime.annotation_modes.{name}] {field} = {on}：只能是 true 或 false"),
                     format!("[ime.annotation_modes.{name}] {field} = {on}：只能是 true 或 false"),
                     format!("[ime.annotation_modes.{name}] {field} = {on}: only true or false"),
                 ));
@@ -4207,6 +4239,7 @@ impl Config {
             false => "全局",
         };
         said(
+            format!("{which}配置档出错，使用出厂设置。{}: {detail}", path.display()),
             format!("{which}配置檔出錯，使用出廠設置。{}: {detail}", path.display()),
             format!(
                 "The {} config file has an error; the factory settings are in use. {}: {detail}",
@@ -5424,6 +5457,7 @@ impl RawConfig {
         fn held(problems: &mut Vec<String>, at: &str, want: usize, got: usize, range: &str) -> usize {
             if got != want {
                 problems.push(said(
+                    format!("{at}：输入的 {want} 不在合法范围 {range}"),
                     format!("{at}：輸入的 {want} 不在合法範圍 {range}"),
                     format!("{at}: {want} is outside {range}"),
                 ));
@@ -5488,6 +5522,10 @@ impl RawConfig {
                 Some(_) => config.editor.language_key = key,
                 None => problems.push(said(
                     format!(
+                        "[editor] language_key：不认得「{key}」——只能是 off、F1 到 F12、\
+                         C-<字母> 或 A-<字母>"
+                    ),
+                    format!(
                         "[editor] language_key：不認得「{key}」——只能是 off、F1 到 F12、\
                          C-<字母> 或 A-<字母>"
                     ),
@@ -5525,6 +5563,7 @@ impl RawConfig {
             match one_character(&character, true) {
                 true => config.editor.indent_guides_character = character,
                 false => problems.push(said(
+                    format!("[editor] indent_guides_character = \"{character}\"：只能是一个半角字符"),
                     format!("[editor] indent_guides_character = \"{character}\"：只能是一個半角字符"),
                     format!("[editor] indent_guides_character = \"{character}\": one character, one cell wide"),
                 )),
@@ -5569,6 +5608,7 @@ impl RawConfig {
             match one_character(&symbol, false) {
                 true => config.editor.indent_symbol = symbol,
                 false => problems.push(said(
+                    format!("[editor] indent_symbol = \"{symbol}\"：只能是一个字符"),
                     format!("[editor] indent_symbol = \"{symbol}\"：只能是一個字符"),
                     format!("[editor] indent_symbol = \"{symbol}\": one character"),
                 )),
@@ -5699,12 +5739,14 @@ impl RawConfig {
             let (kept, bad) = yumete_cjk::read_which_wrap(written);
             if bad.contains(&'s') {
                 problems.push(said(
+                    format!("[editor] which_wrap = \"{written}\"：s 不是合法字母。空格在yumete中是菜单键"),
                     format!("[editor] which_wrap = \"{written}\"：s 不是合法字母。空格在yumete中是菜單鍵"),
                     format!("[editor] which_wrap = \"{written}\": s is not allowed; Space is the menu key in yumete"),
                 ));
             }
             if bad.iter().any(|c| *c != 's') {
                 problems.push(said(
+                    format!("[editor] which_wrap = \"{written}\"：出现了不合法字母。只允许 b h l < > ~"),
                     format!("[editor] which_wrap = \"{written}\"：出現了不合法字母。只允許 b h l < > ~"),
                     format!("[editor] which_wrap = \"{written}\": only the letters b h l < > ~"),
                 ));
@@ -5961,15 +6003,19 @@ impl RawConfig {
             if markers.is_empty() {
             } else if !narrow.is_empty() {
                 // 一個都不全角的時候不必把同一串字說兩遍。
-                let which = match narrow == markers {
-                    true => format!("「{markers}」"),
-                    false => format!("「{markers}」裏的「{narrow}」"),
+                let (which_s, which) = match narrow == markers {
+                    true => (format!("「{markers}」"), format!("「{markers}」")),
+                    false => (format!("「{markers}」里的「{narrow}」"), format!("「{markers}」裏的「{narrow}」")),
                 };
                 let which_en = match narrow == markers {
                     true => format!("\"{markers}\" is"),
                     false => format!("\"{narrow}\" in \"{markers}\" are"),
                 };
                 problems.push(said(
+                    format!(
+                        "[panel] markers：{which_s}不是全角的——序号要全角，\
+                         不然候选栏的格子对不齐"
+                    ),
                     format!(
                         "[panel] markers：{which}不是全角的——序號要全角，\
                          不然候選欄的格子對不齊"
@@ -6004,6 +6050,10 @@ impl RawConfig {
         if let Some(page) = self.export.page.as_deref() {
             if parse_page(page).is_none() {
                 problems.push(said(
+                    format!(
+                        "[export] page：不认得「{page}」——只能是 a4 a5 a6 b5 b6 letter \
+                         16开 32开 大32开，或者「137x195」这样的毫米数"
+                    ),
                     format!(
                         "[export] page：不認得「{page}」——只能是 a4 a5 a6 b5 b6 letter \
                          16開 32開 大32開，或者「137x195」這樣的毫米數"
@@ -6089,6 +6139,7 @@ impl RawConfig {
             out.shapes = shapes;
             for (name, _) in &raw.strays {
                 problems.push(said(
+                    format!("[keys.{word}.{name}]：没有这张表，跳过了。一套键位自己的表有 normal、select、insert"),
                     format!("[keys.{word}.{name}]：沒有這張表，跳過了。一套鍵位自己的表有 normal、select、insert"),
                     format!(
                         "[keys.{word}.{name}] is not a table yumete reads, so it was skipped; \
@@ -6099,6 +6150,7 @@ impl RawConfig {
         }
         for (name, _) in &self.keys.strays {
             problems.push(said(
+                format!("[keys.{name}]：没有这张表，跳过了。有 normal、select、insert、table、prompt、picker、sidebar、field、preview"),
                 format!("[keys.{name}]：沒有這張表，跳過了。有 normal、select、insert、table、prompt、picker、sidebar、field、preview"),
                 format!(
                     "[keys.{name}] is not a table yumete reads, so it was skipped; \
@@ -6206,6 +6258,7 @@ pub fn helix_key(key: &str) -> Result<String, ()> {
 /// The line a key [`helix_key`] cannot read says.
 fn unbindable_key(header: &str, key: &str) -> String {
     said(
+        format!("[keys.{header}] {key}：这个键 yumete 绑不了，跳过了"),
         format!("[keys.{header}] {key}：這個鍵 yumete 綁不了，跳過了"),
         format!("[keys.{header}] {key}: yumete cannot bind this key, so it was skipped"),
     )
@@ -6260,6 +6313,7 @@ fn read_key_table(
         for (key, value) in table {
             let wrong = |problems: &mut Vec<String>| {
                 problems.push(said(
+                    format!("[keys.{header}] {key} 这一行写法不对，跳过了——右边写命令、命令列表或键表"),
                     format!("[keys.{header}] {key} 這一行寫法不對，跳過了——右邊寫命令、命令列表或鍵表"),
                     format!(
                         "[keys.{header}] {key}: the right side must be a command, a list of commands, or a table of keys, so it was skipped"
@@ -6276,6 +6330,7 @@ fn read_key_table(
                             }
                             // 草稿
                             _ => problems.push(said(
+                                format!("[keys.{header}] label 只能是一段文字，跳过了"),
                                 format!("[keys.{header}] label 只能是一段文字，跳過了"),
                                 format!("[keys.{header}] label must be text, so it was skipped"),
                             )),
@@ -6288,6 +6343,7 @@ fn read_key_table(
                             (Some(on), Some(group)) if key == "sticky" => group.sticky = on,
                             (Some(on), Some(group)) => group.inherit = on,
                             _ => problems.push(said(
+                                format!("[keys.{header}] {key} 只能是 true 或 false，跳过了"),
                                 format!("[keys.{header}] {key} 只能是 true 或 false，跳過了"),
                                 format!("[keys.{header}] {key} must be true or false, so it was skipped"),
                             )),
@@ -6320,6 +6376,7 @@ fn read_key_table(
                                 shape.says.insert(run.clone(), text.clone());
                             }
                             _ => problems.push(said(
+                                format!("[keys.{header}.{key}] {word}：一条命令只写 run 和 label，跳过了"),
                                 format!("[keys.{header}.{key}] {word}：一條命令只寫 run 和 label，跳過了"),
                                 format!("[keys.{header}.{key}] {word}: a command takes only run and label, so it was skipped"),
                             )),
@@ -6360,6 +6417,7 @@ fn read_key_table(
                     if let Some(was) = spelt.insert(run.clone(), here.clone()) {
                         // 草稿
                         problems.push(said(
+                            format!("{here} 与 {was} 是同一个键，用的是后写的 {here}"),
                             format!("{here} 與 {was} 是同一個鍵，用的是後寫的 {here}"),
                             format!("{here} and {was} are one key; the later, {here}, is used"),
                         ));
@@ -6368,6 +6426,10 @@ fn read_key_table(
                     shape.order.push(run);
                 }
                 Some(bad) => problems.push(said(
+                    format!(
+                        "[keys.{header}] {key} = \"{bad}\" 不是动作名，这一条没装上——\
+                         动作名看 `:keymap-actions`，一串按键要写成 \"@{bad}\""
+                    ),
                     format!(
                         "[keys.{header}] {key} = \"{bad}\" 不是動作名，這一條没裝上——\
                          動作名看 `:keymap-actions`，一串按鍵要寫成 \"@{bad}\""
@@ -6403,6 +6465,7 @@ fn read_place_table(
         let one_key = yumete_cjk::actions::written(&run).chars().filter(|&c| c != yumete_cjk::actions::ALT).count() == 1;
         if !one_key || value.is_table() {
             problems.push(said(
+                format!("[keys.{header}] {key}：这张表一行只绑一个键，跳过了"),
                 format!("[keys.{header}] {key}：這張表一行只綁一個鍵，跳過了"),
                 format!("[keys.{header}] {key}: this table binds one key a line, so it was skipped"),
             ));
@@ -6419,6 +6482,7 @@ fn read_place_table(
         };
         let Some(commands) = commands else {
             problems.push(said(
+                format!("[keys.{header}] {key} 这一行写法不对，跳过了——右边写命令、命令列表或键表"),
                 format!("[keys.{header}] {key} 這一行寫法不對，跳過了——右邊寫命令、命令列表或鍵表"),
                 format!(
                     "[keys.{header}] {key}: the right side must be a command, a list of commands, or a table of keys, so it was skipped"
@@ -6431,6 +6495,10 @@ fn read_place_table(
                 out.insert(run, commands);
             }
             Some(bad) => problems.push(said(
+                format!(
+                    "[keys.{header}] {key} = \"{bad}\" 不是动作名，这一条没装上——\
+                     动作名看 `:keymap-actions`，一串按键要写成 \"@{bad}\""
+                ),
                 format!(
                     "[keys.{header}] {key} = \"{bad}\" 不是動作名，這一條没裝上——\
                      動作名看 `:keymap-actions`，一串按鍵要寫成 \"@{bad}\""

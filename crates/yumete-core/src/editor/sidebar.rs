@@ -1342,14 +1342,14 @@ impl Editor {
         let Some(found) = answer else {
             return rows;
         };
-        let fields = &found.rows;
+        let fields = found.said_rows();
         let width = fields
             .iter()
             .filter(|(_, value)| !value.is_empty())
             .map(|(name, _)| yumete_cjk::str_width(name))
             .max()
             .unwrap_or(0);
-        for (name, value) in fields {
+        for (name, value) in &fields {
             if value.is_empty() {
                 rows.push(heading(name.clone()));
                 continue;

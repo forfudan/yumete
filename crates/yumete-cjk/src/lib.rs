@@ -60,6 +60,20 @@ pub fn speaks_english() -> bool {
     SPEAKS_ENGLISH.load(std::sync::atomic::Ordering::Relaxed)
 }
 
+/// **Which script the Chinese is in**, beside [`speaks_english`]: a reader
+/// who asked for 简体 gets 简体 from the crates below the messages table too.
+static SPEAKS_SIMPLIFIED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Say whether Chinese messages are to be Simplified from now on.
+pub fn set_speaks_simplified(on: bool) {
+    SPEAKS_SIMPLIFIED.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Whether Chinese messages are Simplified (false: Traditional).
+pub fn speaks_simplified() -> bool {
+    SPEAKS_SIMPLIFIED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 pub use grapheme::{
     cells_per_char, grapheme_count, graphemes, next_grapheme_boundary, nth_grapheme, show_orphan_marks,
     prev_grapheme_boundary,
