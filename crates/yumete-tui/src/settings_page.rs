@@ -867,7 +867,8 @@ impl Seat {
     /// 交回來的那一段字。
     pub fn settle(&mut self, editor: &mut Editor) {
         let _ = self.notice(editor);
-        if editor.take_settings_request() && self.panel.is_none() {
+        let opening = editor.take_settings_request() && self.panel.is_none();
+        if opening {
             // 本項目那一頁跟着工作路徑走。
             let local = Some(yumete_config::panel::local_sheet_path(&editor.root()));
             let mut page = Panel::open(Some(yumete_config::config_dir().join("config.toml")), local);
@@ -885,6 +886,14 @@ impl Seat {
             if let Some(page) = self.panel.as_mut() {
                 page.search.clear();
                 if !page.go_to(&name, |s| every_name(s.label)) {
+                    // **From the text, a name the panel lacks opens nothing**:
+                    // it is most often vim's `:set nu` or `:set nowrap`, and a
+                    // panel opened on no row answers a question nobody asked.
+                    if opening {
+                        self.close(editor);
+                        editor.set_status(say!("settings.no-such-setting-from-text", name));
+                        return;
+                    }
                     editor.set_status(say!("settings.no-such-setting", name));
                     self.row_said = true;
                 }
@@ -2818,6 +2827,7 @@ mod tests {
         ed.execute(":settings no such thing").unwrap();
         seat.settle(&mut ed);
         assert_eq!(ed.status(), say!("settings.no-such-setting", "no such thing"));
+        assert!(seat.panel.is_some(), "already open, it stays");
     }
 
     /// **The keys at the foot are keys that do something**: no
@@ -3005,6 +3015,20 @@ mod tests {
         seat.settle(&mut ed);
         assert_eq!(ed.status(), say!("settings.no-such-setting", "nosuch"));
         assert_eq!(page(&seat).here().map(|s| s.key), Some("scrolloff"), "where it was");
+    }
+
+    /// **vim's `:set nu` from the text opens no panel**: a name the panel
+    /// lacks is refused on the status line, saying what `:set` takes.
+    #[test]
+    fn a_name_the_panel_lacks_opens_nothing_from_the_text() {
+        for words in ["nu", "nowrap", "ic", "invnu", "no such thing"] {
+            let mut ed = Editor::new();
+            let mut seat = Seat::default();
+            ed.execute(&format!(":set {words}")).unwrap();
+            seat.settle(&mut ed);
+            assert!(seat.panel.is_none(), "{words}");
+            assert_eq!(ed.status(), say!("settings.no-such-setting-from-text", words));
+        }
     }
 
     /// **A file that cannot be read is said at the top**, its layer is

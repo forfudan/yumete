@@ -1505,6 +1505,12 @@ zhs = "没有叫「{0}」的设置"
 en = "no setting called {0}"
 
 [[message]]
+# 在正文里打了 :settings（:set）和一个名字，而没有这一项设置；面板不打开。{0} 是打的名字（草稿）
+key = "settings.no-such-setting-from-text"
+zhs = "没有叫「{0}」的设置；:set 另认 vim 的 ft、ts、sw、et、tw"
+en = "no setting called {0}; :set also takes vim's ft, ts, sw, et and tw"
+
+[[message]]
 # 设置面板开着时打了 : 和一个命令并按 Enter，面板不接受命令。{0} 是打的命令（草稿）
 key = "settings.not-a-command"
 zhs = "设置面板不接受命令「{0}」，按 q 关闭"
