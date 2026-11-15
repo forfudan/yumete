@@ -1968,8 +1968,8 @@ find = "全部退出 全關 退出全部 quit all close everything qa"
 [[message]]
 # : 命令選單裏 :quit-error 那一項的説明（:cquit、:cq；帶退出码离开，git 等程序据此放弃）（草稿）
 key = "cmd.quit.error"
-zhs = "退出并返回错误码(默认 1)，让调用的程序放弃，如 git 提交；加 ! 放弃改动"
-en = "quit with an exit status (1 if not given), so the program that opened yumete gives up — git aborts the commit; ! discards changes"
+zhs = "退出并返回错误码(默认 1)，让调用的程序放弃，如 git 提交；未保存的改动全部直接丢弃"
+en = "quit with an exit status (1 if not given), so the program that opened yumete gives up — git aborts the commit; every unsaved change is discarded"
 find = "退出 错误码 錯誤碼 放弃 放棄 中止 abort cquit cq exit code status"
 
 [[message]]

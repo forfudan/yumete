@@ -166,8 +166,9 @@ pub enum Command {
     /// `:quit-error [status]` (helix's and vim's `:cquit`, `:cq`) — leave as
     /// `:quit-all` does, with exit status `code` (1 when left off). The way
     /// to say 「no」 to the program that opened the editor: git aborts the
-    /// commit, a script stops. Without `force` unsaved files keep it open, as
-    /// in helix; `:cq!` leaves them.
+    /// commit, a script stops. **It discards unsaved changes**, as vim's
+    /// does: saying 「no」 is what it is for, and a buffer git opened is
+    /// nearly always changed. `:cq!` is the same command.
     QuitError {
         code: u8,
         force: bool,

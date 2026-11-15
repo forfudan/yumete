@@ -9778,9 +9778,8 @@ fn reload_all_reads_every_file_and_leaves_the_unsaved_ones() {
 }
 
 /// `:quit-error` (helix's and vim's `:cquit`, `:cq`) leaves with an exit
-/// status — 1, or the one given — so git gives up the commit. It is held up
-/// by unsaved files as helix's is, and the status is only set on the way
-/// out: refused, a later `:q` leaves with 0.
+/// status — 1, or the one given — so git gives up the commit. Unsaved
+/// changes are discarded, as vim's `:cq` does.
 #[test]
 fn quit_error_leaves_with_an_exit_status() {
     let mut ed = Editor::new();
@@ -9796,8 +9795,8 @@ fn quit_error_leaves_with_an_exit_status() {
     press(&mut ed, "i");
     ed.on_key(Key::Char('x'));
     ed.on_key(Key::Esc);
-    assert!(matches!(ed.execute("quit-error"), Err(EditorError::UnsavedChanges)));
-    assert_eq!(ed.exit_code(), 0, "refused, so nothing is set");
+    assert_eq!(ed.execute("quit-error").unwrap(), CommandOutcome::Quit, "unsaved changes are discarded");
+    assert_eq!(ed.exit_code(), 1);
     assert!(ed.execute("cq 300").is_err(), "an exit status is one byte");
     assert!(ed.execute("cq x").is_err());
     assert_eq!(ed.execute("cq! 2").unwrap(), CommandOutcome::Quit);

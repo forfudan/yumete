@@ -346,10 +346,9 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::QuitAll { force } => self.quit_all(force),
-            // The status is set only on the way out: refused for unsaved
-            // files, the editor stays and a later `:q` leaves with 0.
-            Command::QuitError { code, force } => {
-                let out = self.quit_all(force)?;
+            // Unsaved changes do not hold it up: it is the way to say 「no」.
+            Command::QuitError { code, .. } => {
+                let out = self.quit_all(true)?;
                 self.exit_code = code;
                 Ok(out)
             }
