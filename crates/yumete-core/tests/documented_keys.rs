@@ -197,7 +197,6 @@ const DISOWNED: &[&str] = &[
     // 那一扇。和上面 `:clipboard-yank` 那一條同一回事。
     ":buffers",
     ":ls",
-    ":bd",
     ":cy",
     ":cp",
     // The fold: 21 names that moved under a parent. Same rule — the old
@@ -224,7 +223,6 @@ const DISOWNED: &[&str] = &[
     ":sav",
     ":row",
     ":conflicts",
-    ":bclose",
     ":appearance",
     // A spelling the manual prints to explain why the fold renamed the child:
     // 「`:view note` 更糟」.

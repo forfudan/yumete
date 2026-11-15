@@ -1560,7 +1560,7 @@ fn settings_by_name(typed: &str) -> Vec<Choice> {
 /// longer form of a spelling that is printed (`setfiletype` beside `setf`).
 /// They are declared in the entry's `aliases` like every other, so they parse
 /// and the manual's command table lists them; this only keeps a menu row short.
-pub const QUIET: &[&str] = &["setfiletype", "outline", "out"];
+pub const QUIET: &[&str] = &["setfiletype", "outline", "out", "bclose", "bd", "bdelete", "bw", "bwipeout"];
 
 /// **Whether the words after `:settings` are vim's `:set` words** and not a
 /// setting's name. A setting is named by its path, which is always
@@ -5962,7 +5962,9 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "buffer-close",
-        aliases: &["bc"],
+        // vim's `:bd`/`:bw` and helix's `:bclose` too: neither is taken for
+        // anything else by the other editor.
+        aliases: &["bc", "bclose", "bd", "bdelete", "bw", "bwipeout"],
         help: "cmd.buffers.close",
         needs: &[],
         params: &[],
@@ -6506,13 +6508,11 @@ pub const COMMANDS: &[Entry] = &[
 // signpost may only point *away* from a word nobody can type.
 const RENAMED: &[(&str, &str)] = &[
     ("appearance", "theme"),
-    ("bclose", "buffer-close"),
     // **The short vi spellings**. None of them shares a segment
     // with the name it became, so the search below cannot find them — and
     // `:cy` was worse than unfound: the prefix pass matched `cyanotype` in the
     // theme list and sent a vi hand that wanted the clipboard to the theme
     // switcher. A wrong signpost is worse than none.
-    ("bd", "buffer-close"),
     ("buffers", "buffer"),
     ("cf", "yume-annotation"),
     ("conflicts", "check-merge"),
