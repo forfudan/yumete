@@ -1,4 +1,4 @@
-//! What `[^`, `](#` and `[[` can be finished with (#418 二、三).
+//! What `[^`, `](#`, `[[` and `[[page#` can be finished with (#418 二、三).
 //!
 //! Two references a manuscript keeps needing and neither of which the hand can
 //! remember: the tag of a footnote written four hundred lines down, and the
@@ -51,6 +51,8 @@ pub enum Refers {
     Anchor,
     /// `[[` — another file near this one (#418 三).
     File,
+    /// `[[page#` — a heading in the file `page` names.
+    Section,
     /// `[@` — a citation key, Pandoc's syntax in Markdown.
     Cite,
     /// `@` in Typst — a citation key, or a label the document sets.
@@ -63,7 +65,7 @@ impl Refers {
         match self {
             Refers::Note => (']', 1),
             Refers::Anchor => (')', 1),
-            Refers::File => (']', 2),
+            Refers::File | Refers::Section => (']', 2),
             Refers::Cite => (']', 1),
             // Typst's `@key` is closed by whatever follows it.
             Refers::Label => (']', 0),
@@ -77,6 +79,7 @@ impl Refers {
         match self {
             Refers::Note => say!("complete.footnote"),
             Refers::Anchor => say!("complete.heading"),
+            Refers::Section => say!("complete.page-heading"),
             Refers::File => say!("complete.file"),
             Refers::Cite | Refers::Label => say!("complete.citation"),
         }
@@ -158,6 +161,14 @@ impl Editor {
             true => typst_trigger(&before)?,
             false => trigger(&before)?,
         };
+        // `[[雨夜#雪` is finished from 雪 on; the page is what it is read in.
+        let (page, typed) = match refers {
+            Refers::Section => match typed.split_once('#') {
+                Some((page, part)) => (page.to_string(), part.to_string()),
+                None => return None,
+            },
+            _ => (String::new(), typed),
+        };
         // A `[^` quoted in a fence is four characters of somebody's example.
         //
         // Warning: **Asked after the trigger**, for the reason [`Self::continue_the_list`]
@@ -174,6 +185,7 @@ impl Editor {
             Refers::Note => self.note_choices(&typed),
             Refers::Anchor => self.anchor_choices(&typed),
             Refers::File => self.file_choices(&typed),
+            Refers::Section => self.section_choices(&page, &typed),
             Refers::Cite => self.cite_choices(&typed, false),
             Refers::Label => self.cite_choices(&typed, true),
         };
@@ -253,6 +265,81 @@ impl Editor {
                 }
             })
             .collect()
+    }
+
+    /// **The headings of the page `[[page#` names**, written as `gd` reads
+    /// them: the heading's own words, which is also what Obsidian writes.
+    ///
+    /// The page is the file `gd` would open — this folder first, then the
+    /// project's nearest — and an empty one is this file, as `[[#雪]]` is.
+    /// No file, no panel: a heading list for a page that is not there would
+    /// be a guess.
+    ///
+    /// Warning: **One row per heading `gd` can reach.** `gd` goes to the first
+    /// heading whose words match, so a second 「雪」 further down is the same
+    /// link; offering it twice would offer one place under two rows.
+    fn section_choices(&self, page: &str, typed: &str) -> Vec<Candidate> {
+        let close = self.closes_with_n(']', 2);
+        let titles: Vec<String> = match page.is_empty() {
+            true => self.outline().into_iter().map(|(_, _, title)| title).collect(),
+            false => {
+                let resolved = self
+                    .links
+                    .as_ref()
+                    .zip(self.current_file_path())
+                    .and_then(|(index, from)| index.resolve(page, &from).map(Path::to_path_buf));
+                let Some(file) = self.wiki_page_tries(page, resolved).into_iter().find(|p| p.is_file()) else {
+                    return Vec::new();
+                };
+                self.headings_of_page(&file)
+            }
+        };
+        let want = typed.to_lowercase();
+        let mut seen: std::collections::HashSet<String> = Default::default();
+        titles
+            .into_iter()
+            // A heading holding `]]` or `|` would end the link inside it.
+            .filter(|title| !title.contains("]]") && !title.contains('|'))
+            .filter(|title| seen.insert(heading_key(title)))
+            .filter(|title| want.is_empty() || title.to_lowercase().contains(&want))
+            .take(MOST)
+            .map(|title| Candidate { text: format!("{title}{close}"), note: None })
+            .collect()
+    }
+
+    /// The headings of another file, as [`Editor::outline`] would list them
+    /// once `gd` had opened it: from the buffer holding it when one does,
+    /// since that is the text `gd` shows, else from the disk.
+    fn headings_of_page(&self, file: &Path) -> Vec<String> {
+        let held = self.buffer_holding(file).map(|i| &self.buffers[i]);
+        let stamp: crate::editor::PageStamp = match held {
+            Some(buffer) => (None, Some((buffer.id(), buffer.revision()))),
+            None => (std::fs::metadata(file).and_then(|m| m.modified()).ok(), None),
+        };
+        if let Some((path, at, titles)) = self.page_headings.borrow().as_ref() {
+            if path == file && *at == stamp {
+                return titles.clone();
+            }
+        }
+        let (rope, syntax) = match held {
+            Some(buffer) => (buffer.rope().clone(), buffer.syntax()),
+            None => {
+                let Ok(text) = std::fs::read_to_string(file) else { return Vec::new() };
+                let rope = ropey::Rope::from_str(&text);
+                let named = file.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                let syntax = crate::syntax::from_extension(&named).unwrap_or_else(|| crate::syntax::sniff_rope(&rope));
+                (rope, syntax)
+            }
+        };
+        let blocks = match self.markup_visible() && syntax == crate::syntax::Syntax::Markdown {
+            true => markdown_blocks(&rope),
+            false => Vec::new(),
+        };
+        let block_of = |line: usize| blocks.get(line).copied().unwrap_or_default();
+        let titles: Vec<String> =
+            super::render::outline_of(&rope, syntax, &block_of).into_iter().map(|(_, _, title)| title).collect();
+        *self.page_headings.borrow_mut() = Some((file.to_path_buf(), stamp, titles.clone()));
+        titles
     }
 
     /// **Every file near this one** — `[[`, Feature #418 三.
@@ -606,6 +693,16 @@ fn trigger(before: &[char]) -> Option<(Refers, String)> {
         .flatten()
         .max_by_key(|&(end, _)| end)?;
     let typed: String = before[end..].iter().collect();
+    // `[[雨夜#` has gone on from the page to a heading in it.
+    if refers == Refers::File {
+        if let Some((page, part)) = typed.split_once('#') {
+            let page_broken = page.chars().any(|c| matches!(c, '[' | ']' | '(' | ')' | '^' | '|'));
+            // A heading's words may hold a space, a bracket of its own or a
+            // `#`; only what would end the link ends this.
+            let part_broken = part.chars().any(|c| matches!(c, '[' | ']' | '|'));
+            return (!page_broken && !part_broken).then_some((Refers::Section, typed));
+        }
+    }
     // None of the three holds a bracket. One turning up means the reference
     // behind it was finished and this caret is somewhere else on the same line.
     //
@@ -637,6 +734,40 @@ fn typst_trigger(before: &[char]) -> Option<(Refers, String)> {
 /// Where the last `pattern` in `text` ends, if it is in there at all.
 fn ends_at(text: &[char], pattern: &[char]) -> Option<usize> {
     (pattern.len()..=text.len()).rev().find(|&end| &text[end - pattern.len()..end] == pattern)
+}
+
+/// A heading as `gd` compares it: its letters and digits, case aside — see
+/// `goto_heading_named`.
+fn heading_key(title: &str) -> String {
+    title.to_lowercase().chars().filter(|c| c.is_alphanumeric()).collect()
+}
+
+/// Which block each line of a Markdown text is in — what decides that a `#`
+/// in a fence or a note is not a heading, read the way the page's own scan
+/// reads them.
+fn markdown_blocks(rope: &ropey::Rope) -> Vec<crate::markdown::Block> {
+    let mut scanner = crate::markdown::BlockScanner::new();
+    let mut note: Option<&'static str> = None;
+    let mut blocks = Vec::with_capacity(rope.len_lines());
+    for text in rope.lines() {
+        let whole = text.to_string();
+        if let Some(closer) = note {
+            let close = crate::markdown::comment_closes(&whole, closer);
+            if let Some(at) = close {
+                let rest: String = whole.chars().skip(at + closer.chars().count()).collect();
+                note = crate::markdown::comment_left_open(&rest);
+            }
+            blocks.push(crate::markdown::Block::Comment { close });
+            continue;
+        }
+        let prefix: String = whole.chars().take(crate::markdown::PREFIX).collect();
+        let block = scanner.feed(&prefix, whole.chars().count());
+        if !block.is_literal() {
+            note = crate::markdown::comment_left_open(&whole);
+        }
+        blocks.push(block);
+    }
+    blocks
 }
 
 /// A note's opening words, for the column beside the tag.

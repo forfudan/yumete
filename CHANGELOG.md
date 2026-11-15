@@ -2,6 +2,16 @@
 
 Written for people who use it to write, not for the commit log: each line says what you can *do*, and what changed under you. The numbers are the feature table in `docs/development.md` §5.2.
 
+## Unreleased
+
+### Added
+
+- **Typing `#` after the page in a wiki link (`[[雨夜#`) lists that file's headings**, found the way `gd` finds the page; `[[#` lists this file's.
+
+### Fixed
+
+- **A wiki name inside a link no longer turns gold**: the page or alias of `[[page|alias]]`, a `#heading`, or either half of `[text](url)`.
+
 ## 0.23.0 · 2026-11-15
 
 ### Added

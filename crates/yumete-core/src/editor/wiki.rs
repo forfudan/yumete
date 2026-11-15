@@ -468,11 +468,44 @@ impl Editor {
     /// was merged in: the segmentation this reads is the cached one, so a
     /// frame costs a hash lookup per word on the drawn rows and nothing walks
     /// the document. A one-character entry is never marked.
+    ///
+    /// Warning: **Nothing inside a link is marked** — not the page of a
+    /// `[[辭典|宗門]]`, not its alias, not a `#heading`, and not either half
+    /// of a `[text](url)`. A file named like an entry is a link there, and the
+    /// link's colour says so; the gold is for the name in running prose. Asked
+    /// here rather than by each page that draws, so the 縱書 page and the
+    /// horizontal one cannot disagree.
     pub fn wiki_marks_on_line(&self, line: usize) -> Vec<(usize, usize)> {
-        match self.wiki_marks_visible() {
-            true => self.wiki_names_on_line(line),
-            false => Vec::new(),
+        if !self.wiki_marks_visible() {
+            return Vec::new();
         }
+        let names = self.wiki_names_on_line(line);
+        if names.is_empty() {
+            return names;
+        }
+        let linked = self.links_on_line(line);
+        names
+            .into_iter()
+            .filter(|&(a, b)| !linked.iter().any(|&(x, y)| a < y && x < b))
+            .collect()
+    }
+
+    /// Where on `line` a link stands, as char ranges: the whole construct,
+    /// brackets, target and alias, since only its text is a
+    /// [`crate::markdown::Kind::Link`] run.
+    fn links_on_line(&self, line: usize) -> Vec<(usize, usize)> {
+        let runs = self.markup_line_in(line, self.block_of(line));
+        let mut out: Vec<(usize, usize)> = Vec::new();
+        for link in runs
+            .iter()
+            .filter(|r| matches!(r.kind, crate::markdown::Kind::Link | crate::markdown::Kind::WikiLink))
+        {
+            let mine = runs.iter().filter(|r| r.construct == link.construct);
+            let start = mine.clone().map(|r| r.start).min().unwrap_or(link.start);
+            let end = mine.map(|r| r.end).max().unwrap_or(link.end);
+            out.push((start, end));
+        }
+        out
     }
 
     /// Where the names are, whether or not the marks are being drawn — so that

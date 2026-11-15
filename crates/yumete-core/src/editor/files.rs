@@ -1880,21 +1880,13 @@ impl Editor {
         // this manuscript's, not the writer's to type again. The page is
         // looked for across the whole project, nearest first — the same
         // resolver the links panel and completion use.
-        let mut tries = vec![here.join(named)];
-        if link.wiki {
-            if let Some(found) = self.resolve_link(&link.target) {
-                tries.insert(0, found);
+        let tries = match link.wiki {
+            true => {
+                let resolved = self.resolve_link(&link.target);
+                self.wiki_page_tries(&link.target, resolved)
             }
-        }
-        if link.wiki {
-            let suffix = self
-                .current_buffer()
-                .path()
-                .and_then(|p| p.extension().map(|e| e.to_string_lossy().into_owned()))
-                .unwrap_or_else(|| "md".to_string());
-            tries.insert(0, here.join(format!("{}.{suffix}", link.target)));
-            tries.insert(1, here.join(format!("{}.md", link.target)));
-        }
+            false => vec![here.join(named)],
+        };
         let Some(full) = tries.into_iter().find(|p| p.is_file()) else {
             self.status = say!("link.no-such-file", link.target);
             return;
@@ -1907,6 +1899,28 @@ impl Editor {
             Some(anchor) => self.goto_heading_named(&anchor),
             None => self.status = say!("link.opened", link.target),
         }
+    }
+
+    /// **The files `[[target]]` may be, in the order `gd` tries them**: this
+    /// folder's page with this file's suffix, then with `.md`, then the
+    /// project's nearest (`resolved`, from [`Self::resolve_link`]), then the
+    /// name as a path. Completing `[[page#` asks the same list, so the
+    /// headings it offers are the ones `gd` lands on.
+    pub(super) fn wiki_page_tries(&self, target: &str, resolved: Option<PathBuf>) -> Vec<PathBuf> {
+        let here = self
+            .current_buffer()
+            .path()
+            .and_then(|p| p.parent().map(Path::to_path_buf))
+            .unwrap_or_else(|| PathBuf::from("."));
+        let suffix = self
+            .current_buffer()
+            .path()
+            .and_then(|p| p.extension().map(|e| e.to_string_lossy().into_owned()))
+            .unwrap_or_else(|| "md".to_string());
+        let mut tries = vec![here.join(format!("{target}.{suffix}")), here.join(format!("{target}.md"))];
+        tries.extend(resolved);
+        tries.push(here.join(Self::expand_tilde(target)));
+        tries
     }
 
     /// Follow the link the cursor is on, for a front end that has just put the

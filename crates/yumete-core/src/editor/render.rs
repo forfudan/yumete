@@ -1655,206 +1655,8 @@ impl Editor {
         if matches!(self.current_buffer().syntax(), crate::syntax::Syntax::Code(_)) {
             return self.code_outline();
         }
-        let rope = self.current_buffer().rope();
-        let mut out = Vec::new();
-        for line in 0..rope.len_lines() {
-            let text = rope.line(line).to_string();
-            let trimmed = text.trim_end_matches(['\n', '\r']);
-            // A file that pulls its chapters in is a table of contents, and
-            // the chapters are what a reader wants to jump to. `#import` is
-            // not one of them — that borrows a template, it does not add a
-            // chapter — so only `#include` is listed.
-            if trimmed.trim_start().starts_with("#include") {
-                if let Some(path) = quoted_path(trimmed) {
-                    out.push((line, 2, path));
-                    continue;
-                }
-            }
-            // A heading is spelled `#` in Markdown and `=` in Typst, and only
-            // one of those is a heading in any given file: in Typst `#import`
-            // opens code, and reading it as a heading turns every library the
-            // book borrows into a chapter.
-            let want = match self.current_buffer().syntax() {
-                crate::syntax::Syntax::Markdown => '#',
-                crate::syntax::Syntax::Typst => '=',
-                // A file with no markup has its chapters found below instead,
-                // and a `:diff` listing has no chapters at all.
-                crate::syntax::Syntax::Text
-                | crate::syntax::Syntax::Diff
-                | crate::syntax::Syntax::Code(_) => continue,
-            };
-            // A `#` inside a note or a fence is not a chapter (#288).
-            if matches!(
-                self.block_of(line),
-                crate::markdown::Block::Comment { .. } | crate::markdown::Block::Code { .. }
-            ) {
-                continue;
-            }
-            // **`第一章` ＋ 一行 `====` 也是標題**（setext）。CommonMark 認它；
-            // 只找行首的 `#` 的話，用下劃線寫章名的稿子大綱是空的，`空格 o` 和
-            // `:toc` 一章都跳不到。
-            //
-            // Warning: **上一行必須是 `Prose`**，這一句就是 CommonMark 那條「上面要是
-            // 一個段落」。它一次擋掉四種假陽性：卷首 `---` 元數據（那幾行是
-            // `FrontMatter`）、清單項（`Item`）、表格行（`Table`）、引文
-            // （`Quote`）。少了它，`---\ntitle: x\n---` 的第二條橫線會把
-            // `title: x` 變成一章。
-            if want == '#' && line > 0 {
-                let bar = trimmed.trim();
-                let level = match bar.chars().next() {
-                    Some('=') if bar.chars().all(|c| c == '=') => Some(1),
-                    Some('-') if bar.chars().all(|c| c == '-') => Some(2),
-                    _ => None,
-                };
-                if let Some(level) = level {
-                    let above = rope.line(line - 1).to_string();
-                    let title = above.trim_end_matches(['\n', '\r']).trim();
-                    if !title.is_empty()
-                        && matches!(self.block_of(line - 1), crate::markdown::Block::Prose)
-                    {
-                        out.push((line - 1, level, title.to_string()));
-                        continue;
-                    }
-                }
-            }
-            // Warning: **判準走 `heading_marks`，三處同一份**，說明寫在那一支上。
-            // **七個井號不是標題**：CommonMark 封頂六級。
-            let Some(depth) = crate::markdown::heading_marks(trimmed, want) else {
-                continue;
-            };
-            let rest = &trimmed[depth..];
-            let title = rest.trim();
-            // `##` with nothing after it is a rule, not a heading; and a `=`
-            // run on its own is Typst's own heading marker only when titled.
-            if title.is_empty() {
-                continue;
-            }
-            out.push((line, depth, title.to_string()));
-        }
-        // **A novel is a text file with chapters in it and no markup at all.**
-        // 資治通鑑 is 700 chapters and not one `#` — exactly the file where
-        // 「go to chapter 412」 is worth a key, and the one this said had no
-        // outline. The chapters are written 第四百一十二卷, which is a heading
-        // whether or not anybody marked it up.
-        //
-        // Only when nothing else was found: a manuscript that *does* use `#`
-        // has said how it marks a chapter, and a stray 第三章 line in its prose
-        // is not a second opinion.
-        if out.is_empty() {
-            // Every line that *reads* as a chapter heading…
-            let mut found: Vec<(usize, usize, String, String, bool)> = Vec::new();
-            for line in 0..rope.len_lines() {
-                let text = rope.line(line).to_string();
-                // …with the navigation bar a web export wrapped it in taken
-                // off first: 三國演義 writes 「◀上一回 第二回　… 下一回▶」 and
-                // is otherwise a 120-chapter book with no chapters at all.
-                let trimmed = without_navigation(text.trim_end_matches(['\n', '\r']));
-                if let Some(head) = chapter_heading(trimmed) {
-                    found.push((line, head.depth, trimmed.trim().to_string(), head.key, head.numbered));
-                }
-            }
-            // …minus the **table of contents**. 資治通鑑 opens with 294 lines
-            // reading 卷002, 卷003, 卷004 — every chapter named, none of them
-            // *at* its chapter, and together they are the whole of the outline
-            // panel before a reader can reach the first page of writing.
-            //
-            // What tells them apart is not how they are written but what is
-            // under them: **a chapter has writing under it.** A listing has the
-            // next listing — and, in this book, the odd 「秦紀」 label between
-            // two of them, which is why the bar is three lines and not one.
-            // Measured on the corpora: at three lines 資治通鑑's outline is 295
-            // for its 294 卷 and 紅樓夢's is 121 for its 120 回; at one line
-            // they are 310 and 122, the extras all listing lines.
-            const WRITING_UNDER_A_CHAPTER: usize = 3;
-            let writing_under = |line: usize, next: usize| {
-                (line + 1..next)
-                    .filter(|&l| !rope.line(l).to_string().trim().is_empty())
-                    .take(WRITING_UNDER_A_CHAPTER)
-                    .count()
-                    >= WRITING_UNDER_A_CHAPTER
-            };
-            // **A 目錄 is a run, and its last line has writing under it.**
-            // 紅樓夢's listing ends 「第百二十回　甄士隱詳說太虛情」 and then
-            // the 校閱參考 notes begin — three lines of writing, so the bar
-            // above let the last listing line in, and because it is early in
-            // the file it sat *above* 第一回 (#390). What gives it away is the
-            // hundred and nineteen lines above it: **a listing comes in a
-            // run**, a chapter heading stands alone.
-            //
-            // Warning: Two in a row is not a run. 資治通鑑 ends every 卷 with
-            // 「卷二 ◄ 資治通鑑」 and opens the next with 「第三卷 ► 卷四」 —
-            // back to back, every one of its 294 卷. The first try at #390
-            // called that a listing and cut the book down to one row.
-            const A_LISTING_RUNS: usize = 3;
-            let blank_between = |a: usize, b: usize| {
-                (a + 1..b).all(|l| rope.line(l).to_string().trim().is_empty())
-            };
-            let mut listed = vec![false; found.len()];
-            let mut at = 0;
-            while at < found.len() {
-                let mut end = at;
-                while end + 1 < found.len() && blank_between(found[end].0, found[end + 1].0) {
-                    end += 1;
-                }
-                if end + 1 - at >= A_LISTING_RUNS {
-                    listed[at..=end].fill(true);
-                }
-                at = end + 1;
-            }
-            let mut last: Option<String> = None;
-            let mut numbered = 0;
-            for (n, (line, depth, title, key, is_numbered)) in found.iter().enumerate() {
-                let next = found.get(n + 1).map(|&(l, ..)| l).unwrap_or(rope.len_lines());
-                if listed[n] || !writing_under(*line, next) {
-                    continue;
-                }
-                // …and a chapter marked twice running is one chapter.
-                if last.as_deref() == Some(key.as_str()) {
-                    continue;
-                }
-                last = Some(key.clone());
-                numbered += usize::from(*is_numbered);
-                out.push((*line, *depth, title.clone()));
-            }
-            // **A book can number its chapters and write no 章.** 天龍八部's
-            // fifty chapters are 「一 青衫磊落險峰行」, and everything above
-            // found one heading in it: 「后记」. So when the book turned out to
-            // have front matter and no chapters, count instead.
-            //
-            // One such line proves nothing — a year, a list item and a
-            // footnote all look like this. A book proves it: the numbers have
-            // to run **1, 2, 3 from the top**, each with writing under it, and
-            // there have to be enough of them to be a book. Anything that
-            // breaks the count is not a chapter and does not break the run.
-            const A_BOOK_HAS_CHAPTERS: u32 = 5;
-            if numbered == 0 {
-                let mut counted: Vec<(usize, u32, String)> = Vec::new();
-                for line in 0..rope.len_lines() {
-                    let text = rope.line(line).to_string();
-                    let trimmed = text.trim_end_matches(['\n', '\r']);
-                    if let Some(number) = bare_numbered_heading(trimmed) {
-                        counted.push((line, number, trimmed.trim().to_string()));
-                    }
-                }
-                let mut chapters = Vec::new();
-                let mut want = 1;
-                for (n, (line, number, title)) in counted.iter().enumerate() {
-                    let next = counted.get(n + 1).map(|&(l, ..)| l).unwrap_or(rope.len_lines());
-                    // A table of contents counts 1, 2, 3 too, and would take
-                    // the run before the book got to say anything.
-                    if *number != want || !writing_under(*line, next) {
-                        continue;
-                    }
-                    chapters.push((*line, 2, title.clone()));
-                    want += 1;
-                }
-                if want > A_BOOK_HAS_CHAPTERS {
-                    out.extend(chapters);
-                    out.sort_by_key(|&(line, ..)| line);
-                }
-            }
-        }
-        out
+        let buffer = self.current_buffer();
+        outline_of(buffer.rope(), buffer.syntax(), &|line| self.block_of(line))
     }
 
     /// The outline of a file, with the chapters it includes opened out.
@@ -1911,6 +1713,215 @@ impl Editor {
         }
         rows
     }
+}
+
+/// The headings of a text read as `syntax`, as `(line, depth, title)` —
+/// what [`Editor::outline`] lists for a document, with `block_of` saying
+/// which block each line is in.
+pub(super) fn outline_of(
+    rope: &ropey::Rope,
+    syntax: crate::syntax::Syntax,
+    block_of: &dyn Fn(usize) -> crate::markdown::Block,
+) -> Vec<(usize, usize, String)> {
+    let mut out = Vec::new();
+    for line in 0..rope.len_lines() {
+        let text = rope.line(line).to_string();
+        let trimmed = text.trim_end_matches(['\n', '\r']);
+        // A file that pulls its chapters in is a table of contents, and
+        // the chapters are what a reader wants to jump to. `#import` is
+        // not one of them — that borrows a template, it does not add a
+        // chapter — so only `#include` is listed.
+        if trimmed.trim_start().starts_with("#include") {
+            if let Some(path) = quoted_path(trimmed) {
+                out.push((line, 2, path));
+                continue;
+            }
+        }
+        // A heading is spelled `#` in Markdown and `=` in Typst, and only
+        // one of those is a heading in any given file: in Typst `#import`
+        // opens code, and reading it as a heading turns every library the
+        // book borrows into a chapter.
+        let want = match syntax {
+            crate::syntax::Syntax::Markdown => '#',
+            crate::syntax::Syntax::Typst => '=',
+            // A file with no markup has its chapters found below instead,
+            // and a `:diff` listing has no chapters at all.
+            crate::syntax::Syntax::Text
+            | crate::syntax::Syntax::Diff
+            | crate::syntax::Syntax::Code(_) => continue,
+        };
+        // A `#` inside a note or a fence is not a chapter (#288).
+        if matches!(
+            block_of(line),
+            crate::markdown::Block::Comment { .. } | crate::markdown::Block::Code { .. }
+        ) {
+            continue;
+        }
+        // **`第一章` ＋ 一行 `====` 也是標題**（setext）。CommonMark 認它；
+        // 只找行首的 `#` 的話，用下劃線寫章名的稿子大綱是空的，`空格 o` 和
+        // `:toc` 一章都跳不到。
+        //
+        // Warning: **上一行必須是 `Prose`**，這一句就是 CommonMark 那條「上面要是
+        // 一個段落」。它一次擋掉四種假陽性：卷首 `---` 元數據（那幾行是
+        // `FrontMatter`）、清單項（`Item`）、表格行（`Table`）、引文
+        // （`Quote`）。少了它，`---\ntitle: x\n---` 的第二條橫線會把
+        // `title: x` 變成一章。
+        if want == '#' && line > 0 {
+            let bar = trimmed.trim();
+            let level = match bar.chars().next() {
+                Some('=') if bar.chars().all(|c| c == '=') => Some(1),
+                Some('-') if bar.chars().all(|c| c == '-') => Some(2),
+                _ => None,
+            };
+            if let Some(level) = level {
+                let above = rope.line(line - 1).to_string();
+                let title = above.trim_end_matches(['\n', '\r']).trim();
+                if !title.is_empty()
+                    && matches!(block_of(line - 1), crate::markdown::Block::Prose)
+                {
+                    out.push((line - 1, level, title.to_string()));
+                    continue;
+                }
+            }
+        }
+        // Warning: **判準走 `heading_marks`，三處同一份**，說明寫在那一支上。
+        // **七個井號不是標題**：CommonMark 封頂六級。
+        let Some(depth) = crate::markdown::heading_marks(trimmed, want) else {
+            continue;
+        };
+        let rest = &trimmed[depth..];
+        let title = rest.trim();
+        // `##` with nothing after it is a rule, not a heading; and a `=`
+        // run on its own is Typst's own heading marker only when titled.
+        if title.is_empty() {
+            continue;
+        }
+        out.push((line, depth, title.to_string()));
+    }
+    // **A novel is a text file with chapters in it and no markup at all.**
+    // 資治通鑑 is 700 chapters and not one `#` — exactly the file where
+    // 「go to chapter 412」 is worth a key, and the one this said had no
+    // outline. The chapters are written 第四百一十二卷, which is a heading
+    // whether or not anybody marked it up.
+    //
+    // Only when nothing else was found: a manuscript that *does* use `#`
+    // has said how it marks a chapter, and a stray 第三章 line in its prose
+    // is not a second opinion.
+    if out.is_empty() {
+        // Every line that *reads* as a chapter heading…
+        let mut found: Vec<(usize, usize, String, String, bool)> = Vec::new();
+        for line in 0..rope.len_lines() {
+            let text = rope.line(line).to_string();
+            // …with the navigation bar a web export wrapped it in taken
+            // off first: 三國演義 writes 「◀上一回 第二回　… 下一回▶」 and
+            // is otherwise a 120-chapter book with no chapters at all.
+            let trimmed = without_navigation(text.trim_end_matches(['\n', '\r']));
+            if let Some(head) = chapter_heading(trimmed) {
+                found.push((line, head.depth, trimmed.trim().to_string(), head.key, head.numbered));
+            }
+        }
+        // …minus the **table of contents**. 資治通鑑 opens with 294 lines
+        // reading 卷002, 卷003, 卷004 — every chapter named, none of them
+        // *at* its chapter, and together they are the whole of the outline
+        // panel before a reader can reach the first page of writing.
+        //
+        // What tells them apart is not how they are written but what is
+        // under them: **a chapter has writing under it.** A listing has the
+        // next listing — and, in this book, the odd 「秦紀」 label between
+        // two of them, which is why the bar is three lines and not one.
+        // Measured on the corpora: at three lines 資治通鑑's outline is 295
+        // for its 294 卷 and 紅樓夢's is 121 for its 120 回; at one line
+        // they are 310 and 122, the extras all listing lines.
+        const WRITING_UNDER_A_CHAPTER: usize = 3;
+        let writing_under = |line: usize, next: usize| {
+            (line + 1..next)
+                .filter(|&l| !rope.line(l).to_string().trim().is_empty())
+                .take(WRITING_UNDER_A_CHAPTER)
+                .count()
+                >= WRITING_UNDER_A_CHAPTER
+        };
+        // **A 目錄 is a run, and its last line has writing under it.**
+        // 紅樓夢's listing ends 「第百二十回　甄士隱詳說太虛情」 and then
+        // the 校閱參考 notes begin — three lines of writing, so the bar
+        // above let the last listing line in, and because it is early in
+        // the file it sat *above* 第一回 (#390). What gives it away is the
+        // hundred and nineteen lines above it: **a listing comes in a
+        // run**, a chapter heading stands alone.
+        //
+        // Warning: Two in a row is not a run. 資治通鑑 ends every 卷 with
+        // 「卷二 ◄ 資治通鑑」 and opens the next with 「第三卷 ► 卷四」 —
+        // back to back, every one of its 294 卷. The first try at #390
+        // called that a listing and cut the book down to one row.
+        const A_LISTING_RUNS: usize = 3;
+        let blank_between = |a: usize, b: usize| {
+            (a + 1..b).all(|l| rope.line(l).to_string().trim().is_empty())
+        };
+        let mut listed = vec![false; found.len()];
+        let mut at = 0;
+        while at < found.len() {
+            let mut end = at;
+            while end + 1 < found.len() && blank_between(found[end].0, found[end + 1].0) {
+                end += 1;
+            }
+            if end + 1 - at >= A_LISTING_RUNS {
+                listed[at..=end].fill(true);
+            }
+            at = end + 1;
+        }
+        let mut last: Option<String> = None;
+        let mut numbered = 0;
+        for (n, (line, depth, title, key, is_numbered)) in found.iter().enumerate() {
+            let next = found.get(n + 1).map(|&(l, ..)| l).unwrap_or(rope.len_lines());
+            if listed[n] || !writing_under(*line, next) {
+                continue;
+            }
+            // …and a chapter marked twice running is one chapter.
+            if last.as_deref() == Some(key.as_str()) {
+                continue;
+            }
+            last = Some(key.clone());
+            numbered += usize::from(*is_numbered);
+            out.push((*line, *depth, title.clone()));
+        }
+        // **A book can number its chapters and write no 章.** 天龍八部's
+        // fifty chapters are 「一 青衫磊落險峰行」, and everything above
+        // found one heading in it: 「后记」. So when the book turned out to
+        // have front matter and no chapters, count instead.
+        //
+        // One such line proves nothing — a year, a list item and a
+        // footnote all look like this. A book proves it: the numbers have
+        // to run **1, 2, 3 from the top**, each with writing under it, and
+        // there have to be enough of them to be a book. Anything that
+        // breaks the count is not a chapter and does not break the run.
+        const A_BOOK_HAS_CHAPTERS: u32 = 5;
+        if numbered == 0 {
+            let mut counted: Vec<(usize, u32, String)> = Vec::new();
+            for line in 0..rope.len_lines() {
+                let text = rope.line(line).to_string();
+                let trimmed = text.trim_end_matches(['\n', '\r']);
+                if let Some(number) = bare_numbered_heading(trimmed) {
+                    counted.push((line, number, trimmed.trim().to_string()));
+                }
+            }
+            let mut chapters = Vec::new();
+            let mut want = 1;
+            for (n, (line, number, title)) in counted.iter().enumerate() {
+                let next = counted.get(n + 1).map(|&(l, ..)| l).unwrap_or(rope.len_lines());
+                // A table of contents counts 1, 2, 3 too, and would take
+                // the run before the book got to say anything.
+                if *number != want || !writing_under(*line, next) {
+                    continue;
+                }
+                chapters.push((*line, 2, title.clone()));
+                want += 1;
+            }
+            if want > A_BOOK_HAS_CHAPTERS {
+                out.extend(chapters);
+                out.sort_by_key(|&(line, ..)| line);
+            }
+        }
+    }
+    out
 }
 
 /// How many lines apart the Typst scan keeps the scanner's state

@@ -14011,23 +14011,11 @@ fn draw_horizontal(
         let wiki_color = editor.wiki_mark() == yumete_core::wiki::Mark::Color;
         if !wiki.is_empty() {
             let start_in_line = row.start - rope.line_to_char(row.line);
-            // **Inside `[[ ]]` the link wins**: a file named like
-            // an entry is a link there, and the azure underline says so; the
-            // gold is for the name in running prose.
-            let linked: Vec<(usize, usize)> = match (&marked, show_markup) {
-                (Some((line, runs)), true) if *line == row.line => runs
-                    .iter()
-                    .filter(|r| matches!(r.kind, yumete_core::markdown::Kind::Link | yumete_core::markdown::Kind::WikiLink))
-                    .map(|r| (r.start.saturating_sub(start_in_line), r.end.saturating_sub(start_in_line)))
-                    .collect(),
-                _ => Vec::new(),
-            };
+            // Inside a link the link wins; the core leaves those names out
+            // (`Editor::wiki_marks_on_line`).
             for &(a, b) in &wiki {
                 let a = a.saturating_sub(start_in_line);
                 let b = b.saturating_sub(start_in_line).min(chars.len());
-                if linked.iter().any(|&(x, y)| a < y && x < b) {
-                    continue;
-                }
                 for style in styles.iter_mut().take(b).skip(a.min(b)) {
                     *style = match wiki_color {
                         true => style.fg(ink.gold()),
@@ -17474,6 +17462,50 @@ fn squeezed(text: &str) -> String {
         }
         assert!(ruled > 0, "有詞被畫了線");
         assert!(ruled < 24, "不是整行都畫——那就沒有分界了");
+    }
+
+    /// **Inside `[[ ]]` the link's colour wins**: a wiki name written as the
+    /// page of a link — aliased or not, with a `#heading` or not — and as an
+    /// alias takes no gold; the same name in prose does. The name opens a
+    /// longer page name, 辭典上卷, because that is where the segmenter cuts it
+    /// out inside the brackets.
+    #[test]
+    fn a_wiki_name_inside_a_link_takes_no_gold() {
+        let dir = tmp().join(format!("yumete-tui-wiki-link-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join(".yumete")).unwrap();
+        std::fs::write(dir.join(".yumete/wiki.md"), "## 辭典\n一部書。\n").unwrap();
+        std::fs::write(dir.join("辭典上卷.md"), "# 卷首\n").unwrap();
+        let file = dir.join("雨夜.md");
+        std::fs::write(&file, "他翻開辭典。\n見[[辭典上卷|宗門]]與[[辭典上卷]]，[[辭典上卷#卷首]]，[[宗門|辭典上卷]]。\n").unwrap();
+        let mut editor = Editor::new();
+        editor.set_root(&dir);
+        editor.open_file(&file).unwrap();
+        editor.reload_project_words();
+        editor.execute(":wiki-mark color").unwrap();
+        // On the links' line, so every bracket and target is on the page.
+        editor.on_key(Key::Char('j'));
+        let config = Config::default();
+        let gold = ink(&config).gold();
+        let buffer = render(&editor, &config, 80, 6);
+
+        let prose = row_text(&buffer, 0);
+        let x = column_of(&prose, "辭典");
+        assert_eq!(buffer[(x, 0)].style().fg, Some(gold), "the name in prose is gold: {prose:?}");
+        assert_eq!(buffer[(x + 2, 0)].style().fg, Some(gold), "both characters: {prose:?}");
+
+        let links = row_text(&buffer, 1);
+        let at: Vec<u16> = links
+            .match_indices("辭典")
+            .map(|(i, _)| yumete_cjk::str_width(&links[..i]) as u16)
+            .collect();
+        assert_eq!(at.len(), 4, "the target twice, the page with a heading, the alias: {links:?}");
+        for x in at {
+            for cell in [x, x + 2] {
+                assert_ne!(buffer[(cell, 1)].style().fg, Some(gold), "column {cell} inside a link: {links:?}");
+            }
+        }
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     /// **One window looks as it always did**: the writing, then its status

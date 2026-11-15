@@ -3853,6 +3853,10 @@ pub struct Editor {
     /// **Bibliographies read for citation keys**, by file, with the time
     /// each was read at.
     bib_cache: RefCell<HashMap<PathBuf, ReadBibliography>>,
+    /// **The headings of the file a `[[page#` names**, kept while that file
+    /// (on disk, or in the buffer holding it) has not changed, since the
+    /// panel asks on every frame it is open.
+    page_headings: RefCell<Option<(PathBuf, PageStamp, Vec<String>)>>,
     /// **Prose files a language server serves**: they get the
     /// diagnostics lane a code file always has, or a spelling server's
     /// complaints would have nowhere to show.
@@ -4878,6 +4882,7 @@ impl Editor {
             count_cache: RefCell::default(),
             line_counts: RefCell::default(),
             bib_cache: RefCell::default(),
+            page_headings: RefCell::default(),
             served: Default::default(),
             pad_cache: RefCell::new(None),
             md_cache: RefCell::new(None),
@@ -6047,6 +6052,9 @@ fn switch_case(c: char) -> String {
 pub type ActionsQuery = (PathBuf, (usize, usize), (usize, usize));
 /// A bibliography as read: when it was read, and its keys with their titles.
 type ReadBibliography = (std::time::SystemTime, Vec<(String, String)>);
+/// What a file's headings were read from: its time on disk, or the buffer
+/// and revision holding it.
+type PageStamp = (Option<std::time::SystemTime>, Option<(u64, u64)>);
 /// The whole buffer's count: buffer, revision, count.
 type WholeCount = (u64, u64, usize);
 /// The selection's: buffer, revision, start, end, count.

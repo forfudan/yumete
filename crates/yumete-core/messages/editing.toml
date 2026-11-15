@@ -59,13 +59,19 @@ key = "complete.heading"
 zhs = "本文件标题"
 en = "heading in this file"
 
-# ── convert ───────────────────────────────────────────────────────────
-
 [[message]]
 # Typst 的 @ 補全裏，一個標籤旁邊那一句
 key = "complete.label"
 zhs = "标签"
 en = "label"
+
+[[message]]
+# 補全面板的名字：正在補雙鏈所指文件裏的一個標題(Insert 模式打了 `[[頁名#`)（草稿）
+key = "complete.page-heading"
+zhs = "所链文件的标题"
+en = "heading in the linked file"
+
+# ── convert ───────────────────────────────────────────────────────────
 
 [[message]]
 # :convert 這一趟能走的路，一行一個起點

@@ -22955,6 +22955,114 @@ fn a_wiki_link_offers_the_files_near_this_one() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// `[[雨夜#` offers the headings of the page `[[雨夜` names — the one `gd`
+/// opens — in their own words, each once; typing narrows them, Tab writes one
+/// and closes the brackets, and `gd` lands on it.
+#[test]
+fn a_wiki_link_offers_the_headings_of_its_page() {
+    let dir = tmp().join(format!("yumete-wiki-heading-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    for sub in ["卷一", "卷二"] {
+        std::fs::create_dir_all(dir.join(sub)).unwrap();
+    }
+    std::fs::write(dir.join("卷一/第一章.md"), "# 第一章\n\n她去了\n").unwrap();
+    std::fs::write(
+        dir.join("卷一/雨夜.md"),
+        "# 雨夜\n\n## 雪\n落了。\n\n## 歸途\n走了。\n\n## 雪\n又落。\n\n```\n# 不是標題\n```\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("卷二/雨夜.md"), "# 雨夜\n\n## 晴\n").unwrap();
+
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    // Typed by hand, a `[` alone: auto-pairs would close it.
+    ed.set_auto_pairs(crate::editor::AutoPairs::Off);
+    ed.open_file(dir.join("卷一/第一章.md")).unwrap();
+    ed.goto_line(3);
+    press(&mut ed, "A[[雨夜#");
+    let (title, choices, _) = ed.reference_menu().expect("the headings are offered");
+    assert_eq!(title, say!("complete.page-heading"));
+    let texts: Vec<&str> = choices.iter().map(|c| c.text.as_str()).collect();
+    assert_eq!(
+        texts,
+        ["雨夜]]", "雪]]", "歸途]]"],
+        "this volume's 雨夜, the second 雪 once (gd reaches the first), not the fenced line"
+    );
+
+    ed.on_key(Key::Char('歸'));
+    let (_, choices, _) = ed.reference_menu().expect("still a panel");
+    let texts: Vec<&str> = choices.iter().map(|c| c.text.as_str()).collect();
+    assert_eq!(texts, ["歸途]]"]);
+    ed.on_key(Key::Tab);
+    assert!(ed.current_buffer().text().ends_with("她去了[[雨夜#歸途]]\n"), "{:?}", ed.current_buffer().text());
+
+    // What Tab writes is what `gd` follows.
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Char('h'));
+    press(&mut ed, "gd");
+    assert!(ed.current_buffer().path().is_some_and(|p| p.ends_with("卷一/雨夜.md")), "{}", ed.status());
+    let rope = ed.current_buffer().rope();
+    assert_eq!(rope.char_to_line(ed.sel.head()), 5, "on 歸途: {}", ed.status());
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// The page of a `[[page#` is found where `gd` finds it — across the project
+/// nearest first, and by a path's tail — and `[[#` is this file. A page no
+/// file answers to opens no panel.
+#[test]
+fn a_wiki_heading_is_looked_for_where_gd_looks() {
+    let dir = tmp().join(format!("yumete-wiki-heading-far-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    for sub in ["卷一", "百科/人物"] {
+        std::fs::create_dir_all(dir.join(sub)).unwrap();
+    }
+    std::fs::write(dir.join("卷一/第一章.md"), "# 第一章\n\n## 開頭\n\n她見了\n").unwrap();
+    std::fs::write(dir.join("百科/人物/安寧.md"), "# 安寧\n\n## 生平\n\n## 性情\n").unwrap();
+
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    ed.set_auto_pairs(crate::editor::AutoPairs::Off);
+    ed.open_file(dir.join("卷一/第一章.md")).unwrap();
+    ed.links_index();
+    let offered = |ed: &Editor| -> Option<Vec<String>> {
+        ed.reference_menu().map(|(_, choices, _)| choices.into_iter().map(|c| c.text).collect())
+    };
+
+    ed.goto_line(5);
+    press(&mut ed, "A[[安寧#");
+    assert_eq!(offered(&ed).unwrap(), ["安寧]]", "生平]]", "性情]]"], "in another folder, by name");
+    ed.on_key(Key::Esc);
+
+    press(&mut ed, "o[[人物/安寧#性");
+    assert_eq!(offered(&ed).unwrap(), ["性情]]"], "by a path's tail, narrowed");
+    ed.on_key(Key::Esc);
+
+    press(&mut ed, "o[[#");
+    assert_eq!(offered(&ed).unwrap(), ["第一章]]", "開頭]]"], "no page is this file");
+    ed.on_key(Key::Esc);
+
+    press(&mut ed, "o[[無此頁#");
+    assert_eq!(offered(&ed), None, "no file, no panel");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// A wiki name inside a link is not marked — not the page of an aliased
+/// `[[ ]]`, not the target of a `[text](url)` — and the same name in prose is.
+#[test]
+fn a_wiki_name_inside_a_link_is_not_marked() {
+    let dir = tmp().join(format!("yumete-wiki-in-link-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join(".yumete")).unwrap();
+    std::fs::write(dir.join(".yumete/wiki.md"), "## 辭典\n一部書。\n").unwrap();
+    std::fs::write(dir.join("雨夜.md"), "他翻開辭典。見[[辭典上卷|宗門]]，[宗門](辭典上卷.md)。\n").unwrap();
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    ed.open_file(dir.join("雨夜.md")).unwrap();
+    ed.reload_project_words();
+    assert_eq!(ed.wiki_marks_on_line(0), [(3, 5)], "only the one in prose");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// #418 三. **A file name may hold a space** — 「卷一 開端.md」 is a name a
 /// novelist writes — so a space does not break this trigger the way it breaks
 /// a tag or an anchor.
