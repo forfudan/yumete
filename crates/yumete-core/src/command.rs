@@ -6548,9 +6548,13 @@ const RENAMED: &[(&str, &str)] = &[
     ("saveas", "write-as"),
     ("source", "render"),
     // **vim's tab walk is the buffer walk here**: a tab is a file. Without
-    // these `:tabn` would say it knows no such command.
+    // these `:tabn` would say it knows no such command. A new tab is a new
+    // buffer, `:new`; `:open` takes the file by name.
+    ("tabe", "new"),
+    ("tabedit", "new"),
     ("tabn", "buffer-next"),
     ("tabne", "buffer-next"),
+    ("tabnew", "new"),
     ("tabnext", "buffer-next"),
     ("tabp", "buffer-previous"),
     ("tabprevious", "buffer-previous"),
