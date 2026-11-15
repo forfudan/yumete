@@ -280,9 +280,9 @@ pub struct EditorConfig {
     pub language: String,
     /// The gap between two 縱, in half-width cells (0–4).
     pub zong_gap: usize,
-    /// How many characters typed, Latin letters or 漢字 alike, before the
-    /// words of the open files are offered by themselves: 7, helix's
-    /// `trigger-length`. 0 is never (`C-n` still asks). 0 to 20.
+    /// How many Latin letters before the words of the open files are offered
+    /// by themselves: 7, helix's `trigger-length`; 漢字 take half as many,
+    /// rounded up. 0 is never (`C-n` still asks). 0 to 20.
     pub word_completion: usize,
     /// **How many completion items show at once**: the word,
     /// code and shell lists alike. 6, as the input method's candidates.

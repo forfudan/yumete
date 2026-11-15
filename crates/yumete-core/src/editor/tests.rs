@@ -26732,9 +26732,8 @@ fn words_typed_now_are_offered_from_the_next_insert() {
 }
 
 /// Words of the open buffers are offered as you write: after
-/// `word_completion` characters typed (7, helix's `trigger-length`), Latin
-/// letters matched fuzzily, 漢字 as many as letters and only words longer
-/// than that; `C-n` at any length; Tab takes one.
+/// `word_completion` Latin letters (7, helix's `trigger-length`), matched
+/// fuzzily; 漢字 after ⌈N/2⌉, only words longer than that; `C-n` at any length; Tab takes one.
 #[test]
 fn words_of_the_open_buffers_are_offered_as_you_write() {
     let labels = |ed: &Editor| -> Vec<String> {
@@ -26769,28 +26768,28 @@ fn words_of_the_open_buffers_are_offered_as_you_write() {
     assert!(labels(&ed).is_empty());
     ed.on_key(Key::Esc);
 
-    // 漢字: as many as letters, not half as many, and only the longer words.
+    // 漢字: ⌈N/2⌉ of them, and only the longer words.
     let mut ed = typed("阿寧師兄走進書齋，阿寧也來了。\n");
     ed.set_segmenter(Box::new(crate::DictionarySegmenter::new(
         [("阿寧師兄".to_string(), 100), ("阿寧".to_string(), 100), ("書齋".to_string(), 100)],
         1,
     )));
-    ed.set_word_completion(3);
+    ed.set_word_completion(5);
     press(&mut ed, "Go");
     ed.insert_committed("阿");
     ed.insert_committed("寧");
-    assert!(labels(&ed).is_empty(), "two are not three");
+    assert!(labels(&ed).is_empty(), "two are not ⌈5/2⌉ = 3");
     ed.insert_committed("師");
     assert_eq!(labels(&ed), ["阿寧師兄"], "only what is longer than the three typed");
     ed.on_key(Key::Tab);
     assert!(ed.current_buffer().text().ends_with("\n阿寧師兄\n"));
     ed.on_key(Key::Esc);
     ed.on_key(Key::Esc);
-    // At 7, a short run of a sentence opens nothing.
+    // At 7, four 漢字: three open nothing.
     ed.set_word_completion(7);
     press(&mut ed, "o");
     ed.insert_committed("阿寧師");
-    assert!(labels(&ed).is_empty(), "three are not seven");
+    assert!(labels(&ed).is_empty(), "three are not ⌈7/2⌉ = 4");
     ed.on_key(Key::Ctrl('n'));
     assert_eq!(labels(&ed), ["阿寧師兄"], "C-n asks at any length");
 }

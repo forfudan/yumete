@@ -18,11 +18,10 @@
 //!   first characters of a 漢字 word syllable by syllable offer it, after
 //!   the Latin words that start with them, as search reads `shuzhai`. Not
 //!   while typing, where Latin words already come up by themselves.
-//! - **When**: after `[editor] word_completion` characters typed, Latin
-//!   letters or 漢字 alike (7 by default, helix's `trigger-length`; `0`
-//!   off). One count for both: half as many 漢字 would open the list
-//!   on most short runs of a sentence. `C-n` / `C-x`
-//!   asks at any length.
+//! - **When**: after `[editor] word_completion` Latin letters (7 by default,
+//!   helix's `trigger-length`; `0` off), or after ⌈N/2⌉ 漢字, since a 漢字
+//!   word is two to four of them: 7 gives 4, 3 or 4 give 2, 1 or 2 give 1.
+//!   `C-n` / `C-x` asks at any length.
 //! - **Paths**: a word with a `/` in it, or anything right after `](`, read
 //!   relative to the file's own folder — helix's rule, plus the Markdown link.
 //!
@@ -326,8 +325,8 @@ impl Editor {
             return (!items.is_empty()).then_some(items);
         }
         if yumete_cjk::is_han(last) {
-            // N 漢字, as many as letters; at least one for `C-n`.
-            let k = n.max(1);
+            // ⌈N/2⌉ 漢字, at least one.
+            let k = n.div_ceil(2).max(1);
             let run = before.iter().rev().take_while(|&&c| yumete_cjk::is_han(c)).count();
             let k = match by_hand {
                 true => k.min(run),

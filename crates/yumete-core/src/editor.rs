@@ -2758,8 +2758,8 @@ pub struct Editor {
     /// (Feature #24). Defaults to [`CategorySegmenter`]; a dictionary segmenter
     /// can be installed via [`Editor::set_segmenter`].
     segmenter: Box<dyn Segmenter>,
-    /// `[editor] word_completion`: characters typed (Latin letters or 漢字)
-    /// before the word list opens by itself, `0` never (see `suggest.rs`).
+    /// `[editor] word_completion`: Latin letters before the word list opens
+    /// by itself, half as many 漢字, `0` never (see `suggest.rs`).
     word_completion: usize,
     /// `:preview-redraw` asked the previews' pictures to be made again.
     preview_redraw: bool,
