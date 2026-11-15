@@ -724,11 +724,5 @@ key = "substitute.range-not-one-thing"
 zhs = "范围只能是一段(1-40)或几行(1,5,9)，不能混用"
 en = "a range is one span (1-40) or one list (1,5,9), not a mixture"
 
-[[message]]
-# :s 的旗標裏有一個不認得的字母
-key = "substitute.unknown-flag"
-zhs = "未知标志 '{0}'(g 整行全部、i 忽略大小写、f 按字面、c 逐处确认、n 只计数、t 允许改列数、y 拼音、j 繁简)"
-en = "unknown flag '{0}' (g every match on the line, i ignore case, f literal, c ask at each one, n count only, t let the column count change, y pinyin, j glyph variants)"
-
 
 # ── table ─────────────────────────────────────────────────────────────

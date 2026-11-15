@@ -228,6 +228,8 @@ fn said() -> BTreeMap<String, String> {
         // `Described { word: Some("cmd.substitute.flags") }` —— 命令的說明之外那一行。
         // 同上一條，開口寫足 `word: Some(` 而不是光一個 `Some(`。
         tags.extend(literals(&text, "word: Some("));
+        // `Wants::Said("cmd.takes.sort")` —— 拒收一個參數時，說它收什麼的那一句。
+        tags.extend(literals(&text, "Wants::Said("));
         // A place's command and its description (`place("action.confirm",
         // PlaceCmd::Confirm)` in `yumete-cjk/src/actions.rs`).
         tags.extend(literals(&text, "place("));

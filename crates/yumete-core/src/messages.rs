@@ -258,6 +258,13 @@ pub fn say(key: &str, args: &[&str]) -> String {
     fill(template, args)
 }
 
+/// The message tagged `key` in the language in force, as written — for a
+/// message with no holes that has to outlive the call, such as a name a
+/// menu row holds. `None` for a tag with no entry.
+pub fn as_written(key: &str) -> Option<&'static str> {
+    table().get(key).map(|entry| entry.in_language(language()))
+}
+
 /// Put `args` into `{0}`, `{1}`, … — and `{{`, `}}` through as braces.
 fn fill(template: &str, args: &[&str]) -> String {
     let mut out = String::with_capacity(template.len());

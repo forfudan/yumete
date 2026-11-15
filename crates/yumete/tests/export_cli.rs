@@ -192,3 +192,30 @@ fn a_typst_export_says_what_it_cannot_set_and_takes_the_paper() {
     assert!(String::from_utf8_lossy(&out.stderr).is_empty());
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// **A Typst file compiled to PDF says the words it does not use**: its own
+/// `#set page` and `#set text` decide, so `page=` and `font=` are said to be
+/// left out rather than dropped without a word. A Markdown file takes them.
+#[test]
+fn a_typst_file_says_page_and_font_are_its_own() {
+    let have_typst = Command::new("typst").arg("--version").output().is_ok_and(|o| o.status.success());
+    if !have_typst {
+        return;
+    }
+    let root = fixture("typst-own");
+    let typ = root.join("book.typ");
+    std::fs::write(&typ, "= 第一章\n\n一段話。\n").unwrap();
+    let out = ye().args(["--lang=en", "--export", "pdf", "page=A5", "font=Songti"]).arg(&typ).output().unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(out.status.success(), "{stderr}");
+    assert!(
+        stderr.contains("a Typst file sets its own page, fonts and the rest, so page=A5, font=Songti was left out"),
+        "{stderr}"
+    );
+    let md = root.join("ch1.md");
+    std::fs::write(&md, "# 第一章\n\n一段話。\n").unwrap();
+    let out = ye().args(["--lang=en", "--export", "pdf", "page=A5"]).arg(&md).output().unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(out.status.success() && !stderr.contains("sets its own"), "{stderr}");
+    let _ = std::fs::remove_dir_all(&root);
+}

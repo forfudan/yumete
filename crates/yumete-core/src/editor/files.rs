@@ -16,6 +16,23 @@ pub(super) struct Typesetting {
     draft: PathBuf,
     target: PathBuf,
     unsaved: usize,
+    /// `:export`'s words on the line, which the Typst file's own settings
+    /// stand in for ([`left_out`]).
+    left_out: Vec<String>,
+}
+
+/// `said`, and the words of `:export` the line held that this export does
+/// not take, with the reason: a Typst file sets its own page, fonts and the
+/// rest; a Markdown preview is exported as it is drawn. Passing them on to
+/// the compiler would mean a wrapper file around the reader's own, whose
+/// `#set` rules would win over the wrapper's anyway — so they are said
+/// rather than half-honoured.
+fn left_out(said: String, left_out: &[String], typst: bool) -> String {
+    match (left_out.is_empty(), typst) {
+        (true, _) => said,
+        (false, true) => say!("export.left-out-typst", said, left_out.join(", ")),
+        (false, false) => say!("export.left-out-preview", said, left_out.join(", ")),
+    }
 }
 
 /// **A typesetting given up ends with nothing left behind**: the compiler
@@ -2061,7 +2078,7 @@ impl Editor {
         if self.refuse_readonly() {
             return Ok(CommandOutcome::Continue);
         }
-        let (format, path) = match crate::as_preview::read_line(words) {
+        let crate::as_preview::Line { format, path, left_out: unused } = match crate::as_preview::read_line(words) {
             Ok(read) => read,
             Err(why) => {
                 self.status = why;
@@ -2097,9 +2114,9 @@ impl Editor {
             },
         };
         match (format, kind) {
-            (Format::Html, _) => self.export_markdown_as_preview(path.as_deref(), force),
-            (Format::Pdf, PreviewKind::Markdown) => self.export_markdown_as_pdf(path.as_deref(), force),
-            (Format::Pdf, PreviewKind::Typst) => self.export_typst_as_preview(path.as_deref(), force),
+            (Format::Html, _) => self.export_markdown_as_preview(path.as_deref(), force, &unused),
+            (Format::Pdf, PreviewKind::Markdown) => self.export_markdown_as_pdf(path.as_deref(), force, &unused),
+            (Format::Pdf, PreviewKind::Typst) => self.export_typst_as_preview(path.as_deref(), force, unused),
         }
     }
 
@@ -2144,7 +2161,7 @@ impl Editor {
     /// end into long pages ([`crate::as_preview::PdfMaker`]), in the fonts,
     /// colours and direction of the preview on the screen, as wide as the
     /// preview's window when one shows the document.
-    fn export_markdown_as_pdf(&mut self, path: Option<&str>, force: bool) -> Result<CommandOutcome, EditorError> {
+    fn export_markdown_as_pdf(&mut self, path: Option<&str>, force: bool, unused: &[String]) -> Result<CommandOutcome, EditorError> {
         let Some(maker) = self.preview_pdf.clone() else {
             self.status = say!("export.as-preview-no-look");
             return Ok(CommandOutcome::Continue);
@@ -2180,14 +2197,14 @@ impl Editor {
             }
         };
         crate::buffer::write_binary_atomically(&target, &written).map_err(EditorError::Io)?;
-        self.status = say!("export.wrote", target.display());
+        self.status = left_out(say!("export.wrote", target.display()), unused, false);
         Ok(CommandOutcome::Continue)
     }
 
     /// The Markdown preview as an HTML page: the export's page, in the
     /// preview's look — its fonts and colours as the front end says they are
     /// now, vertical when the preview is.
-    fn export_markdown_as_preview(&mut self, path: Option<&str>, force: bool) -> Result<CommandOutcome, EditorError> {
+    fn export_markdown_as_preview(&mut self, path: Option<&str>, force: bool, unused: &[String]) -> Result<CommandOutcome, EditorError> {
         let Some(looker) = self.preview_look.clone() else {
             self.status = say!("export.as-preview-no-look");
             return Ok(CommandOutcome::Continue);
@@ -2217,7 +2234,7 @@ impl Editor {
         };
         let written = crate::as_preview::html(&text, &style);
         crate::buffer::write_binary_atomically(&target, written.as_bytes()).map_err(EditorError::Io)?;
-        self.status = say!("export.wrote", target.display());
+        self.status = left_out(say!("export.wrote", target.display()), unused, false);
         Ok(CommandOutcome::Continue)
     }
 
@@ -2231,7 +2248,7 @@ impl Editor {
     /// own, its input, output and errors its own and never the terminal's;
     /// the status line says it is typesetting, and the loop collects the
     /// answer ([`Editor::collect_typesetting`]). One at a time.
-    fn export_typst_as_preview(&mut self, path: Option<&str>, force: bool) -> Result<CommandOutcome, EditorError> {
+    fn export_typst_as_preview(&mut self, path: Option<&str>, force: bool, unused: Vec<String>) -> Result<CommandOutcome, EditorError> {
         let Some(main) = self.typst_main_here() else {
             return Err(EditorError::NoFileName);
         };
@@ -2295,8 +2312,10 @@ impl Editor {
             }
             return Err(EditorError::Io(err));
         }
-        self.status = say!("export.typesetting", main.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default());
-        self.typesetting = Some(Typesetting { answer, child, draft, target, unsaved: self.unsaved_in_the_book(&main) });
+        let name = main.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        self.status = left_out(say!("export.typesetting", name), &unused, true);
+        self.typesetting =
+            Some(Typesetting { answer, child, draft, target, unsaved: self.unsaved_in_the_book(&main), left_out: unused });
         Ok(CommandOutcome::Continue)
     }
 
@@ -2325,8 +2344,8 @@ impl Editor {
         };
         let renamed = said.and_then(|()| std::fs::rename(&done.draft, &done.target).map_err(|e| e.to_string()));
         self.status = match renamed {
-            Ok(()) if done.unsaved == 0 => say!("export.wrote", done.target.display()),
-            Ok(()) => say!("export.wrote-from-disk", done.target.display(), done.unsaved),
+            Ok(()) if done.unsaved == 0 => left_out(say!("export.wrote", done.target.display()), &done.left_out, true),
+            Ok(()) => left_out(say!("export.wrote-from-disk", done.target.display(), done.unsaved), &done.left_out, true),
             Err(why) => {
                 let _ = std::fs::remove_file(&done.draft);
                 say!("export.typst-failed", why)
@@ -2860,6 +2879,43 @@ mod tests {
             assert!(!chapter.with_extension("pdf").exists(), "the book, not the chapter");
             ed.execute(":export-as-preview pdf").unwrap();
             assert_eq!(ed.status(), say!("export.target-exists-for", book.with_extension("pdf").display(), "export-as-preview"));
+        }
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// **`page=` and `font=` on an `:export-as-preview` line are said to be
+    /// left out**, with the reason, and never taken for the file to write:
+    /// a Markdown preview is exported as it is drawn, and a Typst file sets
+    /// its own page and fonts.
+    #[test]
+    fn the_export_words_are_said_to_be_left_out() {
+        let dir = folder("left-out");
+        let path = dir.join("樣張.md");
+        std::fs::write(&path, "一段話。\n").unwrap();
+        let mut ed = editor_on(&path);
+        ed.execute(":export-as-preview html page=A5 font=Songti").unwrap();
+        let wrote = dir.join("樣張.html");
+        assert!(wrote.exists() && !dir.join("page=A5").exists(), "{}", ed.status());
+        assert_eq!(
+            ed.status(),
+            say!("export.left-out-preview", say!("export.wrote", wrote.display()), "page=A5, font=Songti")
+        );
+
+        let book = dir.join("book.typ");
+        std::fs::write(&book, "#set page(width: 8cm, height: 8cm)\n一頁。\n").unwrap();
+        ed.execute(&format!(":open {}", book.display())).unwrap();
+        if crate::export::typst_is_installed() {
+            ed.execute(":export-as-preview page=A5").unwrap();
+            assert_eq!(ed.status(), say!("export.left-out-typst", say!("export.typesetting", "book.typ"), "page=A5"));
+            for _ in 0..600 {
+                if ed.collect_typesetting() {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            let pdf = book.with_extension("pdf");
+            assert_eq!(ed.status(), say!("export.left-out-typst", say!("export.wrote", pdf.display()), "page=A5"));
+            assert!(pdf.exists() && !dir.join("page=A5").exists());
         }
         std::fs::remove_dir_all(&dir).ok();
     }

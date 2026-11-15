@@ -2022,9 +2022,10 @@ fn run_export(
     // said, not opened as a file; a file really named `vertical` is
     // `./vertical`.
     let mut named: Vec<String> = Vec::new();
+    let mut words: Vec<&str> = Vec::new();
     for arg in files {
         match editor.take_export_word(arg) {
-            Some(Ok(())) => {}
+            Some(Ok(())) => words.push(arg),
             Some(Err(why)) => {
                 eprintln!("yumete: {why}");
                 return ExitCode::from(2);
@@ -2082,6 +2083,13 @@ fn run_export(
             eprintln!("yumete: {}: {err}", source.display());
             failed = true;
             continue;
+        }
+        // A Typst file is compiled as it is written: its own `#set page`
+        // and `#set text` decide, so the words typed for this run are said
+        // to be left out rather than dropped without a word.
+        let typst = editor.current_buffer().syntax() == yumete_core::syntax::Syntax::Typst;
+        if format == "pdf" && typst && !words.is_empty() {
+            eprintln!("yumete: {}", yumete_core::say!("export.typst-sets-its-own", source.display(), words.join(", ")));
         }
         let result = match format.as_str() {
             "pdf" => export_pdf(editor, &source, out),

@@ -265,12 +265,29 @@ impl Format {
     }
 }
 
+/// One `:export-as-preview` line, read ([`read_line`]).
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct Line {
+    pub format: Option<String>,
+    pub path: Option<String>,
+    /// **`:export`'s words, which this export does not take** — `page=A5`,
+    /// `font=Songti`, `vertical`: the preview's look decides them, and a
+    /// Typst file its own. Said back, never taken for a file name, which
+    /// would write the PDF to a file called `page=A5`.
+    pub left_out: Vec<String>,
+}
+
 /// **The words of one `:export-as-preview` line**: a format
 /// and a path, both optional, the format first. A first word that is not a
 /// path is taken for a format (and refused by the caller if it is none); a
-/// path is quoted or written as `:export` takes one.
-pub fn read_line(line: &str) -> Result<(Option<String>, Option<String>), String> {
-    let pieces = crate::export::split_words(line)?;
+/// path is quoted or written as `:export` takes one. `:export`'s own words
+/// are set aside wherever they stand ([`Line::left_out`]).
+pub fn read_line(line: &str) -> Result<Line, String> {
+    let export_word = |piece: &str| {
+        crate::export::WORDS.iter().any(|w| piece == *w || (w.ends_with('=') && piece.starts_with(w)))
+    };
+    let (left_out, pieces): (Vec<String>, Vec<String>) =
+        crate::export::split_words(line)?.into_iter().partition(|piece| export_word(piece));
     let mut pieces = pieces.iter();
     let (mut format, mut path) = (None, None);
     if let Some(first) = pieces.next() {
@@ -288,7 +305,7 @@ pub fn read_line(line: &str) -> Result<(Option<String>, Option<String>), String>
     if let Some(extra) = pieces.next() {
         return Err(say!("export.words-after-path", path.unwrap_or_else(|| extra.clone())));
     }
-    Ok((format, path))
+    Ok(Line { format, path, left_out })
 }
 
 /// **A callout's title when none is written**, as the preview gives it: an
@@ -830,12 +847,27 @@ mod tests {
 
     #[test]
     fn a_line_is_a_format_and_a_path() {
-        assert_eq!(read_line("").unwrap(), (None, None));
-        assert_eq!(read_line("html").unwrap(), (Some("html".into()), None));
-        assert_eq!(read_line("out/a.html").unwrap(), (None, Some("out/a.html".into())));
-        assert_eq!(read_line("pdf \"my book.pdf\"").unwrap(), (Some("pdf".into()), Some("my book.pdf".into())));
-        assert_eq!(read_line("docx").unwrap(), (Some("docx".into()), None));
-        assert!(read_line("a.html b.html").is_err());
+        let read = |line: &str| read_line(line).map(|l| (l.format, l.path));
+        assert_eq!(read("").unwrap(), (None, None));
+        assert_eq!(read("html").unwrap(), (Some("html".into()), None));
+        assert_eq!(read("out/a.html").unwrap(), (None, Some("out/a.html".into())));
+        assert_eq!(read("pdf \"my book.pdf\"").unwrap(), (Some("pdf".into()), Some("my book.pdf".into())));
+        assert_eq!(read("docx").unwrap(), (Some("docx".into()), None));
+        assert!(read("a.html b.html").is_err());
+    }
+
+    /// `page=` and `font=` are `:export`'s, set aside wherever they stand —
+    /// not a format, and not the name of the file to write.
+    #[test]
+    fn the_export_words_are_set_aside() {
+        let line = read_line("pdf page=A5 out.pdf font='Songti SC, serif'").unwrap();
+        assert_eq!(line.format.as_deref(), Some("pdf"));
+        assert_eq!(line.path.as_deref(), Some("out.pdf"));
+        assert_eq!(line.left_out, ["page=A5", "font='Songti SC, serif'"]);
+        let line = read_line("page=A5 vertical").unwrap();
+        assert_eq!((line.format, line.path), (None, None));
+        assert_eq!(line.left_out, ["page=A5", "vertical"]);
+        assert!(read_line("pdf").unwrap().left_out.is_empty());
     }
 
     #[test]

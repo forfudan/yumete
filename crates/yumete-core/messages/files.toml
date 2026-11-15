@@ -337,6 +337,18 @@ zhs = "没能画出 PDF：{0}"
 en = "could not draw the PDF: {0}"
 
 [[message]]
+# :export-as-preview 用在 Markdown 文件上，行裏有 :export 的詞（page=、font=、vertical 這些）：導出的是預覽的樣子，那些詞用不上。{0} 是「已導出」那句，{1} 是那些詞，用逗號隔開（草稿）
+key = "export.left-out-preview"
+zhs = "{0}；导出的是预览的样子，{1} 用不上，已略去"
+en = "{0}; the export is the preview as drawn, so {1} was left out"
+
+[[message]]
+# :export-as-preview 用在 Typst 文件上，行裏有 :export 的詞（page=、font=、vertical 這些）：Typst 文件自己定版式，那些詞用不上。{0} 是本來要說的話（已導出、正在排版），{1} 是那些詞，用逗號隔開（草稿）
+key = "export.left-out-typst"
+zhs = "{0}；Typst 文件的纸张、字体等版式由文件自己设定，{1} 用不上，已略去"
+en = "{0}; a Typst file sets its own page, fonts and the rest, so {1} was left out"
+
+[[message]]
 # :export 的 font= 后面是空的（草稿：教加引号）
 key = "export.no-fonts"
 zhs = "font= 后面要写字体，例如 font=Songti；含空格或逗号的字体列表要加引号，例如 font='Songti SC, serif'"
@@ -425,6 +437,12 @@ en = "still typesetting {0}; wait for it to finish"
 key = "export.typst-failed"
 zhs = "typst 编译失败，没有导出：{0}"
 en = "typst could not compile it, so nothing was exported: {0}"
+
+[[message]]
+# ye --export pdf 編譯一個 Typst 文件，命令行上有 :export 的詞（page=、font= 這些）：Typst 文件自己定版式。{0} 是那個文件，{1} 是那些詞，用逗號隔開（草稿）
+key = "export.typst-sets-its-own"
+zhs = "{0}：Typst 文件的纸张、字体等版式由文件自己设定，{1} 用不上，已略去"
+en = "{0}: a Typst file sets its own page, fonts and the rest, so {1} was left out"
 
 [[message]]
 # :export 的路径后面还有别的词（草稿）

@@ -889,10 +889,18 @@ pub enum CommandError {
     Unknown(String),
     /// The command requires an argument that was not supplied.
     MissingArgument(&'static str),
-    /// The command's argument was not one of the values it accepts.
+    /// The command's argument is not one of the words its parameter lists;
+    /// the refusal names them, read off the table ([`takes`]).
     InvalidArgument {
         command: &'static str,
         value: String,
+    },
+    /// The command's argument is not what it takes, and the refusal says
+    /// what that is: a range, or a sentence, where no word list says it.
+    Wants {
+        command: &'static str,
+        value: String,
+        wants: Wants,
     },
     /// A subcommand written with a space where this tree uses a hyphen.
     ///
@@ -934,12 +942,12 @@ impl fmt::Display for CommandError {
             CommandError::LineTooBig(digits) => {
                 write!(f, "{}", crate::say!("cmd.line-number-too-big", digits))
             }
-            CommandError::MissingArgument(what) => {
-                write!(f, "{}", crate::say!("cmd.needs-an-argument", what))
-            }
-            CommandError::InvalidArgument { command, value } => {
-                write!(f, "{}", crate::say!("cmd.not-one-of-its-values", command, value))
-            }
+            CommandError::MissingArgument(what) => match wanted_after(what) {
+                Some(takes) => write!(f, "{}", crate::say!("cmd.wants-after-it", what, takes)),
+                None => write!(f, "{}", crate::say!("cmd.needs-an-argument", what)),
+            },
+            CommandError::InvalidArgument { command, value } => write!(f, "{}", refusal(command, value, None)),
+            CommandError::Wants { command, value, wants } => write!(f, "{}", refusal(command, value, Some(*wants))),
             CommandError::MeansTheHyphenatedOne { command, word } => {
                 write!(f, "{}", crate::say!("cmd.means-the-hyphenated-one", command, word))
             }
@@ -951,6 +959,136 @@ impl fmt::Display for CommandError {
 }
 
 impl std::error::Error for CommandError {}
+
+/// **What a command takes, where no word list says it**: a range, or a
+/// sentence of its own.
+///
+/// A refusal that names only the value sends the reader to the manual for
+/// the one thing the editor already knows, so every refusal names what is
+/// taken instead: `:indent-width 40` is answered with the range, `:sort -x`
+/// with its two flags.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Wants {
+    /// The words parameter `n` of the command lists.
+    WordsOf(usize),
+    /// A whole number from the first to the second, both included.
+    Range(usize, usize),
+    /// A whole number, this one or more.
+    AtLeast(usize),
+    /// What the message of this tag says.
+    Said(&'static str),
+}
+
+/// The refusal of `value` by `command`, naming what it takes.
+fn refusal(command: &str, value: &str, wants: Option<Wants>) -> String {
+    match takes(command, wants) {
+        Some(takes) => say!("cmd.takes-instead", command, value, elsewhere(command, value, takes)),
+        None => say!("cmd.not-one-of-its-values", command, value),
+    }
+}
+
+/// **What `command` takes**, in the reader's language: the words its
+/// parameter lists, or what the refusal brings — after the words of a
+/// `WordsOr` in the first slot, which are taken as well (`:indent full`
+/// beside `:indent 4`). `None` when nothing is known to say.
+///
+/// Read off the table rather than written at each refusal, so the refusal
+/// and the `:` menu cannot list different words.
+fn takes(command: &str, wants: Option<Wants>) -> Option<String> {
+    let entry = COMMANDS.iter().find(|e| e.name == command);
+    let params = entry.map_or(&[][..], |e| e.params);
+    let listed = |param: &Param| param.words().filter(|w| !w.is_empty()).map(one_of);
+    let thing = match wants {
+        None => return params.iter().find_map(listed),
+        Some(Wants::WordsOf(n)) => return params.get(n).and_then(listed),
+        Some(Wants::Range(lo, hi)) => say!("cmd.takes.range", lo, hi),
+        Some(Wants::AtLeast(0)) => say!("cmd.takes.whole-number"),
+        Some(Wants::AtLeast(lo)) => say!("cmd.takes.at-least", lo),
+        Some(Wants::Said(tag)) => crate::messages::say(tag, &[]),
+    };
+    Some(match params.first() {
+        Some(first @ Param::WordsOr { .. }) => match listed(first) {
+            Some(words) => say!("cmd.takes.or", words, thing),
+            None => thing,
+        },
+        _ => thing,
+    })
+}
+
+/// A word list as a sentence says it: the one word, or 「one of」 them.
+fn one_of(words: &[Word]) -> String {
+    match words {
+        [only] => only.name.to_string(),
+        _ => say!(
+            "cmd.takes.one-of",
+            words.iter().map(|w| w.name).collect::<Vec<_>>().join(&say!("cmd.takes.separator"))
+        ),
+    }
+}
+
+/// `takes`, with the command that does take `value` when it is another's:
+/// a PDF is the preview's export, not the manuscript's.
+fn elsewhere(command: &str, value: &str, takes: String) -> String {
+    match (command, value.to_ascii_lowercase().as_str()) {
+        ("export", "pdf") => say!("cmd.takes.pdf-is-the-preview", takes),
+        _ => takes,
+    }
+}
+
+/// **What is missing after `command`**, for 「`:pipe` wants a command after
+/// it」: the last parameter that is a path or free text — what a command that
+/// also takes words cannot do without (`:table-find` needs its text, not its
+/// axis) — else its first word list. `None` when there is nothing to say in
+/// the reader's language.
+fn wanted_after(command: &str) -> Option<String> {
+    let Some(entry) = COMMANDS.iter().find(|e| e.name == command) else {
+        return match command {
+            "!" => Some(say!("cmd.arg.command")),
+            "substitute" => Some(say!("cmd.takes.substitute")),
+            _ => None,
+        };
+    };
+    let free = entry.params.iter().rev().find(|p| matches!(p, Param::Path | Param::Free(_)));
+    match free {
+        Some(Param::Path) => Some(say!("cmd.arg.path")),
+        Some(Param::Free(declared)) => placeholder(declared),
+        _ => {
+            let param = entry.params.iter().find(|p| p.words().is_some_and(|w| !w.is_empty()))?;
+            let words = one_of(param.words()?);
+            Some(match param {
+                Param::WordsOr { or, .. } => match placeholder(or) {
+                    Some(other) => say!("cmd.takes.or", words, other),
+                    None => words,
+                },
+                _ => words,
+            })
+        }
+    }
+}
+
+/// **A placeholder in the reader's language**. The `:` menu draws a
+/// parameter's placeholder as it is declared; a sentence says it in the
+/// language of the sentence around it. `None` for one with no translation,
+/// so the sentence is not half in another language.
+fn placeholder(declared: &str) -> Option<String> {
+    Some(match declared {
+        "<命令>" => say!("cmd.arg.command"),
+        "<表達式>" => say!("cmd.arg.expression"),
+        "<字符串>" => say!("cmd.arg.text"),
+        "<列名>" => say!("cmd.arg.row-name"),
+        "<格式> [<格式>]" => say!("cmd.arg.formats"),
+        "<名字>" => say!("cmd.arg.name"),
+        "<新名>" => say!("cmd.arg.new-name"),
+        "<分隔符>" => say!("cmd.arg.delimiter"),
+        "<欄號>" => say!("cmd.arg.column"),
+        "<行號>" => say!("cmd.arg.line"),
+        "<字數>" => say!("cmd.arg.count"),
+        "<字/分>" => say!("cmd.arg.per-minute"),
+        "<鍵/秒>" => say!("cmd.arg.per-second"),
+        "<%>" => say!("cmd.arg.percent"),
+        _ => return None,
+    })
+}
 
 /// Parse a single command line, with or without a leading `:`.
 ///
@@ -1316,11 +1454,27 @@ impl<'a> Parsed<'a> {
 
     /// Parameter `i` as a number, in the command's own name if it is not one.
     pub fn number(&self, i: usize) -> Result<usize, CommandError> {
+        self.number_from(i, 0)
+    }
+
+    /// Parameter `i` as a number of at least `lo`, refused with that said.
+    pub fn number_from(&self, i: usize, lo: usize) -> Result<usize, CommandError> {
+        self.counted(i, lo, usize::MAX, Wants::AtLeast(lo))
+    }
+
+    /// Parameter `i` as a number from `lo` to `hi`, refused with the range
+    /// said: the one place the range is written, for the check and the
+    /// refusal alike.
+    pub fn number_in(&self, i: usize, lo: usize, hi: usize) -> Result<usize, CommandError> {
+        self.counted(i, lo, hi, Wants::Range(lo, hi))
+    }
+
+    fn counted(&self, i: usize, lo: usize, hi: usize, wants: Wants) -> Result<usize, CommandError> {
         let text = self.need(i)?;
-        text.parse().map_err(|_| CommandError::InvalidArgument {
-            command: self.name,
-            value: text.to_string(),
-        })
+        match text.parse::<usize>() {
+            Ok(n) if (lo..=hi).contains(&n) => Ok(n),
+            _ => Err(CommandError::Wants { command: self.name, value: text.to_string(), wants }),
+        }
     }
 }
 
@@ -1376,6 +1530,41 @@ pub fn set_setting_names(names: &[(&str, &'static str)]) {
         .map(|(path, label)| Word { name: Box::leak(path.to_string().into_boxed_str()), help: label, needs: &[] })
         .collect();
     let _ = SETTING_NAMES.set(Box::leak(words.into_boxed_slice()));
+}
+
+/// **The settings whose name on the panel holds `typed`**, in any language
+/// the name is written in, each offered by its name in the language in force,
+/// its TOML path beside it: the panel goes to a setting by either
+/// (`Panel::go_to`), so the name completes as surely as the path. Those whose
+/// name begins with what is typed come first.
+fn settings_by_name(typed: &str) -> Vec<Choice> {
+    let folded = typed.to_lowercase();
+    let mut found: Vec<(bool, Choice)> = setting_names()
+        .iter()
+        .filter_map(|w| {
+            let entry = crate::messages::table().get(w.help)?;
+            let begins = [entry.zht, entry.zhs, entry.en]
+                .iter()
+                .map(|name| name.to_lowercase())
+                .filter(|name| !name.is_empty() && name.contains(&folded))
+                .map(|name| name.starts_with(&folded))
+                .max()?;
+            let choice = Choice {
+                name: crate::messages::as_written(w.help)?,
+                family: None,
+                needs: w.needs,
+                alias: None,
+                short: None,
+                help: w.help,
+                leading: "",
+                under: String::new(),
+                note: Some(w.name),
+            };
+            Some((begins, choice))
+        })
+        .collect();
+    found.sort_by_key(|(begins, _)| !begins);
+    found.into_iter().map(|(_, choice)| choice).collect()
 }
 
 /// The settings `:settings` offers.
@@ -1613,7 +1802,7 @@ fn read_params(
         return Some(Err(wrong));
     }
     let mut args: Vec<String> = Vec::with_capacity(entry.params.len());
-    for param in entry.params {
+    for (slot, param) in entry.params.iter().enumerate() {
         // **The last kind of parameter eats the line.** A path may hold
         // spaces, and so may the text of a `:grep`; a word never does.
         if param.takes_the_rest() {
@@ -1638,9 +1827,10 @@ fn read_params(
                 true => match unquote(left) {
                     Some(path) => path,
                     None => {
-                        return Some(Err(CommandError::InvalidArgument {
+                        return Some(Err(CommandError::Wants {
                             command: entry.name,
                             value: left.to_string(),
+                            wants: Wants::Said("cmd.takes.closed-quote"),
                         }))
                     }
                 },
@@ -1666,11 +1856,18 @@ fn read_params(
             (Some(list), open) => match pick(head, list) {
                 Some(word) => args.push(word.name.to_string()),
                 None if open => args.push(head.to_string()),
+                // The first list is what a bare refusal names; a later
+                // one is named by its slot.
                 None => {
-                    return Some(Err(CommandError::InvalidArgument {
-                        command: entry.name,
-                        value: head.to_string(),
-                    }))
+                    let first = entry.params.iter().position(|p| p.words().is_some_and(|w| !w.is_empty()));
+                    return Some(Err(match first == Some(slot) {
+                        true => CommandError::InvalidArgument { command: entry.name, value: head.to_string() },
+                        false => CommandError::Wants {
+                            command: entry.name,
+                            value: head.to_string(),
+                            wants: Wants::WordsOf(slot),
+                        },
+                    }));
                 }
             },
             (None, _) => args.push(head.to_string()),
@@ -2600,7 +2797,7 @@ fn genda_top_count(p: &Parsed) -> Result<usize, CommandError> {
         None | Some("") => Ok(crate::genda::DEFAULT_TOP),
         Some(text) => match text.parse::<usize>() {
             Ok(n) if n > 0 => Ok(n),
-            _ => Err(CommandError::InvalidArgument { command: p.name, value: text.to_string() }),
+            _ => Err(CommandError::Wants { command: p.name, value: text.to_string(), wants: Wants::AtLeast(1) }),
         },
     }
 }
@@ -2609,7 +2806,11 @@ fn genda_top_count(p: &Parsed) -> Result<usize, CommandError> {
 /// for none.
 fn genda_goal_value(p: &Parsed) -> Result<u32, CommandError> {
     let text = p.need(0)?;
-    crate::genda::hundredths(text).ok_or_else(|| CommandError::InvalidArgument { command: p.name, value: text.to_string() })
+    crate::genda::hundredths(text).ok_or_else(|| CommandError::Wants {
+        command: p.name,
+        value: text.to_string(),
+        wants: Wants::Said("cmd.takes.a-number"),
+    })
 }
 
 /// `:genda-goal` and each of its criteria: `off`.
@@ -3557,7 +3758,14 @@ pub const COMMANDS: &[Entry] = &[
             match p.arg(0) {
                 None => Ok(Command::Progress),
                 Some("off" | "none" | "0") => Ok(Command::Target(None)),
-                Some(_) => Ok(Command::Target(Some(p.number(0)?))),
+                Some(text) => match text.parse() {
+                    Ok(n) => Ok(Command::Target(Some(n))),
+                    Err(_) => Err(CommandError::Wants {
+                        command: p.name,
+                        value: text.to_string(),
+                        wants: Wants::Said("cmd.takes.count-or-off"),
+                    }),
+                },
             }
         }),
     },
@@ -3733,10 +3941,7 @@ pub const COMMANDS: &[Entry] = &[
                 None => 1,
                 // An exit status is one byte; a number past it would be
                 // cut to another status without a word.
-                Some(word) => word.parse::<u8>().map_err(|_| CommandError::InvalidArgument {
-                    command: "quit-error",
-                    value: word.to_string(),
-                })?,
+                Some(_) => p.number_in(0, 0, 255)? as u8,
             };
             Ok(Command::QuitError { code, force: p.force })
         }),
@@ -3795,9 +4000,10 @@ pub const COMMANDS: &[Entry] = &[
         params: &[Param::Free("<步數>｜<時間>")],
         build: Some(|p| match UndoSpan::parse(p.arg(0)) {
             Some(span) => Ok(Command::Earlier(span)),
-            None => Err(CommandError::InvalidArgument {
+            None => Err(CommandError::Wants {
                 command: p.name,
                 value: p.arg(0).unwrap_or_default().to_string(),
+                wants: Wants::Said("cmd.takes.undo-span"),
             }),
         }),
     },
@@ -3809,9 +4015,10 @@ pub const COMMANDS: &[Entry] = &[
         params: &[Param::Free("<步數>｜<時間>")],
         build: Some(|p| match UndoSpan::parse(p.arg(0)) {
             Some(span) => Ok(Command::Later(span)),
-            None => Err(CommandError::InvalidArgument {
+            None => Err(CommandError::Wants {
                 command: p.name,
                 value: p.arg(0).unwrap_or_default().to_string(),
+                wants: Wants::Said("cmd.takes.undo-span"),
             }),
         }),
     },
@@ -4254,9 +4461,10 @@ pub const COMMANDS: &[Entry] = &[
                 Some(rest) => rest
                     .split_whitespace()
                     .map(|word| {
-                        word.parse().map_err(|_| CommandError::InvalidArgument {
+                        word.parse().map_err(|_| CommandError::Wants {
                             command: "rules",
                             value: word.to_string(),
+                            wants: Wants::Said("cmd.takes.rules"),
                         })
                     })
                     .collect::<Result<Vec<usize>, _>>()?,
@@ -4463,19 +4671,13 @@ pub const COMMANDS: &[Entry] = &[
         params: &[Param::Free("<1–9>")],
         build: Some(|p| {
             // On its own it is the question, like `:yume-panel`.
-            let Some(word) = p.arg(0) else {
+            if p.arg(0).is_none() {
                 return Ok(Command::YumeMenuSize(None));
-            };
-            match word.parse::<usize>() {
-                // **The panel's own limit, not an opinion about taste.** The
-                // selection keys are `1`–`9`, so a tenth candidate on the page
-                // would have no key to pick it with.
-                Ok(n) if (1..=9).contains(&n) => Ok(Command::YumeMenuSize(Some(n))),
-                _ => Err(CommandError::InvalidArgument {
-                    command: "yume-menu-size",
-                    value: word.to_string(),
-                }),
             }
+            // **The panel's own limit, not an opinion about taste.** The
+            // selection keys are `1`–`9`, so a tenth candidate on the page
+            // would have no key to pick it with.
+            p.number_in(0, 1, 9).map(|n| Command::YumeMenuSize(Some(n)))
         }),
     },
     Entry {
@@ -4667,13 +4869,7 @@ pub const COMMANDS: &[Entry] = &[
         params: &[Param::Free("<1–4>")],
         build: Some(|p| match p.arg(0) {
             None => Ok(Command::SetPagesHorizontal(None)),
-            Some(_) => match p.number(0)? {
-                n @ 1..=4 => Ok(Command::SetPagesHorizontal(Some(n))),
-                n => Err(CommandError::InvalidArgument {
-                    command: "view-pages-horizontal",
-                    value: n.to_string(),
-                }),
-            },
+            Some(_) => Ok(Command::SetPagesHorizontal(Some(p.number_in(0, 1, 4)?))),
         }),
     },
     Entry {
@@ -4684,13 +4880,7 @@ pub const COMMANDS: &[Entry] = &[
         params: &[Param::Free("<1–4>")],
         build: Some(|p| match p.arg(0) {
             None => Ok(Command::SetPagesVertical(None)),
-            Some(_) => match p.number(0)? {
-                n @ 1..=4 => Ok(Command::SetPagesVertical(Some(n))),
-                n => Err(CommandError::InvalidArgument {
-                    command: "view-pages-vertical",
-                    value: n.to_string(),
-                }),
-            },
+            Some(_) => Ok(Command::SetPagesVertical(Some(p.number_in(0, 1, 4)?))),
         }),
     },
     Entry {
@@ -4920,15 +5110,7 @@ pub const COMMANDS: &[Entry] = &[
                 Some("full") => Command::SetIndentLevel(crate::editor::Render::Full),
                 Some("basic") => Command::SetIndentLevel(crate::editor::Render::Basic),
                 Some("off" | "0") => Command::SetIndentLevel(crate::editor::Render::Off),
-                Some(_) => match p.number(0)? {
-                    n @ 0..=8 => Command::SetIndent(n),
-                    n => {
-                        return Err(CommandError::InvalidArgument {
-                            command: "indent",
-                            value: n.to_string(),
-                        })
-                    }
-                },
+                Some(_) => Command::SetIndent(p.number_in(0, 0, 8)?),
             })
         }),
     },
@@ -4968,15 +5150,7 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|p| {
             Ok(Command::SetIndentWidth(match p.arg(0) {
                 None => None,
-                Some(_) => match p.number(0)? {
-                    n @ 1..=16 => Some(n),
-                    n => {
-                        return Err(CommandError::InvalidArgument {
-                            command: "indent-width",
-                            value: n.to_string(),
-                        })
-                    }
-                },
+                Some(_) => Some(p.number_in(0, 1, 16)?),
             }))
         }),
     },
@@ -5014,7 +5188,13 @@ pub const COMMANDS: &[Entry] = &[
                 match word {
                     "-r" | "--reverse" => reverse = true,
                     "-i" | "--insensitive" | "i" => insensitive = true,
-                    _ => return Err(CommandError::InvalidArgument { command: "sort", value: word.to_string() }),
+                    _ => {
+                        return Err(CommandError::Wants {
+                            command: "sort",
+                            value: word.to_string(),
+                            wants: Wants::Said("cmd.takes.sort"),
+                        })
+                    }
                 }
             }
             Ok(Command::Sort { reverse, insensitive })
@@ -5108,9 +5288,10 @@ pub const COMMANDS: &[Entry] = &[
             // 3×3——而那個 `x` 是人打出來的。理由同下面
             // 那一條（第三個數是打錯了，不是可以丟掉的）。
             if first.is_none() && !spec.trim().is_empty() {
-                return Err(CommandError::InvalidArgument {
+                return Err(CommandError::Wants {
                     command: "table",
                     value: spec.to_string(),
+                    wants: Wants::Said("cmd.takes.table-size"),
                 });
             }
             let rows = first.unwrap_or("3");
@@ -5119,18 +5300,20 @@ pub const COMMANDS: &[Entry] = &[
             // `:table 3 4 5` 不許默默作一張 3×4 的表：那個 `5` 是人打出來的——他要
             // 的多半不是 3×4。說一句，別自作主張。
             if numbers.next().is_some() {
-                return Err(CommandError::InvalidArgument {
+                return Err(CommandError::Wants {
                     command: "table",
                     value: spec.to_string(),
+                    wants: Wants::Said("cmd.takes.table-size"),
                 });
             }
             match (rows.parse::<usize>(), columns.parse::<usize>()) {
                 (Ok(r), Ok(c)) if (1..=200).contains(&r) && (1..=32).contains(&c) => {
                     Ok(Command::NewTable { rows: r, columns: c })
                 }
-                _ => Err(CommandError::InvalidArgument {
+                _ => Err(CommandError::Wants {
                     command: "table",
                     value: spec.to_string(),
+                    wants: Wants::Said("cmd.takes.table-size"),
                 }),
             }
         }),
@@ -5209,18 +5392,20 @@ pub const COMMANDS: &[Entry] = &[
             let mut words = p.arg(0).unwrap_or("").split_whitespace();
             while let Some(word) = words.next() {
                 let Ok(column) = word.parse::<usize>() else {
-                    return Err(CommandError::InvalidArgument {
+                    return Err(CommandError::Wants {
                         command: "table-sort",
                         value: word.to_string(),
+                        wants: Wants::Said("cmd.takes.table-sort"),
                     });
                 };
                 let down = match words.next() {
                     None | Some("a") | Some("asc") => false,
                     Some("d") | Some("desc") => true,
                     Some(other) => {
-                        return Err(CommandError::InvalidArgument {
+                        return Err(CommandError::Wants {
                             command: "table-sort",
                             value: other.to_string(),
+                            wants: Wants::Said("cmd.takes.table-sort"),
                         })
                     }
                 };
@@ -5476,10 +5661,13 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[Param::Free("<級>")],
         build: Some(|p| {
-            // As `:goto`: `number`'s error is already the right one.
             Ok(Command::Outline(match p.arg(0) {
                 None => None,
-                Some(_) => Some(p.number(0)?),
+                Some(text) => Some(text.parse().map_err(|_| CommandError::Wants {
+                    command: p.name,
+                    value: text.to_string(),
+                    wants: Wants::Said("cmd.takes.outline-level"),
+                })?),
             }))
         }),
     },
@@ -5556,9 +5744,10 @@ pub const COMMANDS: &[Entry] = &[
             let word = p.need(0)?;
             crate::table::delimiter_named(word)
                 .map(Command::TableDelimiter)
-                .ok_or(CommandError::InvalidArgument {
+                .ok_or(CommandError::Wants {
                     command: "table-delimiter",
                     value: word.to_string(),
+                    wants: Wants::Said("cmd.takes.delimiter"),
                 })
         }),
     },
@@ -5629,9 +5818,10 @@ pub const COMMANDS: &[Entry] = &[
         params: &[Param::Free("<格式> [<格式>]")],
         build: Some(|p| {
             let shape = |word: &str| {
-                crate::table::Shape::named(word).ok_or(CommandError::InvalidArgument {
+                crate::table::Shape::named(word).ok_or(CommandError::Wants {
                     command: "paste-table",
                     value: word.to_string(),
+                    wants: Wants::Said("cmd.takes.table-formats"),
                 })
             };
             let words: Vec<&str> = p.arg(0).unwrap_or("").split_whitespace().collect();
@@ -5642,9 +5832,10 @@ pub const COMMANDS: &[Entry] = &[
                     to: shape(to)?,
                     from: Some(shape(from)?),
                 }),
-                _ => Err(CommandError::InvalidArgument {
+                _ => Err(CommandError::Wants {
                     command: "paste-table",
                     value: p.arg(0).unwrap_or("").to_string(),
+                    wants: Wants::Said("cmd.takes.table-formats"),
                 }),
             }
         }),
@@ -5661,9 +5852,10 @@ pub const COMMANDS: &[Entry] = &[
         params: &[Param::Free("<格式> [<格式>]")],
         build: Some(|p| {
             let shape = |word: &str| {
-                crate::table::Shape::named(word).ok_or(CommandError::InvalidArgument {
+                crate::table::Shape::named(word).ok_or(CommandError::Wants {
                     command: "convert-table",
                     value: word.to_string(),
+                    wants: Wants::Said("cmd.takes.table-formats"),
                 })
             };
             let words: Vec<&str> = p.arg(0).unwrap_or("").split_whitespace().collect();
@@ -5675,9 +5867,10 @@ pub const COMMANDS: &[Entry] = &[
                     to: shape(to)?,
                     from: Some(shape(from)?),
                 }),
-                _ => Err(CommandError::InvalidArgument {
+                _ => Err(CommandError::Wants {
                     command: "convert-table",
                     value: p.arg(0).unwrap_or("").to_string(),
+                    wants: Wants::Said("cmd.takes.table-formats"),
                 }),
             }
         }),
@@ -5703,12 +5896,13 @@ pub const COMMANDS: &[Entry] = &[
                 // terminal's own notch」, which is one unit — a config file
                 // clamps it the same way, and `set_wheel_step` is where the
                 // `.max(1)` lives.
-                Some(_) => match p.number(0)? {
-                    n @ 0..=10 => Some(n),
-                    n => {
-                        return Err(CommandError::InvalidArgument {
-                            command: "wheel",
-                            value: n.to_string(),
+                Some(text) => match text.parse::<usize>() {
+                    Ok(n) if n <= 10 => Some(n),
+                    _ => {
+                        return Err(CommandError::Wants {
+                            command: p.name,
+                            value: text.to_string(),
+                            wants: Wants::Range(1, 10),
                         })
                     }
                 },
@@ -5935,10 +6129,7 @@ pub const COMMANDS: &[Entry] = &[
         // A value, not an action: how long a segment is. `all` is 全文.
         build: Some(|p| match p.need(0)? {
             "all" => Ok(Command::Genda(crate::genda::Ask::Length(None))),
-            _ => match p.number(0)? {
-                0 => Err(CommandError::InvalidArgument { command: p.name, value: "0".into() }),
-                n => Ok(Command::Genda(crate::genda::Ask::Length(Some(n)))),
-            },
+            _ => Ok(Command::Genda(crate::genda::Ask::Length(Some(p.number_from(0, 1)?)))),
         }),
     },
     Entry {
@@ -6648,11 +6839,22 @@ fn complete_within_stripped(line: &str, folding: bool) -> (usize, Vec<Choice>) {
         at += part.len() + 1;
     }
     let starting_new = line.is_empty() || line.ends_with(' ');
-    let (start, typed) = if starting_new {
+    let (mut start, mut typed) = if starting_new {
         (line.len(), "")
     } else {
         words.pop().unwrap_or((0, ""))
     };
+    // **A setting's name is the whole of the rest**, as `:settings` reads it:
+    // the panel's name for it may hold spaces (`first-line indent`), and a
+    // space typed inside it is not the start of another argument.
+    if let Some(&(_, head)) = words.first() {
+        if entry_named(head).is_some_and(|e| matches!(e.params, [Param::Settings])) && (words.len() > 1 || !typed.is_empty()) {
+            if let Some(&(at, _)) = words.get(1) {
+                (start, typed) = (at, &line[at..]);
+            }
+            words.truncate(1);
+        }
+    }
 
     // Fold each family into its head until something has narrowed it (#369).
     //
@@ -6853,6 +7055,9 @@ fn complete_within_stripped(line: &str, folding: bool) -> (usize, Vec<Choice>) {
     // `scheme lingming`, because in both the reader named the leaf and not the
     // path. Guarded on an empty result rather than merged into it: a word that
     // *does* name something here has been answered already.
+    if !typed.is_empty() && walk(&words).is_some_and(|p| matches!(p, Param::Settings)) {
+        choices.extend(settings_by_name(typed));
+    }
     let reached_for = choices.is_empty() && !typed.is_empty();
     if reached_for {
         choices = match words.first() {
@@ -7146,7 +7351,7 @@ pub fn about_the_line(line: &str) -> Result<Described, Option<String>> {
             None if param.takes_others() => break,
             // 這張表不認得這個詞——按下 Enter 報的就是這一句，提前說出來。
             None => {
-                said.wrong = Some(say!("cmd.not-one-of-its-values", e.name, word));
+                said.wrong = Some(refusal(e.name, word, Some(Wants::WordsOf(at))));
                 said.word = None;
                 break;
             }
@@ -7482,9 +7687,10 @@ fn parse_substitution(input: &str) -> Option<Result<Command, CommandError>> {
     // Saying so beats doing the substitution the flag was meant to hold back:
     // `n` in vi means "count, change nothing", and must not *substitute*.
     if let Some(bad) = flags.chars().find(|c| !"ginctfyj".contains(*c)) {
-        return Some(Err(CommandError::InvalidArgument {
+        return Some(Err(CommandError::Wants {
             command: "substitute",
-            value: say!("substitute.unknown-flag", bad),
+            value: bad.to_string(),
+            wants: Wants::Said("cmd.takes.substitute-flags"),
         }));
     }
     // Only now — once this is certainly a substitution and not `:set` or a
@@ -7601,8 +7807,8 @@ mod tests {
         assert_eq!(parse(":cq 0"), Ok(Command::QuitError { code: 0, force: false }));
         assert_eq!(parse(":cquit! 7"), Ok(Command::QuitError { code: 7, force: true }));
         assert_eq!(parse(":quit-error!"), Ok(Command::QuitError { code: 1, force: true }));
-        assert!(matches!(parse(":cq 256"), Err(CommandError::InvalidArgument { .. })));
-        assert!(matches!(parse(":cq -1"), Err(CommandError::InvalidArgument { .. })));
+        assert!(matches!(parse(":cq 256"), Err(CommandError::Wants { .. })));
+        assert!(matches!(parse(":cq -1"), Err(CommandError::Wants { .. })));
         for (line, force) in [(":rla", false), (":reload-all", false), (":rla!", true), (":reload-all!", true)] {
             assert_eq!(parse(line), Ok(Command::ReloadAll { force }), "{line}");
         }
@@ -8676,7 +8882,7 @@ mod tests {
         assert_eq!(parse(":sort! i"), sort(true, true));
         assert_eq!(
             parse(":sort r"),
-            Err(CommandError::InvalidArgument { command: "sort", value: "r".into() }),
+            Err(CommandError::Wants { command: "sort", value: "r".into(), wants: Wants::Said("cmd.takes.sort") }),
             "vim's `r` sorts on a match, so it is refused rather than read as reverse"
         );
     }
@@ -9422,11 +9628,11 @@ mod tests {
     fn an_unterminated_quote_is_refused() {
         assert!(matches!(
             parse(r#":w "a.txt"#),
-            Err(CommandError::InvalidArgument { command: "write", .. })
+            Err(CommandError::Wants { command: "write", .. })
         ));
         assert!(matches!(
             parse(":o 'a.txt"),
-            Err(CommandError::InvalidArgument { command: "open", .. })
+            Err(CommandError::Wants { command: "open", .. })
         ));
     }
 

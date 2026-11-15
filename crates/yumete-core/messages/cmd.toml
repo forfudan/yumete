@@ -31,16 +31,100 @@ en = "no annotation"
 find = "注解 關 关 off"
 
 [[message]]
+# 命令少了參數時説的佔位：欄號（:table-hide）（草稿）
+key = "cmd.arg.column"
+zhs = "<栏号>"
+en = "<column number>"
+
+[[message]]
+# 命令少了參數時説的佔位：一條外部命令（草稿）
+key = "cmd.arg.command"
+zhs = "<命令>"
+en = "<command>"
+
+[[message]]
+# 命令少了參數時説的佔位：字數（:genda-length）（草稿）
+key = "cmd.arg.count"
+zhs = "<字数>"
+en = "<number of characters>"
+
+[[message]]
+# 命令少了參數時説的佔位：分隔符（:table-delimiter）（草稿）
+key = "cmd.arg.delimiter"
+zhs = "<分隔符>"
+en = "<delimiter>"
+
+[[message]]
+# 命令少了參數時説的佔位：一個表達式（:decimo）（草稿）
+key = "cmd.arg.expression"
+zhs = "<表达式>"
+en = "<expression>"
+
+[[message]]
+# 命令少了參數時説的佔位：一到兩個表格格式（:paste-table）（草稿）
+key = "cmd.arg.formats"
+zhs = "<格式> [<格式>]"
+en = "<format> [<format>]"
+
+[[message]]
+# 命令少了參數時説的佔位：行號（:goto）（草稿）
+key = "cmd.arg.line"
+zhs = "<行号>"
+en = "<line number>"
+
+[[message]]
+# 命令少了參數時説的佔位：一個名字（:run）（草稿）
+key = "cmd.arg.name"
+zhs = "<名字>"
+en = "<name>"
+
+[[message]]
+# 命令少了參數時説的佔位：新名字（:lsp-rename）（草稿）
+key = "cmd.arg.new-name"
+zhs = "<新名字>"
+en = "<new name>"
+
+[[message]]
 # : 命令選單裏，吃一個路徑的命令後面畫的佔位
 key = "cmd.arg.path"
 zhs = "<路径>"
 en = "<path>"
 
 [[message]]
+# 命令少了參數時説的佔位：每分鐘字數（:genda-goal-speed）（草稿）
+key = "cmd.arg.per-minute"
+zhs = "<字/分>"
+en = "<characters a minute>"
+
+[[message]]
+# 命令少了參數時説的佔位：每秒鍵數（:genda-goal-kps）（草稿）
+key = "cmd.arg.per-second"
+zhs = "<键/秒>"
+en = "<keys a second>"
+
+[[message]]
+# 命令少了參數時説的佔位：百分比（:genda-goal-accuracy）（草稿）
+key = "cmd.arg.percent"
+zhs = "<%>"
+en = "<%>"
+
+[[message]]
+# 命令少了參數時説的佔位：表格一行的名字（:table-jump）（草稿）
+key = "cmd.arg.row-name"
+zhs = "<行名>"
+en = "<row name>"
+
+[[message]]
 # : 命令菜单里，:settings 后面画的占位：一项设置的名字（草稿）
 key = "cmd.arg.setting"
 zhs = "<设置项>"
 en = "<setting>"
+
+[[message]]
+# 命令少了參數時説的佔位：要找的字（:table-find）（草稿）
+key = "cmd.arg.text"
+zhs = "<字符串>"
+en = "<text>"
 
 [[message]]
 # : 命令選單裏 column 那一項的説明(axis 組)
@@ -2161,10 +2245,136 @@ zhs = "制表符：Tab 输入制表符，Shift-Tab 输入空格"
 en = "tab: Tab types a tab, Shift-Tab spaces"
 
 [[message]]
+# 參數不是這個命令收的值；{2} 説它收什麼：一組詞、一個範圍或一句話（草稿）
+key = "cmd.takes-instead"
+zhs = "{0} 不接受「{1}」，可填 {2}"
+en = "{0} does not take '{1}': it takes {2}"
+
+[[message]]
 # 那個詞後面本來不跟東西，而後面跟了東西
 key = "cmd.takes-nothing-after-it"
 zhs = "{0} 不接受参数：「{1}」是多余的"
 en = "{0} takes no argument; '{1}' is extra"
+
+[[message]]
+# :genda-goal-speed 這幾個：參數要一個數，可帶小數（草稿）
+key = "cmd.takes.a-number"
+zhs = "数字"
+en = "a number"
+
+[[message]]
+# 參數要不小於 {0} 的整數（草稿）
+key = "cmd.takes.at-least"
+zhs = "不小于 {0} 的整数"
+en = "a whole number from {0} up"
+
+[[message]]
+# 路徑的引號没有收尾（草稿）
+key = "cmd.takes.closed-quote"
+zhs = "引号成对的路径"
+en = "a path with its quotes closed"
+
+[[message]]
+# :count-target 收的參數（草稿）
+key = "cmd.takes.count-or-off"
+zhs = "整数(字数)，或 off"
+en = "a whole number of characters, or off"
+
+[[message]]
+# :table-delimiter 收的參數（草稿）
+key = "cmd.takes.delimiter"
+zhs = "tab、space、comma、semicolon，或一个不是字母的字符"
+en = "tab, space, comma, semicolon, or one character that is not a letter"
+
+[[message]]
+# 拒收參數時列出的一組詞，{0} 是這些詞，已用分隔符連好（草稿）
+key = "cmd.takes.one-of"
+zhs = "{0}"
+en = "one of {0}"
+
+[[message]]
+# 一組詞之外還收別的：{0} 是那組詞，{1} 是別的（一個範圍、一個數）（草稿）
+key = "cmd.takes.or"
+zhs = "{0}，或 {1}"
+en = "{0}, or {1}"
+
+[[message]]
+# :sidebar-outline-level 收的參數（草稿）
+key = "cmd.takes.outline-level"
+zhs = "整数：大纲列到第几级标题，0 关闭大纲"
+en = "a whole number: the deepest heading level to list, 0 closes the outline"
+
+[[message]]
+# :export pdf：PDF 不是 :export 的格式，是 :export-as-preview 的；{0} 是 :export 收的格式（草稿）
+key = "cmd.takes.pdf-is-the-preview"
+zhs = "{0}；PDF 请用 :export-as-preview pdf"
+en = "{0}; for a PDF, :export-as-preview pdf"
+
+[[message]]
+# 參數要一個範圍裏的整數（草稿）
+key = "cmd.takes.range"
+zhs = "{0} 到 {1} 的整数"
+en = "a whole number from {0} to {1}"
+
+[[message]]
+# :rules 收的參數（草稿）
+key = "cmd.takes.rules"
+zhs = "一个或几个栏数(如 80 100)，或 off"
+en = "one or more column numbers such as 80 100, or off"
+
+[[message]]
+# 拒收參數時列詞，兩個詞之間的分隔（草稿）
+key = "cmd.takes.separator"
+zhs = "、"
+en = ", "
+
+[[message]]
+# :sort 收的參數（草稿）
+key = "cmd.takes.sort"
+zhs = "-r(倒序)、-i(不分大小写)"
+en = "-r (reversed) or -i (ignoring case)"
+
+[[message]]
+# :s 後面少了查找或替換（草稿）
+key = "cmd.takes.substitute"
+zhs = "/查找内容/替换内容/，末尾可加标志"
+en = "/pattern/replacement/, with flags after it if any"
+
+[[message]]
+# :s 的旗標裏有一個不認得的字母；這一句列出認得的（草稿）
+key = "cmd.takes.substitute-flags"
+zhs = "这几个标志：g 整行全部、i 忽略大小写、f 按字面、c 逐处确认、n 只计数、t 允许改列数、y 拼音、j 繁简"
+en = "these flags: g every match on the line, i ignore case, f literal, c ask at each one, n count only, t let the column count change, y pinyin, j glyph variants"
+
+[[message]]
+# :paste-table/:convert-table 收的參數（草稿）
+key = "cmd.takes.table-formats"
+zhs = "一到两个格式：pipe、csv、tsv，或分隔符(tab、space、comma、semicolon，或一个不是字母的字符)"
+en = "one or two formats: pipe, csv, tsv, or a delimiter (tab, space, comma, semicolon, or one character that is not a letter)"
+
+[[message]]
+# :table 收的參數：行數和欄數（草稿）
+key = "cmd.takes.table-size"
+zhs = "行数和栏数，如 3x4(行 1 到 200，栏 1 到 32)"
+en = "rows and columns such as 3x4, rows 1 to 200 and columns 1 to 32"
+
+[[message]]
+# :table-sort 收的參數（草稿）
+key = "cmd.takes.table-sort"
+zhs = "栏号，各跟 a(升序)或 d(降序)，如 1 a 2 d"
+en = "column numbers, each followed by a (ascending) or d (descending), such as 1 a 2 d"
+
+[[message]]
+# :earlier/:later 收的參數（草稿）
+key = "cmd.takes.undo-span"
+zhs = "步数，或 5m、1h 30m、2 days 这样的时长"
+en = "a number of steps, or a span such as 5m, 1h 30m or 2 days"
+
+[[message]]
+# 參數要一個整數（草稿）
+key = "cmd.takes.whole-number"
+zhs = "整数"
+en = "a whole number"
 
 [[message]]
 # : 命令選單裏 bw 那一項的説明(themes 組)
@@ -2419,6 +2629,12 @@ key = "cmd.view.wrap-width"
 zhs = "正文宽度(列数)；`:view-wrap-width 50` 设宽度，`0` 跟随窗口"
 en = "text width in columns; `0` follows the window"
 find = "寬度 宽度 欄寬 栏宽 行寬 行宽 width measure"
+
+[[message]]
+# 命令少了參數；{1} 説後面該寫什麼（草稿）
+key = "cmd.wants-after-it"
+zhs = "{0} 后面要写 {1}"
+en = "{0} wants {1} after it"
 
 [[message]]
 # :which-wrap 收到不認得的字母
