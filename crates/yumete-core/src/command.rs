@@ -2790,6 +2790,19 @@ fn genda_top_count(p: &Parsed) -> Result<usize, CommandError> {
     }
 }
 
+/// The ranks `:genda-top-chars` takes ([`crate::genda::ranks`]): ranks 1
+/// to [`crate::genda::DEFAULT_TOP`] when nothing is typed.
+fn genda_top_ranks(p: &Parsed) -> Result<(usize, usize), CommandError> {
+    match p.arg(0).map(str::trim) {
+        None | Some("") => Ok((1, crate::genda::DEFAULT_TOP)),
+        Some(text) => crate::genda::ranks(text).ok_or_else(|| CommandError::Wants {
+            command: p.name,
+            value: text.to_string(),
+            wants: Wants::Said("cmd.takes.ranks"),
+        }),
+    }
+}
+
 /// A criterion of `:genda-goal-…`, in hundredths: a number, or `off` or `0`
 /// for none.
 fn genda_goal_value(p: &Parsed) -> Result<u32, CommandError> {
@@ -2814,14 +2827,6 @@ const GENDA_LENGTHS: &[Word] = &[
     Word { name: "200", help: "cmd.genda-lengths.n", needs: &[] },
     Word { name: "500", help: "cmd.genda-lengths.n", needs: &[] },
     Word { name: "all", help: "cmd.genda-lengths.all", needs: &[] },
-];
-
-/// `:genda-article`, in the order of [`crate::genda::ARTICLE_WORDS`].
-const GENDA_ARTICLES: &[Word] = &[
-    Word { name: "buffer", help: "cmd.genda-articles.buffer", needs: &[] },
-    Word { name: "chars-1-500", help: "cmd.genda-articles.common-1", needs: &[] },
-    Word { name: "chars-501-1000", help: "cmd.genda-articles.common-2", needs: &[] },
-    Word { name: "chars-1001-1500", help: "cmd.genda-articles.common-3", needs: &[] },
 ];
 
 const PANELS: &[Word] = &[
@@ -6179,17 +6184,14 @@ pub const COMMANDS: &[Entry] = &[
         }),
     },
     Entry {
-        name: "genda-article",
-        aliases: &[],
-        help: "cmd.commands.genda-article",
+        name: "genda-top-chars",
+        aliases: &["gtc"],
+        help: "cmd.commands.genda-top-chars",
         needs: &[],
-        params: &[Param::Words { of: GENDA_ARTICLES, default: None }],
+        params: &[Param::Free("cmd.arg.ranks")],
         build: Some(|p| {
-            let word = p.need(0)?;
-            match crate::genda::Choice::from_word(word) {
-                Some(choice) => Ok(Command::Genda(crate::genda::Ask::Article(choice))),
-                None => Err(CommandError::InvalidArgument { command: p.name, value: word.to_string() }),
-            }
+            let (from, to) = genda_top_ranks(p)?;
+            Ok(Command::Genda(crate::genda::Ask::TopChars(from, to)))
         }),
     },
     Entry {
@@ -7744,6 +7746,28 @@ mod tests {
         assert_eq!(genda(":genda-retry-slow"), Some(Ask::RetrySlow));
         assert!(parse(":genda-goal-speed fast").is_err());
         assert!(parse(":genda-goal speed 120").is_err());
+    }
+
+    /// **`:genda-top-chars` takes `N` or `M-N`** of Yume's list; a rank of
+    /// 0, M past N, or anything else is refused here, before the page.
+    #[test]
+    fn genda_top_chars_takes_n_or_m_to_n() {
+        use crate::genda::Ask;
+        let genda = |line: &str| match parse(line) {
+            Ok(Command::Genda(ask)) => Some(ask),
+            _ => None,
+        };
+        assert_eq!(genda(":genda-top-chars"), Some(Ask::TopChars(1, crate::genda::DEFAULT_TOP)));
+        assert_eq!(genda(":genda-top-chars 800"), Some(Ask::TopChars(1, 800)));
+        assert_eq!(genda(":gtc 501-1000"), Some(Ask::TopChars(501, 1000)));
+        assert_eq!(genda(":gtc 7-7"), Some(Ask::TopChars(7, 7)));
+        for refused in [":gtc 0", ":gtc 0-5", ":gtc 9-3", ":gtc many", ":gtc 3-", ":gtc -3"] {
+            match parse(refused) {
+                Err(err) => assert!(err.to_string().contains(&say!("cmd.takes.ranks")), "{refused}: {err}"),
+                Ok(other) => panic!("{refused}: {other:?}"),
+            }
+        }
+        assert!(parse(":genda-article buffer").is_err(), "`:genda` is that");
     }
 
     #[test]

@@ -8,8 +8,13 @@ Written for people who use it to write, not for the commit log: each line says w
 
 - **Typing `#` after the page in a wiki link (`[[雨夜#`) lists that file's headings**, found the way `gd` finds the page; `[[#` lists this file's.
 
+### Changed
+
+- **`:genda-top-chars N` (`:gtc`) types Yume's N most common characters, and `:genda-top-chars M-N` ranks M to N**, in place of `:genda-article`'s three bands; ranks past the end of the list are refused with its length. `:genda-article buffer` was `:genda`.
+
 ### Fixed
 
+- **`:` reaches the command line in the middle of a `:genda` segment**, where it was typed into the pad as errors; the clock stops while the line is open. Where the next character to type is a colon, the key still types it.
 - **A wiki name inside a link no longer turns gold**: the page or alias of `[[page|alias]]`, a `#heading`, or either half of `[text](url)`.
 
 ## 0.23.0 · 2026-11-15

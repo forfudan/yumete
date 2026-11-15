@@ -48,28 +48,16 @@ zhs = "全文打完了：F3 重打，C-u 上一段"
 en = "the whole article is typed: F3 again, C-u back"
 
 [[message]]
-# : 跟打頁上那篇常用字文章的名字（第一個五百）（草稿）
-key = "genda.article.common-1"
-zhs = "常用单字 前500"
-en = "common characters 1–500"
-
-[[message]]
-# : 跟打頁上那篇常用字文章的名字（第二個五百）（草稿）
-key = "genda.article.common-2"
-zhs = "常用单字 中500"
-en = "common characters 501–1000"
-
-[[message]]
-# : 跟打頁上那篇常用字文章的名字（第三個五百）（草稿）
-key = "genda.article.common-3"
-zhs = "常用单字 后500"
-en = "common characters 1001–1500"
-
-[[message]]
 # : 跟打頁上的文章取自選區時的名字，{0} 是檔名（草稿）
 key = "genda.article.selection"
 zhs = "{0}（选区）"
 en = "{0} (selection)"
+
+[[message]]
+# : 跟打页上那篇宇浩常用单字文章的名字，{0} 到 {1} 是名次（草稿）
+key = "genda.article.top-chars"
+zhs = "常用单字 {0}–{1}"
+en = "common characters {0}–{1}"
 
 [[message]]
 # : 跟打關掉自動換段之後（草稿）
@@ -700,6 +688,12 @@ en = "shuffled"
 key = "genda.system-ime"
 zhs = "系统"
 en = "system"
+
+[[message]]
+# : :genda-top-chars 要的名次超出宇浩常用单字表的长度，{0} 是表里的字数（草稿）
+key = "genda.top-chars-beyond"
+zhs = "宇浩常用单字表只有 {0} 个字，名次最大到 {0}"
+en = "Yume's list of common characters has {0|character|characters}: ranks go up to {0}"
 
 [[message]]
 # : :genda-top 之類的命令在範圍裏一個漢字都沒數到（草稿）

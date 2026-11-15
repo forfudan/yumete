@@ -2987,8 +2987,8 @@ pub struct Editor {
     /// **What the `:genda` family asked of the typing page**, for the front
     /// end that holds it to take; the page itself is the front end's.
     genda_asks: Vec<crate::genda::Ask>,
-    /// The article `:genda` (or `:genda-article buffer`) read off the buffer
-    /// when it was typed: `(name, text)`.
+    /// The article `:genda` read off the buffer when it was typed, or
+    /// `:genda-top` counted: `(name, text)`.
     genda_article: Option<(String, String)>,
     /// The typing page is open: `:q` closes it rather than the editor.
     genda_open: bool,

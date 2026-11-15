@@ -1,7 +1,7 @@
 //! **跟打** (`:genda`): the typing trainer's page.
 //!
 //! ```text
-//! ╭ 本段 ────────────╮╭ 常用单字 前500 ─────────────────────────╮
+//! ╭ 本段 ────────────╮╭ 常用单字 1–500 ─────────────────────────╮
 //! │ 速度   112.40    ││ 的一是了不在有个人这上中大为来我到出要 │
 //! │ 击键     5.82    ││ 以时和地们得可下对生也子就过能他会多发 │
 //! │ 当量     1.42    ││                                        │
@@ -41,7 +41,7 @@ use ratatui::Frame;
 
 use yumete_config::Config;
 use yumete_core::command::Switch;
-use yumete_core::genda::{self, Ask, Choice, Daily, Goal, Mark, Pressed, Record, Run, Stroke, Totals};
+use yumete_core::genda::{self, Ask, Daily, Goal, Mark, Pressed, Record, Run, Stroke, Totals};
 use yumete_core::input::{Key, Mode};
 use yumete_core::say;
 use yumete_core::Editor;
@@ -168,6 +168,10 @@ struct Page {
     totals: Totals,
     latest: Option<Record>,
     all_done: bool,
+    /// **`:` opened the command line over a running segment**: the pad
+    /// waits and the clock stands until the line closes, and then both go
+    /// on by themselves, with no Enter to press.
+    at_the_line: bool,
     /// Esc stopped the page: keys wait for Enter, `q` closes, and another
     /// Esc stays (a shape-code hand presses Esc again to be sure a code is
     /// cleared, and that must not close the page).
@@ -272,7 +276,9 @@ impl Seat {
     /// **The pad is taking keys**: the caret is a bar in it and the IME
     /// composes there.
     pub fn typing(&self) -> bool {
-        self.page.as_ref().is_some_and(|p| p.view == View::Typing && !p.run.finished() && !p.all_done && !self.paused())
+        self.page.as_ref().is_some_and(|p| {
+            p.view == View::Typing && !p.run.finished() && !p.all_done && !p.at_the_line && !self.paused()
+        })
     }
 
     fn paused(&self) -> bool {
@@ -338,6 +344,18 @@ impl Seat {
                 return true;
             }
             Key::Char(':') if !self.typing() => return false,
+            // **`:` opens the command line from a running segment too**,
+            // the clock standing while it is open, except where the key is
+            // typing: while a code is composed, it is the IME's; where the
+            // passage's next character is a colon, `:` or `：`, it types it
+            // (Esc first reaches the line there).
+            Key::Char(':') if !composing && !self.page.as_ref().is_some_and(|p| p.run.wants_a_colon()) => {
+                let now = self.clock();
+                let page = self.page.as_mut().expect("open");
+                page.run.pause(now);
+                page.at_the_line = true;
+                return false;
+            }
             _ => {}
         }
         let page = self.page.as_mut().expect("open");
@@ -461,6 +479,13 @@ impl Seat {
 
     /// **What the core was asked**: `:genda` and its family, `:q`.
     pub fn settle(&mut self, editor: &mut Editor, ime: &ImeSession) {
+        if !editor.mode().is_prompt() {
+            let now = self.clock();
+            if let Some(page) = self.page.as_mut().filter(|p| p.at_the_line) {
+                page.at_the_line = false;
+                page.run.resume(now);
+            }
+        }
         let article = editor.take_genda_article();
         for ask in editor.take_genda_asks() {
             match ask {
@@ -482,22 +507,12 @@ impl Seat {
                 Ask::History => self.history(editor),
                 Ask::Length(length) => self.set_length(editor, length),
                 Ask::Whole(switch) => self.set_whole(editor, switch),
-                Ask::Article(Choice::Buffer) => {
+                Ask::Article => {
                     if let Some((name, text)) = article.clone() {
                         self.replace_article(editor, name, genda::strip(&text));
                     }
                 }
-                Ask::Article(Choice::Common(band)) => {
-                    let common = self.common.get_or_insert_with(|| ime.frequent_chars(
-                        1500,
-                        yumete_core::messages::language() != yumete_core::messages::Language::Traditional,
-                    ));
-                    let chars: Vec<char> = common.iter().copied().skip(band * 500).take(500).collect();
-                    match chars.is_empty() {
-                        true => editor.set_status(say!("genda.no-frequency")),
-                        false => self.replace_article(editor, Choice::band_name(band), chars),
-                    }
-                }
+                Ask::TopChars(from, to) => self.top_chars(editor, ime, from, to),
                 Ask::Hint(switch) => self.set_hint(editor, ime, switch),
                 Ask::Auto(switch) => {
                     self.manual_next = !switch.over(!self.manual_next);
@@ -525,6 +540,32 @@ impl Seat {
         self.look_up_the_hint(ime);
         let whole = self.page.as_ref().is_some_and(|p| p.length.is_none());
         editor.set_genda_switches(genda::Switches { hint: self.hint, auto: !self.manual_next, clean: self.goal.clean, whole });
+    }
+
+    /// **`:genda-top-chars`**: ranks `from` to `to` of Yume's common
+    /// characters, as the page's article, the page opened on them when it
+    /// is closed. Ranks past the list's end are refused whole, saying how
+    /// long the list is.
+    fn top_chars(&mut self, editor: &mut Editor, ime: &ImeSession, from: usize, to: usize) {
+        let common = self.common.get_or_insert_with(|| {
+            ime.frequent_chars(
+                usize::MAX,
+                yumete_core::messages::language() != yumete_core::messages::Language::Traditional,
+            )
+        });
+        if common.is_empty() {
+            editor.set_status(say!("genda.no-frequency"));
+            return;
+        }
+        let Some(chars) = genda::by_rank(common, from, to).map(<[char]>::to_vec) else {
+            editor.set_status(say!("genda.top-chars-beyond", common.len()));
+            return;
+        };
+        let name = say!("genda.article.top-chars", from, to);
+        match self.page.is_some() {
+            true => self.replace_article(editor, name, chars),
+            false => self.start(editor, ime, name, chars),
+        }
     }
 
     /// **A segment length**, `None` for 全文, from the article's first
@@ -655,6 +696,7 @@ impl Seat {
             latest: None,
             all_done: false,
             held: false,
+            at_the_line: false,
             scheme: match ime.holding_the_keys() {
                 true => ime.scheme_name().to_string(),
                 false => String::new(),
@@ -713,6 +755,7 @@ impl Seat {
         page.counted = false;
         page.all_done = false;
         page.held = false;
+        page.at_the_line = false;
         page.waiting = None;
         page.redo = None;
         page.view = View::Typing;
@@ -1592,7 +1635,6 @@ mod tests {
     fn the_history_copies_one_line_or_the_whole_table() {
         let (mut ed, mut ime, mut seat) = seated("天地玄黄", None);
         command(&mut seat, &mut ed, &mut ime, "genda");
-        // A `:` typed in the pad is text: Esc holds the page first.
         keys(&mut seat, &mut ed, &mut ime, &typed("\u{1b}"));
         command(&mut seat, &mut ed, &mut ime, "genda-copy");
         assert_eq!(ed.status(), say!("genda.no-record"));
@@ -2149,6 +2191,67 @@ mod tests {
         keys(&mut seat, &mut ed, &mut ime, &[Key::Tab, Key::Char('d')]);
         assert_eq!(ed.status(), say!("genda.no-record"));
         assert!(page(&seat).view == View::History);
+    }
+
+    /// **`:genda-top-chars` takes ranks of Yume's list**, opening the page
+    /// or changing its article, and refuses ranks past the list's end
+    /// saying how long it is.
+    #[test]
+    fn top_chars_takes_ranks_of_yumes_list_and_refuses_past_its_end() {
+        let (mut ed, mut ime, mut seat) = seated("天地", None);
+        seat.common = Some("的一是了不在有人".chars().collect());
+        command(&mut seat, &mut ed, &mut ime, "gtc 3-5");
+        assert!(seat.open());
+        assert_eq!(page(&seat).name, say!("genda.article.top-chars", 3, 5));
+        assert_eq!(page(&seat).chars, ['是', '了', '不']);
+        command(&mut seat, &mut ed, &mut ime, "genda-top-chars 4");
+        assert_eq!(page(&seat).chars, ['的', '一', '是', '了']);
+        command(&mut seat, &mut ed, &mut ime, "genda-top-chars 2-9");
+        assert_eq!(ed.status(), say!("genda.top-chars-beyond", 8));
+        assert_eq!(page(&seat).chars, ['的', '一', '是', '了'], "refused whole, not cut short");
+        command(&mut seat, &mut ed, &mut ime, "genda-top-chars 5-3");
+        assert!(ed.status().contains(&say!("cmd.takes.ranks")), "{}", ed.status());
+        // With no list at all, it says so.
+        let (mut ed, mut ime, mut seat) = seated("天地", None);
+        command(&mut seat, &mut ed, &mut ime, "gtc 10");
+        assert_eq!(ed.status(), say!("genda.no-frequency"));
+        assert!(!seat.open());
+    }
+
+    /// **`:` reaches the command line from a running segment**, the clock
+    /// standing while the line is open and running on after it, unless the
+    /// passage's next character is a colon, which the key types.
+    #[test]
+    fn colon_reaches_the_line_mid_segment_unless_the_passage_wants_a_colon() {
+        let (mut ed, mut ime, mut seat) = seated("天地:玄黄：宇宙", None);
+        command(&mut seat, &mut ed, &mut ime, "genda");
+        keys(&mut seat, &mut ed, &mut ime, &typed("天"));
+        keys(&mut seat, &mut ed, &mut ime, &typed(":genda-goal-sp"));
+        assert!(ed.mode().is_prompt(), "the line is open");
+        assert!(page(&seat).run.paused() && !seat.typing(), "the clock stands");
+        keys(&mut seat, &mut ed, &mut ime, &typed("eed 50\n"));
+        assert!(ed.status().contains("50"), "{}", ed.status());
+        assert!(!page(&seat).run.paused() && seat.typing(), "and runs on, with no Enter");
+        assert_eq!(page(&seat).run.typed(), ['天'], "nothing of the line in the pad");
+        assert_eq!(page(&seat).run.errors(), 0);
+        // The passage asks for `:` next: the key types it.
+        keys(&mut seat, &mut ed, &mut ime, &typed("地:"));
+        assert!(!ed.mode().is_prompt());
+        assert_eq!(page(&seat).run.typed(), ['天', '地', ':']);
+        // …and for `：` too, which the built-in IME makes of the key.
+        keys(&mut seat, &mut ed, &mut ime, &typed("玄黄:"));
+        assert!(!ed.mode().is_prompt());
+        assert_eq!(page(&seat).run.typed().len(), 6);
+        // Esc out of the line leaves the segment as it stood.
+        keys(&mut seat, &mut ed, &mut ime, &typed("\u{8}："));
+        keys(&mut seat, &mut ed, &mut ime, &typed(":genda\u{1b}"));
+        assert!(!ed.mode().is_prompt() && seat.typing());
+        assert_eq!(page(&seat).run.typed(), ['天', '地', ':', '玄', '黄', '：']);
+        // A command that cuts the segments afresh starts the segment over.
+        keys(&mut seat, &mut ed, &mut ime, &typed("宇:genda-length 3\n"));
+        assert_eq!(ed.status(), say!("genda.length-set", 3));
+        assert_eq!(page(&seat).run.target(), ['天', '地', ':']);
+        assert!(page(&seat).run.typed().is_empty() && seat.typing());
     }
 
     #[test]

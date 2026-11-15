@@ -48,8 +48,13 @@ pub enum Ask {
     /// `:genda-whole`: the whole article as one segment, or back to the
     /// length chosen.
     Whole(crate::command::Switch),
-    /// Another article.
-    Article(Choice),
+    /// The article the core read and handed over (`:genda-top` and its
+    /// scopes over an open page) takes the place of the page's.
+    Article,
+    /// `:genda-top-chars`: Yume's common characters from the first rank to
+    /// the second, both counted from 1 and included; the front end holds
+    /// the list and refuses ranks past its end.
+    TopChars(usize, usize),
     /// An article of the `N` most frequent 漢字 in a scope (`:genda-top`
     /// and its scopes); the core counts them and hands the article over.
     Top(crate::search_panel::Where, usize),
@@ -91,35 +96,24 @@ impl Default for Switches {
     }
 }
 
-/// Which article `:genda-article` names.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Choice {
-    /// The selection, or the whole buffer.
-    Buffer,
-    /// One band of 500 of Yume's most frequent characters: 0, 1 or 2.
-    Common(usize),
+/// **`:genda-top-chars`'s argument**: `N` for ranks 1 to N, `M-N` for
+/// ranks M to N (an en dash too, as the article's name writes it). `None`
+/// for anything else, a rank of 0, or M past N.
+pub fn ranks(text: &str) -> Option<(usize, usize)> {
+    let text = text.trim();
+    let (from, to) = match text.split_once(['-', '–']) {
+        Some((from, to)) => (from.trim().parse().ok()?, to.trim().parse().ok()?),
+        None => (1, text.parse().ok()?),
+    };
+    (from >= 1 && from <= to).then_some((from, to))
 }
 
-/// The words `:genda-article` takes, in the order of [`Choice`].
-pub const ARTICLE_WORDS: [&str; 4] = ["buffer", "chars-1-500", "chars-501-1000", "chars-1001-1500"];
-
-impl Choice {
-    /// The choice a word of [`ARTICLE_WORDS`] names.
-    pub fn from_word(word: &str) -> Option<Choice> {
-        match ARTICLE_WORDS.iter().position(|w| *w == word)? {
-            0 => Some(Choice::Buffer),
-            band => Some(Choice::Common(band - 1)),
-        }
-    }
-
-    /// What the page calls a band of common characters.
-    pub fn band_name(band: usize) -> String {
-        match band {
-            0 => say!("genda.article.common-1"),
-            1 => say!("genda.article.common-2"),
-            _ => say!("genda.article.common-3"),
-        }
-    }
+/// **Ranks `from` to `to` of a ranked list**, both from 1 and included;
+/// `None` when `to` runs past the list's end, which is refused whole
+/// rather than cut short, so an article never silently has fewer
+/// characters than its name says.
+pub fn by_rank(list: &[char], from: usize, to: usize) -> Option<&[char]> {
+    (from >= 1 && from <= to && to <= list.len()).then(|| &list[from - 1..to])
 }
 
 /// `:genda-top` without a number.
@@ -517,6 +511,12 @@ impl Run {
     /// The committed text as the run reads it.
     pub fn typed(&self) -> &[char] {
         &self.typed
+    }
+
+    /// **The next character to type is a colon**, ASCII or full-width:
+    /// the `:` key types it here rather than opening the command line.
+    pub fn wants_a_colon(&self) -> bool {
+        matches!(self.target.get(self.typed.len()), Some(':' | '：'))
     }
 
     /// The clock has started: a key reached the pad.
@@ -1434,6 +1434,27 @@ mod tests {
         for c in ['\u{F900}', '\u{2F800}', '⺀', '⼀', 'あ', '，', '々', 'a', '\u{2A6E0}', '\u{33480}'] {
             assert!(!counts_as_han(c), "{:X}", c as u32);
         }
+    }
+
+    #[test]
+    fn ranks_are_n_or_m_to_n_and_a_list_past_its_end_gives_none() {
+        assert_eq!(ranks("500"), Some((1, 500)));
+        assert_eq!(ranks(" 501-1000 "), Some((501, 1000)));
+        assert_eq!(ranks("1–500"), Some((1, 500)));
+        for no in ["", "0", "0-3", "5-4", "a", "1-", "-1", "1-2-3"] {
+            assert_eq!(ranks(no), None, "{no:?}");
+        }
+        let list: Vec<char> = "的一是了不".chars().collect();
+        assert_eq!(by_rank(&list, 2, 4), Some(&['一', '是', '了'][..]));
+        assert_eq!(by_rank(&list, 1, 5).map(<[char]>::len), Some(5));
+        assert_eq!(by_rank(&list, 4, 6), None);
+        let mut run = run("天:地");
+        assert!(!run.wants_a_colon());
+        run.typed = vec!['天'];
+        assert!(run.wants_a_colon());
+        let mut wide = super::Run::new("天：".chars().collect());
+        wide.typed = vec!['天'];
+        assert!(wide.wants_a_colon());
     }
 
     #[test]

@@ -199,6 +199,12 @@ zhs = "<%>"
 en = "<%>"
 
 [[message]]
+# 命令参数的占位：名次 N 或 M-N（:genda-top-chars）（草稿）
+key = "cmd.arg.ranks"
+zhs = "<N>｜<M-N>"
+en = "<N>｜<M-N>"
+
+[[message]]
 # 命令參數的佔位：表格一行的名字（:table-jump）（草稿）
 key = "cmd.arg.row-name"
 zhs = "<行名>"
@@ -563,13 +569,6 @@ en = "typing trainer: type the selection (or the whole file) in segments, timed,
 find = "跟打 跟打器 打字 練習 练习 測速 测速 速度 擊鍵 击键 碼長 码长 typing trainer practice speed wpm genda"
 
 [[message]]
-# : 命令選單裏 genda-article 那一項的説明(commands 組)（草稿）
-key = "cmd.commands.genda-article"
-zhs = "跟打：换文章，当前文件或宇浩字频里的常用单字"
-en = "typing trainer: another article, the current file or Yume's most frequent characters"
-find = "跟打 文章 常用字 單字 单字 字頻 字频 article common characters genda"
-
-[[message]]
 # : 命令選單裏 genda-auto 的説明（草稿）
 key = "cmd.commands.genda-auto"
 zhs = "跟打：打完一段自动换到下一段，on/off，不带参数则切换"
@@ -701,6 +700,13 @@ key = "cmd.commands.genda-top-buffers"
 zhs = "跟打：所有打开的文件里最常用的 N 个汉字"
 en = "typing trainer: the N most frequent Chinese characters in every open buffer"
 find = "跟打 字頻 字频 常用字 頻率 频率 top frequency genda buffers gtb"
+
+[[message]]
+# : 命令选单里 genda-top-chars 那一项的说明(commands 组)（草稿）
+key = "cmd.commands.genda-top-chars"
+zhs = "跟打：宇浩字频里的常用单字，N 取第 1 到第 N 个，M-N 取第 M 到第 N 个（默认 1-500）"
+en = "typing trainer: Yume's common characters, by Yume's own frequencies: ranks 1 to N, or M-N (1-500 by default)"
+find = "跟打 常用字 常用單字 常用单字 字頻 字频 宇浩 名次 common characters frequency rank genda gtc"
 
 [[message]]
 # : 命令選單裏 genda-top-project 那一項的説明(commands 組)（草稿）
@@ -1604,30 +1610,6 @@ zhs = "行内注 ^[…]，不放到文末"
 en = "an inline note ^[…], kept in place"
 
 [[message]]
-# : 命令選單裏 genda-article 的 buffer 那一項的説明(genda-articles 組)（草稿）
-key = "cmd.genda-articles.buffer"
-zhs = "当前文件的选区，没有选区则整个文件"
-en = "the selection in the current file, or the whole file"
-
-[[message]]
-# : 命令選單裏 genda-article 的 chars-1-500 那一項的説明(genda-articles 組)（草稿）
-key = "cmd.genda-articles.common-1"
-zhs = "常用单字前 500，取自宇浩字频"
-en = "the 500 most frequent characters, by Yume's frequencies"
-
-[[message]]
-# : 命令選單裏 genda-article 的 chars-501-1000 那一項的説明(genda-articles 組)（草稿）
-key = "cmd.genda-articles.common-2"
-zhs = "常用单字第 501 到 1000"
-en = "the next 500 most frequent characters"
-
-[[message]]
-# : 命令選單裏 genda-article 的 chars-1001-1500 那一項的説明(genda-articles 組)（草稿）
-key = "cmd.genda-articles.common-3"
-zhs = "常用单字第 1001 到 1500"
-en = "the 500 after those"
-
-[[message]]
 # : 命令選單裏 genda-goal 與它各條件的 off 那一項的説明(genda-goal 組)（草稿）
 key = "cmd.genda-goal.off"
 zhs = "取消"
@@ -2489,6 +2471,12 @@ en = "{0}; for a PDF, :export-as-preview pdf"
 key = "cmd.takes.range"
 zhs = "{0} 到 {1} 的整数"
 en = "a whole number from {0} to {1}"
+
+[[message]]
+# :genda-top-chars 收的参数（草稿）
+key = "cmd.takes.ranks"
+zhs = "名次 N，或 M-N（1 ≤ M ≤ N）"
+en = "a rank N, or ranks M-N with 1 ≤ M ≤ N"
 
 [[message]]
 # :rules 收的參數（草稿）

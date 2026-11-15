@@ -2263,16 +2263,17 @@ impl Editor {
         self.settings_target.take()
     }
 
-    /// **A `:genda-…` command**: `:genda` and `:genda-article buffer` read
-    /// the article off the buffer now, while the selection is the one it
-    /// was typed over; the rest need the page open.
+    /// **A `:genda-…` command**: `:genda` reads the article off the buffer
+    /// now, while the selection is the one it was typed over;
+    /// `:genda-top-chars` opens the page or changes its article, from a list
+    /// only the front end holds; the rest need the page open.
     pub(super) fn ask_the_typing_page(&mut self, ask: crate::genda::Ask) {
-        use crate::genda::{Ask, Choice};
+        use crate::genda::Ask;
         if let Ask::Top(scope, n) = &ask {
             self.ask_for_the_top(scope, *n);
             return;
         }
-        if matches!(ask, Ask::Open | Ask::Article(Choice::Buffer)) {
+        if matches!(ask, Ask::Open) {
             let (start, end) = self.selection();
             let rope = self.current_buffer().rope();
             let name = self.current_buffer().display_name();
@@ -2280,7 +2281,7 @@ impl Editor {
                 true => (say!("genda.article.selection", name), rope.slice(start..end.min(rope.len_chars())).to_string()),
                 false => (name, rope.to_string()),
             });
-        } else if !self.genda_open {
+        } else if !self.genda_open && !matches!(ask, Ask::TopChars(..)) {
             self.status = say!("genda.not-open");
             return;
         }
@@ -2318,7 +2319,7 @@ impl Editor {
         };
         self.genda_article = Some((name, top.into_iter().collect()));
         self.genda_asks.push(match self.genda_open {
-            true => crate::genda::Ask::Article(crate::genda::Choice::Buffer),
+            true => crate::genda::Ask::Article,
             false => crate::genda::Ask::Open,
         });
     }
