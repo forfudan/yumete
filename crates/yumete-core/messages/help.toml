@@ -15,6 +15,18 @@ zhs = "已恢复上次打开的 {0} 个文件"
 en = "reopened {0|file|files} from last time"
 
 [[message]]
+# （草稿）`ye --preview` 开着不止一个缓冲区时，接在 cli.preview-heading 那一行里
+key = "cli.preview-buffers"
+zhs = "（共 {0} 个缓冲区）"
+en = "  ({0|buffer|buffers} open)"
+
+[[message]]
+# （草稿）`ye --preview` 打印正文前的那一行：{0} 文件名，{1} 有未存改动时的「 [+]」，{2} 行数，{3} 字数，{4} 开着几个缓冲区（cli.preview-buffers，只有一个时为空）
+key = "cli.preview-heading"
+zhs = "── {0}{1} — {2} 行，{3} 字{4} ──"
+en = "── {0}{1} — {2|line|lines}, {3|character|characters}{4} ──"
+
+[[message]]
 # 啓動時報用的是哪個方案
 key = "cli.scheme"
 zhs = "方案：{0}"

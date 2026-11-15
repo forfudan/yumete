@@ -333,6 +333,20 @@ macro_rules! say {
     };
 }
 
+/// **Why a program started without a shell did not start**, in the words `:!`
+/// uses when the shell says the same thing with an exit code: `typst was not
+/// found` rather than the system's `No such file or directory (os error 2)`,
+/// which names neither the program nor what to do about it.
+///
+/// `None` for any other failure, which each caller words in its own sentence.
+pub fn could_not_start(program: &str, err: &std::io::Error) -> Option<String> {
+    match err.kind() {
+        std::io::ErrorKind::NotFound => Some(say!("shell.program-not-found", program)),
+        std::io::ErrorKind::PermissionDenied => Some(say!("shell.program-not-runnable", program)),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     /// **What a locale asks for**.

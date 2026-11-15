@@ -791,6 +791,12 @@ pub fn run(
     // that has one is really opened, and everything it says arrives through
     // `collect` below without anything here ever waiting on it.
     let mut servers = crate::server::Servers::default();
+    // **The first frame knows whether this file's server is installed.** It
+    // stays up while the language data loads (`deferred`), and `follow` runs
+    // only after that, so without this the cell beside the mode word is blank
+    // there and turns `?` a moment later. A look on the path, nothing started.
+    servers.find(editor, config);
+    editor.note_the_server_is_missing(servers.standing(editor, config).is_missing());
     // **公式浮窗**: the same bell, rung when a picture lands;
     // and whether this terminal can show one at all, asked once.
     crate::maths::ring_on_answers(doorbell.clone());
@@ -3845,7 +3851,10 @@ impl Job {
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::piped())
             .spawn()
-            .map_err(|e| say!("find.file-and-message", program, e))?;
+            .map_err(|e| {
+                yumete_core::messages::could_not_start(program, &e)
+                    .unwrap_or_else(|| say!("find.file-and-message", program, e))
+            })?;
         note_the_server(child.id(), program);
         let (send, said) = std::sync::mpsc::channel();
         if let Some(log) = child.stderr.take() {
@@ -4171,7 +4180,7 @@ fn run_for_language(
                     say!("language.replaced", want.verb)
                 }
                 Ok(ran) => say!("language.text-untouched", ran.why()),
-                Err(err) => say!("language.cannot-run", err),
+                Err(err) => cannot_run(program, &err),
             }
         }
         // It reads and rewrites the file itself, so the buffer is re-read
@@ -4187,7 +4196,7 @@ fn run_for_language(
                     say!("language.done", want.verb)
                 }
                 Ok(ran) => say!("find.file-and-message", want.verb, ran.why()),
-                Err(err) => say!("language.cannot-run", err),
+                Err(err) => cannot_run(program, &err),
             }
         }
         // A server is a life of its own; `:preview` owns that path.
@@ -4195,6 +4204,12 @@ fn run_for_language(
             say!("language.is-a-server", want.verb)
         }
     }
+}
+
+/// Why a language's program did not run: the words `:!` uses for a missing
+/// program, else the system's own.
+fn cannot_run(program: &str, err: &io::Error) -> String {
+    yumete_core::messages::could_not_start(program, err).unwrap_or_else(|| say!("language.cannot-run", err))
 }
 
 /// Run a program **directly**, with no shell between.
@@ -17204,6 +17219,38 @@ mod tests {
         );
         let other = super::failed_run("sample-tool", &ended(3)).unwrap();
         assert!(other.contains("sample-tool") && other.contains('3'), "{other}");
+    }
+
+    /// **A program run without a shell is named the same way** when it is not
+    /// there: a language's `:format`, and a preview server, say what `:!` says
+    /// rather than the system's `No such file or directory`.
+    #[test]
+    fn a_missing_program_run_without_a_shell_is_named_as_by_the_shell() {
+        use yumete_core::say;
+        let absent = "yumete-sample-tool-that-is-not-installed";
+        let want = say!("shell.program-not-found", absent);
+        let dir = std::env::temp_dir().join(format!("yumete-absent-program-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("a.md");
+        std::fs::write(&file, "一行。\n").unwrap();
+        let mut editor = Editor::new();
+        editor.open_file(&file).unwrap();
+        let mut config = Config::default();
+        for kind in [yumete_config::RunKind::Filter, yumete_config::RunKind::Once] {
+            config.language.entry("markdown".to_string()).or_default().insert(
+                "format".to_string(),
+                yumete_config::Runner { run: format!("{absent} {{file}}"), kind },
+            );
+            let run = yumete_core::editor::LanguageRun {
+                verb: "format".to_string(),
+                language: "markdown".to_string(),
+                path: file.clone(),
+            };
+            assert_eq!(super::run_for_language(&mut editor, &config, &run), want, "{kind:?}");
+        }
+        let server = super::Job::server(absent, &[], &file).err().expect("nothing to start");
+        assert_eq!(server, want);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
 /// 把一行畫出來的字裏「寬字後面那個空格」擠掉，好照字面對句子（#497）。

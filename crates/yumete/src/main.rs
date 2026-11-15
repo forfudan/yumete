@@ -2251,7 +2251,7 @@ fn export_pdf(
         .arg(&input)
         .arg(&target)
         .output()
-        .map_err(|e| format!("typst: {e}"));
+        .map_err(|e| yumete_core::messages::could_not_start("typst", &e).unwrap_or_else(|| format!("typst: {e}")));
     if let Some(draft) = temporary {
         let _ = std::fs::remove_file(draft);
     }
@@ -2993,7 +2993,7 @@ fn preview(editor: &Editor, config: &yumete_config::Config) {
     let buf = editor.current_buffer();
     let modified = if buf.is_modified() { " [+]" } else { "" };
     let extra = if editor.buffer_count() > 1 {
-        format!("  ({} buffers open)", editor.buffer_count())
+        yumete_core::say!("cli.preview-buffers", editor.buffer_count())
     } else {
         String::new()
     };
@@ -3006,18 +3006,17 @@ fn preview(editor: &Editor, config: &yumete_config::Config) {
 
     // Status line.
     let _ = (|| -> io::Result<()> {
+        // The text's lines, not the empty one after its last line ending
+        // (a three-line file is three lines, not four).
+        let lines = {
+            let rope = buf.rope();
+            let ends = rope.len_chars() > 0 && rope.char(rope.len_chars() - 1) == '\n';
+            buf.line_count() - usize::from(ends && buf.line_count() > 1)
+        };
         writeln!(
             out,
-            "── {name}{modified} — {lines} line(s), {chars} char(s){extra} ──",
-            name = buf.display_name(),
-            // The text's lines, not the empty one after its last line ending
-            // (a three-line file is three lines, not four).
-            lines = {
-                let rope = buf.rope();
-                let ends = rope.len_chars() > 0 && rope.char(rope.len_chars() - 1) == '\n';
-                buf.line_count() - usize::from(ends && buf.line_count() > 1)
-            },
-            chars = buf.char_count(),
+            "{}",
+            yumete_core::say!("cli.preview-heading", buf.display_name(), modified, lines, buf.char_count(), extra)
         )?;
 
         // A recovery draft is the one thing a reader must be told about before

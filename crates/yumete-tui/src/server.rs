@@ -638,40 +638,53 @@ impl Servers {
         }
     }
 
-    /// Start, open, and update — everything that depends on where the cursor
-    /// is. Called once a turn, after the keys have been handled.
-    pub fn follow(&mut self, editor: &mut Editor, config: &yumete_config::Config) {
+    /// **Whether this file's language has a server on this machine**: the
+    /// language when one of its servers is found, `None` when the file wants
+    /// none or none is installed — marked missing then, and said once.
+    ///
+    /// Split from [`Servers::follow`] so the frame drawn before `follow` first
+    /// runs can carry the `?` too: at launch that frame stays up while the
+    /// language data loads, and a cell that is blank there and `?` a second
+    /// later says something it does not mean. It looks and starts nothing.
+    pub fn find(&mut self, editor: &Editor, config: &yumete_config::Config) -> Option<&'static str> {
         self.prose = ["markdown", "typst", "text"]
             .into_iter()
             .filter(|kind| config.lsp.get(*kind).is_some_and(|v| v.iter().any(|s| !s.command.is_empty())))
             .collect();
-        let Some(language) = self.language_of(editor) else { return };
-        let Some(_named) = Self::named(config, language, Some(&Self::look_from(editor))) else {
-            self.missing.insert(language.to_string());
-            // **打開的那一刻就說，別等人問**。默默 `return` 的話，讀者打開 `.py`
-            // 什麽都不知道，一直到按 `空格 k` 纔撞上。
-            //
-            // Warning: **每個語言只說一次**。這是一件關於這臺機器的事實，
-            // 不是一個事件——一個項目裏切五個 `.py` 就罵五遍，會把狀態欄上別的話
-            // 全蓋掉。同 `lsp.cannot-start` 那一條的理由。
-            // A text file with only the factory's list says nothing: a writer
-            // never asked for a server, and every chapter would open with
-            // 「not installed」.
-            if self.told_about.insert(language.to_string())
-                && !(matches!(language, "markdown" | "typst" | "text")
-                    && config.lsp.get(language) == yumete_config::factory_servers().get(language))
-            {
-                // The factory's list is nobody's spelling to check.
-                let factory = config.lsp.get(language) == yumete_config::factory_servers().get(language);
-                self.says = Some(match config.lsp.get(language).filter(|v| !v.is_empty()) {
-                    Some(wanted) if factory => say!("lsp.not-installed-factory", Self::the_names(wanted)),
-                    Some(wanted) => say!("lsp.not-installed", Self::the_names(wanted)),
-                    None => say!("lsp.no-server-configured", language),
-                });
-            }
-            return;
-        };
-        self.missing.remove(language);
+        let language = self.language_of(editor)?;
+        if Self::named(config, language, Some(&Self::look_from(editor))).is_some() {
+            self.missing.remove(language);
+            return Some(language);
+        }
+        self.missing.insert(language.to_string());
+        // **打開的那一刻就說，別等人問**。默默 `return` 的話，讀者打開 `.py`
+        // 什麽都不知道，一直到按 `空格 k` 纔撞上。
+        //
+        // Warning: **每個語言只說一次**。這是一件關於這臺機器的事實，
+        // 不是一個事件——一個項目裏切五個 `.py` 就罵五遍，會把狀態欄上別的話
+        // 全蓋掉。同 `lsp.cannot-start` 那一條的理由。
+        // A text file with only the factory's list says nothing: a writer
+        // never asked for a server, and every chapter would open with
+        // 「not installed」.
+        if self.told_about.insert(language.to_string())
+            && !(matches!(language, "markdown" | "typst" | "text")
+                && config.lsp.get(language) == yumete_config::factory_servers().get(language))
+        {
+            // The factory's list is nobody's spelling to check.
+            let factory = config.lsp.get(language) == yumete_config::factory_servers().get(language);
+            self.says = Some(match config.lsp.get(language).filter(|v| !v.is_empty()) {
+                Some(wanted) if factory => say!("lsp.not-installed-factory", Self::the_names(wanted)),
+                Some(wanted) => say!("lsp.not-installed", Self::the_names(wanted)),
+                None => say!("lsp.no-server-configured", language),
+            });
+        }
+        None
+    }
+
+    /// Start, open, and update — everything that depends on where the cursor
+    /// is. Called once a turn, after the keys have been handled.
+    pub fn follow(&mut self, editor: &mut Editor, config: &yumete_config::Config) {
+        let Some(language) = self.find(editor, config) else { return };
         let Some(path) = editor.current_buffer().path().map(Path::to_path_buf) else {
             // An unsaved buffer has no URI, and a server answers about files.
             return;
@@ -3241,6 +3254,27 @@ mod tests {
 
         let _ = std::fs::remove_file(&path);
         let _ = std::fs::remove_file(&plain);
+    }
+
+    /// **The look before the first frame**: `find` alone says a server is
+    /// missing, as `follow` would, and starts nothing — a server that is
+    /// there stays to be started by `follow`.
+    #[test]
+    fn finding_says_missing_without_starting_anything() {
+        let absent = "yumete-no-such-server-9y";
+        let (editor, _) = editor_on("finding.rs", "fn main() {}\n");
+        let mut config = Servers::stocked("rust");
+        config.lsp.insert("rust".into(), vec![yumete_config::Server { command: absent.into(), ..Default::default() }]);
+        let mut servers = Servers::default();
+        assert_eq!(servers.find(&editor, &config), None);
+        assert_eq!(servers.standing(&editor, &config), Standing::NotFound(absent.into()));
+        assert!(servers.says.is_some(), "said once, as `follow` says it");
+
+        let config = Servers::stocked("rust");
+        let mut servers = Servers::default();
+        assert_eq!(servers.find(&editor, &config), Some("rust"));
+        assert!(servers.running.is_empty(), "nothing started");
+        assert!(!servers.standing(&editor, &config).is_missing());
     }
 
     /// **Where a file stands with its servers** — what the status line's cell

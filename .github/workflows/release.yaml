@@ -45,14 +45,15 @@ name: Build release tarballs
 #     with the binary inside it is worse than no tarball.
 #   * by hand from the Actions tab, where the version may be given and
 #     otherwise comes from `Cargo.toml`. A manual run keeps the tarballs as
-#     artifacts and attaches nothing, since there may be no release to attach
-#     them to.
+#     artifacts and attaches them to the release `v<version>` as well, which
+#     must already exist (a draft will do); without one the attach job fails
+#     and says so, and the artifacts are still there.
 #
 # Warning: The release page is live from the moment it is published, and the assets
 # arrive minutes later — a reader (or a tap) who looks in between sees a
-# release with nothing on it. **Do the manual run first**, look at the
-# artifacts, then publish the release; the build is cached by then and the
-# window is short.
+# release with nothing on it. **Do the manual run first**, against a draft of
+# the release, look at the assets it attached, then publish the draft; the
+# build is cached by then and the window is short.
 
 on:
   release:
@@ -371,13 +372,22 @@ jobs:
           # This is also the check that catches a `.ydiv` whose magic has moved
           # on: the fetch step can only see that the file is a division table,
           # not that *this* reader accepts it.
+          #
+          # **In both languages the release speaks**: the row's label comes from
+          # the message table (`ime.lookup.full-division`), and an English
+          # reader's frame is a different path through it. The English label
+          # is the `en` of that message, so a change there is a change here.
           printf '阻\n' > "$RUNNER_TEMP/c.md"
-          split=$("$YE" --lang=zh --shot=60x12 --keys='\{space}n' "$RUNNER_TEMP/c.md")
-          printf '%s\n' "$split" >&2
-          if ! printf '%s' "$split" | grep -q '宇浩全息拆分'; then
-            echo "!! no 拆分表 in this build: 空格 n has nothing to say about 阻" >&2
-            exit 1
-          fi
+          for pair in 'zh:宇浩全息拆分' 'en:full division'; do
+            lang="${pair%%:*}"
+            label="${pair#*:}"
+            split=$("$YE" --lang="$lang" --shot=60x12 --keys='\{space}n' "$RUNNER_TEMP/c.md")
+            printf '%s\n' "$split" >&2
+            if ! printf '%s' "$split" | grep -q "$label"; then
+              echo "!! no 拆分表 in this build: 空格 n under --lang=${lang} has no 「${label}」 row for 阻" >&2
+              exit 1
+            fi
+          done
           if ! printf '%s' "$typed" | head -1 | "$py" -c \
             'import sys; t = sys.stdin.buffer.read().decode("utf-8", "replace"); sys.exit(0 if any("\u4e00" <= c <= "\u9fff" for c in t) else 1)'; then
             echo "!! the engine put no 漢字 on the page" >&2
@@ -400,7 +410,6 @@ jobs:
   # than failing on the second attempt.
   attach:
     name: Attach the tarballs to the release
-    if: github.event_name == 'release'
     needs: [version, build]
     runs-on: ubuntu-latest
     permissions:
@@ -415,6 +424,16 @@ jobs:
       - name: Upload to the release
         run: |
           set -euo pipefail
+          # A run by hand attaches to the release its version names, which
+          # has to be there already — a draft will do. Said here rather than
+          # left to `gh release upload`, whose 「release not found」 does not
+          # say which tag it looked for or how to make one.
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "!! no release $TAG on $GITHUB_REPOSITORY, so nothing was attached." >&2
+            echo "   Create it (a draft is enough) and re-run this job; the" >&2
+            echo "   packages are kept as this run's artifacts meanwhile." >&2
+            exit 1
+          fi
           # `nullglob` and an explicit list, because the rows do not all have
           # the same suffix any more and `fail-fast: false` means one platform
           # can be missing. An unmatched glob would otherwise reach `gh` as a

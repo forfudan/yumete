@@ -816,7 +816,12 @@ impl Editor {
     /// flavour report and `:keymap-actions` read, so a line in
     /// `[keys.vim.normal]` counts wherever one in `[keys.normal]` does.
     pub(super) fn normal_lines_in_force(&self) -> HashMap<String, Vec<String>> {
-        let own = &self.keymap_user[keymap_index(self.key_preset)];
+        self.normal_lines_of(self.key_preset)
+    }
+
+    /// The same under `keymap`, in force or not.
+    pub(super) fn normal_lines_of(&self, keymap: yumete_cjk::KeyPreset) -> HashMap<String, Vec<String>> {
+        let own = &self.keymap_user[keymap_index(keymap)];
         self.user_aliases
             .iter()
             .chain(own.normal.iter())
@@ -909,12 +914,7 @@ impl Editor {
         if self.keys_on_hold {
             return;
         }
-        let preset: HashMap<String, Vec<String>> = self
-            .key_preset
-            .table()
-            .iter()
-            .map(|(k, v)| (yumete_cjk::actions::written(k), vec![v.to_string()]))
-            .collect();
+        let preset = preset_lines(self.key_preset);
         // The shared lines, then this keymap's own over them.
         let own = self.keymap_user[keymap_index(self.key_preset)].clone();
         let written = |lines: &HashMap<String, Vec<String>>| -> Vec<(String, Vec<String>)> {
@@ -934,24 +934,7 @@ impl Editor {
         for key in self.key_preset.normal_only() {
             select_preset.remove(&yumete_cjk::actions::written(key));
         }
-        // Each tree's layers: the shared tables, then the keymap's own over
-        // them; select mode's and a grid's over Normal mode's.
-        let shared = self.key_shapes.clone();
-        let lines = |select: bool, grid: bool| {
-            let mut lines = super::keymap::Lines::default();
-            lines.add(&self.user_aliases, &shared.normal);
-            lines.add(&own.normal, &own.shapes.normal);
-            if select {
-                lines.add(&self.user_select, &shared.select);
-                lines.add(&own.select, &own.shapes.select);
-            }
-            if grid {
-                lines.add(&self.user_table, &shared.table);
-            }
-            lines.name(&self.key_labels);
-            lines.name(&own.labels);
-            lines
-        };
+        let lines = |select: bool, grid: bool| self.layers(&own, select, grid);
         let (normal, select, table, table_select) = (lines(false, false), lines(true, false), lines(false, true), lines(true, true));
         self.normal_tree = self.lay_tree(&preset, &normal, false);
         self.select_tree = self.lay_tree(&select_preset, &select, true);
@@ -960,6 +943,38 @@ impl Editor {
         self.key_aliases = all;
         self.alias_held.clear();
         self.node_held = None;
+    }
+
+    /// Each tree's layers: the shared tables, then the keymap's own over
+    /// them; select mode's and a grid's over Normal mode's.
+    fn layers(&self, own: &KeymapLines, select: bool, grid: bool) -> super::keymap::Lines {
+        let shared = &self.key_shapes;
+        let mut lines = super::keymap::Lines::default();
+        lines.add(&self.user_aliases, &shared.normal);
+        lines.add(&own.normal, &own.shapes.normal);
+        if select {
+            lines.add(&self.user_select, &shared.select);
+            lines.add(&own.select, &own.shapes.select);
+        }
+        if grid {
+            lines.add(&self.user_table, &shared.table);
+        }
+        lines.name(&self.key_labels);
+        lines.name(&own.labels);
+        lines
+    }
+
+    /// **Normal mode's tree under `keymap`**, the reader's lines laid over
+    /// its preset as [`Self::lay_aliases`] lays the one in force. For
+    /// `:keymap-actions`, whose column for the keymap not in force must
+    /// leave out a key the reader made a group under it too.
+    pub(super) fn normal_tree_of(&mut self, keymap: yumete_cjk::KeyPreset) -> super::keymap::KeyTree {
+        if keymap == self.key_preset {
+            return self.normal_tree.clone();
+        }
+        let own = self.keymap_user[keymap_index(keymap)].clone();
+        let lines = self.layers(&own, false, false);
+        self.lay_tree(&preset_lines(keymap), &lines, false)
     }
 
     /// **The runs at the top level in force now** (`keymap.rs`): the
@@ -3368,6 +3383,11 @@ impl Editor {
 }
 
 /// Where a keymap's own lines are kept: helix's first, vim's second.
+/// A shipped keymap's own lines, its keys in the internal spelling.
+fn preset_lines(keymap: yumete_cjk::KeyPreset) -> HashMap<String, Vec<String>> {
+    keymap.table().iter().map(|(k, v)| (yumete_cjk::actions::written(k), vec![v.to_string()])).collect()
+}
+
 fn keymap_index(keymap: yumete_cjk::KeyPreset) -> usize {
     match keymap {
         yumete_cjk::KeyPreset::Vim => 1,

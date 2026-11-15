@@ -978,21 +978,28 @@ impl Editor {
                     level: yumete_cjk::FlavorLevel::Off,
                     items: Default::default(),
                 });
-                // The reader's own lines in force; a key of theirs no longer
-                // does what the keymap gave it, and neither does a key they
-                // made a group (`[keys.normal.space.f]`), so the column in
-                // force drops both, as the palette does.
+                // The reader's own lines; a key of theirs no longer does what
+                // the keymap gave it, and neither does a key they made a group
+                // (`[keys.normal.space.f]`), so each column drops both, as the
+                // palette does — under that column's keymap, since a
+                // `[keys.vim.normal]` line changes nothing under helix.
                 let own = self.normal_lines_in_force();
-                let taken = |run: &str| own.contains_key(run) || self.normal_tree.opens(run);
+                let keymap_of = |vim: bool| match vim {
+                    true => yumete_cjk::KeyPreset::Vim,
+                    false => yumete_cjk::KeyPreset::Helix,
+                };
+                let other = keymap_of(!vim_now);
+                let (own_other, tree_other) = (self.normal_lines_of(other), self.normal_tree_of(other));
+                let taken = |run: &str, vim: bool| match vim == vim_now {
+                    true => own.contains_key(run) || self.normal_tree.opens(run),
+                    false => own_other.contains_key(run) || tree_other.opens(run),
+                };
                 let keys_of = |docs: &[DocCommand], name: &str, vim: bool| -> Vec<Vec<String>> {
                     docs.iter()
                         .find(|(n, ..)| *n == name)
                         .map(|(_, _, helix, vim_keys, _)| {
                             let keys = if vim { vim_keys } else { helix };
-                            keys.iter()
-                                .filter(|k| vim != vim_now || !taken(&k.concat()))
-                                .cloned()
-                                .collect()
+                            keys.iter().filter(|k| !taken(&k.concat(), vim)).cloned().collect()
                         })
                         .unwrap_or_default()
                 };

@@ -2333,7 +2333,8 @@ impl Editor {
         let mut child = match command.spawn() {
             Ok(child) => child,
             Err(err) => {
-                self.status = say!("export.typst-failed", err.to_string());
+                self.status = crate::messages::could_not_start("typst", &err)
+                    .unwrap_or_else(|| say!("export.typst-failed", err.to_string()));
                 return Ok(CommandOutcome::Continue);
             }
         };

@@ -41637,3 +41637,40 @@ fn a_surround_menus_letters_are_taken_before_the_input_method() {
     let ed = vim_after("say hi now\n", "f");
     assert!(!ed.takes_as_a_menu_entry(Key::Char('m')), "after `f` a letter is text");
 }
+
+/// **`:keymap-actions` leaves a key out of each column whose keymap made it
+/// a group**, the keymap not in force included: a `[keys.vim.normal.v]`
+/// table takes `v` from vim's column while helix is in force, and leaves
+/// helix's `v` alone.
+#[test]
+fn the_action_list_drops_a_group_key_from_the_column_not_in_force() {
+    let row_of = |ed: &mut Editor| -> Vec<String> {
+        ed.execute(":keymap-actions").unwrap();
+        let listing = ed.current_buffer().text();
+        let row = listing.lines().find(|l| l.contains("`select_mode`")).expect("a row").to_string();
+        row.split('|').map(|c| c.trim().to_string()).collect()
+    };
+    let has_v = |cell: &str| cell.split(' ').any(|k| k.trim_end_matches('*') == "`v`");
+    let group_on_v = |ed: &mut Editor, keymap: yumete_cjk::KeyPreset| {
+        let mut shapes = yumete_cjk::KeyShapes::default();
+        shapes.normal.groups.push(yumete_cjk::KeyGroup { path: "v".into(), sticky: false, inherit: false });
+        ed.set_keymap_shapes(keymap, shapes);
+        ed.set_keymap_aliases(keymap, lines_of(&[("vq", "select_all")]), HashMap::new(), HashMap::new());
+    };
+
+    let mut ed = typed("一\n");
+    let plain = row_of(&mut ed);
+    assert!(has_v(&plain[3]) && has_v(&plain[4]), "both keymaps put it on v: {plain:?}");
+
+    let mut ed = typed("一\n");
+    group_on_v(&mut ed, yumete_cjk::KeyPreset::Vim);
+    let row = row_of(&mut ed);
+    assert!(has_v(&row[3]), "helix, in force, keeps v: {row:?}");
+    assert!(!has_v(&row[4]), "vim's v opens the reader's group: {row:?}");
+
+    let mut ed = typed_vim("一\n");
+    group_on_v(&mut ed, yumete_cjk::KeyPreset::Helix);
+    let row = row_of(&mut ed);
+    assert!(!has_v(&row[3]), "helix's v opens the reader's group: {row:?}");
+    assert!(has_v(&row[4]), "vim, in force, keeps v: {row:?}");
+}
