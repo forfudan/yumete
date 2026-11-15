@@ -6704,6 +6704,9 @@ fn draw<'a>(
                 }
             }
         }
+        // The page takes every `:` command, so the `:` menu is the
+        // editor's own, standing on the same floor as over the text.
+        draw_command_menu(frame, editor, config, ime, area, footer);
         candidates(frame, true);
     }
     // Last, and over everything: the editor is stopped behind it (#295).

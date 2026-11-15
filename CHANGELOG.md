@@ -6,6 +6,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Added
 
+- **`:genda`: in the history (`Tab`), `d` deletes the picked record from the kept history and `u` brings deletions back where they stood, latest first, until you leave the history; the totals follow. Typing `:` over the page shows the command menu.**
 - **`:genda`: the picked row in the history stands out in full ink; copying a score line or the history includes every detail field** (pairs, alternation, hands, top key), with unmeasured TSV cells left empty; `C-o` or `:genda-whole` switches between the segment length and the whole article.
 - **`:genda` shows a results table under the pad** (this session's segments newest first, the latest in gold, earlier records dimmed, columns dropped to fit). After a segment the command row says only its number and speed, and `y` copies the full score line. A second `Esc` keeps the page paused instead of closing it, so an extra `Esc` to clear a code is safe; `q` (or `:q`) closes.
 - **`[editor] show_line_breaks` (or `:view-line-breaks`) shows where a line really ends**: a faint `␊`, the mark table cells use, after every line that ends in a line break, so with soft wrap on a real break can be told from a wrapped row. Off by default; it never moves the text.

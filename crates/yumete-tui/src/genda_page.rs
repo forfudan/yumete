@@ -113,6 +113,16 @@ struct Drill {
     tries: usize,
 }
 
+/// **A record `d` took out of the history**, for `u` to put back where it
+/// stood. `earlier` says it was read from the file at opening rather than
+/// finished in this session: the index alone cannot tell the two apart
+/// where they meet.
+struct Deleted {
+    index: usize,
+    record: Record,
+    earlier: bool,
+}
+
 /// What comes after a finished segment: brought up at once, or on Enter
 /// while `:genda-auto` is off.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -178,6 +188,9 @@ struct Page {
     /// a code for it.
     hint: Option<String>,
     daily: Daily,
+    /// The records `d` took out, the latest last, while the history view
+    /// stays open: leaving it forgets them.
+    deleted: Vec<Deleted>,
 }
 
 impl Page {
@@ -205,6 +218,25 @@ impl Page {
         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
         let today = yumete_core::clock::local_day(now as i64);
         self.daily = Daily::of(&self.history, |at| yumete_core::clock::local_day(at as i64), today);
+    }
+
+    /// **The history changed under the figures**: the session's totals and
+    /// latest record, and the days, worked out again from the records.
+    fn recount(&mut self) {
+        let session = &self.history[self.earlier.min(self.history.len())..];
+        self.totals = Totals::of(session);
+        self.latest = session.last().cloned();
+        self.add_up_the_days();
+    }
+
+    /// **The history file rewritten as `records`**, whole or not at all: a
+    /// failed write leaves the file as it was.
+    fn keep(&self, records: &[Record]) -> std::io::Result<()> {
+        let Some(file) = &self.file else { return Ok(()) };
+        if let Some(dir) = file.parent() {
+            std::fs::create_dir_all(dir)?;
+        }
+        yumete_core::buffer::write_file_atomically(file, &genda::jsonl(records))
     }
 
     /// The article box's name: the article's, or the drill's after it.
@@ -307,6 +339,8 @@ impl Seat {
                 Key::Char('k') | Key::Up => page.picked = page.picked.saturating_sub(1),
                 Key::Char('y') => self.copy(editor),
                 Key::Char('Y') => self.copy_history(editor),
+                Key::Char('d') => self.delete(editor),
+                Key::Char('u') => self.restore(editor),
                 Key::Tab | Key::Esc | Key::Char('q') => self.history(editor),
                 _ => {}
             }
@@ -624,6 +658,7 @@ impl Seat {
             redo: None,
             hint: None,
             daily: Daily::default(),
+            deleted: Vec::new(),
         });
         if let Some(page) = self.page.as_mut() {
             page.add_up_the_days();
@@ -672,6 +707,7 @@ impl Seat {
         page.waiting = None;
         page.redo = None;
         page.view = View::Typing;
+        page.deleted.clear();
         let mut pad = Box::new(Editor::new());
         pad.open_field("", true);
         self.pad = Some(pad);
@@ -746,7 +782,58 @@ impl Seat {
             }
             View::History => View::Typing,
         };
+        page.deleted.clear();
         editor.set_status(String::new());
+    }
+
+    /// **`d`: the picked record out of the history** and its file; the
+    /// pick stays on the row that comes up into its place.
+    fn delete(&mut self, editor: &mut Editor) {
+        let Some(page) = self.page.as_mut() else { return };
+        let Some(index) = page.history.len().checked_sub(page.picked + 1) else {
+            editor.set_status(say!("genda.no-record"));
+            return;
+        };
+        let mut kept = page.history.clone();
+        let record = kept.remove(index);
+        if let Err(err) = page.keep(&kept) {
+            editor.set_status(say!("genda.keep-failed", err));
+            return;
+        }
+        let earlier = index < page.earlier;
+        page.history = kept;
+        if earlier {
+            page.earlier -= 1;
+        }
+        page.deleted.push(Deleted { index, record, earlier });
+        let row = page.picked + 1;
+        page.picked = page.picked.min(page.history.len().saturating_sub(1));
+        page.recount();
+        editor.set_status(say!("genda.deleted", row));
+    }
+
+    /// **`u`: the record `d` took out last, back where it stood**, and picked.
+    fn restore(&mut self, editor: &mut Editor) {
+        let Some(page) = self.page.as_mut() else { return };
+        let Some(deleted) = page.deleted.pop() else {
+            editor.set_status(say!("genda.nothing-to-restore"));
+            return;
+        };
+        let index = deleted.index.min(page.history.len());
+        let mut kept = page.history.clone();
+        kept.insert(index, deleted.record.clone());
+        if let Err(err) = page.keep(&kept) {
+            page.deleted.push(deleted);
+            editor.set_status(say!("genda.keep-failed", err));
+            return;
+        }
+        page.history = kept;
+        if deleted.earlier {
+            page.earlier += 1;
+        }
+        page.picked = page.history.len() - 1 - index;
+        page.recount();
+        editor.set_status(say!("genda.restored"));
     }
 
     /// **The segment is done**: kept, added up, said, and what comes after
@@ -1881,6 +1968,86 @@ mod tests {
         keys(&mut seat, &mut ed, &mut ime, &typed("\u{1b}"));
         command(&mut seat, &mut ed, &mut ime, "genda-whole");
         assert_eq!(page(&seat).length, Some(4));
+    }
+
+    /// The segments the history file holds, in order.
+    fn kept_segments(dir: &std::path::Path) -> Vec<usize> {
+        let text = std::fs::read_to_string(dir.join(HISTORY_FILE)).unwrap();
+        genda::read_records(&text).iter().map(|r| r.segment).collect()
+    }
+
+    fn segments(seat: &Seat) -> Vec<usize> {
+        page(seat).history.iter().map(|r| r.segment).collect()
+    }
+
+    #[test]
+    fn d_deletes_the_picked_record_and_u_brings_the_deletions_back_in_turn() {
+        let dir = std::env::temp_dir().join(format!("yumete-genda-delete-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let before = [101, 102].map(|segment| Record { segment, chars: 9, millis: 6_000, ..Record::default() });
+        std::fs::write(dir.join(HISTORY_FILE), genda::jsonl(&before)).unwrap();
+        let (mut ed, mut ime, mut seat) = seated("abcdef", Some(&dir));
+        command(&mut seat, &mut ed, &mut ime, "genda");
+        keys(&mut seat, &mut ed, &mut ime, &typed("\u{1b}"));
+        command(&mut seat, &mut ed, &mut ime, "genda-length 2");
+        keys(&mut seat, &mut ed, &mut ime, &typed("\nabcdef"));
+        assert_eq!(kept_segments(&dir), [101, 102, 1, 2, 3]);
+        assert_eq!((page(&seat).totals.segments, page(&seat).daily.today_chars), (3, 6));
+
+        // Newest first: 3, 2, 1, 102, 101. The second row goes, and the pick
+        // stays on the row that comes up into its place.
+        keys(&mut seat, &mut ed, &mut ime, &[Key::Tab, Key::Char('j'), Key::Char('d')]);
+        assert_eq!(ed.status(), say!("genda.deleted", 2));
+        assert_eq!(kept_segments(&dir), [101, 102, 1, 3]);
+        assert_eq!(segments(&seat), [101, 102, 1, 3]);
+        assert_eq!(page(&seat).history.iter().rev().nth(page(&seat).picked).map(|r| r.segment), Some(1));
+        assert_eq!((page(&seat).totals.segments, page(&seat).totals.chars, page(&seat).daily.today_chars), (2, 4, 4));
+        assert_eq!(page(&seat).latest.as_ref().map(|r| r.segment), Some(3));
+        // A record read at opening goes the same way, and leaves the
+        // session's totals alone.
+        keys(&mut seat, &mut ed, &mut ime, &[Key::Char('j'), Key::Char('d')]);
+        assert_eq!(ed.status(), say!("genda.deleted", 3));
+        assert_eq!(kept_segments(&dir), [101, 1, 3]);
+        assert_eq!((page(&seat).earlier, page(&seat).totals.segments, page(&seat).daily.chars), (1, 2, 13));
+
+        // `u` puts back the latest deletion first, each where it stood.
+        keys(&mut seat, &mut ed, &mut ime, &[Key::Char('u')]);
+        assert_eq!(ed.status(), say!("genda.restored"));
+        assert_eq!(kept_segments(&dir), [101, 102, 1, 3]);
+        assert_eq!(page(&seat).history.iter().rev().nth(page(&seat).picked).map(|r| r.segment), Some(102));
+        keys(&mut seat, &mut ed, &mut ime, &[Key::Char('u')]);
+        assert_eq!(kept_segments(&dir), [101, 102, 1, 2, 3]);
+        assert_eq!((page(&seat).earlier, page(&seat).totals.segments, page(&seat).daily.today_chars), (2, 3, 6));
+        keys(&mut seat, &mut ed, &mut ime, &[Key::Char('u')]);
+        assert_eq!(ed.status(), say!("genda.nothing-to-restore"));
+
+        // The pick is on the row put back last, so `d` takes it again; leaving
+        // the history forgets what `u` could bring back.
+        keys(&mut seat, &mut ed, &mut ime, &[Key::Char('d'), Key::Tab, Key::Tab, Key::Char('u')]);
+        assert_eq!(ed.status(), say!("genda.nothing-to-restore"));
+        assert_eq!(kept_segments(&dir), [101, 102, 1, 3]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn d_on_an_empty_history_says_there_is_none() {
+        let (mut ed, mut ime, mut seat) = opened("一二三四五六", 3);
+        keys(&mut seat, &mut ed, &mut ime, &[Key::Tab, Key::Char('d')]);
+        assert_eq!(ed.status(), say!("genda.no-record"));
+        assert!(page(&seat).view == View::History);
+    }
+
+    #[test]
+    fn the_colon_menu_is_drawn_over_the_page() {
+        let (mut ed, mut ime, mut seat) = opened("一二三四五六", 3);
+        keys(&mut seat, &mut ed, &mut ime, &typed(":genda-l"));
+        let pages = crate::Pages { settings: None, genda: Some(&seat) };
+        let text = crate::frame_to_text_with(&mut ed, &Config::default(), &ime, 100, 30, pages);
+        assert!(text.contains(&say!("ui.commands")), "{text}");
+        assert!(text.contains(":genda-length 10"), "{text}");
+        // The page is still under it.
+        assert!(text.contains(&say!("genda.box.results")), "{text}");
     }
 
     impl Seat {

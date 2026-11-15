@@ -156,6 +156,12 @@ zhs = "{0}字 {1}"
 en = "{0} chars {1}"
 
 [[message]]
+# : 跟打頁看歷史時按 d 刪掉了一條成績，{0} 是它在表裏從上往下數的行號（草稿）
+key = "genda.deleted"
+zhs = "已删除第 {0} 条"
+en = "row {0} deleted"
+
+[[message]]
 # : 跟打打完一段、下一段等 Enter 或全文打完時命令行那一句；{0} 第幾段，{1} 速度（草稿）
 key = "genda.done"
 zhs = "第{0}段 速度{1} · y 复制成绩"
@@ -260,14 +266,20 @@ en = "F3 again  C-p next  C-u previous  C-l shuffle  Tab history  Esc pause  C-o
 [[message]]
 # : 跟打頁看歷史時底行的鍵位提示（草稿）
 key = "genda.hints-history"
-zhs = "j k 选择  y 复制这条  Y 复制全部  Tab 返回"
-en = "j k pick  y copy this  Y copy all  Tab back"
+zhs = "j k 选择  y 复制这条  Y 复制全部  d 删除  u 恢复  Tab 返回"
+en = "j k pick  y copy this  Y copy all  d delete  u undo  Tab back"
 
 [[message]]
 # : 跟打頁暫停時底行的鍵位提示（草稿）
 key = "genda.hints-paused"
 zhs = "Enter 继续  q 关闭  y 复制成绩  Tab 历史  : 命令"
 en = "Enter go on  q close  y copy score  Tab history  : command"
+
+[[message]]
+# : 跟打刪除或恢復成績時寫不進成績檔，{0} 是系統給的原因（草稿）
+key = "genda.keep-failed"
+zhs = "成绩没能写入：{0}"
+en = "could not write the scores: {0}"
 
 [[message]]
 # : 跟打歷史的互擊次數一欄，空格算半次（草稿）
@@ -648,6 +660,12 @@ zhs = "跟打没有打开，先用 :genda"
 en = "the typing trainer is not open; :genda opens it"
 
 [[message]]
+# : 跟打頁看歷史時按 u 而沒有剛刪掉的成績可放回（草稿）
+key = "genda.nothing-to-restore"
+zhs = "没有可恢复的成绩"
+en = "nothing to restore"
+
+[[message]]
 # : 跟打文章框裏第幾段，{0} 是第幾段，{1} 是共幾段（草稿）
 key = "genda.part"
 zhs = "第 {0}/{1} 段"
@@ -658,6 +676,12 @@ en = "segment {0}/{1}"
 key = "genda.paused"
 zhs = "已暂停：Enter 继续，q 关闭，: 输入命令"
 en = "paused: Enter goes on, q closes, : for a command"
+
+[[message]]
+# : 跟打頁看歷史時按 u 把剛刪的一條成績放回原處（草稿）
+key = "genda.restored"
+zhs = "已恢复"
+en = "restored"
 
 [[message]]
 # : 跟打時關掉亂序，回到原來的字序（草稿）

@@ -1173,6 +1173,12 @@ pub fn read_records(text: &str) -> Vec<Record> {
     text.lines().filter_map(|line| serde_json::from_str(line.trim()).ok()).collect()
 }
 
+/// **The records as the history file keeps them**: one JSON line each, in
+/// order, what [`read_records`] reads back.
+pub fn jsonl(records: &[Record]) -> String {
+    records.iter().map(|r| r.to_line() + "\n").collect()
+}
+
 /// `m:ss.fff`.
 pub fn clock_text(millis: u64) -> String {
     format!("{}:{:02}.{:03}", millis / 60_000, millis / 1000 % 60, millis % 1000)
@@ -1199,6 +1205,15 @@ pub struct Totals {
 }
 
 impl Totals {
+    /// The totals of `records`, as if each had been added in turn.
+    pub fn of(records: &[Record]) -> Totals {
+        let mut out = Totals::default();
+        for record in records {
+            out.add(record);
+        }
+        out
+    }
+
     pub fn add(&mut self, record: &Record) {
         self.segments += 1;
         self.chars += record.chars;
@@ -1691,5 +1706,19 @@ mod tests {
         assert_eq!(totals.keys_per_second(), Some(5.0));
         assert_eq!(totals.code_length(), Some(3.0));
         assert_eq!(totals.fastest, 100.0);
+        let records = [Record { chars: 10, millis: 6_000, ..Record::default() }, Record { chars: 30, millis: 6_000, ..Record::default() }];
+        let mut added = Totals::default();
+        records.iter().for_each(|r| added.add(r));
+        assert_eq!(Totals::of(&records), added);
+        assert_eq!(Totals::of(&records[..1]).fastest, 100.0);
+    }
+
+    #[test]
+    fn the_history_file_reads_back_record_for_record() {
+        let records = vec![Record { segment: 1, chars: 5, ..Record::default() }, Record { segment: 2, chars: 7, ..Record::default() }];
+        let text = jsonl(&records);
+        assert_eq!(text.lines().count(), 2);
+        assert_eq!(read_records(&text), records);
+        assert_eq!(jsonl(&[]), "");
     }
 }
