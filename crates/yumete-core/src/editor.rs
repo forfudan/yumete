@@ -3571,6 +3571,9 @@ pub struct Editor {
     /// The name vim-surround's `t` or `f` is asking for on the value line,
     /// and what it is for; the answer is the editor's, not a front end's.
     surround_asking: Option<surround::SurroundAsk>,
+    /// What the pair waited for goes around: the text, its lines, or a
+    /// block's pieces (vim-surround's `ysj`, `yS`, `VS`, `C-v S`).
+    surround_around: surround::Around,
     /// The data directory, for the global word list. Set by the front end.
     data_dir: Option<PathBuf>,
     /// Where this project's session is remembered — which files were open and
@@ -4762,6 +4765,7 @@ impl Editor {
             remembers: true,
             surround_shown: None,
             surround_asking: None,
+            surround_around: surround::Around::Text,
             data_dir: None,
             session_file: None,
             session_view: None,

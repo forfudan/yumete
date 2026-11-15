@@ -1703,6 +1703,54 @@ zhs = "输入法"
 en = "input method"
 
 [[message]]
+# vim 鍵位 ds 之後的菜單：用開括號指名，連裏面的空格一起去掉，{0} 是那一對（草稿）
+key = "hint.surround.and-blanks"
+zhs = "{0} 连同里面的空格"
+en = "{0} and the spaces inside"
+
+[[message]]
+# vim 鍵位 ys 之後的菜單最後一行：別的符號前後各加一個，字母什麼都不加（草稿）
+key = "hint.surround.any-put"
+zhs = "……其他非字母符号，前后各一个"
+en = "… any other non-letter, on both sides"
+
+[[message]]
+# vim 鍵位 ds 之後的菜單：q 去掉最近的一對直引號（草稿）
+key = "hint.surround.any-quote"
+zhs = "最近的一对直引号"
+en = "the nearest straight quotes"
+
+[[message]]
+# vim 鍵位 ds 之後的菜單：f 去掉函數名和它的括號（草稿）
+key = "hint.surround.call"
+zhs = "函数名和它的括号"
+en = "a function's name and brackets"
+
+[[message]]
+# vim 鍵位 ys 之後的菜單：f 和 F 問函數名再包成函數調用，{0} 是包出來的樣子（草稿）
+key = "hint.surround.function"
+zhs = "{0}，问函数名"
+en = "{0}, the name asked for"
+
+[[message]]
+# vim 鍵位 ys 之後的菜單：s 在前面加一個空格（草稿）
+key = "hint.surround.space-before"
+zhs = "前面加一个空格"
+en = "a space before"
+
+[[message]]
+# vim 鍵位 ys 之後的菜單：t 和 < 問一個標籤名再包上（草稿）
+key = "hint.surround.tag"
+zhs = "<标签>…</标签>，问标签名"
+en = "<tag>…</tag>, the tag asked for"
+
+[[message]]
+# vim 鍵位 ds 之後的菜單：t 去掉一對 HTML 標籤（草稿）
+key = "hint.surround.tag-pair"
+zhs = "一对标签"
+en = "a pair of tags"
+
+[[message]]
 # 表格提示：加一欄
 key = "hint.table.add-column"
 zhs = "插入列(右/左)"

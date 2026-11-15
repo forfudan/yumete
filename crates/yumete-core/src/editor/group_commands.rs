@@ -260,7 +260,7 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
         e.pending = Pending::MatchPair { around: true };
         e.operator_count = cx.operator_count;
     }, Key::Char('a')),
-    (NormalCmd::SurroundAdd, |e, _| e.pending = Pending::Surround, Key::Char('s')),
+    (NormalCmd::SurroundAdd, |e, _| e.begin_surround(), Key::Char('s')),
     (NormalCmd::SurroundDelete, |e, cx| {
         e.pending = Pending::SurroundOff;
         e.operator_count = cx.operator_count;

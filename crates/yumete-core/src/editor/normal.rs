@@ -589,6 +589,8 @@ pub(super) const VIM_NORMAL: &[(Key, NormalCmd, Option<When>)] = &[
     (Key::Char('y'), NormalCmd::VimYank, Some(when::typed_extending)),
     (Key::Char('x'), NormalCmd::DeleteSelection, Some(when::typed_extending)),
     (Key::Char('s'), NormalCmd::ChangeSelection, Some(when::typed_extending)),
+    // vim-surround's `xmap S`: the selection wrapped in the pair typed next.
+    (Key::Char('S'), NormalCmd::SurroundAdd, Some(when::typed_extending)),
     (Key::Ctrl('v'), NormalCmd::VimVisualBlockMode, Some(when::typed)),
     (Key::Char('i'), NormalCmd::VimInsertMode, None),
     (Key::Char('a'), NormalCmd::VimAppendMode, None),

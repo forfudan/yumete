@@ -1138,10 +1138,11 @@ impl Editor {
             // `2ds(` and `2cst` reach that many pairs out (vim-surround's
             // `v:count1`), as helix's `2md(` does.
             self.settle_alias_count();
-            let count = self.count.take();
             if op != 'y' {
-                self.operator_count = count;
+                self.operator_count = self.count.take();
             }
+            // `2ysw` keeps its count for the motion: `ys` is vim's `g@`,
+            // which a count before it reaches as `g@2w` does.
             self.pending = match op {
                 'd' => Pending::SurroundOff,
                 'c' => Pending::SurroundFrom,
@@ -1150,6 +1151,16 @@ impl Editor {
                 _ => Pending::VimOperator { op: 's', first: None },
             };
             return;
+        }
+        // **`yS` is `ys` with the text on lines of its own**, and `ySS` (or
+        // `ySs`) its whole lines, indented (vim-surround's `opfunc2`).
+        if first.is_none() && c == 'S' && op == 'y' && self.keymap_rules().vim_surround {
+            self.settle_alias_count();
+            self.pending = Pending::VimOperator { op: 'S', first: None };
+            return;
+        }
+        if first.is_none() && op == 'S' && c == 's' {
+            return self.run_vim_line(op);
         }
         // Warning: **`;` 和 `,` 也是動作**（`:h ;`）：`d;` 把剛纔那個 `f`/`t` 再做
         // 一遍，`d,` 反着做。[`crate::vim::step_for`] 是純函數，記不住「剛纔那
@@ -1731,17 +1742,31 @@ impl Editor {
         // **An operator takes a closed fold whole** (`:h fold-behavior`: 「dl
         // deletes the whole closed fold under the cursor」, measured).
         let (span, shape) = match op {
-            's' => (span, shape),
+            's' | 'S' => (span, shape),
             _ => self.over_closed_folds(op, span, shape),
         };
         // **`ys{motion}{bracket}`**: the motion only says what to wrap, so
         // nothing is edited yet and there is nothing to take a snapshot of.
         // Select what it named and wait for the bracket, which is what `ms`
         // does — [`Editor::surround_add`] takes its own snapshot.
-        if op == 's' {
+        if matches!(op, 's' | 'S') {
             let motion::Span::Over { anchor, mut head } = span else {
                 return;
             };
+            // **Over lines the marks go on lines of their own** (`ysj`,
+            // `ysip`), and `yS` puts them there over characters too, the
+            // text indented between (`s:wrap` by the register's type).
+            self.surround_around = match (shape, op) {
+                (Shape::Lines, 's') => surround::Around::Lines { indent: false },
+                (Shape::Lines, _) => surround::Around::Lines { indent: true },
+                (_, 's') => surround::Around::Text,
+                _ => surround::Around::OwnLines,
+            };
+            if shape == Shape::Lines {
+                self.take_object(motion::Span::Over { anchor, head });
+                self.pending = Pending::Surround;
+                return;
+            }
             // Warning: **The blanks at the tail stay outside the brackets.**
             // vim-surround does this and says so in one line of `s:opfunc`:
             // `let keeper = substitute(keeper,'\_s\@<!\s*$','','')`, with

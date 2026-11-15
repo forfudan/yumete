@@ -301,6 +301,8 @@ impl super::Editor {
                     self.block_yank(block);
                     return self.leave_block(top_left);
                 }
+                // vim-surround's `xmap S` holds in a block too.
+                Key::Char('S') if self.keymap_rules().vim_surround => return self.begin_block_surround(block),
                 Key::Char('c' | 's' | 'C' | 'S') => {
                     let block = match key {
                         Key::Char('C' | 'S') => Block { to_line_end: true, ..block },
@@ -465,6 +467,44 @@ impl super::Editor {
         self.leave_block(top_left);
     }
 
+    /// **vim-surround's `S` on a block**: each line's piece is what gets
+    /// wrapped, and the block stays drawn while the pair is waited for.
+    /// The pieces are taken now: asking for a tag closes the block.
+    fn begin_block_surround(&mut self, block: Block) {
+        let (first, _, left, _) = self.block_shape(block);
+        let corner = at_column(self.current_buffer().rope(), self.tab_stop(), first, left);
+        let pieces = self.block_pieces(block).into_iter().map(|(_, a, b)| (a, b)).collect();
+        let size = self.block_size(block);
+        self.surround_around = super::surround::Around::Block { pieces, corner, size };
+        self.pending = Pending::Surround;
+    }
+
+    /// Each piece between `open` and `close`, the bottom line first; the
+    /// cursor on the block's top-left corner, where the first opener is.
+    /// A line that does not reach the block is left alone.
+    pub(super) fn surround_block(&mut self, pieces: &[(usize, usize)], corner: usize, size: Size, open: &str, close: &str, typed: &str) {
+        self.block = None;
+        self.snapshot();
+        let grouping = self.current_buffer_mut().begin_undo_group();
+        for &(a, b) in pieces.iter().rev() {
+            let done = {
+                let buffer = self.current_buffer_mut();
+                buffer.insert(b, close).and_then(|()| buffer.insert(a, open))
+            };
+            if !self.applied(done) {
+                break;
+            }
+        }
+        self.current_buffer_mut().end_undo_group(grouping);
+        self.leave_block(corner);
+        let mut keys = vec![Key::Char('S')];
+        keys.extend(typed.chars().map(|c| match c {
+            '\n' => Key::Enter,
+            c => Key::Char(c),
+        }));
+        self.remember_block_keys(size, keys);
+    }
+
     /// `>` and `<`: one level of indent at the block's left edge, every line.
     fn block_shift(&mut self, block: Block, add: bool) {
         let (first, last, left, _) = self.block_shape(block);
@@ -599,6 +639,16 @@ impl super::Editor {
     /// same operator, the same text (vim's `visual-repeat`: 「the same number
     /// of lines and columns」).
     fn remember_block(&mut self, size: Size, op: char, typed: &str) {
+        let mut keys = vec![Key::Char(op)];
+        if op != 'd' {
+            keys.extend(typed.chars().map(Key::Char));
+            keys.push(Key::Esc);
+        }
+        self.remember_block_keys(size, keys);
+    }
+
+    /// The block's size spelled as keys from the cursor, then `then`.
+    fn remember_block_keys(&mut self, size: Size, then: Vec<Key>) {
         if self.repeating_edit {
             return;
         }
@@ -608,11 +658,7 @@ impl super::Editor {
             true => keys.push(Key::Char('$')),
             false => keys.extend(std::iter::repeat_n(Key::Char('l'), size.across)),
         }
-        keys.push(Key::Char(op));
-        if op != 'd' {
-            keys.extend(typed.chars().map(Key::Char));
-            keys.push(Key::Esc);
-        }
+        keys.extend(then);
         self.block_repeat = Some(keys);
     }
 

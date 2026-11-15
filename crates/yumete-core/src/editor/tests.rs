@@ -4938,12 +4938,13 @@ fn vim_keys_spell_surround_the_way_vim_surround_does() {
     assert_ne!(ed.current_buffer().text(), "甲乙\n", "helix 鍵位下不認 ds");
 }
 
-/// Keys for the vim-surround tests: `\n` is Enter and `\x1b` Esc.
+/// Keys for the vim-surround tests: `\n` is Enter, `\x1b` Esc and `\x16` `C-v`.
 fn press_vim_surround(ed: &mut Editor, keys: &str) {
     for c in keys.chars() {
         ed.on_key(match c {
             '\n' => Key::Enter,
             '\x1b' => Key::Esc,
+            '\x16' => Key::Ctrl('v'),
             c => Key::Char(c),
         });
     }
@@ -5105,6 +5106,131 @@ fn vim_dot_repeats_a_surround() {
         press_vim_surround(&mut ed, after);
         assert_eq!(ed.current_buffer().text(), want, "{commit}");
     }
+}
+
+/// `text` under the vim keymap after `keys`: the text, and the cursor as
+/// vim's `line('.')` and `col('.')` count it.
+fn vim_surround_at(text: &str, keys: &str) -> (String, (usize, usize)) {
+    let mut ed = typed_vim(text);
+    press_vim_surround(&mut ed, keys);
+    let rope = ed.current_buffer().rope();
+    let head = ed.sel.head();
+    let line = rope.char_to_line(head);
+    (ed.current_buffer().text().to_string(), (line + 1, head - rope.line_to_char(line) + 1))
+}
+
+/// **A count before `ys` is the motion's** (`ys` is vim's `g@`, and
+/// `2g@w` is `g@2w`), and a count on the object counts it; the trailing
+/// blanks stay outside. Every result measured in nvim 0.12 with
+/// vim-surround loaded.
+#[test]
+fn vim_surround_keeps_the_count_before_ys() {
+    assert_eq!(vim_surround("one two three four\n", "2ysw("), "( one two ) three four\n");
+    assert_eq!(vim_surround("one two three four\n", "ys2w("), "( one two ) three four\n");
+    assert_eq!(vim_surround("one two three four\n", "2ys2w)"), "(one two three four)\n", "the two multiplied");
+    assert_eq!(vim_surround("one two three\n", "2ysiw("), "( one ) two three\n", "2iw is the word and its gap");
+    assert_eq!(vim_surround("one two three\n", "ys2iw("), "( one ) two three\n");
+    assert_eq!(vim_surround("one two three\n", "ys3iw("), "( one two ) three\n");
+    assert_eq!(vim_surround("foo bar\nbaz\n", "2yss("), "( foo bar\nbaz )\n", "yss with a count: that many lines");
+    assert_eq!(vim_surround_at("  foo bar\nbaz\n", "yss("), ("  ( foo bar )\nbaz\n".to_string(), (1, 3)));
+}
+
+/// **The marks on lines of their own** (vim-surround's `s:wrap` for a
+/// linewise register): `ys` over lines puts them at the first line's
+/// indent; `ySS`, `ySs` and `yS` over lines also indent what they wrap
+/// one level, blank lines too; `ySiw` keeps the opener where the word
+/// was. The level is `>>`'s (four spaces here; vim's `shiftwidth`).
+#[test]
+fn vim_surround_puts_marks_on_lines_of_their_own() {
+    let at = |text, keys| vim_surround_at(text, keys);
+    assert_eq!(at("foo bar\nbaz\n", "ysj("), ("(\nfoo bar\nbaz\n)\n".to_string(), (1, 1)));
+    assert_eq!(vim_surround("  foo\n  bar\nbaz\n", "ysj{"), "  {\n  foo\n  bar\n  }\nbaz\n");
+    assert_eq!(at("  foo bar\nbaz\n", "ySS{"), ("  {\n      foo bar\n  }\nbaz\n".to_string(), (1, 1)));
+    assert_eq!(vim_surround("  foo bar\nbaz\n", "ySS("), "  (\n      foo bar\n  )\nbaz\n", "no spaces inside");
+    assert_eq!(vim_surround("  foo bar\nbaz\n", "ySs{"), "  {\n      foo bar\n  }\nbaz\n");
+    assert_eq!(vim_surround("foo bar\nbaz\nqux\n", "2ySS{"), "{\n    foo bar\n    baz\n}\nqux\n");
+    assert_eq!(vim_surround("foo\n\nbar\n", "yS2j{"), "{\n    foo\n    \n    bar\n}\n");
+    assert_eq!(at("  foo bar\nbaz\n", "^wySiw("), ("  foo (\n      bar\n  )\nbaz\n".to_string(), (1, 7)));
+    assert_eq!(vim_surround("  foo bar\nbaz\n", "^wySiwB"), "  foo {\n      bar\n  }\nbaz\n");
+    assert_eq!(vim_surround("one two\n", "ySStem\n"), "<em>\n    one two\n</em>\n");
+    assert_eq!(vim_surround("one\ntwo\n", "ySSbj."), "(\n    (\n        one\n    )\n)\ntwo\n", ". again");
+}
+
+/// **Visual mode's `S`** (vim-surround's `vS`): charwise it wraps the
+/// selection as it stands, trailing blanks included; linewise the marks
+/// go on lines of their own and the lines are indented, as `ySS`. It ends
+/// Visual mode with the cursor on the opener, or the first line's start.
+#[test]
+fn vim_visual_s_wraps_the_selection() {
+    let at = |text, keys| vim_surround_at(text, keys);
+    assert_eq!(at("my str = whee!;\n", "fwvllllS'"), ("my str = 'whee!';\n".to_string(), (1, 10)));
+    assert_eq!(vim_surround("my str = whee!;\n", "fwvllllS("), "my str = ( whee! );\n");
+    assert_eq!(vim_surround("one two \n", "veS)"), "(one) two \n");
+    assert_eq!(vim_surround("one two \n", "vlllS)"), "(one )two \n", "the blank stays inside");
+    assert_eq!(vim_surround("one\ntwo\n", "vjS("), "( one\nt )wo\n");
+    assert_eq!(at("foo\nbar\nbaz\n", "VjS{"), ("{\n    foo\n    bar\n}\nbaz\n".to_string(), (1, 1)));
+    assert_eq!(at("foo\nbar\nbaz\n", "jVS{"), ("foo\n{\n    bar\n}\nbaz\n".to_string(), (2, 1)));
+    assert_eq!(vim_surround("  foo\nbar\n", "VS{"), "  {\n      foo\n  }\nbar\n");
+    assert_eq!(vim_surround("one two\n", "veStem\n"), "<em>one</em> two\n");
+    assert_eq!(vim_surround("one two\n", "VStem\n"), "<em>\n    one two\n</em>\n");
+    assert_eq!(vim_surround("one two\n", "veSfg\n"), "g(one) two\n");
+    assert_eq!(vim_surround("one two\n", "veSx"), "one two\n", "a letter puts nothing");
+    let mut ed = typed_vim("one two\n");
+    press_vim_surround(&mut ed, "veS)");
+    assert!(!ed.extend, "Visual mode ends");
+    // `.` selects as much again from the cursor (`:h visual-repeat`).
+    assert_eq!(vim_surround("ab cd\n", "vlS)$h."), "(ab) (cd)\n");
+    // helix keeps its own `S`: split the selection, not surround.
+    let mut ed = typed("one two\n");
+    press(&mut ed, "ggvlS");
+    assert!(ed.pending != Pending::Surround, "helix's S");
+}
+
+/// **`S` on a block wraps each line's piece** (vim-surround's `s:wrap` for
+/// a blockwise register), the cursor on the block's top-left corner; `.`
+/// does it again on a block of the same size from the cursor. A line that
+/// does not reach the block is left alone, where vim-surround pads it.
+#[test]
+fn vim_block_s_wraps_each_line() {
+    let at = |text, keys| vim_surround_at(text, keys);
+    assert_eq!(at("abcd\nefgh\nijkl\n", "l\x16jjlS("), ("a( bc )d\ne( fg )h\ni( jk )l\n".to_string(), (1, 2)));
+    assert_eq!(vim_surround("abcd\nefgh\nijkl\n", "l\x16jjlS)"), "a(bc)d\ne(fg)h\ni(jk)l\n");
+    assert_eq!(vim_surround("abcd\nefgh\n", "l\x16j$S)"), "a(bcd)\ne(fgh)\n");
+    assert_eq!(vim_surround("ab\nx\nijkl\n", "l\x16jjlS)"), "a(b)\nx\ni(jk)l\n", "ragged: what each line has");
+    assert_eq!(vim_surround("abcd\nefgh\n", "l\x16jlStb\n"), "a<b>bc</b>d\ne<b>fg</b>h\n");
+    assert_eq!(vim_surround("abcd\nefgh\nijkl\nmnop\n", "l\x16jlS)jj0."), "a(bc)d\ne(fg)h\n(ij)kl\n(mn)op\n");
+    assert_eq!(
+        vim_surround("abcd\nefgh\nijkl\nmnop\n", "l\x16jlStb\njj0."),
+        "a<b>bc</b>d\ne<b>fg</b>h\n<b>ij</b>kl\n<b>mn</b>op\n",
+        ". without asking again"
+    );
+    assert_eq!(vim_surround("abcd\nefgh\n", "l\x16jlS\x1b"), "abcd\nefgh\n", "Esc: nothing");
+}
+
+/// **The menus after `ys`, `ds` and `cs` list vim-surround's keys**, from
+/// the table the code reads: `t` and `f`, the letters `b B r a q`, the
+/// brackets, aliases sharing a row.
+#[test]
+fn vim_surround_menus_list_its_keys() {
+    let rows_after = |pressed: &str| -> Vec<String> {
+        let mut ed = typed_vim("(one)\n");
+        press_vim_surround(&mut ed, pressed);
+        let Hint::Keys(_, rows) = ed.hint() else { panic!("{pressed}: no key list") };
+        rows.into_iter().map(|(k, _)| k.into_owned()).collect()
+    };
+    let put = rows_after("ysiw");
+    for row in ["(", ") b", "{", "} B", "[", "] r", "< t", "> a", "f", "F", "s", "q \"", "'", "`"] {
+        assert!(put.iter().any(|r| r == row), "ys lists {row}: {put:?}");
+    }
+    let without_enter = |rows: Vec<String>| rows.into_iter().filter(|r| r != "Enter").collect::<Vec<_>>();
+    assert_eq!(without_enter(rows_after("lcs)")), without_enter(put.clone()), "cs's new pair: the same keys");
+    assert_eq!(rows_after("vS"), put, "and Visual mode's S");
+    let off = rows_after("ds");
+    for row in ["(", ") b", "{", "} B", "[", "] r", "<", "> a", "t", "f", "q", "m", "k"] {
+        assert!(off.iter().any(|r| r == row), "ds lists {row}: {off:?}");
+    }
+    assert!(!off.iter().any(|r| r == "s" || r == "F"), "nothing to take off under s or F: {off:?}");
+    assert_eq!(rows_after("cs"), off, "cs's old pair: the same keys");
 }
 
 /// **vim 鍵位下 `m` 是設標記**。

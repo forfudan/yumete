@@ -384,6 +384,7 @@ impl Editor {
             // so, not a bare `u`.
             let mut word = match op {
                 's' => String::from("ys"),
+                'S' => String::from("yS"),
                 'u' | 'U' | '~' | 'q' | 'w' => format!("g{op}"),
                 '#' => String::from("gc"),
                 'Z' => String::from("zf"),

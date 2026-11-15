@@ -925,8 +925,9 @@ impl Editor {
         self.insert_held.clear();
         let mut all = preset.clone();
         all.extend(user);
-        // vim's `x` and `s` are written for Normal mode (`;{n}D`); in Visual
-        // mode they are its own delete and change (`vim_*` in the table).
+        // vim's `x`, `s` and `S` are written for Normal mode (`;{n}D`, `@cc`);
+        // in Visual mode they are its own delete and change and
+        // vim-surround's `S` (`vim_*` and `surround_add` in the table).
         // The reader's own lines come after, so an `x` of theirs holds in
         // Visual mode too.
         let mut select_preset = preset.clone();
