@@ -430,6 +430,21 @@ impl Editor {
         if self.repeating_edit {
             return;
         }
+        // **`.` after a put from `"1`–`"8` puts from the next one**
+        // (`:h redo-register`), so `"1p..` walks back through the deletes.
+        if self.as_vim() {
+            if let [Key::Char('"'), Key::Char(n @ '1'..='8'), rest @ ..] = keys.as_slice() {
+                let command = rest.iter().find(|k| !matches!(k, Key::Char(c) if c.is_ascii_digit()));
+                if matches!(command, Some(Key::Char('p' | 'P'))) {
+                    let next = (*n as u8 + 1) as char;
+                    self.last_edit_keys[1] = Key::Char(next);
+                }
+            }
+        }
+        let keys = match self.as_vim() {
+            false => &self.last_insert_keys,
+            true => &self.last_edit_keys,
+        };
         let keys = keys.clone();
         self.repeating_edit = true;
         for key in keys {

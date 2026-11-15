@@ -79,6 +79,14 @@ impl Editor {
         self.current_buffer_mut().snapshot_with(at, Some(every));
     }
 
+    /// The same, with `at` as the place vim's `u` puts its one cursor back:
+    /// a command whose caret stands elsewhere when it begins to edit, as
+    /// vim-surround's do.
+    pub(super) fn snapshot_returning_to(&mut self, at: usize) {
+        let every = self.sel.clone();
+        self.current_buffer_mut().snapshot_with(at, Some(every));
+    }
+
     /// **Put back the selections an undo point kept** (measured against helix
     /// 25.07.1: after `C` `A` `X` `Esc` `u`, helix has both cursors back where
     /// the typing began).

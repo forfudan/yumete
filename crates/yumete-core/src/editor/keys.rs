@@ -223,7 +223,16 @@ impl Editor {
             // A count is part of the command it prefixes, not a command: `3>`
             // is one change and `.` has to repeat all three levels of it.
             if self.mode == Mode::Normal && self.pending == Pending::None && self.count.is_none() {
+                // **A register named for this command is part of it**: `.`
+                // after `"1p` has to know the register is `"1` (`:h redo-register`).
+                let named = match (self.pending_register, self.edit_keys.as_slice()) {
+                    (Some(name), [.., Key::Char('"'), Key::Char(c)]) if *c == name => Some(name),
+                    _ => None,
+                };
                 self.edit_keys.clear();
+                if let Some(name) = named {
+                    self.edit_keys.extend([Key::Char('"'), Key::Char(name)]);
+                }
                 self.edit_visual = self.visual_replay();
                 self.edit_was_insert = false;
                 self.edit_revision = (self.current_buffer().id(), self.current_buffer().revision());
@@ -1227,6 +1236,21 @@ impl Editor {
                     self.enter_insert();
                 }
                 return;
+            }
+            // **`:h exclusive`'s two rules** for an end in column 1 of a later
+            // line: from the indent or before it the motion takes whole lines,
+            // and from further in it stops at the end of the line before, so
+            // `` d`] `` from mid-line keeps the line break.
+            let (first, last) = (rope.char_to_line(start), rope.char_to_line(end));
+            if last > first && end == rope.line_to_char(last) {
+                if start <= motion::line_first_non_blank(rope, rope.line_to_char(first)) {
+                    return self.do_vim_lines(op, first, last - 1);
+                }
+                let stop = motion::line_end(rope, rope.line_to_char(last - 1));
+                return match stop > start {
+                    true => self.do_vim(op, motion::Span::Over { anchor: start, head: stop - 1 }),
+                    false => self.do_vim(op, motion::Span::Over { anchor: start, head: start }),
+                };
             }
             return self.do_vim(op, motion::Span::Over { anchor: start, head: end - 1 });
         }
@@ -3009,6 +3033,7 @@ pub(super) const MOTION_STEPS: &[(NormalCmd, &str)] = &[
     (NormalCmd::MoveLineUp, "k"),
     (NormalCmd::MoveVisualLineUp, "k"),
     (NormalCmd::GotoNextLineNonwhitespace, "+"),
+    (NormalCmd::GotoPrevLineNonwhitespace, "-"),
     (NormalCmd::VimGotoLine, "G"),
     (NormalCmd::VimGotoFileStart, "gg"),
     (NormalCmd::GotoFileStart, "gg"),

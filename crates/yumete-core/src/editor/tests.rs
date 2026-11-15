@@ -5031,7 +5031,8 @@ fn mini_surround_keys_take_the_same_aliases() {
     assert_eq!(ed.current_buffer().text(), "(hello)\n");
     press_vim_surround(&mut ed, "lgsrbq");
     assert_eq!(ed.current_buffer().text(), "\"hello\"\n");
-    press_vim_surround(&mut ed, "gsaiwtem\n");
+    // `cs` leaves the caret on the new opener, as vim-surround does.
+    press_vim_surround(&mut ed, "lgsaiwtem\n");
     assert_eq!(ed.current_buffer().text(), "\"<em>hello</em>\"\n");
     press_vim_surround(&mut ed, "gsdt");
     assert_eq!(ed.current_buffer().text(), "\"hello\"\n");
@@ -41318,4 +41319,193 @@ fn the_outline_follows_a_reload() {
     ed.on_key(Key::Enter);
     assert_eq!(outline_titles(&ed), ["New", "More"], "{}", ed.status());
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// vim, `keys` pressed from the top (`\n` Enter, `\x1b` Esc): the editor.
+fn vim_after(text: &str, keys: &str) -> Editor {
+    let mut ed = typed_vim(text);
+    press_vim_surround(&mut ed, keys);
+    ed
+}
+
+/// **A linewise motion past the last line fails whole** (measured against
+/// nvim 0.12): nothing deleted, changed or yanked, and `Enter`, `+` and
+/// `-` stay where they are when they cannot move.
+#[test]
+fn vims_line_motions_past_the_end_fail() {
+    let two = "one two\nthree four\n";
+    for keys in ["jdj", "jd+", "jd\n", "jc\nX\x1b", "j>j", "jgUj"] {
+        assert_eq!(vim_after(two, keys).current_buffer().text().to_string(), two, "{keys:?}");
+    }
+    for keys in ["jyj", "jy\n"] {
+        assert_eq!(vim_after(two, keys).register_contents(None), "", "{keys:?} yanks nothing");
+    }
+    assert_eq!(vim_after("only line here\n", "wdj").current_buffer().text().to_string(), "only line here\n");
+    // `Enter` on the last line stays, as `+` does; `-` on the first.
+    assert_eq!(vim_after(two, "jw\n").cursor(), 14);
+    assert_eq!(vim_after(two, "jw+").cursor(), 14);
+    assert_eq!(vim_after(two, "w-").cursor(), 4);
+    // A count past the end stops on the last line's first non-blank.
+    assert_eq!(vim_after("one two\n  three four\n", "w5\n").cursor(), 10);
+    assert_eq!(vim_after("one two\n  three four\n", "w5+").cursor(), 10);
+    // Still a line when there is one to take.
+    assert_eq!(vim_after("a\nb\nc\n", "5dj").current_buffer().text().to_string(), "");
+    assert_eq!(vim_after("a\nb\nc\n", "dk").current_buffer().text().to_string(), "a\nb\nc\n");
+}
+
+/// **`ds` and `cs` reach ahead on the line** when no pair holds the
+/// cursor, as vim-surround does through vim's own `a(` and `a"`.
+#[test]
+fn vim_surround_reaches_ahead_to_the_next_pair() {
+    assert_eq!(vim_surround("a c (d) e\n", "ds)"), "a c d e\n");
+    assert_eq!(vim_surround("a c ( d ) e\n", "ds("), "a c d e\n");
+    assert_eq!(vim_surround("a c \"d\" e\n", "ds\""), "a c d e\n");
+    assert_eq!(vim_surround("a c (d) e\n", "cs)]"), "a c [d] e\n");
+    assert_eq!(vim_surround("\"b\" c \"d\" e\n", "fbds\"W."), "b c d e\n");
+    assert_eq!(vim_surround("a (b (c) d) e\n", "2ds)"), "a (b c d) e\n", "the second opener ahead");
+    assert_eq!(vim_surround("a c\n(d) e\n", "ds)"), "a c\nd e\n", "a bracket past the line");
+    // Inside a pair a count too large is refused, not sent ahead.
+    assert_eq!(vim_surround("a (b) c (d)\n", "fb2ds)"), "a (b) c (d)\n");
+}
+
+/// **vim-surround's caret**: on the opening mark after `ds`, `cs` and
+/// `ys`, and `u` back where vim puts it (measured against nvim with
+/// vim-surround).
+#[test]
+fn vim_surround_leaves_the_caret_where_vim_surround_does() {
+    let text = "call( world ) end\n";
+    for keys in ["fwds(", "fwds)", "fwcs(]", "fwcs)["] {
+        assert_eq!(vim_after(text, keys).cursor(), 4, "{keys:?}");
+    }
+    assert_eq!(vim_after("f((a (in) b)) z\n", "fi2ds(").cursor(), 2);
+    assert_eq!(vim_after("say \"hello\" now\n", "fods\"").cursor(), 4);
+    assert_eq!(vim_after("hello world foo\n", "wllysiw)").cursor(), 6);
+    // `u` goes back to where the wrapped text begins, or inside the pair.
+    assert_eq!(vim_after("hello world foo\n", "wllysiw)u").cursor(), 6);
+    assert_eq!(vim_after("hello world foo\n", "wllys$)u").cursor(), 8);
+    assert_eq!(vim_after(text, "fwds)u").cursor(), 5);
+    assert_eq!(vim_after("a (hello) b\n", "wllcs)]u").cursor(), 3);
+    // A tag asked for and let go of leaves the caret where the word begins.
+    let mut ed = vim_after("hello world foo\n", "wllysiwt");
+    press_vim_surround(&mut ed, "em\x1b");
+    assert_eq!(ed.cursor(), 6);
+    assert_eq!(ed.current_buffer().text().to_string(), "hello world foo\n");
+}
+
+/// **`'[` goes to the line's first non-blank, `` `[ `` to the place**.
+#[test]
+fn vims_quote_bracket_marks_take_the_first_non_blank() {
+    let text = "top line\n  indented words here\n";
+    assert_eq!(vim_after(text, "jwwywgg'[").cursor(), 11);
+    assert_eq!(vim_after(text, "jwwywgg']").cursor(), 11);
+    assert_eq!(vim_after(text, "jwwywgg`[").cursor(), 20);
+}
+
+/// **`` `] `` on the last character a change put** (measured against
+/// nvim): `~`, `gu`, a Visual put, vim-surround's put, `:sort`, `J`; and
+/// past what Insert typed, as before.
+#[test]
+fn vims_change_end_mark_sits_on_the_last_character_changed() {
+    let end = |text: &str, keys: &str| vim_after(text, &format!("{keys}0`]")).cursor();
+    assert_eq!(end("hello world\n", "w~"), 6);
+    assert_eq!(end("hello WORLD foo\n", "wguiw"), 10);
+    assert_eq!(end("hello world foo\n", "wgUiw"), 10);
+    assert_eq!(end("hello world foo\n", "yiwviwp"), 4);
+    assert_eq!(end("aa bb cc\n", "wysiw)"), 6);
+    assert_eq!(end("hello world\nfoo bar\n", "J"), 18);
+    assert_eq!(vim_after("hello world\nfoo bar\n", "J0`[").cursor(), 11);
+    assert_eq!(end("call( world ) end\n", "fwds)"), 10);
+    assert_eq!(end("call( world ) end\n", "fwcs)]"), 12);
+    // Yanks, puts, Insert and deletes keep their own ends.
+    assert_eq!(end("hello world foo\n", "wyw"), 11);
+    assert_eq!(end("hello world foo\n", "wcwxy\x1b"), 8);
+    assert_eq!(end("hello world foo\n", "wdw"), 6);
+    assert_eq!(end("hello world foo\n", "wyiwp"), 11);
+    assert_eq!(end("hello world foo\n", "wiabc\x1b"), 9);
+    let sorted = vim_after("pear\nApple\nbanana\n", ":sort\ngg`]");
+    assert_eq!(sorted.cursor(), 13, "`:sort`: the last line's start");
+}
+
+/// **After `u` the marks are the lines it changed, at their starts**
+/// (`u_undoredo`), and **a file read is a change** from its first line to
+/// its last.
+#[test]
+fn vims_change_marks_after_undo_and_on_a_file_read() {
+    assert_eq!(vim_after("hello world foo bar\n", "wdwu0`[").cursor(), 0);
+    assert_eq!(vim_after("hello world foo bar\n", "wdwu0`]").cursor(), 0);
+    assert_eq!(vim_after("one\ntwo\nthree\n", "jddu`]").cursor(), 4);
+    assert_eq!(vim_after("one\ntwo\nthree\n", "jyypu`]").cursor(), 8);
+    let path = tmp().join(format!("yumete-read-marks-{}.txt", std::process::id()));
+    std::fs::write(&path, "hello world\nfoo bar\n").unwrap();
+    let buffer = crate::buffer::Buffer::open(&path).unwrap();
+    assert_eq!(buffer.change_span(), Some((0, 12)));
+    let mut ed = Editor::new();
+    ed.execute(":keymap vim").unwrap();
+    ed.open_file(&path).unwrap();
+    press(&mut ed, "wd`]");
+    assert_eq!(ed.current_buffer().text().to_string(), "hello \nfoo bar\n", "`:h exclusive`: the break stays");
+    let _ = std::fs::remove_file(&path);
+}
+
+/// **vim's `:sort!` is the stable sort turned round**: lines equal under
+/// `i` come out last first.
+#[test]
+fn vims_sort_bang_reverses_ties_too() {
+    let ed = vim_after("pear\nApple\nbanana\napple\nBanana\n", ":sort! i\n");
+    assert_eq!(ed.current_buffer().text().to_string(), "pear\nBanana\nbanana\napple\nApple\n");
+    let ed = vim_after("pear\nApple\nbanana\napple\nBanana\n", ":sort i\n");
+    assert_eq!(ed.current_buffer().text().to_string(), "Apple\napple\nbanana\nBanana\npear\n");
+}
+
+/// **vim's registers**: `.` walks `"1p` back through the deletes, and
+/// `".` `"-` `":` `"/` `"%` answer what vim answers.
+#[test]
+fn vims_numbered_and_read_only_registers() {
+    let ed = vim_after("one\ntwo\nthree\nfour\n", "dddddd\"1p..");
+    assert_eq!(ed.current_buffer().text().to_string(), "four\nthree\ntwo\none\n");
+    assert_eq!(vim_after("one two\n", "Ofoo\x1b").register_contents(Some('.')), "foo");
+    assert_eq!(vim_after("abcdef\n", "xx").register_contents(Some('-')), "b");
+    assert_eq!(vim_after("one two three\n", "wdiw").register_contents(Some('-')), "two");
+    assert_eq!(vim_after("one two\nthree\n", "dd").register_contents(Some('-')), "", "a line goes to \"1");
+    assert_eq!(vim_after("one two\n", ":s/one/ONE/\n").register_contents(Some(':')), "s/one/ONE/");
+    assert_eq!(vim_after("one two\n", "/two\n").register_contents(Some('/')), "two");
+    assert_eq!(vim_after("one two\n", "").register_contents(Some('%')), "", "a scratch buffer has no name");
+    let ed = vim_after("one two\n", "/two\n\"/P");
+    assert_eq!(ed.current_buffer().text().to_string(), "one twotwo\n");
+    // A yank into a read-only register keeps nothing there.
+    assert_eq!(vim_after("one two\n", "\".yy").register_contents(Some('.')), "one two\n", "still the last Insert");
+}
+
+/// **The pending echo says the keys vim's reader typed**: `ds`, `cs)`,
+/// `ysiw`, Visual `S`, not this editor's `md` `mr` `ms`.
+#[test]
+fn vims_pending_echo_spells_vim_surrounds_keys() {
+    let text = "say (hello) now\n";
+    for (keys, echo) in [("fhds", "ds"), ("fhcs", "cs"), ("fhcs)", "cs)"), ("ysiw", "ysiw"), ("viwS", "S"), ("2ds", "2ds")] {
+        assert_eq!(vim_after(text, keys).typed_so_far(), echo, "{keys:?}");
+    }
+    let mut ed = typed(text);
+    press(&mut ed, "ggmd");
+    assert_eq!(ed.typed_so_far(), "md", "helix's own keys under helix");
+}
+
+/// **A letter the open surround menu lists is that entry**, not the
+/// first letter of an input-method code; punctuation, and every letter
+/// after `f`, still go to the input method.
+#[test]
+fn a_surround_menus_letters_are_taken_before_the_input_method() {
+    let mut ed = typed("say “hi” now\n");
+    press(&mut ed, "ggmd");
+    assert!(ed.takes_as_a_menu_entry(Key::Char('m')));
+    assert!(ed.takes_as_a_menu_entry(Key::Char('k')));
+    assert!(!ed.takes_as_a_menu_entry(Key::Char('(')), "punctuation goes through the input method");
+    assert!(!ed.takes_as_a_menu_entry(Key::Char('x')), "a letter the menu does not list");
+    let ed = vim_after("say <b>hi</b> now\n", "fhds");
+    for c in ['t', 'b', 'f', 'q', 'm'] {
+        assert!(ed.takes_as_a_menu_entry(Key::Char(c)), "{c}");
+    }
+    let ed = vim_after("say hi now\n", "wysiw");
+    assert!(ed.takes_as_a_menu_entry(Key::Char('b')));
+    let ed = vim_after("say hi now\n", "f");
+    assert!(!ed.takes_as_a_menu_entry(Key::Char('m')), "after `f` a letter is text");
 }

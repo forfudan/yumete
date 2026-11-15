@@ -1877,7 +1877,12 @@ impl Editor {
     pub(super) fn surround_with(&mut self, open: &str, close: &str) {
         let (start, end) = self.selection();
         let end = end.max(start);
-        self.snapshot();
+        // vim's `u` after vim-surround's put goes back to where the text
+        // wrapped begins.
+        match self.keymap_rules().vim_surround {
+            true => self.snapshot_returning_to(start),
+            false => self.snapshot(),
+        }
         let done = {
             let buffer = self.current_buffer_mut();
             // The closer first, so writing it cannot shift the opener.
@@ -1894,9 +1899,11 @@ impl Editor {
         // highlight showed. A longer mark (a CRLF line break) moves it on.
         let marks = open.chars().count() + close.chars().count();
         self.sel.set_head(end + marks - 1);
-        // vim-surround ends its put with `` `[ ``: the caret on the opener.
+        // vim-surround ends its put with `` `[ ``: the caret on the opener,
+        // and `` `] `` on the closer, the last character it put.
         if self.keymap_rules().vim_surround {
             self.sel.set_head(start);
+            self.current_buffer_mut().set_change_span(start, end + marks - 1);
         }
         self.clamp_cursor();
     }
@@ -2108,13 +2115,26 @@ impl Editor {
             self.status = say!("edit.no-pair-to-delete");
             return;
         };
-        self.snapshot();
+        let vim = self.keymap_rules().vim_surround;
+        match vim {
+            true => self.snapshot_returning_to(out + 1),
+            false => self.snapshot(),
+        }
         let done = {
             let buffer = self.current_buffer_mut();
             // The closer first, so removing it cannot shift the opener.
             buffer.remove(inn_end..out_end).and_then(|()| buffer.remove(out..inn))
         };
         if !self.applied(done) {
+            return;
+        }
+        // **vim-surround puts the text back and ends on `` `[ ``**: the caret
+        // where the opener stood, `` `] `` on the text's last character.
+        if vim {
+            let kept = inn_end - inn;
+            self.current_buffer_mut().set_change_span(out, out + kept.saturating_sub(1));
+            self.set_cursor(out);
+            self.clamp_cursor();
             return;
         }
         // **The selection goes through the two removals, both ends**, not
@@ -3275,7 +3295,9 @@ impl Editor {
                     (false, Some((first, _))) => first,
                     (_, None) => line,
                 };
-                let last = rope.len_lines().saturating_sub(1);
+                // The empty line after a final break is not a line to step
+                // onto: `dj` on the last written line fails, as in vim.
+                let last = motion::last_line(rope);
                 match down {
                     true if line < last => at(rope.line_to_char(line + 1)),
                     false if line > 0 => at(rope.line_to_char(line - 1)),

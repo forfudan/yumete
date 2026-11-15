@@ -725,7 +725,14 @@ impl Editor {
         let mut rows: Vec<String> = (first..=last)
             .map(|n| rope.line(n).to_string().trim_end_matches(['\n', '\r']).to_string())
             .collect();
-        sort_texts(&mut rows, reverse, insensitive);
+        // **vim's `:sort!` is the stable sort turned round**, so lines
+        // equal under `i` come out in the reverse of their order
+        // (`ex_sort` writes the sorted lines last first), where
+        // helix's `-r` keeps them in order.
+        sort_texts(&mut rows, false, insensitive);
+        if reverse {
+            rows.reverse();
+        }
         let ending = self.current_buffer().ending().to_string();
         let mut out = rows.join(&ending);
         if ended {
@@ -738,6 +745,11 @@ impl Editor {
         if !self.overwrite(from, to, &out) {
             return;
         }
+        // vim's `'[` and `']` are the range's first and last lines, at their
+        // starts (measured in nvim).
+        let rope = self.current_buffer().rope();
+        let last_start = rope.line_to_char(last.min(motion::last_line(rope)));
+        self.current_buffer_mut().set_change_span(from, last_start);
         // vim leaves the cursor at the start of the range.
         self.sel.set_anchor(from);
         self.sel.set_head(from);
@@ -1239,7 +1251,8 @@ impl Editor {
 }
 
 /// `:sort`'s order, helix's comparators: by code point, `insensitive` on the
-/// lower-cased texts, and stable either way.
+/// lower-cased texts, and stable either way; `reverse` turns the comparator
+/// round, so equal texts keep their order.
 pub(super) fn sort_texts(texts: &mut [String], reverse: bool, insensitive: bool) {
     texts.sort_by(|a, b| {
         let order = match insensitive {

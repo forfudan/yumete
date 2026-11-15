@@ -1774,10 +1774,14 @@ fn press(
         // Warning: **問的要和真編輯器同一個問題**：互動迴圈問的是「要不要開輸入法」，
         // 不是「吃不吃一個字符」——`mi`/`ma` 之後兩者的答案不同，問後者就會在圖上
         // 畫出一個真編輯器裏不會出現的候選框。離屏路徑和真路徑不許分家。
+        // Warning: **Only a run that begins with a 漢字 or a full-width mark
+        // is a commit**: an ASCII key answers the wait on its own, so
+        // `mr(「` is `(` for the pair and `「` for what replaces it, not one
+        // commit `(「` that answers the first wait and leaves the second open.
         if editor.wants_the_ime() {
             if let Key::Char(c) = key {
                 let mut text = String::from(c);
-                while let Some(&next) = chars.peek() {
+                while let Some(&next) = chars.peek().filter(|_| !c.is_ascii()) {
                     if next.is_ascii() {
                         break;
                     }

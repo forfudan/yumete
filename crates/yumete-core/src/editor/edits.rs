@@ -1546,6 +1546,8 @@ impl Editor {
             // as in helix and vim: `"_d` deletes without touching
             // what `p` puts, and `"+y` copies out of the editor.
             Some('_') => {}
+            // The read-only registers are answers, not places to keep text.
+            Some(name) if self.register_is_read_only(name) => {}
             Some('+' | '*') => {
                 self.clipboard_request = Some(text);
             }
@@ -1600,6 +1602,9 @@ impl Editor {
                         }
                     }
                     self.registers.insert('1', self.register_parts.clone());
+                } else if fresh && self.keymap_rules().vim_registers && !self.storing_a_yank {
+                    // **vim's `"-`: a delete within one line** (`:h quote_-`).
+                    self.registers.insert('-', self.register_parts.clone());
                 }
             }
         }
@@ -1718,6 +1723,15 @@ impl Editor {
             // Warning: **只有一段的時候它是「1」**，不是空的：`"#p` 在一個光標上貼一個 1 是
             // 說得通的，而貼一個空字符串看起來像鍵没按上。
             Some('#') => (self.edit_nth.unwrap_or(0) + 1).to_string(),
+            // **The read-only registers** (`:h quote.`, helix's `%`, `:`
+            // and `/`): the file's name, the last `:` line, the last search,
+            // and under vim the last Insert's text.
+            Some(name) if self.register_is_read_only(name) => match name {
+                '.' => self.last_inserted.clone(),
+                '%' => self.file_name_as_register(),
+                ':' => self.last_command_here.clone().unwrap_or_default(),
+                _ => self.last_search.clone(),
+            },
             // `"Ap` puts register `a`, as vim's does.
             Some(name) if name.is_ascii_uppercase() && self.keymap_rules().vim_registers => self.held(name.to_ascii_lowercase()),
             Some(name) => match self.registers.get(&name) {
@@ -1731,6 +1745,28 @@ impl Editor {
                 true => Self::part_for(&self.register_parts, self.edit_nth),
                 false => self.register.clone(),
             },
+        }
+    }
+
+    /// Whether `name` is a register that answers rather than holds: `%` `:`
+    /// `/` under both keymaps (helix and vim give them the same meaning),
+    /// and `.` under vim, where helix's `.` is the selections' text.
+    fn register_is_read_only(&self, name: char) -> bool {
+        match name {
+            '%' | ':' | '/' => true,
+            '.' => self.keymap_rules().vim_registers,
+            _ => false,
+        }
+    }
+
+    /// `"%`: the file's name as helix and vim show it, from the working
+    /// directory when the file is under it, and empty for a scratch buffer.
+    fn file_name_as_register(&self) -> String {
+        let Some(path) = self.current_buffer().path() else { return String::new() };
+        let here = std::env::current_dir().ok().and_then(|d| std::fs::canonicalize(d).ok());
+        match here.as_deref().and_then(|d| path.strip_prefix(d).ok()) {
+            Some(inside) => inside.to_string_lossy().into_owned(),
+            None => path.to_string_lossy().into_owned(),
         }
     }
 

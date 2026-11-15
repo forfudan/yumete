@@ -3229,6 +3229,8 @@ pub struct Editor {
     /// The Insert session being recorded, so `C-w` can take a word back out
     /// of it.
     insert_recording: String,
+    /// **What the last Insert session typed**, vim's read-only `".`.
+    last_inserted: String,
     /// **The indent vim's autoindent wrote and nothing typed after it**
     /// (`:h autoindent`): `Esc` or Enter on such a line takes it back out.
     /// The buffer, its revision once written, where the caret stood, how many
@@ -4711,6 +4713,7 @@ impl Editor {
             marks: HashMap::new(),
             repeating_edit: false,
             insert_recording: String::new(),
+            last_inserted: String::new(),
             fresh_indent: None,
             insert_again: 0,
             searching: None,

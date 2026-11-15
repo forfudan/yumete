@@ -101,7 +101,14 @@ impl Editor {
                     return;
                 };
                 self.show_buffer(i);
-                self.set_cursor(pos.min(self.current_buffer().rope().len_chars()));
+                let rope = self.current_buffer().rope();
+                let pos = pos.min(rope.len_chars());
+                // `'[` and `'a` go to the line's first non-blank, `` `[ ``
+                // and `` `a `` to the very place (`:h '[`).
+                match exact {
+                    true => self.set_cursor(pos),
+                    false => self.move_to_line(rope.char_to_line(pos) + 1),
+                }
                 self.status = say!("goto.mark-in-this-file", name);
             }
         }

@@ -222,8 +222,8 @@ impl KeyPreset {
                 // begins」** (B4). `Enter` is the same motion and
                 // cannot be spelled in this table — it has a key arm of its
                 // own — but `+` and `-` are characters and belong here.
-                ("+", "@jgs"),
-                ("-", "@kgs"),
+                ("+", "goto_next_line_nonwhitespace"),
+                ("-", "goto_prev_line_nonwhitespace"),
                 ("^", "@gs"),
                 ("$", "vim_goto_line_end"),
                 ("0", "@gh"),

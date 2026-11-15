@@ -748,6 +748,9 @@ impl Buffer {
         let name = path.file_name().map(|n| n.to_string_lossy().into_owned());
         let named = name.as_deref().and_then(crate::syntax::from_extension);
         let syntax = named.unwrap_or_else(|| crate::syntax::sniff_rope(&rope));
+        // **A file read is vim's first change**: `` `[ `` on its first line
+        // and `` `] `` on the last line read, both at the line's start.
+        let read_span = (rope.len_chars() > 0).then(|| (0, rope.line_to_char(crate::motion::last_line(&rope))));
         Ok(Buffer {
             id: next_id(),
             ending: dominant_ending(&rope),
@@ -771,7 +774,7 @@ impl Buffer {
             changes: Vec::new(),
             changes_at: 0,
             insert_stop: None,
-            change_span: None,
+            change_span: read_span,
             change_span_open: false,
             folds: crate::fold::FoldMap::new(),
             line_edits: Vec::new(),
@@ -1316,9 +1319,16 @@ impl Buffer {
             pos if pos < at + taken => at,
             pos => pos - taken + put,
         };
+        // **Text put in place of text ends `` `] `` on its last character**
+        // (`~`, `gU`, `r`: vim's `b_op_end = oap->end`); text only added ends
+        // it past what is typed, as Insert does.
+        let last = match taken > 0 && put > 0 {
+            true => at + put - 1,
+            false => at + put,
+        };
         self.change_span = Some(match self.change_span {
-            Some((start, end)) if self.change_span_open => (shift(start).min(at), shift(end).max(at + put)),
-            _ => (at, at + put),
+            Some((start, end)) if self.change_span_open => (shift(start).min(at), shift(end).max(last)),
+            _ => (at, last),
         });
         self.change_span_open = true;
     }
@@ -1368,6 +1378,22 @@ impl Buffer {
     ///
     /// Compared line by line on the ropes from both ends, never copied out:
     /// an undo in a long manuscript costs its changed lines, not the book.
+    /// **An undo or a redo is a change of whole lines to vim's marks**:
+    /// `` `[ `` at the start of the first line it changed, `` `] `` at the
+    /// start of the last line it left there, or of the first when it left
+    /// none (`u_undoredo`).
+    fn mark_lines_stepped(&mut self, before: &Rope) {
+        let (was, now) = (before.len_lines(), self.rope.len_lines());
+        let head = (0..was.min(now)).take_while(|&i| before.line(i) == self.rope.line(i)).count();
+        let most = was.min(now) - head;
+        let tail = (1..=most).take_while(|&i| before.line(was - i) == self.rope.line(now - i)).count();
+        let last_line = crate::motion::last_line(&self.rope);
+        let first = head.min(last_line);
+        let last = (now - tail).saturating_sub(1).max(first).min(last_line);
+        self.change_span = Some((self.rope.line_to_char(first), self.rope.line_to_char(last)));
+        self.change_span_open = false;
+    }
+
     fn note_lines_changed(&mut self, before: &Rope) {
         let (was, now) = (before.len_lines(), self.rope.len_lines());
         if was == now || self.path.is_none() {
@@ -2282,6 +2308,7 @@ impl Buffer {
         self.journal = None;
         let before = std::mem::replace(&mut self.rope, prev.rope);
         self.note_lines_changed(&before);
+        self.mark_lines_stepped(&before);
         self.restore_folds(&prev.folds, &before);
         // **走回去了算不算乾淨，問的是走到了哪裏**，不是那一格當初記了什麼。
         self.modified = match self.still_as_saved() {
@@ -2323,6 +2350,7 @@ impl Buffer {
         self.journal = None;
         let before = std::mem::replace(&mut self.rope, next.rope);
         self.note_lines_changed(&before);
+        self.mark_lines_stepped(&before);
         self.restore_folds(&next.folds, &before);
         self.modified = match self.still_as_saved() {
             Some(same) => !same,

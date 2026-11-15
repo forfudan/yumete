@@ -650,6 +650,25 @@ impl Editor {
         self.pending_keys().is_some()
     }
 
+    /// **Whether `key` is a letter the open surround menu lists** (`m`, `k`,
+    /// `t`, `f`, `b` …): the front end gives it to the editor rather than to
+    /// the input method, which would read it as the first letter of a code.
+    /// Only a surround's wait has letters in its menu that name things; after
+    /// `f` and `r` every letter is text.
+    pub fn takes_as_a_menu_entry(&self, key: Key) -> bool {
+        let Key::Char(c) = key else { return false };
+        let waits = matches!(
+            self.pending,
+            Pending::Surround | Pending::SurroundOff | Pending::SurroundFrom | Pending::SurroundTo(_)
+        );
+        if !waits || !c.is_ascii_alphabetic() {
+            return false;
+        }
+        let mut buf = [0; 4];
+        let c: &str = c.encode_utf8(&mut buf);
+        self.pending_menu().is_some_and(|(_, rows)| rows.iter().any(|(keys, _)| keys.split(' ').any(|k| k == c)))
+    }
+
     pub fn pending_menu(&self) -> Option<(String, KeyRows)> {
         match self.pending_keys()? {
             Hint::Keys(title, keys) => Some((title, keys)),

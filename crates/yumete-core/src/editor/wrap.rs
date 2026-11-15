@@ -356,6 +356,34 @@ impl Editor {
         self.status = say!("keys.no-such-combination", typed);
     }
 
+    /// **What the reader typed to reach a surround's wait** under vim:
+    /// `ds`, `cs)`, `ysiw`, Visual `S`, not this editor's own `md` `mr`
+    /// `ms`. The keys are the command's own as `.` records them, without
+    /// the register named before it, and without the count when the count
+    /// is shown apart.
+    fn surround_keys_typed(&self) -> Option<String> {
+        let mut keys = self.edit_keys.as_slice();
+        if let [Key::Char('"'), _, rest @ ..] = keys {
+            keys = rest;
+        }
+        if self.operator_count.is_some() {
+            while let [Key::Char(c), rest @ ..] = keys {
+                if !c.is_ascii_digit() {
+                    break;
+                }
+                keys = rest;
+            }
+        }
+        let typed: String = keys
+            .iter()
+            .map(|key| match key {
+                Key::Char(c) => Some(*c),
+                _ => None,
+            })
+            .collect::<Option<String>>()?;
+        (!typed.is_empty()).then_some(typed)
+    }
+
     pub fn typed_so_far(&self) -> String {
         // **`gx`/`gz` 打到一半，HUD 寫的是 `gxa`、`gzdon`**（鍵見 `groups.rs` 的
         // `GOTO`）。
@@ -378,8 +406,8 @@ impl Editor {
         // is to hand those characters back.
         if let Pending::VimOperator { op, first } = self.pending {
             // `ys` 内部記作一個字符 `s`；牌子上寫的是手按過的那兩個鍵。
-            // Warning: **只有 `ys` 這一個**。vim 的 `ds`/`cs` 不走這條路——它們落在 `SurroundOff`/`SurroundFrom`
-            // 上，牌子畫的是這個編輯器自己的 `md`/`mr`。
+            // vim 的 `ds`/`cs` 不走這條路——它們落在 `SurroundOff`/`SurroundFrom`
+            // 上，牌子由底下 [`Self::surround_keys_typed`] 照按過的鍵寫。
             // `gu` `gU` `g~` `gq` are typed with their `g`, and the sign says
             // so, not a bare `u`.
             let mut word = match op {
@@ -450,6 +478,11 @@ impl Editor {
         let word: String = match self.pending {
             Pending::Space | Pending::Open | Pending::Yume | Pending::YumeValue(_) | Pending::Conflict => {
                 word.replacen('␣', &space, 1)
+            }
+            Pending::Surround | Pending::SurroundOff | Pending::SurroundFrom | Pending::SurroundTo(_)
+                if self.vim_keymap() =>
+            {
+                self.surround_keys_typed().unwrap_or_else(|| word.to_string())
             }
             Pending::Table | Pending::TableConvert => format!("{space}{word}"),
             Pending::Case if self.vim_keymap() => "g`".to_string(),

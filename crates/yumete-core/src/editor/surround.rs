@@ -479,7 +479,18 @@ impl Editor {
     /// Whether the line is the surround's to answer.
     pub(super) fn answer_surround_name(&mut self, answer: Option<&str>) -> bool {
         let Some(ask) = self.surround_asking.take() else { return false };
-        let Some(text) = answer.filter(|t| !t.is_empty()) else { return true };
+        let Some(text) = answer.filter(|t| !t.is_empty()) else {
+            // vim-surround's put let go leaves the caret where the text it
+            // would have wrapped begins, nothing selected.
+            if ask.change.is_none() && self.keymap_rules().vim_surround && !self.sel.is_plural() {
+                let (start, _) = self.selection();
+                self.extend = false;
+                self.vim_lines = false;
+                self.set_cursor(start);
+                self.clamp_cursor();
+            }
+            return true;
+        };
         let (open, close) = match ask.name {
             NameAsked::Tag => {
                 // A `>` at the end drops the old tag's attributes.
@@ -542,13 +553,26 @@ impl Editor {
             self.status = say!("edit.no-pair-to-delete");
             return;
         };
-        self.snapshot();
+        let vim = self.keymap_rules().vim_surround;
+        match vim {
+            true => self.snapshot_returning_to(out + 1),
+            false => self.snapshot(),
+        }
         let done = {
             let buffer = self.current_buffer_mut();
             // The closer first, so replacing it cannot shift the opener.
             buffer.replace(inn_end..out_end, close).and_then(|()| buffer.replace(out..inn, open))
         };
         if !self.applied(done) {
+            return;
+        }
+        // **vim-surround puts the new pair and its text back and ends on
+        // `` `[ ``**: the caret on the new opener, `` `] `` on the closer.
+        if vim {
+            let put = open.chars().count() + (inn_end - inn) + close.chars().count();
+            self.current_buffer_mut().set_change_span(out, out + put.saturating_sub(1));
+            self.set_cursor(out);
+            self.clamp_cursor();
             return;
         }
         let changes = [
@@ -577,9 +601,15 @@ impl Editor {
                 .into_iter()
                 .filter_map(|q| self.pair_to_change(q, count))
                 .max_by_key(|&(open, _)| open)
+                .or_else(|| {
+                    ['"', '\'', '`'].into_iter().filter_map(|q| self.pair_ahead(q, count)).min_by_key(|&(open, _)| open)
+                })
                 .map(one_each_side)?,
-            (_, Some(Off::Pair { closer, .. })) => self.pair_to_change(closer, count).map(one_each_side)?,
-            (c, None) => self.pair_to_change(c, count).map(one_each_side)?,
+            (_, Some(Off::Pair { closer, .. })) => self
+                .pair_to_change(closer, count)
+                .or_else(|| self.pair_ahead(closer, count))
+                .map(one_each_side)?,
+            (c, None) => self.pair_to_change(c, count).or_else(|| self.pair_ahead(c, count)).map(one_each_side)?,
         };
         if matches!(off_of(which), Some(Off::Pair { trim: true, .. })) {
             let blank = |c: char| c == ' ' || c == '\t';
@@ -591,6 +621,28 @@ impl Editor {
             }
         }
         Some((out, inn, inn_end, out_end))
+    }
+
+    /// **The pair `ds`/`cs` reach ahead to** when none holds the cursor:
+    /// vim-surround finds its pair with vim's own `a(` and `a"`, and those
+    /// look on (`:h a(`), so `ds)` at the start of `a (b) c` gives `a b c`.
+    /// A bracket is the count-th opener ahead, past the line if need be; a
+    /// quote is the next pair on the cursor's line, by `quoted`'s rule.
+    /// Warning: **Only when no pair holds the cursor at all**: `2ds)`
+    /// inside a single `(…)` is refused, not sent ahead, as `d2i(` is.
+    fn pair_ahead(&self, which: char, count: usize) -> Option<(usize, usize)> {
+        if !self.keymap_rules().vim_text_objects || self.pair_to_change(which, 1).is_some() {
+            return None;
+        }
+        let rope = self.current_buffer().rope();
+        let here = self.sel.head();
+        super::pair_family(which)
+            .into_iter()
+            .filter_map(|(open, close)| match open == close {
+                true => super::quoted(rope, here, open).filter(|&(a, _)| here < a && count == 1),
+                false => super::nth_ahead(rope, here, open, close, count),
+            })
+            .min_by_key(|&(open, _)| open)
     }
 
     /// The pair `mr`/`cs` change: one character each side under helix's

@@ -788,6 +788,12 @@ zhs = "上一个函数"
 en = "previous function"
 
 [[message]]
+# 命令說明：goto_prev_line_nonwhitespace（草稿）
+key = "action.goto-prev-line-nonwhitespace"
+zhs = "上一行的第一个非空白字符"
+en = "previous line's first non-blank character"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.goto-prev-paragraph"
 zhs = "上一段"

@@ -60,6 +60,7 @@ pub(super) const NORMAL_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::GotoLineEnd, |e, cx| e.acting(false, |e| e.cmd_goto_line_end(cx)), Key::End),
     (NormalCmd::VimGotoLineEnd, |e, cx| e.acting(true, |e| e.cmd_goto_line_end(cx)), Key::End),
     (NormalCmd::GotoNextLineNonwhitespace, Editor::cmd_goto_next_line_nonwhitespace, Key::Enter),
+    (NormalCmd::GotoPrevLineNonwhitespace, |e, cx| e.cmd_goto_next_line_nonwhitespace(cx.with_key(Key::Char('-'))), Key::Char('-')),
     (NormalCmd::JumpNextWordStart, |e, cx| e.cmd_jump_by_word(cx.with_key(Key::Char('w'))), Key::Char('w')),
     (NormalCmd::JumpNextLongWordStart, |e, cx| e.cmd_jump_by_word(cx.with_key(Key::Char('W'))), Key::Char('W')),
     (NormalCmd::JumpPrevWordStart, |e, cx| e.cmd_jump_by_word(cx.with_key(Key::Char('b'))), Key::Char('b')),
@@ -1142,8 +1143,14 @@ impl Editor {
     #[allow(unused_variables)]
     pub(super) fn cmd_goto_next_line_nonwhitespace(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
+        // **On the last line it fails and stays** (`:h <CR>`, measured in
+        // nvim); a count past the end stops on the last line, as `5+` does.
+        let down = motion::Motion::Line { down: key != Key::Char('-') };
+        if self.run_motion(down) == motion::Span::Missed {
+            return;
+        }
         self.repeat(count, |e| {
-            let down = e.run_motion(motion::Motion::Line { down: true });
+            let down = e.run_motion(down);
             e.jump_to(down);
             let home = e.run_motion(motion::Motion::LineFirstNonBlank);
             e.jump_to(home);
@@ -2396,6 +2403,7 @@ impl Editor {
             let kept = self.sel.primary();
             let rope = self.current_buffer().rope();
             let (len, seam) = (rope.len_chars(), motion::line_end(rope, kept.span().0));
+            let revision = self.current_buffer().revision();
             self.repeat_writing(n, |e| e.join_lines());
             // **The selection stays on its text** (helix's `join_selections`
             // only maps it through the change: `J` on `ab` leaves the cursor
@@ -2410,6 +2418,13 @@ impl Editor {
                 self.sel.set_anchor(moved(kept.anchor));
                 self.sel.set_head(moved(kept.head));
                 self.clamp_cursor();
+            } else if self.current_buffer().revision() != revision {
+                // vim's `` `[ `` is the first line's old end and `` `] ``
+                // the joined line's end (`do_join`).
+                let rope = self.current_buffer().rope();
+                let seam = seam.min(rope.len_chars());
+                let end = motion::line_end(rope, seam);
+                self.current_buffer_mut().set_change_span(seam, end);
             }
         }
     }

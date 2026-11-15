@@ -275,6 +275,7 @@ impl Editor {
         // now.
         let again = std::mem::take(&mut self.insert_again);
         let typed = std::mem::take(&mut self.insert_recording);
+        self.last_inserted.clone_from(&typed);
         if again > 0 && !typed.is_empty() {
             // At every cursor, not at the primary alone.
             let opened = self.insert_opened;

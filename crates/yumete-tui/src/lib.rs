@@ -5444,6 +5444,13 @@ fn ime_handle(
         return false;
     }
     let composing = ime.is_composing();
+    // **A letter the open surround menu lists is that entry** (`md` `m`, `ds`
+    // `t`, `ys` `b`), not the first letter of a code: with nothing composed
+    // yet it goes to the editor, and punctuation still goes through the
+    // engine, so `ms(` writes `（…）`.
+    if !composing && map_key(code, mods).is_some_and(|key| editor.takes_as_a_menu_entry(key)) {
+        return false;
+    }
     // **快捷符號 owns the keyboard while it is up** — every printable key goes
     // straight to the engine, which has `shortcut_input` for exactly this: a
     // letter commits its symbol, the lead key again commits 「；」, anything
