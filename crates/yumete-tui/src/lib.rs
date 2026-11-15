@@ -1344,20 +1344,7 @@ pub fn run(
         // 行只有前端知道。擺在 `follow` 後面：剛打開的那一份要先起得了服務器，
         // 這一行纔不是空的。
         if editor.take_file_info_request() {
-            let watching = servers.watching(editor);
-            let said = match watching.is_empty() {
-                true => None,
-                false => Some(
-                    watching
-                        .into_iter()
-                        .map(|(name, ready)| match ready {
-                            true => say!("file.server-ready", name),
-                            false => say!("file.server-not-running", name),
-                        })
-                        .collect::<Vec<_>>()
-                        .join("、"),
-                ),
-            };
+            let said = standing_in_words(&servers.standing(editor, config));
             let report = editor.file_report(said);
             editor.open_report(&say!("file.title"), &report);
             editor.set_status(say!("file.opened"));
@@ -1392,8 +1379,10 @@ pub fn run(
         // **在等回話就讓那八個點轉起來**（#426）。`Servers` 住在前端這一側，核心
         // 看不見它，所以每一輪說一聲——同 `note_the_server` 那一條。
         let spinning = editor.server_busy_since().is_some();
+        let missing = editor.server_is_missing();
         editor.note_the_server_is_busy(servers.busy_since(editor));
-        if spinning != editor.server_busy_since().is_some() {
+        editor.note_the_server_is_missing(servers.standing(editor, config).is_missing());
+        if spinning != editor.server_busy_since().is_some() || missing != editor.server_is_missing() {
             server_said_something = true;
         }
         if std::mem::take(&mut servers.filled) {
@@ -14751,7 +14740,8 @@ fn draw_status(
                 drawable(word).into_owned(),
                 bar.fg(ink.gold()).add_modifier(Modifier::BOLD),
             ),
-            // `NOR` 之後、檔名之前——那八個點的位子，兩邊各一格空氣。
+            // `NOR` 之後、檔名之前——語言服務器那一格（轉圈、錯、`!`、`i`、
+            // `?`，見 [`server_cell`]），兩邊各一格空氣。
             //
             // Warning: **那一格是從 `rest` 借的。** 模式那一欄本來就是
             // `「{mode}  」`（兩格空白），這裏借走一格給點站，於是轉不轉都只多
@@ -14764,9 +14754,10 @@ fn draw_status(
                 },
                 bar,
             ),
-            Span::styled(
-                spinner::frame(editor.server_busy_since()).to_string(),
-                bar.fg(ink.gold()),
+            server_cell(
+                ServerCell::of(editor.server_busy_since(), editor.problem_counts(), editor.server_is_missing()),
+                ink,
+                bar,
             ),
             Span::styled(
                 drawable(match mode.is_empty() {
@@ -14781,6 +14772,85 @@ fn draw_status(
         .style(bar),
         status_area,
     );
+}
+
+/// **`:info`'s language-server row**, `None` when no server is in question
+/// for this file (the row is left out, as the cell is blank).
+fn standing_in_words(standing: &crate::server::Standing) -> Option<String> {
+    use crate::server::{Lost, Standing};
+    Some(match standing {
+        Standing::Unserved => return None,
+        Standing::Unsaved => say!("lsp.buffer-unsaved"),
+        Standing::Serving(running) => running
+            .iter()
+            .map(|(name, ready)| match ready {
+                true => say!("file.server-ready", name),
+                false => say!("file.server-starting", name),
+            })
+            .collect::<Vec<_>>()
+            .join(if yumete_cjk::speaks_english() { ", " } else { "、" }),
+        Standing::NotFound(names) => say!("file.server-not-found", names),
+        Standing::Lost(Lost::CannotStart { command, why }) => say!("file.server-cannot-start", command, why),
+        Standing::Lost(Lost::NoAnswer(command)) => say!("file.server-no-answer", command),
+        Standing::Lost(Lost::Exited(command)) => say!("file.server-exited", command),
+    })
+}
+
+/// **The one cell right of the mode word**: what the language server of
+/// this file has to say, in one character.
+///
+/// One cell, five things, the loudest first: the server is busy (the
+/// spinner), the file has errors, warnings, only notes and hints, or a
+/// server belongs here and is not running. Ready with nothing to say, and a
+/// file no server is expected for, are both blank: a blank cell is the one
+/// that needs no attention.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ServerCell {
+    Busy(std::time::Instant),
+    Problem(yumete_core::problem::Severity),
+    Missing,
+    Blank,
+}
+
+impl ServerCell {
+    /// `counts` is `[errors, warnings, info]` ([`Editor::problem_counts`]).
+    ///
+    /// Problems outrank the `?`: a file whose server is gone may still carry
+    /// what another checker said (yumete's own config check needs no server).
+    fn of(busy: Option<std::time::Instant>, counts: [usize; 3], missing: bool) -> ServerCell {
+        use yumete_core::problem::Severity;
+        let [errors, warnings, info] = counts;
+        match busy {
+            Some(since) => ServerCell::Busy(since),
+            None if errors > 0 => ServerCell::Problem(Severity::Error),
+            None if warnings > 0 => ServerCell::Problem(Severity::Warn),
+            None if info > 0 => ServerCell::Problem(Severity::Note),
+            None if missing => ServerCell::Missing,
+            None => ServerCell::Blank,
+        }
+    }
+}
+
+/// The cell drawn.
+///
+/// **The problem marks are the gutter's own** ([`problem_cell`]): a solid
+/// 朱 cell for errors, `!` on amber, `i` on azure — so the lane and the
+/// status line are one set of marks, and a reader who knows one reads the
+/// other. Hints draw as notes: one character cannot be both `i` and `·`
+/// and still be told apart from a blank at a glance.
+///
+/// Warning: **Every state is a different shape, not only a different
+/// colour**: a braille spinner, a filled cell, `!`, `i`, `?`, nothing. In the
+/// `bw` theme the colours collapse and the shapes are all that is left.
+/// The `?` is the quietest ink on the bar: a missing server is worth
+/// knowing, not worth looking at.
+fn server_cell(cell: ServerCell, ink: crate::theme::Palette, bar: Style) -> Span<'static> {
+    match cell {
+        ServerCell::Busy(since) => Span::styled(spinner::frame(Some(since)), bar.fg(ink.gold())),
+        ServerCell::Problem(severity) => problem_cell(severity, ink, bar),
+        ServerCell::Missing => Span::styled("?", bar.fg(ink.furniture())),
+        ServerCell::Blank => Span::styled(spinner::frame(None), bar),
+    }
 }
 
 /// What a status line keeps, worked down field by field as the window
@@ -21342,6 +21412,157 @@ fn squeezed(text: &str) -> String {
                 );
             }
         }
+    }
+
+    /// **The cell right of the mode word: seven states, five marks**, the
+    /// loudest first — busy, errors, warnings, notes and hints, a missing
+    /// server; ready-and-clean and no-server-expected are both blank.
+    #[test]
+    fn the_server_cell_says_the_loudest_of_seven_states() {
+        use super::ServerCell;
+        use yumete_core::problem::Severity;
+        let now = std::time::Instant::now();
+        // (busy, [errors, warnings, info], missing) → state.
+        let cases = [
+            ((Some(now), [3, 2, 1], true), ServerCell::Busy(now)),
+            ((None, [1, 4, 2], true), ServerCell::Problem(Severity::Error)),
+            ((None, [0, 1, 5], true), ServerCell::Problem(Severity::Warn)),
+            ((None, [0, 0, 1], true), ServerCell::Problem(Severity::Note)),
+            ((None, [0, 0, 0], false), ServerCell::Blank),
+            ((None, [0, 0, 0], true), ServerCell::Missing),
+        ];
+        for ((busy, counts, missing), want) in cases {
+            assert_eq!(ServerCell::of(busy, counts, missing), want, "{busy:?} {counts:?} {missing}");
+        }
+
+        let config = Config::default();
+        let ink = ink(&config);
+        let bar = super::status_bar_style(&config);
+        let drawn = |cell| super::server_cell(cell, ink, bar);
+        let busy = drawn(ServerCell::Busy(now));
+        assert!(spinner::FRAMES.contains(&busy.content.as_ref()), "{busy:?}");
+        assert_eq!(busy.style.fg, Some(ink.gold()));
+        // The problem marks are the gutter lane's, glyph and colour alike.
+        for severity in [Severity::Error, Severity::Warn, Severity::Note] {
+            let lane = super::problem_cell(severity, ink, bar);
+            let cell = drawn(ServerCell::Problem(severity));
+            assert_eq!((cell.content, cell.style), (lane.content, lane.style), "{severity:?}");
+        }
+        assert_eq!(drawn(ServerCell::Problem(Severity::Error)).style.bg, Some(ink.mark()), "錯是一塊朱");
+        assert_eq!(drawn(ServerCell::Problem(Severity::Warn)).content, "!");
+        assert_eq!(drawn(ServerCell::Problem(Severity::Note)).content, "i");
+        let missing = drawn(ServerCell::Missing);
+        assert_eq!((missing.content.as_ref(), missing.style.fg), ("?", Some(ink.furniture())), "暗的問號");
+        assert_eq!(drawn(ServerCell::Blank).content, " ");
+        assert_eq!(drawn(ServerCell::Blank).style, bar, "空的那一格就是狀態欄本身");
+        for cell in [ServerCell::Busy(now), ServerCell::Problem(Severity::Error), ServerCell::Missing, ServerCell::Blank] {
+            assert_eq!(yumete_cjk::str_width(&drawn(cell).content), 1, "{cell:?} 只佔一格");
+        }
+    }
+
+    /// Warning: **Each state is a shape, not only a colour**: in the
+    /// black-and-white theme the hues are gone and the six cells must still
+    /// be told apart — by their glyph, or by a ground that is not the bar's.
+    #[test]
+    fn the_server_cell_reads_without_colour() {
+        use super::ServerCell;
+        use yumete_core::problem::Severity;
+        let theme = yumete_config::ThemeConfig::named("bw").expect("bw");
+        for dark in [true, false] {
+            let ink = crate::theme::Palette::of_theme(&theme, dark);
+            let bar = Style::default().bg(ink.sunken()).fg(ink.text());
+            let shape = |cell| {
+                let span = super::server_cell(cell, ink, bar);
+                let filled = span.style.bg.is_some_and(|bg| Some(bg) != bar.bg);
+                let glyph = match cell {
+                    ServerCell::Busy(_) => "spinner".to_string(),
+                    _ => span.content.to_string(),
+                };
+                (glyph, filled)
+            };
+            let all = [
+                ServerCell::Busy(std::time::Instant::now()),
+                ServerCell::Problem(Severity::Error),
+                ServerCell::Problem(Severity::Warn),
+                ServerCell::Problem(Severity::Note),
+                ServerCell::Missing,
+                ServerCell::Blank,
+            ];
+            for (i, a) in all.iter().enumerate() {
+                for b in &all[i + 1..] {
+                    assert_ne!(shape(*a), shape(*b), "dark={dark}: {a:?} 和 {b:?} 只差顏色");
+                }
+            }
+        }
+    }
+
+    /// The cell as drawn on the status line of the window with the keys,
+    /// and only there: a second window's line names its file and no more.
+    #[test]
+    fn the_status_line_carries_the_server_cell_beside_the_mode() {
+        use yumete_core::problem::Severity;
+        let (mut editor, path) = editor_on_disk("cell.rs", "one\ntwo\nthree\n");
+        editor.set_end_of_line_diagnostics(None);
+        let config = Config::default();
+        let ink = ink(&config);
+        let cell = |editor: &Editor| {
+            let buffer = render(editor, &config, 60, 8);
+            let y = buffer.area.height - 2;
+            (buffer[(5, y)].symbol().to_string(), buffer[(5, y)].style())
+        };
+        assert_eq!(cell(&editor).0, " ", "nothing to say: blank");
+
+        editor.note_the_server_is_missing(true);
+        let (glyph, style) = cell(&editor);
+        assert_eq!((glyph.as_str(), style.fg), ("?", Some(ink.furniture())));
+        let line = status_line(&render(&editor, &config, 60, 8));
+        assert!(line.starts_with(" NOR ? cell.rs"), "{line:?}");
+
+        editor.set_problems(path.clone(), "test".into(), vec![said(0, Severity::Note)]);
+        assert_eq!(cell(&editor).0, "i", "a note outranks the missing server");
+        editor.set_problems(path.clone(), "test".into(), vec![said(0, Severity::Hint), said(1, Severity::Warn)]);
+        assert_eq!(cell(&editor).0, "!");
+        editor.set_problems(path.clone(), "test".into(), vec![said(1, Severity::Warn), said(2, Severity::Error)]);
+        let (glyph, style) = cell(&editor);
+        assert_eq!((glyph.as_str(), style.bg), (" ", Some(ink.mark())), "errors: a solid 朱 cell");
+        assert_eq!(editor.problem_counts(), [1, 1, 0]);
+        editor.note_the_server_is_busy(Some(std::time::Instant::now()));
+        assert!(spinner::FRAMES.contains(&cell(&editor).0.as_str()), "busy outranks everything");
+
+        // A second window: its line has the name, never the cell.
+        editor.note_the_server_is_busy(None);
+        editor.execute(":vsplit").unwrap();
+        let buffer = render(&editor, &config, 80, 8);
+        let y = buffer.area.height - 2;
+        let line = row_text(&buffer, y);
+        assert_eq!(line.matches("NOR").count(), 1, "one window has the keys: {line:?}");
+        let mark = Some(ink.mark());
+        let filled = (0..buffer.area.width).filter(|&x| buffer[(x, y)].style().bg == mark).count();
+        assert_eq!(filled, 1, "one 朱 cell on the row, the live window's: {line:?}");
+    }
+
+    /// **`:info`'s language-server row in plain words**: which server, and
+    /// running, starting, not found (with what was looked for), could not
+    /// start, never answered, or exited. No row where none is expected.
+    #[test]
+    fn info_says_where_the_file_stands_with_its_server() {
+        use crate::server::{Lost, Standing};
+        use super::standing_in_words as words;
+        assert_eq!(words(&Standing::Unserved), None, "no server in question, no row");
+        assert_eq!(words(&Standing::Unsaved), Some(say!("lsp.buffer-unsaved")));
+        let both = words(&Standing::Serving(vec![("alpha-ls".into(), true), ("beta-ls".into(), false)])).unwrap();
+        assert!(both.contains(&say!("file.server-ready", "alpha-ls")), "{both}");
+        assert!(both.contains(&say!("file.server-starting", "beta-ls")), "{both}");
+        assert_ne!(say!("file.server-ready", "x"), say!("file.server-starting", "x"));
+        let missing = words(&Standing::NotFound("alpha-ls".into())).unwrap();
+        assert_eq!(missing, say!("file.server-not-found", "alpha-ls"));
+        assert!(missing.contains("alpha-ls"), "says the command it looked for: {missing}");
+        let failed = words(&Standing::Lost(Lost::CannotStart { command: "alpha-ls".into(), why: "denied".into() })).unwrap();
+        assert!(failed.contains("alpha-ls") && failed.contains("denied"), "{failed}");
+        let mute = words(&Standing::Lost(Lost::NoAnswer("alpha-ls".into()))).unwrap();
+        let exited = words(&Standing::Lost(Lost::Exited("alpha-ls".into()))).unwrap();
+        assert!(mute.contains("alpha-ls") && exited.contains("alpha-ls"));
+        assert_ne!(mute, exited, "two ways to go, two sentences");
     }
 
     #[test]

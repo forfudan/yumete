@@ -3071,6 +3071,11 @@ pub struct Editor {
     /// 一條的理由：`Servers` 住在那一側，核心看不見它。存的是**起點**而不是
     /// 「第幾格」——轉到第幾格是時間算得出來的，存它就會有兩處轉得不同步。
     server_busy_since: Option<std::time::Instant>,
+    /// **This file should have a language server and has none running**: one
+    /// is configured for its language, and it is not installed, would not
+    /// start, or exited. The front end writes it, for the same reason as
+    /// `server_busy_since`; the status line's cell draws it as a quiet `?`.
+    server_missing: bool,
     /// The character the 字典 panel is about, and the answer if one has come.
     ///
     /// Three states, because three things can be true. `None`: nobody has
@@ -4645,6 +4650,7 @@ impl Editor {
             info_scroll: 0,
             server_line: None,
             server_busy_since: None,
+            server_missing: false,
             completion_query: None,
             completion_at: None,
             completion_sent: None,

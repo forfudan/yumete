@@ -1862,6 +1862,25 @@ impl Editor {
         self.problems.worst_on(path, line)
     }
 
+    /// **How many errors, warnings and the rest the current file has**, from
+    /// every server: `[errors, warnings, info]`, hints counted with info.
+    ///
+    /// The status line's cell and `:info` read the same three numbers, so
+    /// the mark and the words never disagree about one file.
+    pub fn problem_counts(&self) -> [usize; 3] {
+        use crate::problem::Severity;
+        let mut counts = [0; 3];
+        let Some(path) = self.current_buffer().path() else { return counts };
+        for p in self.problems.of(path) {
+            counts[match p.severity {
+                Severity::Error => 0,
+                Severity::Warn => 1,
+                Severity::Note | Severity::Hint => 2,
+            }] += 1;
+        }
+        counts
+    }
+
     /// **The diagnostics follow the line edits**, of every
     /// buffer: after each key, before each frame, and before a server's
     /// new word, so an edit made by a paste, a formatter or a rename in
@@ -2385,6 +2404,16 @@ impl Editor {
     /// 從什麽時候起在等，`None` ＝ 没在等。
     pub fn server_busy_since(&self) -> Option<std::time::Instant> {
         self.server_busy_since
+    }
+
+    /// **這份檔該有語言服務器而没有**——前端每一輪說一聲，同上一條。
+    pub fn note_the_server_is_missing(&mut self, missing: bool) {
+        self.server_missing = missing;
+    }
+
+    /// 配了服務器、可它没在跑（没裝、起不來、退了）。
+    pub fn server_is_missing(&self) -> bool {
+        self.server_missing
     }
 
     /// `:diagnostics-all` 頂上那一行，没有服務器就是 `None`。

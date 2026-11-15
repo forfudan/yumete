@@ -550,6 +550,18 @@ zhs = "已在新缓冲区中打开(只读)"
 en = "opened in a new buffer (read-only)"
 
 [[message]]
+# :info：錯誤、警告、其餘（說明與提示合在一起）各幾條（草稿）
+key = "file.problem-counts"
+zhs = "错误 {0}，警告 {1}，提示 {2}"
+en = "errors {0}, warnings {1}, info {2}"
+
+[[message]]
+# :info 那一行的名字：這份檔案的診斷各有幾條（草稿）
+key = "file.problems"
+zhs = "诊断"
+en = "diagnostics"
+
+[[message]]
 # :info：唯讀
 key = "file.readonly"
 zhs = "只读"
@@ -562,16 +574,40 @@ zhs = "项目根目录"
 en = "project root"
 
 [[message]]
-# :info：配置裏有這個服務器，可它還没起來(或者機器上没裝)
-key = "file.server-not-running"
-zhs = "{0}(未运行)"
-en = "{0} (not running)"
+# :info：服務器的程序起不來；{0} 命令名，{1} 系統給的理由（草稿）
+key = "file.server-cannot-start"
+zhs = "{0}(启动失败:{1})"
+en = "{0} (could not start: {1})"
+
+[[message]]
+# :info：服務器的程序退出了（草稿）
+key = "file.server-exited"
+zhs = "{0}(已退出)"
+en = "{0} (exited)"
+
+[[message]]
+# :info：服務器起來了，可從頭到尾没回過握手，已經不再等它（草稿）
+key = "file.server-no-answer"
+zhs = "{0}(一直没有应答，已放弃)"
+en = "{0} (never answered, given up)"
+
+[[message]]
+# :info：配了服務器，可這臺機器上一個都找不到；{0} 是找過的命令名（草稿）
+key = "file.server-not-found"
+zhs = "未找到(找过 {0})"
+en = "not found (looked for {0})"
 
 [[message]]
 # :info：這一份起着的服務器，名字後面説它握完手没有
 key = "file.server-ready"
 zhs = "{0}(运行中)"
 en = "{0} (running)"
+
+[[message]]
+# :info：這一份起着的服務器還没握完手（草稿）
+key = "file.server-starting"
+zhs = "{0}(启动中)"
+en = "{0} (starting)"
 
 [[message]]
 # :info：哪幾個語言服務器在看着這一份

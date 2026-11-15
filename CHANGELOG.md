@@ -6,6 +6,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Added
 
+- **The cell right of the mode word says how the file's language server is doing**: the spinner while it works, then the gutter's marks for the loudest diagnostic (a red cell for errors, `!` warnings, `i` information), blank when all is well or in prose, and a dim `?` when a server is configured for the file (Typst included) but not installed or not running. `:info` names the server, says whether it is running, starting, not found (and what it looked for) or exited, and counts the errors, warnings and information.
 - **When Typst downloads a package** for a Typst formula or `:export-as-preview pdf`, the status line names it while it downloads.
 - **`:yume-words` (`Space z u`) shows what yumete learned** (words, 调频, 固顶, with the Yume app's beside them, read only) and deletes yumete's copy of an entry, with `u` to put it back. yumete's own files hold only what yumete learned, and both layers are combined while you type (调频 counts are added together). **New `[ime] learn`, off by default**: yumete only reads the Yume app until it is turned on.
 - **`:quit-error` (`:cquit`, `:cq`) quits with exit status 1 or the one given**, so `git commit` aborts when yumete is git's editor; `:cq!` leaves unsaved files. **`:reload-all` (`:rla`) reloads every open file**, leaving files with unsaved changes alone unless you add `!`.

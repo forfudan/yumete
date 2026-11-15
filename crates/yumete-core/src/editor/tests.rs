@@ -30589,6 +30589,53 @@ fn the_file_report_says_what_this_file_is() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **`:info` counts the file's diagnostics** beside its servers: the three
+/// numbers the status line's cell is drawn from, hints counted as info.
+#[test]
+fn the_file_report_counts_the_diagnostics_beside_the_servers() {
+    use crate::problem::{Problem, Severity};
+    let dir = tmp().join(format!("yumete-fileinfo-counts-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("main.rs");
+    std::fs::write(&file, "fn main() {}\nfn other() {}\n").unwrap();
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    ed.open_file(&file).unwrap();
+    let row = |page: &str| {
+        page.lines()
+            .find(|l| l.starts_with(&format!("| {} |", say!("file.problems"))))
+            .map(str::to_string)
+    };
+
+    // No server in question and nothing said: no row.
+    assert_eq!(row(&ed.file_report(None)), None);
+    // A server, a clean file: the row says so in numbers.
+    let clean = row(&ed.file_report(Some("srv (running)".into())));
+    assert_eq!(clean, Some(format!("| {} | {} |", say!("file.problems"), say!("file.problem-counts", 0, 0, 0))));
+
+    let path = ed.current_buffer().path().unwrap().to_path_buf();
+    let one = |line, severity| Problem {
+        line,
+        utf16_column: 0,
+        severity,
+        message: "sample".into(),
+        source: None,
+        code: None,
+    };
+    ed.set_problems(
+        path,
+        "srv".into(),
+        vec![one(0, Severity::Error), one(0, Severity::Warn), one(1, Severity::Warn), one(1, Severity::Note), one(1, Severity::Hint)],
+    );
+    assert_eq!(ed.problem_counts(), [1, 2, 2]);
+    // Said even with no server row: the diagnostics are there to count.
+    let counted = row(&ed.file_report(None));
+    assert_eq!(counted, Some(format!("| {} | {} |", say!("file.problems"), say!("file.problem-counts", 1, 2, 2))));
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **插入態打 `(` 就問一次簽名**：函數的說明在打 `(` 時出現。
 ///
 /// 三條規矩一起釘住：只在代碼裏、只在插入態、`)` 之後服務器說没有就收。

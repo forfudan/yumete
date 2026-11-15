@@ -234,8 +234,17 @@ impl Editor {
             row(say!("file.modified-at"), when_was(when));
         }
         row(say!("file.root"), format!("`{}`", self.project_root().display()));
+        // The diagnostics beside the servers that said them: the same three
+        // numbers the status line's cell is drawn from. Said whenever a server
+        // is in question or anything has been said, so a clean file under a
+        // running server reads 「0, 0, 0」 rather than nothing.
+        let [errors, warnings, info] = self.problem_counts();
+        let counted = errors + warnings + info > 0;
         if let Some(servers) = servers {
             row(say!("file.servers"), servers);
+            row(say!("file.problems"), say!("file.problem-counts", errors, warnings, info));
+        } else if counted {
+            row(say!("file.problems"), say!("file.problem-counts", errors, warnings, info));
         }
         out
     }

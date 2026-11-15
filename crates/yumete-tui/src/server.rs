@@ -194,6 +194,47 @@ impl Server {
     }
 }
 
+/// **How the one server a language had stopped being there**, kept per
+/// language for `:info` until one of its servers starts again.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Lost {
+    /// The program would not start: its command, and what the system said.
+    CannotStart { command: String, why: String },
+    /// It started and never answered the handshake.
+    NoAnswer(String),
+    /// It exited, or its pipe broke.
+    Exited(String),
+}
+
+/// **Where the current file stands with its language servers**: the status
+/// line's cell and `:info` both read this, so the mark and the words come
+/// from one judgement.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Standing {
+    /// No server is expected here and none runs: a language nobody
+    /// configured one for, or prose with only the factory's list (a
+    /// manuscript is not told its spelling checker is missing; Typst is not
+    /// prose here, since its preview needs tinymist).
+    Unserved,
+    /// The buffer has no file yet, and a server answers about files.
+    Unsaved,
+    /// These run for it, in the config's order: the command, and whether the
+    /// handshake is done.
+    Serving(Vec<(String, bool)>),
+    /// Configured, and not one of them is on this machine: the commands
+    /// looked for, as the reader would type them.
+    NotFound(String),
+    /// Found and tried, and gone.
+    Lost(Lost),
+}
+
+impl Standing {
+    /// **A server belongs here and none is running** — the `?` in the cell.
+    pub fn is_missing(&self) -> bool {
+        matches!(self, Standing::NotFound(_) | Standing::Lost(_))
+    }
+}
+
 /// Every server, and the one rule about when to talk to them.
 /// **這一輪各服務器答了什麽**，攢着，等迴圈走完再一起交給編輯器（#425）。
 ///
@@ -390,6 +431,13 @@ pub struct Servers {
     serving: HashMap<String, Vec<String>>,
     /// Languages that could not be started, so the editor says so once.
     failed: HashSet<String>,
+    /// **Languages whose configured servers are on nobody's path**, as
+    /// [`Servers::follow`] last found: it looks every turn, so a server
+    /// installed mid-session clears its language here.
+    missing: HashSet<String>,
+    /// How each language's last server went, until one starts again
+    /// ([`Standing::Lost`]).
+    gone: HashMap<String, Lost>,
     /// **哪幾個語言已經說過「這臺機器上沒有」了**——一個語言只說一次。
     told_about: HashSet<String>,
     /// 每個起來了的服務器，那個可執行檔到底在哪——`:diagnostics-all` 頂上那一行要說。
@@ -475,6 +523,8 @@ impl Default for Servers {
             running: HashMap::new(),
             serving: HashMap::new(),
             failed: HashSet::new(),
+            missing: HashSet::new(),
+            gone: HashMap::new(),
             told_about: HashSet::new(),
             found: HashMap::new(),
             sent: HashMap::new(),
@@ -597,6 +647,7 @@ impl Servers {
             .collect();
         let Some(language) = self.language_of(editor) else { return };
         let Some(_named) = Self::named(config, language, Some(&Self::look_from(editor))) else {
+            self.missing.insert(language.to_string());
             // **打開的那一刻就說，別等人問**。默默 `return` 的話，讀者打開 `.py`
             // 什麽都不知道，一直到按 `空格 k` 纔撞上。
             //
@@ -620,6 +671,7 @@ impl Servers {
             }
             return;
         };
+        self.missing.remove(language);
         let Some(path) = editor.current_buffer().path().map(Path::to_path_buf) else {
             // An unsaved buffer has no URI, and a server answers about files.
             return;
@@ -647,6 +699,7 @@ impl Servers {
                     .unwrap_or(false);
                 match start(named, editor, &at, self.doorbell.clone()) {
                     Ok(server) => {
+                        self.gone.remove(language);
                         self.running.insert(named.command.clone(), server);
                         self.serving
                             .entry(language.to_string())
@@ -677,6 +730,10 @@ impl Servers {
                         // Warning: **記在語言上，所以一個起不來就不再試這一種語言的任何一個**——多服
                         // 務器下它偏保守：寧可少起一個，也不要每一幀重試一個起不來的。
                         self.failed.insert(language.to_string());
+                        self.gone.insert(
+                            language.to_string(),
+                            Lost::CannotStart { command: named.command.clone(), why: why.to_string() },
+                        );
                         self.says = Some(say!("lsp.cannot-start", named.command, why));
                     }
                 }
@@ -795,6 +852,46 @@ impl Servers {
                 (name, ready)
             })
             .collect()
+    }
+
+    /// **Where the current file stands** ([`Standing`]).
+    ///
+    /// Nothing here looks at the disk: whether a command is installed is what
+    /// [`Self::follow`] last found, so this is cheap enough to ask every turn.
+    pub fn standing(&self, editor: &Editor, config: &yumete_config::Config) -> Standing {
+        let Some(language) = self.language_of(editor) else { return Standing::Unserved };
+        let running = self.watching(editor);
+        if !running.is_empty() {
+            return Standing::Serving(running);
+        }
+        let Some(wanted) = config.lsp.get(language).filter(|v| v.iter().any(|s| !s.command.is_empty())) else {
+            return Standing::Unserved;
+        };
+        // The rule `follow` keeps for its 「not installed」: a manuscript with
+        // only the factory's list was never promised a server.
+        if matches!(language, "markdown" | "text")
+            && config.lsp.get(language) == yumete_config::factory_servers().get(language)
+        {
+            return Standing::Unserved;
+        }
+        if self.missing.contains(language) {
+            return Standing::NotFound(Self::the_names(wanted));
+        }
+        if editor.current_buffer().path().is_none() {
+            return Standing::Unsaved;
+        }
+        if let Some(lost) = self.gone.get(language) {
+            return Standing::Lost(lost.clone());
+        }
+        // Found and not yet started: `follow` starts it this turn.
+        Standing::Serving(
+            wanted
+                .iter()
+                .filter(|s| !s.command.is_empty())
+                .map(|s| (s.command.clone(), false))
+                .take(1)
+                .collect(),
+        )
     }
 
     pub fn busy_since(&self, editor: &Editor) -> Option<std::time::Instant> {
@@ -1510,6 +1607,13 @@ impl Servers {
             return;
         }
         self.serving.remove(&language);
+        self.gone.insert(
+            language.clone(),
+            match why {
+                Gone::Mute => Lost::NoAnswer(command.to_string()),
+                Gone::Died => Lost::Exited(command.to_string()),
+            },
+        );
         // 它不在聽了，`:diagnostics-all` 頂上那一行也不該再說它在。
         editor.note_the_server(None);
         for path in &its {
@@ -3137,6 +3241,83 @@ mod tests {
 
         let _ = std::fs::remove_file(&path);
         let _ = std::fs::remove_file(&plain);
+    }
+
+    /// **Where a file stands with its servers** — what the status line's cell
+    /// and `:info` both read. One case per state, none of them asking what
+    /// this machine has installed.
+    #[test]
+    fn a_file_s_standing_is_one_of_the_states_the_cell_draws() {
+        let absent = "yumete-no-such-server-9x";
+        let naming = |language: &str| {
+            let mut config = Servers::stocked("rust");
+            config
+                .lsp
+                .insert(language.to_string(), vec![yumete_config::Server { command: absent.into(), ..Default::default() }]);
+            config
+        };
+
+        // Code whose server is not on this machine: not found, and which
+        // command was looked for.
+        let (mut editor, rs) = editor_on("standing.rs", "fn main() {}\n");
+        let mut servers = Servers::default();
+        let config = naming("rust");
+        servers.follow(&mut editor, &config);
+        assert_eq!(servers.standing(&editor, &config), Standing::NotFound(absent.into()));
+        assert!(servers.standing(&editor, &config).is_missing());
+
+        // Typst likewise: its server is a default, the preview needs it.
+        let (mut editor, typ) = editor_on("standing.typ", "= One\n");
+        let mut servers = Servers::default();
+        let config = naming("typst");
+        servers.follow(&mut editor, &config);
+        assert_eq!(servers.standing(&editor, &config), Standing::NotFound(absent.into()));
+
+        // Markdown with only the factory's list was promised nothing. Asked
+        // without `follow`, which would start a marksman this machine has.
+        let (editor, md) = editor_on("standing.md", "A line.\n");
+        let mut servers = Servers::default();
+        let config = Servers::stocked("rust");
+        servers.prose.insert("markdown");
+        assert_eq!(servers.standing(&editor, &config), Standing::Unserved);
+        // …and named by the reader, it is expected like any other.
+        let config = naming("markdown");
+        servers.missing.insert("markdown".into());
+        assert_eq!(servers.standing(&editor, &config), Standing::NotFound(absent.into()));
+
+        // A language nobody configured a server for.
+        let (editor, _) = editor_on("standing2.rs", "fn main() {}\n");
+        let mut config = Servers::stocked("rust");
+        config.lsp.remove("rust");
+        assert_eq!(Servers::default().standing(&editor, &config), Standing::Unserved);
+        config.lsp.insert("rust".into(), vec![yumete_config::Server::default()]);
+        assert_eq!(Servers::default().standing(&editor, &config), Standing::Unserved, "an empty command turns it off");
+
+        // Running, and starting.
+        let config = Servers::stocked("rust");
+        let (mut servers, _heard, tell) = Servers::pretend("rust");
+        assert_eq!(servers.standing(&editor, &config), Standing::Serving(vec![(Servers::findable(), true)]));
+        servers.running.get_mut(&Servers::findable()).unwrap().ready = false;
+        assert_eq!(servers.standing(&editor, &config), Standing::Serving(vec![(Servers::findable(), false)]));
+
+        // Gone: it never answered and exited.
+        let mut editor = editor;
+        drop(tell);
+        servers.collect(&mut editor);
+        assert_eq!(servers.standing(&editor, &config), Standing::Lost(Lost::Exited(Servers::findable())));
+        assert!(servers.standing(&editor, &config).is_missing());
+
+        // A buffer with no file has nothing to serve yet.
+        let mut scratch = Editor::new();
+        scratch.execute(":syntax rust").unwrap();
+        let mut servers = Servers::default();
+        servers.follow(&mut scratch, &config);
+        assert_eq!(servers.standing(&scratch, &config), Standing::Unsaved);
+        assert!(!servers.standing(&scratch, &config).is_missing());
+
+        for path in [rs, typ, md] {
+            let _ = std::fs::remove_file(path);
+        }
     }
 
     /// **The page window's half of the Typst server**: whether
