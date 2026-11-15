@@ -280,9 +280,9 @@ pub struct EditorConfig {
     pub language: String,
     /// The gap between two 縱, in half-width cells (0–4).
     pub zong_gap: usize,
-    /// How many Latin letters before the words of the open files are offered
-    /// by themselves; 漢字 take half as many, rounded up. 0 is
-    /// never (`C-n` still asks). 0 to 20.
+    /// How many characters typed, Latin letters or 漢字 alike, before the
+    /// words of the open files are offered by themselves: 7, helix's
+    /// `trigger-length`. 0 is never (`C-n` still asks). 0 to 20.
     pub word_completion: usize,
     /// **How many completion items show at once**: the word,
     /// code and shell lists alike. 6, as the input method's candidates.
@@ -571,7 +571,7 @@ impl Default for EditorConfig {
             remember: true,
             language: "auto".to_string(),
             zong_gap: DEFAULT_ZONG_GAP,
-            word_completion: 4,
+            word_completion: 7,
             completion_page_size: 6,
             show_ruby: false,
             usage_groups: Vec::new(),

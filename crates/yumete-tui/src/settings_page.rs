@@ -664,6 +664,14 @@ impl Seat {
         self.cell = Some(cell);
     }
 
+    /// **The keys are the panel's own**: it is open and nothing is typed on
+    /// it, neither a value in its cell nor the search or a `:` on its line.
+    /// That is where a lone-Shift tap is not the 中/英 switch: nothing there
+    /// is typed, so a stray tap would only flip it in silence.
+    pub fn keys_are_its_own(&self, editor: &Editor) -> bool {
+        self.open() && self.cell.is_none() && !editor.mode().is_prompt()
+    }
+
     /// Whether a value is being edited in its cell.
     pub fn in_cell(&self) -> bool {
         self.cell.is_some()
@@ -2453,6 +2461,56 @@ mod tests {
         // Everything done in the cell is one `u`.
         keys(&mut seat, &mut ed, &[Key::Char('u')]);
         assert!(file(&dir).contains("pages_vertical = 3"), "{}", file(&dir));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// **A lone Shift is the 中/英 switch wherever the panel is typed**: on the
+    /// `/` search, on its `:` line and in a value's cell, as on every other
+    /// prompt; mid-code on the search it commits the code there, which
+    /// narrows the list. On the rows it is nothing.
+    #[test]
+    fn a_lone_shift_switches_the_language_on_the_search_line_and_in_a_cell() {
+        use crate::{route_a_shift_tap, Borrow, FuncKey, ImeSession};
+        use yumete_ime::Scheme;
+        let dir = scratch("shift-tap");
+        let (mut ed, mut seat) = seated(&dir, "", "editor.pages_vertical");
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧\n");
+        let mut genda = crate::genda_page::Seat::default();
+        let mut borrowed = Borrow::default();
+        let mut tap = |ime: &mut ImeSession, seat: &mut Seat, ed: &mut Editor| {
+            route_a_shift_tap(ime, ed, seat, &mut genda, &mut borrowed, FuncKey::ShiftL)
+        };
+        assert!(ime.is_chinese());
+        assert!(!tap(&mut ime, &mut seat, &mut ed), "not on the rows");
+        assert!(ime.is_chinese());
+
+        keys(&mut seat, &mut ed, &[Key::Char('/')]);
+        assert!(tap(&mut ime, &mut seat, &mut ed));
+        assert!(!ime.is_chinese(), "the search takes it");
+        assert!(tap(&mut ime, &mut seat, &mut ed));
+        assert!(ime.is_chinese(), "and back");
+        assert!(crate::ime_handle(&mut ime, &mut ed, crate::KeyCode::Char('b'), crate::KeyModifiers::NONE));
+        assert!(ime.is_composing());
+        assert!(tap(&mut ime, &mut seat, &mut ed));
+        assert_eq!(ed.value_typed(), Some("b"), "mid-code, the code is committed on the line");
+        assert_eq!(page(&seat).search, "b", "and the list narrows to it");
+        keys(&mut seat, &mut ed, &[Key::Esc]);
+        if !ime.is_chinese() {
+            ime.toggle_language();
+        }
+
+        keys(&mut seat, &mut ed, &[Key::Char(':')]);
+        assert!(tap(&mut ime, &mut seat, &mut ed));
+        assert!(!ime.is_chinese(), "the `:` line takes it, as the editor's own does");
+        keys(&mut seat, &mut ed, &[Key::Esc]);
+        ime.toggle_language();
+
+        page_mut(&mut seat).go_to("editor.pages_vertical", |_| Vec::new());
+        keys(&mut seat, &mut ed, &[Key::Enter, Key::Char('c')]);
+        assert!(seat.in_cell());
+        assert!(tap(&mut ime, &mut seat, &mut ed));
+        assert!(!ime.is_chinese(), "a value's cell takes it");
+        assert!(seat.in_cell(), "and is still open");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

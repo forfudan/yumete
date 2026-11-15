@@ -31,6 +31,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Changed
 
+- **`[editor] word_completion` counts Chinese characters one for one with Latin letters, and defaults to 7**, as helix's `trigger-length`. `:yume-words`'s `/` search is typed with the built-in Yume (candidates shown, Shift switches 中/英).
 - **The `Space n` character lookup names its rows in the interface language**, and config complaints come in 简体 when the interface is `zhs`.
 - **Command arguments are shown in the interface language everywhere**: the `:` menu, `:help commands`, the refusals and the site's command tables say `<line number>` in English, not `<行號>`; the site's generated tables have their headers in each page's language. Config complaints about syntax, table_rules, indent_hint and similar keys, the pipe-in-a-cell refusal, and the mark for a missing table cell are translated too.
 - **A refused argument says what the command takes**: the words it accepts, the range (`:indent-width 40` → a whole number from 1 to 16), or the form (`:sort -x`, `:table 3 4 5`); a missing one says what goes after the command, and `:export pdf` points to `:export-as-preview pdf`. **`:settings` + `Tab` completes a setting by the name the panel shows**, in the interface's language. **`page=` and `font=` on a Typst PDF are said to be left out** (a Typst file sets its own page and fonts) instead of being dropped silently, and `:export-as-preview` no longer writes to a file named `page=A5`.
@@ -52,6 +53,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Fixed
 
+- **A lone Shift switches 中/英 in the settings panel's `/` search**, its `:` line and while editing a value, as on every other prompt.
 - **Moving into a window that shows a `.csv` from deep in a longer file, or resuming such a session with `ye -r`, no longer crashes.**
 - **The outline sidebar follows the text as you write**: a heading renamed, added, deleted, undone or reloaded from disk shows at once, without saving or moving into the sidebar. In a long document it updates as soon as you pause typing. The buffer list's `+` follows edits and saves the same way.
 - **A `.csv` in one window no longer draws the other window's prose as a table.**

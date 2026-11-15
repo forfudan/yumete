@@ -887,10 +887,10 @@ zhs = "词语补全"
 en = "word completion"
 
 [[message]]
-# 設置面板：[editor] word_completion 那一行底下的說明
+# 設置面板：[editor] word_completion 那一行底下的說明（草稿）
 key = "settings.editor.word-completion.hint"
-zhs = "输入几个西文字母后列出已打开文件中出现过的词，汉字为一半(向上取整)。C-n 随时列出"
-en = "after this many Latin letters, list words that appear in the open files; for Chinese characters, half as many (rounded up). C-n lists them at any time"
+zhs = "输入几个西文字母或汉字后列出已打开文件中出现过的词。C-n 随时列出"
+en = "after this many characters, Latin letters or Chinese alike, list words that appear in the open files. C-n lists them at any time"
 
 [[message]]
 # 設置：分词松紧

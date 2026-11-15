@@ -34,7 +34,7 @@ use ratatui::widgets::Clear;
 use ratatui::Frame;
 
 use yumete_config::Config;
-use yumete_core::input::Key;
+use yumete_core::input::{Key, Mode};
 use yumete_core::say;
 use yumete_core::Editor;
 use yumete_ime::{Deleted, Held, ImeSession, WordList, WordRow};
@@ -179,24 +179,6 @@ impl Seat {
             return false;
         }
         let Some(key) = key else { return true };
-        if page.searching {
-            match key {
-                Key::Char(c) => page.search.push(c),
-                Key::Backspace => {
-                    if page.search.pop().is_none() {
-                        page.searching = false;
-                    }
-                }
-                Key::Enter => page.searching = false,
-                Key::Esc => {
-                    page.search.clear();
-                    page.searching = false;
-                }
-                _ => {}
-            }
-            page.row = 0;
-            return true;
-        }
         let lists = ime.word_lists().len().max(1);
         match key {
             Key::Char(':') => return false,
@@ -212,9 +194,14 @@ impl Seat {
                 page.list = (page.list.min(lists - 1) + 1) % lists;
                 page.row = 0;
             }
+            // **The search is typed on the editor's own value line**, as the
+            // settings panel's is: the input method composes there and a lone
+            // Shift switches 中/英, so a word is found by what it is written as.
             Key::Char('/') => {
                 page.search.clear();
                 page.searching = true;
+                page.row = 0;
+                editor.open_value_line(&say!("yume.words.search", ""), "");
             }
             Key::Esc => page.search.clear(),
             Key::Tab => {
@@ -332,9 +319,31 @@ impl Seat {
         if editor.take_word_page_close() {
             self.close(editor);
         }
+        // The search narrows as it is typed; Enter keeps it, Esc clears it.
+        if let Some(page) = self.page.as_mut().filter(|p| p.searching) {
+            let typed = match editor.take_value_answer() {
+                Some(answer) => {
+                    page.searching = false;
+                    answer.unwrap_or_default()
+                }
+                None if editor.mode() != Mode::Value => {
+                    page.searching = false;
+                    page.search.clone()
+                }
+                None => editor.value_typed().unwrap_or_default().to_string(),
+            };
+            if typed != page.search {
+                page.search = typed;
+                page.row = 0;
+            }
+            self.clamp(ime);
+        }
     }
 
     fn close(&mut self, editor: &mut Editor) {
+        if self.page.as_ref().is_some_and(|p| p.searching) {
+            editor.close_value_line();
+        }
         self.page = None;
         editor.set_word_page_open(false);
         editor.set_status(String::new());
@@ -794,14 +803,36 @@ mod tests {
         assert_eq!(cells(WordList::Words, row).join("\t"), "他们\tdf\tyumete");
     }
 
+    /// Keys as the loop gives them: the page first, the editor's line when
+    /// the page gives them back, and the page settled after each.
+    fn typed(seat: &mut Seat, editor: &mut Editor, ime: &mut ImeSession, keys: &[Key]) {
+        for &key in keys {
+            if !seat.took(editor, ime, Some(key)) {
+                editor.on_key(key);
+            }
+            seat.settle(editor, ime);
+        }
+    }
+
+    /// **`/` is typed on the editor's value line**, which the input method
+    /// composes on: the list narrows as it is typed, Enter keeps the search
+    /// and Esc on the line clears it.
     #[test]
     fn search_narrows_and_q_and_colon_q_close() {
         let (mut ime, ..) = session("search");
         let mut editor = Editor::new();
         let mut seat = opened(&mut editor, &mut ime);
-        press(&mut seat, &mut editor, &mut ime, "/jk\n");
+        typed(&mut seat, &mut editor, &mut ime, &[Key::Char('/'), Key::Char('j')]);
+        assert_eq!(editor.mode(), Mode::Value);
+        assert!(crate::composes_here(&editor), "the input method composes there");
+        assert_eq!(seat.page.as_ref().map(|p| p.search.as_str()), Some("j"), "narrowed as it is typed");
+        typed(&mut seat, &mut editor, &mut ime, &[Key::Char('k'), Key::Enter]);
+        assert_eq!(editor.mode(), Mode::Normal);
         let frame = shot(&seat, &ime);
         assert!(frame.contains("你们") && !frame.contains("他们"), "{frame}");
+        typed(&mut seat, &mut editor, &mut ime, &[Key::Char('/'), Key::Char('d'), Key::Esc]);
+        assert_eq!(seat.page.as_ref().map(|p| p.search.as_str()), Some(""), "Esc on the line clears it");
+        assert!(shot(&seat, &ime).contains("他们"));
         press(&mut seat, &mut editor, &mut ime, "q");
         assert!(!seat.open());
         let mut seat = opened(&mut editor, &mut ime);
@@ -809,6 +840,22 @@ mod tests {
         assert!(editor.execute(":q").is_ok());
         seat.settle(&mut editor, &mut ime);
         assert!(!seat.open(), ":q closes the page, not the editor");
+    }
+
+    /// **A lone Shift switches 中/英 on the `/` line**, as on every prompt.
+    #[test]
+    fn a_lone_shift_switches_the_language_on_the_search_line() {
+        let (mut ime, ..) = session("shift");
+        let mut editor = Editor::new();
+        let mut seat = opened(&mut editor, &mut ime);
+        typed(&mut seat, &mut editor, &mut ime, &[Key::Char('/')]);
+        let chinese = ime.is_chinese();
+        let mut settings = crate::settings_page::Seat::default();
+        let mut genda = crate::genda_page::Seat::default();
+        let mut borrowed = crate::Borrow::default();
+        assert!(crate::route_a_shift_tap(&mut ime, &mut editor, &mut settings, &mut genda, &mut borrowed, yumete_ime::FuncKey::ShiftL));
+        assert_ne!(ime.is_chinese(), chinese);
+        assert_eq!(editor.mode(), Mode::Value, "the line stays open");
     }
 
     #[test]

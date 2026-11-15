@@ -4754,6 +4754,7 @@ fn counts_blocks_and_pinyin_after_the_review() {
 
     // `C-x` over a list typing opened asks again by hand, pinyin included.
     let mut ed = typed("在學習裏。xuexiing\n");
+    ed.set_word_completion(4);
     ed.set_segmenter(Box::new(crate::DictionarySegmenter::new([("學習".to_string(), 100)], 1)));
     press(&mut ed, "Go");
     press(&mut ed, "xuexi");
@@ -26684,8 +26685,6 @@ fn a_shell_line_has_its_label_ghost_history_and_bang() {
     assert_eq!(fresh.status(), say!("shell.no-previous"));
 }
 
-/// Words of the open buffers are offered as you write: Latin after
-/// `word_completion` letters, matched fuzzily; 漢字 after ⌈N/2⌉, only words
 /// **The outline is rebuilt back in Normal mode**: a heading typed in
 /// Insert mode joins the folds once Insert mode is left.
 #[test]
@@ -26723,31 +26722,35 @@ fn words_typed_now_are_offered_from_the_next_insert() {
     };
     let mut ed = typed("Donaudampfschiff\n");
     press(&mut ed, "Go");
-    press(&mut ed, "Straßenbahn Stra");
+    press(&mut ed, "Straßenbahn Straßen");
     assert!(labels(&ed).is_empty(), "typed in this stay: {:?}", labels(&ed));
     ed.on_key(Key::Esc);
     ed.on_key(Key::Esc);
     press(&mut ed, "o");
-    press(&mut ed, "Stra");
+    press(&mut ed, "Straßen");
     assert_eq!(labels(&ed), ["Straßenbahn"]);
 }
 
-/// longer than that; `C-n` at any length; Tab takes one.
+/// Words of the open buffers are offered as you write: after
+/// `word_completion` characters typed (7, helix's `trigger-length`), Latin
+/// letters matched fuzzily, 漢字 as many as letters and only words longer
+/// than that; `C-n` at any length; Tab takes one.
 #[test]
 fn words_of_the_open_buffers_are_offered_as_you_write() {
     let labels = |ed: &Editor| -> Vec<String> {
         ed.offers_here().map(|(items, _)| items.iter().map(|o| o.label.clone()).collect()).unwrap_or_default()
     };
     let mut ed = typed("Straßenbahnhaltestelle und Donaudampfschiff\n");
+    assert_eq!(ed.word_completion(), 7, "helix's trigger-length");
     press(&mut ed, "Go");
-    press(&mut ed, "Str");
-    assert!(labels(&ed).is_empty(), "three letters are not four");
-    press(&mut ed, "a");
+    press(&mut ed, "Straße");
+    assert!(labels(&ed).is_empty(), "six letters are not seven");
+    press(&mut ed, "n");
     assert_eq!(labels(&ed), ["Straßenbahnhaltestelle"]);
     ed.on_key(Key::Tab);
     assert_eq!(ed.current_buffer().text(), "Straßenbahnhaltestelle und Donaudampfschiff\nStraßenbahnhaltestelle\n");
-    // Fuzzily, as helix: `Ddsf` is Donaudampfschiff.
-    press(&mut ed, " Ddsf");
+    // Fuzzily, as helix: `Ddampfs` is Donaudampfschiff.
+    press(&mut ed, " Ddampfs");
     assert_eq!(labels(&ed), ["Donaudampfschiff"]);
     ed.on_key(Key::Esc);
     ed.on_key(Key::Esc);
@@ -26766,19 +26769,30 @@ fn words_of_the_open_buffers_are_offered_as_you_write() {
     assert!(labels(&ed).is_empty());
     ed.on_key(Key::Esc);
 
-    // 漢字: two of them at N = 4, and only the longer words.
+    // 漢字: as many as letters, not half as many, and only the longer words.
     let mut ed = typed("阿寧師兄走進書齋，阿寧也來了。\n");
     ed.set_segmenter(Box::new(crate::DictionarySegmenter::new(
         [("阿寧師兄".to_string(), 100), ("阿寧".to_string(), 100), ("書齋".to_string(), 100)],
         1,
     )));
+    ed.set_word_completion(3);
     press(&mut ed, "Go");
     ed.insert_committed("阿");
-    assert!(labels(&ed).is_empty(), "one is not two");
     ed.insert_committed("寧");
-    assert_eq!(labels(&ed), ["阿寧師兄"], "only what is longer than the two typed");
+    assert!(labels(&ed).is_empty(), "two are not three");
+    ed.insert_committed("師");
+    assert_eq!(labels(&ed), ["阿寧師兄"], "only what is longer than the three typed");
     ed.on_key(Key::Tab);
     assert!(ed.current_buffer().text().ends_with("\n阿寧師兄\n"));
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Esc);
+    // At 7, a short run of a sentence opens nothing.
+    ed.set_word_completion(7);
+    press(&mut ed, "o");
+    ed.insert_committed("阿寧師");
+    assert!(labels(&ed).is_empty(), "three are not seven");
+    ed.on_key(Key::Ctrl('n'));
+    assert_eq!(labels(&ed), ["阿寧師兄"], "C-n asks at any length");
 }
 
 /// A simplified character finds the traditional words and the other way
@@ -26793,7 +26807,7 @@ fn chinese_words_are_found_by_either_form_and_by_pinyin() {
         [("書齋".to_string(), 100), ("书房".to_string(), 100), ("读书".to_string(), 100)],
         1,
     )));
-    ed.set_word_completion(2);
+    ed.set_word_completion(1);
     press(&mut ed, "Go");
     ed.insert_committed("书");
     assert_eq!(labels(&ed), ["书房", "書齋"], "written as in the file");
@@ -26829,6 +26843,7 @@ fn a_word_is_completed_in_the_case_typed_before_fuzzy_matches() {
         ed.offers_here().map(|(items, _)| items.iter().map(|o| o.label.clone()).collect()).unwrap_or_default()
     };
     let mut ed = typed("When it rains, whenever. JavaScript and HTML. A worth.\n");
+    ed.set_word_completion(4);
     let ask = |ed: &mut Editor, word: &str| {
         press(ed, "Go");
         press(ed, word);
@@ -30496,6 +30511,7 @@ fn in_code_words_stand_in_when_the_server_has_nothing() {
     let rs = dir.join("a.rs");
     std::fs::write(&rs, "// whenever it rains\n").unwrap();
     let mut ed = Editor::new();
+    ed.set_word_completion(4);
     ed.open_file(&rs).unwrap();
     press(&mut ed, "Go");
     press(&mut ed, "// when");
@@ -33692,6 +33708,7 @@ fn eszett_survives_the_case_typed() {
         ed.offers_here().map(|(items, _)| items.iter().map(|o| o.label.clone()).collect()).unwrap_or_default()
     };
     let mut ed = typed("Straßenbahn fährt\n");
+    ed.set_word_completion(4);
     press(&mut ed, "Go");
     press(&mut ed, "STRA");
     assert_eq!(labels(&ed), ["STRAßENBAHN"]);

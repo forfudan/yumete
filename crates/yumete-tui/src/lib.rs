@@ -1540,17 +1540,7 @@ pub fn run(
                 // swallowed so it never reaches the editor.
                 match shift.update(&key) {
                     ShiftResult::Tap(tapped) => {
-                        // Mid-code in the typing trainer's pad, the tap commits
-                        // the code there; elsewhere it is the switch alone.
-                        match genda.lend_pad_for_tap(ime) {
-                            Some(mut pad) => {
-                                answer_a_shift_tap(ime, &mut pad, &mut borrowed, tapped, false);
-                                genda.take_back_pad(editor, pad);
-                            }
-                            None => {
-                                answer_a_shift_tap(ime, editor, &mut borrowed, tapped, settings.open());
-                            }
-                        }
+                        route_a_shift_tap(ime, editor, &mut settings, &mut genda, &mut borrowed, tapped);
                         continue;
                     }
                     ShiftResult::Consumed => continue,
@@ -2704,18 +2694,20 @@ impl Borrow {
 /// works in every mode — this is the same question asked with
 /// the hand instead, so it gives the same answer.
 ///
-/// Warning: **the settings panel is the one place left out.** That page takes
-/// every key before the IME is offered one, so nothing on it composes and no
-/// letter there could be Chinese; a stray tap would only flip the switch in
-/// silence, under a page that cannot use either side of it.
+/// Warning: **the settings panel's rows are the one place left out.** There
+/// the page takes every key before the IME is offered one, so nothing
+/// composes and no letter could be Chinese; a stray tap would only flip the
+/// switch in silence, under a page that cannot use either side of it. Its
+/// search, its `:` line and a value in its cell are typed, and take the tap
+/// ([`route_a_shift_tap`]).
 fn answer_a_shift_tap(
     ime: &mut ImeSession,
     editor: &mut Editor,
     borrowed: &mut Borrow,
     tapped: FuncKey,
-    settings_open: bool,
+    on_the_settings_rows: bool,
 ) -> bool {
-    if !ime.holding_the_keys() || settings_open {
+    if !ime.holding_the_keys() || on_the_settings_rows {
         return false;
     }
     // The same answer as `:yume` (on), given by the hand rather than by the
@@ -2738,6 +2730,39 @@ fn answer_a_shift_tap(
         false => ime.toggle_language(),
     }
     true
+}
+
+/// **Where a lone-Shift tap lands**: the editor the next key would go to.
+///
+/// Mid-code in the typing trainer's pad, the tap commits the code there; a
+/// value typed in the settings panel's cell takes it as the text does; the
+/// panel's search and `:` line are the editor's own prompt, so they take it
+/// as every other prompt does. Only the panel's rows leave it out.
+fn route_a_shift_tap(
+    ime: &mut ImeSession,
+    editor: &mut Editor,
+    settings: &mut crate::settings_page::Seat,
+    genda: &mut crate::genda_page::Seat,
+    borrowed: &mut Borrow,
+    tapped: FuncKey,
+) -> bool {
+    if let Some(mut pad) = genda.lend_pad_for_tap(ime) {
+        let answered = answer_a_shift_tap(ime, &mut pad, borrowed, tapped, false);
+        genda.take_back_pad(editor, pad);
+        return answered;
+    }
+    if let Some(mut cell) = settings.lend_cell() {
+        let answered = answer_a_shift_tap(ime, &mut cell, borrowed, tapped, false);
+        settings.take_back_cell(cell);
+        return answered;
+    }
+    let on_the_rows = settings.keys_are_its_own(editor);
+    let answered = answer_a_shift_tap(ime, editor, borrowed, tapped, on_the_rows);
+    // A code the tap committed into the panel's search narrows it, as a key does.
+    if settings.open() {
+        settings.settle(editor);
+    }
+    answered
 }
 
 /// Whether a key event should drive the editor.
@@ -6867,6 +6892,8 @@ fn draw<'a>(
             }
         }
         draw_command_menu(frame, editor, config, ime, area, footer);
+        // The `/` search composes on the command row: its candidates stand there.
+        candidates(frame, true);
     }
     // Last, and over everything: the editor is stopped behind it (#295).
     draw_query(frame, editor, config, area);
@@ -26495,6 +26522,7 @@ fn squeezed(text: &str) -> String {
         };
         editor.on_key(yumete_core::input::Key::Char('G'));
         editor.on_key(yumete_core::input::Key::Char('o'));
+        editor.set_word_completion(4);
         for c in "word".chars() {
             editor.on_key(yumete_core::input::Key::Char(c));
         }
@@ -29708,11 +29736,12 @@ fn squeezed(text: &str) -> String {
     /// 這一臂不問 `composes_here`：那個替身鍵（#339）在每個模式裏都管用，兩條路
     /// 對同一個問題要給同一個答案，所以 Normal 模式按下去也翻。
     ///
-    /// Warning: **設置面板那一頁不算。** 那扇窗把每一鍵都收下（`Seat::took`），輸入法
-    /// 一個鍵都看不見，所以那裏打不出中文；一下誤觸只會悄悄把開關翻過去。
+    /// Warning: **設置面板的那幾行不算。** 那裏每一鍵都歸面板（`Seat::took`），輸入法
+    /// 一個鍵都看不見，所以打不出中文；一下誤觸只會悄悄把開關翻過去。面板上打字的地方
+    /// （搜索、`:`、值的格子）照舊翻，見 `settings_page` 那一條。
     #[test]
-    fn a_lone_shift_tap_answers_in_every_mode_but_not_on_the_settings_page() {
-        let answer = |settings_open: bool, enter_insert: bool| -> bool {
+    fn a_lone_shift_tap_answers_in_every_mode_but_not_on_the_settings_rows() {
+        let answer = |on_the_settings_rows: bool, enter_insert: bool| -> bool {
             let mut editor = Editor::new();
             if enter_insert {
                 editor.on_key(Key::Char('i'));
@@ -29725,13 +29754,13 @@ fn squeezed(text: &str) -> String {
                 &mut editor,
                 &mut borrowed,
                 FuncKey::ShiftL,
-                settings_open,
+                on_the_settings_rows,
             );
             !ime.is_chinese()
         };
         assert!(answer(false, false), "Normal 模式也翻");
         assert!(answer(false, true), "Insert 模式照舊");
-        assert!(!answer(true, false), "設置面板開着就不翻");
+        assert!(!answer(true, false), "設置面板的行上不翻");
 
         // 鍵盤不在 yume 手裏的時候更不翻——那時候 中/ABC 本來就沒有一格。
         let mut editor = Editor::new();

@@ -1118,7 +1118,7 @@ pub const SETTINGS: &[Setting] = &[
         kind: Kind::Count { low: 0, high: 20, zero: Some("settings.zero.off") },
         label: "settings.editor.word-completion",
         hint: "settings.editor.word-completion.hint",
-        factory: "4",
+        factory: "7",
     },
     Setting {
         table: "editor",
