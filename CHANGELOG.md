@@ -28,6 +28,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Changed
 
+- **An EPUB puts each chapter on a page of its own**, so long books open quickly in a reader: chapters are the top headings (the `##` ones under a single `#` title). The table of contents nests each chapter's headings, links between chapters still lead there, and a footnote stays in the chapter that first cites it.
 - **A table is how its window shows the file**: a `.csv`/`.tsv` grid or a `Space t t` table stays a grid, with its own columns, header, scroll and cell, when the keys go to another window, and comes back on the same cell and layer. Two windows on one csv keep their own place, and `ye -r` brings csv windows back as grids. Moving from one csv window to another no longer leaves the first drawn as source with the other table's column ruler and padding.
 - **`:outline` opens and closes the outline sidebar**, as `:sidebar-outline` does; `:out` and `:ou` work too. How many heading levels it lists moves to `:sidebar-outline-level N` (`0` closes it, bare reports), and `:sidebar-outline` takes `:outline`'s place among the everyday commands at the top of the `:` menu.
 - **Windows without the keys are no longer faded by default** (`[theme] inactive` = 100): every window's status line already says which one has them.

@@ -14,8 +14,10 @@
 //!   from the text, the time it was made, and — for a vertical book —
 //!   `page-progression-direction="rtl"`, which is what makes a reader turn
 //!   pages the way a Chinese book turns;
-//! - `OEBPS/nav.xhtml`, the table of contents, from the headings;
-//! - `OEBPS/text.xhtml` and `OEBPS/style.css`, the page;
+//! - `OEBPS/nav.xhtml`, the table of contents, from the headings, each
+//!   chapter with the headings under it;
+//! - `OEBPS/text-1.xhtml`, `text-2.xhtml`…, a page for each chapter
+//!   ([`chapters`]), and `OEBPS/style.css`, the stylesheet they share;
 //! - `OEBPS/images/`, each drawn formula and each picture, a figure's or one
 //!   in a line, as a file of its own: a data URL is not a resource a package
 //!   can list, and a book cannot reach outside itself for a picture.
@@ -28,23 +30,34 @@ use std::fmt::Write as _;
 
 use crate::export::Style;
 
-/// The book's page, as XHTML, and the formula pictures it refers to, each
-/// with the name it has in the book.
+/// The book's text as one page of XHTML, and the formula pictures it
+/// refers to, each with the name it has in the book.
 pub(crate) fn chapter(text: &str, style: &Style) -> (String, Vec<(String, Vec<u8>)>) {
     let parts = parts(text, style);
-    (parts.page, parts.images)
+    (page(parts.lang, &parts.title, &parts.body), parts.images)
 }
 
 /// The whole EPUB, as the bytes of the file.
 pub fn book(text: &str, style: &Style) -> Vec<u8> {
-    let parts = parts(text, style);
-    let Parts { lang, title, page, css, images, headings } = parts;
+    let Parts { lang, title, body, css, images, headings } = parts(text, style);
     let id = identifier(text, &title);
-    let mut manifest = String::from(
-        "<item id=\"nav\" href=\"nav.xhtml\" media-type=\"application/xhtml+xml\" properties=\"nav\"/>\n\
-         <item id=\"text\" href=\"text.xhtml\" media-type=\"application/xhtml+xml\"/>\n\
-         <item id=\"css\" href=\"style.css\" media-type=\"text/css\"/>\n",
-    );
+    let (documents, chapter_level) = chapters(&body);
+    let name = |n: usize| format!("text-{}.xhtml", n + 1);
+    // Where each `id` is, so a link to it from another chapter names that
+    // chapter's file.
+    let mut home: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for (n, document) in documents.iter().enumerate() {
+        for found in ID.captures_iter(document) {
+            home.entry(found[1].to_string()).or_insert(n);
+        }
+    }
+    let mut manifest = String::from("<item id=\"nav\" href=\"nav.xhtml\" media-type=\"application/xhtml+xml\" properties=\"nav\"/>\n");
+    let mut spine = String::new();
+    for n in 0..documents.len() {
+        let _ = writeln!(manifest, "<item id=\"t{}\" href=\"{}\" media-type=\"application/xhtml+xml\"/>", n + 1, name(n));
+        let _ = writeln!(spine, "<itemref idref=\"t{}\"/>", n + 1);
+    }
+    manifest.push_str("<item id=\"css\" href=\"style.css\" media-type=\"text/css\"/>\n");
     for (n, (name, _)) in images.iter().enumerate() {
         let kind = media_type(name).unwrap_or("image/png");
         let _ = writeln!(manifest, "<item id=\"f{}\" href=\"{name}\" media-type=\"{kind}\"/>", n + 1);
@@ -66,18 +79,28 @@ pub fn book(text: &str, style: &Style) -> Vec<u8> {
          <meta property=\"dcterms:modified\">{modified}</meta>{mode}\n\
          </metadata>\n\
          <manifest>\n{manifest}</manifest>\n\
-         <spine{direction}>\n<itemref idref=\"text\"/>\n</spine>\n\
+         <spine{direction}>\n{spine}</spine>\n\
          </package>\n",
         title = xml_text(&title),
         modified = utc_now(),
     );
+    // The contents: every chapter and the two levels of headings under it,
+    // and never less than down to `<h3>`, each pointing into its own page.
+    let deepest = (chapter_level + 2).max(3);
+    let entries: Vec<Entry> = headings
+        .iter()
+        .filter(|(level, _, _)| *level <= deepest)
+        .map(|(level, anchor, words)| Entry {
+            level: *level,
+            href: format!("{}#{anchor}", name(home.get(anchor).copied().unwrap_or(0))),
+            words: if words.is_empty() { anchor.clone() } else { words.clone() },
+            under: Vec::new(),
+        })
+        .collect();
     let mut toc = String::new();
-    for (anchor, words) in &headings {
-        let words = if words.is_empty() { anchor } else { words };
-        let _ = writeln!(toc, "<li><a href=\"text.xhtml#{anchor}\">{}</a></li>", xml_text(words));
-    }
+    contents(&nested(entries), &mut toc);
     if toc.is_empty() {
-        let _ = writeln!(toc, "<li><a href=\"text.xhtml\">{}</a></li>", xml_text(&title));
+        let _ = writeln!(toc, "<li><a href=\"{}\">{}</a></li>", name(0), xml_text(&title));
     }
     let nav = format!(
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE html>\n\
@@ -95,24 +118,204 @@ pub fn book(text: &str, style: &Style) -> Vec<u8> {
         ("META-INF/container.xml".to_string(), container.as_bytes().to_vec()),
         ("OEBPS/content.opf".to_string(), opf.into_bytes()),
         ("OEBPS/nav.xhtml".to_string(), nav.into_bytes()),
-        ("OEBPS/text.xhtml".to_string(), page.into_bytes()),
-        ("OEBPS/style.css".to_string(), css.into_bytes()),
     ];
+    for (n, document) in documents.iter().enumerate() {
+        // A link to a place in another chapter names its file; one to a
+        // place in this chapter, or to nowhere, is left as it is.
+        let document = HREF.replace_all(document, |found: &regex::Captures| match home.get(&found[1]) {
+            Some(&at) if at != n => format!("href=\"{}#{}\"", name(at), &found[1]),
+            _ => found[0].to_string(),
+        });
+        // Each page is titled by its first heading, or by the book.
+        let named = headings
+            .iter()
+            .find(|(_, anchor, words)| home.get(anchor) == Some(&n) && !words.is_empty())
+            .map_or(title.as_str(), |(_, _, words)| words.as_str());
+        files.push((format!("OEBPS/{}", name(n)), page(lang, named, &document).into_bytes()));
+    }
+    files.push(("OEBPS/style.css".to_string(), css.into_bytes()));
     for (name, png) in images {
         files.push((format!("OEBPS/{name}"), png));
     }
     zip(&files)
 }
 
+/// An `id` in a page, and a link to a place in it.
+static ID: std::sync::LazyLock<regex::Regex> =
+    std::sync::LazyLock::new(|| regex::Regex::new(r#"\sid="([^"]*)""#).expect("a pattern"));
+static HREF: std::sync::LazyLock<regex::Regex> =
+    std::sync::LazyLock::new(|| regex::Regex::new(r##"href="#([^"]*)""##).expect("a pattern"));
+
+/// One heading in the table of contents, and the headings under it.
+struct Entry {
+    level: usize,
+    href: String,
+    words: String,
+    under: Vec<Entry>,
+}
+
+/// The headings as a tree: each under the last heading above it of a
+/// higher level, however many levels it skips.
+fn nested(entries: Vec<Entry>) -> Vec<Entry> {
+    fn put(list: &mut Vec<Entry>, entry: Entry) {
+        match list.last_mut() {
+            Some(last) if last.level < entry.level => put(&mut last.under, entry),
+            _ => list.push(entry),
+        }
+    }
+    let mut tree = Vec::new();
+    for entry in entries {
+        put(&mut tree, entry);
+    }
+    tree
+}
+
+/// The tree of headings as the `<li>`s of the navigation document's list.
+fn contents(entries: &[Entry], out: &mut String) {
+    for entry in entries {
+        let _ = write!(out, "<li><a href=\"{}\">{}</a>", entry.href, xml_text(&entry.words));
+        if !entry.under.is_empty() {
+            out.push_str("\n<ol>\n");
+            contents(&entry.under, out);
+            out.push_str("</ol>\n");
+        }
+        out.push_str("</li>\n");
+    }
+}
+
+/// **The book cut into chapters**, a page of XHTML each, so a reader opens
+/// a long book at the chapter it is in rather than laying out the whole of
+/// it; and the heading level the chapters start at.
+///
+/// A chapter starts at each heading of the highest level the text uses at
+/// its top level, not one inside a quotation or a list. One heading of that
+/// level first in the text, with lower ones after it, is the book's title
+/// and not a chapter: `# 书名` then `## 第一章`… is cut at each `##`, the
+/// title going with what is before the first chapter. What is before the
+/// first chapter is a page of its own, when there is anything.
+///
+/// **A note stays with the chapter that first cites it**, in a list of the
+/// chapter's own notes at its end, numbered as in the whole book; a note
+/// cited nowhere goes with the last chapter.
+fn chapters(body: &str) -> (Vec<String>, usize) {
+    let (text, notes) = notes_apart(body);
+    let headings = top_level_headings(text);
+    let Some(top) = headings.iter().map(|(_, level)| *level).min() else { return (vec![body.to_string()], 1) };
+    let below = headings.iter().map(|(_, level)| *level).filter(|level| *level > top).min();
+    let titled = headings[0].1 == top && headings.iter().filter(|(_, level)| *level == top).count() == 1;
+    let level = match below {
+        Some(below) if titled => below,
+        _ => top,
+    };
+    let mut cuts: Vec<usize> = headings.iter().filter(|(_, l)| *l <= level).map(|(at, _)| *at).collect();
+    cuts.insert(0, 0);
+    cuts.push(text.len());
+    let mut documents: Vec<String> =
+        cuts.windows(2).map(|w| text[w[0]..w[1]].to_string()).filter(|page| !page.trim().is_empty()).collect();
+    if documents.is_empty() {
+        documents.push(String::new());
+    }
+    let Some(notes) = notes else { return (documents, level) };
+    let mut kept: Vec<Vec<(usize, &str)>> = vec![Vec::new(); documents.len()];
+    for (n, note) in notes {
+        let cited = format!("href=\"#fn-{n}\"");
+        let at = documents.iter().position(|page| page.contains(&cited)).unwrap_or(documents.len() - 1);
+        kept[at].push((n, note));
+    }
+    for (page, notes) in documents.iter_mut().zip(kept) {
+        if notes.is_empty() {
+            continue;
+        }
+        page.push_str("<section class=\"footnotes\">\n<hr/>\n<ol>\n");
+        for (n, note) in notes {
+            let _ = writeln!(page, "<li id=\"fn-{n}\" value=\"{n}\">{note}</li>");
+        }
+        page.push_str("</ol>\n</section>\n");
+    }
+    (documents, level)
+}
+
+/// The page's text and, apart, its notes as [`crate::export::html_body`]
+/// lists them at its end: each note's number and its words. `None` when
+/// the text ends in no such list, and the text is then the whole page.
+fn notes_apart(body: &str) -> (&str, Option<Vec<(usize, &str)>>) {
+    const OPEN: &str = "<section class=\"footnotes\">\n<hr/>\n<ol>\n";
+    const SHUT: &str = "</ol>\n</section>";
+    let whole = body.trim_end();
+    let found = body.rfind(OPEN).filter(|&at| at == 0 || body[..at].ends_with('\n'));
+    let Some(at) = found.filter(|_| whole.ends_with(SHUT)) else { return (body, None) };
+    let mut rest = &whole[at + OPEN.len()..whole.len() - SHUT.len()];
+    let mut notes = Vec::new();
+    while !rest.is_empty() {
+        let Some((n, after)) = rest.strip_prefix("<li id=\"fn-").and_then(|r| r.split_once("\">")) else { return (body, None) };
+        let Ok(n) = n.parse::<usize>() else { return (body, None) };
+        let Some(end) = closing_li(after) else { return (body, None) };
+        notes.push((n, &after[..end]));
+        let after = &after[end + "</li>".len()..];
+        rest = after.strip_prefix('\n').unwrap_or(after);
+    }
+    (&body[..at], Some(notes))
+}
+
+/// Where the `</li>` is that closes a list item whose words start `text`,
+/// past any list item inside it.
+fn closing_li(text: &str) -> Option<usize> {
+    let mut depth = 1usize;
+    for (k, _) in text.match_indices("li") {
+        let open = text[..k].ends_with('<') && text[k + 2..].starts_with(['>', ' ']);
+        let shut = text[..k].ends_with("</") && text[k + 2..].starts_with('>');
+        if open {
+            depth += 1;
+        } else if shut {
+            depth -= 1;
+            if depth == 0 {
+                return Some(k - 2);
+            }
+        }
+    }
+    None
+}
+
+/// Where each heading at the top level of the page starts, a line of its
+/// own, and its level.
+fn top_level_headings(body: &str) -> Vec<(usize, usize)> {
+    let mut out = Vec::new();
+    let mut depth = 0usize;
+    let mut at = 0;
+    while let Some(found) = body[at..].find('<') {
+        let from = at + found;
+        if body[from..].starts_with("<!--") {
+            at = body[from..].find("-->").map_or(body.len(), |end| from + end + 3);
+            continue;
+        }
+        let Some(tag) = read_tag(&body[from..]) else {
+            at = from + 1;
+            continue;
+        };
+        if tag.closing {
+            depth = depth.saturating_sub(1);
+        } else if !tag.closed {
+            let level = tag.name.strip_prefix('h').and_then(|n| n.parse::<usize>().ok()).filter(|n| (1..=6).contains(n));
+            if let Some(level) = level.filter(|_| depth == 0 && (from == 0 || body[..from].ends_with('\n'))) {
+                out.push((from, level));
+            }
+            depth += 1;
+        }
+        at = from + tag.len;
+    }
+    out
+}
+
 /// What a book is made of before it is packed.
 struct Parts {
     lang: &'static str,
     title: String,
-    page: String,
+    /// The text, as what goes inside a page's `<body>`.
+    body: String,
     css: String,
     images: Vec<(String, Vec<u8>)>,
-    /// Each heading's anchor and its words, for the table of contents.
-    headings: Vec<(String, String)>,
+    /// Each heading's level, anchor and words, for the table of contents.
+    headings: Vec<(usize, String, String)>,
 }
 
 fn parts(text: &str, style: &Style) -> Parts {
@@ -123,20 +326,31 @@ fn parts(text: &str, style: &Style) -> Parts {
     let body = pictures_in(&body, style.base.as_deref());
     let (body, images) = pictures_out(&body);
     let body = links_kept_in(&body);
-    let (body, headings) = anchored(&well_formed(&xhtml(&body)));
+    let (body, mut headings) = anchored(&well_formed(&xhtml(&body)));
+    // A heading inside a quotation or a list is the quotation's, not one
+    // of the book's: not in its contents, and not its title.
+    let outline: std::collections::HashSet<String> = top_level_headings(&body)
+        .iter()
+        .filter_map(|(at, _)| read_tag(&body[*at..])?.attributes.into_iter().find(|(name, _)| name == "id")?.1)
+        .collect();
+    headings.retain(|(_, anchor, _)| outline.contains(anchor));
     let title = headings
         .iter()
-        .find(|(_, words)| !words.is_empty())
-        .map(|(_, words)| words.clone())
+        .find(|(_, _, words)| !words.is_empty())
+        .map(|(_, _, words)| words.clone())
         .unwrap_or_else(|| style.title.rsplit_once('.').map_or(style.title.clone(), |(stem, _)| stem.to_string()));
-    let page = format!(
+    Parts { lang, title, body, css, images, headings }
+}
+
+/// A page of the book: `body` in the XHTML around it, titled `title`.
+fn page(lang: &str, title: &str, body: &str) -> String {
+    format!(
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE html>\n\
          <html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\" lang=\"{lang}\" xml:lang=\"{lang}\">\n\
          <head><meta charset=\"utf-8\"/><title>{}</title><link rel=\"stylesheet\" href=\"style.css\"/></head>\n\
          <body>\n{body}</body>\n</html>\n",
-        xml_text(&title),
-    );
-    Parts { lang, title, page, css, images, headings }
+        xml_text(title),
+    )
 }
 
 /// The picture types a book may hold, by the extension a file is named
@@ -356,13 +570,15 @@ fn xhtml(body: &str) -> String {
     VOID.replace_all(&body, "<${1}${2}/>").replace("&nbsp;", "&#160;")
 }
 
-/// Every `<h1>`–`<h3>` with the `id` the page gave it from its words
-/// (`export::heading_ids`), and the list of them with their words for the
-/// table of contents.
-fn anchored(body: &str) -> (String, Vec<(String, String)>) {
+/// Every heading with the `id` the page gave it from its words
+/// (`export::heading_ids`), and the list of them with their level and words
+/// for the table of contents.
+fn anchored(body: &str) -> (String, Vec<(usize, String, String)>) {
     let mut headings = Vec::new();
     for line in body.lines() {
-        let Some(rest) = ["<h1 id=\"", "<h2 id=\"", "<h3 id=\""].iter().find_map(|tag| line.strip_prefix(tag)) else { continue };
+        let level = line.strip_prefix("<h").and_then(|rest| rest.bytes().next()).filter(|d| (b'1'..=b'6').contains(d));
+        let Some(level) = level.map(|d| usize::from(d - b'0')) else { continue };
+        let Some(rest) = line[3..].strip_prefix(" id=\"") else { continue };
         let Some((anchor, rest)) = rest.split_once("\">") else { continue };
         let close = format!("</{}", &line[1..3]);
         let inner = rest.find(&close).map(|end| &rest[..end]).unwrap_or_default();
@@ -374,7 +590,7 @@ fn anchored(body: &str) -> (String, Vec<(String, String)>) {
         let words = Some(crate::export::plain_words(inner))
             .filter(|w| !w.trim().is_empty())
             .unwrap_or_else(|| alt_words(inner));
-        headings.push((anchor.to_string(), words.trim().to_string()));
+        headings.push((level, anchor.to_string(), words.trim().to_string()));
     }
     (body.to_string(), headings)
 }
@@ -832,6 +1048,55 @@ mod tests {
         out
     }
 
+    /// Every chapter's page, one after another.
+    fn pages(files: &[(String, Vec<u8>)]) -> String {
+        let chapters = files.iter().filter(|(name, _)| name.starts_with("OEBPS/text-"));
+        chapters.map(|(_, data)| String::from_utf8(data.clone()).unwrap()).collect()
+    }
+
+    /// **What a reader that checks will look for**, held of every book the
+    /// tests make: each page is in the manifest and the spine, each in the
+    /// manifest is in the zip, and every link in a page or in the contents
+    /// leads to an `id` in the page it names.
+    fn check(files: &[(String, Vec<u8>)]) {
+        let read = |name: &str| String::from_utf8(files.iter().find(|(n, _)| n == name).unwrap_or_else(|| panic!("{name}")).1.clone()).unwrap();
+        let opf = read("OEBPS/content.opf");
+        let item = regex::Regex::new(r#"<item id="([^"]+)" href="([^"]+)""#).unwrap();
+        let manifest: Vec<(String, String)> = item.captures_iter(&opf).map(|c| (c[1].to_string(), c[2].to_string())).collect();
+        for (_, href) in &manifest {
+            assert!(files.iter().any(|(n, _)| *n == format!("OEBPS/{href}")), "{href} is in the zip");
+        }
+        let texts: Vec<&(String, Vec<u8>)> = files.iter().filter(|(n, _)| n.starts_with("OEBPS/text-")).collect();
+        let spine = regex::Regex::new(r#"<itemref idref="([^"]+)"/>"#).unwrap();
+        let order: Vec<String> = spine
+            .captures_iter(&opf)
+            .map(|c| format!("OEBPS/{}", manifest.iter().find(|(id, _)| *id == c[1]).unwrap().1))
+            .collect();
+        assert_eq!(order, texts.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>(), "the spine reads every page in order");
+        let ids = |page: &str| -> Vec<String> { ID.captures_iter(page).map(|c| c[1].to_string()).collect() };
+        let link = regex::Regex::new(r##"href="([^"#:]*)(?:#([^"]*))?""##).unwrap();
+        let mut seen: Vec<String> = Vec::new();
+        for from in texts.iter().map(|(n, _)| n.as_str()).chain(["OEBPS/nav.xhtml"]) {
+            let page = read(from);
+            let own = ids(&page);
+            for id in &own {
+                assert!(!seen.contains(id), "{id} is one place in the book");
+            }
+            seen.extend(own);
+            for found in link.captures_iter(&page) {
+                let target = match &found[1] {
+                    "" => from.to_string(),
+                    "style.css" => continue,
+                    file => format!("OEBPS/{file}"),
+                };
+                assert!(texts.iter().any(|(n, _)| *n == target), "{from}: {} names a page of the book", &found[0]);
+                if let Some(anchor) = found.get(2) {
+                    assert!(ids(&read(&target)).iter().any(|id| id == anchor.as_str()), "{from}: {} leads somewhere", &found[0]);
+                }
+            }
+        }
+    }
+
     #[test]
     fn crc32_is_the_zip_formats() {
         assert_eq!(crc32(b""), 0);
@@ -855,26 +1120,29 @@ mod tests {
         assert!(book.starts_with(b"PK\x03\x04"));
         let files = entries(&book);
         let names: Vec<&str> = files.iter().map(|(n, _)| n.as_str()).collect();
-        assert_eq!(names, ["mimetype", "META-INF/container.xml", "OEBPS/content.opf", "OEBPS/nav.xhtml", "OEBPS/text.xhtml", "OEBPS/style.css"]);
+        assert_eq!(
+            names,
+            ["mimetype", "META-INF/container.xml", "OEBPS/content.opf", "OEBPS/nav.xhtml", "OEBPS/text-1.xhtml", "OEBPS/text-2.xhtml", "OEBPS/style.css"]
+        );
         assert_eq!(files[0].1, b"application/epub+zip");
         assert_eq!(&book[30..38], b"mimetype");
         let read = |n: usize| String::from_utf8(files[n].1.clone()).unwrap();
         assert!(read(1).contains("full-path=\"OEBPS/content.opf\""));
         let opf = read(2);
-        assert!(opf.contains("<spine page-progression-direction=\"rtl\">"), "{opf}");
+        assert!(opf.contains("<spine page-progression-direction=\"rtl\">\n<itemref idref=\"t1\"/>\n<itemref idref=\"t2\"/>\n</spine>"), "{opf}");
         assert!(opf.contains("<dc:title>第一章</dc:title>"), "{opf}");
         assert!(opf.contains("<dc:language>zh</dc:language>"), "{opf}");
         assert!(opf.contains("properties=\"nav\""), "{opf}");
         assert!(opf.contains("<meta property=\"dcterms:modified\">"), "{opf}");
         let nav = read(3);
-        assert!(nav.contains("<a href=\"text.xhtml#第一章\">第一章</a>"), "{nav}");
-        assert!(nav.contains("<a href=\"text.xhtml#第2节\">第2节</a>"), "{nav}");
+        assert!(nav.contains("<li><a href=\"text-1.xhtml#第一章\">第一章</a>\n<ol>\n<li><a href=\"text-2.xhtml#第2节\">第2节</a></li>\n</ol>\n</li>"), "{nav}");
         let page = read(4);
         assert!(page.contains("<h1 id=\"第一章\">第一章</h1>"), "{page}");
         assert!(page.contains("<span class=\"yoko\">1997</span>年"), "{page}");
         assert!(page.contains("『走吧。』<br/>"), "{page}");
-        assert!(read(5).contains("-epub-writing-mode: vertical-rl"));
-        assert!(!read(5).contains("32em"));
+        assert!(read(5).contains("<title>第2节</title>") && read(5).contains("完。"));
+        assert!(read(6).contains("-epub-writing-mode: vertical-rl"));
+        assert!(!read(6).contains("32em"));
     }
 
     /// Across the page, no direction is claimed; a formula is a file of its
@@ -1015,15 +1283,15 @@ mod tests {
     fn a_link_to_a_heading_finds_it_and_so_does_the_contents() {
         let text = "# 第一章\n\n见[锚点](#第二章)与[同名](#第一章-1)。\n\n# 第二章\n\n## Hello, World!\n\n# 第一章\n";
         let files = entries(&book(text, &style()));
-        let page = String::from_utf8(files[4].1.clone()).unwrap();
+        let page = pages(&files);
         for id in ["第一章", "第二章", "hello-world", "第一章-1"] {
             assert!(page.contains(&format!(" id=\"{id}\">")), "{id}: {page}");
         }
-        assert!(page.contains("<a href=\"#第二章\">") && page.contains("<a href=\"#第一章-1\">"), "{page}");
+        assert!(page.contains("<a href=\"text-2.xhtml#第二章\">") && page.contains("<a href=\"text-3.xhtml#第一章-1\">"), "{page}");
         let nav = String::from_utf8(files[3].1.clone()).unwrap();
-        assert!(nav.contains("<a href=\"text.xhtml#第二章\">第二章</a>"), "{nav}");
-        assert!(nav.contains("<a href=\"text.xhtml#hello-world\">Hello, World!</a>"), "{nav}");
-        assert!(nav.contains("<a href=\"text.xhtml#第一章-1\">第一章</a>"), "{nav}");
+        assert!(nav.contains("<a href=\"text-2.xhtml#第二章\">第二章</a>"), "{nav}");
+        assert!(nav.contains("<a href=\"text-2.xhtml#hello-world\">Hello, World!</a>"), "{nav}");
+        assert!(nav.contains("<a href=\"text-3.xhtml#第一章-1\">第一章</a>"), "{nav}");
     }
 
     /// **The writer's own HTML is made XML** (a `<span>` left open makes
@@ -1079,7 +1347,7 @@ mod tests {
         let text = "# ![第一章](nowhere.png)\n\n甲[^n]乙[^n]丙[^n]。\n\n# ![](nowhere.png)\n\n文 <div title=\"x]]>y\">块</div> 与 <span title=\"&#1;\">字</span> 与 <span title=\"&#x4E00;\">一</span>。\n\n[^n]: 註。\n";
         let files = entries(&book(text, &s));
         let file = |name: &str| String::from_utf8(files.iter().find(|(n, _)| n == name).unwrap().1.clone()).unwrap();
-        let (opf, nav, page) = (file("OEBPS/content.opf"), file("OEBPS/nav.xhtml"), file("OEBPS/text.xhtml"));
+        let (opf, nav, page) = (file("OEBPS/content.opf"), file("OEBPS/nav.xhtml"), pages(&files));
         assert!(opf.contains("<dc:title>第一章</dc:title>"), "{opf}");
         assert!(nav.contains("<title>第一章</title>"), "{nav}");
         assert!(nav.contains(">第一章</a></li>"), "the picture's alt: {nav}");
@@ -1106,5 +1374,87 @@ mod tests {
         assert!(page.contains("<details open=\"open\"><summary>展开</summary>里面</details>"), "{page}");
         assert!(page.contains("<p style=\"text-align: center\">居中</p>"), "{page}");
         assert!(page.contains("<div style=\"color: red; text-align: right\">右</div>"), "{page}");
+    }
+
+    /// **A chapter is a page of its own**: each `#` starts one, what is
+    /// before the first is a page too, and a heading in a quotation starts
+    /// none. A link to a heading in another chapter names that chapter's
+    /// page; a note stays in the chapter that first cites it, numbered as in
+    /// the whole book, and a later chapter citing it again points there.
+    #[test]
+    fn each_chapter_is_a_page_and_links_and_notes_follow() {
+        let mut s = style();
+        s.settings.vertical = false;
+        let text = "前言一段。\n\n# 第一章\n\n正文[^a]，见[第二章](#第二章)与[细节](#细节)。\n\n> # 引文标题\n>\n> 引文。\n\n## 小节一\n\n一[^b]。\n\n# 第二章\n\n再引[^a]，三[^c]。回看[第一章](#第一章)与[小节](#小节一)。\n\n### 细节\n\n末。\n\n[^a]: 注甲。\n[^b]: 注乙。\n[^c]: 注丙。\n";
+        let files = entries(&book(text, &s));
+        check(&files);
+        let read = |name: &str| String::from_utf8(files.iter().find(|(n, _)| n == name).unwrap().1.clone()).unwrap();
+        assert_eq!(pages(&files).matches("<?xml").count(), 3, "{}", pages(&files));
+        let (front, one, two) = (read("OEBPS/text-1.xhtml"), read("OEBPS/text-2.xhtml"), read("OEBPS/text-3.xhtml"));
+        assert!(front.contains("前言一段。") && !front.contains("<h1"), "{front}");
+        assert!(front.contains("<title>第一章</title>"), "a page with no heading takes the book's title: {front}");
+        assert!(one.contains("<title>第一章</title>") && one.contains("引文标题") && one.contains("小节一"), "{one}");
+        assert!(one.contains("<a href=\"text-3.xhtml#第二章\">第二章</a>"), "{one}");
+        assert!(one.contains("<a href=\"text-3.xhtml#细节\">细节</a>"), "{one}");
+        assert!(two.contains("<a href=\"text-2.xhtml#第一章\">") && two.contains("<a href=\"text-2.xhtml#小节一\">"), "{two}");
+        // The notes: 1 and 2 where they are first cited, 3 in its chapter.
+        assert!(one.contains("<li id=\"fn-1\" value=\"1\">注甲。</li>\n<li id=\"fn-2\" value=\"2\">注乙。</li>"), "{one}");
+        assert!(one.contains("<a href=\"#fn-1\" id=\"fnref-1\">1</a>"), "{one}");
+        assert!(two.contains("<a href=\"text-2.xhtml#fn-1\" id=\"fnref-1-2\">1</a>"), "{two}");
+        assert!(two.contains("<li id=\"fn-3\" value=\"3\">注丙。</li>") && !two.contains("id=\"fn-1\""), "{two}");
+        assert!(!front.contains("footnotes"), "{front}");
+        let nav = read("OEBPS/nav.xhtml");
+        // The heading in the quotation is the quotation's, not the book's.
+        assert!(nav.contains("<li><a href=\"text-2.xhtml#第一章\">第一章</a>\n<ol>\n<li><a href=\"text-2.xhtml#小节一\">小节一</a></li>\n</ol>\n</li>"), "{nav}");
+        assert!(!nav.contains("引文标题"), "{nav}");
+        assert!(nav.contains("<li><a href=\"text-3.xhtml#第二章\">第二章</a>\n<ol>\n<li><a href=\"text-3.xhtml#细节\">细节</a></li>\n</ol>\n</li>"), "{nav}");
+    }
+
+    /// **A vertical book is vertical in every chapter**: one `#` heading
+    /// first is the book's title and the chapters are its `##`s; each page
+    /// links the stylesheet that sets the page vertical, and ruby, a
+    /// picture and a note stay in the chapter they are in.
+    #[test]
+    fn a_vertical_book_is_cut_at_its_chapters_under_the_title() {
+        let dir = std::env::temp_dir().join(format!("yumete-epub-chapters-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("a.png"), [1u8, 2, 3]).unwrap();
+        let mut s = style();
+        s.base = Some(dir.clone());
+        let text = "# 书名\n\n题记。\n\n## 第一章\n\n<ruby>永<rt>ㄩㄥˇ</rt></ruby>和九年，见[后文](#第二章)。\n\n## 第二章\n\n![一棵树](a.png)\n\n2024年[^n]。\n\n[^n]: 注。\n";
+        let files = entries(&book(text, &s));
+        let _ = std::fs::remove_dir_all(&dir);
+        check(&files);
+        let read = |name: &str| String::from_utf8(files.iter().find(|(n, _)| n == name).unwrap().1.clone()).unwrap();
+        let opf = read("OEBPS/content.opf");
+        assert!(opf.contains("<spine page-progression-direction=\"rtl\">\n<itemref idref=\"t1\"/>\n<itemref idref=\"t2\"/>\n<itemref idref=\"t3\"/>\n</spine>"), "{opf}");
+        assert!(opf.contains("<dc:title>书名</dc:title>"), "{opf}");
+        let (title, one, two) = (read("OEBPS/text-1.xhtml"), read("OEBPS/text-2.xhtml"), read("OEBPS/text-3.xhtml"));
+        for page in [&title, &one, &two] {
+            assert!(page.contains("<link rel=\"stylesheet\" href=\"style.css\"/>") && page.contains("xml:lang=\"zh\""), "{page}");
+        }
+        assert!(title.contains("<h1 id=\"书名\">书名</h1>") && title.contains("题记。") && !title.contains("第一章</h2>"), "{title}");
+        assert!(one.contains("<ruby>永<rt>ㄩㄥˇ</rt></ruby>和九年") && one.contains("href=\"text-3.xhtml#第二章\""), "{one}");
+        assert!(two.contains("src=\"images/f1.png\"") && two.contains("<span class=\"yoko\">2024</span>年"), "{two}");
+        assert!(two.contains("<li id=\"fn-1\" value=\"1\">"), "{two}");
+        assert!(read("OEBPS/style.css").contains("-epub-writing-mode: vertical-rl"));
+        let nav = read("OEBPS/nav.xhtml");
+        assert!(nav.contains("<li><a href=\"text-1.xhtml#书名\">书名</a>\n<ol>\n<li><a href=\"text-2.xhtml#第一章\">第一章</a></li>\n<li><a href=\"text-3.xhtml#第二章\">第二章</a></li>\n</ol>\n</li>"), "{nav}");
+    }
+
+    /// **A text of one chapter is one page**, notes and all; so is one with
+    /// no heading, and the contents then name the book.
+    #[test]
+    fn one_chapter_is_one_page() {
+        let files = entries(&book("# 唯一\n\n正文[^1]。\n\n[^1]: 注。\n", &style()));
+        check(&files);
+        assert_eq!(files.iter().filter(|(n, _)| n.starts_with("OEBPS/text-")).count(), 1);
+        let page = pages(&files);
+        assert!(page.contains("<h1 id=\"唯一\">唯一</h1>") && page.contains("<li id=\"fn-1\" value=\"1\">注。</li>"), "{page}");
+        let files = entries(&book("没有标题的一段。\n", &style()));
+        check(&files);
+        let nav = String::from_utf8(files[3].1.clone()).unwrap();
+        assert!(nav.contains("<li><a href=\"text-1.xhtml\">第一章</a></li>"), "{nav}");
+        assert_eq!(files[4].0, "OEBPS/text-1.xhtml");
     }
 }
