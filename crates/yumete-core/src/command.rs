@@ -163,6 +163,21 @@ pub enum Command {
     QuitAll {
         force: bool,
     },
+    /// `:quit-error [status]` (helix's and vim's `:cquit`, `:cq`) — leave as
+    /// `:quit-all` does, with exit status `code` (1 when left off). The way
+    /// to say 「no」 to the program that opened the editor: git aborts the
+    /// commit, a script stops. Without `force` unsaved files keep it open, as
+    /// in helix; `:cq!` leaves them.
+    QuitError {
+        code: u8,
+        force: bool,
+    },
+    /// `:reload-all` (helix's `:rla`) — `:reload` for every file that is
+    /// open. A file with unsaved changes is left as it is and counted, unless
+    /// `force`, as `:reload` refuses it.
+    ReloadAll {
+        force: bool,
+    },
     /// `:wq [path]` — save (optionally to a new path), then leave. `:wq!`
     /// (helix's `write-quit!`) writes over a file changed outside and
     /// leaves whatever else is unsaved, as `:q!` does.
@@ -1876,6 +1891,7 @@ const FORCEABLE: &[&str] = &[
     "sort!",
     "write!",
     "quit-all!",
+    "quit-error!",
     // `:wqa!`: overwrite what changed outside, as `:w!` does,
     // then leave, as `:qa!` does. The oversize question still stops it — a
     // bang never answers that one (see `write_forcing`).
@@ -1883,6 +1899,7 @@ const FORCEABLE: &[&str] = &[
     // `:wq!`, helix's `write-quit!`.
     "write-quit!",
     "reload!",
+    "reload-all!",
     // Opened with unsaved text, which lazygit cannot see.
     "git-lazygit!",
     "quit!",
@@ -3430,6 +3447,15 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|p| Ok(Command::Reload { force: p.force })),
     },
     Entry {
+        name: "reload-all",
+        // helix's short name.
+        aliases: &["rla"],
+        help: "cmd.reload.all",
+        needs: &[],
+        params: &[],
+        build: Some(|p| Ok(Command::ReloadAll { force: p.force })),
+    },
+    Entry {
         // **一個詞的參數表就是名字的一半**。旁邊就是
         // `:reload-auto`，而「再讀一遍設定」卻是 `:reload config`——同一族兩種
         // 拼法。
@@ -3693,6 +3719,27 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[],
         build: Some(|p| Ok(Command::QuitAll { force: p.force })),
+    },
+    // **A quit, so in the quit family**: what `:cquit` does is `:quit-all`
+    // with another exit status, and the name says the second half.
+    Entry {
+        name: "quit-error",
+        aliases: &["cquit", "cq"],
+        help: "cmd.quit.error",
+        needs: &[],
+        params: &[Param::Free("<0–255>")],
+        build: Some(|p| {
+            let code = match p.arg(0) {
+                None => 1,
+                // An exit status is one byte; a number past it would be
+                // cut to another status without a word.
+                Some(word) => word.parse::<u8>().map_err(|_| CommandError::InvalidArgument {
+                    command: "quit-error",
+                    value: word.to_string(),
+                })?,
+            };
+            Ok(Command::QuitError { code, force: p.force })
+        }),
     },
     Entry {
         name: "write-quit",
@@ -7544,6 +7591,23 @@ mod tests {
         assert_eq!(parse(":quit!"), Ok(Command::Quit { force: true }));
     }
 
+    /// helix's `:cquit [code]` and `:cquit!`, and vim's `:cq`: one command
+    /// in the quit family, and `:rla` beside `:reload`.
+    #[test]
+    fn parses_quit_error_and_reload_all() {
+        for line in [":cq", ":cquit", ":quit-error"] {
+            assert_eq!(parse(line), Ok(Command::QuitError { code: 1, force: false }), "{line}");
+        }
+        assert_eq!(parse(":cq 0"), Ok(Command::QuitError { code: 0, force: false }));
+        assert_eq!(parse(":cquit! 7"), Ok(Command::QuitError { code: 7, force: true }));
+        assert_eq!(parse(":quit-error!"), Ok(Command::QuitError { code: 1, force: true }));
+        assert!(matches!(parse(":cq 256"), Err(CommandError::InvalidArgument { .. })));
+        assert!(matches!(parse(":cq -1"), Err(CommandError::InvalidArgument { .. })));
+        for (line, force) in [(":rla", false), (":reload-all", false), (":rla!", true), (":reload-all!", true)] {
+            assert_eq!(parse(line), Ok(Command::ReloadAll { force }), "{line}");
+        }
+    }
+
     /// §5.2.2 fault 6: a bang has to survive every prefix that resolves
     /// without one.
     ///
@@ -8440,7 +8504,7 @@ mod tests {
         // …and two characters is worth knowing however it was arrived at.
         // `:theme` grew two children — `-mode` and `-fill`.
         assert_eq!(row("", "theme"), ":theme (th) +2");
-        assert_eq!(row("", "quit"), ":quit (q) +3");
+        assert_eq!(row("", "quit"), ":quit (q) +4");
         // A **different word** is worth knowing at any length: none of these
         // could be read off the name.
         assert_eq!(row("", "open"), ":open (o e edit)");
@@ -8922,7 +8986,7 @@ mod tests {
         assert!(complete("quit ").is_empty());
         assert_eq!(
             complete("quit").iter().map(|e| e.name).collect::<Vec<_>>(),
-            ["quit", "quit-all", "quit-others", "quit-window"]
+            ["quit", "quit-all", "quit-error", "quit-others", "quit-window"]
         );
         // **`:qa` is in the list as itself** (#363): an alias is another name
         // for the command, not a shortcut to it, so it narrows like a name.

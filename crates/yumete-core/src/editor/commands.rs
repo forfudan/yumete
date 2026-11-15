@@ -233,6 +233,10 @@ impl Editor {
                 self.reload(force)?;
                 Ok(CommandOutcome::Continue)
             }
+            Command::ReloadAll { force } => {
+                self.reload_all(force);
+                Ok(CommandOutcome::Continue)
+            }
             Command::Encoding(word) => {
                 if let Some(word) = word {
                     // The parser takes only the four words, so this is never
@@ -317,11 +321,13 @@ impl Editor {
             // 面板攢的改動一聲不吭全丟——`Quit` 那一條的注釋寫着「不可逆」，而
             // `:qa` 正好從旁邊繞過去。關掉這一扇之後再按一次 `:qa` 纔是離開。
             // The typing page, like the settings page, is what `:q` closes.
-            Command::Quit { .. } | Command::QuitAll { .. } if self.genda_open => {
+            Command::Quit { .. } | Command::QuitAll { .. } | Command::QuitError { .. } if self.genda_open => {
                 self.genda_asks.push(crate::genda::Ask::Close);
                 Ok(CommandOutcome::Continue)
             }
-            Command::Quit { force } | Command::QuitAll { force } if self.settings_open => {
+            Command::Quit { force } | Command::QuitAll { force } | Command::QuitError { force, .. }
+                if self.settings_open =>
+            {
                 self.settings_close = Some(force);
                 Ok(CommandOutcome::Continue)
             }
@@ -335,6 +341,13 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::QuitAll { force } => self.quit_all(force),
+            // The status is set only on the way out: refused for unsaved
+            // files, the editor stays and a later `:q` leaves with 0.
+            Command::QuitError { code, force } => {
+                let out = self.quit_all(force)?;
+                self.exit_code = code;
+                Ok(out)
+            }
             Command::Substitute {
                 pattern,
                 replacement,

@@ -1779,7 +1779,9 @@ language-servers = ["gopls", "golangci-lint-lsp"]
         ] {
             assert_eq!(typable(helix).as_deref(), Ok(line), "{helix}");
         }
-        assert!(typable(":cquit").is_err());
+        assert_eq!(typable(":cquit 2").as_deref(), Ok(":quit-error 2"));
+        assert_eq!(typable(":rla").as_deref(), Ok(":reload-all"));
+        assert!(typable(":tree-sitter-subtree").is_err());
         assert_eq!(typable(":set soft-wrap.enable false").as_deref(), Ok(":view-wrap off"));
         assert_eq!(typable(":set soft-wrap.enable true").as_deref(), Ok(":view-wrap on"));
     }
@@ -2299,6 +2301,52 @@ put(vim.fn.expand("~/written-by-the-config"), "x")
         }
         assert_eq!(snapshot(&home), before, "the reader's files are as they were");
         let _ = std::fs::remove_dir_all(&home);
+    }
+
+    /// **A sandbox's name is never given twice**: names asked for as fast as
+    /// four threads can ask are all different, where the process and the
+    /// clock alone gave two tests one directory within a clock tick.
+    #[test]
+    fn sandbox_names_asked_for_at_once_are_all_different() {
+        let names: Vec<String> = std::thread::scope(|s| {
+            let threads: Vec<_> =
+                (0..4).map(|_| s.spawn(|| (0..5000).map(|_| dump::run_dir_name()).collect::<Vec<_>>())).collect();
+            threads.into_iter().flat_map(|t| t.join().unwrap()).collect()
+        });
+        let different: std::collections::HashSet<&String> = names.iter().collect();
+        assert_eq!(different.len(), names.len());
+        assert!(names.iter().all(|n| n.starts_with("yumete-run-")));
+    }
+
+    /// **A name already there is passed over, never used or removed**, and
+    /// the next one is made; past [`dump::NAME_TRIES`] it gives up.
+    #[test]
+    fn a_sandbox_directory_already_there_is_passed_over() {
+        let base = scratch("taken-names");
+        let taken = base.join("taken");
+        std::fs::create_dir_all(&taken).unwrap();
+        std::fs::write(taken.join("theirs"), "kept").unwrap();
+        let mut names = [taken.clone(), base.join("free")].into_iter();
+        let made = dump::new_dir_named(&mut || names.next().unwrap()).unwrap();
+        assert_eq!(made, base.join("free"));
+        assert_eq!(std::fs::read_to_string(taken.join("theirs")).unwrap(), "kept");
+        let mut asked = 0;
+        let refused = dump::new_dir_named(&mut || {
+            asked += 1;
+            taken.clone()
+        });
+        assert!(matches!(refused, Err(dump::Failed::Copy(_))));
+        assert_eq!(asked, dump::NAME_TRIES);
+        // And sandboxes made at once by several threads each have their own.
+        let made: Vec<Vec<dump::Sandbox>> = std::thread::scope(|s| {
+            let threads: Vec<_> = (0..4)
+                .map(|_| s.spawn(|| (0..5).map(|_| dump::Sandbox::new_in(&base, dump::TIMEOUT).unwrap()).collect()))
+                .collect();
+            threads.into_iter().map(|t| t.join().unwrap()).collect()
+        });
+        let roots: std::collections::HashSet<&PathBuf> = made.iter().flatten().map(|s| &s.root).collect();
+        assert_eq!(roots.len(), 20);
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     /// **git stays in the copy**: with the temporary directory inside a

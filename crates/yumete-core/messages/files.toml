@@ -798,6 +798,24 @@ en = "no draft kept: {0}"
 # ── register ──────────────────────────────────────────────────────────
 
 [[message]]
+# :reload-all 做完：{0} 个文件重新载入，{1} 个有未保存的改动没有动（草稿）
+key = "reload.all"
+zhs = "已重新加载 {0} 个文件，{1} 个有未保存的改动没有动(加 ! 一并重新加载)"
+en = "reloaded {0} files; {1} with unsaved changes left alone — add ! to reload them too"
+
+[[message]]
+# :reload-all 做完，没有文件被跳过：{0} 个文件重新载入（草稿）
+key = "reload.all-done"
+zhs = "已重新加载 {0} 个文件"
+en = "reloaded {0} files"
+
+[[message]]
+# :reload-all 做完但有文件读不了：{0} 个重新载入，{1} 个有未保存的改动没有动，{2} 个读取失败，{3} 是第一个失败的文件和原因（草稿）
+key = "reload.all-failed"
+zhs = "已重新加载 {0} 个文件，{1} 个有未保存的改动没有动，{2} 个无法重新加载：{3}"
+en = "reloaded {0} files; {1} with unsaved changes left alone; {2} could not be reloaded: {3}"
+
+[[message]]
 # 重讀失敗
 key = "reload.failed"
 zhs = "无法重新加载：{0}"

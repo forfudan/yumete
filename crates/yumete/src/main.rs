@@ -1497,7 +1497,8 @@ fn main() -> ExitCode {
         }
     }
     match outcome {
-        Ok(()) => ExitCode::SUCCESS,
+        // 0, or what `:quit-error` asked for: `git commit` reads it.
+        Ok(()) => ExitCode::from(editor.exit_code()),
         Err(err) => {
             eprintln!("yumete: {err}");
             ExitCode::FAILURE

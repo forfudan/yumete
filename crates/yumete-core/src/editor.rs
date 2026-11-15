@@ -3916,6 +3916,8 @@ pub struct Editor {
     /// Whether the writer has already been told that recovery copies cannot be
     /// written, so the status line says it once rather than every few seconds.
     swap_warned: bool,
+    /// The exit status to leave with: 0, or what `:quit-error` asked for.
+    exit_code: u8,
     /// Where the round-robin over the *other* buffers resumes (#317).
     swap_cursor: usize,
     /// Whether the last round ran out of budget with copies still owed, so the
@@ -3963,6 +3965,10 @@ pub struct Editor {
     /// How long the last 大綱 took to build, which decides whether the next
     /// one follows the key or waits for the typing to stop.
     outline_cost: std::time::Duration,
+    /// Tests that are about what the outline shows, not when: a busy test
+    /// runner can make any build look slow and put it behind the pause.
+    /// Always `false` outside tests.
+    pub(crate) outline_never_waits: bool,
     /// How many times a slot's rows were built from the text.
     panel_builds: u64,
     /// The panel each side showed when it was last closed, which opening the
@@ -4840,6 +4846,7 @@ impl Editor {
             autosave: true,
             last_swap: None,
             swap_warned: false,
+            exit_code: 0,
             swap_cursor: 0,
             swap_backlog: false,
             readonly_default: false,
@@ -4857,6 +4864,7 @@ impl Editor {
             panel_built: [None, None],
             panel_owed: None,
             outline_cost: std::time::Duration::ZERO,
+            outline_never_waits: false,
             panel_builds: 0,
             last_view: [None, None],
             width: [crate::sidebar::Width::default(); 2],

@@ -1708,6 +1708,13 @@ en = "close all files and quit (short: :qa)"
 find = "全部退出 全關 退出全部 quit all close everything qa"
 
 [[message]]
+# : 命令選單裏 :quit-error 那一項的説明（:cquit、:cq；帶退出码离开，git 等程序据此放弃）（草稿）
+key = "cmd.quit.error"
+zhs = "退出并返回错误码(默认 1)，让调用的程序放弃，如 git 提交；加 ! 放弃改动"
+en = "quit with an exit status (1 if not given), so the program that opened yumete gives up — git aborts the commit; ! discards changes"
+find = "退出 错误码 錯誤碼 放弃 放棄 中止 abort cquit cq exit code status"
+
+[[message]]
 # :quit-others —— vim 的 :only
 key = "cmd.quit.others"
 zhs = "只保留当前窗口，关闭其他窗口和侧栏(vim 的 `:only`，简写 `:on`)"
@@ -1720,6 +1727,13 @@ key = "cmd.quit.window"
 zhs = "关闭当前区域，但不关闭最后一个窗口(vim 的 `:close`，简写 `:clo`)"
 en = "close this region, but never the last window (vim's `:close`, short: `:clo`)"
 find = "關閉窗口 关闭窗口 關掉這一區 关掉这一区 close window clo"
+
+[[message]]
+# : 命令選單裏 :reload-all 那一項的説明（:rla；所有打开的文件重新载入）（草稿）
+key = "cmd.reload.all"
+zhs = "重新载入所有打开的文件；有未保存改动的不动，加 ! 一并放弃"
+en = "reload every open file; files with unsaved changes are left alone, ! discards them too"
+find = "重載 重载 全部重读 全部重讀 刷新 revert all rla"
 
 [[message]]
 # : 命令選單裏 auto 那一項的説明(reload 組)

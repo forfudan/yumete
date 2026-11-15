@@ -758,7 +758,7 @@ impl Editor {
             if self.panel_built[side as usize].as_ref() == Some(&source) {
                 continue;
             }
-            if view == crate::sidebar::View::Outline && self.outline_cost > Self::OUTLINE_EVERY_KEY {
+            if view == crate::sidebar::View::Outline && self.outline_cost > Self::OUTLINE_EVERY_KEY && !self.outline_never_waits {
                 let since = match &owed {
                     Some((was, since)) if *was == source => *since,
                     _ => std::time::Instant::now(),
@@ -2397,6 +2397,12 @@ impl Editor {
     /// **Where the front end should start again**, taken once.
     pub fn take_reopen_request(&mut self) -> Option<PathBuf> {
         self.reopen_request.take()
+    }
+
+    /// **The exit status the process should leave with**: 0, or the one
+    /// `:quit-error` left with.
+    pub fn exit_code(&self) -> u8 {
+        self.exit_code
     }
 
     /// Whether `Space` is waiting for the key that says what to do — which is

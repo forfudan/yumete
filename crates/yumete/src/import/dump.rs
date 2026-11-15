@@ -155,6 +155,55 @@ pub(super) struct Sandbox {
     caught: Option<signals::Caught>,
 }
 
+/// How many names [`new_dir_named`] tries before it gives up.
+pub(super) const NAME_TRIES: u32 = 64;
+
+/// **A name for a sandbox, never given twice in a process.**
+///
+/// The process, the clock and a count kept for the whole process. The clock
+/// alone is not enough: it ticks in microseconds on macOS, and two sandboxes
+/// started in one tick by two threads would be given one name. The count
+/// tells them apart within a process, the process id across processes, and
+/// the clock across a process id used again.
+pub(super) fn run_dir_name() -> String {
+    static COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let n = COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    format!("yumete-run-{}-{stamp}-{n}", std::process::id())
+}
+
+/// **A directory of the import's own under `base`, made new**, named by
+/// [`run_dir_name`].
+fn own_new_dir(base: &Path) -> Result<PathBuf, Failed> {
+    new_dir_named(&mut || base.join(run_dir_name()))
+}
+
+/// Make the first of `next`'s paths that is not there yet, of
+/// [`NAME_TRIES`].
+///
+/// Warning: **the reader's alone, and new**: it holds a copy of their config
+/// under the shared temporary directory, so it is made 0700, and a directory
+/// already there by that name is never used — the next name is tried, and
+/// the one found there, not made here, is never removed either.
+pub(super) fn new_dir_named(next: &mut dyn FnMut() -> PathBuf) -> Result<PathBuf, Failed> {
+    #[cfg_attr(not(unix), allow(unused_mut))]
+    let mut made = std::fs::DirBuilder::new();
+    #[cfg(unix)]
+    std::os::unix::fs::DirBuilderExt::mode(&mut made, 0o700);
+    let mut tries = 1;
+    loop {
+        let root = next();
+        match made.create(&root) {
+            Ok(()) => return Ok(root),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists && tries < NAME_TRIES => tries += 1,
+            Err(e) => return Err(Failed::Copy(format!("{}: {e}", root.display()))),
+        }
+    }
+}
+
 impl Sandbox {
     /// A sandbox under the system's temporary directory, whose copies may
     /// take `budget` between them.
@@ -164,20 +213,7 @@ impl Sandbox {
 
     /// The same, under `base`.
     pub(super) fn new_in(base: &Path, budget: Duration) -> Result<Sandbox, Failed> {
-        let stamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or(0);
-        let root = base.join(format!("yumete-run-{}-{stamp}", std::process::id()));
-        // **The reader's alone, and new**: it holds a copy of their config
-        // under the shared temporary directory, so it is made 0700, and a
-        // directory already there by that name is refused rather than used
-        // (and, refused before the sandbox exists, never removed either).
-        #[cfg_attr(not(unix), allow(unused_mut))]
-        let mut made = std::fs::DirBuilder::new();
-        #[cfg(unix)]
-        std::os::unix::fs::DirBuilderExt::mode(&mut made, 0o700);
-        made.create(&root).map_err(|e| Failed::Copy(format!("{}: {e}", root.display())))?;
+        let root = own_new_dir(base)?;
         let real_root = std::fs::canonicalize(&root).map_err(|e| Failed::Copy(e.to_string()))?;
         let home = root.join("home");
         let sandbox = Sandbox {

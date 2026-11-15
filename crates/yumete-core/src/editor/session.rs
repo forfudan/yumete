@@ -222,6 +222,51 @@ impl Editor {
         Ok(())
     }
 
+    /// `:reload-all`: [`Self::reload`] for every buffer that has a file.
+    ///
+    /// The same gate per file: one with unsaved changes is left as it is
+    /// without `force`, and counted, so the status line says how many were
+    /// kept and that `!` takes them too. A file that cannot be read is
+    /// counted apart and named, and the others are still read.
+    pub(super) fn reload_all(&mut self, force: bool) {
+        let (mut read, mut kept) = (0usize, 0usize);
+        let mut failed: Vec<String> = Vec::new();
+        for i in 0..self.buffers.len() {
+            if self.buffers[i].path().is_none() {
+                continue;
+            }
+            if self.buffers[i].is_modified() && !force {
+                kept += 1;
+                continue;
+            }
+            if i == self.current {
+                match self.reread_current() {
+                    Ok(()) => read += 1,
+                    Err(err) => failed.push(format!("{}: {err}", self.buffers[i].display_name())),
+                }
+                continue;
+            }
+            let buffer = &mut self.buffers[i];
+            if let Err(err) = buffer.reread() {
+                failed.push(format!("{}: {err}", buffer.display_name()));
+                continue;
+            }
+            if self.modeline {
+                buffer.read_modelines();
+            }
+            // The text the change bar compares with is asked again when the
+            // file is next shown: what is on disk is what moved.
+            let id = buffer.id();
+            self.vcs_base.remove(&id);
+            read += 1;
+        }
+        self.status = match failed.first() {
+            Some(first) => say!("reload.all-failed", read, kept, failed.len(), first.as_str()),
+            None if kept == 0 => say!("reload.all-done", read),
+            None => say!("reload.all", read, kept),
+        };
+    }
+
     /// Take what is on disk, and put the editor back in step with it.
     ///
     /// Three caches answer questions *about the whole document* and every one
@@ -233,14 +278,23 @@ impl Editor {
         // A locked buffer is still re-readable: read-only is about **editing**
         // it, and taking a fresh copy of the file is the one thing a reader
         // does want.
-        if let Err(err) = self.current_buffer_mut().reread() {
+        if let Err(err) = self.reread_current() {
             self.status = say!("reload.failed", err.to_string());
+            return false;
+        }
+        true
+    }
+
+    /// All of [`Self::reread_now`] but the status line: the caller words the
+    /// failure (`:reload-all` counts it among others).
+    fn reread_current(&mut self) -> std::io::Result<()> {
+        if let Err(err) = self.current_buffer_mut().reread() {
             // **Latched, or it says it every two seconds.** A file that was
             // moved or deleted out from under a `:reload-auto` session
             // answers `changed_underneath` yes for ever, and the failure
             // would stamp over whatever the reader is actually reading.
             self.reload_warned = true;
-            return false;
+            return Err(err);
         }
         self.clamp_cursor();
         // A file read again may say something else in its modelines.
@@ -253,7 +307,7 @@ impl Editor {
         self.forget_the_document();
         // 磁碟上那一份換了人——改動條記的是跟它比出來的，也得重問（#55）。
         self.refresh_vcs(true);
-        true
+        Ok(())
     }
 
     /// Notice a file that changed underneath, if `:reload-auto` (on) (Feature

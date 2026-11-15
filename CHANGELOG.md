@@ -6,6 +6,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Added
 
+- **`:quit-error` (`:cquit`, `:cq`) quits with exit status 1 or the one given**, so `git commit` aborts when yumete is git's editor; `:cq!` leaves unsaved files. **`:reload-all` (`:rla`) reloads every open file**, leaving files with unsaved changes alone unless you add `!`.
 - **Single-character mode (单字派) like the Yume app, in two copies**: character by character (default 字词同出) and whole sentence (default 严格单字): `[ime] single_char`, `sentence_single_char`, `word_show`, two settings rows, `:yume-single-char` and `Space z d`.
 - **yumete reads the Yume app's word lists, 固顶 pins and 调频** (never writing them), re-reads them when the app saves, and keeps what it learns in files of its own, so learning on 拼音 and 冰雪 is no longer lost on exit; `:yume-where` lists them.
 - **`:genda`: in the history (`Tab`), `d` deletes the picked record from the kept history and `u` brings deletions back where they stood, latest first, until you leave the history; the totals follow. Typing `:` over the page shows the command menu.**

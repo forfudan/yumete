@@ -9600,6 +9600,83 @@ fn reload_stops_at_unsaved_changes_and_the_bang_does_not() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// `:reload-all` (helix's `:rla`) is `:reload` for every open file, with its
+/// gate per file: unsaved ones are left and counted, `!` takes them too, a
+/// buffer with no file is passed over, and the current one is read as well.
+#[test]
+fn reload_all_reads_every_file_and_leaves_the_unsaved_ones() {
+    let dir = tmp().join(format!("yumete-rla-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (a, b, c) = (dir.join("a.md"), dir.join("b.md"), dir.join("c.md"));
+    for file in [&a, &b, &c] {
+        std::fs::write(file, "old\n").unwrap();
+    }
+
+    let mut ed = Editor::new();
+    ed.open_file(&a).unwrap();
+    ed.open_file(&b).unwrap();
+    press(&mut ed, "i");
+    ed.on_key(Key::Char('x'));
+    ed.on_key(Key::Esc);
+    ed.execute("new").unwrap();
+    ed.open_file(&c).unwrap();
+    assert!(ed.buffers.iter().any(|buf| buf.path().is_none()), "a scratch buffer is open too");
+    for file in [&a, &b, &c] {
+        std::fs::write(file, "new\n").unwrap();
+    }
+
+    assert_eq!(ed.execute("rla").unwrap(), CommandOutcome::Continue);
+    assert_eq!(ed.status(), say!("reload.all", 2, 1));
+    let text = |ed: &Editor, path: &std::path::Path| {
+        ed.buffers.iter().find(|buf| buf.path() == Some(path)).unwrap().text()
+    };
+    assert_eq!(ed.current_buffer().text(), "new\n", "the current file is read too");
+    assert_eq!(text(&ed, &a), "new\n");
+    assert_eq!(text(&ed, &b), "xold\n", "the unsaved file is left as it is");
+    assert!(ed.buffers.iter().find(|buf| buf.path() == Some(b.as_path())).unwrap().is_modified());
+
+    assert_eq!(ed.execute("reload-all!").unwrap(), CommandOutcome::Continue);
+    assert_eq!(ed.status(), say!("reload.all-done", 3));
+    assert_eq!(text(&ed, &b), "new\n", "the bang takes it too");
+    assert!(!ed.buffers.iter().any(|buf| buf.is_modified()));
+
+    // A file gone from disk is named, and the others are read all the same.
+    std::fs::remove_file(&a).unwrap();
+    std::fs::write(&c, "newer\n").unwrap();
+    ed.execute("reload-all").unwrap();
+    assert!(ed.status().contains("a.md"), "{}", ed.status());
+    assert_eq!(ed.current_buffer().text(), "newer\n");
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// `:quit-error` (helix's and vim's `:cquit`, `:cq`) leaves with an exit
+/// status — 1, or the one given — so git gives up the commit. It is held up
+/// by unsaved files as helix's is, and the status is only set on the way
+/// out: refused, a later `:q` leaves with 0.
+#[test]
+fn quit_error_leaves_with_an_exit_status() {
+    let mut ed = Editor::new();
+    assert_eq!(ed.exit_code(), 0);
+    assert_eq!(ed.execute("cq").unwrap(), CommandOutcome::Quit);
+    assert_eq!(ed.exit_code(), 1);
+
+    let mut ed = Editor::new();
+    assert_eq!(ed.execute("cquit 3").unwrap(), CommandOutcome::Quit);
+    assert_eq!(ed.exit_code(), 3);
+
+    let mut ed = Editor::new();
+    press(&mut ed, "i");
+    ed.on_key(Key::Char('x'));
+    ed.on_key(Key::Esc);
+    assert!(matches!(ed.execute("quit-error"), Err(EditorError::UnsavedChanges)));
+    assert_eq!(ed.exit_code(), 0, "refused, so nothing is set");
+    assert!(ed.execute("cq 300").is_err(), "an exit status is one byte");
+    assert!(ed.execute("cq x").is_err());
+    assert_eq!(ed.execute("cq! 2").unwrap(), CommandOutcome::Quit);
+    assert_eq!(ed.exit_code(), 2);
+}
+
 /// #214: the automatic half takes a clean buffer and never a dirty one.
 #[test]
 fn auto_reload_takes_a_clean_buffer_and_only_warns_about_a_dirty_one() {
@@ -40793,7 +40870,7 @@ fn the_outline_follows_an_edited_heading_without_being_focused() {
     assert_eq!(ed.panel_focus(), None, "the keys are back in the text");
     assert_eq!(outline_titles(&ed), ["Alpha", "Beta"]);
     // The fast path, however long this machine took for the first build.
-    ed.outline_cost = std::time::Duration::ZERO;
+    ed.outline_never_waits = true;
     press(&mut ed, "A changed");
     assert_eq!(outline_titles(&ed), ["Alpha changed", "Beta"], "typing in Insert renames the row");
     ed.on_key(Key::Esc);
@@ -40820,7 +40897,7 @@ fn the_outline_follows_typst_headings() {
     ed.execute(":sidebar-outline").unwrap();
     ed.on_key(Key::Enter);
     assert_eq!(outline_titles(&ed), ["One"]);
-    ed.outline_cost = std::time::Duration::ZERO;
+    ed.outline_never_waits = true;
     press(&mut ed, "Go== Two");
     ed.on_key(Key::Esc);
     assert_eq!(outline_titles(&ed), ["One", "Two"]);
@@ -40846,7 +40923,7 @@ fn an_unchanged_outline_is_not_rebuilt() {
     press(&mut ed, "G");
     assert_eq!(ed.panel_builds(), built, "motions and frames build nothing");
     // A debug build is slow enough to be debounced; this asks the other half.
-    ed.outline_cost = std::time::Duration::ZERO;
+    ed.outline_never_waits = true;
     press(&mut ed, "o");
     ed.on_key(Key::Esc);
     assert!(ed.panel_builds() > built, "an edit does");
@@ -40915,7 +40992,7 @@ fn the_outline_follows_a_reload() {
     std::fs::write(&file, "# New\n\ntext\n\n## More\n").unwrap();
     // The fast path, whatever this machine took for the first build: a slow
     // runner would otherwise wait for the pause, which a test does not take.
-    ed.outline_cost = std::time::Duration::ZERO;
+    ed.outline_never_waits = true;
     press(&mut ed, ":reload");
     ed.on_key(Key::Enter);
     assert_eq!(outline_titles(&ed), ["New", "More"], "{}", ed.status());
