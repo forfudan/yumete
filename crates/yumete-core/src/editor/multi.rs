@@ -849,7 +849,10 @@ impl super::Editor {
     /// the first in order put into the first selection, the next into the
     /// next. The boundaries stay where they are, as [`Self::rotate_contents`]
     /// keeps them; one undo point.
-    pub(super) fn sort_selections(&mut self, reverse: bool, insensitive: bool) {
+    ///
+    /// `n` sorts them by number as it sorts lines; `u` is for lines, and
+    /// says so rather than leaving equal selections in place unannounced.
+    pub(super) fn sort_selections(&mut self, how: crate::command::SortHow) {
         let rope = self.current_buffer().rope().clone();
         let mut out: Vec<Range> = self.sel.iter().copied().collect();
         let mut texts: Vec<String> = out
@@ -860,7 +863,10 @@ impl super::Editor {
             })
             .collect();
         let was = texts.clone();
-        super::verbs::sort_texts(&mut texts, reverse, insensitive);
+        if how.unique {
+            self.status = say!("edit.sort-unique-needs-lines");
+        }
+        super::verbs::sort_texts(&mut texts, how);
         if texts == was {
             return;
         }

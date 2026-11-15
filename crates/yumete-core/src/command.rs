@@ -246,7 +246,9 @@ pub enum Command {
     /// selection, vim's: the lines it covers sorted, or every line of the
     /// buffer when nothing is selected. By code point; `reverse` from `!`
     /// (vim) or `-r` (helix), `insensitive` from `i` (vim) or `-i` (helix).
-    Sort { reverse: bool, insensitive: bool },
+    /// `rows` is a range written in front (`:%sort`, `:2,3sort`), which
+    /// takes the place of the selection.
+    Sort { how: SortHow, rows: Option<Rows> },
     /// `:vsplit [file]` / `:hsplit [file]`: a new window beside or below the
     /// live one, showing `file` when one is named.
     SplitWindow { how: crate::window::Split, file: Option<String> },
@@ -373,8 +375,11 @@ pub enum Command {
     /// families.
     Fold,
     /// `:read <file>` — a file's contents into this buffer, as vim's `:r` and
-    /// helix's `:read`.
-    Read(String),
+    /// helix's `:read`; `:read !cmd` the command's output, as vim's. The
+    /// lines go below the cursor's line, or below line `after` when a range
+    /// stands in front (`:0read` above the first line, `:$read` after the
+    /// last).
+    Read { what: String, shell: bool, after: Option<Bound> },
     /// `:wheel <n>` — how far one notch of the mouse wheel moves, in whichever
     /// unit the page is set in; `None` only reports (Feature #222).
     SetWheelStep(Option<usize>),
@@ -884,6 +889,21 @@ impl UndoSpan {
     }
 }
 
+/// How `:sort` orders the lines: vim's `!` `i` `n` `u`, helix's `-r` `-i`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct SortHow {
+    /// Last first (`!`, `-r`).
+    pub reverse: bool,
+    /// Case folded (`i`, `-i`).
+    pub insensitive: bool,
+    /// By the first decimal number in each line, a `-` before it taken in;
+    /// lines with none come first, in their order (vim's `n`).
+    pub numeric: bool,
+    /// Only the first of a run of equal lines kept (vim's `u`): equal as
+    /// text, case folded with `i`, whatever `n` read in them.
+    pub unique: bool,
+}
+
 /// An error produced while parsing a command line.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CommandError {
@@ -1126,6 +1146,13 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         };
     }
 
+    if let Some(ranged) = parse_ranged(trimmed) {
+        return ranged;
+    }
+    if let Some(read) = parse_read_shell(trimmed) {
+        return read;
+    }
+
     let mut parts = trimmed.splitn(2, char::is_whitespace);
     let word = resolve(parts.next().unwrap());
     let rest = parts.next().unwrap_or("").trim();
@@ -1155,6 +1182,49 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
     // walk, from its own declaration; what stands here is the answer for a
     // word that names none of them.
     Err(CommandError::Unknown(word.to_string()))
+}
+
+/// **A range in front of a command that takes one**: vim's `:%sort`,
+/// `:2,3sort`, `:0read file`, written as this editor writes a range
+/// ([`Rows`]: `-` a span, `,` a list). `None` when there is no range, or
+/// the command after it takes none.
+fn parse_ranged(line: &str) -> Option<Result<Command, CommandError>> {
+    let (rows, rest) = parse_rows(line);
+    if rest.len() == line.len() || rest.trim().is_empty() {
+        return None;
+    }
+    let rows = rows.ok()?;
+    match parse(rest) {
+        Ok(Command::Sort { how, rows: None }) => Some(Ok(Command::Sort { how, rows: Some(rows) })),
+        // **The lines go after the range's last line**, as vim's `:r`.
+        Ok(Command::Read { what, shell, after: None }) => {
+            let after = match rows {
+                Rows::All => Bound::Last,
+                Rows::Span(_, last) => last,
+                Rows::Selection | Rows::List(_) => return None,
+            };
+            Some(Ok(Command::Read { what, shell, after: Some(after) }))
+        }
+        Err(e) if matches!(&e, CommandError::Wants { command: "sort", .. }) => Some(Err(e)),
+        _ => None,
+    }
+}
+
+/// **`:read !cmd`** (and `:read! cmd`, `:read!cmd`): the command's output
+/// read in, as vim's. Read before the walk, which would take the quotes and
+/// backslashes off a path, and a shell line needs them.
+fn parse_read_shell(line: &str) -> Option<Result<Command, CommandError>> {
+    let name_end = line.find(|c: char| c.is_whitespace() || c == '!').unwrap_or(line.len());
+    let (name, after) = line.split_at(name_end);
+    if name.is_empty() || entry_named(name).is_none_or(|e| e.name != "read") {
+        return None;
+    }
+    let after = after.trim_start();
+    let cmd = after.strip_prefix('!')?.trim();
+    Some(match cmd.is_empty() {
+        true => Err(CommandError::MissingArgument("read")),
+        false => Ok(Command::Read { what: cmd.to_string(), shell: true, after: None }),
+    })
 }
 
 /// What was asked of `:convert`.
@@ -2074,6 +2144,8 @@ const FORCEABLE: &[&str] = &[
     "write-buffer-close!",
     // vim's `:sort!`, in reverse.
     "sort!",
+    // vim's `:read! cmd`, a command's output read in.
+    "read!",
     "write!",
     "quit-all!",
     "quit-error!",
@@ -3639,7 +3711,8 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "reload",
-        aliases: &[],
+        // helix's short name.
+        aliases: &["rl"],
         help: "cmd.commands.reload",
         needs: &[],
         params: &[],
@@ -5180,8 +5253,9 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|p| Ok(Command::Align(p.arg(0).unwrap_or("=").to_string()))),
     },
     // **helix's flags and vim's both**: `-r`/`--reverse` and
-    // `-i`/`--insensitive` are helix's spellings, `!` and `i` vim's. vim's
-    // `r` is not taken: there it sorts on a pattern's match, not in reverse.
+    // `-i`/`--insensitive` are helix's spellings, `!` `i` `n` `u` vim's,
+    // which run together as vim lets them (`:sort nu`). vim's `r` is not
+    // taken: there it sorts on a pattern's match, not in reverse.
     Entry {
         name: "sort",
         aliases: &[],
@@ -5189,11 +5263,16 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[Param::Free("cmd.arg.sort-flags")],
         build: Some(|p| {
-            let (mut reverse, mut insensitive) = (p.force, false);
+            let mut how = SortHow { reverse: p.force, ..SortHow::default() };
             for word in p.arg(0).unwrap_or("").split_whitespace() {
                 match word {
-                    "-r" | "--reverse" => reverse = true,
-                    "-i" | "--insensitive" | "i" => insensitive = true,
+                    "-r" | "--reverse" => how.reverse = true,
+                    "-i" | "--insensitive" => how.insensitive = true,
+                    _ if word.chars().all(|c| matches!(c, 'i' | 'n' | 'u')) => {
+                        how.insensitive |= word.contains('i');
+                        how.numeric |= word.contains('n');
+                        how.unique |= word.contains('u');
+                    }
                     _ => {
                         return Err(CommandError::Wants {
                             command: "sort",
@@ -5203,7 +5282,7 @@ pub const COMMANDS: &[Entry] = &[
                     }
                 }
             }
-            Ok(Command::Sort { reverse, insensitive })
+            Ok(Command::Sort { how, rows: None })
         }),
     },
     Entry {
@@ -5504,7 +5583,7 @@ pub const COMMANDS: &[Entry] = &[
         params: &[Param::Path],
         build: Some(|p| match p.arg(0) {
             None => Err(CommandError::MissingArgument("read")),
-            Some(path) => Ok(Command::Read(path.to_string())),
+            Some(path) => Ok(Command::Read { what: path.to_string(), shell: false, after: None }),
         }),
     },
     Entry {
@@ -5956,7 +6035,8 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "buffer-next",
-        aliases: &["bn"],
+        // helix's two spellings; `:bnext` is vim's as well.
+        aliases: &["bn", "bnext"],
         help: "cmd.buffers.next",
         needs: &[],
         params: &[],
@@ -5964,7 +6044,8 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "buffer-previous",
-        aliases: &["bp"],
+        // helix's two spellings; `:bprev` is vim's as well.
+        aliases: &["bp", "bprev"],
         help: "cmd.buffers.previous",
         needs: &[],
         params: &[],
@@ -8906,7 +8987,7 @@ mod tests {
             parse(":wbc! 二.md"),
             Ok(Command::WriteBufferClose { path: Some("二.md".into()), force: true })
         );
-        let sort = |reverse, insensitive| Ok(Command::Sort { reverse, insensitive });
+        let sort = |reverse, insensitive| Ok(Command::Sort { how: SortHow { reverse, insensitive, ..SortHow::default() }, rows: None });
         assert_eq!(parse(":sort"), sort(false, false));
         assert_eq!(parse(":sort!"), sort(true, false));
         assert_eq!(parse(":sort -r"), sort(true, false));
@@ -8918,6 +8999,43 @@ mod tests {
             Err(CommandError::Wants { command: "sort", value: "r".into(), wants: Wants::Said("cmd.takes.sort") }),
             "vim's `r` sorts on a match, so it is refused rather than read as reverse"
         );
+        let how = |numeric, unique| SortHow { numeric, unique, ..SortHow::default() };
+        assert_eq!(parse(":sort nu"), Ok(Command::Sort { how: how(true, true), rows: None }));
+        assert_eq!(parse(":sort n u"), Ok(Command::Sort { how: how(true, true), rows: None }));
+        assert_eq!(parse(":%sort n"), Ok(Command::Sort { how: how(true, false), rows: Some(Rows::All) }));
+        assert_eq!(
+            parse(":2,3sort"),
+            Ok(Command::Sort { how: how(false, false), rows: Some(Rows::List(vec![Bound::Line(2), Bound::Line(3)])) })
+        );
+        assert_eq!(
+            parse(":.-$sort!"),
+            Ok(Command::Sort { how: SortHow { reverse: true, ..SortHow::default() }, rows: Some(Rows::Span(Bound::Cursor, Bound::Last)) })
+        );
+        assert!(matches!(parse(":%sort x"), Err(CommandError::Wants { command: "sort", .. })));
+    }
+
+    /// **`:read !cmd` and a line in front** (vim's `:r !cmd`, `:0r`,
+    /// `:$r`); the shell line keeps its quotes and backslashes.
+    #[test]
+    fn read_takes_a_shell_command_and_a_line() {
+        let shell = |what: &str, after| Ok(Command::Read { what: what.into(), shell: true, after });
+        assert_eq!(parse(":read !printf 'a\\nb'"), shell("printf 'a\\nb'", None));
+        assert_eq!(parse(":read! ls -l"), shell("ls -l", None));
+        assert_eq!(parse(":read!ls"), shell("ls", None));
+        assert_eq!(parse(":0read !date"), shell("date", Some(Bound::Line(0))));
+        assert_eq!(parse(":$read notes.md"), Ok(Command::Read { what: "notes.md".into(), shell: false, after: Some(Bound::Last) }));
+        assert_eq!(parse(":read notes.md"), Ok(Command::Read { what: "notes.md".into(), shell: false, after: None }));
+        assert_eq!(parse(":read !"), Err(CommandError::MissingArgument("read")));
+        assert!(!matches!(parse(":r !ls"), Ok(Command::Read { .. })), "`:r` stays `:replace`");
+    }
+
+    /// **helix's spellings of the buffer walk and `:reload`**.
+    #[test]
+    fn helixs_buffer_and_reload_spellings() {
+        assert_eq!(parse(":bnext"), Ok(Command::NextBuffer));
+        assert_eq!(parse(":bprev"), Ok(Command::PreviousBuffer));
+        assert_eq!(parse(":rl"), Ok(Command::Reload { force: false }));
+        assert_eq!(parse(":rl!"), Ok(Command::Reload { force: true }));
     }
 
     #[test]

@@ -845,6 +845,9 @@ pub enum Put {
     /// The selection kept and its value after it, ` = ` between them
     /// (`:decimo-append`), on the selection's line as [`Put::Value`] is.
     Equation,
+    /// `:read !cmd`: the output as lines of their own below line `n` of
+    /// the text (`0` above the first), the selection left where it is.
+    Lines(usize),
 }
 
 /// The text a pipe was given: which buffer, at which revision, and the
@@ -2643,6 +2646,14 @@ pub struct Editor {
     /// Set while a yank stores its text, so the store can tell a yank from
     /// a delete (vim's `"0` is the one, `"1` the other).
     storing_a_yank: bool,
+    /// **vim's `:h quote1` exception**: a delete made with `%` `(` `)`
+    /// `` ` `` `{` `}` goes into `"1` (and `"-` too, when it stays in one
+    /// line), however short it is. Set while that operator runs.
+    use_reg_one: bool,
+    /// **Where a linewise operator began**, when that is not the cursor:
+    /// a paragraph's or sentence's first character, a mark's line. vim's
+    /// `` `[ `` after `>ip` is there (`oap->start`), not at the line's start.
+    lines_from: Option<usize>,
     /// Keys recorded since `q` was pressed, if a macro is being recorded.
     recording: Option<Vec<Key>>,
     /// How long the recording was when the keys being pressed now began:
@@ -4560,6 +4571,8 @@ impl Editor {
             session_names: Vec::new(),
             vim_line_column: 0,
             storing_a_yank: false,
+            use_reg_one: false,
+            lines_from: None,
             recording: None,
             recording_from: 0,
             motion_extend: None,

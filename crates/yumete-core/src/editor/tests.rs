@@ -41617,6 +41617,171 @@ fn vims_numbered_and_read_only_registers() {
     assert_eq!(vim_after("one two\n", "\".yy").register_contents(Some('.')), "one two\n", "still the last Insert");
 }
 
+/// **`:h quote1`'s exception** (measured against vim 9.1, and nvim 0.12
+/// with its `%` left to vim): a delete made with `%` `(` `)` `` ` `` `{`
+/// `}` goes into `"1` however short, and into `"-` as well; a named
+/// register's delete of lines goes into `"1` too.
+#[test]
+fn vims_short_deletes_by_quote1_motions_go_to_register_one() {
+    for (text, keys, gone) in [
+        ("(ab) cd\n", "d%", "(ab)"),
+        ("One two. Three four.\n", "d)", "One two. "),
+        ("One two. Three four.\n", "wd(", "One "),
+        ("abcdefg\n", "lmallld`a", "bcd"),
+        ("abc def\n\nend\n", "ld}", "bc def"),
+        ("(ab) cd\n", "c%X\x1b", "(ab)"),
+    ] {
+        let ed = vim_after(text, keys);
+        assert_eq!(ed.register_contents(Some('1')), gone, "{keys:?}: \"1");
+        assert_eq!(ed.register_contents(Some('-')), gone, "{keys:?}: \"-");
+    }
+    let ed = vim_after("one two\n", "dw");
+    assert_eq!(ed.register_contents(Some('1')), "", "`dw` is a small delete");
+    assert_eq!(ed.register_contents(Some('-')), "one ");
+    assert_eq!(vim_after("(ab) cd\n", "y%").register_contents(Some('1')), "", "a yank is not a delete");
+    let ed = vim_after("one\ntwo\n", "\"add");
+    assert_eq!(ed.register_contents(Some('a')), "one\n");
+    assert_eq!(ed.register_contents(Some('1')), "one\n", "a named delete of a line goes to \"1 too");
+    let ed = vim_after("X\n(ab) cd\n", "\"addd%");
+    assert_eq!((ed.register_contents(Some('1')), ed.register_contents(Some('2'))), ("(ab)".into(), "X\n".into()));
+}
+
+/// **`d'a` keeps the column the cursor wants** (nvim's 'nostartofline',
+/// measured), as `dj` does: not the first non-blank.
+#[test]
+fn vims_delete_to_a_mark_line_keeps_the_column() {
+    let column = |ed: &Editor| {
+        let rope = ed.current_buffer().rope();
+        let head = ed.sel.head();
+        (rope.char_to_line(head), head - rope.line_to_char(rope.char_to_line(head)))
+    };
+    let ed = vim_after("one\n    two\nthree\n  four\nfive\n", "jjjllmakkd'a");
+    assert_eq!(ed.current_buffer().text().to_string(), "one\nfive\n");
+    assert_eq!(column(&ed), (1, 2));
+    assert_eq!(column(&vim_after("a\n    b\n  c\nd\n", "jjjmakd'a")), (1, 0));
+    assert_eq!(column(&vim_after("abcdefgh\n  xy\nabcdefgh\nabcdefgh\nabcdefgh\n", "jlllyjjjd']")), (2, 3));
+}
+
+/// **`>` and `<` set `` `[ `` and `` `] ``** (measured in nvim): `` `[ ``
+/// where the operator began, at its column before the shift, and `` `] ``
+/// on the last line's last character.
+#[test]
+fn vims_shifts_set_the_change_marks() {
+    let marks = |text: &str, keys: &str| {
+        let ed = vim_after(text, keys);
+        let rope = ed.current_buffer().rope();
+        let (a, b) = ed.current_buffer().change_span().expect("marks");
+        let at = |p: usize| (rope.char_to_line(p), p - rope.line_to_char(rope.char_to_line(p)));
+        (at(a), at(b))
+    };
+    let text = "one\ntwo three\nfour\nfive\n";
+    assert_eq!(marks(text, "jll>>"), ((1, 2), (1, 12)));
+    assert_eq!(marks(text, "jll>j"), ((1, 2), (2, 7)));
+    assert_eq!(marks(text, "jll3>>"), ((1, 2), (3, 7)));
+    assert_eq!(marks(text, "jllVj>"), ((1, 0), (2, 7)));
+    assert_eq!(marks(text, "jll>>jj."), ((3, 2), (3, 7)));
+    assert_eq!(marks("one\n  two three\n  four\nfive\n", "jll<k"), ((0, 2), (1, 8)));
+    assert_eq!(marks("one\n    two three\n", "jll<<"), ((1, 2), (1, 8)));
+    assert_eq!(marks("one\ntwo three\nfour five\nsix\n", "jjll>ip"), ((0, 0), (3, 6)));
+}
+
+/// **A delete or a yank into a read-only register is refused whole**, as
+/// vim refuses it (`valid_yank_reg`) and helix does (`Registers::write`):
+/// nothing deleted, and the status line says why.
+#[test]
+fn a_cut_into_a_read_only_register_is_refused_whole() {
+    for keys in ["\"%dd", "\":dd", "\"/dw", "\".dd", "\"%x", "\".D", "v\":d", "\"%cw", "\"%X"] {
+        let ed = vim_after("one two\n", &format!("l{keys}"));
+        assert_eq!(ed.current_buffer().text().to_string(), "one two\n", "{keys:?}");
+    }
+    let ed = vim_after("one two\n", "\"%dd");
+    assert!(ed.status().contains('%'), "{}", ed.status());
+    let ed = vim_after("one\ntwo\n", "yy\":ddp");
+    assert_eq!(ed.current_buffer().text().to_string(), "one\none\ntwo\n", "the yank before is what `p` puts");
+    // helix refuses `%` `#` `.` and keeps text in `:` and `/`.
+    for keys in ["l\".d", "l\"%d", "l\"#d", "l\".cX\x1b"] {
+        let mut ed = typed("aaa\n");
+        press(&mut ed, &format!("gg{keys}"));
+        assert_eq!(ed.current_buffer().text().to_string(), "aaa\n", "{keys:?}");
+    }
+    let mut ed = typed("aaa\n");
+    press(&mut ed, "ggl\":d");
+    assert_eq!(ed.current_buffer().text().to_string(), "aa\n", "helix's `:` takes text");
+}
+
+/// **helix's `"."` is the selections' text** (measured against helix
+/// 25.07.1): `x".p` puts a copy of the line under it.
+#[test]
+fn helixs_dot_register_is_the_selections_text() {
+    let mut ed = typed("aaa\n");
+    press(&mut ed, "ggx\".p");
+    assert_eq!(ed.current_buffer().text().to_string(), "aaa\naaa\n");
+    let mut ed = typed("aaa\n");
+    press(&mut ed, "ggl\".y\".p");
+    assert_eq!(ed.current_buffer().text().to_string(), "aaaa\n", "`\".y` writes nothing, `\".p` puts the selection");
+    assert_eq!(vim_after("one two\n", "Ofoo\x1b").register_contents(Some('.')), "foo", "vim's is the last Insert");
+}
+
+/// **vim's `:sort n` and `u`, and a range in front** (measured against
+/// nvim 0.12): numbers by value, lines without one first; `u` keeps the
+/// first of equal lines; `:%sort` and `:2-3sort` sort what they name.
+#[test]
+fn vims_sort_takes_numbers_unique_and_a_range() {
+    let sorted = |text: &str, line: &str| vim_after(text, &format!("{line}\n")).current_buffer().text().to_string();
+    assert_eq!(sorted("x10\nx9\n-3 y\nz\nx100\n", ":sort n"), "z\n-3 y\nx9\nx10\nx100\n");
+    assert_eq!(sorted("x10\nx9\n-3 y\nz\nx100\n", ":sort! n"), "x100\nx10\nx9\n-3 y\nz\n");
+    assert_eq!(sorted("2 -\n1-2\n-1\n1\n", ":sort n"), "-1\n1-2\n1\n2 -\n");
+    assert_eq!(sorted("c\na\nb\na\nc\n", ":sort u"), "a\nb\nc\n");
+    assert_eq!(sorted("a2\nb2\na1\nc\nd\n", ":sort nu"), "c\nd\na1\na2\nb2\n", "`u` compares text, not the number");
+    assert_eq!(sorted("b\nA\na\nB\n", ":sort iu"), "A\nb\n");
+    assert_eq!(sorted("a\nc\nb\na\n", ":sort! u"), "c\nb\na\n");
+    assert_eq!(sorted("c\na\nb\na\n", ":%sort"), "a\na\nb\nc\n");
+    assert_eq!(sorted("d\nc\nb\na\n", ":2,3sort"), "d\nb\nc\na\n");
+    assert_eq!(sorted("d\nc\nb\na\n", ":2-4sort"), "d\na\nb\nc\n");
+    assert_eq!(sorted("d\nc\nb\na\n", ":1,4sort"), "a\nc\nb\nd\n", "a list sorts its own lines among their places");
+    assert_eq!(sorted("d\nc\nb\nc\nb\n", ":2-$sort u"), "d\nb\nc\n");
+    assert_eq!(sorted("d\nc10\nb9\na\n", "jVj:sort n"), "d\nb9\nc10\na\n");
+    assert_eq!(sorted("b\na\n", ":9sort"), "b\na\n", "no such line sorts nothing");
+}
+
+/// **`:read !cmd` reads the command's output in below the cursor line**,
+/// the cursor on the last line read (vim's `:r !cmd`); `:0read` and
+/// `:$read` put a file above the first line and after the last.
+#[test]
+fn vims_read_takes_a_command_and_a_line() {
+    let mut ed = vim_after("one\ntwo\nthree\n", "j:read !printf 'x\\ny\\n'\n");
+    let asked = ed.take_shell_request().expect("asks the shell");
+    assert_eq!(asked.line, "printf 'x\\ny\\n'");
+    let put = match asked.how {
+        crate::editor::How::Pipe(fed, put) => {
+            assert_eq!(fed, "");
+            put
+        }
+        _ => panic!("a pipe"),
+    };
+    assert_eq!(put, crate::editor::Put::Lines(2));
+    ed.provide_pipe_output("x\ny\n", put);
+    assert_eq!(ed.current_buffer().text().to_string(), "one\ntwo\nx\ny\nthree\n");
+    assert_eq!(ed.current_buffer().rope().char_to_line(ed.sel.head()), 3, "on the last line read");
+    let mut ed = vim_after("one\ntwo\n", "G:0read !echo hi\n");
+    let put = match ed.take_shell_request().map(|s| s.how) {
+        Some(crate::editor::How::Pipe(_, put)) => put,
+        _ => panic!("a pipe"),
+    };
+    ed.provide_pipe_output("hi\n", put);
+    assert_eq!(ed.current_buffer().text().to_string(), "hi\none\ntwo\n");
+    let dir = std::env::temp_dir().join(format!("yumete-read-line-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("r.txt");
+    std::fs::write(&file, "r1\nr2\n").unwrap();
+    let path = file.to_string_lossy().into_owned();
+    let read = |line: &str| vim_after("one\ntwo\n", &format!("{line} {path}\n")).current_buffer().text().to_string();
+    assert_eq!(read(":0read"), "r1\nr2\none\ntwo\n");
+    assert_eq!(read(":$read"), "one\ntwo\nr1\nr2\n");
+    assert_eq!(read(":1read"), "one\nr1\nr2\ntwo\n");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// **The pending echo says the keys vim's reader typed**: `ds`, `cs)`,
 /// `ysiw`, Visual `S`, not this editor's `md` `mr` `ms`.
 #[test]

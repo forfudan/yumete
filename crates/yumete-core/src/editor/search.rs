@@ -422,7 +422,7 @@ impl Editor {
     }
 
     /// The lines a `:s` range names, as a question a line number can be put to.
-    fn substitution_rows(&self, rows: crate::command::Rows) -> Result<Chosen, String> {
+    pub(super) fn substitution_rows(&self, rows: crate::command::Rows) -> Result<Chosen, String> {
         use crate::command::{Bound, Rows};
         let rope = self.current_buffer().rope();
         let last_line = motion::last_line(rope);

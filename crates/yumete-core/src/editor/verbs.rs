@@ -696,12 +696,16 @@ impl Editor {
     /// Unicode order, not by reading or by stroke. The sort is stable, so
     /// lines equal under `insensitive` keep their order, as vim's `:sort i`
     /// and helix's `-i` keep it.
-    pub(super) fn sort(&mut self, reverse: bool, insensitive: bool) {
+    ///
+    /// A range written in front (`:%sort`, `:2-5sort`, `:2,3sort`) takes the
+    /// place of the selection; a list of lines (`,`) sorts those lines among
+    /// their own places, the ones between left alone.
+    pub(super) fn sort(&mut self, how: crate::command::SortHow, rows: Option<crate::command::Rows>) {
         if self.refuse_readonly() {
             return;
         }
-        if self.sel.is_plural() {
-            self.sort_selections(reverse, insensitive);
+        if rows.is_none() && self.sel.is_plural() {
+            self.sort_selections(how);
             return;
         }
         let rope = self.current_buffer().rope();
@@ -710,31 +714,48 @@ impl Editor {
             true => rope.len_lines() - 1,
             false => rope.len_lines(),
         };
-        let (first, last) = match self.has_selection() {
-            true => {
-                let (start, end) = self.selection();
-                (rope.char_to_line(start), rope.char_to_line(end.saturating_sub(1).max(start)))
-            }
-            false => (0, lines.saturating_sub(1)),
+        let chosen: Vec<usize> = match rows {
+            Some(rows) => match self.substitution_rows(rows) {
+                Ok(super::Chosen::Span(a, b)) => (a..=b).collect(),
+                Ok(super::Chosen::These(mut these)) => {
+                    these.sort_unstable();
+                    these.dedup();
+                    these
+                }
+                Err(why) => {
+                    self.status = why;
+                    return;
+                }
+            },
+            None => match self.has_selection() {
+                true => {
+                    let (start, end) = self.selection();
+                    (rope.char_to_line(start)..=rope.char_to_line(end.saturating_sub(1).max(start))).collect()
+                }
+                false => (0..lines.max(1)).collect(),
+            },
         };
-        let last = last.min(lines.saturating_sub(1)).max(first);
+        let chosen: Vec<usize> = chosen.into_iter().filter(|&n| n < lines.max(1)).collect();
+        let (Some(&first), Some(&last)) = (chosen.first(), chosen.last()) else { return };
+        let rope = self.current_buffer().rope();
         let from = rope.line_to_char(first);
         let to = rope.line_to_char(last) + rope.line(last).len_chars();
         let was: String = rope.slice(from..to).chars().collect();
         let ended = was.ends_with('\n');
-        let mut rows: Vec<String> = (first..=last)
-            .map(|n| rope.line(n).to_string().trim_end_matches(['\n', '\r']).to_string())
+        let text_of = |n: usize| rope.line(n).to_string().trim_end_matches(['\n', '\r']).to_string();
+        let mut sorted: Vec<String> = chosen.iter().map(|&n| text_of(n)).collect();
+        sort_lines(&mut sorted, how);
+        // The lines between a list's lines stay; a listed line with no text
+        // left for it (`u` took its twin) goes.
+        let mut sorted = sorted.into_iter();
+        let out_rows: Vec<String> = (first..=last)
+            .filter_map(|n| match chosen.binary_search(&n) {
+                Ok(_) => sorted.next(),
+                Err(_) => Some(text_of(n)),
+            })
             .collect();
-        // **vim's `:sort!` is the stable sort turned round**, so lines
-        // equal under `i` come out in the reverse of their order
-        // (`ex_sort` writes the sorted lines last first), where
-        // helix's `-r` keeps them in order.
-        sort_texts(&mut rows, false, insensitive);
-        if reverse {
-            rows.reverse();
-        }
         let ending = self.current_buffer().ending().to_string();
-        let mut out = rows.join(&ending);
+        let mut out = out_rows.join(&ending);
         if ended {
             out.push_str(&ending);
         }
@@ -748,6 +769,7 @@ impl Editor {
         // vim's `'[` and `']` are the range's first and last lines, at their
         // starts (measured in nvim).
         let rope = self.current_buffer().rope();
+        let last = first + out_rows.len().saturating_sub(1);
         let last_start = rope.line_to_char(last.min(motion::last_line(rope)));
         self.current_buffer_mut().set_change_span(from, last_start);
         // vim leaves the cursor at the start of the range.
@@ -1032,6 +1054,8 @@ impl Editor {
         }
         lines.sort_unstable();
         lines.dedup();
+        // Where the shifted text begins, by its column, for vim's `` `[ ``.
+        let opened = self.sel.iter().map(|one| self.drawn(*one).0.min(rope.len_chars())).min().map(|start| start - rope.line_to_char(rope.char_to_line(start)));
         let primary = self.sel.primary();
         let which = self.sel.iter().position(|one| *one == primary).unwrap_or(0);
         let mut ranges: Vec<crate::selection::Range> = self.sel.iter().copied().collect();
@@ -1107,6 +1131,25 @@ impl Editor {
         }
         self.sel.rebuild(ranges, which);
         self.clamp_cursor();
+        if let (true, Some(&first), Some(&last), Some(column)) = (vim, lines.first(), lines.last(), opened) {
+            self.mark_shifted_lines(first, column, last);
+        }
+    }
+
+    /// **vim's `` `[ `` and `` `] `` after `>` and `<`** (`op_shift`,
+    /// measured in nvim): `` `[ `` on the first line at the column the
+    /// operator started from, before the shift moved the text, and `` `] ``
+    /// on the last line's last character.
+    pub(super) fn mark_shifted_lines(&mut self, first: usize, column: usize, last: usize) {
+        let rope = self.current_buffer().rope();
+        let last = last.min(motion::last_line(rope));
+        let first = first.min(last);
+        let on_line = |line: usize, column: usize| {
+            let len = crate::zong::line_chars(rope, line).len();
+            rope.line_to_char(line) + column.min(len.saturating_sub(1))
+        };
+        let (start, end) = (on_line(first, column), on_line(last, usize::MAX));
+        self.current_buffer_mut().set_change_span(start, end);
     }
 
     /// A line's indent and what vim's `>`/`<` make of it, `None` when `<`
@@ -1253,17 +1296,52 @@ impl Editor {
 /// `:sort`'s order, helix's comparators: by code point, `insensitive` on the
 /// lower-cased texts, and stable either way; `reverse` turns the comparator
 /// round, so equal texts keep their order.
-pub(super) fn sort_texts(texts: &mut [String], reverse: bool, insensitive: bool) {
-    texts.sort_by(|a, b| {
-        let order = match insensitive {
-            true => a.to_lowercase().cmp(&b.to_lowercase()),
-            false => a.cmp(b),
-        };
-        match reverse {
-            true => order.reverse(),
-            false => order,
-        }
+pub(super) fn sort_texts(texts: &mut [String], how: crate::command::SortHow) {
+    texts.sort_by(|a, b| match how.reverse {
+        true => compare_lines(a, b, how).reverse(),
+        false => compare_lines(a, b, how),
     });
+}
+
+/// Two lines in `:sort`'s order: by number with `n`, else by text, case
+/// folded with `i`.
+fn compare_lines(a: &str, b: &str, how: crate::command::SortHow) -> std::cmp::Ordering {
+    match (how.numeric, how.insensitive) {
+        (true, _) => first_number(a).cmp(&first_number(b)),
+        (false, true) => a.to_lowercase().cmp(&b.to_lowercase()),
+        (false, false) => a.cmp(b),
+    }
+}
+
+/// **vim's `:sort` on lines** (`ex_sort`): a stable sort by text, or by
+/// number with `n`; `!` the sorted order turned round, so equal lines come
+/// out last first; `u` then keeps the first of each run of equal lines.
+pub(super) fn sort_lines(rows: &mut Vec<String>, how: crate::command::SortHow) {
+    rows.sort_by(|a, b| compare_lines(a, b, how));
+    if how.reverse {
+        rows.reverse();
+    }
+    if how.unique {
+        rows.dedup_by(|later, kept| match how.insensitive {
+            true => later.to_lowercase() == kept.to_lowercase(),
+            false => later == kept,
+        });
+    }
+}
+
+/// The first decimal number in `line` with a `-` right before it taken in,
+/// as vim's `:sort n` reads one (`skiptodigit`); `None` sorts before every
+/// number. Past `i64` it stays at the edge, as `strtol` does.
+fn first_number(line: &str) -> Option<i64> {
+    let at = line.find(|c: char| c.is_ascii_digit())?;
+    let digits = &line[at..];
+    let digits = &digits[..digits.find(|c: char| !c.is_ascii_digit()).unwrap_or(digits.len())];
+    let negative = line[..at].ends_with('-');
+    let value = digits.bytes().fold(0i64, |n, d| n.saturating_mul(10).saturating_add(i64::from(d - b'0')));
+    Some(match negative {
+        true => -value,
+        false => value,
+    })
 }
 
 /// Where the first `sign` stands in `line`, as byte offsets, outside a

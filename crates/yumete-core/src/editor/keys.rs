@@ -1003,6 +1003,19 @@ impl Editor {
     /// register — `dd` then `p` puts the line back — so it is this editor's
     /// `D` (剪切), not its `d` (刪除，不動寄存器).
     fn vim_operator_key(&mut self, op: char, first: Option<char>, key: Key) {
+        // **`:h quote1`'s motions**: a delete made with one of these goes into
+        // `"1` however short it is. `/` `?` `n` `N` are on vim's list too, but
+        // they are no motions after an operator here.
+        self.use_reg_one = match (first, key) {
+            (None, Key::Char(c)) => matches!(c, '%' | '(' | ')' | '{' | '}'),
+            (Some('`'), Key::Char(_)) => true,
+            _ => false,
+        };
+        self.vim_operator_key_now(op, first, key);
+        self.use_reg_one = false;
+    }
+
+    fn vim_operator_key_now(&mut self, op: char, first: Option<char>, key: Key) {
         // Warning: **Let go of the wait before doing anything**: what
         // runs below reads `pending`, and an operator still holding the wait
         // answers its own motion as though it were the next key.
@@ -1218,16 +1231,14 @@ impl Editor {
             };
             let here = self.sel.head();
             let rope = self.current_buffer().rope();
+            // `d'a` keeps the column the cursor wants, as `dj` does (nvim's
+            // 'nostartofline', measured): the mark's line is only where the
+            // lines end.
             if quote == '\'' {
                 let (a, b) = (rope.char_to_line(here), rope.char_to_line(at));
-                self.do_vim_lines(op, a.min(b), a.max(b));
-                if op == 'd' {
-                    let rope = self.current_buffer().rope();
-                    let at = motion::line_first_non_blank(rope, self.sel.head());
-                    self.move_head(at);
-                    self.sel.set_goal(None);
-                }
-                return;
+                // The motion lands on the mark line's first non-blank.
+                self.lines_from = Some(here.min(motion::line_first_non_blank(rope, rope.line_to_char(b))));
+                return self.do_vim_lines(op, a.min(b), a.max(b));
             }
             let (start, end) = (here.min(at), here.max(at));
             if start == end {
@@ -1508,6 +1519,7 @@ impl Editor {
                 if let motion::Span::Over { anchor, head } = span {
                     let rope = self.current_buffer().rope();
                     let (a, b) = (rope.char_to_line(anchor), rope.char_to_line(head));
+                    self.lines_from = Some(anchor.min(head));
                     return self.do_vim_lines(op, a.min(b), a.max(b));
                 }
             }
@@ -1528,6 +1540,7 @@ impl Editor {
                     let more = rope.char_to_line(head) < motion::last_line(rope);
                     if breaks && more && anchor <= motion::line_first_non_blank(rope, anchor) {
                         let (a, b) = (rope.char_to_line(anchor), rope.char_to_line(head));
+                        self.lines_from = Some(anchor);
                         return self.do_vim_lines(op, a, b);
                     }
                 }
@@ -1763,6 +1776,10 @@ impl Editor {
     /// 同上，而且說清楚這一段是**整行**還是行內的一截——那道「落在換行符上就什麼
     /// 都不做」的閘只擋行內的（見底下）。
     fn do_vim_span(&mut self, op: char, span: motion::Span, shape: Shape) {
+        let lines_from = self.lines_from.take();
+        if matches!(op, 'd' | 'c' | 'y') && self.refuse_unwritable_register() {
+            return;
+        }
         // **An operator takes a closed fold whole** (`:h fold-behavior`: 「dl
         // deletes the whole closed fold under the cursor」, measured).
         let (span, shape) = match op {
@@ -1882,9 +1899,31 @@ impl Editor {
                     let line = rope.char_to_line(head);
                     (line, head - rope.line_to_char(line))
                 };
+                // `` `[ `` is where the operator began: the cursor for `>>`
+                // and `>j`, the line above at the column wanted for `>k`, a
+                // paragraph's start for `>ip` (measured in nvim).
+                let opened = match span {
+                    motion::Span::Over { anchor, head } => {
+                        let rope = self.current_buffer().rope();
+                        let start = anchor.min(head).min(rope.len_chars());
+                        let first = rope.char_to_line(start);
+                        let last = rope.char_to_line(anchor.max(head).min(rope.len_chars()));
+                        let column = match (shape, lines_from) {
+                            (Shape::Lines, Some(at)) => at.saturating_sub(rope.line_to_char(rope.char_to_line(at.min(rope.len_chars())))),
+                            (Shape::Lines, None) if first == line => column,
+                            (Shape::Lines, None) => self.column_wanted(),
+                            _ => start - rope.line_to_char(first),
+                        };
+                        Some((first, column, last))
+                    }
+                    motion::Span::Missed => None,
+                };
                 self.take_object(span);
                 self.extend_to_line_bounds();
                 self.indent(op == '>');
+                if let Some((first, column, last)) = opened {
+                    self.mark_shifted_lines(first, column, last);
+                }
                 match kept {
                     // On the first line shifted, at the column wanted:
                     // `>k` lands a line up.

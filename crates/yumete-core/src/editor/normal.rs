@@ -1766,6 +1766,9 @@ impl Editor {
     #[allow(unused_variables)]
     fn cmd_delete_or_change_now(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
+        if !matches!(key, Key::Alt('d') | Key::Alt('c')) && self.refuse_unwritable_register() {
+            return;
+        }
         self.snapshot();
         // A count deletes that many graphemes when there is nothing
         // selected, the way `3x` does in vim; with a selection it is
@@ -1853,6 +1856,9 @@ impl Editor {
             let text = self.change_here().map(|run| run.was.join("\n"));
             self.clipboard_request = text;
         } else {
+            if self.refuse_unwritable_register() {
+                return;
+            }
             if self.vim_lines {
                 self.extend_to_line_bounds();
                 self.vim_lines = false;

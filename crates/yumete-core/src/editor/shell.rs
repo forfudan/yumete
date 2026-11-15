@@ -64,7 +64,7 @@ impl Editor {
         let (start, end) = self.selection();
         let fed = match put {
             Put::Replace | Put::Nowhere => self.current_buffer().rope().slice(start..end).to_string(),
-            Put::Before | Put::After | Put::Value | Put::Equation => String::new(),
+            Put::Before | Put::After | Put::Value | Put::Equation | Put::Lines(_) => String::new(),
         };
         let buffer = self.current_buffer();
         self.pipe_at = Some(crate::editor::PipeAt { buffer: buffer.id(), revision: buffer.revision(), start, end });
@@ -121,13 +121,16 @@ impl Editor {
             }
             None => self.selection(),
         };
+        if let Put::Lines(below) = put {
+            return self.read_output_in(output, below);
+        }
         // **插在前面/後面的，把原文接回去**。整段仍舊走「換掉這一
         // 段」那條路，所以換行規矩、表格那道閘、撤銷點全是現成的——`!` 和 `|`
         // 於是不會慢慢長出兩套邊界情形。
         let keep = self.current_buffer().rope().slice(start..end).to_string();
         let joined;
         let output = match put {
-            Put::Replace | Put::Nowhere => output,
+            Put::Replace | Put::Nowhere | Put::Lines(_) => output,
             Put::Before => {
                 joined = format!("{output}{keep}");
                 joined.as_str()
@@ -189,10 +192,26 @@ impl Editor {
         let written = text.chars().count();
         self.status = match put {
             Put::Replace | Put::Nowhere => say!("edit.pipe-replaced-characters", written),
-            Put::Before | Put::After | Put::Value | Put::Equation => {
+            Put::Before | Put::After | Put::Value | Put::Equation | Put::Lines(_) => {
                 say!("edit.pipe-inserted-characters", written.saturating_sub(keep.chars().count()))
             }
         };
+    }
+
+    /// **`:read !cmd`'s answer**, as lines below line `below`: nothing for
+    /// no output (vim reads no empty line in), and the cursor on the last
+    /// line read, at its first non-blank (vim's `do_filter`).
+    fn read_output_in(&mut self, output: &str, below: usize) {
+        if output.is_empty() {
+            return;
+        }
+        let ending = self.current_buffer().ending();
+        let text = output.replace("\r\n", "\n");
+        let text = match ending {
+            "\n" => text,
+            _ => text.replace('\n', ending),
+        };
+        self.read_in(&text, below, true);
     }
 
     /// Whether a range covers whole rows of the grid — line start to line end.

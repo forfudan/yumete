@@ -566,6 +566,12 @@ zhs = "那个寄存器是空的"
 en = "that register is empty"
 
 [[message]]
+# （草稿）多个选区时 :sort u：选区照样排序，但 u 只对整行去重
+key = "edit.sort-unique-needs-lines"
+zhs = "u 只对整行去重：几个选区照样排了序，相同的都还在"
+en = "u is for lines: the selections are sorted, the equal ones all kept"
+
+[[message]]
 # vim 鍵位 ysiwf：問要包上的函數名，命令行上那一行的標籤（草稿）
 key = "edit.surround-ask-function"
 zhs = "函数名："
@@ -673,6 +679,12 @@ en = "register {0} is empty"
 key = "register.nothing-yanked"
 zhs = "还没有复制过内容：y 复制，␣p 从系统剪贴板粘贴"
 en = "nothing yanked yet: y copies, Space p pastes from the system clipboard"
+
+[[message]]
+# （草稿）往只读寄存器（"% ": "/ ". 等）里剪切或复制，整个操作被拒绝
+key = "register.read-only"
+zhs = "寄存器 {0} 只读：没有删除也没有复制"
+en = "register {0} is read-only: nothing was deleted or copied"
 
 [[message]]
 # 空格 " 的貼上單，某一條取過的東西不止一行時的那一行摘要

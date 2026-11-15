@@ -139,15 +139,15 @@ impl Editor {
     }
 
     /// Put `text` (a file `:read` took in) into the buffer: on new lines
-    /// below the cursor line, the cursor on the first of them (vim's `:r`),
-    /// under every keymap.
-    pub(super) fn read_in(&mut self, text: &str) {
+    /// below line `below` (`0` above the first), the cursor at the first
+    /// non-blank of the first of them (vim's `:r`) or, for a command's
+    /// output, of the last (vim's `:r !cmd`), under every keymap.
+    pub(super) fn read_in(&mut self, text: &str, below: usize, on_the_last: bool) {
         self.snapshot();
         let rope = self.current_buffer().rope();
-        let next = self.cursor_line() + 1;
         let len = rope.len_chars();
-        let at = match next < rope.len_lines() {
-            true => rope.line_to_char(next),
+        let at = match below < rope.len_lines() {
+            true => rope.line_to_char(below),
             false => len,
         };
         // The last line has no line break of its own to stand on.
@@ -161,10 +161,18 @@ impl Editor {
             false => ending,
         };
         if self.overwrite(at, at, &format!("{lead}{text}{tail}")) {
+            let rope = self.current_buffer().rope();
             let first = at + lead.chars().count();
-            self.sel.set_anchor(first);
-            self.sel.set_head(first);
+            let line = match on_the_last {
+                true => rope.char_to_line(first) + format!("{text}{tail}").matches('\n').count().saturating_sub(1),
+                false => rope.char_to_line(first),
+            };
+            let line = line.min(motion::last_line(rope));
+            let to = motion::line_first_non_blank(rope, rope.line_to_char(line));
+            self.sel.set_anchor(to);
+            self.sel.set_head(to);
             self.clamp_cursor();
+            self.refresh_goal_column();
         }
     }
 
@@ -1224,6 +1232,9 @@ impl Editor {
     /// stopping at the start of the line — vim's `X`. The cursor ends on the
     /// character it was on.
     pub(super) fn cut_before_cursor(&mut self, count: usize) {
+        if self.refuse_unwritable_register() {
+            return;
+        }
         let (start, last) = {
             let rope = self.current_buffer().rope();
             let line_start = motion::line_start(rope, self.sel.head());
@@ -1541,19 +1552,33 @@ impl Editor {
                 false => self.charwise_breaks.remove(&key),
             };
         }
+        // **vim's `"1`–`"9`: the last nine deletes of a line or more**
+        // (`:h quote1`), each pushing the older ones down — a register named
+        // for the delete gets it too, and so does `"1` — and the short
+        // deletes of `:h quote1`'s motions ([`Editor::use_reg_one`]).
+        let numbered = fresh
+            && self.keymap_rules().vim_registers
+            && !self.storing_a_yank
+            && (text.contains('\n') || self.use_reg_one);
         match named {
             // **`"_` keeps nothing and `"+` / `"*` are the system clipboard**,
             // as in helix and vim: `"_d` deletes without touching
             // what `p` puts, and `"+y` copies out of the editor.
             Some('_') => {}
             // The read-only registers are answers, not places to keep text.
-            Some(name) if self.register_is_read_only(name) => {}
+            Some(name) if self.register_is_read_only(name) || self.register_refuses_writes(name) => {}
             Some('+' | '*') => {
+                if numbered {
+                    self.push_numbered(vec![text.clone()]);
+                }
                 self.clipboard_request = Some(text);
             }
             // **vim's `"A` adds to register `a`** (`:h quote_alpha`): lines added to text, or text to lines,
             // make lines.
             Some(name) if name.is_ascii_uppercase() && self.keymap_rules().vim_registers => {
+                if numbered {
+                    self.push_numbered(vec![text.clone()]);
+                }
                 let name = name.to_ascii_lowercase();
                 let mut held = self.held(name);
                 let mut text = text;
@@ -1569,6 +1594,9 @@ impl Editor {
                 self.unnamed_follows(name);
             }
             Some(name) => {
+                if numbered {
+                    self.push_numbered(vec![text.clone()]);
+                }
                 let parts = self.registers.entry(name).or_default();
                 if fresh {
                     parts.clear();
@@ -1584,30 +1612,33 @@ impl Editor {
                     self.yanks.insert(0, text.clone());
                     self.yanks.truncate(YANKS);
                 }
-                // **vim's `"1`–`"9`: the last nine deletes of a line or more**
-                // (`:h quote1`), each pushing the older ones down.
-                let numbered = fresh
-                    && self.keymap_rules().vim_registers
-                    && !self.storing_a_yank
-                    && text.contains('\n');
+                let short = !text.contains('\n');
                 if fresh {
                     self.register_parts.clear();
                 }
                 keep_one_piece(&mut self.register_parts, nth, text);
                 self.register = self.register_parts.concat();
                 if numbered {
-                    for n in (b'1'..b'9').rev() {
-                        if let Some(older) = self.registers.remove(&(n as char)) {
-                            self.registers.insert((n + 1) as char, older);
-                        }
-                    }
-                    self.registers.insert('1', self.register_parts.clone());
-                } else if fresh && self.keymap_rules().vim_registers && !self.storing_a_yank {
-                    // **vim's `"-`: a delete within one line** (`:h quote_-`).
+                    self.push_numbered(self.register_parts.clone());
+                }
+                // **vim's `"-`: a delete within one line** (`:h quote_-`),
+                // whether or not `"1` took it as well.
+                if short && fresh && self.keymap_rules().vim_registers && !self.storing_a_yank {
                     self.registers.insert('-', self.register_parts.clone());
                 }
             }
         }
+    }
+
+    /// Put a delete in `"1`, the older ones moving down to `"9` and the
+    /// ninth falling off (`:h quote_number`).
+    fn push_numbered(&mut self, parts: Vec<String>) {
+        for n in (b'1'..b'9').rev() {
+            if let Some(older) = self.registers.remove(&(n as char)) {
+                self.registers.insert((n + 1) as char, older);
+            }
+        }
+        self.registers.insert('1', parts);
     }
 
     /// **vim's `""` follows the register just written** (`:h quotequote`):
@@ -1726,6 +1757,13 @@ impl Editor {
             // **The read-only registers** (`:h quote.`, helix's `%`, `:`
             // and `/`): the file's name, the last `:` line, the last search,
             // and under vim the last Insert's text.
+            // **helix's `"."` is the selections' text**, each selection its own
+            // (helix's `Registers::read`): `".p` puts a copy of what is
+            // selected after it.
+            Some('.') if !self.keymap_rules().vim_registers => {
+                let (start, end) = self.selection();
+                self.current_buffer().rope().slice(start..end).to_string()
+            }
             Some(name) if self.register_is_read_only(name) => match name {
                 '.' => self.last_inserted.clone(),
                 '%' => self.file_name_as_register(),
@@ -1757,6 +1795,31 @@ impl Editor {
             '.' => self.keymap_rules().vim_registers,
             _ => false,
         }
+    }
+
+    /// Whether `name` refuses to be written: vim's `%` `:` `/` `.`
+    /// (`valid_yank_reg` with `writing`), helix's `%` `#` `.`
+    /// (`Registers::write`). helix's `:` and `/` take text.
+    fn register_refuses_writes(&self, name: char) -> bool {
+        match self.keymap_rules().vim_registers {
+            true => self.register_is_read_only(name),
+            false => matches!(name, '%' | '#' | '.'),
+        }
+    }
+
+    /// **A cut or a copy into a register that cannot take it is refused
+    /// whole**, as vim and helix refuse it: `"%dd` deletes nothing, where
+    /// doing the edit and keeping nothing would lose the text. `true` when
+    /// it was refused; the status line says why.
+    pub(super) fn refuse_unwritable_register(&mut self) -> bool {
+        let Some(name) = self.pending_register.filter(|&n| self.register_refuses_writes(n)) else {
+            return false;
+        };
+        self.pending_register = None;
+        self.count = None;
+        self.alias_count = None;
+        self.status = say!("register.read-only", name);
+        true
     }
 
     /// `"%`: the file's name as helix and vim show it, from the working

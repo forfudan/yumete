@@ -734,8 +734,8 @@ impl Editor {
                 self.align_lines(&sign);
                 Ok(CommandOutcome::Continue)
             }
-            Command::Sort { reverse, insensitive } => {
-                self.sort(reverse, insensitive);
+            Command::Sort { how, rows } => {
+                self.sort(how, rows);
                 Ok(CommandOutcome::Continue)
             }
             Command::SplitJoin => {
@@ -1449,9 +1449,27 @@ impl Editor {
                 self.ask_the_shell(line.trim_end().to_string(), put);
                 Ok(CommandOutcome::Continue)
             }
-            Command::Read(path) => {
+            Command::Read { what: path, shell, after } => {
                 if self.current_buffer().is_readonly() {
                     self.status = say!("readonly.refused");
+                    return Ok(CommandOutcome::Continue);
+                }
+                // **Below which line**: the cursor's, or the one a range
+                // named, `0` being above the first (vim's `:0r`).
+                let rope = self.current_buffer().rope();
+                let lines = motion::last_line(rope) + 1;
+                let below = match after {
+                    None | Some(command::Bound::Cursor) => self.cursor_line() + 1,
+                    Some(command::Bound::Last) => lines,
+                    Some(command::Bound::Line(n)) if n <= lines => n,
+                    Some(command::Bound::Line(n)) => {
+                        self.status = say!("find.no-such-line", n, lines);
+                        return Ok(CommandOutcome::Continue);
+                    }
+                };
+                if shell {
+                    self.last_bang = Some(path.clone());
+                    self.ask_the_shell(path, crate::editor::Put::Lines(below));
                     return Ok(CommandOutcome::Continue);
                 }
                 // The name goes into the error, as vim's E484 has it: a bare
@@ -1475,7 +1493,7 @@ impl Editor {
                     "\n" => text,
                     _ => text.replace('\n', ending),
                 };
-                self.read_in(&text);
+                self.read_in(&text, below, false);
                 Ok(CommandOutcome::Continue)
             }
             Command::Convert(ask) => {
