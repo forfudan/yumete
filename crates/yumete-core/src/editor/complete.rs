@@ -8,9 +8,9 @@
 //! **Nothing is written until Tab.** The panel opens by itself, because a
 //! completion nobody knows about is not one, but the buffer is not touched
 //! until the writer asks — so a reference typed out in full never has an
-//! editor's guess in it. That also keeps every other key exactly what it was:
-//! Enter is a line break, Esc leaves Insert, and Tab outside a trigger is
-//! still a tab character.
+//! editor's guess in it. From there on it is the panel word completion uses,
+//! with its keys (`completion.rs`): each `Tab` writes the next reference in,
+//! closing brackets and all, `Enter` keeps it, `C-c` takes it back out.
 
 use super::*;
 
@@ -92,9 +92,18 @@ pub struct Candidate {
     /// What gets written in place of what has been typed, closing bracket and
     /// all.
     pub text: String,
-    /// What it is, in the quiet ink beside it: a note's first words, a
-    /// heading's title.
+    /// What the panel shows: the same without the bracket it closes, since
+    /// `舊註]` reads as a typo in a list of tags.
+    pub label: String,
+    /// What it is, in the quiet ink beside it: a note's first words, the
+    /// folder a page is in, a heading's level and the heading it is under.
     pub note: Option<String>,
+}
+
+impl Candidate {
+    fn new(label: String, close: &str, note: Option<String>) -> Self {
+        Candidate { text: format!("{label}{close}"), label, note }
+    }
 }
 
 /// A trigger standing open at the cursor, and what it offers.
@@ -229,17 +238,11 @@ impl Editor {
             .iter()
             .filter(|tag| tag.starts_with(typed))
             .take(MOST)
-            .map(|tag| Candidate {
-                text: format!("{tag}{close}"),
-                note: bodies.get(tag).cloned().map(first_words),
-            })
+            .map(|tag| Candidate::new(tag.clone(), &close, bodies.get(tag).cloned().map(first_words)))
             .collect();
         let fresh = (1..).find(|n| !taken.contains(n)).unwrap_or(1).to_string();
         if fresh.starts_with(typed) {
-            out.push(Candidate {
-                text: format!("{fresh}{close}"),
-                note: Some(say!("complete.a-new-one")),
-            });
+            out.push(Candidate::new(fresh, &close, Some(say!("complete.a-new-one"))));
         }
         out
     }
@@ -247,23 +250,15 @@ impl Editor {
     /// This file's headings, as the anchor a Markdown reader would give them.
     fn anchor_choices(&self, typed: &str) -> Vec<Candidate> {
         let close = self.closes_with(')');
-        self.outline()
+        let headings: Vec<(usize, String)> = self.outline().into_iter().map(|(_, level, title)| (level, title)).collect();
+        let notes = heading_notes(&headings);
+        headings
             .into_iter()
-            .map(|(_, _, title)| (crate::markdown::anchor(&title), title))
+            .zip(notes)
+            .map(|((_, title), note)| (crate::markdown::anchor(&title), note))
             .filter(|(slug, _)| !slug.is_empty() && slug.starts_with(typed))
             .take(MOST)
-            .map(|(slug, title)| {
-                // The title beside the anchor only when it is telling the
-                // reader something: for 「卷一 開端」 the anchor *is* the
-                // title with the space taken out, and printing both fills
-                // half the panel with the same words twice.
-                let bare: String = title.chars().filter(|c| !c.is_whitespace()).collect();
-                let same = slug.replace('-', "") == bare.to_lowercase();
-                Candidate {
-                    text: format!("{slug}{close}"),
-                    note: (!same).then_some(title),
-                }
-            })
+            .map(|(slug, note)| Candidate::new(slug, &close, Some(note)))
             .collect()
     }
 
@@ -280,8 +275,8 @@ impl Editor {
     /// link; offering it twice would offer one place under two rows.
     fn section_choices(&self, page: &str, typed: &str) -> Vec<Candidate> {
         let close = self.closes_with_n(']', 2);
-        let titles: Vec<String> = match page.is_empty() {
-            true => self.outline().into_iter().map(|(_, _, title)| title).collect(),
+        let headings: Vec<(usize, String)> = match page.is_empty() {
+            true => self.outline().into_iter().map(|(_, level, title)| (level, title)).collect(),
             false => {
                 let resolved = self
                     .links
@@ -296,21 +291,23 @@ impl Editor {
         };
         let want = typed.to_lowercase();
         let mut seen: std::collections::HashSet<String> = Default::default();
-        titles
+        let notes = heading_notes(&headings);
+        headings
             .into_iter()
+            .zip(notes)
             // A heading holding `]]` or `|` would end the link inside it.
-            .filter(|title| !title.contains("]]") && !title.contains('|'))
-            .filter(|title| seen.insert(heading_key(title)))
-            .filter(|title| want.is_empty() || title.to_lowercase().contains(&want))
+            .filter(|((_, title), _)| !title.contains("]]") && !title.contains('|'))
+            .filter(|((_, title), _)| seen.insert(heading_key(title)))
+            .filter(|((_, title), _)| want.is_empty() || title.to_lowercase().contains(&want))
             .take(MOST)
-            .map(|title| Candidate { text: format!("{title}{close}"), note: None })
+            .map(|((_, title), note)| Candidate::new(title, &close, Some(note)))
             .collect()
     }
 
     /// The headings of another file, as [`Editor::outline`] would list them
     /// once `gd` had opened it: from the buffer holding it when one does,
     /// since that is the text `gd` shows, else from the disk.
-    fn headings_of_page(&self, file: &Path) -> Vec<String> {
+    fn headings_of_page(&self, file: &Path) -> Vec<(usize, String)> {
         let held = self.buffer_holding(file).map(|i| &self.buffers[i]);
         let stamp: crate::editor::PageStamp = match held {
             Some(buffer) => (None, Some((buffer.id(), buffer.revision()))),
@@ -336,8 +333,10 @@ impl Editor {
             false => Vec::new(),
         };
         let block_of = |line: usize| blocks.get(line).copied().unwrap_or_default();
-        let titles: Vec<String> =
-            super::render::outline_of(&rope, syntax, &block_of).into_iter().map(|(_, _, title)| title).collect();
+        let titles: Vec<(usize, String)> = super::render::outline_of(&rope, syntax, &block_of)
+            .into_iter()
+            .map(|(_, level, title)| (level, title))
+            .collect();
         *self.page_headings.borrow_mut() = Some((file.to_path_buf(), stamp, titles.clone()));
         titles
     }
@@ -387,7 +386,15 @@ impl Editor {
         found
             .into_iter()
             .take(MOST)
-            .map(|(_, shown, under)| Candidate { text: format!("{shown}{close}"), note: under })
+            .map(|(_, shown, under)| {
+                // The folder as a path is written, `卷一/`; a page at the
+                // project's top is said to be there in a word.
+                let folder = match under {
+                    Some(dir) => format!("{dir}/"),
+                    None => say!("complete.project-root"),
+                };
+                Candidate::new(shown, &close, Some(folder))
+            })
             .collect()
     }
 
@@ -457,10 +464,9 @@ impl Editor {
         found
             .into_iter()
             .take(MOST)
-            .map(|(shown, under)| Candidate {
-                text: format!("{shown}{close}"),
-                note: under,
-            })
+            // Until the project is read, the folder is this file's: a page
+            // beside it is `./`.
+            .map(|(shown, under)| Candidate::new(shown, &close, Some(format!("{}/", under.as_deref().unwrap_or(".")))))
             .collect()
     }
 
@@ -480,15 +486,12 @@ impl Editor {
                 crate::cite::typst_labels(&text)
                     .into_iter()
                     .filter(|label| label.to_lowercase().starts_with(&want))
-                    .map(|label| Candidate { text: label, note: Some(say!("complete.label")) }),
+                    .map(|label| Candidate::new(label, "", Some(say!("complete.label")))),
             );
         }
         for (key, title) in self.bibliography_entries(&text, typst) {
-            if key.to_lowercase().starts_with(&want) && !out.iter().any(|c| c.text == key) {
-                out.push(Candidate {
-                    text: format!("{key}{close}"),
-                    note: (!title.is_empty()).then(|| first_words(title)),
-                });
+            if key.to_lowercase().starts_with(&want) && !out.iter().any(|c| c.label == key) {
+                out.push(Candidate::new(key, &close, (!title.is_empty()).then(|| first_words(title))));
             }
         }
         out.truncate(MOST);
@@ -580,7 +583,39 @@ impl Editor {
     /// vanished there would be telling the reader the opposite.
     pub fn reference_open(&self) -> bool {
         self.mode == Mode::Insert
-            && (self.reference.is_some() || self.reference_offer().is_some())
+            && (self.reference.is_some() || (!self.reference_dismissed() && self.reference_offer().is_some()))
+    }
+
+    /// Whether the panel was put away by hand here, and nothing has been
+    /// typed or moved since (see `completion_dismissed`).
+    pub(super) fn reference_dismissed(&self) -> bool {
+        let buffer = self.current_buffer();
+        self.completion_dismissed == Some((buffer.id(), buffer.revision(), self.sel.head()))
+    }
+
+    /// Put the panel away until the text or the caret moves on.
+    pub(super) fn dismiss_reference(&mut self) {
+        self.reference = None;
+        let buffer = self.current_buffer();
+        self.completion_dismissed = Some((buffer.id(), buffer.revision(), self.sel.head()));
+    }
+
+    /// **`C-c` / `C-e`**: the reference written in comes back out, what was
+    /// typed stands again, and the panel closes. Insert mode stays.
+    pub(super) fn cancel_reference(&mut self) {
+        if let Some(walk) = self.reference.take() {
+            let upto = self.sel.head().saturating_sub(walk.past).max(walk.at);
+            let done = self.without_cell_guard(|e| e.current_buffer_mut().replace(walk.at..upto, &walk.typed));
+            if self.applied(done) {
+                if let Some(wrote) = &walk.wrote {
+                    self.rerecord(wrote, &walk.typed);
+                }
+                self.sel.set_head(walk.at + walk.typed.chars().count());
+                self.sel.set_anchor(self.sel.head());
+                self.refresh_goal_column();
+            }
+        }
+        self.dismiss_reference();
     }
 
     /// What the panel draws: the ring's name, the rows, and which one Tab is
@@ -598,6 +633,7 @@ impl Editor {
                 walk.choices.clone(),
                 Some(walk.index.min(walk.choices.len().saturating_sub(1))),
             )),
+            None if self.reference_dismissed() => None,
             None => {
                 let offer = self.reference_offer()?;
                 Some((offer.refers.title(), offer.choices, None))
@@ -665,11 +701,7 @@ impl Editor {
         // recording actually ends with what is being taken back** — Insert may
         // have opened on top of an already-typed `[^4`, and then those
         // characters were never recorded and are somebody else's.
-        if self.insert_recording.ends_with(&taking) {
-            let keep = self.insert_recording.len() - taking.len();
-            self.insert_recording.truncate(keep);
-        }
-        self.insert_recording.push_str(&text);
+        self.rerecord(&taking, &text);
         self.reference = Some(Walking { wrote: Some(text), past, ..walk });
         true
     }
@@ -768,6 +800,27 @@ fn markdown_blocks(rope: &ropey::Rope) -> Vec<crate::markdown::Block> {
         blocks.push(block);
     }
     blocks
+}
+
+/// **What the panel says beside each heading**: its level as the file spells
+/// it, and the heading it stands under — `### 渡口 ›`. The parent is left out
+/// when it is the file's one top heading, which every other row would repeat.
+fn heading_notes(headings: &[(usize, String)]) -> Vec<String> {
+    let tops = headings.iter().filter(|(level, _)| *level == 1).count();
+    let mut out = Vec::with_capacity(headings.len());
+    for (i, (level, _)) in headings.iter().enumerate() {
+        let marks = "#".repeat((*level).max(1));
+        let parent = headings[..i]
+            .iter()
+            .rev()
+            .find(|(above, _)| above < level)
+            .filter(|(above, _)| !(*above == 1 && tops == 1));
+        out.push(match parent {
+            Some((_, title)) => format!("{marks} {title} ›"),
+            None => marks,
+        });
+    }
+    out
 }
 
 /// A note's opening words, for the column beside the tag.

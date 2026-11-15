@@ -11,11 +11,6 @@ use yumete_cjk::actions::PlaceCmd;
 const HISTORY: &[PlaceCmd] = &[PlaceCmd::HistoryPrev, PlaceCmd::HistoryNext];
 
 impl Editor {
-    // Warning: **The list's arms are not folded into guards**
-    // (`collapsible_match`): `Key::Tab if self.take_the_offer()`
-    // would be a guard with a side effect, which changes meaning when an arm
-    // is put between.
-    #[allow(clippy::collapsible_match)]
     pub(super) fn on_insert_key(&mut self, key: Key) {
         // Warning: **`Pending` 的分派只在 Normal 那一支跑**（`on_normal_key`），所以
         // `C-g` 後面那個 `u` 得在這裏吞——放在那邊是吞不到的，稿子裏會留下一個
@@ -39,49 +34,22 @@ impl Editor {
             }
             return;
         }
-        // **服務器提的那張單子，開着的時候先歸它**（#53 ④）。
-        //
-        // Warning: **`Tab` 在這裏本來就有主人**（引用補全，#418）：單子開着 `Tab` 是
-        // 「就這一條」，没開纔是原來那件事。這是浮出來的單子的通則——它在，它
-        // 收鍵；它不在，什麽都没變。
+        // **The completion panel, while it is open, has the keys first** (#53 ④,
+        // #418): words, paths, a server's list and references share one panel
+        // and one set of keys (`completion.rs`). It there, it takes them; it
+        // not there, nothing has changed.
         //
         // Warning: **IME 開着的時候這裏一個鍵都收不到**：編碼串還在 IME 手裏，根本
         // 不進這個函數。模型是「只有當文字上屏才算字符落到屏幕上」——所以候選欄與這張單子不會同時收同一個鍵，空格與 `2390` 一直是
         // IME 的。
-        if self.offers_here().is_some() {
-            match key {
-                Key::Tab => {
-                    if self.take_the_offer() {
-                        return;
-                    }
-                }
-                Key::Ctrl('n') | Key::Down => {
-                    if self.pick_offer(true) {
-                        return;
-                    }
-                }
-                Key::Ctrl('p') | Key::Up => {
-                    if self.pick_offer(false) {
-                        return;
-                    }
-                }
-                // **`C-x` asks again, by hand**, over the list typing opened:
-                // that list never holds the pinyin
-                // offers, and `C-n` inside it only moves.
-                Key::Ctrl('x') => {
-                    if self.offer_from_the_text(true) {
-                        return;
-                    }
-                }
-                // Warning: **`Esc` is not the list's**: it closes the list and
-                // leaves Insert in one press, as helix's popup
-                // (`ignore_escape_key`) and vim's menu (`i_<Esc>` ends
-                // completion) do. `leave_insert` puts the list away.
-                // 別的鍵照舊：打字就該打進去，而打完這張單子就過期了（它記着
-                // 問的時候光標在哪）。
-                _ => {}
-            }
-        } else if key == Key::Ctrl('x')
+        //
+        // Warning: **`Esc` is not the panel's**: it keeps what is written,
+        // closes the panel and leaves Insert in one press, as helix's popup
+        // (`ignore_escape_key`) and vim's menu (`i_<Esc>` ends completion) do.
+        if self.completion_key(key) {
+            return;
+        }
+        if key == Key::Ctrl('x')
             || (key == Key::Ctrl('n') && (self.vim_keymap() || self.flavor_on(yumete_cjk::FlavorItem::InsertExtras)))
         {
             // **叫它出來。** 稿子裏没有服務器可問，那就什麽都不做——`C-n` 在
@@ -92,12 +60,6 @@ impl Editor {
             if self.offer_from_the_text(true) || self.ask_what_comes_next(true) {
                 return;
             }
-        }
-        // Anything but Tab abandons the reference being walked, so the next Tab
-        // starts from what is actually in the buffer — the same rule the
-        // command line's completion follows (#418).
-        if !matches!(key, Key::Tab | Key::BackTab) {
-            self.reference = None;
         }
         let continuing_zong = std::mem::take(&mut self.zong_motion);
         if self.layout() == Layout::Vertical {
@@ -235,15 +197,6 @@ impl Editor {
             }
         }
 
-        // `[^` and `](#` finished from what the file already holds (#418).
-        // Asked here, below the grid's own Tab: inside a cell Tab walks to the
-        // next one, and that is the older claim on the key.
-        if matches!(key, Key::Tab | Key::BackTab) && self.cycle_reference(match key {
-            Key::Tab => 1,
-            _ => -1,
-        }) {
-            return;
-        }
         // **Insert mode's keys are a table too** (step 6 of the keymap plan): `INSERT_KEYS` says which command each key runs, and
         // the reader's `[keys.insert]` is asked before any of this (`on_key`).
         // A key no command answers types itself.

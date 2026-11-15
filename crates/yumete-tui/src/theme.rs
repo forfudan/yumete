@@ -605,7 +605,7 @@ fn srgb(v: f64) -> u8 {
 }
 
 /// The WCAG contrast ratio between two colours.
-fn contrast(a: Color, b: Color) -> f64 {
+pub(crate) fn contrast(a: Color, b: Color) -> f64 {
     let (x, y) = (luminance(a), luminance(b));
     let (hi, lo) = if x > y { (x, y) } else { (y, x) };
     (hi + 0.05) / (lo + 0.05)

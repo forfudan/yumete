@@ -127,6 +127,12 @@ impl Editor {
         if self.mode != Mode::Insert {
             return false;
         }
+        // **A reference standing open has the panel**: `[[卷一/雨` is a page
+        // to link to, not a path or a word, and two lists for one caret would
+        // be one too many.
+        if self.reference.is_some() || self.reference_offer().is_some() {
+            return false;
+        }
         let items = match self.path_offers(by_hand) {
             Some(items) => items,
             // Code asks the server, a Typst `#…` as much as a program.
@@ -140,7 +146,8 @@ impl Editor {
             buffer: self.current_buffer().id(),
             at: self.sel.head(),
             items,
-            picked: 0,
+            chosen: None,
+            prefill: None,
             server: None,
         });
         true
@@ -168,6 +175,7 @@ impl Editor {
             kind: 0,
             detail: None,
             filter: None,
+            deprecated: false,
             replacing: Some(crate::lsp::Replacing {
                 line,
                 from: crate::problem::utf16_column(&text, to - typed),
@@ -225,13 +233,20 @@ impl Editor {
             dir if dir.starts_with('~') || dir.starts_with('/') => Self::expand_tilde(dir),
             dir => here.join(dir),
         };
-        let mut names: Vec<String> = std::fs::read_dir(folder)
+        // What each one is, as helix's path completion says it: a link, a
+        // folder, a file.
+        let mut names: Vec<(String, i64)> = std::fs::read_dir(folder)
             .ok()?
             .flatten()
             .filter_map(|entry| {
                 let name = entry.file_name().into_string().ok()?;
                 let shown = base.starts_with('.') || !name.starts_with('.');
                 let folder = entry.path().is_dir();
+                let kind = match entry.file_type().is_ok_and(|t| t.is_symlink()) {
+                    true => crate::lsp::KIND_LINK,
+                    false if folder => crate::lsp::KIND_FOLDER,
+                    false => crate::lsp::KIND_FILE,
+                };
                 // A folder typed in full still offers its `/`: `src` offers
                 // `src/`.
                 (shown && name.starts_with(base) && (name != base || folder)).then(|| {
@@ -240,13 +255,16 @@ impl Editor {
                         true => name.replace('%', "%25").replace(' ', "%20"),
                         false => name,
                     };
-                    format!("{name}{slash}")
+                    (format!("{name}{slash}"), kind)
                 })
             })
             .collect();
         names.sort();
         names.truncate(MOST);
-        let items: Vec<_> = names.into_iter().map(|n| self.offer_over(line, typed, n)).collect();
+        let items: Vec<_> = names
+            .into_iter()
+            .map(|(n, kind)| crate::lsp::Offer { kind, ..self.offer_over(line, typed, n) })
+            .collect();
         (!items.is_empty()).then_some(items)
     }
 

@@ -632,7 +632,18 @@ pub struct Offer {
     /// language's words. `None` when the server sent no edit range, and then
     /// the caller replaces nothing.
     pub replacing: Option<Replacing>,
+    /// The server marks it deprecated (`deprecated`, or the `Deprecated`
+    /// tag); the panel crosses it out, as helix does.
+    pub deprecated: bool,
 }
+
+/// `CompletionItemKind.File`.
+pub const KIND_FILE: i64 = 17;
+/// `CompletionItemKind.Folder`.
+pub const KIND_FOLDER: i64 = 19;
+/// **A symbolic link**, which path completion names as helix's does. Not one
+/// of the protocol's kinds, which are numbered from 1.
+pub const KIND_LINK: i64 = -1;
 
 impl Offer {
     /// What the typed word is matched against: the server's `filterText`, or
@@ -1237,6 +1248,11 @@ fn one_offer(item: &serde_json::Value) -> Option<Offer> {
             .filter(|d| !d.is_empty()),
         filter,
         replacing,
+        deprecated: item.get("deprecated").and_then(|d| d.as_bool()).unwrap_or(false)
+            || item
+                .get("tags")
+                .and_then(|t| t.as_array())
+                .is_some_and(|tags| tags.iter().any(|t| t.as_i64() == Some(1))),
     })
 }
 
@@ -2292,5 +2308,19 @@ mod tests {
         // Anybody else's answer is none of this.
         let Notice::Answer { executed, .. } = read(r#"{"jsonrpc":"2.0","id":4,"result":null}"#, 1) else { panic!() };
         assert_eq!(executed, None);
+    }
+
+    /// **A deprecated item is known as one** — by the field or by the tag,
+    /// as helix reads it — and the panel crosses it out.
+    #[test]
+    fn a_deprecated_completion_is_marked() {
+        let items = serde_json::json!([
+            {"label": "old", "deprecated": true},
+            {"label": "older", "tags": [1]},
+            {"label": "new", "kind": 3}
+        ]);
+        let got: Vec<(String, bool, i64)> =
+            super::offers(Some(&items)).into_iter().map(|o| (o.label, o.deprecated, o.kind)).collect();
+        assert_eq!(got, [("old".into(), true, 0), ("older".into(), true, 0), ("new".into(), false, 3)]);
     }
 }

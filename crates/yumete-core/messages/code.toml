@@ -437,12 +437,6 @@ zhs = "{0} 的语言服务器已停止，之前的结果不再可靠；打开下
 en = "the {0} language server stopped; its results no longer count, and the next file starts a new one"
 
 [[message]]
-# 補全單子底下那一句：怎麽用
-key = "lsp.take-it"
-zhs = "Tab 补全 · C-n/C-p 选择"
-en = "Tab to complete · C-n/C-p to choose"
-
-[[message]]
 # gd 跳到了定義那一行
 key = "lsp.went"
 zhs = "{0} 第 {1} 行(C-o 返回)"
@@ -456,12 +450,6 @@ en = "{0} line {1} (C-o to go back)"
 key = "lsp.where-it-is"
 zhs = "{0}  {1}  {2}"
 en = "{0}  {1}  {2}"
-
-[[message]]
-# 補全單子底下：第幾條/一共幾條(單子露不全的時候)
-key = "lsp.which-of-them"
-zhs = "{0}/{1} · Tab 补全"
-en = "{0}/{1} · Tab to complete"
 
 [[message]]
 # 語言服務器説的一句話有多響：最響的那一檔

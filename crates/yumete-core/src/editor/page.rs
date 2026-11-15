@@ -3077,7 +3077,8 @@ impl Editor {
             buffer: self.current_buffer().id(),
             at: self.sel.head(),
             items,
-            picked: 0,
+            chosen: None,
+            prefill: None,
             server: Some(list.clone()),
         });
         true
@@ -3116,7 +3117,8 @@ impl Editor {
             buffer: self.current_buffer().id(),
             at: self.sel.head(),
             items,
-            picked: 0,
+            chosen: None,
+            prefill: None,
             server: Some(list),
         });
         true
@@ -3212,42 +3214,106 @@ impl Editor {
     }
 
     /// 這會兒該不該畫那張單子——光標還在問的地方纔算。
-    pub fn offers_here(&self) -> Option<(&[crate::lsp::Offer], usize)> {
+    pub fn offers_here(&self) -> Option<(&[crate::lsp::Offer], Option<usize>)> {
         let offering = self.offering.as_ref()?;
-        (offering.stands_here(self)).then_some((offering.items.as_slice(), offering.picked))
+        (offering.stands_here(self)).then_some((offering.items.as_slice(), offering.chosen))
     }
 
-    /// 單子上下走一格。**首尾相接**——一張十幾條的單子，從頭回到尾比按住鍵往回
-    /// 翻快，而且没有「按到頭了」這種無聲的失敗。
-    pub(super) fn pick_offer(&mut self, forward: bool) -> bool {
+    /// **Choose the next one (`forward`) or the one before, and write it in**,
+    /// as helix's menu does on `Tab`, `C-n` and `Down`: the text shows the
+    /// choice while the list stays open, and typing on keeps it. **The ends
+    /// meet**: a list of a dozen is quicker walked round than back, and there
+    /// is no silent 「that was the last one」. Whether it answered.
+    pub(super) fn choose_offer(&mut self, forward: bool) -> bool {
         let here = (self.current_buffer().id(), self.sel.head());
-        let Some(offering) = self.offering.as_mut() else { return false };
+        let Some(offering) = self.offering.as_ref() else { return false };
         if (offering.buffer, offering.at) != here || offering.items.is_empty() {
             return false;
         }
         let last = offering.items.len() - 1;
-        offering.picked = match (forward, offering.picked) {
-            (true, at) if at == last => 0,
-            (true, at) => at + 1,
-            (false, 0) => last,
-            (false, at) => at - 1,
+        let index = match (forward, offering.chosen) {
+            (true, None) => 0,
+            (false, None) => last,
+            (true, Some(at)) if at == last => 0,
+            (true, Some(at)) => at + 1,
+            (false, Some(0)) => last,
+            (false, Some(at)) => at - 1,
         };
+        let item = offering.items[index].clone();
+        let before = offering.prefill.clone();
+        // The last choice goes first, so the spans the list was worked out
+        // against are the text they were worked out on.
+        if let Some(prefill) = &before {
+            if !self.put_back(prefill) {
+                return false;
+            }
+        }
+        let asked_at = self.sel.head();
+        let (start, end) = self.offer_span(&item);
+        let rope = self.current_buffer().rope();
+        let original: String = rope.slice(start..end).to_string();
+        let typed: String = rope.slice(start..asked_at.max(start)).to_string();
+        if !self.overwrite(start, end, &item.insert) {
+            return false;
+        }
+        let caret = start + item.insert.chars().count();
+        self.set_cursor(caret);
+        self.rerecord(&typed, &item.insert);
+        if let Some(offering) = self.offering.as_mut() {
+            offering.at = caret;
+            offering.chosen = Some(index);
+            offering.prefill = Some(crate::editor::Prefill { start, end: caret, asked_at, original });
+        }
         true
     }
 
-    /// **選中的那一條真打進去**（#53 ④），打了回 `true`。
-    ///
-    /// Warning: **替換多少是服務器說的**，不是這一頭猜的：`self.co` 補成 `count` 要
-    /// 蓋掉 `co` 那兩個字符，而哪兩個字符算「已經打出來的那個詞」，只有認得這門
-    /// 語言的那一頭知道（見 [`crate::lsp::Offer::replacing`]）。服務器没說就
-    /// 什麽都不蓋，只在光標處插入。
-    pub(super) fn take_the_offer(&mut self) -> bool {
-        let here = (self.current_buffer().id(), self.sel.head());
-        let Some(offering) = self.offering.take() else { return false };
-        if (offering.buffer, offering.at) != here {
+    /// **Take the written choice back out**: what it replaced goes back, and
+    /// the caret to where the list was asked for.
+    fn put_back(&mut self, prefill: &crate::editor::Prefill) -> bool {
+        let written: String = {
+            let rope = self.current_buffer().rope();
+            let end = prefill.end.min(rope.len_chars());
+            rope.slice(prefill.start.min(end)..end).to_string()
+        };
+        if !self.overwrite(prefill.start, prefill.end, &prefill.original) {
             return false;
         }
-        let Some(item) = offering.items.get(offering.picked).cloned() else { return false };
+        let typed: String = prefill.original.chars().take(prefill.asked_at.saturating_sub(prefill.start)).collect();
+        self.rerecord(&written, &typed);
+        self.set_cursor(prefill.asked_at);
+        if let Some(offering) = self.offering.as_mut() {
+            offering.at = prefill.asked_at;
+            offering.chosen = None;
+            offering.prefill = None;
+        }
+        true
+    }
+
+    /// **`C-c` / `C-e`**: the choice written in comes back out, what was typed
+    /// stands again, and the list closes. Insert mode stays.
+    pub(super) fn cancel_offer(&mut self) {
+        if let Some(prefill) = self.offering.as_ref().and_then(|o| o.prefill.clone()) {
+            self.put_back(&prefill);
+        }
+        self.offering = None;
+    }
+
+    /// `.` replays what the writer meant, which is the word chosen and not the
+    /// letters typed before it. **Only when the recording actually ends with
+    /// what is being taken back**: Insert may have opened on top of letters
+    /// that were never recorded.
+    pub(super) fn rerecord(&mut self, taking: &str, giving: &str) {
+        if self.insert_recording.ends_with(taking) {
+            let keep = self.insert_recording.len() - taking.len();
+            self.insert_recording.truncate(keep);
+            self.insert_recording.push_str(giving);
+        }
+    }
+
+    /// **替換多少是服務器說的**，不是這一頭猜的：`self.co` 補成 `count` 要
+    /// 蓋掉 `co` 那兩個字符，而哪兩個字符算「已經打出來的那個詞」，只有認得這門
+    /// 語言的那一頭知道（見 [`crate::lsp::Offer::replacing`]）。
+    pub(super) fn offer_span(&self, item: &crate::lsp::Offer) -> (usize, usize) {
         let rope = self.current_buffer().rope();
         let long = rope.len_chars();
         let line = rope.char_to_line(self.sel.head().min(long));
@@ -3274,17 +3340,8 @@ impl Editor {
             // A range on another line was worked out on other text: insert only.
             Some(_) => (self.sel.head(), self.sel.head()),
         };
-        // 打進去算**一次**編輯——`u` 一下把整個詞撤掉，而不是一個字母一個字母地
-        // 撤（同「一次插入是一次撤銷」）。
-        if self.mode != Mode::Insert {
-            self.snapshot();
-        }
         let end = end.max(start).min(long);
-        if !self.overwrite(start, end, &item.insert) {
-            return false;
-        }
-        self.set_cursor(start + item.insert.chars().count());
-        true
+        (start.min(end), end)
     }
 
     /// 忘掉一個檔的話——服務器死了，它說過的就不再算數。

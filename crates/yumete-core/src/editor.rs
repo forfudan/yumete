@@ -2446,13 +2446,30 @@ pub(crate) struct Offering {
     pub(crate) at: usize,
     /// What the server offered, in the server's own order (it ranks them).
     pub(crate) items: Vec<crate::lsp::Offer>,
-    /// Which one is picked — always a real index, because an empty list is
-    /// 「no offering」 and is never stored.
-    pub(crate) picked: usize,
+    /// Which one is chosen, and so written into the text: `None` until the
+    /// first `Tab`, `C-n` or `Down`, as helix's menu starts with no selection.
+    /// Always a real index when set, because an empty list is 「no offering」
+    /// and is never stored.
+    pub(crate) chosen: Option<usize>,
+    /// **What the chosen one replaced**, so the next choice and `C-c` can put
+    /// it back. `None` while nothing is chosen.
+    pub(crate) prefill: Option<Prefill>,
     /// **The server's whole answer**, when the list is one, so
     /// the next letter narrows it here instead of waiting for a new answer.
     /// `None` for words and paths, which are worked out afresh each time.
     pub(crate) server: Option<ServerList>,
+}
+
+/// **A choice written into the text while the panel stays open** (helix's
+/// `preview_completion_insert`): what `start..end` held before, and where the
+/// caret stood when the list was asked for.
+#[derive(Debug, Clone)]
+pub(crate) struct Prefill {
+    pub(crate) start: usize,
+    /// The end of what the choice wrote; the caret stands here.
+    pub(crate) end: usize,
+    pub(crate) asked_at: usize,
+    pub(crate) original: String,
 }
 
 /// A language server's completion answer, kept whole. See
@@ -3856,7 +3873,7 @@ pub struct Editor {
     /// **The headings of the file a `[[page#` names**, kept while that file
     /// (on disk, or in the buffer holding it) has not changed, since the
     /// panel asks on every frame it is open.
-    page_headings: RefCell<Option<(PathBuf, PageStamp, Vec<String>)>>,
+    page_headings: RefCell<Option<(PathBuf, PageStamp, PageHeadings)>>,
     /// **Prose files a language server serves**: they get the
     /// diagnostics lane a code file always has, or a spelling server's
     /// complaints would have nowhere to show.
@@ -3923,6 +3940,12 @@ pub struct Editor {
     /// replaces what the last one wrote, so the buffer can no longer say what
     /// the writer had typed.
     reference: Option<complete::Walking>,
+    /// **A reference panel closed by hand** (`Enter`, `C-y`, `C-c`, `C-e`):
+    /// the buffer, its revision and the caret when it was closed. A reference
+    /// is worked out afresh from the text on every frame, so without this the
+    /// panel `C-c` just put away would be back on the next one; any edit or
+    /// move opens it again.
+    completion_dismissed: Option<(u64, u64, usize)>,
     /// Which spellings of a reading **count as one** (Feature #65) — what the
     /// word count subtracts, what `:ruby` edits, what `:ruby-auto` writes.
     ///
@@ -4847,6 +4870,7 @@ impl Editor {
             value_answer: None,
             completion: None,
             reference: None,
+            completion_dismissed: None,
             tatechuyoko: 0,
             hanging: false,
             export: crate::export::Settings::default(),
@@ -6055,6 +6079,9 @@ type ReadBibliography = (std::time::SystemTime, Vec<(String, String)>);
 /// What a file's headings were read from: its time on disk, or the buffer
 /// and revision holding it.
 type PageStamp = (Option<std::time::SystemTime>, Option<(u64, u64)>);
+
+/// A page's headings, each with its level, as `[[page#` offers them.
+type PageHeadings = Vec<(usize, String)>;
 /// The whole buffer's count: buffer, revision, count.
 type WholeCount = (u64, u64, usize);
 /// The selection's: buffer, revision, start, end, count.
@@ -6282,6 +6309,7 @@ mod block;
 mod checks;
 mod commands;
 pub mod complete;
+pub mod completion;
 mod conflicts;
 mod convert;
 mod detail;

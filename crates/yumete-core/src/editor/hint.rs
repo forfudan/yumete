@@ -289,13 +289,11 @@ impl Editor {
             );
             return Hint::Keys(say!("hint.sidebar"), keys);
         }
-        // A reference standing half-typed, with the panel already open under
-        // it: Tab is the key, and it is a key that means nothing anywhere else
-        // in Insert, so nobody would try it unasked (#418).
-        if self.reference_open() {
-            return Hint::Keys(say!("hint.reference"), vec![
-                ("Tab".into(), say!("hint.reference.pick")),
-            ]);
+        // **The completion panel open under the caret**: Tab is the key, and
+        // where the choice is in the list is the one thing the panel's window
+        // cannot show (#418). Below everything else this row says.
+        if let Some(hint) = self.completion_hint() {
+            return hint;
         }
         // Standing on a footnote reference, the key that shows the note is
         // worth saying: it is the one place `gd` has an answer that the reader

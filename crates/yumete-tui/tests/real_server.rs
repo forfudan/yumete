@@ -363,18 +363,18 @@ fn rust_analyzer_offers_what_comes_next_and_it_goes_in_clean() {
         "自己寫的那個函數在單子上：{offered:?}"
     );
 
-    // 走到 `counted` 那一條上，按 Tab。
+    // 走到 `counted` 那一條上（每走一格就寫進正文），按 Enter 收下。
     for _ in 0..offered.len() {
+        editor.on_key(yumete_core::input::Key::Ctrl('n'));
         let picked = editor
             .offers_here()
-            .map(|(items, at)| items[at].label.clone())
+            .and_then(|(items, at)| at.map(|at| items[at].label.clone()))
             .unwrap_or_default();
         if picked.starts_with("counted") {
             break;
         }
-        editor.on_key(yumete_core::input::Key::Ctrl('n'));
     }
-    editor.on_key(yumete_core::input::Key::Tab);
+    editor.on_key(yumete_core::input::Key::Enter);
 
     let line = {
         let rope = editor.current_buffer().rope();

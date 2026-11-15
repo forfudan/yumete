@@ -60,6 +60,162 @@ zhs = "本文件标题"
 en = "heading in this file"
 
 [[message]]
+# 補全面板右邊那一欄：這一條是什麼（語言服務器說的種類，或路徑補全裏的文件、文件夾、符號鏈接）（草稿）
+key = "complete.kind.class"
+zhs = "类"
+en = "class"
+
+[[message]]
+# 補全面板右邊那一欄：這一條是什麼（語言服務器說的種類，或路徑補全裏的文件、文件夾、符號鏈接）（草稿）
+key = "complete.kind.color"
+zhs = "颜色"
+en = "color"
+
+[[message]]
+# 補全面板右邊那一欄：這一條是什麼（語言服務器說的種類，或路徑補全裏的文件、文件夾、符號鏈接）（草稿）
+key = "complete.kind.constant"
+zhs = "常量"
+en = "constant"
+
+[[message]]
+# 補全面板右邊那一欄：這一條是什麼（語言服務器說的種類，或路徑補全裏的文件、文件夾、符號鏈接）（草稿）
+key = "complete.kind.constructor"
+zhs = "构造函数"
+en = "constructor"
+
+[[message]]
+# 補全面板右邊那一欄：這一條是什麼（語言服務器說的種類，或路徑補全裏的文件、文件夾、符號鏈接）（草稿）
+key = "complete.kind.enum"
+zhs = "枚举"
+en = "enum"
+
+[[message]]
+# 補全面板右邊那一欄：這一條是什麼（語言服務器說的種類，或路徑補全裏的文件、文件夾、符號鏈接）（草稿）
+key = "complete.kind.enum-member"
+zhs = "枚举成员"
+en = "enum member"
+
+[[message]]
+# 補全面板右邊那一欄：這一條是什麼（語言服務器說的種類，或路徑補全裏的文件、文件夾、符號鏈接）（草稿）
+key = "complete.kind.event"
+zhs = "事件"
+en = "event"
+
+[[message]]
+# 補全面板右邊那一欄：這一條是什麼（語言服務器說的種類，或路徑補全裏的文件、文件夾、符號鏈接）（草稿）
+key = "complete.kind.field"
+zhs = "字段"
+en = "field"
+
+[[message]]
+# 補全面板右邊那一欄：這一條是什麼（語言服務器說的種類，或路徑補全裏的文件、文件夾、符號鏈接）（草稿）
+key = "complete.kind.file"
+zhs = "文件"
+en = "file"
+
+[[message]]
+# 補全面板右邊那一欄：這一條是什麼（語言服務器說的種類，或路徑補全裏的文件、文件夾、符號鏈接）（草稿）
+key = "complete.kind.folder"
+zhs = "文件夹"
+en = "folder"
+
+[[message]]
+# 補全面板右邊那一欄：這一條是什麼（語言服務器說的種類，或路徑補全裏的文件、文件夾、符號鏈接）（草稿）
+key = "complete.kind.function"
+zhs = "函数"
+en = "function"
+
+[[message]]
+# 補全面板右邊那一欄：這一條是什麼（語言服務器說的種類，或路徑補全裏的文件、文件夾、符號鏈接）（草稿）
+key = "complete.kind.interface"
+zhs = "接口"
+en = "interface"
+
+[[message]]
+# 補全面板右邊那一欄：這一條是什麼（語言服務器說的種類，或路徑補全裏的文件、文件夾、符號鏈接）（草稿）
+key = "complete.kind.keyword"
+zhs = "关键字"
+en = "keyword"
+
+[[message]]
+# 補全面板右邊那一欄：這一條是什麼（語言服務器說的種類，或路徑補全裏的文件、文件夾、符號鏈接）（草稿）
+key = "complete.kind.link"
+zhs = "链接"
+en = "link"
+
+[[message]]
+# 補全面板右邊那一欄：這一條是什麼（語言服務器說的種類，或路徑補全裏的文件、文件夾、符號鏈接）（草稿）
+key = "complete.kind.method"
+zhs = "方法"
+en = "method"
+
+[[message]]
+# 補全面板右邊那一欄：這一條是什麼（語言服務器說的種類，或路徑補全裏的文件、文件夾、符號鏈接）（草稿）
+key = "complete.kind.module"
+zhs = "模块"
+en = "module"
+
+[[message]]
+# 補全面板右邊那一欄：這一條是什麼（語言服務器說的種類，或路徑補全裏的文件、文件夾、符號鏈接）（草稿）
+key = "complete.kind.operator"
+zhs = "运算符"
+en = "operator"
+
+[[message]]
+# 補全面板右邊那一欄：這一條是什麼（語言服務器說的種類，或路徑補全裏的文件、文件夾、符號鏈接）（草稿）
+key = "complete.kind.property"
+zhs = "属性"
+en = "property"
+
+[[message]]
+# 補全面板右邊那一欄：這一條是什麼（語言服務器說的種類，或路徑補全裏的文件、文件夾、符號鏈接）（草稿）
+key = "complete.kind.reference"
+zhs = "引用"
+en = "reference"
+
+[[message]]
+# 補全面板右邊那一欄：這一條是什麼（語言服務器說的種類，或路徑補全裏的文件、文件夾、符號鏈接）（草稿）
+key = "complete.kind.snippet"
+zhs = "代码片段"
+en = "snippet"
+
+[[message]]
+# 補全面板右邊那一欄：這一條是什麼（語言服務器說的種類，或路徑補全裏的文件、文件夾、符號鏈接）（草稿）
+key = "complete.kind.struct"
+zhs = "结构体"
+en = "struct"
+
+[[message]]
+# 補全面板右邊那一欄：這一條是什麼（語言服務器說的種類，或路徑補全裏的文件、文件夾、符號鏈接）（草稿）
+key = "complete.kind.text"
+zhs = "文本"
+en = "text"
+
+[[message]]
+# 補全面板右邊那一欄：這一條是什麼（語言服務器說的種類，或路徑補全裏的文件、文件夾、符號鏈接）（草稿）
+key = "complete.kind.type-parameter"
+zhs = "类型参数"
+en = "type parameter"
+
+[[message]]
+# 補全面板右邊那一欄：這一條是什麼（語言服務器說的種類，或路徑補全裏的文件、文件夾、符號鏈接）（草稿）
+key = "complete.kind.unit"
+zhs = "单位"
+en = "unit"
+
+[[message]]
+# 補全面板右邊那一欄：這一條是什麼（語言服務器說的種類，或路徑補全裏的文件、文件夾、符號鏈接）（草稿）
+key = "complete.kind.value"
+zhs = "值"
+en = "value"
+
+[[message]]
+# 補全面板右邊那一欄：這一條是什麼（語言服務器說的種類，或路徑補全裏的文件、文件夾、符號鏈接）（草稿）
+key = "complete.kind.variable"
+zhs = "变量"
+en = "variable"
+
+[[message]]
 # Typst 的 @ 補全裏，一個標籤旁邊那一句
 key = "complete.label"
 zhs = "标签"
@@ -72,6 +228,12 @@ zhs = "所链文件的标题"
 en = "heading in the linked file"
 
 # ── convert ───────────────────────────────────────────────────────────
+
+[[message]]
+# 補全面板右邊那一欄：`[[` 列出的這一頁就在項目最上層的文件夾裏，不在哪個子文件夾（草稿）
+key = "complete.project-root"
+zhs = "项目根"
+en = "root"
 
 [[message]]
 # :convert 這一趟能走的路，一行一個起點

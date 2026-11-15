@@ -22888,7 +22888,7 @@ fn what_is_typed_after_the_caret_narrows_the_tags() {
 }
 
 /// #418 二. `](#` offers this file's headings by the anchor a Markdown reader
-/// gives them, and prints the title only where the anchor is not already it.
+/// gives them, each with its level beside it.
 #[test]
 fn a_link_is_finished_with_a_heading_of_this_file() {
     let mut ed = typed("# 卷一 開端\n\n## 第三節：雨\n\n見\n");
@@ -22903,8 +22903,8 @@ fn a_link_is_finished_with_a_heading_of_this_file() {
     assert_eq!(title, say!("complete.heading"));
     let texts: Vec<&str> = choices.iter().map(|c| c.text.as_str()).collect();
     assert_eq!(texts, ["卷一-開端)", "第三節雨)"], "the space becomes a hyphen, the colon is dropped");
-    assert_eq!(choices[0].note, None, "「卷一-開端」 is the title; printing it twice says nothing");
-    assert_eq!(choices[1].note.as_deref(), Some("第三節：雨"), "here the anchor has lost something");
+    assert_eq!(choices[0].note.as_deref(), Some("#"));
+    assert_eq!(choices[1].note.as_deref(), Some("##"), "the file's one top heading is not repeated as a parent");
     ed.on_key(Key::Tab);
     assert!(ed.current_buffer().text().ends_with("見[那裏](#卷一-開端)\n"));
 }
@@ -22958,7 +22958,7 @@ fn a_wiki_link_offers_the_files_near_this_one() {
     assert!(!names.iter().any(|n| n.contains("一.md")), "not this file: {names:?}");
     // The folder beside the name, when there is one worth saying.
     let deep = choices.iter().find(|c| c.text.starts_with("卷二/")).expect("the deep one");
-    assert_eq!(deep.note.as_deref(), Some("卷二"));
+    assert_eq!(deep.note.as_deref(), Some("卷二/"));
 
     // **Typing narrows on the name as well as the path**, so 雨 finds
     // 卷二/雨夜.md without anybody typing the folder first.
@@ -26096,6 +26096,7 @@ fn an_answer_to_a_question_that_was_dropped_is_not_shown() {
         detail: None,
         filter: None,
         replacing: Some(crate::lsp::Replacing { line: 0, from: 0, to: 4 }),
+        deprecated: false,
     }], false);
     assert!(ed.offers_here().is_none(), "作廢的答案不擺出來");
     std::fs::remove_dir_all(&dir).ok();
@@ -28549,14 +28550,17 @@ fn esc_closes_the_list_and_leaves_insert_at_once() {
         assert!(ed.offers_here().is_none(), "{keymap}: and the list is gone");
         assert_eq!(ed.current_buffer().text(), "alpha alphabet\nalp\n", "{keymap}: nothing taken");
     }
-    // `C-c` leaves Insert under vim, and takes the list with it.
+    // `C-c` with the list open is the list's, as in helix: it closes the list
+    // and Insert stays, under vim too; a second one leaves Insert.
     let mut ed = typed_vim("alpha alphabet\n");
     press(&mut ed, "Go");
     press(&mut ed, "alp");
     ed.on_key(Key::Ctrl('x'));
     ed.on_key(Key::Ctrl('c'));
+    assert_eq!(ed.mode(), Mode::Insert);
+    assert!(ed.offers_here().is_none(), "C-c closes the list");
+    ed.on_key(Key::Ctrl('c'));
     assert_eq!(ed.mode(), Mode::Normal);
-    assert!(ed.offers_here().is_none(), "C-c too");
 }
 
 /// **`:align`, mini.align's `=`**: the selected lines on the first sign, by
@@ -29792,7 +29796,7 @@ fn the_line_is_described_as_a_function_with_its_argument() {
 
 /// **一條補全只蓋得了它自己說的那一行，而且蓋不過行末**。
 ///
-/// 兩件事都在 `take_the_offer` 裏守：
+/// 兩件事都在 `offer_span` 裏守：
 ///
 /// - `Offer::replacing` 讀 `character` 也讀兩個 `line`——丟掉 `line` 的話，服務器指
 ///   着別的行說的範圍被當成**光標這一行**的列號，正文裏憑空少一截。
@@ -29809,6 +29813,7 @@ fn a_completion_covers_only_the_line_it_names_and_never_the_break() {
         detail: None,
         filter: None,
         replacing: Some(Replacing { line, from, to }),
+        deprecated: false,
     };
 
     // 擺好一條待選的，光標停在那一行的行尾。
@@ -29822,7 +29827,8 @@ fn a_completion_covers_only_the_line_it_names_and_never_the_break() {
             buffer: ed.current_buffer().id(),
             at,
             items: vec![one],
-            picked: 0,
+            chosen: None,
+            prefill: None,
             server: None,
         });
         ed
@@ -29830,7 +29836,7 @@ fn a_completion_covers_only_the_line_it_names_and_never_the_break() {
 
     // 範圍指着**別的行**：什麼都不蓋，只在光標處插入。
     let mut ed = stand("第一行。\n第二行 cou\n", 2, offer(0, 0, 3));
-    assert!(ed.take_the_offer(), "{}", ed.status());
+    assert!(ed.choose_offer(true), "{}", ed.status());
     assert_eq!(
         ed.current_buffer().text(),
         "第一行。\n第二行 coucounted\n",
@@ -29839,7 +29845,7 @@ fn a_completion_covers_only_the_line_it_names_and_never_the_break() {
 
     // 數過了頭的 `end`：蓋到行尾為止，換行符留着。
     let mut ed = stand("第二行 cou\n後面一行。\n", 1, offer(0, 4, 999));
-    assert!(ed.take_the_offer(), "{}", ed.status());
+    assert!(ed.choose_offer(true), "{}", ed.status());
     assert_eq!(
         ed.current_buffer().text(),
         "第二行 counted\n後面一行。\n",
@@ -29961,6 +29967,7 @@ fn a_completion_list_belongs_to_the_buffer_it_was_asked_about() {
         detail: None,
         filter: None,
         replacing: None,
+        deprecated: false,
     };
     let mut ed = typed("甲\n");
     // 光標在第 0 格——「還在那一格嗎」答是，不足以讓單子認門。
@@ -29970,11 +29977,12 @@ fn a_completion_list_belongs_to_the_buffer_it_was_asked_about() {
         buffer: other.wrapping_add(1),
         at: 0,
         items: vec![offer],
-        picked: 0,
+        chosen: None,
+        prefill: None,
         server: None,
     });
     assert!(ed.offers_here().is_none(), "別的稿子問出來的單子，這裏不算數");
-    assert!(!ed.take_the_offer(), "更不許蓋進來");
+    assert!(!ed.choose_offer(true), "更不許蓋進來");
     assert_eq!(ed.current_buffer().text(), "甲\n", "一個字都没進來");
 }
 
@@ -30481,6 +30489,7 @@ fn the_offer_list_is_ranked_by_what_has_been_typed() {
         detail: None,
         filter: None,
         replacing: None,
+        deprecated: false,
     };
     // 服務器給的次序，照截圖。
     let from_the_server = || {
@@ -30552,6 +30561,7 @@ fn the_server_list_narrows_as_the_word_grows() {
         filter: filter.map(str::to_string),
         // `n.t` asked after the `t`: the server replaces that one `t`.
         replacing: Some(crate::lsp::Replacing { line: 0, from: 2, to: 3 }),
+        deprecated: false,
     };
     let from_the_server = || {
         vec![
@@ -30671,6 +30681,7 @@ fn in_code_words_stand_in_when_the_server_has_nothing() {
             detail: None,
             filter: None,
             replacing: None,
+            deprecated: false,
         }],
         false,
     );
@@ -33821,6 +33832,7 @@ fn completion_after_the_review() {
         detail: None,
         filter: None,
         replacing: None,
+        deprecated: false,
     };
     let dir = tmp().join(format!("yumete-complete-review-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
@@ -33863,6 +33875,7 @@ fn completion_after_the_review() {
             detail: None,
             filter: None,
             replacing: Some(crate::lsp::Replacing { line: 2, from: 0, to: 1 }),
+            deprecated: false,
         }],
         false,
     );
@@ -41673,4 +41686,375 @@ fn the_action_list_drops_a_group_key_from_the_column_not_in_force() {
     let row = row_of(&mut ed);
     assert!(!has_v(&row[3]), "helix's v opens the reader's group: {row:?}");
     assert!(has_v(&row[4]), "vim, in force, keeps v: {row:?}");
+}
+
+/// The line the caret is on, as the completion panel's tests read it.
+fn caret_line(ed: &Editor) -> String {
+    let rope = ed.current_buffer().rope();
+    crate::motion::line_text(rope, rope.char_to_line(ed.sel.head())).to_string()
+}
+
+/// `harb` typed on a fresh line under `keymap`, the word list opened by hand:
+/// `harbourside`, then `harbourmaster` (shorter first).
+fn harbour_list(keymap: &str) -> Editor {
+    let mut ed = typed("harbourmaster and harbourside walk\n");
+    ed.execute(&format!(":keymap {keymap}")).unwrap();
+    press(&mut ed, "Go");
+    press(&mut ed, "harb");
+    ed.on_key(Key::Ctrl('x'));
+    let labels: Vec<String> =
+        ed.completion_panel().map(|p| p.rows.into_iter().map(|r| r.label).collect()).unwrap_or_default();
+    assert_eq!(labels, ["harbourside", "harbourmaster"], "{keymap}");
+    ed
+}
+
+/// **The completion panel's keys are helix's menu's**, measured against helix
+/// 25.07.1 (its path completion: `Tab Tab Enter`, `C-n` then typing, `Tab Esc`,
+/// `Tab C-c`, `S-Tab`, `Tab C-p`, `Tab Tab Tab`, `Tab Backspace`, Enter with
+/// nothing chosen), under both keymaps; and vim's `C-y` / `C-e` while it is open.
+#[test]
+fn the_word_panel_takes_helix_menu_keys_under_both_keymaps() {
+    for keymap in ["helix", "vim"] {
+        let chosen = |ed: &Editor| ed.completion_panel().and_then(|p| p.chosen);
+        // Each Tab writes the next one in; the ends meet; Enter keeps it and
+        // closes the panel without a line break.
+        let mut ed = harbour_list(keymap);
+        assert_eq!(chosen(&ed), None, "{keymap}: nothing chosen until Tab");
+        ed.on_key(Key::Tab);
+        assert_eq!(caret_line(&ed), "harbourside", "{keymap}");
+        assert_eq!(chosen(&ed), Some(0), "{keymap}");
+        ed.on_key(Key::Tab);
+        assert_eq!(caret_line(&ed), "harbourmaster", "{keymap}");
+        ed.on_key(Key::Tab);
+        assert_eq!(caret_line(&ed), "harbourside", "{keymap}: round the end");
+        ed.on_key(Key::Tab);
+        let lines = ed.current_buffer().rope().len_lines();
+        ed.on_key(Key::Enter);
+        assert_eq!(caret_line(&ed), "harbourmaster", "{keymap}");
+        assert_eq!(ed.current_buffer().rope().len_lines(), lines, "{keymap}: no line break");
+        assert_eq!(ed.mode(), Mode::Insert, "{keymap}");
+        assert!(ed.completion_panel().is_none(), "{keymap}: closed");
+
+        // `C-n` writes the first in, and typing on keeps it.
+        let mut ed = harbour_list(keymap);
+        ed.on_key(Key::Ctrl('n'));
+        ed.on_key(Key::Char('x'));
+        assert_eq!(caret_line(&ed), "harboursidex", "{keymap}");
+
+        // `S-Tab` from nothing is the last; `C-p` and `Up` go back, `Down` on.
+        let mut ed = harbour_list(keymap);
+        ed.on_key(Key::BackTab);
+        assert_eq!(caret_line(&ed), "harbourmaster", "{keymap}");
+        ed.on_key(Key::Ctrl('p'));
+        assert_eq!(caret_line(&ed), "harbourside", "{keymap}");
+        ed.on_key(Key::Up);
+        assert_eq!(caret_line(&ed), "harbourmaster", "{keymap}: round the top");
+        ed.on_key(Key::Down);
+        assert_eq!(caret_line(&ed), "harbourside", "{keymap}");
+
+        // `Esc` keeps it, closes the panel and leaves Insert: one press.
+        let mut ed = harbour_list(keymap);
+        ed.on_key(Key::Tab);
+        ed.on_key(Key::Esc);
+        assert_eq!(ed.mode(), Mode::Normal, "{keymap}");
+        assert!(ed.current_buffer().text().ends_with("harbourside\n"), "{keymap}");
+
+        // `C-c` takes the written one back out; Insert stays, typing goes on.
+        let mut ed = harbour_list(keymap);
+        ed.on_key(Key::Tab);
+        ed.on_key(Key::Tab);
+        ed.on_key(Key::Ctrl('c'));
+        assert_eq!(caret_line(&ed), "harb", "{keymap}");
+        assert_eq!(ed.mode(), Mode::Insert, "{keymap}");
+        assert!(ed.completion_panel().is_none(), "{keymap}: closed");
+        ed.on_key(Key::Char('y'));
+        assert_eq!(caret_line(&ed), "harby", "{keymap}");
+
+        // vim's `C-y` is Enter and `C-e` is `C-c` while the panel is open.
+        let mut ed = harbour_list(keymap);
+        ed.on_key(Key::Tab);
+        ed.on_key(Key::Ctrl('y'));
+        assert_eq!(caret_line(&ed), "harbourside", "{keymap}: C-y keeps");
+        assert_eq!(ed.mode(), Mode::Insert, "{keymap}");
+        assert!(ed.completion_panel().is_none(), "{keymap}");
+        let mut ed = harbour_list(keymap);
+        ed.on_key(Key::Tab);
+        ed.on_key(Key::Ctrl('e'));
+        assert_eq!(caret_line(&ed), "harb", "{keymap}: C-e takes it back");
+        assert_eq!(ed.mode(), Mode::Insert, "{keymap}");
+
+        // `Backspace` keeps the choice and then takes its last letter.
+        let mut ed = harbour_list(keymap);
+        ed.on_key(Key::Tab);
+        ed.on_key(Key::Backspace);
+        assert_eq!(caret_line(&ed), "harboursid", "{keymap}");
+
+        // Nothing chosen: Enter is a line break, `C-c` only closes the panel.
+        let mut ed = harbour_list(keymap);
+        let lines = ed.current_buffer().rope().len_lines();
+        ed.on_key(Key::Enter);
+        assert_eq!(ed.current_buffer().rope().len_lines(), lines + 1, "{keymap}");
+        let mut ed = harbour_list(keymap);
+        ed.on_key(Key::Ctrl('c'));
+        assert_eq!(caret_line(&ed), "harb", "{keymap}");
+        assert_eq!(ed.mode(), Mode::Insert, "{keymap}");
+        assert!(ed.completion_panel().is_none(), "{keymap}");
+    }
+}
+
+/// **`.` replays the word chosen**, not the letters typed before it.
+#[test]
+fn a_chosen_word_is_what_dot_repeats() {
+    let mut ed = harbour_list("vim");
+    ed.on_key(Key::Tab);
+    ed.on_key(Key::Esc);
+    press(&mut ed, ".");
+    assert!(ed.current_buffer().text().ends_with("harbourside\nharbourside\n"), "{:?}", ed.current_buffer().text());
+    let mut ed = harbour_list("vim");
+    ed.on_key(Key::Tab);
+    ed.on_key(Key::Tab);
+    ed.on_key(Key::Ctrl('c'));
+    ed.on_key(Key::Esc);
+    press(&mut ed, ".");
+    assert!(ed.current_buffer().text().ends_with("harb\nharb\n"), "{:?}", ed.current_buffer().text());
+}
+
+/// `[^` in the footnote fixture, under `keymap`, the panel open by itself.
+fn footnote_panel(keymap: &str) -> Editor {
+    let mut ed = typed("正文[^舊註]和[^7]。\n\n[^舊註]: 從前的話\n[^7]: 第七條\n");
+    ed.execute(&format!(":keymap {keymap}")).unwrap();
+    press(&mut ed, "gg");
+    // Typed by hand, a `[` alone: auto-pairs would close it.
+    ed.set_auto_pairs(crate::editor::AutoPairs::Off);
+    press(&mut ed, "A[^");
+    assert!(ed.completion_panel().is_some(), "{keymap}: the panel opens by itself");
+    ed
+}
+
+/// **References take the same keys**: `Tab` writes the next one in, closing
+/// bracket and all, `Enter` keeps it without a line break, `C-c` puts back
+/// what was typed and the panel stays shut until the text moves on.
+#[test]
+fn the_reference_panel_takes_the_same_keys() {
+    let first = |ed: &Editor| ed.current_buffer().text().lines().next().unwrap_or_default().to_string();
+    for keymap in ["helix", "vim"] {
+        let mut ed = footnote_panel(keymap);
+        ed.on_key(Key::Tab);
+        ed.on_key(Key::Tab);
+        assert_eq!(ed.completion_panel().and_then(|p| p.chosen), Some(1), "{keymap}");
+        let lines = ed.current_buffer().rope().len_lines();
+        ed.on_key(Key::Enter);
+        assert_eq!(first(&ed), "正文[^舊註]和[^7]。[^7]", "{keymap}");
+        assert_eq!(ed.current_buffer().rope().len_lines(), lines, "{keymap}: no line break");
+        assert_eq!(ed.mode(), Mode::Insert, "{keymap}");
+        assert!(ed.completion_panel().is_none(), "{keymap}");
+
+        let mut ed = footnote_panel(keymap);
+        ed.on_key(Key::Down);
+        ed.on_key(Key::Char('，'));
+        assert_eq!(first(&ed), "正文[^舊註]和[^7]。[^舊註]，", "{keymap}: typing on keeps it");
+
+        let mut ed = footnote_panel(keymap);
+        ed.on_key(Key::Up);
+        assert_eq!(first(&ed), "正文[^舊註]和[^7]。[^1]", "{keymap}: Up from nothing is the last");
+
+        let mut ed = footnote_panel(keymap);
+        ed.on_key(Key::Tab);
+        ed.on_key(Key::Ctrl('c'));
+        assert_eq!(first(&ed), "正文[^舊註]和[^7]。[^", "{keymap}: C-c puts back what was typed");
+        assert_eq!(ed.mode(), Mode::Insert, "{keymap}");
+        assert!(ed.completion_panel().is_none(), "{keymap}: and the panel stays shut");
+        ed.on_key(Key::Char('舊'));
+        assert!(ed.completion_panel().is_some(), "{keymap}: typing on opens it again");
+
+        let mut ed = footnote_panel(keymap);
+        ed.on_key(Key::Tab);
+        ed.on_key(Key::Ctrl('e'));
+        assert_eq!(first(&ed), "正文[^舊註]和[^7]。[^", "{keymap}: C-e is C-c");
+
+        let mut ed = footnote_panel(keymap);
+        ed.on_key(Key::Tab);
+        ed.on_key(Key::Ctrl('y'));
+        assert_eq!(first(&ed), "正文[^舊註]和[^7]。[^舊註]", "{keymap}: C-y is Enter");
+        assert!(ed.completion_panel().is_none(), "{keymap}");
+
+        let mut ed = footnote_panel(keymap);
+        ed.on_key(Key::Tab);
+        ed.on_key(Key::Esc);
+        assert_eq!(ed.mode(), Mode::Normal, "{keymap}");
+        assert_eq!(first(&ed), "正文[^舊註]和[^7]。[^舊註]", "{keymap}: Esc keeps it");
+
+        // Nothing chosen: `C-c` shuts the panel and writes nothing.
+        let mut ed = footnote_panel(keymap);
+        ed.on_key(Key::Ctrl('c'));
+        assert!(ed.completion_panel().is_none(), "{keymap}");
+        assert_eq!(ed.mode(), Mode::Insert, "{keymap}");
+        assert_eq!(first(&ed), "正文[^舊註]和[^7]。[^", "{keymap}");
+    }
+}
+
+/// **The brackets a reference closes with come and go with it**: written by
+/// the pre-fill, stepped over when auto-pairs wrote them, and `C-c` leaves the
+/// pair as it found it.
+#[test]
+fn a_reference_brings_its_brackets_and_takes_them_back() {
+    // Auto-pairs on: `[` wrote its `]`, and the caret is inside `[^]`.
+    let mut ed = typed("[^甲]\n\n[^甲]: 一\n");
+    press(&mut ed, "ge");
+    ed.on_key(Key::Char('A'));
+    ed.on_key(Key::Enter);
+    press(&mut ed, "[^");
+    assert_eq!(caret_line(&ed), "[^]", "auto-pairs closed the bracket");
+    ed.on_key(Key::Tab);
+    assert_eq!(caret_line(&ed), "[^甲]", "one bracket, not two");
+    ed.on_key(Key::Ctrl('c'));
+    assert_eq!(caret_line(&ed), "[^]", "the pair as it was");
+    ed.on_key(Key::Char('乙'));
+    assert_eq!(caret_line(&ed), "[^乙]", "and the caret inside it");
+
+    // `[[`: two brackets written, and gone again with `C-c`.
+    let dir = tmp().join(format!("yumete-panel-brackets-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("雨夜.md"), "# 雨夜\n").unwrap();
+    std::fs::write(dir.join("here.md"), "見\n").unwrap();
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    ed.set_auto_pairs(crate::editor::AutoPairs::Off);
+    ed.open_file(dir.join("here.md")).unwrap();
+    press(&mut ed, "A[[");
+    ed.on_key(Key::Tab);
+    assert_eq!(caret_line(&ed), "見[[雨夜]]");
+    ed.on_key(Key::Ctrl('c'));
+    assert_eq!(caret_line(&ed), "見[[");
+    ed.on_key(Key::Char('雨'));
+    ed.on_key(Key::Tab);
+    ed.on_key(Key::Enter);
+    assert_eq!(caret_line(&ed), "見[[雨夜]]");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **The quiet column says what each row is**: nothing for a word; file,
+/// folder or link for a path, a folder in the folder style; a server item's
+/// kind as helix names it, a deprecated one crossed out.
+#[test]
+fn the_panel_says_what_each_word_path_and_server_item_is() {
+    type Seen = Vec<(String, Option<String>, bool, bool)>;
+    let notes = |ed: &Editor| -> Seen {
+        ed.completion_panel()
+            .map(|p| p.rows.into_iter().map(|r| (r.label, r.note, r.folder, r.deprecated)).collect())
+            .unwrap_or_default()
+    };
+    let ed = harbour_list("helix");
+    assert!(notes(&ed).iter().all(|(_, note, folder, _)| note.is_none() && !folder), "a word has no note");
+
+    let dir = tmp().join(format!("yumete-panel-paths-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("harbours")).unwrap();
+    std::fs::write(dir.join("harbour.md"), "").unwrap();
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(dir.join("harbour.md"), dir.join("harbourlink")).unwrap();
+    std::fs::write(dir.join("notes.md"), "\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(dir.join("notes.md")).unwrap();
+    press(&mut ed, "i./harb");
+    let rows = notes(&ed);
+    let row = |name: &str| rows.iter().find(|r| r.0 == name).cloned().unwrap_or_else(|| panic!("{name}: {rows:?}"));
+    assert_eq!(row("harbour.md").1, Some(say!("complete.kind.file")));
+    assert!(!row("harbour.md").2);
+    assert_eq!(row("harbours/").1, Some(say!("complete.kind.folder")));
+    assert!(row("harbours/").2, "a folder is drawn as one");
+    #[cfg(unix)]
+    assert_eq!(row("harbourlink").1, Some(say!("complete.kind.link")));
+    std::fs::remove_dir_all(&dir).ok();
+
+    let dir = tmp().join(format!("yumete-panel-kinds-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("a.rs"), "\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(dir.join("a.rs")).unwrap();
+    press(&mut ed, "ico");
+    ed.take_completion_query();
+    let offer = |label: &str, kind: i64, deprecated: bool| crate::lsp::Offer {
+        label: label.into(),
+        insert: label.into(),
+        kind,
+        detail: Some("fn() -> usize".into()),
+        filter: None,
+        replacing: None,
+        deprecated,
+    };
+    ed.show_offers(vec![offer("count", 3, false), offer("Counter", 22, false), offer("cold", 0, true)], false);
+    let rows = notes(&ed);
+    assert_eq!(rows.len(), 3, "{rows:?}");
+    let row = |name: &str| rows.iter().find(|r| r.0 == name).cloned().unwrap_or_else(|| panic!("{name}: {rows:?}"));
+    assert_eq!(row("count").1, Some(say!("complete.kind.function")), "the kind, not the detail");
+    assert_eq!(row("Counter").1, Some(say!("complete.kind.struct")));
+    assert_eq!(row("cold").1, None, "no kind, no note");
+    assert!(row("cold").3 && !row("count").3, "only the deprecated one is crossed out");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **References' notes**: the folder a page is in (the project's top in a
+/// word), a heading's level and the heading it stands under, a footnote's
+/// first words.
+#[test]
+fn the_panel_says_where_a_page_and_a_heading_are() {
+    let dir = tmp().join(format!("yumete-panel-refs-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    for sub in ["卷一", "人物"] {
+        std::fs::create_dir_all(dir.join(sub)).unwrap();
+    }
+    std::fs::write(dir.join("卷一/第四章.md"), "# 第四章\n\n那一夜，見\n").unwrap();
+    std::fs::write(dir.join("卷一/雨夜.md"), "# 雨夜\n\n## 雪落之前\n\n## 渡口\n\n### 船家的話\n\n## 天明\n").unwrap();
+    std::fs::write(dir.join("人物/安寧.md"), "# 安寧\n").unwrap();
+    std::fs::write(dir.join("地名辭典.md"), "地名\n").unwrap();
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    ed.set_auto_pairs(crate::editor::AutoPairs::Off);
+    ed.open_file(dir.join("卷一/第四章.md")).unwrap();
+    ed.links_index();
+    ed.goto_line(3);
+    press(&mut ed, "A[[");
+    let rows = ed.completion_panel().expect("the pages").rows;
+    let note = |label: &str| rows.iter().find(|r| r.label.ends_with(label)).and_then(|r| r.note.clone());
+    assert_eq!(note("雨夜").as_deref(), Some("卷一/"), "{rows:?}");
+    assert_eq!(note("安寧").as_deref(), Some("人物/"), "{rows:?}");
+    assert_eq!(note("地名辭典"), Some(say!("complete.project-root")), "{rows:?}");
+
+    press(&mut ed, "雨夜#");
+    let rows = ed.completion_panel().expect("the headings").rows;
+    let notes: Vec<(&str, &str)> = rows.iter().map(|r| (r.label.as_str(), r.note.as_deref().unwrap_or(""))).collect();
+    assert_eq!(
+        notes,
+        [("雨夜", "#"), ("雪落之前", "##"), ("渡口", "##"), ("船家的話", "### 渡口 ›"), ("天明", "##")],
+        "the one top heading is not repeated as every row's parent"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+
+    let ed = footnote_panel("helix");
+    let rows = ed.completion_panel().expect("the notes").rows;
+    assert_eq!(rows[0].label, "舊註", "the bracket it closes is not shown");
+    assert_eq!(rows[0].note.as_deref(), Some("從前的話"));
+}
+
+/// **`Tab 补全 · 1/2` on the command row while the panel is open**, under
+/// any message that row has to say.
+#[test]
+fn the_command_row_says_the_panel_keys_below_any_message() {
+    let keys = |ed: &Editor| match ed.hint() {
+        Hint::Keys(name, keys) => Some((name, keys.into_iter().map(|(k, d)| (k.to_string(), d)).collect::<Vec<_>>())),
+        _ => None,
+    };
+    let mut ed = harbour_list("helix");
+    assert_eq!(keys(&ed), Some((String::new(), vec![("Tab".into(), say!("hint.complete-count", 2))])));
+    ed.on_key(Key::Tab);
+    assert_eq!(keys(&ed), Some((String::new(), vec![("Tab".into(), say!("hint.complete", 1, 2))])));
+    ed.set_status("保存了".into());
+    assert!(matches!(ed.hint(), Hint::Says(said) if said == "保存了"), "a message wins the row");
+
+    let mut ed = footnote_panel("vim");
+    ed.on_key(Key::Tab);
+    assert_eq!(keys(&ed), Some((String::new(), vec![("Tab".into(), say!("hint.complete", 1, 3))])));
 }

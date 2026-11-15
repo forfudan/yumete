@@ -10,6 +10,8 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Changed
 
+- **Word and reference completion are one list under the cursor, with helix's keys**: `Tab`/`C-n`/`Down` write the next entry into the text and `S-Tab`/`C-p`/`Up` the previous one, typing on keeps it, `Enter` keeps it without a new line, `Esc` keeps it and leaves Insert, `C-c` puts back what you typed; `C-y` and `C-e` do the same as `Enter` and `C-c` while the list is open. `[[`, `[^`, `](#`, `[@` and Typst `@` open it under the cursor rather than at the foot of the window.
+- **The completion list has no border and stands on the status bar's ground**, with a quiet right-hand column (a language server item's kind, file/folder/link for a path, a page's folder, a heading's level and the heading it is under, a footnote's first words), folders in blue with a `/`, deprecated items crossed out, and a scrollbar when it holds more than it shows. The bottom row says `Tab complete · 3/12`.
 - **`:genda-top-chars N` (`:gtc`) types Yume's N most common characters, and `:genda-top-chars M-N` ranks M to N**, in place of `:genda-article`'s three bands; ranks past the end of the list are refused with its length. `:genda-article buffer` was `:genda`.
 
 ### Fixed

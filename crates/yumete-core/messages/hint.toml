@@ -255,6 +255,18 @@ zhs = "关闭"
 en = "close"
 
 [[message]]
+# Insert 模式，補全面板開着、已經選了一條寫進正文：命令行上那一句，Tab 後面的說明與第幾條／共幾條（草稿）
+key = "hint.complete"
+zhs = "补全 · {0}/{1}"
+en = "complete · {0}/{1}"
+
+[[message]]
+# Insert 模式，補全面板開着、還沒選哪一條：命令行上那一句，Tab 後面的說明與一共幾條（草稿）
+key = "hint.complete-count"
+zhs = "补全 · 共 {0} 条"
+en = "complete · {0} in all"
+
+[[message]]
 # :s 逐處確認的選單：後面的全換，不再問
 key = "hint.confirm.all"
 zhs = "替换其余全部"
@@ -1066,18 +1078,6 @@ en = "skip ignored"
 key = "hint.reading"
 zhs = "注音"
 en = "reading"
-
-[[message]]
-# 提示：Insert 模式打了 `[^` 或 `](#`，補全面板開着，等 Tab
-key = "hint.reference"
-zhs = "引用"
-en = "reference"
-
-[[message]]
-# 提示：Tab 在補全面板上換下一條(Shift-Tab 往回)
-key = "hint.reference.pick"
-zhs = "下一条(Shift-Tab 上一条)"
-en = "next (Shift-Tab: previous)"
 
 [[message]]
 # C-w q：關掉這一區

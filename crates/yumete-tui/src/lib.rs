@@ -10,6 +10,7 @@
 //! bundled `crossterm` backend, so no ANSI escapes are hand-written here.
 
 pub mod chrome;
+mod completion;
 pub mod panel;
 pub mod table;
 pub mod spinner;
@@ -3639,7 +3640,12 @@ fn shell_command(line: &str, in_dir: &std::path::Path) -> std::process::Command 
 /// **The status line's strip**, for the editor and for every page that puts
 /// one at its foot (`:settings`).
 pub(crate) fn status_bar_style(config: &Config) -> Style {
-    let ink = crate::theme::Palette::of(config);
+    status_bar_style_in(config, crate::theme::Palette::of(config))
+}
+
+/// The same, in a palette already chosen — the completion panel's ground is
+/// this strip's, read through this one function.
+pub(crate) fn status_bar_style_in(config: &Config, ink: crate::theme::Palette) -> Style {
     match config.theme.status_bar {
         yumete_config::StatusBar::Sunken => Style::default().bg(ink.sunken()).fg(ink.text()),
         yumete_config::StatusBar::Raised => ink.ground(yumete_config::rung::CHROME).fg(ink.text()),
@@ -6477,7 +6483,6 @@ fn draw<'a>(
     panels.extend(draw_command_menu(frame, editor, config, ime, area, footer));
     panels.extend(draw_search_hint(frame, editor, config, area, footer));
     panels.extend(draw_lookfor_menu(frame, editor, config, area, footer));
-    panels.extend(draw_reference_menu(frame, editor, config, area, footer));
     // Where the picker put its caret, so the candidate panel can stand under
     // the query instead of over the page the list is already covering.
     //
@@ -8220,60 +8225,11 @@ fn draw_note(
     // word that has already ended, and it would lie under the IME's
     // candidates. It comes back, worked out afresh, once the text is
     // committed, and as it was if the composition is let go.
-    if let Some((items, picked)) = editor.offers_here().filter(|_| !composing) {
-        // Warning: **只畫一小扇窗，不是整張單子。**
-        // `Body::Keys` 是 `空格` 那張鍵表的形狀——它裝不下就往**寬**裏長，於是
-        // rust-analyzer 提的六十二條會鋪成三欄、佔掉半個屏幕。補全單子不是鍵
-        // 表：它是一列**走着看**的東西，VSCode、helix、vim 一律單欄十行上下，
-        // 選到哪兒滾到哪兒。
-        // `[editor] completion_page_size`, 6 at the factory, as
-        // the input method's candidates.
-        let shown = config.editor.completion_page_size.max(1);
-        let from = match items.len() <= shown {
-            true => 0,
-            // 選中的那一條留在窗子中間偏上；到頭了就貼着頭尾，不留空行。
-            false => picked.saturating_sub(shown / 2).min(items.len() - shown),
-        };
-        let window = &items[from..(from + shown).min(items.len())];
-        let rows: Vec<(String, String)> = window
-            .iter()
-            .enumerate()
-            .map(|(n, offer)| {
-                let i = from + n;
-                // 選中的那一條在名字前頭帶一個記號——終端裏一整行反白會把兩欄
-                // 的對齊也一起反掉，而一個記號在哪一行是一眼的事。
-                let mark = match i == picked {
-                    true => "› ",
-                    false => "  ",
-                };
-                (
-                    format!("{mark}{}", offer.label),
-                    offer.detail.clone().unwrap_or_default(),
-                )
-            })
-            .collect();
-        return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
-            // **貼着光標畫**（見 `chrome::Anchor::UnderCaret`）。
-            // 這張單子說的是「剛打的那半個詞接下來是什麼」，是唯一一張跟着手走的浮窗。
-            stand: panel::Stand::UnderCaret,
-            accent: None,
-            pages: false,
-            reading: false,
-            scroll: 0,
-            // 沒有名字（見 `panel::draw`）。
-            title: String::new(),
-            lede: None,
-            entry: false,
-            body: panel::Body::Keys(rows),
-            // 第幾條、一共幾條——單子只露一小截的時候，這是唯一說得出「還有」的
-            // 地方，而「怎麽用」那一句在第一次之後就不必再讀了。
-            tag: Some(match items.len() > shown {
-                true => say!("lsp.which-of-them", picked + 1, items.len()),
-                false => say!("lsp.take-it"),
-            }),
-            vertical_text: false,
-            marked: false,
-        });
+    // **The completion panel**: words, paths, a server's list and references
+    // share it (`completion.rs`), so the reference list `[[` opens stands
+    // under the caret too, as the word list always has.
+    if let Some(panel) = editor.completion_panel().filter(|_| !composing) {
+        return crate::completion::draw(frame, config, area, bottom, caret, vertical, &panel);
     }
     // **「這是什麽」浮在最前**（#53 ③）。It was *asked for*, and the diagnostic
     // under it was not: a float that answered a question the reader did not
@@ -9023,8 +8979,8 @@ fn draw_search_hint(
 }
 
 /// The float of programs and files a shell line offers, standing on the status
-/// line under the word being typed. One column, a window of nine, `›` on the
-/// one Tab is on: the code-completion float's shape.
+/// line under the word being typed: the completion panel's look
+/// (`completion.rs`), `›` on the one Tab is on.
 fn draw_shell_offers(
     frame: &mut Frame,
     editor: &Editor,
@@ -9033,53 +8989,30 @@ fn draw_shell_offers(
     status: Rect,
 ) -> Option<Rect> {
     let (items, picked, lead) = editor.shell_offers()?;
-    let shown = config.editor.completion_page_size.max(1);
-    let at = picked.unwrap_or(0);
-    let from = match items.len() <= shown {
-        true => 0,
-        false => at.saturating_sub(shown / 2).min(items.len() - shown),
-    };
-    let rows: Vec<(String, String)> = items[from..(from + shown).min(items.len())]
+    let rows: Vec<yumete_core::editor::completion::CompletionRow> = items
         .iter()
-        .enumerate()
-        .map(|(n, item)| {
-            let mark = match picked == Some(from + n) {
-                true => "› ",
-                false => "  ",
-            };
-            (format!("{mark}{item}"), String::new())
+        .map(|item| yumete_core::editor::completion::CompletionRow {
+            label: item.to_string(),
+            note: None,
+            folder: item.ends_with('/'),
+            deprecated: false,
         })
         .collect();
     let label = editor.prompt_label().unwrap_or_default();
     // Under the word being completed, not the caret: Tab rewrites the word,
     // and a float that followed the caret would jump with every candidate.
-    // Two cells back for the ring and the `› `, so the names line up with it.
-    let x = (area.x + (yumete_cjk::str_width(&label) + yumete_cjk::str_width(&lead)) as u16)
-        .saturating_sub(3);
-    // Standing on the command row, so its bottom border lies on the status
-    // line, where the 命令 panel's lies: the one covers the other edge to edge.
-    let row = status.y + 1;
-    panel::draw(
+    // Two cells back for the `› `, so the names line up with it.
+    let x = (area.x + (yumete_cjk::str_width(&label) + yumete_cjk::str_width(&lead)) as u16).saturating_sub(2);
+    // Its last row just above the status line, which stays in sight.
+    crate::completion::draw_rows(
         frame,
         config,
         area,
-        row,
-        crate::chrome::Spot::cell((x, row)),
+        status.y,
+        crate::chrome::Spot::cell((x, status.y)),
         false,
-        &panel::Panel {
-            stand: panel::Stand::UnderCaret,
-            accent: None,
-            pages: false,
-            reading: false,
-            scroll: 0,
-            title: String::new(),
-            lede: None,
-            entry: false,
-            body: panel::Body::Keys(rows),
-            tag: Some(say!("lsp.which-of-them", at + 1, items.len())),
-            vertical_text: false,
-            marked: false,
-        },
+        &rows,
+        picked,
     )
 }
 
@@ -9239,69 +9172,6 @@ fn switch_held_here(line: &str, config: &Config, ime: &ImeSession) -> Option<boo
         Command::YumeAutocompletion(_) => Some(ime.prediction_enabled()),
         _ => None,
     }
-}
-
-/// The `[^` and `](#` panel — the same shape as the `:` menu, in the text
-/// (#418 二).
-///
-/// It stands at the foot beside every other floating panel rather than beside
-/// the caret. Two reasons, and the second is the one that decided it: a
-/// reference is typed at the end of a sentence, which is where the caret is
-/// least likely to have room under it; and a reader who has learned where the
-/// `:` menu opens has learned where *the list of things to press Tab through*
-/// opens, which is worth more than proximity.
-fn draw_reference_menu(
-    frame: &mut Frame,
-    editor: &Editor,
-    config: &Config,
-    area: Rect,
-    status: Rect,
-) -> Option<Rect> {
-    let (title, choices, picked) = editor.reference_menu()?;
-    let ink = crate::theme::Palette::of(config);
-    let highlight = picked.map(|i| i.min(choices.len() - 1));
-    let focus = highlight.unwrap_or(0);
-    // Without the bracket it closes: the panel is a list of references, and
-    // `舊註]` reads as a typo in a list of tags.
-    let names: Vec<&str> = choices.iter().map(|c| c.text.trim_end_matches([']', ')'])).collect();
-    // The notes in one column, because they are read down rather than across:
-    // 「哪一條是我要的」 is answered by the note, and a ragged left edge on the
-    // half that answers it makes the eye walk every row.
-    let column = names.iter().map(|n| yumete_cjk::str_width(n)).max().unwrap_or(0);
-    let items: Vec<Row> = choices
-        .iter()
-        .zip(&names)
-        .map(|(c, name)| Row {
-            dim: false,
-            text: format!("{name}{}", " ".repeat(column - yumete_cjk::str_width(name))),
-            note: c.note.clone(),
-        })
-        .collect();
-    let footer = format!("{}/{}", focus + 1, items.len());
-    draw_list(
-        frame,
-        ink,
-        config.panel.rounded,
-        area,
-        status.y,
-        List {
-            deep_as_the_page: false,
-            about: &[],
-            state: None,
-            wide: false,
-            over_status: false,
-            items: &items,
-            focus,
-            highlight,
-            footer: &footer,
-            columns: true,
-            title: &title,
-            cap: MENU_WIDTH as usize,
-            // A reference list has no unfiltered form to be measured from —
-            // what is on the page *is* the whole of it.
-            whole: None,
-        },
-    )
 }
 
 /// How many entries the `:` menu holds with nothing typed, and how wide the
@@ -16123,8 +15993,12 @@ fn draw_command(
         // down; the row keeps what it is for — what just happened.
         Hint::Keys(..) if editor.pending_menu().is_some() => {}
         Hint::Keys(name, keys) => {
-            put(&name, label, &mut x);
-            put("  ", what, &mut x);
+            // A row of keys with no name of its own (the completion panel's)
+            // starts at its first key.
+            if !name.is_empty() {
+                put(&name, label, &mut x);
+                put("  ", what, &mut x);
+            }
             // Warning: **整對整對地丟，放不下就畫一個 `…`。**
             //
             // 硬切的話，搜索那一扇在 100 欄下停在 `… aA 追加  iI`
@@ -20254,6 +20128,31 @@ fn squeezed(text: &str) -> String {
             x += grapheme_width(symbol).max(1) as u16;
         }
         out
+    }
+
+    /// **`[^` opens the completion panel under the caret**, as word completion
+    /// does, not at the foot like the `:` menu; and the command row says
+    /// `Tab` and how far down the list the choice is.
+    #[test]
+    fn the_reference_panel_stands_under_the_caret_and_the_row_says_its_keys() {
+        let mut ed = editor_with("正文[^舊註]。\n\n[^舊註]: 從前的話\n");
+        ed.set_auto_pairs(yumete_core::editor::AutoPairs::Off);
+        for k in "A[^".chars() {
+            ed.on_key(Key::Char(k));
+        }
+        ed.on_key(Key::Tab);
+        let config = Config::default();
+        let (w, h) = (60u16, 16u16);
+        let buf = render(&ed, &config, w, h);
+        let caret_row = (0..h).find(|&y| row_text(&buf, y).contains("正文[^舊註]。[^舊註]")).expect("the line");
+        let under = row_text(&buf, caret_row + 1);
+        assert!(under.contains("› 舊註") && under.contains("從前的話"), "under the caret: {under:?}");
+        let ground = crate::status_bar_style(&config).bg.unwrap();
+        let at = under.find('›').map(|i| under[..i].chars().map(|c| grapheme_width(&c.to_string()).max(1)).sum::<usize>()).unwrap() as u16;
+        assert_eq!(buf[(at, caret_row + 1)].bg, ground, "the status bar's ground");
+        let last = row_text(&buf, h - 1);
+        assert!(last.contains("Tab"), "the command row: {last:?}");
+        assert!(last.contains("1/2"), "where the choice is: {last:?}");
     }
 
     /// Which screen row holds `needle`.
