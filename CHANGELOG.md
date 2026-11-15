@@ -14,6 +14,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Fixed
 
+- **`[+]` and `:q` ask whether saving would change the file**: typing a character and erasing it, or undoing back to the last save after any amount of undo and redo, leaves no `[+]` and `:q` quits; changing only the encoding counts as a change; a change someone else makes to the file on disk is never taken as yours.
 - **`:` reaches the command line in the middle of a `:genda` segment**, where it was typed into the pad as errors; the clock stops while the line is open. Where the next character to type is a colon, the key still types it.
 - **A wiki name inside a link no longer turns gold**: the page or alias of `[[page|alias]]`, a `#heading`, or either half of `[text](url)`.
 

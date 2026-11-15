@@ -1445,13 +1445,10 @@ impl Editor {
         // **救回來的字在盤上没有第二份**（不撥髒標記會丟字）。
         //
         // 上面那句「`u` 把盤上那一份放回來，所以恢復是收得回的決定」只對了一半：
-        // 底下 `adopt_draft` 會把草稿檔刪掉，而撤回一步正好退到棧底——棧底的深度
-        // 就是 `saved_depth`，於是緩衝報「乾淨」，`[+]` 不亮，`:q` 一聲不響地走人。
+        // 底下 `adopt_draft` 會把草稿檔刪掉，而撤回一步正好退到棧底——棧底的正文
+        // 和盤上一樣，按位元組比就是「乾淨」，`[+]` 不亮，`:q` 一聲不響地走人。
         // 那一刻**救回來的字只在重做棧裏**，而退出把重做棧扔了。
-        //
-        // Warning: **要在 `snapshot()` 之前撥**。撤回那一支恢復的是**快照裏記着的**那個
-        // 髒標記（`EditSnapshot::modified`），所以在快照之後撥等於没撥。[`Buffer::mark_modified`] 順帶把「哪裏算
-        // 乾淨」也作廢，這正是它自己的文檔寫的用途。
+        // [`Buffer::mark_modified`] 讓這一份在存檔之前恆答「改過」。
         self.current_buffer_mut().mark_modified();
         self.snapshot();
         let len = self.current_buffer().char_count();

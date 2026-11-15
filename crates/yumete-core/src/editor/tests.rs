@@ -18064,6 +18064,26 @@ fn quit_on_a_clean_buffer_proceeds() {
     assert_eq!(ed.execute(":q").unwrap(), CommandOutcome::Quit);
 }
 
+/// **A character typed and erased is no change**: `[+]` goes and `:q`
+/// leaves, the answer `:diff` gives for the same text.
+#[test]
+fn typing_then_erasing_lets_quit_proceed() {
+    let dir = tmp().join(format!("yumete-erase-quit-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("page.md");
+    std::fs::write(&path, "plain sample text\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&path).unwrap();
+    ed.on_key(Key::Char('i'));
+    ed.on_key(Key::Char('x'));
+    assert!(ed.current_buffer().is_modified());
+    ed.on_key(Key::Backspace);
+    ed.on_key(Key::Esc);
+    assert!(!ed.current_buffer().is_modified(), "the text is the one on disk");
+    assert_eq!(ed.execute(":q").unwrap(), CommandOutcome::Quit);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 // ---- Modal editing ----------------------------------------------------
 
 /// Feed a string of `Key::Char` presses (plus Enter for '\n').
@@ -19464,8 +19484,8 @@ fn recover_loads_the_draft_and_undo_takes_it_back() {
     assert_eq!(ed.current_buffer().text(), "第一稿\n");
     // **可是撤回之後這一份不許報「乾淨」**（否則會丟字）。
     //
-    // `adopt_draft` 剛剛把草稿檔刪了，而撤回一步正好退到棧底——棧底的深度就是
-    // `saved_depth`，報乾淨的話 `[+]` 不亮、`:q` 一聲不響地走人，崩掉那一輪寫的
+    // `adopt_draft` 剛剛把草稿檔刪了，而撤回一步正好退到棧底——棧底的正文和盤上
+    // 一樣，報乾淨的話 `[+]` 不亮、`:q` 一聲不響地走人，崩掉那一輪寫的
     // 東西哪裏都没有了。盤上那一份和緩衝裏這一份一樣不一樣是另一回事：**那份草稿
     // 已經不在了**，所以在存檔之前這一份就是唯一的一份。
     assert!(

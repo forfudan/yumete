@@ -76,6 +76,48 @@ fn tail_for(rope: &Rope, ending: &str, finish: bool) -> &'static str {
     }
 }
 
+/// **The bytes a save writes, in a form cheap to compare** — what
+/// [`Buffer::is_modified`] holds the buffer up against.
+///
+/// A save writes `encode(text + tail, encoding)`, behind a byte-order mark
+/// when the file came with one, and the tail is a function of the text and
+/// the line ending ([`tail_for`]). So the text's digest plus the encoding, the
+/// mark and the ending decide every byte, and two buffers with the same
+/// fingerprint write the same file. The length rides along so that most edits
+/// are answered without hashing anything: text of another length is other
+/// text.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct Fingerprint {
+    /// The text's length in UTF-8 bytes, as [`Rope::len_bytes`] counts it.
+    bytes: usize,
+    /// [`digest_of`] the text.
+    digest: u64,
+    encoding: &'static crate::encoding::Encoding,
+    marked: bool,
+    ending: &'static str,
+}
+
+impl Default for Fingerprint {
+    /// An empty UTF-8 buffer with unix line endings and no mark, as
+    /// [`Buffer::new`] makes.
+    fn default() -> Self {
+        Fingerprint {
+            bytes: 0,
+            digest: digest(""),
+            encoding: crate::encoding::UTF_8,
+            marked: false,
+            ending: "\n",
+        }
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    /// How many times [`Buffer::is_modified`] hashed the text, for the test
+    /// that holds it to 「not when the lengths differ」.
+    static DIGESTS_TAKEN: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
 /// A buffer that will not be written to (Feature #213).
 ///
 /// The whole error: there is one reason an edit is refused at this level, and
@@ -126,7 +168,6 @@ pub struct Buffer {
     id: u64,
     rope: Rope,
     path: Option<PathBuf>,
-    modified: bool,
     /// A name for a buffer that is not a file — a results listing, say. Shown
     /// on the status line in place of `[scratch]`.
     label: Option<String>,
@@ -234,17 +275,13 @@ pub struct Buffer {
     /// unless the save itself is told. A revision cannot stand in for it:
     /// undo makes one too, and a save makes none.
     saves: u64,
-    /// **撤回棧有多深的時候存的檔**——`None` ＝ 這一份没有一個「和盤上一樣」的位置。
+    /// **What a save would have written, taken at the last read or save**:
+    /// the yardstick [`Buffer::is_modified`] measures against.
     ///
-    /// Warning: **没有它，`:w` 之後按一下 `u`，緩衝區就說自己是乾淨的**，會丟字。每一個撤回點記着「拍它的時候改過没有」，而 `undo` 把那
-    /// 一格原樣寫回來——存檔之前拍的那些點記的都是 `false`。於是：改一個字、
-    /// `:w`、按 `u`，屏幕回到原樣、盤上是改過的那一版、狀態欄**不寫 `[+]`**，
-    /// `:q` 一聲不吭就退出去了。救命稿也不寫（它問的也是 `is_modified`）。
-    ///
-    /// 記的是**深度**不是內容：一條線性的歷史上，撤回棧的深度就認得出一個位置，
-    /// 而比內容要給四十兆的稿子每按一下 `u` 算一次散列。分了叉（撤回之後又改）
-    /// 就把它作廢——那個位置從此走不回去了。
-    saved_depth: Option<usize>,
+    /// Not the file on disk: a change somebody else makes to it is theirs, and
+    /// taking it as ours would make a buffer clean that holds text no file has,
+    /// or dirty when nothing in it moved.
+    pristine: Fingerprint,
     /// **Where the last change was, and how much longer it made the text**
     /// (#366) — `None` when the whole rope was replaced.
     ///
@@ -351,15 +388,16 @@ pub struct Buffer {
     /// reflex and then types it at the real one too. So when the stamp says
     /// "maybe", this says whether it actually did.
     read_as: Option<u64>,
-    /// 上一次替 [`Buffer::is_modified`] 算的那個答案，連它算的是哪一版。
-    /// 只有撤回棧分了叉之後纔用得上。
+    /// The last answer to 「is the text the one in [`Buffer::pristine`]」, with
+    /// the revision it is for: the status line asks every frame, and a digest
+    /// of a long manuscript costs milliseconds. Cleared whenever `pristine` is
+    /// taken again, since the same revision then has another answer.
     clean_at: std::cell::Cell<Option<(u64, bool)>>,
     /// **這一份的字不是從盤上那一份來的**。
     ///
     /// 救回來的草稿就是這一種：`adopt_draft` 把草稿檔刪了，於是在存檔之前它是
     /// **唯一的一份**，和盤上那一份一樣不一樣都不算數。[`Buffer::is_modified`]
-    /// 問指紋那一條退路對它不成立，所以要和「撤回棧分了叉」分得開——兩者都讓
-    /// `saved_depth` 作廢，可只有分叉那一種還回得到「乾淨」。
+    /// 對它恆答「改過」，正文走回哪一步都一樣——撤到棧底，棧底正是那段救回來的字。
     beyond_the_file: bool,
 
 }
@@ -428,7 +466,6 @@ struct EditSnapshot {
     /// **Every selection, when the editor gave them**: helix
     /// brings back every cursor on `u`, and one `usize` holds one of them.
     selections: Option<crate::selection::Selections>,
-    modified: bool,
     /// **The selections at the step's other end** (measured
     /// against helix 25.07.1): on an undo point, where the cursors stood when
     /// the change was done, which is where helix's redo puts them; on a redo
@@ -501,7 +538,6 @@ impl Buffer {
             id: next_id(),
             rope: Rope::new(),
             path: None,
-            modified: false,
             cursor: 0,
             label: None,
             marked: false,
@@ -511,7 +547,7 @@ impl Buffer {
             history: History::default(),
             revision: 0,
             edited: 0,
-            saved_depth: Some(0),
+            pristine: Fingerprint::default(),
             saves: 0,
             edit: None,
             journal: None,
@@ -555,12 +591,7 @@ impl Buffer {
     /// away, and nothing else in the editor would defend it — `:q` let it go
     /// without a word, which is the whole of a crashed session's work.
     pub fn mark_modified(&mut self) {
-        self.modified = true;
         self.beyond_the_file = true;
-        // Warning: **連「哪裏算乾淨」一起作廢**。這一支是給救回來的
-        // 草稿用的：它的字從一個崩掉的 session 來，盤上没有任何一份和它一樣。
-        // 不作廢的話撤回棧走回棧底就會報「乾淨」——而棧底正是那段救回來的字。
-        self.saved_depth = None;
     }
 
     /// Create a buffer holding `text`, not yet associated with any file.
@@ -573,11 +604,10 @@ impl Buffer {
     pub fn from_text(text: &str) -> Self {
         let rope = Rope::from_str(text);
         let ending = dominant_ending(&rope);
-        Buffer {
+        let mut buffer = Buffer {
             id: next_id(),
             rope,
             path: None,
-            modified: false,
             cursor: 0,
             label: None,
             marked: false,
@@ -587,7 +617,7 @@ impl Buffer {
             history: History::default(),
             revision: 0,
             edited: 0,
-            saved_depth: Some(0),
+            pristine: Fingerprint::default(),
             saves: 0,
             edit: None,
             journal: None,
@@ -621,7 +651,9 @@ impl Buffer {
             readonly: false,
             computed: false,
             preview: None,
-        }
+        };
+        buffer.take_pristine(None);
+        buffer
     }
 
     /// Open `path` into a new buffer.
@@ -751,12 +783,11 @@ impl Buffer {
         // **A file read is vim's first change**: `` `[ `` on its first line
         // and `` `] `` on the last line read, both at the line's start.
         let read_span = (rope.len_chars() > 0).then(|| (0, rope.line_to_char(crate::motion::last_line(&rope))));
-        Ok(Buffer {
+        let mut buffer = Buffer {
             id: next_id(),
             ending: dominant_ending(&rope),
             rope,
             path: Some(path.to_path_buf()),
-            modified: false,
             cursor: 0,
             label: None,
             marked,
@@ -765,7 +796,7 @@ impl Buffer {
             history: History::default(),
             revision: 0,
             edited: 0,
-            saved_depth: Some(0),
+            pristine: Fingerprint::default(),
             saves: 0,
             edit: None,
             journal: None,
@@ -809,7 +840,9 @@ impl Buffer {
             readonly: fs::metadata(path).is_ok_and(|m| m.permissions().readonly()),
             computed: false,
             preview: None,
-        })
+        };
+        buffer.take_pristine(read_as);
+        Ok(buffer)
     }
 
     /// Whether this buffer refuses to be edited (Feature #213).
@@ -980,10 +1013,8 @@ impl Buffer {
             set.manual.clear();
         }
         self.seen = seen;
-        self.modified = false;
-        // 讀了一遍：撤回棧清空（底下那一句），所以乾淨的位置就是棧底。
-        self.saved_depth = Some(0);
         self.revision = self.revision.wrapping_add(1);
+        self.take_pristine(self.read_as);
         self.edit = None;
         self.journal = None;
         self.cursor = self.cursor.min(self.rope.len_chars());
@@ -1155,40 +1186,57 @@ impl Buffer {
         self.last_edit = None;
     }
 
-    /// Whether the buffer has unsaved modifications.
+    /// Whether the buffer has unsaved modifications: **whether a save would
+    /// write other bytes than the last read or save took** ([`Fingerprint`]).
     ///
-    /// Warning: **撤回棧分了叉之後，這一問只有正文答得了**。
-    /// 「乾淨」平時是按**深度**認的：存檔那一刻記下棧有多深，走回那個深度就乾淨
-    /// 了。撤回幾步再改一個字，重做那一支整個没了——存檔那個深度從此走不回去，
-    /// `saved_depth` 作廢，於是 `[+]` 再也落不下來。而正文完全可能又和盤上一樣：
-    /// `:diff` 說「一個字都不差」而 `:q` 說「還有没存的改動」，兩句話都照着自己的
-    /// 判準說實話。
+    /// The one answer the `[+]`, `:q`, `:qa`, `:bc`, the buffer list, leaving
+    /// a file and the recovery copy all ask. It is the same question `:diff`
+    /// asks, so the two cannot disagree: typing a character and erasing it is
+    /// clean, undoing back to the save is clean, and undoing past it is not,
+    /// whichever way the history branched.
     ///
-    /// 盤上那一份的指紋本來就在手上（`read_as`，存檔和讀檔各記一次），所以深度
-    /// 認不出來的時候改問它。兩句話問的是同一件事。
+    /// Besides the text it compares what else decides the bytes, so
+    /// `:encoding big5` on an unchanged file is a change. A recovered draft
+    /// ([`Buffer::mark_modified`]) is always one: no file holds its text.
     ///
-    /// Warning: **答案按 `revision` 存着。** 這一句每一幀都要問（狀態欄那個 `[+]`），
-    /// 而算一次指紋要把整條繩子攤成字符串——三十一兆的稿子上那是每幀三十毫秒。
-    /// `revision` 每改一筆漲一次，所以一筆編輯最多算一次。
+    /// Warning: **cheap, because the status line asks every frame.** Text of
+    /// another length is answered without hashing; equal lengths hash once per
+    /// revision ([`Buffer::clean_at`]) — about two milliseconds for eight
+    /// megabytes, paid only on the edit that brings the length back.
     pub fn is_modified(&self) -> bool {
-        if !self.modified {
-            return false;
-        }
-        // 深度還認得出存檔那一刻：它已經答過了（走回去的那一下就清掉了）。
-        if self.saved_depth.is_some() || self.beyond_the_file {
+        if self.beyond_the_file {
             return true;
         }
-        let Some(had) = self.read_as else {
+        let pristine = &self.pristine;
+        if self.encoding != pristine.encoding || self.marked != pristine.marked || self.ending != pristine.ending {
             return true;
-        };
+        }
+        if self.rope.len_bytes() != pristine.bytes {
+            return true;
+        }
         if let Some((at, answer)) = self.clean_at.get() {
             if at == self.revision {
                 return answer;
             }
         }
-        let answer = digest(&self.rope.to_string()) != had;
+        #[cfg(test)]
+        DIGESTS_TAKEN.with(|taken| taken.set(taken.get() + 1));
+        let answer = digest_of(&self.rope) != pristine.digest;
         self.clean_at.set(Some((self.revision, answer)));
         answer
+    }
+
+    /// Take the text as it stands as the clean one ([`Buffer::pristine`]),
+    /// with its digest when the caller has it to hand.
+    fn take_pristine(&mut self, digest: Option<u64>) {
+        self.pristine = Fingerprint {
+            bytes: self.rope.len_bytes(),
+            digest: digest.unwrap_or_else(|| digest_of(&self.rope)),
+            encoding: self.encoding,
+            marked: self.marked,
+            ending: self.ending,
+        };
+        self.clean_at.set(None);
     }
 
     /// Insert `text` at character index `char_idx`, marking the buffer modified.
@@ -1217,7 +1265,6 @@ impl Buffer {
         self.earn_snapshot();
         self.shift_folds(char_idx, 0, text);
         self.rope.insert(char_idx, text);
-        self.modified = true;
         self.edited = next_edit();
         self.revision += 1;
         self.edit = Some((char_idx, text.chars().count() as isize));
@@ -1246,7 +1293,6 @@ impl Buffer {
         let at = range.start;
         self.shift_folds(at, taken, "");
         self.rope.remove(range);
-        self.modified = true;
         self.edited = next_edit();
         self.revision += 1;
         self.edit = Some((at, -(taken as isize)));
@@ -1279,7 +1325,6 @@ impl Buffer {
         self.shift_folds(start, taken, text);
         self.rope.remove(range);
         self.rope.insert(start, text);
-        self.modified = true;
         self.edited = next_edit();
         self.revision += 1;
         self.edit = Some((start, text.chars().count() as isize - taken as isize));
@@ -1680,8 +1725,8 @@ impl Buffer {
     /// Whether a crash right now would take something the recovery copy does
     /// not have (#383).
     ///
-    /// `is_modified` is about the **document**: it stays true from the first
-    /// keystroke until `:w`. This is about the **copy**: it goes false the
+    /// `is_modified` is about the **document**: it is true while a save would
+    /// change the file. This is about the **copy**: it goes false the
     /// moment one is written and true again on the next edit, which is what
     /// lets the loop stop waking up when there is nothing left to insure.
     pub fn draft_is_stale(&self) -> bool {
@@ -1811,10 +1856,14 @@ impl Buffer {
         self.write_atomically(&path, finish)?;
         self.on_disk = self.encoding;
         self.seen = stamp_of(&path);
-        self.read_as = Some(digest_of_written(&self.rope, tail_for(&self.rope, self.ending, finish)));
-        self.modified = false;
+        let tail = tail_for(&self.rope, self.ending, finish);
+        let written = digest_of_written(&self.rope, tail);
+        self.read_as = Some(written);
         self.beyond_the_file = false;
-        self.saved_depth = Some(self.history.undo.len());
+        // The tail is a function of the text and the ending, both in the
+        // fingerprint, so the text alone is what to remember; when nothing is
+        // added the digest is the one just taken.
+        self.take_pristine(tail.is_empty().then_some(written));
         self.saves += 1;
         // The document *is* the recovery copy now — but only ours goes; a draft
         // the writer has not looked at yet still holds text this file does not.
@@ -2122,13 +2171,11 @@ impl Buffer {
     }
 
     /// Write it back in `encoding` from the next save on (`:encoding big5`,
-    /// helix's command, vim's `:set fenc`). The text is unchanged; the file
-    /// will not be, so the buffer is modified.
+    /// helix's command, vim's `:set fenc`). The text stays as it is; the
+    /// bytes a save writes do not, so the buffer is modified until it is
+    /// saved or the encoding goes back (see [`Fingerprint`]).
     pub fn set_encoding(&mut self, encoding: &'static crate::encoding::Encoding) {
-        if encoding != self.encoding {
-            self.encoding = encoding;
-            self.modified = true;
-        }
+        self.encoding = encoding;
     }
 
     /// A short, human-readable name for status lines: the file name, or
@@ -2176,7 +2223,6 @@ impl Buffer {
             folds: self.folds.clone(),
             cursor,
             selections,
-            modified: self.modified,
             far: None,
             at: SystemTime::now(),
         });
@@ -2233,42 +2279,12 @@ impl Buffer {
     /// moved. Called from the two places that move it.
     fn earn_snapshot(&mut self) {
         self.history.fresh = true;
-        match self.history.pending.take() {
-            Some(mut point) => {
-                // Stamped when it is earned: that is when the change was made.
-                point.at = SystemTime::now();
-                // **分了叉，存檔那個位置就走不回去了**（見 [`Buffer::saved_depth`]）。
-                // 撤回幾步再改一個字，重做那一支整個没了——而存檔的那一刻如果
-                // 在那一支上，從此没有任何一個位置和盤上一樣。
-                if self.saved_depth.is_some_and(|at| at > self.history.undo.len()) {
-                    self.saved_depth = None;
-                }
-                self.history.undo.push(point);
-                self.history.redo.clear();
-            }
-            // Warning: **繩子動了而深度没動，那個深度就不認得內容了**。
-            //
-            // `saved_depth` 記的是深度，靠的是「一條線性的歷史上，深度認得出一個
-            // 位置」。分組裏 `snapshot` 不報點（`grouping`），於是**改了一串字而
-            // 深度一格没動**——那一串裏如果夾着一次存檔，存的那個深度此後還在長，
-            // `u` 再 `U` 回到那個深度帶回來的是後來的內容，而它說「乾淨」。
-            //
-            // 真打得出來：錄一個「改一下、`:w`、再改一下」的巨集放兩遍，屏幕上
-            // 不寫 `[+]`、`:q` 一聲不吭就退出去——正是這一格要擋的那件事。
-            //
-            // 平時那條路不受影響：`i…Esc` 第一下就把點報掉了，深度早就走過
-            // `saved_depth`，對不上也就不會作廢。
-            None => {
-                if self.saved_depth == Some(self.history.undo.len()) {
-                    self.saved_depth = None;
-                }
-            }
+        if let Some(mut point) = self.history.pending.take() {
+            // Stamped when it is earned: that is when the change happens.
+            point.at = SystemTime::now();
+            self.history.undo.push(point);
+            self.history.redo.clear();
         }
-    }
-
-    /// 走到這一步之後，緩衝區和盤上那一份還一不一樣。
-    fn still_as_saved(&self) -> Option<bool> {
-        self.saved_depth.map(|at| self.history.undo.len() == at)
     }
 
     /// Step back one undo point, returning the cursor position it was taken at,
@@ -2310,11 +2326,6 @@ impl Buffer {
         self.note_lines_changed(&before);
         self.mark_lines_stepped(&before);
         self.restore_folds(&prev.folds, &before);
-        // **走回去了算不算乾淨，問的是走到了哪裏**，不是那一格當初記了什麼。
-        self.modified = match self.still_as_saved() {
-            Some(same) => !same,
-            None => prev.modified,
-        };
         Some((prev.cursor.min(self.rope.len_chars()), prev.selections))
     }
 
@@ -2352,10 +2363,6 @@ impl Buffer {
         self.note_lines_changed(&before);
         self.mark_lines_stepped(&before);
         self.restore_folds(&next.folds, &before);
-        self.modified = match self.still_as_saved() {
-            Some(same) => !same,
-            None => next.modified,
-        };
         Some((next.cursor.min(self.rope.len_chars()), next.selections))
     }
 
@@ -2366,7 +2373,6 @@ impl Buffer {
             folds: self.folds.clone(),
             cursor,
             selections,
-            modified: self.modified,
             far: None,
             at: SystemTime::now(),
         }
@@ -3410,12 +3416,11 @@ fn tmp() -> std::path::PathBuf {
         assert_eq!(b.revision(), was + 1, "one edit, one revision");
     }
 
-    /// **分組裏存了一次檔，那個「乾淨位置」就不算數了**。
+    /// **分組裏存了一次檔，走回那一格帶回來的是後來的內容**。
     ///
-    /// `saved_depth` 記的是深度，靠的是「一條線性的歷史上，深度認得出一個位置」。
-    /// 分組裏不報撤回點，於是改了一串字而深度一格没動——那一串裏夾着的那次存檔，
-    /// 存的深度此後還在長。`u` 再 `U` 回到那個深度帶回來的是**後來的內容**，而它
-    /// 說「乾淨」：`[+]` 不寫、`:q` 不問、救命稿不寫，三道一起失效。
+    /// 分組裏不報撤回點，於是改了一串字而撤回棧一格没動——那一串裏夾着的那次
+    /// 存檔之後還有改動。`u` 再 `U` 回到那一格帶回來的是**後來的內容**，按撤回棧
+    /// 的深度認乾淨就會說「乾淨」：`[+]` 不寫、`:q` 不問、救命稿不寫。
     #[test]
     fn a_save_inside_an_undo_group_leaves_no_clean_point() {
         let dir = tmp().join(format!("yumete-groupsave-{}", std::process::id()));
@@ -3507,6 +3512,141 @@ fn tmp() -> std::path::PathBuf {
         b.undo(0).unwrap();
         assert!(b.is_modified(), "分了叉，没有一個位置和盤上一樣");
         fs::remove_dir_all(&dir).ok();
+    }
+
+    /// A file with nothing typed into it yet, for the clean-or-not tests.
+    fn clean_fixture(name: &str, text: &str) -> (std::path::PathBuf, Buffer) {
+        let dir = tmp().join(format!("yumete-clean-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("page.md");
+        fs::write(&path, text).unwrap();
+        let buffer = Buffer::open(&path).unwrap();
+        (dir, buffer)
+    }
+
+    /// **Typing a character and erasing it changes nothing**: the bytes a
+    /// save would write are the ones the file holds, so `[+]` goes and `:q`
+    /// lets the buffer go — the same answer `:diff` gives.
+    #[test]
+    fn typing_then_erasing_is_clean() {
+        let (dir, mut b) = clean_fixture("erase", "first line\nsecond line\n");
+        b.snapshot(0);
+        b.insert(5, "x").unwrap();
+        assert!(b.is_modified());
+        b.snapshot(6);
+        b.remove(5..6).unwrap();
+        assert!(!b.is_modified(), "the text is the one read");
+
+        // Same length, other text: modified, though the length gives no hint.
+        b.replace(0..1, "F").unwrap();
+        assert!(b.is_modified());
+        b.replace(0..1, "f").unwrap();
+        assert!(!b.is_modified());
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    /// Undo back to the save is clean whichever way the history went.
+    #[test]
+    fn undoing_back_to_the_save_is_clean_even_after_a_branch() {
+        let (dir, mut b) = clean_fixture("branch", "one\n");
+        b.snapshot(0);
+        b.insert(0, "a").unwrap();
+        b.undo(0).unwrap();
+        assert!(!b.is_modified(), "undone to the text as read");
+        // A branch: the redo of "a" is gone, and the read text is still reachable.
+        b.snapshot(0);
+        b.insert(0, "b").unwrap();
+        assert!(b.is_modified());
+        b.undo(0).unwrap();
+        assert!(!b.is_modified(), "a branched history still comes back to the read text");
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    /// **Another encoding is another file**, even with every character the
+    /// same — also after the undo history has branched.
+    #[test]
+    fn an_encoding_change_with_the_same_text_is_a_change() {
+        let (dir, mut b) = clean_fixture("enc", "同樣的字\n");
+        b.set_encoding(crate::encoding::BIG5);
+        assert!(b.is_modified(), "a save writes other bytes");
+        b.set_encoding(crate::encoding::UTF_8);
+        assert!(!b.is_modified(), "back to the encoding it is read in");
+
+        b.snapshot(0);
+        b.insert(0, "甲").unwrap();
+        b.undo(0).unwrap();
+        b.snapshot(0);
+        b.insert(0, "乙").unwrap();
+        b.undo(0).unwrap();
+        assert!(!b.is_modified());
+        b.set_encoding(crate::encoding::BIG5);
+        assert!(b.is_modified(), "a branched history does not hide the encoding");
+
+        // Saved in Big5, the Big5 bytes are the clean ones.
+        b.save_forcing(false, true).unwrap();
+        assert!(!b.is_modified());
+        b.set_encoding(crate::encoding::UTF_8);
+        assert!(b.is_modified());
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    /// A recovered draft is modified whatever its text, until it is saved.
+    #[test]
+    fn a_recovered_draft_stays_modified_until_saved() {
+        let (dir, mut b) = clean_fixture("draft", "on disk\n");
+        b.mark_modified();
+        assert!(b.is_modified(), "the same text as the file, and still no file holds this copy");
+        b.snapshot(0);
+        b.insert(0, "x").unwrap();
+        b.snapshot(1);
+        b.remove(0..1).unwrap();
+        assert!(b.is_modified());
+        b.save_forcing(false, true).unwrap();
+        assert!(!b.is_modified(), "saved: the file holds it");
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    /// **Somebody else's change to the file is not ours**: it neither dirties
+    /// a clean buffer nor cleans one that typed the same thing.
+    #[test]
+    fn an_outside_change_neither_dirties_nor_cleans() {
+        let (dir, mut b) = clean_fixture("outside", "mine\n");
+        let path = dir.join("page.md");
+        fs::write(&path, "theirs\n").unwrap();
+        assert!(!b.is_modified(), "nothing typed here");
+
+        b.snapshot(0);
+        b.replace(0..4, "theirs").unwrap();
+        assert_eq!(b.text(), fs::read_to_string(&path).unwrap());
+        assert!(b.is_modified(), "the disk matching is no reason to drop the change");
+        b.undo(0).unwrap();
+        assert!(!b.is_modified(), "back to the text as read");
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    /// **No hashing while the lengths differ**, on a buffer big enough for a
+    /// hash per frame to show; equal lengths hash once per revision.
+    #[test]
+    fn modified_hashes_only_when_the_lengths_match() {
+        let line = "a line of sample text for the length test\n";
+        let mut b = Buffer::from_text(&line.repeat(200_000));
+        let taken = || DIGESTS_TAKEN.with(|n| n.get());
+        let before = taken();
+        b.snapshot(0);
+        b.insert(0, "xy").unwrap();
+        for _ in 0..50 {
+            assert!(b.is_modified());
+        }
+        b.remove(0..1).unwrap();
+        assert!(b.is_modified());
+        assert_eq!(taken(), before, "lengths differ: answered without a hash");
+
+        b.remove(0..1).unwrap();
+        for _ in 0..50 {
+            assert!(!b.is_modified());
+        }
+        assert_eq!(taken(), before + 1, "one hash for the revision, then the cache");
     }
 
     /// **鎖住的那一份，`:w` 連碰都不碰那個檔**。
