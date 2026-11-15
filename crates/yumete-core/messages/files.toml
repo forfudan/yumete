@@ -433,6 +433,18 @@ zhs = "还在排版 {0}，等它完成"
 en = "still typesetting {0}; wait for it to finish"
 
 [[message]]
+# 公式浮窗那一趟 typst 下載完包、排好了公式；幾秒後自己消失。{0} 是包名（草稿）
+key = "export.typst-downloaded"
+zhs = "已下载 Typst 包 {0}"
+en = "downloaded Typst package {0}"
+
+[[message]]
+# yumete 自己跑的 typst（公式浮窗、:export-as-preview pdf）開始下載一個沒緩存過的 Typst 包，告訴用戶 yumete 聯網了。{0} 是包名，如 @preview/cetz:0.3.1（草稿）
+key = "export.typst-downloading"
+zhs = "正在下载 Typst 包 {0}…"
+en = "downloading Typst package {0}…"
+
+[[message]]
 # :export-as-preview 编译 PDF 时 typst 报了错，{0} 是它说的第一行（草稿）
 key = "export.typst-failed"
 zhs = "typst 编译失败，没有导出：{0}"

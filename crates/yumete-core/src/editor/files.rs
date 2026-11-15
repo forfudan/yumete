@@ -11,7 +11,7 @@ use super::*;
 /// one that file becomes, and how many open files of the book had unsaved
 /// changes when it began.
 pub(super) struct Typesetting {
-    answer: std::sync::mpsc::Receiver<Result<(), String>>,
+    answer: std::sync::mpsc::Receiver<Typeset>,
     child: std::sync::Arc<std::sync::Mutex<std::process::Child>>,
     draft: PathBuf,
     target: PathBuf,
@@ -19,6 +19,32 @@ pub(super) struct Typesetting {
     /// `:export`'s words on the line, which the Typst file's own settings
     /// stand in for ([`left_out`]).
     left_out: Vec<String>,
+}
+
+/// What the compiler's thread sends the loop: each package Typst starts to
+/// download, as it starts, and then the end.
+enum Typeset {
+    Downloading(String),
+    Done(Result<(), String>),
+}
+
+/// **Listen to the compiler's stderr**, passing on each package it
+/// downloads; what it said, for its complaint.
+fn listen(stderr: impl std::io::Read, tell: &std::sync::mpsc::Sender<Typeset>) -> String {
+    crate::export::read_typst_stderr(stderr, |spec| {
+        let _ = tell.send(Typeset::Downloading(spec));
+    })
+}
+
+/// The compiler's complaint: its first `error:` line, or else its first line
+/// that says anything and is not a download.
+fn complaint(said: &str) -> String {
+    let lines = || said.lines().map(str::trim).filter(|l| !l.is_empty());
+    lines()
+        .find(|l| l.starts_with("error"))
+        .or_else(|| lines().find(|l| crate::export::downloading_package(l).is_none()))
+        .unwrap_or("")
+        .to_string()
 }
 
 /// `said`, and the words of `:export` the line held that this export does
@@ -2293,17 +2319,14 @@ impl Editor {
         let held = std::sync::Arc::clone(&child);
         let (tell, answer) = std::sync::mpsc::channel();
         let spawned = std::thread::Builder::new().name("typst-export".to_string()).spawn(move || {
-            let mut err = String::new();
-            if let Some(mut stderr) = stderr {
-                let _ = std::io::Read::read_to_string(&mut stderr, &mut err);
-            }
+            let err = stderr.map(|stderr| listen(stderr, &tell)).unwrap_or_default();
             let status = held.lock().map_err(|_| String::new()).and_then(|mut child| child.wait().map_err(|e| e.to_string()));
             let said = match status {
                 Ok(status) if status.success() => Ok(()),
-                Ok(_) => Err(err.lines().find(|l| !l.trim().is_empty()).unwrap_or("").trim().to_string()),
+                Ok(_) => Err(complaint(&err)),
                 Err(err) => Err(err),
             };
-            let _ = tell.send(said);
+            let _ = tell.send(Typeset::Done(said));
         });
         if let Err(err) = spawned {
             if let Ok(mut child) = child.lock() {
@@ -2328,16 +2351,23 @@ impl Editor {
 
     /// **Take the PDF the compiler made, if it is done**:
     /// renamed over the target, or the compiler's first line of complaint
-    /// on the status line. Asked every frame; `true` when something was
-    /// said.
+    /// on the status line; meanwhile, any package Typst is downloading.
+    /// Asked every frame; `true` when something was said.
     pub fn collect_typesetting(&mut self) -> bool {
-        let Some(running) = &self.typesetting else {
-            return false;
-        };
-        let said = match running.answer.try_recv() {
-            Ok(said) => said,
-            Err(std::sync::mpsc::TryRecvError::Empty) => return false,
-            Err(std::sync::mpsc::TryRecvError::Disconnected) => Err(String::new()),
+        let mut told = false;
+        let said = loop {
+            let Some(running) = &self.typesetting else {
+                return told;
+            };
+            match running.answer.try_recv() {
+                Ok(Typeset::Downloading(spec)) => {
+                    self.typst_downloading(&spec);
+                    told = true;
+                }
+                Ok(Typeset::Done(said)) => break said,
+                Err(std::sync::mpsc::TryRecvError::Empty) => return told,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => break Err(String::new()),
+            }
         };
         let Some(done) = self.typesetting.take() else {
             return false;
@@ -2352,6 +2382,28 @@ impl Editor {
             }
         };
         true
+    }
+
+    /// **Typst went online**: a `typst` yumete runs has started to download
+    /// a package it had not cached (`@preview/cetz:0.3.1`). Typst's own
+    /// default is followed, so the package is fetched; the status line says
+    /// so, so that going online is never silent.
+    pub fn typst_downloading(&mut self, spec: &str) {
+        self.status = say!("export.typst-downloading", spec);
+    }
+
+    /// **That `typst` is done**: when the status line still says it is
+    /// downloading `spec`, it says the package was downloaded and fades
+    /// (`ok`), or clears (the run failed, which says so where it was asked
+    /// for). Anything said since is left alone.
+    pub fn typst_downloaded(&mut self, spec: &str, ok: bool) {
+        if self.status != say!("export.typst-downloading", spec) {
+            return;
+        }
+        match ok {
+            true => self.murmur(say!("export.typst-downloaded", spec)),
+            false => self.status.clear(),
+        }
     }
 
     /// How soon the loop should look for the compiler's answer: while one
@@ -2645,6 +2697,72 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::canonicalize(&dir).unwrap()
+    }
+
+    /// **Typst going online is said**: a `downloading` line on the
+    /// compiler's stderr reaches the loop as the package's name, and the
+    /// status line names it; the complaint is still Typst's `error:` line,
+    /// not the download.
+    #[test]
+    fn a_package_typst_downloads_is_said_on_the_status_line() {
+        let (tell, heard) = std::sync::mpsc::channel();
+        let stderr = "downloading @preview/cetz:0.3.1\n\n  0 B /  11.7 KiB (  0 %), 117.1 KiB/s, ETA: 0 s\n\
+                      11.7 KiB /  11.7 KiB (100 %), 117.1 KiB/s, ETA: 0 s\nerror: unknown variable: x\n";
+        let said = listen(stderr.as_bytes(), &tell);
+        let specs: Vec<String> = heard
+            .try_iter()
+            .map(|news| match news {
+                Typeset::Downloading(spec) => spec,
+                Typeset::Done(_) => panic!("only the compiler's thread says it is done"),
+            })
+            .collect();
+        assert_eq!(specs, ["@preview/cetz:0.3.1"]);
+        assert_eq!(complaint(&said), "error: unknown variable: x");
+        let mut ed = Editor::new();
+        ed.typst_downloading(&specs[0]);
+        assert_eq!(ed.status(), say!("export.typst-downloading", "@preview/cetz:0.3.1"));
+        // Done: the downloaded package is said, and fades.
+        ed.typst_downloaded("@preview/cetz:0.3.1", true);
+        assert_eq!(ed.status(), say!("export.typst-downloaded", "@preview/cetz:0.3.1"));
+        assert!(ed.status_due_in().is_some(), "it fades");
+        // A failed run clears it; something said since is left standing.
+        ed.typst_downloading("@preview/a:1.0.0");
+        ed.typst_downloaded("@preview/a:1.0.0", false);
+        assert_eq!(ed.status(), "");
+        ed.typst_downloading("@preview/a:1.0.0");
+        ed.set_status("other".to_string());
+        ed.typst_downloaded("@preview/a:1.0.0", true);
+        assert_eq!(ed.status(), "other");
+    }
+
+    /// **Nothing downloaded, nothing said**: a run that only complains
+    /// sends no download, and its complaint is its first line.
+    #[test]
+    fn no_download_no_word_of_one() {
+        let (tell, heard) = std::sync::mpsc::channel();
+        let said = listen("error: file not found\n  ┌─ main.typ\n".as_bytes(), &tell);
+        assert!(heard.try_iter().next().is_none());
+        assert_eq!(complaint(&said), "error: file not found");
+        assert_eq!(complaint("warning: odd\n"), "warning: odd");
+        for line in ["downloading release", "downloading", "compiled successfully", "  downloading @preview/x:1.0.0 now"] {
+            assert_eq!(crate::export::downloading_package(line), None, "{line}");
+        }
+        assert_eq!(
+            crate::export::downloading_package("\x1b[1;32mdownloading\x1b[0m @preview/cetz:0.3.1\n").as_deref(),
+            Some("@preview/cetz:0.3.1")
+        );
+    }
+
+    /// **The words are translated**: simplified Chinese and English.
+    #[test]
+    fn the_download_words_are_translated() {
+        let table = crate::messages::table();
+        let going = table.get("export.typst-downloading").expect("an entry");
+        assert_eq!(going.zhs, "正在下载 Typst 包 {0}…");
+        assert_eq!(going.en, "downloading Typst package {0}…");
+        let done = table.get("export.typst-downloaded").expect("an entry");
+        assert_eq!(done.zhs, "已下载 Typst 包 {0}");
+        assert_eq!(done.en, "downloaded Typst package {0}");
     }
 
     /// The ink the last formula was drawn in.

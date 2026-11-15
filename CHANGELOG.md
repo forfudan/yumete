@@ -6,6 +6,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Added
 
+- **When Typst downloads a package** for a Typst formula or `:export-as-preview pdf`, the status line names it while it downloads.
 - **`:yume-words` (`Space z u`) shows what yumete learned** (words, 调频, 固顶, with the Yume app's beside them, read only) and deletes yumete's copy of an entry, with `u` to put it back. yumete's own files hold only what yumete learned, and both layers are combined while you type (调频 counts are added together). **New `[ime] learn`, off by default**: yumete only reads the Yume app until it is turned on.
 - **`:quit-error` (`:cquit`, `:cq`) quits with exit status 1 or the one given**, so `git commit` aborts when yumete is git's editor; `:cq!` leaves unsaved files. **`:reload-all` (`:rla`) reloads every open file**, leaving files with unsaved changes alone unless you add `!`.
 - **Single-character mode (单字派) like the Yume app, in two copies**: character by character (default 字词同出) and whole sentence (default 严格单字): `[ime] single_char`, `sentence_single_char`, `word_show`, two settings rows, `:yume-single-char` and `Space z d`.

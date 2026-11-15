@@ -37,6 +37,54 @@ pub fn typst_command() -> std::process::Command {
     std::process::Command::new("typst")
 }
 
+/// **The package a line of Typst's stderr says it is downloading**:
+/// `@preview/cetz:0.3.1` from `downloading @preview/cetz:0.3.1`, the line
+/// Typst writes before it fetches a package it has not cached. Any colour
+/// codes around the word are skipped. `None` for every other line.
+pub fn downloading_package(line: &str) -> Option<String> {
+    let mut plain = String::with_capacity(line.len());
+    let mut chars = line.chars();
+    while let Some(c) = chars.next() {
+        if c == '\x1b' {
+            if chars.next() == Some('[') {
+                for c in chars.by_ref() {
+                    if ('@'..='~').contains(&c) {
+                        break;
+                    }
+                }
+            }
+            continue;
+        }
+        plain.push(c);
+    }
+    let spec = plain.trim().strip_prefix("downloading ")?.trim();
+    (spec.starts_with('@') && !spec.contains(char::is_whitespace)).then(|| spec.to_string())
+}
+
+/// **Read Typst's stderr as it is written**: `downloading` is called with
+/// each package Typst starts to download, the moment it says so, so the
+/// status line can tell that yumete went online; the whole text comes back
+/// at the end, for its complaint.
+pub fn read_typst_stderr(pipe: impl std::io::Read, mut downloading: impl FnMut(String)) -> String {
+    use std::io::BufRead;
+    let mut reader = std::io::BufReader::new(pipe);
+    let mut all = String::new();
+    let mut line = Vec::new();
+    loop {
+        line.clear();
+        match reader.read_until(b'\n', &mut line) {
+            Ok(0) | Err(_) => break,
+            Ok(_) => {}
+        }
+        let text = String::from_utf8_lossy(&line);
+        if let Some(spec) = downloading_package(&text) {
+            downloading(spec);
+        }
+        all.push_str(&text);
+    }
+    all
+}
+
 /// Whether [`typst_command`] answers at all.
 pub fn typst_is_installed() -> bool {
     typst_command()

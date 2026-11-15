@@ -12,7 +12,9 @@
 //! nothing waits for it. The frame asks ([`ask`]); a picture not made yet is
 //! queued, and the loop is woken when it lands. Each picture is kept by what
 //! it shows — the formula, its ink and its size — so walking the cursor back
-//! over a formula does not run typst again.
+//! over a formula does not run typst again. A formula that imports a
+//! package typst has not cached makes typst download it, as typst always
+//! does; the status line names the package while it comes ([`tell_downloads`]).
 //!
 //! **Markdown's maths is TeX, drawn by RaTeX** ([`crate::tex`]),
 //! in the process, in well under a millisecond, so it is drawn when asked
@@ -95,6 +97,42 @@ struct Studio {
     /// The formula whose last run took too long: answered so while it is
     /// still the one asked about, and tried again once another was.
     slow: Option<Key>,
+    /// The packages typst downloaded for a formula, for the status line
+    /// ([`tell_downloads`]).
+    news: Vec<Download>,
+}
+
+/// A package typst fetched for a formula: started, or done (`true` when
+/// typst made the picture).
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Download {
+    Started(String),
+    Finished(String, bool),
+}
+
+fn hear(news: Download) {
+    let (lock, _) = studio();
+    lock.lock().unwrap_or_else(|e| e.into_inner()).news.push(news);
+    if let Some(ring) = BELL.get() {
+        ring();
+    }
+}
+
+/// **Say on the status line what typst downloaded** for a formula: the
+/// package while it comes, then that it came. Asked every frame; `true`
+/// when something was said.
+pub fn tell_downloads(editor: &mut yumete_core::editor::Editor) -> bool {
+    let news = {
+        let (lock, _) = studio();
+        std::mem::take(&mut lock.lock().unwrap_or_else(|e| e.into_inner()).news)
+    };
+    for one in &news {
+        match one {
+            Download::Started(spec) => editor.typst_downloading(spec),
+            Download::Finished(spec, ok) => editor.typst_downloaded(spec, *ok),
+        }
+    }
+    !news.is_empty()
 }
 
 /// What a run that ran out of time says.
@@ -113,6 +151,7 @@ fn studio() -> &'static (Mutex<Studio>, Condvar) {
                 started: false,
                 no_typst: false,
                 slow: None,
+                news: Vec::new(),
             }),
             Condvar::new(),
         )
@@ -366,12 +405,18 @@ fn render(key: &Key, place: Option<&Place>) -> Answer {
         }
         bytes
     });
+    // Read as typst writes it, so a package it downloads is said while it
+    // comes.
     let err = std::thread::spawn(move || {
-        let mut text = String::new();
-        if let Some(pipe) = stderr.as_mut() {
-            let _ = pipe.read_to_string(&mut text);
-        }
-        text
+        let mut last = None;
+        let text = match stderr.take() {
+            Some(pipe) => yumete_core::export::read_typst_stderr(pipe, |spec| {
+                last = Some(spec.clone());
+                hear(Download::Started(spec));
+            }),
+            None => String::new(),
+        };
+        (text, last)
     });
     let deadline = std::time::Instant::now() + PATIENCE;
     let status = loop {
@@ -388,7 +433,10 @@ fn render(key: &Key, place: Option<&Place>) -> Answer {
         }
     };
     let png = out.join().unwrap_or_default();
-    let said = err.join().unwrap_or_default();
+    let (said, downloaded) = err.join().unwrap_or_default();
+    if let Some(spec) = downloaded {
+        hear(Download::Finished(spec, status.is_some_and(|s| s.success())));
+    }
     match status {
         Some(status) if status.success() => match crate::graphics::png_size(&png) {
             Some((width, height)) => Answer::Ready(Arc::new(Picture { png, width, height })),
@@ -608,6 +656,23 @@ mod tests {
             ink: (0xc8, 0xa2, 0xff),
             cell_height: 30,
         }
+    }
+
+    /// **A package typst downloads for a formula reaches the status line**:
+    /// named while it comes, said to have come once typst is done; with no
+    /// news, the status line is left as it was.
+    #[test]
+    fn a_formula_download_is_said_on_the_status_line() {
+        let mut ed = yumete_core::editor::Editor::new();
+        ed.set_status("as it was".to_string());
+        assert!(!tell_downloads(&mut ed));
+        assert_eq!(ed.status(), "as it was");
+        hear(Download::Started("@preview/physica:0.9.5".to_string()));
+        assert!(tell_downloads(&mut ed));
+        assert_eq!(ed.status(), yumete_core::say!("export.typst-downloading", "@preview/physica:0.9.5"));
+        hear(Download::Finished("@preview/physica:0.9.5".to_string(), true));
+        assert!(tell_downloads(&mut ed));
+        assert_eq!(ed.status(), yumete_core::say!("export.typst-downloaded", "@preview/physica:0.9.5"));
     }
 
     /// **A picture is kept by what it shows** — the formula, how it is set,

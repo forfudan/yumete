@@ -1059,6 +1059,9 @@ pub fn run(
             // `:export-as-preview` on a Typst file: the PDF typeset on a
             // thread, collected here.
             editor.collect_typesetting();
+            // A package typst downloads for a formula, said on the status
+            // line while it comes.
+            crate::maths::tell_downloads(editor);
             // Diagnostics follow what was edited since the last frame: a
             // paste, a formatter, a rename in another file.
             editor.move_the_problems();
