@@ -19,7 +19,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **The Markdown preview follows the cursor to the exact line it is drawn on**, however much bold, link addresses or other hidden markup comes before it in a long paragraph, on vertical pages too.
 - **New commands from helix**: `:sort` (sorts several selections among themselves, or the selected lines, or the whole buffer; `-r`/`!` reverse, `-i`/`i` ignore case), `:buffer-close-others` (`:bco`), `:buffer-close-all` (`:bca`) and `:write-buffer-close` (`:wbc`); helix configs that use them now import.
 - **vim's `` `[ `` and `` `] ``** go to where the last change or yank began and ended, `'[` and `']` to their lines, and an operator takes them as it takes a letter's mark (`` d`] ``).
-- **`:git-lazygit` and `:files-yazi` hand the terminal to lazygit and yazi** and come back when you leave them: lazygit in the current file's repository, asking you to save first (`:git-lazygit!` does not ask), and yazi on the current file, where `Enter` opens the chosen files here. Files changed on disk meanwhile are read again.
+- **`:git-lazygit` and `:files-yazi` hand the terminal to lazygit and yazi** (the LazyVim preset's `Space g g` runs `:git-lazygit`) and come back when you leave them: lazygit in the current file's repository, asking you to save first (`:git-lazygit!` does not ask), and yazi on the current file, where `Enter` opens the chosen files here. Files changed on disk meanwhile are read again.
 - **`:run-in-terminal <command>`** gives any program the whole terminal and comes back the moment it ends, with no key to press.
 - **`:decimo` and `:decimo-replace` put an arbitrary-precision value into the text**, with [decimo](https://github.com/forfudan/decimo) installed: `:decimo pi -P 50` at the cursor, on the same line; `:decimo-replace -P 50` evaluates the selected text and puts the value in its place, and `:decimo-append -P 50` keeps it and writes ` = ` and the value after it.
 - **An import says where yumete's taken keys went.** When your vim, Neovim, LazyVim or helix maps take one of yumete's `Space` keys, the imported file, the terminal and a read-only report the editor opens the next time it starts list each one and where its command is now (`Space b  open the buffer picker: now Space ,`).
@@ -49,6 +49,8 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Fixed
 
+- **`:decimo-replace`, `:decimo-append` and `:pipe` from vim's Visual mode act on the whole selection**: they put the value over one character and could duplicate a line. If the text changes while the command runs, the output is not put in. `:decimo` says it inserted, not replaced.
+- **English messages count properly**: "1 file", "2 files", not "1 files" or "file(s)"; `:help commands` writes aliases in plain brackets.
 - **With the code shown in the text (`inline_preedit = preview`), the candidate box no longer greys out the first candidate as if it were the code, nor highlights the second one.**
 - **A lone Shift switches 中/英 in the settings panel's `/` search** and its `:` line, as on every other prompt.
 - **Moving into a window that shows a `.csv` from deep in a longer file, or resuming such a session with `ye -r`, no longer crashes.**

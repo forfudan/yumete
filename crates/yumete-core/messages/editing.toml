@@ -77,13 +77,13 @@ en = "  {0}  →  {1}"
 # :convert 換完了，字數没變(除了 force，簡繁都是一個字換一個字)
 key = "convert.characters-changed"
 zhs = "已转换：{0} 个字有变化"
-en = "converted: {0} character(s) changed"
+en = "converted: {0|character|characters} changed"
 
 [[message]]
 # `` ` `` 那一組換完選區，{0} 是換了幾個字
 key = "convert.done-here"
 zhs = "转换了 {0} 个字(u 撤销)"
-en = "{0} character(s) changed (u to undo)"
+en = "{0|character|characters} changed (u to undo)"
 
 [[message]]
 # :convert 的説明頁最後一行，解釋 force 是什麼
@@ -109,7 +109,7 @@ en = "running: {0}"
 # :convert 換完了，字數變了(force 那一檔連詞一起換)
 key = "convert.length-changed"
 zhs = "已转换：{0} 字 → {1} 字"
-en = "converted: {0} characters → {1}"
+en = "converted: {0|character|characters} → {1}"
 
 [[message]]
 # :convert 加了 force，可這一對没有連詞一起換的那一檔
@@ -253,7 +253,7 @@ en = "selection"
 # :count 報字數
 key = "count.report"
 zhs = "{0}  字词 {1}  汉字 {2}  字符 {3}(不含空白)  {4} 段"
-en = "{0}  {1} words  {2} han  {3} characters (no spaces)  {4} paragraphs"
+en = "{0}  {1|word|words}  {2} han  {3|character|characters} (no spaces)  {4|paragraph|paragraphs}"
 
 [[message]]
 # :count 的範圍：全篇
@@ -265,7 +265,7 @@ en = "whole file"
 # 改動類的 count 撞到上限
 key = "count.writing-ceiling"
 zhs = "最多重复 {0} 次，超出部分不执行"
-en = "repeated at most {0} times; the rest are skipped"
+en = "repeated at most {0|time|times}; the rest are skipped"
 
 
 # ── data ──────────────────────────────────────────────────────────────
@@ -286,7 +286,7 @@ en = "the clipboard is empty"
 # 複製到系統剪貼簿
 key = "edit.copied-to-clipboard"
 zhs = "已复制 {0} 个字到系统剪贴板"
-en = "copied {0} character(s) to the system clipboard"
+en = "copied {0|character|characters} to the system clipboard"
 
 [[message]]
 # gS 的時候光標不在任何括號裏，或者括號裏是空的
@@ -365,13 +365,19 @@ en = "pasted {0}"
 # 貼上一段字
 key = "edit.pasted-characters"
 zhs = "已粘贴 {0} 个字"
-en = "pasted {0} character(s)"
+en = "pasted {0|character|characters}"
+
+[[message]]
+# :insert-output、:append-output、:decimo、:decimo-append 把命令的输出放在选区旁边，选区留着（草稿）
+key = "edit.pipe-inserted-characters"
+zhs = "已插入 {0} 个字"
+en = "inserted {0|character|characters}"
 
 [[message]]
 # :! 用外部命令換掉了選中的字
 key = "edit.pipe-replaced-characters"
 zhs = "已替换 {0} 个字"
-en = "replaced {0} character(s)"
+en = "replaced {0|character|characters}"
 
 [[message]]
 # 重做，已經到最新
@@ -419,7 +425,7 @@ en = "a new undo step starts here"
 # y 取了一段字
 key = "edit.yanked-characters"
 zhs = "已复制 {0} 个字"
-en = "yanked {0} character(s)"
+en = "yanked {0|character|characters}"
 
 
 # ── export ────────────────────────────────────────────────────────────
@@ -477,7 +483,7 @@ en = "no macro recorded yet: Q starts recording, Q again stops"
 # 錄製結束，報鍵數
 key = "macro.recorded-keys"
 zhs = "已录制 {0} 个键"
-en = "recorded {0} key(s)"
+en = "recorded {0|key|keys}"
 
 [[message]]
 # 開始錄製
@@ -504,7 +510,7 @@ en = "nothing yanked yet: y copies, Space p pastes from the system clipboard"
 # 空格 " 的貼上單，某一條取過的東西不止一行時的那一行摘要
 key = "register.several-lines"
 zhs = "{0} …({1} 行)"
-en = "{0} … ({1} lines)"
+en = "{0} … ({1|line|lines})"
 
 [[message]]
 # 空格 " 的貼上單裏，系統剪貼簿那一條的名字
@@ -525,7 +531,7 @@ en = "the readings are already {0}"
 # :ruby-auto 寫進去了幾條注音
 key = "ruby.auto-added"
 zhs = "已为 {0} 个词注音(u 撤销)"
-en = "annotated {0} word(s) (`u` to undo)"
+en = "annotated {0|word|words} (`u` to undo)"
 
 [[message]]
 # :ruby-auto，但字料層没裝，讀音無從查起
@@ -645,7 +651,7 @@ en = "kept the primary selection, dropped {0}"
 # 兩處選區靠到一起被併成一處——helix 是靜默的，這裏説一句
 key = "selection.merged"
 zhs = "已合并 {0} 个选区，剩 {1} 个"
-en = "{0} selections merged, {1} left"
+en = "{0|selection|selections} merged, {1} left"
 
 [[message]]
 # 按 C/A-C 想再加一個選區，可是那個方向上没有一行夠長
@@ -675,7 +681,7 @@ en = "nothing to split"
 # s/S/A-k/A-K 做完了，剩幾段
 key = "selection.sift-done"
 zhs = "{0} 个选区"
-en = "{0} selection(s)"
+en = "{0|selection|selections}"
 
 [[message]]
 # s/S/A-k/A-K 一段都没剩下
@@ -747,7 +753,7 @@ en = "lazygit is not installed; brew install lazygit or scoop install lazygit in
 # :git-lazygit 時還有沒存的檔，{0} 是個數（草稿）
 key = "shell.lazygit-unsaved"
 zhs = "还有 {0} 个文件没有保存，lazygit 看不到它们的改动；先 :wa，或用 :git-lazygit! 照样打开"
-en = "{0} files have unsaved changes lazygit cannot see; :wa first, or :git-lazygit! to open it anyway"
+en = "unsaved changes in {0|file|files} that lazygit cannot see; :wa first, or :git-lazygit! to open it anyway"
 
 [[message]]
 # :| 交出去的命令跑失敗了——失敗的答案不許蓋掉稿子
@@ -777,7 +783,7 @@ en = "the command failed on every selection; they are left as they were"
 # 在 yazi 裏選了好幾個檔，都打開了，{0} 是個數（草稿）
 key = "shell.opened-chosen"
 zhs = "打开了 {0} 个文件"
-en = "opened {0} files"
+en = "opened {0|file|files}"
 
 [[message]]
 # :!命令 跑完，螢幕還在命令那邊，等你看完
@@ -807,6 +813,12 @@ en = "replaced, but the command said: {0}"
 # ── shot ──────────────────────────────────────────────────────────────
 
 [[message]]
+# 选区交给外部命令后、输出回来前，文字被改动了，输出没有放回去（草稿）
+key = "shell.text-changed-meanwhile"
+zhs = "命令运行期间文字已改动，输出未放回"
+en = "the text changed while the command ran, so its output was not put in"
+
+[[message]]
 # :files-yazi 而 yazi 沒有裝（草稿）
 key = "shell.yazi-missing"
 zhs = "没有找到 yazi；可用 brew install yazi 或 scoop install yazi 安装"
@@ -816,13 +828,13 @@ en = "yazi is not installed; brew install yazi or scoop install yazi installs it
 # 挖完了，名單寫出來給人看了(那個檔是覆蓋寫的，不會讀回來)
 key = "word.discover-found"
 zhs = "找到 {0} 个项目专有词，已用于分词；列表见 {1}(每次覆盖，仅供查看)"
-en = "found {0} project-specific word(s), now used for segmenting; list in {1} (overwritten each time, for reference only)"
+en = "found {0|project-specific word|project-specific words}, now used for segmenting; list in {1} (overwritten each time, for reference only)"
 
 [[message]]
 # 那份名單檔的第一行抬頭(這一行進的是檔案，不是狀態欄)
 key = "word.discover-heading"
 zhs = "# 项目专有词：从 {0} 个文件中自动找出。每次 :word-discover 会整体覆盖。"
-en = "# Project-specific words found in {0} file(s). Each :word-discover overwrites this file."
+en = "# Project-specific words found in {0|file|files}. Each :word-discover overwrites this file."
 
 [[message]]
 # 寫進詞表的一行：詞，還有它出現了幾次。中間那一個是**真的 tab**，不是 \t——
@@ -836,7 +848,7 @@ en = "{0}	# {1}×"
 # 挖了，一個字典不認得的詞都没有
 key = "word.discover-none"
 zhs = "扫描了 {0} 个文件，没有找到项目专有词：词典已全部收录"
-en = "scanned {0} file(s); no project-specific words, the dictionary knows them all"
+en = "scanned {0|file|files}; no project-specific words, the dictionary knows them all"
 
 [[message]]
 # 那份名單檔的第二行：説清楚它是寫出來給人看的，改它不算數
@@ -866,7 +878,7 @@ en = "{0}: one word per line; :w to apply"
 # 詞表存下了，同一下就重讀進來了
 key = "word.list-saved"
 zhs = "已保存 {0}，{1} 个词已生效"
-en = "saved {0}; {1} word(s) in effect"
+en = "saved {0}; {1|word|words} in effect"
 
 [[message]]
 # 詞表重讀完了
@@ -920,7 +932,7 @@ en = "{0} + {1} from this project"
 # 分詞的詞表：內置的那一份，帶條數
 key = "word.source-builtin"
 zhs = "{0} 条(内置)"
-en = "{0} entries (built in)"
+en = "{0|entry|entries} (built in)"
 
 [[message]]
 # 分詞的詞表：没有詞表，每個漢字自成一詞
@@ -932,7 +944,7 @@ en = "no dictionary (character by character)"
 # 分詞的詞表：宇浩自己的語言模型
 key = "word.source-yume"
 zhs = "宇浩语言模型 {0} 条"
-en = "宇浩 language model, {0} entries"
+en = "宇浩 language model, {0|entry|entries}"
 
 [[message]]
 # 分詞現在的狀態
@@ -956,7 +968,7 @@ en = "{0}: no overused words"
 # :word-habit 查出了幾個口頭禪
 key = "words.found"
 zhs = "{0} 个词用得过多，gf 跳到该行"
-en = "{0} overused word(s); gf jumps to the line"
+en = "{0|overused word|overused words}; gf jumps to the line"
 
 [[message]]
 # :word-habit 結果裏的一行：這個詞説了幾次，比尋常文章多幾倍

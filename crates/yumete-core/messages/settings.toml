@@ -6,13 +6,13 @@
 # :check-config 查完了，兩個檔都没毛病({0} 是查了幾個檔)
 key = "config.check-clean"
 zhs = "配置无误(检查了 {0} 个文件)"
-en = "config OK ({0} file(s) checked)"
+en = "config OK ({0|file|files} checked)"
 
 [[message]]
 # :check-config 查出來幾條
 key = "config.check-found"
 zhs = "配置有 {0} 处问题"
-en = "{0} problem(s) in the config"
+en = "{0|problem|problems} in the config"
 
 [[message]]
 # :check-config 查出來的那一頁的名字

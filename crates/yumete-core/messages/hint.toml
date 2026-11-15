@@ -318,7 +318,7 @@ en = "merge conflict"
 # count panel: J welds N lines into one
 key = "hint.count.join"
 zhs = "合并 {0} 行"
-en = "join {0} lines"
+en = "join {0|line|lines}"
 
 [[message]]
 # count panel: gg / G go to line N
@@ -336,7 +336,7 @@ en = "match {0} (after f or t)"
 # count panel: the last row — every other key just repeats
 key = "hint.count.otherwise"
 zhs = "重复 {0} 次"
-en = "repeat {0} times"
+en = "repeat {0|time|times}"
 
 [[message]]
 # count panel: gt / gc / gb, the Nth row on the screen

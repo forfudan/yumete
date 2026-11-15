@@ -847,6 +847,16 @@ pub enum Put {
     Equation,
 }
 
+/// The text a pipe was given: which buffer, at which revision, and the
+/// span of it that the output goes back to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct PipeAt {
+    buffer: u64,
+    revision: u64,
+    start: usize,
+    end: usize,
+}
+
 /// What is done with a command's output.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum How {
@@ -3517,6 +3527,11 @@ pub struct Editor {
     /// 下一趟循環纔回得來，所以「換哪兒」得跟着問題一起放下——等答案回來的時候，
     /// 選區早就不在了（換完光標要落在換出來的字上）。
     convert_range: Option<std::ops::Range<usize>>,
+    /// **Where a pipe's output goes back**, read when the command was asked
+    /// for: vim leaves Visual mode before the answer comes, and the
+    /// selection then is one character. Held with the buffer and its
+    /// revision, so an answer for text that has since changed is not put in.
+    pipe_at: Option<PipeAt>,
     /// The grid this file is being read as, when a schema says it is a table.
     ///
     /// A view, never a copy: the text stays the truth, and this only says how
@@ -4778,6 +4793,7 @@ impl Editor {
             last_bang: None,
             convert_patch: None,
             convert_range: None,
+            pipe_at: None,
             table: None,
             open_notice: None,
             table_level: TableLevel::default(),

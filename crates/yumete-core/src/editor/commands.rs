@@ -958,15 +958,18 @@ impl Editor {
                     items: Default::default(),
                 });
                 // The reader's own lines in force; a key of theirs no longer
-                // does what the keymap gave it, so the column in force drops it.
+                // does what the keymap gave it, and neither does a key they
+                // made a group (`[keys.normal.space.f]`), so the column in
+                // force drops both, as the palette does.
                 let own = self.normal_lines_in_force();
+                let taken = |run: &str| own.contains_key(run) || self.normal_tree.opens(run);
                 let keys_of = |docs: &[DocCommand], name: &str, vim: bool| -> Vec<Vec<String>> {
                     docs.iter()
                         .find(|(n, ..)| *n == name)
                         .map(|(_, _, helix, vim_keys, _)| {
                             let keys = if vim { vim_keys } else { helix };
                             keys.iter()
-                                .filter(|k| vim != vim_now || !own.contains_key(&k.concat()))
+                                .filter(|k| vim != vim_now || !taken(&k.concat()))
                                 .cloned()
                                 .collect()
                         })

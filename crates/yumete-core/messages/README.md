@@ -44,6 +44,12 @@ translation may put them in the other order: 「{0} 個檔案裏都没有「{1}�
 "no 「{1}」 in {0} files". Every language of one message must use the same set
 of holes; a test checks it.
 
+A count in English agrees with its noun: `{0|file|files}` is the value, a
+space, and the first noun after a count of exactly one, the second
+otherwise — "1 file", "2 files". The noun may carry a verb that agrees too
+(`{0|line differs|lines differ}`). Never `file(s)`, and never a bare
+`{0} files`; a test checks both.
+
 The English register to match is `README.md` and `--help`: plain, short, lower
 case unless a name starts the line, no exclamation marks, and it says what
 happened rather than apologising for it. Where the Chinese uses a term of the

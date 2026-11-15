@@ -629,7 +629,7 @@ const PLUGIN_COMMANDS: &[(&str, &str)] = &[
     ("SymbolsOutline", ":sidebar-outline"),
     ("Outline", ":sidebar-outline"),
     ("Trouble symbols toggle", ":sidebar-outline"),
-    ("LazyGit", ":!lazygit"),
+    ("LazyGit", ":git-lazygit"),
     ("Gitsigns preview_hunk", "show_change"),
     ("Gitsigns next_hunk", "goto_next_change"),
     ("Gitsigns prev_hunk", "goto_prev_change"),

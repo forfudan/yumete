@@ -6,13 +6,13 @@
 # 崩潰之後，在正常螢幕上留的那一句：救回幾份草稿、日誌在哪
 key = "cli.crashed"
 zhs = "yumete 崩溃了。已保存 {0} 份草稿(`:recover` 恢复)；详情见 {1}"
-en = "yumete crashed. {0} draft(s) saved (:recover restores them); details in {1}"
+en = "yumete crashed. {0|draft|drafts} saved (:recover restores them); details in {1}"
 
 [[message]]
 # 啓動時接着上次的檔案
 key = "cli.picked-up-where-you-left-off"
 zhs = "已恢复上次打开的 {0} 个文件"
-en = "reopened {0} file(s) from last time"
+en = "reopened {0|file|files} from last time"
 
 [[message]]
 # 啓動時報用的是哪個方案

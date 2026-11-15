@@ -61,13 +61,13 @@ impl Editor {
     /// 命令，把答案放這裏」，光標在哪一段跟它没關係。
     pub(super) fn ask_the_shell(&mut self, line: String, put: crate::editor::Put) {
         use crate::editor::Put;
+        let (start, end) = self.selection();
         let fed = match put {
-            Put::Replace | Put::Nowhere => {
-                let (start, end) = self.selection();
-                self.current_buffer().rope().slice(start..end).to_string()
-            }
+            Put::Replace | Put::Nowhere => self.current_buffer().rope().slice(start..end).to_string(),
             Put::Before | Put::After | Put::Value | Put::Equation => String::new(),
         };
+        let buffer = self.current_buffer();
+        self.pipe_at = Some(crate::editor::PipeAt { buffer: buffer.id(), revision: buffer.revision(), start, end });
         self.shell_request = Some(crate::editor::Shell {
             line,
             how: crate::editor::How::Pipe(fed, put),
@@ -107,7 +107,20 @@ impl Editor {
 
     pub fn provide_pipe_output(&mut self, output: &str, put: crate::editor::Put) {
         use crate::editor::Put;
-        let (start, end) = self.selection();
+        // The span the command was asked about, not the selection when the
+        // answer comes: vim
+        // has left Visual mode by the time the answer comes. Text that
+        // changed in between gets nothing, since the span no longer names
+        // what the command was given.
+        let (buffer, revision) = (self.current_buffer().id(), self.current_buffer().revision());
+        let (start, end) = match self.pipe_at.take() {
+            Some(at) if at.buffer == buffer && at.revision == revision => (at.start, at.end),
+            Some(_) => {
+                self.status = say!("shell.text-changed-meanwhile");
+                return;
+            }
+            None => self.selection(),
+        };
         // **插在前面/後面的，把原文接回去**。整段仍舊走「換掉這一
         // 段」那條路，所以換行規矩、表格那道閘、撤銷點全是現成的——`!` 和 `|`
         // 於是不會慢慢長出兩套邊界情形。
@@ -171,7 +184,15 @@ impl Editor {
         self.sel.set_anchor(start);
         self.sel.set_head((start + text.chars().count()).saturating_sub(1).max(start));
         self.clamp_cursor();
-        self.status = say!("edit.pipe-replaced-characters", text.chars().count());
+        // What happened to the text: a `|` replaced the span, the other
+        // three kept it and put the answer beside it.
+        let written = text.chars().count();
+        self.status = match put {
+            Put::Replace | Put::Nowhere => say!("edit.pipe-replaced-characters", written),
+            Put::Before | Put::After | Put::Value | Put::Equation => {
+                say!("edit.pipe-inserted-characters", written.saturating_sub(keep.chars().count()))
+            }
+        };
     }
 
     /// Whether a range covers whole rows of the grid — line start to line end.

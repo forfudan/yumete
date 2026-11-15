@@ -17163,6 +17163,13 @@ fn help_is_the_editor_describing_itself() {
     for entry in crate::command::COMMANDS {
         assert!(text.contains(&format!(":{}", entry.name)), "{} missing", entry.name);
     }
+    // Aliases go in the reader's brackets: full-width in Chinese, ASCII after
+    // a space in English.
+    let aliased = crate::command::COMMANDS.iter().find(|e| !e.aliases.is_empty()).expect("an alias");
+    let spelt = say!("label.in-brackets", aliased.aliases.join(" "));
+    assert!(text.contains(&format!("`:{}`{spelt}", aliased.name)), "{text}");
+    let brackets = &crate::messages::table()["label.in-brackets"];
+    assert_eq!((brackets.zhs, brackets.en), ("（{0}）", " ({0})"));
 
     // A section that does not exist says which ones do.
     ed.execute(":help 火星文").unwrap();
@@ -40507,6 +40514,67 @@ fn decimo_append_writes_the_value_after_the_expression() {
         }
         None => assert_eq!(ed.status(), say!("shell.decimo-missing")),
     }
+}
+
+/// **A command run from vim's Visual mode answers for the whole selection**:
+/// vim leaves Visual mode before the output comes back, so the span is the
+/// one the command was given, not the one character left under the caret.
+/// The status says whether the text was replaced or added to.
+#[test]
+fn a_pipe_from_visual_mode_puts_its_answer_over_the_whole_selection() {
+    use crate::editor::Put;
+    let piped = |text: &str, keys: &str, line: &str, out: &str| -> Editor {
+        let mut ed = typed_vim(text);
+        press(&mut ed, keys);
+        ed.on_key(Key::Char(':'));
+        for c in line.chars() {
+            ed.on_key(Key::Char(c));
+        }
+        ed.on_key(Key::Enter);
+        let Some(Shell { how: crate::editor::How::Pipe(_, put), .. }) = ed.take_shell_request() else {
+            panic!("a pipe for {line}: {}", ed.status());
+        };
+        ed.provide_pipe_output(out, put);
+        ed
+    };
+    let ed = piped("x abc y\n", "wvll", "pipe tr a-z A-Z", "ABC");
+    assert_eq!(ed.current_buffer().text(), "x ABC y\n");
+    assert_eq!(ed.status(), say!("edit.pipe-replaced-characters", 3));
+    let ed = piped("b\na\nnext\n", "Vj", "pipe sort", "a\nb\n");
+    assert_eq!(ed.current_buffer().text(), "a\nb\nnext\n", "linewise, no line twice");
+    let ed = piped("x abc y\n", "wvll", "insert-output echo", "1");
+    assert_eq!(ed.current_buffer().text(), "x 1abc y\n");
+    assert_eq!(ed.status(), say!("edit.pipe-inserted-characters", 1));
+    let ed = piped("x abc y\n", "wvll", "append-output echo", "1");
+    assert_eq!(ed.current_buffer().text(), "x abc1 y\n");
+
+    // The value of a selected expression, as `:decimo-replace` and
+    // `:decimo-append` ask for it.
+    let valued = |put: Put| {
+        let mut ed = typed_vim("x 1+1 y\n");
+        press(&mut ed, "wvll");
+        ed.ask_the_shell("calc".into(), put);
+        ed.on_key(Key::Esc);
+        ed.provide_pipe_output("2\n", put);
+        ed
+    };
+    let ed = valued(Put::Replace);
+    assert_eq!(ed.current_buffer().text(), "x 2 y\n");
+    let ed = valued(Put::Equation);
+    assert_eq!(ed.current_buffer().text(), "x 1+1 = 2 y\n");
+    assert_eq!(ed.status(), say!("edit.pipe-inserted-characters", 4));
+
+    // Text changed while the command ran: the answer is not put in.
+    let mut ed = typed_vim("x abc y\n");
+    press(&mut ed, "wvll");
+    ed.ask_the_shell("calc".into(), Put::Replace);
+    ed.on_key(Key::Esc);
+    press(&mut ed, "iz");
+    ed.on_key(Key::Esc);
+    let typed_in = ed.current_buffer().text().to_string();
+    ed.provide_pipe_output("ABC", Put::Replace);
+    assert_eq!(ed.current_buffer().text(), typed_in);
+    assert_eq!(ed.status(), say!("shell.text-changed-meanwhile"));
 }
 
 /// Every `on`/`off` command says what it is now under `:`, so one added

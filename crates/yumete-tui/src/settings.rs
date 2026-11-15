@@ -1454,6 +1454,25 @@ q = ":quit"
         assert!(ed.key_notes().is_empty(), "{:?}", ed.key_notes());
     }
 
+    /// **A key made a group is not shown for the action it had**: with
+    /// `[keys.normal.space.f]`, `Space f` opens a group, so neither the
+    /// palette nor `:keymap-actions` names it for `file_picker`.
+    #[test]
+    fn a_key_made_a_group_leaves_the_action_list() {
+        // The column of the keymap in force: helix's, out of the box.
+        let in_force = |ed: &mut Editor| -> String {
+            ed.execute(":keymap-actions").unwrap();
+            let listing = ed.current_buffer().text();
+            let row = listing.lines().find(|l| l.starts_with("| `file_picker`")).expect("a row");
+            row.split('|').nth(3).expect("the helix column").trim().to_string()
+        };
+        let mut plain = laid("");
+        assert_eq!(in_force(&mut plain), "`Space f`");
+        let mut ed = laid("[keys.normal.space.f]\nx = \"goto_file_start\"\n");
+        assert_eq!(ed.keys_now("file_picker"), None);
+        assert_eq!(in_force(&mut ed), "");
+    }
+
     /// **A `[keys.vim.normal]` line holds in Visual mode too**:
     /// `ye --import vim` writes a vim reader's Normal-mode maps there, and
     /// says so. Not under helix's keys.

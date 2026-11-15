@@ -120,7 +120,7 @@ en = "[lint {0}]"
 # :lint 查一張拆分表，某一行的欄數和表頭對不上
 key = "chaifen.wrong-column-count"
 zhs = "{0}: 此行有 {1} 列，应为 {2} 列"
-en = "{0}: {1} columns here, {2} expected"
+en = "{0}: {1|column|columns} here, {2} expected"
 
 # ── check ─────────────────────────────────────────────────────────────
 
@@ -729,7 +729,7 @@ en = "The Yume app's word lists (read only):"
 # `:yume-where`：讀過的一個詞庫檔。{0} 是路徑，{1} 是條數（草稿）
 key = "yume.where.words-file"
 zhs = "{0}  {1} 条"
-en = "{0}  {1} entries"
+en = "{0}  {1|entry|entries}"
 
 [[message]]
 # `:yume-where`：yumete 自己學到的詞那一節的標題（草稿）
@@ -825,7 +825,7 @@ en = "row copied"
 # 詞庫頁：Y 複製了整頁，{0} 條（草稿）
 key = "yume.words.copied-page"
 zhs = "已复制这一页（{0} 条，TSV）"
-en = "list copied ({0} rows, TSV)"
+en = "list copied ({0|row|rows}, TSV)"
 
 [[message]]
 # 詞庫頁：刪掉一條調頻之後（草稿）
@@ -843,7 +843,7 @@ en = "deleted the pin of {1} on {0} · u puts it back"
 # 詞庫頁：刪掉一個詞之後。{0} 詞，{1} 條編碼（草稿）
 key = "yume.words.deleted-word"
 zhs = "已删除「{0}」（{1} 条）· u 恢复"
-en = "deleted {0} ({1} lines) · u puts it back"
+en = "deleted {0} ({1|line|lines}) · u puts it back"
 
 [[message]]
 # 詞庫頁說明框：應用的調頻（草稿）

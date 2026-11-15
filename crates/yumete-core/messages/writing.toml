@@ -12,7 +12,7 @@ en = "{0}: every character is in a character set"
 # :check-charset 查出了不在任何字集裏的字
 key = "check.charset-found"
 zhs = "{0} 个字不在任何字集中，gf 跳到该行"
-en = "{0} character(s) in no character set; gf jumps to the line"
+en = "{0|character|characters} in no character set; gf jumps to the line"
 
 [[message]]
 # :check-charset 没有字集資料可問(碼表没載)
@@ -24,7 +24,7 @@ en = "no character-set data — load a scheme first with :yume-scheme"
 # :check-charset 結果裏的一行：這個字不在任何字集裏
 key = "check.charset-outside"
 zhs = "{0}: 「{1}」不在任何字集里({2})，全文 {3} 处"
-en = "{0}: 「{1}」 is in no character set ({2}); {3} times in the file"
+en = "{0}: 「{1}」 is in no character set ({2}); {3|time|times} in the file"
 
 [[message]]
 # :check-charset 的結果那一份緩衝區的名字
@@ -48,7 +48,7 @@ en = "{0}: every name spelled as the wiki has it"
 # :check-names 查出了寫錯一個字的專名
 key = "check.names-found"
 zhs = "{0} 处专名错了一个字，gf 跳到该行"
-en = "{0} name(s) one character off; gf jumps to the line"
+en = "{0|name|names} one character off; gf jumps to the line"
 
 [[message]]
 # :check-names 要讀音表纔分得出「同音寫錯」和「本來就是别的詞」，而它没裝
@@ -97,7 +97,7 @@ en = "{0}: 「{1}」 should be 「……」"
 # :check-punct 查出了要看一眼的標點
 key = "check.punct-found"
 zhs = "{0} 处标点需要检查，gf 跳到该行"
-en = "{0} mark(s) to check; gf jumps to the line"
+en = "{0|mark|marks} to check; gf jumps to the line"
 
 [[message]]
 # :check-punct 結果裏的一行：中文裏的半角標點
@@ -139,7 +139,7 @@ en = "{0}: one spelling throughout"
 # :check-usage 查出了不一致的用字
 key = "check.usage-found"
 zhs = "{0} 处用字不一致，gf 跳到该行"
-en = "{0} inconsistent spelling(s); gf jumps to the line"
+en = "{0|inconsistent spelling|inconsistent spellings}; gf jumps to the line"
 
 [[message]]
 # :check-usage 的結果那一份緩衝區的名字
@@ -275,7 +275,7 @@ en = "reading the project's links…"
 # :links-reindex 讀完了
 key = "links.reindexed"
 zhs = "已重新读取 {0} 个文件的链接"
-en = "reread links in {0} files"
+en = "reread links in {0|file|files}"
 
 [[message]]
 # 光標在公式裏，typst 排這個公式時報錯：公式浮窗裏寫的那一句，{0} 是 typst 自己說的
@@ -352,7 +352,7 @@ en = "{0}: already read, skipped"
 # :wiki-where 報告裏：一個詞條文件夾(一檔一條)讀了幾個檔、幾條
 key = "wiki.folder"
 zhs = "{0}/：{1} 个文件，{2} 条"
-en = "{0}/: {1} files, {2} entries"
+en = "{0}/: {1|file|files}, {2|entry|entries}"
 
 [[message]]
 # 同名詞條裏，全局百科那一部分前面的標記
@@ -430,7 +430,7 @@ en = "put the cursor on a wiki name to see its entry here"
 # :wiki 報告裏：讀到的一個檔和它給的詞條數
 key = "wiki.read"
 zhs = "{0}：{1} 条"
-en = "{0}: {1} entries"
+en = "{0}: {1|entry|entries}"
 
 [[message]]
 # :wiki 報告裏：引的路徑出了這本書(或是絕對路徑)，不讀
@@ -442,7 +442,7 @@ en = "{0} (named in {1}): outside the project, not read"
 # 百科重讀了(:wiki-reload，或存了一個百科檔)
 key = "wiki.reloaded"
 zhs = "百科：{0} 条，来自 {1} 个文件"
-en = "wiki: {0} entries from {1} file(s)"
+en = "wiki: {0|entry|entries} from {1|file|files}"
 
 [[message]]
 # :wiki 報告的標題，也是那個緩衝區的名字

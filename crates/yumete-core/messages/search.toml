@@ -42,7 +42,7 @@ en = "no '{0}' on this line"
 # :s 的行號超出這一份的行數
 key = "find.no-such-line"
 zhs = "本文件只有 {1} 行，没有第 {0} 行"
-en = "this file has only {1} lines; there is no line {0}"
+en = "this file has only {1|line|lines}; there is no line {0}"
 
 [[message]]
 # 表格裏一欄一欄地找，没找到
@@ -216,7 +216,7 @@ en = "every level"
 # :sidebar-outline-level 報告，大綱關着：{0} 是列到哪一級，{1} 是會列出的標題數（草稿）
 key = "outline.closed"
 zhs = "大纲：已关闭，{0}，{1} 个标题"
-en = "outline: closed, {0}, {1} heading(s)"
+en = "outline: closed, {0}, {1|heading|headings}"
 
 [[message]]
 # :sidebar-outline-level 報告裏的級別，`:sidebar-outline-level N` 設過之後（草稿）
@@ -228,7 +228,7 @@ en = "down to level {0}"
 # :sidebar-outline-level 報告，大綱開着：{0} 是列到哪一級，{1} 是列出的標題數（草稿）
 key = "outline.open"
 zhs = "大纲：已打开，{0}，{1} 个标题"
-en = "outline: open, {0}, {1} heading(s)"
+en = "outline: open, {0}, {1|heading|headings}"
 
 [[message]]
 # 跨檔替換做到一半按了 Esc：接着做下去的那一條
@@ -252,7 +252,7 @@ en = "stop and undo everything"
 # 跨檔替換做到一半按了 Esc，問那一句
 key = "search.abort-what"
 zhs = "已替换 {0} 个文件，确定停止吗？"
-en = "replaced in {0} file(s) so far; stop here?"
+en = "replaced in {0|file|files} so far; stop here?"
 
 [[message]]
 # 搜索面板底下那一塊：這一處換完長什麼樣。寫在一道雙橫線的左端。
@@ -509,7 +509,7 @@ en = "window too narrow — searching on the line instead"
 # 搜索面板底下那一行：走查走到哪了(§5.101)
 key = "search.progress"
 zhs = "已搜索 {0} 个文件，正在搜索 {1}"
-en = "{0} files searched, searching {1}"
+en = "{0|file|files} searched, searching {1}"
 
 [[message]]
 # 搜索：全部替換動得太多，中央那扇窗問一次——「繼續替換」
@@ -533,13 +533,13 @@ en = "Nothing was replaced"
 # 搜索：同上，正文({0} 幾個檔、{1} 幾處)
 key = "search.replace-all-what"
 zhs = "将替换 {0} 个文件中的 {1} 处。"
-en = "this will replace {1} match(es) in {0} file(s)."
+en = "this will replace {1|match|matches} in {0|file|files}."
 
 [[message]]
 # 整個檔要不要全換，先問一句
 key = "search.replace-file-sure"
 zhs = "替换 {1} 中的全部 {0} 处？"
-en = "replace all {0} match(es) in {1}?"
+en = "replace all {0|match|matches} in {1}?"
 
 [[message]]
 # 搜索面板第七行三態之二：打什麼就寫什麼(出廠)
@@ -563,13 +563,13 @@ en = "keep case"
 # 搜索：換掉了幾處
 key = "search.replaced"
 zhs = "共替换 {0} 处(:wa 保存全部)"
-en = "replaced {0} match(es) (:wa saves them all)"
+en = "replaced {0|match|matches} (:wa saves them all)"
 
 [[message]]
 # 搜索：換掉了幾處，有幾個只讀的檔没換
 key = "search.replaced-skipping"
 zhs = "共替换 {0} 处，跳过 {1} 个只读文件(:wa 保存全部)"
-en = "replaced {0} match(es), skipped {1} read-only file(s) (:wa saves them all)"
+en = "replaced {0|match|matches}, skipped {1|read-only file|read-only files} (:wa saves them all)"
 
 [[message]]
 # 搜索面板那個開關：勾上就長出替換行
@@ -581,7 +581,7 @@ en = "replace"
 # 搜索：全部替換正在做，已經做到第幾個檔
 key = "search.replacing-progress"
 zhs = "正在替换 {0}/{1} 个文件"
-en = "replacing {0}/{1} files"
+en = "replacing {0}/{1|file|files}"
 
 [[message]]
 # 搜索：正在走磁盤
@@ -623,7 +623,7 @@ en = "Undo {0} only"
 # 搜索：撤回一次跨檔替換，中央那扇窗問一次——正文({0} 幾個檔、{1} 幾處)
 key = "search.undo-all-what"
 zhs = "撤销全部替换(共 {0} 个文件 {1} 处)？"
-en = "Undo the whole replacement — {1} matches in {0} files?"
+en = "Undo the whole replacement — {1|match|matches} in {0|file|files}?"
 
 [[message]]
 # 撤回了剛纔那一次替換
@@ -642,7 +642,7 @@ en = "These files were changed afterwards and were left alone. The rest were und
 # 撤回了剛纔那一次替換，動了好幾個檔
 key = "search.undone-files"
 zhs = "已撤销刚才的替换，{0} 个文件均已复原"
-en = "replacement undone in all {0} files"
+en = "replacement undone in all {0|file|files}"
 
 [[message]]
 # 搜索：同上那扇窗唯一那顆按鈕
@@ -704,7 +704,7 @@ en = "type a reading{0}"
 # 。
 key = "seek.places"
 zhs = "共 {0} 处"
-en = "{0} place(s)"
+en = "{0|place|places}"
 
 [[message]]
 # :s …c 走完之後的結語

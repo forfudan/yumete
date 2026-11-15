@@ -51,7 +51,7 @@ en = "closed"
 # :buffer-close-others 或 :buffer-close-all 关完了，没有留下的（草稿）
 key = "buffer.closed-many"
 zhs = "已关闭 {0} 个文件"
-en = "closed {0} files"
+en = "closed {0|file|files}"
 
 [[message]]
 # 關掉一個緩衝區，切到下一個
@@ -129,13 +129,13 @@ en = "saved {0}"
 # :write all 存好多個檔案
 key = "buffer.saved-many"
 zhs = "已保存 {0} 个文件"
-en = "saved {0} file(s)"
+en = "saved {0|file|files}"
 
 [[message]]
 # :write all 有幾份没存成
 key = "buffer.saved-some-not-all"
 zhs = "已保存 {0} 个文件；{1} 个未保存：{2}"
-en = "saved {0} file(s); {1} not saved: {2}"
+en = "saved {0|file|files}; {1} not saved: {2}"
 
 [[message]]
 # :w 到一個已經存在的文件夾上
@@ -163,7 +163,7 @@ en = "there are unsaved changes — add ! to override"
 # :buffer-close-others 或 :buffer-close-all 关了一些，有未保存改动的没关；当前切到其中一个（草稿）
 key = "buffer.unsaved-kept"
 zhs = "已关闭 {0} 个文件，{1} 个有未保存的改动没有关闭，当前为 {2}(加 ! 强制关闭)"
-en = "closed {0} files; {1} with unsaved changes kept, now {2} — add ! to close them"
+en = "closed {0|file|files}; {1} with unsaved changes kept, now {2} — add ! to close them"
 
 [[message]]
 # :cd - 而没有上一個
@@ -181,7 +181,7 @@ en = "working directory: {0}"
 # 另有幾個檔同樣没進去
 key = "data.and-more-failed"
 zhs = "{0}(另有 {1} 个文件也未加载)"
-en = "{0} ({1} more file(s) did not load either)"
+en = "{0} ({1|more file|more files} did not load either)"
 
 [[message]]
 # 核心不認這個檔
@@ -232,7 +232,7 @@ en = "save as UTF-8"
 # 同上，窗口正文。{0} 文件名，{1} 編碼名，{2} 一共幾處，{3} 第一個字，{4} 行，{5} 列，{6} 有哪幾個字
 key = "encoding.ask-what"
 zhs = "{1} 无法保存《{0}》中的 {2} 个字，第一个是第 {4} 行第 {5} 列的「{3}」。无法保存的字：{6}"
-en = "{1} cannot encode {2} characters in '{0}'; the first is {3} at line {4}, column {5}. They are: {6}"
+en = "{1} cannot encode {2|character|characters} in '{0}'; the first is {3} at line {4}, column {5}. They are: {6}"
 
 [[message]]
 # 同上，只有一處的時候。{0} 文件名，{1} 編碼名，{3} 那個字，{4} 行，{5} 列
@@ -655,7 +655,7 @@ en = "cannot write {0}: {1}"
 # :count-progress 的列表裏一天一行：日期、字數、長條
 key = "progress.day"
 zhs = "{0}　{1} 字　{2}"
-en = "{0}  {1} words  {2}"
+en = "{0}  {1|word|words}  {2}"
 
 [[message]]
 # :count-progress 但這一份還没有檔名，記不進哪本書
@@ -673,7 +673,7 @@ en = "nothing recorded yet: save once to start counting today"
 # :count-progress 的結果，没有設每日目標
 key = "progress.report"
 zhs = "今天 {0} 字，项目 {1} 字，连续 {2} 天"
-en = "{0} words today, {1} in the project, {2}-day streak"
+en = "{0|word|words} today, {1} in the project, {2}-day streak"
 
 [[message]]
 # :count-progress 的結果，設了每日目標
@@ -697,7 +697,7 @@ en = "daily target cleared; words are still counted"
 # :count-target 2000
 key = "progress.target-set"
 zhs = "每日目标 {0} 字，保存在 {1}"
-en = "daily target {0} words, kept in {1}"
+en = "daily target {0|word|words}, kept in {1}"
 
 # ── readonly ──────────────────────────────────────────────────────────
 
@@ -834,13 +834,13 @@ en = "draft opened: :w keeps it, u goes back"
 # 啓動時救回没存的
 key = "recover.drafts-opened"
 zhs = "已打开 {0} 份未保存的草稿，用 :w <文件名> 保存"
-en = "opened {0} unsaved draft(s) — :w <name> keeps them"
+en = "opened {0|unsaved draft|unsaved drafts} — :w <name> keeps them"
 
 [[message]]
 # 啓動時發現有没存的
 key = "recover.drafts-waiting"
 zhs = "有 {0} 份未保存的草稿，:recover 打开"
-en = "{0} unsaved draft(s) — :recover opens them"
+en = "{0|unsaved draft|unsaved drafts} — :recover opens them"
 
 [[message]]
 # 那一問上選了「暫時不管」或「取消」之後
@@ -867,19 +867,19 @@ en = "no draft kept: {0}"
 # :reload-all 做完：{0} 个文件重新载入，{1} 个有未保存的改动没有动（草稿）
 key = "reload.all"
 zhs = "已重新加载 {0} 个文件，{1} 个有未保存的改动没有动(加 ! 一并重新加载)"
-en = "reloaded {0} files; {1} with unsaved changes left alone — add ! to reload them too"
+en = "reloaded {0|file|files}; {1} with unsaved changes left alone — add ! to reload them too"
 
 [[message]]
 # :reload-all 做完，没有文件被跳过：{0} 个文件重新载入（草稿）
 key = "reload.all-done"
 zhs = "已重新加载 {0} 个文件"
-en = "reloaded {0} files"
+en = "reloaded {0|file|files}"
 
 [[message]]
 # :reload-all 做完但有文件读不了：{0} 个重新载入，{1} 个有未保存的改动没有动，{2} 个读取失败，{3} 是第一个失败的文件和原因（草稿）
 key = "reload.all-failed"
 zhs = "已重新加载 {0} 个文件，{1} 个有未保存的改动没有动，{2} 个无法重新加载：{3}"
-en = "reloaded {0} files; {1} with unsaved changes left alone; {2} could not be reloaded: {3}"
+en = "reloaded {0|file|files}; {1} with unsaved changes left alone; {2} could not be reloaded: {3}"
 
 [[message]]
 # 重讀失敗

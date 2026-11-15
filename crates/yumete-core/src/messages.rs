@@ -288,11 +288,23 @@ fn fill(template: &str, args: &[&str]) -> String {
                     }
                     digits.push(d);
                 }
+                // **A count and its noun**: `{0|file|files}` is the value,
+                // a space, and the noun that agrees with it — the first
+                // after a count of exactly one, the second otherwise.
+                let mut parts = digits.splitn(3, '|');
+                let index = parts.next().unwrap_or("");
+                let noun = parts.next().zip(parts.next());
                 // A hole naming an argument that is not there is left as it was
                 // written: a visible `{7}` is a translator's typo somebody can
                 // see and fix, where a silent empty string is not.
-                match digits.parse::<usize>().ok().and_then(|i| args.get(i)) {
-                    Some(arg) => out.push_str(arg),
+                match index.parse::<usize>().ok().and_then(|i| args.get(i)) {
+                    Some(arg) => {
+                        out.push_str(arg);
+                        if let Some((one, many)) = noun {
+                            out.push(' ');
+                            out.push_str(if arg.trim() == "1" { one } else { many });
+                        }
+                    }
                     None => {
                         out.push('{');
                         out.push_str(&digits);
@@ -436,7 +448,8 @@ mod tests {
                         }
                         digits.push(d);
                     }
-                    found.push(digits);
+                    // `{0|file|files}` is hole 0 with its noun.
+                    found.push(digits.split('|').next().unwrap_or("").to_string());
                 }
                 found.sort();
                 found
@@ -449,6 +462,57 @@ mod tests {
                 assert_eq!(holes(text), want, "{key}: different holes in {name}");
             }
         }
+    }
+
+    /// **A count in English agrees with its noun**: `{0|file|files}` says
+    /// "1 file" and "2 files", so no message reads "1 files" (`:rla` on one
+    /// file, one day of `:genda`) or hedges with "file(s)".
+    #[test]
+    fn an_english_count_agrees_with_its_noun() {
+        assert_eq!(super::fill("reloaded {0|file|files}", &["1"]), "reloaded 1 file");
+        assert_eq!(super::fill("reloaded {0|file|files}", &["2"]), "reloaded 2 files");
+        assert_eq!(super::fill("{1|day|days}, {0}", &["x", "0"]), "0 days, x");
+        assert_eq!(super::fill("{3|day|days}", &["1"]), "{3|day|days}", "a missing argument shows the hole");
+        // A count written before a bare plural, or a noun hedged with `(s)`.
+        let nouns = [
+            "files", "days", "lines", "rows", "scores", "entries", "chars", "characters", "words", "times",
+            "matches", "selections", "columns", "headings", "problems", "places", "keys", "cells", "records",
+        ];
+        let mut slips = Vec::new();
+        for (key, entry) in super::table() {
+            let words: Vec<&str> = entry.en.split_whitespace().collect();
+            let hedged = words.iter().any(|w| w.contains("(s)") || w.contains("(es)") || w.contains("(ies)"));
+            let bare = words.windows(2).any(|pair| {
+                let hole = pair[0].trim_start_matches(['(', '「']);
+                let noun = pair[1].trim_end_matches([',', ';', ')', '.', ':']);
+                // One hole alone: `{0}/{1} words` counts a share, not a noun.
+                let alone = hole.len() == 3 && hole.starts_with('{') && hole.ends_with('}');
+                alone && nouns.contains(&noun)
+            });
+            if hedged || bare {
+                slips.push(format!("{key}: {}", entry.en));
+            }
+        }
+        slips.sort();
+        assert!(slips.is_empty(), "write a count as {{0|noun|nouns}}:\n{}", slips.join("\n"));
+    }
+
+    /// **An English label stands apart from its value** on the `:genda`
+    /// score line (`speed 231.04`, not `speed231.04`); the Chinese line
+    /// runs them together as the typing sites write it.
+    #[test]
+    fn an_english_score_label_is_spaced_from_its_value() {
+        let mut glued: Vec<String> = super::table()
+            .iter()
+            .filter(|(key, _)| key.starts_with("genda.line.") || key.starts_with("genda.done"))
+            .filter(|(_, entry)| {
+                let en = entry.en;
+                en.match_indices('{').any(|(at, _)| en[..at].chars().last().is_some_and(|c| c.is_ascii_alphabetic()))
+            })
+            .map(|(key, entry)| format!("{key}: {}", entry.en))
+            .collect();
+        glued.sort();
+        assert!(glued.is_empty(), "a label run into its value:\n{}", glued.join("\n"));
     }
 
     #[test]

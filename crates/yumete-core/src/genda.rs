@@ -1179,6 +1179,44 @@ pub fn jsonl(records: &[Record]) -> String {
     records.iter().map(|r| r.to_line() + "\n").collect()
 }
 
+/// **The history file's text without `record`**: the first line that reads
+/// as that record is dropped, and every other line stays as it was written —
+/// records another yumete appended since this one read the file, and lines
+/// that do not read, which are somebody's and not this one's to discard.
+/// `None` when no line is that record.
+pub fn without_record(text: &str, record: &Record) -> Option<String> {
+    let lines: Vec<&str> = text.lines().collect();
+    let at = lines.iter().position(|line| serde_json::from_str::<Record>(line.trim()).ok().as_ref() == Some(record))?;
+    Some(lines.iter().enumerate().filter(|(i, _)| *i != at).map(|(_, line)| format!("{line}\n")).collect())
+}
+
+/// **The history file's text with `record` back in it**: in front of
+/// `next`, the record it stood before, when the file still holds that one;
+/// else before the first record finished later than it, so the file stays
+/// in the order the segments were typed. Every other line as it was written.
+pub fn with_record(text: &str, record: &Record, next: Option<&Record>) -> String {
+    let lines: Vec<&str> = text.lines().collect();
+    let read = |line: &&str| serde_json::from_str::<Record>(line.trim()).ok();
+    let at = next
+        .and_then(|next| lines.iter().position(|line| read(line).as_ref() == Some(next)))
+        .or_else(|| lines.iter().position(|line| read(line).is_some_and(|r| r.at > record.at)))
+        .unwrap_or(lines.len());
+    let mut out = String::with_capacity(text.len() + 256);
+    for (i, line) in lines.iter().enumerate() {
+        if i == at {
+            out.push_str(&record.to_line());
+            out.push('\n');
+        }
+        out.push_str(line);
+        out.push('\n');
+    }
+    if at == lines.len() {
+        out.push_str(&record.to_line());
+        out.push('\n');
+    }
+    out
+}
+
 /// `m:ss.fff`.
 pub fn clock_text(millis: u64) -> String {
     format!("{}:{:02}.{:03}", millis / 60_000, millis / 1000 % 60, millis % 1000)
@@ -1720,5 +1758,26 @@ mod tests {
         assert_eq!(text.lines().count(), 2);
         assert_eq!(read_records(&text), records);
         assert_eq!(jsonl(&[]), "");
+    }
+
+    /// **Deleting a record touches that record only**: a record appended
+    /// by another yumete since the file was read, and a line that does not
+    /// read, both stay; putting it back puts it where its time says.
+    #[test]
+    fn a_record_comes_out_of_the_file_and_goes_back_by_itself() {
+        let one = Record { at: 10, segment: 1, chars: 5, ..Record::default() };
+        let two = Record { at: 20, segment: 2, chars: 7, ..Record::default() };
+        let theirs = Record { at: 30, segment: 1, chars: 9, ..Record::default() };
+        let text = format!("{}\nnot a record\n{}\n{}\n", one.to_line(), two.to_line(), theirs.to_line());
+        let without = without_record(&text, &two).expect("the record is there");
+        assert_eq!(without, format!("{}\nnot a record\n{}\n", one.to_line(), theirs.to_line()));
+        assert_eq!(read_records(&without), vec![one.clone(), theirs.clone()]);
+        assert_eq!(without_record(&without, &two), None, "not there twice");
+        assert_eq!(with_record(&without, &two, None), text, "back where its time puts it");
+        assert_eq!(with_record(&without, &two, Some(&theirs)), text, "back in front of the one it stood before");
+        let same_time = Record { at: 30, ..two.clone() };
+        let back = with_record(&without, &same_time, Some(&theirs));
+        assert_eq!(read_records(&back), vec![one.clone(), same_time, theirs.clone()], "a tie goes by its neighbour");
+        assert_eq!(with_record("", &one, None), format!("{}\n", one.to_line()));
     }
 }

@@ -129,31 +129,31 @@ en = "score line copied"
 # : 跟打把全部歷史複製成表格之後，{0} 是條數（草稿）
 key = "genda.copied-history"
 zhs = "已复制 {0} 条成绩（TSV）"
-en = "{0} scores copied (TSV)"
+en = "{0|score|scores} copied (TSV)"
 
 [[message]]
 # : 跟打累計框總計一欄的值，{0} 字數，{1} 天數（草稿）
 key = "genda.daily.overall"
 zhs = "{0}字 {1}天"
-en = "{0} chars {1} days"
+en = "{0|char|chars} {1|day|days}"
 
 [[message]]
 # : 跟打累計框連續一欄的值，{0} 天數（草稿）
 key = "genda.daily.streak"
 zhs = "{0}天"
-en = "{0} days"
+en = "{0|day|days}"
 
 [[message]]
 # : 跟打歷史視圖標題後半：今日字數用時、總字數天數、連續天數（草稿）
 key = "genda.daily.title"
 zhs = "今日 {0}字 {1} · 总计 {2}字 {3}天 · 连续 {4}天"
-en = "today {0} chars {1} · all {2} chars {3} days · streak {4} days"
+en = "today {0|char|chars} {1} · all {2|char|chars} {3|day|days} · streak {4|day|days}"
 
 [[message]]
 # : 跟打累計框今日一欄的值，{0} 字數，{1} 用時（草稿）
 key = "genda.daily.today"
 zhs = "{0}字 {1}"
-en = "{0} chars {1}"
+en = "{0|char|chars} {1}"
 
 [[message]]
 # : 跟打頁看歷史時按 d 刪掉了一條成績，{0} 是它在表裏從上往下數的行號（草稿）
@@ -165,13 +165,13 @@ en = "row {0} deleted"
 # : 跟打打完一段、下一段等 Enter 或全文打完時命令行那一句；{0} 第幾段，{1} 速度（草稿）
 key = "genda.done"
 zhs = "第{0}段 速度{1} · y 复制成绩"
-en = "seg{0} speed{1} · y copies the score line"
+en = "seg {0} speed {1} · y copies the score line"
 
 [[message]]
 # : 跟打打完一段、下一段已經接着出來時命令行那一句：要先 Esc 暫停纔能按 y；{0} 第幾段，{1} 速度（草稿）
 key = "genda.done-typing"
 zhs = "第{0}段 速度{1} · Esc y 复制成绩"
-en = "seg{0} speed{1} · Esc y copies the score line"
+en = "seg {0} speed {1} · Esc y copies the score line"
 
 [[message]]
 # : 跟打慢字重打那一段的名字（草稿）
@@ -495,49 +495,49 @@ en = "the whole article in one segment"
 # : 跟打改了段長之後，{0} 是段長（草稿）
 key = "genda.length-set"
 zhs = "每段 {0} 字"
-en = "{0} characters a segment"
+en = "{0|character|characters} a segment"
 
 [[message]]
 # : 成績行裏互擊次數那一項，空格算半次（不加空格）（草稿）
 key = "genda.line.alternating"
 zhs = "互击{0}"
-en = "alt{0}"
+en = "alt {0}"
 
 [[message]]
 # : 成績行裏左右手互擊率那一項，{0} 是兩位小數（不加空格）（草稿）
 key = "genda.line.alternation-rate"
 zhs = "互击率{0}%"
-en = "altrate{0}%"
+en = "altrate {0}%"
 
 [[message]]
 # : 成績行裏字數那一項（不加空格）（草稿）
 key = "genda.line.chars"
 zhs = "字数{0}"
-en = "chars{0}"
+en = "chars {0}"
 
 [[message]]
 # : 成績行裏碼長那一項（不加空格）（草稿）
 key = "genda.line.code-length"
 zhs = "码长{0}"
-en = "codelen{0}"
+en = "codelen {0}"
 
 [[message]]
 # : 成績行裏回改那一項（不加空格）（草稿）
 key = "genda.line.corrections"
 zhs = "回改{0}"
-en = "fixed{0}"
+en = "fixed {0}"
 
 [[message]]
 # : 跟打成績行裏的當量，{0} 是兩位小數（草稿）
 key = "genda.line.equivalence"
 zhs = "当量{0}"
-en = "equiv{0}"
+en = "equiv {0}"
 
 [[message]]
 # : 成績行裏錯字那一項（不加空格）（草稿）
 key = "genda.line.errors"
 zhs = "错字{0}"
-en = "errors{0}"
+en = "errors {0}"
 
 [[message]]
 # : 成績行裏這一段是第一次打（草稿）
@@ -555,67 +555,67 @@ en = "ime:{0}"
 # : 成績行裏鍵準那一項（不加空格）（草稿）
 key = "genda.line.key-accuracy"
 zhs = "键准{0}%"
-en = "keyacc{0}%"
+en = "keyacc {0}%"
 
 [[message]]
 # : 成績行裏擊鍵那一項（不加空格）（草稿）
 key = "genda.line.kps"
 zhs = "击键{0}"
-en = "kps{0}"
+en = "kps {0}"
 
 [[message]]
 # : 成績行裏有效按鍵組合那一項（不加空格）（草稿）
 key = "genda.line.pairs"
 zhs = "有效组合{0}"
-en = "pairs{0}"
+en = "pairs {0}"
 
 [[message]]
 # : 跟打成績行裏的峰值，{0} 是速度（草稿）
 key = "genda.line.peak"
 zhs = "峰值{0}"
-en = "peak{0}"
+en = "peak {0}"
 
 [[message]]
 # : 成績行裏選重那一項（不加空格）（草稿）
 key = "genda.line.picks"
 zhs = "选重{0}"
-en = "picks{0}"
+en = "picks {0}"
 
 [[message]]
 # : 成績行裏重打那一項，{0} 是第幾次重打（草稿）
 key = "genda.line.retry"
 zhs = "重打{0}"
-en = "retry{0}"
+en = "retry {0}"
 
 [[message]]
 # : 成績行裏同手次數那一項，空格算半次（不加空格）（草稿）
 key = "genda.line.same-hand"
 zhs = "同手{0}"
-en = "same{0}"
+en = "same {0}"
 
 [[message]]
 # : 成績行裏第幾段那一項（不加空格）（草稿）
 key = "genda.line.segment"
 zhs = "第{0}段"
-en = "seg{0}"
+en = "seg {0}"
 
 [[message]]
 # : 成績行裏速度那一項（不加空格）（草稿）
 key = "genda.line.speed"
 zhs = "速度{0}"
-en = "speed{0}"
+en = "speed {0}"
 
 [[message]]
 # : 跟打成績行裏的停留，{0} 形如 [字]1.23s（草稿）
 key = "genda.line.stay"
 zhs = "停留{0}"
-en = "stay{0}"
+en = "stay {0}"
 
 [[message]]
 # : 成績行裏用時那一項（不加空格）（草稿）
 key = "genda.line.time"
 zhs = "用时{0}"
-en = "time{0}"
+en = "time {0}"
 
 [[message]]
 # : 成績行裏最常用按鍵那一項，{0} 形如 Space×20（草稿）
@@ -627,7 +627,7 @@ en = "topkey:{0}"
 # : 成績行裏打詞率那一項（不加空格）（草稿）
 key = "genda.line.word-rate"
 zhs = "打词{0}%"
-en = "words{0}%"
+en = "words {0}%"
 
 [[message]]
 # : 選常用字文章時沒有宇浩的字頻數據（草稿）
@@ -711,25 +711,25 @@ en = "no Chinese characters here: nothing to type"
 # : 跟打頁的文章取自當前文件的字頻時的名字，{0} 是字數（草稿）
 key = "genda.top.buffer"
 zhs = "本文件字频前 {0}"
-en = "this file's top {0} characters"
+en = "this file's top {0|character|characters}"
 
 [[message]]
 # : 跟打頁的文章取自所有打開的文件的字頻時的名字，{0} 是字數（草稿）
 key = "genda.top.buffers"
 zhs = "打开的文件字频前 {0}"
-en = "open buffers' top {0} characters"
+en = "open buffers' top {0|character|characters}"
 
 [[message]]
 # : 跟打頁的文章取自項目的字頻時的名字，{0} 是字數（草稿）
 key = "genda.top.project"
 zhs = "项目字频前 {0}"
-en = "project's top {0} characters"
+en = "project's top {0|character|characters}"
 
 [[message]]
 # : 跟打頁的文章取自工作目錄的字頻時的名字，{0} 是字數（草稿）
 key = "genda.top.working"
 zhs = "工作目录字频前 {0}"
-en = "working directory's top {0} characters"
+en = "working directory's top {0|character|characters}"
 
 [[message]]
 # : 跟打頁文章框裏段長一欄，段長是全文時（草稿）
@@ -787,6 +787,12 @@ en = "PgUp/PgDn to page"
 key = "label.comma"
 zhs = "、"
 en = ", "
+
+[[message]]
+# 括在一段话后面的补充，例如 :help commands 里命令的别名（草稿）
+key = "label.in-brackets"
+zhs = "（{0}）"
+en = " ({0})"
 
 [[message]]
 # :line-numbers 的參數 absolute
@@ -1449,13 +1455,13 @@ en = "commands"
 # 狀態欄的字數：全文
 key = "ui.count"
 zhs = "{0} 字"
-en = "{0} words"
+en = "{0|word|words}"
 
 [[message]]
 # 狀態欄的字數：選區 / 全文
 key = "ui.count-of"
 zhs = "{0} / {1} 字"
-en = "{0} / {1} words"
+en = "{0} / {1|word|words}"
 
 [[message]]
 # 狀態欄的字數：選區 / 全文，全文只有一個詞的時候（英文要單數）
@@ -1684,7 +1690,7 @@ en = "all lowercase ignores case; any capital makes it case-sensitive"
 # `/` 與 `?` 那一扇面板的第三行——那一行上 `A-j` 做什麼。{0} 是那個鍵(`[keys.prompt]` 改得動)
 key = "ui.search-wild"
 zhs = "{0} 切换繁简/拼音通配"
-en = "{0} matches across glyph variants and pinyin"
+en = "{0|match|matches} across glyph variants and pinyin"
 
 [[message]]
 # `:shot` 把這一幀畫成檔案了

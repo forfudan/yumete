@@ -6,13 +6,13 @@
 # :hard-wrap 做完了：幾行變幾行，寬多少
 key = "hard-wrap.done"
 zhs = "{0} 行 → {1} 行，宽 {2}"
-en = "{0} lines → {1}, width {2}"
+en = "{0|line|lines} → {1}, width {2}"
 
 [[message]]
 # :hard-wrap 0 做完了：幾行併成幾行
 key = "hard-wrap.joined"
 zhs = "{0} 行合并为 {1} 行"
-en = "{0} lines joined into {1}"
+en = "{0|line|lines} joined into {1}"
 
 [[message]]
 # :hard-wrap 不選區時光標站在標題、代碼、空行上
@@ -48,7 +48,7 @@ en = "code highlighting: on (supports {0})"
 # :view-code 報告裏：光標所在這一段代碼太長，超過上限所以只畫一種顏色
 key = "layout.code-too-long"
 zhs = "此代码块 {0} 行，超过 {1} 行不高亮"
-en = "this block has {0} lines; over {1}, it is not highlighted"
+en = "this block has {0|line|lines}; over {1}, it is not highlighted"
 
 [[message]]
 # :view-diff on，可是這個文件不在 git 倉里，或者倉里还没有第一个提交——
@@ -79,13 +79,13 @@ en = "end-of-line diagnostics: {0}"
 # :indent full — 縮進畫出來，段間的空行也收起
 key = "layout.first-line-indent-folded"
 zhs = "首行缩进：{0} 格，收起段间空行"
-en = "first-line indent: {0} cells, blank lines hidden"
+en = "first-line indent: {0|cell|cells}, blank lines hidden"
 
 [[message]]
 # :indent basic — 縮進畫出來，段間的空行不收
 key = "layout.first-line-indent-kept"
 zhs = "首行缩进：{0} 格，保留段间空行"
-en = "first-line indent: {0} cells, blank lines kept"
+en = "first-line indent: {0|cell|cells}, blank lines kept"
 
 [[message]]
 # 首行縮進關掉
@@ -169,7 +169,7 @@ en = "every line is highlighted, however long"
 # `:view-long-line N` ——門槛開著的時候狀態欄那一句
 key = "layout.long-line-on"
 zhs = "超过 {0} 字的行不高亮"
-en = "lines past {0} characters are not highlighted"
+en = "lines past {0|character|characters} are not highlighted"
 
 [[message]]
 # `:view-margin always`
@@ -199,7 +199,7 @@ en = "margin: never (no readings, hanging marks, emphasis dots or 平仄)"
 # :measure 定了欄寬
 key = "layout.measure-columns"
 zhs = "正文宽度：{0} 列"
-en = "text width: {0} columns"
+en = "text width: {0|column|columns}"
 
 [[message]]
 # :measure 交回窗口寬
@@ -304,7 +304,7 @@ en = "layout: vertical"
 # 竖排：定了一列幾個字
 key = "layout.zong-measure"
 zhs = "每纵 {0} 字"
-en = "{0} characters per column"
+en = "{0|character|characters} per column"
 
 [[message]]
 # 竖排：一列跟着窗口
@@ -454,13 +454,13 @@ en = "line numbers: {0}"
 # 滾輪一格走多遠——問的時候
 key = "wheel.is"
 zhs = "滚轮：每格 {0} 行(`:wheel 1` 为终端默认)"
-en = "wheel: {0} line(s) per notch (`:wheel 1` is the terminal's own)"
+en = "wheel: {0|line|lines} per notch (`:wheel 1` is the terminal's own)"
 
 [[message]]
 # 滾輪一格走多遠——設好了
 key = "wheel.set"
 zhs = "滚轮：每格 {0} 行"
-en = "wheel: {0} line(s) per notch"
+en = "wheel: {0|line|lines} per notch"
 
 
 # ── word ──────────────────────────────────────────────────────────────

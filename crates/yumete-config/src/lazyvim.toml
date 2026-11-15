@@ -48,7 +48,7 @@ T = "suspend"
 
 [keys.normal.space.g]
 label = "git"
-g = { run = ":!lazygit", label = "Lazygit (Root Dir)" }
+g = { run = ":git-lazygit", label = "Lazygit (Root Dir)" }
 G = { run = ":!lazygit", label = "Lazygit (cwd)" }
 s = "changed_file_picker"
 d = { run = ":git-diff", label = "Git Diff" }

@@ -229,14 +229,23 @@ impl Page {
         self.add_up_the_days();
     }
 
-    /// **The history file rewritten as `records`**, whole or not at all: a
-    /// failed write leaves the file as it was.
-    fn keep(&self, records: &[Record]) -> std::io::Result<()> {
+    /// **The history file changed by `edit`**, read again just before and
+    /// written whole or not at all: records another yumete appended since
+    /// this page opened, and lines that do not read, go through untouched,
+    /// and a failed write leaves the file as it was. `edit` answering `None`
+    /// leaves the file alone.
+    fn keep(&self, edit: impl FnOnce(&str) -> Option<String>) -> std::io::Result<()> {
         let Some(file) = &self.file else { return Ok(()) };
+        let text = match std::fs::read_to_string(file) {
+            Ok(text) => text,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => String::new(),
+            Err(err) => return Err(err),
+        };
+        let Some(edited) = edit(&text) else { return Ok(()) };
         if let Some(dir) = file.parent() {
             std::fs::create_dir_all(dir)?;
         }
-        yumete_core::buffer::write_file_atomically(file, &genda::jsonl(records))
+        yumete_core::buffer::write_file_atomically(file, &edited)
     }
 
     /// The article box's name: the article's, or the drill's after it.
@@ -796,7 +805,9 @@ impl Seat {
         };
         let mut kept = page.history.clone();
         let record = kept.remove(index);
-        if let Err(err) = page.keep(&kept) {
+        // By the record itself, not its place: the file may hold records
+        // this page never read.
+        if let Err(err) = page.keep(|text| genda::without_record(text, &record)) {
             editor.set_status(say!("genda.keep-failed", err));
             return;
         }
@@ -822,7 +833,13 @@ impl Seat {
         let index = deleted.index.min(page.history.len());
         let mut kept = page.history.clone();
         kept.insert(index, deleted.record.clone());
-        if let Err(err) = page.keep(&kept) {
+        // Not a second copy of a record the file still holds.
+        let next = kept.get(index + 1);
+        let back = |text: &str| match genda::without_record(text, &deleted.record) {
+            Some(_) => None,
+            None => Some(genda::with_record(text, &deleted.record, next)),
+        };
+        if let Err(err) = page.keep(back) {
             page.deleted.push(deleted);
             editor.set_status(say!("genda.keep-failed", err));
             return;
@@ -1011,16 +1028,19 @@ pub fn draw(frame: &mut Frame, seat: &Seat, config: &Config, area: Rect) -> Opti
         return None;
     }
     let (record, _) = shown_record(seat, page);
+    let boxes = left_boxes((page, seat.goal), &record);
     let (left, right) = match body.width >= WIDE {
         true => {
-            let w = 26.min(body.width / 3);
+            // As wide as its labels and values want, never under 26 cells
+            // nor over a third of the page.
+            let w = left_width(&boxes).max(26).min(body.width / 3);
             (Some(Rect { width: w, ..body }), Rect { x: body.x + w, width: body.width - w, ..body })
         }
         false => (None, body),
     };
     let right = match left {
         Some(left) => {
-            draw_left(frame, (page, seat.goal), &record, (ink, base), left, &ring);
+            draw_left(frame, boxes, (ink, base), left, &ring);
             right
         }
         None => {
@@ -1194,14 +1214,66 @@ fn hours(millis: u64) -> String {
     format!("{}:{:02}:{:02}", s / 3600, s / 60 % 60, s % 60)
 }
 
+/// The left column's three boxes, each a title and its label–value rows.
+type LeftBoxes = [(String, Vec<(String, String)>); 3];
+
+/// **The cells the left column wants**: its borders and a cell of padding
+/// each side, the widest label, a cell between label and value, and the
+/// widest value — so no label runs into its value and no value meets the
+/// border, in either language.
+fn left_width(boxes: &LeftBoxes) -> u16 {
+    let rows = || boxes.iter().flat_map(|(_, rows)| rows.iter());
+    let label = rows().map(|(l, _)| yumete_cjk::str_width(l)).max().unwrap_or(0);
+    let value = rows().map(|(_, v)| yumete_cjk::str_width(v)).max().unwrap_or(0);
+    (2 + 1 + label + 1 + value + 1) as u16
+}
+
+/// The widest label in the left column, which puts every value in one
+/// column a cell after it.
+fn left_label_width(boxes: &LeftBoxes) -> u16 {
+    boxes.iter().flat_map(|(_, rows)| rows.iter()).map(|(l, _)| yumete_cjk::str_width(l)).max().unwrap_or(0) as u16
+}
+
 fn draw_left(
     frame: &mut Frame,
-    (page, goal): (&Page, Goal),
-    record: &Record,
+    boxes: LeftBoxes,
     (ink, base): (Palette, Style),
     left: Rect,
     ring: &dyn Fn(&mut Frame, Rect, String) -> Rect,
 ) {
+    let label_width = left_label_width(&boxes);
+    let mut y = left.y;
+    let bottom = left.y + left.height;
+    for (n, (title, rows)) in boxes.into_iter().enumerate() {
+        let want = rows.len() as u16 + 2;
+        let room = bottom.saturating_sub(y);
+        // The last box takes what is left over.
+        let height = match n {
+            2 => room,
+            _ => want.min(room),
+        };
+        if height < 3 {
+            break;
+        }
+        let rect = Rect { y, height, ..left };
+        let inner = ring(frame, rect, title);
+        for (i, (label, value)) in rows.iter().enumerate().take(inner.height as usize) {
+            let row = inner.y + i as u16;
+            let end = inner.x + inner.width;
+            let x = match label.is_empty() {
+                true => inner.x + 1,
+                false => {
+                    put_text(frame.buffer_mut(), inner.x + 1, row, end, label, base.fg(ink.quiet()));
+                    inner.x + 1 + label_width + 1
+                }
+            };
+            put_text(frame.buffer_mut(), x, row, end, value, base.fg(ink.text()));
+        }
+        y += height;
+    }
+}
+
+fn left_boxes((page, goal): (&Page, Goal), record: &Record) -> LeftBoxes {
     let keyed = |v: Option<f64>, f: fn(f64) -> String| dash_or(v, f);
     let keys = record.keys;
     let this = vec![
@@ -1251,40 +1323,11 @@ fn draw_left(
         (say!("genda.label.overall"), say!("genda.daily.overall", d.chars, d.days)),
         (say!("genda.label.streak"), say!("genda.daily.streak", d.streak)),
     ];
-    let boxes = [
+    [
         (say!("genda.box.this"), this),
         (say!("genda.box.article"), info),
         (say!("genda.box.total"), total),
-    ];
-    let mut y = left.y;
-    let bottom = left.y + left.height;
-    for (n, (title, rows)) in boxes.into_iter().enumerate() {
-        let want = rows.len() as u16 + 2;
-        let room = bottom.saturating_sub(y);
-        // The last box takes what is left over.
-        let height = match n {
-            2 => room,
-            _ => want.min(room),
-        };
-        if height < 3 {
-            break;
-        }
-        let rect = Rect { y, height, ..left };
-        let inner = ring(frame, rect, title);
-        for (i, (label, value)) in rows.iter().enumerate().take(inner.height as usize) {
-            let row = inner.y + i as u16;
-            let end = inner.x + inner.width;
-            let x = match label.is_empty() {
-                true => inner.x + 1,
-                false => {
-                    put_text(frame.buffer_mut(), inner.x + 1, row, end, label, base.fg(ink.quiet()));
-                    inner.x + 8
-                }
-            };
-            put_text(frame.buffer_mut(), x, row, end, value, base.fg(ink.text()));
-        }
-        y += height;
-    }
+    ]
 }
 
 /// Lay `count` characters into rows of `width` cells; gives each row's start.
@@ -1870,6 +1913,47 @@ mod tests {
         assert_eq!(whole_hints("F3 重打  C-t 提示", 3), "");
     }
 
+    /// **A label never runs into its value, and no value meets the border**:
+    /// the value column sits a cell after the widest label, and the left
+    /// column is as wide as its widest label and value want — English
+    /// labels are longer than 段數 and 碼長.
+    #[test]
+    fn the_left_column_keeps_labels_and_values_apart() {
+        let row = |l: &str, v: &str| (l.to_string(), v.to_string());
+        let boxes: LeftBoxes = [
+            ("this".into(), vec![row("codelen", "2.90"), row("speed", "0.00")]),
+            ("article".into(), vec![row("length", "whole  segment 1/1")]),
+            ("session".into(), vec![row("segments", "0"), row("today", "0 chars 0:00:00")]),
+        ];
+        let width = left_width(&boxes);
+        let mut terminal = ratatui::Terminal::new(ratatui::backend::TestBackend::new(width, 12)).unwrap();
+        terminal
+            .draw(|frame| {
+                let ring = |frame: &mut Frame, rect: Rect, title: String| {
+                    put_text(frame.buffer_mut(), rect.x, rect.y, rect.x + rect.width, &title, Style::default());
+                    for y in rect.y + 1..rect.y + rect.height {
+                        put_text(frame.buffer_mut(), rect.x + rect.width - 1, y, rect.x + rect.width, "│", Style::default());
+                    }
+                    Rect { x: rect.x + 1, y: rect.y + 1, width: rect.width - 2, height: rect.height - 2 }
+                };
+                let ink = Palette::of(&Config::default());
+                draw_left(frame, boxes.clone(), (ink, Style::default()), Rect::new(0, 0, width, 12), &ring);
+            })
+            .unwrap();
+        let text = crate::buffer_to_text(terminal.backend().buffer());
+        for want in ["codelen  2.90", "segments 0", "whole  segment 1/1 │", "today    0 chars 0:00:00"] {
+            assert!(text.contains(want), "{want:?} in\n{text}");
+        }
+        // The Chinese labels keep the column they have always had.
+        let zh: LeftBoxes = [
+            ("本段".into(), vec![row("碼長", "2.90")]),
+            ("文章".into(), vec![row("輸入法", "系統"), row("段長", "25  第 1/2 段")]),
+            ("累計".into(), vec![row("今日", "0字 0:00:00")]),
+        ];
+        assert_eq!(left_label_width(&zh), 6);
+        assert!(left_width(&zh) <= 26, "{}", left_width(&zh));
+    }
+
     /// A record whose key fields and hands were measured, as under Yume.
     fn measured(segment: usize) -> Record {
         Record {
@@ -2027,6 +2111,35 @@ mod tests {
         keys(&mut seat, &mut ed, &mut ime, &[Key::Char('d'), Key::Tab, Key::Tab, Key::Char('u')]);
         assert_eq!(ed.status(), say!("genda.nothing-to-restore"));
         assert_eq!(kept_segments(&dir), [101, 102, 1, 3]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// **`d` and `u` leave what they did not read alone**: a record another
+    /// yumete appended after this page opened, and a line that does not
+    /// read, are both still in the file afterwards.
+    #[test]
+    fn d_keeps_records_appended_meanwhile_and_lines_it_cannot_read() {
+        let dir = std::env::temp_dir().join(format!("yumete-genda-meanwhile-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join(HISTORY_FILE);
+        let before = [101, 102].map(|segment| Record { at: segment as u64, segment, chars: 9, ..Record::default() });
+        std::fs::write(&file, format!("{}not a record\n", genda::jsonl(&before))).unwrap();
+        let (mut ed, mut ime, mut seat) = seated("abcdef", Some(&dir));
+        command(&mut seat, &mut ed, &mut ime, "genda");
+        // Another yumete finishes a segment.
+        let theirs = Record { at: 103, segment: 7, chars: 4, ..Record::default() };
+        let mut text = std::fs::read_to_string(&file).unwrap();
+        text.push_str(&format!("{}\n", theirs.to_line()));
+        std::fs::write(&file, &text).unwrap();
+        // Newest first: 102, 101. `d` takes 102.
+        keys(&mut seat, &mut ed, &mut ime, &[Key::Tab, Key::Char('d')]);
+        assert_eq!(ed.status(), say!("genda.deleted", 1));
+        assert_eq!(kept_segments(&dir), [101, 7]);
+        assert!(std::fs::read_to_string(&file).unwrap().contains("not a record\n"));
+        keys(&mut seat, &mut ed, &mut ime, &[Key::Char('u')]);
+        assert_eq!(kept_segments(&dir), [101, 102, 7]);
+        assert!(std::fs::read_to_string(&file).unwrap().contains("not a record\n"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

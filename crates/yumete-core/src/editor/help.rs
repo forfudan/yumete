@@ -198,7 +198,9 @@ impl Editor {
         for entry in crate::command::COMMANDS {
             let aliases = match entry.aliases.is_empty() {
                 true => String::new(),
-                false => format!("（{}）", entry.aliases.join(" ")),
+                // The reader's own brackets: full-width ones in Chinese,
+                // a space and ASCII ones in English.
+                false => say!("label.in-brackets", entry.aliases.join(" ")),
             };
             out.push_str(&format!(
                 "- `:{}`{} {} — {}

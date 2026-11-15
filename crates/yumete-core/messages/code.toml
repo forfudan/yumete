@@ -117,7 +117,7 @@ en = "merge conflict at line {0}"
 # 空格 m 之後，衝突化解，留下了 {0} 行
 key = "conflict.kept"
 zhs = "冲突已解决，保留 {0} 行"
-en = "conflict resolved, {0} line(s) kept"
+en = "conflict resolved, {0|line|lines} kept"
 
 [[message]]
 # 空格 m 想回到共同祖先，但檔案裏没有記下它(不是 diff3 樣式)
@@ -153,13 +153,13 @@ en = "the cursor is not in a merge conflict"
 # :check-merge 列出了 {0} 處衝突
 key = "conflict.some"
 zhs = "{0} 处合并冲突"
-en = "{0} merge conflict(s)"
+en = "{0|merge conflict|merge conflicts}"
 
 [[message]]
 # :diff 找到了改動
 key = "diff.changed"
 zhs = "{0} 行与《{1}》不同，gf 跳转"
-en = "{0} line(s) differ from '{1}'; gf jumps there"
+en = "{0|line differs|lines differ} from '{1}'; gf jumps there"
 
 [[message]]
 # :git-diff 問不出答案：git 自己那一句話照搬
@@ -210,13 +210,13 @@ en = "the version at {0} is open read-only in the other window"
 # 代碼動作做完了：哪一個，幾處，幾個檔
 key = "lsp.action-done"
 zhs = "{0}：在 {2} 个文件中修改了 {1} 处"
-en = "{0}: changed {1} place(s) in {2} file(s)"
+en = "{0}: changed {1|place|places} in {2|file|files}"
 
 [[message]]
 # 語言服務器要求改檔，改完了：幾處，幾個檔
 key = "lsp.applied"
 zhs = "语言服务器在 {1} 个文件中修改了 {0} 处"
-en = "the language server changed {0} place(s) in {1} file(s)"
+en = "the language server changed {0|place|places} in {1|file|files}"
 
 [[message]]
 # gd 問出去了，還没回話
@@ -396,7 +396,7 @@ en = "the language server declined to rename: {0}"
 # 改名做完了：幾處，幾個檔
 key = "lsp.renamed"
 zhs = "已重命名 {0} 处（{1} 个文件）"
-en = "renamed {0} place(s) in {1} file(s)"
+en = "renamed {0|place|places} in {1|file|files}"
 
 [[message]]
 # gd 問出去之前，服務器還在讀項目(#431)
@@ -473,7 +473,7 @@ en = "error"
 # :diagnostics-all 列完了，一共幾處
 key = "problem.found"
 zhs = "{0} 个问题，gf 跳到该行"
-en = "{0} problem(s); gf jumps to the line"
+en = "{0|problem|problems}; gf jumps to the line"
 
 [[message]]
 # 最輕的那一檔：「你也許想知道」

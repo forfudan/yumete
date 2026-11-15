@@ -1681,7 +1681,9 @@ pub fn run(
                             // after that program has finished, takes it again.
                             system_ime.release();
                             match hand_over(&mut terminal, &want.line, &events, &editor.working_dir(), enhanced, all_keys, &mut system_ime) {
-                                Ok(()) => editor.set_status(say!("shell.finished", want.line)),
+                                Ok(status) => editor.set_status(
+                                    failed_run(&want.line, &status).unwrap_or_else(|| say!("shell.finished", want.line)),
+                                ),
                                 Err(err) => editor.set_status(say!("shell.cannot-run", err)),
                             }
                             editor.check_the_disk_now();
@@ -1702,16 +1704,8 @@ pub fn run(
                                         if let Some(dir) = file.parent() {
                                             let _ = std::fs::remove_dir(dir);
                                         }
-                                    } else if !status.success() {
-                                        // The shell's own word for it went to the
-                                        // screen the editor has just taken back.
-                                        let program = want.line.split_whitespace().next().unwrap_or("").to_string();
-                                        editor.set_status(match status.code() {
-                                            // A POSIX shell's 127, and cmd.exe's 9009.
-                                            Some(127 | 9009) => say!("shell.program-not-found", program),
-                                            Some(126) => say!("shell.program-not-runnable", program),
-                                            _ => say!("shell.finished", format!("{} — {status}", want.line)),
-                                        });
+                                    } else if let Some(said) = failed_run(&want.line, &status) {
+                                        editor.set_status(said);
                                     }
                                 }
                                 Err(err) => editor.set_status(say!("shell.cannot-run", err)),
@@ -3319,6 +3313,24 @@ fn hand_over_program<B: ratatui::backend::Backend + io::Write>(
     status
 }
 
+/// **What the status line says of a run in the terminal that failed**, or
+/// `None` when it succeeded. One rule for every route that hands a program
+/// the terminal (`:!`, `:run-in-terminal`, lazygit, yazi): the shell's own
+/// complaint went to a screen the editor has since taken back, so a program
+/// that is not there is named here rather than called finished.
+fn failed_run(line: &str, status: &std::process::ExitStatus) -> Option<String> {
+    if status.success() {
+        return None;
+    }
+    let program = line.split_whitespace().next().unwrap_or("").to_string();
+    Some(match status.code() {
+        // A POSIX shell's 127, and cmd.exe's 9009.
+        Some(127 | 9009) => say!("shell.program-not-found", program),
+        Some(126) => say!("shell.program-not-runnable", program),
+        _ => say!("shell.finished", format!("{line} — {status}")),
+    })
+}
+
 /// Give the terminal back, run the command in it, and take it again.
 ///
 /// This is what `:!` has meant since vi, and it is the only honest answer to
@@ -3334,7 +3346,7 @@ fn hand_over<B: ratatui::backend::Backend + io::Write>(
     enhanced: bool,
     all_keys: bool,
     system_ime: &mut crate::system_ime::SystemIme,
-) -> io::Result<()> {
+) -> io::Result<std::process::ExitStatus> {
     step_aside(terminal, enhanced, all_keys)?;
     pause_the_reader();
     let status = run_in_the_terminal(line, in_dir);
@@ -3368,7 +3380,7 @@ fn hand_over<B: ratatui::backend::Backend + io::Write>(
         }
     }
     step_back(terminal, enhanced, all_keys)?;
-    status.map(|_| ())
+    status
 }
 
 /// Answer a `:theme`, and say where things stand afterwards.
@@ -13017,6 +13029,31 @@ const PAGE_GAP: u16 = 2;
 /// [`PAGE_LEAST`] cells of text; fewer when the window is too narrow, as the
 /// vertical pages fall back to fewer bands when a band cannot hold a 縱. The
 /// last page takes the cells the division leaves over.
+/// **A drawn row cut to `width` cells**, from its end: what no longer fits
+/// is dropped, and a wide character cut in half leaves a blank in its
+/// style, so the cells before it stay where they were.
+fn give_up_the_last_cell(spans: &mut Vec<Span<'_>>, width: usize) {
+    let mut used: usize = spans.iter().map(|s| yumete_cjk::str_width(&s.content)).sum();
+    let mut style = Style::default();
+    while used > width {
+        let Some(last) = spans.last_mut() else { break };
+        style = last.style;
+        let mut text = last.content.to_string();
+        match text.pop() {
+            Some(c) => {
+                used = used.saturating_sub(yumete_cjk::char_width(c));
+                last.content = text.into();
+            }
+            None => {
+                spans.pop();
+            }
+        }
+    }
+    if used < width {
+        spans.push(Span::styled(" ".repeat(width - used), style));
+    }
+}
+
 fn horizontal_pages(editor: &Editor, config: &Config, rect: Rect) -> Vec<Rect> {
     let lines = editor.current_buffer().line_count();
     let mut n = editor.pages_horizontal().max(1);
@@ -14374,17 +14411,25 @@ fn draw_horizontal(
         // **The line break, shown** (`:view-line-breaks`): the table's own `␊`,
         // in the gutter's ink, in the cell the break already owns — the one a
         // cursor resting on the break is drawn in, so a selection reaching
-        // over it lights the mark. Drawn, never measured: it goes only where
-        // that cell is still on the page, and a row that fills its width
-        // goes without, rather than pushing a character onto the next row.
-        // Not after a last line with no break, nor on a closed fold's line,
-        // whose break is the fold's.
+        // over it lights the mark. Drawn, never measured: no character moves
+        // and no row is added for it. **A row that fills its width** has no
+        // cell after it, so the mark takes the row's own last cell (a wide
+        // character there gives way to the mark and a blank): every line
+        // that ends in a break shows it, and the writing stays where it is.
+        // A row that runs on past the page (no wrap, scrolled) does not end
+        // on the page and goes without. Not after a last line with no break,
+        // nor on a closed fold's line, whose break is the fold's.
+        let used: usize = spans.iter().map(|s| yumete_cjk::str_width(&s.content)).sum();
+        let room = text_area.width as usize + left;
         let mark_break = editor.line_breaks()
             && ends_line
             && row.line + 1 < rope.len_lines()
             && !editor.fold_head(row.line)
-            && spans.iter().map(|s| yumete_cjk::str_width(&s.content)).sum::<usize>()
-                < text_area.width as usize + left;
+            && used <= room
+            && room > left;
+        if mark_break && used == room {
+            give_up_the_last_cell(&mut spans, room - 1);
+        }
         match (mark_break, break_cell.is_empty()) {
             (true, bare) => {
                 let quiet = fill.fg(ink.furniture());
@@ -16992,6 +17037,28 @@ mod tests {
         assert_eq!(super::without_escapes(said), "Error: sqrt() is undefined\n  sqrt(-1)\n");
         let ran = super::Ran { said: String::new(), complained: said.to_string(), ok: false };
         assert_eq!(ran.why(), "Error: sqrt() is undefined");
+    }
+
+    /// **A program that is not there is named, whichever route ran it**:
+    /// `:!` and `:run-in-terminal` read one rule, so neither says
+    /// "finished" for a shell's 127.
+    #[cfg(unix)]
+    #[test]
+    fn a_missing_program_is_named_on_every_route() {
+        use std::os::unix::process::ExitStatusExt;
+        use yumete_core::say;
+        let ended = |code: i32| std::process::ExitStatus::from_raw(code << 8);
+        assert_eq!(super::failed_run("sample-tool --flag", &ended(0)), None);
+        assert_eq!(
+            super::failed_run("sample-tool --flag", &ended(127)),
+            Some(say!("shell.program-not-found", "sample-tool"))
+        );
+        assert_eq!(
+            super::failed_run("sample-tool", &ended(126)),
+            Some(say!("shell.program-not-runnable", "sample-tool"))
+        );
+        let other = super::failed_run("sample-tool", &ended(3)).unwrap();
+        assert!(other.contains("sample-tool") && other.contains('3'), "{other}");
     }
 
 /// 把一行畫出來的字裏「寬字後面那個空格」擠掉，好照字面對句子（#497）。
@@ -21840,8 +21907,9 @@ fn squeezed(text: &str) -> String {
     }
 
     /// **The mark never moves the writing.** A row that wraps keeps the
-    /// break where it was, and a last row that fills the width goes without
-    /// a mark rather than pushing a character onto a row of its own.
+    /// break where it was, and a row that fills the width carries the mark
+    /// in its own last cell rather than pushing a character onto a row of
+    /// its own — every line that ends in a break shows it.
     #[test]
     fn the_line_break_mark_does_not_change_the_wrap() {
         let mut config = Config::default();
@@ -21849,9 +21917,10 @@ fn squeezed(text: &str) -> String {
         let w = 24u16;
         let gutter = gutter_in(w as usize, 3, config.editor.line_numbers, false);
         let room = w as usize - gutter;
-        let full = "x".repeat(room);
+        let full = format!("{}y", "x".repeat(room - 1));
+        let wide = format!("{}漢", "x".repeat(room - 2));
         let long = "word ".repeat(10);
-        let text = format!("{full}\n{long}\nend");
+        let text = format!("{full}\n{wide}\n{long}\nend");
         let mark = yumete_cjk::LINE_FEED_PICTURE;
 
         let mut editor = editor_with(&text);
@@ -21859,12 +21928,16 @@ fn squeezed(text: &str) -> String {
         editor.set_line_breaks(true);
         let on = page_rows(&render_wrapped(&mut editor, &config, w, 12));
 
-        assert!(on[0].ends_with(&full) && !on[0].contains(mark), "a full row has no room: {on:#?}");
-        let stripped: Vec<String> = on.iter().map(|r| r.replace(mark, "").trim_end().to_string()).collect();
-        assert_eq!(stripped, off, "every row breaks where it did");
-        // The long line's own last row carries it, and only that one.
+        assert_eq!(on.len(), off.len(), "no row added: {on:#?}");
+        let x = "x".repeat(room - 2);
+        assert!(on[0].ends_with(&format!("{x}x{mark}")), "a full row's last cell: {on:#?}");
+        assert!(on[1].ends_with(&format!("{x} {mark}")), "a wide last character gives way: {on:#?}");
+        assert_eq!(on[0].chars().count(), off[0].chars().count(), "nothing moved");
+        let stripped: Vec<String> = on.iter().skip(2).map(|r| r.replace(mark, "").trim_end().to_string()).collect();
+        assert_eq!(stripped, off[2..].to_vec(), "every row breaks where it did");
+        // The two full rows and the long line's own last row carry it.
         let marked = on.iter().filter(|row| row.contains(mark)).count();
-        assert_eq!(marked, 1, "{on:#?}");
+        assert_eq!(marked, 3, "{on:#?}");
     }
 
     /// A vertical page puts the mark in the slot under a 縱's last character —
