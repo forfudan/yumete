@@ -13044,31 +13044,6 @@ const PAGE_GAP: u16 = 2;
 /// [`PAGE_LEAST`] cells of text; fewer when the window is too narrow, as the
 /// vertical pages fall back to fewer bands when a band cannot hold a 縱. The
 /// last page takes the cells the division leaves over.
-/// **A drawn row cut to `width` cells**, from its end: what no longer fits
-/// is dropped, and a wide character cut in half leaves a blank in its
-/// style, so the cells before it stay where they were.
-fn give_up_the_last_cell(spans: &mut Vec<Span<'_>>, width: usize) {
-    let mut used: usize = spans.iter().map(|s| yumete_cjk::str_width(&s.content)).sum();
-    let mut style = Style::default();
-    while used > width {
-        let Some(last) = spans.last_mut() else { break };
-        style = last.style;
-        let mut text = last.content.to_string();
-        match text.pop() {
-            Some(c) => {
-                used = used.saturating_sub(yumete_cjk::char_width(c));
-                last.content = text.into();
-            }
-            None => {
-                spans.pop();
-            }
-        }
-    }
-    if used < width {
-        spans.push(Span::styled(" ".repeat(width - used), style));
-    }
-}
-
 fn horizontal_pages(editor: &Editor, config: &Config, rect: Rect) -> Vec<Rect> {
     let lines = editor.current_buffer().line_count();
     let mut n = editor.pages_horizontal().max(1);
@@ -14426,25 +14401,18 @@ fn draw_horizontal(
         // **The line break, shown** (`:view-line-breaks`): the table's own `␊`,
         // in the gutter's ink, in the cell the break already owns — the one a
         // cursor resting on the break is drawn in, so a selection reaching
-        // over it lights the mark. Drawn, never measured: no character moves
-        // and no row is added for it. **A row that fills its width** has no
-        // cell after it, so the mark takes the row's own last cell (a wide
-        // character there gives way to the mark and a blank): every line
-        // that ends in a break shows it, and the writing stays where it is.
-        // A row that runs on past the page (no wrap, scrolled) does not end
-        // on the page and goes without. Not after a last line with no break,
-        // nor on a closed fold's line, whose break is the fold's.
-        let used: usize = spans.iter().map(|s| yumete_cjk::str_width(&s.content)).sum();
-        let room = text_area.width as usize + left;
+        // over it lights the mark. Drawn, never measured: it goes only where
+        // that cell is still on the page. **A row that fills its width goes
+        // without**: the mark would have to cover the row's last character or
+        // push it onto a row of its own, and the writing outranks the mark.
+        // Not after a last line with no break, nor on a closed fold's line,
+        // whose break is the fold's.
         let mark_break = editor.line_breaks()
             && ends_line
             && row.line + 1 < rope.len_lines()
             && !editor.fold_head(row.line)
-            && used <= room
-            && room > left;
-        if mark_break && used == room {
-            give_up_the_last_cell(&mut spans, room - 1);
-        }
+            && spans.iter().map(|s| yumete_cjk::str_width(&s.content)).sum::<usize>()
+                < text_area.width as usize + left;
         match (mark_break, break_cell.is_empty()) {
             (true, bare) => {
                 let quiet = fill.fg(ink.furniture());
@@ -22143,9 +22111,9 @@ fn squeezed(text: &str) -> String {
     }
 
     /// **The mark never moves the writing.** A row that wraps keeps the
-    /// break where it was, and a row that fills the width carries the mark
-    /// in its own last cell rather than pushing a character onto a row of
-    /// its own — every line that ends in a break shows it.
+    /// break where it was, and a row that fills the width goes without a
+    /// mark rather than covering its last character or pushing it onto a
+    /// row of its own.
     #[test]
     fn the_line_break_mark_does_not_change_the_wrap() {
         let mut config = Config::default();
@@ -22165,15 +22133,13 @@ fn squeezed(text: &str) -> String {
         let on = page_rows(&render_wrapped(&mut editor, &config, w, 12));
 
         assert_eq!(on.len(), off.len(), "no row added: {on:#?}");
-        let x = "x".repeat(room - 2);
-        assert!(on[0].ends_with(&format!("{x}x{mark}")), "a full row's last cell: {on:#?}");
-        assert!(on[1].ends_with(&format!("{x} {mark}")), "a wide last character gives way: {on:#?}");
-        assert_eq!(on[0].chars().count(), off[0].chars().count(), "nothing moved");
-        let stripped: Vec<String> = on.iter().skip(2).map(|r| r.replace(mark, "").trim_end().to_string()).collect();
-        assert_eq!(stripped, off[2..].to_vec(), "every row breaks where it did");
-        // The two full rows and the long line's own last row carry it.
+        assert!(on[0].ends_with(&full) && !on[0].contains(mark), "a full row keeps its last character: {on:#?}");
+        assert!(on[1].ends_with(&wide) && !on[1].contains(mark), "a wide last character too: {on:#?}");
+        let stripped: Vec<String> = on.iter().map(|r| r.replace(mark, "").trim_end().to_string()).collect();
+        assert_eq!(stripped, off, "every row breaks where it did");
+        // The long line's own last row carries it, and only that one.
         let marked = on.iter().filter(|row| row.contains(mark)).count();
-        assert_eq!(marked, 3, "{on:#?}");
+        assert_eq!(marked, 1, "{on:#?}");
     }
 
     /// A vertical page puts the mark in the slot under a 縱's last character —
