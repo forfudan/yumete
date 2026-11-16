@@ -1668,6 +1668,14 @@ impl Editor {
             PlaceCmd::GotoLastLine => sidebar.go_to_end(true),
             PlaceCmd::CollapseEntry => sidebar.collapse(),
             PlaceCmd::ExpandEntry | PlaceCmd::OpenEntry => self.open_the_entry(side),
+            // The outline's rows are the document's sections: `A-j`/`A-k`
+            // move the highlighted one, as they do on its heading in the text.
+            PlaceCmd::MoveSectionDown if view == crate::sidebar::View::Outline => {
+                self.move_section_from_outline(side, true)
+            }
+            PlaceCmd::MoveSectionUp if view == crate::sidebar::View::Outline => {
+                self.move_section_from_outline(side, false)
+            }
             _ => {}
         }
     }

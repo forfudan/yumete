@@ -166,8 +166,10 @@ pub(super) const NORMAL_COMMANDS: &[NormalCommand] = &[
         e.cmd_delete_or_change(cx.with_key(Key::Char('d')));
     }, Key::Char('x')),
     (NormalCmd::ExtendLineAbove, |e, cx| e.repeat(cx.count, |e| e.select_line_above()), Key::Char('X')),
-    (NormalCmd::MoveSelectedLinesDown, |e, cx| e.move_selected_lines(cx.count, true), Key::Alt('j')),
-    (NormalCmd::MoveSelectedLinesUp, |e, cx| e.move_selected_lines(cx.count, false), Key::Alt('k')),
+    // A bare cursor on a heading's line moves the heading's section, as
+    // org-mode's `M-down`/`M-up`; a selection moves its lines.
+    (NormalCmd::MoveSelectedLinesDown, |e, cx| e.move_lines_or_section(cx.count, true), Key::Alt('j')),
+    (NormalCmd::MoveSelectedLinesUp, |e, cx| e.move_lines_or_section(cx.count, false), Key::Alt('k')),
     // `G`: a count's line, as helix's; none, the last line's start, as `ge`.
     (NormalCmd::GotoLineOrLastLine, |e, cx| match cx.operator_count.is_some() {
         true => e.acting(false, |e| e.cmd_goto_line(cx)),

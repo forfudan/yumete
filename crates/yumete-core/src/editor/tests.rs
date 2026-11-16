@@ -42880,3 +42880,176 @@ fn the_command_row_says_the_panel_keys_below_any_message() {
     ed.on_key(Key::Tab);
     assert_eq!(keys(&ed), Some((String::new(), vec![("Tab".into(), say!("hint.complete", 1, 3))])));
 }
+
+/// **`A-j`/`A-k` on a heading move its section** (org-mode's `M-down`/`M-up`):
+/// the heading and everything under it, past the sibling below or above;
+/// the text above the first heading stays; the cursor stays on the heading;
+/// one `u` takes it back.
+#[test]
+fn a_bare_cursor_on_a_heading_moves_its_section() {
+    let text = "前言\n# 甲\n甲文\n# 乙\n乙文\n# 丙\n丙文\n";
+    let mut ed = typed(text);
+    ed.goto_line(2);
+    ed.on_key(Key::Alt('j'));
+    assert_eq!(ed.current_buffer().text(), "前言\n# 乙\n乙文\n# 甲\n甲文\n# 丙\n丙文\n");
+    assert_eq!(ed.cursor_line(), 3, "the cursor stays on the heading");
+    ed.on_key(Key::Alt('k'));
+    assert_eq!(ed.current_buffer().text(), text);
+    assert_eq!(ed.cursor_line(), 1);
+    // At the first sibling it stops and says so; the preface never moves.
+    ed.on_key(Key::Alt('k'));
+    assert_eq!(ed.current_buffer().text(), text);
+    assert_eq!(ed.status(), say!("edit.section-first"));
+    // A count passes that many; more than there are goes as far as they go.
+    press(&mut ed, "2");
+    ed.on_key(Key::Alt('j'));
+    assert_eq!(ed.current_buffer().text(), "前言\n# 乙\n乙文\n# 丙\n丙文\n# 甲\n甲文\n");
+    assert_eq!(ed.cursor_line(), 5);
+    ed.on_key(Key::Alt('j'));
+    assert_eq!(ed.status(), say!("edit.section-last"));
+    press(&mut ed, "9");
+    ed.on_key(Key::Alt('k'));
+    assert_eq!(ed.current_buffer().text(), text);
+    // One undo step a move.
+    press(&mut ed, "u");
+    assert_eq!(ed.current_buffer().text(), "前言\n# 乙\n乙文\n# 丙\n丙文\n# 甲\n甲文\n");
+
+    // Under vim the same.
+    let mut ed = typed_vim(text);
+    press(&mut ed, "j");
+    ed.on_key(Key::Alt('j'));
+    assert_eq!(ed.current_buffer().text(), "前言\n# 乙\n乙文\n# 甲\n甲文\n# 丙\n丙文\n");
+    press(&mut ed, "u");
+    assert_eq!(ed.current_buffer().text(), text, "one undo step under vim too");
+}
+
+/// Sub-sections travel with their heading, and a section never leaves its
+/// parent.
+#[test]
+fn a_section_moves_with_its_subsections_and_stays_under_its_parent() {
+    let text = "# 甲\n## 子一\n一\n## 子二\n二\n# 乙\n乙\n";
+    let mut ed = typed(text);
+    ed.on_key(Key::Alt('j'));
+    assert_eq!(ed.current_buffer().text(), "# 乙\n乙\n# 甲\n## 子一\n一\n## 子二\n二\n");
+    assert_eq!(ed.cursor_line(), 2);
+    let mut ed = typed(text);
+    ed.goto_line(4);
+    ed.on_key(Key::Alt('j'));
+    assert_eq!(ed.current_buffer().text(), text, "the last child stays under its parent");
+    assert_eq!(ed.status(), say!("edit.section-last"));
+    ed.on_key(Key::Alt('k'));
+    assert_eq!(ed.current_buffer().text(), "# 甲\n## 子二\n二\n## 子一\n一\n# 乙\n乙\n");
+    assert_eq!(ed.cursor_line(), 1);
+    ed.on_key(Key::Alt('k'));
+    assert_eq!(ed.status(), say!("edit.section-first"), "the parent is not a sibling");
+}
+
+/// With a selection, or off a heading, `A-j`/`A-k` move lines.
+#[test]
+fn a_selection_on_a_heading_still_moves_lines() {
+    let text = "# 甲\n甲文\n# 乙\n乙文\n";
+    let mut ed = typed(text);
+    press(&mut ed, "x");
+    ed.on_key(Key::Alt('j'));
+    assert_eq!(ed.current_buffer().text(), "甲文\n# 甲\n# 乙\n乙文\n", "helix x: the line");
+    let mut ed = typed_vim(text);
+    press(&mut ed, "V");
+    ed.on_key(Key::Alt('j'));
+    assert_eq!(ed.current_buffer().text(), "甲文\n# 甲\n# 乙\n乙文\n", "vim V: the line");
+    let mut ed = typed(text);
+    ed.goto_line(2);
+    ed.on_key(Key::Alt('j'));
+    assert_eq!(ed.current_buffer().text(), "# 甲\n# 乙\n甲文\n乙文\n", "off a heading: the line");
+}
+
+/// The last section without a line break takes one, so the two do not run
+/// together, and the file still ends without one.
+#[test]
+fn the_last_section_without_a_line_break_does_not_run_into_the_next() {
+    let text = "# 甲\n甲文\n# 乙\n乙文";
+    let mut ed = typed(text);
+    ed.on_key(Key::Alt('j'));
+    assert_eq!(ed.current_buffer().text(), "# 乙\n乙文\n# 甲\n甲文");
+    assert_eq!(ed.cursor_line(), 2);
+    ed.on_key(Key::Alt('k'));
+    assert_eq!(ed.current_buffer().text(), text);
+    assert_eq!(ed.cursor_line(), 0);
+}
+
+/// Setext headings, Typst's `=` and a plain text's chapters move the same.
+#[test]
+fn every_heading_the_outline_reads_moves_its_section() {
+    let mut ed = typed("甲\n===\n文\n\n乙\n===\n字\n\n");
+    ed.on_key(Key::Alt('j'));
+    assert_eq!(ed.current_buffer().text(), "乙\n===\n字\n\n甲\n===\n文\n\n", "setext");
+    let mut ed = typed("= 甲\n文\n= 乙\n字\n");
+    ed.execute(":syntax typst").unwrap();
+    ed.on_key(Key::Alt('j'));
+    assert_eq!(ed.current_buffer().text(), "= 乙\n字\n= 甲\n文\n", "typst");
+    let mut ed = typed("第一章\n一\n二\n三\n第二章\n四\n五\n六\n");
+    ed.current_buffer_mut().set_syntax_by_hand(crate::syntax::Syntax::Text);
+    ed.on_key(Key::Alt('j'));
+    assert_eq!(ed.current_buffer().text(), "第二章\n四\n五\n六\n第一章\n一\n二\n三\n", "plain text");
+}
+
+/// A closed fold goes with its section.
+#[test]
+fn a_moved_section_keeps_its_fold() {
+    let mut ed = typed_vim("# 甲\n一\n二\n# 乙\n三\n");
+    press(&mut ed, "zc");
+    assert!(ed.fold_head(0), "{}", ed.status());
+    ed.on_key(Key::Alt('j'));
+    assert_eq!(ed.current_buffer().text(), "# 乙\n三\n# 甲\n一\n二\n");
+    assert!(ed.fold_head(2), "the heading's fold moved with it");
+    assert!(!ed.fold_head(0));
+    // A manual fold inside the section too.
+    let mut ed = typed_vim("# 甲\n一\n二\n# 乙\n三\n");
+    press(&mut ed, "jzfj");
+    press(&mut ed, "gg");
+    ed.on_key(Key::Alt('j'));
+    assert_eq!(ed.current_buffer().text(), "# 乙\n三\n# 甲\n一\n二\n", "{}", ed.status());
+    assert!(ed.fold_head(3) && ed.line_is_folded(4), "the manual fold moved with it");
+}
+
+/// In the outline sidebar `A-j`/`A-k` move the highlighted row's section
+/// and keep the row highlighted; a row from an included chapter is
+/// refused.
+#[test]
+fn the_outline_sidebar_moves_the_highlighted_section() {
+    let dir = tmp().join(format!("yumete-secmove-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut ed = typed("# 甲\n甲文\n# 乙\n乙文\n## 丁\n丁文\n");
+    ed.open_sidebar_showing(&dir, crate::sidebar::View::Outline);
+    assert!(ed.sidebar_focused());
+    let names = |ed: &Editor| -> Vec<String> {
+        ed.panel(crate::sidebar::Side::Left).unwrap().rows().iter().map(|r| r.name.trim().to_string()).collect()
+    };
+    let chosen = |ed: &Editor| {
+        let panel = ed.panel(crate::sidebar::Side::Left).unwrap();
+        panel.rows()[panel.selected()].name.trim().to_string()
+    };
+    assert_eq!(names(&ed), ["甲", "乙", "丁"]);
+    ed.on_key(Key::Alt('j'));
+    assert_eq!(ed.current_buffer().text(), "# 乙\n乙文\n## 丁\n丁文\n# 甲\n甲文\n");
+    assert_eq!(names(&ed), ["乙", "丁", "甲"]);
+    assert_eq!(chosen(&ed), "甲", "the row stays highlighted");
+    assert!(ed.sidebar_focused());
+    ed.on_key(Key::Alt('k'));
+    assert_eq!(ed.current_buffer().text(), "# 甲\n甲文\n# 乙\n乙文\n## 丁\n丁文\n");
+    assert_eq!(chosen(&ed), "甲");
+
+    // An included chapter's row is another file's: refused.
+    std::fs::write(dir.join("ch01.typ"), "= 舊章\n文\n").unwrap();
+    std::fs::write(dir.join("book.typ"), "= 卷\n#include \"ch01.typ\"\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(dir.join("book.typ")).unwrap();
+    ed.open_sidebar_showing(&dir, crate::sidebar::View::Outline);
+    ed.on_key(Key::Char('j'));
+    assert_eq!(chosen(&ed), "舊章");
+    ed.on_key(Key::Alt('k'));
+    assert_eq!(ed.status(), say!("edit.section-included"));
+    assert_eq!(ed.current_buffer().text(), "= 卷\n#include \"ch01.typ\"\n");
+    assert_eq!(std::fs::read_to_string(dir.join("ch01.typ")).unwrap(), "= 舊章\n文\n");
+    std::fs::remove_dir_all(&dir).ok();
+}

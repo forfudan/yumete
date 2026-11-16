@@ -6389,6 +6389,7 @@ pub(crate) use prompt::word_cut;
 mod render;
 mod ruby;
 mod search;
+mod sections;
 mod session;
 mod shell;
 mod surround;

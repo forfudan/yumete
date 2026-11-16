@@ -1251,6 +1251,18 @@ zhs = "竖排时到上一纵(文件里的)"
 en = "on a vertical page, back to the previous line of the file"
 
 [[message]]
+# 命令說明：move_section_down（草稿）
+key = "action.move-section-down"
+zhs = "把这一节连同小节往下移过同级的一节"
+en = "move this section, its subsections with it, below the next one at its level"
+
+[[message]]
+# 命令說明：move_section_up（草稿）
+key = "action.move-section-up"
+zhs = "把这一节连同小节往上移过同级的一节"
+en = "move this section, its subsections with it, above the previous one at its level"
+
+[[message]]
 # 命令說明：move_selected_lines_down
 key = "action.move-selected-lines-down"
 zhs = "把选中的行往下移"

@@ -159,6 +159,21 @@ impl FoldSet {
         }
     }
 
+    /// Every fold moved through `to` (see [`crate::buffer::Buffer::put_folds_through`]):
+    /// both ends of a manual fold and each closed heading's anchor. A fold
+    /// whose two ends land the other way round spans the rearranged text,
+    /// and holds all of it.
+    pub fn remap(&mut self, to: &dyn Fn(usize) -> usize) {
+        for fold in &mut self.manual {
+            let (from, end) = (to(fold.from), to(fold.to));
+            fold.from = from.min(end);
+            fold.to = from.max(end);
+        }
+        for (anchor, _) in &mut self.closed_headings {
+            *anchor = to(*anchor);
+        }
+    }
+
     /// The manual folds as `restored` had them (an undo point), each open
     /// or closed as it is now when it is still here.
     ///

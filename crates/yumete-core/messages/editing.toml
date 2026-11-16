@@ -462,7 +462,6 @@ key = "edit.no-brackets-to-split"
 zhs = "光标不在可以拆开或合并的括号里"
 en = "the cursor is not in brackets with items to split or join"
 
-
 [[message]]
 # mi g / ma g，可是這個文件 git 管不着(helix 的 "Diff is not available")
 key = "edit.no-diff-here"
@@ -564,6 +563,31 @@ en = "nothing inserted: C-r wants a register name, or a quote for the unnamed on
 key = "edit.register-is-empty"
 zhs = "那个寄存器是空的"
 en = "that register is empty"
+
+[[message]]
+# A-k 在標題行上，可是它已經是上一級標題底下同級的第一節（草稿）
+key = "edit.section-first"
+zhs = "前面没有同级的一节了"
+en = "no section above at this level"
+
+[[message]]
+# 大綱側欄裏 A-j／A-k 移的那一行是被 #include 引入的章節，這裏不動別的文件（草稿）
+key = "edit.section-included"
+zhs = "这一节在被引入的文件里，这里移不动"
+en = "this section is in an included file and does not move from here"
+
+[[message]]
+# A-j 在標題行上，可是它已經是上一級標題底下同級的最後一節（草稿）
+key = "edit.section-last"
+zhs = "后面没有同级的一节了"
+en = "no section below at this level"
+
+[[message]]
+# 大綱側欄裏 A-j／A-k 移的那一行不是標題（例如代碼文件的符號）（草稿）
+key = "edit.section-not-a-heading"
+zhs = "只有标题能带着它的一节移动"
+en = "only a heading moves with its section"
+
 
 [[message]]
 # （草稿）多个选区时 :sort u：选区照样排序，但 u 只对整行去重

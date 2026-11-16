@@ -90,6 +90,8 @@ pub(super) const SIDEBAR_KEYS: &[(Key, PlaceCmd)] = &[
     (Key::Char('v'), PlaceCmd::ToggleLinksGraph),
     (Key::Char('u'), PlaceCmd::RestoreChange),
     (Key::Char('y'), PlaceCmd::YankOldText),
+    (Key::Alt('j'), PlaceCmd::MoveSectionDown),
+    (Key::Alt('k'), PlaceCmd::MoveSectionUp),
     (Key::Char('R'), PlaceCmd::RefreshSidebar),
     (Key::Char('w'), PlaceCmd::CycleSidebarWidth),
     (Key::Tab, PlaceCmd::NextSidebarView),

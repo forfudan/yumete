@@ -1125,6 +1125,17 @@ impl Editor {
         self.refresh_goal_column();
     }
 
+    /// `A-j`/`A-k`: a heading's section past its siblings when the cursor
+    /// is bare on the heading's line, the selected lines otherwise.
+    pub(super) fn move_lines_or_section(&mut self, count: usize, down: bool) {
+        if self.bare_on_a_heading() {
+            let line = self.cursor_line();
+            self.move_section(line, count, down);
+            return;
+        }
+        self.move_selected_lines(count, down);
+    }
+
     /// **The selected lines, moved `count` lines down or up**
     /// (`move_selected_lines_down`/`_up`, the flavour's `A-j`/`A-k`): in
     /// prose a line is a paragraph, so this moves paragraphs. The selection

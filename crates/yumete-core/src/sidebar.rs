@@ -503,6 +503,18 @@ impl Sidebar {
         }
     }
 
+    /// The folded headings of the document being written (an empty path),
+    /// each moved to the line `to` gives for it.
+    pub fn remap_folded_lines(&mut self, to: &dyn Fn(usize) -> usize) {
+        self.folded = std::mem::take(&mut self.folded)
+            .into_iter()
+            .map(|(path, line)| match path.as_os_str().is_empty() {
+                true => (path, to(line)),
+                false => (path, line),
+            })
+            .collect();
+    }
+
     /// The sidebar's header: the view's name, and for the tree the directory it
     /// is rooted at.
     /// **這一格的主語**，接在框畫的標題後面——文件樹接的是它扎根的那個目錄

@@ -1582,6 +1582,24 @@ impl Buffer {
         self.folds.entry(window).or_default()
     }
 
+    /// Every window's folds in this buffer, as a copy to hand back to
+    /// [`Self::put_folds_through`].
+    pub fn fold_map(&self) -> crate::fold::FoldMap {
+        self.folds.clone()
+    }
+
+    /// The folds `before` held before an edit, each moved through `to`,
+    /// which says where a character of the text before the edit is in the
+    /// text after it. For an edit that rearranges text rather than
+    /// replacing it, where the general shift can only squeeze what it
+    /// crossed.
+    pub fn put_folds_through(&mut self, mut before: crate::fold::FoldMap, to: &dyn Fn(usize) -> usize) {
+        for set in before.values_mut() {
+            set.remap(to);
+        }
+        self.folds = before;
+    }
+
     /// A new window shows what the window it was split from shows, folds
     /// and all, as vim's `:split` copies them.
     pub fn copy_folds(&mut self, from: u64, to: u64) {

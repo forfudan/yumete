@@ -6,6 +6,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Added
 
+- **`A-j`/`A-k` on a heading move its whole section** past the next or previous section at the same level, as org-mode's `M-down`/`M-up`: the heading, its text and its sub-sections, with a count to pass several, never out from under its parent, folds carried along, one `u` to undo. In the outline sidebar the same keys move the highlighted heading's section. With a selection they still move lines.
 - **Pictures chosen in `:files-yazi` go into the text instead of opening**: `![](img/pic.png)` in Markdown (`![](<my pic.png>)` when the path has a space), `#image("img/pic.png")` in Typst, the bare path elsewhere, relative to the current file's folder with `/` on every system. Several pictures go in one per line as one undo step; text files chosen with them open as before.
 - **`:file-rename` (`:mv`) renames or moves the file you are editing** and keeps it open: a relative name is read from the file's own folder, missing folders are made, an existing file is replaced only with `:mv!`; unsaved changes stay unsaved, and the recovery copy, local history and recent-files list follow the new name. Links to it elsewhere are not rewritten.
 - **`:lg` opens lazygit**, a short spelling of `:git-lazygit`.
