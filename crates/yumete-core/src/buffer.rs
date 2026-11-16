@@ -4163,6 +4163,32 @@ fn tmp() -> std::path::PathBuf {
         fs::remove_dir_all(&dir).ok();
     }
 
+    /// **Notepad's 「Unicode」 file and a long EUC-KR one** open in their own
+    /// encoding and an open-and-save gives back the same bytes, the UTF-16
+    /// mark included.
+    #[test]
+    fn utf16_and_euc_files_open_and_save_as_they_came() {
+        use crate::encoding::{EUC_KR, UTF_16LE};
+        let dir = tmp().join(format!("yumete-utf16-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let utf16 = crate::encoding::encode(UTF_16LE, "清晨的雾气还没有散去。\r\nfirst line\r\n");
+        let euc = EUC_KR
+            .encode("아침 안개가 아직 걷히지 않았는데 작은 마을의 돌길에는 벌써 사람들이 걷고 있었다.\n")
+            .0
+            .into_owned();
+        for (file, bytes, encoding) in [("notepad.txt", utf16, UTF_16LE), ("old-ko.txt", euc, EUC_KR)] {
+            let path = dir.join(file);
+            fs::write(&path, &bytes).unwrap();
+            let mut b = Buffer::open(&path).unwrap();
+            assert_eq!(b.encoding(), encoding, "{file}");
+            assert!(!b.text().starts_with('\u{feff}'), "the mark is not text");
+            b.save_forcing(true, true).unwrap();
+            assert_eq!(fs::read(&path).unwrap(), bytes, "{file}");
+            assert!(!b.changed_underneath(), "{file}: what was written reads back the same");
+        }
+        fs::remove_dir_all(&dir).ok();
+    }
+
     /// Two characters cannot be told apart: the writer is asked, and the
     /// error names the candidates. Told, it opens.
     #[test]

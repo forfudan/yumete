@@ -6,6 +6,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Added
 
+- **Windows "Unicode" files (UTF-16 with a byte-order mark), EUC-JP and EUC-KR open and save back in their own encoding**: they were refused, UTF-16 as a binary. `:encoding` and `:open ++enc=` take `utf-16le`, `utf-16be`, `euc-jp` and `euc-kr`. Every Big5-HKSCS code and EUC-JP's rarer JIS X 0212 characters are written back as they came.
 - **Tables recognise `|` as a delimiter**, tried after tab, comma and semicolon, so `sqlite3` output and other `|`-separated text opens as a table; a Markdown table is never read that way. **`Space t t` takes the mark under the cursor as the delimiter**, whatever it is (`^`, `:`, `、`, `|`…), when the lines around it agree about it.
 - **`:table-delimiter` in a Markdown or Typst document reads only the lines under the cursor** and remembers nothing, instead of turning the whole chapter into a grid; **`:table-delimiter auto` forgets the delimiter chosen for a file.**
 - **`A-j`/`A-k` on a heading move its whole section** past the next or previous section at the same level, as org-mode's `M-down`/`M-up`: the heading, its text and its sub-sections, with a count to pass several, never out from under its parent, folds carried along, one `u` to undo. In the outline sidebar the same keys move the highlighted heading's section. With a selection they still move lines.

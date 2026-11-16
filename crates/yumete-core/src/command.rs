@@ -2790,6 +2790,26 @@ const ENCODINGS: &[Word] = &[
         help: "cmd.encodings.shift-jis",
         needs: &[],
     },
+    Word {
+        name: "euc-jp",
+        help: "cmd.encodings.euc-jp",
+        needs: &[],
+    },
+    Word {
+        name: "euc-kr",
+        help: "cmd.encodings.euc-kr",
+        needs: &[],
+    },
+    Word {
+        name: "utf-16le",
+        help: "cmd.encodings.utf-16le",
+        needs: &[],
+    },
+    Word {
+        name: "utf-16be",
+        help: "cmd.encodings.utf-16be",
+        needs: &[],
+    },
 ];
 
 /// 字集過濾——`:yume-charset` 的四個詞，yume 自己的名字。

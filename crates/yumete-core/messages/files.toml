@@ -259,10 +259,10 @@ zhs = "编码：{0}"
 en = "encoding: {0}"
 
 [[message]]
-# `:open ++enc=X` 的 X 不是認得的編碼。{0} 那個詞
+# `:open ++enc=X` 的 X 不是認得的編碼。{0} 那個詞（草稿）
 key = "encoding.no-such"
-zhs = "未知编码 {0}，可用 utf-8、gb18030、big5、shift-jis"
-en = "unknown encoding {0}; use utf-8, gb18030, big5 or shift-jis"
+zhs = "未知编码 {0}，可用 utf-8、gb18030、big5、shift-jis、euc-jp、euc-kr、utf-16le、utf-16be"
+en = "unknown encoding {0}; use utf-8, gb18030, big5, shift-jis, euc-jp, euc-kr, utf-16le or utf-16be"
 
 [[message]]
 # 按指定的編碼讀，有字節解不開。{0} 是路徑，{1} 是編碼名
@@ -289,10 +289,10 @@ zhs = "已按 {0} 重新加载"
 en = "reloaded as {0}"
 
 [[message]]
-# 打開一個既不是 UTF-8、也不是 GB18030／Big5／Shift-JIS 的檔。{0} 是路徑
+# 打開一個哪種認得的編碼都不是的檔。{0} 是路徑（草稿）
 key = "encoding.refused"
-zhs = "{0} 不是 UTF-8，也不是 GB18030、Big5 或 Shift-JIS，打不开"
-en = "{0} is not UTF-8, nor GB18030, Big5 or Shift-JIS, so it cannot be opened"
+zhs = "{0} 不是 UTF-8，也不是 GB18030、Big5、Shift-JIS、EUC-JP、EUC-KR 或带 BOM 的 UTF-16，打不开"
+en = "{0} is not UTF-8, nor GB18030, Big5, Shift-JIS, EUC-JP, EUC-KR or UTF-16 with a BOM, so it cannot be opened"
 
 [[message]]
 # `:encoding X` 之後：下次存盤用 X。{0} 編碼名

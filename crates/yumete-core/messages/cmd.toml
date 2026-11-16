@@ -1469,6 +1469,18 @@ zhs = "Big5"
 en = "Big5"
 
 [[message]]
+# `:encoding` 的詞 euc-jp（草稿）
+key = "cmd.encodings.euc-jp"
+zhs = "EUC-JP"
+en = "EUC-JP"
+
+[[message]]
+# `:encoding` 的詞 euc-kr（草稿）
+key = "cmd.encodings.euc-kr"
+zhs = "EUC-KR"
+en = "EUC-KR"
+
+[[message]]
 # `:encoding` 的詞 gb18030
 key = "cmd.encodings.gb18030"
 zhs = "GB18030(兼容 GBK、GB2312)"
@@ -1479,6 +1491,18 @@ en = "GB18030 (also reads GBK and GB2312)"
 key = "cmd.encodings.shift-jis"
 zhs = "Shift-JIS"
 en = "Shift-JIS"
+
+[[message]]
+# `:encoding` 的詞 utf-16be（草稿）
+key = "cmd.encodings.utf-16be"
+zhs = "UTF-16BE(带 BOM)"
+en = "UTF-16BE (with a BOM)"
+
+[[message]]
+# `:encoding` 的詞 utf-16le（草稿）
+key = "cmd.encodings.utf-16le"
+zhs = "UTF-16LE(带 BOM，Windows 记事本的「Unicode」)"
+en = "UTF-16LE (with a BOM: Windows Notepad's 'Unicode')"
 
 [[message]]
 # `:encoding` 的詞 utf-8
