@@ -6363,6 +6363,7 @@ mod labels;
 mod links;
 mod matching;
 mod maths;
+pub use maths::MathsInPlace;
 mod memo;
 mod modes;
 mod multi;

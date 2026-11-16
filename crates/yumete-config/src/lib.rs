@@ -134,6 +134,13 @@ pub struct EditorConfig {
     /// show a picture in its text (Ghostty, kitty), through the `typst`
     /// command. On; elsewhere it draws nothing either way.
     pub maths_preview: bool,
+    /// **A display formula drawn in place**: under `:render full`, a
+    /// display-maths block whose delimiters stand on lines of their own is
+    /// shown as its typeset picture, in the rows its source takes, while
+    /// the cursor is not in it. On; a terminal that cannot show a picture
+    /// shows the source either way. The editing region only: the preview
+    /// and the exports never read it.
+    pub maths_in_place: bool,
     /// **How big the page window draws the page**: `"width"`
     /// (the default), the page as wide as the window and scrolled to the
     /// cursor, or `"page"`, the whole page in the window.
@@ -547,6 +554,7 @@ impl Default for EditorConfig {
             end_of_line_diagnostics: "hint".to_string(),
             modeline: true,
             maths_preview: true,
+            maths_in_place: true,
             preview_fit: "width".to_string(),
             preview_theme: false,
             preview_vertical: true,
@@ -4859,6 +4867,7 @@ struct RawEditor {
     end_of_line_diagnostics: Option<String>,
     modeline: Option<bool>,
     maths_preview: Option<bool>,
+    maths_in_place: Option<bool>,
     preview_fit: Option<String>,
     preview_theme: Option<bool>,
     preview_vertical: Option<bool>,
@@ -5097,6 +5106,9 @@ impl RawConfig {
         }
         if other.editor.maths_preview.is_some() {
             self.editor.maths_preview = other.editor.maths_preview;
+        }
+        if other.editor.maths_in_place.is_some() {
+            self.editor.maths_in_place = other.editor.maths_in_place;
         }
         if other.editor.preview_fit.is_some() {
             self.editor.preview_fit = other.editor.preview_fit.clone();
@@ -5589,6 +5601,9 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.maths_preview {
             config.editor.maths_preview = on;
+        }
+        if let Some(on) = self.editor.maths_in_place {
+            config.editor.maths_in_place = on;
         }
         if let Some(fit) = self.editor.preview_fit {
             config.editor.preview_fit = fit;

@@ -521,6 +521,18 @@ zhs = "何时显示夹行(注音、着重号、平仄等)"
 en = "when to show the lane for readings, emphasis and 平仄"
 
 [[message]]
+# 设置：公式原位显示（草稿）
+key = "settings.editor.maths-in-place"
+zhs = "公式原位显示"
+en = "maths in place"
+
+[[message]]
+# 设置：公式原位显示——一句话（草稿）
+key = "settings.editor.maths-in-place.hint"
+zhs = ":render full 时，独占几行的行间公式在原处显示排版结果，光标进入时显示源码；需要 Ghostty 或 kitty"
+en = "under :render full, a display formula on lines of its own shows typeset where it stands, and its source while the cursor is in it; needs Ghostty or kitty"
+
+[[message]]
 # 設置：公式預覽
 key = "settings.editor.maths-preview"
 zhs = "公式预览"

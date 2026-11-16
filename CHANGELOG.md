@@ -6,6 +6,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Added
 
+- **Display maths, typeset where it stands**: under `:render full`, in Ghostty and kitty, a `$$` … `$$` block (Typst `$` … `$`) on lines of its own is drawn as typeset maths in the rows its source takes, and shows its source again when the cursor or a selection enters it. `[editor] maths_in_place = false` turns it off; other terminals, the preview and exports are unchanged.
 - **`]q` / `[q` go to the next / previous result of the last listing from any file**, Neovim's keys, under both keymaps: the rows of `:check-names`, `:check-punct`, `:diagnostics-all`, `:git-diff` and the other listings, one press per fix, with a count to skip several; `]Q` / `[Q` go to the last and the first. At the end they stop and say "no more results" instead of wrapping, and `C-o` comes back.
 - **Windows "Unicode" files (UTF-16 with a byte-order mark), EUC-JP and EUC-KR open and save back in their own encoding**: they were refused, UTF-16 as a binary. `:encoding` and `:open ++enc=` take `utf-16le`, `utf-16be`, `euc-jp` and `euc-kr`. Every Big5-HKSCS code and EUC-JP's rarer JIS X 0212 characters are written back as they came.
 - **Tables recognise `|` as a delimiter**, tried after tab, comma and semicolon, so `sqlite3` output and other `|`-separated text opens as a table; a Markdown table is never read that way. **`Space t t` takes the mark under the cursor as the delimiter**, whatever it is (`^`, `:`, `、`, `|`…), when the lines around it agree about it.

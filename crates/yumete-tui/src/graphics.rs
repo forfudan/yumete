@@ -1,6 +1,7 @@
 //! **Pictures in the text, through the kitty graphics protocol**.
 //!
-//! Two uses — the formula float ([`crate::maths`]) and the preview ([`crate::page_window`], two
+//! Three uses — the formula float and the display formulas drawn in place on the page
+//! ([`crate::maths`], a row of ids each), and the preview ([`crate::page_window`], two
 //! slots a preview) — and one route, the protocol's **Unicode placeholders**: the PNG goes to the
 //! terminal once (`a=T,U=1`, a *virtual placement*), and after that the picture is ordinary text.
 //! Each of its cells holds U+10EEEE with two combining marks that say which row and column of the
@@ -334,55 +335,93 @@ pub fn delete(id: u32, tmux: bool) -> Vec<u8> {
     wrapped(&format!("\x1b_Ga=d,d=I,i={id},q=2\x1b\\"), tmux).into_bytes()
 }
 
-/// How many pictures stay in the terminal before the oldest is freed. Each is
-/// a formula, a few kilobytes; the cap keeps a long session from leaving the
-/// terminal a library of every formula ever stood on.
+/// How many pictures the float keeps in the terminal before the oldest is
+/// freed. Each is a formula, a few kilobytes; the cap keeps a long session
+/// from leaving the terminal a library of every formula ever stood on.
 const KEPT: usize = 16;
 
-/// **The pictures the terminal holds**, the most recently shown last, and the
+/// How many pictures the page keeps for the formulas it draws in place
+/// ([`crate::maths::in_place`]): a screenful of display maths and the ones
+/// just scrolled past, so scrolling back does not upload them again. Apart
+/// from the float's, so standing in one formula does not push the page's
+/// out, nor a page of formulas the float's.
+const KEPT_IN_PLACE: usize = 64;
+
+/// How many ids each row of pictures has: half of the low eight bits each,
+/// the float's from 1 and the page's from 128 (0 is the protocol's).
+const IDS_A_ROW: u32 = 127;
+
+/// **One row of pictures the terminal holds**, the most recently shown last:
+/// what each shows (its key and cells) and the id it is under.
+struct Row {
+    held: Vec<(u64, u32, u16, u16)>,
+    next: u32,
+    /// The lowest of this row's ids, in the low eight bits.
+    base: u32,
+    kept: usize,
+}
+
+/// **The pictures the terminal holds**, the float's and the page's, and the
 /// bytes still to be written before the next frame's cells.
 struct Shelf {
-    held: Vec<(u64, u32, u16, u16)>,
-    next: u8,
+    floats: Row,
+    in_place: Row,
     pending: Vec<u8>,
 }
 
-static SHELF: Mutex<Shelf> = Mutex::new(Shelf { held: Vec::new(), next: 0, pending: Vec::new() });
+static SHELF: Mutex<Shelf> = Mutex::new(Shelf {
+    floats: Row { held: Vec::new(), next: 0, base: 1, kept: KEPT },
+    in_place: Row { held: Vec::new(), next: 0, base: 1 + IDS_A_ROW, kept: KEPT_IN_PLACE },
+    pending: Vec::new(),
+});
 
-/// The id this process gives its `n`th picture slot: the process id in the
-/// high bits, so two programs in one terminal are unlikely to share one, and
-/// never 0, which the protocol reserves.
-fn id_for(n: u8) -> u32 {
-    ((std::process::id() & 0x7FFF) << 8) | (n as u32 % 255 + 1)
+/// The id this process gives the `n`th slot of the row starting at `base`:
+/// the process id in the high bits, so two programs in one terminal are
+/// unlikely to share one, and never 0, which the protocol reserves.
+fn id_for(base: u32, n: u32) -> u32 {
+    ((std::process::id() & 0x7FFF) << 8) | (base + n % IDS_A_ROW)
 }
 
-/// **The id picture `key` is shown under**, uploading it first if the
-/// terminal does not have it at this size. The upload waits in the shelf for
-/// [`take_pending`].
-pub fn show(key: u64, png: &[u8], columns: u16, rows: u16) -> u32 {
+/// **The id picture `key` is shown under in `row`**, uploading it first if the
+/// terminal does not have it at this size, and freeing the row's oldest to
+/// make room.
+fn show_in(row: &mut Row, pending: &mut Vec<u8>, key: u64, png: &[u8], columns: u16, rows: u16) -> u32 {
     let tmux = support() == Support::KittyInTmux;
-    let mut shelf = SHELF.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(at) = shelf.held.iter().position(|&(k, _, c, r)| k == key && c == columns && r == rows) {
-        let entry = shelf.held.remove(at);
-        shelf.held.push(entry);
+    if let Some(at) = row.held.iter().position(|&(k, _, c, r)| k == key && c == columns && r == rows) {
+        let entry = row.held.remove(at);
+        row.held.push(entry);
         return entry.1;
     }
-    while shelf.held.len() >= KEPT {
-        let (_, old, _, _) = shelf.held.remove(0);
-        let bytes = delete(old, tmux);
-        shelf.pending.extend(bytes);
+    while row.held.len() >= row.kept {
+        let (_, old, _, _) = row.held.remove(0);
+        pending.extend(delete(old, tmux));
     }
     let id = loop {
-        let id = id_for(shelf.next);
-        shelf.next = shelf.next.wrapping_add(1);
-        if !shelf.held.iter().any(|&(_, held, _, _)| held == id) {
+        let id = id_for(row.base, row.next);
+        row.next = (row.next + 1) % IDS_A_ROW;
+        if !row.held.iter().any(|&(_, held, _, _)| held == id) {
             break id;
         }
     };
-    let bytes = upload(id, png, columns, rows, tmux);
-    shelf.pending.extend(bytes);
-    shelf.held.push((key, id, columns, rows));
+    pending.extend(upload(id, png, columns, rows, tmux));
+    row.held.push((key, id, columns, rows));
     id
+}
+
+/// **The id the float's picture `key` is shown under**, uploading it first if
+/// the terminal does not have it at this size. The upload waits in the shelf
+/// for [`take_pending`].
+pub fn show(key: u64, png: &[u8], columns: u16, rows: u16) -> u32 {
+    let mut shelf = SHELF.lock().unwrap_or_else(|e| e.into_inner());
+    let Shelf { floats, pending, .. } = &mut *shelf;
+    show_in(floats, pending, key, png, columns, rows)
+}
+
+/// [`show`], for a formula the page draws in place: kept in a row of its own.
+pub fn show_in_place(key: u64, png: &[u8], columns: u16, rows: u16) -> u32 {
+    let mut shelf = SHELF.lock().unwrap_or_else(|e| e.into_inner());
+    let Shelf { in_place, pending, .. } = &mut *shelf;
+    show_in(in_place, pending, key, png, columns, rows)
 }
 
 /// The uploads and deletions owed, taken — written by the backend before the
@@ -398,7 +437,9 @@ pub fn forget() {
     for slots in PAGES.lock().unwrap_or_else(|e| e.into_inner()).iter_mut() {
         slots.held = [None, None];
     }
-    SHELF.lock().unwrap_or_else(|e| e.into_inner()).held.clear();
+    let mut shelf = SHELF.lock().unwrap_or_else(|e| e.into_inner());
+    shelf.floats.held.clear();
+    shelf.in_place.held.clear();
 }
 
 /// The bytes that free every picture this process left in the terminal, for
@@ -408,7 +449,8 @@ pub fn release_all() -> Vec<u8> {
     drop_pages();
     let mut shelf = SHELF.lock().unwrap_or_else(|e| e.into_inner());
     let mut out = std::mem::take(&mut shelf.pending);
-    for (_, id, _, _) in std::mem::take(&mut shelf.held) {
+    let held = [std::mem::take(&mut shelf.floats.held), std::mem::take(&mut shelf.in_place.held)];
+    for (_, id, _, _) in held.into_iter().flatten() {
         out.extend(delete(id, tmux));
     }
     out
@@ -625,6 +667,25 @@ mod tests {
         // Ghostty's, the client is not.
         let begun = [("TMUX", "/tmp/tmux-501/default,1,0"), ("GHOSTTY_RESOURCES_DIR", "/x")];
         assert_eq!(support_from(env(&begun), said("xterm-256color iTerm2 3.5", true)), Support::None);
+    }
+
+    /// **The page's formulas and the float's are kept apart**: never one id
+    /// between them, and a float shown over and over frees none of the
+    /// page's — which would be uploaded again on the next frame.
+    #[test]
+    fn the_page_and_the_float_keep_their_pictures_apart() {
+        let mut floats = Row { held: Vec::new(), next: 0, base: 1, kept: 2 };
+        let mut page = Row { held: Vec::new(), next: 0, base: 1 + IDS_A_ROW, kept: 3 };
+        let mut pending = Vec::new();
+        let formula = show_in(&mut page, &mut pending, 1, b"p", 4, 2);
+        let ids: Vec<u32> = (10..300).map(|key| show_in(&mut floats, &mut pending, key, b"f", 1, 1)).collect();
+        assert!(!ids.contains(&formula));
+        assert!(ids.iter().all(|id| (1..=IDS_A_ROW).contains(&(id & 0xFF))), "the float's half");
+        assert!((IDS_A_ROW + 1..=2 * IDS_A_ROW).contains(&(formula & 0xFF)), "the page's half");
+        assert_eq!(floats.held.len(), 2);
+        pending.clear();
+        assert_eq!(show_in(&mut page, &mut pending, 1, b"p", 4, 2), formula);
+        assert!(pending.is_empty(), "the page's picture is still in the terminal");
     }
 
     #[test]

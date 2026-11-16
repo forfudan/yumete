@@ -740,6 +740,15 @@ pub const SETTINGS: &[Setting] = &[
     },
     Setting {
         table: "editor",
+        key: "maths_in_place",
+        group: Group::Marks,
+        kind: Kind::Tick,
+        label: "settings.editor.maths-in-place",
+        hint: "settings.editor.maths-in-place.hint",
+        factory: "true",
+    },
+    Setting {
+        table: "editor",
         key: "heading_folds",
         group: Group::Marks,
         kind: Kind::Tick,

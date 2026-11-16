@@ -13616,6 +13616,12 @@ fn draw_horizontal(
         true => on_screen.iter().filter(|(_, row)| row.starts_line()).map(|(y, row)| (*y, row.line)).collect(),
         false => Vec::new(),
     };
+    // The display formulas drawn as their pictures, read before the rows are
+    // spent; laid over the page once it is drawn.
+    let maths_spots = match crate::maths::in_place_wanted(config) {
+        true => maths_spots(editor, rope, measure, &on_screen),
+        false => Vec::new(),
+    };
     for (_, row) in on_screen {
         // Which palette this row is drawn off. Everything below asks `ink`, so
         // the whole of 焦點模式 is this one decision. The gutter goes with the
@@ -14505,6 +14511,20 @@ fn draw_horizontal(
         Paragraph::new(with_room_for_wide_glyphs(lines)).style(ink.page()),
         text_area,
     );
+
+    // **A display formula drawn in place** covers its own rows, the text's
+    // columns only: the gutter keeps the block's line numbers. Centred in the
+    // measure, the way a display formula is set on paper.
+    if !maths_spots.is_empty() {
+        let text = (text_area.width as usize).saturating_sub(gutter);
+        let area = Rect {
+            x: text_area.x + gutter as u16,
+            y: text_area.y,
+            width: text.min(width) as u16,
+            height: text_area.height,
+        };
+        crate::maths::in_place(frame.buffer_mut(), ink, area, &maths_spots);
+    }
 
     // **空手打開的那一屏**（照 vim 的開場）。
     //
@@ -15551,6 +15571,54 @@ fn meter_in_row(
         .meter_on_line(row.line)
         .into_iter()
         .filter(|m| m.column >= start && m.column < end)
+        .collect()
+}
+
+/// **Where each display formula drawn in place is on this page**: the
+/// blocks [`Editor::maths_in_place`] names among the lines `on_screen` shows,
+/// each with the screen row its first row is on and how many screen rows it
+/// takes in all — counted the way `on_screen` counts them, a reading's row
+/// and all, so a block the page cuts at its top keeps the picture's size and
+/// shows its lower part.
+fn maths_spots(
+    editor: &Editor,
+    rope: &yumete_core::Rope,
+    measure: wrap::Measure,
+    on_screen: &[(usize, wrap::Row)],
+) -> Vec<crate::maths::Spot> {
+    let (Some((_, top)), Some((_, bottom))) = (on_screen.first(), on_screen.last()) else {
+        return Vec::new();
+    };
+    editor
+        .maths_in_place(top.line, bottom.line)
+        .into_iter()
+        .filter_map(|block| {
+            let most: usize = (block.first..=block.last).map(|l| wrap::row_count_in_line(rope, l, measure)).sum();
+            let head = WrapAnchor { line: block.first, index_in_line: 0 };
+            let mut below_first = Vec::new();
+            let mut y = 0usize;
+            for (n, row) in wrap::rows_from(rope, head, measure, most).into_iter().enumerate() {
+                if row.line > block.last {
+                    break;
+                }
+                if n > 0 {
+                    y += usize::from(row_has_reading(editor, rope, &row));
+                }
+                below_first.push(((row.line, row.index_in_line), y));
+                y += 1;
+            }
+            let (at, below) = on_screen.iter().find_map(|(at, row)| {
+                below_first
+                    .iter()
+                    .find(|(here, _)| *here == (row.line, row.index_in_line))
+                    .map(|(_, below)| (*at, *below))
+            })?;
+            Some(crate::maths::Spot {
+                maths: block.maths,
+                top: at as i32 - below as i32,
+                rows: y.min(u16::MAX as usize) as u16,
+            })
+        })
         .collect()
 }
 

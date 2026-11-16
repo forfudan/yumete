@@ -6,6 +6,11 @@
 //! changes: the coloured source stays what the page shows. `[editor]
 //! maths_preview = false` turns it off.
 //!
+//! **Under `:render full` a display formula on lines of its own is drawn in
+//! place** ([`in_place`]): its picture in the rows its source takes, while
+//! the cursor is elsewhere. `[editor] maths_in_place = false` turns it off.
+//! The editing region only — the preview and the exports never ask.
+//!
 //! **Typst's maths is drawn by the `typst` command**, the same one
 //! `--export pdf` runs ([`yumete_core::export::typst_command`]), off the
 //! drawing thread: a formula takes about 5 ms (20 ms with 漢字 in it), and
@@ -87,9 +92,14 @@ struct Studio {
     made: HashMap<Key, Answer>,
     /// The order they were made in, oldest first, for dropping.
     order: VecDeque<Key>,
-    /// The one picture wanted next. A newer wish replaces an older one: the
-    /// cursor has moved on, and a formula it left need not be made.
+    /// The float's picture, wanted before any other. A newer wish replaces
+    /// an older one: the cursor has moved on, and a formula it left need not
+    /// be made.
     wanted: Option<Key>,
+    /// The pictures the page draws in place and does not have yet, top of
+    /// the page first ([`ask_in_place`]). Each frame says the whole of it
+    /// again, so a formula scrolled off before its turn is not made.
+    queue: VecDeque<Key>,
     /// Whether the worker has been started.
     started: bool,
     /// No `typst` on this machine: every answer is [`Answer::NoTypst`].
@@ -148,6 +158,7 @@ fn studio() -> &'static (Mutex<Studio>, Condvar) {
                 made: HashMap::new(),
                 order: VecDeque::new(),
                 wanted: None,
+                queue: VecDeque::new(),
                 started: false,
                 no_typst: false,
                 slow: None,
@@ -210,12 +221,58 @@ pub fn ask(key: &Key) -> Answer {
         None => {}
     }
     studio.wanted = Some(key.clone());
+    start(&mut studio);
+    wake.notify_one();
+    Answer::Making
+}
+
+/// Start the worker, once.
+fn start(studio: &mut Studio) {
     if !studio.started {
         studio.started = true;
         let _ = std::thread::Builder::new().name("maths".into()).spawn(work);
     }
-    wake.notify_one();
-    Answer::Making
+}
+
+/// **The pictures for the formulas the page draws in place**, an answer a
+/// key: [`ask`]'s answers, but a Typst formula not made yet joins a queue the
+/// worker takes after the float's, instead of taking the float's place. The
+/// queue becomes exactly the formulas asked for here that are still to make.
+///
+/// A formula whose last run took too long is answered so for good here: the
+/// page shows its source, and only the float tries it again.
+pub fn ask_in_place(keys: &[Key]) -> Vec<Answer> {
+    let mut answers = Vec::with_capacity(keys.len());
+    let mut queue = VecDeque::new();
+    let (lock, wake) = studio();
+    let mut studio = lock.lock().unwrap_or_else(|e| e.into_inner());
+    for key in keys {
+        let answer = match key.maths.latex {
+            true => match crate::tex::picture(&tex_key(key)) {
+                Ok(picture) => Answer::Ready(picture),
+                Err(why) => Answer::Failed(why),
+            },
+            false if studio.no_typst => Answer::NoTypst,
+            false => match studio.made.get(key) {
+                Some(answer) => answer.clone(),
+                None if studio.slow.as_ref() == Some(key) => Answer::Failed(too_slow()),
+                None => {
+                    if !queue.contains(key) {
+                        queue.push_back(key.clone());
+                    }
+                    Answer::Making
+                }
+            },
+        };
+        answers.push(answer);
+    }
+    let waiting = !queue.is_empty();
+    studio.queue = queue;
+    if waiting {
+        start(&mut studio);
+        wake.notify_one();
+    }
+    answers
 }
 
 /// **Put a picture in by hand** — for a test, which has no typst to wait for.
@@ -226,7 +283,8 @@ pub fn preload(key: Key, png: Vec<u8>) {
     keep(&mut studio, key, Answer::Ready(Arc::new(Picture { png, width, height })));
 }
 
-/// The worker: one picture at a time, the most recently wanted.
+/// The worker: one picture at a time — the float's most recent wish first,
+/// then the page's queue from the top.
 fn work() {
     let (lock, wake) = studio();
     let place = Place::set_up();
@@ -234,7 +292,11 @@ fn work() {
         let key = {
             let mut studio = lock.lock().unwrap_or_else(|e| e.into_inner());
             loop {
-                match studio.wanted.take() {
+                let next = match studio.wanted.take() {
+                    Some(key) => Some(key),
+                    None => studio.queue.pop_front(),
+                };
+                match next {
                     Some(key) if !studio.made.contains_key(&key) => break key,
                     Some(_) => {}
                     None => studio = wake.wait(studio).unwrap_or_else(|e| e.into_inner()),
@@ -573,6 +635,92 @@ fn said(
     })
 }
 
+/// **A display formula the page draws in place**: the formula, and the
+/// screen rows its source takes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Spot {
+    pub maths: Maths,
+    /// The screen row the block's first row is on, counted from the top of
+    /// the page: below zero when the page has scrolled past its top.
+    pub top: i32,
+    /// How many screen rows the block takes in all, on the page or not.
+    pub rows: u16,
+}
+
+/// Whether the page draws display formulas in place at all: the setting is
+/// on and this terminal can show a picture. Asked before the page works out
+/// where its formulas are, so a frame that draws none pays nothing.
+pub fn in_place_wanted(config: &yumete_config::Config) -> bool {
+    config.editor.maths_in_place && crate::graphics::support() != crate::graphics::Support::None
+}
+
+/// **Draw each of `spots` as its typeset picture, in the rows its source
+/// takes** on the page `area` (the text's columns and the page's rows).
+///
+/// The picture is no taller than the block and no wider than the text: one
+/// that is bigger is shrunk as a whole, one that is smaller sits in the
+/// middle of the block's rows. The rows are the block's own, so nothing
+/// below moves when the cursor walks in and the source comes back. A
+/// formula with no picture yet — Typst's, being made — or none at all — a
+/// broken one, no `typst` — keeps its source, and the cells the source was
+/// drawn in are left as they are. The page's other rows are not touched.
+///
+/// `palette` is the page's: the picture in its ink, on its ground.
+pub fn in_place(
+    buf: &mut ratatui::buffer::Buffer,
+    palette: crate::theme::Palette,
+    area: ratatui::layout::Rect,
+    spots: &[Spot],
+) {
+    if spots.is_empty() || area.width == 0 || area.height == 0 {
+        return;
+    }
+    let ground = palette.page();
+    let ink = match palette.text() {
+        ratatui::style::Color::Rgb(r, g, b) => (r, g, b),
+        _ => (0x80, 0x80, 0x80),
+    };
+    let cell = crate::graphics::cell_pixels();
+    let keys: Vec<Key> = spots
+        .iter()
+        .map(|spot| Key { maths: spot.maths.clone(), ink, cell_height: cell.1 })
+        .collect();
+    let answers = ask_in_place(&keys);
+    for ((spot, key), answer) in spots.iter().zip(&keys).zip(answers) {
+        let Answer::Ready(picture) = answer else { continue };
+        let (columns, rows) = cells_for((picture.width, picture.height), cell, (area.width, spot.rows));
+        let block_top = area.y as i32 + spot.top;
+        let block_end = block_top + spot.rows as i32;
+        let seen_top = block_top.max(area.y as i32);
+        let seen_end = block_end.min(area.bottom() as i32);
+        if seen_top >= seen_end {
+            continue;
+        }
+        for y in seen_top..seen_end {
+            for x in area.x..area.right() {
+                if let Some(cell) = buf.cell_mut((x, y as u16)) {
+                    cell.reset();
+                    cell.set_style(ground);
+                }
+            }
+        }
+        let picture_top = block_top + (spot.rows.saturating_sub(rows) / 2) as i32;
+        let from = picture_top.max(seen_top);
+        let to = (picture_top + rows as i32).min(seen_end);
+        if from >= to {
+            continue;
+        }
+        let id = crate::graphics::show_in_place(key.hash(), &picture.png, columns, rows);
+        let spot_rect = ratatui::layout::Rect {
+            x: area.x + area.width.saturating_sub(columns) / 2,
+            y: from as u16,
+            width: columns,
+            height: (to - from) as u16,
+        };
+        crate::graphics::put_picture_from(buf, spot_rect, id, (from - picture_top) as u16, 0);
+    }
+}
+
 /// **How many cells a picture takes**, at most `room`: its pixels over a
 /// cell's, rounded up, then shrunk as a whole if that is more than the room —
 /// the terminal fits the picture into the cells it is given and keeps its
@@ -735,6 +883,64 @@ mod tests {
             other => panic!("{other:?}"),
         };
         assert!(tall("1/2") > tall("x") + 4, "1/2 {} vs x {}", tall("1/2"), tall("x"));
+    }
+
+    /// A page of `x`, 32 × 8, and what [`in_place`] leaves on it for one
+    /// formula whose block starts on screen row `top` and takes `rows`.
+    fn page_with(source: &str, top: i32, rows: u16) -> ratatui::buffer::Buffer {
+        use ratatui::layout::Rect;
+        let mut buf = ratatui::buffer::Buffer::filled(Rect::new(0, 0, 32, 8), ratatui::buffer::Cell::new("x"));
+        let spot = Spot { maths: Maths { source: source.into(), latex: true, display: true }, top, rows };
+        // The text's columns: two of gutter on the left are not the page's.
+        let palette = crate::theme::Palette::in_mood(&yumete_config::Config::default(), true);
+        in_place(&mut buf, palette, Rect::new(2, 0, 30, 8), &[spot]);
+        buf
+    }
+
+    /// The row of the picture a screen row shows, if it shows one.
+    fn picture_row(buf: &ratatui::buffer::Buffer, y: u16) -> Option<u16> {
+        let first = (0..32).find_map(|x| {
+            let s = buf[(x, y)].symbol();
+            s.starts_with(crate::graphics::PLACEHOLDER).then(|| s.to_string())
+        })?;
+        (0..crate::graphics::MOST_CELLS).find(|&r| crate::graphics::placeholder(r, 0).chars().nth(1) == first.chars().nth(1))
+    }
+
+    /// **The picture takes the block's rows and no others**: the rows above
+    /// and below and the gutter keep what they had, the block's rows are
+    /// the picture on the page's ground, and a block the page has scrolled
+    /// into shows the picture's lower part at the same size.
+    #[test]
+    fn a_formula_in_place_takes_its_blocks_rows() {
+        let formula = r"\frac{a}{b} + \sum_{k=1}^{n} k";
+        let buf = page_with(formula, 1, 4);
+        let shown: Vec<Option<u16>> = (0..8).map(|y| picture_row(&buf, y)).collect();
+        for y in [0, 5, 6, 7] {
+            assert!((0..32).all(|x| buf[(x, y)].symbol() == "x"), "row {y} is not the block's");
+        }
+        for y in 1..5 {
+            assert_eq!(buf[(0, y)].symbol(), "x", "the gutter keeps row {y}");
+            assert!((2..32).all(|x| buf[(x, y)].symbol() != "x"), "the source is gone from row {y}");
+        }
+        let rows: Vec<u16> = shown.iter().flatten().copied().collect();
+        assert!(!rows.is_empty() && rows.len() <= 4, "{shown:?}");
+        assert_eq!(rows, (0..rows.len() as u16).collect::<Vec<_>>(), "the picture's rows in order");
+        // Cut at the top by one row: the same picture a row higher, its first
+        // row off the page.
+        for top in [0, -1, -2] {
+            let cut = page_with(formula, top, 4);
+            let up = (1 - top) as usize;
+            for y in 0..8 - up {
+                assert_eq!(picture_row(&cut, y as u16), shown[y + up], "top {top}, row {y}");
+            }
+        }
+    }
+
+    /// **A broken formula keeps its source**: nothing is drawn over it.
+    #[test]
+    fn a_broken_formula_in_place_keeps_its_source() {
+        let buf = page_with(r"\frac{a}{", 1, 3);
+        assert!((0..8).all(|y| (0..32).all(|x| buf[(x, y)].symbol() == "x")));
     }
 
     /// Cells: rounded up, and shrunk as a whole to the room.
