@@ -793,6 +793,9 @@ fn main() -> ExitCode {
     // A shot is a picture of the editor, not a session: it reads nothing of
     // where you have been, so the same keys draw the same frame anywhere.
     editor.set_remembering(config.editor.remember && !private && shot.is_none());
+    // Nor what a crash left on this machine: a recovery copy beside the file
+    // would put its question on one machine's frame and not another's.
+    editor.set_reading_drafts(shot.is_none());
     let session_key = config_root.clone();
     if let Some(here) = session_key {
         editor.keep_session_in(yumete_config::data_dir().join("sessions"), &here);
@@ -1165,9 +1168,10 @@ fn main() -> ExitCode {
     }
     // **恢復那一問要在按鍵之前擺出來**，因為它就是開檔那一刻的事。
     //
-    // Warning: **而且要在 `--shot` 那一支之前**，不然 `--shot` 先把圖印出來走人，
-    // 離屏**永遠拍不到**開檔時的任何通知，救命稿那一問、「接着上次」那一句都在
-    // 圖外。§5.55：拍照的工具看不見人看得見的東西，比 bug 還糟。
+    // Warning: **而且要在 `--shot` 那一支之前**：開檔時的通知若排在出圖之後，
+    // 離屏就永遠拍不到它們。§5.55：拍照的工具看不見人看得見的東西，比 bug 還糟。
+    // `--shot` 自己不讀會話也不讀草稿（`set_remembering`、`set_reading_drafts`），
+    // 所以這兩句在它的圖上不出現——同一串鍵在哪台機器上都畫同一幀。
     if restored > 0 {
         editor.set_status(yumete_core::say!("cli.picked-up-where-you-left-off", restored));
     }
@@ -2934,6 +2938,8 @@ SEARCHING FROM THE SHELL:
                      it — to standard output and exit. 100x30 by default.
                      `:shot` inside the editor draws the same picture into a
                      file; this is it without opening the editor at all.
+                     Nothing an earlier run left is read (history, session,
+                     recovery copies), so the same keys draw the same frame.
         --keys=KEYS  Press these before the picture is taken, so a panel that
                      opens on the third keystroke can be looked at:
                      `\\e` Esc, `\\t` Tab, `\\n` Enter, `\\b` Backspace,

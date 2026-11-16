@@ -1968,13 +1968,7 @@ pub mod typst {
             }
             // **A bare `https://…` is a link**, as Typst reads it in writing, not
             // a `//` comment running to the end of the line. It runs to a space, less the stop or comma after it.
-            if (at == 0 || !chars[at - 1].is_alphanumeric())
-                && ["https://", "http://"].iter().any(|p| chars[at..].starts_with(&p.chars().collect::<Vec<_>>()))
-            {
-                let mut end = (at..chars.len()).find(|&i| chars[i].is_whitespace()).unwrap_or(chars.len());
-                while end > at && matches!(chars[end - 1], '.' | ',' | ';' | ':' | '!' | '?' | ')' | '。' | '，') {
-                    end -= 1;
-                }
+            if let Some(end) = link_end(chars, at) {
                 push(&mut out, at, end, Kind::Link, construct);
                 construct += 1;
                 at = end;
@@ -2068,6 +2062,12 @@ pub mod typst {
                     continue;
                 }
             }
+            // A stray `*/` is one token of text in Typst: its `*` opens no
+            // strong run and its `/` no comment.
+            if chars[at] == '*' && chars.get(at + 1) == Some(&'/') {
+                at += 2;
+                continue;
+            }
             // `*粗*` and `_斜_` — one delimiter, not two.
             if matches!(chars[at], '*' | '_') && !in_word(chars, at) {
                 let kind = if chars[at] == '*' {
@@ -2091,17 +2091,25 @@ pub mod typst {
                     continue;
                 }
             }
-            // `` `code` ``. Counted in backticks — see `super::code_span`;
-            // without that ``` ``//`` ``` opened a Typst comment.
+            // `` `code` ``, by Typst's raw rules ([`raw_at`]): two backticks
+            // are an empty raw, any other run closes at the first run of as
+            // many, and one left open is the rest of the line. Without them
+            // ``` ``//`` ``` opened a comment, and the `/*` of ``` ``/*` ```
+            // — an empty raw, then a note — was hidden in a code span.
             if chars[at] == '`' {
-                if let Some((open, close, end)) = super::code_span(chars, at) {
-                    push(&mut out, at, at + open, Kind::Marker, construct);
-                    push(&mut out, at + open, close, Kind::Code, construct);
-                    push(&mut out, close, end, Kind::Marker, construct);
-                    at = end;
-                    construct += 1;
-                    continue;
-                }
+                let ticks = chars[at..].iter().take_while(|&&c| c == '`').count();
+                let (end, left_open) = raw_at(chars, at);
+                let close = match (ticks, left_open) {
+                    (2, _) => at + 2,
+                    (_, 0) => end - ticks,
+                    _ => end,
+                };
+                push(&mut out, at, at + ticks.min(end - at), Kind::Marker, construct);
+                push(&mut out, at + ticks, close, Kind::Code, construct);
+                push(&mut out, close, end, Kind::Marker, construct);
+                at = end;
+                construct += 1;
+                continue;
             }
             at += 1;
         }
@@ -2486,6 +2494,25 @@ pub mod typst {
         }
     }
 
+    /// **How many `/*` deep a line that begins inside `frames` leaves a
+    /// comment opened in writing** — `#figure[…]/*`, the bracket closed and a
+    /// note opened after it. Only the writing after the line's last code
+    /// counts: a `/*` code leaves open is a [`Frame::Note`] the frames carry,
+    /// and one inside a string is no comment.
+    pub fn comment_left_in_writing(line: &str, frames: &[Frame]) -> usize {
+        if frames.is_empty() {
+            return comment_depth_left(line);
+        }
+        let chars: Vec<char> = line.chars().collect();
+        let mut left = frames.to_vec();
+        let pieces = walk(&chars, &mut left, &mut Open::default());
+        if !left.is_empty() {
+            return 0;
+        }
+        let from = pieces.iter().rposition(|&p| p != Piece::Writing).map_or(0, |at| at + 1);
+        comment_depth_left(&chars[from..].iter().collect::<String>())
+    }
+
     /// The marked-up runs of a line of Typst that begins inside `frames` —
     /// what [`BlockScanner::frames`] said just before it was fed the line.
     ///
@@ -2858,11 +2885,57 @@ pub mod typst {
                 | 0xAC00..=0xD7AF)   // 諺文音節
     }
 
+    /// Where the `*` or `_` that closes a run opened before `from` stands.
+    ///
+    /// Warning: **没有空白那兩道閘**：「開標記後面不許是空格、閉標記前面不許是空格」
+    /// 是 Markdown 的規矩；Typst 没有這條，`* 文*` 在官方那裏就是強調。判準只有官方
+    /// 唯一的那一條：[`in_word`]。
+    ///
+    /// Warning: **the walk takes Typst's tokens, not single characters.** The
+    /// `*` of a `/*` opens a comment and the `*` of a `*/` is text, so neither
+    /// closes `*冬/*天*` at the comment's star; a comment, a raw text or an
+    /// equation inside the run is stepped over, one left open or a `//`
+    /// leaves the run open on this line, and an escape or a bare link is
+    /// passed whole. Closing at the comment's `*` hides a `/*` from
+    /// [`comment_depth_left`], and every line under it would be read as
+    /// writing where Typst reads a comment.
     fn closing(chars: &[char], from: usize, delimiter: char) -> Option<usize> {
-        // Warning: **没有空白那兩道閘**：「開標記後面不許是空格、閉標記前面不許是空格」
-        // 是 Markdown 的規矩；Typst 没有這條，`* 文*` 在官方那裏就是強調。判準只有官方
-        // 唯一的那一條：[`in_word`]。
-        (from..chars.len()).find(|&i| chars[i] == delimiter && !in_word(chars, i))
+        let mut i = from;
+        while i < chars.len() {
+            if let Some(end) = link_end(chars, i) {
+                i = end;
+                continue;
+            }
+            match (chars[i], chars.get(i + 1).copied()) {
+                ('\\', Some(c)) if super::escapable(c) => i += 2,
+                ('/', Some('/')) => return None,
+                ('/', Some('*')) => i = block_comment_end(chars, i + 2)?,
+                ('*', Some('/')) => i += 2,
+                ('`', _) => match raw_at(chars, i) {
+                    (end, 0) => i = end,
+                    _ => return None,
+                },
+                ('$', _) => i = math_end(chars, i + 1)?,
+                (c, _) if c == delimiter && !in_word(chars, i) => return Some(i),
+                _ => i += 1,
+            }
+        }
+        None
+    }
+
+    /// The end of a bare `https://…` that starts at `at`, as Typst reads one
+    /// in writing: to a space, less the stop or comma after it.
+    fn link_end(chars: &[char], at: usize) -> Option<usize> {
+        let starts = (at == 0 || !chars[at - 1].is_alphanumeric())
+            && ["https://", "http://"].iter().any(|p| chars[at..].starts_with(&p.chars().collect::<Vec<_>>()));
+        if !starts {
+            return None;
+        }
+        let mut end = (at..chars.len()).find(|&i| chars[i].is_whitespace()).unwrap_or(chars.len());
+        while end > at && matches!(chars[end - 1], '.' | ',' | ';' | ':' | '!' | '?' | ')' | '。' | '，') {
+            end -= 1;
+        }
+        Some(end)
     }
 
     fn push(out: &mut Vec<Span>, start: usize, end: usize, kind: Kind, construct: usize) {
@@ -3335,6 +3408,35 @@ mod typst_tests {
         assert!(comment_left_open("那年 /* 沒收"));
         assert!(!comment_left_open("那年 /* 收了 */"));
         assert!(!comment_left_open("`/*` 是代碼"));
+    }
+
+    /// **A comment inside a strong or emphasised run is a comment**, as
+    /// Typst's lexer reads it: the `*` of `/*` does not close `*冬/*天`, so a
+    /// `/*` left open there is still open at the end of the line, and a
+    /// stray `*/` is text that neither closes nor opens a run.
+    #[test]
+    fn a_comment_inside_a_run_is_not_its_closing_star() {
+        assert!(comment_left_open("那年*冬/*天*很冷"));
+        assert!(comment_left_open("_斜 /* 註"));
+        assert!(!comment_left_open("*粗 /* 註 */ 粗*"));
+        assert_eq!(shape("*粗 /* 註 */ 粗*"), ".BB%%%%%%%BB.");
+        assert_eq!(shape("*粗 // 註*"), "   %%%%%");
+        assert_eq!(shape("*粗 */ 粗*"), ".BBBBBB.");
+        assert_eq!(shape("甲 */ 乙"), "      ");
+        assert_eq!(shape("*見 https://a.b/*c 粗*"), ".BBLLLLLLLLLLLLLLBB.");
+        assert_eq!(shape("*a `*` b*"), ".BB.C.BB.");
+    }
+
+    /// **Backticks are read by Typst's raw rules**: two are an empty raw, so
+    /// the `/*` after them opens a note, and a run left open is raw to the end
+    /// of the line.
+    #[test]
+    fn backticks_in_a_line_are_typst_raw() {
+        assert_eq!(shape("``/*`"), "..%%%");
+        assert!(comment_left_open("``/*`"));
+        assert_eq!(shape("甲 ` /* 乙"), "  .CCCCC");
+        assert!(!comment_left_open("甲 ` /* 乙"));
+        assert_eq!(shape("`a``b`"), ".C..C.");
     }
 
     /// `#(1 + 2)` and `#{…}` are code, as `#set` is.

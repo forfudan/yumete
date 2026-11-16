@@ -3610,6 +3610,9 @@ pub struct Editor {
     table_bypass: std::cell::Cell<bool>,
     /// Where buffers with no file keep their recovery copies.
     drafts_dir: Option<PathBuf>,
+    /// Whether a recovery copy left on disk is offered: false for `--shot`,
+    /// whose frame must not depend on what a crash left on this machine.
+    reads_drafts: bool,
     /// **這一份是哪一版**——`:version` 要印它。
     ///
     /// 前端告訴核心的，同 [`Editor::keep_drafts_in`]：版本號是構建期塞進可執行檔的
@@ -4846,6 +4849,7 @@ impl Editor {
             show_detail: None,
             table_bypass: std::cell::Cell::new(false),
             drafts_dir: None,
+            reads_drafts: true,
             build: String::new(),
             opened_empty: false,
             start_note: String::new(),

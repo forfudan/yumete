@@ -24,6 +24,8 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Fixed
 
+- **`--shot` reads no recovery copies**: a draft left beside the file by a session that crashed no longer puts the "unsaved draft found" question on the frame, so the same keys draw the same frame on any machine. The copy stays where it is, and `--private` still offers it.
+- **A Typst comment opened inside strong text, after a closing bracket or after two backticks runs on as Typst reads it**: `*so/* …`, `#figure[…]/*` and ``` ``/* ``` used to leave the lines further down a long book coloured as writing while Typst read them as comment.
 - **vim's registers and marks, closer to vim**: a delete made with `%` `(` `)` `` ` `` `{` `}` goes into `"1` (and `"-`) however short, and a delete of lines into a named register goes into `"1` too; `d'a` keeps the cursor's column as `dj` does; `>` and `<` set `` `[ `` and `` `] ``; a delete or yank into a read-only register (`"%` `":` `"/` `".`, and helix's `"%` `"#` `".`) is refused whole instead of deleting and keeping nothing.
 - **A language's `:format`, a preview server and Typst exports say `typst was not found` when the program is not installed**, as `:!` does, instead of the system's "No such file or directory".
 - **`:keymap-actions` leaves out of each keymap's column the keys your config turned into a group**, including the keymap not in force.

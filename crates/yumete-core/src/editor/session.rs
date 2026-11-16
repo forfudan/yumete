@@ -382,6 +382,16 @@ impl Editor {
         self.drafts_dir = Some(dir);
     }
 
+    /// **Whether recovery copies already on disk are looked for** — beside
+    /// each file opened, and the unnamed buffers' in the drafts directory.
+    /// `--shot` turns it off: a picture is of the keys pressed, and a copy a
+    /// crash left beside the file would put its question on the frame on one
+    /// machine and not on another. `--private` leaves it on, as a run that
+    /// forgets where it has been must still give back unsaved work.
+    pub fn set_reading_drafts(&mut self, on: bool) {
+        self.reads_drafts = on;
+    }
+
     /// **哪一版**——前端告訴核心，`:version` 印它。
     pub fn knows_the_build(&mut self, version: &str) {
         self.build = version.to_string();
@@ -1265,7 +1275,7 @@ impl Editor {
     /// [`crate::buffer::owner_still_running`]：一個還在跑、打了字還没存的 yumete
     /// 的唯一保險不許被別人清掉——它只要不再敲鍵就不會重寫。
     pub fn orphan_drafts(&self) -> Vec<PathBuf> {
-        let Some(dir) = &self.drafts_dir else {
+        let Some(dir) = self.drafts_dir.as_ref().filter(|_| self.reads_drafts) else {
             return Vec::new();
         };
         let mine = format!("scratch-{}-", std::process::id());

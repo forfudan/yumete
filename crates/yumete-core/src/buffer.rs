@@ -1617,6 +1617,13 @@ impl Buffer {
         self.draft_left_alone = true;
     }
 
+    /// **Act as if no recovery copy had been found**: nothing is asked, and
+    /// the copy stays on disk for a session that does read it.
+    pub fn pass_over_the_draft(&mut self) {
+        self.pending_draft = None;
+        self.pending_swap = None;
+    }
+
     /// 這一份的草稿要不要自己把那一問擺出來。
     pub fn draft_wants_asking(&self) -> bool {
         self.recovered_draft().is_some() && !self.draft_left_alone

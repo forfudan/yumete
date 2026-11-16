@@ -1120,6 +1120,9 @@ impl Editor {
                 return Err(err);
             }
         };
+        if !self.reads_drafts {
+            buffer.pass_over_the_draft();
+        }
         // Nothing to remember of a file that is not there yet.
         if told.is_some() && path.exists() {
             self.remember_encoding(path, told);

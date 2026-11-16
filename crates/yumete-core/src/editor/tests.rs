@@ -19702,6 +19702,32 @@ fn quitting_takes_the_recovery_copies_with_it() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **An editor that does not read drafts (`--shot`) passes over a recovery
+/// copy left on disk** and leaves it there: no question on opening, no
+/// unnamed drafts counted, and the copy still waiting for an editor that
+/// reads them.
+#[test]
+fn an_editor_not_reading_drafts_passes_over_a_left_copy() {
+    let dir = tmp().join(format!("yumete-shotdraft-{}", std::process::id()));
+    let drafts = dir.join("drafts");
+    std::fs::create_dir_all(&drafts).unwrap();
+    let path = dir.join("a.md");
+    std::fs::write(&path, "one\n").unwrap();
+    let swap = dir.join(".a.md.999991.yumete-swp");
+    std::fs::write(&swap, "one\nunsaved\n").unwrap();
+    std::fs::write(drafts.join("scratch-999991-1.yumete-swp"), "lost\n").unwrap();
+    for reads in [true, false] {
+        let mut ed = Editor::new();
+        ed.keep_drafts_in(drafts.clone());
+        ed.set_reading_drafts(reads);
+        ed.open_file(&path).unwrap();
+        assert_eq!(ed.current_buffer().draft_wants_asking(), reads, "reads {reads}");
+        assert_eq!(ed.orphan_drafts().len(), usize::from(reads), "reads {reads}");
+        assert!(swap.exists(), "reads {reads}: the copy stays on disk");
+    }
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// The selection covers the grapheme the cursor is on, as it does in Helix.
 /// Without that, the block cursor sits on a character an edit would not
 /// touch — what the screen shows is not what `d` takes.
@@ -40141,6 +40167,34 @@ fn the_typst_scan_from_an_edit_reads_as_a_scan_from_the_top() {
     }
 }
 
+/// **A comment opened where the writing goes on runs on as Typst reads
+/// it**: inside strong text (`*冬/*天*` is strong text holding a comment,
+/// not strong text closed at the comment's star), after the `]` that
+/// closes a `#figure[`, and after an empty raw ``` `` ```. Every later note
+/// is balanced, so the rest of the book is comment and no piece may begin
+/// below it.
+#[test]
+fn a_comment_opened_in_writing_holds_across_typst_pieces() {
+    for (after, typed) in [("那年*冬", "/*"), ("  說明\n]", "/*"), ("\n那年", "``/*`")] {
+        let mut ed = Editor::new();
+        ed.current_buffer_mut().insert(0, &typst_book(280)).unwrap();
+        ed.set_syntax(crate::syntax::Syntax::Typst);
+        let total = ed.current_buffer().rope().len_lines();
+        let mut row = 0;
+        while row < total {
+            let _ = ed.typst_colours(row);
+            row += 40;
+        }
+        let text = ed.current_buffer().text();
+        let at = text[..text.find(after).unwrap() + after.len()].chars().count();
+        ed.current_buffer_mut().insert(at, typed).unwrap();
+        let total = ed.current_buffer().rope().len_lines();
+        let unlike = typst_lines_unlike_the_whole(&ed, total - 300..total);
+        assert!(unlike.is_empty(), "{typed:?} after {after:?}: {} lines, first {:?}", unlike.len(), unlike.first());
+        assert_eq!(ed.typst_pieces(), 1, "{typed:?} after {after:?}: no cut under an open comment");
+    }
+}
+
 /// **A piece joined for a moment is cut again**: a fence typed and closed
 /// again joins every piece drawn so far into one, and it must not stay one
 /// until the buffer is left.
@@ -40176,18 +40230,31 @@ fn a_joined_typst_piece_is_cut_again() {
 /// **A Typst book drawn in pieces is coloured as the whole file parsed at
 /// once**, through random edits — backticks anywhere among them, as Typst's
 /// raw text closes at a run of backticks mid-line — whenever the whole file
-/// parses without an error. A few seeds here; a thorough run takes 150:
+/// parses without an error. A few seeds here, and the ones that found a
+/// difference (403: a `/*` typed inside strong text; 1156: a `/*` after the
+/// `]` that closes a `#figure[`; 1241: a `/*` after an empty raw ``` `` ```,
+/// which a code span hid); a thorough run takes a
+/// thousand or more, about a third of a second each, and a range runs from
+/// where one stopped:
 ///
-///     YUMETE_TYPST_SEEDS=150 cargo test --release -p yumete-core typst_pieces_are_coloured_as_the_whole_file
+///     YUMETE_TYPST_SEEDS=1500 cargo test --release -p yumete-core typst_pieces_are_coloured_as_the_whole_file
+///     YUMETE_TYPST_SEEDS=1500..3000 cargo test --release -p yumete-core typst_pieces_are_coloured_as_the_whole_file
 #[test]
 fn typst_pieces_are_coloured_as_the_whole_file() {
-    let seeds: u64 = std::env::var("YUMETE_TYPST_SEEDS").ok().and_then(|n| n.parse().ok()).unwrap_or(3);
+    let asked = std::env::var("YUMETE_TYPST_SEEDS").unwrap_or_default();
+    let seeds: Vec<u64> = match asked.split_once("..") {
+        Some((from, to)) => (from.parse().unwrap_or(1)..=to.parse().unwrap_or(0)).collect(),
+        None => match asked.parse() {
+            Ok(upto) => (1..=upto).collect(),
+            Err(_) => vec![1, 2, 3, 403, 1156, 1241],
+        },
+    };
     let snippets = [
         "/* c */", "/*", "*/", "#emph[x]", "#{ 1 }", "```\nraw\n```\n", "```\n", "```", "`", "``", "````", "```rust x```",
         ";```", "\n\n", "#let z = {", "}", "[", "]", "$", "// x", "\"", "*", "_", "(", ")", "\n", "\n\n= 新\n\n", "\\", "x",
     ];
     let mut failed = Vec::new();
-    for seed in 1..=seeds {
+    for seed in seeds {
         let mut rng = seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1;
         let mut next = move || {
             rng ^= rng << 13;

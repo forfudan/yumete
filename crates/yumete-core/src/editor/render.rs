@@ -2096,13 +2096,26 @@ fn scan_typst_line(
     // A paragraph is walked for raw texts and equations only when it holds
     // a backtick or a `$`, found without copying it.
     let ticks = text.chunks().any(|c| c.contains(['`', '$']));
+    // Typst's `/*`: only a line holding one is read whole (a URL's `/` is
+    // not one). A line that begins in code and closes it, `]/*` under a
+    // `#figure[`, is code to the scanner, and the note after its code is
+    // the writing's all the same; the frames it began in say where that
+    // writing starts.
+    let note = opens_a_block_comment(text);
+    let begun_in = match note && !state.typst.in_raw() && !state.typst.in_math() {
+        true => state.typst.frames().to_vec(),
+        false => Vec::new(),
+    };
     let block = state.typst.feed_line_ticked(head, len, Some(ticks), || Some(text.to_string()));
     scan.raw.push(block);
-    // Typst's `/*`: only a line holding one is read whole (a URL's `/` is
-    // not one). A line that leaves a raw text open has no note open after
-    // it: a `/*` before the raw text would have hidden its backticks.
-    if !block.is_literal() && !state.typst.in_raw() && opens_a_block_comment(text) {
-        state.depth = typst::comment_depth_left(&text.to_string());
+    // A line that leaves a raw text open has no note open after it: a `/*`
+    // before the raw text would have hidden its backticks.
+    if note && !state.typst.in_raw() {
+        if !begun_in.is_empty() && state.typst.frames().is_empty() {
+            state.depth = typst::comment_left_in_writing(&text.to_string(), &begun_in);
+        } else if !block.is_literal() {
+            state.depth = typst::comment_depth_left(&text.to_string());
+        }
     }
 }
 
