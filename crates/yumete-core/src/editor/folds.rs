@@ -146,6 +146,13 @@ impl Editor {
         self.shut_around(line).is_some_and(|(first, _)| line > first)
     }
 
+    /// Every closed fold of this window in this buffer, as its first and
+    /// last line: in order, none inside another. A scrollbar counts each as
+    /// the one row its first line is drawn on.
+    pub fn closed_folds(&self) -> Vec<(usize, usize)> {
+        self.fold_view().shut.clone()
+    }
+
     /// Whether `line` is the first line of a closed fold: drawn as the
     /// fold's own line.
     pub fn fold_head(&self, line: usize) -> bool {

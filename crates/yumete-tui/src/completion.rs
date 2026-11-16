@@ -144,7 +144,7 @@ pub(crate) fn draw_rows_in(
     // terminal gives an ambiguous block or rule.
     if scrolled {
         let bar = Rect { x: right - 1, width: 1, ..rect };
-        crate::tint_the_thumb(buf, bar, crate::thumb(shown, (from, from + shown), all), ink.rule());
+        crate::tint_the_thumb(buf, bar, crate::thumb(shown, (from, from + shown), all), ink.scrollbar());
     }
     Some(rect)
 }
@@ -273,23 +273,23 @@ mod tests {
                 .map(|y| buf.cell((right, y)).map(|c| (c.symbol().to_string(), Some(c.bg))).unwrap())
                 .collect();
             assert!(bar.iter().all(|(s, _)| s == " "), "spaces, no glyph of ambiguous width: {bar:?}");
-            let thumb = bar.iter().filter(|(_, bg)| *bg == Some(ink.rule())).count();
+            let thumb = bar.iter().filter(|(_, bg)| *bg == Some(ink.scrollbar())).count();
             assert_eq!(thumb, 3, "six of twelve shown: a thumb half the panel: {bar:?}");
-            assert_eq!(bar[0].1, Some(ink.rule()), "at the top of the list, the thumb at the top");
-            assert_ne!(bar[5].1, Some(ink.rule()), "no track");
+            assert_eq!(bar[0].1, Some(ink.scrollbar()), "at the top of the list, the thumb at the top");
+            assert_ne!(bar[5].1, Some(ink.scrollbar()), "no track");
             assert_eq!(bar[5].1, buf.cell((right - 1, rect.y + 5)).map(|c| Some(c.bg)).unwrap(), "the panel's own ground");
 
             let (rect, buf) = drawn("ink", dark, &many, Some(11), (2, 1));
             let right = rect.x + rect.width - 1;
-            assert_eq!(buf.cell((right, rect.y + 5)).unwrap().bg, ink.rule(), "at the end, the thumb at the bottom");
-            assert_ne!(buf.cell((right, rect.y)).unwrap().bg, ink.rule());
+            assert_eq!(buf.cell((right, rect.y + 5)).unwrap().bg, ink.scrollbar(), "at the end, the thumb at the bottom");
+            assert_ne!(buf.cell((right, rect.y)).unwrap().bg, ink.scrollbar());
             assert!(text_of(&buf, rect.y + 5, rect.x, rect.x + rect.width).contains("› harbour12"));
         }
         let few: Vec<CompletionRow> = (1..=3).map(|i| row(&format!("harbour{i}"), None)).collect();
         let (rect, buf) = drawn("ink", true, &few, Some(0), (2, 1));
         let ink = crate::theme::Palette::in_mood(&config_for("ink"), true);
         for y in rect.y..rect.y + rect.height {
-            assert_ne!(buf.cell((rect.x + rect.width - 1, y)).unwrap().bg, ink.rule(), "no scrollbar");
+            assert_ne!(buf.cell((rect.x + rect.width - 1, y)).unwrap().bg, ink.scrollbar(), "no scrollbar");
         }
     }
 

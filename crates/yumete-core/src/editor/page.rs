@@ -431,6 +431,19 @@ impl Editor {
             .unwrap_or(false)
     }
 
+    /// **The blank lines the paragraph indent takes off the page**, one flag
+    /// per line, **wherever the cursor is**: what [`Self::line_is_folded`]
+    /// asks less the two lines it gives back around the cursor, so the answer
+    /// stays the same for as long as the text does. `None` when the indent
+    /// folds nothing. A scrollbar estimating the page's rows reads this.
+    pub fn blank_lines_off_the_page(&self) -> Option<std::cell::Ref<'_, [bool]>> {
+        if self.indent == 0 || !self.indent_folds {
+            return None;
+        }
+        self.remember_folds();
+        std::cell::Ref::filter_map(self.fold_cache.borrow(), |cache| cache.as_ref().map(|(_, map, _)| map.as_slice())).ok()
+    }
+
     /// The span of lines a fold must not touch, because what is written there
     /// is not prose: a fence, a page's metadata, a table.
     ///

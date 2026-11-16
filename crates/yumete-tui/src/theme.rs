@@ -858,6 +858,11 @@ impl Palette {
     pub fn rule(self) -> Color {
         self.at(rung::RULE)
     }
+    /// A scrollbar's thumb: a shade quieter than a rule
+    /// ([`yumete_config::rung::SCROLLBAR`]).
+    pub fn scrollbar(self) -> Color {
+        self.at(rung::SCROLLBAR)
+    }
     /// Chrome, raised one notch off the page.
     pub fn chrome(self) -> Color {
         self.at(rung::CHROME)
@@ -1434,6 +1439,40 @@ mod ground_tests {
     fn at(ladder: Ladder, rung: u16) -> Color {
         let (r, g, b) = ladder.step(rung);
         Color::Rgb(r, g, b)
+    }
+
+    /// **A scrollbar's thumb is not the rule's grey**, and is seen on every
+    /// ground it is drawn on — the paper, the margin past a measure, a raised
+    /// status ground and a sunken one (the completion list's) — in every
+    /// theme and both moods; a different colour from the selection and the
+    /// cursor row too, though neither reaches the bar.
+    #[test]
+    fn the_thumb_is_its_own_grey_and_seen_on_its_grounds() {
+        let names = ["ink", "one-dark", "github", "monokai", "dracula", "tokyo-night", "catppuccin", "gruvbox", "bw", "morandi"];
+        for name in names {
+            let theme = ThemeConfig::named(name).expect("a theme by that name");
+            for (mood, ladder) in [("dark", theme.dark), ("light", theme.light)] {
+                let thumb = at(ladder, rung::SCROLLBAR);
+                let deep = at(ladder, rung::DEEP);
+                let sunken = match contrast(deep, at(ladder, rung::PAPER)) < 1.05 {
+                    true => at(ladder, rung::PAPER - (rung::DEEP - rung::PAPER)),
+                    false => deep,
+                };
+                for (other, what) in [
+                    (at(ladder, rung::RULE), "the rule (a closed sidebar's block)"),
+                    (at(ladder, rung::PAPER), "the paper"),
+                    (at(ladder, rung::BAND), "the margin past a measure"),
+                    (at(ladder, rung::CHROME), "a raised ground"),
+                    (sunken, "a sunken ground"),
+                ] {
+                    let ratio = contrast(thumb, other);
+                    assert!(ratio >= APART, "{name} {mood}, against {what}: {ratio:.2}:1, under {APART}");
+                }
+                for other in [rung::SELECTION, rung::HEAD] {
+                    assert_ne!(thumb, at(ladder, other), "{name} {mood}: rung {other}");
+                }
+            }
+        }
     }
 
     /// **The three grounds that meet inside a table stay a rung apart** — the

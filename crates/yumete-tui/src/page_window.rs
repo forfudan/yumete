@@ -814,7 +814,7 @@ pub fn draw(frame: &mut ratatui::Frame, editor: &Editor, config: &yumete_config:
             if editor.scrollbar() {
                 let total = page.total.map(|t| t * rows as usize);
                 let from = (page.number.saturating_sub(1)) * rows as usize + top as usize;
-                bar_on_the_wall(frame.buffer_mut(), area, total.map(|t| (from, from + spot.height as usize, t)), ink.rule());
+                bar_on_the_wall(frame.buffer_mut(), area, total.map(|t| (from, from + spot.height as usize, t)), ink.scrollbar());
             }
             let mark = cursor_row.map(|row| cursor_mark(row - top as i32, spot.height));
             mark_the_cursor(frame.buffer_mut(), area, spot, mark, ink.page().fg(ink.gold()));
@@ -826,7 +826,7 @@ pub fn draw(frame: &mut ratatui::Frame, editor: &Editor, config: &yumete_config:
             crate::graphics::put_picture(frame.buffer_mut(), spot, picture);
             if editor.scrollbar() {
                 let at = page.number.saturating_sub(1);
-                bar_on_the_wall(frame.buffer_mut(), area, page.total.map(|t| (at, at + 1, t)), ink.rule());
+                bar_on_the_wall(frame.buffer_mut(), area, page.total.map(|t| (at, at + 1, t)), ink.scrollbar());
             }
             let mark = board
                 .jump

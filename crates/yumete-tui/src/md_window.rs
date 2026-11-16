@@ -564,7 +564,7 @@ pub fn draw(frame: &mut ratatui::Frame, editor: &Editor, config: &yumete_config:
             crate::graphics::put_picture_from(frame.buffer_mut(), spot, picture, 0, 0);
             if framed {
                 if editor.scrollbar() {
-                    bar_on_the_wall(frame.buffer_mut(), area, &shot, crate::graphics::cell_pixels(), ink.rule());
+                    bar_on_the_wall(frame.buffer_mut(), area, &shot, crate::graphics::cell_pixels(), ink.scrollbar());
                 }
                 mark_the_caret(frame.buffer_mut(), area, &shot, ink.page().fg(ink.gold()));
             }

@@ -11,6 +11,7 @@
 
 pub mod chrome;
 mod completion;
+mod scrollbar;
 pub mod panel;
 pub mod table;
 pub mod spinner;
@@ -1504,6 +1505,9 @@ pub fn run(
                 pages.due_in(),
                 // The Markdown preview: the typing still long enough.
                 markdown.due_in(),
+                // A scrollbar over a very long book, counted again once the
+                // typing has been still.
+                viewport.rows.due_in(),
                 // 轉圈那八個點：不給這個數，它畫一格就睡着了，於是那八個點成
                 // 了一個不動的點（同上面那幾個鬧鐘）。
                 spinner::due_in(editor.server_busy_since()),
@@ -2897,6 +2901,9 @@ struct Seats {
     /// 一側只畫一扇面板，所以一格就夠；換了面板這個數是舊的，而它每一幀都先
     /// 夾一次、再讓選中那一行拉回來（[`window_start`]），下一幀就對了。
     listed: [usize; 2],
+    /// **Each buffer's rows, estimated for its scrollbar**, kept from frame
+    /// to frame and built again only when the text or its width changes.
+    rows: scrollbar::Estimates,
 }
 
 /// **一張捲動的單子，這一幀從第幾行畫起。**
@@ -6682,8 +6689,19 @@ fn draw<'a>(
                         Some(_) => ink.reading(editor.focus()),
                     };
                     let len = editor.current_buffer().rope().len_chars();
-                    let span = seat.drawn_span.unwrap_or((0, len));
-                    tint_the_thumb(frame.buffer_mut(), bar, thumb(bar.height as usize, span, len), ink.rule());
+                    // Whether the file fits, and whether the page has reached
+                    // its end, are read off what was drawn — exactly; how long
+                    // the thumb is and where, off the estimated rows.
+                    let (a, b) = viewport[which].drawn_span.unwrap_or((0, len));
+                    let top = viewport[which].top;
+                    let thumb = (a > 0 || b < len).then(|| {
+                        let folds = editor.closed_folds();
+                        let rows = viewport.rows.rows(editor);
+                        let (above, total) = scrollbar::rows_above_and_total(rows, &folds, top);
+                        let window = bar.height as usize * chain.max(1);
+                        scrollbar::thumb(bar.height as usize, window, above, total, b >= len)
+                    });
+                    tint_the_thumb(frame.buffer_mut(), bar, thumb.flatten(), ink.scrollbar());
                 }
                 caret
             }
@@ -21441,7 +21459,7 @@ fn squeezed(text: &str) -> String {
     /// Where the scrollbar of a frame's window `which` is, and which of its
     /// cells carry the thumb's tint.
     fn thumb_cells(buffer: &ratatui::buffer::Buffer, config: &Config, bar: Rect) -> String {
-        let tint = ink(config).rule();
+        let tint = ink(config).scrollbar();
         (bar.y..bar.y + bar.height).map(|y| if buffer[(bar.x, y)].bg == tint { '#' } else { '.' }).collect()
     }
 
@@ -21475,7 +21493,7 @@ fn squeezed(text: &str) -> String {
         assert_eq!((areas.panes[0].width, areas.bars[0].width), (30, 0), "vertical: unchanged");
     }
 
-    /// **The thumb says where the page is in the file**, by characters: at
+    /// **The thumb says where the page is in the file**, by rows: at
     /// the top on the first page, at the bottom on the last, and the column
     /// blank — a margin — while the whole file fits.
     #[test]
@@ -21543,7 +21561,126 @@ fn squeezed(text: &str) -> String {
         // Ten of fifty rows on the spread, five rows tall: a single cell.
         assert_eq!(thumb_cells(&buffer, &config, areas.bars[0]), "#....", "{}", buffer_to_text(&buffer));
         let gap = strips[0].x + strips[0].width;
-        assert!((0..areas.bars[0].height).all(|y| buffer[(gap, y)].bg != ink(&config).rule()), "none in the gap");
+        assert!((0..areas.bars[0].height).all(|y| buffer[(gap, y)].bg != ink(&config).scrollbar()), "none in the gap");
+    }
+
+    /// A document whose screens hold very different amounts of text: a
+    /// heading, a run of blank lines, a paragraph that wraps to several rows.
+    fn uneven_document() -> String {
+        (1..=12)
+            .map(|n| format!("# Part {n}\n\n\n\n{}\n\n", "words in a long paragraph ".repeat(5)))
+            .collect()
+    }
+
+    /// **The thumb keeps its length while the page scrolls**: as long as the
+    /// window is of the document's rows, whichever rows are on screen — a
+    /// screen of blank lines holds fewer characters than one of prose, and
+    /// the thumb does not grow and shrink with that. It only ever moves down
+    /// as the page does.
+    #[test]
+    fn the_thumb_keeps_its_length_down_an_uneven_file() {
+        let config = bare();
+        ink(&config);
+        let (w, h) = (30u16, 12u16);
+        let mut seats = Seats::default();
+        let mut editor = editor_with(&uneven_document());
+        editor.on_key(Key::Char('g'));
+        editor.on_key(Key::Char('g'));
+        let bar = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0).bars[0];
+        let mut seen = Vec::new();
+        for key in std::iter::repeat_n(Key::Char('j'), 80).chain(std::iter::repeat_n(Key::Char('k'), 30)) {
+            editor.on_key(key);
+            let (buffer, _) = centred_frame(&mut editor, &config, w, h, &mut seats);
+            let cells = thumb_cells(&buffer, &config, bar);
+            seen.push((cells.find('#').expect("a thumb"), cells.matches('#').count(), cells));
+        }
+        let length = seen[0].1;
+        assert!(seen.iter().all(|(_, n, _)| *n == length), "one length all the way: {seen:?}");
+        let downs: Vec<usize> = seen[..80].iter().map(|(at, _, _)| *at).collect();
+        assert!(downs.windows(2).all(|p| p[0] <= p[1]), "only ever down on the way down: {downs:?}");
+        assert!(downs[79] > downs[0], "and it does go down");
+    }
+
+    /// **`gg` puts the thumb at the top and `G` at the bottom**, whatever the
+    /// estimate made of the rows between.
+    #[test]
+    fn gg_and_g_put_the_thumb_at_the_ends() {
+        let config = bare();
+        ink(&config);
+        let (w, h) = (30u16, 12u16);
+        let mut seats = Seats::default();
+        let mut editor = editor_with(&uneven_document());
+        let bar = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0).bars[0];
+        editor.on_key(Key::Char('G'));
+        let (buffer, _) = centred_frame(&mut editor, &config, w, h, &mut seats);
+        assert!(thumb_cells(&buffer, &config, bar).ends_with('#'), "G: at the bottom:\n{}", buffer_to_text(&buffer));
+        editor.on_key(Key::Char('g'));
+        editor.on_key(Key::Char('g'));
+        let (buffer, _) = centred_frame(&mut editor, &config, w, h, &mut seats);
+        let cells = thumb_cells(&buffer, &config, bar);
+        assert!(cells.starts_with('#') && !cells.ends_with('#'), "gg: at the top: {cells}");
+    }
+
+    /// **The rows are counted once for a text and a width**: scrolling the
+    /// page asks the same table, an edit or a new width builds it again.
+    #[test]
+    fn the_rows_are_counted_again_only_for_a_new_text_or_width() {
+        let config = bare();
+        ink(&config);
+        let (w, h) = (30u16, 12u16);
+        let mut seats = Seats::default();
+        let mut editor = editor_with(&uneven_document());
+        editor.on_key(Key::Esc);
+        editor.on_key(Key::Char('g'));
+        editor.on_key(Key::Char('g'));
+        centred_frame(&mut editor, &config, w, h, &mut seats);
+        let built = seats.rows.builds;
+        assert!(built >= 1, "counted for the first frame");
+        for _ in 0..40 {
+            editor.on_key(Key::Char('j'));
+            centred_frame(&mut editor, &config, w, h, &mut seats);
+        }
+        assert_eq!(seats.rows.builds, built, "a scroll counts nothing");
+        for key in [Key::Char('i'), Key::Char('z'), Key::Esc] {
+            editor.on_key(key);
+        }
+        centred_frame(&mut editor, &config, w, h, &mut seats);
+        assert_eq!(seats.rows.builds, built + 1, "an edit counts once");
+        centred_frame(&mut editor, &config, w, h, &mut seats);
+        assert_eq!(seats.rows.builds, built + 1, "and once only");
+        centred_frame(&mut editor, &config, w + 10, h, &mut seats);
+        assert_eq!(seats.rows.builds, built + 2, "a new width counts once");
+    }
+
+    /// **A table slow to count waits for the typing to stop**: typed into,
+    /// the thumb stands on the text as it was, the loop is owed a wake, and
+    /// the first frame after the pause counts it again.
+    #[test]
+    fn a_slow_table_waits_for_the_typing_to_stop() {
+        let config = bare();
+        ink(&config);
+        let (w, h) = (30u16, 12u16);
+        let mut seats = Seats::default();
+        let mut editor = editor_with(&uneven_document());
+        editor.on_key(Key::Esc);
+        centred_frame(&mut editor, &config, w, h, &mut seats);
+        let built = seats.rows.builds;
+        assert_eq!(seats.rows.due_in(), None, "nothing owed");
+        seats.rows.as_if(true, false);
+        for key in [Key::Char('i'), Key::Char('z'), Key::Char('z')] {
+            editor.on_key(key);
+            centred_frame(&mut editor, &config, w, h, &mut seats);
+        }
+        assert_eq!(seats.rows.builds, built, "typed into: the table as it was");
+        assert!(seats.rows.due_in().is_some(), "and a wake owed");
+        seats.rows.as_if(false, true);
+        centred_frame(&mut editor, &config, w, h, &mut seats);
+        assert_eq!(seats.rows.builds, built + 1, "counted once the typing is still");
+        assert_eq!(seats.rows.due_in(), None, "nothing owed after");
+        // A new width is not typing: counted at once, slow or not.
+        seats.rows.as_if(true, false);
+        centred_frame(&mut editor, &config, w + 10, h, &mut seats);
+        assert_eq!(seats.rows.builds, built + 2);
     }
 
     /// **A window each, a bar each**: side by side, each bar at its own

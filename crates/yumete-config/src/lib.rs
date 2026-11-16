@@ -1370,6 +1370,21 @@ pub mod rung {
     /// tick. Not text and not a ground, and the only thing that belongs in the
     /// middle of the ladder.
     pub const RULE: u16 = 5000; // 第 50 檔
+    /// **A scrollbar's thumb** — a window's, a preview's, the completion
+    /// list's: a tinted run of cells saying where the view is.
+    ///
+    /// Warning: **Not [`RULE`].** A thumb on the rule's grey is the same block
+    /// as a closed sidebar's — the two cells at each end of the tab line —
+    /// and at 第 50 it is the loudest thing in the margin, for what is only a
+    /// glance. 第 70 is one shade quieter and still a mark: on
+    /// the twenty ladders its worst ratios are 1.54 against the rule, 1.36
+    /// against [`BAND`] (the margin a centred page leaves), 1.28 against
+    /// [`CHROME`] (a raised status ground, the completion list's), 1.55
+    /// against the paper — all Catppuccin Latte, the tightest ladder.
+    /// Between [`SELECTION`] and [`HEAD`] it is a different colour from both
+    /// (1.16 and 1.07 at worst) without having to be told from them: neither
+    /// ground reaches the bar's column.
+    pub const SCROLLBAR: u16 = 7000; // 第 70 檔
     /// Chrome: a sidebar, a tab bar, a table's gutter and header, a detail
     /// panel, the status line.
     ///
