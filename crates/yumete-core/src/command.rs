@@ -444,6 +444,9 @@ pub enum Command {
     /// `:view-scrollbar` — every text window keeps its rightmost column for
     /// a bar saying where the page is in the file.
     SetScrollbar(Switch),
+    /// `:view-scrollbar-marks [search|listing|changes|problems] [on|off]` —
+    /// one kind of mark on the scrollbar on or off; bare, which are on.
+    SetScrollbarMarks(Option<(String, Switch)>),
     /// `:view-long-line`：一行長過多少列就不上色。`None` ＝裸的，報告現在多少。
     SetLongLine(Option<Option<usize>>),
     /// `:table-numbers` — the row of column numbers above the header.
@@ -3570,6 +3573,15 @@ const SWITCH: &[Word] = &[
     },
 ];
 
+/// The kinds of mark a scrollbar carries (`:view-scrollbar-marks`), in the
+/// order of `ScrollbarMarks::WORDS`.
+const SCROLLBAR_MARKS: &[Word] = &[
+    Word { name: "search", help: "cmd.scrollbar-marks.search", needs: &[] },
+    Word { name: "listing", help: "cmd.scrollbar-marks.listing", needs: &[] },
+    Word { name: "changes", help: "cmd.scrollbar-marks.changes", needs: &[] },
+    Word { name: "problems", help: "cmd.scrollbar-marks.problems", needs: &[] },
+];
+
 /// The two words every switch takes — read back by [`switch`].
 /// The four margins, tightest first (`:view-margin`).
 const MARGINS: &[Word] = &[
@@ -5028,6 +5040,25 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[Param::Words { of: SWITCH, default: None }],
         build: Some(|p| Ok(Command::SetScrollbar(switched(p)))),
+    },
+    Entry {
+        // One kind at a time, as `:view-scrollbar` turns the bar: the
+        // kind, then the switch, so a session or a key can say each
+        // exactly; bare, the status line says which are on.
+        name: "view-scrollbar-marks",
+        aliases: &[],
+        help: "cmd.view.scrollbar-marks",
+        needs: &[],
+        params: &[Param::Words { of: SCROLLBAR_MARKS, default: None }, Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| {
+            Ok(Command::SetScrollbarMarks(p.arg(0).map(|kind| {
+                let on = match p.arg(1) {
+                    None => Switch::Flip,
+                    Some(word) => Switch::To(word == "on"),
+                };
+                (kind.to_string(), on)
+            })))
+        }),
     },
     Entry {
         // `height`, not `vertical`: the horizontal one is a width, this one a
@@ -8936,7 +8967,7 @@ mod tests {
         // A family with no head of its own keeps the hyphen, which is what
         // says it is a family and not a command, and nothing else: `view-w` is
         // `view-wrap`'s spelling, not the thirteen's.
-        assert_eq!(row("", "view-"), ":view- +22");
+        assert_eq!(row("", "view-"), ":view- +23");
         assert_eq!(row("", "check-"), ":check- +7");
         // …and a stem is a stem however many are under it.
         assert_eq!(row("", "markdown-"), ":markdown- +2");
@@ -9430,6 +9461,20 @@ mod tests {
         assert_eq!(names("e").first().map(String::as_str), Some("open"));
         assert_eq!(names("w").first().map(String::as_str), Some("write"));
         assert_eq!(names("ru"), ["ruby", "rules", "run"]);
+    }
+
+    /// **`:view-scrollbar-marks` turns one kind at a time**: the kind and
+    /// the switch, the kind alone flipping it, and bare it only asks.
+    #[test]
+    fn scrollbar_marks_take_a_kind_and_a_switch() {
+        let marks = |kind: &str, on| Ok(Command::SetScrollbarMarks(Some((kind.to_string(), on))));
+        assert_eq!(parse(":view-scrollbar-marks changes on"), marks("changes", Switch::To(true)));
+        assert_eq!(parse(":view-scrollbar-marks search off"), marks("search", Switch::To(false)));
+        assert_eq!(parse(":view-scrollbar-marks problems"), marks("problems", Switch::Flip));
+        assert_eq!(parse(":view-scrollbar-marks"), Ok(Command::SetScrollbarMarks(None)));
+        assert!(parse(":view-scrollbar-marks colours").is_err(), "no such kind");
+        let words: Vec<&str> = SCROLLBAR_MARKS.iter().map(|w| w.name).collect();
+        assert_eq!(words, crate::editor::ScrollbarMarks::WORDS, "one list of kinds");
     }
 
     /// **`:outline` opens and closes the outline**, as a writer expects of the

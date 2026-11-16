@@ -408,6 +408,13 @@ pub struct EditorConfig {
     /// file, the column blank while the whole file fits. On by default;
     /// `:view-scrollbar` toggles. Off gives the column back to the text.
     pub scrollbar: bool,
+    /// **The kinds of mark the scrollbar carries**, any of `search` (the
+    /// lines a search hit, while its count shows), `listing` (the lines of
+    /// this file the last listing points at), `changes` (what
+    /// `:view-diff` marks) and `problems` (the language server's errors and
+    /// warnings). The first two by default; empty for none.
+    /// `:view-scrollbar-marks` turns one at a time.
+    pub scrollbar_marks: Vec<String>,
     /// The width `:hard-wrap` fills to when given none, in cells; `0` for
     /// unset, which makes the bare command say so.
     pub hard_wrap: usize,
@@ -617,6 +624,7 @@ impl Default for EditorConfig {
             measure: 0,
             centre_measure: true,
             scrollbar: true,
+            scrollbar_marks: vec!["search".to_string(), "listing".to_string()],
             hard_wrap: 0,
             char_info: true,
             status_count: "text".to_string(),
@@ -778,6 +786,8 @@ pub const CHARSET_WORDS: &[&str] = &["all", "common", "tonggui", "harmonic"];
 pub const CHARSET_SORT_WORDS: &[&str] = &["original", "common", "tonggui", "harmonic"];
 /// The words `[ime] single_char` and `sentence_single_char` take, yume's own.
 pub const SINGLE_CHAR_WORDS: &[&str] = &["both", "primary", "strict"];
+/// The words `[editor] scrollbar_marks` takes.
+pub const SCROLLBAR_MARK_WORDS: &[&str] = &["search", "listing", "changes", "problems"];
 /// The words `[ime] word_show` takes.
 pub const WORD_SHOW_WORDS: &[&str] = &["two", "three", "four", "longer", "whitelist"];
 /// The charsets a lane may be, yume's named seven.
@@ -4968,6 +4978,7 @@ struct RawEditor {
     measure: Option<usize>,
     centre_measure: Option<bool>,
     scrollbar: Option<bool>,
+    scrollbar_marks: Option<Vec<String>>,
     hard_wrap: Option<usize>,
     char_info: Option<bool>,
     status_count: Option<String>,
@@ -5286,6 +5297,9 @@ impl RawConfig {
         }
         if other.editor.scrollbar.is_some() {
             self.editor.scrollbar = other.editor.scrollbar;
+        }
+        if other.editor.scrollbar_marks.is_some() {
+            self.editor.scrollbar_marks = other.editor.scrollbar_marks.clone();
         }
         if other.editor.hard_wrap.is_some() {
             self.editor.hard_wrap = other.editor.hard_wrap;
@@ -5851,6 +5865,10 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.scrollbar {
             config.editor.scrollbar = on;
+        }
+        if let Some(words) = self.editor.scrollbar_marks {
+            config.editor.scrollbar_marks =
+                words.into_iter().filter(|w| SCROLLBAR_MARK_WORDS.contains(&w.as_str())).collect();
         }
         if let Some(width) = self.editor.hard_wrap {
             config.editor.hard_wrap =
@@ -7390,6 +7408,18 @@ mod tests {
         assert_eq!(c.editor.line_numbers, LineNumbers::Absolute);
         assert_eq!(c.theme.mode, Mode::Auto);
         assert_eq!(c.theme.dark.ink, ThemeConfig::default().dark.ink);
+    }
+
+    /// **`[editor] scrollbar_marks`**: a search's hits and the listing's
+    /// rows out of the box, the words written when written, an empty list
+    /// none, and a word that names no kind left out.
+    #[test]
+    fn scrollbar_marks_read_their_four_words() {
+        assert_eq!(Config::from_toml("").editor.scrollbar_marks, ["search", "listing"]);
+        let config = Config::from_toml("[editor]\nscrollbar_marks = [\"changes\", \"colours\", \"problems\"]\n");
+        assert_eq!(config.editor.scrollbar_marks, ["changes", "problems"]);
+        assert!(Config::from_toml("[editor]\nscrollbar_marks = []\n").editor.scrollbar_marks.is_empty());
+        assert_eq!(SCROLLBAR_MARK_WORDS, ["search", "listing", "changes", "problems"]);
     }
 
     /// 單字派: Yume's defaults — 字詞同出 character by character, 嚴格單字 in

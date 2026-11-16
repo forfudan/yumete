@@ -976,6 +976,79 @@ pub enum Hud {
     Full,
 }
 
+/// **Which kinds of mark the scrollbar carries** (`[editor] scrollbar_marks`,
+/// `:view-scrollbar-marks`).
+///
+/// Out of the box only the two a writer has just asked for: the hits of a
+/// search and the rows of the last listing. The file's changes and the
+/// language server's complaints are there for a reader who wants them; on
+/// by default they would cover the bar on a draft that is all new lines, or
+/// a file a linter has opinions about, and hide the thumb they sit on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ScrollbarMarks {
+    /// The lines a search found hits on, while its count is shown.
+    pub search: bool,
+    /// The rows of the last listing that point into this file.
+    pub listing: bool,
+    /// The lines `:view-diff` marks as added, changed or cut.
+    pub changes: bool,
+    /// The language server's errors and warnings.
+    pub problems: bool,
+}
+
+impl Default for ScrollbarMarks {
+    fn default() -> Self {
+        ScrollbarMarks { search: true, listing: true, changes: false, problems: false }
+    }
+}
+
+impl ScrollbarMarks {
+    /// The words a kind is written with, in the config and on the command
+    /// line, in the order they are listed.
+    pub const WORDS: [&'static str; 4] = ["search", "listing", "changes", "problems"];
+
+    /// None of them.
+    pub const NONE: ScrollbarMarks = ScrollbarMarks { search: false, listing: false, changes: false, problems: false };
+
+    /// The kinds a list of words names; a word that is none of them names
+    /// nothing.
+    pub fn from_words<S: AsRef<str>>(words: &[S]) -> Self {
+        let mut marks = Self::NONE;
+        for word in words {
+            marks.set(word.as_ref(), true);
+        }
+        marks
+    }
+
+    /// Whether the kind `word` names is on; `None` for a word that names
+    /// no kind.
+    pub fn get(self, word: &str) -> Option<bool> {
+        Some(match word {
+            "search" => self.search,
+            "listing" => self.listing,
+            "changes" => self.changes,
+            "problems" => self.problems,
+            _ => return None,
+        })
+    }
+
+    /// Turn the kind `word` names on or off.
+    pub fn set(&mut self, word: &str, on: bool) {
+        match word {
+            "search" => self.search = on,
+            "listing" => self.listing = on,
+            "changes" => self.changes = on,
+            "problems" => self.problems = on,
+            _ => {}
+        }
+    }
+
+    /// The words of the kinds that are on.
+    pub fn words(self) -> Vec<&'static str> {
+        Self::WORDS.into_iter().filter(|w| self.get(w) == Some(true)).collect()
+    }
+}
+
 /// What `:view-hud` says about a level, whether it was just set or only asked.
 fn hud_says(how: Hud) -> String {
     match how {
@@ -2713,6 +2786,10 @@ pub struct Editor {
     /// number and the total. The status line shows it while the caret is
     /// still inside that match in that text.
     search_stand: Option<SearchStand>,
+    /// **The lines that search found a hit on**, from the same pass that
+    /// counted them for [`Self::search_stand`], ascending, one entry a line:
+    /// what the scrollbar marks while that count is shown.
+    search_hit_lines: Vec<u32>,
     /// Normal-mode bindings from the config (Feature #23): a run of keys,
     /// in the internal spelling, and the commands it runs.
     key_aliases: HashMap<String, Vec<String>>,
@@ -3152,6 +3229,8 @@ pub struct Editor {
     /// Whether every text window keeps its rightmost column for a scrollbar
     /// (`:view-scrollbar`).
     scrollbar: bool,
+    /// Which kinds of mark the scrollbar carries (`:view-scrollbar-marks`).
+    scrollbar_marks: ScrollbarMarks,
     /// Whether the window with the keys has a cell past the end of a full row
     /// (the scrollbar's column, or the gap between two pages), so the caret
     /// resting after a row that fills the width stands there instead of on a
@@ -4240,6 +4319,11 @@ pub struct Editor {
     /// a later report that writes `listing_root` without being a listing
     /// would otherwise send `]q` on an older listing to the wrong directory.
     last_listing: Option<results::LastListing>,
+    /// **The lines of each file the last listing points at**, worked out
+    /// the first time a scrollbar asks and kept for as long as that listing
+    /// is the last one: its rows are read and its paths resolved once, not
+    /// on every frame.
+    listing_marks: std::cell::RefCell<Option<results::ListingMarks>>,
     /// **The files this session has been in, newest first**.
     ///
     /// What `空格 f` puts at the top of its list. Alphabetical is chapter
@@ -4616,6 +4700,7 @@ impl Editor {
             last_search: String::new(),
             search_forward: true,
             search_stand: None,
+            search_hit_lines: Vec::new(),
             key_aliases: HashMap::new(),
             user_aliases: HashMap::new(),
             user_select: HashMap::new(),
@@ -4752,6 +4837,7 @@ impl Editor {
             line_breaks: false,
             centre: true,
             scrollbar: true,
+            scrollbar_marks: ScrollbarMarks::default(),
             cell_past_the_row: std::cell::Cell::new(false),
             diff_gutter: false,
             vcs: HashMap::new(),
@@ -5029,6 +5115,7 @@ impl Editor {
             listing_root: None,
             listing_jumps: None,
             last_listing: None,
+            listing_marks: std::cell::RefCell::new(None),
             visited: Vec::new(),
             usage_groups: Vec::new(),
             opened_with: HashMap::new(),
@@ -5771,16 +5858,18 @@ fn search_forward(
 }
 
 /// **Which match starts at `at`, and how many there are** within `lines`:
-/// `(nth, total)`, `nth` counted from one. One pass over the lines, the
-/// same per-line spans `/` and `n` walk.
-fn count_matches(rope: &Rope, look: &find::Look, within: std::ops::Range<usize>, at: usize) -> (usize, usize) {
+/// `(nth, total)`, `nth` counted from one, and the lines a match is on,
+/// ascending, each once — what the scrollbar marks. One pass over the
+/// lines, the same per-line spans `/` and `n` walk.
+fn count_matches(rope: &Rope, look: &find::Look, within: std::ops::Range<usize>, at: usize) -> (usize, usize, Vec<u32>) {
     let mut before = 0usize;
     let mut total = 0usize;
+    let mut lines = Vec::new();
     if within.start >= within.end {
-        return (1, 1);
+        return (1, 1, lines);
     }
     let mut start = rope.line_to_char(within.start);
-    for slice in rope.lines_at(within.start).take(within.end - within.start) {
+    for (n, slice) in rope.lines_at(within.start).take(within.end - within.start).enumerate() {
         let owned;
         let text: &str = match slice.as_str() {
             Some(text) => text,
@@ -5790,7 +5879,11 @@ fn count_matches(rope: &Rope, look: &find::Look, within: std::ops::Range<usize>,
             }
         };
         let (text, _) = line_body(text);
-        for (a, _) in look.spans(text) {
+        let spans = look.spans(text);
+        if !spans.is_empty() {
+            lines.push((within.start + n) as u32);
+        }
+        for (a, _) in spans {
             total += 1;
             if start + a < at {
                 before += 1;
@@ -5798,7 +5891,7 @@ fn count_matches(rope: &Rope, look: &find::Look, within: std::ops::Range<usize>,
         }
         start += slice.len_chars();
     }
-    ((before + 1).min(total.max(1)), total.max(1))
+    ((before + 1).min(total.max(1)), total.max(1), lines)
 }
 
 /// The first match at or after `from` within `lines`, searching forward, as a

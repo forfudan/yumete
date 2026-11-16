@@ -2200,6 +2200,30 @@ en = "星陳"
 find = "星陳 星陈 xingchen 形碼 形码"
 
 [[message]]
+# `:view-scrollbar-marks` 可选的一种：changes（草稿）
+key = "cmd.scrollbar-marks.changes"
+zhs = "改动：:view-diff 标出的新增、修改和删除"
+en = "changes: what :view-diff marks as added, changed or cut"
+
+[[message]]
+# `:view-scrollbar-marks` 可选的一种：listing（草稿）
+key = "cmd.scrollbar-marks.listing"
+zhs = "清单：上一份检查清单指到这个文件的行，清单关掉就没了"
+en = "listing: the lines of this file the last listing points at, until it is closed"
+
+[[message]]
+# `:view-scrollbar-marks` 可选的一种：problems（草稿）
+key = "cmd.scrollbar-marks.problems"
+zhs = "报错：语言服务器报的错误和警告"
+en = "problems: the language server's errors and warnings"
+
+[[message]]
+# `:view-scrollbar-marks` 可选的一种：search（草稿）
+key = "cmd.scrollbar-marks.search"
+zhs = "搜索：搜索命中的行，状态栏显示计数时才有"
+en = "search: the lines a search hit, while the status line counts them"
+
+[[message]]
 # :set 給的一項都不認
 key = "cmd.set-takes"
 zhs = ":set 只认 ft、ts、sw、et、tw；「{0}」不在其中"
@@ -2824,6 +2848,13 @@ key = "cmd.view.scrollbar"
 zhs = "滚动条：每个窗口右边留一格，标出这一页在文件里的位置"
 en = "scrollbar: each window keeps a column at its right showing where the page is in the file"
 find = "滚动条 滾動條 捲軸 位置 scrollbar scroll bar thumb"
+
+[[message]]
+# : 命令菜单里 scrollbar-marks 那一项的说明(view 组)：滚动条上画哪几种标记（草稿）
+key = "cmd.view.scrollbar-marks"
+zhs = "滚动条标记：在滚动条上标出搜索命中、清单各行、改动或报错所在的行"
+en = "scrollbar marks: mark the lines of search hits, listing rows, changes or errors on the scrollbar"
+find = "滚动条 滾動條 标记 標記 命中 改动 改動 报错 報錯 scrollbar marks search listing changes problems"
 
 [[message]]
 # : 命令選單裏 sentence 那一項的説明(view 組)

@@ -1426,6 +1426,9 @@ pub const LATER: &[&str] = &[
     // row of ticks of its own, as Yume's 更多詞語功能設置 has. The config holds
     // them meanwhile.
     "ime.word_show",
+    // Four kinds, each on or off: a row of ticks of its own, as `word_show`
+    // wants. `:view-scrollbar-marks` turns each meanwhile.
+    "editor.scrollbar_marks",
     "editor.usage_groups",
     "editor.syntax",
     // Warning: **二十四個色位（十二個色 × 深淺兩套）收在二級入口裏，不攤在第一層。**

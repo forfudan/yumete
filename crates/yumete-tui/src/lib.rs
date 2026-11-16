@@ -6694,14 +6694,24 @@ fn draw<'a>(
                     // the thumb is and where, off the estimated rows.
                     let (a, b) = viewport[which].drawn_span.unwrap_or((0, len));
                     let top = viewport[which].top;
-                    let thumb = (a > 0 || b < len).then(|| {
+                    // The marks are placed in the same rows, and only on a
+                    // bar with a thumb: while the file fits there is
+                    // nowhere else for a line to be.
+                    let placed = (a > 0 || b < len).then(|| {
                         let folds = editor.closed_folds();
                         let rows = viewport.rows.rows(editor);
                         let (above, total) = scrollbar::rows_above_and_total(rows, &folds, top);
                         let window = bar.height as usize * chain.max(1);
-                        scrollbar::thumb(bar.height as usize, window, above, total, b >= len)
+                        let thumb = scrollbar::thumb(bar.height as usize, window, above, total, b >= len);
+                        let marks = thumb.map(|_| scrollbar::marks(editor, rows, &folds, total, bar.height as usize));
+                        (thumb, marks)
                     });
-                    tint_the_thumb(frame.buffer_mut(), bar, thumb.flatten(), ink.scrollbar());
+                    let (thumb, marks) = placed.unwrap_or((None, None));
+                    tint_the_thumb(frame.buffer_mut(), bar, thumb, ink.scrollbar());
+                    if let Some(marks) = marks {
+                        let caret = (which == live).then_some(caret);
+                        scrollbar::paint_marks(frame.buffer_mut(), bar, &marks, ink, caret);
+                    }
                 }
                 caret
             }
@@ -21681,6 +21691,244 @@ fn squeezed(text: &str) -> String {
         seats.rows.as_if(true, false);
         centred_frame(&mut editor, &config, w + 10, h, &mut seats);
         assert_eq!(seats.rows.builds, built + 2);
+    }
+
+    /// The marks on a frame's scrollbar, a letter a cell: `s` a search hit,
+    /// `l` a listing's row, `e` an error, `w` a warning, `a` and `c` an added
+    /// and a changed line, `.` none.
+    fn mark_cells(buffer: &ratatui::buffer::Buffer, config: &Config, bar: Rect) -> String {
+        use crate::scrollbar::{colour, Mark, MARK};
+        let ink = ink(config);
+        let letters = [
+            (Mark::Search, 's'),
+            (Mark::Listing, 'l'),
+            (Mark::Error, 'e'),
+            (Mark::Warning, 'w'),
+            (Mark::Added, 'a'),
+            (Mark::Changed, 'c'),
+        ];
+        (bar.y..bar.y + bar.height)
+            .map(|y| {
+                let cell = &buffer[(bar.x, y)];
+                match cell.symbol() == MARK {
+                    true => letters.iter().find(|(m, _)| colour(*m, ink) == cell.fg).map(|(_, c)| *c).unwrap_or('?'),
+                    false => '.',
+                }
+            })
+            .collect()
+    }
+
+    /// A frame, and the marks on its live window's bar, the bar asked of
+    /// the layout as it stands after the frame.
+    fn frame_marks(editor: &mut Editor, config: &Config, w: u16, h: u16, seats: &mut Seats) -> (String, String) {
+        let (buffer, _) = centred_frame(editor, config, w, h, seats);
+        let bar = page_areas(editor, config, Rect::new(0, 0, w, h), 0).bars[editor.live_pane()];
+        (mark_cells(&buffer, config, bar), buffer_to_text(&buffer))
+    }
+
+    /// A hundred and twenty lines with `harbour` on every seventeenth.
+    fn harbour_lines() -> String {
+        (1..=120)
+            .map(|n| match n % 17 {
+                0 => format!("line {n} with the harbour\n"),
+                _ => format!("line {n} plain\n"),
+            })
+            .collect()
+    }
+
+    fn search_for(editor: &mut Editor, word: &str) {
+        editor.on_key(Key::Char('/'));
+        for c in word.chars() {
+            editor.on_key(Key::Char(c));
+        }
+        editor.on_key(Key::Enter);
+    }
+
+    /// **A search marks its hits on the bar while the status line counts
+    /// them**: each hit's line in the cell its row falls in, gone once the
+    /// caret leaves the hit, back with `n`, gone at the first edit.
+    #[test]
+    fn search_hits_mark_the_bar_while_they_are_counted() {
+        let config = bare();
+        let (w, h) = (30u16, 14u16);
+        let mut seats = Seats::default();
+        let mut editor = editor_with(&harbour_lines());
+        let bar = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0).bars[0];
+        let (buffer, _) = centred_frame(&mut editor, &config, w, h, &mut seats);
+        assert_eq!(mark_cells(&buffer, &config, bar), ".".repeat(bar.height as usize), "nothing searched");
+        search_for(&mut editor, "harbour");
+        assert!(editor.search_index().is_some());
+        let (buffer, _) = centred_frame(&mut editor, &config, w, h, &mut seats);
+        let cells = mark_cells(&buffer, &config, bar);
+        // Seven hits, lines 17, 34 … 119, in twelve cells of 121 rows.
+        let want: String = (0..bar.height as usize)
+            .map(|cell| match [16usize, 33, 50, 67, 84, 101, 118].iter().any(|l| l * 12 / 121 == cell) {
+                true => 's',
+                false => '.',
+            })
+            .collect();
+        assert_eq!(cells, want, "{}", buffer_to_text(&buffer));
+        editor.on_key(Key::Char('j'));
+        let (buffer, _) = centred_frame(&mut editor, &config, w, h, &mut seats);
+        assert!(!mark_cells(&buffer, &config, bar).contains('s'), "the caret left the hit");
+        editor.on_key(Key::Char('n'));
+        let (buffer, _) = centred_frame(&mut editor, &config, w, h, &mut seats);
+        assert_eq!(mark_cells(&buffer, &config, bar), want, "`n` counts them again");
+        for key in [Key::Char('i'), Key::Char('x'), Key::Esc] {
+            editor.on_key(key);
+        }
+        let (buffer, _) = centred_frame(&mut editor, &config, w, h, &mut seats);
+        assert!(!mark_cells(&buffer, &config, bar).contains('s'), "an edit takes them away");
+    }
+
+    /// **A visible line's mark lands on the thumb**: the bar places lines in
+    /// the rows the thumb is measured in.
+    #[test]
+    fn a_visible_hits_mark_lands_on_the_thumb() {
+        let config = bare();
+        let (w, h) = (30u16, 14u16);
+        let mut seats = Seats::default();
+        let mut editor = editor_with(&harbour_lines());
+        let bar = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0).bars[0];
+        for hit in 1..=7 {
+            search_for(&mut editor, "harbour");
+            for _ in 1..hit {
+                editor.on_key(Key::Char('n'));
+            }
+            let (buffer, _) = centred_frame(&mut editor, &config, w, h, &mut seats);
+            let line = editor.cursor_line();
+            let cell = line * bar.height as usize / 121;
+            let thumb = thumb_cells(&buffer, &config, bar);
+            let (first, last) = (thumb.find('#').unwrap(), thumb.rfind('#').unwrap());
+            assert!(first.saturating_sub(1) <= cell && cell <= last + 1, "line {line}: cell {cell}, thumb {thumb}");
+            assert_eq!(mark_cells(&buffer, &config, bar).chars().nth(cell), Some('s'), "line {line}");
+        }
+    }
+
+    /// **The rows of the last listing mark the file they point into**, and
+    /// no other; closing the listing takes them away.
+    #[test]
+    fn a_listings_rows_mark_their_own_file_until_it_is_closed() {
+        let config = bare();
+        let (w, h) = (30u16, 14u16);
+        let mut seats = Seats::default();
+        let text: String = (1..=120)
+            .map(|n| match n {
+                10 | 90 => "他说,好的。\n".to_string(),
+                _ => format!("第{n}行。\n"),
+            })
+            .collect();
+        let (mut editor, _) = editor_on_disk("listing-marks.md", &text);
+        editor.execute(":check-punct").unwrap();
+        let listing = editor.current_buffer().id();
+        editor.execute(":buffer-previous").unwrap();
+        assert_ne!(editor.current_buffer().id(), listing);
+        let (cells, shown) = frame_marks(&mut editor, &config, w, h, &mut seats);
+        let want: String = (0..cells.len())
+            .map(|cell| match [9usize, 89].iter().any(|l| l * cells.len() / 121 == cell) {
+                true => 'l',
+                false => '.',
+            })
+            .collect();
+        assert_eq!(cells, want, "{shown}");
+        // Another file: nothing of the listing's.
+        let other = std::env::temp_dir().join(format!("yumete-problem-{}", std::process::id())).join("listing-other.md");
+        std::fs::write(&other, &text).unwrap();
+        editor.open_file(&other).unwrap();
+        assert!(!frame_marks(&mut editor, &config, w, h, &mut seats).0.contains('l'), "not this file's listing");
+        editor.execute(":buffer-close").unwrap();
+        // Close the listing, and the marks go with it.
+        while editor.current_buffer().id() != listing {
+            editor.execute(":buffer-next").unwrap();
+        }
+        editor.execute(":buffer-close").unwrap();
+        assert_ne!(editor.current_buffer().id(), listing);
+        let (cells, shown) = frame_marks(&mut editor, &config, w, h, &mut seats);
+        assert!(cells.chars().all(|c| c == '.'), "the listing is closed: {shown}");
+    }
+
+    /// **Changes and the servers' complaints are off out of the box**, and
+    /// one word each turns them on: added lines fill the cells they span,
+    /// errors and warnings their own, a note nothing.
+    #[test]
+    fn changes_and_problems_wait_to_be_asked_for() {
+        use yumete_core::problem::Severity;
+        let config = bare();
+        let (w, h) = (30u16, 14u16);
+        let mut seats = Seats::default();
+        let text: String = (1..=120).map(|n| format!("line {n}\n")).collect();
+        let (mut editor, path) = editor_on_disk("change-marks.md", &text);
+        let bar = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0).bars[0];
+        editor.set_diff_gutter(true);
+        let lines = editor.current_buffer().rope().len_lines();
+        editor.set_vcs(yumete_core::vcs::Changes::from_diff("@@ -0,0 +1,20 @@\n", lines));
+        editor.set_problems(
+            path,
+            "test".into(),
+            vec![said(60, Severity::Error), said(100, Severity::Warn), said(80, Severity::Note)],
+        );
+        let (buffer, _) = centred_frame(&mut editor, &config, w, h, &mut seats);
+        assert_eq!(mark_cells(&buffer, &config, bar), ".".repeat(bar.height as usize), "off out of the box");
+        editor.execute(":view-scrollbar-marks changes on").unwrap();
+        editor.execute(":view-scrollbar-marks problems").unwrap();
+        assert_eq!(editor.scrollbar_marks().words(), ["search", "listing", "changes", "problems"]);
+        let (buffer, _) = centred_frame(&mut editor, &config, w, h, &mut seats);
+        // Twenty added lines of 121 rows in twelve cells: the first two.
+        assert_eq!(mark_cells(&buffer, &config, bar), "aa...e...w..", "{}", buffer_to_text(&buffer));
+        editor.execute(":view-scrollbar-marks changes off").unwrap();
+        let (buffer, _) = centred_frame(&mut editor, &config, w, h, &mut seats);
+        assert_eq!(mark_cells(&buffer, &config, bar), ".....e...w..");
+    }
+
+    /// **One cell, the loudest mark**: an error over a search hit, a hit
+    /// over a listing's row, a listing's row over a warning, a warning over
+    /// a change.
+    #[test]
+    fn the_loudest_mark_takes_a_shared_cell() {
+        use crate::scrollbar::Mark;
+        use yumete_core::problem::Severity;
+        assert!(Mark::Error > Mark::Search && Mark::Search > Mark::Listing);
+        assert!(Mark::Listing > Mark::Warning && Mark::Warning > Mark::Changed && Mark::Changed > Mark::Added);
+        let config = bare();
+        let (w, h) = (30u16, 14u16);
+        let mut seats = Seats::default();
+        let text: String = (1..=120)
+            .map(|n| match n {
+                50 => "他说,好的。\n".to_string(),
+                _ => format!("line {n}\n"),
+            })
+            .collect();
+        let (mut editor, path) = editor_on_disk("loudest-marks.md", &text);
+        editor.execute(":check-punct").unwrap();
+        editor.execute(":buffer-previous").unwrap();
+        let at = |editor: &mut Editor, seats: &mut Seats| {
+            let (cells, _) = frame_marks(editor, &config, w, h, seats);
+            cells.chars().nth(49 * cells.len() / 121)
+        };
+        assert_eq!(at(&mut editor, &mut seats), Some('l'), "the listing's row");
+        editor.execute(":view-scrollbar-marks problems on").unwrap();
+        editor.set_problems(path.clone(), "test".into(), vec![said(49, Severity::Warn)]);
+        assert_eq!(at(&mut editor, &mut seats), Some('l'), "a listing's row over a warning");
+        search_for(&mut editor, "他说");
+        assert_eq!(at(&mut editor, &mut seats), Some('s'), "a hit over a listing's row");
+        editor.set_problems(path, "test".into(), vec![said(49, Severity::Error)]);
+        assert_eq!(at(&mut editor, &mut seats), Some('e'), "an error over a hit");
+    }
+
+    /// **No marks while the file fits**: no thumb, and nowhere else for a
+    /// line to be.
+    #[test]
+    fn a_file_that_fits_has_no_marks() {
+        let config = bare();
+        let (w, h) = (30u16, 14u16);
+        let mut seats = Seats::default();
+        let mut editor = editor_with("one harbour\ntwo\nthree harbour\n");
+        let bar = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0).bars[0];
+        search_for(&mut editor, "harbour");
+        assert!(editor.search_index().is_some());
+        let (buffer, _) = centred_frame(&mut editor, &config, w, h, &mut seats);
+        assert_eq!(mark_cells(&buffer, &config, bar), ".".repeat(bar.height as usize));
+        assert_eq!(thumb_cells(&buffer, &config, bar), ".".repeat(bar.height as usize));
     }
 
     /// **A window each, a bar each**: side by side, each bar at its own

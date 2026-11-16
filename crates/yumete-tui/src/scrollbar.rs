@@ -240,6 +240,176 @@ pub(crate) fn thumb(bar: usize, window: usize, above: usize, total: usize, at_en
     Some((at, cells))
 }
 
+/// **What a mark on the scrollbar says**, quietest first: where two fall in
+/// one cell, the later one in this list is drawn. An error is the one thing
+/// that must not be missed; a search hit and a listing's row are what the
+/// writer has just asked for; a warning and a change are what the file
+/// holds anyway.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum Mark {
+    /// A line `:view-diff` marks as added.
+    Added,
+    /// A line `:view-diff` marks as changed, or a cut beside it.
+    Changed,
+    /// A warning from a language server.
+    Warning,
+    /// A row of the last listing.
+    Listing,
+    /// A line a search hit.
+    Search,
+    /// An error from a language server.
+    Error,
+}
+
+/// The glyph a mark is drawn with: the right half of the cell, in the
+/// mark's colour over whatever ground the cell has, so a mark on the thumb
+/// leaves the thumb's tint showing beside it. Neutral in East Asian width,
+/// so one cell in every terminal however it draws ambiguous characters.
+pub(crate) const MARK: &str = "\u{2590}";
+
+/// **Where a line falls on the bar**: in the same estimated rows the thumb
+/// is measured in, a closed fold counting the one row its first line is
+/// drawn on, so the mark of a line on screen lands on the thumb.
+struct Places<'a> {
+    rows: &'a Rows,
+    folds: &'a [(usize, usize)],
+    /// Rows the first `n` folds hide, for every `n`.
+    hidden: Vec<usize>,
+    total: usize,
+    bar: usize,
+}
+
+impl<'a> Places<'a> {
+    fn new(rows: &'a Rows, folds: &'a [(usize, usize)], total: usize, bar: usize) -> Places<'a> {
+        let mut hidden = Vec::with_capacity(folds.len() + 1);
+        hidden.push(0);
+        for &(first, last) in folds {
+            let hides = (rows.before(last + 1) - rows.before(first)).saturating_sub(1);
+            hidden.push(hidden[hidden.len() - 1] + hides);
+        }
+        Places { rows, folds, hidden, total: total.max(1), bar }
+    }
+
+    /// The rows above `line`, less what closed folds above it hide; a line
+    /// inside a fold is at the fold's own row.
+    fn row(&self, line: usize) -> usize {
+        let k = self.folds.partition_point(|&(first, _)| first < line);
+        match k.checked_sub(1).map(|i| (i, self.folds[i])) {
+            Some((i, (first, last))) if line <= last => self.rows.before(first).saturating_sub(self.hidden[i]),
+            _ => self.rows.before(line).saturating_sub(self.hidden[k]),
+        }
+    }
+
+    fn cell_of_row(&self, row: usize) -> usize {
+        (row * self.bar / self.total).min(self.bar.saturating_sub(1))
+    }
+
+    /// The cell a line's mark goes in: the one its first row falls in.
+    fn line(&self, line: usize) -> usize {
+        self.cell_of_row(self.row(line))
+    }
+
+    /// Every cell a run of lines spans, at least the one its first line is
+    /// in.
+    fn run(&self, lines: std::ops::Range<usize>) -> std::ops::RangeInclusive<usize> {
+        let from = self.line(lines.start);
+        let rows_end = self.row(lines.end.max(lines.start + 1));
+        let to = (rows_end * self.bar).div_ceil(self.total).saturating_sub(1).min(self.bar.saturating_sub(1));
+        from..=to.max(from)
+    }
+}
+
+/// **The marks on a bar `bar` cells long**, one or none a cell: each kind
+/// the reader has on (`:view-scrollbar-marks`), read off what the editor
+/// already holds — the lines the last search counted, the listing's rows,
+/// the diff's runs, the servers' complaints — and placed through the same
+/// rows as the thumb, `total` of them less what folds hide. As cheap as
+/// the marks and the cells: nothing is searched or counted to draw them.
+pub(crate) fn marks(editor: &Editor, rows: &Rows, folds: &[(usize, usize)], total: usize, bar: usize) -> Vec<Option<Mark>> {
+    let mut cells: Vec<Option<Mark>> = vec![None; bar];
+    if bar == 0 {
+        return cells;
+    }
+    let places = Places::new(rows, folds, total, bar);
+    let mut put = |cell: usize, mark: Mark| {
+        if let Some(slot) = cells.get_mut(cell) {
+            if slot.is_none_or(|held| held < mark) {
+                *slot = Some(mark);
+            }
+        }
+    };
+    let kinds = editor.scrollbar_marks();
+    if kinds.changes {
+        for run in editor.vcs_runs() {
+            let mark = match run.how {
+                yumete_core::vcs::Change::Added => Mark::Added,
+                _ => Mark::Changed,
+            };
+            for cell in places.run(run.at.clone()) {
+                put(cell, mark);
+            }
+        }
+    }
+    if kinds.problems {
+        use yumete_core::problem::Severity;
+        for problem in editor.problems_here() {
+            match problem.severity {
+                Severity::Error => put(places.line(problem.line), Mark::Error),
+                Severity::Warn => put(places.line(problem.line), Mark::Warning),
+                Severity::Note | Severity::Hint => {}
+            }
+        }
+    }
+    if kinds.listing {
+        for &line in editor.listing_lines_here().iter().flat_map(|lines| lines.iter()) {
+            put(places.line(line as usize), Mark::Listing);
+        }
+    }
+    if kinds.search {
+        for &line in editor.search_hit_lines() {
+            put(places.line(line as usize), Mark::Search);
+        }
+    }
+    cells
+}
+
+/// The colour a mark is drawn in: the colour the same thing has elsewhere
+/// on the page — a search's hit, the gold of what the reader puts on the
+/// page, the gutter's green and blue, 朱 for an error.
+pub(crate) fn colour(mark: Mark, ink: crate::theme::Palette) -> ratatui::style::Color {
+    use crate::theme::Accent;
+    match mark {
+        Mark::Added => ink.vcs(Accent::Green),
+        Mark::Changed => ink.vcs(Accent::Azure),
+        Mark::Warning => ink.amber(),
+        Mark::Listing => ink.gold(),
+        Mark::Search => ink.wash(),
+        Mark::Error => ink.mark(),
+    }
+}
+
+/// **Paint the marks into the bar's column**, over the thumb's tint and the
+/// page alike. A cell that already holds something — the `␊` of a row that
+/// fills the window — keeps it, and so does the cell the caret stands in.
+pub(crate) fn paint_marks(
+    buf: &mut ratatui::buffer::Buffer,
+    bar: ratatui::layout::Rect,
+    cells: &[Option<Mark>],
+    ink: crate::theme::Palette,
+    caret: Option<(u16, u16)>,
+) {
+    for (n, mark) in cells.iter().enumerate().take(bar.height as usize) {
+        let Some(mark) = *mark else { continue };
+        let at = (bar.x, bar.y + n as u16);
+        if caret == Some(at) {
+            continue;
+        }
+        if let Some(cell) = buf.cell_mut(at).filter(|cell| cell.symbol() == " ") {
+            cell.set_symbol(MARK).set_fg(colour(mark, ink));
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -281,6 +451,55 @@ mod tests {
         // Lines 1–2 folded: four rows down to one.
         assert_eq!(rows_above_and_total(&rows, &[(1, 2)], top(3, 0)), (3, 5));
         assert_eq!(rows_above_and_total(&rows, &[(1, 2)], top(0, 0)), (0, 5));
+    }
+
+    /// **A line falls where its rows do**: a line inside a closed fold at
+    /// the fold's own row, a line below it less the rows it hides, a run in
+    /// every cell its rows reach.
+    #[test]
+    fn a_line_falls_in_the_cell_its_rows_reach() {
+        let rows = Rows {
+            key: Key { revision: 0, width: Some(10), blank_lines_fold: false },
+            // Ten lines of a row each, but line 2 of three.
+            before: vec![0, 1, 2, 5, 6, 7, 8, 9, 10, 11, 12],
+            used: 0,
+            took: Duration::ZERO,
+            seen: (0, Instant::now()),
+        };
+        let places = Places::new(&rows, &[], 12, 12);
+        assert_eq!((places.line(0), places.line(2), places.line(3), places.line(9)), (0, 2, 5, 11));
+        assert_eq!(places.run(2..3), 2..=4, "a line of three rows spans three cells");
+        assert_eq!(places.line(400), 11, "a line past the end stays on the bar");
+        // Lines 2-4 folded: five rows down to one, twelve to eight.
+        let folds = [(2, 4)];
+        let places = Places::new(&rows, &folds, 8, 8);
+        assert_eq!((places.line(2), places.line(3), places.line(4)), (2, 2, 2), "inside the fold, at its row");
+        assert_eq!(places.line(5), 3, "below it, less what it hides");
+    }
+
+    /// **A mark gives way to what the column holds**: the line feed of a
+    /// row that fills the window, and the caret standing in the column; it
+    /// is drawn over the thumb's tint, keeping it; the glyph is neutral in
+    /// East Asian width, so one cell in every terminal.
+    #[test]
+    fn a_mark_gives_way_to_the_line_feed_and_the_caret() {
+        use ratatui::buffer::Buffer;
+        use ratatui::layout::Rect;
+        use ratatui::style::Color;
+        assert_eq!(MARK, "\u{2590}", "RIGHT HALF BLOCK, East Asian width N");
+        let config = yumete_config::Config::default();
+        let ink = crate::theme::Palette::of(&config);
+        let bar = Rect::new(0, 0, 1, 4);
+        let mut buf = Buffer::empty(bar);
+        buf[(0, 1)].set_symbol("\u{240a}");
+        buf[(0, 3)].set_bg(Color::Red);
+        let all = vec![Some(Mark::Search); 4];
+        paint_marks(&mut buf, bar, &all, ink, Some((0, 2)));
+        assert_eq!(buf[(0, 0)].symbol(), MARK);
+        assert_eq!(buf[(0, 0)].fg, colour(Mark::Search, ink));
+        assert_eq!(buf[(0, 1)].symbol(), "\u{240a}", "the line feed stays");
+        assert_eq!(buf[(0, 2)].symbol(), " ", "the caret's cell stays");
+        assert_eq!((buf[(0, 3)].symbol(), buf[(0, 3)].bg), (MARK, Color::Red), "over the ground, keeping it");
     }
 
     /// How long a table takes to build, for a long file of short lines and

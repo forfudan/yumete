@@ -305,6 +305,7 @@ fn view_lines(editor: &Editor) -> Vec<String> {
     use yumete_core::editor::Hud;
     use yumete_core::zong::Layout;
     let on = |b: bool| if b { "on" } else { "off" };
+    let marks = editor.scrollbar_marks();
     vec![
         // What was chosen, not what this buffer shows: a program file or a
         // drawn table is horizontal whatever the reader chose: quitting on a
@@ -317,6 +318,11 @@ fn view_lines(editor: &Editor) -> Vec<String> {
         format!("view-wrap {}", on(editor.soft_wrap())),
         format!("view-centre {}", on(editor.centre())),
         format!("view-scrollbar {}", on(editor.scrollbar())),
+        // One line a kind, so the session keeps only the kinds turned.
+        format!("view-scrollbar-marks search {}", on(marks.search)),
+        format!("view-scrollbar-marks listing {}", on(marks.listing)),
+        format!("view-scrollbar-marks changes {}", on(marks.changes)),
+        format!("view-scrollbar-marks problems {}", on(marks.problems)),
         format!("view-wrap-height {}", editor.zong_measure().unwrap_or(0)),
         format!("view-pages-vertical {}", editor.pages_vertical()),
         format!("view-pages-horizontal {}", editor.pages_horizontal()),
@@ -641,6 +647,7 @@ fn apply_to_editor(config: &Config, editor: &mut Editor, layout: Option<yumete_c
     editor.set_line_breaks(config.editor.show_line_breaks);
     editor.set_centre(config.editor.centre_measure);
     editor.set_scrollbar(config.editor.scrollbar);
+    editor.set_scrollbar_marks(yumete_core::editor::ScrollbarMarks::from_words(&config.editor.scrollbar_marks));
     editor.set_diff_gutter(config.editor.diff_gutter);
     editor.set_modeline(config.editor.modeline);
     if let Some(level) = yumete_core::problem::level_from_word(&config.editor.end_of_line_diagnostics) {
@@ -1024,6 +1031,36 @@ mod config_watch_tests {
         assert!(kept.contains(&"view-scrollbar on".to_string()), "{kept:?}");
         super::view_back_to_config(&mut ed, &config);
         assert!(!ed.scrollbar(), "the reload puts the config's back");
+    }
+
+    /// **`[editor] scrollbar_marks`**: the config's kinds, the same four
+    /// words as the command's; a kind turned by `:view-scrollbar-marks` is
+    /// kept by the session as its own line, and the reload puts the
+    /// config's back.
+    #[test]
+    fn the_scrollbar_marks_come_from_the_config_and_are_kept_by_the_session() {
+        use yumete_core::editor::ScrollbarMarks;
+        assert_eq!(yumete_config::SCROLLBAR_MARK_WORDS, ScrollbarMarks::WORDS, "one list of kinds");
+        let mut config = yumete_config::Config::default();
+        let mut ed = yumete_core::Editor::new();
+        super::apply_to_editor(&config, &mut ed, None);
+        assert_eq!(ed.scrollbar_marks(), ScrollbarMarks::default());
+        assert_eq!(ed.scrollbar_marks().words(), ["search", "listing"]);
+        config.editor.scrollbar_marks = vec!["problems".into()];
+        super::apply_to_editor(&config, &mut ed, None);
+        assert_eq!(ed.scrollbar_marks().words(), ["problems"], "the config's kinds");
+        ed.execute(":view-scrollbar-marks changes on").unwrap();
+        let kept = super::view_to_keep(&ed, &config);
+        assert!(kept.contains(&"view-scrollbar-marks changes on".to_string()), "{kept:?}");
+        assert!(!kept.iter().any(|l| l.starts_with("view-scrollbar-marks problems")), "not what the config gives: {kept:?}");
+        let mut replayed = yumete_core::Editor::new();
+        super::apply_to_editor(&config, &mut replayed, None);
+        for line in &kept {
+            replayed.execute_quietly(&format!(":{line}"));
+        }
+        assert_eq!(replayed.scrollbar_marks(), ed.scrollbar_marks(), "the session puts it back");
+        super::view_back_to_config(&mut ed, &config);
+        assert_eq!(ed.scrollbar_marks().words(), ["problems"], "the reload puts the config's back");
     }
 
     /// **The session and the reload**: the

@@ -153,6 +153,10 @@ impl Editor {
             search_backward(rope, &look, self.sel.anchor().min(self.sel.head()), within.clone())
         };
         let counted = found.map(|(pos, _)| super::count_matches(rope, &look, within, pos));
+        let (counted, hit_lines) = match counted {
+            Some((nth, total, lines)) => (Some((nth, total)), lines),
+            None => (None, Vec::new()),
+        };
         let id = self.current_buffer().id();
         let revision = self.current_buffer().revision();
 
@@ -166,6 +170,7 @@ impl Editor {
                 // covers the cursor's own grapheme.
                 let end = end.min(len);
                 let head = motion::prev_grapheme(rope, end).max(pos);
+                self.search_hit_lines = hit_lines;
                 self.search_stand = counted.map(|(nth, total)| super::SearchStand {
                     buffer: id,
                     revision,
@@ -247,6 +252,18 @@ impl Editor {
         let here = self.caret();
         let fresh = stand.buffer == buffer.id() && stand.revision == buffer.revision();
         (fresh && (stand.from..stand.to).contains(&here)).then_some((stand.nth, stand.total))
+    }
+
+    /// **The lines the search found hits on**, for the scrollbar: while the
+    /// status line counts them ([`Self::search_index`]) and only then, so
+    /// the marks go with the count — at the first edit, and once the caret
+    /// leaves the hit. Kept from the pass that counted them; nothing is
+    /// searched again to draw them.
+    pub fn search_hit_lines(&self) -> &[u32] {
+        match self.search_index() {
+            Some(_) => &self.search_hit_lines,
+            None => &[],
+        }
     }
 
     // ---- Substitute (Feature #15) -----------------------------------------

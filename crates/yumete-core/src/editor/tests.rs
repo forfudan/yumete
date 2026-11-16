@@ -41768,7 +41768,10 @@ fn a_pipe_from_visual_mode_puts_its_answer_over_the_whole_selection() {
 #[test]
 fn every_switch_says_what_it_is_now() {
     let ed = Editor::new();
-    let elsewhere = ["theme-fill", "yume", "yume-autocompletion", "table-detail", "table-header"];
+    // The front end's two, the table's two (nothing to switch away from a
+    // table), and the scrollbar's marks (a switch for each kind, said once
+    // the kind is typed).
+    let elsewhere = ["theme-fill", "yume", "yume-autocompletion", "table-detail", "table-header", "view-scrollbar-marks"];
     let mut seen = 0;
     let mut silent = Vec::new();
     for e in crate::command::COMMANDS {
@@ -41785,6 +41788,9 @@ fn every_switch_says_what_it_is_now() {
     assert!(seen > 20, "only {seen} switches found");
     assert_eq!(ed.switch_state(":view-focus"), Some(false));
     assert_eq!(ed.switch_state("goto 3"), None);
+    assert_eq!(ed.switch_state(":view-scrollbar-marks changes"), Some(false));
+    assert_eq!(ed.switch_state(":view-scrollbar-marks sea"), Some(true), "a kind by its prefix");
+    assert_eq!(ed.switch_state(":view-scrollbar-marks"), None, "no kind yet");
 }
 
 /// **vim's `` `[ `` and `` `] ``**: where the last change or yank began and

@@ -618,6 +618,18 @@ impl Editor {
                 };
                 Ok(CommandOutcome::Continue)
             }
+            Command::SetScrollbarMarks(change) => {
+                if let Some((kind, on)) = change {
+                    let now = self.scrollbar_marks.get(&kind).unwrap_or(false);
+                    self.scrollbar_marks.set(&kind, on.over(now));
+                }
+                let words = self.scrollbar_marks.words();
+                self.status = match words.is_empty() {
+                    true => say!("layout.scrollbar-marks-none"),
+                    false => say!("layout.scrollbar-marks", words.join(" ")),
+                };
+                Ok(CommandOutcome::Continue)
+            }
             Command::SetScrollbar(on) => {
                 self.scrollbar = on.over(self.scrollbar);
                 self.status = match self.scrollbar {
@@ -2610,6 +2622,15 @@ impl Editor {
             Command::SetLineBreaks(_) => self.line_breaks,
             Command::SetCentre(_) => self.centre,
             Command::SetScrollbar(_) => self.scrollbar,
+            // The switch is a kind's, so the kind is read too: with none
+            // typed yet there is nothing to say.
+            Command::SetScrollbarMarks(_) => {
+                let kind = line.strip_prefix(':').unwrap_or(line).split_whitespace().nth(1)?;
+                match command::parse(&format!("{head} {kind}")).ok()? {
+                    Command::SetScrollbarMarks(Some((kind, _))) => self.scrollbar_marks.get(&kind)?,
+                    _ => return None,
+                }
+            }
             Command::SetTableNumbers(_) => self.table_numbers,
             Command::SetTableHeader(_) => self.table()?.schema.header,
             Command::Sidebar(panel, _) => self.showing(Editor::view_of(panel)?).is_some(),

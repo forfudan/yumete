@@ -1585,6 +1585,34 @@ impl Editor {
         self.scrollbar = on;
     }
 
+    /// Which kinds of mark the scrollbar carries (`:view-scrollbar-marks`).
+    pub fn scrollbar_marks(&self) -> ScrollbarMarks {
+        self.scrollbar_marks
+    }
+
+    /// Choose the kinds of mark the scrollbar carries.
+    pub fn set_scrollbar_marks(&mut self, marks: ScrollbarMarks) {
+        self.scrollbar_marks = marks;
+    }
+
+    /// **The file's changes against `HEAD`, for the scrollbar**: the runs
+    /// `:view-diff` draws in the gutter, while it is on and has them.
+    pub fn vcs_runs(&self) -> &[crate::vcs::Run] {
+        match self.diff_gutter {
+            true => self.vcs.get(&self.current_buffer().id()).map(|(_, c)| c.runs()).unwrap_or(&[]),
+            false => &[],
+        }
+    }
+
+    /// **What the language servers said about the file on screen**, every
+    /// severity, for the scrollbar to pick from.
+    pub fn problems_here(&self) -> &[crate::problem::Problem] {
+        match self.current_buffer().path() {
+            Some(path) => self.problems.of(path),
+            None => &[],
+        }
+    }
+
     /// Whether the window with the keys has a cell past the end of a full
     /// row for the caret to stand in. Noted by the front end as it lays the
     /// windows out, before the keys that move by rows run.

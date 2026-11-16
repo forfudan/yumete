@@ -80,6 +80,11 @@ pub struct Run {
 }
 
 impl Changes {
+    /// Every run, by where it starts.
+    pub fn runs(&self) -> &[Run] {
+        &self.runs
+    }
+
     /// 第 `line` 行（0 起算）的來歷，沒有就是沒動過。
     pub fn at(&self, line: usize) -> Option<Change> {
         self.run_at(line).map(|run| run.how)

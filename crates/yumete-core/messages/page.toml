@@ -298,6 +298,18 @@ zhs = "段组：一段(整页一纵到底)"
 en = "pages, vertical: one (a column runs the whole page)"
 
 [[message]]
+# :view-scrollbar-marks — 滚动条上画哪几种标记；{0} 是开着的那几种的名字（草稿）
+key = "layout.scrollbar-marks"
+zhs = "滚动条标记：{0}"
+en = "scrollbar marks: {0}"
+
+[[message]]
+# :view-scrollbar-marks — 一种标记都不画（草稿）
+key = "layout.scrollbar-marks-none"
+zhs = "滚动条标记：无"
+en = "scrollbar marks: none"
+
+[[message]]
 # :view-scrollbar off — 那一格还给正文（草稿）
 key = "layout.scrollbar-off"
 zhs = "滚动条：关"

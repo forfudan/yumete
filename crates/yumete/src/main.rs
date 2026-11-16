@@ -3041,6 +3041,7 @@ KEYS (Normal mode, Helix-style):
               :view-wrap-width <n>  a fixed measure; 0 follows the window
               :view-centre [on|off]  a page at a measure stands centred
               :view-scrollbar [on|off]  a column at each window's right
+              :view-scrollbar-marks [search|listing|changes|problems] [on|off]  marks on it
               :wq [path]       save (optionally save-as) and quit
               :42  :goto n    put the cursor on a line
               :recover         use or drop a crash-recovery draft
