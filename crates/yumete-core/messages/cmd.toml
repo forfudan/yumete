@@ -390,6 +390,13 @@ en = "check punctuation: half-width marks in Chinese, `...` for ……, and uncl
 find = "標點 标点 半角 全角 引號 引号 括號 括号 省略號 省略号 校對 校对 punctuation quotes"
 
 [[message]]
+# （草稿）:check-spelling 在命令表裏的説明
+key = "cmd.check.spelling"
+zhs = "检查英文拼写：列出内置英文词典里没有的词，代码、网址和全大写缩写不查；加 book 查全书"
+en = "check English spelling: list the words the built-in English dictionary does not know, leaving out code, addresses and acronyms; book checks every file"
+find = "拼写 拼寫 英文 英语 英語 错字 錯字 校对 校對 spelling spell typo English dictionary"
+
+[[message]]
 # : 命令選單裏 usage 那一項的説明(check 組)
 # tc on purpose: it shows the character forms or names the scripts themselves
 key = "cmd.check.usage"

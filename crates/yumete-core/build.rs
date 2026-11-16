@@ -62,6 +62,18 @@ fn main() {
     let lesson = std::fs::read_to_string(&lesson_path).expect("tutor_zhs.md is there");
     let made = fix_terms(&glyphs.forward(&s2t.convert(&lesson)), &terms);
     write_if_changed(&out.parent().expect("OUT_DIR").join("tutor_zht.md"), &made);
+
+    // The English dictionary `:check-spelling` reads, zstd-packed: 0.55 MB of
+    // word list is 0.17 MB in the binary, and it is unpacked only when the
+    // command runs.
+    for name in ["en_US.aff", "en_US.dic"] {
+        let path = root.join("src").join(name);
+        println!("cargo:rerun-if-changed={}", path.display());
+        let raw = std::fs::read(&path).expect("the dictionary is there");
+        let packed = zstd::encode_all(&raw[..], 19).expect("the dictionary compresses");
+        std::fs::write(out.parent().expect("OUT_DIR").join(format!("{name}.zst")), packed)
+            .expect("OUT_DIR is writable");
+    }
 }
 
 /// One file: aliases spelled out, a `zht` made where none was written, and a

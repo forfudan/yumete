@@ -32,3 +32,10 @@ The rendered Markdown preview (`crates/yumete-mdview`) follows the spacing of Gi
 | File | Project | What is used |
 | --- | --- | --- |
 | `opencc.LICENSE` | [OpenCC](https://github.com/BYVoid/OpenCC), by way of `ferrous-opencc` 0.4.0 | the conversion dictionaries and rules `:convert` uses, embedded in the binary |
+
+`:check-spelling` checks English words with [spellbook](https://github.com/helix-editor/spellbook) 0.4.2 (Mozilla Public License 2.0), linked in unchanged, against SCOWL's en_US Hunspell dictionary (size 60, version 2020.12.07, as the `dictionary-en` package ships it), packed into the binary. Both notices are kept here, unchanged.
+
+| File | Project | What is used |
+| --- | --- | --- |
+| `spellbook.LICENSE` | [spellbook](https://github.com/helix-editor/spellbook) 0.4.2 (`LICENSE`) | the Hunspell-compatible checker, as a library |
+| `en_US-hunspell.LICENSE` | [SCOWL](http://wordlist.aspell.net/) en_US Hunspell dictionary 2020.12.07, by way of [dictionary-en](https://github.com/wooorm/dictionaries/tree/main/dictionaries/en) (`license`) | `crates/yumete-core/src/en_US.aff` and `en_US.dic`, zstd-packed into the binary |

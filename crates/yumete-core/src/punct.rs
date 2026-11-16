@@ -91,7 +91,7 @@ fn chinese(c: char) -> bool {
 ///
 /// Blanked rather than removed so that every column reported is still the
 /// column the cursor has to go to.
-fn prose(line: &str, in_fence: &mut bool) -> Vec<char> {
+pub(crate) fn prose(line: &str, in_fence: &mut bool) -> Vec<char> {
     let chars: Vec<char> = line.chars().collect();
     let fence = line.trim_start().starts_with("```") || line.trim_start().starts_with("~~~");
     if fence {

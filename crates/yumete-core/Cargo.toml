@@ -42,6 +42,10 @@ ropey = { version = "1.6", default-features = false, features = ["simd"] }
 unicode-normalization = "0.1"
 yumete-cjk = {path = "../yumete-cjk"}
 zstd = { version = "0.13", default-features = false }
+# `:check-spelling`: a Hunspell-compatible checker in pure Rust, by helix's
+# authors (MPL-2.0, about 0.4 MB), reading SCOWL's en_US dictionary
+# (`src/en_US.aff`, `src/en_US.dic`, packed by build.rs).
+spellbook = "0.4.2"
 
 # Code inside a fence, coloured by its own grammar (#420). Only the fence is
 # parsed — never the manuscript — so the per-paragraph caches keep their shape.
@@ -104,3 +108,5 @@ windows-sys = {version = "0.59", features = ["Win32_Storage_FileSystem", "Win32_
 # without a hand-written `zht`, and t2s to check the ones with one. A pure-Rust
 # OpenCC with its dictionaries built in, so no machine needs opencc installed.
 ferrous-opencc = "0.4.0"
+# The spelling dictionary is packed at build time, as yumete-tables packs its tables.
+zstd = { version = "0.13", default-features = false }

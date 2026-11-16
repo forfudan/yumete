@@ -221,6 +221,10 @@ pub enum Command {
     /// written another way: one homophone, or 繁简/异体/兼容字 in any number.
     /// `book` reads every file of the project index rather than this one.
     CheckNames { book: bool },
+    /// `:check-spelling [file|book]` — English words the built-in en_US
+    /// dictionary does not know, one row per word; `book` as for
+    /// `:check-names`.
+    CheckSpelling { book: bool },
     /// `:diagnostics-all` — everything the language servers have complained about
     /// (#53/#54), as a `path:line:` listing `gf` can walk.
     CheckCode,
@@ -3965,6 +3969,24 @@ pub const COMMANDS: &[Entry] = &[
                     Some("book") => true,
                     Some(other) => {
                         return Err(CommandError::InvalidArgument { command: "check-names", value: other.to_string() })
+                    }
+                },
+            })
+        }),
+    },
+    Entry {
+        name: "check-spelling",
+        aliases: &[],
+        help: "cmd.check.spelling",
+        needs: &[],
+        params: &[Param::Words { of: CHECK_SCOPES, default: Some("file") }],
+        build: Some(|p| {
+            Ok(Command::CheckSpelling {
+                book: match p.arg(0) {
+                    None | Some("file") => false,
+                    Some("book") => true,
+                    Some(other) => {
+                        return Err(CommandError::InvalidArgument { command: "check-spelling", value: other.to_string() })
                     }
                 },
             })
@@ -8897,7 +8919,7 @@ mod tests {
         // says it is a family and not a command, and nothing else: `view-w` is
         // `view-wrap`'s spelling, not the thirteen's.
         assert_eq!(row("", "view-"), ":view- +20");
-        assert_eq!(row("", "check-"), ":check- +6");
+        assert_eq!(row("", "check-"), ":check- +7");
         // …and a stem is a stem however many are under it.
         assert_eq!(row("", "markdown-"), ":markdown- +2");
         // …while a name that merely begins the same way is no relation:

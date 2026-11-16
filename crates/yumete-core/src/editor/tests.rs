@@ -25470,6 +25470,66 @@ fn check_names_book_reads_every_chapter_and_gf_goes_to_each() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **`:check-spelling`: one row per English word the dictionary lacks**, at
+/// its first line with its count; Chinese, code, an address and acronyms are
+/// not asked about, and a word in `.yumete/words.txt` is accepted.
+#[test]
+fn check_spelling_lists_each_unknown_word_once_and_accepts_words_txt() {
+    let dir = tmp().join(format!("yumete-check-spelling-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join(".yumete")).unwrap();
+    std::fs::write(
+        dir.join("garden.md"),
+        "# A Garden Diary\n\n今天在花园里种了tomatos和basil。\nThe weathr was fine, and the Tomatos grew.\nSee `let recieve = 1;` and https://exmaple.com/wrod for the JSON and LaTeX notes.\nWenlan came by.\n",
+    )
+    .unwrap();
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    ed.open_file(dir.join("garden.md")).unwrap();
+    ed.reload_project_words();
+    ed.execute(":check-spelling").unwrap();
+    assert_eq!(ed.current_buffer().text(), "3: tomatos (×2)\n4: weathr (×1)\n6: Wenlan (×1)\n");
+    assert_eq!(ed.status(), say!("check.spelling-found", 3));
+    press(&mut ed, "j");
+    press(&mut ed, "gf");
+    assert_eq!(ed.current_buffer().display_name(), "garden.md");
+    assert_eq!(ed.cursor_line(), 3, "gf goes to the row's line");
+
+    std::fs::write(dir.join(".yumete/words.txt"), "# People\nWenlan\n").unwrap();
+    ed.reload_project_words();
+    ed.execute(":check-spelling").unwrap();
+    let listing = ed.current_buffer().text();
+    assert!(!listing.contains("Wenlan"), "words.txt is accepted: {listing}");
+    assert_eq!(listing.lines().count(), 2, "{listing}");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **`:check-spelling book`** reads the book's Markdown files, counts a word
+/// across all of them at its first place, and `]q` walks the rows.
+#[test]
+fn check_spelling_book_counts_across_chapters_and_bracket_q_walks_them() {
+    let dir = tmp().join(format!("yumete-check-spelling-book-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("卷一")).unwrap();
+    std::fs::write(dir.join("卷一/第一章.md"), "He wrote a lettr.\n").unwrap();
+    std::fs::write(dir.join("卷一/第二章.md"), "Another lettr came.\nThen a parcle.\n").unwrap();
+    std::fs::write(dir.join("札记.txt"), "mispelt\n").unwrap();
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    ed.open_file(dir.join("卷一/第一章.md")).unwrap();
+    ed.execute(":check-spelling").unwrap();
+    assert_eq!(ed.current_buffer().text(), "1: lettr (×1)\n", "this file only");
+    ed.open_file(dir.join("卷一/第一章.md")).unwrap();
+    ed.execute(":check-spelling book").unwrap();
+    assert_eq!(ed.current_buffer().text(), "卷一/第一章.md:1: lettr (×2)\n卷一/第二章.md:2: parcle (×1)\n");
+    let at = |ed: &Editor| (ed.current_buffer().display_name().to_string(), ed.cursor_line());
+    press(&mut ed, "]q");
+    assert_eq!(at(&ed), ("第一章.md".to_string(), 0));
+    press(&mut ed, "]q");
+    assert_eq!(at(&ed), ("第二章.md".to_string(), 1));
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **`]q` `[q` walk the last listing from the file being fixed**, across
 /// files, under both keymaps; at either end they stop and say so.
 #[test]

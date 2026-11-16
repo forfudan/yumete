@@ -171,6 +171,54 @@ zhs = "{0}: 「{1}」前面没有「{2}」"
 en = "{0}: 「{1}」 with no 「{2}」 before it"
 
 [[message]]
+# （草稿）:check-spelling book 的範圍名，放進「{0}：英文词都在词典里」那一類句子
+key = "check.spelling-book"
+zhs = "全书"
+en = "the book"
+
+[[message]]
+# （草稿）:check-spelling 查完，每個英文詞都在詞典或 words.txt 裏
+key = "check.spelling-clean"
+zhs = "{0}：英文词都在词典里"
+en = "{0}: every English word is in the dictionary"
+
+[[message]]
+# （草稿）:check-spelling 查出了詞典裏没有的英文詞
+key = "check.spelling-found"
+zhs = "{0} 个英文词不在词典里，gf 跳到该行"
+en = "{0|English word is|English words are} not in the dictionary; gf jumps to the line"
+
+[[message]]
+# （草稿）:check-spelling 查出來的一個詞：在哪(行號，或 路徑:行號)、詞本身、寫了幾次
+key = "check.spelling-miss"
+zhs = "{0}: {1} (×{2})"
+en = "{0}: {1} (×{2})"
+
+[[message]]
+# （草稿）:check-spelling 內置的英文詞典讀不出來(程序本身壞了)
+key = "check.spelling-no-dictionary"
+zhs = "内置的英文词典读不出来"
+en = "the built-in English dictionary could not be read"
+
+[[message]]
+# （草稿）:check-spelling 的緩衝區標題
+key = "check.spelling-results"
+zhs = "{0} 的拼写"
+en = "spelling in {0}"
+
+[[message]]
+# （草稿）:check-spelling book 的緩衝區標題
+key = "check.spelling-results-book"
+zhs = "全书的拼写"
+en = "spelling in the book"
+
+[[message]]
+# （草稿）:check-spelling 查出來的太多，只列了前面那些
+key = "check.spelling-too-many"
+zhs = "过多，只列出前 {0} 个"
+en = "too many; the first {0} are listed"
+
+[[message]]
 # :check-usage 查完，全文用字一致
 key = "check.usage-clean"
 zhs = "{0}：用字一致"

@@ -331,6 +331,70 @@ impl Editor {
         });
     }
 
+    /// `:check-spelling [file|book]` — the English words no dictionary has.
+    ///
+    /// **The Latin half of a Chinese manuscript.** A title, a name, a quoted
+    /// line: a typo in them reads past as easily as 醉翁停 does, and no
+    /// checker made for Chinese looks at them. What counts as a word, and
+    /// what is left alone (code, addresses, acronyms), is [`crate::spell`].
+    ///
+    /// **Only when asked, all at once**, as [`Self::check_names`]: the
+    /// dictionary is unpacked for the one run and dropped after it. The words
+    /// of `.yumete/words.txt` are accepted, so a name the book means is
+    /// listed there once and is let through from then on; this never writes to it.
+    pub(super) fn check_spelling(&mut self, book: bool) {
+        let name = self
+            .current_buffer()
+            .path()
+            .and_then(|p| p.file_name())
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| self.current_buffer().display_name().to_string());
+        let Some(dict) = crate::spell::dictionary() else {
+            self.status = say!("check.spelling-no-dictionary");
+            return;
+        };
+        let accepted = crate::spell::accepted(self.own_words.iter());
+        let root = self.root();
+        let texts: Vec<(Option<String>, String)> = match book {
+            false => vec![(None, self.current_buffer().rope().to_string())],
+            true => self.book_texts(&root),
+        };
+        let words = texts.iter().flat_map(|(path, text)| {
+            crate::spell::words(text).into_iter().map(move |(line, word)| {
+                let at = match path {
+                    Some(path) => format!("{path}:{}", line + 1),
+                    None => (line + 1).to_string(),
+                };
+                (at, word)
+            })
+        });
+        let found = crate::spell::misses(words, |w| {
+            crate::spell::is_accepted(&accepted, w) || crate::spell::knows(&dict, w)
+        });
+        let scope = match book {
+            true => say!("check.spelling-book"),
+            false => name.clone(),
+        };
+        if found.is_empty() {
+            self.status = say!("check.spelling-clean", scope);
+            return;
+        }
+        let n = found.len();
+        let mut listing = String::new();
+        for miss in found.iter().take(LISTING_LIMIT) {
+            listing.push_str(&say!("check.spelling-miss", miss.at, miss.word, miss.count));
+            listing.push('\n');
+        }
+        match book {
+            true => self.show_listing_under(listing, say!("check.spelling-results-book"), root),
+            false => self.show_listing(listing, say!("check.spelling-results", name)),
+        }
+        self.status = match n > LISTING_LIMIT {
+            true => say!("check.spelling-too-many", LISTING_LIMIT),
+            false => say!("check.spelling-found", n),
+        };
+    }
+
     /// Every file of the book, as `(path from the root, text)` in path order.
     ///
     /// The set is the project index's ([`super::links::read_project`]), so

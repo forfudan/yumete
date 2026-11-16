@@ -66,6 +66,7 @@ pub mod nearby;
 pub mod search_panel;
 pub mod selection;
 pub mod sidebar;
+pub mod spell;
 pub mod table;
 pub mod syntax;
 pub mod text_store;

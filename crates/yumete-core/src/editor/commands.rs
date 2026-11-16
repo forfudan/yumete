@@ -703,6 +703,10 @@ impl Editor {
                 self.check_names(book);
                 Ok(CommandOutcome::Continue)
             }
+            Command::CheckSpelling { book } => {
+                self.check_spelling(book);
+                Ok(CommandOutcome::Continue)
+            }
             Command::CheckCode => {
                 self.list_problems();
                 Ok(CommandOutcome::Continue)
