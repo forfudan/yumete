@@ -634,10 +634,10 @@ en = "WYSIWYG: readings shown, markup hidden"
 # ── hint ──────────────────────────────────────────────────────────────
 
 [[message]]
-# 開場屏：空格 ? 做什麼
+# 開場屏：:: 做什麼
 key = "intro.all-commands"
-zhs = "显示命令列表"
-en = "list commands"
+zhs = "搜索命令"
+en = "search commands"
 
 [[message]]
 # 開場屏：那一欄裏的名字。繁簡兩種寫法，英文用拼音。
@@ -650,6 +650,12 @@ en = "Yuhao Zhu"
 key = "intro.by"
 zhs = "作者"
 en = "by"
+
+[[message]]
+# （草稿）開場屏：:docs 那一行
+key = "intro.docs"
+zhs = "打开 yumete 手册网站"
+en = "open the yumete manual website"
 
 [[message]]
 # 開場屏：:help 那一行
@@ -692,12 +698,6 @@ en = "open the file picker"
 key = "intro.space-f-key"
 zhs = "空格 f"
 en = "Space f"
-
-[[message]]
-# 開場屏：那個鍵怎麼寫(空格 ?)
-key = "intro.space-question-key"
-zhs = "空格 ?"
-en = "Space ?"
 
 [[message]]
 # 空手打開 ye 時那一屏的頭一行

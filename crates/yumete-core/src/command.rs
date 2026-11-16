@@ -371,6 +371,8 @@ pub enum Command {
     SetZongMeasure(Option<Option<usize>>),
     /// `:version` —— 這一版是哪一版，以及東西都放在哪。
     Version,
+    /// `:docs` — hand yumete's manual site to the system's browser.
+    Docs,
     /// `:yuhao` — hand the 宇浩 input-method site to the system's browser.
     Yuhao,
     /// `:pipe-before` / `:pipe-after` / `:pipe-to` — the other three of
@@ -5817,6 +5819,14 @@ pub const COMMANDS: &[Entry] = &[
             None => Err(CommandError::MissingArgument("pipe-to")),
             Some(line) => Ok(Command::PipeInto(line.to_string(), crate::editor::Put::Nowhere)),
         }),
+    },
+    Entry {
+        name: "docs",
+        aliases: &[],
+        help: "cmd.commands.docs",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::Docs)),
     },
     Entry {
         name: "yuhao",

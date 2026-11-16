@@ -13119,7 +13119,8 @@ fn draw_the_intro(frame: &mut Frame, editor: &Editor, config: &Config, area: Rec
         (":lang".into(), say!("intro.lang")),
         (":keymap".into(), say!("intro.keymap")),
         (say!("intro.space-f-key"), say!("intro.open-a-file")),
-        (say!("intro.space-question-key"), say!("intro.all-commands")),
+        ("::".into(), say!("intro.all-commands")),
+        (":docs".into(), say!("intro.docs")),
         (":yuhao".into(), say!("intro.yuhao")),
         (":q".into(), say!("intro.leave")),
     ];
