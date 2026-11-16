@@ -193,23 +193,51 @@ pub fn answer_config_check(editor: &mut Editor) {
 }
 
 /// **Whether the keys a table took are news**: they differ from the ones
-/// last said, which `dir`'s `taken-keys` file keeps. Saying them every
-/// start-up was saying the same thing to someone who chose it; a config that
-/// takes no key forgets the file, so taking them again is said again.
+/// last said under the same project config, which `dir`'s `taken-keys` file
+/// keeps. Saying them every start-up would say the same thing to someone who
+/// chose it; a config that takes no key forgets its record, so taking them
+/// again is said again.
 ///
-pub fn taken_keys_are_news(taken: &[String], dir: &std::path::Path) -> bool {
+/// **One record per project config** (`scope`, `None` for a project without
+/// one). The tables themselves are read from the global config only, but
+/// what they take is not: a project's `keymap` or `[keys.flavor]` decides
+/// which commands sit under the keys, so two projects can take different
+/// keys with the same tables. A single record would flip at every switch
+/// between them and say both again each time. Keyed by the config file
+/// rather than the folder, because folders without one all take the same
+/// keys: opening yumete in a new folder is no news.
+///
+/// The file holds one `scope<TAB>key` line per key; a line without a tab
+/// belongs to no scope and is dropped at the next write.
+pub fn taken_keys_are_news(taken: &[String], dir: &std::path::Path, scope: Option<&std::path::Path>) -> bool {
     let file = dir.join("taken-keys");
-    if taken.is_empty() {
-        let _ = std::fs::remove_file(&file);
+    // A tab or line break in the path would break the line it is written on.
+    let scope = scope.map(|path| path.to_string_lossy().replace(['\t', '\n', '\r'], "\u{FFFD}")).unwrap_or_default();
+    let held = std::fs::read_to_string(&file).unwrap_or_default();
+    let mut others: Vec<&str> = Vec::new();
+    let mut said: Vec<&str> = Vec::new();
+    for line in held.lines() {
+        match line.split_once('\t') {
+            Some((of, key)) if of == scope => said.push(key),
+            Some(_) => others.push(line),
+            None => {}
+        }
+    }
+    if said.iter().copied().eq(taken.iter().map(String::as_str)) {
         return false;
     }
-    let now = taken.join("\n");
-    if std::fs::read_to_string(&file).is_ok_and(|was| was == now) {
-        return false;
+    let mine = taken.iter().map(|key| format!("{scope}\t{}", key.replace(['\n', '\r'], " ")));
+    let lines: Vec<String> = others.into_iter().map(str::to_string).chain(mine).collect();
+    match lines.is_empty() {
+        true => {
+            let _ = std::fs::remove_file(&file);
+        }
+        false => {
+            let _ = std::fs::create_dir_all(dir);
+            let _ = std::fs::write(&file, lines.join("\n") + "\n");
+        }
     }
-    let _ = std::fs::create_dir_all(dir);
-    let _ = std::fs::write(&file, now);
-    true
+    !taken.is_empty()
 }
 
 /// The config files that exist, global first — the order the loader reads
@@ -795,11 +823,45 @@ mod config_watch_tests {
         let _ = std::fs::remove_dir_all(&dir);
         let f = vec!["<Space>f".to_string()];
         let fb = vec!["<Space>f".to_string(), "<Space>b".to_string()];
-        assert!(super::taken_keys_are_news(&f, &dir), "the first time");
-        assert!(!super::taken_keys_are_news(&f, &dir), "the same keys again");
-        assert!(super::taken_keys_are_news(&fb, &dir), "one more key");
-        assert!(!super::taken_keys_are_news(&[], &dir), "none taken");
-        assert!(super::taken_keys_are_news(&fb, &dir), "taken again after none");
+        assert!(super::taken_keys_are_news(&f, &dir, None), "the first time");
+        assert!(!super::taken_keys_are_news(&f, &dir, None), "the same keys again");
+        assert!(super::taken_keys_are_news(&fb, &dir, None), "one more key");
+        assert!(!super::taken_keys_are_news(&[], &dir, None), "none taken");
+        assert!(super::taken_keys_are_news(&fb, &dir, None), "taken again after none");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// **Two projects that take different keys are each told once**:
+    /// switching between them says nothing more, and a change in one is
+    /// said in that one only.
+    #[test]
+    fn taken_keys_are_remembered_for_each_project_config() {
+        let dir = std::env::temp_dir().join(format!("yumete-taken-keys-scoped-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let a = std::path::Path::new("/书/甲/.yumete/config.toml");
+        let b = std::path::Path::new("/书/乙/.yumete.toml");
+        let f = vec!["<Space>f".to_string()];
+        let fb = vec!["<Space>f".to_string(), "<Space>b".to_string()];
+        assert!(super::taken_keys_are_news(&f, &dir, Some(a)), "project A, first time");
+        assert!(super::taken_keys_are_news(&fb, &dir, Some(b)), "project B, first time");
+        for _ in 0..3 {
+            assert!(!super::taken_keys_are_news(&f, &dir, Some(a)), "back in A");
+            assert!(!super::taken_keys_are_news(&fb, &dir, Some(b)), "back in B");
+        }
+        assert!(super::taken_keys_are_news(&f, &dir, None), "a folder with no project config");
+        assert!(!super::taken_keys_are_news(&f, &dir, None), "another such folder");
+        assert!(super::taken_keys_are_news(&fb, &dir, Some(a)), "A changed");
+        assert!(!super::taken_keys_are_news(&fb, &dir, Some(b)), "B did not");
+        assert!(!super::taken_keys_are_news(&[], &dir, Some(a)), "A takes none");
+        assert!(super::taken_keys_are_news(&fb, &dir, Some(a)), "A takes them again");
+        assert!(!super::taken_keys_are_news(&f, &dir, None), "the folders kept theirs");
+        // A line with no scope is no one's record.
+        std::fs::write(dir.join("taken-keys"), "<Space>f\n").unwrap();
+        assert!(super::taken_keys_are_news(&f, &dir, None), "an unscoped line is forgotten");
+        for scope in [None, Some(a)] {
+            assert!(!super::taken_keys_are_news(&[], &dir, scope));
+        }
+        assert!(!dir.join("taken-keys").exists(), "nothing taken anywhere leaves no file");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

@@ -1167,7 +1167,10 @@ fn main() -> ExitCode {
     if !mistakes.is_empty() {
         config_problems.push(mistakes.join(" · "));
     }
-    if yumete_tui::settings::taken_keys_are_news(&editor.taken_keys(), &yumete_config::data_dir()) {
+    // Remembered for each project config: two projects can take different
+    // keys with the same tables, and switching between them is no news.
+    let project_config = config_root.as_deref().and_then(yumete_config::local_config_path);
+    if yumete_tui::settings::taken_keys_are_news(&editor.taken_keys(), &yumete_config::data_dir(), project_config.as_deref()) {
         config_problems.extend(editor.taken_keys_note());
     }
     if !config_problems.is_empty() {

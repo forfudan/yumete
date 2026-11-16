@@ -26,6 +26,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Changed
 
+- **The Unicode alarm marks the same bidi controls as VS Code** (the embeddings, overrides and isolates "Trojan Source" uses, and the left-to-right, right-to-left and Arabic letter marks), and the status line names every marked character from the Unicode data.
 - **The whole screen is drawn again whenever the windows move**: a split, a closed, moved or swapped window, a sidebar or a preview opened or closed, or the terminal resized clears the screen once and sends the previews' pictures again, so no window or picture is left at its old place or size. The clear goes out with the new frame, so no blank frame shows in between; typing and scrolling never clear.
 - **Word and reference completion are one list under the cursor, with helix's keys**: `Tab`/`C-n`/`Down` write the next entry into the text and `S-Tab`/`C-p`/`Up` the previous one, typing on keeps it, `Enter` keeps it without a new line, `Esc` keeps it and leaves Insert, `C-c` puts back what you typed; `C-y` and `C-e` do the same as `Enter` and `C-c` while the list is open. `[[`, `[^`, `](#`, `[@` and Typst `@` open it under the cursor rather than at the foot of the window.
 - **The completion list has no border and stands on the status bar's ground**, with a quiet right-hand column (a language server item's kind, file/folder/link for a path, a page's folder, a heading's level and the heading it is under, a footnote's first words), folders in blue with a `/`, deprecated items crossed out, and a scrollbar when it holds more than it shows. The bottom row says `Tab complete · 3/12`.
@@ -34,6 +35,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Fixed
 
+- **"Your groups now take …" is said once for each project**, not again at every switch between two projects whose `preset` or flavor makes the same key tables take different keys.
 - **`--shot` reads no recovery copies**: a draft left beside the file by a session that crashed no longer puts the "unsaved draft found" question on the frame, so the same keys draw the same frame on any machine. The copy stays where it is, and `--private` still offers it.
 - **A Typst comment opened inside strong text, after a closing bracket or after two backticks runs on as Typst reads it**: `*so/* …`, `#figure[…]/*` and ``` ``/* ``` used to leave the lines further down a long book coloured as writing while Typst read them as comment.
 - **vim's registers and marks, closer to vim**: a delete made with `%` `(` `)` `` ` `` `{` `}` goes into `"1` (and `"-`) however short, and a delete of lines into a named register goes into `"1` too; `d'a` keeps the cursor's column as `dj` does; `>` and `<` set `` `[ `` and `` `] ``; a delete or yank into a read-only register (`"%` `":` `"/` `".`, and helix's `"%` `"#` `".`) is refused whole instead of deleting and keeping nothing.

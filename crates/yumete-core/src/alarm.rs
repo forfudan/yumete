@@ -24,57 +24,33 @@ pub enum Alarm {
 
 /// Whether `c` is one of them, and which kind.
 pub fn alarm(c: char) -> Option<Alarm> {
-    name(c).map(|_| match c {
+    match c {
         '\u{00A0}' | '\u{2000}'..='\u{200A}' | '\u{202F}' | '\u{205F}' | '\u{3164}' | '\u{FFA0}' => {
-            Alarm::Space
+            Some(Alarm::Space)
         }
-        _ => Alarm::Hidden,
-    })
+        '\u{00AD}' | '\u{180E}' | '\u{200B}' | '\u{200C}' | '\u{2060}'..='\u{2064}' | '\u{FEFF}' => {
+            Some(Alarm::Hidden)
+        }
+        _ if bidi_control(c) => Some(Alarm::Hidden),
+        _ => None,
+    }
 }
 
-/// Its Unicode name, for the status line.
-pub fn name(c: char) -> Option<&'static str> {
-    Some(match c {
-        '\u{00A0}' => "NO-BREAK SPACE",
-        '\u{00AD}' => "SOFT HYPHEN",
-        '\u{061C}' => "ARABIC LETTER MARK",
-        '\u{180E}' => "MONGOLIAN VOWEL SEPARATOR",
-        '\u{2000}' => "EN QUAD",
-        '\u{2001}' => "EM QUAD",
-        '\u{2002}' => "EN SPACE",
-        '\u{2003}' => "EM SPACE",
-        '\u{2004}' => "THREE-PER-EM SPACE",
-        '\u{2005}' => "FOUR-PER-EM SPACE",
-        '\u{2006}' => "SIX-PER-EM SPACE",
-        '\u{2007}' => "FIGURE SPACE",
-        '\u{2008}' => "PUNCTUATION SPACE",
-        '\u{2009}' => "THIN SPACE",
-        '\u{200A}' => "HAIR SPACE",
-        '\u{200B}' => "ZERO WIDTH SPACE",
-        '\u{200C}' => "ZERO WIDTH NON-JOINER",
-        '\u{200E}' => "LEFT-TO-RIGHT MARK",
-        '\u{200F}' => "RIGHT-TO-LEFT MARK",
-        '\u{202A}' => "LEFT-TO-RIGHT EMBEDDING",
-        '\u{202B}' => "RIGHT-TO-LEFT EMBEDDING",
-        '\u{202C}' => "POP DIRECTIONAL FORMATTING",
-        '\u{202D}' => "LEFT-TO-RIGHT OVERRIDE",
-        '\u{202E}' => "RIGHT-TO-LEFT OVERRIDE",
-        '\u{202F}' => "NARROW NO-BREAK SPACE",
-        '\u{205F}' => "MEDIUM MATHEMATICAL SPACE",
-        '\u{2060}' => "WORD JOINER",
-        '\u{2061}' => "FUNCTION APPLICATION",
-        '\u{2062}' => "INVISIBLE TIMES",
-        '\u{2063}' => "INVISIBLE SEPARATOR",
-        '\u{2064}' => "INVISIBLE PLUS",
-        '\u{2066}' => "LEFT-TO-RIGHT ISOLATE",
-        '\u{2067}' => "RIGHT-TO-LEFT ISOLATE",
-        '\u{2068}' => "FIRST STRONG ISOLATE",
-        '\u{2069}' => "POP DIRECTIONAL ISOLATE",
-        '\u{3164}' => "HANGUL FILLER",
-        '\u{FEFF}' => "ZERO WIDTH NO-BREAK SPACE",
-        '\u{FFA0}' => "HALFWIDTH HANGUL FILLER",
-        _ => return None,
-    })
+/// **The bidirectional controls**, the characters "Trojan Source"
+/// (CVE-2021-42574) hides behind: the embeddings, overrides and isolates
+/// that reorder what follows them, and the three marks. The same twelve VS
+/// Code draws as control characters (`isControlCharacter` in its
+/// `viewLineRenderer.ts`). rustc's `text_direction_codepoint_in_literal` lint
+/// warns on the first nine only and leaves out the marks, which reorder
+/// nothing past themselves; a mark is as invisible as the rest, though, and a
+/// reader asking why the caret jumps wants it named too.
+pub fn bidi_control(c: char) -> bool {
+    matches!(c, '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}' | '\u{200E}' | '\u{200F}' | '\u{061C}')
+}
+
+/// Its Unicode name, for the status line: `RIGHT-TO-LEFT OVERRIDE`.
+pub fn name(c: char) -> Option<String> {
+    alarm(c).and_then(|_| yumete_cjk::blocks::name(c))
 }
 
 /// **Which cells of a row to tint**: for each alarming character, its own
@@ -106,7 +82,41 @@ mod tests {
     fn hidden_ones_tint_the_next_cell_and_spaces_their_own() {
         let chars: Vec<char> = "pri\u{200B}ce a\u{00A0}b x\u{202E}".chars().collect();
         assert_eq!(cells(&chars), vec![4, 8, 11]);
-        assert_eq!(name('\u{200B}'), Some("ZERO WIDTH SPACE"));
+        assert_eq!(name('\u{200B}').as_deref(), Some("ZERO WIDTH SPACE"));
+    }
+
+    /// **Trojan Source is tinted and named**: every bidi control VS Code
+    /// draws, rustc's nine among them, takes no cell and has its name.
+    #[test]
+    fn the_bidi_controls_are_hidden_and_named() {
+        let rustc = ['\u{202A}', '\u{202B}', '\u{202D}', '\u{202E}', '\u{2066}', '\u{2067}', '\u{2068}', '\u{202C}', '\u{2069}'];
+        let marks = ['\u{200E}', '\u{200F}', '\u{061C}'];
+        for c in rustc.into_iter().chain(marks) {
+            assert!(bidi_control(c), "{c:?}");
+            assert_eq!(alarm(c), Some(Alarm::Hidden), "{c:?}");
+            assert!(name(c).is_some_and(|n| !n.is_empty()), "{c:?}");
+        }
+        assert_eq!(name('\u{202E}').as_deref(), Some("RIGHT-TO-LEFT OVERRIDE"));
+        assert_eq!(name('\u{2066}').as_deref(), Some("LEFT-TO-RIGHT ISOLATE"));
+        assert_eq!(name('\u{061C}').as_deref(), Some("ARABIC LETTER MARK"));
+        // The neighbours that are not controls stay plain.
+        for c in ['\u{2029}', '\u{2065}', '\u{2070}', '\u{061B}', '\u{200D}'] {
+            assert!(!bidi_control(c), "{c:?}");
+        }
+        // An override, an isolate and its closing pop: the cell after each
+        // is tinted (the one before, for the pop at the end of the row), and
+        // no character moves.
+        let chars: Vec<char> = "a\u{202E}b\u{2066}c\u{2069}".chars().collect();
+        assert_eq!(cells(&chars), vec![2, 4, 4]);
+    }
+
+    /// **Every character the alarm tints has a name** in the Unicode data,
+    /// so the status line never says a bare code point for one.
+    #[test]
+    fn every_alarming_character_is_named() {
+        for c in (0..=0x10FFFFu32).filter_map(char::from_u32).filter(|&c| alarm(c).is_some()) {
+            assert!(name(c).is_some_and(|n| !n.is_empty()), "U+{:04X}", c as u32);
+        }
     }
 
     #[test]
