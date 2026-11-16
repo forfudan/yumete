@@ -193,8 +193,10 @@ pub enum Command {
     },
     /// `:exit` (aliases `:x`, `:xit`) — **save only if the file changed**, then
     /// leave. vi's `:x` and helix's `:exit`, with the one thing that tells it
-    /// apart from `:wq`.
-    Exit(Option<String>),
+    /// apart from `:wq`. `force` (`:x!`, helix's `exit!`) writes the way
+    /// `:wq!` does: over a file changed outside, leaving whatever else is
+    /// unsaved.
+    Exit { path: Option<String>, force: bool },
     /// `:write-if-changed` (`:update`, `:up`) — **save only if the file changed**, and stay.
     /// `:write` with the same gate: the timestamp of a file nobody touched is
     /// what `make`, rsync and a sync folder all read as 「this changed」.
@@ -294,8 +296,9 @@ pub enum Command {
         /// Which lines it touches.
         rows: Rows,
     },
-    /// `:write-all` — save every buffer that has changed.
-    WriteAll,
+    /// `:write-all` — save every buffer that has changed. `force` (`:wa!`,
+    /// helix's `write-all!`) writes over files changed outside, as `:w!` does.
+    WriteAll { force: bool },
     /// `:undo` (alias `:u`) — undo the last change.
     Undo,
     /// `:redo` (alias `:red`) — redo the last undone change.
@@ -1630,7 +1633,27 @@ fn settings_by_name(typed: &str) -> Vec<Choice> {
 /// longer form of a spelling that is printed (`setfiletype` beside `setf`).
 /// They are declared in the entry's `aliases` like every other, so they parse
 /// and the manual's command table lists them; this only keeps a menu row short.
-pub const QUIET: &[&str] = &["setfiletype", "outline", "out", "bclose", "bd", "bdelete", "bw", "bwipeout"];
+///
+/// helix's long names are here too: each is a second spelling of a yumete
+/// name that already says the same thing, and printing them would double
+/// the row.
+pub const QUIET: &[&str] = &[
+    "setfiletype",
+    "outline",
+    "out",
+    "bclose",
+    "bd",
+    "bdelete",
+    "bw",
+    "bwipeout",
+    "change-current-directory",
+    "show-directory",
+    "set-language",
+    "set-option",
+    "run-shell-command",
+    "clipboard-paste-after",
+    "clipboard-yank-join",
+];
 
 /// **Whether the words after `:settings` are vim's `:set` words** and not a
 /// setting's name. A setting is named by its path, which is always
@@ -2147,6 +2170,8 @@ const FORCEABLE: &[&str] = &[
     // vim's `:read! cmd`, a command's output read in.
     "read!",
     "write!",
+    // helix's `write-all!` (`:wa!`): `:w!` for every changed buffer.
+    "write-all!",
     "quit-all!",
     "quit-error!",
     // `:wqa!`: overwrite what changed outside, as `:w!` does,
@@ -2155,6 +2180,8 @@ const FORCEABLE: &[&str] = &[
     "write-quit-all!",
     // `:wq!`, helix's `write-quit!`.
     "write-quit!",
+    // `:x!` / `:xit!`, helix's `exit!`: `:wq!` behind `:x`'s gate.
+    "exit!",
     "reload!",
     "reload-all!",
     // Opened with unsaved text, which lazygit cannot see.
@@ -3566,7 +3593,7 @@ pub const COMMANDS: &[Entry] = &[
     // 旁邊再單列一個 `:cd`，同一條命令佔兩格還都看不懂。長名字進 `find`。
     Entry {
         name: "cd",
-        aliases: &[],
+        aliases: &["change-current-directory"],
         help: "cmd.commands.cd",
         needs: &[],
         params: &[Param::Path],
@@ -3574,7 +3601,7 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "pwd",
-        aliases: &[],
+        aliases: &["show-directory"],
         help: "cmd.commands.pwd",
         needs: &[],
         params: &[],
@@ -3670,7 +3697,7 @@ pub const COMMANDS: &[Entry] = &[
         help: "cmd.write.all",
         needs: &[],
         params: &[],
-        build: Some(|_| Ok(Command::WriteAll)),
+        build: Some(|p| Ok(Command::WriteAll { force: p.force })),
     },
     Entry {
         name: "write-as",
@@ -4044,7 +4071,7 @@ pub const COMMANDS: &[Entry] = &[
         help: "cmd.commands.exit",
         needs: &[],
         params: &[Param::Path],
-        build: Some(|p| Ok(Command::Exit(p.arg(0).map(|s| s.to_string())))),
+        build: Some(|p| Ok(Command::Exit { path: p.arg(0).map(|s| s.to_string()), force: p.force })),
     },
     Entry {
         name: "write-if-changed",
@@ -4809,7 +4836,7 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "syntax",
-        aliases: &["syn", "setf", "setfiletype"],
+        aliases: &["syn", "setf", "setfiletype", "set-language"],
         help: "cmd.commands.syntax",
         needs: &[],
         params: &[Param::WordsOr { of: SYNTAXES, default: None, or: "cmd.arg.syntax" }],
@@ -4830,7 +4857,7 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "run-shell-in-buffer",
-        aliases: &["sh"],
+        aliases: &["sh", "run-shell-command"],
         help: "cmd.commands.run-shell-in-buffer",
         needs: &[],
         params: &[Param::Free("cmd.arg.command")],
@@ -6009,7 +6036,7 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "clipboard-yank",
-        aliases: &[],
+        aliases: &["clipboard-yank-join"],
         help: "cmd.clipboard.yank",
         needs: &[],
         params: &[],
@@ -6017,7 +6044,7 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "clipboard-paste",
-        aliases: &[],
+        aliases: &["clipboard-paste-after"],
         help: "cmd.clipboard.paste",
         needs: &[],
         params: &[],
@@ -6127,7 +6154,7 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "settings",
-        aliases: &["set", "se"],
+        aliases: &["set", "se", "set-option"],
         help: "cmd.commands.settings",
         needs: &[],
         params: &[Param::Settings],
@@ -6654,6 +6681,13 @@ const RENAMED: &[(&str, &str)] = &[
     ("wysiwyg", "render"),
 ];
 
+/// **Another editor's command that yumete does not have**, so no signpost.
+/// The walk below would answer it by a segment — `char` is the last word of
+/// `:yume-single-char` — but helix's `:char` shows what the character under
+/// the cursor is, and pointing a helix hand at 單字派 sends it somewhere it
+/// never meant to go. A wrong signpost is worse than none.
+const NOT_MOVED: &[&str] = &["char"];
+
 /// Where a word that is not a command went, if it went anywhere (#283).
 ///
 /// **The point of folding a table into a tree is that the leaves keep their
@@ -6666,6 +6700,9 @@ const RENAMED: &[(&str, &str)] = &[
 /// `:count-progress` is the difference between a signpost and a shrug. Three
 /// answers at most: past that the word is too vague to be pointing anywhere.
 fn moved_to(word: &str) -> Option<String> {
+    if NOT_MOVED.contains(&word) {
+        return None;
+    }
     if let Some((_, to)) = RENAMED.iter().find(|(from, _)| *from == word) {
         // **A name may have become two.** `:layout` was one command with a
         // direction for an argument, and the two directions are each a thing
@@ -9166,6 +9203,53 @@ mod tests {
     /// **The menu lists the common commands first, then the rest**, each
     /// group alphabetical, folded into their families; a name typed whole
     /// (`:e` is `:open`'s) comes before either.
+    /// **helix's long names reach yumete's own**, and mean the same thing.
+    #[test]
+    fn helixs_long_names_are_spellings_of_yumetes_own() {
+        for (helix, ours) in [
+            (":change-current-directory 稿", ":cd 稿"),
+            (":show-directory", ":pwd"),
+            (":set-language markdown", ":syntax markdown"),
+            (":set-option", ":settings"),
+            (":run-shell-command date", ":run-shell-in-buffer date"),
+            (":clipboard-paste-after", ":clipboard-paste"),
+            (":clipboard-yank-join", ":clipboard-yank"),
+        ] {
+            assert!(parse(ours).is_ok(), "{ours}");
+            assert_eq!(parse(helix), parse(ours), "{helix}");
+        }
+        // `:lang` stays the interface language, not helix's `set-language`.
+        assert_ne!(parse(":lang en"), parse(":syntax en"));
+    }
+
+    /// `:x!` and `:wa!`, helix's `exit!` and `write-all!`: the bang forces
+    /// the write, as `:wq!` and `:w!` do.
+    #[test]
+    fn exit_and_write_all_take_a_bang() {
+        for line in [":x!", ":xit!", ":exit!"] {
+            assert_eq!(parse(line), Ok(Command::Exit { path: None, force: true }), "{line}");
+        }
+        assert_eq!(parse(":x"), Ok(Command::Exit { path: None, force: false }));
+        assert_eq!(
+            parse(":x! 稿.md"),
+            Ok(Command::Exit { path: Some("稿.md".into()), force: true })
+        );
+        for line in [":wa!", ":write-all!"] {
+            assert_eq!(parse(line), Ok(Command::WriteAll { force: true }), "{line}");
+        }
+        assert_eq!(parse(":wa"), Ok(Command::WriteAll { force: false }));
+    }
+
+    /// `:char` is helix's character info, which yumete has no command for:
+    /// it says so and points nowhere, least of all at 單字派.
+    #[test]
+    fn char_is_not_a_signpost_to_single_char() {
+        assert!(matches!(parse(":char"), Err(CommandError::Unknown(_))));
+        assert_eq!(moved_to("char"), None);
+        let said = parse(":char").unwrap_err().to_string();
+        assert!(!said.contains("yume-single-char"), "{said}");
+    }
+
     #[test]
     fn a_quiet_spelling_parses_and_is_not_printed() {
         for quiet in QUIET {
@@ -9173,7 +9257,12 @@ mod tests {
                 .iter()
                 .find(|e| e.aliases.contains(quiet))
                 .unwrap_or_else(|| panic!("`{quiet}` is no command's spelling"));
-            assert!(parse(&format!(":{quiet}")).is_ok(), "{quiet}");
+            // Reaching the command is the point: `:run-shell-command` alone
+            // asks for the command to run, as `:sh` does.
+            assert!(
+                !matches!(parse(&format!(":{quiet}")), Err(CommandError::Unknown(_))),
+                "{quiet}"
+            );
             // The bracketed spellings, word by word: `outline` is a quiet
             // spelling of `sidebar-outline` and also a part of its name.
             let row = complete(entry.name).into_iter().find(|c| c.name == entry.name);
@@ -9574,7 +9663,7 @@ mod tests {
                     "gr" => ":gr x".to_string(),
                     "ex" => ":ex html".to_string(),
                     "md" => ":md footnote".to_string(),
-                    "insert-output" | "append-output" | "sh" => format!(":{alias} date"),
+                    "insert-output" | "append-output" | "sh" | "run-shell-command" => format!(":{alias} date"),
                     alias => format!(":{alias}"),
                 };
                 assert!(parse(&line).is_ok(), "alias {alias} does not parse");

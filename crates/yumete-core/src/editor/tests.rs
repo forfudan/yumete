@@ -8971,7 +8971,7 @@ fn a_file_nobody_changed_is_not_written_again() {
     // …and `:xit` is the same command under its other name.
     assert_eq!(
         crate::command::parse(":xit"),
-        Ok(crate::command::Command::Exit(None))
+        Ok(crate::command::Command::Exit { path: None, force: false })
     );
     // `:x` is not `:wq`, which stays unconditional.
     assert_eq!(
@@ -8981,7 +8981,7 @@ fn a_file_nobody_changed_is_not_written_again() {
     // A path is an instruction, not a convenience: it is always written.
     assert_eq!(
         crate::command::parse(":x 第二章.md"),
-        Ok(crate::command::Command::Exit(Some("第二章.md".into())))
+        Ok(crate::command::Command::Exit { path: Some("第二章.md".into()), force: false })
     );
 
     std::fs::remove_dir_all(&dir).ok();
@@ -22070,6 +22070,47 @@ fn write_quit_all_leaves_only_when_everything_is_on_disk() {
     assert_eq!(std::fs::read_to_string(&b).unwrap(), "外面改的一行\n");
     assert_eq!(ed.execute(":wqa!").unwrap(), CommandOutcome::Quit);
     assert_eq!(std::fs::read_to_string(&b).unwrap(), "四二乙\n");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// `:x!` and `:wa!` (helix's `exit!` and `write-all!`) write over a file
+/// changed outside, as `:wq!` and `:w!` do; without the bang they refuse.
+#[test]
+fn exit_and_write_all_bang_write_over_a_file_changed_outside() {
+    let dir = tmp().join(format!("yumete-x-bang-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let a = dir.join("a.md");
+    let b = dir.join("b.md");
+
+    for bang in [":x!", ":xit!"] {
+        std::fs::write(&a, "甲\n").unwrap();
+        let mut ed = Editor::new();
+        ed.open_file(&a).unwrap();
+        let _ = ed.buffers[0].insert(0, "一");
+        std::fs::write(&a, "外面改的一行\n").unwrap();
+        assert!(!matches!(ed.execute(":x"), Ok(CommandOutcome::Quit)), "`:x` refuses");
+        assert_eq!(std::fs::read_to_string(&a).unwrap(), "外面改的一行\n");
+        assert_eq!(ed.execute(bang).unwrap(), CommandOutcome::Quit, "{bang}");
+        assert_eq!(std::fs::read_to_string(&a).unwrap(), "一甲\n", "{bang}");
+    }
+
+    std::fs::write(&a, "甲\n").unwrap();
+    std::fs::write(&b, "乙\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&a).unwrap();
+    ed.open_file(&b).unwrap();
+    let _ = ed.buffers[0].insert(0, "一");
+    let _ = ed.buffers[1].insert(0, "二");
+    std::fs::write(&a, "外面改的一行\n").unwrap();
+    std::fs::write(&b, "外面也改了\n").unwrap();
+    let _ = ed.execute(":wa");
+    assert_eq!(std::fs::read_to_string(&a).unwrap(), "外面改的一行\n");
+    assert_eq!(std::fs::read_to_string(&b).unwrap(), "外面也改了\n");
+    ed.execute(":wa!").unwrap();
+    assert_eq!(std::fs::read_to_string(&a).unwrap(), "一甲\n");
+    assert_eq!(std::fs::read_to_string(&b).unwrap(), "二乙\n");
 
     let _ = std::fs::remove_dir_all(&dir);
 }

@@ -6,6 +6,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Added
 
+- **helix's long command names work as aliases**: `:change-current-directory`, `:show-directory`, `:set-language`, `:set-option`, `:run-shell-command`, `:clipboard-paste-after`, `:clipboard-yank-join`; `:x!`/`:xit!` and `:wa!` write over files changed outside, like `:wq!` and `:w!`.
 - **A lone Shift tap switches 中/ABC on Windows** (Windows Terminal and the classic console), as it does under the Kitty keyboard protocol elsewhere, with the same rules; the start-up line about the terminal not reporting a lone Shift is no longer shown there. `C-\` still works.
 - **vim's `:sort` takes `n` and `u`, and a range in front**: `:sort n` orders lines by their first number (lines without one first), `:sort u` keeps one of each run of equal lines, and `:%sort` or `:2-5sort` sorts the lines it names.
 - **`:read !cmd` reads a command's output in** below the cursor line, the cursor on its last line, as vim's `:r !cmd`; `:0read` and `:$read` put a file or output above the first line or after the last, `:5read` below line 5.

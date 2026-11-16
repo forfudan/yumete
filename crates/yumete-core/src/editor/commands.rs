@@ -496,7 +496,7 @@ impl Editor {
             // Warning: **`:x` 也要接住。** 它本來是 `write_then_quit`——面板開着的時候
             // 那一支會存眼前那一章、**再把整個編輯器關掉**，而按的人以為自己只是
             // 關了一扇設置頁。存了再關，同 `:wq`。
-            Command::Exit(_) if self.settings_open => {
+            Command::Exit { .. } if self.settings_open => {
                 self.settings_save = true;
                 self.settings_close = Some(false);
                 Ok(CommandOutcome::Continue)
@@ -515,7 +515,7 @@ impl Editor {
             Command::WriteQuitAll { force } => self.write_quit_all(force),
             // `:x` and `:xit`: the same, and the save is skipped when nothing
             // was changed. A path is an instruction, so it is always written.
-            Command::Exit(path) => self.write_then_quit(path, true, false),
+            Command::Exit { path, force } => self.write_then_quit(path, true, force),
             Command::Update => {
                 if !self.current_buffer().is_modified() {
                     self.status = say!("buffer.unchanged-not-written");
@@ -526,11 +526,11 @@ impl Editor {
             }
             // Warning: **`:wa` 也要存面板。** 「全都存」而設定一個字節没落盤，狀態行
             // 還報存成功——同 `:w` 那條的理由逐字相同。緩衝區照舊存。
-            Command::WriteAll if self.settings_open => {
+            Command::WriteAll { force } if self.settings_open => {
                 self.settings_save = true;
-                self.write_all()
+                self.write_all_forcing(force)
             }
-            Command::WriteAll => self.write_all(),
+            Command::WriteAll { force } => self.write_all_forcing(force),
             Command::Search { pattern, by } => {
                 match by {
                     crate::command::Axis::Row => {
