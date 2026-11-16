@@ -484,6 +484,21 @@ fn settle_the_pages(editor: &mut Editor, config: &Config, page: Rect) {
     editor.note_side_width((first.width as usize).saturating_sub(gutter).max(1), gutter);
 }
 
+/// **How wide the grid draws its columns, said before a key** — for
+/// `--keys`, which has no frame between two keys to say it. A wrapped cell's
+/// rows are cut at those widths, so `j` inside a cell must know them before
+/// it is pressed. The live loop needs none of this: every frame it draws
+/// says it ([`table::draw`]).
+pub fn fit_the_grid(editor: &Editor, config: &Config, width: u16, height: u16, seat: &mut table::Viewport) {
+    if !editor.grid_has_the_pane() {
+        return;
+    }
+    let areas = page_areas(editor, config, Rect::new(0, 0, width, height), 0);
+    if let Some(&pane) = areas.panes.get(editor.live_pane()) {
+        table::note_drawn_columns(editor, config, pane, seat);
+    }
+}
+
 pub fn fit_the_page(
     ime: &mut ImeSession,
     editor: &mut Editor,
@@ -20130,12 +20145,12 @@ fn squeezed(text: &str) -> String {
         assert!(typing.contains(long), "the cell being typed in is whole:\n{typing}");
     }
 
-    /// **Under 摺起 the cap rises with the window**: a table that fits the
-    /// window at its capped widths gives the spare width back to the columns
-    /// the cap cut, never past a column's widest cell; a window too narrow for
-    /// the capped table is drawn exactly as the cap alone draws it.
+    /// **Under 摺起 and 折行 the cap rises with the window**: a table that fits
+    /// the window at its capped widths gives the spare width back to the
+    /// columns the cap cut, never past a column's widest cell; a window too
+    /// narrow for the capped table is drawn exactly as the cap alone draws it.
     #[test]
-    fn the_folded_grid_gives_a_wide_windows_spare_width_to_the_cut_columns() {
+    fn the_capped_grid_gives_a_wide_windows_spare_width_to_the_cut_columns() {
         let note = "A harbour town on seven hills with yellow trams and tiled walls";
         let place = "Rua Augusta 100 near the river and the square";
         let mut editor = editor_with(&format!(
@@ -20153,10 +20168,20 @@ fn squeezed(text: &str) -> String {
                 .find(|line| line.contains("A harbour"))
                 .unwrap_or_else(|| panic!("the row is on the page at {wide}"))
         };
-        // 折行 keeps the fixed cap whatever the window: the editor walks a
-        // wrapped cell's rows at that width.
-        let wrapped = row(&editor, 200);
-        assert!(!wrapped.contains(note), "under 折行 the note still wraps:\n{wrapped}");
+        // 折行: too narrow for the capped table, the note wraps at the cap;
+        // room for everything, it is one row and the record one line tall.
+        let lines = |editor: &Editor, wide: u16| -> Vec<String> {
+            let frame = render(editor, &config, wide, 10);
+            (0..10).map(|y| grid_half(&frame, y)).collect()
+        };
+        let narrow = lines(&editor, 60);
+        let first = narrow.iter().find(|l| l.contains("A harbour")).expect("the row is on the page");
+        assert!(first.contains("A harbour town on seven hills "), "wrapped at the cap:\n{}", narrow.join("\n"));
+        assert!(!first.contains("with"), "and no wider:\n{}", narrow.join("\n"));
+        let wide = lines(&editor, 200);
+        let at = wide.iter().position(|l| l.contains("A harbour")).expect("the row is on the page");
+        assert!(wide[at].contains(&format!("{note}┆{place}┆")), "whole on one row:\n{}", wide.join("\n"));
+        assert!(wide[at + 1].contains("short"), "the next record right under it:\n{}", wide.join("\n"));
         for key in [' ', 't', 'w'] {
             editor.on_key(Key::Char(key));
         }
@@ -20181,6 +20206,57 @@ fn squeezed(text: &str) -> String {
         assert_eq!(yumete_cjk::str_width(between.trim_end()), 100, "the table fills the window:\n{between}");
     }
 
+    /// **`j` in a wrapped cell lands where the next drawn row starts**, at
+    /// every window width: the grid tells the editor how wide it drew each
+    /// column, and both cut the cell's rows with one breaker, between words.
+    #[test]
+    fn j_in_a_wrapped_cell_lands_where_the_grid_drew_the_next_row() {
+        let note = "A harbour town on seven hills with yellow trams and tiled walls along the river";
+        let source = format!("| id | note |\n| --- | --- |\n| 1 | {note} |\n| 2 | short |");
+        let config = Config::default();
+        for wide in [40u16, 60, 100] {
+            let mut editor = editor_with(&source);
+            for key in ['j', 'j', ' ', 't', 't', 'l'] {
+                editor.on_key(Key::Char(key));
+            }
+            assert!(editor.grid_has_the_pane(), "{}", editor.status());
+            assert_eq!(editor.cell_position().map(|(_, c)| c), Some(1), "in the note");
+            editor.on_key(Key::Enter);
+            // The note's drawn rows, read off the frame: its column of every
+            // line from the record's first down to the next record.
+            let frame = render(&editor, &config, wide, 14);
+            let page: Vec<String> = (0..14).map(|y| grid_half(&frame, y)).collect();
+            let first = page.iter().position(|l| l.contains("A harbour")).expect("on the page");
+            let drawn: Vec<String> = page[first..]
+                .iter()
+                .take_while(|l| !l.contains("short"))
+                .filter_map(|l| l.rsplit('┆').nth(1).map(|c| c.trim().to_string()))
+                .filter(|c| !c.is_empty())
+                .collect();
+            let whole = page.join("\n");
+            // Wrapped only while the window cannot hold it: the spare width goes
+            // to the wrapped column.
+            assert_eq!(drawn.len() > 1, wide < 100, "{wide}: {} rows:\n{whole}", drawn.len());
+            let into = |editor: &Editor| -> String {
+                let (line, cell) = editor.cell_position().expect("in a cell");
+                let (a, b) = editor.cell_span(line, cell).expect("a cell");
+                let start = editor.value_span(a, b).0;
+                note.chars().skip(editor.cursor() - start).collect()
+            };
+            for row in &drawn[1..] {
+                editor.on_key(Key::Char('j'));
+                assert!(into(&editor).starts_with(row.as_str()), "{wide}: `j` onto 「{row}」:\n{whole}");
+            }
+            editor.on_key(Key::Char('j'));
+            assert_eq!(editor.cell_position().map(|(_, c)| c), Some(1), "{wide}");
+            assert!(
+                editor.grapheme_at_cursor().is_some_and(|g| g == "s"),
+                "{wide}: out of the cell after its last drawn row ({} rows):\n{whole}",
+                drawn.len()
+            );
+        }
+    }
+
     /// 格內軟折行: every over-long cell soft-wraps into the empty rows under
     /// it. The grid can do this and the prose page cannot: it owns its own
     /// layout, so a row is as tall as its tallest cell and the rows under it
@@ -20199,8 +20275,11 @@ fn squeezed(text: &str) -> String {
             editor.on_key(Key::Char(key));
         }
         let config = Config::default();
+        // **A window the capped table just fills** (two columns and their
+        // walls are 38 cells, the gutter three), so no spare width is there to
+        // widen the cut column out of wrapping or folding (`table::share_spare`).
         let page = |editor: &Editor| -> Vec<String> {
-            let frame = render(editor, &config, 120, 12);
+            let frame = render(editor, &config, 41, 12);
             (0..12)
                 .map(|y| grid_half(&frame, y))
                 .collect()

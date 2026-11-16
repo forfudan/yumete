@@ -1608,6 +1608,88 @@ fn a_wrapped_cell_has_rows_for_j_that_gj_steps_over() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **`j` in a wrapped cell lands where a drawn row starts** — between words,
+/// at whatever width the grid drew the column, because the rows it walks are
+/// cut by the breaker the grid draws with
+/// ([`crate::mdtable::cell_drawn_rows`]).
+///
+/// Cut by character at the cap instead, `j` in a cell of English notes put
+/// the caret in the middle of a word on the row below.
+#[test]
+fn j_in_a_wrapped_cell_lands_on_the_drawn_row_starts_at_any_width() {
+    let dir = tmp().join(format!("yumete-wordrows-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("notes.csv");
+    let note = "The ferry leaves at dawn and returns before the tide turns again near the old stone pier";
+    std::fs::write(&csv, format!("id,note\n1,{note}\n2,Short\n")).unwrap();
+    // `None`: no frame has said a width, and the cap stands.
+    for drawn in [None, Some(20), Some(45), Some(66)] {
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        assert!(ed.enter_table(), "{}", ed.status());
+        ed.set_cell_width(crate::editor::CellWidth::Wrap);
+        let width = drawn.unwrap_or(crate::mdtable::MAX_COLUMN);
+        if let Some(w) = drawn {
+            ed.note_drawn_columns(1, vec![3, w]);
+        }
+        let starts: Vec<usize> =
+            crate::wrap::line_rows(note, width).into_iter().map(|(a, _)| a).collect();
+        assert!(starts.len() > 1, "{width}: the note wraps");
+
+        press(&mut ed, "ggl");
+        ed.on_key(Key::Enter);
+        let column = |ed: &Editor| ed.caret() - ed.cell_here().unwrap().0;
+        for &start in &starts[1..] {
+            press(&mut ed, "j");
+            assert_eq!(column(&ed), start, "{width}: `j` onto the start of a drawn row");
+            assert_eq!(ed.cell_position().map(|(l, _)| l), Some(1), "{width}: still that record");
+        }
+        press(&mut ed, "j");
+        assert_eq!(ed.cell_position().map(|(l, _)| l), Some(2), "{width}: out at the last row");
+        press(&mut ed, "k");
+        assert_eq!(
+            column(&ed),
+            *starts.last().unwrap(),
+            "{width}: `k` back in lands on the last drawn row's start"
+        );
+        for &start in starts[..starts.len() - 1].iter().rev() {
+            press(&mut ed, "k");
+            assert_eq!(column(&ed), start, "{width}: `k` onto the start of a drawn row");
+        }
+    }
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **A drawn row is a row of the value as drawn**: a quoted field's `""` is
+/// one `"` on the grid, so the rows are cut on that text and read back onto
+/// the file — and a line the writer broke ends a row whatever its width.
+#[test]
+fn wrapped_cell_rows_follow_the_drawn_value_through_quotes_and_line_breaks() {
+    let dir = tmp().join(format!("yumete-quoterows-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("quoted.csv");
+    // Drawn: `say ""no"" more words here` is `say "no" more words here`.
+    std::fs::write(&csv, "id,note\n1,\"say \"\"no\"\" more words\nnext line\"\n2,x\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&csv).unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+    ed.set_cell_width(crate::editor::CellWidth::Wrap);
+    // `say "no" more ` fits 14; `words` goes down.
+    ed.note_drawn_columns(1, vec![3, 14]);
+    press(&mut ed, "ggl");
+    ed.on_key(Key::Enter);
+    let at = |ed: &Editor| ed.grapheme_at_cursor().unwrap_or_default();
+    press(&mut ed, "j");
+    assert_eq!(at(&ed), "w", "「words」 opens the second drawn row: {}", ed.status());
+    press(&mut ed, "j");
+    assert_eq!(at(&ed), "n", "「next line」, the line the writer broke");
+    press(&mut ed, "kk");
+    assert_eq!(at(&ed), "s", "and back to the top");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **Leaving Insert comes to rest on a character of the cell**, and an empty
 /// cell has none to name.
 ///

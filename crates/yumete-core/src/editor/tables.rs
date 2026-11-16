@@ -4206,23 +4206,49 @@ impl Editor {
         }
     }
 
+    /// **How wide the grid drew each column**, said by the front end every
+    /// frame it draws the table whose first row is line `first` — the width a
+    /// wrapped cell's rows are cut at, so that `j` inside a cell lands where a
+    /// drawn row starts. Only the front end knows it: a column is as wide as
+    /// its widest *drawn* cell, and the window's spare width is shared out on
+    /// top of that.
+    pub fn note_drawn_columns(&self, first: usize, widths: Vec<usize>) {
+        *self.drawn_columns.borrow_mut() = Some((first, widths));
+    }
+
+    /// The width column `column` of the table holding `line` was drawn at, as
+    /// [`Self::note_drawn_columns`] last said — or the cap, when no frame has
+    /// drawn this table.
+    fn drawn_column(&self, line: usize, column: usize) -> usize {
+        let first = self.table_row_span_at(line).map(|(first, _)| first);
+        self.drawn_columns
+            .borrow()
+            .as_ref()
+            .filter(|(drawn, _)| Some(*drawn) == first)
+            .and_then(|(_, widths)| widths.get(column).copied())
+            .unwrap_or(crate::mdtable::MAX_COLUMN)
+    }
+
     /// **The rows the grid draws one cell on** — as spans of the buffer, in
     /// the order they are drawn, never empty.
     ///
     /// A cell has rows of its own, since a line break can be typed into one,
-    /// and the grid draws them two ways: a value's
-    /// own line breaks each start a row, and under 折行 (`␣t a`) anything past
-    /// [`crate::mdtable::MAX_COLUMN`] columns is drawn underneath as well.
-    /// `visual` asks for the rows **on the screen** (both splits) and
-    /// `!visual` for the rows **of the file** (line breaks only) — the same
-    /// question `j` and `gj` ask of a page of prose, answered here for one
-    /// cell.
+    /// and the grid draws them two ways: a value's own line breaks each start
+    /// a row, and under 折行 (`␣t a`) what does not fit the column's drawn
+    /// width is drawn underneath as well. `visual` asks for the rows **on the
+    /// screen** (both splits) and `!visual` for the rows **of the file** (line
+    /// breaks only) — the same question `j` and `gj` ask of a page of prose,
+    /// answered here for one cell.
     ///
     /// Takes the value span so that every caller is already past the quotes:
-    /// a row of a cell is a row of its *content*.
-    pub(super) fn cell_rows(&self, from: usize, to: usize, visual: bool) -> Vec<(usize, usize)> {
+    /// a row of a cell is a row of its *content*. `column` is the cell's, to
+    /// know how wide it was drawn.
+    pub(super) fn cell_rows(&self, from: usize, to: usize, column: usize, visual: bool) -> Vec<(usize, usize)> {
         let rope = self.current_buffer().rope();
-        let wraps = visual && self.cell_width_now() == CellWidth::Wrap;
+        if visual && self.cell_width_now() == CellWidth::Wrap {
+            let line = rope.char_to_line(from.min(rope.len_chars()));
+            return self.wrapped_cell_rows(from, to, self.drawn_column(line, column));
+        }
         let mut rows = Vec::new();
         let mut start = from;
         for at in from..to {
@@ -4232,27 +4258,61 @@ impl Editor {
             }
         }
         rows.push((start, to));
-        if !wraps {
-            return rows;
+        rows
+    }
+
+    /// [`Self::cell_rows`] under 折行: **the rows the grid draws, read back
+    /// onto the buffer** — [`crate::mdtable::cell_drawn_rows`] over the value
+    /// as drawn, the one breaker the grid draws with.
+    ///
+    /// The grid draws a quoted field's `""` as one `"`, so the rows are found
+    /// on that text and each of its characters is mapped back to where it
+    /// stands in the file. A row ends before the line break it draws as `␊`,
+    /// which is not a place in the content; a row holding nothing but that
+    /// `␊` is no row the caret can stand on and is left out. The trailing
+    /// blanks the grid does not draw belong to the row before them, so every
+    /// position of the value is on some row.
+    fn wrapped_cell_rows(&self, from: usize, to: usize, width: usize) -> Vec<(usize, usize)> {
+        let rope = self.current_buffer().rope();
+        let quoted = matches!(self.table().map(|view| view.separator), Some(Separator::Delimiter(_)))
+            && from > 0
+            && rope.char(from - 1) == '"';
+        let mut shown = String::new();
+        let mut place = Vec::new();
+        let mut at = from;
+        while at < to {
+            let c = rope.char(at);
+            shown.push(c);
+            place.push(at);
+            at += match quoted && c == '"' && at + 1 < to && rope.char(at + 1) == '"' {
+                true => 2,
+                false => 1,
+            };
         }
-        // **折行 cuts a row when the ink runs past the cap**, counted the way
-        // the grid counts it: by display width, so one wide character is two.
-        rows.into_iter()
-            .flat_map(|(a, b)| {
-                let mut cut = Vec::new();
-                let (mut start, mut width) = (a, 0);
-                for at in a..b {
-                    let w = yumete_cjk::char_width(rope.char(at));
-                    if width + w > crate::mdtable::MAX_COLUMN && at > start {
-                        cut.push((start, at));
-                        (start, width) = (at, 0);
-                    }
-                    width += w;
-                }
-                cut.push((start, b));
-                cut
-            })
-            .collect()
+        place.push(to);
+        let mut rows: Vec<(usize, usize)> = Vec::new();
+        for (a, b) in crate::mdtable::cell_drawn_rows(&shown, width.max(1), true) {
+            let (a, mut b) = (place[a], place[b]);
+            if b > a && rope.char(b - 1) == '\n' {
+                b -= 1;
+            }
+            let opens_its_line = a == from || rope.char(a - 1) == '\n';
+            if a == b && !opens_its_line {
+                continue;
+            }
+            rows.push((a, b));
+        }
+        // Each row reaches where the next one starts, or the line break that
+        // ends its line: what lies between is the blank tail nobody drew.
+        for k in 0..rows.len() {
+            let line_end = (rows[k].1..to).find(|&i| rope.char(i) == '\n').unwrap_or(to);
+            let end = rows.get(k + 1).map_or(line_end, |&(next, _)| next.min(line_end));
+            rows[k].1 = rows[k].1.max(end);
+        }
+        if rows.is_empty() {
+            rows.push((from, to));
+        }
+        rows
     }
 
     /// Which of [`Self::cell_rows`] holds this position, and how far into it.

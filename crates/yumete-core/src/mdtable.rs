@@ -1045,6 +1045,50 @@ pub fn measured_window(
 
 pub const MAX_COLUMN: usize = 32;
 
+/// **The rows a grid draws one cell's value on**, as char ranges of `shown`
+/// (the value as drawn: quotes off, line breaks kept).
+///
+/// One function for the two questions a wrapped cell is asked: the grid draws
+/// these rows, and `j`/`k` inside the cell walk them
+/// ([`crate::editor::Editor`]'s `cell_rows`). Two breakers would agree only
+/// while every break fell where both put it, and a word-aware one and a
+/// cut-at-the-measure one disagree on nearly every row of English prose.
+///
+/// Each line the writer wrote is one row, its break included in the range and
+/// drawn as `␊` — a hard newline is the writer's, so `wrap` has no say over
+/// it. With `wrap` on and a `width` to wrap at, each written line is then
+/// broken by [`crate::wrap::line_rows`], the page's own breaker, which keeps
+/// 禁則 and a Latin word whole. Trailing blanks of the last line are not
+/// drawn, and neither is an empty row left after a line that fills the
+/// measure exactly: nothing would stand on it, and every row under it would
+/// move down.
+pub fn cell_drawn_rows(shown: &str, width: usize, wrap: bool) -> Vec<(usize, usize)> {
+    let picture = yumete_cjk::LINE_FEED_PICTURE.to_string();
+    let lines: Vec<&str> = shown.split('\n').collect();
+    let last = lines.len() - 1;
+    let mut rows = Vec::new();
+    let mut start = 0;
+    for (i, line) in lines.into_iter().enumerate() {
+        let piece = match i == last {
+            true => line.to_string(),
+            false => format!("{line}{picture}"),
+        };
+        let held = piece.chars().count();
+        match wrap && width > 0 {
+            true => {
+                let mut cut = crate::wrap::line_rows(piece.trim_end(), width);
+                while cut.len() > 1 && cut.last().is_some_and(|&(a, b)| a == b) {
+                    cut.pop();
+                }
+                rows.extend(cut.into_iter().map(|(a, b)| (start + a, start + b)));
+            }
+            false => rows.push((start, start + held)),
+        }
+        start += held;
+    }
+    rows
+}
+
 /// The mark that stands where a cell's tail was cut off — the grid's, since
 /// prose draws every cell whole ([`crate::editor::Editor::cell_width_now`]).
 ///

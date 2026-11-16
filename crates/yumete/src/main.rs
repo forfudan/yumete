@@ -1650,6 +1650,8 @@ fn press(
     let mut genda = yumete_tui::genda_page::Seat::default();
     genda.tick = Some(200);
     let mut words = yumete_tui::words_page::Seat::default();
+    // Where the grid is scrolled to, kept from key to key as a frame keeps it.
+    let mut grid = yumete_tui::table::Viewport::default();
     // **`\{ime}` 撥一下這一格**：往後那幾個鍵交給輸入法，再按一次撥回來。
     let mut composing = false;
     let mut chars = keys.chars().peekable();
@@ -1683,6 +1685,7 @@ fn press(
         // 就落在别的地方（`多選區` 那張金樣會變）。算出來，别畫出來。
         if let Some((w, h)) = shot {
             yumete_tui::fit_the_page(ime, editor, config, w, h);
+            yumete_tui::fit_the_grid(editor, config, w, h, &mut grid);
         }
         let key = match c {
             '\\' => match chars.next() {

@@ -51,7 +51,7 @@ pub struct Viewport {
 /// [`yumete_core::editor::Editor::cell_folds`]'s other half: the prose page folds by hiding
 /// characters, the grid by drawing narrow.
 ///
-/// **Under 摺起 it is the least the cap is**: a window with room left over
+/// **Under 摺起 and 折行 it is the least the cap is**: a window with room left over
 /// once every column is on it gives that room back to the columns it cut
 /// ([`share_spare`]).
 const MIN_COLUMN: usize = 3;
@@ -104,11 +104,11 @@ fn layout(
     };
     // **What each column would take with no cap at all**, kept beside the
     // capped widths so that room the window has over can go back to the
-    // columns the cap cut. Only under 摺起: 全文 has no cap to lift, and
-    // under 折行 the editor walks a wrapped cell's rows at the fixed cap
-    // (`cell_rows`), so a column drawn wider would put `j` in the middle of a
-    // drawn row.
-    let grow = editor.cell_folds() && !editor.cell_wrap();
+    // columns the cap cut. Under 摺起 and 折行 alike — 全文 has no cap to
+    // lift. A wrapped column drawn wider is walked at the width it was drawn
+    // at: [`draw`] tells the editor, and `j` inside the cell cuts its rows
+    // with the breaker the grid draws with.
+    let grow = editor.cell_folds();
     let mut natural = match grow {
         true => heading_widths(editor, anchor, room, false).map(|(w, _)| w).unwrap_or_default(),
         false => Vec::new(),
@@ -415,20 +415,22 @@ fn cell_fits(
 /// and a hard newline is the writer's own, so `t a` governs the first and has
 /// no say over the second. Each written line is then soft-wrapped on its own
 /// when `t a` is on.
+///
+/// The rows are [`yumete_core::mdtable::cell_drawn_rows`]'s, the same ones
+/// `j`/`k` walk inside the cell: a second breaker here would put the caret in
+/// the middle of a drawn row.
 fn cell_lines(shown: &str, width: usize, wrap: bool) -> Vec<String> {
-    let hard: Vec<&str> = shown.split('\n').collect();
-    let last = hard.len() - 1;
-    hard.into_iter()
-        .enumerate()
-        .flat_map(|(i, piece)| {
-            let piece = match i == last {
-                true => piece.to_string(),
-                false => format!("{piece}{}", yumete_cjk::LINE_FEED_PICTURE),
-            };
-            match wrap && width > 0 {
-                true => wrapped(piece.trim_end(), width),
-                false => vec![piece],
-            }
+    let chars: Vec<char> = shown.chars().collect();
+    yumete_core::mdtable::cell_drawn_rows(shown, width, wrap)
+        .into_iter()
+        .map(|(from, to)| {
+            chars[from.min(chars.len())..to.min(chars.len())]
+                .iter()
+                .map(|&c| match c {
+                    '\n' => yumete_cjk::LINE_FEED_PICTURE,
+                    c => c,
+                })
+                .collect()
         })
         .collect()
 }
@@ -634,21 +636,45 @@ pub fn char_at(
     Some((start + cells.last().map_or(0, |&(a, _)| a)).min(rope.len_chars().saturating_sub(1)))
 }
 
-// Warning: **`for i in 視窗左邊..widths.len()` 不改成 `enumerate`**：
-// 走的是**一段**欄（從橫向捲到的那一欄起），而 `i` 本身就是欄號——標尺與欄名
-// 都要拿它去對 `cursor_cell`。`enumerate` 只會多一次 `skip` 再多一個偏移量。
-#[allow(clippy::needless_range_loop)]
-pub fn draw(
-    frame: &mut Frame,
+/// What a frame of the grid settles before it draws a cell: whose table, which
+/// rows, where the page and the columns are scrolled to, and how wide each
+/// column is drawn.
+struct Settled {
+    anchor: usize,
+    top_row: usize,
+    bottom_row: usize,
+    rowless: bool,
+    cursor_row: usize,
+    cursor_cell: usize,
+    numbers: u16,
+    head: u16,
+    gutter: u16,
+    widths: Vec<usize>,
+}
+
+/// **Tell the editor how wide the grid in `area` draws its columns**, without
+/// drawing it — for `--keys`, which presses every key before the one frame it
+/// draws. `viewport` is kept from key to key, as the live loop keeps it from
+/// frame to frame: the widths are the drawn rows', and a page scrolled afresh
+/// on every key would measure other rows than the ones the reader was shown.
+/// The page is not asked where the cursor should sit (`page_inset`): that
+/// answer is recorded as the last frame's, and no frame is drawn here. The
+/// live loop says the same thing from every frame it draws ([`draw`]).
+pub fn note_drawn_columns(editor: &Editor, config: &Config, area: Rect, viewport: &mut Viewport) {
+    if let Some(settled) = settle(editor, config, area, viewport, None, true) {
+        editor.note_drawn_columns(settled.top_row, settled.widths);
+    }
+}
+
+fn settle(
     editor: &Editor,
     config: &Config,
     area: Rect,
     viewport: &mut Viewport,
     peek: Option<&yumete_core::editor::Pane>,
-) -> (u16, u16) {
-    let Some(view) = editor.table() else {
-        return (area.x, area.y);
-    };
+    quiet: bool,
+) -> Option<Settled> {
+    let view = editor.table()?;
     // **The table's own lines, not the file's**. `t t` hands
     // this widget a `|` table that is three lines of a chapter, and the rows
     // below are the chapter — measured, scrolled through and clicked on, they
@@ -669,9 +695,7 @@ pub fn draw(
     // so nothing here may scroll and the row loop must not run.
     let span = editor.table_row_span_at(anchor);
     let rowless = span.is_none() && editor.table_is_rowless();
-    let Some((top_row, bottom_row)) = span.or(rowless.then_some((1, 0))) else {
-        return (area.x, area.y);
-    };
+    let (top_row, bottom_row) = span.or(rowless.then_some((1, 0)))?;
     // A pane that is only being read is scrolled around the row it was opened
     // at, and marks it — it has no cursor and no cell of its own.
     let (cursor_row, cursor_cell) = match peek {
@@ -700,7 +724,7 @@ pub fn draw(
     let head = u16::from(view.schema.header) + numbers;
     let rows = (area.height.saturating_sub(head)) as usize;
     if rows == 0 {
-        return (area.x, area.y);
+        return None;
     }
 
     // Vertical scroll: the ordinary rule, keeping the cursor's row on screen.
@@ -758,7 +782,13 @@ pub fn draw(
         room,
         rows,
     );
-    let inset = editor.page_inset(distance, cursor_row < viewport.top, rows.saturating_sub(1), scrolloff);
+    // **Asked only by a frame that is drawn**: the editor records where the
+    // page put the cursor each time it answers, and a measure taken between
+    // two keys is no frame.
+    let inset = match quiet {
+        true => None,
+        false => editor.page_inset(distance, cursor_row < viewport.top, rows.saturating_sub(1), scrolloff),
+    };
     if !rowless {
         let from = viewport.top;
         if let Some(inset) = inset {
@@ -869,6 +899,56 @@ pub fn draw(
                 &mut viewport.left,
             );
         }
+    }
+    Some(Settled {
+        anchor,
+        top_row,
+        bottom_row,
+        rowless,
+        cursor_row,
+        cursor_cell,
+        numbers,
+        head,
+        gutter,
+        widths,
+    })
+}
+
+// Warning: **`for i in 視窗左邊..widths.len()` 不改成 `enumerate`**：
+// 走的是**一段**欄（從橫向捲到的那一欄起），而 `i` 本身就是欄號——標尺與欄名
+// 都要拿它去對 `cursor_cell`。`enumerate` 只會多一次 `skip` 再多一個偏移量。
+#[allow(clippy::needless_range_loop)]
+pub fn draw(
+    frame: &mut Frame,
+    editor: &Editor,
+    config: &Config,
+    area: Rect,
+    viewport: &mut Viewport,
+    peek: Option<&yumete_core::editor::Pane>,
+) -> (u16, u16) {
+    let Some(view) = editor.table() else {
+        return (area.x, area.y);
+    };
+    let Some(Settled {
+        anchor,
+        top_row,
+        bottom_row,
+        rowless,
+        cursor_row,
+        cursor_cell,
+        numbers,
+        head,
+        gutter,
+        widths,
+    }) = settle(editor, config, area, viewport, peek, false)
+    else {
+        return (area.x, area.y);
+    };
+    // **The window with the keys says how wide it drew each column**: a
+    // wrapped cell's rows are cut at that width, and `j` inside the cell walks
+    // them. A window only being read has no caret to move.
+    if peek.is_none() {
+        editor.note_drawn_columns(top_row, widths.clone());
     }
     // How many columns this table has — what a row is measured against when
     // asking whether it is ragged, and where the drawn extras start.
@@ -1888,30 +1968,6 @@ fn caret_in(parts: &[String], into: usize) -> (usize, usize) {
         seen += held;
     }
     (0, 0)
-}
-
-/// A value broken across `width` cells, as the rows it is drawn on.
-///
-/// [`yumete_core::wrap::line_rows`] is the page's own breaker — the one that
-/// keeps 禁則 and does not split a Latin word — so a wrapped cell reads the
-/// way the same words would read in the document they came from.
-fn wrapped(text: &str, width: usize) -> Vec<String> {
-    if width == 0 {
-        return Vec::new();
-    }
-    let chars: Vec<char> = text.chars().collect();
-    let mut out: Vec<String> = yumete_core::wrap::line_rows(text, width)
-        .into_iter()
-        .map(|(from, to)| chars[from.min(chars.len())..to.min(chars.len())].iter().collect())
-        .collect();
-    // **A row that ends exactly on the measure leaves an empty one after it**
-    // — the page wants somewhere to put the caret when a line fills its width
-    // to the cell. Nothing is drawn there, so a cell would be a line taller
-    // than it has anything to show, and every row under it would move down.
-    while out.len() > 1 && out.last().is_some_and(String::is_empty) {
-        out.pop();
-    }
-    out
 }
 
 /// **The cell under the cursor at the top layer**, `from..upto` on row `y`,

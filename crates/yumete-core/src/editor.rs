@@ -3826,6 +3826,10 @@ pub struct Editor {
     fold_return: Option<(u64, usize, usize)>,
     /// The columns a fold's line fills, as the front end last said.
     fold_width: std::cell::Cell<usize>,
+    /// **How wide the grid drew each column of its table**, as the front end
+    /// last said, with the table's first row to say which table: what a
+    /// wrapped cell's rows are cut at (`cell_rows`). Unsaid, the cap.
+    drawn_columns: std::cell::RefCell<Option<(usize, Vec<usize>)>>,
     /// The Markdown runs of each paragraph, cached the same way and for the
     /// same reason: the renderer asks for every paragraph on screen, every
     /// frame, and the answer only changes when the paragraph does.
@@ -4917,6 +4921,7 @@ impl Editor {
             fold_stays_closed: false,
             fold_return: None,
             fold_width: std::cell::Cell::new(80),
+            drawn_columns: std::cell::RefCell::new(None),
             markup_memo: memo::LineMemo::default(),
             ruby_memo: memo::LineMemo::default(),
             block_cache: RefCell::new(None),

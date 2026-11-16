@@ -2264,7 +2264,7 @@ impl Editor {
         // walks into the paragraph underneath, which is what `t b` means.
         let grid = self.layers_here();
         let rows = match grid {
-            true => self.cell_rows(from, to, !textual),
+            true => self.cell_rows(from, to, cell, !textual),
             false => vec![(from, to)],
         };
         let into = match self.row_of_the_cell(&rows, self.caret()) {
@@ -2303,7 +2303,8 @@ impl Editor {
         // a place 全窗 says it never stands, drawn inside the cell, so nothing
         // would warn before the next keystroke.
         let width = self.row_cells(want).len();
-        let span = self.cell_span(want, cell.min(width.saturating_sub(1)));
+        let landing = cell.min(width.saturating_sub(1));
+        let span = self.cell_span(want, landing);
         let Some((a, b)) = span.map(|(a, b)| self.value_span(a, b)) else {
             return false;
         };
@@ -2311,7 +2312,7 @@ impl Editor {
         // first coming down, its last going up. Landing always on the first
         // row would make `k` out of a cell and `j` back into it a different
         // place from where it started.
-        let rows = self.cell_rows(a, b, !textual);
+        let rows = self.cell_rows(a, b, landing, !textual);
         let (a, b) = match up {
             true => *rows.last().unwrap_or(&(a, b)),
             false => *rows.first().unwrap_or(&(a, b)),
