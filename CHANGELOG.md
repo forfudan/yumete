@@ -6,6 +6,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Added
 
+- **Pictures chosen in `:files-yazi` go into the text instead of opening**: `![](img/pic.png)` in Markdown (`![](<my pic.png>)` when the path has a space), `#image("img/pic.png")` in Typst, the bare path elsewhere, relative to the current file's folder with `/` on every system. Several pictures go in one per line as one undo step; text files chosen with them open as before.
 - **`:file-rename` (`:mv`) renames or moves the file you are editing** and keeps it open: a relative name is read from the file's own folder, missing folders are made, an existing file is replaced only with `:mv!`; unsaved changes stay unsaved, and the recovery copy, local history and recent-files list follow the new name. Links to it elsewhere are not rewritten.
 - **`:lg` opens lazygit**, a short spelling of `:git-lazygit`.
 - **Local history**: every save keeps a version of the file in the book's `.yumete/history/` (or the data directory for files outside a book), thinned to all of today, one an hour for a week and one a day for sixty days; saves less than ten minutes apart count as one. `:history` lists them with a word-diff preview; `Enter` opens one read-only beside the text, `A-r` puts it back as one undoable edit. `:history-label <name>` names a version and keeps it for good. Off with `[editor] history = false`; `--private` and `remember = false` keep none.

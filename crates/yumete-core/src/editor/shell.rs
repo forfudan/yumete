@@ -409,9 +409,31 @@ impl Editor {
     /// **The files a program chose**, one path a line in `chosen` (yazi's
     /// `--chooser-file`), opened in turn, the last one shown; what cannot be
     /// opened is said.
+    ///
+    /// **A picture is not opened but referred to**: it goes into the current
+    /// buffer at the cursor, in the markup that buffer is written in (see
+    /// [`picture_reference`]), one a line and one undo step for all of them,
+    /// before the other files open. A buffer that cannot take text — locked,
+    /// or a preview — gets nothing and nothing opens, so a choice is never
+    /// half carried out.
     pub fn open_chosen(&mut self, chosen: &str) {
+        let lines = chosen.lines().map(str::trim).filter(|l| !l.is_empty());
+        let (pictures, files): (Vec<&str>, Vec<&str>) = lines.partition(|l| is_picture(Path::new(l)));
+        if !pictures.is_empty() {
+            if self.current_buffer().is_preview() {
+                self.status = say!("shell.chosen-pictures-in-preview");
+                return;
+            }
+            if self.current_buffer().is_readonly() {
+                self.status = say!("shell.chosen-pictures-readonly");
+                return;
+            }
+            if !self.put_picture_references(&pictures) {
+                return;
+            }
+        }
         let mut opened = 0usize;
-        for line in chosen.lines().map(str::trim).filter(|l| !l.is_empty()) {
+        for line in files {
             match self.open_file(line) {
                 Ok(()) => opened += 1,
                 Err(err) => {
@@ -420,9 +442,46 @@ impl Editor {
                 }
             }
         }
-        if opened > 1 {
+        if !pictures.is_empty() {
+            self.status = match opened {
+                0 => say!("shell.chosen-pictures-put", pictures.len()),
+                _ => say!("shell.chosen-pictures-put-files-opened", pictures.len(), opened),
+            };
+        } else if opened > 1 {
             self.status = say!("shell.opened-chosen", opened.to_string());
         }
+    }
+
+    /// One reference per picture at the cursor, as one edit: the caret ends
+    /// on the last character put in, as after `P`, or past it in Insert mode.
+    /// `false` when the buffer refused, the status line saying why.
+    fn put_picture_references(&mut self, pictures: &[&str]) -> bool {
+        let base = match self.current_buffer().path().and_then(Path::parent) {
+            Some(dir) if !dir.as_os_str().is_empty() => dir.to_path_buf(),
+            _ => self.working_dir(),
+        };
+        let syntax = self.current_buffer().syntax();
+        let ending = self.current_buffer().ending();
+        let text = pictures
+            .iter()
+            .map(|p| picture_reference(syntax, &relative_path(Path::new(p), &base)))
+            .collect::<Vec<_>>()
+            .join(ending);
+        let at = self.cursor();
+        self.snapshot();
+        if !self.overwrite(at, at, &text) {
+            return false;
+        }
+        let end = at + text.chars().count();
+        let to = match self.mode == Mode::Insert {
+            true => end,
+            false => end.saturating_sub(1).max(at),
+        };
+        self.sel.set_anchor(to);
+        self.sel.set_head(to);
+        self.clamp_cursor();
+        self.refresh_goal_column();
+        true
     }
 
     /// **Look at the disk on the next turn** rather than at the next tick: a
@@ -430,5 +489,81 @@ impl Editor {
     pub fn check_the_disk_now(&mut self) {
         self.last_disk_check = None;
         self.reload_warned = false;
+    }
+}
+
+/// Whether a chosen file is a picture, by its extension in any case.
+fn is_picture(path: &Path) -> bool {
+    const PICTURES: [&str; 10] = ["png", "jpg", "jpeg", "gif", "webp", "svg", "avif", "bmp", "tiff", "tif"];
+    path.extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| PICTURES.iter().any(|p| p.eq_ignore_ascii_case(e)))
+}
+
+/// **`path` as seen from `base`**, with `/` between the parts on every
+/// system, so a manuscript moved with its pictures still finds them. The
+/// disk's own spelling of both is compared, so `/var` and `/private/var`
+/// meet; a path on another drive has no relative form and stays whole.
+fn relative_path(path: &Path, base: &Path) -> String {
+    let spelled = |p: &Path| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+    let (path, base) = (spelled(path), spelled(base));
+    let parts = |p: &Path| -> Vec<String> {
+        p.components()
+            .filter_map(|c| match c {
+                std::path::Component::Normal(w) => Some(w.to_string_lossy().into_owned()),
+                std::path::Component::ParentDir => Some("..".to_string()),
+                std::path::Component::Prefix(w) => {
+                    let w = w.as_os_str().to_string_lossy();
+                    Some(w.strip_prefix(r"\\?\").unwrap_or(&w).to_string())
+                }
+                std::path::Component::RootDir | std::path::Component::CurDir => None,
+            })
+            .collect()
+    };
+    let (to, from) = (parts(&path), parts(&base));
+    let same_root = path.has_root() == base.has_root();
+    let shared = match same_root {
+        true => to.iter().zip(&from).take_while(|(a, b)| a == b).count(),
+        false => 0,
+    };
+    // Different drives, or nothing in common below a drive letter: no
+    // relative spelling reaches it.
+    let drive = |p: &[String]| p.first().filter(|w| w.ends_with(':')).cloned();
+    if !same_root || (drive(&to).is_some() && shared == 0) {
+        let whole = to.join("/");
+        return match path.has_root() && drive(&to).is_none() {
+            true => format!("/{whole}"),
+            false => whole,
+        };
+    }
+    let mut out: Vec<String> = std::iter::repeat_n("..".to_string(), from.len() - shared).collect();
+    out.extend(to[shared..].iter().cloned());
+    out.join("/")
+}
+
+/// **The reference to a picture** at `path`, in the markup of `syntax`:
+/// Markdown's `![](path)`, in the angle-bracket form CommonMark asks for when
+/// the path holds a space or a character the bare form would read as markup;
+/// Typst's `#image("path")`; elsewhere the path alone, which is how plain
+/// text or code names a file.
+pub(super) fn picture_reference(syntax: crate::syntax::Syntax, path: &str) -> String {
+    use crate::syntax::Syntax;
+    match syntax {
+        Syntax::Markdown => {
+            let marked = |c: char| c.is_whitespace() || c.is_control() || "()<>\\".contains(c);
+            if !path.chars().any(marked) {
+                return format!("![]({path})");
+            }
+            let mut inside = String::new();
+            for c in path.chars() {
+                if "<>\\".contains(c) {
+                    inside.push('\\');
+                }
+                inside.push(c);
+            }
+            format!("![](<{inside}>)")
+        }
+        Syntax::Typst => format!("#image(\"{}\")", path.replace('\\', "\\\\").replace('"', "\\\"")),
+        _ => path.to_string(),
     }
 }

@@ -894,6 +894,30 @@ zhs = "此处无法挂起"
 en = "cannot suspend here"
 
 [[message]]
+# 在 yazi 裏選了圖片，當前是預覽窗口，沒處插引用，什麼都沒打開（草稿）
+key = "shell.chosen-pictures-in-preview"
+zhs = "图片会以引用插入文本，但预览窗口没有文字；什么也没打开"
+en = "pictures go into the text as references, and a preview has no text; nothing was opened"
+
+[[message]]
+# 在 yazi 裏選了圖片，插了 {0} 條引用（草稿）
+key = "shell.chosen-pictures-put"
+zhs = "插入了 {0} 张图片的引用"
+en = "put in {0|reference to a picture|references to pictures}"
+
+[[message]]
+# 在 yazi 裏選了圖片和文件：插了 {0} 條圖片引用，打開了 {1} 個文件（草稿）
+key = "shell.chosen-pictures-put-files-opened"
+zhs = "插入了 {0} 张图片的引用，打开了 {1} 个文件"
+en = "put in {0|reference to a picture|references to pictures} and opened {1|file|files}"
+
+[[message]]
+# 在 yazi 裏選了圖片，當前文件只讀，沒插引用，什麼都沒打開（草稿）
+key = "shell.chosen-pictures-readonly"
+zhs = "只读，图片引用无法插入；什么也没打开。用 :readonly off 解除"
+en = "read-only, so the pictures cannot be referred to and nothing was opened — `:readonly off` unlocks it"
+
+[[message]]
 # :decimo 而 decimo 沒有裝（草稿）
 key = "shell.decimo-missing"
 zhs = "没有找到 decimo；可用 brew install forfudan/tap/decimo 安装"

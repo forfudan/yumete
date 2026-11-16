@@ -41123,6 +41123,161 @@ fn the_files_a_program_chose_are_opened() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// A folder of its own for one picture test, with the files named in it
+/// made (empty is enough: nothing reads a picture's bytes).
+fn chosen_fixture(name: &str, files: &[&str]) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("yumete-chosen-{name}-{}", std::process::id()));
+    std::fs::remove_dir_all(&dir).ok();
+    for file in files {
+        let path = dir.join(file);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, if file.ends_with(".md") || file.ends_with(".typ") || file.ends_with(".txt") { "a\n" } else { "" }).unwrap();
+    }
+    dir
+}
+
+/// **A picture yazi chose goes into a Markdown file as `![](…)`**, relative
+/// to that file's folder, at the cursor, and is not opened; one `u` takes
+/// it back. The extension is matched in any case.
+#[test]
+fn a_chosen_picture_is_referred_to_in_markdown() {
+    let dir = chosen_fixture("md", &["notes/doc.md", "notes/img/pic.JPG", "pics/up.webp"]);
+    let mut ed = Editor::new();
+    ed.open_file(dir.join("notes/doc.md")).unwrap();
+    ed.open_chosen(&format!("{}\n", dir.join("notes/img/pic.JPG").display()));
+    assert_eq!(ed.current_buffer().text(), "![](img/pic.JPG)a\n");
+    assert_eq!(ed.buffers.len(), 1, "the picture is not opened");
+    assert_eq!(ed.status(), say!("shell.chosen-pictures-put", 1));
+    ed.on_key(Key::Char('u'));
+    assert_eq!(ed.current_buffer().text(), "a\n");
+    ed.open_chosen(&dir.join("pics/up.webp").display().to_string());
+    assert_eq!(ed.current_buffer().text(), "![](../pics/up.webp)a\n");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// In Typst the reference is `#image("…")`; in a plain-text file it is the
+/// path alone.
+#[test]
+fn a_chosen_picture_is_referred_to_in_typst_and_text() {
+    let dir = chosen_fixture("typ", &["doc.typ", "note.txt", "fig/a.svg"]);
+    let mut ed = Editor::new();
+    ed.open_file(dir.join("doc.typ")).unwrap();
+    assert_eq!(ed.current_buffer().syntax(), crate::syntax::Syntax::Typst);
+    ed.open_chosen(&dir.join("fig/a.svg").display().to_string());
+    assert_eq!(ed.current_buffer().text(), "#image(\"fig/a.svg\")a\n");
+    ed.open_file(dir.join("note.txt")).unwrap();
+    ed.current_buffer_mut().set_syntax_by_hand(crate::syntax::Syntax::Text);
+    ed.open_chosen(&dir.join("fig/a.svg").display().to_string());
+    assert_eq!(ed.current_buffer().text(), "fig/a.svga\n");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **A path with a space takes CommonMark's angle brackets**, which is the
+/// only form of a link destination a space may stand in.
+#[test]
+fn a_chosen_picture_with_a_space_is_bracketed() {
+    let dir = chosen_fixture("space", &["doc.md", "my pics/a b.png"]);
+    let mut ed = Editor::new();
+    ed.open_file(dir.join("doc.md")).unwrap();
+    ed.open_chosen(&dir.join("my pics/a b.png").display().to_string());
+    assert_eq!(ed.current_buffer().text(), "![](<my pics/a b.png>)a\n");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **Several pictures go in one a line, as one undo step.**
+#[test]
+fn several_chosen_pictures_are_one_a_line_and_one_undo() {
+    let dir = chosen_fixture("several", &["doc.md", "a.png", "b.gif", "c.tiff"]);
+    let mut ed = Editor::new();
+    ed.open_file(dir.join("doc.md")).unwrap();
+    let chosen = ["a.png", "b.gif", "c.tiff"].map(|f| dir.join(f).display().to_string()).join("\n");
+    ed.open_chosen(&chosen);
+    assert_eq!(ed.current_buffer().text(), "![](a.png)\n![](b.gif)\n![](c.tiff)a\n");
+    assert_eq!(ed.status(), say!("shell.chosen-pictures-put", 3));
+    ed.on_key(Key::Char('u'));
+    assert_eq!(ed.current_buffer().text(), "a\n", "one u takes all three back");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **A mixed choice**: the pictures are referred to in the file the cursor
+/// was in, and the text files open as before, the last one shown.
+#[test]
+fn a_mixed_choice_refers_to_pictures_and_opens_files() {
+    let dir = chosen_fixture("mixed", &["doc.md", "p.avif", "other.md"]);
+    let mut ed = Editor::new();
+    ed.open_file(dir.join("doc.md")).unwrap();
+    let chosen = format!("{}\n{}\n", dir.join("other.md").display(), dir.join("p.avif").display());
+    ed.open_chosen(&chosen);
+    assert_eq!(ed.current_buffer().path().unwrap().file_name().unwrap(), "other.md");
+    let doc = ed.buffers.iter().find(|b| b.path().is_some_and(|p| p.ends_with("doc.md"))).unwrap();
+    assert_eq!(doc.text(), "![](p.avif)a\n");
+    assert_eq!(ed.status(), say!("shell.chosen-pictures-put-files-opened", 1, 1));
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **A buffer with no file** refers to the picture from the working
+/// directory.
+#[test]
+fn a_chosen_picture_in_a_buffer_with_no_file_is_relative_to_the_working_directory() {
+    let dir = chosen_fixture("nofile", &["sub/x.bmp"]);
+    let mut ed = Editor::new();
+    assert!(ed.set_working_dir(&dir));
+    ed.current_buffer_mut().set_syntax_by_hand(crate::syntax::Syntax::Markdown);
+    ed.open_chosen(&dir.join("sub/x.bmp").display().to_string());
+    assert_eq!(ed.current_buffer().text(), "![](sub/x.bmp)");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **A read-only buffer takes no reference, and then nothing opens**: half
+/// a choice carried out would be harder to notice than none.
+#[test]
+fn a_read_only_buffer_refuses_chosen_pictures_and_opens_nothing() {
+    let dir = chosen_fixture("ro", &["doc.md", "p.png", "other.md"]);
+    let mut ed = Editor::new();
+    ed.open_file(dir.join("doc.md")).unwrap();
+    ed.current_buffer_mut().set_readonly(true);
+    ed.open_chosen(&format!("{}\n{}\n", dir.join("p.png").display(), dir.join("other.md").display()));
+    assert_eq!(ed.current_buffer().text(), "a\n");
+    assert_eq!(ed.buffers.len(), 1, "other.md is not opened");
+    assert_eq!(ed.status(), say!("shell.chosen-pictures-readonly"));
+    // Text files alone still open in a read-only buffer's company.
+    ed.open_chosen(&dir.join("other.md").display().to_string());
+    assert_eq!(ed.current_buffer().path().unwrap().file_name().unwrap(), "other.md");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **What the bare Markdown form would misread goes in angle brackets**,
+/// with `<`, `>` and `\` escaped there; Typst escapes its string's own two.
+#[test]
+fn a_picture_reference_escapes_what_its_markup_would_read() {
+    use super::shell::picture_reference as reference;
+    use crate::syntax::Syntax;
+    assert_eq!(reference(Syntax::Markdown, "a(1).png"), "![](<a(1).png>)");
+    assert_eq!(reference(Syntax::Markdown, "a<b>.png"), "![](<a\\<b\\>.png>)");
+    assert_eq!(reference(Syntax::Markdown, "图/甲.png"), "![](图/甲.png)");
+    assert_eq!(reference(Syntax::Typst, "a \"b\".png"), "#image(\"a \\\"b\\\".png\")");
+    assert_eq!(reference(Syntax::Code(crate::code::Language::Python), "a b.png"), "a b.png");
+}
+
+/// **A preview with the keys has no text to refer from**: nothing goes in
+/// and nothing opens.
+#[test]
+fn a_preview_refuses_chosen_pictures_and_opens_nothing() {
+    let dir = chosen_fixture("preview", &["doc.md", "p.png", "other.md"]);
+    let mut ed = Editor::new();
+    ed.open_file(dir.join("doc.md")).unwrap();
+    ed.open_page_window(dir.join("doc.md")).unwrap();
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
+    assert!(ed.page_window_has_the_keys());
+    let before = ed.buffers.len();
+    ed.open_chosen(&format!("{}\n{}\n", dir.join("p.png").display(), dir.join("other.md").display()));
+    assert_eq!(ed.buffers.len(), before, "other.md is not opened");
+    assert!(ed.buffers.iter().all(|b| b.text() != "![](p.png)a\n"));
+    assert_eq!(ed.status(), say!("shell.chosen-pictures-in-preview"));
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **A value asked for at a line's end stays on that line** (`:decimo`):
 /// with the caret on the line break it goes in front of the break, its own
 /// line break dropped; on a character it goes after that character.
