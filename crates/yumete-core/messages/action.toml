@@ -252,11 +252,11 @@ zhs = "删除光标后的一个词"
 en = "delete the word after the cursor"
 
 [[message]]
-# :keymap-actions 那張表裏這一行寫什麽
+# （草稿）:keymap-actions 那张表里这一行写什么：空格 n 的字符信息
 key = "action.dictionary"
-zhs = "字典：光标处汉字的拆分"
-en = "dictionary: the division of the character under the cursor"
-find = "字典 拆分 部件 查字 dictionary chaifen"
+zhs = "字符信息：光标处字符的码位、名称、字节，汉字另有拆分"
+en = "character info: about the character under the cursor"
+find = "字符 信息 字典 拆分 部件 查字 碼位 码位 統一碼 统一码 character info unicode dictionary chaifen"
 
 [[message]]
 # 命令說明：earlier
@@ -2514,10 +2514,10 @@ en = "yank"
 find = "複製 复制 拷貝 拷贝 copy yank"
 
 [[message]]
-# 命令說明：yank_old_text
+# （草稿）命令说明：yank_old_text（侧栏的 y：改动那一格复制原文，字符信息那一格复制整份信息）
 key = "action.yank-old-text"
-zhs = "复制改动前的文本"
-en = "copy the old text"
+zhs = "复制改动前的文本；在字符信息里复制整份信息"
+en = "copy the old text; in the character info, copy the whole answer"
 
 [[message]]
 # 命令說明：yume_menu_size_3
@@ -2688,16 +2688,16 @@ zhs = "开：d、c 删除时不进寄存器，A-d、A-c 才剪切。关：同 he
 en = "On: d and c delete without filling the register, and A-d and A-c cut. Off: helix's d and c cut."
 
 [[message]]
-# 風味的一項：設置面板上的名字
+# （草稿）风味的一项：设置面板上的名字（空格 n／N 的字符信息）
 key = "keys.flavor.item.dictionary"
-zhs = "词典"
-en = "dictionary"
+zhs = "字符信息"
+en = "character info"
 
 [[message]]
-# 風味的一項：設置面板上的說明
+# （草稿）风味的一项：设置面板上的说明（空格 n／N 的字符信息）
 key = "keys.flavor.item.dictionary.hint"
-zhs = "开：空格 n 在浮窗里查光标处的字，空格 N 在侧栏里查。关：未绑定。"
-en = "On: Space n looks up the character under the cursor in a popup, Space N in the sidebar. Off: both are unbound."
+zhs = "开：空格 n 在浮窗里显示光标处字符的信息，空格 N 在侧栏里显示。关：未绑定。"
+en = "On: Space n shows information about the character under the cursor in a popup, Space N in the sidebar. Off: both are unbound."
 
 [[message]]
 # 風味的一項：設置面板上的名字

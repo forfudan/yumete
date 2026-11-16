@@ -389,6 +389,14 @@ impl Editor {
                 let text = run.was.join("\n");
                 self.clipboard_request = Some(text);
             }
+            // **`y` in the character info copies the answer**: one key that
+            // copies what the panel is showing, in either panel that has
+            // something to copy.
+            PlaceCmd::YankOldText if self.info_in_this_sidebar(side) == Some(crate::sidebar::Info::Dictionary) => {
+                if let Some(text) = self.character_info_text() {
+                    self.clipboard_request = Some(text);
+                }
+            }
             _ => {}
         }
     }
@@ -1342,6 +1350,28 @@ impl Editor {
         let Some(found) = answer else {
             return rows;
         };
+        for (line, is_heading) in Self::character_info_lines(found) {
+            rows.push(match is_heading {
+                true => heading(line),
+                false => plain(line, false),
+            });
+        }
+        // **「沒有拆法」寫在下面，淡的，隔一行**。上面那幾行是
+        // 這個字的事實，這一句是這一次查詢的事實——擺在上面會讀成一條欄目，擺在
+        // 貼着的下一行會讀成最後一欄的註腳。
+        if let Some(note) = self.character_info_note(ch, found) {
+            rows.push(plain(String::new(), false));
+            rows.push(plain(note, true));
+        }
+        rows
+    }
+
+    /// **The answer's lines, as the sidebar sets them**: a field is its
+    /// name padded to the widest name, then its value; a heading (a field
+    /// with no value, which names the 拆法 below it) is its name alone. The
+    /// `bool` says which. `y` copies the same lines, so what is pasted
+    /// reads as what was on the screen.
+    fn character_info_lines(found: &Found) -> Vec<(String, bool)> {
         let fields = found.said_rows();
         let width = fields
             .iter()
@@ -1349,31 +1379,52 @@ impl Editor {
             .map(|(name, _)| yumete_cjk::str_width(name))
             .max()
             .unwrap_or(0);
-        for (name, value) in &fields {
-            if value.is_empty() {
-                rows.push(heading(name.clone()));
-                continue;
-            }
-            let pad = " ".repeat(width.saturating_sub(yumete_cjk::str_width(name)));
-            rows.push(plain(format!("{name}{pad}  {value}"), false));
+        fields
+            .iter()
+            .map(|(name, value)| match value.is_empty() {
+                true => (name.clone(), true),
+                false => {
+                    let pad = " ".repeat(width.saturating_sub(yumete_cjk::str_width(name)));
+                    (format!("{name}{pad}  {value}"), false)
+                }
+            })
+            .collect()
+    }
+
+    /// **The quiet line under a character's info**, when there is one to
+    /// say: the 拆分表 is loaded and this 漢字 is not in it, or no table is
+    /// loaded at all — two sentences, because the second asks the reader to
+    /// do something.
+    ///
+    /// Only a 漢字 has a 拆法 to miss. Under a letter, a punctuation mark or
+    /// an emoji the line would say what nobody asked.
+    pub fn character_info_note(&self, ch: &str, found: &Found) -> Option<String> {
+        let han = ch.chars().next().is_some_and(yumete_cjk::is_han);
+        (!found.divided && han).then(|| match self.chaifen_available() {
+            true => say!("ui.not-in-the-table"),
+            false => say!("ui.no-table-yet"),
+        })
+    }
+
+    /// **The character info as plain text**, for `y`: the character on the
+    /// first line, then a line to each field, its name before its value.
+    /// `None` until the answer has arrived.
+    pub fn character_info_text(&self) -> Option<String> {
+        let (ch, found) = self.dictionary.as_ref()?;
+        let found = found.as_ref()?;
+        let mut lines = vec![ch.clone()];
+        lines.extend(Self::character_info_lines(found).into_iter().map(|(line, _)| line));
+        Some(lines.join("\n"))
+    }
+
+    /// **What the text's `y` copies while the character info floats**: the
+    /// answer, as `y` under the change band copies the old text. A count
+    /// before it (`3y`) asks for the text's yank and gets it.
+    pub(super) fn character_info_to_copy(&self, operator_count: Option<usize>) -> Option<String> {
+        if operator_count.is_some() || self.info_afloat() != Some(crate::sidebar::Info::Dictionary) {
+            return None;
         }
-        // **「沒有拆法」寫在下面，淡的，隔一行**。上面那幾行是
-        // 這個字的事實，這一句是這一次查詢的事實——擺在上面會讀成一條欄目，擺在
-        // 貼着的下一行會讀成最後一欄的註腳。
-        //
-        // 兩句話分得開：表載了而字不在表裏（符號本來就沒有拆法），和根本還沒載
-        // 表（那是要人去做一件事）。
-        if !found.divided {
-            rows.push(plain(String::new(), false));
-            rows.push(plain(
-                match self.chaifen_available() {
-                    true => say!("ui.not-in-the-table"),
-                    false => say!("ui.no-table-yet"),
-                },
-                true,
-            ));
-        }
-        rows
+        self.character_info_text()
     }
 
     /// Look this character up in the 拆分表 — `空格 N`, and `Tab` on a

@@ -249,6 +249,18 @@ zhs = "复制原文"
 en = "copy the old text"
 
 [[message]]
+# （草稿）字符信息浮窗底边那一行键：y 复制整份信息
+key = "hint.character-info.keys"
+zhs = "y 复制这些信息"
+en = "y copy this info"
+
+[[message]]
+# （草稿）字符信息那一格底下那一行：y 那一项
+key = "hint.character-info.yank"
+zhs = "复制这些信息"
+en = "copy this info"
+
+[[message]]
 # 提示：關
 key = "hint.close"
 zhs = "关闭"
@@ -1531,16 +1543,16 @@ zhs = "诊断选择器"
 en = "diagnostics picker"
 
 [[message]]
-# 空格組：字典
+# （草稿）空格组：字符信息（浮窗）
 key = "hint.space.dictionary"
-zhs = "显示汉字信息(浮窗)"
-en = "char info (popup)"
+zhs = "显示字符信息(浮窗)"
+en = "character info (popup)"
 
 [[message]]
-# 空格選單裏那一行：把漢字信息開進邊欄(浮窗是小寫的 d)
+# （草稿）空格菜单里那一行：把字符信息开进侧栏(浮窗是小写的 n)
 key = "hint.space.dictionary-panel"
-zhs = "显示汉字信息(侧栏)"
-en = "char info (sidebar)"
+zhs = "显示字符信息(侧栏)"
+en = "character info (sidebar)"
 
 [[message]]
 # space e：瀏覽文件，一次一個目錄(挑選器式，不是邊欄那棵樹)

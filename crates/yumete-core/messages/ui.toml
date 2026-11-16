@@ -855,10 +855,10 @@ zhs = "改动"
 en = "Changes"
 
 [[message]]
-# 標籤：字典
+# （草稿）标签：字符信息（空格 n／N 那一格的标题）
 key = "label.panel.dictionary"
-zhs = "字典"
-en = "Dictionary"
+zhs = "字符信息"
+en = "Character info"
 
 [[message]]
 # 邊欄面板的名字：文檔

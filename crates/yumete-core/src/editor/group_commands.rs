@@ -599,6 +599,16 @@ impl Editor {
         }
     }
 
+    /// **`:character-info`**: the float `空格 n` opens, and only opens. The
+    /// key asked twice puts it away; a command typed is never asked to
+    /// close what it names.
+    pub(super) fn show_character_info(&mut self) {
+        let showing = self.dictionary_afloat().is_some_and(|(ch, _)| Some(ch.to_string()) == self.grapheme_at_cursor());
+        if !showing {
+            self.look_up_under_the_cursor(true);
+        }
+    }
+
     /// A request for the input method, which the front end carries out.
     pub fn ask_the_input_method(&mut self, what: &str) {
         self.scheme_request = Some(what.to_string());

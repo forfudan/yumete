@@ -17,6 +17,8 @@ const NAMES: &[(&str, &str, &str)] = &[
     ("ime.lookup.note", "注释", "注釋"),
     ("ime.lookup.charset", "字集", "字集"),
     ("ime.lookup.codepoint", "统一码", "統一碼"),
+    ("ime.lookup.name", "统一码名称", "統一碼名稱"),
+    ("ime.lookup.utf8", "UTF-8", "UTF-8"),
     ("ime.lookup.block", "统一码区块", "統一碼區塊"),
     ("ime.lookup.source.mainland", "陆", "陸"),
     ("ime.lookup.source.taiwan", "台", "臺"),

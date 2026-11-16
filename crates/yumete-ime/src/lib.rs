@@ -1817,6 +1817,19 @@ impl ImeSession {
         if !points.is_empty() {
             out.push(("ime.lookup.codepoint", points.join(" ")));
         }
+        // **A name to a row**: `SQUARED CJK UNIFIED IDEOGRAPH-7121` and
+        // `VARIATION SELECTOR-16` joined on one line read as one long name.
+        // A code point the standard leaves unnamed (a control, private use)
+        // has no row rather than an empty one.
+        for name in ch.chars().filter_map(yumete_cjk::blocks::name) {
+            out.push(("ime.lookup.name", name));
+        }
+        // The bytes are grouped by code point, so where one ends is never a
+        // matter of decoding them in one's head.
+        if !ch.is_empty() {
+            let bytes: Vec<String> = ch.chars().map(yumete_cjk::blocks::utf8_bytes).collect();
+            out.push(("ime.lookup.utf8", bytes.join(" · ")));
+        }
         // 區塊問的是**底字**：一個異體字選擇符自己在 Variation Selectors
         // Supplement 裏，而讀者要知道的是那個漢字在哪一區。同狀態欄那一格。
         //
@@ -3000,9 +3013,38 @@ mod tests {
             let got = ime.glosses("行");
             assert!(got.divided, "{got:?}");
             let last: Vec<&str> =
-                got.rows.iter().rev().take(2).map(|(n, _)| *n).collect();
-            assert_eq!(last, ["ime.lookup.block", "ime.lookup.codepoint"], "兩行在最後，區塊貼着碼位");
+                got.rows.iter().rev().take(4).map(|(n, _)| *n).collect();
+            assert_eq!(
+                last,
+                ["ime.lookup.block", "ime.lookup.utf8", "ime.lookup.name", "ime.lookup.codepoint"],
+                "字的事實在最後：碼位、名稱、字節、區塊"
+            );
         }
+    }
+
+    /// **Every character has its Unicode name and its UTF-8 bytes**, a
+    /// letter, a 漢字 and an emoji alike — what helix's `:char` says too.
+    #[test]
+    fn a_character_says_its_name_and_its_bytes() {
+        let ime = ImeSession::empty(Scheme::LINGMING);
+        let all = |got: &Lookup, n: &str| -> Vec<String> {
+            got.rows.iter().filter(|(name, _)| *name == n).map(|(_, v)| v.clone()).collect()
+        };
+        let got = ime.glosses("a");
+        assert_eq!(all(&got, "ime.lookup.name"), ["LATIN SMALL LETTER A"], "{got:?}");
+        assert_eq!(all(&got, "ime.lookup.utf8"), ["61"], "{got:?}");
+        let got = ime.glosses("\u{963B}");
+        assert_eq!(all(&got, "ime.lookup.name"), ["CJK UNIFIED IDEOGRAPH-963B"], "{got:?}");
+        assert_eq!(all(&got, "ime.lookup.utf8"), ["e9 98 bb"], "{got:?}");
+        // A cluster of two code points: a name to each, the bytes grouped.
+        let got = ime.glosses("\u{1F21A}\u{FE0F}");
+        assert_eq!(all(&got, "ime.lookup.codepoint"), ["U+1F21A U+FE0F"], "{got:?}");
+        assert_eq!(
+            all(&got, "ime.lookup.name"),
+            ["SQUARED CJK UNIFIED IDEOGRAPH-7121", "VARIATION SELECTOR-16"],
+            "{got:?}"
+        );
+        assert_eq!(all(&got, "ime.lookup.utf8"), ["f0 9f 88 9a · ef b8 8f"], "{got:?}");
     }
 
     #[test]

@@ -391,6 +391,22 @@ pub fn codepoint(c: char) -> String {
     format!("U+{:04X}", c as u32)
 }
 
+/// Its name in the Unicode standard: `LATIN SMALL LETTER A`,
+/// `CJK UNIFIED IDEOGRAPH-963B`, `VARIATION SELECTOR-16`.
+///
+/// `None` where the standard gives none: a control, a private-use or an
+/// unassigned code point. The names of the ideographs and of the Hangul
+/// syllables are worked out from the code point, as the standard writes them.
+pub fn name(c: char) -> Option<String> {
+    unicode_names2::name(c).map(|name| name.to_string())
+}
+
+/// Its bytes in UTF-8, as two lowercase hex digits each: `e9 98 bb`.
+pub fn utf8_bytes(c: char) -> String {
+    let mut buf = [0u8; 4];
+    c.encode_utf8(&mut buf).bytes().map(|b| format!("{b:02x}")).collect::<Vec<_>>().join(" ")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -428,5 +444,20 @@ mod tests {
         assert_eq!(codepoint('\u{4E00}'), "U+4E00");
         assert_eq!(codepoint('a'), "U+0061");
         assert_eq!(codepoint('\u{2B740}'), "U+2B740");
+    }
+
+    #[test]
+    fn a_character_is_named_as_the_standard_names_it() {
+        assert_eq!(name('a').as_deref(), Some("LATIN SMALL LETTER A"));
+        assert_eq!(name('\u{963B}').as_deref(), Some("CJK UNIFIED IDEOGRAPH-963B"));
+        assert_eq!(name('\u{FE0F}').as_deref(), Some("VARIATION SELECTOR-16"));
+        assert_eq!(name('\u{E000}'), None, "a private-use code point has no name");
+    }
+
+    #[test]
+    fn utf8_bytes_are_lowercase_pairs() {
+        assert_eq!(utf8_bytes('a'), "61");
+        assert_eq!(utf8_bytes('\u{963B}'), "e9 98 bb");
+        assert_eq!(utf8_bytes('\u{1F21A}'), "f0 9f 88 9a");
     }
 }

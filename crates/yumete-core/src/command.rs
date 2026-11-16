@@ -324,6 +324,10 @@ pub enum Command {
     /// 和 [`Command::YumeWhere`] 同一條路：答案是**一頁**，而且有一行只有前端答
     /// 得出來（哪幾個語言服務器在看着它）。
     FileInfo,
+    /// `:character-info` (alias `:char`, helix's) — what `空格 n` floats:
+    /// the character under the cursor, its code point, name, bytes and, for a
+    /// 漢字, its 拆法.
+    CharacterInfo,
     /// `:keymap-yumete-flavor [off|basic|full]` — the yumete flavour's level
     /// (three levels, not a switch). Bare, it reports
     /// the level and each item.
@@ -3587,7 +3591,7 @@ const LINKS_LOOKS: &[Word] = &[
 ];
 
 const INFO_KINDS: &[Word] = &[
-    Word { name: "dictionary", help: "label.panel.dictionary", needs: &[] },
+    Word { name: "character", help: "label.panel.dictionary", needs: &[] },
     Word { name: "wiki", help: "label.panel.wiki", needs: &[] },
     Word { name: "record", help: "label.panel.record", needs: &[] },
     Word { name: "docs", help: "label.panel.docs", needs: &[] },
@@ -4570,6 +4574,15 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[],
         build: Some(|_| Ok(Command::FileInfo)),
+    },
+    Entry {
+        // helix's name, and its short form: neither is vim's.
+        name: "character-info",
+        aliases: &["char"],
+        help: "cmd.commands.character-info",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::CharacterInfo)),
     },
     Entry {
         // **「什麽時候問」與「畫在哪」分開**：即時顯示是一個命令開關，不是快捷鍵。畫在
@@ -6724,13 +6737,6 @@ const RENAMED: &[(&str, &str)] = &[
     ("wysiwyg", "render"),
 ];
 
-/// **Another editor's command that yumete does not have**, so no signpost.
-/// The walk below would answer it by a segment — `char` is the last word of
-/// `:yume-single-char` — but helix's `:char` shows what the character under
-/// the cursor is, and pointing a helix hand at 單字派 sends it somewhere it
-/// never meant to go. A wrong signpost is worse than none.
-const NOT_MOVED: &[&str] = &["char"];
-
 /// Where a word that is not a command went, if it went anywhere (#283).
 ///
 /// **The point of folding a table into a tree is that the leaves keep their
@@ -6743,9 +6749,6 @@ const NOT_MOVED: &[&str] = &["char"];
 /// `:count-progress` is the difference between a signpost and a shrug. Three
 /// answers at most: past that the word is too vague to be pointing anywhere.
 fn moved_to(word: &str) -> Option<String> {
-    if NOT_MOVED.contains(&word) {
-        return None;
-    }
     if let Some((_, to)) = RENAMED.iter().find(|(from, _)| *from == word) {
         // **A name may have become two.** `:layout` was one command with a
         // direction for an argument, and the two directions are each a thing
@@ -9283,14 +9286,12 @@ mod tests {
         assert_eq!(parse(":wa"), Ok(Command::WriteAll { force: false }));
     }
 
-    /// `:char` is helix's character info, which yumete has no command for:
-    /// it says so and points nowhere, least of all at 單字派.
+    /// `:char` is helix's character info, and yumete's: never a signpost
+    /// to 單字派.
     #[test]
-    fn char_is_not_a_signpost_to_single_char() {
-        assert!(matches!(parse(":char"), Err(CommandError::Unknown(_))));
-        assert_eq!(moved_to("char"), None);
-        let said = parse(":char").unwrap_err().to_string();
-        assert!(!said.contains("yume-single-char"), "{said}");
+    fn char_is_the_character_info() {
+        assert_eq!(parse(":char"), Ok(Command::CharacterInfo));
+        assert_eq!(parse(":character-info"), Ok(Command::CharacterInfo));
     }
 
     /// **`:redraw` is vim's and helix's name**; `:preview-redraw` is a

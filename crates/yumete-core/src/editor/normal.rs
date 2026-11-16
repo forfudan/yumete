@@ -143,7 +143,12 @@ pub(super) const NORMAL_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::ExtendLineBelow, Editor::cmd_extend_line_below, Key::Char('x')),
     (NormalCmd::OperatorDelete, |e, cx| e.cmd_vim_operator(cx.with_key(Key::Char('d'))), Key::Char('d')),
     (NormalCmd::OperatorChange, |e, cx| e.cmd_vim_operator(cx.with_key(Key::Char('c'))), Key::Char('c')),
-    (NormalCmd::OperatorYank, |e, cx| e.cmd_vim_operator(cx.with_key(Key::Char('y'))), Key::Char('y')),
+    // vim's `y` waits for a motion, except under the character info, where
+    // the hint on the float says `y` copies it.
+    (NormalCmd::OperatorYank, |e, cx| match e.character_info_to_copy(cx.operator_count) {
+        Some(text) => e.clipboard_request = Some(text),
+        None => e.cmd_vim_operator(cx.with_key(Key::Char('y'))),
+    }, Key::Char('y')),
     (NormalCmd::OperatorIndent, |e, cx| e.cmd_vim_operator(cx.with_key(Key::Char('>'))), Key::Char('>')),
     (NormalCmd::OperatorUnindent, |e, cx| e.cmd_vim_operator(cx.with_key(Key::Char('<'))), Key::Char('<')),
     (NormalCmd::DeleteSelection, |e, cx| e.cmd_delete_or_change(cx.with_key(Key::Char('d'))), Key::Char('d')),
@@ -1855,6 +1860,8 @@ impl Editor {
         if operator_count.is_none() && self.info_afloat() == Some(crate::sidebar::Info::Change) && self.change_here().is_some() {
             let text = self.change_here().map(|run| run.was.join("\n"));
             self.clipboard_request = text;
+        } else if let Some(text) = self.character_info_to_copy(operator_count) {
+            self.clipboard_request = Some(text);
         } else {
             if self.refuse_unwritable_register() {
                 return;

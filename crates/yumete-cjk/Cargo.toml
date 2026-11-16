@@ -8,4 +8,5 @@ version.workspace = true
 
 [dependencies]
 unicode-segmentation = "1"
+unicode_names2 = "4.0.0"
 unicode-width = "0.2"

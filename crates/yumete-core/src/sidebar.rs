@@ -60,7 +60,8 @@ impl Side {
 /// 兩個都問出來，不存。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Info {
-    /// 漢字的拆分與編碼（`空格 d`，#215）。
+    /// **字符信息**（`空格 n`／`空格 N`，`:character-info`）：碼位、名稱、
+    /// UTF-8 字節、區塊，漢字另有拆分與編碼（#215）。
     Dictionary,
     /// 詞條（#287）。
     Wiki,
@@ -101,7 +102,7 @@ impl Info {
     /// `:info <名>` 認的那個詞。
     pub fn key(self) -> &'static str {
         match self {
-            Info::Dictionary => "dictionary",
+            Info::Dictionary => "character",
             Info::Wiki => "wiki",
             Info::Record => "record",
             Info::Docs => "docs",
@@ -110,9 +111,14 @@ impl Info {
         }
     }
 
-    /// 讀那個詞回來。
+    /// 讀那個詞回來。`dictionary` is the character info's other spelling:
+    /// the panel answers for every character, so the name it shows is
+    /// `character`, and the older word still reaches it.
     pub fn parse(word: &str) -> Option<Info> {
         let word = word.trim().to_ascii_lowercase();
+        if word == "dictionary" {
+            return Some(Info::Dictionary);
+        }
         Info::ALL.into_iter().find(|one| one.key() == word)
     }
 }

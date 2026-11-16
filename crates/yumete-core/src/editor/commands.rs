@@ -1230,6 +1230,10 @@ impl Editor {
                 self.file_info_request = true;
                 Ok(CommandOutcome::Continue)
             }
+            Command::CharacterInfo => {
+                self.show_character_info();
+                Ok(CommandOutcome::Continue)
+            }
             Command::BuiltinScheme => {
                 self.scheme_request = Some(String::from("!"));
                 Ok(CommandOutcome::Continue)

@@ -12862,6 +12862,106 @@ fn an_answer_for_a_character_nobody_is_asking_about_now_is_dropped() {
     assert_eq!(ed.info_rows(crate::sidebar::Side::Right).len(), 1, "still waiting");
 }
 
+/// **Only a 漢字 has a 拆法 to miss**: a letter the table does not have
+/// gets its code point and name, and no line about the table.
+#[test]
+fn a_letter_is_not_blamed_for_missing_from_the_table() {
+    let mut ed = typed("abc");
+    ed.set_chaifen_available(true);
+    press(&mut ed, " N");
+    assert_eq!(ed.take_dictionary_query(), Some("a".to_string()));
+    ed.set_dictionary("a", crate::editor::Found {
+        rows: vec![
+            ("ime.lookup.codepoint", "U+0061".to_string()),
+            ("ime.lookup.name", "LATIN SMALL LETTER A".to_string()),
+        ],
+        divided: false,
+    });
+    let rows: Vec<String> =
+        ed.info_rows(crate::sidebar::Side::Right).iter().map(|r| r.name.clone()).collect();
+    assert_eq!(rows.len(), 3, "the letter and its two rows, nothing under them: {rows:?}");
+    assert!(rows[2].ends_with("LATIN SMALL LETTER A"), "{rows:?}");
+    assert!(!rows.contains(&say!("ui.not-in-the-table")), "{rows:?}");
+}
+
+/// **`:character-info` (`:char`) is `空格 n` typed**: the same float, for
+/// the character under the cursor. Typed twice it stays: a command names
+/// what to show and never puts it away.
+#[test]
+fn char_opens_the_character_info_float() {
+    let mut ed = typed("那年");
+    ed.execute(":char").unwrap();
+    assert_eq!(ed.info_afloat(), Some(crate::sidebar::Info::Dictionary));
+    assert_eq!(ed.take_dictionary_query(), Some("那".to_string()));
+    assert!(ed.panel(crate::sidebar::Side::Right).is_none(), "a float, not the sidebar");
+    ed.execute(":character-info").unwrap();
+    assert_eq!(ed.info_afloat(), Some(crate::sidebar::Info::Dictionary), "still up");
+    // The key asked again is the one that puts it away.
+    press(&mut ed, " n");
+    assert_eq!(ed.info_afloat(), None);
+}
+
+/// **`y` copies the character info as plain text**: the character, then a
+/// line to each field, name before value — under the float from the text's
+/// keys (as under the change band), and in the sidebar from its own.
+#[test]
+fn y_copies_the_character_info() {
+    let answer = || crate::editor::Found {
+        rows: vec![
+            ("拆分", "刀二阝".to_string()),
+            ("編碼", "vfb".to_string()),
+        ],
+        divided: true,
+    };
+    let copied = "那\n拆分  刀二阝\n編碼  vfb";
+    for vim in [false, true] {
+        let mut ed = match vim {
+            true => typed_vim("那年"),
+            false => typed("那年"),
+        };
+        press(&mut ed, " n");
+        ed.take_dictionary_query();
+        ed.set_dictionary("那", answer());
+        press(&mut ed, "y");
+        assert_eq!(ed.take_clipboard_request().as_deref(), Some(copied), "vim: {vim}");
+        assert_eq!(ed.current_buffer().text(), "那年", "nothing else happened");
+    }
+
+    // The sidebar's `y`, once the keys are in it.
+    let mut ed = typed("那年");
+    press(&mut ed, " N");
+    ed.take_dictionary_query();
+    ed.set_dictionary("那", answer());
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
+    assert_eq!(ed.panel_focus(), Some(crate::sidebar::Side::Right), "walked in");
+    // The hint row says so, as it says `y` under the change panel.
+    let Hint::Keys(_, keys) = ed.hint() else { panic!("{:?}", ed.hint()) };
+    assert!(keys.iter().any(|(k, says)| *k == "y" && *says == say!("hint.character-info.yank")), "{keys:?}");
+    ed.on_key(Key::Char('y'));
+    assert_eq!(ed.take_clipboard_request().as_deref(), Some(copied));
+}
+
+/// **The panel is called what it is**: it answers for every character, so
+/// its name says 字符 (character), not 字典. `:instant-info` shows
+/// `character` and still takes `dictionary`.
+#[test]
+fn the_character_info_is_named_for_every_character() {
+    use crate::sidebar::Info;
+    assert_eq!(Info::Dictionary.key(), "character");
+    assert_eq!(Info::parse("character"), Some(Info::Dictionary));
+    assert_eq!(Info::parse("dictionary"), Some(Info::Dictionary), "the other spelling");
+    let entry = |tag: &str| crate::messages::table().get(tag).copied().unwrap_or_else(|| panic!("{tag}"));
+    assert_eq!(entry(Info::Dictionary.tag()).zhs, "字符信息");
+    assert_eq!(entry(Info::Dictionary.tag()).en, "Character info");
+    for tag in ["action.dictionary", "hint.space.dictionary", "hint.space.dictionary-panel", "keys.flavor.item.dictionary"] {
+        let one = entry(tag);
+        assert!(one.zhs.contains("字符信息"), "{tag}: {}", one.zhs);
+        assert!(one.en.to_lowercase().contains("character info"), "{tag}: {}", one.en);
+        assert!(!one.en.contains("division") && !one.zhs.contains("汉字信息"), "{tag}");
+    }
+}
+
 /// #222: how far a notch of the wheel moves is the reader's, not a
 /// `const` in the front end that nobody can reach.
 #[test]

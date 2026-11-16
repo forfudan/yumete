@@ -299,6 +299,12 @@ zhs = "宇浩全息拆分"
 en = "full division"
 
 [[message]]
+# （草稿）字符信息（空格 n）的一行：这个字符在 Unicode 标准里的名称
+key = "ime.lookup.name"
+zhs = "统一码名称"
+en = "Unicode name"
+
+[[message]]
 # （草稿）查字（空格 n）的一行：拆分表给这个字的注释
 key = "ime.lookup.note"
 zhs = "注释"
@@ -342,6 +348,12 @@ key = "ime.lookup.source.taiwan"
 zhs = "台"
 zht = "臺"
 en = "Taiwan"
+
+[[message]]
+# （草稿）字符信息（空格 n）的一行：这个字符的 UTF-8 字节
+key = "ime.lookup.utf8"
+zhs = "UTF-8"
+en = "UTF-8"
 
 [[message]]
 # :yume-menu-size ——候選面板一頁幾條

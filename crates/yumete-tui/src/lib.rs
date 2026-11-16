@@ -8622,21 +8622,19 @@ fn band_rows(row: &yumete_core::diff::DraftRow, head: String, room: usize) -> Ve
                 // **「沒有拆法」寫在下面，隔一行**（同邊欄那一半）。
                 // 一行空名字的在 `Body::Keys` 裏畫得淡——上面幾行是這個字的事實，
                 // 這一句是這一次查詢的事實。
-                if !found.divided {
+                if let Some(note) = editor.character_info_note(ch, found) {
                     rows.push((String::new(), String::new()));
-                    rows.push((
-                        String::new(),
-                        match editor.chaifen_available() {
-                            true => say!("ui.not-in-the-table"),
-                            false => say!("ui.no-table-yet"),
-                        },
-                    ));
+                    rows.push((String::new(), note));
                 }
                 rows
             }
             // 問出去了，答案還没回來——前端下一趟循環纔去查。
             None => vec![(say!("ui.looking-it-up"), String::new())],
         };
+        // **`y` copies the answer**, as it copies the old text under the
+        // change band, so the bottom edge says so the same way. Only once the
+        // answer is there: before that `y` is the text's own.
+        let tag = answer.is_some().then(|| say!("hint.character-info.keys"));
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
             stand: panel::Stand::Corner,
             accent: None,
@@ -8647,8 +8645,9 @@ fn band_rows(row: &yumete_core::diff::DraftRow, head: String, room: usize) -> Ve
             lede: None,
             entry: false,
             body: panel::Body::Keys(rows),
-            // 讀不完就去邊欄——浮窗不收鍵，那是浮窗的通則。
-            tag: None,
+            // 讀不完就去邊欄——浮窗不收鍵，那是浮窗的通則；`y` 是正文的鍵，
+            // 浮窗開着時它複製這一份答案（同改動那條帶子）。
+            tag,
             vertical_text: false,
             marked: false,
         });
@@ -23707,7 +23706,7 @@ fn squeezed(text: &str) -> String {
         // `split_once('│')` 認不出它，要問底色。
         let panel = |y: u16| past_the_wall(&buffer, y);
         let head = panel(0);
-        assert!(head.contains("字典"), "{head}");
+        assert!(head.contains("字符信息"), "{head}");
         let rows: Vec<String> = (1..4).map(panel).collect();
         assert!(rows[0].starts_with(" 那"), "{:?}", rows[0]);
         // 拆分 is four columns and 分節編碼 is eight, so the shorter name is

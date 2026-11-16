@@ -121,6 +121,11 @@ impl Editor {
                             .flatten()
                             .collect()
                         }
+                        Some(crate::sidebar::Info::Dictionary) if self.character_info_text().is_some() => {
+                            sidebar(&[(Key::Char('y'), PlaceCmd::YankOldText)], say!("hint.character-info.yank"))
+                                .into_iter()
+                                .collect()
+                        }
                         _ => Vec::new(),
                     })
                     .collect::<Vec<_>>());
