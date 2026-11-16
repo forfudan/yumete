@@ -18,6 +18,12 @@
 //! character that may not start a row, a table row that does not wrap. What
 //! it keeps: a blank line the paragraph indent takes off the page counts no
 //! row, and a closed fold counts the one row its first line is drawn on.
+//!
+//! **The thumb is dragged through the same rows, turned round**: a cell
+//! the thumb is put at is a row ([`row_at`]), the row a line and a row into
+//! it found in the running totals ([`line_at`]), and the page is put there.
+//! The foot of the bar is the document's end, which the page finds, not the
+//! estimate.
 
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -230,7 +236,7 @@ pub(crate) fn thumb(bar: usize, window: usize, above: usize, total: usize, at_en
     if bar == 0 || total == 0 {
         return None;
     }
-    let cells = ((bar * window + total / 2) / total).clamp(1, bar.saturating_sub(1).max(1));
+    let cells = thumb_cells(bar, window, total);
     let room = bar - cells;
     let at = match (at_end, total.saturating_sub(window)) {
         (true, _) => room,
@@ -238,6 +244,60 @@ pub(crate) fn thumb(bar: usize, window: usize, above: usize, total: usize, at_en
         (false, hidden) => ((above.min(hidden) * room + hidden / 2) / hidden).min(room.saturating_sub(1)),
     };
     Some((at, cells))
+}
+
+/// How many cells the thumb is: the bar times the window over the
+/// document, rounded, at least one and short of the whole bar.
+fn thumb_cells(bar: usize, window: usize, total: usize) -> usize {
+    ((bar * window + total / 2) / total.max(1)).clamp(1, bar.saturating_sub(1).max(1))
+}
+
+/// **The window's thumb and the document's rows**, as [`thumb`] and
+/// [`rows_above_and_total`] answer them for a window whose top row is `top`,
+/// `bar` cells tall and `chain` pages to the spread.
+pub(crate) fn place(rows: &Rows, folds: &[(usize, usize)], top: Anchor, bar: usize, chain: usize, at_end: bool) -> (Option<(usize, usize)>, usize) {
+    let (above, total) = rows_above_and_total(rows, folds, top);
+    (thumb(bar, bar * chain.max(1), above, total, at_end), total)
+}
+
+/// **Where the thumb's first cell put at `at` puts the window's top**, in
+/// rows less what folds hide — what [`thumb`] places, turned round — or
+/// `None` at the foot of the bar, which is the document's end: the
+/// estimate cannot say which row that is, the page can. The top of the bar
+/// is the first row, and a cell between stands for the row whose thumb is
+/// drawn in it.
+pub(crate) fn row_at(bar: usize, window: usize, total: usize, at: usize) -> Option<usize> {
+    let room = bar.saturating_sub(thumb_cells(bar, window, total));
+    match at {
+        0 => Some(0),
+        _ if at >= room => None,
+        _ => Some((at * total.saturating_sub(window) + room / 2) / room),
+    }
+}
+
+/// **The line, and the row into it, that row `row` of the bar's count
+/// falls on** — what [`rows_above_and_total`] counts, turned round: a
+/// binary search in the running totals. A row inside a closed fold is the
+/// fold's first line; a blank line off the page is skipped for the line
+/// whose rows hold the row.
+pub(crate) fn line_at(rows: &Rows, folds: &[(usize, usize)], row: usize) -> (usize, usize) {
+    let places = Places::new(rows, folds, 1, 1);
+    let lines = rows.before.len() - 1;
+    // The last line whose first row is at or above `row`: rows only grow
+    // down the file, so the lines up to it are one run.
+    let (mut lo, mut hi) = (0, lines);
+    while lo + 1 < hi {
+        let mid = (lo + hi) / 2;
+        match places.row(mid) <= row {
+            true => lo = mid,
+            false => hi = mid,
+        }
+    }
+    let k = folds.partition_point(|&(first, _)| first <= lo);
+    match k.checked_sub(1).map(|i| folds[i]) {
+        Some((first, last)) if lo <= last => (first, 0),
+        _ => (lo, (row - places.row(lo)).min(rows.of(lo).saturating_sub(1))),
+    }
 }
 
 /// **What a mark on the scrollbar says**, quietest first: where two fall in
@@ -451,6 +511,41 @@ mod tests {
         // Lines 1–2 folded: four rows down to one.
         assert_eq!(rows_above_and_total(&rows, &[(1, 2)], top(3, 0)), (3, 5));
         assert_eq!(rows_above_and_total(&rows, &[(1, 2)], top(0, 0)), (0, 5));
+    }
+
+    /// **A thumb dragged to a cell is drawn in that cell again**: every
+    /// cell turned into a row places the thumb back where it was put, and
+    /// the foot of the bar is the end.
+    #[test]
+    fn a_dragged_thumb_lands_where_it_was_put() {
+        for (bar, window, total) in [(9, 9, 41), (20, 20, 1000), (10, 10, 12), (5, 10, 51)] {
+            let (_, cells) = thumb(bar, window, 0, total, false).unwrap();
+            let room = bar - cells;
+            for at in 0..=room {
+                match row_at(bar, window, total, at) {
+                    None => assert_eq!(at, room, "{bar} {window} {total}: only the foot is the end"),
+                    Some(row) => assert_eq!(thumb(bar, window, row, total, false).unwrap().0, at, "{bar} {window} {total}"),
+                }
+            }
+        }
+    }
+
+    /// **A row of the bar's count is found on its line**: a row into a
+    /// line that wraps, a closed fold's first line for the row it is drawn
+    /// on, and past the blank lines that take no row.
+    #[test]
+    fn a_row_is_found_on_its_line() {
+        let rows = |before: Vec<u32>| Rows { key: Key { revision: 0, width: Some(10), blank_lines_fold: false }, before, used: 0, took: Duration::ZERO, seen: (0, Instant::now()) };
+        // Five lines of 2, 1, 3, 1, 1 rows.
+        let five = rows(vec![0, 2, 3, 6, 7, 8]);
+        let found: Vec<_> = (0..8).map(|row| line_at(&five, &[], row)).collect();
+        assert_eq!(found, [(0, 0), (0, 1), (1, 0), (2, 0), (2, 1), (2, 2), (3, 0), (4, 0)]);
+        assert_eq!(line_at(&five, &[], 99), (4, 0), "past the end, the last line");
+        // Lines 1–2 folded: one row for both, at line 1.
+        assert_eq!([2, 3, 4].map(|row| line_at(&five, &[(1, 2)], row)), [(1, 0), (3, 0), (4, 0)]);
+        // Lines 1 and 2 blank and off the page.
+        let blank = rows(vec![0, 1, 1, 1, 2]);
+        assert_eq!(line_at(&blank, &[], 1), (3, 0));
     }
 
     /// **A line falls where its rows do**: a line inside a closed fold at

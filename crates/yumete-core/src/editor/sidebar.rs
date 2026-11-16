@@ -2819,12 +2819,17 @@ impl Editor {
         // walking cells.
         self.forget_a_guessed_table();
         self.find_the_table_here();
+        // …and the row a scroll pinned the caret to is a key's alone, as
+        // `on_key` clears it: kept, the page would carry the clicked line
+        // to that row.
+        self.aim = None;
     }
 
     /// Drag the selection's head to char index `pos`, keeping its anchor.
     pub fn drag_to(&mut self, pos: usize) {
         self.sel.set_head(pos.min(self.current_buffer().char_count()));
         self.refresh_goal_column();
+        self.aim = None;
     }
 
     /// **Text a front end wants on the system clipboard**, sent the way

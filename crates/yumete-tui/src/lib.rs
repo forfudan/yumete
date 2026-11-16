@@ -727,9 +727,8 @@ pub fn run(
 
     let mut viewport = Seats::default();
     let mut shift = ShiftTap::default();
-    // The last left press on the page, to pair a second one with
-    // ([`is_double_click`]).
-    let mut last_press: Option<(std::time::Instant, u16, u16)> = None;
+    // What the left button is doing between a press and its release.
+    let mut pointer = Pointer::default();
     // Whether the extra enhancement level — the one with
     // `REPORT_ALL_KEYS_AS_ESCAPE_CODES` in it — is on the terminal's stack.
     // Pushed and popped as the input method takes and gives back the keyboard,
@@ -2114,57 +2113,10 @@ pub fn run(
                     diag::beat(diag::Stage::Scrolling, notches as u64);
                     editor.scroll(editor.wheel_step() * notches, back);
                 }
-                // A tab is a thing you point at; the mouse is already captured
-                // for the wheel, so this costs nothing but the arithmetic.
-                MouseEventKind::Down(MouseButton::Left) => {
-                    if let Some(side) = sidebar_block_at(editor, config, terminal.size().ok(), mouse) {
-                        editor.toggle_sidebar(side);
-                    } else if let Some(i) = tab_at(editor, config, terminal.size().ok(), mouse) {
-                        editor.show_buffer_at(i);
-                    } else if let Some(window) = window_at(editor, config, terminal.size().ok(), &viewport, mouse)
-                        .filter(|&w| w != editor.live_window() || editor.panel_focus().is_some() || editor.is_page_window(w))
-                    {
-                        // **A click gives the window under it the keys**: a
-                        // preview takes them as it is; a text window also
-                        // takes the caret where it was clicked.
-                        editor.focus_window(window);
-                        if !editor.is_page_window(window) {
-                            if let Some(at) = text_at(editor, config, terminal.size().ok(), &viewport, mouse) {
-                                editor.point_at(at);
-                            }
-                        }
-                    } else if let Some(at) =
-                        text_at(editor, config, terminal.size().ok(), &viewport, mouse)
-                    {
-                        let now = std::time::Instant::now();
-                        let double = is_double_click(last_press, now, mouse.column, mouse.row);
-                        // A third press starts a new pair rather than making
-                        // a second double out of the second and third.
-                        last_press = (!double).then_some((now, mouse.column, mouse.row));
-                        match double {
-                            true => editor.point_into(at),
-                            false => editor.point_at(at),
-                        }
-                        // **Ctrl-click follows a link** (Feature #285) — the
-                        // gesture every other editor already means by it, and
-                        // the one modifier that survives a terminal. A bare
-                        // click stays a bare click: a manuscript is clicked in
-                        // all day, and a link that opened on one would open by
-                        // accident all day.
-                        if mouse.modifiers.contains(KeyModifiers::CONTROL) {
-                            editor.follow_link_here();
-                        }
-                    }
-                }
-                // Dragging picks out a range — the thing the terminal's own
-                // selection does, given back inside the editor, where it
-                // can become a yank, an edit, or the system clipboard.
-                MouseEventKind::Drag(MouseButton::Left) => {
-                    if let Some(at) =
-                        text_at(editor, config, terminal.size().ok(), &viewport, mouse)
-                    {
-                        editor.drag_to(at);
-                    }
+                MouseEventKind::Down(MouseButton::Left)
+                | MouseEventKind::Drag(MouseButton::Left)
+                | MouseEventKind::Up(MouseButton::Left) => {
+                    left_button(editor, config, terminal.size().ok(), &mut viewport, &mut pointer, mouse);
                 }
                 _ => {}
             },
@@ -6194,6 +6146,196 @@ fn window_at(
     })
 }
 
+/// **What the left button is doing between a press and its release.**
+#[derive(Default)]
+struct Pointer {
+    /// The last left press on the page, to pair a second one with
+    /// ([`is_double_click`]).
+    last_press: Option<(std::time::Instant, u16, u16)>,
+    /// The thumb held, from a press on a scrollbar to the release: the
+    /// window whose bar it is, and how many cells below the thumb's first
+    /// the press took it, which the thumb keeps under the pointer as it is
+    /// dragged. A drag that starts here moves the page, never a selection.
+    bar: Option<(yumete_core::window::WindowId, usize)>,
+}
+
+/// **The left button, pressed, dragged and let go.**
+///
+/// A press on a sidebar's block, a tab, another window or the text does
+/// what it says; a press on a window's scrollbar takes its thumb — on the
+/// thumb where it was pressed, off it with the thumb jumped to stand
+/// centred on the press — and a drag then carries the thumb, and the page
+/// with it, until the release. A drag from the text picks out a range.
+fn left_button(
+    editor: &mut Editor,
+    config: &Config,
+    size: Option<ratatui::layout::Size>,
+    seats: &mut Seats,
+    pointer: &mut Pointer,
+    mouse: ratatui::crossterm::event::MouseEvent,
+) {
+    match mouse.kind {
+        MouseEventKind::Up(_) => pointer.bar = None,
+        MouseEventKind::Drag(_) => match pointer.bar {
+            Some((window, grab)) if window == editor.live_window() => {
+                if let Some((bar, (_, cells), rows)) = held_bar(editor, config, size, seats) {
+                    let y = (mouse.row as usize).saturating_sub(bar.y as usize).saturating_sub(grab);
+                    scroll_by_the_bar(editor, seats, bar, cells, rows, y);
+                }
+            }
+            Some(_) => pointer.bar = None,
+            // Dragging picks out a range — the thing the terminal's own
+            // selection does, given back inside the editor, where it
+            // can become a yank, an edit, or the system clipboard.
+            None => {
+                if let Some(at) = text_at(editor, config, size, seats, mouse) {
+                    editor.drag_to(at);
+                }
+            }
+        },
+        _ => {
+            pointer.bar = None;
+            // A tab is a thing you point at; the mouse is already captured
+            // for the wheel, so this costs nothing but the arithmetic.
+            if let Some(side) = sidebar_block_at(editor, config, size, mouse) {
+                editor.toggle_sidebar(side);
+            } else if let Some(i) = tab_at(editor, config, size, mouse) {
+                editor.show_buffer_at(i);
+            } else if let Some(window) = bar_at(editor, config, size, seats, mouse) {
+                // **A press on a bar gives its window the keys**, as a click
+                // on its text does, and takes the thumb.
+                if window != editor.live_window() || editor.panel_focus().is_some() {
+                    editor.focus_window(window);
+                }
+                if let Some((bar, (at, cells), rows)) = held_bar(editor, config, size, seats) {
+                    let y = (mouse.row as usize).saturating_sub(bar.y as usize);
+                    let grab = match y >= at && y < at + cells {
+                        true => y - at,
+                        // Off the thumb: it jumps to stand centred on the
+                        // press, and is held there.
+                        false => {
+                            let to = y.saturating_sub(cells / 2).min((bar.height as usize).saturating_sub(cells));
+                            scroll_by_the_bar(editor, seats, bar, cells, rows, to);
+                            y - to
+                        }
+                    };
+                    pointer.bar = Some((window, grab));
+                }
+            } else if let Some(window) = window_at(editor, config, size, seats, mouse)
+                .filter(|&w| w != editor.live_window() || editor.panel_focus().is_some() || editor.is_page_window(w))
+            {
+                // **A click gives the window under it the keys**: a
+                // preview takes them as it is; a text window also
+                // takes the caret where it was clicked.
+                editor.focus_window(window);
+                if !editor.is_page_window(window) {
+                    if let Some(at) = text_at(editor, config, size, seats, mouse) {
+                        editor.point_at(at);
+                    }
+                }
+            } else if let Some(at) = text_at(editor, config, size, seats, mouse) {
+                let now = std::time::Instant::now();
+                let double = is_double_click(pointer.last_press, now, mouse.column, mouse.row);
+                // A third press starts a new pair rather than making
+                // a second double out of the second and third.
+                pointer.last_press = (!double).then_some((now, mouse.column, mouse.row));
+                match double {
+                    true => editor.point_into(at),
+                    false => editor.point_at(at),
+                }
+                // **Ctrl-click follows a link** (Feature #285) — the
+                // gesture every other editor already means by it, and
+                // the one modifier that survives a terminal. A bare
+                // click stays a bare click: a manuscript is clicked in
+                // all day, and a link that opened on one would open by
+                // accident all day.
+                if mouse.modifiers.contains(KeyModifiers::CONTROL) {
+                    editor.follow_link_here();
+                }
+            }
+        }
+    }
+}
+
+/// **The window whose scrollbar is under the pointer**, by the rectangles
+/// the frame drew; none where a window keeps no bar.
+fn bar_at(
+    editor: &Editor,
+    config: &Config,
+    size: Option<ratatui::layout::Size>,
+    seats: &Seats,
+    mouse: ratatui::crossterm::event::MouseEvent,
+) -> Option<yumete_core::window::WindowId> {
+    let areas = drawn_areas(editor, config, size?, seats);
+    let i = areas.bars.iter().position(|b| {
+        b.width > 0 && mouse.column >= b.x && mouse.column < b.x + b.width && mouse.row >= b.y && mouse.row < b.y + b.height
+    })?;
+    editor.windows().leaves().get(i).copied()
+}
+
+/// The page's rectangles as the last frame drew them, the table head's two
+/// rows included when they were on it.
+fn drawn_areas(editor: &Editor, config: &Config, size: ratatui::layout::Size, seats: &Seats) -> Areas {
+    let top = seats[editor.live_pane()].top.line;
+    let head_rows = 2 * u16::from(!editor.grid_has_the_pane() && editor.table_head_is_off_the_page(top));
+    page_areas(editor, config, Rect::new(0, 0, size.width, size.height), head_rows)
+}
+
+/// What a dragged thumb is measured against: the live window's bar and
+/// what the document's rows come to over the spread.
+struct BarRows {
+    window: usize,
+    total: usize,
+}
+
+/// **The live window's bar, its thumb as the last frame drew it, and the
+/// rows it was measured in** — `None` while the whole file is in view, or
+/// before a frame. The editor is first told the page as it is told before
+/// a key, so a window that has just taken the keys scrolls at its own
+/// width.
+fn held_bar(
+    editor: &mut Editor,
+    config: &Config,
+    size: Option<ratatui::layout::Size>,
+    seats: &mut Seats,
+) -> Option<(Rect, (usize, usize), BarRows)> {
+    let areas = drawn_areas(editor, config, size?, seats);
+    let live = editor.live_pane();
+    let bar = areas.bars.get(live).copied().filter(|b| b.width > 0)?;
+    let page = areas.panes[live];
+    editor.set_page_top(seats[live].top.line);
+    let (a, b) = seats[live].drawn_span?;
+    editor.set_page_span(a, b);
+    settle_the_pages(editor, config, page);
+    let len = editor.current_buffer().rope().len_chars();
+    if a == 0 && b >= len {
+        return None;
+    }
+    let chain = horizontal_pages(editor, config, page).len().max(1);
+    let folds = editor.closed_folds();
+    let top = seats[live].top;
+    let rows = seats.rows.rows(editor);
+    let (thumb, total) = scrollbar::place(rows, &folds, top, bar.height as usize, chain, b >= len);
+    Some((bar, thumb?, BarRows { window: bar.height as usize * chain, total }))
+}
+
+/// **Scroll the live window so its thumb's first cell is `at`**: the cell
+/// turned into a row, the row into a line and a row in it, and the page
+/// put there as `C-e` puts it — the caret stays while it is on the page
+/// and is pushed in from the edge it fell past otherwise. The foot of the
+/// bar is the document's end, as `G` shows it.
+fn scroll_by_the_bar(editor: &mut Editor, seats: &mut Seats, bar: Rect, cells: usize, rows: BarRows, at: usize) {
+    let at = at.min((bar.height as usize).saturating_sub(cells));
+    match scrollbar::row_at(bar.height as usize, rows.window, rows.total, at) {
+        None => editor.scroll_the_page_to_end(),
+        Some(row) => {
+            let folds = editor.closed_folds();
+            let (line, rows_in) = scrollbar::line_at(seats.rows.rows(editor), &folds, row);
+            editor.scroll_the_page_to(line, rows_in);
+        }
+    }
+}
+
 /// **When the whole screen is drawn again** (`:redraw`): when it is asked
 /// for, and when the windows are laid out otherwise than in the last frame
 /// drawn — a window opened, closed, moved, swapped or resized, a sidebar or a
@@ -6700,9 +6842,7 @@ fn draw<'a>(
                     let placed = (a > 0 || b < len).then(|| {
                         let folds = editor.closed_folds();
                         let rows = viewport.rows.rows(editor);
-                        let (above, total) = scrollbar::rows_above_and_total(rows, &folds, top);
-                        let window = bar.height as usize * chain.max(1);
-                        let thumb = scrollbar::thumb(bar.height as usize, window, above, total, b >= len);
+                        let (thumb, total) = scrollbar::place(rows, &folds, top, bar.height as usize, chain, b >= len);
                         let marks = thumb.map(|_| scrollbar::marks(editor, rows, &folds, total, bar.height as usize));
                         (thumb, marks)
                     });
@@ -21952,6 +22092,239 @@ fn squeezed(text: &str) -> String {
                 assert!(thumb_cells(&buffer, &config, *bar).starts_with('#'), "{split}: {}", buffer_to_text(&buffer));
             }
         }
+    }
+
+    /// The left button at a cell: pressed, dragged there, or let go.
+    fn button(kind: &str, x: u16, y: u16) -> ratatui::crossterm::event::MouseEvent {
+        use ratatui::crossterm::event::{MouseButton, MouseEventKind};
+        let kind = match kind {
+            "down" => MouseEventKind::Down(MouseButton::Left),
+            "drag" => MouseEventKind::Drag(MouseButton::Left),
+            _ => MouseEventKind::Up(MouseButton::Left),
+        };
+        ratatui::crossterm::event::MouseEvent { kind, column: x, row: y, modifiers: ratatui::crossterm::event::KeyModifiers::NONE }
+    }
+
+    /// The lines the live window's last frame drew, first and last.
+    fn lines_shown(editor: &Editor, seats: &Seats) -> (usize, usize) {
+        let (a, b) = seats[editor.live_pane()].drawn_span.expect("a frame");
+        let rope = editor.current_buffer().rope();
+        (rope.char_to_line(a), rope.char_to_line(b.min(rope.len_chars())))
+    }
+
+    /// Whether the caret's line is among the lines drawn.
+    fn caret_shown(editor: &Editor, seats: &Seats) -> bool {
+        let (first, last) = lines_shown(editor, seats);
+        (first..=last).contains(&editor.cursor_line())
+    }
+
+    /// **The thumb dragged to the foot of its bar shows the end** — the
+    /// page `G` shows, the thumb at the bottom — and dragged back up, the
+    /// top; the caret is kept on the page as `C-e` keeps it, and a drag
+    /// that started on the bar picks out nothing, the release ends it.
+    #[test]
+    fn dragging_the_thumb_scrolls_from_end_to_end() {
+        let config = bare();
+        ink(&config);
+        let (w, h) = (30u16, 11u16);
+        let size = Some(ratatui::layout::Size::new(w, h));
+        let text: String = (1..=40).map(|n| format!("line {n:02}\n")).collect();
+        let mut editor = editor_with(&text);
+        let mut seats = Seats::default();
+        let mut pointer = Pointer::default();
+        let bar = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0).bars[0];
+        let (buffer, _) = centred_frame(&mut editor, &config, w, h, &mut seats);
+        assert_eq!(thumb_cells(&buffer, &config, bar), "##.......");
+        left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("down", bar.x, bar.y));
+        assert_eq!(lines_shown(&editor, &seats).0, 0, "a press on the thumb moves nothing");
+        // Down past the bar's foot, and across the text on the way.
+        left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("drag", 3, bar.y + 4));
+        centred_frame(&mut editor, &config, w, h, &mut seats);
+        left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("drag", bar.x, bar.y + bar.height + 3));
+        let (buffer, _) = centred_frame(&mut editor, &config, w, h, &mut seats);
+        assert_eq!(thumb_cells(&buffer, &config, bar), ".......##", "{}", buffer_to_text(&buffer));
+        let last = editor.current_buffer().rope().len_lines() - 1;
+        assert_eq!(lines_shown(&editor, &seats), (last - 8, last), "a full page, ending on the last line");
+        assert!(caret_shown(&editor, &seats), "the caret on the page");
+        let (from, to) = editor.selection();
+        assert!(to - from <= 1, "nothing picked out: {from}..{to}");
+        // Back up to the top.
+        left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("drag", bar.x, 0));
+        let (buffer, _) = centred_frame(&mut editor, &config, w, h, &mut seats);
+        assert_eq!(thumb_cells(&buffer, &config, bar), "##.......");
+        assert_eq!(lines_shown(&editor, &seats).0, 0);
+        assert!(caret_shown(&editor, &seats));
+        left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("up", bar.x, 0));
+        assert!(pointer.bar.is_none(), "let go");
+        // A drag after the release is a drag in the text again.
+        let before = lines_shown(&editor, &seats);
+        left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("drag", bar.x, bar.y + 8));
+        centred_frame(&mut editor, &config, w, h, &mut seats);
+        assert_eq!(lines_shown(&editor, &seats), before, "no thumb held");
+    }
+
+    /// **The thumb keeps the cell it was taken by under the pointer**, and
+    /// a press off the thumb jumps it to stand centred on the press, from
+    /// where the drag carries on.
+    #[test]
+    fn the_thumb_keeps_its_grab_and_a_press_off_it_jumps() {
+        let config = bare();
+        ink(&config);
+        let (w, h) = (30u16, 11u16);
+        let size = Some(ratatui::layout::Size::new(w, h));
+        let text: String = (1..=40).map(|n| format!("line {n:02}\n")).collect();
+        for keymap in ["helix", "vim"] {
+            let mut editor = editor_with(&text);
+            editor.execute(&format!(":keymap {keymap}")).unwrap();
+            let mut seats = Seats::default();
+            let mut pointer = Pointer::default();
+            let bar = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0).bars[0];
+            centred_frame(&mut editor, &config, w, h, &mut seats);
+            // Taken by its second cell and dragged four down.
+            left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("down", bar.x, bar.y + 1));
+            left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("drag", bar.x, bar.y + 5));
+            let (buffer, _) = centred_frame(&mut editor, &config, w, h, &mut seats);
+            assert_eq!(thumb_cells(&buffer, &config, bar), "....##...", "{keymap}: the second cell under the pointer:\n{}", buffer_to_text(&buffer));
+            assert!(caret_shown(&editor, &seats), "{keymap}");
+            left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("up", bar.x, bar.y + 5));
+            // A press on the thumb where it stands moves nothing.
+            let shown = lines_shown(&editor, &seats);
+            left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("down", bar.x, bar.y + 4));
+            left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("up", bar.x, bar.y + 4));
+            centred_frame(&mut editor, &config, w, h, &mut seats);
+            assert_eq!(lines_shown(&editor, &seats), shown, "{keymap}: a press on the thumb");
+            // A press below it: centred on the press.
+            left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("down", bar.x, bar.y + 7));
+            let (buffer, _) = centred_frame(&mut editor, &config, w, h, &mut seats);
+            assert_eq!(thumb_cells(&buffer, &config, bar), "......##.", "{keymap}: jumped:\n{}", buffer_to_text(&buffer));
+            // …and held there: one up takes it one up.
+            left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("drag", bar.x, bar.y + 6));
+            let (buffer, _) = centred_frame(&mut editor, &config, w, h, &mut seats);
+            assert_eq!(thumb_cells(&buffer, &config, bar), ".....##..", "{keymap}");
+            left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("up", bar.x, bar.y + 6));
+            // A press above it, at the top cell: the top.
+            left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("down", bar.x, bar.y));
+            let (buffer, _) = centred_frame(&mut editor, &config, w, h, &mut seats);
+            assert_eq!(thumb_cells(&buffer, &config, bar), "##.......", "{keymap}");
+            assert_eq!(lines_shown(&editor, &seats).0, 0, "{keymap}");
+        }
+    }
+
+    /// **A click after the bar has scrolled moves the caret, not the
+    /// page**: the row the scroll left the caret on does not hold the
+    /// clicked line to it.
+    #[test]
+    fn a_click_after_the_bar_leaves_the_page() {
+        let config = bare();
+        ink(&config);
+        let (w, h) = (30u16, 23u16);
+        let size = Some(ratatui::layout::Size::new(w, h));
+        let text: String = (1..=80).map(|n| format!("line {n:02}\n")).collect();
+        for keymap in ["helix", "vim"] {
+            let mut editor = editor_with(&text);
+            editor.execute(&format!(":keymap {keymap}")).unwrap();
+            let mut seats = Seats::default();
+            let mut pointer = Pointer::default();
+            let bar = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0).bars[0];
+            centred_frame(&mut editor, &config, w, h, &mut seats);
+            left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("down", bar.x, bar.y + 12));
+            left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("up", bar.x, bar.y + 12));
+            centred_frame(&mut editor, &config, w, h, &mut seats);
+            let shown = lines_shown(&editor, &seats);
+            assert!(shown.0 > 0, "{keymap}: scrolled");
+            left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("down", 2, 11));
+            centred_frame(&mut editor, &config, w, h, &mut seats);
+            assert_eq!(lines_shown(&editor, &seats), shown, "{keymap}");
+            assert_eq!(editor.cursor_line(), shown.0 + 11, "{keymap}");
+        }
+    }
+
+    /// **A click on the text still puts the caret there**, and a drag from
+    /// the text still picks out a range; while the whole file fits the bar
+    /// has no thumb and a press on it does nothing.
+    #[test]
+    fn the_text_takes_clicks_beside_the_bar() {
+        let config = bare();
+        ink(&config);
+        let (w, h) = (30u16, 11u16);
+        let size = Some(ratatui::layout::Size::new(w, h));
+        let text: String = (1..=40).map(|n| format!("line {n:02}\n")).collect();
+        let mut editor = editor_with(&text);
+        let mut seats = Seats::default();
+        let mut pointer = Pointer::default();
+        centred_frame(&mut editor, &config, w, h, &mut seats);
+        let at = text_at(&editor, &config, size, &seats, button("down", 2, 3)).expect("a character");
+        left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("down", 2, 3));
+        assert_eq!(editor.cursor(), at);
+        left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("drag", 5, 6));
+        let (from, to) = editor.selection();
+        assert!(to - from > 1, "a range: {from}..{to}");
+        left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("up", 5, 6));
+        let mut short = editor_with("one\ntwo\n");
+        let mut seats = Seats::default();
+        centred_frame(&mut short, &config, w, h, &mut seats);
+        let bar = page_areas(&short, &config, Rect::new(0, 0, w, h), 0).bars[0];
+        let caret = short.cursor();
+        left_button(&mut short, &config, size, &mut seats, &mut pointer, button("down", bar.x, bar.y + 5));
+        left_button(&mut short, &config, size, &mut seats, &mut pointer, button("drag", bar.x, bar.y + 7));
+        assert!(pointer.bar.is_none(), "no thumb to hold");
+        assert_eq!(short.cursor(), caret);
+    }
+
+    /// **A press on another window's bar gives that window the keys**, as
+    /// a click on its text does, and scrolls that window only; side by side
+    /// and one above the other.
+    #[test]
+    fn a_press_on_another_windows_bar_scrolls_that_window() {
+        let config = bare();
+        ink(&config);
+        let text: String = (1..=40).map(|n| format!("line {n:02}\n")).collect();
+        for split in [":vsplit", ":hsplit"] {
+            let mut editor = editor_with(&text);
+            editor.execute(split).unwrap();
+            let (w, h) = (61u16, 16u16);
+            let size = Some(ratatui::layout::Size::new(w, h));
+            let mut seats = Seats::default();
+            let mut pointer = Pointer::default();
+            centred_frame(&mut editor, &config, w, h, &mut seats);
+            let areas = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0);
+            let live = editor.live_pane();
+            let other = 1 - live;
+            let leaves = editor.windows().leaves();
+            let bar = areas.bars[other];
+            left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("down", bar.x, bar.y + bar.height - 1));
+            assert_eq!(editor.live_window(), leaves[other], "{split}: the keys go to it");
+            let (buffer, _) = centred_frame(&mut editor, &config, w, h, &mut seats);
+            let moved = thumb_cells(&buffer, &config, bar);
+            assert!(moved.ends_with('#') && !moved.starts_with('#'), "{split}: {moved}\n{}", buffer_to_text(&buffer));
+            assert!(thumb_cells(&buffer, &config, areas.bars[live]).starts_with('#'), "{split}: the first window stays");
+            assert_eq!(seats[live].top.line, 0, "{split}");
+            assert!(seats[other].top.line > 0, "{split}");
+        }
+    }
+
+    /// **Two pages side by side scroll as one spread** by their one bar: at
+    /// its foot the second page ends on the document's last row.
+    #[test]
+    fn the_spreads_bar_scrolls_the_spread() {
+        let config = bare();
+        ink(&config);
+        let (w, h) = (101u16, 7u16);
+        let size = Some(ratatui::layout::Size::new(w, h));
+        let text: String = (1..=50).map(|n| format!("line {n:02}\n")).collect();
+        let mut editor = editor_with(&text);
+        editor.set_pages_horizontal(2);
+        let mut seats = Seats::default();
+        let mut pointer = Pointer::default();
+        centred_frame(&mut editor, &config, w, h, &mut seats);
+        let bar = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0).bars[0];
+        left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("down", bar.x, bar.y));
+        left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("drag", bar.x, bar.y + bar.height - 1));
+        let (buffer, _) = centred_frame(&mut editor, &config, w, h, &mut seats);
+        assert_eq!(thumb_cells(&buffer, &config, bar), "....#", "{}", buffer_to_text(&buffer));
+        let rope = editor.current_buffer().rope();
+        assert_eq!(seats[0].top.line, rope.len_lines() - 10, "ten rows to the spread, the last of them the last line");
+        assert!(caret_shown(&editor, &seats));
     }
 
     /// **The caret after a row that fills the page stands in the

@@ -550,6 +550,53 @@ impl Editor {
     /// reading the same stale frame would scroll six. A pushed cursor
     /// lands at the line's start under helix and keeps its column under vim.
     pub(super) fn scroll_the_page(&mut self, down: bool, n: usize) {
+        let n = n.max(1);
+        self.scroll_the_page_with(Some(down), |rope, was, m, _| match down {
+            true => crate::wrap::advance(rope, was, m, n),
+            false => crate::wrap::retreat(rope, was, m, n),
+        });
+    }
+
+    /// **The view's top row put at row `rows_in` of line `line`** — the
+    /// scrollbar's thumb dragged — and the cursor kept as `C-e` keeps it:
+    /// where it is while that stays on the page, pushed in to scrolloff
+    /// from whichever edge it fell past otherwise. A line off the page (a
+    /// closed fold's inside, a blank line the indent takes away) stands for
+    /// the next one on it; a row past the line's last is its last.
+    pub fn scroll_the_page_to(&mut self, line: usize, rows_in: usize) {
+        self.scroll_the_page_with(None, |rope, _, m, _| {
+            let lines = rope.len_lines();
+            let mut line = line.min(lines.saturating_sub(1));
+            while m.folded(line) && line + 1 < lines {
+                line += 1;
+            }
+            while m.folded(line) && line > 0 {
+                line -= 1;
+            }
+            let rows = crate::wrap::row_count_in_line(rope, line, m);
+            crate::wrap::Anchor { line, index_in_line: rows_in.min(rows.saturating_sub(1)) }
+        });
+    }
+
+    /// **The view's last row put on the document's last** — the thumb
+    /// dragged to the foot of its bar: the page `G` shows, the cursor kept
+    /// as [`Self::scroll_the_page_to`] keeps it.
+    pub fn scroll_the_page_to_end(&mut self) {
+        self.scroll_the_page_with(None, |rope, _, m, height| {
+            let end = crate::wrap::Anchor::from(crate::wrap::position(rope, rope.len_chars(), m));
+            crate::wrap::retreat(rope, end, m, height.saturating_sub(1))
+        });
+    }
+
+    /// The scroll itself, to the top `top_of` answers from the top the page
+    /// last drew and the window's rows: the cursor pushed in from the top
+    /// edge when `down`, from the bottom when not, and from whichever it
+    /// fell past when the view jumps (`None`).
+    fn scroll_the_page_with(
+        &mut self,
+        down: Option<bool>,
+        top_of: impl FnOnce(&ropey::Rope, crate::wrap::Anchor, crate::wrap::Measure, usize) -> crate::wrap::Anchor,
+    ) {
         let Some(rows) = self.page_rows() else { return };
         let height = self.window_rows(rows.len());
         let vim = self.keymap_rules().vim_scrolling;
@@ -559,23 +606,23 @@ impl Editor {
             true => self.vim_margins(height),
             false => (so, so),
         };
-        let n = n.max(1);
         let head = self.sel.head();
         let width = self.wrap_width().unwrap_or(crate::wrap::NO_WRAP);
         let moved = self.with_page_measure(width, |rope, m| {
-            use crate::wrap::{advance, distance, position, retreat, rows_from, Anchor};
+            use crate::wrap::{distance, position, rows_from, Anchor};
             let was = Anchor { line: rows[0].line, index_in_line: rows[0].index_in_line };
-            let top = match down {
-                true => advance(rope, was, m, n),
-                false => retreat(rope, was, m, n),
-            };
+            let top = top_of(rope, was, m, height);
             // **Nothing to scroll moves nothing** under vim: `C-y` in a file
             // that fits the window leaves the cursor, as nvim does, rather than
-            // pulling it in by scrolloff.
-            if vim && top == was {
+            // pulling it in by scrolloff. A jump to where the view stands
+            // moves nothing under either.
+            if (vim || down.is_none()) && top == was {
                 return None;
             }
             let page = rows_from(rope, top, m, height);
+            // A jump pushes the cursor down from the top edge when it is
+            // above that edge's row, up from the bottom edge otherwise.
+            let down = down.unwrap_or_else(|| page.get(above).is_some_and(|edge| head < edge.start));
             let edge = match down {
                 true => page.get(above),
                 false => page.get(height.saturating_sub(1 + below)).or(page.last()),
