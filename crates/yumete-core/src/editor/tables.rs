@@ -344,8 +344,7 @@ impl Editor {
                 let lines = self.first_lines(20);
                 // What was chosen for this file before the sniffer's guess.
                 let delimiter = self
-                    .table_choice_for(&path)
-                    .delimiter
+                    .remembered_delimiter(&path)
                     .or_else(|| crate::table::sniff(&lines))
                     .unwrap_or(',');
                 let head = self.current_buffer().rope().line(0).to_string();
@@ -497,6 +496,12 @@ impl Editor {
     /// caller has a better message for 「this is not a table」 than this does,
     /// because the caller knows which door was being tried.
     fn enter_block_table(&mut self, pane: bool) -> bool {
+        let order = self.separators_worth_trying();
+        self.enter_block_cut_by(pane, &order)
+    }
+
+    /// The block door, trying only the separators given, best first.
+    fn enter_block_cut_by(&mut self, pane: bool, order: &[char]) -> bool {
         let rope = self.current_buffer().rope();
         let at = rope.char_to_line(self.sel.head().min(rope.len_chars()));
         // **The walk is the test.** Each candidate is tried by walking the
@@ -506,7 +511,7 @@ impl Editor {
         // and the block is not known until the separator is: a 碼表 sitting
         // directly under `## 第三章` has a heading in its own paragraph, and no
         // count of tabs over *that* run agrees about anything.
-        for delimiter in self.separators_worth_trying() {
+        for &delimiter in order {
             let Some(region) = self.delimited_block(at, delimiter) else {
                 continue;
             };
@@ -569,7 +574,9 @@ impl Editor {
     ///
     /// **What the cursor is standing on comes first** — `ci"`'s own idea, so
     /// nothing has to be prompted for, and it is how a person says 「this one」
-    /// about a line that holds a tab *and* a comma. Then, if lines are
+    /// about a line that holds a tab *and* a comma. Any mark counts there, not
+    /// only the guesses: a `^` or a `、` the cursor is on is being pointed at
+    /// ([`crate::table::may_cut`]). Then, if lines are
     /// selected, whichever candidate they agree about; then the rest, in the
     /// order [`crate::table::BLOCK_GUESSES`] puts them.
     fn separators_worth_trying(&self) -> Vec<char> {
@@ -581,7 +588,7 @@ impl Editor {
         };
         if let Some(c) = self
             .char_at_cursor()
-            .filter(|c| crate::table::BLOCK_GUESSES.contains(c))
+            .filter(|&c| crate::table::may_cut(c))
         {
             add(c);
         }
@@ -864,7 +871,7 @@ impl Editor {
         // A delimiter chosen for this file before (`:table-delimiter`) opens
         // it as a grid without the sniffer's say.
         if self.table().is_none() && problems.is_empty() {
-            if let Some(delimiter) = self.table_choice_for(&path).delimiter {
+            if let Some(delimiter) = self.remembered_delimiter(&path) {
                 self.attach_text_grid(delimiter);
                 self.apply_table_choice(&path);
                 self.turn_for_table();
@@ -979,9 +986,8 @@ impl Editor {
     /// own, and a `.csv` is already a grid by its name. The evidence is the
     /// same evidence `:table`'s header-row door takes — a mark that appears
     /// the same number of times in every one of the first twenty lines, and
-    /// at least two columns once the quoting rules are applied — with a space
-    /// added to the candidates, because a whole file of lines each holding
-    /// three spaces is a grid and a paragraph is not.
+    /// at least two columns once the quoting rules are applied — over
+    /// [`crate::table::TEXT_GUESSES`], which hold no space.
     ///
     /// **The cost of guessing wrong is padding, not meaning.** `hjkl` walk
     /// characters at every level (#356), so a file mistaken for a grid is
@@ -1043,11 +1049,67 @@ impl Editor {
         }
     }
 
+    /// **Whether this whole file may be read as one grid**: plain text, or a
+    /// name that says it is one (`.csv`).
+    ///
+    /// A Markdown or Typst document has table forms of its own and a code
+    /// file has a grammar; a delimiter named in one of them is about the
+    /// block under the cursor, and the chapter around it stays prose.
+    fn whole_file_may_be_a_grid(&self, path: &Path) -> bool {
+        self.syntax() == crate::syntax::Syntax::Text || self.names_itself_a_grid(path)
+    }
+
+    /// The delimiter `:table-delimiter` chose for this file, if the file is
+    /// one that may be read whole as a grid.
+    fn remembered_delimiter(&self, path: &Path) -> Option<char> {
+        self.table_choice_for(path)
+            .delimiter
+            .filter(|_| self.whole_file_may_be_a_grid(path))
+    }
+
     /// **`:table-delimiter tab`**: read this file as a grid cut by that
     /// character, and remember it for this file — the way a space-separated
     /// list is read as a table, since the sniffer never guesses a space.
+    ///
+    /// **Or only the block under the cursor**, when the file is not one grid:
+    /// always in a document ([`Self::whole_file_may_be_a_grid`]), and in plain
+    /// text when the file's lines disagree under that delimiter and the block
+    /// under the cursor is a part of the file rather than all of it. A block
+    /// is read, not remembered — the same terms as the block `␣t t` finds by
+    /// itself. A ragged space-separated list is still the whole file: every
+    /// line of it holds a space, so its block is the file.
     pub(super) fn set_table_delimiter(&mut self, delimiter: char) {
-        let Some(path) = self.current_buffer().path().map(Path::to_path_buf) else {
+        let path = self.current_buffer().path().map(Path::to_path_buf);
+        let whole = path.as_deref().is_some_and(|p| self.whole_file_may_be_a_grid(p));
+        let agrees = || {
+            let head = self.current_buffer().rope().line(0).to_string();
+            let columns = crate::table::Schema::from_header(&head, delimiter).columns.len();
+            path.as_deref().is_some_and(|p| self.names_itself_a_grid(p))
+                || (columns >= 2 && self.looks_delimited(delimiter, columns))
+        };
+        let a_part = || {
+            let Some(block) = self.delimited_block(self.cursor_line(), delimiter) else {
+                return false;
+            };
+            let lines = self.current_buffer().rope().len_lines();
+            (0..block.first)
+                .chain(block.last + 1..lines)
+                .any(|i| self.line_text(i).is_some_and(|l| !l.trim().is_empty()))
+        };
+        if !whole || (!agrees() && a_part()) {
+            self.leave_table_quietly();
+            if self.enter_block_cut_by(false, &[delimiter]) {
+                return;
+            }
+            if !whole {
+                self.status = match path {
+                    Some(_) => say!("table.delimiter-no-block", named_delimiter(delimiter)),
+                    None => say!("table.no-file-name-no-schema"),
+                };
+                return;
+            }
+        }
+        let Some(path) = path else {
             self.status = say!("table.no-file-name-no-schema");
             return;
         };
@@ -1059,6 +1121,40 @@ impl Editor {
         self.apply_table_choice(&path);
         self.turn_for_table();
         self.status = say!("table.delimiter-set", named_delimiter(delimiter));
+    }
+
+    /// **`:table-delimiter auto`**: forget the delimiter chosen for this file
+    /// and let the file be read the way it would be had nobody chosen —
+    /// guessed, or by its name, or as source.
+    pub(super) fn forget_table_delimiter(&mut self) {
+        let Some(path) = self.current_buffer().path().map(Path::to_path_buf) else {
+            self.status = say!("table.no-file-name-no-schema");
+            return;
+        };
+        let mut choice = self.table_choice_for(&path);
+        if choice.delimiter.take().is_none() {
+            self.status = say!("table.delimiter-not-remembered");
+            return;
+        }
+        self.remember_table_choice(&path, &choice);
+        // Only the grid the choice built is taken down: a schema's view is
+        // the schema's, and a block was never the choice's.
+        let built_by_the_choice = self
+            .table()
+            .is_some_and(|v| v.bounds == Bounds::WholeFile && v.from.as_os_str().is_empty());
+        if built_by_the_choice {
+            self.leave_table_quietly();
+            if self.names_itself_a_grid(&path) {
+                self.enter_table();
+            } else if !self.wants_source_mode(&path) {
+                if let Some(delimiter) = self.delimited_text_file() {
+                    self.attach_text_grid(delimiter);
+                    self.apply_table_choice(&path);
+                    self.turn_for_table();
+                }
+            }
+        }
+        self.status = say!("table.delimiter-forgotten");
     }
 
     /// **`:table-hide 7` / `:table-show 7`**: a column drawn at no width, or
@@ -2046,11 +2142,14 @@ impl Editor {
     /// whose entries are 「字⇥碼」 with a 權重 on some of them is still one
     /// table, and a schema that named two columns would hide the third.
     fn delimited_block(&self, at: usize, d: char) -> Option<crate::mdtable::Region> {
+        // A Markdown table row is never a row of a `|`-cut block: its bars
+        // are a `|` table's, and a block walked through them would draw an
+        // empty column down each side.
         let holds = |line: usize| -> bool {
             self.line_text(line).is_some_and(|text| {
                 let text = text.trim_end_matches(['\n', '\r']);
                 !text.trim().is_empty() && text.contains(d)
-            })
+            }) && !(d == '|' && self.md_row_at(line))
         };
         if !holds(at) {
             return None;

@@ -2339,10 +2339,10 @@ en = "convert to the named format (csv, tsv, pipe); with two words the first is 
 find = "表格 转换 轉換 格式 csv tsv pipe 分隔 convert table"
 
 [[message]]
-# : 命令選單裏 table-delimiter 的説明
+# : 命令選單裏 table-delimiter 的説明（草稿）
 key = "cmd.table.delimiter"
-zhs = "按此分隔符把文件读成表格并记住(tab、space、comma、semicolon 或该字符)"
-en = "read this file as a table split on that delimiter, and remember it (tab, space, comma, semicolon or a character)"
+zhs = "按此分隔符把文件读成表格并记住；文档里只读光标所在的那段；auto 忘掉(tab、space、comma、semicolon 或该字符)"
+en = "read this file as a table split on that delimiter, and remember it; in a document, only the lines under the cursor; auto forgets (tab, space, comma, semicolon or a character)"
 find = "分隔符 分隔 delimiter separator tab space"
 
 [[message]]
@@ -2479,8 +2479,8 @@ en = "a whole number of characters, or off"
 [[message]]
 # :table-delimiter 收的參數（草稿）
 key = "cmd.takes.delimiter"
-zhs = "tab、space、comma、semicolon，或一个不是字母的字符"
-en = "tab, space, comma, semicolon, or one character that is not a letter"
+zhs = "tab、space、comma、semicolon、auto，或一个不是字母的字符"
+en = "tab, space, comma, semicolon, auto, or one character that is not a letter"
 
 [[message]]
 # 拒收參數時列出的一組詞，{0} 是這些詞，已用分隔符連好（草稿）

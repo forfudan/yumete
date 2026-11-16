@@ -1853,7 +1853,10 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::TableDelimiter(delimiter) => {
-                self.set_table_delimiter(delimiter);
+                match delimiter {
+                    Some(delimiter) => self.set_table_delimiter(delimiter),
+                    None => self.forget_table_delimiter(),
+                }
                 Ok(CommandOutcome::Continue)
             }
             Command::HideTableColumn { column, hide } => {

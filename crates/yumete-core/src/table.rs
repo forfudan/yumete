@@ -667,7 +667,12 @@ pub fn quote_for(value: &str, delimiter: char) -> String {
 /// but *one* space is the character that holds a sentence together, and a rule
 /// that splits on it turns every line of prose into a grid. Runs of spaces are
 /// a different question with a different answer (#216).
-const GUESSES: [char; 3] = ['\t', ',', ';'];
+///
+/// **`|` comes last** — the bar a database shell puts between columns
+/// (`sqlite3`'s own output, `psql -A`) — and is never guessed over lines that
+/// hold a Markdown table row: those are a `|` table, which has a reader of
+/// its own ([`sniff_among`]).
+const GUESSES: [char; 4] = ['\t', ',', ';', '|'];
 
 /// The delimiters a **block inside a document** may be cut by (#216).
 ///
@@ -676,18 +681,20 @@ const GUESSES: [char; 3] = ['\t', ',', ';'];
 /// is asked of a whole *file*, where a run of lines each holding one `&` is as
 /// likely to be prose about HTML entities; asked of the few lines a person is
 /// standing in and has just pressed the key about, it is worth guessing.
-pub const BLOCK_GUESSES: [char; 4] = ['\t', ',', ';', '&'];
+///
+/// `|` last, on the same terms as in [`GUESSES`].
+pub const BLOCK_GUESSES: [char; 5] = ['\t', ',', ';', '&', '|'];
 
 /// The delimiters a **plain-text file** may turn out to be cut by (#380).
 ///
-/// The three above, in that order of confidence: a file cut by tabs usually
+/// The four above, in that order of confidence: a file cut by tabs usually
 /// has spaces inside its fields, so the stronger mark has to be tried first.
 ///
 /// **No space**. A shopping list whose lines all
 /// hold two spaces was read as a three-column grid, and `:w` then wrote
 /// quotes around a cell nobody had quoted: `call mum "tonight and dad"`. A
 /// space-separated table is asked for by name (`:table space`, `-t`).
-pub const TEXT_GUESSES: [char; 3] = ['\t', ',', ';'];
+pub const TEXT_GUESSES: [char; 4] = ['\t', ',', ';', '|'];
 
 /// Which character splits these lines into cells, if one plainly does.
 ///
@@ -714,7 +721,17 @@ pub fn sniff_among(lines: &[String], guesses: &[char]) -> Option<char> {
         // evidence worth acting on.
         return None;
     }
+    // A Markdown table row says what it is on its own line, and what cuts it
+    // is its `|`: reading those bars as a delimiter would hand back a grid
+    // with an empty column down each side of the real one.
+    let holds_a_pipe_table = || {
+        let text: Vec<&str> = rows.iter().map(|l| l.as_str()).collect();
+        crate::mdtable::row_lines(&text.join("\n")).contains(&true)
+    };
     guesses.iter().copied().find(|&c| {
+        if c == '|' && holds_a_pipe_table() {
+            return false;
+        }
         let counts = outside_quotes(&rows, c);
         let mut counts = counts.into_iter();
         let first = counts.next().unwrap_or(0);
@@ -772,6 +789,17 @@ impl Shape {
             _ => delimiter_named(word).map(Shape::Delimited),
         }
     }
+}
+
+/// Whether `c`, standing under the cursor, may be taken as the delimiter of
+/// the block it is in.
+///
+/// A mark, not a letter: the person pressing the key on a `^` or a `、` is
+/// pointing at it, and the rows still have to agree before it counts. A letter
+/// or a 漢字 is a cell's content, a space is never a delimiter by guess (see
+/// [`GUESSES`]), and `"` is the quote that protects a delimiter.
+pub fn may_cut(c: char) -> bool {
+    BLOCK_GUESSES.contains(&c) || !(c.is_alphanumeric() || c.is_whitespace() || c.is_control() || c == '"')
 }
 
 /// 一個分隔符的名字：`tab`、`space`、`comma`、`semicolon`，或者它自己。
@@ -1035,6 +1063,26 @@ mod tests {
         // One line is not evidence of a shape.
         assert_eq!(of("字,讀音"), None);
         assert_eq!(of(""), None);
+
+        // A bar is the last guess: `sqlite3`'s rows, no bar at either end.
+        assert_eq!(of("木|AA|1\n目|BB|2"), Some('|'));
+        // A comma that every row holds beats it, as it beats nothing else.
+        assert_eq!(of("木,x|AA\n目,y|BB"), Some(','));
+        // A Markdown table row is a `|` table, never `|`-cut text — with its
+        // outer bars, or bare over a rule row.
+        assert_eq!(of("| 字 | 碼 |\n| 甲 | ab |"), None);
+        assert_eq!(of("字 | 碼\n--- | ---\n甲 | ab"), None);
+    }
+
+    /// The mark under the cursor that `␣t t` may take as the delimiter.
+    #[test]
+    fn a_mark_under_the_cursor_may_cut_and_a_letter_may_not() {
+        for c in ['^', '|', ':', '、', '｜', '\t', ',', '#'] {
+            assert!(may_cut(c), "{c:?}");
+        }
+        for c in ['a', 'Z', '7', '甲', ' ', '　', '"', '\n'] {
+            assert!(!may_cut(c), "{c:?}");
+        }
     }
 
     /// **一個字母是打了一半的名字，不是分隔符**。

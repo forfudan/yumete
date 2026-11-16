@@ -276,6 +276,24 @@ zhs = "光标不在表格里"
 en = "the cursor is not in a table"
 
 [[message]]
+# :table-delimiter auto 之後（草稿）
+key = "table.delimiter-forgotten"
+zhs = "不再记住此文件的分隔符，改回自动判断"
+en = "the delimiter is no longer remembered for this file; it is guessed again"
+
+[[message]]
+# 文檔裏 :table-delimiter，光標所在那段不是用它分開的表格；{0} 是分隔符（草稿）
+key = "table.delimiter-no-block"
+zhs = "光标所在的这段不是以 {0} 分列的表格"
+en = "the lines under the cursor are not a table split by {0}"
+
+[[message]]
+# :table-delimiter auto，但此文件本來就没有記住的分隔符（草稿）
+key = "table.delimiter-not-remembered"
+zhs = "此文件没有记住的分隔符"
+en = "no delimiter is remembered for this file"
+
+[[message]]
 # :table-delimiter 之後
 key = "table.delimiter-set"
 zhs = "以 {0} 分列；下次打开此文件时沿用"

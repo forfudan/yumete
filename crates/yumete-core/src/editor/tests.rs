@@ -7311,7 +7311,7 @@ fn a_grid_without_a_schema_is_split_on_what_its_lines_agree_about() {
     assert_eq!(ed.cell_text(1, 1), "ㄩㄥˇ", "tabs, not commas");
     assert_eq!(ed.cell_text(2, 2), "丿");
 
-    // …and semicolons, the third of the three the sniffer knows.
+    // …and semicolons, which the sniffer knows as well.
     let scsv = dir.join("讀音.txt");
     std::fs::write(&scsv, "字;讀音\n永;ㄩㄥˇ\n").unwrap();
     let mut ed = Editor::new();
@@ -43051,5 +43051,167 @@ fn the_outline_sidebar_moves_the_highlighted_section() {
     assert_eq!(ed.status(), say!("edit.section-included"));
     assert_eq!(ed.current_buffer().text(), "= 卷\n#include \"ch01.typ\"\n");
     assert_eq!(std::fs::read_to_string(dir.join("ch01.typ")).unwrap(), "= 舊章\n文\n");
+}
+
+/// A fresh directory for one of the delimiter tests below, and the editor
+/// paths that keep `tables.txt` inside it.
+fn delimiter_dir(name: &str) -> (std::path::PathBuf, (std::path::PathBuf, std::path::PathBuf)) {
+    let dir = tmp().join(format!("yumete-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let paths = (dir.join("config.toml"), dir.join("data"));
+    (dir, paths)
+}
+
+fn grid_of(ed: &Editor) -> Option<(Bounds, Separator)> {
+    ed.table().map(|v| (v.bounds, v.separator))
+}
+
+#[test]
+fn a_bar_cut_text_file_opens_as_a_grid() {
+    // What `sqlite3` prints by default: fields cut by `|`, no bar at either
+    // end. Every line agrees, so the plain-text door takes it like a TSV.
+    let (dir, _) = delimiter_dir("bar-file");
+    let file = dir.join("rows.txt");
+    std::fs::write(&file, "fruit|colour|count\napple|red|3\npear|green|5\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    assert_eq!(grid_of(&ed), Some((Bounds::WholeFile, Separator::Delimiter('|'))), "{}", ed.status());
+    assert_eq!(ed.cell_text(1, 1), "red");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn a_markdown_pipe_table_is_never_read_as_bar_cut_text() {
+    // Bars at both ends: a `|` table, even in a `.txt` and without a rule
+    // row. Read as `|`-cut text it would grow an empty column down each side.
+    let (dir, _) = delimiter_dir("bar-md");
+    let piped = dir.join("piped.txt");
+    std::fs::write(&piped, "| 字 | 碼 |\n| 甲 | ab |\n| 乙 | cd |\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&piped).unwrap();
+    assert_ne!(grid_of(&ed).map(|g| g.1), Some(Separator::Delimiter('|')), "not on open");
+    assert!(ed.enter_table(), "{}", ed.status());
+    assert_eq!(grid_of(&ed).map(|g| g.1), Some(Separator::Pipe), "a `|` table under ␣t t");
+
+    // The pipeless style, a rule row under a bare header: a `|` table too.
+    let bare = dir.join("bare.txt");
+    std::fs::write(&bare, "字 | 碼\n--- | ---\n甲 | ab\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&bare).unwrap();
+    assert_ne!(grid_of(&ed).map(|g| g.1), Some(Separator::Delimiter('|')), "not on open");
+
+    // In a Markdown document, standing on a bar of the table.
+    let doc = dir.join("doc.md");
+    std::fs::write(&doc, "# 表\n\n| 字 | 碼 |\n| --- | --- |\n| 甲 | ab |\n\n正文。\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&doc).unwrap();
+    ed.execute(":5").unwrap();
+    assert_eq!(ed.char_at_cursor(), Some('|'));
+    assert!(ed.enter_table(), "{}", ed.status());
+    assert_eq!(grid_of(&ed).map(|g| g.1), Some(Separator::Pipe));
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn a_bar_cut_block_beside_a_pipe_table_leaves_the_table_out() {
+    // A note under a `|` table that happens to hold a bar is not a row of a
+    // `|`-cut block reaching up into the table.
+    let mut ed = typed("| 字 | 碼 |\n| 甲 | ab |\napple|red\npear|green\n");
+    ed.execute(":3").unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+    assert_eq!(grid_of(&ed).map(|g| g.1), Some(Separator::Delimiter('|')));
+    let region = ed.block_region().expect("inside the block");
+    assert_eq!((region.first, region.last), (2, 3), "the `|` table is not in it");
+}
+
+#[test]
+fn space_t_t_takes_the_mark_the_cursor_is_on() {
+    // `^` is no guess of the sniffer's; standing on one says it is meant.
+    let mut ed = typed("序。\n\napple^red^3\npear^green^5\n\n完。\n");
+    ed.execute(":3").unwrap();
+    assert!(!ed.enter_table(), "nothing points at the caret yet");
+    ed.execute(":3").unwrap();
+    press(&mut ed, "f^");
+    assert_eq!(ed.char_at_cursor(), Some('^'));
+    assert!(ed.enter_table(), "{}", ed.status());
+    assert_eq!(grid_of(&ed), Some((Bounds::Block, Separator::Delimiter('^'))));
+    assert_eq!(ed.cell_text(3, 1), "green");
+    // A letter is a cell's content, not a delimiter.
+    ed.leave_table();
+    ed.execute(":3").unwrap();
+    press(&mut ed, "fr");
+    assert!(!ed.enter_table(), "{}", ed.status());
+}
+
+#[test]
+fn table_delimiter_in_a_document_reads_only_the_block() {
+    let (dir, paths) = delimiter_dir("delim-doc");
+    let doc = dir.join("章.md");
+    std::fs::write(&doc, "# 章\n\n正文。\n\napple^red^3\npear^green^5\n\n再寫。\n").unwrap();
+    let mut ed = Editor::new();
+    ed.knows_its_paths(paths.0.clone(), paths.1.clone());
+    ed.open_file(&doc).unwrap();
+    // In the prose: no block there, and the chapter is not turned into a grid.
+    ed.execute(":3").unwrap();
+    ed.execute(":table-delimiter ^").unwrap();
+    assert_eq!(grid_of(&ed), None, "{}", ed.status());
+    assert_eq!(ed.status(), say!("table.delimiter-no-block", "^"));
+    // In the block: that block, read and not remembered.
+    ed.execute(":5").unwrap();
+    ed.execute(":table-delimiter ^").unwrap();
+    assert_eq!(grid_of(&ed), Some((Bounds::Block, Separator::Delimiter('^'))), "{}", ed.status());
+    let kept = std::fs::read_to_string(paths.1.join("tables.txt")).unwrap_or_default();
+    assert!(!kept.contains("章.md"), "{kept}");
+    // Reopened, the chapter is prose.
+    let mut again = Editor::new();
+    again.knows_its_paths(paths.0.clone(), paths.1.clone());
+    again.open_file(&doc).unwrap();
+    assert_eq!(grid_of(&again), None);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn table_delimiter_in_plain_text_takes_the_block_when_the_file_is_more() {
+    let (dir, paths) = delimiter_dir("delim-txt");
+    let file = dir.join("notes.txt");
+    std::fs::write(&file, "序。\n\napple^red^3\npear^green^5\n\n完。\n").unwrap();
+    let mut ed = Editor::new();
+    ed.knows_its_paths(paths.0.clone(), paths.1.clone());
+    ed.open_file(&file).unwrap();
+    ed.execute(":3").unwrap();
+    ed.execute(":table-delimiter ^").unwrap();
+    assert_eq!(grid_of(&ed), Some((Bounds::Block, Separator::Delimiter('^'))), "{}", ed.status());
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn table_delimiter_auto_forgets_the_choice() {
+    // A ragged space-separated list: every line holds a space, so its block
+    // is the whole file, and the choice is the file's.
+    let (dir, paths) = delimiter_dir("delim-auto");
+    let file = dir.join("list.txt");
+    std::fs::write(&file, "木 AA 1\n目 BB\n田 CC 3\n").unwrap();
+    let mut ed = Editor::new();
+    ed.knows_its_paths(paths.0.clone(), paths.1.clone());
+    ed.open_file(&file).unwrap();
+    assert_eq!(grid_of(&ed), None, "a space is never guessed");
+    ed.execute(":table-delimiter space").unwrap();
+    assert_eq!(grid_of(&ed), Some((Bounds::WholeFile, Separator::Delimiter(' '))), "{}", ed.status());
+
+    let mut again = Editor::new();
+    again.knows_its_paths(paths.0.clone(), paths.1.clone());
+    again.open_file(&file).unwrap();
+    assert_eq!(grid_of(&again).map(|g| g.1), Some(Separator::Delimiter(' ')), "remembered");
+    again.execute(":table-delimiter auto").unwrap();
+    assert_eq!(grid_of(&again), None, "{}", again.status());
+    assert_eq!(again.status(), say!("table.delimiter-forgotten"));
+    again.execute(":table-delimiter auto").unwrap();
+    assert_eq!(again.status(), say!("table.delimiter-not-remembered"));
+
+    let mut third = Editor::new();
+    third.knows_its_paths(paths.0.clone(), paths.1.clone());
+    third.open_file(&file).unwrap();
+    assert_eq!(grid_of(&third), None, "forgotten");
     std::fs::remove_dir_all(&dir).ok();
 }

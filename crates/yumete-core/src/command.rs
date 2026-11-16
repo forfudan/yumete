@@ -476,8 +476,10 @@ pub enum Command {
     /// the data.
     TableSchema { write: bool },
     /// `:table-delimiter tab` — read this file as a grid cut by that
-    /// character, and remember the choice for this file.
-    TableDelimiter(char),
+    /// character, and remember the choice for this file; or only the block
+    /// under the cursor, in a document. `None` is `:table-delimiter auto`,
+    /// which forgets the choice.
+    TableDelimiter(Option<char>),
     /// `:table-hide 7` / `:table-show 7` — a column drawn at no width, or
     /// drawn again; remembered for this file, never written beside it.
     HideTableColumn { column: usize, hide: bool },
@@ -5933,8 +5935,11 @@ pub const COMMANDS: &[Entry] = &[
         params: &[Param::Free("cmd.arg.delimiter")],
         build: Some(|p| {
             let word = p.need(0)?;
+            if word == "auto" {
+                return Ok(Command::TableDelimiter(None));
+            }
             crate::table::delimiter_named(word)
-                .map(Command::TableDelimiter)
+                .map(|c| Command::TableDelimiter(Some(c)))
                 .ok_or(CommandError::Wants {
                     command: "table-delimiter",
                     value: word.to_string(),
