@@ -5690,7 +5690,7 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "git-lazygit",
-        aliases: &["lazygit"],
+        aliases: &["lazygit", "lg"],
         help: "cmd.commands.git-lazygit",
         needs: &[],
         params: &[],

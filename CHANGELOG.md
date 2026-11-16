@@ -6,6 +6,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Added
 
+- **`:lg` opens lazygit**, a short spelling of `:git-lazygit`.
 - **Local history**: every save keeps a version of the file in the book's `.yumete/history/` (or the data directory for files outside a book), thinned to all of today, one an hour for a week and one a day for sixty days; saves less than ten minutes apart count as one. `:history` lists them with a word-diff preview; `Enter` opens one read-only beside the text, `A-r` puts it back as one undoable edit. `:history-label <name>` names a version and keeps it for good. Off with `[editor] history = false`; `--private` and `remember = false` keep none.
 - **`:redraw` clears the terminal and draws it all again** (vim's and helix's name; `:redr` works too): every window, and every preview's picture at its window's size now, for when another program's output is left on the screen. `:preview-redraw` is a second spelling of it.
 - **helix's long command names work as aliases**: `:change-current-directory`, `:show-directory`, `:set-language`, `:set-option`, `:run-shell-command`, `:clipboard-paste-after`, `:clipboard-yank-join`; `:x!`/`:xit!` and `:wa!` write over files changed outside, like `:wq!` and `:w!`.
