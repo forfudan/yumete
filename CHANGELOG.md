@@ -44,6 +44,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Fixed
 
+- **Soft wrap no longer starts a row with a space**: a word that ends exactly at the wrap width moves down with its space, as vim's linebreak does, at a set `:view-wrap-width`, at the window's edge and in two-page view alike.
 - **A lone `-` on the command line is refused instead of opening a file named `-`**: `echo hello | ye -` showed an empty buffer that `:w` would have saved as a file called `-`. The refusal points at `ye --readonly <(cmd)`; a file really named `-` opens as `./-`.
 - **A macro keeps the Chinese you type through the built-in input method**: `qa` `A` 你好 `Esc` `q` recorded `A<esc>` and typed nothing when played; it now holds `A你好<esc>` and types the characters back, no input method needed. Under the vim keymap a paste from the terminal in Insert mode or at a prompt is recorded too, as vim records it; helix records keys alone, and so does the helix keymap.
 - **vim's `p` on an empty line puts the text into that line**, as vim does, instead of at the start of the next one; `P`, counts and the empty last line too.

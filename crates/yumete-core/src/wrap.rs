@@ -699,7 +699,43 @@ fn steps(text: &str) -> impl Iterator<Item = (usize, usize)> + '_ {
 
 /// Where the row starting at grapheme `g` should really end, given that `end`
 /// is where it stops fitting. Returns a count of graphemes, always at least 1.
+///
+/// Warning: **a row does not open with the space it breaks at.** A word that
+/// fills the measure to the cell leaves its space as the first thing that does
+/// not fit, and breaking there starts the next row one cell out of line with
+/// the rest of the paragraph: ` earlier`, ` cost`. The space is not hung past
+/// the measure instead, because past the measure there may be no cell: at the
+/// window's edge, or a page's in a spread, a caret standing on it would slide
+/// the whole page sideways. So the space has to fit, and the word it follows
+/// goes down with it — what vim's `linebreak` does. A word with nowhere to go
+/// back to (one word filling the row) keeps the plain break.
 fn adjusted_break(
+    chars: &[char],
+    cuts: &[usize],
+    widths: &[usize],
+    g: usize,
+    end: usize,
+) -> usize {
+    let char_at = |i: usize| chars.get(cuts[i]).copied().unwrap_or(' ');
+    let drawn = |i: usize| widths.get(i).copied().unwrap_or(0) > 0;
+    let last_seen = (g..end).rev().find(|&i| drawn(i));
+    if let Some(last) = last_seen.filter(|&last| last > g) {
+        if char_at(end) == ' ' && drawn(end) && char_at(last) != ' ' {
+            // Break as if the last thing seen on the row had not fitted
+            // either, and let the word and 禁則 rules find the place.
+            let cut = g + break_within(chars, cuts, widths, g, last);
+            let splits_a_word = latin_word_char(char_at(cut - 1)) && latin_word_char(char_at(cut));
+            if !splits_a_word {
+                return cut - g;
+            }
+        }
+    }
+    break_within(chars, cuts, widths, g, end)
+}
+
+/// [`adjusted_break`]'s 禁則 and word rules, for a row that stops fitting at
+/// `end`.
+fn break_within(
     chars: &[char],
     cuts: &[usize],
     widths: &[usize],
@@ -1853,6 +1889,89 @@ mod tests {
             wrapped("antidisestablishment", 8),
             vec!["antidise", "stablish", "ment"]
         );
+    }
+
+    /// The rows of `text` as the page asks for them, through a [`Measure`].
+    fn page_rows(text: &str, width: usize) -> Vec<String> {
+        let rope = Rope::from_str(text);
+        let chars: Vec<char> = text.chars().collect();
+        rows_of_line(&rope, 0, Measure::plain(width))
+            .into_iter()
+            .map(|(s, e)| chars[s..e].iter().collect())
+            .collect()
+    }
+
+    #[test]
+    fn a_word_that_fills_the_row_takes_its_space_down_with_it() {
+        // `cccc` ends on the fourteenth cell, so its space is the first thing
+        // that does not fit. vim's `wrap linebreak` (measured at 14 columns)
+        // gives exactly these rows; helix opens the second with the space.
+        let text = "aaaa bbbb cccc dddd eeee ffff gggg";
+        let want = vec!["aaaa bbbb ", "cccc dddd ", "eeee ffff gggg"];
+        assert_eq!(wrapped(text, 14), want);
+        // The page asks the same breaker, at a set measure or at the window's
+        // edge alike: the width is all either of them hands it.
+        assert_eq!(page_rows(text, 14), want);
+        // A stop that ends on the last cell goes down with its word: `.` may
+        // not open a row and the word may not be split.
+        let text = "Most of the objections concerned cost rather than substance; a few more";
+        let rows = wrapped(text, 60);
+        assert_eq!(rows[0], "Most of the objections concerned cost rather than ");
+        assert!(rows.iter().all(|r| !r.starts_with(' ')), "{rows:?}");
+    }
+
+    #[test]
+    fn a_word_with_nowhere_to_go_back_to_keeps_the_plain_break() {
+        // One word filling the row: taking it down would leave the row empty
+        // and splitting it is worse than the space. vim breaks here too.
+        assert_eq!(wrapped("abcdefgh ij", 8), vec!["abcdefgh", " ij"]);
+    }
+
+    #[test]
+    fn a_han_character_at_the_edge_goes_down_with_the_space_after_it() {
+        // Ten cells of 漢字 and then a space: one character comes down, and
+        // the space stays inside the row it is written in.
+        assert_eq!(wrapped("中文中文中 next", 10), vec!["中文中文", "中 next"]);
+        // …a stop at the edge brings its character with it, as 禁則 says.
+        assert_eq!(wrapped("中文中文。 next", 10), vec!["中文中", "文。 next"]);
+        // No space, nothing changes: CJK still fills the row to the cell.
+        assert_eq!(wrapped("春夏秋冬春夏秋冬", 8), vec!["春夏秋冬", "春夏秋冬"]);
+        let mixed = "中文裏夾着 Helix 和 Vim 兩個名字，再寫一句 soft wrap 的說明，看看行首有沒有空格。";
+        for width in 12..40 {
+            let rows = wrapped(mixed, width);
+            assert!(rows.iter().all(|r| !r.starts_with(' ')), "{width}: {rows:?}");
+            assert_eq!(rows.concat(), mixed);
+        }
+    }
+
+    #[test]
+    fn hidden_markup_does_not_hide_the_word_at_the_edge() {
+        // `aa bbbb` is seven cells with the asterisks off the page; the word
+        // still goes down whole, markup and all.
+        let text = "aa **bbbb** cc";
+        let chars: Vec<char> = text.chars().collect();
+        let rows: Vec<String> = line_rows_hiding(text, 7, &[(3, 5), (9, 11)])
+            .into_iter()
+            .map(|(s, e)| chars[s..e].iter().collect())
+            .collect();
+        assert_eq!(rows, vec!["aa ", "**bbbb** cc"]);
+    }
+
+    #[test]
+    fn the_caret_stands_on_the_space_a_row_breaks_at() {
+        let rope = Rope::from_str("aaaa bbbb cccc dddd");
+        let m = Measure::plain(14);
+        // The space after `bbbb` closes the first row, in the last column the
+        // row has text in.
+        let p = position(&rope, 9, m);
+        assert_eq!((p.index_in_line, p.column), (0, 9));
+        // A goal past the row's end lands on it rather than on the next row.
+        assert_eq!(char_at_column(&rope, 0, 0, m, 99), 9);
+        // `j` and `k` from it keep its column.
+        assert_eq!(next_row(&rope, 9, m, 9), 19);
+        assert_eq!(prev_row(&rope, 19, m, 9), 9);
+        // …and the next row's first character is the word, not the space.
+        assert_eq!(char_at_column(&rope, 0, 1, m, 0), 10);
     }
 
     #[test]
