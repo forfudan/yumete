@@ -622,6 +622,33 @@ impl Editor {
         self.where_data.as_ref().filter(|_| self.remembers).map(|d| d.join(PLACES_FILE))
     }
 
+    /// **What is remembered about a file goes with it when it is renamed**
+    /// (`:file-rename`): its line in `places.txt` — which is also the
+    /// recent-files list — and the table and encoding chosen for it. Each
+    /// line keyed by the old path is rekeyed in place, keeping its rank; a
+    /// line the new path already had (a file replaced by `:file-rename!`)
+    /// gives way. The session needs nothing: it is written from the open
+    /// buffers' paths.
+    pub(super) fn carry_remembered(&self, from: &Path, to: &Path) {
+        let (from, to) = (from.to_string_lossy(), to.to_string_lossy());
+        for file in [self.places_file(), self.tables_file(), self.encodings_file()].into_iter().flatten() {
+            let Ok(text) = std::fs::read_to_string(&file) else { continue };
+            let key = |line: &str| line.split('\t').next().unwrap_or_default().to_string();
+            if !text.lines().any(|line| key(line) == from) {
+                continue;
+            }
+            let out: Vec<String> = text
+                .lines()
+                .filter(|line| key(line) != to)
+                .map(|line| match line.strip_prefix(&*from).filter(|rest| rest.starts_with('\t')) {
+                    Some(rest) => format!("{to}{rest}"),
+                    None => line.to_string(),
+                })
+                .collect();
+            let _ = std::fs::write(&file, out.join("\n") + "\n");
+        }
+    }
+
     /// **這個檔上次停在第幾行**，不知道就是不知道。
     ///
     /// Warning: **和會話是兩件事。** 會話按工作路徑分檔，答的是「上次開着哪幾個」；

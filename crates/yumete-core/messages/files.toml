@@ -580,6 +580,54 @@ zhs = "只读"
 en = "read-only"
 
 [[message]]
+# :file-rename 的目標已經是一個文件，没帶 !（{0} 那個名字）（草稿）
+key = "file.rename-exists"
+zhs = "{0} 已存在，用 :file-rename! 覆盖"
+en = "{0} already exists; :file-rename! replaces it"
+
+[[message]]
+# :file-rename 失敗了：建文件夾或改名時系統報錯（{0} 原因）（草稿）
+key = "file.rename-failed"
+zhs = "没能改名：{0}"
+en = "could not rename: {0}"
+
+[[message]]
+# :file-rename 的目標是一個已有的文件夾（加上原文件名之後仍是文件夾）（{0} 那個名字）（草稿）
+key = "file.rename-folder"
+zhs = "{0} 是已有的文件夹，换个名字"
+en = "{0} is an existing folder; pick another name"
+
+[[message]]
+# :file-rename 用在没有文件的緩衝區上（草稿）
+key = "file.rename-no-file"
+zhs = "这个缓冲区还没有文件，先用 :write-as 起个名字"
+en = "this buffer has no file yet; :write-as gives it a name"
+
+[[message]]
+# :file-rename 的目標正在另一個緩衝區裏開着（{0} 那個緩衝區的名字）（草稿）
+key = "file.rename-open-elsewhere"
+zhs = "{0} 正在另一个缓冲区里打开，换个名字"
+en = "{0} is open in another buffer; pick another name"
+
+[[message]]
+# :file-rename 給的名字就是現在的名字（草稿）
+key = "file.rename-same"
+zhs = "名字没有变"
+en = "that is already its name"
+
+[[message]]
+# :file-rename 改好了名字（{0} 新名字，從原來那個文件夾算起）（草稿）
+key = "file.renamed"
+zhs = "已改名为 {0}"
+en = "renamed to {0}"
+
+[[message]]
+# :file-rename 改好了名字，可是歷史版本没能跟過去（{0} 新名字，{1} 原因）（草稿）
+key = "file.renamed-history-left"
+zhs = "已改名为 {0}，但历史版本没能跟过去：{1}"
+en = "renamed to {0}, but its history stayed behind: {1}"
+
+[[message]]
 # :info：項目根
 key = "file.root"
 zhs = "项目根目录"

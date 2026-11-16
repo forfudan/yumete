@@ -6402,6 +6402,7 @@ mod versions;
 mod verbs;
 mod vim_view;
 mod refactor;
+mod rename;
 mod wiki;
 pub use wiki::{WikiLine, WikiPart, WikiView};
 mod words;

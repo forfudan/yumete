@@ -227,15 +227,8 @@ impl Shelf {
     /// unlike any name in `all`.
     fn add_file(&self, text: &str, path: &str, now: i64, all: &[Version]) -> io::Result<Version> {
         std::fs::create_dir_all(&self.dir)?;
-        // **A store tells git to leave it alone.** A book kept in git and
-        // committed with `git add -A` would otherwise take a compressed copy
-        // of every save into the repository, for good. A sync folder still
-        // carries the store along; only git is told not to.
         if let Some(store) = self.dir.parent() {
-            let ignore = store.join(".gitignore");
-            if !ignore.exists() {
-                let _ = std::fs::write(&ignore, "*\n");
-            }
+            leave_out_of_git(store);
         }
         let taken = |name: &str| all.iter().any(|v| v.file == name) || self.dir.join(name).exists();
         let file = (0..)
@@ -346,6 +339,12 @@ pub fn find_moved(store: &Path, base: Option<&Path>, is_it: &dyn Fn(&str) -> boo
         }
         let all = shelf.versions();
         let Some(last) = all.last() else { continue };
+        // A shelf named for another key than its newest version's has
+        // already followed its file ([`carry`]); a copy of that file must not
+        // take it.
+        if entry.file_name().to_string_lossy() != shelf_name(&last.path) {
+            continue;
+        }
         let was_at = match base {
             Some(base) => base.join(&last.path),
             None => PathBuf::from(&last.path),
@@ -365,6 +364,49 @@ pub fn adopt(store: &Path, from: &Path, key: &str) -> io::Result<Shelf> {
     let to = Shelf::of(store, key);
     std::fs::rename(from, &to.dir)?;
     Ok(to)
+}
+
+/// **Carry a file's shelf to its new name** — `:file-rename`, which knows
+/// both names and so need not search as [`find_moved`] does.
+///
+/// The stores may differ: a chapter moved out of its book takes its versions
+/// to the data directory's store, and one moved into another book to that
+/// book's. Within one file system the shelf is renamed whole; across two it
+/// is copied file by file and then removed.
+///
+/// Nothing moves when there is no shelf to carry, or when the new name has a
+/// shelf of its own — the versions of a file that `:file-rename!` replaced,
+/// which are how that file can still be got back. Answers whether it moved.
+pub fn carry(from_store: &Path, from_key: &str, to_store: &Path, to_key: &str) -> io::Result<bool> {
+    let from = Shelf::of(from_store, from_key);
+    let to = Shelf::of(to_store, to_key);
+    if from.dir == to.dir || !from.exists() || to.dir.exists() {
+        return Ok(false);
+    }
+    std::fs::create_dir_all(to_store)?;
+    leave_out_of_git(to_store);
+    match std::fs::rename(&from.dir, &to.dir) {
+        Err(e) if e.kind() == io::ErrorKind::CrossesDevices => {
+            std::fs::create_dir_all(&to.dir)?;
+            for entry in std::fs::read_dir(&from.dir)?.flatten() {
+                std::fs::copy(entry.path(), to.dir.join(entry.file_name()))?;
+            }
+            std::fs::remove_dir_all(&from.dir)?;
+        }
+        other => other?,
+    }
+    Ok(true)
+}
+
+/// **A store tells git to leave it alone.** A book kept in git and committed
+/// with `git add -A` would otherwise take a compressed copy of every save
+/// into the repository, for good. A sync folder still carries the store
+/// along; only git is told not to.
+fn leave_out_of_git(store: &Path) {
+    let ignore = store.join(".gitignore");
+    if !ignore.exists() {
+        let _ = std::fs::write(&ignore, "*\n");
+    }
 }
 
 /// One version's text from its file.

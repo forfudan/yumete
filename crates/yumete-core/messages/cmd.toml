@@ -561,6 +561,13 @@ en = "file info: path, size, lines and characters, language, attached language s
 find = "檔案 档案 文件 信息 元數據 元数据 位置 大小 info file metadata"
 
 [[message]]
+# : 命令選單裏 file-rename 那一項的説明（草稿）
+key = "cmd.commands.file-rename"
+zhs = "给这个文件改名或挪到别处，接着编辑（相对路径从文件所在的文件夹算起）"
+en = "rename or move this file and go on editing it (a relative name is read from its folder)"
+find = "改名 重命名 移动 挪 rename move mv"
+
+[[message]]
 # : 命令選單裏 files-yazi 那一項的説明（草稿）
 key = "cmd.commands.files-yazi"
 zhs = "在 yazi 里浏览文件，Enter 把选中的文件在这里打开"

@@ -6,6 +6,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Added
 
+- **`:file-rename` (`:mv`) renames or moves the file you are editing** and keeps it open: a relative name is read from the file's own folder, missing folders are made, an existing file is replaced only with `:mv!`; unsaved changes stay unsaved, and the recovery copy, local history and recent-files list follow the new name. Links to it elsewhere are not rewritten.
 - **`:lg` opens lazygit**, a short spelling of `:git-lazygit`.
 - **Local history**: every save keeps a version of the file in the book's `.yumete/history/` (or the data directory for files outside a book), thinned to all of today, one an hour for a week and one a day for sixty days; saves less than ten minutes apart count as one. `:history` lists them with a word-diff preview; `Enter` opens one read-only beside the text, `A-r` puts it back as one undoable edit. `:history-label <name>` names a version and keeps it for good. Off with `[editor] history = false`; `--private` and `remember = false` keep none.
 - **`:redraw` clears the terminal and draws it all again** (vim's and helix's name; `:redr` works too): every window, and every preview's picture at its window's size now, for when another program's output is left on the screen. `:preview-redraw` is a second spelling of it.

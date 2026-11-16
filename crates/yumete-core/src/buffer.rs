@@ -1967,6 +1967,40 @@ impl Buffer {
         }
     }
 
+    /// **The file was renamed on disk, and the buffer goes with it**
+    /// (`:file-rename`). The text, its undo history and whether it is
+    /// modified stay exactly as they were: a rename moves the file, it does
+    /// not save it.
+    ///
+    /// The stamps are taken again from the new name — a rename keeps the
+    /// file's time, a copy across file systems does not, and a stale stamp
+    /// would make the next `:w` ask about a change nobody made.
+    ///
+    /// **This session's recovery copy follows**: written afresh under the
+    /// new name first, and the one under the old name removed only once that
+    /// worked, so there is no moment without one. A draft another session
+    /// left beside the old name is not this buffer's to move.
+    pub fn moved_to(&mut self, path: PathBuf) {
+        self.seen = stamp_of(&path);
+        self.path = Some(path);
+        let named = self.path.as_deref().and_then(|p| p.file_name());
+        let said = named.and_then(|n| crate::syntax::from_extension(&n.to_string_lossy()));
+        if let Some(syntax) = said.filter(|_| !self.syntax_by_hand) {
+            self.syntax = syntax;
+            self.syntax_guessed = false;
+        }
+        let Some(old_copy) = self.wrote_at.take() else {
+            return;
+        };
+        match self.write_swap() {
+            Ok(()) if self.wrote_at.as_ref() != Some(&old_copy) => {
+                let _ = fs::remove_file(&old_copy);
+            }
+            Ok(()) => {}
+            Err(_) => self.wrote_at = Some(old_copy),
+        }
+    }
+
     /// Write this buffer's text to another file, **staying bound to its own**.
     ///
     /// This is what `:w <path>` has always claimed to do and did not: it called

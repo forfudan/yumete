@@ -16,12 +16,12 @@ use super::*;
 use crate::versions::{self, Kept, Shelf, Version};
 
 /// Where one file's versions are kept.
-struct Place {
+pub(super) struct Place {
     /// The store: a book's `.yumete/history`, or the data directory's.
-    store: PathBuf,
+    pub(super) store: PathBuf,
     /// The file's key in it: its path from the book's root with `/` between
     /// folders, or its absolute path outside a book.
-    key: String,
+    pub(super) key: String,
     /// What a relative key is relative to — the book's root; `None` when the
     /// key is absolute.
     base: Option<PathBuf>,
@@ -56,7 +56,7 @@ impl Editor {
     /// [`Self::remembers`] off, and with it every read and write of history:
     /// a run that forgets where it has been does not leave copies of what it
     /// wrote either, and a shot draws the same frame on any machine.
-    fn history_refused(&self) -> Option<String> {
+    pub(super) fn history_refused(&self) -> Option<String> {
         match (self.keeps_history, self.remembers) {
             (false, _) => Some(say!("history.off")),
             (true, false) => Some(say!("history.private")),
@@ -67,7 +67,7 @@ impl Editor {
     /// The store and key for `path`'s versions — see the module's note.
     /// `None` outside a book when no data directory was given, and for the
     /// store's own files.
-    fn history_place(&self, path: &Path) -> Option<Place> {
+    pub(super) fn history_place(&self, path: &Path) -> Option<Place> {
         let real = self.real_path(path).unwrap_or_else(|| path.to_path_buf());
         let root = book_root(real.parent()?);
         let book = root.join(".yumete");

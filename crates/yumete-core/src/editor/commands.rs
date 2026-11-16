@@ -200,7 +200,7 @@ impl Editor {
             }
             // **A preview has no file**: the saves say so and
             // write nothing, as in a sidebar; `:x` and `ZZ` are `:q` there.
-            Command::Write(_) | Command::WriteForce(_) | Command::Update | Command::SaveAs { .. }
+            Command::Write(_) | Command::WriteForce(_) | Command::Update | Command::SaveAs { .. } | Command::FileRename { .. }
                 if !self.settings_open && self.page_window_has_the_keys() =>
             {
                 self.status = say!("preview.nothing-to-write");
@@ -223,6 +223,10 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::SaveAs { path, force } => self.write_as(&path, force),
+            Command::FileRename { path, force } => {
+                self.rename_file(&path, force);
+                Ok(CommandOutcome::Continue)
+            }
             Command::Genda(ask) => {
                 self.ask_the_typing_page(ask);
                 Ok(CommandOutcome::Continue)

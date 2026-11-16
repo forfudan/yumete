@@ -738,6 +738,14 @@ pub enum Command {
         path: String,
         force: bool,
     },
+    /// `:file-rename <path>` (helix's `:mv`) — **rename this buffer's file on
+    /// disk and go on editing it** under the new name. A relative name is
+    /// read from the file's own folder; a folder that is not there is made;
+    /// an existing file is replaced only with `!`.
+    FileRename {
+        path: String,
+        force: bool,
+    },
     /// `:buffer-next` / `:buffer-previous` (aliases `:bn` / `:bp`) — show
     /// another of the open buffers.
     NextBuffer,
@@ -2180,6 +2188,8 @@ const FORCEABLE: &[&str] = &[
     "buffer-close-others!",
     "buffer-close-all!",
     "write-buffer-close!",
+    // helix's `:move!` (`:mv!`): rename over a file that is already there.
+    "file-rename!",
     // vim's `:sort!`, in reverse.
     "sort!",
     // vim's `:read! cmd`, a command's output read in.
@@ -3728,6 +3738,19 @@ pub const COMMANDS: &[Entry] = &[
         params: &[Param::Path],
         build: Some(|p| {
             Ok(Command::SaveAs {
+                path: p.need(0)?.to_string(),
+                force: p.force,
+            })
+        }),
+    },
+    Entry {
+        name: "file-rename",
+        aliases: &["mv"],
+        help: "cmd.commands.file-rename",
+        needs: &[],
+        params: &[Param::Path],
+        build: Some(|p| {
+            Ok(Command::FileRename {
                 path: p.need(0)?.to_string(),
                 force: p.force,
             })
@@ -9713,7 +9736,7 @@ mod tests {
             // exactly the drift this test exists to catch.
             for alias in entry.aliases {
                 let line = match *alias {
-                    "o" | "e" | "edit" => format!(":{alias} a.md"),
+                    "o" | "e" | "edit" | "mv" => format!(":{alias} a.md"),
                     "gr" => ":gr x".to_string(),
                     "ex" => ":ex html".to_string(),
                     "md" => ":md footnote".to_string(),
