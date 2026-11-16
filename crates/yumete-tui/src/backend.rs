@@ -18,6 +18,7 @@ use ratatui::crossterm::queue;
 use ratatui::crossterm::style::{
     Attribute, Color as CColor, Colors, Print, SetAttribute, SetColors, SetUnderlineColor,
 };
+use ratatui::crossterm::terminal::{BeginSynchronizedUpdate, Clear, EndSynchronizedUpdate};
 use ratatui::backend::{Backend, ClearType, CrosstermBackend, WindowSize};
 use ratatui::buffer::Cell;
 use ratatui::layout::{Position, Size};
@@ -51,14 +52,30 @@ pub fn keep_the_cursor_hidden(hidden: bool) {
     HIDE_THE_CURSOR.store(hidden, std::sync::atomic::Ordering::Relaxed);
 }
 
-/// The crossterm backend, with dotted underlines.
+/// The crossterm backend, with dotted underlines, and **a clear of the
+/// screen written with the frame that follows it**.
+///
+/// ratatui clears the whole screen when the terminal changes size, and
+/// `:redraw` does so on purpose; the crossterm backend writes and flushes
+/// that clear at once, and the frame comes only after the page is laid out
+/// again — long enough on a big vertical page to see the screen go blank.
+/// Here the clear waits for the next frame's cells and goes out in the same
+/// write, opened as a synchronized update (`CSI ? 2026 h`) and closed at the
+/// flush, so a terminal that knows the mode shows the old screen until the
+/// new one is whole, and one that does not still has no blank frame to show
+/// between the two.
 pub struct Dotted<W: Write> {
     inner: CrosstermBackend<W>,
+    /// A clear of the whole screen asked for and not yet written.
+    owed_clear: bool,
+    /// The frame being written opened a synchronized update, which the
+    /// flush closes.
+    synchronized: bool,
 }
 
 impl<W: Write> Dotted<W> {
     pub fn new(writer: W) -> Dotted<W> {
-        Dotted { inner: CrosstermBackend::new(writer) }
+        Dotted { inner: CrosstermBackend::new(writer), owed_clear: false, synchronized: false }
     }
 
     /// One dotted cell, from a clean state and back to one — the crossterm
@@ -116,6 +133,14 @@ impl<W: Write> Backend for Dotted<W> {
     where
         I: Iterator<Item = (u16, u16, &'a Cell)>,
     {
+        if std::mem::take(&mut self.owed_clear) {
+            queue!(
+                self.inner.writer_mut(),
+                BeginSynchronizedUpdate,
+                Clear(ratatui::crossterm::terminal::ClearType::All)
+            )?;
+            self.synchronized = true;
+        }
         // **A picture's upload goes ahead of the cells that show it**
         // (`graphics.rs`): the placeholders below are only text
         // until the terminal has the picture they name.
@@ -165,10 +190,14 @@ impl<W: Write> Backend for Dotted<W> {
         self.inner.set_cursor_position(position)
     }
     fn clear(&mut self) -> io::Result<()> {
-        self.inner.clear()
+        self.owed_clear = true;
+        Ok(())
     }
     fn clear_region(&mut self, clear_type: ClearType) -> io::Result<()> {
-        self.inner.clear_region(clear_type)
+        match clear_type {
+            ClearType::All => self.clear(),
+            _ => self.inner.clear_region(clear_type),
+        }
     }
     fn size(&self) -> io::Result<Size> {
         self.inner.size()
@@ -177,6 +206,53 @@ impl<W: Write> Backend for Dotted<W> {
         self.inner.window_size()
     }
     fn flush(&mut self) -> io::Result<()> {
+        if std::mem::take(&mut self.owed_clear) {
+            queue!(self.inner.writer_mut(), Clear(ratatui::crossterm::terminal::ClearType::All))?;
+        }
+        if std::mem::take(&mut self.synchronized) {
+            queue!(self.inner.writer_mut(), EndSynchronizedUpdate)?;
+        }
         Backend::flush(&mut self.inner)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn written(backend: &mut Dotted<Vec<u8>>) -> String {
+        String::from_utf8(std::mem::take(backend.inner.writer_mut())).unwrap()
+    }
+
+    /// **The clear goes out with the frame**, inside one synchronized
+    /// update: nothing is written when it is asked for, and the cells
+    /// follow it in the same write.
+    #[test]
+    fn a_clear_waits_for_the_frame_and_goes_out_with_it() {
+        let mut backend = Dotted::new(Vec::new());
+        backend.clear_region(ClearType::All).unwrap();
+        assert_eq!(written(&mut backend), "", "nothing before the frame");
+        let cell = Cell::new("字");
+        backend.draw([(3u16, 1u16, &cell)].into_iter()).unwrap();
+        Backend::flush(&mut backend).unwrap();
+        let out = written(&mut backend);
+        let begin = out.find("\x1b[?2026h").expect("opened");
+        let clear = out.find("\x1b[2J").expect("cleared");
+        let cell = out.find('字').expect("the cell");
+        let end = out.find("\x1b[?2026l").expect("closed");
+        assert!(begin < clear && clear < cell && cell < end, "{out:?}");
+    }
+
+    /// **A frame with no clear before it is written plainly**:
+    /// no clear and no synchronized update.
+    #[test]
+    fn a_frame_without_a_clear_writes_no_clear() {
+        let mut backend = Dotted::new(Vec::new());
+        let cell = Cell::new("字");
+        backend.draw([(0u16, 0u16, &cell)].into_iter()).unwrap();
+        Backend::flush(&mut backend).unwrap();
+        let out = written(&mut backend);
+        assert!(out.contains('字'));
+        assert!(!out.contains("\x1b[2J") && !out.contains("2026"), "{out:?}");
     }
 }

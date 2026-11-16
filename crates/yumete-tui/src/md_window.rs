@@ -186,6 +186,9 @@ struct Tab {
     top: f32,
     page: f32,
     shown: bool,
+    /// The picture is to be asked for again though nothing in its request
+    /// changed (`:redraw`); the request keeps its place and caret.
+    again: bool,
     /// How many jobs were sent — for the tests that count feedback.
     jobs_sent: usize,
 }
@@ -198,7 +201,7 @@ impl Tab {
             .name("md-preview".to_string())
             .spawn(move || work(inbox, out))
             .expect("a thread for the Markdown preview");
-        Tab { main, jobs, shots, source: None, changed: None, sent: None, top: 0.0, page: 0.0, shown: false, jobs_sent: 0 }
+        Tab { main, jobs, shots, source: None, changed: None, sent: None, top: 0.0, page: 0.0, shown: false, again: false, jobs_sent: 0 }
     }
 }
 
@@ -372,15 +375,6 @@ impl MdPreviews {
             Some(_) => editor.take_page_steps(),
             None => Vec::new(),
         };
-        // **`:preview-redraw`**: every picture is forgotten and asked for
-        // again at its window's size now.
-        if editor.take_preview_redraw() {
-            for (&id, tab) in self.tabs.iter_mut() {
-                tab.sent = None;
-                crate::graphics::drop_pages_of(id);
-            }
-            redraw = true;
-        }
         let now = Instant::now();
         let cell = crate::graphics::cell_pixels();
         let theme = crate::preview_theme::theme(crate::theme::Palette::of(config));
@@ -489,7 +483,7 @@ impl MdPreviews {
                 }
                 .or_else(|| tab.sent.as_ref().and_then(|w| w.caret)),
             };
-            if text.is_some() || tab.sent.as_ref() != Some(&want) {
+            if text.is_some() || std::mem::take(&mut tab.again) || tab.sent.as_ref() != Some(&want) {
                 let base_dir = tab.main.parent().map(PathBuf::from).unwrap_or_default();
                 if tab.jobs.send(Job { text, base_dir, want: want.clone() }).is_ok() {
                     tab.jobs_sent += 1;
@@ -498,6 +492,22 @@ impl MdPreviews {
             }
         }
         redraw
+    }
+
+    /// **Every preview's picture drawn again** (`:redraw`, and every change
+    /// of the layout): the pictures the terminal holds are let go, so the
+    /// next frame sends each page it shows again, a Typst page's too; and a
+    /// Markdown preview's picture is asked for again at its window's
+    /// present size, on the next turn.
+    pub fn redraw(&mut self, editor: &Editor) {
+        for (id, _) in editor.previews() {
+            crate::graphics::drop_pages_of(id);
+        }
+        // Only the previews on the screen: one out of sight is asked for
+        // its picture when it comes back, at the size it comes back at.
+        for tab in self.tabs.values_mut().filter(|t| t.shown) {
+            tab.again = true;
+        }
     }
 
     /// **How long the loop may sleep**: until the typing in a previewed file

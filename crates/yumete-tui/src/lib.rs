@@ -779,6 +779,8 @@ pub fn run(
     let mut last_frame = std::time::Duration::ZERO;
     // 上一次寫進終端標題欄的那一句，見 `name_the_window`。
     let mut window_name = String::new();
+    // The layout of the last frame drawn, for `:redraw`'s own turns.
+    let mut repaint = Repaint::default();
     // The frame `:shot` will photograph, kept only when one was asked for.
     let mut drawn: Option<ratatui::buffer::Buffer> = None;
     // **自動認詞** (#448): the book's own names, found without being asked.
@@ -1068,6 +1070,11 @@ pub fn run(
             // **一頁不許比畫得下的多**（#516）。
             let size = terminal.size()?;
             fit_the_page(ime, editor, config, size.width, size.height);
+            // **The whole screen, when asked or when the windows moved** —
+            // once for the event, in the frame that shows it.
+            if repaint.due(layout_of(editor, config, size), editor.take_redraw()) {
+                redraw_everything(&mut terminal, editor, &mut markdown)?;
+            }
             name_the_window(editor, &mut window_name);
             // **背景那一趟交回來的，每一幀收一批**（§5.93）。收完就畫，所以名單
             // 是在長的，而右上角那個「N+」跟着跳。
@@ -6151,6 +6158,64 @@ fn window_at(
         let inside = mouse.column >= a.x && mouse.column < a.x + a.width && mouse.row >= a.y && mouse.row < bottom;
         inside.then(|| leaves.get(i).copied()).flatten()
     })
+}
+
+/// **When the whole screen is drawn again** (`:redraw`): when it is asked
+/// for, and when the windows are laid out otherwise than in the last frame
+/// drawn — a window opened, closed, moved, swapped or resized, a sidebar or a
+/// preview opened or closed, the terminal resized. Typing and scrolling move
+/// no window, so they never come here.
+///
+/// **Compared a drawn frame at a time**, so a burst of changes between two
+/// frames (a drag of the terminal's corner, keys queued behind a slow frame)
+/// is one redraw; the first frame only notes the layout, since starting up
+/// already cleared the screen.
+#[derive(Default)]
+struct Repaint {
+    layout: Option<u64>,
+}
+
+impl Repaint {
+    /// Whether this frame draws everything again: `asked`, or `layout` is
+    /// not the last frame's.
+    fn due(&mut self, layout: u64, asked: bool) -> bool {
+        let moved = self.layout.is_some_and(|was| was != layout);
+        self.layout = Some(layout);
+        asked || moved
+    }
+}
+
+/// **The layout, as one number**: the terminal's size, the sidebars' and
+/// the tab line's places, and each window's place with the window and the
+/// preview in it — enough that a swap of two windows the same size counts.
+/// Laid out without a table's head rows, which come and go with the scroll.
+fn layout_of(editor: &Editor, config: &Config, size: ratatui::layout::Size) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let areas = page_areas(editor, config, Rect::new(0, 0, size.width, size.height), 0);
+    let mut hash = std::collections::hash_map::DefaultHasher::new();
+    (size.width, size.height).hash(&mut hash);
+    (areas.panels, areas.tabs, areas.blocks, &areas.dividers, &areas.lines).hash(&mut hash);
+    let leaves = editor.windows().leaves();
+    for (i, pane) in areas.panes.iter().enumerate() {
+        let window = leaves.get(i).copied();
+        (pane, window, window.and_then(|w| editor.preview_in(w))).hash(&mut hash);
+    }
+    hash.finish()
+}
+
+/// **Draw the whole terminal again**: the screen cleared, so whatever
+/// another program left on it goes, every cell written afresh by the frame
+/// about to be drawn, and every preview's picture sent again
+/// ([`md_window::MdPreviews::redraw`]). The clear waits for that frame and
+/// goes out with it ([`backend::Dotted`]).
+fn redraw_everything<B: ratatui::backend::Backend>(
+    terminal: &mut ratatui::Terminal<B>,
+    editor: &Editor,
+    markdown: &mut crate::md_window::MdPreviews,
+) -> io::Result<()> {
+    terminal.clear()?;
+    markdown.redraw(editor);
+    Ok(())
 }
 
 fn page_areas(editor: &Editor, config: &Config, area: Rect, head_rows: u16) -> Areas {
@@ -17533,6 +17598,49 @@ fn squeezed(text: &str) -> String {
             }
         }
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// **A change of the layout draws the whole screen once; typing and
+    /// scrolling never do.** A split, a swap, a close, a sidebar and the
+    /// terminal's size each move a window; `:redraw` asks on its own.
+    #[test]
+    fn the_layout_moving_redraws_once_and_typing_never() {
+        let mut editor = editor_with(&"一行字\n".repeat(80));
+        let config = Config::default();
+        let mut repaint = Repaint::default();
+        let size = ratatui::layout::Size::new(80, 24);
+        let mut turn = |editor: &mut Editor, size| repaint.due(layout_of(editor, &config, size), editor.take_redraw());
+        assert!(!turn(&mut editor, size), "the first frame only notes the layout");
+        assert!(!turn(&mut editor, size), "nothing moved");
+        for c in "ihello".chars() {
+            editor.on_key(Key::Char(c));
+        }
+        editor.on_key(Key::Esc);
+        assert!(!turn(&mut editor, size), "typing");
+        for key in [Key::Ctrl('d'), Key::Ctrl('e'), Key::Char('G')] {
+            editor.on_key(key);
+            assert!(!turn(&mut editor, size), "scrolling: {key:?}");
+        }
+        editor.execute(":vsplit").unwrap();
+        assert!(turn(&mut editor, size), "a split");
+        assert!(!turn(&mut editor, size), "once");
+        for key in [Key::Ctrl('w'), Key::Char('H')] {
+            editor.on_key(key);
+        }
+        assert!(turn(&mut editor, size), "a swap");
+        for key in [Key::Ctrl('w'), Key::Char('q')] {
+            editor.on_key(key);
+        }
+        assert!(turn(&mut editor, size), "a close");
+        editor.execute(":sidebar-outline").unwrap();
+        assert!(turn(&mut editor, size), "a sidebar");
+        assert!(!turn(&mut editor, size), "once");
+        let bigger = ratatui::layout::Size::new(100, 30);
+        assert!(turn(&mut editor, bigger), "the terminal resized");
+        assert!(!turn(&mut editor, bigger), "once");
+        editor.execute(":redraw").unwrap();
+        assert!(turn(&mut editor, bigger), "asked for");
+        assert!(!turn(&mut editor, bigger), "asked once");
     }
 
     /// **One window looks as it always did**: the writing, then its status

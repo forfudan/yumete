@@ -2799,8 +2799,8 @@ pub struct Editor {
     /// `[editor] word_completion`: Latin letters before the word list opens
     /// by itself, half as many 漢字, `0` never (see `suggest.rs`).
     word_completion: usize,
-    /// `:preview-redraw` asked the previews' pictures to be made again.
-    preview_redraw: bool,
+    /// `:redraw` asked for the whole terminal to be drawn again.
+    redraw: bool,
     /// Each open buffer's words, for that list.
     word_index: HashMap<u64, suggest::WordIndex>,
     /// The words were read during this stay in Insert mode: they are read
@@ -4639,7 +4639,7 @@ impl Editor {
             word_completion: 7,
             word_index: HashMap::new(),
             words_read_in_insert: false,
-            preview_redraw: false,
+            redraw: false,
             line_words: HashMap::new(),
             run_texts: HashMap::new(),
             reader: Box::new(NoReader),

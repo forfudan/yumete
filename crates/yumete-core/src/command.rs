@@ -604,8 +604,9 @@ pub enum Command {
     /// `:preview-vertical [on|off]` — the Markdown preview set
     /// vertically while the text window is.
     PreviewVertical(Switch),
-    /// Make every preview's picture again, at its window's size now.
-    PreviewRedraw,
+    /// `:redraw` — clear the terminal and draw everything on it again: every
+    /// window, and every preview's picture at its window's present size.
+    Redraw,
     /// `:w!` — write over a file that changed on disk since it was read.
     WriteForce(Option<String>),
     /// `:reload` / `:reload!` — read the file again. The `!` throws away
@@ -1662,6 +1663,7 @@ pub const QUIET: &[&str] = &[
     "run-shell-command",
     "clipboard-paste-after",
     "clipboard-yank-join",
+    "preview-redraw",
 ];
 
 /// **Whether the words after `:settings` are vim's `:set` words** and not a
@@ -5216,12 +5218,12 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|p| Ok(Command::PreviewVertical(switched(p)))),
     },
     Entry {
-        name: "preview-redraw",
-        aliases: &[],
-        help: "cmd.view.preview-redraw",
+        name: "redraw",
+        aliases: &["preview-redraw"],
+        help: "cmd.view.redraw",
         needs: &[],
         params: &[],
-        build: Some(|_| Ok(Command::PreviewRedraw)),
+        build: Some(|_| Ok(Command::Redraw)),
     },
     Entry {
         name: "render",
@@ -9289,6 +9291,16 @@ mod tests {
         assert_eq!(moved_to("char"), None);
         let said = parse(":char").unwrap_err().to_string();
         assert!(!said.contains("yume-single-char"), "{said}");
+    }
+
+    /// **`:redraw` is vim's and helix's name**; `:preview-redraw` is a
+    /// second spelling of it and `:redr` vim's short one.
+    #[test]
+    fn redraw_parses_under_its_spellings() {
+        for spelling in [":redraw", ":preview-redraw", ":redr"] {
+            assert!(matches!(parse(spelling), Ok(Command::Redraw)), "{spelling}");
+        }
+        assert!(!matches!(parse(":red"), Ok(Command::Redraw)), "`:red` stays vim's `:redo`");
     }
 
     #[test]

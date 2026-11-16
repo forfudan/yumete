@@ -344,10 +344,10 @@ impl Editor {
     /// preview opened to the side leaves them in VS Code. A preview already
     /// on the screen is said to be open instead. The window, or `None` when
     /// there is no room.
-    /// Whether `:preview-redraw` asked for the pictures to be made again
+    /// Whether `:redraw` asked for the whole terminal to be drawn again
     /// since the front end last asked; asking takes the request.
-    pub fn take_preview_redraw(&mut self) -> bool {
-        std::mem::take(&mut self.preview_redraw)
+    pub fn take_redraw(&mut self) -> bool {
+        std::mem::take(&mut self.redraw)
     }
 
     pub fn open_page_window(&mut self, main: PathBuf) -> Option<WindowId> {

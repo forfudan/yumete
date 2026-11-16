@@ -40028,14 +40028,22 @@ fn window_columns(ed: &Editor) -> Vec<(crate::window::WindowId, u16)> {
 /// the text — the screen is not laid out by the page the keys are on. A
 /// preview opened from a 縱書 page goes below it, where the columns leave
 /// room, and `C-w j` `k` go to the window drawn there.
-/// **`:preview-redraw`** asks the front end once for new pictures.
+/// **`:redraw`**, and `:preview-redraw` its second spelling, ask the front
+/// end once for the whole screen; typing asks nothing.
 #[test]
-fn preview_redraw_is_taken_once() {
+fn redraw_is_taken_once() {
     let (mut ed, dir) = a_markdown_note("redraw");
-    assert!(!ed.take_preview_redraw());
-    ed.execute(":preview-redraw").unwrap();
-    assert!(ed.take_preview_redraw());
-    assert!(!ed.take_preview_redraw(), "taken");
+    assert!(!ed.take_redraw());
+    for spelling in [":redraw", ":preview-redraw", ":redr"] {
+        ed.execute(spelling).unwrap();
+        assert!(ed.take_redraw(), "{spelling}");
+        assert!(!ed.take_redraw(), "{spelling} taken");
+    }
+    for c in "ihello".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Esc);
+    assert!(!ed.take_redraw(), "typing");
     std::fs::remove_dir_all(&dir).ok();
 }
 

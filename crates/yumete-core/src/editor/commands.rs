@@ -1565,8 +1565,8 @@ impl Editor {
                 }
                 Ok(CommandOutcome::Continue)
             }
-            Command::PreviewRedraw => {
-                self.preview_redraw = true;
+            Command::Redraw => {
+                self.redraw = true;
                 Ok(CommandOutcome::Continue)
             }
             Command::PreviewVertical(how) => {

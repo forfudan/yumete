@@ -2750,13 +2750,6 @@ en = "how big the page window draws the page: as wide as the window, or whole"
 find = "預覽 预览 頁寬 页宽 整頁 整页 fit width page"
 
 [[message]]
-# : 命令選單裏 preview-redraw 那一項的説明：照窗口現在的大小重畫預覽（草稿）
-key = "cmd.view.preview-redraw"
-zhs = "按窗口现在的大小重画预览"
-en = "draw the previews again at their windows' size now"
-find = "預覽 预览 重畫 重画 刷新 preview redraw refresh"
-
-[[message]]
 # : 命令菜单里 preview-theme 那一项的说明（草稿）
 key = "cmd.view.preview-theme"
 zhs = "用主题配色显示预览页面：纸为背景色，黑字为文字色；关闭则按印刷原样"
@@ -2783,6 +2776,13 @@ key = "cmd.view.punct"
 zhs = "标点提示：在半角标点和 ... 旁显示应使用的全角标点"
 en = "punctuation hints: show the full-width mark next to a half-width one"
 find = "標點 标点 半角 全角 逗號 逗号 省略號 省略号 提示 note punctuation hint"
+
+[[message]]
+# : 命令菜单里 redraw 那一项的说明：清屏，重画所有窗口和预览（草稿）
+key = "cmd.view.redraw"
+zhs = "清屏并重画整个终端：所有窗口，以及按窗口现在的大小重画预览"
+en = "clear the terminal and draw it all again: every window, and the previews at their windows' size now"
+find = "重畫 重画 刷新 清屏 預覽 预览 redraw refresh clear preview"
 
 [[message]]
 # : 命令選單裏 sentence 那一項的説明(view 組)

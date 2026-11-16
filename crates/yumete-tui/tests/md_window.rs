@@ -384,3 +384,50 @@ fn a_preview_moved_below_is_drawn_at_its_new_size() {
     eprintln!("before {before:?} after {after:?} shot {}x{} page {} top {}", shot.columns, shot.rows, shot.page, shot.top);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// **`:redraw` sends the pictures again**: the next frame uploads the page
+/// the terminal already had, and the worker is asked for it once more at
+/// the window's size, its place kept — once, not every turn after.
+#[test]
+fn a_redraw_sends_the_picture_again_once() {
+    let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let dir = std::env::temp_dir().join(format!("yumete-md-redraw-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let main = a_long_note(&dir);
+    let mut editor = Editor::new();
+    editor.open_file(&main).unwrap();
+    let config = Config::default();
+    let mut md = MdPreviews::default();
+    let page = editor.open_page_window_of(main.clone(), PreviewKind::Markdown).expect("room");
+    let preview = editor.preview_in(page).unwrap();
+    graphics::set_support(Support::Kitty);
+    until(&mut editor, &config, &mut md, |_| md_window::shot_of(preview).is_some());
+    for _ in 0..3 {
+        frame(&mut editor, &config);
+        md.follow(&mut editor, &config);
+    }
+    let _ = graphics::take_pending();
+    let sent = md.jobs_sent(preview);
+    let asked = md.sent(preview);
+    frame(&mut editor, &config);
+    assert!(graphics::take_pending().is_empty(), "an unchanged picture is not sent twice");
+
+    md.redraw(&editor);
+    frame(&mut editor, &config);
+    let out = String::from_utf8(graphics::take_pending()).unwrap();
+    assert!(out.contains("a=d"), "the old picture let go");
+    assert!(out.contains("a=T"), "and sent again in the same frame");
+    assert!(out.find("a=d") < out.find("a=T"));
+    md.follow(&mut editor, &config);
+    assert_eq!(md.jobs_sent(preview), sent + 1, "asked for again");
+    assert_eq!(md.sent(preview), asked, "with what it was asked with");
+    for _ in 0..3 {
+        frame(&mut editor, &config);
+        md.follow(&mut editor, &config);
+    }
+    assert_eq!(md.jobs_sent(preview), sent + 1, "once");
+    graphics::drop_pages();
+    let _ = graphics::take_pending();
+    let _ = std::fs::remove_dir_all(&dir);
+}
