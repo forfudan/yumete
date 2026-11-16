@@ -712,6 +712,12 @@ zhs = "读不出这个版本：{0}"
 en = "cannot read this version: {0}"
 
 [[message]]
+# :history 未保存那一段裏，緩衝區眼下所在的那一步（行裏的一欄）（草稿）
+key = "history.current"
+zhs = "当前"
+en = "current"
+
+[[message]]
 # :history-label 之後：哪一版叫了什麼名字（{0} 名字，{1} 時間）（草稿）
 key = "history.labelled"
 zhs = "已把 {1} 的版本命名为「{0}」"
@@ -748,6 +754,12 @@ zhs = "历史版本已关闭（[editor] history）"
 en = "local history is off ([editor] history)"
 
 [[message]]
+# :history 未保存那一段裏，最早那一步（檔剛讀進來時）的時間欄（草稿）
+key = "history.opened"
+zhs = "打开时"
+en = "as opened"
+
+[[message]]
 # :history 那一扇挑選器的標題（{0} 檔名）（草稿）
 key = "history.picker-title"
 zhs = "{0} 的历史版本"
@@ -766,10 +778,22 @@ zhs = "已换回 {0} 的版本，u 撤销"
 en = "put back the version of {0}; u undoes it"
 
 [[message]]
+# :history 裏在「打開時」那一步上按 A-r：整份換成了檔剛讀進來時的內容（草稿）
+key = "history.restored-opened"
+zhs = "已换回刚打开时的内容，u 撤销"
+en = "put back the text as opened; u undoes it"
+
+[[message]]
 # :history 的預覽或 A-r：那一版和眼前的正文一字不差（草稿）
 key = "history.same"
 zhs = "与当前内容相同"
 en = "the same as the buffer"
+
+[[message]]
+# :history 未保存那一段裏，與磁盤上的檔一字不差的那一步（行裏的一欄）（草稿）
+key = "history.saved-state"
+zhs = "已保存"
+en = "saved"
 
 [[message]]
 # :history 裏按 Enter：那一版在另一個窗口只讀打開了（{0} 時間）（草稿）
@@ -782,6 +806,30 @@ en = "the version of {0} is open read-only in the other window"
 key = "history.too-far"
 zhs = "与当前内容差别太大，比不出来"
 en = "too different from the buffer to compare"
+
+[[message]]
+# :history 打開之後撤銷記錄又變了（再打開一次的挑選器裏那一行已經過時）（草稿）
+key = "history.undo-moved"
+zhs = "撤销记录已经变了，请重新打开 :history"
+en = "the undo history has changed; open :history again"
+
+[[message]]
+# :history 未保存那一段裏，没有存過的一步（行裏的一欄）（草稿）
+key = "history.unsaved"
+zhs = "未保存"
+en = "unsaved"
+
+[[message]]
+# :history 裏在未保存的一步上按 Enter：撤銷記錄走到了那一步（{0} 時間）（草稿）
+key = "history.walked"
+zhs = "已回到 {0} 的那一步，撤销和重做都还在"
+en = "back at the state of {0}; undo and redo still reach the rest"
+
+[[message]]
+# :history 裏在「打開時」那一步上按 Enter：撤銷記錄走回了檔剛讀進來時（草稿）
+key = "history.walked-opened"
+zhs = "已回到刚打开时的那一步，撤销和重做都还在"
+en = "back at the text as opened; undo and redo still reach the rest"
 
 [[message]]
 # ye --import-word：要写的 .md（或图片文件夹）已经存在，没加 --overwrite 就不覆盖。{0} 是那个路径（草稿）

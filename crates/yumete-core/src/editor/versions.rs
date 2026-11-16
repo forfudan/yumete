@@ -166,35 +166,37 @@ impl Editor {
         Ok((Shelf::of(&place.store, &place.key), place, name))
     }
 
-    /// **`:history`: this file's versions in a picker**, newest first, each
-    /// row its time, how many characters it added or took away against the
-    /// version before it, and its label.
+    /// **`:history`: this session's unsaved states, then this file's saved
+    /// versions, in one picker.**
+    ///
+    /// The unsaved block comes first ([`Self::unsaved_rows`]), newest first,
+    /// above the dashed rule the picker draws under preferred rows; the saved
+    /// versions follow, newest first, each row its time, how many characters
+    /// it added or took away against the version before it, and its label.
+    ///
+    /// The unsaved block lives in memory and leaves nothing on disk, so it is
+    /// listed where saved versions are not — `--private`, `[editor] history
+    /// = false`, a buffer with no file; the picker then holds that block alone.
     pub(super) fn open_history_picker(&mut self) {
-        let (shelf, _, name) = match self.this_shelf() {
-            Ok(found) => found,
-            Err(why) => {
+        let unsaved = self.unsaved_rows();
+        let (saved, name) = match self.this_shelf() {
+            Ok((shelf, _, name)) => (saved_rows(&shelf), name),
+            Err(why) if unsaved.is_empty() => {
                 self.status = why;
                 return;
             }
+            Err(_) => (Vec::new(), self.current_buffer().display_name()),
         };
-        let all = shelf.versions();
-        if all.is_empty() {
+        if unsaved.is_empty() && saved.is_empty() {
             self.status = say!("history.none", name);
             return;
         }
-        let deltas: Vec<String> = all
-            .iter()
-            .enumerate()
-            .map(|(i, v)| delta(v.chars, i.checked_sub(1).map(|j| all[j].chars).unwrap_or(0)))
-            .collect();
-        let wide = deltas.iter().map(|d| d.chars().count()).max().unwrap_or(0);
-        let items = all
-            .iter()
-            .zip(&deltas)
-            .rev()
-            .map(|(v, d)| crate::picker::Item::Version(row_of(v, d, wide), shelf.path_of(v), v.secs))
-            .collect();
+        // Newest unsaved state on top: the bonus keeps the block first and in
+        // its order, and is what the picker's rule is drawn under.
+        let bonus: Vec<i64> = (1..=unsaved.len() as i64).rev().chain(saved.iter().map(|_| 0)).collect();
+        let items = unsaved.into_iter().chain(saved).collect();
         let mut picker = crate::picker::Picker::new(&say!("history.picker-title", name), items);
+        picker.prefer(bonus);
         // A row is columns — time, ±, label — and a `/` in a label is not a
         // folder to move behind the name.
         picker.verbatim = true;
@@ -204,14 +206,97 @@ impl Editor {
         self.show_the_picker(picker);
     }
 
+    /// **The unsaved block of `:history`**: the states on this buffer's undo
+    /// line since the last save, or since the file was read when it has not
+    /// been saved this session, newest first.
+    ///
+    /// **One row per minute.** Undo points are made per command, so an hour
+    /// of writing is hundreds of them; the row's time is written to the
+    /// minute, and a minute is the finest the list can tell apart — two rows
+    /// both reading `09:42` are noise. A row stands for the last state of its
+    /// minute. The state the buffer is in always ends a row, so it can be
+    /// marked; the oldest state listed, the one the save left (or the text as
+    /// read), has a row of its own, the place to come back to.
+    ///
+    /// Each row: the time, the characters it added or took away against the
+    /// row below, what it is — the current state, the text on disk, or
+    /// unsaved — and the first line it changed, shortened.
+    fn unsaved_rows(&self) -> Vec<crate::picker::Item> {
+        let buffer = self.current_buffer();
+        let (line, here) = buffer.undo_line();
+        let saves = buffer.saves();
+        // The state a save was made in: the newest one begun before it. After
+        // an undo past the save and a new edit, the saved state is gone from
+        // the line and this is where the line forked from it.
+        let saved = line.iter().rposition(|state| state.saves < saves).unwrap_or(0);
+        let low = saved.min(here);
+        if line.len() - low < 2 {
+            return Vec::new();
+        }
+        let minute = |i: usize| line[i].at.map(|at| secs_of(at).div_euclid(60));
+        let mut shown = vec![low];
+        shown.extend((low + 1..line.len()).filter(|&i| i + 1 == line.len() || i == here || minute(i + 1) != minute(i)));
+        let opened = say!("history.opened");
+        let rows: Vec<(usize, String, String, String, String)> = shown
+            .iter()
+            .enumerate()
+            .rev()
+            .map(|(n, &i)| {
+                let state = &line[i];
+                let when = state.at.map(|at| when_of(secs_of(at))).unwrap_or_else(|| opened.clone());
+                let below = n.checked_sub(1).map(|m| &line[shown[m]].rope);
+                let chars = state.rope.len_chars();
+                let delta = below.map(|b| delta(chars, b.len_chars())).unwrap_or_default();
+                let what = match (i == here, buffer.is_the_file(&state.rope)) {
+                    (true, _) => say!("history.current"),
+                    (false, true) => say!("history.saved-state"),
+                    (false, false) => say!("history.unsaved"),
+                };
+                let changed = below
+                    .and_then(|b| first_changed_line(&state.rope, b))
+                    .map(|(at, text)| format!("{at}: {}", shorten(&text)))
+                    .unwrap_or_default();
+                (i, when, delta, what, changed)
+            })
+            .collect();
+        let width = |s: &str| yumete_cjk::width::str_width(s);
+        let when_w = rows.iter().map(|r| width(&r.1)).max().unwrap_or(0);
+        let delta_w = rows.iter().map(|r| width(&r.2)).max().unwrap_or(0);
+        let what_w = rows.iter().map(|r| width(&r.3)).max().unwrap_or(0);
+        let revision = buffer.revision();
+        rows.into_iter()
+            .map(|(i, when, delta, what, changed)| {
+                let row = format!(
+                    "{when}{}  {}{delta}  {what}{}  {changed}",
+                    " ".repeat(when_w - width(&when)),
+                    " ".repeat(delta_w - width(&delta)),
+                    " ".repeat(what_w - width(&what)),
+                );
+                crate::picker::Item::UndoState(row.trim_end().to_string(), i, revision)
+            })
+            .collect()
+    }
+
     /// **What a version would change**, for the picker's preview: the word
     /// diff from it to the buffer, row by row as `:diff` lists it, `rows`
     /// rows at most.
     pub(super) fn version_preview(&self, file: &Path, rows: usize) -> Vec<String> {
-        let old = match versions::read_text(file) {
-            Ok(text) => text,
-            Err(why) => return vec![say!("history.cannot-read", why)],
-        };
+        match versions::read_text(file) {
+            Ok(text) => self.diff_to_the_buffer(&text, rows),
+            Err(why) => vec![say!("history.cannot-read", why)],
+        }
+    }
+
+    /// The same preview for a state on the undo line.
+    pub(super) fn undo_state_preview(&self, state: usize, revision: u64, rows: usize) -> Vec<String> {
+        match self.undo_state_text(state, revision) {
+            Some(text) => self.diff_to_the_buffer(&text, rows),
+            None => vec![say!("history.undo-moved")],
+        }
+    }
+
+    /// The word diff from `old` to the buffer, as `:diff` lists it.
+    fn diff_to_the_buffer(&self, old: &str, rows: usize) -> Vec<String> {
         let new = self.current_buffer().rope().to_string();
         let segment = |line: &str| self.segmenter.segment(line);
         let (a, b): (Vec<&str>, Vec<&str>) = (old.split('\n').collect(), new.split('\n').collect());
@@ -225,12 +310,22 @@ impl Editor {
         }
     }
 
+    /// A state's text, when the undo line is still the one the row was made
+    /// from.
+    fn undo_state_text(&self, state: usize, revision: u64) -> Option<String> {
+        let buffer = self.current_buffer();
+        if buffer.revision() != revision {
+            return None;
+        }
+        buffer.undo_line().0.get(state).map(|s| s.rope.to_string())
+    }
+
     /// Whether the picker's preview is a word diff, which the front end
     /// paints with [`crate::diff::spans`] rather than as a file's head.
     pub fn picker_preview_is_diff(&self) -> bool {
         matches!(
             self.picker.as_ref().and_then(crate::picker::Picker::chosen),
-            Some(crate::picker::Item::Version(..))
+            Some(crate::picker::Item::Version(..) | crate::picker::Item::UndoState(..))
         )
     }
 
@@ -255,24 +350,61 @@ impl Editor {
         self.status = say!("history.shown", when);
     }
 
-    /// **`A-r` in the picker: the highlighted version, back into the buffer
-    /// whole**, as one edit `u` takes back — the way `:recover` puts a draft
-    /// in. The buffer is left unsaved: putting a version back is a decision
-    /// about the text, and saving it is another.
-    pub(super) fn restore_chosen_version(&mut self) {
-        let Some(crate::picker::Item::Version(_, file, secs)) =
-            self.picker.as_ref().and_then(crate::picker::Picker::chosen)
-        else {
+    /// **`Enter` on an unsaved state: walk the undo line to it**, step by
+    /// step as `:earlier` and `:later` do — not a copy beside. The states
+    /// past it stay on the line, so undo and redo bring back the rest.
+    pub(super) fn go_to_undo_state(&mut self, state: usize, revision: u64) {
+        if self.refuse_readonly() {
             return;
+        }
+        if self.current_buffer().revision() != revision {
+            self.status = say!("history.undo-moved");
+            return;
+        }
+        let (line, here) = self.current_buffer().undo_line();
+        let Some(at) = line.get(state).map(|s| s.at) else {
+            self.status = say!("history.undo-moved");
+            return;
+        };
+        if state == here {
+            self.status = say!("history.same");
+            return;
+        }
+        self.walk_the_undo_history(crate::command::UndoSpan::Steps(state.abs_diff(here)), state < here);
+        self.status = match at {
+            Some(at) => say!("history.walked", when_of(secs_of(at))),
+            None => say!("history.walked-opened"),
+        };
+    }
+
+    /// **`A-r` in the picker: the highlighted version or state, back into
+    /// the buffer whole**, as one edit `u` takes back — the way `:recover`
+    /// puts a draft in. The buffer is left unsaved: putting a version back is
+    /// a decision about the text, and saving it is another. On an unsaved
+    /// state this is a new edit on top, not a walk: what was undone past it
+    /// is not kept for redo, and one `u` returns to the text before.
+    pub(super) fn restore_chosen_version(&mut self) {
+        let chosen = self.picker.as_ref().and_then(crate::picker::Picker::chosen);
+        let found = match chosen {
+            Some(crate::picker::Item::Version(_, file, secs)) => versions::read_text(&file)
+                .map(|text| (text, Some(secs)))
+                .map_err(|why| say!("history.cannot-read", why)),
+            Some(crate::picker::Item::UndoState(_, state, revision)) => {
+                let at = self.current_buffer().undo_line().0.get(state).and_then(|s| s.at);
+                self.undo_state_text(state, revision)
+                    .map(|text| (text, at.map(secs_of)))
+                    .ok_or_else(|| say!("history.undo-moved"))
+            }
+            _ => return,
         };
         self.close_picker();
         if self.refuse_readonly() {
             return;
         }
-        let text = match versions::read_text(&file) {
-            Ok(text) => text,
+        let (text, secs) = match found {
+            Ok(found) => found,
             Err(why) => {
-                self.status = say!("history.cannot-read", why);
+                self.status = why;
                 return;
             }
         };
@@ -287,7 +419,10 @@ impl Editor {
             return;
         }
         self.clamp_cursor();
-        self.status = say!("history.restored", when_of(secs));
+        self.status = match secs {
+            Some(secs) => say!("history.restored", when_of(secs)),
+            None => say!("history.restored-opened"),
+        };
     }
 
     /// **`:history-label <name>`: name the newest version.**
@@ -323,6 +458,60 @@ impl Editor {
             Err(why) => say!("history.not-kept", name, why),
         };
     }
+}
+
+/// The saved versions' rows, newest first.
+fn saved_rows(shelf: &Shelf) -> Vec<crate::picker::Item> {
+    let all = shelf.versions();
+    let deltas: Vec<String> = all
+        .iter()
+        .enumerate()
+        .map(|(i, v)| delta(v.chars, i.checked_sub(1).map(|j| all[j].chars).unwrap_or(0)))
+        .collect();
+    let wide = deltas.iter().map(|d| d.chars().count()).max().unwrap_or(0);
+    all.iter()
+        .zip(&deltas)
+        .rev()
+        .map(|(v, d)| crate::picker::Item::Version(row_of(v, d, wide), shelf.path_of(v), v.secs))
+        .collect()
+}
+
+/// A moment as seconds since the epoch.
+fn secs_of(at: std::time::SystemTime) -> i64 {
+    at.duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
+}
+
+/// **The first line `new` and `old` differ on**, counted from 1, as `new`
+/// has it — or as `old` had it when `new` ended before it.
+fn first_changed_line(new: &Rope, old: &Rope) -> Option<(usize, String)> {
+    let (mut a, mut b) = (new.lines(), old.lines());
+    let mut n = 1;
+    loop {
+        match (a.next(), b.next()) {
+            (None, None) => return None,
+            (x, y) if x == y => n += 1,
+            (x, y) => return x.or(y).map(|line| (n, line.to_string())),
+        }
+    }
+}
+
+/// A changed line as an unsaved row shows it: trimmed, and cut with `…`
+/// past twenty-four cells, so the rows stay one line each.
+fn shorten(line: &str) -> String {
+    const CELLS: usize = 24;
+    let line = line.trim();
+    let mut out = String::new();
+    let mut used = 0;
+    for c in line.chars() {
+        let w = yumete_cjk::width::char_width(c);
+        if used + w > CELLS {
+            out.push('…');
+            return out;
+        }
+        used += w;
+        out.push(c);
+    }
+    out
 }
 
 /// A second as the picker and the status line write it: `11-16 09:30`, local.
@@ -511,7 +700,9 @@ mod tests {
         ed.execute("history").unwrap();
         assert!(ed.picker().is_some());
         assert!(ed.picker_preview_is_diff());
-        // Newest first: step to the older one, then put it back.
+        // Newest first, below the unsaved block: step to the older one, then
+        // put it back.
+        past_unsaved(&mut ed);
         ed.on_key(Key::Down);
         let (_, preview) = ed.picker_preview(20).unwrap();
         assert!(preview.iter().any(|l| l.contains("{+")), "{preview:?}");
@@ -535,6 +726,7 @@ mod tests {
         let first = ed.current_buffer().text();
         append(&mut ed, "改过。");
         ed.execute("history").unwrap();
+        past_unsaved(&mut ed);
         ed.on_key(Key::Enter);
         assert_eq!(ed.current_buffer().path(), Some(file.as_path()), "the keys stay in the chapter");
         let copy = ed.buffers.iter().find(|b| b.path().is_none() && b.display_name().contains(" @ "));
@@ -569,7 +761,14 @@ mod tests {
         assert_eq!(shelf.versions()[1].label, "第二稿");
         assert!(ed.status().contains("第二稿"));
         ed.execute("history").unwrap();
-        let rows: Vec<String> = ed.picker().unwrap().items().iter().map(|i| i.label().to_string()).collect();
+        let rows: Vec<String> = ed
+            .picker()
+            .unwrap()
+            .items()
+            .iter()
+            .filter(|i| matches!(i, crate::picker::Item::Version(..)))
+            .map(|i| i.label().to_string())
+            .collect();
         assert!(rows[0].ends_with("第二稿") && rows[1].ends_with("寄给编辑"), "{rows:?}");
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -675,6 +874,171 @@ mod tests {
             shelf.versions().len(),
             size / 1024
         );
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// The rows of the open picker, in the order shown.
+    fn rows(ed: &Editor) -> Vec<crate::picker::Item> {
+        ed.picker().unwrap().matches().into_iter().cloned().collect()
+    }
+
+    /// Step the highlight past the unsaved block, onto the newest saved version.
+    fn past_unsaved(ed: &mut Editor) {
+        for _ in 0..states(ed).len() {
+            ed.on_key(Key::Down);
+        }
+    }
+
+    /// Which states the unsaved rows stand for, top first.
+    fn states(ed: &Editor) -> Vec<usize> {
+        rows(ed)
+            .iter()
+            .filter_map(|item| match item {
+                crate::picker::Item::UndoState(_, state, _) => Some(*state),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Four edits, timed: the first two in one minute, the last two in a
+    /// later one. Hands back the text after each, the text as read first.
+    fn four_edits(ed: &mut Editor) -> Vec<String> {
+        let mut texts = vec![ed.current_buffer().text()];
+        for word in ["一", "二", "三", "四"] {
+            append(ed, word);
+            texts.push(ed.current_buffer().text());
+        }
+        let at = |s: i64| std::time::UNIX_EPOCH + std::time::Duration::from_secs(s as u64);
+        let times = [at(T0), at(T0 + 10), at(T0 + 120), at(T0 + 125)];
+        ed.current_buffer_mut().stamp_undo_line(&times);
+        texts
+    }
+
+    #[test]
+    fn unsaved_states_head_the_picker_one_row_a_minute() {
+        let (dir, file) = book("unsaved-rows");
+        let mut ed = Editor::new();
+        ed.open_file(&file).unwrap();
+        four_edits(&mut ed);
+        ed.execute("history").unwrap();
+        assert!(ed.picker().is_some(), "{}", ed.status());
+        // The last state of each minute, and the text as read.
+        assert_eq!(states(&ed), [4, 2, 0]);
+        let rows = rows(&ed);
+        let label = |i: usize| rows[i].label().to_string();
+        assert!(label(0).contains(&say!("history.current")), "{}", label(0));
+        assert!(label(0).contains("+2"), "two characters since the row below: {}", label(0));
+        assert!(label(1).contains(&say!("history.unsaved")), "{}", label(1));
+        assert!(label(1).contains("1: 第一段。一二"), "the first line it changed: {}", label(1));
+        assert!(label(2).contains(&say!("history.opened")), "{}", label(2));
+        assert!(label(2).contains(&say!("history.saved-state")), "the text as read is on disk: {}", label(2));
+        // Enter goes to the state; the hint row says which way.
+        let Hint::Keys(_, keys) = ed.hint() else { panic!("{:?}", ed.hint()) };
+        assert!(keys.iter().any(|(_, says)| *says == say!("hint.picker.go-to-state")), "{keys:?}");
+        assert!(keys.iter().any(|(_, says)| *says == say!("hint.picker.restore-version")), "{keys:?}");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn enter_on_an_unsaved_state_walks_there_and_redo_comes_back() {
+        let (dir, file) = book("unsaved-walk");
+        let mut ed = Editor::new();
+        ed.open_file(&file).unwrap();
+        let texts = four_edits(&mut ed);
+        ed.execute("history").unwrap();
+        ed.on_key(Key::Down);
+        assert!(ed.picker_preview_is_diff());
+        let (_, preview) = ed.picker_preview(20).unwrap();
+        assert!(preview.iter().any(|l| l.contains("{+三四+}")), "the diff from it to the buffer: {preview:?}");
+        ed.on_key(Key::Enter);
+        assert!(ed.picker().is_none());
+        assert_eq!(ed.current_buffer().text(), texts[2]);
+        assert_eq!(ed.status(), say!("history.walked", when_of(T0 + 10)));
+        ed.execute("redo").unwrap();
+        ed.execute("redo").unwrap();
+        assert_eq!(ed.current_buffer().text(), texts[4], "redo reaches what was walked past");
+        // The text as read, from the bottom row, and back up again.
+        ed.execute("history").unwrap();
+        ed.on_key(Key::Down);
+        ed.on_key(Key::Down);
+        ed.on_key(Key::Enter);
+        assert_eq!(ed.current_buffer().text(), texts[0]);
+        assert_eq!(ed.status(), say!("history.walked-opened"));
+        assert!(!ed.current_buffer().is_modified());
+        ed.execute("history").unwrap();
+        assert_eq!(states(&ed), [4, 2, 0], "the line is all still there");
+        ed.on_key(Key::Enter);
+        assert_eq!(ed.current_buffer().text(), texts[4]);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn put_back_on_an_unsaved_state_is_one_undo_step() {
+        let (dir, file) = book("unsaved-restore");
+        let mut ed = Editor::new();
+        ed.open_file(&file).unwrap();
+        let texts = four_edits(&mut ed);
+        ed.execute("history").unwrap();
+        ed.on_key(Key::Down);
+        ed.on_key(Key::Alt('r'));
+        assert!(ed.picker().is_none());
+        assert_eq!(ed.current_buffer().text(), texts[2]);
+        assert_eq!(ed.status(), say!("history.restored", when_of(T0 + 10)));
+        ed.on_key(Key::Char('u'));
+        assert_eq!(ed.current_buffer().text(), texts[4], "one `u` takes it back");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn the_unsaved_block_starts_at_the_save_and_saved_versions_follow() {
+        let (dir, file) = book("unsaved-save");
+        let mut ed = Editor::new();
+        ed.set_history_clock(Some(T0));
+        ed.open_file(&file).unwrap();
+        append(&mut ed, "存了。");
+        ed.execute("w").unwrap();
+        let saved = ed.current_buffer().text();
+        append(&mut ed, "没存。");
+        ed.execute("history").unwrap();
+        let shown = rows(&ed);
+        // The state the save left and the one after it; nothing before the save.
+        assert_eq!(states(&ed), [2, 1]);
+        assert!(shown[1].label().contains(&say!("history.saved-state")), "{}", shown[1].label());
+        assert!(matches!(shown[2], crate::picker::Item::Version(..)), "{shown:?}");
+        assert_eq!(shown.len(), 3);
+        assert_eq!(ed.picker().unwrap().rule_after(), Some(2), "a rule between the two blocks");
+        // A saved version still opens beside, and the hint row says so.
+        ed.on_key(Key::Down);
+        ed.on_key(Key::Down);
+        let Hint::Keys(_, keys) = ed.hint() else { panic!("{:?}", ed.hint()) };
+        assert!(keys.iter().any(|(_, says)| *says == say!("hint.picker.open-beside")), "{keys:?}");
+        ed.on_key(Key::Esc);
+        // Undone back to the save, the state ahead is still listed.
+        ed.on_key(Key::Char('u'));
+        assert_eq!(ed.current_buffer().text(), saved);
+        ed.execute("history").unwrap();
+        assert_eq!(states(&ed), [2, 1]);
+        assert!(rows(&ed)[1].label().contains(&say!("history.current")));
+        // Saved again with nothing new: no unsaved block, the versions alone.
+        ed.on_key(Key::Esc);
+        ed.execute("redo").unwrap();
+        ed.execute("w").unwrap();
+        ed.execute("history").unwrap();
+        assert!(states(&ed).is_empty());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_private_run_lists_its_unsaved_states_alone() {
+        let (dir, file) = book("unsaved-private");
+        let mut ed = Editor::new();
+        ed.set_remembering(false);
+        ed.open_file(&file).unwrap();
+        append(&mut ed, "不留。");
+        ed.execute("history").unwrap();
+        assert_eq!(states(&ed), [1, 0], "{}", ed.status());
+        assert_eq!(rows(&ed).len(), 2);
+        assert!(!dir.join(".yumete").join("history").exists(), "nothing is written for it");
         std::fs::remove_dir_all(&dir).ok();
     }
 }

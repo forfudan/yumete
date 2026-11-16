@@ -494,6 +494,21 @@ struct EditSnapshot {
     /// when the state on its far side began: `:earlier 5m` and `:later` find
     /// their point by it, as helix's revisions are found by their timestamp.
     at: SystemTime,
+    /// **How many saves had been made when that step was taken**, beside
+    /// `at`: the states `:history` lists as unsaved are the ones begun after
+    /// the last save ([`Buffer::undo_line`]). A count, not a time, so a save
+    /// and the edit after it never tie.
+    saves: u64,
+}
+
+/// **One state on the line `u` and redo walk**, as `:history` lists it.
+pub struct UndoState {
+    pub rope: Rope,
+    /// When the change that made it was made; `None` for the oldest state,
+    /// the text as it was read.
+    pub at: Option<SystemTime>,
+    /// How many saves had been made when that change was made.
+    pub saves: u64,
 }
 
 /// A buffer's undo and redo stacks.
@@ -2314,6 +2329,7 @@ impl Buffer {
             selections,
             far: None,
             at: SystemTime::now(),
+            saves: self.saves,
         });
     }
 
@@ -2371,6 +2387,7 @@ impl Buffer {
         if let Some(mut point) = self.history.pending.take() {
             // Stamped when it is earned: that is when the change happens.
             point.at = SystemTime::now();
+            point.saves = self.saves;
             self.history.undo.push(point);
             self.history.redo.clear();
         }
@@ -2406,6 +2423,7 @@ impl Buffer {
         self.history.redo.push(EditSnapshot {
             far: Some((prev.cursor, prev.selections.clone())),
             at: prev.at,
+            saves: prev.saves,
             ..self.here(cursor, selections)
         });
         self.revision += 1;
@@ -2443,6 +2461,7 @@ impl Buffer {
         self.history.undo.push(EditSnapshot {
             far: Some((next.cursor, next.selections.clone())),
             at: next.at,
+            saves: next.saves,
             ..self.here(back.0, back.1)
         });
         self.revision += 1;
@@ -2464,7 +2483,51 @@ impl Buffer {
             selections,
             far: None,
             at: SystemTime::now(),
+            saves: self.saves,
         }
+    }
+
+    /// **Every state on the undo line, oldest first, and which one the
+    /// buffer is in** — `:history`'s unsaved block. The line is straight: a
+    /// new edit drops what was undone, so this is the whole of it.
+    ///
+    /// Cheap: a rope clone shares its structure.
+    pub fn undo_line(&self) -> (Vec<UndoState>, usize) {
+        let undo = &self.history.undo;
+        let redo = &self.history.redo;
+        let ropes = undo.iter().map(|u| &u.rope).chain([&self.rope]).chain(redo.iter().rev().map(|r| &r.rope));
+        // A state's time and count are on the step into it: the undo point
+        // below it, or the redo point that holds it.
+        let steps = undo.iter().map(|u| (u.at, u.saves)).chain(redo.iter().rev().map(|r| (r.at, r.saves)));
+        let starts = std::iter::once(None).chain(steps.map(Some));
+        let line = ropes
+            .zip(starts)
+            .map(|(rope, start)| UndoState {
+                rope: rope.clone(),
+                at: start.map(|(at, _)| at),
+                saves: start.map_or(0, |(_, saves)| saves),
+            })
+            .collect();
+        (line, undo.len())
+    }
+
+    /// **Say when each state on the undo line began**, oldest first from the
+    /// second state: `:history` groups them by minute, and a test cannot wait
+    /// a minute.
+    #[cfg(test)]
+    pub(crate) fn stamp_undo_line(&mut self, times: &[SystemTime]) {
+        let history = &mut self.history;
+        let steps = history.undo.iter_mut().chain(history.redo.iter_mut().rev());
+        for (step, at) in steps.zip(times) {
+            step.at = *at;
+        }
+    }
+
+    /// Whether `rope` is the text last read or saved — what a save of it
+    /// would leave the buffer: clean. The length answers most of them
+    /// without hashing.
+    pub fn is_the_file(&self, rope: &Rope) -> bool {
+        !self.beyond_the_file && rope.len_bytes() == self.pristine.bytes && digest_of(rope) == self.pristine.digest
     }
 
     /// **How many steps back (negative) or forward reach the state nearest

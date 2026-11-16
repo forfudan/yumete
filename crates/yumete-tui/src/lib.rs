@@ -17515,6 +17515,9 @@ fn squeezed(text: &str) -> String {
         editor.execute(":s/很/不/").unwrap();
         assert_eq!(editor.current_buffer().text(), "今天天气不好。\n");
         editor.execute(":history").unwrap();
+        // The top row is the state the buffer is in; the one below it is the
+        // text the save left, the same as the version.
+        editor.on_key(Key::Down);
         assert!(editor.picker_preview_is_diff());
 
         let buf = render_with(&editor, &Config::default(), no_ime(), 100, 24);

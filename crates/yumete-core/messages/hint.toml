@@ -1062,10 +1062,22 @@ zhs = "前后各加换行"
 en = "a line break on each side"
 
 [[message]]
+# 提示：:history 裏站在未保存的一步上——Enter 沿撤銷記錄走到那一步（草稿）
+key = "hint.picker.go-to-state"
+zhs = "回到这一步"
+en = "go to this state"
+
+[[message]]
 # 提示：挑選器——Enter 打開選中的那一條
 key = "hint.picker.open"
 zhs = "打开"
 en = "open"
+
+[[message]]
+# 提示：:history 裏站在保存過的版本上——Enter 在另一個窗口只讀打開它（草稿）
+key = "hint.picker.open-beside"
+zhs = "在旁边只读打开"
+en = "open read-only beside"
 
 [[message]]
 # 歷史版本那一扇挑選器的提示行：A-r 換回這一版（草稿）

@@ -1877,6 +1877,16 @@ impl Editor {
                 }
                 cached.as_ref().map(|(_, lines)| (row, lines.clone()))
             }
+            // The same diff from an unsaved state. Its key is no path: a
+            // path holds no NUL, so it cannot be mistaken for a file's head.
+            crate::picker::Item::UndoState(row, state, revision) => {
+                let key = PathBuf::from(format!("\0undo {state} {revision}"));
+                let mut cached = self.preview.borrow_mut();
+                if cached.as_ref().is_none_or(|(at, _)| *at != key) {
+                    *cached = Some((key, self.undo_state_preview(state, revision, rows)));
+                }
+                cached.as_ref().map(|(_, lines)| (row, lines.clone()))
+            }
             // **The entry itself, beside the list of names.** The preview a
             // picker already has shows the highlighted entry — no second
             // mechanism.
@@ -1959,6 +1969,7 @@ impl Editor {
                 }
             }
             Some(crate::picker::Item::Version(_, file, secs)) => self.show_version(&file, secs),
+            Some(crate::picker::Item::UndoState(_, state, revision)) => self.go_to_undo_state(state, revision),
             None => self.status = say!("picker.nothing-matched"),
         }
     }

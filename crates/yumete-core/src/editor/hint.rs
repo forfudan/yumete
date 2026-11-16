@@ -151,8 +151,16 @@ impl Editor {
             let picker_keys = |spec: &[(Key, PlaceCmd)], says: String| {
                 self.place_hint(Place::Picker, spec).map(|keys| (keys.into(), says))
             };
+            // **`:history`'s two kinds of row take `Enter` two ways**: a saved
+            // version opens beside, read-only; an unsaved state is walked to,
+            // so undo and redo still reach the rest. The row says which.
+            let enter = match picker.chosen() {
+                Some(crate::picker::Item::Version(..)) => say!("hint.picker.open-beside"),
+                Some(crate::picker::Item::UndoState(..)) => say!("hint.picker.go-to-state"),
+                _ => say!("hint.picker.open"),
+            };
             let mut keys: KeyRows = [
-                picker_keys(&[(Key::Enter, PlaceCmd::Confirm)], say!("hint.picker.open")),
+                picker_keys(&[(Key::Enter, PlaceCmd::Confirm)], enter),
                 picker_keys(
                     &[
                         (Key::Tab, PlaceCmd::NextEntry),
@@ -178,7 +186,10 @@ impl Editor {
                 keys.extend(picker_keys(&[(Key::Alt('h'), PlaceCmd::CycleHiddenFiles)], skipping));
             }
             // **放回一整版，只在歷史版本那一扇寫**——別的挑選器裏那個鍵什麼都不做。
-            if matches!(picker.items().first(), Some(crate::picker::Item::Version(..))) {
+            if matches!(
+                picker.items().first(),
+                Some(crate::picker::Item::Version(..) | crate::picker::Item::UndoState(..))
+            ) {
                 keys.extend(picker_keys(&[(Key::Alt('r'), PlaceCmd::RestoreVersion)], say!("hint.picker.restore-version")));
             }
             keys.extend(picker_keys(&[(Key::Esc, PlaceCmd::NormalMode)], say!("hint.close")));

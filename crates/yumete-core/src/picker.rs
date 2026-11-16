@@ -72,6 +72,12 @@ pub enum Item {
     /// shown (time, characters ±, label), the version's file in its shelf,
     /// and the second it was saved.
     Version(String, std::path::PathBuf, i64),
+    /// **A state on this session's undo line** — the unsaved block at the
+    /// top of `:history`: the row shown (time, characters ±, what it is, the
+    /// first line it changed), the state's place on the line, oldest first,
+    /// and the buffer's revision when the row was made, so a row from a
+    /// line that has moved since is refused rather than followed.
+    UndoState(String, usize, u64),
 }
 
 impl Item {
@@ -81,7 +87,7 @@ impl Item {
             Item::File(path) | Item::Project(path) | Item::Dir(path) | Item::Changed(path, _) => path,
             Item::Buffer(_, name) | Item::Paste(_, name) | Item::Action(_, name) => name,
             Item::Encoding(name, ..) => name,
-            Item::Version(row, ..) => row,
+            Item::Version(row, ..) | Item::UndoState(row, ..) => row,
             Item::Place(label, ..) => label,
             Item::Wiki(name, _) => name,
         }
