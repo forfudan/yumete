@@ -6107,6 +6107,12 @@ struct Areas {
     /// an index into this, and it is a different question on purpose:
     /// splitting must not make a window change its place under its viewport.
     panes: Vec<Rect>,
+    /// **Each window's scrollbar column**, in the same order as `panes`: the
+    /// cell column right of the writing, taken off the window's width when
+    /// it is laid out ([`keeps_a_bar`]), so the wrap, the drawing, a click
+    /// and the grid all count from the narrower `panes`. Zero wide in a window
+    /// that keeps none. Still the window's for [`window_at`].
+    bars: Vec<Rect>,
     /// **Each window's own status line**, the row under its writing, in the
     /// same order as `panes`. In a stack the upper window's line is the
     /// boundary between the two, as in helix and vim.
@@ -6147,6 +6153,15 @@ struct Areas {
     command: Rect,
 }
 
+impl Areas {
+    /// Window `i`'s writing with its scrollbar's column: where its caret may
+    /// stand, after a row that fills the page.
+    fn with_bar(&self, i: usize) -> Rect {
+        let pane = self.panes.get(i).copied().unwrap_or(self.panes[0]);
+        Rect { width: pane.width + self.bars.get(i).map_or(0, |b| b.width), ..pane }
+    }
+}
+
 /// Divide `area` up. Pure: it draws nothing and depends only on what the
 /// editor and the config say.
 /// **The window under the pointer**, by the rectangles the frame drew.
@@ -6163,9 +6178,11 @@ fn window_at(
     let areas = page_areas(editor, config, Rect::new(0, 0, size.width, size.height), head_rows);
     let leaves = editor.windows().leaves();
     // A window's status line is the window's too: a click on it goes there.
+    // …and so is its scrollbar's column.
     areas.panes.iter().enumerate().find_map(|(i, a)| {
         let bottom = areas.lines.get(i).map_or(a.y + a.height, |l| l.y + l.height);
-        let inside = mouse.column >= a.x && mouse.column < a.x + a.width && mouse.row >= a.y && mouse.row < bottom;
+        let right = a.x + a.width + areas.bars.get(i).map_or(0, |b| b.width);
+        let inside = mouse.column >= a.x && mouse.column < right && mouse.row >= a.y && mouse.row < bottom;
         inside.then(|| leaves.get(i).copied()).flatten()
     })
 }
@@ -6300,7 +6317,8 @@ fn page_areas(editor: &Editor, config: &Config, area: Rect, head_rows: u16) -> A
         windows.push(text);
     }
     // **The last row of every window is its status line**, and what is
-    // above it is the writing.
+    // above it is the writing — less the scrollbar's column at its right.
+    let leaves = editor.windows().leaves();
     let (panes, lines): (Vec<Rect>, Vec<Rect>) = windows
         .iter()
         .map(|w| {
@@ -6311,6 +6329,20 @@ fn page_areas(editor: &Editor, config: &Config, area: Rect, head_rows: u16) -> A
             )
         })
         .unzip();
+    let (panes, bars): (Vec<Rect>, Vec<Rect>) = panes
+        .iter()
+        .enumerate()
+        .map(|(i, &pane)| match keeps_a_bar(editor, leaves.get(i).copied(), pane) {
+            true => (
+                Rect { width: pane.width - 1, ..pane },
+                Rect { x: pane.x + pane.width - 1, width: 1, ..pane },
+            ),
+            false => (pane, Rect { x: pane.x + pane.width, width: 0, ..pane }),
+        })
+        .unzip();
+    // The caret after a full row stands in that column, so the rows `j`
+    // walks must know it is there before the keys run.
+    editor.note_cell_past_the_row(bars.get(editor.live_pane()).is_some_and(|b| b.width > 0));
     let dividers: Vec<Rect> = rules.iter().map(|r| rect(r.area)).collect();
     let status = lines.get(editor.live_pane()).copied().unwrap_or(lines[0]);
     let floor = match command_rows {
@@ -6324,12 +6356,68 @@ fn page_areas(editor: &Editor, config: &Config, area: Rect, head_rows: u16) -> A
         head,
         text,
         panes,
+        bars,
         lines,
         dividers,
         status,
         floor,
         command,
     }
+}
+
+/// **Whether a window keeps its rightmost column for the scrollbar**
+/// (`:view-scrollbar`, on by default): every window of text across the
+/// page, the switch on and the window wide enough to keep two columns of
+/// text. Reserved whether or not the file fits, so the text never folds
+/// again when it grows past a page: while it fits the column is a margin.
+///
+/// Not a preview, which draws its bar on its own frame and keeps its picture
+/// the size it was made for; not 竪排, whose page runs the other way; not a
+/// grid, which scrolls by its own rows and columns.
+fn keeps_a_bar(editor: &Editor, leaf: Option<yumete_core::window::WindowId>, pane: Rect) -> bool {
+    if !editor.scrollbar() || pane.width < 3 {
+        return false;
+    }
+    if leaf.is_some_and(|id| editor.is_page_window(id)) {
+        return false;
+    }
+    let _viewing = leaf.and_then(|id| editor.pane_of(id)).map(|p| editor.view_pane(p));
+    editor.layout() == WritingLayout::Horizontal && !editor.grid_has_the_pane()
+}
+
+/// **Paint a scrollbar's thumb** into the column `bar`: `thumb` as
+/// [`thumb`] answers it, as a ground of `tint` under whatever the column
+/// already holds, so a `␊` drawn there stays on top of it. No track: the
+/// cells outside the thumb keep the ground they have.
+pub(crate) fn tint_the_thumb(buf: &mut ratatui::buffer::Buffer, bar: Rect, thumb: Option<(usize, usize)>, tint: Color) {
+    let Some((at, cells)) = thumb else { return };
+    for y in (at..at + cells).map(|n| bar.y + n as u16).take_while(|&y| y < bar.y + bar.height) {
+        for x in bar.x..bar.x + bar.width {
+            if let Some(cell) = buf.cell_mut((x, y)) {
+                cell.set_bg(tint);
+            }
+        }
+    }
+}
+
+/// **The thumb of a scrollbar `h` cells long over `len` units, `[a, b)` in
+/// view**, as `(first cell, cells)`; `None` when everything is in view. As
+/// long as the view is of the whole, at least a cell; placed so the thumb
+/// touches the top only at the start and the bottom only at the end —
+/// helix's completion menu does the same, and so does every bar here.
+pub(crate) fn thumb(h: usize, (a, b): (usize, usize), len: usize) -> Option<(usize, usize)> {
+    let b = b.min(len);
+    if h == 0 || len == 0 || (a == 0 && b >= len) {
+        return None;
+    }
+    let seen = b.saturating_sub(a);
+    let cells = (h * seen).div_ceil(len).clamp(1, h);
+    let hidden = len - seen;
+    let at = match hidden {
+        0 => 0,
+        _ => (a.min(hidden) * (h - cells) + hidden / 2) / hidden,
+    };
+    Some((at, cells))
 }
 
 fn draw<'a>(
@@ -6362,6 +6450,7 @@ fn draw<'a>(
     let Areas {
         panels: slots,
         panes,
+        bars,
         dividers,
         tabs: tab_area,
         blocks,
@@ -6483,6 +6572,7 @@ fn draw<'a>(
                 // whole chain, each next one starts where the last one ended.
                 let strips = horizontal_pages(editor, config, *rect);
                 let chain = strips.len();
+                let bar = bars.get(which).copied().filter(|b| b.width > 0);
                 // The air between pages is page too.
                 {
                     let ink = crate::theme::Palette::of(config);
@@ -6494,6 +6584,11 @@ fn draw<'a>(
                         let from = pair[0].x + pair[0].width;
                         let gap = Rect::new(from, rect.y, pair[1].x - from, rect.height);
                         frame.render_widget(Paragraph::new("").style(ink.page()), gap);
+                    }
+                    // …and the scrollbar's column, blank until the page and
+                    // its thumb are drawn into it.
+                    if let Some(bar) = bar {
+                        frame.render_widget(Paragraph::new("").style(ink.page()), bar);
                     }
                     // …and so is the margin a centred page leaves on its
                     // left, in the tint the right one has past the measure.
@@ -6518,6 +6613,13 @@ fn draw<'a>(
                 let mut caret = (rect.x, rect.y);
                 let mut next: Option<WrapAnchor> = None;
                 for (k, strip) in strips.iter().enumerate() {
+                    // The cell right of a page is the gap before the next one,
+                    // or the scrollbar's column after the last.
+                    let spill = match (k + 1 < strips.len(), bar.is_some()) {
+                        (true, _) => PastThePage::Gap,
+                        (false, true) => PastThePage::Bar,
+                        (false, false) => PastThePage::Nothing,
+                    };
                     let (at, after) = match k {
                         0 => draw_horizontal(
                             frame,
@@ -6533,6 +6635,7 @@ fn draw<'a>(
                             head,
                             chain,
                             true,
+                            spill,
                         ),
                         _ => match next {
                             Some(mut from) => {
@@ -6549,6 +6652,7 @@ fn draw<'a>(
                                     None,
                                     chain,
                                     false,
+                                    spill,
                                 );
                                 seat.page_left.resize(k, 0);
                                 seat.page_left[k - 1] = left;
@@ -6570,6 +6674,16 @@ fn draw<'a>(
                         caret = at;
                     }
                     next = after;
+                }
+                if let Some(bar) = bar {
+                    let ink = crate::theme::Palette::of(config);
+                    let ink = match peek {
+                        None => ink,
+                        Some(_) => ink.reading(editor.focus()),
+                    };
+                    let len = editor.current_buffer().rope().len_chars();
+                    let span = seat.drawn_span.unwrap_or((0, len));
+                    tint_the_thumb(frame.buffer_mut(), bar, thumb(bar.height as usize, span, len), ink.rule());
                 }
                 caret
             }
@@ -6796,7 +6910,7 @@ fn draw<'a>(
                 editor,
                 config,
                 (cursor_x, cursor_y),
-                areas.panes[editor.live_pane()],
+                areas.with_bar(editor.live_pane()),
             ),
             false => {
                 // **While `v` is on, a bare primary cursor keeps its block**:
@@ -6811,7 +6925,7 @@ fn draw<'a>(
                         editor,
                         config,
                         (cursor_x, cursor_y),
-                        areas.panes[editor.live_pane()],
+                        areas.with_bar(editor.live_pane()),
                     );
                 }
                 frame.set_cursor_position(Position::new(cursor_x, cursor_y))
@@ -9600,7 +9714,7 @@ fn text_at_under(
                 .with_version(editor.current_buffer().id(), editor.current_buffer().revision())
                 .with_edit(editor.current_buffer().edit())
                 .with_open_line(editor.open_line())
-                .with_caret(Some(editor.caret_in_line()));
+                .with_caret(editor.caret_for_the_wrap());
             // The same walk the page was drawn with: a row with a reading
             // over it takes two screen rows, so counting rows from the top
             // would land a click one row low for every reading above it.
@@ -13097,6 +13211,19 @@ const PAGE_LEAST: usize = 30;
 /// character of the left page (「…霜金10第10段」).
 const PAGE_GAP: u16 = 2;
 
+/// **What stands in the column right of a page**: a row that fills the page
+/// puts its `␊`, and the caret resting after it, there rather than on the
+/// row's last character or on a row of its own.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PastThePage {
+    /// The window's edge: nothing of the page's goes past it.
+    Nothing,
+    /// The air before the next page of a spread.
+    Gap,
+    /// The scrollbar's column, which takes the tint of the margin it ends.
+    Bar,
+}
+
 /// **The pages a horizontal pane is cut into**, left to right.
 ///
 /// As many as `:view-pages-horizontal` asks for while each still holds
@@ -13223,6 +13350,7 @@ fn draw_horizontal(
     head: Option<Rect>,
     chain: usize,
     scrolls: bool,
+    past: PastThePage,
 ) -> (Option<(u16, u16)>, Option<WrapAnchor>) {
     let buffer = editor.current_buffer();
     let total_lines = buffer.line_count();
@@ -13285,7 +13413,7 @@ fn draw_horizontal(
         .with_version(editor.current_buffer().id(), editor.current_buffer().revision())
         .with_edit(editor.current_buffer().edit())
         .with_open_line(editor.open_line())
-        .with_caret(Some(editor.caret_in_line()));
+        .with_caret(editor.caret_for_the_wrap());
 
     // A pane that is only being read has no cursor: it is drawn from the
     // place it was left at, and *that* is what the page is scrolled around.
@@ -13485,16 +13613,20 @@ fn draw_horizontal(
         // vim puts a caret half a page or more off the side in the middle
         // (`curs_columns`, measured in nvim: `300|`); helix and a
         // nearer caret scroll just enough.
+        // A caret after the end of its line may stand in the cell past
+        // the page, where it stands after a row that fills it.
+        let at_a_break = at >= rope.len_chars() || matches!(rope.char(at), '\n' | '\r');
+        let room = page + usize::from(past != PastThePage::Nothing && at_a_break);
         let off = match cursor_pos.column < *left {
             true => *left - cursor_pos.column,
-            false => (cursor_pos.column + wide).saturating_sub(*left + page),
+            false => (cursor_pos.column + wide).saturating_sub(*left + room),
         };
         if off > 0 && off >= page / 2 && editor.key_preset() == yumete_core::KeyPreset::Vim {
             *left = cursor_pos.column.saturating_sub(page / 2);
         } else if cursor_pos.column < *left {
             *left = cursor_pos.column;
-        } else if cursor_pos.column + wide > *left + page {
-            *left = (cursor_pos.column + wide).saturating_sub(page);
+        } else if cursor_pos.column + wide > *left + room {
+            *left = (cursor_pos.column + wide).saturating_sub(room);
         }
     } else {
         *left = 0;
@@ -13674,6 +13806,10 @@ fn draw_horizontal(
     // 而 `Paragraph` 是最後一次性渲染的——在循環裏往 buffer 上塗，會被它蓋掉。
     // 所以循環裏只記座標，收尾再蓋上去（同上面那條 measure 帶子的辦法）。
     let mut label_cells: Vec<(u16, u16, String)> = Vec::new();
+    // The `␊` of each row that fills the page, put past it once the page is
+    // drawn: the screen row, and the selection's style when it reaches over
+    // the break.
+    let mut breaks_past: Vec<(u16, Option<Style>)> = Vec::new();
     // **這一趟畫了哪一段**，交給核心去算 `gw` 的落腳點（#406）。畫的這一支是唯一
     // 知道的：`page_top` 只是一個行號，而一屏放得下幾個邏輯行要問 measure。
     let on_screen = rows_on_screen(editor, rope, measure, *viewport, height);
@@ -14522,26 +14658,33 @@ fn draw_horizontal(
         // **The line break, shown** (`:view-line-breaks`): the table's own `␊`,
         // in the gutter's ink, in the cell the break already owns — the one a
         // cursor resting on the break is drawn in, so a selection reaching
-        // over it lights the mark. Drawn, never measured: it goes only where
-        // that cell is still on the page. **A row that fills its width goes
-        // without**: the mark would have to cover the row's last character or
-        // push it onto a row of its own, and the writing outranks the mark.
+        // over it lights the mark. Drawn, never measured. **A row that fills
+        // its width puts it in the cell past the page** — the scrollbar's
+        // column, or the gap before the next page — where the caret after
+        // that row stands too; with neither, the row goes without, since the
+        // mark would have to cover the row's last character or push it onto a
+        // row of its own, and the writing outranks the mark.
         // Not after a last line with no break, nor on a closed fold's line,
         // whose break is the fold's.
         let mark_break = editor.line_breaks()
             && ends_line
             && row.line + 1 < rope.len_lines()
-            && !editor.fold_head(row.line)
-            && spans.iter().map(|s| yumete_cjk::str_width(&s.content)).sum::<usize>()
-                < text_area.width as usize + left;
-        match (mark_break, break_cell.is_empty()) {
-            (true, bare) => {
-                let quiet = fill.fg(ink.furniture());
-                let style = if bare { quiet } else { quiet.patch(sel_style) };
-                spans.push(Span::styled(yumete_cjk::LINE_FEED_PICTURE.to_string(), style));
+            && !editor.fold_head(row.line);
+        let fills = spans.iter().map(|s| yumete_cjk::str_width(&s.content)).sum::<usize>()
+            >= text_area.width as usize + left;
+        let mark_style = |bare: bool| {
+            let quiet = fill.fg(ink.furniture());
+            if bare { quiet } else { quiet.patch(sel_style) }
+        };
+        match (mark_break, fills, break_cell.is_empty()) {
+            (true, false, bare) => {
+                spans.push(Span::styled(yumete_cjk::LINE_FEED_PICTURE.to_string(), mark_style(bare)));
             }
-            (false, false) => spans.push(Span::styled(break_cell, sel_style)),
-            (false, true) => {}
+            (true, true, bare) if past != PastThePage::Nothing => {
+                breaks_past.push((text_area.y + lines.len() as u16, (!bare).then_some(sel_style)));
+            }
+            (_, _, false) => spans.push(Span::styled(break_cell, sel_style)),
+            _ => {}
         }
         // **helix's end-of-line diagnostic**: the loudest message
         // of the line, two cells after its last row, in the lane's ink, cut
@@ -14727,9 +14870,11 @@ fn draw_horizontal(
     // margin still reads as selected.
     if ruler > 0 {
         let edge = text_area.x + (gutter + ruler.saturating_sub(left)) as u16;
+        // The scrollbar's column ends the margin it stands in.
+        let past = u16::from(past == PastThePage::Bar && edge <= text_area.x + text_area.width);
         let buf = frame.buffer_mut();
         for y in text_area.y..text_area.y + text_area.height {
-            for x in edge..text_area.x + text_area.width {
+            for x in edge..text_area.x + text_area.width + past {
                 if let Some(cell) = buf.cell_mut((x, y)) {
                     if cell.bg == Color::Reset || cell.bg == ink.paper() {
                         cell.set_bg(ink.at(yumete_config::rung::BAND));
@@ -14766,6 +14911,21 @@ fn draw_horizontal(
 
     tint_the_rules(frame, editor, config, text_area, gutter, left);
 
+    // The `␊` of the rows that fill the page, in the cell past it.
+    if past != PastThePage::Nothing {
+        let x = text_area.x + text_area.width;
+        let buf = frame.buffer_mut();
+        for (y, selected) in breaks_past {
+            if let Some(cell) = buf.cell_mut((x, y)) {
+                // On the ground the cell has — the page, the margin's tint —
+                // unless the selection reaches over the break.
+                let quiet = Style::default().bg(cell.bg).fg(ink.furniture());
+                let style = selected.map_or(quiet, |sel| quiet.patch(sel));
+                cell.set_symbol(&yumete_cjk::LINE_FEED_PICTURE.to_string()).set_style(style);
+            }
+        }
+    }
+
     // The caret sits where the writing is, not where the source is — and
     // `wrap::position` is where that is decided, for the caret and for `j`
     // alike. Not worked out **again** here by subtracting the hidden width
@@ -14776,9 +14936,11 @@ fn draw_horizontal(
     // width would otherwise be drawn in the column after the last one.
     // Saturating: on a window a few columns wide `left` can pass the caret's
     // column, and the subtraction would overflow.
+    // …or, with a cell past the page, in that cell: the measure opened no
+    // row for it ([`Editor::caret_for_the_wrap`]).
     let x = (gutter + cursor_pos.column)
         .saturating_sub(left)
-        .min(text_area.width.saturating_sub(1) as usize);
+        .min(text_area.width.saturating_sub(u16::from(past == PastThePage::Nothing)) as usize);
     let caret = (
         text_area.x + x as u16,
         // …in **screen** rows, taken off `on_screen` where the page itself
@@ -17821,7 +17983,10 @@ fn squeezed(text: &str) -> String {
         let editor = editor_with("那年冬天\n");
         let config = Config::default();
         let areas = page_areas(&editor, &config, Rect::new(0, 0, 60, 8), 0);
-        assert_eq!(areas.panes, [Rect::new(0, 0, 60, 6)]);
+        // The writing, and the scrollbar's column at its right; the status
+        // line keeps the whole width.
+        assert_eq!(areas.panes, [Rect::new(0, 0, 59, 6)]);
+        assert_eq!(areas.bars, [Rect::new(59, 0, 1, 6)]);
         assert_eq!(areas.lines, [Rect::new(0, 6, 60, 1)]);
         assert_eq!(areas.command, Rect::new(0, 7, 60, 1));
         assert!(areas.dividers.is_empty());
@@ -18790,13 +18955,15 @@ fn squeezed(text: &str) -> String {
         w: u16,
         h: u16,
     ) -> ratatui::buffer::Buffer {
+        // The window's writing, less the scrollbar's column when it keeps one.
+        let w_text = page_areas(editor, config, Rect::new(0, 0, w, h), 0).panes[0].width;
         let gutter = gutter_in(
-            w as usize,
+            w_text as usize,
             editor.current_buffer().line_count(),
             config.editor.line_numbers,
             editor.has_a_problem_lane(),
         );
-        editor.set_wrap_width((w as usize).saturating_sub(gutter));
+        editor.set_wrap_width((w_text as usize).saturating_sub(gutter));
         render(editor, config, w, h)
     }
 
@@ -20805,6 +20972,8 @@ fn squeezed(text: &str) -> String {
     #[test]
     fn the_page_scrolls_sideways_to_keep_the_caret_on_it() {
         let mut editor = editor_with("abcdefghijklmnopqrstuvwxyz");
+        // About the text's own cells: no scrollbar's column.
+        editor.set_scrollbar(false);
         editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         editor.set_soft_wrap(false);
         let config = bare();
@@ -20847,6 +21016,8 @@ fn squeezed(text: &str) -> String {
     #[test]
     fn the_page_slides_by_the_one_column_it_needs() {
         let mut editor = editor_with("abcdefghijklmnopqrstuvwxyz");
+        // About the text's own cells: no scrollbar's column.
+        editor.set_scrollbar(false);
         editor.set_soft_wrap(false);
         let config = bare();
         for _ in 0..10 {
@@ -21119,7 +21290,8 @@ fn squeezed(text: &str) -> String {
     fn a_page_at_a_measure_stands_centred_with_its_numbers() {
         let text = "one two three four five six seven eight nine ten\nshort\n";
         let mut config = bare();
-        let (w, h) = (60u16, 8u16);
+        // Sixty for the page once the scrollbar has the last column.
+        let (w, h) = (61u16, 8u16);
         let mut seats = Seats::default();
         let mut editor = editor_with(text);
         editor.execute(":view-wrap-width 20").unwrap();
@@ -21247,9 +21419,184 @@ fn squeezed(text: &str) -> String {
         assert_eq!(horizontal_pages(&editor, &config, page)[0].x, 0, "off: from the left edge");
     }
 
+    /// **The thumb's maths**: as long as the view is of the whole, at least
+    /// a cell, at the top only at the start and at the bottom only at the
+    /// end; nothing at all while everything is in view.
+    #[test]
+    fn the_thumb_is_as_long_as_the_view_and_where_it_is() {
+        // Ten cells over a hundred units, twenty in view: two cells.
+        assert_eq!(thumb(10, (0, 20), 100), Some((0, 2)), "at the top");
+        assert_eq!(thumb(10, (40, 60), 100), Some((4, 2)), "in the middle");
+        assert_eq!(thumb(10, (80, 100), 100), Some((8, 2)), "at the end");
+        assert_eq!(thumb(10, (1, 21), 100), Some((0, 2)), "one unit down is not yet a cell");
+        assert_eq!(thumb(10, (79, 99), 100), Some((8, 2)), "the last cell only at the very end, rounded");
+        assert_eq!(thumb(10, (0, 1), 10_000), Some((0, 1)), "never less than a cell");
+        assert_eq!(thumb(10, (5, 99), 100), Some((0, 10)), "never more than the bar");
+        assert_eq!(thumb(10, (0, 100), 100), None, "the whole in view: no thumb");
+        assert_eq!(thumb(10, (0, 120), 100), None, "past the end too");
+        assert_eq!(thumb(0, (0, 20), 100), None, "no bar to put it in");
+        assert_eq!(thumb(10, (0, 0), 0), None, "nothing to scroll");
+    }
+
+    /// Where the scrollbar of a frame's window `which` is, and which of its
+    /// cells carry the thumb's tint.
+    fn thumb_cells(buffer: &ratatui::buffer::Buffer, config: &Config, bar: Rect) -> String {
+        let tint = ink(config).rule();
+        (bar.y..bar.y + bar.height).map(|y| if buffer[(bar.x, y)].bg == tint { '#' } else { '.' }).collect()
+    }
+
+    /// **Every text window keeps its last column for the scrollbar**: the
+    /// rows fold one cell short of the window, the column is the window's
+    /// for a click that picks a window, and `:view-scrollbar off` gives it
+    /// back to the text.
+    #[test]
+    fn the_scrollbar_keeps_a_column_and_the_rows_fold_short_of_it() {
+        let config = bare();
+        let (w, h) = (30u16, 8u16);
+        let mut editor = editor_with(&"word ".repeat(40));
+        assert!(editor.scrollbar(), "on out of the box");
+        let areas = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0);
+        assert_eq!((areas.panes[0].width, areas.bars[0]), (29, Rect::new(29, 0, 1, areas.panes[0].height)));
+        settle_the_pages(&mut editor, &config, areas.panes[0]);
+        assert_eq!(editor.wrap_width(), Some(29), "folded at the window less the column");
+        let seats = Seats::default();
+        let click = left_click(29, 1);
+        assert_eq!(window_at(&editor, &config, Some((w, h).into()), &seats, click), Some(editor.live_window()), "the column is the window's");
+        assert_eq!(text_at(&editor, &config, Some((w, h).into()), &seats, click), None, "a click in it does nothing");
+        editor.execute(":view-scrollbar off").unwrap();
+        let areas = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0);
+        assert_eq!((areas.panes[0].width, areas.bars[0].width), (30, 0), "off: the whole width");
+        settle_the_pages(&mut editor, &config, areas.panes[0]);
+        assert_eq!(editor.wrap_width(), Some(30));
+        // 竪排 keeps no column.
+        editor.execute(":view-scrollbar on").unwrap();
+        editor.execute(":vertical").unwrap();
+        let areas = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0);
+        assert_eq!((areas.panes[0].width, areas.bars[0].width), (30, 0), "vertical: unchanged");
+    }
+
+    /// **The thumb says where the page is in the file**, by characters: at
+    /// the top on the first page, at the bottom on the last, and the column
+    /// blank — a margin — while the whole file fits.
+    #[test]
+    fn the_thumb_follows_the_page_down_the_file() {
+        let config = bare();
+        ink(&config);
+        let (w, h) = (30u16, 11u16);
+        let mut seats = Seats::default();
+        let text: String = (1..=40).map(|n| format!("line {n:02}\n")).collect();
+        let mut editor = editor_with(&text);
+        let bar = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0).bars[0];
+        assert_eq!(bar.height, 9, "nine rows of writing");
+        let (buffer, _) = centred_frame(&mut editor, &config, w, h, &mut seats);
+        assert_eq!(thumb_cells(&buffer, &config, bar), "##.......", "nine of forty rows, at the top:\n{}", buffer_to_text(&buffer));
+        assert!((0..bar.height).all(|y| buffer[(bar.x, bar.y + y)].symbol() == " "), "a tint, not a glyph");
+        editor.on_key(Key::Char('G'));
+        let (buffer, _) = centred_frame(&mut editor, &config, w, h, &mut seats);
+        assert_eq!(thumb_cells(&buffer, &config, bar), ".......##", "at the end, at the bottom:\n{}", buffer_to_text(&buffer));
+        let mut short = editor_with("one\ntwo\n");
+        let (buffer, _) = centred_frame(&mut short, &config, w, h, &mut seats);
+        assert_eq!(thumb_cells(&buffer, &config, bar), ".........", "the whole file in view: blank");
+        assert_eq!(buffer[(bar.x, 0)].bg, ink(&config).paper(), "the page's ground");
+    }
+
+    /// **A centred page's scrollbar stands at the window's right edge**,
+    /// in the margin past the measure: the column is kept before the page
+    /// is centred, so the margins are equal in what is left, and the column
+    /// takes the margin's tint outside the thumb.
+    #[test]
+    fn a_centred_pages_scrollbar_stands_in_its_right_margin() {
+        let config = bare();
+        ink(&config);
+        let (w, h) = (61u16, 6u16);
+        let mut seats = Seats::default();
+        let text: String = (1..=40).map(|n| format!("line {n:02}\n")).collect();
+        let mut editor = editor_with(&text);
+        editor.execute(":view-wrap-width 20").unwrap();
+        let (buffer, _) = centred_frame(&mut editor, &config, w, h, &mut seats);
+        assert_eq!(first_ink(&buffer, 0), Some(20), "(60 - 20) / 2:\n{}", buffer_to_text(&buffer));
+        let bar = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0).bars[0];
+        assert_eq!(bar.x, 60, "the window's last column");
+        assert_eq!(thumb_cells(&buffer, &config, bar).chars().next(), Some('#'), "the thumb at the top");
+        let band = ink(&config).at(yumete_config::rung::BAND);
+        assert_eq!(buffer[(bar.x, bar.y + bar.height - 1)].bg, band, "outside the thumb, the margin's tint");
+        assert_eq!(buffer[(59, bar.y + bar.height - 1)].bg, band, "as the margin beside it");
+    }
+
+    /// **Two pages side by side have one bar, for the spread**, at the
+    /// window's right edge: the view runs from the first page's top to the
+    /// second page's foot.
+    #[test]
+    fn two_pages_have_one_bar_for_the_spread() {
+        let config = bare();
+        ink(&config);
+        let (w, h) = (101u16, 7u16);
+        let mut seats = Seats::default();
+        let text: String = (1..=50).map(|n| format!("line {n:02}\n")).collect();
+        let mut editor = editor_with(&text);
+        editor.set_pages_horizontal(2);
+        let (buffer, _) = centred_frame(&mut editor, &config, w, h, &mut seats);
+        let areas = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0);
+        let strips = horizontal_pages(&editor, &config, areas.panes[0]);
+        assert_eq!(strips.len(), 2, "two pages");
+        assert_eq!(areas.bars[0].x, 100, "one bar, at the window's edge");
+        // Ten of fifty rows on the spread, five rows tall: a single cell.
+        assert_eq!(thumb_cells(&buffer, &config, areas.bars[0]), "#....", "{}", buffer_to_text(&buffer));
+        let gap = strips[0].x + strips[0].width;
+        assert!((0..areas.bars[0].height).all(|y| buffer[(gap, y)].bg != ink(&config).rule()), "none in the gap");
+    }
+
+    /// **A window each, a bar each**: side by side, each bar at its own
+    /// window's right edge; one above the other, the same.
+    #[test]
+    fn each_window_of_a_split_has_its_own_bar() {
+        let config = bare();
+        ink(&config);
+        let text: String = (1..=40).map(|n| format!("line {n:02}\n")).collect();
+        for split in [":vsplit", ":hsplit"] {
+            let mut editor = editor_with(&text);
+            editor.execute(split).unwrap();
+            let (w, h) = (61u16, 16u16);
+            let mut seats = Seats::default();
+            let (buffer, _) = centred_frame(&mut editor, &config, w, h, &mut seats);
+            let areas = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0);
+            assert_eq!(areas.bars.len(), 2, "{split}");
+            for (pane, bar) in areas.panes.iter().zip(&areas.bars) {
+                assert_eq!((bar.x, bar.y, bar.width, bar.height), (pane.x + pane.width, pane.y, 1, pane.height), "{split}");
+                assert!(thumb_cells(&buffer, &config, *bar).starts_with('#'), "{split}: {}", buffer_to_text(&buffer));
+            }
+        }
+    }
+
+    /// **The caret after a row that fills the page stands in the
+    /// scrollbar's column**: no empty row opens for it, and `A` on such a
+    /// row puts the caret in the window's last column, on the row's own row.
+    #[test]
+    fn the_caret_after_a_full_row_stands_in_the_scrollbars_column() {
+        let config = bare();
+        ink(&config);
+        let (w, h) = (21u16, 6u16);
+        let mut seats = Seats::default();
+        let mut editor = editor_with(&format!("{}\nnext\n", "x".repeat(20)));
+        editor.on_key(Key::Char('A'));
+        let (buffer, caret) = centred_frame(&mut editor, &config, w, h, &mut seats);
+        assert_eq!(caret, Position::new(20, 0), "in the column, on the row:\n{}", buffer_to_text(&buffer));
+        assert_eq!(row_text(&buffer, 1).trim_end(), "next", "no row opened for it");
+        editor.on_key(Key::Esc);
+        editor.execute(":view-scrollbar off").unwrap();
+        // Without the column the row is one cell wider, so fill it again.
+        let mut editor = editor_with(&format!("{}\nnext\n", "x".repeat(21)));
+        editor.set_scrollbar(false);
+        editor.on_key(Key::Char('A'));
+        let (buffer, caret) = centred_frame(&mut editor, &config, w, h, &mut seats);
+        assert_eq!(caret, Position::new(0, 1), "off: a row of its own:\n{}", buffer_to_text(&buffer));
+    }
+
     #[test]
     fn a_click_counts_from_what_is_on_the_page() {
         let mut editor = editor_with("abcdefghijklmnopqrstuvwxyz");
+        // About the text's own cells: no scrollbar's column.
+        editor.set_scrollbar(false);
         editor.set_soft_wrap(false);
         let config = bare();
         editor.on_key(Key::Char('g'));
@@ -21282,6 +21629,8 @@ fn squeezed(text: &str) -> String {
     #[test]
     fn a_character_split_by_the_scroll_becomes_a_blank() {
         let mut editor = editor_with(&"字".repeat(20));
+        // About the text's own cells: no scrollbar's column.
+        editor.set_scrollbar(false);
         editor.set_soft_wrap(false);
         let config = bare();
         editor.on_key(Key::Char('g'));
@@ -22766,35 +23115,52 @@ fn squeezed(text: &str) -> String {
     }
 
     /// **The mark never moves the writing.** A row that wraps keeps the
-    /// break where it was, and a row that fills the width goes without a
-    /// mark rather than covering its last character or pushing it onto a
-    /// row of its own.
+    /// break where it falls without the mark, and a row that fills the width puts its mark in
+    /// the scrollbar's column past it, rather than covering its last
+    /// character or pushing it onto a row of its own; with no such column
+    /// (`:view-scrollbar off`) it goes without.
     #[test]
     fn the_line_break_mark_does_not_change_the_wrap() {
         let mut config = Config::default();
         config.editor.show_segmentation = false;
         let w = 24u16;
-        let gutter = gutter_in(w as usize, 3, config.editor.line_numbers, false);
-        let room = w as usize - gutter;
-        let full = format!("{}y", "x".repeat(room - 1));
-        let wide = format!("{}漢", "x".repeat(room - 2));
-        let long = "word ".repeat(10);
-        let text = format!("{full}\n{wide}\n{long}\nend");
-        let mark = yumete_cjk::LINE_FEED_PICTURE;
+        for bar in [true, false] {
+            let gutter = gutter_in(w as usize, 3, config.editor.line_numbers, false);
+            let room = w as usize - usize::from(bar) - gutter;
+            let full = format!("{}y", "x".repeat(room - 1));
+            let wide = format!("{}漢", "x".repeat(room - 2));
+            let long = "word ".repeat(10);
+            let text = format!("{full}\n{wide}\n{long}\nend");
+            let mark = yumete_cjk::LINE_FEED_PICTURE;
 
-        let mut editor = editor_with(&text);
-        let off = page_rows(&render_wrapped(&mut editor, &config, w, 12));
-        editor.set_line_breaks(true);
-        let on = page_rows(&render_wrapped(&mut editor, &config, w, 12));
+            let mut editor = editor_with(&text);
+            editor.set_scrollbar(bar);
+            let off = page_rows(&render_wrapped(&mut editor, &config, w, 12));
+            editor.set_line_breaks(true);
+            let buffer = render_wrapped(&mut editor, &config, w, 12);
+            let on = page_rows(&buffer);
 
-        assert_eq!(on.len(), off.len(), "no row added: {on:#?}");
-        assert!(on[0].ends_with(&full) && !on[0].contains(mark), "a full row keeps its last character: {on:#?}");
-        assert!(on[1].ends_with(&wide) && !on[1].contains(mark), "a wide last character too: {on:#?}");
-        let stripped: Vec<String> = on.iter().map(|r| r.replace(mark, "").trim_end().to_string()).collect();
-        assert_eq!(stripped, off, "every row breaks where it did");
-        // The long line's own last row carries it, and only that one.
-        let marked = on.iter().filter(|row| row.contains(mark)).count();
-        assert_eq!(marked, 1, "{on:#?}");
+            assert_eq!(on.len(), off.len(), "no row added: {on:#?}");
+            let stripped: Vec<String> = on.iter().map(|r| r.replace(mark, "").trim_end().to_string()).collect();
+            assert_eq!(stripped, off, "every row breaks where it did");
+            assert!(stripped[0].ends_with(&full), "a full row keeps its last character: {on:#?}");
+            assert!(stripped[1].ends_with(&wide), "a wide last character too: {on:#?}");
+            match bar {
+                true => {
+                    // In the scrollbar's column, the window's last.
+                    for y in [0, 1] {
+                        assert_eq!(buffer[(w - 1, y)].symbol(), mark.to_string(), "row {y} marks past the page: {on:#?}");
+                    }
+                    assert_eq!(buffer[(w - 1, 0)].style().fg, Some(ink(&config).furniture()), "in the quiet ink");
+                }
+                false => {
+                    assert!(!on[0].contains(mark) && !on[1].contains(mark), "no room for the mark: {on:#?}");
+                }
+            }
+            // The long line's own last row carries it, and only that one.
+            let marked = on[2..].iter().filter(|row| row.contains(mark)).count();
+            assert_eq!(marked, 1, "{on:#?}");
+        }
     }
 
     /// A vertical page puts the mark in the slot under a 縱's last character —
@@ -25077,6 +25443,8 @@ fn squeezed(text: &str) -> String {
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::Absolute;
         let mut editor = editor_with("春夏秋冬\nabcd\n");
+        // About the text's own cells: no scrollbar's column.
+        editor.set_scrollbar(false);
         editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::Absolute);
 
         let buffer = render_wrapped(&mut editor, &config, 4, 6);
@@ -25107,9 +25475,10 @@ fn squeezed(text: &str) -> String {
         let tint = Some(ink(&config).at(yumete_config::rung::BAND));
 
         // Centred, as out of the box: ten cells of margin either side of
-        // the twenty, both in the tint.
+        // the twenty, both in the tint — in the forty the window keeps once
+        // its scrollbar has the last column.
         editor.execute("view-wrap-width 20").unwrap();
-        let buffer = render_wrapped(&mut editor, &config, 40, 8);
+        let buffer = render_wrapped(&mut editor, &config, 41, 8);
         assert_eq!(buffer[(30, 0)].style().bg, tint, "the measure is in force");
         assert_eq!(buffer[(5, 0)].style().bg, tint, "on the left of the centred page too");
         assert_eq!(at(&buffer, 10, 0), "字", "which starts after the left margin");
@@ -25118,7 +25487,7 @@ fn squeezed(text: &str) -> String {
         // the page may claim they are — no margin, and the page against the
         // left edge again.
         editor.execute("view-wrap").unwrap();
-        let buffer = render_wrapped(&mut editor, &config, 40, 8);
+        let buffer = render_wrapped(&mut editor, &config, 41, 8);
         assert_ne!(buffer[(20, 0)].style().bg, tint, "no margin past it");
         assert_ne!(buffer[(5, 0)].style().bg, tint, "nor before it");
         assert_eq!(at(&buffer, 0, 0), "字", "nothing to centre");
@@ -25129,7 +25498,7 @@ fn squeezed(text: &str) -> String {
 
         // …and `:view-wrap` alone puts the measure — and its margin — back.
         editor.execute("view-wrap").unwrap();
-        let buffer = render_wrapped(&mut editor, &config, 40, 8);
+        let buffer = render_wrapped(&mut editor, &config, 41, 8);
         assert_eq!(buffer[(30, 0)].style().bg, tint, "the number was kept");
     }
 
@@ -26579,6 +26948,8 @@ fn squeezed(text: &str) -> String {
         // without it, so `j` and `k` landed on the character under a column
         // nobody was looking at, and a click was two cells off.
         let mut editor = editor_with("甲\n\n一二三四五六七八\n");
+        // About the text's own cells: no scrollbar's column.
+        editor.set_scrollbar(false);
         editor.set_indent(2);
         editor.set_soft_wrap(true);
         let mut config = Config::default();
@@ -27674,7 +28045,9 @@ fn squeezed(text: &str) -> String {
     /// manual's own `:view-wrap` example.
     #[test]
     fn a_blocks_ground_reaches_the_edge_whatever_the_widths_say() {
-        let editor = editor_with("前一段。\n\n```\n那年冬天。   ▓▓▓▓▓▓\n雪——一直下。\n```\n");
+        let mut editor = editor_with("前一段。\n\n```\n那年冬天。   ▓▓▓▓▓▓\n雪——一直下。\n```\n");
+        // About the text's own cells: no scrollbar's column.
+        editor.set_scrollbar(false);
         let mut config = Config::default();
         config.editor.line_numbers = yumete_config::LineNumbers::None;
         // A fence has no ground of its own since #449 — 品色 says what it is
@@ -31342,6 +31715,8 @@ fn squeezed(text: &str) -> String {
     #[test]
     fn a_long_paragraph_continues_on_the_next_row() {
         let mut editor = Editor::new();
+        // About the text's own cells: no scrollbar's column.
+        editor.set_scrollbar(false);
         editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         editor
             .current_buffer_mut()
@@ -31355,6 +31730,8 @@ fn squeezed(text: &str) -> String {
     #[test]
     fn without_wrapping_the_tail_of_a_paragraph_is_clipped() {
         let mut editor = Editor::new();
+        // About the text's own cells: no scrollbar's column.
+        editor.set_scrollbar(false);
         editor
             .current_buffer_mut()
             .insert(0, "春夏秋冬春夏秋冬春夏").expect("the fixture buffer is writable");
@@ -31405,6 +31782,8 @@ fn squeezed(text: &str) -> String {
     #[test]
     fn j_walks_the_rows_the_reader_sees() {
         let mut editor = Editor::new();
+        // About the text's own cells: no scrollbar's column.
+        editor.set_scrollbar(false);
         editor.current_buffer_mut().insert(0, "春夏秋冬春夏秋冬").expect("the fixture buffer is writable");
         let config = wrap_config();
         render_wrapped(&mut editor, &config, 8, 5);
@@ -31435,6 +31814,8 @@ fn squeezed(text: &str) -> String {
     #[test]
     fn a_word_split_by_a_wrap_keeps_one_colour() {
         let mut editor = Editor::new();
+        // About the text's own cells: no scrollbar's column.
+        editor.set_scrollbar(false);
         editor.set_segmenter(Box::new(DictionarySegmenter::from_text(
             "那年 10\n冬天 10\n下雪 10\n以後 10\n",
             0,
@@ -31513,6 +31894,8 @@ fn squeezed(text: &str) -> String {
         let rows = |margin: Margin| -> Vec<String> {
             let mut editor =
                 editor_with("<ruby>永<rt>ㄩㄥˇ</rt></ruby>和九年歲在癸丑暮春之初\n後面一行");
+            // About the text's own cells: no scrollbar's column.
+            editor.set_scrollbar(false);
             let mut config = Config::default();
             config.editor.line_numbers = yumete_config::LineNumbers::None;
             config.editor.command_line = false;
@@ -31550,6 +31933,8 @@ fn squeezed(text: &str) -> String {
     fn a_loose_page_keeps_its_air_over_the_tail_of_a_read_paragraph() {
         let mut editor =
             editor_with("<ruby>永<rt>ㄩㄥˇ</rt></ruby>和九年歲在癸丑暮春之初\n後面一行");
+        // About the text's own cells: no scrollbar's column.
+        editor.set_scrollbar(false);
         let mut config = Config::default();
         config.editor.line_numbers = yumete_config::LineNumbers::None;
         config.editor.command_line = false;
@@ -31590,6 +31975,8 @@ fn squeezed(text: &str) -> String {
     #[test]
     fn a_reading_takes_its_own_row_from_the_meter_and_no_other() {
         let mut editor = metered("春眠不覺曉春眠不覺曉<ruby>春<rt>ㄔㄨㄣ</rt></ruby>\n");
+        // About the text's own cells: no scrollbar's column.
+        editor.set_scrollbar(false);
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
         editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);

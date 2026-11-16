@@ -563,6 +563,9 @@ pub fn draw(frame: &mut ratatui::Frame, editor: &Editor, config: &yumete_config:
             let spot = Rect { width: shot.columns.min(area.width), height: shot.rows.min(area.height), ..area };
             crate::graphics::put_picture_from(frame.buffer_mut(), spot, picture, 0, 0);
             if framed {
+                if editor.scrollbar() {
+                    bar_on_the_wall(frame.buffer_mut(), area, &shot, crate::graphics::cell_pixels(), ink.rule());
+                }
                 mark_the_caret(frame.buffer_mut(), area, &shot, ink.page().fg(ink.gold()));
             }
         }
@@ -602,6 +605,22 @@ fn paint_the_bar(picture: &mut yumete_mdview::Picture, span: (f32, f32), vertica
             }
         }
     }
+}
+
+/// **Where the window is down the page, on the frame's right wall** beside
+/// `area`: the scrollbar every text window has, worked out from the
+/// picture's own place (`top`) and the page's length, so nothing is drawn
+/// again for it and the picture keeps its size. Blank while the page fits.
+/// Not down a vertical page, whose length runs across the window.
+fn bar_on_the_wall(buf: &mut ratatui::buffer::Buffer, area: Rect, shot: &Shot, cell: (u16, u16), tint: ratatui::style::Color) {
+    if shot.vertical || area.height == 0 {
+        return;
+    }
+    let shown = area.height as f32 * cell.1.max(1) as f32;
+    let top = shot.top.max(0.0);
+    let span = (top.round() as usize, (top + shown).round() as usize);
+    let wall = Rect { x: area.x + area.width, width: 1, ..area };
+    crate::tint_the_thumb(buf, wall, crate::thumb(area.height as usize, span, shot.page.max(0.0).round() as usize), tint);
 }
 
 /// **The way to the cursor's line, marked on the frame** while it is out
@@ -649,6 +668,33 @@ pub fn why_not() -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn shot(top: f32, page: f32) -> Shot {
+        Shot { png: Vec::new(), hash: 0, columns: 10, rows: 10, top, page, caret: None, vertical: false }
+    }
+
+    /// **The scrollbar on the right wall**: ten rows of twenty pixels over a
+    /// page of 800 shows a quarter, so a thumb of three rows at the top, in
+    /// the middle and at the bottom; a page that fits leaves the wall bare,
+    /// and nothing goes on the top or bottom wall where the arrows stand.
+    #[test]
+    fn the_scrollbar_stands_on_the_right_wall() {
+        let tint = ratatui::style::Color::Rgb(1, 2, 3);
+        let area = Rect::new(1, 1, 12, 10);
+        let drawn = |top: f32, page: f32| {
+            let mut buf = ratatui::buffer::Buffer::empty(Rect::new(0, 0, 14, 12));
+            bar_on_the_wall(&mut buf, area, &shot(top, page), (10, 20), tint);
+            let wall: Vec<bool> = (0..12).map(|y| buf[(13, y)].bg == tint).collect();
+            let elsewhere = (0..14).any(|x| (0..12).any(|y| x != 13 && buf[(x, y)].bg == tint));
+            assert!(!elsewhere, "only the right wall");
+            assert!(!wall[0] && !wall[11], "not on the corners");
+            wall[1..11].iter().map(|&t| if t { '#' } else { '.' }).collect::<String>()
+        };
+        assert_eq!(drawn(0.0, 800.0), "###.......", "at the top");
+        assert_eq!(drawn(300.0, 800.0), "....###...", "half way down the rest");
+        assert_eq!(drawn(600.0, 800.0), ".......###", "at the bottom");
+        assert_eq!(drawn(0.0, 150.0), "..........", "the page fits: no bar");
+    }
 
     /// **The bar stands beside the paragraph, and only there**: in the left
     /// margin across a page, along the top margin down a vertical one.

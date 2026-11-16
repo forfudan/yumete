@@ -286,6 +286,18 @@ zhs = "段组：一段(整页一纵到底)"
 en = "pages, vertical: one (a column runs the whole page)"
 
 [[message]]
+# :view-scrollbar off — 那一格还给正文（草稿）
+key = "layout.scrollbar-off"
+zhs = "滚动条：关"
+en = "scrollbar off"
+
+[[message]]
+# :view-scrollbar on — 窗口右边留一格滚动条（草稿）
+key = "layout.scrollbar-on"
+zhs = "滚动条：开"
+en = "scrollbar on"
+
+[[message]]
 # :indent-tab spaces — Tab 打空格
 key = "layout.tab-spaces"
 zhs = "Tab 键：用空格补到下一个 {0} 的倍数(Shift-Tab 插入制表符)"

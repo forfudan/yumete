@@ -2819,6 +2819,13 @@ en = "clear the terminal and draw it all again: every window, and the previews a
 find = "重畫 重画 刷新 清屏 預覽 预览 redraw refresh clear preview"
 
 [[message]]
+# : 命令菜单里 scrollbar 那一项的说明(view 组)：窗口右边留一格滚动条（草稿）
+key = "cmd.view.scrollbar"
+zhs = "滚动条：每个窗口右边留一格，标出这一页在文件里的位置"
+en = "scrollbar: each window keeps a column at its right showing where the page is in the file"
+find = "滚动条 滾動條 捲軸 位置 scrollbar scroll bar thumb"
+
+[[message]]
 # : 命令選單裏 sentence 那一項的説明(view 組)
 key = "cmd.view.sentence"
 zhs = "一句一纵：竖排时每句另起一纵，只改显示，不改文件"

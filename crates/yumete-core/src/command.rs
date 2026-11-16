@@ -441,6 +441,9 @@ pub enum Command {
     /// `:view-centre` — a page written to a measure stands in the middle of
     /// its window, margins left and right.
     SetCentre(Switch),
+    /// `:view-scrollbar` — every text window keeps its rightmost column for
+    /// a bar saying where the page is in the file.
+    SetScrollbar(Switch),
     /// `:view-long-line`：一行長過多少列就不上色。`None` ＝裸的，報告現在多少。
     SetLongLine(Option<Option<usize>>),
     /// `:table-numbers` — the row of column numbers above the header.
@@ -5026,6 +5029,16 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|p| Ok(Command::SetCentre(switched(p)))),
     },
     Entry {
+        // vim and helix have no scrollbar, so no name of theirs to take;
+        // the family is the view one, beside the other switches of the page.
+        name: "view-scrollbar",
+        aliases: &[],
+        help: "cmd.view.scrollbar",
+        needs: &[],
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::SetScrollbar(switched(p)))),
+    },
+    Entry {
         // `height`, not `vertical`: the horizontal one is a width, this one a
         // height.
         name: "view-wrap-height",
@@ -8932,7 +8945,7 @@ mod tests {
         // A family with no head of its own keeps the hyphen, which is what
         // says it is a family and not a command, and nothing else: `view-w` is
         // `view-wrap`'s spelling, not the thirteen's.
-        assert_eq!(row("", "view-"), ":view- +21");
+        assert_eq!(row("", "view-"), ":view- +22");
         assert_eq!(row("", "check-"), ":check- +7");
         // …and a stem is a stem however many are under it.
         assert_eq!(row("", "markdown-"), ":markdown- +2");

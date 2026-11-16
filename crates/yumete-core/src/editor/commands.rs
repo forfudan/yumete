@@ -618,6 +618,14 @@ impl Editor {
                 };
                 Ok(CommandOutcome::Continue)
             }
+            Command::SetScrollbar(on) => {
+                self.scrollbar = on.over(self.scrollbar);
+                self.status = match self.scrollbar {
+                    true => say!("layout.scrollbar-on"),
+                    false => say!("layout.scrollbar-off"),
+                };
+                Ok(CommandOutcome::Continue)
+            }
             Command::SetEolDiagnostics(word) => {
                 if let Some(level) = word.as_deref().and_then(crate::problem::level_from_word) {
                     self.end_of_line_diagnostics = level;
@@ -2605,6 +2613,7 @@ impl Editor {
             Command::SetCode(_) => self.code_colours,
             Command::SetLineBreaks(_) => self.line_breaks,
             Command::SetCentre(_) => self.centre,
+            Command::SetScrollbar(_) => self.scrollbar,
             Command::SetTableNumbers(_) => self.table_numbers,
             Command::SetTableHeader(_) => self.table()?.schema.header,
             Command::Sidebar(panel, _) => self.showing(Editor::view_of(panel)?).is_some(),

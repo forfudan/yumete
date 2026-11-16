@@ -2748,7 +2748,7 @@ impl Editor {
             .with_version(self.current_buffer().id(), self.current_buffer().revision())
             .with_edit(self.current_buffer().edit())
             .with_open_line(self.open_line())
-            .with_caret(Some(self.caret_in_line()));
+            .with_caret(self.caret_for_the_wrap());
         f(rope, m)
     }
 

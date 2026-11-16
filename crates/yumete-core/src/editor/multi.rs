@@ -76,7 +76,7 @@ impl super::Editor {
                 .with_version(self.current_buffer().id(), self.current_buffer().revision())
                 .with_edit(self.current_buffer().edit())
                 .with_open_line(self.open_line())
-                .with_caret(Some(self.caret_in_line()));
+                .with_caret(self.caret_for_the_wrap());
             let rope = self.current_buffer().rope();
             let step = |pos: usize, goal: usize| match down {
                 true => crate::wrap::next_row(rope, pos, m, goal),

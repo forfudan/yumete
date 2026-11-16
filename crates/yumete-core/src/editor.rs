@@ -3149,6 +3149,15 @@ pub struct Editor {
     /// Whether a page written to a measure stands in the middle of its window
     /// (`:view-centre`).
     centre: bool,
+    /// Whether every text window keeps its rightmost column for a scrollbar
+    /// (`:view-scrollbar`).
+    scrollbar: bool,
+    /// Whether the window with the keys has a cell past the end of a full row
+    /// (the scrollbar's column, or the gap between two pages), so the caret
+    /// resting after a row that fills the width stands there instead of on a
+    /// row of its own. Told by the front end each time it lays the windows
+    /// out.
+    cell_past_the_row: std::cell::Cell<bool>,
     /// 改動條：行號旁邊那一格說不說「這一行跟 git 那一份不一樣」（#55/#298）。
     diff_gutter: bool,
     /// 每個 buffer 一份 git 逐行差，連着**算它的時候那個 revision**。
@@ -4741,6 +4750,8 @@ impl Editor {
             number_fill: false,
             line_breaks: false,
             centre: true,
+            scrollbar: true,
+            cell_past_the_row: std::cell::Cell::new(false),
             diff_gutter: false,
             vcs: HashMap::new(),
             vcs_base: HashMap::new(),

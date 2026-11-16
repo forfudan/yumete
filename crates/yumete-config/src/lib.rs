@@ -401,6 +401,11 @@ pub struct EditorConfig {
     /// numbers going with the text — rather than against its left edge. On by
     /// default; `:view-centre` toggles. Nothing to centre without a measure.
     pub centre_measure: bool,
+    /// Whether every text window and preview keeps its rightmost column for
+    /// a scrollbar: a tinted run of cells saying where the page is in the
+    /// file, the column blank while the whole file fits. On by default;
+    /// `:view-scrollbar` toggles. Off gives the column back to the text.
+    pub scrollbar: bool,
     /// The width `:hard-wrap` fills to when given none, in cells; `0` for
     /// unset, which makes the bare command say so.
     pub hard_wrap: usize,
@@ -609,6 +614,7 @@ impl Default for EditorConfig {
             ruler: 0,
             measure: 0,
             centre_measure: true,
+            scrollbar: true,
             hard_wrap: 0,
             char_info: true,
             status_count: "text".to_string(),
@@ -4930,6 +4936,7 @@ struct RawEditor {
     ruler: Option<usize>,
     measure: Option<usize>,
     centre_measure: Option<bool>,
+    scrollbar: Option<bool>,
     hard_wrap: Option<usize>,
     char_info: Option<bool>,
     status_count: Option<String>,
@@ -5245,6 +5252,9 @@ impl RawConfig {
         }
         if other.editor.centre_measure.is_some() {
             self.editor.centre_measure = other.editor.centre_measure;
+        }
+        if other.editor.scrollbar.is_some() {
+            self.editor.scrollbar = other.editor.scrollbar;
         }
         if other.editor.hard_wrap.is_some() {
             self.editor.hard_wrap = other.editor.hard_wrap;
@@ -5807,6 +5817,9 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.centre_measure {
             config.editor.centre_measure = on;
+        }
+        if let Some(on) = self.editor.scrollbar {
+            config.editor.scrollbar = on;
         }
         if let Some(width) = self.editor.hard_wrap {
             config.editor.hard_wrap =

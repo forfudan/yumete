@@ -701,6 +701,18 @@ zhs = "只画一条线：超出此列的字变色，不换行"
 en = "a guide, not a break: text past it changes colour"
 
 [[message]]
+# 设置：窗口右边的滚动条（草稿）
+key = "settings.editor.scrollbar"
+zhs = "滚动条"
+en = "scrollbar"
+
+[[message]]
+# 设置：滚动条——一句话（草稿）
+key = "settings.editor.scrollbar.hint"
+zhs = "每个窗口和预览的右边留一格，用一段底色标出这一页在文件里的位置；整个文件放得下时那一格空着。关掉就把那一格还给正文"
+en = "each window and preview keeps a column at its right, a tinted run in it showing where the page is in the file; blank while the whole file fits. Off gives the column back to the text"
+
+[[message]]
 # 設置：光标边距
 key = "settings.editor.scrolloff"
 zhs = "光标边距"

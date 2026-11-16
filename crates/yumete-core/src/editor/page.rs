@@ -1561,6 +1561,33 @@ impl Editor {
         self.centre = on;
     }
 
+    /// Whether each text window keeps its rightmost column for a scrollbar
+    /// (`:view-scrollbar`).
+    pub fn scrollbar(&self) -> bool {
+        self.scrollbar
+    }
+
+    /// Keep the scrollbar's column, or give it back to the text.
+    pub fn set_scrollbar(&mut self, on: bool) {
+        self.scrollbar = on;
+    }
+
+    /// Whether the window with the keys has a cell past the end of a full
+    /// row for the caret to stand in. Noted by the front end as it lays the
+    /// windows out, before the keys that move by rows run.
+    pub fn note_cell_past_the_row(&self, there: bool) {
+        self.cell_past_the_row.set(there);
+    }
+
+    /// **Where the caret is, for the wrap's one question about it**: whether
+    /// the last row of its line owes it a cell ([`crate::wrap::Measure::with_caret`]).
+    /// `None` when the window has a cell past the row anyway, so a caret after
+    /// a row that fills the width stands in that cell and no empty row opens
+    /// for it.
+    pub fn caret_for_the_wrap(&self) -> Option<(usize, usize)> {
+        (!self.cell_past_the_row.get()).then(|| self.caret_in_line())
+    }
+
     // ---- 改動條（#55/#298）------------------------------------------------
 
     /// 行號旁邊那一格說不說 git 的改動。

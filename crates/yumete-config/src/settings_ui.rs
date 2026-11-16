@@ -503,6 +503,15 @@ pub const SETTINGS: &[Setting] = &[
     },
     Setting {
         table: "editor",
+        key: "scrollbar",
+        group: Group::Layout,
+        kind: Kind::Tick,
+        label: "settings.editor.scrollbar",
+        hint: "settings.editor.scrollbar.hint",
+        factory: "true",
+    },
+    Setting {
+        table: "editor",
         key: "hard_wrap",
         group: Group::Layout,
         kind: Kind::Count { low: 1, high: 400, zero: Some("settings.zero.hard-wrap-unset") },

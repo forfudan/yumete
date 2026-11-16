@@ -811,6 +811,11 @@ pub fn draw(frame: &mut ratatui::Frame, editor: &Editor, config: &yumete_config:
                 height: (rows - top).min(room.height),
             };
             crate::graphics::put_picture_from(frame.buffer_mut(), spot, picture, top, 0);
+            if editor.scrollbar() {
+                let total = page.total.map(|t| t * rows as usize);
+                let from = (page.number.saturating_sub(1)) * rows as usize + top as usize;
+                bar_on_the_wall(frame.buffer_mut(), area, total.map(|t| (from, from + spot.height as usize, t)), ink.rule());
+            }
             let mark = cursor_row.map(|row| cursor_mark(row - top as i32, spot.height));
             mark_the_cursor(frame.buffer_mut(), area, spot, mark, ink.page().fg(ink.gold()));
         }
@@ -819,6 +824,10 @@ pub fn draw(frame: &mut ratatui::Frame, editor: &Editor, config: &yumete_config:
             let picture = crate::graphics::show_page(preview, page.hash, &page.png, columns, rows);
             let spot = Rect { x: room.x + room.width.saturating_sub(columns) / 2, y: room.y, width: columns, height: rows };
             crate::graphics::put_picture(frame.buffer_mut(), spot, picture);
+            if editor.scrollbar() {
+                let at = page.number.saturating_sub(1);
+                bar_on_the_wall(frame.buffer_mut(), area, page.total.map(|t| (at, at + 1, t)), ink.rule());
+            }
             let mark = board
                 .jump
                 .filter(|j| j.page == page.number)
@@ -837,6 +846,17 @@ pub fn draw(frame: &mut ratatui::Frame, editor: &Editor, config: &yumete_config:
             frame.render_widget(Paragraph::new(Line::from(format!(" {note}"))).style(quiet), left);
         }
     }
+}
+
+/// **Where the window is in the document, on the frame's right wall**
+/// beside `area`: `[a, b)` of `len`, in rows of the page across its width
+/// (the page before this one counting a whole page) or in pages when a page
+/// fits whole. Nothing when tinymist has not said how many pages there are.
+/// Drawn before the cursor's marks, so a `◀` on its row stands over it.
+fn bar_on_the_wall(buf: &mut ratatui::buffer::Buffer, area: Rect, span: Option<(usize, usize, usize)>, tint: ratatui::style::Color) {
+    let Some((a, b, len)) = span else { return };
+    let wall = Rect { x: area.x + area.width, width: 1, ..area };
+    crate::tint_the_thumb(buf, wall, crate::thumb(area.height as usize, (a, b), len), tint);
 }
 
 /// **Where the cursor's line is drawn from**, against a picture `height`
