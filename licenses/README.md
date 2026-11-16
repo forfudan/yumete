@@ -26,3 +26,9 @@ The rendered Markdown preview (`crates/yumete-mdview`) follows the spacing of Gi
 | File | Project | What is used |
 | --- | --- | --- |
 | `github-markdown-css.LICENSE` | [github-markdown-css](https://github.com/sindresorhus/github-markdown-css) | the light and dark colours, sizes and margins of `Theme::light`, `Theme::dark` and `layout.rs` |
+
+`:convert` converts between simplified and traditional Chinese with [OpenCC](https://github.com/BYVoid/OpenCC)'s conversion rules and dictionaries (Apache License 2.0), built into the binary by way of [ferrous-opencc](https://crates.io/crates/ferrous-opencc) 0.4.0. The license's text is kept here; OpenCC's dictionaries are copyright Carbo Kuo (BYVoid) and the OpenCC contributors.
+
+| File | Project | What is used |
+| --- | --- | --- |
+| `opencc.LICENSE` | [OpenCC](https://github.com/BYVoid/OpenCC), by way of `ferrous-opencc` 0.4.0 | the conversion dictionaries and rules `:convert` uses, embedded in the binary |

@@ -870,14 +870,6 @@ pub enum How {
     /// Run it over the selection and do [`Put`] with what it says
     /// (`:pipe` and its three siblings).
     Pipe(String, Put),
-    /// Feed it the **whole buffer** and rewrite the buffer with the answer
-    /// (`:convert`).
-    ///
-    /// Not `Pipe`: that one replaces a selection and holds the result to a
-    /// table's shape, both of which are wrong here. 簡繁 is a property of the
-    /// manuscript, not of a passage — converting the paragraph the cursor
-    /// happens to be in leaves a book in two scripts.
-    Convert(String),
     /// Run it once on each selection, given as its input, and keep the
     /// selections it exits 0 on (helix's `$`, `:keep-pipe`).
     Keep(Vec<String>),
@@ -3552,14 +3544,6 @@ pub struct Editor {
     /// The last command `:!` ran, after its own `!` were replaced: what the
     /// next `!` stands for (vim's rule).
     last_bang: Option<String>,
-    /// The 字形 table waiting for opencc to come back (Feature #241).
-    convert_patch: Option<crate::convert::Side>,
-    /// **要換的是哪一段**——`None` 是整本書。
-    ///
-    /// `:convert` 換整本；`` ` `` 那一組換**選區**。opencc 是另一個進程，答案
-    /// 下一趟循環纔回得來，所以「換哪兒」得跟着問題一起放下——等答案回來的時候，
-    /// 選區早就不在了（換完光標要落在換出來的字上）。
-    convert_range: Option<std::ops::Range<usize>>,
     /// **Where a pipe's output goes back**, read when the command was asked
     /// for: vim leaves Visual mode before the answer comes, and the
     /// selection then is one character. Held with the buffer and its
@@ -4854,8 +4838,6 @@ impl Editor {
             shell_request: None,
             suspend_request: false,
             last_bang: None,
-            convert_patch: None,
-            convert_range: None,
             pipe_at: None,
             table: None,
             open_notice: None,

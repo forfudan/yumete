@@ -1,6 +1,6 @@
-//! 簡繁 conversion, handed to opencc — Feature #241.
+//! 簡繁 conversion, by the OpenCC built into the editor — Feature #241.
 //!
-//! ## Why the editor does not do this itself
+//! ## Why the editor does not write its own converter
 //!
 //! 簡繁 looks like a character table and is not one. 发 is 發 in 头发 and 髮 in
 //! 发现; 干 is 乾, 幹 or 干; 里 is 里 or 裏 depending on whether it is a 里 of
@@ -10,8 +10,11 @@
 //! [OpenCC](https://github.com/BYVoid/OpenCC). A converter written here would
 //! be a worse OpenCC that a manuscript would have to trust.
 //!
-//! So `:convert` runs `opencc`. If it is not installed the editor says so and
-//! says how to install it, and changes nothing. That is the whole design.
+//! So `:convert` runs OpenCC — its pure-Rust port, `ferrous-opencc`, linked
+//! into the editor with OpenCC's own dictionaries. There is no program to
+//! install, find on `PATH` or quote for a shell, on any system, and the text
+//! is converted in place in one step: loading a dictionary takes a few
+//! milliseconds and a 300 KB manuscript converts in about ten.
 //!
 //! ## The one thing that is ours
 //!
@@ -21,7 +24,7 @@
 //! word choice**: 説 vs 說, 内 vs 內, 吴 vs 吳 — a few dozen characters, each
 //! one a straight swap.
 //!
-//! That is small enough to be data. [`Side::C`] and [`Side::G`] run opencc to
+//! That is small enough to be data. [`Side::C`] and [`Side::G`] run OpenCC to
 //! 繁體 first and then walk the result once, one character at a time, through
 //! a table copied from [GujiCC](https://github.com/forFudan/GujiCC). No
 //! context, no dictionary, no ambiguity — every row is one character for one
@@ -41,8 +44,10 @@
 //! opencc's own dictionaries decide. Six characters for `c`, four for `g`.
 
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
 use std::sync::OnceLock;
+
+use ferrous_opencc::config::BuiltinConfig;
+use ferrous_opencc::OpenCC;
 
 /// 大陸通規繁體 字形, copied from GujiCC (Apache-2.0).
 const GLYPHS_C: &str = include_str!("glyphs_c.txt");
@@ -141,18 +146,19 @@ impl Side {
 /// characters — `s2twp` turns 内存 into 記憶體. It is a different kind of edit
 /// from the rest of this file (it changes the character count, and it is not
 /// reversible), so it is behind `force` rather than being what `:convert s tw`
-/// quietly does.
+/// quietly does. Taiwan is the only place it goes: 簡體 and 香港繁體 are
+/// converted character by character, with no word-level variant.
 const ROUTES: &[(Side, Side, &str, Option<&str>)] = &[
     (Side::S, Side::T, "s2t", None),
     (Side::S, Side::Tw, "s2tw", Some("s2twp")),
-    (Side::S, Side::Hk, "s2hk", Some("s2hkp")),
+    (Side::S, Side::Hk, "s2hk", None),
     (Side::T, Side::S, "t2s", None),
     (Side::T, Side::Tw, "t2tw", None),
     (Side::T, Side::Hk, "t2hk", None),
     (Side::T, Side::Jp, "t2jp", None),
     (Side::Tw, Side::S, "tw2s", Some("tw2sp")),
     (Side::Tw, Side::T, "tw2t", None),
-    (Side::Hk, Side::S, "hk2s", Some("hk2sp")),
+    (Side::Hk, Side::S, "hk2s", None),
     (Side::Hk, Side::T, "hk2t", None),
     (Side::Jp, Side::T, "jp2t", None),
 ];
@@ -164,9 +170,9 @@ pub struct Plan {
     /// opencc sees it — `Some(C)` for anything starting at 大陸通規繁體, and
     /// `None` for every side opencc already understands.
     pub unpatch: Option<Side>,
-    /// The opencc config to run the text through — `None` when the text is
+    /// The OpenCC config to run the text through — `None` when the text is
     /// already on the right side and only the 字形 table has anything to say
-    /// (`:convert t c` runs no program at all).
+    /// (`:convert t c` runs no OpenCC at all).
     pub config: Option<&'static str>,
     /// The side whose 字形 table is walked over what comes back.
     pub patch: Option<Side>,
@@ -348,39 +354,6 @@ fn walk(text: &str, map: &HashMap<char, char>) -> String {
         .collect()
 }
 
-/// Where `opencc` is, if it is anywhere.
-///
-/// Looked up rather than spawned: `:convert` has to be able to say 「it is not
-/// installed, here is how」 *before* it hands a whole manuscript to a program
-/// that may not exist, and the answer to 「does this exist」 should not cost a
-/// process.
-pub fn opencc() -> Option<PathBuf> {
-    let path = std::env::var_os("PATH")?;
-    std::env::split_paths(&path)
-        .map(|dir| dir.join("opencc"))
-        .find(|candidate| candidate.is_file())
-}
-
-/// Which opencc this is, if it will say.
-///
-/// Spawned, unlike [`opencc`] — but only by `:convert-opencc`, which is the
-/// one command whose whole job is to answer this. `opencc --version` prints
-/// two lines and the version is on the second (`Version: 1.4.2`), so the
-/// number is read off that label rather than off a position: a release that
-/// adds a banner line would otherwise be reported as its own banner.
-pub fn version(program: &std::path::Path) -> Option<String> {
-    let out = std::process::Command::new(program).arg("--version").output().ok()?;
-    let text = String::from_utf8_lossy(match out.stdout.is_empty() {
-        true => &out.stderr,
-        false => &out.stdout,
-    })
-    .into_owned();
-    text.lines()
-        .find_map(|line| line.trim().strip_prefix("Version:"))
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty())
-}
-
 /// Every destination a side can reach, and whether `force` works for it.
 ///
 /// Asked of [`plan`] rather than read off [`ROUTES`], so the menu and the
@@ -396,37 +369,51 @@ pub fn destinations(from: Side) -> Vec<(Side, bool)> {
         .collect()
 }
 
-/// The shell line that runs one conversion.
-///
-/// The program is quoted because it came from `PATH`, and a `PATH` entry is
-/// whatever the reader's shell profile put there — `/Users/…/Application
-/// Support/…` is a real place for a package manager to install into. The
-/// config name never needs quoting: it comes from [`ROUTES`], which is a
-/// literal in this file.
-pub fn command_line(program: &std::path::Path, config: &str) -> String {
-    let program = program.to_string_lossy().replace('\'', r"'\''");
-    format!("'{program}' -c {config}.json")
+/// The built-in OpenCC config a name in [`ROUTES`] stands for.
+fn builtin(config: &str) -> Option<BuiltinConfig> {
+    Some(match config {
+        "s2t" => BuiltinConfig::S2t,
+        "s2tw" => BuiltinConfig::S2tw,
+        "s2twp" => BuiltinConfig::S2twp,
+        "s2hk" => BuiltinConfig::S2hk,
+        "t2s" => BuiltinConfig::T2s,
+        "t2tw" => BuiltinConfig::T2tw,
+        "t2hk" => BuiltinConfig::T2hk,
+        "t2jp" => BuiltinConfig::T2jp,
+        "tw2s" => BuiltinConfig::Tw2s,
+        "tw2sp" => BuiltinConfig::Tw2sp,
+        "tw2t" => BuiltinConfig::Tw2t,
+        "hk2s" => BuiltinConfig::Hk2s,
+        "hk2t" => BuiltinConfig::Hk2t,
+        "jp2t" => BuiltinConfig::Jp2t,
+        _ => return None,
+    })
 }
 
-/// The command that installs opencc on this machine.
+/// Carry `text` along a [`Plan`]: out of 通規 by the table, through OpenCC,
+/// into 通規 by the table — each step only where the plan has one.
 ///
-/// macOS gets Homebrew, which `:convert-opencc-install` can actually run.
-/// Linux gets whichever package manager is there, printed rather than run: it
-/// needs `sudo`, and a full-screen terminal application is the wrong place to
-/// be asked for a password.
-pub fn install_line() -> &'static str {
-    if cfg!(target_os = "macos") {
-        "brew install opencc"
-    } else if cfg!(target_os = "windows") {
-        "winget install BYVoid.OpenCC"
-    } else {
-        "sudo apt install opencc  ｜  sudo dnf install opencc  ｜  sudo pacman -S opencc"
+/// The dictionary is loaded for each call rather than kept: it takes a few
+/// milliseconds, a conversion is something done to a book now and then, and
+/// a kept one would hold its memory for the rest of the session.
+///
+/// The error is the config that would not load, which only a broken build
+/// can produce: every config in [`ROUTES`] is built in.
+pub fn apply(plan: &Plan, text: &str) -> Result<String, &'static str> {
+    let mut text = match plan.unpatch {
+        Some(side) => unrespell(text, side),
+        None => text.to_string(),
+    };
+    if let Some(config) = plan.config {
+        let cc = builtin(config)
+            .and_then(|which| OpenCC::from_config(which).ok())
+            .ok_or(config)?;
+        text = cc.convert(&text);
     }
-}
-
-/// Whether `:convert-opencc-install` may run the install itself.
-pub fn install_runs_here() -> bool {
-    cfg!(target_os = "macos")
+    if let Some(side) = plan.patch {
+        text = respell(&text, side);
+    }
+    Ok(text)
 }
 
 #[cfg(test)]
@@ -493,7 +480,7 @@ mod tests {
                 patch: Some(Side::C)
             })
         );
-        // Already 繁體: the table alone, no child process.
+        // Already 繁體: the table alone, no OpenCC.
         assert_eq!(
             plan(Side::T, Side::C, false),
             Ok(Plan {
@@ -519,7 +506,7 @@ mod tests {
                 patch: None
             })
         );
-        // `c t` is the table backwards and nothing else — no child process.
+        // `c t` is the table backwards and nothing else — no OpenCC.
         assert_eq!(
             plan(Side::C, Side::T, false),
             Ok(Plan {
@@ -564,7 +551,7 @@ mod tests {
             vec![
                 (Side::T, false),
                 (Side::Tw, true),
-                (Side::Hk, true),
+                (Side::Hk, false),
                 (Side::C, false),
                 (Side::G, false)
             ]
@@ -583,21 +570,73 @@ mod tests {
     }
 
     #[test]
-    fn a_path_with_a_space_in_it_is_still_one_word() {
-        let line = command_line(std::path::Path::new("/opt/my tools/opencc"), "s2t");
-        assert_eq!(line, "'/opt/my tools/opencc' -c s2t.json");
+    fn every_route_is_reachable_and_built_in() {
+        // If a pair is listed it has to be plannable and its dictionary has to
+        // load, or `:convert` offers a combination that fails when run.
+        for (from, to, plain, words) in ROUTES {
+            let planned = plan(*from, *to, false).unwrap();
+            assert_eq!(planned.config, Some(*plain));
+            assert!(apply(&planned, "头发").is_ok(), "{plain} does not load");
+            if let Some(p) = words {
+                let planned = plan(*from, *to, true).unwrap();
+                assert_eq!(planned.config, Some(*p));
+                assert!(apply(&planned, "内存").is_ok(), "{p} does not load");
+            }
+        }
+    }
+
+    /// The words a character table gets wrong: one 簡體 character, two or
+    /// three 繁體 ones, chosen by the word around it.
+    const TRICKY: &str = "头发 发现 后天 皇后 干燥 干部 干涉 树干 里面 公里 一只 只有 \
+        面条 见面 系统 关系 联系 钟表 表面 理发 了解 松树 放松 云彩 人云亦云 冲突 \
+        历史 日历 制造 体制 复杂 恢复 余下 台风 台湾 着急 看着 着火 姓范 忧郁 \
+        秋千 斗争 北斗 叶子 才能 卷发 试卷 签名 抽签 并且 合并 胡须 象征 生姜 老板";
+
+    fn run(from: Side, to: Side, force: bool, text: &str) -> String {
+        apply(&plan(from, to, force).unwrap(), text).unwrap()
     }
 
     #[test]
-    fn every_route_opencc_ships_is_reachable() {
-        // The table is the contract with a program we do not control: if a
-        // pair is listed here it has to be plannable, or `:convert` offers a
-        // combination that fails at the command line.
-        for (from, to, plain, words) in ROUTES {
-            assert_eq!(plan(*from, *to, false).unwrap().config, Some(*plain));
-            if let Some(p) = words {
-                assert_eq!(plan(*from, *to, true).unwrap().config, Some(*p));
-            }
-        }
+    fn simplified_to_traditional_picks_the_character_by_the_word() {
+        assert_eq!(
+            run(Side::S, Side::T, false, TRICKY),
+            "頭髮 發現 後天 皇后 乾燥 幹部 干涉 樹幹 裏面 公里 一隻 只有 \
+             麪條 見面 系統 關係 聯繫 鐘錶 表面 理髮 瞭解 松樹 放鬆 雲彩 人云亦云 衝突 \
+             歷史 日曆 製造 體制 複雜 恢復 餘下 颱風 臺灣 着急 看着 着火 姓範 憂鬱 \
+             鞦韆 鬥爭 北斗 葉子 才能 捲髮 試卷 簽名 抽籤 並且 合併 鬍鬚 象徵 生薑 老闆"
+        );
+        // Taiwan and Hong Kong differ from plain 繁體 by glyph shape alone:
+        // 裡 著 麵 for Taiwan, 台 葱 for Hong Kong.
+        assert_eq!(
+            run(Side::S, Side::Tw, false, "里面 着急 面条 台湾 葱"),
+            "裡面 著急 麵條 臺灣 蔥"
+        );
+        assert_eq!(
+            run(Side::S, Side::Hk, false, "里面 着急 面条 台湾 葱"),
+            "裏面 着急 麪條 台灣 葱"
+        );
+    }
+
+    #[test]
+    fn traditional_to_simplified_comes_back_to_the_same_words() {
+        let traditional = run(Side::S, Side::T, false, TRICKY);
+        assert_eq!(run(Side::T, Side::S, false, &traditional), TRICKY);
+    }
+
+    #[test]
+    fn a_mainland_standard_route_runs_opencc_then_the_table() {
+        // s2t gives 説 as 說 and 内 as 內; the 通規 table turns them back.
+        assert_eq!(run(Side::S, Side::C, false, "他说内人在里面"), "他説内人在裏面");
+        // And out of it: the table backwards first, so t2tw can read it.
+        assert_eq!(run(Side::C, Side::Tw, false, "他説内人在裏面，吴先生"), "他說內人在裡面，吳先生");
+        assert_eq!(run(Side::T, Side::Jp, false, "國語學會經濟"), "国語学会経済");
+    }
+
+    #[test]
+    fn words_are_converted_for_taiwan_and_nowhere_else() {
+        assert_eq!(run(Side::S, Side::Tw, true, "内存"), "記憶體");
+        assert_eq!(run(Side::Tw, Side::S, true, "記憶體"), "内存");
+        assert_eq!(plan(Side::S, Side::Hk, true), Err(Snag::NoWords));
+        assert_eq!(plan(Side::Hk, Side::S, true), Err(Snag::NoWords));
     }
 }

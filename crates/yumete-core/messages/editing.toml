@@ -248,6 +248,12 @@ zhs = "已转换：{0} 个字有变化"
 en = "converted: {0|character|characters} changed"
 
 [[message]]
+# :convert 的詞典載不起來，只有程序本身壞了纔會這樣（草稿）
+key = "convert.config-failed"
+zhs = "OpenCC 词典 {0} 无法载入，原文未改动"
+en = "OpenCC could not load {0}; your text is untouched"
+
+[[message]]
 # `` ` `` 那一組換完選區，{0} 是換了幾個字
 key = "convert.done-here"
 zhs = "转换了 {0} 个字(u 撤销)"
@@ -260,18 +266,6 @@ key = "convert.force-means"
 zht = "加 `!` 會連詞語一起轉換(内存 → 記憶體)。字數會變，且無法還原，所以須明確指定。"
 zhs = "加 `!` 会连词语一起转换(内存 → 記憶體)。字数会变，且无法还原，所以须明确指定。"
 en = "`!` converts words too (内存 → 記憶體); the length changes and cannot be reversed, so it must be asked for"
-
-[[message]]
-# :convert-opencc-install，這台機器不能替你跑，只把命令説出來
-key = "convert.install-it-yourself"
-zhs = "请手动安装：{0}"
-en = "install it manually: {0}"
-
-[[message]]
-# :convert-opencc-install 交出螢幕之前
-key = "convert.installing"
-zhs = "正在运行：{0}"
-en = "running: {0}"
 
 [[message]]
 # :convert 換完了，字數變了(force 那一檔連詞一起換)
@@ -298,34 +292,10 @@ zhs = "没有需要转换的字"
 en = "nothing needed converting"
 
 [[message]]
-# :convert 跑成了，可 opencc 一個字都没交回來
-key = "convert.nothing-came-back"
-zhs = "opencc 没有返回内容，原文未改动"
-en = "opencc returned nothing; your text is untouched"
-
-[[message]]
 # `` ` `` 那一組按下去的時候什麽都没選上
 key = "convert.nothing-picked"
 zhs = "这里没有可转换的字"
 en = "nothing to convert here"
-
-[[message]]
-# :convert 的説明頁裏，opencc 裝在哪
-key = "convert.opencc-at"
-zhs = "opencc：{0}"
-en = "opencc: {0}"
-
-[[message]]
-# :convert 要跑了才發現没裝 opencc
-key = "convert.opencc-needed"
-zhs = "未安装 opencc。安装命令：{0}(macOS 上可直接运行 :convert-opencc-install)"
-en = "opencc is not installed. Install it with: {0} (on macOS, :convert-opencc-install runs it)"
-
-[[message]]
-# :convert-opencc 報的那一則：裝了，這個版本，在這裏
-key = "convert.opencc-version"
-zhs = "opencc {0}：{1}"
-en = "opencc {0}: {1}"
 
 [[message]]
 # :convert 説明頁開出來之後的狀態行

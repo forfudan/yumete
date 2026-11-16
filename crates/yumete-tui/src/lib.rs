@@ -1794,11 +1794,6 @@ pub fn run(
                                 editor.provide_kept(&kept);
                             }
                         }
-                        How::Convert(input) => match run_capturing(&want.line, Some(&input), &editor.working_dir()) {
-                            Ok(ran) if ran.ok => editor.provide_conversion(&ran.said),
-                            Ok(ran) => editor.set_status(say!("shell.left-alone", ran.why())),
-                            Err(err) => editor.set_status(say!("shell.cannot-run", err)),
-                        },
                     }
                 }
                 // **What a language was told to run** (Feature #197): the
@@ -30432,50 +30427,26 @@ fn squeezed(text: &str) -> String {
         assert_eq!(editor.current_buffer().text(), "八");
     }
 
-    /// `:convert` from end to end, through the real `opencc` — Feature #241.
+    /// `:convert` from end to end — Feature #241.
     ///
-    /// The unit tests either side of this one check the plan and the rewrite;
-    /// what only a run can check is that the plan produces a command line a
-    /// real converter accepts, and that what comes back is what the manuscript
-    /// should say. `--shot` cannot photograph this — it draws without turning
-    /// the loop that services a shell request — so the loop's own arm is
-    /// spelled out here instead.
-    ///
-    /// Skipped where `opencc` is not installed, which is most CI machines. A
-    /// test that silently passes without the program would be worse than none.
+    /// OpenCC is linked in, so the conversion happens inside `execute`: no
+    /// shell request comes out for the loop to service.
     #[test]
-    fn convert_runs_the_real_opencc_and_brings_back_the_manuscript() {
-        use yumete_core::editor::How;
-        let Some(_) = yumete_core::convert::opencc() else {
-            return;
-        };
-        // 通規 in, 臺灣正體 out: 説 内 吴 are 字形 opencc has never heard of,
+    fn convert_brings_back_the_manuscript_without_a_shell() {
+        // 通規 in, 臺灣正體 out: 説 内 吴 are 字形 OpenCC has never heard of,
         // so this only works if the table was walked backwards first.
         let mut editor = editor_with("他説内人在裏面，吴先生録了一段。\n");
         editor.execute("convert c tw").unwrap();
-        let want = editor.take_shell_request().expect("opencc has to be run");
-        let How::Convert(input) = want.how else {
-            panic!("a conversion is piped, not handed the screen");
-        };
-        assert_eq!(input, "他說內人在裏面，吳先生錄了一段。\n", "the way back");
-        let ran = run_capturing(&want.line, Some(&input), &editor.working_dir()).expect("opencc runs");
-        assert!(ran.ok, "{}", ran.why());
-        editor.provide_conversion(&ran.said);
+        assert!(editor.take_shell_request().is_none(), "nothing is handed to a shell");
         assert_eq!(
             editor.current_buffer().rope().to_string(),
             "他說內人在裡面，吳先生錄了一段。\n"
         );
         // And back the other way, where the table is walked forwards over
-        // what opencc hands over.
+        // what OpenCC hands over.
         let mut editor = editor_with("他说内人在里面，吴先生录了一段。\n");
         editor.execute("convert s c").unwrap();
-        let want = editor.take_shell_request().expect("opencc has to be run");
-        let How::Convert(input) = want.how else {
-            panic!("a conversion is piped, not handed the screen");
-        };
-        let ran = run_capturing(&want.line, Some(&input), &editor.working_dir()).expect("opencc runs");
-        assert!(ran.ok, "{}", ran.why());
-        editor.provide_conversion(&ran.said);
+        assert!(editor.take_shell_request().is_none());
         assert_eq!(
             editor.current_buffer().rope().to_string(),
             "他説内人在裏面，吴先生録了一段。\n"

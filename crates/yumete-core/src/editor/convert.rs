@@ -1,110 +1,66 @@
-//! 簡繁, handed to opencc (#241).
+//! 簡繁, by the built-in OpenCC (#241).
 
 use super::*;
 
 impl Editor {
-    // ---- 簡繁, handed to opencc (Feature #241) ----------------------------
+    // ---- 簡繁, by the built-in OpenCC (Feature #241) ----------------------
 
     /// `:convert` — every shape of it.
     pub(super) fn convert(&mut self, ask: crate::command::ConvertAsk) {
         use crate::command::ConvertAsk;
-        use crate::convert::{self, Snag};
         match ask {
             ConvertAsk::Explain => self.explain_convert(),
-            // The one place that *runs* opencc to find out about opencc. Asking
-            // its version costs a process, which is why `:convert` itself still
-            // only looks at `PATH` (see [`convert::opencc`]).
-            ConvertAsk::Status => {
-                self.status = match convert::opencc() {
-                    None => say!("convert.opencc-needed", convert::install_line()),
-                    Some(path) => match convert::version(&path) {
-                        Some(version) => say!("convert.opencc-version", version, path.display()),
-                        None => say!("convert.opencc-at", path.display()),
-                    },
-                };
-            }
-            ConvertAsk::Opencc { update } => {
-                let line = match update {
-                    true => convert::install_line().replace("install", "upgrade"),
-                    false => convert::install_line().to_string(),
-                };
-                // Only where one command does it without a password. Elsewhere
-                // the line is *said*, because a full-screen terminal
-                // application is the wrong place to be asked for a sudo
-                // password — and because which package manager this machine
-                // has is not something the editor should guess at and then run.
-                if !convert::install_runs_here() {
-                    self.status = say!("convert.install-it-yourself", line);
-                    return;
-                }
-                self.status = say!("convert.installing", line);
-                self.shell_request = Some(Shell {
-                    line,
-                    how: How::Terminal,
-                });
-            }
-            ConvertAsk::Run { from, to, force } => {
-                let plan = match convert::plan(from, to, force) {
-                    Ok(plan) => plan,
-                    Err(Snag::Same) => {
-                        self.status = say!("convert.same-side", from.word(), to.word());
-                        return;
-                    }
-                    Err(Snag::NoRoute) => {
-                        self.status = say!("convert.no-route", from.word(), to.word());
-                        return;
-                    }
-                    Err(Snag::NoWords) => {
-                        self.status = say!("convert.no-force", from.word(), to.word());
-                        return;
-                    }
-                };
-                // The way out of 通規 happens here rather than in the child:
-                // opencc's configs cannot read those 字形, so what it is handed
-                // has to be 字形 it knows.
-                // Warning: **换哪一段，在這裏就定下來。** 整本是 `None`；`` ` `` 那一
-                // 組先把選區放進 `convert_range`，這裏照它取字。
-                let whole = self.convert_range.is_none();
-                let mut text = match &self.convert_range {
-                    Some(range) => self.current_buffer().rope().slice(range.clone()).to_string(),
-                    None => self.current_buffer().rope().to_string(),
-                };
-                let _ = whole;
-                if let Some(side) = plan.unpatch {
-                    text = convert::unrespell(&text, side);
-                }
-                let Some(config) = plan.config else {
-                    // 繁體 to 繁體: 字形 tables and nothing else, so there is
-                    // no program to be missing and no process to spawn.
-                    if let Some(side) = plan.patch {
-                        text = convert::respell(&text, side);
-                    }
-                    self.rewrite_with_conversion(&text);
-                    return;
-                };
-                let Some(program) = convert::opencc() else {
-                    self.status = say!("convert.opencc-needed", convert::install_line());
-                    return;
-                };
-                self.convert_patch = plan.patch;
-                self.shell_request = Some(Shell {
-                    line: convert::command_line(&program, config),
-                    how: How::Convert(text),
-                });
-            }
+            ConvertAsk::Run { from, to, force } => self.run_conversion(from, to, force, None),
         }
     }
 
-    /// What `:convert` on its own answers: what it can do, and whether the
-    /// program it needs is here.
+    /// Convert the whole book (`range` is `None`) or one stretch of it, here
+    /// and now: OpenCC is linked in, so there is nothing to wait for and the
+    /// answer goes straight into the buffer as one undo step.
+    fn run_conversion(
+        &mut self,
+        from: crate::convert::Side,
+        to: crate::convert::Side,
+        force: bool,
+        range: Option<std::ops::Range<usize>>,
+    ) {
+        use crate::convert::{self, Snag};
+        let plan = match convert::plan(from, to, force) {
+            Ok(plan) => plan,
+            Err(Snag::Same) => {
+                self.status = say!("convert.same-side", from.word(), to.word());
+                return;
+            }
+            Err(Snag::NoRoute) => {
+                self.status = say!("convert.no-route", from.word(), to.word());
+                return;
+            }
+            Err(Snag::NoWords) => {
+                self.status = say!("convert.no-force", from.word(), to.word());
+                return;
+            }
+        };
+        let text = match &range {
+            Some(range) => self.current_buffer().rope().slice(range.clone()).to_string(),
+            None => self.current_buffer().rope().to_string(),
+        };
+        let converted = match convert::apply(&plan, &text) {
+            Ok(converted) => converted,
+            Err(config) => {
+                self.status = say!("convert.config-failed", config);
+                return;
+            }
+        };
+        match range {
+            Some(range) => self.rewrite_range_with_conversion(range, &converted),
+            None => self.rewrite_with_conversion(&converted),
+        }
+    }
+
+    /// What `:convert` on its own answers: what it can do.
     fn explain_convert(&mut self) {
         use crate::convert::{self, Side};
         let mut listing = String::new();
-        listing.push_str(&match convert::opencc() {
-            Some(path) => say!("convert.opencc-at", path.display()),
-            None => say!("convert.opencc-needed", convert::install_line()),
-        });
-        listing.push_str("\n\n");
         for side in Side::ALL {
             listing.push_str(&match side {
                 Side::S => say!("convert.side-s"),
@@ -171,27 +127,7 @@ impl Editor {
             self.status = say!("convert.nothing-picked");
             return;
         }
-        self.convert_range = Some(start..end);
-        self.convert(crate::command::ConvertAsk::Run { from, to, force: false });
-    }
-
-    /// What opencc said, patched and put in the buffer.
-    pub fn provide_conversion(&mut self, output: &str) {
-        let patched = match self.convert_patch.take() {
-            Some(side) => crate::convert::respell(output, side),
-            None => output.to_string(),
-        };
-        // opencc answers an empty file with an empty file and exit 0, so
-        // 「nothing came back」 is only a finding when something went in.
-        if patched.is_empty() && self.current_buffer().char_count() > 0 {
-            self.convert_range = None;
-            self.status = say!("convert.nothing-came-back");
-            return;
-        }
-        match self.convert_range.take() {
-            Some(range) => self.rewrite_range_with_conversion(range, &patched),
-            None => self.rewrite_with_conversion(&patched),
-        }
+        self.run_conversion(from, to, false, Some(start..end));
     }
 
     /// **換掉選區那一段**，其餘一個字不動。

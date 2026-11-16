@@ -90,6 +90,12 @@ libc = "0.2"
 # 「is the process that left this draft still running」 (there are no signals to
 # borrow there). Already in the lock file by way of crossterm, so it costs no
 # build.
+# **`:convert` is OpenCC, linked in** (src/convert.rs): the pure-Rust port with
+# OpenCC's dictionaries built in, so 簡繁 conversion needs no program on
+# `PATH` and no shell on any system. `japanese-conversion` adds the 日本新字体
+# routes (`t2jp`, `jp2t`) to the default two.
+ferrous-opencc = {version = "0.4.0", features = ["japanese-conversion"]}
+
 [target.'cfg(windows)'.dependencies]
 windows-sys = {version = "0.59", features = ["Win32_Storage_FileSystem", "Win32_Foundation", "Win32_System_SystemInformation", "Win32_System_Threading"]}
 

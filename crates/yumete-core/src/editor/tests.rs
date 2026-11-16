@@ -11934,9 +11934,7 @@ fn an_edit_that_did_nothing_leaves_nothing_to_undo() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// 繁體 to 繁體 is a 字形 table and nothing else, so it runs here — no
-/// opencc, no child process, and a machine without opencc can still do it
-/// (#241).
+/// 繁體 to 繁體 is a 字形 table and nothing else — no OpenCC at all (#241).
 #[test]
 fn mainland_glyphs_need_no_program_at_all() {
     let mut ed = typed("他說內人在裏面，吳先生溫了酒。\n");
@@ -11954,43 +11952,53 @@ fn mainland_glyphs_need_no_program_at_all() {
     );
 }
 
-/// Everything else is opencc's, and the editor's whole part in it is to
-/// hand over the buffer and put back what comes out (#241).
+/// Everything else is OpenCC's, linked in: the buffer is converted inside
+/// `execute`, nothing is handed to a shell, and one `u` undoes it (#241).
 #[test]
-fn simplified_to_traditional_is_handed_to_opencc() {
-    // Warning: `:convert` hands the work to **opencc**, and says how to install it
-    // instead when it is not there — so with no opencc there is no shell
-    // request to look at, and this asserts nothing. Both CI Linux runners and
-    // the macOS one caught it: green on a developer's machine, red on a bare
-    // one. See `crate::convert::opencc`.
-    if crate::convert::opencc().is_none() {
-        return;
-    }
+fn simplified_to_traditional_is_converted_in_place() {
     let mut ed = typed("他说内人在里面。\n");
     assert!(ed.execute("convert s c").is_ok());
-    let asked = ed.take_shell_request().expect("opencc to run");
-    assert!(
-        asked.line.ends_with("-c s2t.json"),
-        "大陸通規 goes through 繁體 first: {}",
-        asked.line
-    );
-    match asked.how {
-        How::Convert(text) => assert_eq!(text, "他说内人在里面。\n", "the whole book"),
-        other => panic!("{other:?}"),
-    }
-    // What opencc says, then the 字形 table on top of it.
-    ed.provide_conversion("他說內人在裏面。\n");
+    assert!(ed.take_shell_request().is_none(), "no program is run");
+    // OpenCC's s2t, then the 字形 table on top of it.
     assert_eq!(ed.current_buffer().text(), "他説内人在裏面。\n");
     assert!(ed.status().contains('2'), "how much moved: {}", ed.status());
+    press(&mut ed, "u");
+    assert_eq!(ed.current_buffer().text(), "他说内人在里面。\n", "one undo step");
 }
 
-/// A pair opencc cannot do is refused before anything is spawned, and the
-/// refusal says where to look — the alternative is a command line that
-/// fails with opencc's own error, which names a config file (#241).
+/// **No `opencc` on `PATH`, no difference** (#241): the conversion never looks
+/// for a program. Run in a child test process with an empty `PATH`, so the
+/// tests beside it that do run programs keep theirs.
+#[test]
+fn convert_works_with_an_empty_path() {
+    const MARK: &str = "YUMETE_TEST_EMPTY_PATH";
+    if std::env::var_os(MARK).is_none() {
+        let me = std::env::current_exe().expect("the test binary");
+        let out = std::process::Command::new(me)
+            .args(["--exact", "editor::tests::convert_works_with_an_empty_path", "--nocapture"])
+            .env("PATH", "")
+            .env(MARK, "1")
+            .output()
+            .expect("the test binary runs");
+        let said = String::from_utf8_lossy(&out.stdout);
+        assert!(out.status.success(), "{said}{}", String::from_utf8_lossy(&out.stderr));
+        assert!(said.contains("1 passed"), "the child ran the test: {said}");
+        return;
+    }
+    assert_eq!(std::env::var_os("PATH").as_deref(), Some(std::ffi::OsStr::new("")));
+    let mut ed = typed("头发干燥，后面还有。\n");
+    assert!(ed.execute("convert s t").is_ok());
+    assert_eq!(ed.current_buffer().text(), "頭髮乾燥，後面還有。\n");
+    assert!(ed.execute("convert t s").is_ok());
+    assert_eq!(ed.current_buffer().text(), "头发干燥，后面还有。\n");
+}
+
+/// A pair OpenCC cannot do is refused before anything is touched, and the
+/// refusal says where to look (#241).
 #[test]
 fn a_pair_opencc_cannot_do_is_refused_rather_than_attempted() {
     let mut ed = typed("なにか\n");
-    for line in ["convert jp s", "convert c g", "convert s s", "convert! s t"] {
+    for line in ["convert jp s", "convert c g", "convert s s", "convert! s t", "convert! s hk", "convert! hk s"] {
         assert!(ed.execute(line).is_ok(), "{line}");
         assert!(
             ed.take_shell_request().is_none(),
@@ -12010,23 +12018,29 @@ fn a_pair_opencc_cannot_do_is_refused_rather_than_attempted() {
 /// 了只換字的那一套。
 #[test]
 fn convert_with_a_bang_changes_the_words_too() {
-    // Warning: `:convert` hands the work to **opencc**, and says how to install it
-    // instead when it is not there — so with no opencc there is no shell
-    // request to look at, and this asserts nothing. Both CI Linux runners and
-    // the macOS one caught it: green on a developer's machine, red on a bare
-    // one. See `crate::convert::opencc`.
-    if crate::convert::opencc().is_none() {
-        return;
-    }
     let mut ed = typed("内存不足\n");
     assert!(ed.execute("convert! s tw").is_ok());
-    let asked = ed.take_shell_request().expect("opencc to run");
-    assert!(asked.line.ends_with("-c s2twp.json"), "{}", asked.line);
+    assert_eq!(ed.current_buffer().text(), "記憶體不足\n");
 
     // And without it, the character-only config.
+    let mut ed = typed("内存不足\n");
     assert!(ed.execute("convert s tw").is_ok());
-    let asked = ed.take_shell_request().expect("opencc to run");
-    assert!(asked.line.ends_with("-c s2tw.json"), "{}", asked.line);
+    assert_eq!(ed.current_buffer().text(), "內存不足\n");
+}
+
+/// **`!` between 簡體 and 香港繁體 is not a route** (#241): the refusal is the
+/// ordinary 「no word-level variant」 one, and the text is left alone.
+#[test]
+fn convert_with_a_bang_to_hong_kong_is_refused() {
+    let mut ed = typed("内存不足\n");
+    assert!(ed.execute("convert! s hk").is_ok());
+    assert_eq!(ed.current_buffer().text(), "内存不足\n");
+    let said = ed.status().to_string();
+    assert!(ed.execute("convert! s t").is_ok());
+    assert_eq!(said.replace("hk", "t"), ed.status(), "the same refusal as any pair without words");
+    // Without the bang Hong Kong works.
+    assert!(ed.execute("convert s hk").is_ok());
+    assert_eq!(ed.current_buffer().text(), "內存不足\n");
 }
 
 /// `:convert` alone explains rather than guessing a direction (#241).
@@ -12047,25 +12061,6 @@ fn convert_on_its_own_says_what_it_can_do() {
         .find(|l| l.trim_start().starts_with("jp  →"))
         .unwrap_or_else(|| panic!("no jp row:\n{out}"));
     assert!(!jp.contains(" s"), "{jp}");
-}
-
-/// opencc failing does not get to overwrite a manuscript (#241).
-#[test]
-fn a_conversion_that_came_back_empty_changes_nothing() {
-    // Warning: `:convert` hands the work to **opencc**, and says how to install it
-    // instead when it is not there — so with no opencc there is no shell
-    // request to look at, and this asserts nothing. Both CI Linux runners and
-    // the macOS one caught it: green on a developer's machine, red on a bare
-    // one. See `crate::convert::opencc`.
-    if crate::convert::opencc().is_none() {
-        return;
-    }
-    let mut ed = typed("他说内人在里面。\n");
-    assert!(ed.execute("convert s t").is_ok());
-    assert!(ed.take_shell_request().is_some());
-    ed.provide_conversion("");
-    assert_eq!(ed.current_buffer().text(), "他说内人在里面。\n");
-    assert!(!ed.status().is_empty());
 }
 
 #[test]
@@ -26292,10 +26287,6 @@ fn a_second_escape_says_the_suspension_again() {
 /// 完整命令又是 `` `tw `` 的前綴，只能靠超時去猜。
 #[test]
 fn the_backtick_group_converts_only_what_is_picked() {
-    use crate::editor::How;
-    if crate::convert::opencc().is_none() {
-        return; // 機器上没裝 opencc，這一條没什麽可驗的
-    }
     let mut ed = typed("他說內人在裏面。\n第二行不動。\n");
     ed.goto_line(1);
     // 選中第一行（`v` 開始，`gl` 到行尾）。
@@ -26305,14 +26296,7 @@ fn the_backtick_group_converts_only_what_is_picked() {
     ed.on_key(Key::Char('`'));
     ed.on_key(Key::Char('s'));
 
-    let asked = ed.take_shell_request().expect("opencc 要跑一趟");
-    match asked.how {
-        // Warning: 送出去的**只有選區**，不是整本書。
-        How::Convert(text) => assert_eq!(text, "他說內人在裏面。", "只送選中的那一段"),
-        other => panic!("{other:?}"),
-    }
-
-    ed.provide_conversion("他说内人在里面。");
+    assert!(ed.take_shell_request().is_none(), "不跑外部程序");
     assert_eq!(
         ed.current_buffer().text(),
         "他说内人在里面。\n第二行不動。\n",

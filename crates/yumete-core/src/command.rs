@@ -1256,12 +1256,10 @@ fn parse_read_shell(line: &str) -> Option<Result<Command, CommandError>> {
 
 /// What was asked of `:convert`.
 ///
-/// Four shapes rather than one because they are four different questions:
-/// what can this do, do it, which opencc is here, and get me one.
+/// Two shapes because they are two questions: what can this do, and do it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConvertAsk {
-    /// `:convert` on its own — every pair it can do, and whether opencc is
-    /// installed.
+    /// `:convert` on its own — every pair it can do.
     ///
     /// **There is deliberately no default direction.** Half the manuscripts in
     /// the world want `s t` and half want `t s`; a bare `:convert` that picked
@@ -1272,23 +1270,11 @@ pub enum ConvertAsk {
     Run {
         from: Side,
         to: Side,
-        /// Convert **words** too — opencc's `p` configs, which turn 内存 into
+        /// Convert **words** too — OpenCC's `p` configs, which turn 内存 into
         /// 記憶體. Behind a word because it is a different promise: the text
         /// comes back a different length, and running the reverse config does
         /// not bring it back.
         force: bool,
-    },
-    /// `:convert-opencc` — whether opencc is installed, where, which version.
-    ///
-    /// Its own question, not a second spelling of [`Self::Explain`]. The
-    /// listing answers 「which ways can this text be turned」, and half of its
-    /// routes (繁體 to 繁體) never spawn opencc at all; this answers 「is the
-    /// program here」, and it is the only thing in the crate that runs opencc
-    /// to find out rather than looking at `PATH`.
-    Status,
-    /// `:convert-opencc-install` / `:convert-opencc-update`.
-    Opencc {
-        update: bool,
     },
 }
 
@@ -3533,9 +3519,6 @@ const WORD_LEVELS: &[Word] = &[
     },
 ];
 
-/// What `:check` can be asked to look over (Feature #233).
-///
-/// What `:convert-opencc` can be asked to do.
 /// The two halves of a 簡繁 conversion — which writing it is now, and which
 /// it should become.
 const SIDES: &[Word] = &[
@@ -4061,30 +4044,6 @@ pub const COMMANDS: &[Entry] = &[
                 }),
             }
         }),
-    },
-    Entry {
-        name: "convert-opencc",
-        aliases: &[],
-        help: "cmd.convert.opencc",
-        needs: &[],
-        params: &[],
-        build: Some(|_| Ok(Command::Convert(ConvertAsk::Status))),
-    },
-    Entry {
-        name: "convert-opencc-install",
-        aliases: &[],
-        help: "cmd.opencc.install",
-        needs: &[],
-        params: &[],
-        build: Some(|_| Ok(Command::Convert(ConvertAsk::Opencc { update: false }))),
-    },
-    Entry {
-        name: "convert-opencc-update",
-        aliases: &[],
-        help: "cmd.opencc.update",
-        needs: &[],
-        params: &[],
-        build: Some(|_| Ok(Command::Convert(ConvertAsk::Opencc { update: true }))),
     },
     Entry {
         name: "quit",
@@ -10002,20 +9961,6 @@ mod tests {
                 "{spec}"
             );
         }
-    }
-
-    /// **`:convert-opencc` is not a second spelling of bare `:convert`.**
-    ///
-    /// Both built `ConvertAsk::Explain`, so the command whose help said
-    /// 「opencc 本身」 printed the list of 簡繁 routes. Half those routes never
-    /// run opencc at all.
-    #[test]
-    fn convert_opencc_asks_about_opencc() {
-        assert_eq!(parse(":convert"), Ok(Command::Convert(ConvertAsk::Explain)));
-        assert_eq!(
-            parse(":convert-opencc"),
-            Ok(Command::Convert(ConvertAsk::Status))
-        );
     }
 
     /// **The bang of `:replace!` is read**.
