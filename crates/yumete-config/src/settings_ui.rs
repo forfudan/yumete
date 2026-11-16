@@ -230,6 +230,7 @@ const EDITOR_VERTICAL_KEYS_WAYS: &[Choice] = &[
 
 const EDITOR_AUTO_PAIRS_WAYS: &[Choice] = &[
     Choice { word: "off", label: "settings.pick.auto-pairs.off" },
+    Choice { word: "minimal", label: "settings.pick.auto-pairs.minimal" },
     Choice { word: "basic", label: "settings.pick.auto-pairs.basic" },
     Choice { word: "full", label: "settings.pick.auto-pairs.full" },
 ];

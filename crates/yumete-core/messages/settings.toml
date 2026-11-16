@@ -165,10 +165,10 @@ zhs = "自动配对"
 en = "auto-pairs"
 
 [[message]]
-# 設置面板：[editor] auto_pairs 那一行底下的說明
+# 設置面板：[editor] auto_pairs 那一行底下的說明（草稿）
 key = "settings.editor.auto-pairs.hint"
-zhs = "输入左括号或引号时自动补上右半边；再输入右半边会跳过"
-en = "typing an opening bracket or quote adds its closer; typing the closer then steps over it"
+zhs = "输入左括号或引号时自动补上右半边；再输入右半边会跳过。仅括号：() [] {}；基本：再加三种英文引号；完整：所有成对符号"
+en = "typing an opening bracket or quote adds its closer; typing the closer then steps over it. minimal: () [] {}; basic: also the three ASCII quotes; full: every paired symbol"
 
 [[message]]
 # 設置：抢救副本
@@ -1683,6 +1683,12 @@ en = "basic"
 key = "settings.pick.auto-pairs.full"
 zhs = "完整"
 en = "full"
+
+[[message]]
+# 設置面板：自動配對 minimal（只配 ASCII 的三種括號，不配引號）（草稿）
+key = "settings.pick.auto-pairs.minimal"
+zhs = "仅括号"
+en = "minimal"
 
 [[message]]
 # 設置面板：自動配對 off

@@ -409,7 +409,7 @@ en = "repeated at most {0|time|times}; the rest are skipped"
 # ── data ──────────────────────────────────────────────────────────────
 
 [[message]]
-# :auto-pairs 的回答({0} ＝ off／basic／full)
+# :auto-pairs 的回答({0} ＝ off／minimal／basic／full)
 key = "edit.auto-pairs"
 zhs = "自动配对：{0}"
 en = "auto-pairs: {0}"

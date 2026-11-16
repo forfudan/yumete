@@ -212,8 +212,8 @@ pub struct EditorConfig {
     /// `"color"`, `"symbol"`.
     pub indent_hint: String,
     /// Which brackets and quotes close themselves as they are typed: `"off"`,
-    /// `"basic"` (default, helix's six), `"full"` (every pair the `m` group
-    /// knows). Checked and applied by the front end, as `indent_hint` is.
+    /// `"minimal"` (the three ASCII brackets), `"basic"` (default, helix's
+    /// six), `"full"` (every pair the `m` group knows). Checked and applied by the front end, as `indent_hint` is.
     pub auto_pairs: String,
     /// The character the `symbol` hint draws in the first of them.
     pub indent_symbol: String,

@@ -427,10 +427,10 @@ en = "align the selected lines on a character (= by default)"
 find = "对齐 對齊 等号 等號 align equals mini.align"
 
 [[message]]
-# : 菜單：:auto-pairs 那一行
+# : 菜單：:auto-pairs 那一行（草稿）
 key = "cmd.commands.auto-pairs"
-zhs = "自动补上右括号：关/基本/完整；不带参数显示当前档位"
-en = "auto-close brackets: off, basic, full; no argument shows the current one"
+zhs = "自动补上右括号：关/仅括号/基本/完整；不带参数显示当前档位"
+en = "auto-close brackets: off, minimal, basic, full; no argument shows the current one"
 find = "自動配對 自动配对 括號 括号 引號 引号 auto pairs"
 
 [[message]]

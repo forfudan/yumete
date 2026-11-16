@@ -4768,6 +4768,82 @@ fn brackets_and_quotes_close_themselves() {
     assert_eq!(text(&ed), "正文[^注]。[^注]X\n\n[^注]: 一\n", "the caret steps past the closer");
 }
 
+/// **Auto-pairs, `minimal` and runs of a quote**: `minimal` pairs the three
+/// brackets and no quote; a quote does not pair right after the same quote,
+/// at every level and in every file type, so `"""` and a fence come out as
+/// typed (helix writes four, its issue #13697).
+#[test]
+fn a_run_of_one_quote_is_typed_as_it_reads() {
+    use crate::editor::AutoPairs;
+    // `keys` typed from Insert into an empty buffer of `syntax`, `\n` being
+    // Enter; `|` marks the caret.
+    let run = |syntax: crate::syntax::Syntax, level: AutoPairs, keys: &str| {
+        let mut ed = typed("");
+        ed.current_buffer_mut().set_syntax_by_hand(syntax);
+        ed.set_auto_pairs(level);
+        press(&mut ed, "i");
+        for c in keys.chars() {
+            ed.on_key(if c == '\n' { Key::Enter } else { Key::Char(c) });
+        }
+        let at = ed.cursor();
+        let mut out = ed.current_buffer().text().to_string();
+        out.insert(out.char_indices().nth(at).map_or(out.len(), |(i, _)| i), '|');
+        out
+    };
+    let md = crate::syntax::Syntax::Markdown;
+    let py = crate::syntax::Syntax::Code(crate::code::Language::Python);
+
+    // `minimal`: brackets, not quotes.
+    let minimal = AutoPairs::Minimal;
+    assert_eq!(run(md, minimal, "("), "(|)");
+    assert_eq!(run(md, minimal, "["), "[|]");
+    assert_eq!(run(md, minimal, "{"), "{|}");
+    assert_eq!(run(md, minimal, "(x)"), "(x)|");
+    assert_eq!(run(md, minimal, "\""), "\"|");
+    assert_eq!(run(md, minimal, "'"), "'|");
+    assert_eq!(run(md, minimal, "`"), "`|");
+
+    for level in [AutoPairs::Basic, AutoPairs::Full] {
+        for syntax in [md, py] {
+            assert_eq!(run(syntax, level, "\""), "\"|\"", "{level:?}");
+            assert_eq!(run(syntax, level, "\"\""), "\"\"|", "{level:?}: the second steps over");
+            assert_eq!(run(syntax, level, "\"\"\""), "\"\"\"|", "{level:?}");
+            assert_eq!(run(syntax, level, "'''"), "'''|", "{level:?}");
+            assert_eq!(run(syntax, level, "```"), "```|", "{level:?}");
+            assert_eq!(run(syntax, level, "```\n"), "```\n|", "{level:?}: nothing stray after a fence");
+            assert_eq!(run(syntax, level, "```rust\n"), "```rust\n|", "{level:?}");
+            assert_eq!(run(syntax, level, "don't"), "don't|", "{level:?}");
+            assert_eq!(run(syntax, level, "(\""), "(\"|\")", "{level:?}");
+        }
+    }
+    assert_eq!(run(md, AutoPairs::Full, "＂＂＂"), "＂＂＂|", "the full-width forms too");
+    assert_eq!(run(md, AutoPairs::Full, "＂"), "＂|＂");
+
+    // Backspace still takes an empty pair, a quote's as a bracket's.
+    for (level, open) in [(AutoPairs::Minimal, "("), (AutoPairs::Basic, "\""), (AutoPairs::Basic, "[")] {
+        let mut ed = typed("");
+        ed.set_auto_pairs(level);
+        press(&mut ed, "i");
+        press(&mut ed, open);
+        ed.on_key(Key::Backspace);
+        assert_eq!(ed.current_buffer().text().to_string(), "", "{level:?} {open}");
+    }
+}
+
+/// **The levels' names**, as the config and `:auto-pairs` spell them.
+#[test]
+fn auto_pairs_levels_round_trip() {
+    use crate::editor::AutoPairs;
+    for level in [AutoPairs::Off, AutoPairs::Minimal, AutoPairs::Basic, AutoPairs::Full] {
+        assert_eq!(AutoPairs::parse(level.name()), Some(level));
+    }
+    assert_eq!(AutoPairs::parse(" Minimal "), Some(AutoPairs::Minimal));
+    assert_eq!(AutoPairs::parse("true"), Some(AutoPairs::Basic));
+    assert_eq!(AutoPairs::parse("false"), Some(AutoPairs::Off));
+    assert_eq!(AutoPairs::parse("brackets"), None);
+    assert_eq!(AutoPairs::default(), AutoPairs::Basic);
+}
+
 /// **Undo and redo**, against helix 25.07.1: `u` keeps every cursor, and
 /// redo after `r` comes back to the change.
 #[test]

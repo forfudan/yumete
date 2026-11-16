@@ -534,6 +534,35 @@ fn set(got: &mut Gathered, key: &str, value: String) {
     got.carried += 1;
 }
 
+/// **The level a helix `[editor.auto-pairs]` table names**: its pairs as a
+/// set, when they are exactly one of yumete's levels. An empty table pairs
+/// nothing; the three brackets are `minimal`; helix's own six are `basic`.
+fn auto_pairs_level(pairs: &toml::Table) -> Option<&'static str> {
+    let one = |s: &str| {
+        let mut chars = s.chars();
+        chars.next().filter(|_| chars.next().is_none())
+    };
+    let mut got: Vec<(char, char)> = Vec::new();
+    for (open, close) in pairs {
+        got.push((one(open)?, one(close.as_str()?)?));
+    }
+    got.sort_unstable();
+    got.dedup();
+    let same = |want: &[(char, char)]| {
+        let mut want = want.to_vec();
+        want.sort_unstable();
+        got == want
+    };
+    let brackets = [('(', ')'), ('[', ']'), ('{', '}')];
+    let helix = [('(', ')'), ('[', ']'), ('{', '}'), ('"', '"'), ('\'', '\''), ('`', '`')];
+    match () {
+        _ if got.is_empty() => Some("off"),
+        _ if same(&brackets) => Some("minimal"),
+        _ if same(&helix) => Some("basic"),
+        _ => None,
+    }
+}
+
 /// **helix's `[editor]`, for the settings yumete has.**
 fn editor_table(table: &toml::Table, got: &mut Gathered) {
     let mut line_numbers: Option<String> = None;
@@ -648,7 +677,11 @@ fn editor_table(table: &toml::Table, got: &mut Gathered) {
             "auto-pairs" => match value {
                 toml::Value::Boolean(false) => set(got, "auto_pairs", quote("off")),
                 toml::Value::Boolean(true) => set(got, "auto_pairs", quote("basic")),
-                _ => skip(got, "yumete's pairs are fixed: auto_pairs is off, basic or full"),
+                toml::Value::Table(pairs) => match auto_pairs_level(pairs) {
+                    Some(level) => set(got, "auto_pairs", quote(level)),
+                    None => skip(got, "yumete's pairs are fixed: auto_pairs is off, minimal, basic or full"),
+                },
+                _ => skip(got, "not true, false or a table"),
             },
             "word-completion" => {
                 let Some(t) = value.as_table() else {
@@ -1685,6 +1718,27 @@ j = { k = "normal_mode" }
         assert!(sample().text.contains("A run written with @"));
         let skipped_run = helix("[keys.normal]\nA-x = \"@<esc>x\"\n", Path::new("x"), "t", false, None).unwrap().text;
         assert!(!skipped_run.contains("A run written with @"), "{skipped_run}");
+    }
+
+    /// helix's `auto-pairs`: true and false, or a table that is exactly one
+    /// of yumete's levels; any other table is left out with the reason.
+    #[test]
+    fn helix_s_auto_pairs_land_on_a_level() {
+        let carried = |source: &str| {
+            let out = helix(source, Path::new("x"), "t", false, None).unwrap().text;
+            assert_eq!(complaints(&out), Vec::<String>::new(), "{out}");
+            out
+        };
+        assert!(carried("[editor]\nauto-pairs = false\n").contains("auto_pairs = \"off\""));
+        assert!(carried("[editor]\nauto-pairs = true\n").contains("auto_pairs = \"basic\""));
+        let brackets = "[editor.auto-pairs]\n'(' = ')'\n'{' = '}'\n'[' = ']'\n";
+        assert!(carried(brackets).contains("auto_pairs = \"minimal\""));
+        let six = "[editor.auto-pairs]\n'(' = ')'\n'{' = '}'\n'[' = ']'\n'\"' = '\"'\n\"'\" = \"'\"\n'`' = '`'\n";
+        assert!(carried(six).contains("auto_pairs = \"basic\""));
+        assert!(carried("[editor.auto-pairs]\n").contains("auto_pairs = \"off\""));
+        let other = carried("[editor.auto-pairs]\n'(' = ')'\n'<' = '>'\n");
+        assert!(!other.contains("auto_pairs ="), "{other}");
+        assert!(other.contains("[editor] auto-pairs: yumete's pairs are fixed"), "{other}");
     }
 
     #[test]

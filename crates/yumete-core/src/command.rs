@@ -570,7 +570,7 @@ pub enum Command {
     /// `:indent-hint color` — what, if anything, is drawn in the opening
     /// squares.
     SetIndentHint(Option<crate::zong::IndentHint>),
-    /// `:auto-pairs off|basic|full` — which brackets and quotes close
+    /// `:auto-pairs off|minimal|basic|full` — which brackets and quotes close
     /// themselves as they are typed; bare reports.
     SetAutoPairs(Option<crate::editor::AutoPairs>),
     /// `:indent-tab [spaces|tab]` — what Tab types in Insert mode; bare reports.
@@ -3167,6 +3167,7 @@ const TAB_INSERTS: &[Word] = &[
 
 const AUTO_PAIRS: &[Word] = &[
     Word { name: "off", help: "settings.pick.auto-pairs.off", needs: &[] },
+    Word { name: "minimal", help: "settings.pick.auto-pairs.minimal", needs: &[] },
     Word { name: "basic", help: "settings.pick.auto-pairs.basic", needs: &[] },
     Word { name: "full", help: "settings.pick.auto-pairs.full", needs: &[] },
 ];

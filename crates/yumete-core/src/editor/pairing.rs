@@ -1,11 +1,12 @@
 //! **Auto-pairs** (roadmap #51): an opening bracket or a quote
 //! typed in Insert writes its closer too, as helix's `auto-pairs` does.
 //!
-//! Three levels, as the other settings have them: `off`, no auto-pairs at
-//! all; `basic`, helix's list of symbols; `full`, every paired symbol the `m`
-//! group knows. `basic` is the factory setting under both keymaps, since this
-//! is a feature, not a matter of keymap. `full` is a choice, not the default:
-//! writing a novel with 「」 paired as it is typed is tedious.
+//! Four levels: `off`, no auto-pairs at all; `minimal`, the three ASCII
+//! brackets `()` `[]` `{}` and no quotes; `basic`, helix's list of symbols;
+//! `full`, every paired symbol the `m` group knows. `basic` is the factory
+//! setting under both keymaps, since this is a feature, not a matter of
+//! keymap. `full` is a choice, not the default: writing a novel with 「」
+//! paired as it is typed is tedious.
 //!
 //! The rules are helix's, measured on 25.07.1:
 //!
@@ -14,6 +15,12 @@
 //!   which is what wrapping it wants.
 //! - A quote, its own closer, also needs no letter or digit before it:
 //!   `don't` stays one apostrophe.
+//! - Nor does a quote pair right after the same quote, so a run of them is
+//!   typed as it reads: `"""` comes out three quotes and a fence three
+//!   backticks, with nothing written after the caret. This departs from
+//!   helix, which pairs a quote whenever no letter or digit is before it and
+//!   so writes four (helix issue #13697). Nothing here knows a language:
+//!   neither a fence nor a docstring closes itself.
 //! - The closer typed in front of itself steps over it, so `(x)` typed in full
 //!   comes out once. Through the input method this is what makes `full` work:
 //!   Yume writes `“` for the first `"` and `”` for the next, and the second
@@ -21,8 +28,7 @@
 //! - Backspace between the two halves of an empty pair takes both.
 //!
 //! Not helix's: a space inside `()` is one space (helix 25.07.1 writes one too,
-//! whatever its source says about two), and Enter between two brackets does
-//! not open an indented line.
+//! whatever its source says about two).
 
 use super::*;
 
@@ -30,6 +36,8 @@ use super::*;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum AutoPairs {
     Off,
+    /// The three ASCII brackets `()` `[]` `{}`, no quotes.
+    Minimal,
     /// helix's six: `()` `{}` `[]` and the three ASCII quotes.
     #[default]
     Basic,
@@ -39,6 +47,9 @@ pub enum AutoPairs {
     Full,
 }
 
+/// The brackets alone.
+const MINIMAL: &[(char, char)] = &[('(', ')'), ('{', '}'), ('[', ']')];
+
 /// helix's `DEFAULT_PAIRS`.
 const BASIC: &[(char, char)] = &[('(', ')'), ('{', '}'), ('[', ']'), ('\'', '\''), ('"', '"'), ('`', '`')];
 
@@ -47,6 +58,7 @@ impl AutoPairs {
     pub fn parse(word: &str) -> Option<AutoPairs> {
         match word.trim().to_ascii_lowercase().as_str() {
             "off" | "none" | "false" => Some(AutoPairs::Off),
+"minimal" => Some(AutoPairs::Minimal),
             "basic" | "on" | "true" => Some(AutoPairs::Basic),
             "full" => Some(AutoPairs::Full),
             _ => None,
@@ -57,6 +69,7 @@ impl AutoPairs {
     pub fn name(self) -> &'static str {
         match self {
             AutoPairs::Off => "off",
+            AutoPairs::Minimal => "minimal",
             AutoPairs::Basic => "basic",
             AutoPairs::Full => "full",
         }
@@ -67,6 +80,7 @@ impl AutoPairs {
         let left_out = |c: char| c == '<' || ('\u{FE10}'..='\u{FE4F}').contains(&c);
         let table: &[(char, char)] = match self {
             AutoPairs::Off => return None,
+            AutoPairs::Minimal => MINIMAL,
             AutoPairs::Basic => BASIC,
             AutoPairs::Full => PAIRS,
         };
@@ -105,7 +119,7 @@ impl Editor {
             self.stepped_over = true;
             return true;
         }
-        if c != open || wordy(next) || (open == close && wordy(prev)) {
+        if c != open || wordy(next) || (open == close && (wordy(prev) || prev == Some(c))) {
             return false;
         }
         self.insert_str(&format!("{open}{close}"));
@@ -177,12 +191,15 @@ impl Editor {
     /// would have written after it. Empty when auto-pairs is off.
     pub(super) fn closers_owed(&self, typed: &str) -> String {
         let mut open: Vec<char> = Vec::new();
+        let mut prev = None;
         for c in typed.chars() {
+            let before = prev.replace(c);
             let Some((o, close)) = self.auto_pairs.pair_of(c) else { continue };
             match (open.last() == Some(&close), c == o) {
                 (true, _) if c == close => {
                     open.pop();
                 }
+                (_, true) if o == close && before == Some(c) => {}
                 (_, true) => open.push(close),
                 _ => {}
             }

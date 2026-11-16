@@ -278,7 +278,7 @@ pub fn complaints(config: &Config) -> Vec<String> {
     }
     let word = config.editor.auto_pairs.trim();
     if !word.is_empty() && yumete_core::editor::AutoPairs::parse(word).is_none() {
-        said.push(only("[editor] auto_pairs", word, &["off", "basic", "full"]));
+        said.push(only("[editor] auto_pairs", word, &["off", "minimal", "basic", "full"]));
     }
     let word = config.editor.status_count.trim();
     if !word.is_empty() && !matches!(word, "text" | "all" | "off") {
