@@ -161,8 +161,8 @@ en = "convert"
 [[message]]
 # `` 那一組：換一種寫法
 key = "hint.case.to-c"
-zhs = "简→大陆繁"
-en = "simplified → mainland traditional"
+zhs = "简→繁(大陆通规)"
+en = "simplified → traditional (mainland standard)"
 
 [[message]]
 # ` 組：轉全角(只動 Unicode 那張對應表上的字)
@@ -173,8 +173,8 @@ en = "to fullwidth"
 [[message]]
 # `` 那一組：換一種寫法
 key = "hint.case.to-g"
-zhs = "简→古籍繁"
-en = "simplified → classical traditional"
+zhs = "简→繁(古籍通规)"
+en = "simplified → traditional (classical standard)"
 
 [[message]]
 # ` 組：轉半角
@@ -185,13 +185,13 @@ en = "to halfwidth"
 [[message]]
 # `` 那一組：換一種寫法
 key = "hint.case.to-hk"
-zhs = "简→香港繁"
-en = "simplified → Hong Kong traditional"
+zhs = "简→繁(香港)"
+en = "simplified → traditional (Hong Kong)"
 
 [[message]]
 # `` 那一組：換一種寫法
 key = "hint.case.to-jp"
-zhs = "繁→日文新字体"
+zhs = "繁→日本新字体"
 en = "traditional → Japanese shinjitai"
 
 [[message]]
@@ -203,14 +203,14 @@ en = "traditional → simplified"
 [[message]]
 # `` 那一組：換一種寫法
 key = "hint.case.to-t"
-zhs = "简→繁"
-en = "simplified → traditional"
+zhs = "简→繁(OpenCC)"
+en = "simplified → traditional (OpenCC)"
 
 [[message]]
 # `` 那一組：換一種寫法
 key = "hint.case.to-tw"
-zhs = "简→台湾繁"
-en = "simplified → Taiwan traditional"
+zhs = "简→繁(台湾)"
+en = "simplified → traditional (Taiwan)"
 
 [[message]]
 # ` 組：轉大寫
@@ -2019,12 +2019,6 @@ en = "type a character"
 key = "hint.type-a-character-to-overwrite"
 zhs = "输入字符替换选区"
 en = "type a character to replace the selection"
-
-[[message]]
-# ` 組的末行(vi 的 ` 是記號鍵，這裏是 M 和 ')
-key = "hint.vi.backtick"
-zhs = "vi 标记：M 设置，' 跳回"
-en = "vi's marks: M sets, ' returns"
 
 [[message]]
 # vim 預設：按下 d/c/y 之後，狀態行説它在等什麽

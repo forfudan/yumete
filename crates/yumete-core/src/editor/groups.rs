@@ -1325,11 +1325,7 @@ pub(super) static WINDOW_NEW: Group = Group {
 };
 
 /// **`` ` `` — 「不改它說什麼，只改它長什麼樣」** (§5.2.3 ②): case, width, and
-/// which 繁 or 簡.
-///
-/// The last line is `hint.vi.backtick` — 「vi 的記號：M 記、`'` 回去」. It is a
-/// line in a menu the reader opened, not a guess about why a key was
-/// pressed.
+/// which 繁 or 簡, in that order and each kind together.
 pub(super) static CASE: Group = Group {
     name: "case",
     pending: Pending::Case,
@@ -1339,16 +1335,15 @@ pub(super) static CASE: Group = Group {
         ch('l', NormalCmd::SwitchToLowercase, "hint.case.lower"),
         ch('u', NormalCmd::SwitchToUppercase, "hint.case.upper"),
         ch('`', NormalCmd::SwitchCase, "hint.case.switch"),
-        ch('s', NormalCmd::ConvertToSimplified, "hint.case.to-s"),
-        ch('t', NormalCmd::ConvertToTraditional, "hint.case.to-t"),
-        ch('w', NormalCmd::ConvertToTaiwanTraditional, "hint.case.to-tw"),
         ch('f', NormalCmd::SwitchToFullwidth, "hint.case.to-full"),
         ch('h', NormalCmd::SwitchToHalfwidth, "hint.case.to-half"),
-        ch('k', NormalCmd::ConvertToHongKongTraditional, "hint.case.to-hk"),
+        ch('s', NormalCmd::ConvertToSimplified, "hint.case.to-s"),
+        ch('t', NormalCmd::ConvertToTraditional, "hint.case.to-t"),
         ch('c', NormalCmd::ConvertToMainlandTraditional, "hint.case.to-c"),
         ch('g', NormalCmd::ConvertToClassicalTraditional, "hint.case.to-g"),
+        ch('w', NormalCmd::ConvertToTaiwanTraditional, "hint.case.to-tw"),
+        ch('k', NormalCmd::ConvertToHongKongTraditional, "hint.case.to-hk"),
         ch('j', NormalCmd::ConvertToJapanese, "hint.case.to-jp"),
-        note("", "hint.vi.backtick"),
     ],
     unknown: Unknown::NoSuchCombination,
     sticky: false,
