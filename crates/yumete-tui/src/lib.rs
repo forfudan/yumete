@@ -12380,11 +12380,11 @@ fn stand_back(frame: &mut Frame, ink: crate::theme::Palette, area: Rect) {
 
 /// 挑選器那扇窗佔幾行。`area` 是它能用的那一塊（頁腳以上）。
 ///
-/// **窗口的 3/4 高**，見 [`draw_picker`] 裏那一段。畫的那一支和主循環各要一次
+/// **窗口的九成高**（寬也是九成），見 [`draw_picker`] 裏那一段。畫的那一支和主循環各要一次
 /// ——主循環要它是為了告訴核心「翻一頁」是幾條——所以它在這裏，不在那個函數
 /// 肚子裏。
 fn picker_height(area: Rect) -> u16 {
-    ((area.height * 3 / 4).max(10) + 3).min(area.height).max(4)
+    (area.height * 9 / 10).max(13).min(area.height).max(4)
 }
 
 /// The box a picker would take, or `None` when the window cannot hold one.
@@ -12402,7 +12402,7 @@ fn picker_height(area: Rect) -> u16 {
 /// of three rows or fewer is the short case.
 fn picker_box(area: Rect) -> Option<(u16, u16)> {
     let rows = picker_height(area);
-    let wide = (area.width * 4 / 5).clamp(24, 160).min(area.width.saturating_sub(2));
+    let wide = (area.width * 9 / 10).clamp(24, 200).min(area.width.saturating_sub(2));
     (wide >= 8 && rows <= area.height).then_some((wide, rows))
 }
 
@@ -12538,11 +12538,11 @@ fn draw_picker(
     // 「nothing matched」 would be the frame that looks broken. A picker is a
     // place on the page; it keeps its shape whether it holds one name or a
     // hundred and thirty-seven.
-    // **窗口的 3/4 高、4/5 寬。** 挑一個檔名是這扇面板唯一的事，而一半的高度在
+    // **窗口的九成高、九成寬。** 挑一個檔名是這扇面板唯一的事，而一半的高度在
     // 40 行的終端上只列得出十幾條；列表八行深在八十行的終端上就是一個鑰匙孔。
-    // Warning: **寬度的上限是 160**：4/5 在 160 欄的終端上是 128，上限若是 120 就被
-    // 砍掉，看着像「沒到 4/5」。上限本身留着——超寬顯示器上一條 200 欄的
-    // 名字要眼睛橫着掃一趟。
+    // 四周留的那一成是它還像一扇浮在稿子上的窗、不是換了一頁的理由（helix 在
+    // 200 欄以下整屏蓋住）。寬度的上限是 200：超寬顯示器上一條更長的名字要眼睛
+    // 橫着掃一趟。
     let (wide, rows) = picker_box(area)?;
     let box_ = crate::chrome::place(area, (wide, rows), crate::chrome::Anchor::Centre)?;
     // Two fifths for the names, the rest for the preview — and a window too
@@ -29952,8 +29952,8 @@ fn squeezed(text: &str) -> String {
             })
             .count();
         assert!(
-            (10..=24 * 3 / 4 + 3).contains(&drawn),
-            "窗口的四分之三加上框，而且不少於十行：{drawn}"
+            (10..=24 * 9 / 10).contains(&drawn),
+            "窗口的九成，而且不少於十行：{drawn}"
         );
     }
 
