@@ -315,6 +315,7 @@ fn view_lines(editor: &Editor) -> Vec<String> {
         },
         format!("view-wrap-width {}", editor.measure().unwrap_or(0)),
         format!("view-wrap {}", on(editor.soft_wrap())),
+        format!("view-centre {}", on(editor.centre())),
         format!("view-wrap-height {}", editor.zong_measure().unwrap_or(0)),
         format!("view-pages-vertical {}", editor.pages_vertical()),
         format!("view-pages-horizontal {}", editor.pages_horizontal()),
@@ -637,6 +638,7 @@ fn apply_to_editor(config: &Config, editor: &mut Editor, layout: Option<yumete_c
     }
     editor.set_number_fill(config.editor.line_number_fill);
     editor.set_line_breaks(config.editor.show_line_breaks);
+    editor.set_centre(config.editor.centre_measure);
     editor.set_diff_gutter(config.editor.diff_gutter);
     editor.set_modeline(config.editor.modeline);
     if let Some(level) = yumete_core::problem::level_from_word(&config.editor.end_of_line_diagnostics) {
@@ -978,6 +980,27 @@ mod config_watch_tests {
         super::apply_to_editor(&config, &mut ed, None);
         assert_eq!(ed.measure(), None, "the window's width again");
         assert_eq!(ed.paragraph_indent(), 0, "no indent again");
+    }
+
+    /// **`[editor] centre_measure`**: on out of the box, `false` in the
+    /// config keeps the page at the left edge, a `:view-centre` the config
+    /// would not give is kept by the session, and the reload puts it back.
+    #[test]
+    fn the_centring_switch_comes_from_the_config_and_is_kept_by_the_session() {
+        let mut config = yumete_config::Config::default();
+        assert!(config.editor.centre_measure, "on out of the box");
+        let mut ed = yumete_core::Editor::new();
+        super::apply_to_editor(&config, &mut ed, None);
+        assert!(ed.centre());
+        config.editor.centre_measure = false;
+        super::apply_to_editor(&config, &mut ed, None);
+        assert!(!ed.centre(), "the config turns it off");
+        ed.execute(":view-centre").unwrap();
+        assert!(ed.centre(), "the bare command turns it round");
+        let kept = super::view_to_keep(&ed, &config);
+        assert!(kept.contains(&"view-centre on".to_string()), "{kept:?}");
+        super::view_back_to_config(&mut ed, &config);
+        assert!(!ed.centre(), "the reload puts the config's back");
     }
 
     /// **The session and the reload**: the

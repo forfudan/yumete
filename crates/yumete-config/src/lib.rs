@@ -396,6 +396,11 @@ pub struct EditorConfig {
     /// line is, this folds the rows there and leaves the rest of the window as
     /// margin. `:view-wrap-width 50` sets it for one session (Feature #113).
     pub measure: usize,
+    /// Whether a page written to a `measure` stands in the middle of the
+    /// window — the spare width split into two equal margins, the line
+    /// numbers going with the text — rather than against its left edge. On by
+    /// default; `:view-centre` toggles. Nothing to centre without a measure.
+    pub centre_measure: bool,
     /// The width `:hard-wrap` fills to when given none, in cells; `0` for
     /// unset, which makes the bare command say so.
     pub hard_wrap: usize,
@@ -603,6 +608,7 @@ impl Default for EditorConfig {
             syntax: String::new(),
             ruler: 0,
             measure: 0,
+            centre_measure: true,
             hard_wrap: 0,
             char_info: true,
             status_count: "text".to_string(),
@@ -4923,6 +4929,7 @@ struct RawEditor {
     syntax: Option<String>,
     ruler: Option<usize>,
     measure: Option<usize>,
+    centre_measure: Option<bool>,
     hard_wrap: Option<usize>,
     char_info: Option<bool>,
     status_count: Option<String>,
@@ -5235,6 +5242,9 @@ impl RawConfig {
         }
         if other.editor.measure.is_some() {
             self.editor.measure = other.editor.measure;
+        }
+        if other.editor.centre_measure.is_some() {
+            self.editor.centre_measure = other.editor.centre_measure;
         }
         if other.editor.hard_wrap.is_some() {
             self.editor.hard_wrap = other.editor.hard_wrap;
@@ -5794,6 +5804,9 @@ impl RawConfig {
         if let Some(measure) = self.editor.measure {
             config.editor.measure =
                 held(problems, "[editor] measure", measure, measure.min(400), &span(0, 400));
+        }
+        if let Some(on) = self.editor.centre_measure {
+            config.editor.centre_measure = on;
         }
         if let Some(width) = self.editor.hard_wrap {
             config.editor.hard_wrap =

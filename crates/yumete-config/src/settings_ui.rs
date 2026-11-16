@@ -494,6 +494,15 @@ pub const SETTINGS: &[Setting] = &[
     },
     Setting {
         table: "editor",
+        key: "centre_measure",
+        group: Group::Layout,
+        kind: Kind::Tick,
+        label: "settings.editor.centre-measure",
+        hint: "settings.editor.centre-measure.hint",
+        factory: "true",
+    },
+    Setting {
+        table: "editor",
         key: "hard_wrap",
         group: Group::Layout,
         kind: Kind::Count { low: 1, high: 400, zero: Some("settings.zero.hard-wrap-unset") },

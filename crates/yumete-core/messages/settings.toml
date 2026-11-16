@@ -197,6 +197,18 @@ zhs = "开：在 Markdown、Typst、HTML 中用 空格 C 注释多行时，<!-- 
 en = "On: Space C over several whole lines in Markdown, Typst or HTML puts <!-- and --> on lines of their own. Off: as in helix, the marks go at the first line's start and the last line's end."
 
 [[message]]
+# 设置：定了正文宽度时正文居中（草稿）
+key = "settings.editor.centre-measure"
+zhs = "正文居中"
+en = "centre the text"
+
+[[message]]
+# 设置：正文居中——一句话（草稿）
+key = "settings.editor.centre-measure.hint"
+zhs = "定了正文宽度时，正文和行号立在窗口中间，左右边距一样宽；关掉就靠左"
+en = "with a text width set, the text and its line numbers stand in the middle of the window, equal margins either side; off keeps them at the left"
+
+[[message]]
 # 設置：字的码位
 key = "settings.editor.char-info"
 zhs = "字符信息"

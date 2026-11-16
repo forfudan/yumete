@@ -609,6 +609,15 @@ impl Editor {
                 };
                 Ok(CommandOutcome::Continue)
             }
+            Command::SetCentre(on) => {
+                self.centre = on.over(self.centre);
+                self.status = match (self.centre, self.measure.is_some()) {
+                    (true, true) => say!("layout.centre-on"),
+                    (true, false) => say!("layout.centre-on-no-measure"),
+                    (false, _) => say!("layout.centre-off"),
+                };
+                Ok(CommandOutcome::Continue)
+            }
             Command::SetEolDiagnostics(word) => {
                 if let Some(level) = word.as_deref().and_then(crate::problem::level_from_word) {
                     self.end_of_line_diagnostics = level;
@@ -2595,6 +2604,7 @@ impl Editor {
             Command::SetNote(_) => self.notes,
             Command::SetCode(_) => self.code_colours,
             Command::SetLineBreaks(_) => self.line_breaks,
+            Command::SetCentre(_) => self.centre,
             Command::SetTableNumbers(_) => self.table_numbers,
             Command::SetTableHeader(_) => self.table()?.schema.header,
             Command::Sidebar(panel, _) => self.showing(Editor::view_of(panel)?).is_some(),

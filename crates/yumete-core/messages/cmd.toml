@@ -2665,6 +2665,13 @@ en = "each key moves the way it points"
 
 
 [[message]]
+# : 命令菜单里 centre 那一项的说明(view 组)：定了正文宽度时正文居中（草稿）
+key = "cmd.view.centre"
+zhs = "正文居中：定了正文宽度时，正文立在窗口中间，左右留出一样宽的边"
+en = "centred page: with a text width set, the text stands in the middle of the window, equal margins either side"
+find = "居中 置中 正文 頁邊 页边 留白 禪 禅 zen centre center margin"
+
+[[message]]
 # : 命令選單裏 code 那一項的説明(view 組)
 key = "cmd.view.code"
 zhs = "代码着色：代码块按其语言着色"

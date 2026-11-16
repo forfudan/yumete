@@ -3039,6 +3039,7 @@ KEYS (Normal mode, Helix-style):
               :yume-scheme <tag>   {schemes}
               :view-wrap [on|off]  soft-wrap; bare flips it
               :view-wrap-width <n>  a fixed measure; 0 follows the window
+              :view-centre [on|off]  a page at a measure stands centred
               :wq [path]       save (optionally save-as) and quit
               :42  :goto n    put the cursor on a line
               :recover         use or drop a crash-recovery draft

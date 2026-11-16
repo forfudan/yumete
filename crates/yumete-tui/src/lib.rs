@@ -6495,7 +6495,26 @@ fn draw<'a>(
                         let gap = Rect::new(from, rect.y, pair[1].x - from, rect.height);
                         frame.render_widget(Paragraph::new("").style(ink.page()), gap);
                     }
+                    // …and so is the margin a centred page leaves on its
+                    // left, in the tint the right one has past the measure.
+                    let margin = left_margin(*rect, &strips);
+                    if margin.width > 0 {
+                        let tint = ink.page().bg(ink.at(yumete_config::rung::BAND));
+                        frame.render_widget(Paragraph::new("").style(tint), margin);
+                    }
                 }
+                // The table's head bar stands over the first page, so it moves
+                // with it; the cells it leaves are margin.
+                let head = (which == editor.live_pane()).then(|| {
+                    let margin = left_margin(*rect, &strips).width.min(head_area.width);
+                    if margin > 0 && head_area.height > 0 {
+                        let ink = crate::theme::Palette::of(config);
+                        let tint = ink.page().bg(ink.at(yumete_config::rung::BAND));
+                        let cells = Rect { width: margin, ..head_area };
+                        frame.render_widget(Paragraph::new("").style(tint), cells);
+                    }
+                    Rect { x: head_area.x + margin, width: head_area.width - margin, ..head_area }
+                });
                 let mut caret = (rect.x, rect.y);
                 let mut next: Option<WrapAnchor> = None;
                 for (k, strip) in strips.iter().enumerate() {
@@ -6511,7 +6530,7 @@ fn draw<'a>(
                             peek,
                             // Only the pane the keys are in gets the bar, and only in
                             // the layout that reserved it.
-                            (which == editor.live_pane()).then_some(head_area),
+                            head,
                             chain,
                             true,
                         ),
@@ -9543,9 +9562,13 @@ fn text_at_under(
             // that page is the area, and its first row is
             // where the pages before it ended.
             let strips = horizontal_pages(editor, config, area);
+            // A click in a centred page's left margin is a click in its
+            // gutter: the row's first character, as the page it stands
+            // beside is the first.
             let page = strips
                 .iter()
-                .position(|s| mouse.column >= s.x && mouse.column < s.x + s.width)?;
+                .position(|s| mouse.column >= s.x && mouse.column < s.x + s.width)
+                .or_else(|| (mouse.column < strips.first()?.x).then_some(0))?;
             let area = strips[page];
             let gutter = gutter_in(
                 area.width as usize,
@@ -9612,7 +9635,7 @@ fn text_at_under(
             .find(|(y, _)| *y == want_row || *y == want_row + 1)?;
             // Which character of that row the column landed on, counting only
             // what is drawn — hidden markup takes no columns.
-            let want = (mouse.column - area.x) as usize;
+            let want = mouse.column.saturating_sub(area.x) as usize;
             // …plus what is off the left edge, so a click on a long line that
             // the page has scrolled sideways to follow lands on the 字 under
             // the pointer and not on one a screenful back (Feature #221). A
@@ -13093,7 +13116,7 @@ fn horizontal_pages(editor: &Editor, config: &Config, rect: Rect) -> Vec<Rect> {
         n -= 1;
     }
     let w = wide(n);
-    (0..n)
+    let strips = (0..n)
         .map(|k| {
             let x = rect.x + k as u16 * (w + PAGE_GAP);
             let width = match k + 1 == n {
@@ -13102,7 +13125,75 @@ fn horizontal_pages(editor: &Editor, config: &Config, rect: Rect) -> Vec<Rect> {
             };
             Rect::new(x, rect.y, width, rect.height)
         })
+        .collect();
+    centre_the_pages(editor, config, rect, strips)
+}
+
+/// **A page written to a measure stands in the middle of its window**
+/// (`:view-centre`, on by default): the spare width is split into two
+/// margins, the odd cell going to the right one.
+///
+/// What is centred is the block a page is drawn as, **its gutter with it** —
+/// VS Code's centred layout and zen-mode.nvim both centre the editor with
+/// its line numbers, and numbers standing off at the window's edge, a margin
+/// away from the lines they count, would not read as those lines' numbers.
+/// Pages side by side are one spread and are centred as one: each page as
+/// narrow as its gutter and the measure, [`PAGE_GAP`] between them, as in a
+/// book held open; centring each in a share of the window would part them by
+/// a margin and make two windows of one text.
+///
+/// Only the left edge moves. The last page keeps the window's right edge, so
+/// what may run past the measure — a `|` table's row, which never folds —
+/// keeps the room to the window's edge, and the right margin is the page's
+/// own tint past the measure. The left margin is painted to match by whoever
+/// draws the pages ([`left_margin`]).
+///
+/// Nothing moves without a measure, with the rows not folding (`:view-wrap`
+/// off on a single page), or when the window has no spare width; this runs
+/// for every caller of [`horizontal_pages`], so the page drawn, the caret,
+/// a click and the rows `j` walks are worked out from the same rectangles.
+fn centre_the_pages(editor: &Editor, config: &Config, rect: Rect, strips: Vec<Rect>) -> Vec<Rect> {
+    let folds = editor.soft_wrap() || strips.len() > 1;
+    let (Some(_), true, true, Some(first)) = (editor.measure(), editor.centre(), folds, strips.first()) else {
+        return strips;
+    };
+    let lines = editor.current_buffer().line_count();
+    let gutter = |w: u16| gutter_in(w as usize, lines, numbers(editor, config), editor.has_a_problem_lane());
+    let text = editor.wrap_for((first.width as usize).saturating_sub(gutter(first.width)));
+    let widths: Vec<u16> = strips
+        .iter()
+        .map(|s| s.width.min(u16::try_from(gutter(s.width) + text).unwrap_or(u16::MAX)))
+        .collect();
+    let used = widths.iter().sum::<u16>() + PAGE_GAP * (strips.len() as u16 - 1);
+    let mut x = rect.x + centred_margin(rect.width, used);
+    let last = strips.len() - 1;
+    widths
+        .iter()
+        .enumerate()
+        .map(|(k, &w)| {
+            let width = match k == last {
+                true => rect.x + rect.width - x,
+                false => w,
+            };
+            let page = Rect::new(x, rect.y, width, rect.height);
+            x += w + PAGE_GAP;
+            page
+        })
         .collect()
+}
+
+/// **The left margin of a block `used` cells wide centred in `room`**: half
+/// the spare width, rounded down, so an odd cell goes to the right margin;
+/// none when the block does not fit.
+fn centred_margin(room: u16, used: u16) -> u16 {
+    room.saturating_sub(used) / 2
+}
+
+/// **The cells left of the first page** that [`centre_the_pages`] opened,
+/// as a rectangle `rect`'s height; zero wide when nothing is centred.
+fn left_margin(rect: Rect, strips: &[Rect]) -> Rect {
+    let to = strips.first().map_or(rect.x, |s| s.x);
+    Rect::new(rect.x, rect.y, to.saturating_sub(rect.x), rect.height)
 }
 
 /// One page of the horizontal layout — the whole of it, or one of the pages
@@ -20994,6 +21085,168 @@ fn squeezed(text: &str) -> String {
         assert_eq!(horizontal_pages(&editor, &config, narrow).len(), 1);
     }
 
+    /// **The margins split the spare width, the odd cell to the right**, and
+    /// a block wider than the room has none.
+    #[test]
+    fn a_centred_block_splits_the_spare_width_odd_cell_right() {
+        assert_eq!(centred_margin(60, 20), 20, "even spare: equal margins");
+        assert_eq!(centred_margin(61, 20), 20, "odd spare: the right margin takes the odd cell");
+        assert_eq!(centred_margin(20, 20), 0, "no spare");
+        assert_eq!(centred_margin(15, 20), 0, "narrower than the block: no margin");
+    }
+
+    /// One frame of `editor` at `w`×`h`, settled as the loop settles it,
+    /// with the caret where the frame put it.
+    fn centred_frame(editor: &mut Editor, config: &Config, w: u16, h: u16, seats: &mut Seats) -> (ratatui::buffer::Buffer, Position) {
+        let page = page_areas(editor, config, Rect::new(0, 0, w, h), 0).panes[editor.live_pane()];
+        settle_the_pages(editor, config, page);
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+        terminal.draw(|frame| draw(frame, editor, config, no_ime(), seats, None)).unwrap();
+        let caret = caret_of(&mut terminal, config);
+        (terminal.backend().buffer().clone(), caret)
+    }
+
+    /// The first column of row `y` with a character on it.
+    fn first_ink(buffer: &ratatui::buffer::Buffer, y: u16) -> Option<u16> {
+        (0..buffer.area.width).find(|&x| !buffer[(x, y)].symbol().trim().is_empty())
+    }
+
+    /// **`:view-wrap-width 20` stands the text in the middle of the window**,
+    /// its line numbers with it; the status line keeps the whole width;
+    /// `:view-centre` off puts it back against the left edge, and with no
+    /// width set nothing moves.
+    #[test]
+    fn a_page_at_a_measure_stands_centred_with_its_numbers() {
+        let text = "one two three four five six seven eight nine ten\nshort\n";
+        let mut config = bare();
+        let (w, h) = (60u16, 8u16);
+        let mut seats = Seats::default();
+        let mut editor = editor_with(text);
+        editor.execute(":view-wrap-width 20").unwrap();
+        assert!(editor.centre(), "on out of the box");
+        let (buffer, _) = centred_frame(&mut editor, &config, w, h, &mut seats);
+        assert_eq!(first_ink(&buffer, 0), Some(20), "no gutter: (60 - 20) / 2:\n{}", buffer_to_text(&buffer));
+        let status = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0).status;
+        assert_eq!((status.x, status.width), (0, w), "the status line is the window's width");
+        // Numbers on: a gutter of three goes with the text, and the block of
+        // 23 leaves 37, eighteen on the left and the odd cell on the right.
+        config.editor.line_numbers = LineNumbers::Absolute;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::Absolute);
+        let (buffer, _) = centred_frame(&mut editor, &config, w, h, &mut seats);
+        assert_eq!(first_ink(&buffer, 0), Some(18), "the number leads the block:\n{}", buffer_to_text(&buffer));
+        assert_eq!(buffer[(18, 0)].symbol(), "1");
+        assert_eq!(first_ink(&buffer, 1), Some(21), "a wrapped row starts past the gutter");
+        // Off: back to the left edge.
+        editor.execute(":view-centre").unwrap();
+        assert!(!editor.centre());
+        let (buffer, _) = centred_frame(&mut editor, &config, w, h, &mut seats);
+        assert_eq!(first_ink(&buffer, 0), Some(0), "left aligned:\n{}", buffer_to_text(&buffer));
+        // On again, and no width: nothing to centre.
+        editor.execute(":view-centre on").unwrap();
+        editor.execute(":view-wrap-width 0").unwrap();
+        let (buffer, _) = centred_frame(&mut editor, &config, w, h, &mut seats);
+        assert_eq!(first_ink(&buffer, 0), Some(0), "the window's width:\n{}", buffer_to_text(&buffer));
+        // Narrower than the width: no margin.
+        editor.execute(":view-wrap-width 80").unwrap();
+        let (buffer, _) = centred_frame(&mut editor, &config, w, h, &mut seats);
+        assert_eq!(first_ink(&buffer, 0), Some(0), "no room for a margin:\n{}", buffer_to_text(&buffer));
+    }
+
+    fn left_click(x: u16, y: u16) -> ratatui::crossterm::event::MouseEvent {
+        ratatui::crossterm::event::MouseEvent {
+            kind: ratatui::crossterm::event::MouseEventKind::Down(ratatui::crossterm::event::MouseButton::Left),
+            column: x,
+            row: y,
+            modifiers: ratatui::crossterm::event::KeyModifiers::NONE,
+        }
+    }
+
+    /// **The caret is drawn on its character and a click lands on the
+    /// character under it**, margins and all: a click in the left margin is
+    /// the row's first character, one in the right margin is on the row, and
+    /// `j` walks the rows the page drew.
+    #[test]
+    fn a_centred_page_maps_the_caret_and_clicks_through_its_margins() {
+        let text = "one two three four five six seven eight nine ten\nshort\n";
+        let config = bare();
+        let (w, h) = (61u16, 8u16);
+        let mut seats = Seats::default();
+        let mut editor = editor_with(text);
+        editor.execute(":view-wrap-width 20").unwrap();
+        // 61 - 20 = 41: twenty on the left, twenty-one on the right.
+        let (buffer, caret) = centred_frame(&mut editor, &config, w, h, &mut seats);
+        assert_eq!(first_ink(&buffer, 0), Some(20));
+        assert_eq!(caret, Position::new(20, 0), "the caret on the first character");
+        for _ in 0..8 {
+            editor.on_key(Key::Char('l'));
+        }
+        let (buffer, caret) = centred_frame(&mut editor, &config, w, h, &mut seats);
+        assert_eq!(editor.cursor(), 8, "on `three`");
+        assert_eq!((caret.x, caret.y), (28, 0), "drawn on it:\n{}", buffer_to_text(&buffer));
+        editor.on_key(Key::Char('j'));
+        let (buffer, caret) = centred_frame(&mut editor, &config, w, h, &mut seats);
+        let row: String = (0..w).map(|x| buffer[(x, 1)].symbol().to_string()).collect();
+        assert_eq!(caret.y, 1, "`j` goes down one drawn row");
+        assert!(caret.x >= 20 && caret.x < 40, "inside the column: {caret:?} {row:?}");
+        let rope = editor.current_buffer().rope().clone();
+        let under = |x: u16, y: u16| text_at(&editor, &config, Some((w, h).into()), &seats, left_click(x, y));
+        let at = under(28, 0).expect("a character");
+        assert_eq!(rope.char(at), 't', "a click on `three` lands on it");
+        assert_eq!(under(3, 0), Some(0), "the left margin is the row's first character");
+        let end = under(w - 2, 0).expect("the right margin is on the row");
+        assert_eq!(rope.char_to_line(end), 0);
+        assert!(end > at, "past the click inside the row: {end}");
+        let word = row.trim_start().split(' ').next().unwrap().to_string();
+        let first_of_row = rope.to_string().find(&word).unwrap();
+        assert_eq!(under(5, 1), Some(first_of_row), "the left margin of a wrapped row is that row's start: {row:?}");
+    }
+
+    /// **Each window centres in its own width**: two side by side, the same
+    /// text, each with its own two margins.
+    #[test]
+    fn windows_side_by_side_each_centre_in_their_own_width() {
+        let config = bare();
+        let mut editor = editor_with("one two three four five six seven eight nine ten\n");
+        editor.execute(":view-wrap-width 20").unwrap();
+        editor.execute(":vsplit").unwrap();
+        let (w, h) = (101u16, 8u16);
+        let mut seats = Seats::default();
+        let (buffer, _) = centred_frame(&mut editor, &config, w, h, &mut seats);
+        let areas = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0);
+        assert_eq!(areas.panes.len(), 2, "side by side");
+        for pane in &areas.panes {
+            let from = (pane.x..pane.x + pane.width).find(|&x| !buffer[(x, pane.y)].symbol().trim().is_empty());
+            assert_eq!(
+                from,
+                Some(pane.x + centred_margin(pane.width, 20)),
+                "a window {} wide at {}:\n{}",
+                pane.width,
+                pane.x,
+                buffer_to_text(&buffer)
+            );
+        }
+    }
+
+    /// **Two pages at a measure are one spread, centred as one**: each page
+    /// its gutter and the measure wide, the gap between them, the margins
+    /// either side.
+    #[test]
+    fn two_pages_at_a_measure_are_centred_as_one_spread() {
+        let text: String = (1..=40).map(|n| format!("line{n:02}\n")).collect();
+        let config = bare();
+        let mut editor = editor_with(&text);
+        editor.set_pages_horizontal(2);
+        editor.execute(":view-wrap-width 30").unwrap();
+        let page = Rect::new(0, 0, 100, 8);
+        let [left, right] = horizontal_pages(&editor, &config, page)[..] else { panic!("two pages") };
+        // 30 + 2 + 30 = 62 of 100: nineteen cells either side.
+        assert_eq!(left, Rect::new(19, 0, 30, 8));
+        assert_eq!(right.x, 19 + 30 + PAGE_GAP, "the gap between them");
+        assert_eq!(right.x + right.width, 100, "the last page keeps the window's right edge");
+        editor.execute(":view-centre off").unwrap();
+        assert_eq!(horizontal_pages(&editor, &config, page)[0].x, 0, "off: from the left edge");
+    }
+
     #[test]
     fn a_click_counts_from_what_is_on_the_page() {
         let mut editor = editor_with("abcdefghijklmnopqrstuvwxyz");
@@ -24853,15 +25106,22 @@ fn squeezed(text: &str) -> String {
         assert_eq!(config.editor.ruler, 0);
         let tint = Some(ink(&config).at(yumete_config::rung::BAND));
 
+        // Centred, as out of the box: ten cells of margin either side of
+        // the twenty, both in the tint.
         editor.execute("view-wrap-width 20").unwrap();
         let buffer = render_wrapped(&mut editor, &config, 40, 8);
-        assert_eq!(buffer[(20, 0)].style().bg, tint, "the measure is in force");
+        assert_eq!(buffer[(30, 0)].style().bg, tint, "the measure is in force");
+        assert_eq!(buffer[(5, 0)].style().bg, tint, "on the left of the centred page too");
+        assert_eq!(at(&buffer, 10, 0), "字", "which starts after the left margin");
 
         // `:view-wrap` (off): the rows are not folded at twenty, so nothing on
-        // the page may claim they are.
+        // the page may claim they are — no margin, and the page against the
+        // left edge again.
         editor.execute("view-wrap").unwrap();
         let buffer = render_wrapped(&mut editor, &config, 40, 8);
         assert_ne!(buffer[(20, 0)].style().bg, tint, "no margin past it");
+        assert_ne!(buffer[(5, 0)].style().bg, tint, "nor before it");
+        assert_eq!(at(&buffer, 0, 0), "字", "nothing to centre");
         assert!(
             (0..8).all(|y| at(&buffer, 20, y) != "│"),
             "and no rule at it"
@@ -24870,7 +25130,7 @@ fn squeezed(text: &str) -> String {
         // …and `:view-wrap` alone puts the measure — and its margin — back.
         editor.execute("view-wrap").unwrap();
         let buffer = render_wrapped(&mut editor, &config, 40, 8);
-        assert_eq!(buffer[(20, 0)].style().bg, tint, "the number was kept");
+        assert_eq!(buffer[(30, 0)].style().bg, tint, "the number was kept");
     }
 
     /// **窗口越窄，邊欄不許越寬。**
@@ -24971,6 +25231,8 @@ fn squeezed(text: &str) -> String {
         // page ends.
         assert_eq!(config.editor.ruler, 0);
 
+        // Against the left edge, so the margin is all on the right.
+        editor.execute("view-centre off").unwrap();
         editor.execute("view-wrap-width 20").unwrap();
         let buffer = render_wrapped(&mut editor, &config, 40, 8);
 

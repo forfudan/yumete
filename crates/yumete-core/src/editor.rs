@@ -3146,6 +3146,9 @@ pub struct Editor {
     /// Whether a quiet mark is drawn after every line that ends in a line
     /// break (`:view-line-breaks`).
     line_breaks: bool,
+    /// Whether a page written to a measure stands in the middle of its window
+    /// (`:view-centre`).
+    centre: bool,
     /// 改動條：行號旁邊那一格說不說「這一行跟 git 那一份不一樣」（#55/#298）。
     diff_gutter: bool,
     /// 每個 buffer 一份 git 逐行差，連着**算它的時候那個 revision**。
@@ -4737,6 +4740,7 @@ impl Editor {
             rules: Vec::new(),
             number_fill: false,
             line_breaks: false,
+            centre: true,
             diff_gutter: false,
             vcs: HashMap::new(),
             vcs_base: HashMap::new(),

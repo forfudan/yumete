@@ -1548,6 +1548,19 @@ impl Editor {
         self.line_breaks = on;
     }
 
+    /// Whether a page written to a measure (`:view-wrap-width`) stands in the
+    /// middle of its window, the spare width split into two equal margins
+    /// (`:view-centre`). Only the switch: whether there is anything to centre
+    /// is the front end's question, since only it knows the window.
+    pub fn centre(&self) -> bool {
+        self.centre
+    }
+
+    /// Centre a page written to a measure, or keep it against the left edge.
+    pub fn set_centre(&mut self, on: bool) {
+        self.centre = on;
+    }
+
     // ---- 改動條（#55/#298）------------------------------------------------
 
     /// 行號旁邊那一格說不說 git 的改動。

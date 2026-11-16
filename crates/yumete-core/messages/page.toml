@@ -27,6 +27,24 @@ zhs = "未设宽度：输入 :hard-wrap 50，或在设置里填写 hard_wrap"
 en = "no width set: use :hard-wrap 50, or set hard_wrap in the settings"
 
 [[message]]
+# :view-centre off — 正文靠左（草稿）
+key = "layout.centre-off"
+zhs = "正文靠左"
+en = "page against the left edge"
+
+[[message]]
+# :view-centre on — 定了正文宽度的页居中（草稿）
+key = "layout.centre-on"
+zhs = "正文居中"
+en = "page centred"
+
+[[message]]
+# :view-centre on，但没定正文宽度——正文本来就占满窗口，没有可居中的（草稿）
+key = "layout.centre-on-no-measure"
+zhs = "正文居中(定了正文宽度才看得出：`:view-wrap-width 50`)"
+en = "page centred (shows once a text width is set: `:view-wrap-width 50`)"
+
+[[message]]
 # :vertical/-v 碰上一份程序文件——縮進是那門語言的語法，竪排讀不了
 key = "layout.code-is-horizontal"
 zhs = "代码文件总是横排；其他文本的竖排不受影响"
