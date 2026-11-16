@@ -50,5 +50,7 @@ libc = "0.2"
 # too — see `run_in_the_terminal`. 0.61 because the tree already carries that
 # version (`ignore` -> `winapi-util`), and it links through the small
 # `windows-link` rather than pulling the whole `windows-targets` set.
+# The console input calls and `WaitForSingleObject` hear a lone Shift on the
+# Windows console, where crossterm discards the Shift records (`console_shift`).
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_System_Console", "Win32_Foundation"] }
+windows-sys = { version = "0.61", features = ["Win32_System_Console", "Win32_Foundation", "Win32_System_Threading"] }

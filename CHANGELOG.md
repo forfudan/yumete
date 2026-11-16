@@ -6,12 +6,14 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Added
 
+- **A lone Shift tap switches 中/ABC on Windows** (Windows Terminal and the classic console), as it does under the Kitty keyboard protocol elsewhere, with the same rules; the start-up line about the terminal not reporting a lone Shift is no longer shown there. `C-\` still works.
 - **vim's `:sort` takes `n` and `u`, and a range in front**: `:sort n` orders lines by their first number (lines without one first), `:sort u` keeps one of each run of equal lines, and `:%sort` or `:2-5sort` sorts the lines it names.
 - **`:read !cmd` reads a command's output in** below the cursor line, the cursor on its last line, as vim's `:r !cmd`; `:0read` and `:$read` put a file or output above the first line or after the last, `:5read` below line 5.
 - **helix's `".` register** under the helix keymap is the selections' text, so `".p` puts a copy of each selection after it; **`:bnext`, `:bprev` and `:rl`**, helix's spellings, are `:buffer-next`, `:buffer-previous` and `:reload`.
 - **`:export docx` (and `ye --export docx`) writes a Word document**: headings in Word's own Heading styles, lists, quotations, tables, code, links, real Word footnotes, readings as Word's phonetic guide, pictures, and the front matter as the file's title, author and dates. Vertical layout and hanging punctuation are not set in it yet, and the export says so.
 - **`ye --import-word` turns Word files into Markdown**: a `.docx`, a `.doc`, or every one in a folder, each `.md` beside it or under `--out` in the same tree. Headings only from Word's Heading styles, every paragraph kept as it is, the file's properties as front matter. Needs pandoc; a `.doc` needs LibreOffice or macOS's `textutil`. Never writes over an existing `.md` without `--overwrite`.
 - **Typing `#` after the page in a wiki link (`[[雨夜#`) lists that file's headings**, found the way `gd` finds the page; `[[#` lists this file's.
+- **A lone Shift tap switches 中/ABC on Windows** (Windows Terminal and the classic console), as it does under the Kitty keyboard protocol elsewhere, with the same rules; the start-up line about the terminal not reporting a lone Shift is no longer shown there. `C-\` still works.
 
 ### Changed
 

@@ -32,6 +32,9 @@ pub mod words_page;
 pub mod system_ime;
 pub mod terminal_window;
 pub mod typed_ahead;
+// Only the Windows reader calls into it; the rest of it is tested everywhere.
+#[cfg_attr(not(windows), allow(dead_code))]
+mod console_shift;
 
 use std::io::{self, stdout, Write as _};
 
@@ -746,7 +749,8 @@ pub fn run(
     // fact about the terminal, and it will not change while this session runs.
     // It gives way to an adopted orphan and to whatever opening the files had
     // to say — those are about this run, and this is about the whole session.
-    if !enhanced && editor.status().is_empty() {
+    // The Windows console hears the tap without the protocol (`console_shift`).
+    if !enhanced && !crate::console_shift::available() && editor.status().is_empty() {
         editor.set_status(match language_key(config) {
             Some(_) => say!("ime.no-lone-shift", config.editor.language_key.trim()),
             None => say!("ime.no-lone-shift-off"),
@@ -2374,17 +2378,52 @@ fn spawn_reader() -> (std::sync::mpsc::Receiver<Arrival>, crate::server::Doorbel
             break;
         }
     });
+    // **The lone Shift on the Windows console** ([`crate::console_shift`]):
+    // the head of the queue is looked at first, and crossterm, asked with no
+    // wait, then reads exactly that one record.
+    #[cfg(windows)]
+    let console = crate::console_shift::console::Console::open();
+    #[cfg(windows)]
+    let mut lone_shift = crate::console_shift::LoneShift::default();
     std::thread::spawn(move || loop {
         // **Off the terminal while a program has it** ([`pause_the_reader`]):
         // a reader still reading would take half the keys typed to it.
         if READER_PAUSE.load(std::sync::atomic::Ordering::Acquire) {
             READER_PAUSED.store(true, std::sync::atomic::Ordering::Release);
+            #[cfg(windows)]
+            lone_shift.reset();
             std::thread::sleep(std::time::Duration::from_millis(10));
             continue;
         }
         READER_PAUSED.store(false, std::sync::atomic::Ordering::Release);
+        #[cfg(windows)]
+        let wait = match &console {
+            Some(console) => {
+                use crate::console_shift::console::Head;
+                match console.next(std::time::Duration::from_millis(50)) {
+                    Head::Empty => continue,
+                    Head::Taken(record) => {
+                        if let Some(key) = lone_shift.feed(record) {
+                            for event in crate::console_shift::as_events(key) {
+                                if tx.send(Arrival::Terminal(Ok(event))).is_err() {
+                                    return;
+                                }
+                            }
+                        }
+                        continue;
+                    }
+                    Head::Crossterm(record) => {
+                        lone_shift.feed(record);
+                        std::time::Duration::ZERO
+                    }
+                }
+            }
+            None => std::time::Duration::from_millis(50),
+        };
+        #[cfg(not(windows))]
+        let wait = std::time::Duration::from_millis(50);
         // Waited for in slices, so a pause is seen within one.
-        match event::poll(std::time::Duration::from_millis(50)) {
+        match event::poll(wait) {
             Ok(false) => continue,
             Ok(true) => {}
             Err(err) => {
@@ -2981,7 +3020,9 @@ enum ShiftResult {
 /// that and the loop calls it on `FocusLost`.
 ///
 /// Requires the Kitty keyboard protocol so bare modifier presses and releases
-/// arrive at all.
+/// arrive at all — or, on the Windows console, the reader's own look at the
+/// console's records, which hands a completed tap in as the same two events
+/// (`console_shift`).
 #[derive(Default)]
 struct ShiftTap(ModifierTap);
 
