@@ -14,14 +14,22 @@
 //!   project, not one more character. **A simplified character finds its
 //!   traditional forms and the other way round** (the glyph sets search
 //!   uses): `书` offers `書齋` as it is written in the file.
+//! - **Repeated runs of 漢字**: the segmenter cuts a phrase on purpose, so
+//!   `长江三角洲` is never one of its words. What the open buffers write at
+//!   least twice after the 漢字 being typed is offered with them, the most
+//!   written first (`repeated_runs`).
+//! - **Which 漢字 are being completed**: the longest tail of the run before
+//!   the caret, up to six, that something goes on from — `位于长江` is
+//!   completed as `长江`.
 //! - **Full pinyin, on `C-n` only**: letters that spell the
 //!   first characters of a 漢字 word syllable by syllable offer it, after
 //!   the Latin words that start with them, as search reads `shuzhai`. Not
 //!   while typing, where Latin words already come up by themselves.
 //! - **When**: after `[editor] word_completion` Latin letters (7 by default,
 //!   helix's `trigger-length`; `0` off), or after ⌈N/2⌉ 漢字, since a 漢字
-//!   word is two to four of them: 7 gives 4, 3 or 4 give 2, 1 or 2 give 1.
-//!   `C-n` / `C-x` asks at any length.
+//!   word is two to four of them: 7 gives 4, 3 or 4 give 2, 1 or 2 give 1;
+//!   the tail completed is that long at least. `C-n` / `C-x` asks at any
+//!   length.
 //! - **Paths**: a word with a `/` in it, or anything right after `](`, read
 //!   relative to the file's own folder — helix's rule, plus the Markdown link.
 //!
@@ -90,6 +98,10 @@ const LONGEST: usize = 50;
 const MOST: usize = 50;
 /// How far back on the line a word or a path is looked for.
 const LOOK_BACK: usize = 200;
+/// The longest tail of a run of 漢字 that is completed.
+const LONGEST_TAIL: usize = 6;
+/// How many 漢字 a repeated run goes on past what was typed, at most.
+const RUN_REACH: usize = 8;
 
 /// One buffer's words, kept up to date a line at a time: which lines it has
 /// (by hash, with how many of each), and the words those lines hold.
@@ -343,35 +355,137 @@ impl Editor {
             return (!items.is_empty()).then_some(items);
         }
         if yumete_cjk::is_han(last) {
-            // ⌈N/2⌉ 漢字, at least one.
+            // ⌈N/2⌉ 漢字 open the list by themselves, at least one; by hand
+            // any number does, though a tail of one is tried only when one is
+            // all there is: `沈清` that goes on nowhere is not `清`.
             let k = n.div_ceil(2).max(1);
             let run = before.iter().rev().take_while(|&&c| yumete_cjk::is_han(c)).count();
-            let k = match by_hand {
-                true => k.min(run),
-                false => k,
-            };
-            if run < k {
+            let shortest = if by_hand { run.min(2) } else { k };
+            if run < shortest {
                 return None;
             }
-            let typed: String = before[before.len() - k..].iter().collect();
             self.read_the_open_buffers();
-            let mut found: HashMap<&String, u32> = HashMap::new();
-            for index in self.word_index.values() {
-                for (word, &count) in &index.han {
-                    let rest: Vec<char> = word.chars().skip(k).collect();
-                    let written = after.len() >= rest.len() && after[..rest.len()] == rest[..];
-                    if word.chars().count() > k && starts_as_typed(word, &typed) && !written {
-                        *found.entry(word).or_default() += count;
-                    }
+            self.read_the_open_texts();
+            // **The tail being completed is the longest one that goes on
+            // somewhere**: `位于长江` finds nothing as a whole, `长江` finds
+            // `长江三角洲`. At most [`LONGEST_TAIL`] (or ⌈N/2⌉ if that is
+            // more), at least ⌈N/2⌉ while typing.
+            let longest = LONGEST_TAIL.max(k).min(run);
+            for t in (shortest..=longest).rev() {
+                let typed: String = before[before.len() - t..].iter().collect();
+                let mut found = self.han_words_from(&typed, &after);
+                for (run, count) in self.repeated_runs(&typed, &after) {
+                    let row = found.entry(run).or_default();
+                    *row = (*row).max(count);
                 }
+                if found.is_empty() {
+                    continue;
+                }
+                let mut found: Vec<(String, u32)> = found.into_iter().collect();
+                found.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.len().cmp(&b.0.len())).then(a.0.cmp(&b.0)));
+                let items: Vec<_> =
+                    found.into_iter().take(MOST).map(|(w, _)| self.offer_over(line, t, w)).collect();
+                return Some(items);
             }
-            let mut found: Vec<(&String, u32)> = found.into_iter().collect();
-            found.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.len().cmp(&b.0.len())).then(a.0.cmp(b.0)));
-            let words: Vec<String> = found.into_iter().take(MOST).map(|(w, _)| w.clone()).collect();
-            let items: Vec<_> = words.into_iter().map(|w| self.offer_over(line, k, w)).collect();
-            return (!items.is_empty()).then_some(items);
+            return None;
         }
         None
+    }
+
+    /// **The 漢字 words of the open buffers that go on from `typed`**, with
+    /// how often each is written. A word whose rest already follows the
+    /// caret is not offered to itself.
+    fn han_words_from(&self, typed: &str, after: &[char]) -> HashMap<String, u32> {
+        let t = typed.chars().count();
+        let mut found: HashMap<String, u32> = HashMap::new();
+        for index in self.word_index.values() {
+            for (word, &count) in &index.han {
+                if word.chars().count() <= t || !starts_as_typed(word, typed) {
+                    continue;
+                }
+                let rest: Vec<char> = word.chars().skip(t).collect();
+                if !after.starts_with(&rest) {
+                    *found.entry(word.clone()).or_default() += count;
+                }
+            }
+        }
+        found
+    }
+
+    /// **The runs of 漢字 the open buffers repeat after `typed`**, with how
+    /// often each is written: a name or a phrase of the book that no
+    /// dictionary holds and the segmenter cuts, `长江三角洲`, `图书馆员`.
+    ///
+    /// - `typed` and up to [`RUN_REACH`] more 漢字, written at least twice;
+    ///   the place being typed at is not one of them.
+    /// - **Closed**: a run is dropped when the run one character longer is
+    ///   written as often, since then it never stops where it would end
+    ///   (`长江三角` always goes on to `洲`).
+    /// - **Ends on a word**: the segmenter's last word of it is two
+    ///   漢字 or more, so a run does not stop halfway into a word or on a
+    ///   particle (`图书馆的`). With no dictionary every 漢字 is a word, and
+    ///   nothing is offered.
+    /// - **Never from one 漢字**: `typed` is two at least.
+    fn repeated_runs(&self, typed: &str, after: &[char]) -> Vec<(String, u32)> {
+        let t = typed.chars().count();
+        if t < 2 {
+            return Vec::new();
+        }
+        let here = self.current_buffer().id();
+        let caret = {
+            let rope = self.current_buffer().rope();
+            rope.char_to_byte(self.sel.head().min(rope.len_chars()))
+        };
+        let step = typed.chars().next().map_or(1, char::len_utf8);
+        let mut seen: HashMap<&str, u32> = HashMap::new();
+        for (&id, (_, text)) in &self.run_texts {
+            let mut from = 0;
+            while let Some(at) = text[from..].find(typed).map(|i| from + i) {
+                from = at + step;
+                let end = at + typed.len();
+                if id == here && end == caret {
+                    continue;
+                }
+                let mut to = end;
+                for c in text[end..].chars().take(RUN_REACH).take_while(|&c| yumete_cjk::is_han(c)) {
+                    to += c.len_utf8();
+                    *seen.entry(&text[at..to]).or_default() += 1;
+                }
+            }
+        }
+        // How often the most written run one character longer is written.
+        let mut longer: HashMap<&str, u32> = HashMap::new();
+        for (&run, &count) in &seen {
+            let parent = &run[..run.char_indices().last().map_or(0, |(i, _)| i)];
+            if parent.len() > typed.len() {
+                let most = longer.entry(parent).or_default();
+                *most = (*most).max(count);
+            }
+        }
+        seen.into_iter()
+            .filter(|&(run, count)| count >= 2 && longer.get(run).is_none_or(|&most| most < count))
+            .filter(|&(run, _)| {
+                let rest: Vec<char> = run.chars().skip(t).collect();
+                !after.starts_with(&rest)
+            })
+            .filter(|&(run, _)| self.segmenter.segment(run).last().is_some_and(|&(a, b)| b - a >= 2))
+            .map(|(run, count)| (run.to_string(), count))
+            .collect()
+    }
+
+    /// Bring every open buffer's text up to date for [`repeated_runs`]:
+    /// a buffer is read again only when its revision moved, so a key typed
+    /// costs one copy of the buffer being typed in.
+    fn read_the_open_texts(&mut self) {
+        let open: Vec<u64> = self.buffers.iter().map(|b| b.id()).collect();
+        self.run_texts.retain(|id, _| open.contains(id));
+        for buffer in &self.buffers {
+            let revision = buffer.revision();
+            if self.run_texts.get(&buffer.id()).is_some_and(|(read, _)| *read == revision) {
+                continue;
+            }
+            self.run_texts.insert(buffer.id(), (revision, buffer.rope().to_string()));
+        }
     }
 
     /// **The 漢字 words `typed` spells in full pinyin**, most used first; only

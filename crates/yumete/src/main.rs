@@ -1103,7 +1103,17 @@ fn main() -> ExitCode {
     // whether or not the 碼表 is.
     // One answer, in `yumete_tui::choose_words`, so `:word-list reload` cannot
     // pick a different dictionary from the one start-up picked.
-    editor.set_segmenter(yumete_tui::choose_words(&ime, config.editor.word_level));
+    //
+    // **`--shot` reads the language layer too**, when it is installed: the
+    // interactive loop reads it right after the first frame, which a shot never
+    // reaches, and without it a picture of Chinese completion, word motions or
+    // the segmentation overlay is a picture of something no reader sees. It
+    // is the two tables only (tens of milliseconds), not the 碼表, and the
+    // binary carries them, so the shot is the same on any machine that has no
+    // Yume of its own installed.
+    let language = (shot.is_some() && deferred.is_some()).then(|| ImeSession::language_only(wanted));
+    editor.set_segmenter(yumete_tui::choose_words(language.as_ref().unwrap_or(&ime), config.editor.word_level));
+    drop(language);
     // …and the readings, for `:ruby-auto`. Same source, different question:
     // the segmenter asks where a word ends, the reader asks how it is read.
     editor.set_reader(Box::new(ime.reader()));

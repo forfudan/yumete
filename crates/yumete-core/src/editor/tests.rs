@@ -26997,6 +26997,137 @@ fn words_of_the_open_buffers_are_offered_as_you_write() {
     assert_eq!(labels(&ed), ["阿寧師兄"], "C-n asks at any length");
 }
 
+/// Neutral prose that writes 长江三角洲, 中华人民共和国 and 图书馆 twice each,
+/// with a dictionary that cuts all three, as a real one does.
+fn place_names() -> Editor {
+    let mut ed = typed(concat!(
+        "上海位于长江三角洲东端，是中华人民共和国的直辖市。\n",
+        "长江流域气候温和，长江三角洲人口密集。\n",
+        "他在图书馆看书，图书馆旁边有书店，图书室很小。\n",
+        "中华人民共和国成立以后，城市发展很快。\n",
+    ));
+    let words = "上海 长江 三角洲 东端 中华 人民 共和国 直辖市 流域 气候 温和 人口 密集 \
+                 图书馆 图书室 图书 看书 旁边 书店 成立 以后 城市 发展 很快";
+    ed.set_segmenter(Box::new(crate::DictionarySegmenter::new(
+        words.split_whitespace().map(|w| (w.to_string(), 100)),
+        1,
+    )));
+    ed
+}
+
+fn offered(ed: &Editor) -> Vec<String> {
+    ed.offers_here().map(|(items, _)| items.iter().map(|o| o.label.clone()).collect()).unwrap_or_default()
+}
+
+/// **What the open buffers write twice after the 漢字 typed is offered**,
+/// though the segmenter cuts it: `长江` and `C-n` offer `长江三角洲`, never
+/// the `长江三角` that always goes on to `洲`.
+#[test]
+fn a_repeated_run_of_han_is_offered_where_the_segmenter_cuts_it() {
+    let mut ed = place_names();
+    press(&mut ed, "Go");
+    ed.insert_committed("长江");
+    assert!(offered(&ed).is_empty(), "two are not ⌈7/2⌉ = 4");
+    ed.on_key(Key::Ctrl('n'));
+    assert_eq!(offered(&ed), ["长江三角洲"], "长江流域 is written once, 长江三角 always goes on");
+    ed.on_key(Key::Tab);
+    assert!(ed.current_buffer().text().ends_with("\n长江三角洲\n"));
+
+    let mut ed = place_names();
+    press(&mut ed, "Go");
+    ed.insert_committed("中华");
+    ed.on_key(Key::Ctrl('n'));
+    assert_eq!(offered(&ed), ["中华人民共和国"], "cut 中华 / 人民 / 共和国, written whole");
+
+    // Typed in the middle of a sentence: the tail that goes on somewhere is
+    // the one completed, and the offer replaces only that tail.
+    let mut ed = place_names();
+    press(&mut ed, "Go");
+    ed.insert_committed("那座城市位于长江");
+    ed.on_key(Key::Ctrl('n'));
+    assert_eq!(offered(&ed), ["长江三角洲"]);
+    ed.on_key(Key::Tab);
+    assert!(ed.current_buffer().text().ends_with("\n那座城市位于长江三角洲\n"));
+}
+
+/// **A word of the index and a repeated run are one row**, the most written
+/// first: `图书` offers `图书馆` (one character longer is a completion, as in
+/// helix) once though both sources have it, then `图书室`, written once.
+#[test]
+fn repeated_runs_and_indexed_words_are_one_list_most_written_first() {
+    let mut ed = place_names();
+    press(&mut ed, "Go");
+    ed.insert_committed("图书");
+    ed.on_key(Key::Ctrl('n'));
+    assert_eq!(offered(&ed), ["图书馆", "图书室"]);
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Esc);
+    // What was typed is never offered back.
+    press(&mut ed, "o");
+    ed.insert_committed("图书馆");
+    ed.on_key(Key::Ctrl('n'));
+    assert!(!offered(&ed).contains(&"图书馆".to_string()));
+}
+
+/// **Never from one 漢字**: `长` offers the word `长江` from the index and no
+/// run, whether typed or asked for.
+#[test]
+fn a_single_han_never_offers_a_repeated_run() {
+    let mut ed = place_names();
+    ed.set_word_completion(1);
+    press(&mut ed, "Go");
+    ed.insert_committed("长");
+    assert_eq!(offered(&ed), ["长江"]);
+    ed.on_key(Key::Ctrl('x'));
+    assert_eq!(offered(&ed), ["长江"]);
+}
+
+/// **While typing, the tail is ⌈N/2⌉ 漢字 at least**; `C-n` takes any.
+#[test]
+fn typing_completes_a_run_only_from_as_many_han_as_word_completion_says() {
+    let mut ed = place_names();
+    press(&mut ed, "Go");
+    ed.insert_committed("位于长江");
+    assert!(offered(&ed).is_empty(), "位于长江 is written once; 长江 is two, not four");
+    ed.insert_committed("三角");
+    assert_eq!(offered(&ed), ["长江三角洲"], "长江三角 is four");
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Esc);
+    ed.set_word_completion(3);
+    press(&mut ed, "o");
+    ed.insert_committed("长江");
+    assert_eq!(offered(&ed), ["长江三角洲"], "⌈3/2⌉ = 2");
+}
+
+/// **A run that does not end on a word is not offered**: one that stops on
+/// a particle, or on a 漢字 the segmenter leaves alone.
+#[test]
+fn a_repeated_run_ends_on_a_word_of_two_han_or_more() {
+    let mut ed = typed("他说图书馆的书多。\n她说图书馆的人少。\n");
+    ed.set_segmenter(Box::new(crate::DictionarySegmenter::new(
+        ["图书馆", "图书"].map(|w| (w.to_string(), 100)),
+        1,
+    )));
+    press(&mut ed, "Go");
+    ed.insert_committed("说图");
+    ed.on_key(Key::Ctrl('n'));
+    // 说图书馆 is written twice and goes on to 的 every time; 说图书馆的
+    // ends on 的. And 说图 going on nowhere is not 图.
+    assert!(offered(&ed).is_empty(), "{:?}", offered(&ed));
+    ed.on_key(Key::Esc);
+    press(&mut ed, "o");
+    ed.insert_committed("图");
+    ed.on_key(Key::Ctrl('n'));
+    assert_eq!(offered(&ed), ["图书馆"], "one typed, one tried");
+    // With no dictionary every 漢字 is a word, and no run ends on one.
+    let mut ed = place_names();
+    ed.set_segmenter(Box::new(CategorySegmenter));
+    press(&mut ed, "Go");
+    ed.insert_committed("长江");
+    ed.on_key(Key::Ctrl('n'));
+    assert!(offered(&ed).is_empty());
+}
+
 /// A simplified character finds the traditional words and the other way
 /// round, and on `C-n` full pinyin spells 漢字 words.
 #[test]

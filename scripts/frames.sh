@@ -69,6 +69,7 @@ scenes() {
 代碼-Mojo|80x20|:open MOJO\n
 代碼-竪排是橫的|60x24|:open RUST\n:vertical\n
 合併衝突|80x20|:open CONFLICT\n
+補全-漢字|80x20|Go她在門口站了很久。後來她在門口
 輸入法-候選|80x20|i\{ime}nianjia
 輸入法-候選-竪排|60x24|:vertical\ni\{ime}nianjia
 輸入法-底行|80x20|:yume-panel bottom\ni\{ime}nianjia

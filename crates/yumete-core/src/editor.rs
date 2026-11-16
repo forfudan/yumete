@@ -2808,6 +2808,9 @@ pub struct Editor {
     words_read_in_insert: bool,
     /// The words of every line read so far, by the line's hash.
     line_words: HashMap<u64, suggest::LineWords>,
+    /// Each open buffer's text as one string, at the revision it was read,
+    /// for the repeated runs of 漢字 completion offers (see `suggest.rs`).
+    run_texts: HashMap<u64, (u64, String)>,
     /// Where readings come from for `:ruby-auto` (Feature #234). Defaults to
     /// [`NoReader`], which knows nothing; the front end installs a reader over
     /// 宇浩's 字料層 once the data is loaded, exactly as it does the segmenter.
@@ -4628,6 +4631,7 @@ impl Editor {
             words_read_in_insert: false,
             preview_redraw: false,
             line_words: HashMap::new(),
+            run_texts: HashMap::new(),
             reader: Box::new(NoReader),
             project_words: std::rc::Rc::new(RefCell::new(yumete_cjk::WordList::default())),
             own_words: yumete_cjk::WordList::default(),
