@@ -225,8 +225,8 @@ en = "<setting>"
 [[message]]
 # 命令參數的佔位：排序的開關（:sort）（草稿）
 key = "cmd.arg.sort-flags"
-zhs = "-r｜-i"
-en = "-r｜-i"
+zhs = "-r｜-i｜n｜u …"
+en = "-r｜-i｜n｜u …"
 
 [[message]]
 # 命令參數的佔位：按哪一欄、升序 a 還是降序 d，可以幾組（:table-sort）（草稿）
@@ -916,9 +916,9 @@ find = "退出 離開 离开 關閉 关闭 關掉 关掉 窗口 區域 区域 ex
 [[message]]
 # : 命令選單：:read
 key = "cmd.commands.read"
-zhs = "将文件内容插入选区之后"
-en = "put a file's contents after the selection"
-find = "讀入 读入 插入文件 文件内容 read"
+zhs = "将文件内容或终端命令(`!cmd`)的输出插到光标所在行下方"
+en = "put a file's contents, or a shell command's output (`!cmd`), below the cursor's line"
+find = "讀入 读入 插入文件 文件内容 命令 輸出 输出 終端 终端 shell read"
 
 [[message]]
 # : 命令選單裏 readonly 那一項的説明(commands 組)
@@ -1121,8 +1121,8 @@ find = "截圖 截图 圖片 图片 存圖 存图 screenshot png html 剪貼簿 
 [[message]]
 # : 命令菜单里 sort 那一项的说明（草稿）
 key = "cmd.commands.sort"
-zhs = "排序：多个选区时排各选区的内容，否则排选中的行，无选区时排整个文件；按码位，-r 倒序，-i 不分大小写"
-en = "sort the selections' texts when there are several, else the selected lines, or every line; by code point, -r reversed, -i ignoring case"
+zhs = "排序：多个选区排各选区的内容，否则排选中的行，无选区排全文；按码位，-r 倒序，-i 不分大小写，n 按数值，u 去重"
+en = "sort several selections' texts, else the selected lines or every line; by code point, -r reversed, -i ignoring case, n by number, u unique"
 find = "排序 倒序 逆序 sort reverse lines 行"
 
 [[message]]
@@ -2499,8 +2499,8 @@ en = ", "
 [[message]]
 # :sort 收的參數（草稿）
 key = "cmd.takes.sort"
-zhs = "-r(倒序)、-i(不分大小写)"
-en = "-r (reversed) or -i (ignoring case)"
+zhs = "-r(倒序)、-i 或 i(不分大小写)、n(按数值)、u(去重)"
+en = "-r (reversed), -i or i (ignoring case), n (by number) or u (unique)"
 
 [[message]]
 # :s 後面少了查找或替換（草稿）

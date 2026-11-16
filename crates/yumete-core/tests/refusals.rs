@@ -74,7 +74,7 @@ fn the_named_refusals_read_as_they_should() {
     messages::set_language(Language::Simplified);
     let zhs = [
         (":indent-width 40", "indent-width 不接受「40」，可填 1 到 16 的整数"),
-        (":sort -x", "sort 不接受「-x」，可填 -r(倒序)、-i(不分大小写)"),
+        (":sort -x", "sort 不接受「-x」，可填 -r(倒序)、-i 或 i(不分大小写)、n(按数值)、u(去重)"),
         (":export pdf", "export 不接受「pdf」，可填 html、typst、epub、docx、csv、tsv；PDF 请用 :export-as-preview pdf"),
         (":pipe", "pipe 后面要写 <命令>"),
     ];
