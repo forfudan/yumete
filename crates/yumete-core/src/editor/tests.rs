@@ -25226,6 +25226,161 @@ fn check_names_finds_a_wiki_name_written_one_homophone_out() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// 年/念 are `nian`; nothing else in the test needs a sound.
+struct NianSounds;
+impl yumete_cjk::Reader for NianSounds {
+    fn read(&self, word: &str) -> Option<Vec<String>> {
+        let one = |c: char| match c {
+            '年' | '念' => Some("nian"),
+            _ => None,
+        };
+        word.chars().map(|c| one(c).map(str::to_string)).collect()
+    }
+    fn available(&self) -> bool {
+        true
+    }
+}
+
+/// A small book: 沈鹤年 in the wiki, 青石镇 in `words.txt`, two chapters
+/// under `卷一/`, and a `.txt` the project index does not read.
+fn a_book_of_names(tag: &str) -> (Editor, std::path::PathBuf) {
+    let dir = tmp().join(format!("yumete-check-names-{tag}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join(".yumete")).unwrap();
+    std::fs::create_dir_all(dir.join("卷一")).unwrap();
+    std::fs::write(dir.join(".yumete/wiki.md"), "## 沈鹤年\n镇上的郎中，又写作瀋鶴年。\n").unwrap();
+    std::fs::write(dir.join(".yumete/words.txt"), "# People\n\n# Places\n青石镇\n").unwrap();
+    std::fs::write(dir.join("卷一/第一章.md"), "沈鹤年到了青石镇。\n瀋鶴年又来了。\n").unwrap();
+    std::fs::write(dir.join("卷一/第二章.md"), "他在青石鎮住下。\n沈鹤念走了。\n").unwrap();
+    std::fs::write(dir.join("札记.txt"), "瀋鶴年。\n").unwrap();
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    ed.open_file(dir.join("卷一/第一章.md")).unwrap();
+    ed.reload_project_words();
+    ed.set_reader(Box::new(NianSounds));
+    (ed, dir)
+}
+
+/// **`:check-names` reads the current file; `:check-names book` the book.**
+///
+/// The book is the project index's set — Markdown under the root, the wiki's
+/// own pages left out (the entry above writes 瀋鶴年 on purpose) — and the
+/// listing names each file, so `gf` goes there.
+#[test]
+fn check_names_book_reads_every_chapter_and_gf_goes_to_each() {
+    let (mut ed, dir) = a_book_of_names("book");
+    ed.execute(":check-names").unwrap();
+    let here = ed.current_buffer().text();
+    assert_eq!(here.lines().count(), 1, "this chapter only: {here}");
+    assert!(here.starts_with("2: ") && here.contains("瀋鶴年") && here.contains("沈鹤年"), "{here}");
+    assert!(here.contains(&say!("check.names-reason-script")), "the reason is tagged: {here}");
+
+    ed.open_file(dir.join("卷一/第一章.md")).unwrap();
+    ed.execute(":check-names book").unwrap();
+    let book = ed.current_buffer().text();
+    let rows: Vec<&str> = book.lines().collect();
+    assert_eq!(rows.len(), 3, "{book}");
+    assert!(rows[0].starts_with("卷一/第一章.md:2:"), "{book}");
+    assert!(rows[1].starts_with("卷一/第二章.md:1:") && rows[1].contains("青石鎮"), "words.txt is a source: {book}");
+    assert!(rows[2].starts_with("卷一/第二章.md:2:") && rows[2].contains(&say!("check.names-reason-sound")), "{book}");
+    assert!(!book.contains("郎中"), "the wiki's own page is not the book: {book}");
+    assert!(ed.status().contains('3'), "{}", ed.status());
+
+    press(&mut ed, "jj");
+    press(&mut ed, "gf");
+    assert_eq!(ed.current_buffer().display_name(), "第二章.md");
+    assert_eq!(ed.cursor_line(), 1);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// An unsaved edit counts in a book run, as `:grep` reads an open buffer.
+#[test]
+fn check_names_book_reads_an_open_buffer_as_it_stands() {
+    let (mut ed, dir) = a_book_of_names("open");
+    // Write the slip into the open chapter's first line and do not save.
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "ggI");
+    press(&mut ed, "沈鹤念。");
+    ed.on_key(Key::Esc);
+    ed.execute(":check-names book").unwrap();
+    let book = ed.current_buffer().text();
+    assert!(book.contains("卷一/第一章.md:1:"), "the unsaved line is read: {book}");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// Without readings the three glyph reasons still run, and the status line
+/// says the homophones were not looked at.
+#[test]
+fn check_names_without_readings_still_finds_the_traditional_spelling() {
+    let (mut ed, dir) = a_book_of_names("deaf");
+    ed.set_reader(Box::new(yumete_cjk::NoReader));
+    ed.execute(":check-names book").unwrap();
+    let book = ed.current_buffer().text();
+    assert_eq!(book.lines().count(), 2, "繁简 twice, 同音 skipped: {book}");
+    assert!(ed.status().contains("读音") || ed.status().contains("讀音"), "{}", ed.status());
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// A stopwatch: `:check-names book` over ~2 MB of generated chapters, 300
+/// names (100 wiki entries, 200 in `words.txt`), one name in five written in
+/// 繁體 and one in twenty a homophone out.
+#[test]
+#[ignore = "a stopwatch, not a test"]
+fn check_names_book_on_two_megabytes() {
+    let dir = tmp().join(format!("yumete-check-names-bench-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join(".yumete")).unwrap();
+    let mut seed: u64 = 7;
+    let mut next = move |n: u32| {
+        seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        ((seed >> 33) as u32) % n
+    };
+    let pool: Vec<char> = (0x4E00u32..0x4E00 + 3000).filter_map(char::from_u32).collect();
+    let mut names: Vec<String> = vec!["沈鹤年".into(), "青石镇".into()];
+    while names.len() < 300 {
+        let len = 2 + next(3) as usize;
+        names.push((0..len).map(|_| pool[next(pool.len() as u32) as usize]).collect());
+    }
+    let wiki: String = names[..100].iter().map(|n| format!("## {n}\n")).collect();
+    let words: String = names[100..].iter().map(|n| format!("{n}\n")).collect();
+    std::fs::write(dir.join(".yumete/wiki.md"), wiki).unwrap();
+    std::fs::write(dir.join(".yumete/words.txt"), words).unwrap();
+    let mut bytes = 0usize;
+    for chapter in 0..60 {
+        let mut text = String::new();
+        while text.len() < 35_000 {
+            for _ in 0..40 {
+                text.push(pool[next(pool.len() as u32) as usize]);
+            }
+            match next(20) {
+                0..=3 => text.push_str("瀋鶴年"),
+                4 => text.push_str("沈鹤念"),
+                _ => text.push_str(&names[next(names.len() as u32) as usize]),
+            }
+            text.push_str("。\n");
+        }
+        bytes += text.len();
+        std::fs::write(dir.join(format!("第{chapter:02}章.md")), text).unwrap();
+    }
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    ed.open_file(dir.join("第00章.md")).unwrap();
+    ed.reload_project_words();
+    ed.set_reader(Box::new(NianSounds));
+    let at = std::time::Instant::now();
+    ed.execute(":check-names book").unwrap();
+    println!("{bytes} bytes in 60 files, 300 names: {:?}; {}", at.elapsed(), ed.status());
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// `:check-names` with nothing to compare against says where names come from.
+#[test]
+fn check_names_with_no_names_says_so() {
+    let mut ed = typed("沈鹤年。\n");
+    ed.execute(":check-names").unwrap();
+    assert_eq!(ed.status(), say!("check.names-none"));
+}
+
 /// 作品百科, third part (#287): the names are marked where the segmenter cut
 /// them, in three modes, and never inside a fence.
 #[test]

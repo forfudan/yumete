@@ -777,6 +777,18 @@ zhs = "PgUp/PgDn 翻页"
 en = "PgUp/PgDn to page"
 
 [[message]]
+# （草稿）:check-names 的參數 book 的説明
+key = "label.check.book"
+zhs = "全书：项目索引里的每个文件"
+en = "the whole book: every file the project index reads"
+
+[[message]]
+# （草稿）:check-names 的參數 file 的説明(不寫參數時的範圍)
+key = "label.check.file"
+zhs = "当前文件"
+en = "this file"
+
+[[message]]
 # 把幾樣東西連起來寫時的頓號
 key = "label.comma"
 zhs = "、"

@@ -3442,6 +3442,7 @@ dependencies = [
  "tree-sitter-typescript",
  "tree-sitter-typst",
  "tree-sitter-yaml",
+ "unicode-normalization",
  "windows-sys 0.59.0",
  "yumete-cjk",
  "zip",

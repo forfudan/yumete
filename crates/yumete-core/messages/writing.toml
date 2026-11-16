@@ -39,29 +39,58 @@ zhs = "{0} 个以上(只列出前 {0} 个)，gf 跳到该行"
 en = "{0}+ characters in no character set (first {0} listed); gf jumps to the line"
 
 [[message]]
-# :check-names 查完，稿子裏每一處專名都寫對了
+# （草稿）:check-names 結果裏把兩個理由連起來，例如「繁简、同音」
+key = "check.names-and"
+zhs = "{0}、{1}"
+en = "{0}, {1}"
+
+[[message]]
+# （草稿）:check-names book 的範圍名，放進「{0}：专名都写对了」那一類句子
+key = "check.names-book"
+zhs = "全书"
+en = "the book"
+
+[[message]]
+# （草稿）:check-names 查完，稿子裏每一處專名都照名單寫
 key = "check.names-clean"
 zhs = "{0}：专名都写对了"
-en = "{0}: every name spelled as the wiki has it"
+en = "{0}: every name spelled as listed"
 
 [[message]]
-# :check-names 查出了寫錯一個字的專名
+# （草稿）:check-names 查出了寫法不同的專名
 key = "check.names-found"
-zhs = "{0} 处专名错了一个字，gf 跳到该行"
-en = "{0|name|names} one character off; gf jumps to the line"
+zhs = "{0} 处专名写法不同，gf 跳到该行"
+en = "{0|name|names} written another way; gf jumps to the line"
 
 [[message]]
-# :check-names 要讀音表纔分得出「同音寫錯」和「本來就是别的詞」，而它没裝
-key = "check.names-no-readings"
-zhs = "查不到读音：没有读音表就分不出「同音错字」和「本来就是别的词」(用 `:yume-scheme` 加载)"
-en = "no readings: without them a misspelt name cannot be told from a different word (`:yume-scheme` loads them)"
+# （草稿）:check-names 没有名字可比：百科没有詞條，.yumete/words.txt 也没有詞
+key = "check.names-none"
+zhs = "没有专名可比：百科和 .yumete/words.txt 都是空的(:wiki-edit、:word-list-local)"
+en = "no names to check against: the wiki and .yumete/words.txt are both empty (:wiki-edit, :word-list-local)"
 
 [[message]]
-# :check-names 這本書還没有百科，没有名字可比
-key = "check.names-no-wiki"
-zhs = "本项目还没有百科，用 :wiki-edit 创建后才能检查专名"
-zht = "本項目還没有百科，用 :wiki-edit 創建後纔能檢查專名"
-en = "this project has no wiki yet; :wiki-edit starts one, then names can be checked"
+# （草稿）:check-names 結果裏的理由：兼容表意字或康熙部首，正規化後是同一個字
+key = "check.names-reason-compat"
+zhs = "兼容字"
+en = "compatibility character"
+
+[[message]]
+# （草稿）:check-names 結果裏的理由：一個是另一個的簡體
+key = "check.names-reason-script"
+zhs = "繁简"
+en = "simplified/traditional"
+
+[[message]]
+# （草稿）:check-names 結果裏的理由：讀音相同的另一個字
+key = "check.names-reason-sound"
+zhs = "同音"
+en = "same sound"
+
+[[message]]
+# （草稿）:check-names 結果裏的理由：同一個字的異體
+key = "check.names-reason-variant"
+zhs = "异体"
+en = "variant form"
 
 [[message]]
 # :check-names 的緩衝區標題
@@ -70,16 +99,28 @@ zhs = "{0} 的专名"
 en = "names in {0}"
 
 [[message]]
-# :check-names 查出來的一處：這裏寫的、百科裏的名字、以及差的那一個字
+# （草稿）:check-names book 的緩衝區標題
+key = "check.names-results-book"
+zhs = "全书的专名"
+en = "names in the book"
+
+[[message]]
+# （草稿）:check-names 查出來的一處：在哪(行號，或 路徑:行號)、這裏寫的、名單上的名字、不同的那幾個字、理由
 key = "check.names-slip"
-zhs = "{0}: 这里是「{1}」，百科里是「{2}」({3} → {4}，同音)"
-en = "{0}: 「{1}」 here, 「{2}」 in the wiki ({3} → {4}, same sound)"
+zhs = "{0}: 这里是「{1}」，专名是「{2}」({3}，{4})"
+en = "{0}: 「{1}」 here, the name is 「{2}」 ({3}, {4})"
 
 [[message]]
 # :check-names 查出來的太多，只列了前面那些
 key = "check.names-too-many"
 zhs = "过多，只列出前 {0} 处"
 en = "too many; the first {0} are listed"
+
+[[message]]
+# （草稿）:check-names 没有讀音表：同音那一條没查，其餘照查。{0} 是本來要說的那一句
+key = "check.names-without-readings"
+zhs = "{0}；没有读音表，未查同音字(用 `:yume-scheme` 加载)"
+en = "{0}; no readings, so homophones were not checked (`:yume-scheme` loads them)"
 
 [[message]]
 # :check-punct 查完，標點没有問題

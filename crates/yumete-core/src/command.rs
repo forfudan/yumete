@@ -217,8 +217,10 @@ pub enum Command {
     /// `:check-usage` — which of two spellings the manuscript settled on, and
     /// where it slipped (Feature #233).
     CheckUsage,
-    /// `:check-names` — a 百科 name written one homophone out.
-    CheckNames,
+    /// `:check-names [file|book]` — a name from the wiki or `words.txt`
+    /// written another way: one homophone, or 繁简/异体/兼容字 in any number.
+    /// `book` reads every file of the project index rather than this one.
+    CheckNames { book: bool },
     /// `:diagnostics-all` — everything the language servers have complained about
     /// (#53/#54), as a `path:line:` listing `gf` can walk.
     CheckCode,
@@ -3563,6 +3565,12 @@ const OFF_ONLY: &[Word] = &[Word {
 /// kinds in the order the panel shows them. (`PageUp`/`PageDown` in the panel
 /// scroll by a page; they do not step through the kinds.)
 /// `:links` takes one of these.
+/// How much a `:check-…` reads: the file in front of you, or the whole book.
+const CHECK_SCOPES: &[Word] = &[
+    Word { name: "file", help: "label.check.file", needs: &[] },
+    Word { name: "book", help: "label.check.book", needs: &[] },
+];
+
 const LINKS_LOOKS: &[Word] = &[
     Word { name: "list", help: "label.links.list", needs: &[] },
     Word { name: "graph", help: "label.links.graph", needs: &[] },
@@ -3892,8 +3900,18 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.check.names",
         needs: &[],
-        params: &[],
-        build: Some(|_| Ok(Command::CheckNames)),
+        params: &[Param::Words { of: CHECK_SCOPES, default: Some("file") }],
+        build: Some(|p| {
+            Ok(Command::CheckNames {
+                book: match p.arg(0) {
+                    None | Some("file") => false,
+                    Some("book") => true,
+                    Some(other) => {
+                        return Err(CommandError::InvalidArgument { command: "check-names", value: other.to_string() })
+                    }
+                },
+            })
+        }),
     },
     Entry {
         // `diagnostics-all`：它和 `:diagnostics`（即時開關）是一件事的兩半，跟那一家

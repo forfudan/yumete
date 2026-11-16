@@ -37,6 +37,9 @@ zip = { version = "2.2", default-features = false, features = ["deflate"] }
 imagesize = "0.14"
 roxmltree = "0.21"
 ropey = { version = "1.6", default-features = false, features = ["simd"] }
+# `:check-names` 的「兼容字」：CJK 兼容表意字與康熙部首折回統一表意字。已在
+# lock 檔裏（公式排版那一支帶進來的），不多編一個 crate。
+unicode-normalization = "0.1"
 yumete-cjk = {path = "../yumete-cjk"}
 
 # Code inside a fence, coloured by its own grammar (#420). Only the fence is

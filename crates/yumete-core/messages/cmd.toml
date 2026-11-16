@@ -370,11 +370,11 @@ en = "list the merge conflicts in this file"
 find = "衝突 冲突 合併 合并 merge conflict conflicts git"
 
 [[message]]
-# :check-names 在命令表裏的説明
+# （草稿）:check-names 在命令表裏的説明
 key = "cmd.check.names"
-zhs = "检查专名：找出百科词条名写错同音字的地方(醉翁亭写成醉翁停)"
-en = "check names: wiki names written with a wrong homophone"
-find = "專名 专名 人名 地名 百科 别字 同音 校對 校对 names typo homophone"
+zhs = "检查专名：百科词条与 words.txt 里的名字写成了同音字、繁简、异体或兼容字(醉翁亭写成醉翁停)；加 book 查全书"
+en = "check names: names from the wiki and words.txt written with a homophone, or in another script, variant or compatibility form; book checks every file"
+find = "專名 专名 人名 地名 百科 别字 同音 繁簡 繁简 異體 异体 兼容字 校對 校对 names typo homophone variant"
 
 [[message]]
 # : 命令選單裏 punct 那一項的説明(check 組)

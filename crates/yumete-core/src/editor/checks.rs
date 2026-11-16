@@ -205,38 +205,58 @@ impl Editor {
         };
     }
 
-    /// `:check-names` — a 百科 name written one homophone out.
+    /// `:check-names [file|book]` — a name written another way.
     ///
     /// **The other half of [`Self::check_usage`].** That one settles 裏 against
     /// 裡, and it works because both spellings are in a list. A proper name is
     /// in nobody's list — 醉翁亭 is this book's — so the one place it came out
-    /// 醉翁停 is invisible to every checker there is. The book's 百科 *does*
-    /// know the name, and the reading table knows that 亭 and 停 are one sound,
-    /// which is what tells a typo from a different word (see [`crate::names`]).
-    pub(super) fn check_names(&mut self) {
+    /// 醉翁停 is invisible to every checker there is. The book *does* know its
+    /// names: the wiki's entries and `.yumete/words.txt`, every word of it (the
+    /// `# People` and `# Places` headings in that file are comments to the
+    /// reader, not sections to the parser). What counts as 「another way」 —
+    /// 同音 in one character, 繁简/异体/兼容字 in any — is [`crate::names`].
+    ///
+    /// **Only when asked, all at once.** Nothing is underlined while typing
+    /// and nothing runs behind: a whole book is one walk and one pass, which
+    /// is cheap enough to wait for and too much to repeat on every key.
+    ///
+    /// `book` reads the files the project index reads ([`super::links`]):
+    /// open buffers as they stand, the rest from disk, the wiki's own pages
+    /// left out — an entry is where a variant is written down on purpose.
+    pub(super) fn check_names(&mut self, book: bool) {
         let name = self
             .current_buffer()
             .path()
             .and_then(|p| p.file_name())
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_else(|| self.current_buffer().display_name().to_string());
-        let names: Vec<String> = self.wiki.by_name.keys().cloned().collect();
+        let mut listed: Vec<String> = self.wiki.by_name.keys().cloned().collect();
+        listed.extend(self.own_words.iter().map(str::to_string));
+        let names = crate::names::Names::new(&listed);
         if names.is_empty() {
-            self.status = say!("check.names-no-wiki");
+            self.status = say!("check.names-none");
             return;
         }
-        // Warning: **No reading table, no answer.** Without it this would be
-        // 「one character different」, which in Chinese is most of the
-        // vocabulary; a page of noise is worse than the silence it replaces.
-        if !self.reader.available() {
-            self.status = say!("check.names-no-readings");
-            return;
-        }
+        // (where it is shown from, text): one entry for this file, one per
+        // file of the book.
+        let root = self.root();
+        let texts: Vec<(Option<String>, String)> = match book {
+            false => vec![(None, self.current_buffer().rope().to_string())],
+            true => self.book_texts(&root),
+        };
+        // Warning: **No reading table, no 同音.** Without it the sound rule
+        // would be 「one character different」, which in Chinese is most of the
+        // vocabulary. The other three reasons need no readings and still run;
+        // the status line says which half is skipped.
+        let hears = self.reader.available();
         // One lookup per character, not per comparison: the same handful of
-        // characters is asked about all the way down a chapter.
+        // characters is asked about all the way down a book.
         let sounds: std::cell::RefCell<std::collections::HashMap<char, Option<String>>> =
             Default::default();
         let alike = |a: char, b: char| {
+            if !hears {
+                return false;
+            }
             let say = |c: char| {
                 sounds
                     .borrow_mut()
@@ -251,30 +271,120 @@ impl Editor {
                 _ => false,
             }
         };
-        let text = self.current_buffer().rope().to_string();
-        let slips = crate::names::check(&text, &names, alike);
-        if slips.is_empty() {
-            self.status = say!("check.names-clean", name);
+        let mut found: Vec<(String, crate::names::Slip)> = Vec::new();
+        for (path, text) in &texts {
+            for slip in names.check(text, alike) {
+                let at = match path {
+                    Some(path) => format!("{path}:{}", slip.line + 1),
+                    None => (slip.line + 1).to_string(),
+                };
+                found.push((at, slip));
+            }
+        }
+        let scope = match book {
+            true => say!("check.names-book"),
+            false => name.clone(),
+        };
+        let heard = |status: String| match hears {
+            true => status,
+            false => say!("check.names-without-readings", status),
+        };
+        if found.is_empty() {
+            self.status = heard(say!("check.names-clean", scope));
             return;
         }
-        let n = slips.len();
+        let n = found.len();
         let mut listing = String::new();
-        for slip in slips.iter().take(LISTING_LIMIT) {
+        for (at, slip) in found.iter().take(LISTING_LIMIT) {
+            let pairs: Vec<String> = slip.pairs.iter().map(|(w, r)| format!("{w}→{r}")).collect();
+            let reasons = slip
+                .reasons
+                .iter()
+                .map(|r| {
+                    use crate::names::Reason;
+                    match r {
+                        Reason::Sound => say!("check.names-reason-sound"),
+                        Reason::Script => say!("check.names-reason-script"),
+                        Reason::Variant => say!("check.names-reason-variant"),
+                        Reason::Compat => say!("check.names-reason-compat"),
+                    }
+                })
+                .reduce(|a, b| say!("check.names-and", a, b))
+                .unwrap_or_default();
             listing.push_str(&say!(
                 "check.names-slip",
-                slip.line + 1,
+                at,
                 slip.written,
                 slip.name,
-                slip.wrong,
-                slip.right
+                pairs.join(" "),
+                reasons
             ));
             listing.push('\n');
         }
-        self.show_listing(listing, say!("check.names-results", name));
-        self.status = match n > LISTING_LIMIT {
+        match book {
+            true => self.show_listing_under(listing, say!("check.names-results-book"), root),
+            false => self.show_listing(listing, say!("check.names-results", name)),
+        }
+        self.status = heard(match n > LISTING_LIMIT {
             true => say!("check.names-too-many", LISTING_LIMIT),
             false => say!("check.names-found", n),
-        };
+        });
+    }
+
+    /// Every file of the book, as `(path from the root, text)` in path order.
+    ///
+    /// The set is the project index's ([`super::links::read_project`]), so
+    /// 「the book」 means one thing to `[[…]]`, the links panel and this. An
+    /// open buffer is read as it stands, unsaved edits and all, the way `:grep`
+    /// reads one.
+    fn book_texts(&self, root: &Path) -> Vec<(Option<String>, String)> {
+        let real = |p: &Path| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+        let here = self.working_dir();
+        let open: Vec<(PathBuf, String)> = self
+            .buffers
+            .iter()
+            .filter_map(|b| {
+                let path = b.path()?;
+                let full = match path.is_absolute() {
+                    true => path.to_path_buf(),
+                    false => here.join(path),
+                };
+                Some((real(&full), b.text()))
+            })
+            .collect();
+        // A folder of entries that is the project itself names every chapter
+        // an entry; leaving those out would leave out the book.
+        let whole = real(root);
+        let wiki: Vec<PathBuf> = self
+            .wiki
+            .sources
+            .iter()
+            .flat_map(|s| match s {
+                crate::wiki::Source::Read { path, .. } => vec![real(path)],
+                crate::wiki::Source::Folder { path, files, .. } if real(path) != whole => {
+                    files.iter().map(|f| real(f)).collect()
+                }
+                _ => Vec::new(),
+            })
+            .collect();
+        let mut texts = super::links::read_project(root);
+        texts.sort_by(|a, b| a.0.cmp(&b.0));
+        texts
+            .into_iter()
+            .filter_map(|(path, text)| {
+                let canon = real(&path);
+                if wiki.contains(&canon) {
+                    return None;
+                }
+                let text = open
+                    .iter()
+                    .find(|(p, _)| *p == canon)
+                    .map(|(_, t)| t.clone())
+                    .unwrap_or(text);
+                let shown = path.strip_prefix(root).unwrap_or(&path).to_string_lossy().replace('\\', "/");
+                Some((Some(shown), text))
+            })
+            .collect()
     }
 
     /// `:diagnostics-all` — everything the language servers have said (#53/#54).

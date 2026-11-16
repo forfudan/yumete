@@ -63,6 +63,77 @@ pub fn shapes(ch: char) -> &'static str {
     table().get(&ch).copied().unwrap_or("")
 }
 
+/// 繁簡對照，生成物，編進二進制。見 `scripts/make_glyph_sets.py` 第④步。
+const SIMP: &str = include_str!("glyph_simp.txt");
+
+fn simp_table() -> &'static HashMap<char, &'static str> {
+    static ONCE: OnceLock<HashMap<char, &'static str>> = OnceLock::new();
+    ONCE.get_or_init(|| {
+        let mut out = HashMap::new();
+        for line in SIMP.lines() {
+            if line.starts_with('#') {
+                continue;
+            }
+            let Some((head, simp)) = line.split_once('\t') else { continue };
+            let Some(ch) = head.chars().next() else { continue };
+            out.insert(ch, simp);
+        }
+        out
+    })
+}
+
+/// **兩個字在同一個字形組裏**：一方是另一方可以是的字形。
+///
+/// 兩個方向都問，因為那張表不對稱（class(发) 有 髮，class(髮) 有 发，class(發)
+/// 没有 髮）：发/髮 算，發/髮 不算——後者是兩個字，不是一個字的兩種寫法。
+pub fn related(a: char, b: char) -> bool {
+    a == b || shapes(a).contains(b) || shapes(b).contains(a)
+}
+
+/// **一方是另一方的簡體**（opencc 的 TSCharacters）。同組而不是繁簡的，就是異體：
+/// 說/説、裏/裡。
+pub fn simplified_pair(a: char, b: char) -> bool {
+    let simplifies = |t: char, s: char| simp_table().get(&t).is_some_and(|all| all.contains(s));
+    simplifies(a, b) || simplifies(b, a)
+}
+
+/// **字形組的代表字**，給索引用：同組的字折成同一個字，不同組的保持不同。
+///
+/// Warning: **這是傳遞閉包，只許拿來分桶**。發 和 髮 在這裏是同一個代表（都經過
+/// 发），而 [`related`] 說它們不是一個字。所以它只能決定「這兩串值不值得比」，
+/// 比的時候還是逐字問 [`related`]——拿它當判準，就是檔頭那個不對稱被毀掉的樣子。
+pub fn fold(ch: char) -> char {
+    static ONCE: OnceLock<HashMap<char, char>> = OnceLock::new();
+    let reps = ONCE.get_or_init(|| {
+        fn root(parent: &HashMap<char, char>, mut c: char) -> char {
+            while let Some(&up) = parent.get(&c) {
+                if up == c {
+                    break;
+                }
+                c = up;
+            }
+            c
+        }
+        let mut parent: HashMap<char, char> = HashMap::new();
+        for also in table().values() {
+            let mut chars = also.chars();
+            let Some(first) = chars.next() else { continue };
+            for c in chars {
+                let a = root(&parent, first);
+                let b = root(&parent, c);
+                // The smaller code point leads, so the representative does
+                // not hang on which row the hash map handed over first.
+                let (lo, hi) = if a < b { (a, b) } else { (b, a) };
+                parent.insert(lo, lo);
+                parent.insert(hi, lo);
+            }
+        }
+        let keys: Vec<char> = parent.keys().copied().collect();
+        keys.into_iter().map(|c| (c, root(&parent, c))).collect()
+    });
+    reps.get(&ch).copied().unwrap_or(ch)
+}
+
 /// **把一串要照字面找的字改寫成正則**，每個字換成它的字形集。
 ///
 /// 「書齋」→ `[書书][齋斋]`。没有別的寫法的字原樣轉義過去，所以這一支對純西文的

@@ -96,6 +96,22 @@ def main():
     path = HERE / "crates/yumete-core/src/glyph_sets.txt"
     path.write_text("\n".join(out) + "\n", encoding="utf-8")
     print(f"==> {path.relative_to(HERE)}  {len(out) - 4} 個字，{path.stat().st_size:,} 字節")
+
+    # ④ 繁簡那一對另記一張：`:check-names` 要分得出「繁简」與「异体」兩種理由，
+    # 而上面那張並集只說「可能是同一個字」，不說是哪一種同。只取 TSCharacters：
+    # 一行 `繁 ⇥ 它的簡體`，簡體裏去掉繁體自己（沈→沈沉 那種行只留 沉）。
+    simp = [
+        "# 繁簡對照：opencc 的 TSCharacters，一行 `繁體 ⇥ 它的簡體`（不含它自己）。",
+        "# scripts/make_glyph_sets.py 生成，勿手改。`:check-names` 用它把同一字形組裏的",
+        "#   差別分成「繁简」與「异体」。",
+    ]
+    for head, rest in sorted(rows(read_ocd("TSCharacters"))):
+        others = "".join(dict.fromkeys(c for c in rest if c != head))
+        if others:
+            simp.append(f"{head}\t{others}")
+    spath = HERE / "crates/yumete-core/src/glyph_simp.txt"
+    spath.write_text("\n".join(simp) + "\n", encoding="utf-8")
+    print(f"==> {spath.relative_to(HERE)}  {len(simp) - 3} 行，{spath.stat().st_size:,} 字節")
     for probe in "发發髮说說説里裏裡":
         print(f"   {probe} → {''.join(sorted(wider.get(probe, {probe})))}")
 

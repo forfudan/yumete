@@ -515,7 +515,7 @@ impl Editor {
 
 /// Every Markdown file of the project with its text, read with the same
 /// sieve the search uses — hidden and ignored folders left out.
-fn read_project(root: &Path) -> Vec<(PathBuf, String)> {
+pub(super) fn read_project(root: &Path) -> Vec<(PathBuf, String)> {
     let sieve = crate::editor::Sieve { uncapped: true, ..Default::default() };
     let mut texts = Vec::new();
     crate::editor::walk_prose(root, &sieve, &mut |path| {

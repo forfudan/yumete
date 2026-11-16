@@ -687,8 +687,8 @@ impl Editor {
                 self.check_usage();
                 Ok(CommandOutcome::Continue)
             }
-            Command::CheckNames => {
-                self.check_names();
+            Command::CheckNames { book } => {
+                self.check_names(book);
                 Ok(CommandOutcome::Continue)
             }
             Command::CheckCode => {
