@@ -1,4 +1,4 @@
-# prefixes: check wiki links link note maths
+# prefixes: check wiki links link note maths listing
 #
 # What the editor says, one block per tag; see README.md beside this file.
 
@@ -317,6 +317,36 @@ en = "reading the project's links…"
 key = "links.reindexed"
 zhs = "已重新读取 {0} 个文件的链接"
 en = "reread links in {0|file|files}"
+
+[[message]]
+# ]q / [q / ]Q / [Q 走到最後一份結果列表裏的某一條之後，狀態欄說這是第幾條、共幾條（草稿）
+key = "listing.at"
+zhs = "第 {0} 个结果，共 {1} 个"
+en = "result {0} of {1}"
+
+[[message]]
+# ]q / [q / ]Q / [Q：最後一份結果列表的緩衝區已經關掉了（草稿）
+key = "listing.closed"
+zhs = "结果列表已经关掉了"
+en = "the list of results is closed"
+
+[[message]]
+# ]q / [q：往這個方向已經没有下一條結果了，不繞回另一頭（草稿）
+key = "listing.no-more"
+zhs = "没有更多结果了"
+en = "no more results"
+
+[[message]]
+# ]q / [q / ]Q / [Q：最後一份列表裏没有一行能跳到哪個檔（例如 :version 那種純說明的列表）（草稿）
+key = "listing.no-results"
+zhs = "这份列表里没有能跳转的结果"
+en = "this list has no results to go to"
+
+[[message]]
+# ]q / [q / ]Q / [Q：這一次會話裏還没出過任何結果列表（:check-names、:diagnostics-all 之類）（草稿）
+key = "listing.none"
+zhs = "还没有结果列表"
+en = "no list of results yet"
 
 [[message]]
 # 光標在公式裏，typst 排這個公式時報錯：公式浮窗裏寫的那一句，{0} 是 typst 自己說的

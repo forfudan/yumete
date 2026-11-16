@@ -828,6 +828,12 @@ zhs = "诊断(大写：第一个/最后一个)"
 en = "a diagnostic (capital: the first / the last)"
 
 [[message]]
+# ]/[ 的選單：最後一份結果列表裏的下一條/上一條(大寫是第一條/最後一條)（草稿）
+key = "hint.hop.result"
+zhs = "列表结果(大写：第一个/最后一个)"
+en = "a result in the last listing (capital: the first / the last)"
+
+[[message]]
 # ] 與 [ 組：測試
 key = "hint.hop.test"
 zhs = "测试"

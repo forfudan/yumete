@@ -1030,6 +1030,9 @@ pub(super) static RIGHT_BRACKET: Group = Group {
         ch('G', NormalCmd::GotoLastChange, "hint.hop.change-ends").flavor(FlavorItem::HelixKeysUnderVim),
         ch('d', NormalCmd::GotoNextDiag, "hint.hop.problem"),
         ch('D', NormalCmd::GotoLastDiag, "hint.hop.problem"),
+        // Neovim's `]q` `]Q`: the last listing, from wherever the cursor is.
+        ch('q', NormalCmd::GotoNextResult, "hint.hop.result"),
+        ch('Q', NormalCmd::GotoLastResult, "hint.hop.result"),
         // vim's `]f` is `gf`, Neovim's `]t` a tag: helix's alone.
         ch('f', NormalCmd::GotoNextFunction, "hint.hop.function").listed(Only::Code).when(Only::Helix),
         ch('t', NormalCmd::GotoNextClass, "hint.hop.class").listed(Only::Code).when(Only::Helix),
@@ -1071,6 +1074,8 @@ pub(super) static LEFT_BRACKET: Group = Group {
         ch('G', NormalCmd::GotoFirstChange, "hint.hop.change-ends").flavor(FlavorItem::HelixKeysUnderVim),
         ch('d', NormalCmd::GotoPrevDiag, "hint.hop.problem"),
         ch('D', NormalCmd::GotoFirstDiag, "hint.hop.problem"),
+        ch('q', NormalCmd::GotoPrevResult, "hint.hop.result"),
+        ch('Q', NormalCmd::GotoFirstResult, "hint.hop.result"),
         ch('f', NormalCmd::GotoPrevFunction, "hint.hop.function").listed(Only::Code).when(Only::Helix),
         ch('t', NormalCmd::GotoPrevClass, "hint.hop.class").listed(Only::Code).when(Only::Helix),
         // vim's `]c` is the next change, which yumete has (helix's `]g`);

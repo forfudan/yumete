@@ -25388,6 +25388,125 @@ fn check_names_book_reads_every_chapter_and_gf_goes_to_each() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **`]q` `[q` walk the last listing from the file being fixed**, across
+/// files, under both keymaps; at either end they stop and say so.
+#[test]
+fn bracket_q_walks_a_book_listing_across_files() {
+    for keymap in ["helix", "vim"] {
+        let (mut ed, dir) = a_book_of_names(&format!("walk-{keymap}"));
+        ed.execute(&format!(":keymap {keymap}")).unwrap();
+        ed.execute(":check-names book").unwrap();
+        let at = |ed: &Editor| (ed.current_buffer().display_name().to_string(), ed.cursor_line());
+        press(&mut ed, "]q");
+        assert_eq!(at(&ed), ("第一章.md".to_string(), 1), "{keymap}: the first row is the first result");
+        assert_eq!(ed.status(), say!("listing.at", 1, 3));
+        press(&mut ed, "]q");
+        assert_eq!(at(&ed), ("第二章.md".to_string(), 0), "{keymap}");
+        press(&mut ed, "]q");
+        assert_eq!(at(&ed), ("第二章.md".to_string(), 1), "{keymap}");
+        press(&mut ed, "]q");
+        assert_eq!(ed.status(), say!("listing.no-more"), "{keymap}: no wrapping");
+        assert_eq!(at(&ed), ("第二章.md".to_string(), 1), "{keymap}: it stays put");
+        press(&mut ed, "[q");
+        assert_eq!(at(&ed), ("第二章.md".to_string(), 0), "{keymap}");
+        press(&mut ed, "[q");
+        assert_eq!(at(&ed), ("第一章.md".to_string(), 1), "{keymap}");
+        press(&mut ed, "[q");
+        assert_eq!(ed.status(), say!("listing.no-more"), "{keymap}");
+        assert_eq!(at(&ed), ("第一章.md".to_string(), 1), "{keymap}");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+}
+
+/// A count goes that many results, and as far as there is when fewer are
+/// left (Vim's `:5cnext`); `]Q` `[Q` go to the last and the first, or with a
+/// count to that one.
+#[test]
+fn bracket_q_takes_a_count_and_capital_q_goes_to_the_ends() {
+    let (mut ed, dir) = a_book_of_names("walk-count");
+    ed.execute(":check-names book").unwrap();
+    let at = |ed: &Editor| (ed.current_buffer().display_name().to_string(), ed.cursor_line());
+    press(&mut ed, "2]q");
+    assert_eq!(at(&ed), ("第二章.md".to_string(), 0));
+    press(&mut ed, "5]q");
+    assert_eq!(at(&ed), ("第二章.md".to_string(), 1), "as far as there is");
+    assert_eq!(ed.status(), say!("listing.at", 3, 3));
+    press(&mut ed, "[Q");
+    assert_eq!(at(&ed), ("第一章.md".to_string(), 1));
+    press(&mut ed, "ga");
+    assert_eq!(ed.current_buffer().display_name(), "第二章.md", "ga skips the listing walked through");
+    press(&mut ed, "[Q");
+    ed.on_key(Key::Ctrl('o'));
+    assert_eq!(at(&ed), ("第二章.md".to_string(), 1), "C-o comes back from a result, not to the listing");
+    press(&mut ed, "]Q");
+    assert_eq!(at(&ed), ("第二章.md".to_string(), 1));
+    press(&mut ed, "2[Q");
+    assert_eq!(at(&ed), ("第二章.md".to_string(), 0), "the second result");
+    press(&mut ed, "]Q");
+    press(&mut ed, "2]Q");
+    assert_eq!(at(&ed), ("第二章.md".to_string(), 0), "the second result, from either end");
+    press(&mut ed, "2[q");
+    assert_eq!(ed.status(), say!("listing.at", 1, 3), "one step back is all there is");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// A one-file listing names its rows by line number only: the walk goes
+/// down that file, passing over a heading and a blank line. `gf` in the
+/// listing moves the walk to the row it followed.
+#[test]
+fn bracket_q_walks_a_one_file_listing_and_follows_gf() {
+    let dir = tmp().join(format!("yumete-walk-one-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("a.md"), "甲\n乙\n丙\n丁\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(dir.join("a.md")).unwrap();
+    ed.show_listing("# 單子\n1: 甲\n\n3: 丙\n4: 丁\n".to_string(), "單子".to_string());
+    let listing = ed.current_buffer().id();
+    press(&mut ed, "]q");
+    assert_eq!((ed.current_buffer().display_name(), ed.cursor_line()), ("a.md".to_string(), 0));
+    press(&mut ed, "]q");
+    assert_eq!(ed.cursor_line(), 2, "the blank row is passed over");
+    // Into the listing, onto the last row, and `gf` there.
+    let index = ed.buffers.iter().position(|b| b.id() == listing).unwrap();
+    ed.show_buffer(index);
+    assert_eq!(ed.cursor_line(), 3, "the listing's cursor is where the walk is");
+    press(&mut ed, "j");
+    press(&mut ed, "gf");
+    assert_eq!(ed.cursor_line(), 3);
+    press(&mut ed, "]q");
+    assert_eq!(ed.status(), say!("listing.no-more"), "gf made the last row the current one");
+    press(&mut ed, "[q");
+    assert_eq!(ed.cursor_line(), 2);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// With no listing, with a listing that has nothing to go to, and with the
+/// listing closed, `]q` says which.
+#[test]
+fn bracket_q_says_when_there_is_no_list_to_walk() {
+    let dir = tmp().join(format!("yumete-walk-none-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("a.md"), "甲\n乙\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(dir.join("a.md")).unwrap();
+    press(&mut ed, "]q");
+    assert_eq!(ed.status(), say!("listing.none"));
+    press(&mut ed, "[Q");
+    assert_eq!(ed.status(), say!("listing.none"));
+
+    ed.show_listing("# 說明\n沒有行號的一行\n".to_string(), "說明".to_string());
+    press(&mut ed, "]q");
+    assert_eq!(ed.status(), say!("listing.no-results"));
+
+    ed.show_listing("2: 乙\n".to_string(), "單子".to_string());
+    ed.execute(":buffer-close").unwrap();
+    press(&mut ed, "]q");
+    assert_eq!(ed.status(), say!("listing.closed"));
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// An unsaved edit counts in a book run, as `:grep` reads an open buffer.
 #[test]
 fn check_names_book_reads_an_open_buffer_as_it_stands() {
@@ -30072,7 +30191,7 @@ fn an_unknown_key_says_the_whole_run_that_was_typed() {
         ("z", 'e', "ze"),   // 視窗那一層
         ("`", 'q', "`q"),   // 字形組
         ("m", 'q', "mq"),   // 配對那一族
-        ("]", 'q', "]q"),   // 往後跳那一族
+        ("]", 'o', "]o"),   // 往後跳那一族
     ];
     for (lead, bad, want) in each {
         let mut ed = typed("甲乙丙\n");

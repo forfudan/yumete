@@ -573,6 +573,12 @@ en = "first non-blank character"
 find = "非空白 行首 第一個字 第一个字 nonblank first"
 
 [[message]]
+# 命令說明：goto_first_result（草稿）
+key = "action.goto-first-result"
+zhs = "第一个结果"
+en = "first result"
+
+[[message]]
 # 命令說明：goto_last_change
 key = "action.goto-last-change"
 zhs = "最后一处改动"
@@ -590,6 +596,12 @@ key = "action.goto-last-line"
 zhs = "最后一行"
 en = "last line"
 find = "最後一行 最后一行 末行 last line"
+
+[[message]]
+# 命令說明：goto_last_result（草稿）
+key = "action.goto-last-result"
+zhs = "最后一个结果"
+en = "last result"
 
 [[message]]
 # 命令說明：goto_left_sidebar
@@ -715,6 +727,12 @@ zhs = "选中下一个参数"
 en = "select the next parameter"
 
 [[message]]
+# 命令說明：goto_next_result（草稿）
+key = "action.goto-next-result"
+zhs = "下一个结果"
+en = "next result"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.goto-next-sentence"
 zhs = "下一句"
@@ -805,6 +823,12 @@ find = "上一段 段落 previous paragraph"
 key = "action.goto-prev-parameter"
 zhs = "选中上一个参数"
 en = "select the previous parameter"
+
+[[message]]
+# 命令說明：goto_prev_result（草稿）
+key = "action.goto-prev-result"
+zhs = "上一个结果"
+en = "previous result"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽

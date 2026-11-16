@@ -1773,6 +1773,7 @@ impl Editor {
         );
         // 跳轉的去處由這裏答，不由行上的字答——行上沒有檔名了。
         self.listing_jumps = here.map(|path| (path, jumps));
+        self.keep_listing_slots();
         // The count and the listing have to agree: saying "1,200 lines differ"
         // over a buffer holding 500 of them sends the reader looking for rows
         // that were never written.

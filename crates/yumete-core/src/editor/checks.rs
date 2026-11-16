@@ -567,6 +567,7 @@ impl Editor {
     pub(super) fn show_listing_under(&mut self, listing: String, name: String, root: PathBuf) {
         self.show_listing_as(listing, name, None);
         self.listing_root = Some(root);
+        self.keep_listing_slots();
     }
 
     /// The same, with a syntax of its own (#499).
@@ -615,8 +616,10 @@ impl Editor {
                 .collect();
             (path.to_path_buf(), jumps)
         });
+        let id = buffer.id();
         self.add_buffer(buffer);
         self.set_cursor(0);
+        self.keep_as_last_listing(id);
     }
 
     /// `:check-punct` — the marks a manuscript cannot see (Feature #238).

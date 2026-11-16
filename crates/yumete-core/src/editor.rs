@@ -4216,6 +4216,13 @@ pub struct Editor {
     /// 行印的是它在 `HEAD` 裏的號（`537`），而那一行在現在這份檔裏已經沒有
     /// 了，所以它跳到「這一處改動現在在哪」——同 magit／fugitive（§5.12.66）。
     listing_jumps: Option<(PathBuf, Vec<usize>)>,
+    /// **The list `]q` `[q` walk**: the last listing shown, by buffer id,
+    /// with the two slots above as they were for it.
+    ///
+    /// Warning: **the slots are kept with it**, because they are shared:
+    /// a later report that writes `listing_root` without being a listing
+    /// would otherwise send `]q` on an older listing to the wrong directory.
+    last_listing: Option<results::LastListing>,
     /// **The files this session has been in, newest first**.
     ///
     /// What `空格 f` puts at the top of its list. Alphabetical is chapter
@@ -5000,6 +5007,7 @@ impl Editor {
             syntax_by_name: HashMap::new(),
             listing_root: None,
             listing_jumps: None,
+            last_listing: None,
             visited: Vec::new(),
             usage_groups: Vec::new(),
             opened_with: HashMap::new(),
@@ -6369,6 +6377,7 @@ pub use pairing::AutoPairs;
 mod prompt;
 pub(crate) use prompt::word_cut;
 mod render;
+mod results;
 mod ruby;
 mod search;
 mod sections;

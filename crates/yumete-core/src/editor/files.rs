@@ -1541,6 +1541,8 @@ impl Editor {
     /// The shape a grep result has, and the shape every compiler and every
     /// other grep prints — so it also works on a line pasted in from a shell.
     pub(super) fn goto_file_under_cursor(&mut self) {
+        // A row followed in the listing `]q` walks is where that walk is.
+        self.note_listing_followed();
         // **A link to a file, or a web address, as helix's `gf`**:
         // `[附錄](fu.md)` opens the chapter, an address goes to the browser.
         // A `[[page]]` and a `#heading` are `gd`'s.
