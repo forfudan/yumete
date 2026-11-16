@@ -547,8 +547,17 @@ fn main() -> ExitCode {
                     owed = Some(long);
                 }
             }
-            // Reject unknown flags, but treat a lone "-" as a filename.
-            s if s.starts_with('-') && s != "-" => {
+            // **A lone `-` is the shell's "standard input"**, and the editor
+            // does not read it: taken as a name it would open an empty buffer
+            // that `:w` writes to a file called `-`. Process substitution
+            // hands over a real path to read; a file truly named `-` is `./-`.
+            "-" => {
+                eprintln!("yumete: '-' would mean standard input, which is not read");
+                eprintln!("to look at a command's output: ye --readonly <(cmd)");
+                eprintln!("a file named '-' opens as ./-");
+                return ExitCode::from(2);
+            }
+            s if s.starts_with('-') => {
                 eprintln!("yumete: unknown option '{s}'");
                 eprintln!("try 'yumete --help'");
                 return ExitCode::from(2);
@@ -882,7 +891,7 @@ fn main() -> ExitCode {
     // With no file named, open what was open last time — five `:open`s every
     // morning is five too many. Only then: somebody who said which file they
     // wanted gets that file, and nothing else.
-    // …and not when printing: `yumete -p` and `yumete | cat` are a look at one
+    // …and not when printing: `yumete --preview` and `yumete | cat` are a look at one
     // thing, not a return to work.
     let printing = force_preview || !std::io::stdout().is_terminal();
     let wants_last_time = config.editor.session || resume;
@@ -3100,7 +3109,7 @@ fn preview(editor: &Editor, config: &yumete_config::Config) {
     };
 
     // Written through a locked handle rather than `println!`, which *panics*
-    // when the reader goes away: `yumete -p 稿.md | less`, then `q`, would
+    // when the reader goes away: `yumete --preview 稿.md | less`, then `q`, would
     // print a Rust backtrace. `?` here means "the pipe closed", and the only
     // right answer to that is to stop.
     let mut out = io::stdout().lock();

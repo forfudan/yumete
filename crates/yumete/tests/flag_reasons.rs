@@ -60,3 +60,38 @@ fn a_language_misspelt_is_offered_the_names_the_editor_uses() {
     let help = Command::new(env!("CARGO_BIN_EXE_yumete")).arg("--help").output().unwrap();
     assert!(String::from_utf8_lossy(&help.stdout).contains("zht (繁體), zhs (简体) or en"));
 }
+
+/// **A lone `-` is refused, not opened as a file called `-`**: the editor
+/// does not read standard input, and an empty buffer bound to `-` would be
+/// written there by `:w`. The refusal points at what does work.
+#[test]
+fn a_lone_dash_is_refused_with_the_way_to_read_a_command() {
+    let (code, said) = refused(&["--preview", "-"]);
+    assert_eq!(code, 2, "a refusal: {said}");
+    assert!(said.contains("standard input, which is not read"), "{said}");
+    assert!(said.contains("ye --readonly <(cmd)"), "{said}");
+    assert!(said.contains("./-"), "{said}");
+}
+
+/// A file really named `-` is still reachable, spelt as a path.
+#[test]
+fn a_file_named_dash_opens_as_dot_slash_dash() {
+    let dir = std::env::temp_dir().join(format!("yumete-dash-file-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("home")).expect("a scratch directory");
+    std::fs::write(dir.join("-"), "a line of sample text\n").expect("the file named -");
+    let out = Command::new(env!("CARGO_BIN_EXE_yumete"))
+        .args(["--lang=en", "--preview", "./-"])
+        .current_dir(&dir)
+        .env("HOME", dir.join("home"))
+        .env("XDG_CONFIG_HOME", dir.join("home").join(".config"))
+        .env("XDG_DATA_HOME", dir.join("home").join(".local").join("share"))
+        .env("XDG_STATE_HOME", dir.join("home").join(".local").join("state"))
+        .stdin(std::process::Stdio::null())
+        .output()
+        .expect("the binary runs");
+    let _ = std::fs::remove_dir_all(&dir);
+    let shown = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    assert!(shown.contains("a line of sample text"), "{shown}");
+}

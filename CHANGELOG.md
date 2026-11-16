@@ -44,6 +44,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Fixed
 
+- **A lone `-` on the command line is refused instead of opening a file named `-`**: `echo hello | ye -` showed an empty buffer that `:w` would have saved as a file called `-`. The refusal points at `ye --readonly <(cmd)`; a file really named `-` opens as `./-`.
 - **"Your groups now take …" is said once for each project**, not again at every switch between two projects whose `preset` or flavor makes the same key tables take different keys.
 - **`--shot` reads no recovery copies**: a draft left beside the file by a session that crashed no longer puts the "unsaved draft found" question on the frame, so the same keys draw the same frame on any machine. The copy stays where it is, and `--private` still offers it.
 - **A Typst comment opened inside strong text, after a closing bracket or after two backticks runs on as Typst reads it**: `*so/* …`, `#figure[…]/*` and ``` ``/* ``` used to leave the lines further down a long book coloured as writing while Typst read them as comment.
