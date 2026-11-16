@@ -1417,6 +1417,23 @@ impl Editor {
         self.status = say!("macro.recording");
     }
 
+    /// **Text that reaches the page without its keys goes into the recording
+    /// as the characters it typed**: an input method's commit (its code
+    /// letters went to the input method, never to [`Self::on_key`]) and a
+    /// terminal's paste. Played back, they are typed as keys, with no input
+    /// method in between, so the macro writes the same text on any machine.
+    pub(super) fn record_typed_text(&mut self, text: &str) {
+        if self.replaying || self.expanding_alias {
+            return;
+        }
+        if let Some(keys) = self.recording.as_mut() {
+            keys.extend(text.chars().filter(|&c| c != '\r').map(|c| match c {
+                '\n' => Key::Enter,
+                c => Key::Char(c),
+            }));
+        }
+    }
+
     /// Stop recording and write the keys into their register as text
     /// ([`crate::input::macro_text`]), as helix and vim keep a macro. vim's `qA`
     /// adds to register `a`.
@@ -2050,7 +2067,18 @@ impl Editor {
                 rope.line_to_char(line)
             }
         } else if after {
-            if start == end {
+            // **vim's caret on a line's break is an empty line**, and `p`
+            // there puts the text into that line (nvim: `yiwjp` over a blank
+            // line fills it), not at the start of the next. helix's caret on
+            // a break selects the break, and after it is the next line.
+            let rope = self.current_buffer().rope();
+            let on_empty_line = self.keymap_rules().caret_off_newline
+                && self.mode == Mode::Normal
+                && self.sel.anchor() == self.sel.head()
+                && matches!(rope.get_char(self.sel.head()), Some('\n' | '\r') | None);
+            if on_empty_line {
+                self.sel.head()
+            } else if start == end {
                 motion::right(self.current_buffer().rope(), self.sel.head())
             } else {
                 end

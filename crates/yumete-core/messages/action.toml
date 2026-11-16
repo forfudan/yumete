@@ -3115,6 +3115,12 @@ zhs = "f、t 只挪光标，不选中经过的字"
 en = "f and t move the caret without selecting what they cross"
 
 [[message]]
+# :keymap-actions 規則那一節：records_paste 這條規則說什麽（草稿）
+key = "keys.rule.records-paste"
+zhs = "录宏时粘贴进来的文字也录进去，和打出来的一样"
+en = "a paste while a macro records goes into it, as typed"
+
+[[message]]
 # :keymap-actions 規則那一節：replace_from_caret 這條規則說什麽（草稿）
 key = "keys.rule.replace-from-caret"
 zhs = "r 从光标起替换计数个字"

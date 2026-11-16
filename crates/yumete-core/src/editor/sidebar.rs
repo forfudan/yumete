@@ -2681,6 +2681,22 @@ impl Editor {
                 return;
             }
         }
+        // **vim's paste arrives as keys, so a macro keeps it** as what it
+        // typed: where the keys would type the same text, which is Insert and
+        // the prompts. A paste in Normal replaces the selection, and no keys
+        // say that, so it is not recorded.
+        if self.recording.is_some() && self.keymap_rules().records_paste {
+            let typed: Option<String> = match self.mode {
+                Mode::Insert => Some(text.to_string()),
+                Mode::Value => Some(value_paste(text)),
+                Mode::Field => Some(text.chars().filter(|c| !c.is_control()).collect()),
+                mode if mode.types_into_command_line() => Some(text.chars().filter(|c| !c.is_control()).collect()),
+                _ => None,
+            };
+            if let Some(typed) = typed {
+                self.record_typed_text(&typed);
+            }
+        }
         self.snapshot();
         match self.mode {
             // In Insert it lands where the caret is, like anything typed.
@@ -2716,12 +2732,7 @@ impl Editor {
             }
             // A value lands at the caret, as committed 中文 does:
             // a font list is pasted into the middle of one.
-            Mode::Value => {
-                // A break is a space: a list copied over two lines reads `a, b`.
-                let lines: Vec<&str> = text.split(['\n', '\r']).map(str::trim).filter(|l| !l.is_empty()).collect();
-                let text: String = lines.join(" ").chars().filter(|c| !c.is_control()).collect();
-                self.insert_committed_now_in_prompt(&text);
-            }
+            Mode::Value => self.insert_committed_now_in_prompt(&value_paste(text)),
             mode => {
                 if mode.types_into_command_line() {
                     for c in text.chars().filter(|c| !c.is_control()) {
@@ -2929,6 +2940,13 @@ impl Editor {
         let pos = motion::line_first_non_blank(rope, at);
         self.move_head(pos);
     }
+}
+
+/// A paste into a value line: a break is a space, so a list copied over two
+/// lines reads `a, b`.
+fn value_paste(text: &str) -> String {
+    let lines: Vec<&str> = text.split(['\n', '\r']).map(str::trim).filter(|l| !l.is_empty()).collect();
+    lines.join(" ").chars().filter(|c| !c.is_control()).collect()
 }
 
 /// **The first `rows` lines of a file, and not one byte more.**

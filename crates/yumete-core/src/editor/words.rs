@@ -855,6 +855,20 @@ impl Editor {
     /// Meaningful in Insert mode; grouped as one undo step (Feature #27).
     pub fn insert_committed(&mut self, text: &str) {
         let was = self.before_a_change();
+        // A key that waits for one character (`f`, `mi`, `ms`) takes the
+        // commit's first, so that one is what the macro plays to it; the rest
+        // would reach Normal mode as commands. `r` takes the whole commit.
+        let one = self.pending.takes_a_character()
+            && self.pending != Pending::Replace
+            && !matches!(self.mode, Mode::Field | Mode::Picker)
+            && !self.mode.types_into_command_line();
+        // In Normal mode with nothing waiting the commit is written in, which
+        // its characters played as keys would not do: they would be commands.
+        let typed_as_keys = self.mode != Mode::Normal || self.pending != Pending::None;
+        if typed_as_keys {
+            let recorded: String = text.chars().take(if one { 1 } else { usize::MAX }).collect();
+            self.record_typed_text(&recorded);
+        }
         self.insert_committed_now(text);
         // Where redo comes back to, as for a key — `r`, `ms` and Chinese typed
         // through the input method included.

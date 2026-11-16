@@ -36834,6 +36834,140 @@ fn macros_live_in_registers() {
     assert_eq!(ed.current_buffer().rope().char_to_line(ed.cursor()), 2, "Enter went down a line");
 }
 
+/// **Text an input method commits is recorded as the characters it typed**:
+/// its code letters never reach the editor, so without this a macro of
+/// `A` 你好 `Esc` would hold `A<esc>` and type nothing. Played back, the
+/// characters are typed as keys, no input method needed. A key waiting for
+/// one character (`f`) takes the commit's first, and the macro holds that one.
+#[test]
+fn a_macro_records_what_the_input_method_commits() {
+    // vim.
+    let mut ed = typed_vim("ab\ncd\n");
+    press(&mut ed, "qaA");
+    ed.insert_committed("你好");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "jq");
+    assert_eq!(ed.held('a'), "A你好<esc>j");
+    press(&mut ed, "@a");
+    assert_eq!(ed.current_buffer().text(), "ab你好\ncd你好\n");
+
+    // helix.
+    let mut ed = typed("ab\ncd\n");
+    press(&mut ed, "QA");
+    ed.insert_committed("你好");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "jQ");
+    assert_eq!(ed.held('@'), "A你好<esc>j");
+    press(&mut ed, "q");
+    assert_eq!(ed.current_buffer().text(), "ab你好\ncd你好\n");
+
+    // A line break in a commit is Enter.
+    let mut ed = typed_vim("ab\n");
+    press(&mut ed, "qaA");
+    ed.insert_committed("一\n二");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "q");
+    assert_eq!(ed.held('a'), "A一<ret>二<esc>");
+
+    // `f` and a commit: the macro finds the same character.
+    let mut ed = typed_vim("甲，乙，丙\n");
+    press(&mut ed, "qaf");
+    ed.insert_committed("，乙");
+    press(&mut ed, "q");
+    assert_eq!(ed.held('a'), "f，");
+    press(&mut ed, "@a");
+    assert_eq!(ed.cursor(), 3, "the macro goes on to the next one");
+
+    // `.` still repeats the insert, the commit included.
+    let mut ed = typed_vim("ab\ncd\n");
+    press(&mut ed, "A");
+    ed.insert_committed("你好");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "j.");
+    assert_eq!(ed.current_buffer().text(), "ab你好\ncd你好\n");
+}
+
+/// **A terminal's paste goes into a vim macro as what it typed**, as vim's
+/// paste arrives as keys and is recorded with them; helix records keys alone.
+/// A paste in Normal mode replaces the selection, which no keys say, so it is
+/// not recorded under either keymap.
+#[test]
+fn a_vim_macro_records_a_paste_and_a_helix_one_does_not() {
+    let mut ed = typed_vim("ab\ncd\n");
+    press(&mut ed, "qaA");
+    ed.paste_text(" x-y");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "jq");
+    assert_eq!(ed.held('a'), "A<space>x<minus>y<esc>j");
+    press(&mut ed, "@a");
+    assert_eq!(ed.current_buffer().text(), "ab x-y\ncd x-y\n");
+
+    // A paste over lines: each break is Enter.
+    let mut ed = typed_vim("ab\n");
+    press(&mut ed, "qaA");
+    ed.paste_text("1\r\n2");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "q");
+    assert_eq!(ed.held('a'), "A1<ret>2<esc>");
+
+    // At a prompt, without the breaks the prompt drops.
+    let mut ed = typed_vim("ab\nab\n");
+    press(&mut ed, "qa/");
+    ed.paste_text("b\n");
+    ed.on_key(Key::Enter);
+    press(&mut ed, "q");
+    assert_eq!(ed.held('a'), "/b<ret>");
+
+    // In Normal mode it is not recorded.
+    let mut ed = typed_vim("ab\n");
+    press(&mut ed, "qa");
+    ed.paste_text("x");
+    press(&mut ed, "q");
+    assert_eq!(ed.held('a'), "");
+
+    // helix.
+    let mut ed = typed("ab\n");
+    press(&mut ed, "QA");
+    ed.paste_text("xy");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "Q");
+    assert_eq!(ed.held('@'), "A<esc>");
+}
+
+/// **vim's `p` on an empty line puts the text into that line** (each
+/// measured in nvim): `yiwjp` over a blank line fills it, the cursor on the
+/// last character put; `P` the same; a count puts that many; a charwise
+/// piece over lines starts there with the cursor on its first character.
+/// helix's `p` there puts after the line's break, at the next line.
+#[test]
+fn vims_p_on_an_empty_line_puts_into_it() {
+    let line_col = |ed: &Editor| {
+        let rope = ed.current_buffer().rope();
+        let line = rope.char_to_line(ed.cursor());
+        (line, ed.cursor() - rope.line_to_char(line))
+    };
+    for (keys, text, after, at) in [
+        ("yiwjp", "one\n\nthree\n", "one\none\nthree\n", (1, 2)),
+        ("yiwjP", "one\n\nthree\n", "one\none\nthree\n", (1, 2)),
+        ("yiwj2p", "one\n\nthree\n", "one\noneone\nthree\n", (1, 5)),
+        ("yiwj2P", "one\n\nthree\n", "one\noneone\nthree\n", (1, 5)),
+        ("yiwGp", "one\n\nthree\n\n", "one\n\nthree\none\n", (3, 2)),
+        ("yiwG3p", "one\n\nthree\n\n", "one\n\nthree\noneoneone\n", (3, 8)),
+        ("vjyjjp", "ab\ncd\n\nef\n", "ab\ncd\nab\nc\nef\n", (2, 0)),
+        ("vjyjjP", "ab\ncd\n\nef\n", "ab\ncd\nab\nc\nef\n", (2, 0)),
+    ] {
+        let mut ed = typed_vim(text);
+        press(&mut ed, keys);
+        assert_eq!(ed.current_buffer().text(), after, "{keys}");
+        assert_eq!(line_col(&ed), at, "{keys}");
+    }
+
+    // helix (measured in hx): after the break, so at the next line.
+    let mut ed = typed("one\n\nthree\n");
+    press(&mut ed, "eyjp");
+    assert_eq!(ed.current_buffer().text(), "one\n\nonethree\n");
+}
+
 /// **vim's folds** (each measured in nvim): `zf{motion}` makes a closed
 /// fold; `j` `k` step over it as one line; `zo` `zc` open and close it with
 /// the cursor kept; an operator takes it whole and `u` brings it back; `G`

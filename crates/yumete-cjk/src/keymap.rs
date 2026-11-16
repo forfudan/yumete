@@ -75,6 +75,10 @@ pub struct Rules {
     pub yank_every_selection: bool,
     /// A character delete stays on its line (vim's `x`).
     pub delete_stays_in_line: bool,
+    /// Text the terminal pastes while a macro records goes into it as the
+    /// characters typed (vim's, whose paste arrives as keys); helix records
+    /// keys alone.
+    pub records_paste: bool,
 }
 
 impl Rules {
@@ -97,11 +101,12 @@ impl Rules {
         undo_at_typing_start: true,
         yank_every_selection: true,
         delete_stays_in_line: false,
+        records_paste: false,
     };
 
     /// **Every rule by its name**, the message that says what it does, and
     /// its value: what `:keymap-actions` and the docs list.
-    pub fn list(&self) -> [(&'static str, &'static str, bool); 18] {
+    pub fn list(&self) -> [(&'static str, &'static str, bool); 19] {
         [
             ("vim_tables", "keys.rule.vim-tables", self.vim_tables),
             ("caret_off_newline", "keys.rule.caret-off-newline", self.caret_off_newline),
@@ -121,6 +126,7 @@ impl Rules {
             ("undo_at_typing_start", "keys.rule.undo-at-typing-start", self.undo_at_typing_start),
             ("yank_every_selection", "keys.rule.yank-every-selection", self.yank_every_selection),
             ("delete_stays_in_line", "keys.rule.delete-stays-in-line", self.delete_stays_in_line),
+            ("records_paste", "keys.rule.records-paste", self.records_paste),
         ]
     }
 
@@ -143,6 +149,7 @@ impl Rules {
         undo_at_typing_start: false,
         yank_every_selection: false,
         delete_stays_in_line: true,
+        records_paste: true,
     };
 }
 
