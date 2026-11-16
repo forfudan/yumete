@@ -54,6 +54,7 @@ pub(super) const PICKER_KEYS: &[(Key, PlaceCmd)] = &[
     (Key::PageDown, PlaceCmd::PageDown),
     (Key::PageUp, PlaceCmd::PageUp),
     (Key::Alt('h'), PlaceCmd::CycleHiddenFiles),
+    (Key::Alt('r'), PlaceCmd::RestoreVersion),
 ];
 
 /// A panel box's default keys, read before the prompt's: the boxes of a

@@ -12641,6 +12641,34 @@ fn draw_preview(
         ground,
         title: Some((name.clone(), ground.fg(ink.gold()))),
     });
+    // **A version of the file is previewed as its word diff**, painted as a
+    // `:diff` listing is: the rows in 朱 and 綠, the changed words louder,
+    // the `[-` `{+` scaffolding left off the page.
+    if editor.picker_preview_is_diff() {
+        let buf = frame.buffer_mut();
+        let limit = area.x + area.width - 1;
+        for (i, line) in lines.iter().enumerate() {
+            let y = area.y + 1 + i as u16;
+            if y + 1 >= area.y + area.height {
+                break;
+            }
+            let spans = yumete_core::diff::spans(line);
+            let mut x = area.x + 1;
+            for (at, c) in line.chars().enumerate() {
+                let kind = spans.iter().rev().find(|s| (s.start..s.end).contains(&at)).map(|s| s.kind);
+                let style = match kind {
+                    Some(yumete_core::markdown::Kind::Marker) => continue,
+                    Some(kind) => ground.patch(markup_style(kind, ink)),
+                    None => ground.fg(ink.text()),
+                };
+                x = put_text(buf, x, y, limit, c.encode_utf8(&mut [0; 4]), style);
+                if x >= limit {
+                    break;
+                }
+            }
+        }
+        return;
+    }
     // **Coloured the way the file itself would be**: a chapter's
     // headings in 金, a `.py`'s keywords through the same tree-sitter pass the
     // page uses. A preview in one flat ink asks the reader to read it; a
@@ -17323,6 +17351,43 @@ fn squeezed(text: &str) -> String {
         assert_ne!(gone_row, added_row, "兩行的底分得開");
         assert_ne!(gone_row, gone, "行是淡的那一層，詞是響的那一層");
         assert_ne!(added_row, added);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// **`:history`'s preview is the word diff, painted as `:diff` paints it**:
+    /// the two drafts on their own rows, the markers off the page, the changed
+    /// word on a ground of its own.
+    #[test]
+    fn the_history_preview_paints_the_word_diff() {
+        let dir = std::env::temp_dir().join(format!("yumete-history-preview-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join(".yumete")).unwrap();
+        let file = dir.join("a.md");
+        std::fs::write(&file, "今天天气很好。\n").unwrap();
+
+        let mut editor = Editor::new();
+        editor.open_file(&file).unwrap();
+        // A save keeps the version; then one word changes, unsaved.
+        editor.execute(":w").unwrap();
+        editor.execute(":s/很/不/").unwrap();
+        assert_eq!(editor.current_buffer().text(), "今天天气不好。\n");
+        editor.execute(":history").unwrap();
+        assert!(editor.picker_preview_is_diff());
+
+        let buf = render_with(&editor, &Config::default(), no_ime(), 100, 24);
+        let rows: Vec<String> = (0..24).map(|y| row_text(&buf, y)).collect();
+        // In the panel, not on the page behind it.
+        let boxed = |r: &String, s: &str| r.contains('│') && r.contains(s);
+        let was = rows.iter().position(|r| boxed(r, "很好")).expect("the version's row");
+        let now = rows.iter().position(|r| boxed(r, "不好")).expect("the buffer's row");
+        assert_eq!(now, was + 1, "{rows:#?}");
+        for marker in ["[-", "-]", "{+", "+}"] {
+            assert!(!rows[was].contains(marker) && !rows[now].contains(marker), "{rows:#?}");
+        }
+        let gone = buf[(column_of(&rows[was], "很"), was as u16)].style().bg;
+        let plain = buf[(column_of(&rows[was], "今"), was as u16)].style().bg;
+        assert_ne!(gone, plain, "the changed word is louder than its row");
 
         std::fs::remove_dir_all(&dir).ok();
     }

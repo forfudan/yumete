@@ -1807,6 +1807,17 @@ impl Editor {
                 let text = encoding.decode_without_bom_handling(&head_bytes).0.into_owned();
                 Some((name, text.lines().take(rows).map(str::to_string).collect()))
             }
+            // **What this version would take away and give back**: the word
+            // diff against the buffer, as `:diff` lists it. Kept until the
+            // highlight moves, like a file's head: a diff of a long chapter is
+            // worth not redoing per frame.
+            crate::picker::Item::Version(row, file, _) => {
+                let mut cached = self.preview.borrow_mut();
+                if cached.as_ref().is_none_or(|(at, _)| *at != file) {
+                    *cached = Some((file.clone(), self.version_preview(&file, rows)));
+                }
+                cached.as_ref().map(|(_, lines)| (row, lines.clone()))
+            }
             // **The entry itself, beside the list of names.** The preview a
             // picker already has shows the highlighted entry — no second
             // mechanism.
@@ -1888,6 +1899,7 @@ impl Editor {
                     self.status = say!("buffer.cannot-open", path.display(), err);
                 }
             }
+            Some(crate::picker::Item::Version(_, file, secs)) => self.show_version(&file, secs),
             None => self.status = say!("picker.nothing-matched"),
         }
     }
@@ -2486,6 +2498,8 @@ impl Editor {
             PlaceCmd::Confirm => self.choose_from_picker(),
             // 跳過哪些，轉一格——見 [`Editor::cycle_what_the_picker_skips`]。
             PlaceCmd::CycleHiddenFiles => self.cycle_what_the_picker_skips(),
+            // 只在歷史版本那一扇有意思：別的挑選器裏没有「一版」可以放回去。
+            PlaceCmd::RestoreVersion => self.restore_chosen_version(),
             // A query is typed text, and typed text is edited in the middle.
             PlaceCmd::DeleteCharForward => picker.delete(),
             PlaceCmd::MoveCharLeft => picker.move_caret(Caret::Left),
@@ -2547,7 +2561,7 @@ impl Editor {
     }
 
     /// Shut the picker and go back to Normal.
-    fn close_picker(&mut self) {
+    pub(super) fn close_picker(&mut self) {
         let was_asking = self.asking_an_encoding();
         self.stop_filling_the_picker();
         if let Some(picker) = self.picker.take() {

@@ -55,6 +55,9 @@ impl Editor {
         self.keep_the_signature_up(was);
         self.settle_the_change(was);
         self.sniff_the_scratch();
+        // A key that saved (`:w` Enter, `ZZ`, an answer that saves) leaves its
+        // version kept before the front end hears the outcome.
+        self.keep_saved_versions();
         match std::mem::take(&mut self.quit_from_binding) {
             true => KeyOutcome::Quit,
             false => outcome,

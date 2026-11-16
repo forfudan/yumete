@@ -1050,6 +1050,12 @@ zhs = "打开"
 en = "open"
 
 [[message]]
+# 歷史版本那一扇挑選器的提示行：A-r 換回這一版（草稿）
+key = "hint.picker.restore-version"
+zhs = "换回这一版"
+en = "put back"
+
+[[message]]
 # 提示：挑選器 A-h 轉到第四格——隱藏與忽略的都搜
 key = "hint.picker.search-everything"
 zhs = "搜索全部"

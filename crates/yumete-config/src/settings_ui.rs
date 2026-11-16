@@ -1231,6 +1231,15 @@ pub const SETTINGS: &[Setting] = &[
     },
     Setting {
         table: "editor",
+        key: "history",
+        group: Group::Files,
+        kind: Kind::Tick,
+        label: "settings.editor.history",
+        hint: "settings.editor.history.hint",
+        factory: "true",
+    },
+    Setting {
+        table: "editor",
         key: "insert_final_newline",
         group: Group::Files,
         kind: Kind::Tick,

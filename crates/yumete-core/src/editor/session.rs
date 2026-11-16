@@ -130,6 +130,9 @@ impl Editor {
     /// lasts, so a hundred chapters are all insured within a few seconds
     /// instead of the eight minutes one-per-`SWAP_INTERVAL` would take.
     pub fn autosave_tick(&mut self) {
+        // Whatever door a save came in by, its version is kept by the next
+        // tick at the latest.
+        self.keep_saved_versions();
         if !self.autosave || self.buffers.is_empty() {
             return;
         }
@@ -1649,7 +1652,16 @@ impl Editor {
             }
         };
         let name = format!("{} @ {commit}", self.current_buffer().display_name());
-        let mut copy = crate::Buffer::from_text(&old);
+        self.open_read_only_beside(&path, &old, name);
+        self.status = say!("git.show", commit);
+    }
+
+    /// **Another version of this file, read-only, in the other work area**:
+    /// what `:git-show` and `:history`'s `Enter` both open. It opens on the
+    /// caret's line, the keys stay in the file being written, and asking
+    /// again under the same name replaces the copy rather than stacking one.
+    pub(super) fn open_read_only_beside(&mut self, path: &Path, old: &str, name: String) {
+        let mut copy = crate::Buffer::from_text(old);
         copy.name_as(&name);
         copy.set_syntax(self.current_buffer().syntax());
         copy.set_readonly(true);
@@ -1669,9 +1681,8 @@ impl Editor {
         let rope = self.current_buffer().rope();
         let at = rope.line_to_char(line.min(rope.len_lines().saturating_sub(1)));
         self.show_in_split(at, None, name.clone());
-        let here = self.buffers.iter().position(|b| b.path() == Some(path.as_path())).unwrap_or(here);
+        let here = self.buffers.iter().position(|b| b.path() == Some(path)).unwrap_or(here);
         self.show_buffer(here);
-        self.status = say!("git.show", commit);
     }
 
     /// 兩份正文，比出來，畫成那一份報告。`against` 是「跟誰比」的名字。
@@ -1717,15 +1728,8 @@ impl Editor {
             if counted >= LISTING_LIMIT {
                 break;
             }
-            let mark = match row.gone {
-                true => '-',
-                false => '+',
-            };
-            listing.push_str(&format!(
-                "{:>digits$}{mark}  {}\n",
-                row.line,
-                crate::diff::marked(row)
-            ));
+            listing.push_str(&diff_row(row, digits));
+            listing.push('\n');
             jumps.push(match row.gone {
                 false => row.line,
                 // 配對的那一行就在下一列；沒有配對的話，跳到頂替它的那一行。
@@ -1750,6 +1754,17 @@ impl Editor {
             false => say!("diff.changed", n, against),
         };
     }
+}
+
+/// One row of a word-diff listing as `:diff` writes it: the line number
+/// right-aligned to `digits`, `-` for the old draft or `+` for the new, then
+/// the text with its changed runs marked ([`crate::diff::marked`]).
+pub(super) fn diff_row(row: &crate::diff::DraftRow, digits: usize) -> String {
+    let mark = match row.gone {
+        true => '-',
+        false => '+',
+    };
+    format!("{:>digits$}{mark}  {}", row.line, crate::diff::marked(row))
 }
 
 /// One file's choices from `tables.txt`; see [`TABLES_FILE`].

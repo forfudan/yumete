@@ -34,6 +34,14 @@ impl Editor {
     /// Returns [`CommandOutcome::Quit`] when a `:q` / `:q!` should end the
     /// session, and [`CommandOutcome::Continue`] otherwise.
     pub fn execute(&mut self, line: &str) -> Result<CommandOutcome, EditorError> {
+        let outcome = self.execute_now(line);
+        // Every save a command made is kept as a version before the command
+        // answers — `:wq` answers by leaving.
+        self.keep_saved_versions();
+        outcome
+    }
+
+    fn execute_now(&mut self, line: &str) -> Result<CommandOutcome, EditorError> {
         // **The line belongs to this command.** A command that fails says so
         // through its error, and the status is where the *last* command's
         // answer was: a failed `:export` must not leave 「存了 ch1.md」
@@ -708,6 +716,14 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::Recover => self.recover(),
+            Command::History => {
+                self.open_history_picker();
+                Ok(CommandOutcome::Continue)
+            }
+            Command::HistoryLabel(name) => {
+                self.label_this_version(&name);
+                Ok(CommandOutcome::Continue)
+            }
             Command::HardWrap(width) => {
                 self.hard_wrap_lines(width);
                 Ok(CommandOutcome::Continue)

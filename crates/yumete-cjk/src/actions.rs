@@ -1611,6 +1611,7 @@ place_commands! {
     FirstEntry = "first_entry",
     LastEntry = "last_entry",
     CycleHiddenFiles = "cycle_hidden_files",
+    RestoreVersion = "restore_version",
     MoveLineDown = "move_line_down",
     MoveLineUp = "move_line_up",
     GotoFileStart = "goto_file_start",
@@ -1674,6 +1675,7 @@ pub const PICKER: &[Action] = &[
     place("action.first-entry", PlaceCmd::FirstEntry),
     place("action.last-entry", PlaceCmd::LastEntry),
     place("action.cycle-hidden-files", PlaceCmd::CycleHiddenFiles),
+    place("action.restore-version", PlaceCmd::RestoreVersion),
 ];
 
 /// A panel's box: the next and the previous box of its form.

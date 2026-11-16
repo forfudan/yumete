@@ -12,7 +12,7 @@ use std::path::Path;
 /// The functions that route keys, by file: where `vim_keymap()` belongs.
 const ROUTING: &[(&str, &str)] = &[
     // The listing's `helix | vim` columns, the one in use in bold.
-    ("editor/commands.rs", "execute"),
+    ("editor/commands.rs", "execute_now"),
     // A group menu's rows, by keymap.
     ("editor/groups.rs", "group_context"),
     // Insert mode's key table.

@@ -115,6 +115,12 @@ zhs = "<几格，1–16>"
 en = "<width, 1–16>"
 
 [[message]]
+# 命令參數的佔位：一個名字（:history-label）（草稿）
+key = "cmd.arg.label"
+zhs = "<名字>"
+en = "<name>"
+
+[[message]]
 # 命令參數的佔位：界面語言（:language）（草稿）
 key = "cmd.arg.language"
 zhs = "<语言>"
@@ -770,6 +776,20 @@ key = "cmd.commands.help"
 zhs = "以可搜索的文件打开按键与命令列表"
 en = "keys and commands, opened as a searchable file"
 find = "幫助 帮助 说明 説明 手冊 手册 keys manual"
+
+[[message]]
+# : 命令選單裏 history 那一項的説明（草稿）
+key = "cmd.commands.history"
+zhs = "这个文件的历史版本：每次保存留一份"
+en = "this file's earlier versions, one per save"
+find = "歷史 历史 版本 舊稿 旧稿 恢復 恢复 時光機 时光机 history version timeline local"
+
+[[message]]
+# : 命令選單裏 history-label 那一項的説明（草稿）
+key = "cmd.commands.history-label"
+zhs = "给这个文件最新的历史版本起个名字"
+en = "name this file's newest version"
+find = "命名 標記 标记 版本 歷史 历史 交稿 label name version"
 
 [[message]]
 # : 命令選單裏 hsplit 那一項的説明

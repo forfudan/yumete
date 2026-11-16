@@ -1754,6 +1754,12 @@ zhs = "还原此处改动"
 en = "restore this change"
 
 [[message]]
+# 挑選器的命令：在歷史版本那一扇裏把選中的那一版整份換回來（草稿）
+key = "action.restore-version"
+zhs = "历史版本里：把选中的版本整份换回来"
+en = "in history: put the highlighted version back whole"
+
+[[message]]
 # 命令說明：right_bracket_mode
 key = "action.right-bracket-mode"
 zhs = "] 组：跳到下一个"

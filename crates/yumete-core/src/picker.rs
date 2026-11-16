@@ -68,6 +68,10 @@ pub enum Item {
     /// **An encoding to open a file in**: its name as shown, the
     /// file, and the name `encoding::by_name` reads back.
     Encoding(String, std::path::PathBuf, &'static str),
+    /// **A version local history kept of this file** — `:history`: the row
+    /// shown (time, characters ±, label), the version's file in its shelf,
+    /// and the second it was saved.
+    Version(String, std::path::PathBuf, i64),
 }
 
 impl Item {
@@ -77,6 +81,7 @@ impl Item {
             Item::File(path) | Item::Project(path) | Item::Dir(path) | Item::Changed(path, _) => path,
             Item::Buffer(_, name) | Item::Paste(_, name) | Item::Action(_, name) => name,
             Item::Encoding(name, ..) => name,
+            Item::Version(row, ..) => row,
             Item::Place(label, ..) => label,
             Item::Wiki(name, _) => name,
         }

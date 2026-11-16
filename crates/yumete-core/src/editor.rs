@@ -3639,6 +3639,16 @@ pub struct Editor {
     /// `[editor] remember` / `--private`: whether `places.txt`,
     /// `projects.txt` and the session are read and written at all.
     remembers: bool,
+    /// `[editor] history`: whether a save keeps a version of the file
+    /// (local history, `versions`). Only while [`Self::remembers`] too:
+    /// `--private` and `--shot` keep nothing.
+    keeps_history: bool,
+    /// The second local history takes as the time, held still by a test;
+    /// `None` reads the system clock.
+    history_clock: Option<i64>,
+    /// Whether a version that could not be kept has been said already —
+    /// once a session, as the recovery copy's failure is.
+    history_warned: bool,
     /// The selection `mr` set aside while it shows the pair it found
     /// (helix's `surround_replace`); the next key puts it back.
     surround_shown: Option<crate::selection::Selections>,
@@ -4860,6 +4870,9 @@ impl Editor {
             where_config: None,
             where_data: None,
             remembers: true,
+            keeps_history: true,
+            history_clock: None,
+            history_warned: false,
             surround_shown: None,
             surround_asking: None,
             surround_around: surround::Around::Text,
@@ -6385,6 +6398,7 @@ pub use symbols::SymbolAsk;
 mod sidebar;
 mod tables;
 mod undo;
+mod versions;
 mod verbs;
 mod vim_view;
 mod refactor;

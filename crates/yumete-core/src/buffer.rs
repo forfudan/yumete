@@ -45,6 +45,16 @@ fn digest_of(rope: &Rope) -> u64 {
     digest_of_written(rope, "")
 }
 
+/// [`digest_of`] a text held as a string: the same answer the rope would
+/// give, since the hasher reads its chunks as one stream.
+pub(crate) fn digest_of_text(text: &str) -> u64 {
+    use std::hash::Hasher;
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    hasher.write(text.as_bytes());
+    hasher.write_u8(0xff);
+    hasher.finish()
+}
+
 /// 這一次**寫出去的那一份**的 digest —— 連補上的那個行尾一起算。
 ///
 /// Warning: **不算它就等於替自己埋一個「被外部改過」。** 存檔之後 `read_as` 記的是
@@ -353,6 +363,15 @@ pub struct Buffer {
     seen: Option<(u64, std::time::SystemTime)>,
     /// Where a buffer with no file keeps its recovery copy.
     scratch_swap: Option<PathBuf>,
+    /// **A save local history has yet to keep**: the text written, and
+    /// [`digest_of`] the text the save wrote over (what was last read or
+    /// saved), which is how a file renamed outside the editor finds its
+    /// shelf ([`crate::versions::find_moved`]).
+    ///
+    /// Set by every successful save and taken by the editor
+    /// (`Editor::keep_saved_versions`), so no save path can be missed: the
+    /// buffer is where every one of them ends.
+    version_due: Option<(Rope, u64)>,
     /// Whether this buffer refuses to be edited (Feature #213).
     ///
     /// Per buffer, not per editor: read-only is a property of the *document* —
@@ -579,6 +598,7 @@ impl Buffer {
             clean_at: std::cell::Cell::new(None),
             beyond_the_file: false,
             scratch_swap: None,
+            version_due: None,
             readonly: false,
             computed: false,
             preview: None,
@@ -648,6 +668,7 @@ impl Buffer {
             clean_at: std::cell::Cell::new(None),
             beyond_the_file: false,
             scratch_swap: None,
+            version_due: None,
             readonly: false,
             computed: false,
             preview: None,
@@ -827,6 +848,7 @@ impl Buffer {
             clean_at: std::cell::Cell::new(None),
             beyond_the_file: false,
             scratch_swap: None,
+            version_due: None,
             // **What the disk says, asked now rather than at `:w`.** A file
             // somebody `chmod 444`-ed is one they meant nobody to change, and
             // finding that out after an afternoon of typing is the whole
@@ -1228,6 +1250,12 @@ impl Buffer {
 
     /// Take the text as it stands as the clean one ([`Buffer::pristine`]),
     /// with its digest when the caller has it to hand.
+    /// The save local history has not kept yet, if there is one; taking it
+    /// clears it. See the field.
+    pub fn take_version_due(&mut self) -> Option<(Rope, u64)> {
+        self.version_due.take()
+    }
+
     fn take_pristine(&mut self, digest: Option<u64>) {
         self.pristine = Fingerprint {
             bytes: self.rope.len_bytes(),
@@ -1867,11 +1895,13 @@ impl Buffer {
         let written = digest_of_written(&self.rope, tail);
         self.read_as = Some(written);
         self.beyond_the_file = false;
+        let wrote_over = self.pristine.digest;
         // The tail is a function of the text and the ending, both in the
         // fingerprint, so the text alone is what to remember; when nothing is
         // added the digest is the one just taken.
         self.take_pristine(tail.is_empty().then_some(written));
         self.saves += 1;
+        self.version_due = Some((self.rope.clone(), wrote_over));
         // The document *is* the recovery copy now — but only ours goes; a draft
         // the writer has not looked at yet still holds text this file does not.
         self.clear_swap();

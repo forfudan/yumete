@@ -275,6 +275,12 @@ pub struct EditorConfig {
     /// or `sessions/` — vim's `viminfo=` and Neovim's `shada=""`. Recovery
     /// copies are another matter and keep their own switch.
     pub remember: bool,
+    /// **Whether a save keeps a version of the file** — local history,
+    /// `:history`. In a book the versions are in `.yumete/history/`; a file
+    /// in no book keeps them in the data directory's `history/`. Thinned as
+    /// it goes: all of today, one an hour for a week, one a day for sixty
+    /// days. On by default; nothing is kept while `remember` is off.
+    pub history: bool,
     /// What language the editor says things in: `"auto"` (the default:
     /// the locale's), `"zht"` (繁體), `"zhs"` (简体) or `"en"`.
     pub language: String,
@@ -569,6 +575,7 @@ impl Default for EditorConfig {
             pages_horizontal: 1,
             session: false,
             remember: true,
+            history: true,
             language: "auto".to_string(),
             zong_gap: DEFAULT_ZONG_GAP,
             word_completion: 7,
@@ -4883,6 +4890,7 @@ struct RawEditor {
     pages_horizontal: Option<usize>,
     session: Option<bool>,
     remember: Option<bool>,
+    history: Option<bool>,
     language: Option<String>,
     zong_gap: Option<usize>,
     word_completion: Option<usize>,
@@ -5146,6 +5154,9 @@ impl RawConfig {
         }
         if other.editor.remember.is_some() {
             self.editor.remember = other.editor.remember;
+        }
+        if other.editor.history.is_some() {
+            self.editor.history = other.editor.history;
         }
         if other.editor.language.is_some() {
             self.editor.language = other.editor.language.clone();
@@ -5666,6 +5677,9 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.remember {
             config.editor.remember = on;
+        }
+        if let Some(on) = self.editor.history {
+            config.editor.history = on;
         }
         if let Some(name) = &self.editor.language {
             config.editor.language = name.clone();

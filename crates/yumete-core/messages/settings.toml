@@ -317,6 +317,18 @@ zhs = "开：Markdown 和 Typst 每个标题下的一节可以折叠，初始全
 en = "On: each Markdown or Typst heading folds its section; all start open. Off: vim's, only folds made with zf."
 
 [[message]]
+# 設置：[editor] history（草稿）
+key = "settings.editor.history"
+zhs = "保存时留下历史版本"
+en = "keep a version at each save"
+
+[[message]]
+# 設置頁 [editor] history 那一行的說明（草稿）
+key = "settings.editor.history.hint"
+zhs = "每次保存在书的 .yumete/history/ 里留一份（书外的文件留在数据目录里）：当天的全留，七天内每小时一份，六十天内每天一份，起了名字的一直留。--private 或不记住打开过的文件时不留"
+en = "every save keeps a copy in the book's .yumete/history/ (files outside a book: in the data directory): all of today, one an hour for a week, one a day for sixty days, named ones for good. Nothing is kept with --private or when remember is off"
+
+[[message]]
 # 設置：没有焦点的窗口怎么画状态栏（草稿）
 key = "settings.editor.inactive-status"
 zhs = "非焦点窗口的状态栏"

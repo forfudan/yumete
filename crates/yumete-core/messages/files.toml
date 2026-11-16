@@ -1,4 +1,4 @@
-# prefixes: buffer file recover write readonly reload autoreload recent export import-word cd data progress encoding
+# prefixes: buffer file recover write readonly reload autoreload recent export import-word cd data progress encoding history
 #
 # What the editor says, one block per tag; see README.md beside this file.
 
@@ -656,6 +656,84 @@ en = "location"
 key = "file.yes"
 zhs = "是"
 en = "yes"
+
+[[message]]
+# :history：那一版的檔讀不出來（{0} 原因）（草稿）
+key = "history.cannot-read"
+zhs = "读不出这个版本：{0}"
+en = "cannot read this version: {0}"
+
+[[message]]
+# :history-label 之後：哪一版叫了什麼名字（{0} 名字，{1} 時間）（草稿）
+key = "history.labelled"
+zhs = "已把 {1} 的版本命名为「{0}」"
+en = "named the version of {1} '{0}'"
+
+[[message]]
+# :history-label，緩衝區有没存的改動：名字給了上次存的那一版（{0} 名字，{1} 時間）（草稿）
+key = "history.labelled-saved"
+zhs = "已把上次保存（{1}）的版本命名为「{0}」，未保存的改动不在其中"
+en = "named the last save ({1}) '{0}'; unsaved changes are not in it"
+
+[[message]]
+# :history 或 :history-label：緩衝區没有檔名（草稿）
+key = "history.no-file"
+zhs = "这个缓冲区没有文件名，没有历史版本"
+en = "this buffer has no file, so no history"
+
+[[message]]
+# :history：這個檔一個版本都還没留（{0} 檔名）（草稿）
+key = "history.none"
+zhs = "{0} 还没有历史版本，每次保存都会留一份"
+en = "no history for {0} yet; every save keeps a version"
+
+[[message]]
+# 存檔成功了，歷史版本没留下來（{0} 檔，{1} 原因）（草稿）
+key = "history.not-kept"
+zhs = "没能保存 {0} 的历史版本：{1}"
+en = "could not keep a version of {0}: {1}"
+
+[[message]]
+# :history 或 :history-label：[editor] history 關着（草稿）
+key = "history.off"
+zhs = "历史版本已关闭（[editor] history）"
+en = "local history is off ([editor] history)"
+
+[[message]]
+# :history 那一扇挑選器的標題（{0} 檔名）（草稿）
+key = "history.picker-title"
+zhs = "{0} 的历史版本"
+en = "history of {0}"
+
+[[message]]
+# :history 或 :history-label：這一次運行不記（--private、remember = false、--shot）（草稿）
+key = "history.private"
+zhs = "这次运行不保存历史版本（--private 或 remember = false）"
+en = "this run keeps no history (--private or remember = false)"
+
+[[message]]
+# :history 裏按 A-r：整份換成了那一版（{0} 時間）（草稿）
+key = "history.restored"
+zhs = "已换回 {0} 的版本，u 撤销"
+en = "put back the version of {0}; u undoes it"
+
+[[message]]
+# :history 的預覽或 A-r：那一版和眼前的正文一字不差（草稿）
+key = "history.same"
+zhs = "与当前内容相同"
+en = "the same as the buffer"
+
+[[message]]
+# :history 裏按 Enter：那一版在另一個窗口只讀打開了（{0} 時間）（草稿）
+key = "history.shown"
+zhs = "{0} 的版本已在另一个窗口中只读打开"
+en = "the version of {0} is open read-only in the other window"
+
+[[message]]
+# :history 的預覽：那一版和眼前的正文差得太遠，比不出來（草稿）
+key = "history.too-far"
+zhs = "与当前内容差别太大，比不出来"
+en = "too different from the buffer to compare"
 
 [[message]]
 # ye --import-word：要写的 .md（或图片文件夹）已经存在，没加 --overwrite 就不覆盖。{0} 是那个路径（草稿）

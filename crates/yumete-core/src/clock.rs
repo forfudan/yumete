@@ -43,6 +43,14 @@ pub fn local_day(seconds: i64) -> i64 {
     crate::genda::day_number(y, mo, d)
 }
 
+/// **The local day and hour a second falls on**: what local history thins
+/// its snapshots by ([`crate::versions::thin`]), so 「one an hour」 means the
+/// hours on the writer's clock.
+pub fn local_day_hour(seconds: i64) -> (i64, u32) {
+    let (y, mo, d, h, ..) = broken_down(seconds);
+    (crate::genda::day_number(y, mo, d), h)
+}
+
 /// 本地時區裏，那一秒是幾年幾月幾日幾點幾分幾秒。
 #[cfg(unix)]
 fn broken_down(seconds: i64) -> (i64, u32, u32, u32, u32, u32) {

@@ -269,6 +269,13 @@ pub enum Command {
     /// 本來就有一格（`d`）。有它就是在「刪掉草稿之前一定看得見那三個選項」這條規矩上
     /// 開一個後門。
     Recover,
+    /// `:history` — **this file's earlier versions**, one per save, in a
+    /// picker: the preview is the word diff against the buffer, `Enter`
+    /// opens one read-only beside it, `A-r` puts it back (local history).
+    History,
+    /// `:history-label <name>` — name this file's newest version, which
+    /// keeps it through every thinning.
+    HistoryLabel(String),
     /// `:[range]s/pattern/replacement/[flags]` — substitute text.
     ///
     /// The delimiter is whatever character follows the `s`, so a pattern with
@@ -3735,6 +3742,22 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[],
         build: Some(|_| Ok(Command::Recover)),
+    },
+    Entry {
+        name: "history",
+        aliases: &[],
+        help: "cmd.commands.history",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::History)),
+    },
+    Entry {
+        name: "history-label",
+        aliases: &[],
+        help: "cmd.commands.history-label",
+        needs: &[],
+        params: &[Param::Free("cmd.arg.label")],
+        build: Some(|p| Ok(Command::HistoryLabel(p.need(0)?.to_string()))),
     },
     Entry {
         name: "encoding",

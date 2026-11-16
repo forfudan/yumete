@@ -6,6 +6,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Added
 
+- **Local history**: every save keeps a version of the file in the book's `.yumete/history/` (or the data directory for files outside a book), thinned to all of today, one an hour for a week and one a day for sixty days; saves less than ten minutes apart count as one. `:history` lists them with a word-diff preview; `Enter` opens one read-only beside the text, `A-r` puts it back as one undoable edit. `:history-label <name>` names a version and keeps it for good. Off with `[editor] history = false`; `--private` and `remember = false` keep none.
 - **helix's long command names work as aliases**: `:change-current-directory`, `:show-directory`, `:set-language`, `:set-option`, `:run-shell-command`, `:clipboard-paste-after`, `:clipboard-yank-join`; `:x!`/`:xit!` and `:wa!` write over files changed outside, like `:wq!` and `:w!`.
 - **A lone Shift tap switches 中/ABC on Windows** (Windows Terminal and the classic console), as it does under the Kitty keyboard protocol elsewhere, with the same rules; the start-up line about the terminal not reporting a lone Shift is no longer shown there. `C-\` still works.
 - **vim's `:sort` takes `n` and `u`, and a range in front**: `:sort n` orders lines by their first number (lines without one first), `:sort u` keeps one of each run of equal lines, and `:%sort` or `:2-5sort` sorts the lines it names.

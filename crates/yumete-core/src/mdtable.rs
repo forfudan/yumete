@@ -2008,7 +2008,7 @@ mod proof_292 {
         // 的最寬格子是一整段，於是別的每一行都補到那麼寬」——那是單張表的病。而這一
         // 句量的是「整個文檔集加起來」，它**隨文檔一起長**，所以每隔一陣就要調大一次。
         // 累計該不該換成一個不隨文檔長大的說法（比如補的字節不許超過表格自身），還沒定。
-        assert!(total < 320_000, "every table together would add {total} bytes");
+        assert!(total < 400_000, "every table together would add {total} bytes");
     }
 }
 

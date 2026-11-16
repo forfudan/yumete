@@ -172,6 +172,10 @@ impl Editor {
                 };
                 keys.extend(picker_keys(&[(Key::Alt('h'), PlaceCmd::CycleHiddenFiles)], skipping));
             }
+            // **放回一整版，只在歷史版本那一扇寫**——別的挑選器裏那個鍵什麼都不做。
+            if matches!(picker.items().first(), Some(crate::picker::Item::Version(..))) {
+                keys.extend(picker_keys(&[(Key::Alt('r'), PlaceCmd::RestoreVersion)], say!("hint.picker.restore-version")));
+            }
             keys.extend(picker_keys(&[(Key::Esc, PlaceCmd::NormalMode)], say!("hint.close")));
             return Hint::Keys(title, keys);
         }
