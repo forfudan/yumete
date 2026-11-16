@@ -537,8 +537,8 @@ pub enum Command {
     /// `:view-diff` — whether the cell beside the line numbers shows git's
     /// changes (#55).
     SetDiffGutter(Switch),
-    /// `:view-diagnostics hint|info|warning|error|off` — helix's end-of-line
-    /// diagnostics. `None` asks.
+    /// `:view-diagnostics off|basic|full` — end-of-line diagnostics. `None`
+    /// asks, the way bare `:render` and `:view-hud` report their level.
     SetEolDiagnostics(Option<String>),
     /// `:shot` — a picture of the page, drawn by the editor itself (#189).
     Screenshot { shot: Shot, force: bool },
@@ -2735,31 +2735,22 @@ const COMMITS: &[Word] = &[
     },
 ];
 
-/// `:view-diagnostics`'s words: helix's levels, and `off`.
+/// `:view-diagnostics`'s words: the three levels `[editor]
+/// end_of_line_diagnostics` writes.
 const EOL_LEVELS: &[Word] = &[
     Word {
-        name: "hint",
-        help: "settings.pick.eol-diagnostics.hint",
-        needs: &[],
-    },
-    Word {
-        name: "info",
-        help: "settings.pick.eol-diagnostics.info",
-        needs: &[],
-    },
-    Word {
-        name: "warning",
-        help: "settings.pick.eol-diagnostics.warning",
-        needs: &[],
-    },
-    Word {
-        name: "error",
-        help: "settings.pick.eol-diagnostics.error",
-        needs: &[],
-    },
-    Word {
         name: "off",
-        help: "settings.pick.eol-diagnostics.disable",
+        help: "settings.pick.eol-diagnostics.off",
+        needs: &[],
+    },
+    Word {
+        name: "basic",
+        help: "settings.pick.eol-diagnostics.basic",
+        needs: &[],
+    },
+    Word {
+        name: "full",
+        help: "settings.pick.eol-diagnostics.full",
         needs: &[],
     },
 ];

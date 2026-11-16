@@ -37,6 +37,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Changed
 
+- **End-of-line diagnostics are off by default and take `off`, `basic` (errors and warnings) or `full` (every level)**, in `[editor] end_of_line_diagnostics`, the settings page and `:view-diagnostics`, as helix and Zed ship them off: a grammar checker tags nearly every line of prose. The gutter marks and `:diagnostics-all` are unchanged; helix's words (`disable`, `error`, `warning`, `info`, `hint`) are still read, so old configs and `--import helix` keep working.
 - **`:convert` needs nothing installed**: OpenCC and its dictionaries are built into yumete, so simplified/traditional conversion works the same on every system, Windows included, with no `opencc` on `PATH`, and converts in place at once. `:convert-opencc`, `:convert-opencc-install` and `:convert-opencc-update` are gone. `:convert!` converts vocabulary for Taiwan only; between simplified and Hong Kong it converts characters.
 - **Table columns use a wide window, folded or wrapped**: when the whole table fits with room to spare, the columns cut at 32 share the rest of the window's width, never past their widest cell, so a wrapped cell wraps onto fewer lines; a narrower window draws exactly as before.
 - **The Unicode alarm marks the same bidi controls as VS Code** (the embeddings, overrides and isolates "Trojan Source" uses, and the left-to-right, right-to-left and Arabic letter marks), and the status line names every marked character from the Unicode data.

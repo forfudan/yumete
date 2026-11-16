@@ -599,10 +599,12 @@ fn editor_table(table: &toml::Table, got: &mut Gathered) {
                 Some(on) => set(got, "insert_final_newline", on.to_string()),
                 None => skip(got, "not true or false"),
             },
+            // helix names the least level drawn; yumete has three levels, and
+            // each of helix's five lands on the one that draws what it drew.
             "end-of-line-diagnostics" => match value.as_str() {
-                Some(level @ ("disable" | "hint" | "info" | "warning" | "error")) => {
-                    set(got, "end_of_line_diagnostics", quote(level))
-                }
+                Some("disable") => set(got, "end_of_line_diagnostics", quote("off")),
+                Some("error" | "warning") => set(got, "end_of_line_diagnostics", quote("basic")),
+                Some("info" | "hint") => set(got, "end_of_line_diagnostics", quote("full")),
                 _ => skip(got, "not disable, hint, info, warning or error"),
             },
             "soft-wrap" => sub_table(got, key, value, &mut |got, sub, v| match (sub, v.as_bool()) {
@@ -1688,6 +1690,23 @@ j = { k = "normal_mode" }
     #[test]
     fn a_helix_config_that_does_not_parse_is_refused() {
         assert!(helix("[editor\nscrolloff = 3", Path::new("x"), "t", false, None).is_err());
+    }
+
+    /// helix's five end-of-line levels land on yumete's three, each on the one
+    /// that draws what helix drew; a word helix does not have is left out.
+    #[test]
+    fn helix_s_end_of_line_levels_land_on_off_basic_and_full() {
+        for (helix_word, ours) in
+            [("disable", "off"), ("error", "basic"), ("warning", "basic"), ("info", "full"), ("hint", "full")]
+        {
+            let out = helix(&format!("[editor]\nend-of-line-diagnostics = \"{helix_word}\"\n"), Path::new("x"), "t", false, None)
+                .unwrap()
+                .text;
+            assert!(out.lines().any(|l| l == format!("end_of_line_diagnostics = \"{ours}\"")), "{helix_word}: {out}");
+            assert_eq!(complaints(&out), Vec::<String>::new(), "{out}");
+        }
+        let out = helix("[editor]\nend-of-line-diagnostics = \"basic\"\n", Path::new("x"), "t", false, None).unwrap().text;
+        assert!(!out.lines().any(|l| l.starts_with("end_of_line_diagnostics")), "{out}");
     }
 
     /// **helix's `languages.toml` gives its servers' `config`**,

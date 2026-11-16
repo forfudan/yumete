@@ -22490,13 +22490,14 @@ fn squeezed(text: &str) -> String {
         assert_eq!(plain.control, None);
     }
 
-    /// **helix's end-of-line diagnostics**: the loudest message
-    /// after its line, cut with `…` at the edge, off when asked, not on the
-    /// line being typed, and moving with an inserted line.
+    /// **End-of-line diagnostics**: off out of the factory; `basic` writes
+    /// errors and warnings after their line, `full` every level; the loudest
+    /// on a line wins, cut with `…` at the edge, not on the line being typed,
+    /// and moving with an inserted line.
     #[test]
     fn a_complaint_is_written_after_its_line() {
         use yumete_core::problem::{Problem, Severity};
-        let (mut editor, path) = editor_on_disk("e.rs", "fn a() {}\nfn b() {}\nfn c() {}\n");
+        let (mut editor, path) = editor_on_disk("e.rs", "fn a() {}\nfn b() {}\nfn c() {}\nfn d() {}\n");
         let one = |line: usize, severity: Severity, message: &str| Problem {
             line,
             utf16_column: 0,
@@ -22509,27 +22510,49 @@ fn squeezed(text: &str) -> String {
             path,
             "test".into(),
             vec![
+                one(0, Severity::Note, "only a note"),
                 one(1, Severity::Hint, "just a hint"),
                 one(1, Severity::Error, "unknown thing"),
                 one(2, Severity::Warn, "a warning long enough that it cannot fit on a narrow page"),
+                one(3, Severity::Hint, "only a hint"),
             ],
         );
         let config = Config::default();
         let row = |b: &ratatui::buffer::Buffer, y: u16| row_text(b, y);
+        // The gutter's lane and the cursor's hint say their own part either
+        // way; the subject is the text written after each line.
+        let after = |b: &ratatui::buffer::Buffer, y: u16, line: &str| {
+            let row = row(b, y);
+            row.split_once(line).map(|(_, rest)| rest.trim_start().to_string()).unwrap_or_default()
+        };
+        let plain = ["fn a() {}", "fn b() {}", "fn c() {}", "fn d() {}"];
         let buffer = render(&editor, &config, 60, 8);
+        for (y, line) in plain.iter().enumerate() {
+            let rest = after(&buffer, y as u16, line);
+            assert!(rest.is_empty() || rest.starts_with('╭') || rest.starts_with('│'), "off out of the factory: {:?}", row(&buffer, y as u16));
+        }
+
+        editor.execute("view-diagnostics basic").unwrap();
+        let buffer = render(&editor, &config, 60, 8);
+        assert!(!row(&buffer, 0).contains("only a note"), "basic draws no note: {:?}", row(&buffer, 0));
         assert!(row(&buffer, 1).contains("fn b() {}  unknown thing"), "the loudest: {:?}", row(&buffer, 1));
         assert!(!row(&buffer, 1).contains("just a hint"));
+        assert!(row(&buffer, 2).contains("a warning"), "basic draws a warning: {:?}", row(&buffer, 2));
+        assert!(!row(&buffer, 3).contains("only a hint"), "basic draws no hint: {:?}", row(&buffer, 3));
         let narrow = render(&editor, &config, 40, 8);
         assert!(row(&narrow, 2).trim_end().ends_with('…'), "cut at the edge: {:?}", row(&narrow, 2));
-        assert_eq!(row(&buffer, 0).trim_end(), "  1  fn a() {}", "a line with nothing said");
 
-        editor.execute("view-diagnostics error").unwrap();
+        editor.execute("view-diagnostics full").unwrap();
         let buffer = render(&editor, &config, 60, 8);
-        assert!(!row(&buffer, 2).contains("warning"), "under the level");
-        assert!(row(&buffer, 1).contains("unknown thing"));
+        assert!(row(&buffer, 0).contains("fn a() {}  only a note"), "{:?}", row(&buffer, 0));
+        assert!(row(&buffer, 1).contains("fn b() {}  unknown thing"), "still the loudest: {:?}", row(&buffer, 1));
+        assert!(row(&buffer, 2).contains("a warning"));
+        assert!(row(&buffer, 3).contains("fn d() {}  only a hint"), "{:?}", row(&buffer, 3));
         editor.execute("view-diagnostics off").unwrap();
         assert!(!row(&render(&editor, &config, 60, 8), 1).contains("unknown"));
-        editor.execute("view-diagnostics hint").unwrap();
+        editor.execute("view-diagnostics").unwrap();
+        assert!(!row(&render(&editor, &config, 60, 8), 1).contains("unknown"), "the bare word reports, it does not cycle");
+        editor.execute("view-diagnostics full").unwrap();
 
         // Typing on line 2: not there while it is typed; a line opened above
         // moves the message with its line.
@@ -22718,6 +22741,7 @@ fn squeezed(text: &str) -> String {
                 code: None,
             }],
         );
+        editor.execute("view-diagnostics basic").unwrap();
         let buffer = render_wrapped(&mut editor, &Config::default(), 50, 8);
         assert!(!row_text(&buffer, 0).contains("spelling"), "{:?}", row_text(&buffer, 0));
         assert!(row_text(&buffer, 1).contains("  spelling"), "{:?}", row_text(&buffer, 1));

@@ -88,10 +88,22 @@ zhs = "改动条：开(绿＝新增，蓝＝修改，红色细线＝删除)"
 en = "diff gutter: on (green added, blue changed, thin red line deleted)"
 
 [[message]]
-# `:view-diagnostics` 之後：行末診斷現在畫到哪一級。{0} 檔名
-key = "layout.eol-diagnostics"
-zhs = "行末诊断：{0}"
-en = "end-of-line diagnostics: {0}"
+# `:view-diagnostics` 之後：行末診斷畫錯誤與警告（草稿）
+key = "layout.eol-diagnostics.basic"
+zhs = "行末诊断：基本，显示错误和警告"
+en = "end-of-line diagnostics: basic, errors and warnings"
+
+[[message]]
+# `:view-diagnostics` 之後：行末診斷四級都畫（草稿）
+key = "layout.eol-diagnostics.full"
+zhs = "行末诊断：完整，显示所有级别"
+en = "end-of-line diagnostics: full, every level"
+
+[[message]]
+# `:view-diagnostics` 之後：行末診斷關著（草稿）
+key = "layout.eol-diagnostics.off"
+zhs = "行末诊断：关闭"
+en = "end-of-line diagnostics: off"
 
 [[message]]
 # :indent full — 縮進畫出來，段間的空行也收起

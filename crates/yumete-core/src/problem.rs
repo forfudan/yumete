@@ -47,16 +47,20 @@ impl Severity {
     }
 }
 
-/// helix's words for the least severity end-of-line diagnostics draw
-/// (`end-of-line-diagnostics`): `Some(None)` is off (`disable`, or `off` as
-/// the `:view-*` commands say it), `None` a word that is neither.
+/// The least severity end-of-line diagnostics draw, from
+/// `[editor] end_of_line_diagnostics` or `:view-diagnostics`: `Some(None)` is
+/// off, `None` a word that is none of these.
+///
+/// Three levels, the shape `:render` and `:view-hud` have: `off`, `basic`
+/// (errors and warnings) and `full` (every level). helix's five words
+/// (`end-of-line-diagnostics`) fold into the three, so a config written for
+/// helix still means something: `disable` is off, `error` and `warning` are
+/// basic, `info` and `hint` are full.
 pub fn level_from_word(word: &str) -> Option<Option<Severity>> {
     match word.trim() {
-        "disable" | "off" => Some(None),
-        "hint" => Some(Some(Severity::Hint)),
-        "info" => Some(Some(Severity::Note)),
-        "warning" => Some(Some(Severity::Warn)),
-        "error" => Some(Some(Severity::Error)),
+        "off" | "disable" => Some(None),
+        "basic" | "error" | "warning" => Some(Some(Severity::Warn)),
+        "full" | "info" | "hint" => Some(Some(Severity::Hint)),
         _ => None,
     }
 }
@@ -64,11 +68,9 @@ pub fn level_from_word(word: &str) -> Option<Option<Severity>> {
 /// The word for a level, as the config writes it.
 pub fn level_word(level: Option<Severity>) -> &'static str {
     match level {
-        None => "disable",
-        Some(Severity::Hint) => "hint",
-        Some(Severity::Note) => "info",
-        Some(Severity::Warn) => "warning",
-        Some(Severity::Error) => "error",
+        None => "off",
+        Some(Severity::Error | Severity::Warn) => "basic",
+        Some(Severity::Note | Severity::Hint) => "full",
     }
 }
 

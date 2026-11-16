@@ -120,10 +120,12 @@ pub struct EditorConfig {
     ///
     /// 代價是開檔與存檔各多一個子進程；量過，見 `local/development.md`。
     pub diff_gutter: bool,
-    /// helix's end-of-line diagnostics: the least severity a
-    /// language server's message must have to be drawn after its line —
-    /// `"hint"` (the default, as helix's), `"info"`, `"warning"`, `"error"`, or
-    /// `"disable"`. In prose it follows the paragraph's last row.
+    /// End-of-line diagnostics: which of a language server's messages are
+    /// drawn after their line — `"off"` (the default, as helix and Zed ship
+    /// it: a grammar checker tags nearly every line of prose), `"basic"`
+    /// (errors and warnings) or `"full"` (every level). In prose it follows
+    /// the paragraph's last row. helix's words are read as well and kept as
+    /// the three ([`eol_diagnostics_word`]).
     pub end_of_line_diagnostics: String,
     /// Whether a file's vim modelines (`vim: set ts=2 ft=python:` in its
     /// first or last five lines) are read: its file type, tab stop, indent
@@ -561,7 +563,7 @@ impl Default for EditorConfig {
             wheel_step: 3,
             line_number_fill: false,
             diff_gutter: true,
-            end_of_line_diagnostics: "hint".to_string(),
+            end_of_line_diagnostics: "off".to_string(),
             modeline: true,
             maths_preview: true,
             maths_in_place: true,
@@ -3322,8 +3324,22 @@ const TAB_INSERTS_NAMES: &[&str] = &["spaces", "tab"];
 /// `[ime] system`.
 const SYSTEM_IME_NAMES: &[&str] = &["auto", "keep"];
 
-/// The words `[editor] end_of_line_diagnostics` takes, helix's.
-pub const EOL_DIAGNOSTIC_WORDS: &[&str] = &["disable", "hint", "info", "warning", "error"];
+/// The words `[editor] end_of_line_diagnostics` writes.
+pub const EOL_DIAGNOSTIC_WORDS: &[&str] = &["off", "basic", "full"];
+
+/// **`[editor] end_of_line_diagnostics` as one of its three words**, helix's
+/// five folded in so a config written for helix keeps its meaning:
+/// `disable` is off, `error` and `warning` are basic (helix draws from the
+/// level named up, and errors and warnings are what basic draws), `info`
+/// and `hint` are full. `None` for anything else.
+pub fn eol_diagnostics_word(word: &str) -> Option<&'static str> {
+    match word.trim() {
+        "off" | "disable" => Some("off"),
+        "basic" | "error" | "warning" => Some("basic"),
+        "full" | "info" | "hint" => Some("full"),
+        _ => None,
+    }
+}
 
 /// The fully-resolved configuration.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -4151,7 +4167,7 @@ impl Config {
     }
 
     if let Some(word) = raw.editor.end_of_line_diagnostics.as_deref() {
-        if !EOL_DIAGNOSTIC_WORDS.contains(&word.trim()) {
+        if eol_diagnostics_word(word).is_none() {
             problems.push(one_of("[editor] end_of_line_diagnostics", word, EOL_DIAGNOSTIC_WORDS));
         }
     }
@@ -5597,8 +5613,8 @@ impl RawConfig {
         if let Some(on) = self.editor.diff_gutter {
             config.editor.diff_gutter = on;
         }
-        if let Some(word) = self.editor.end_of_line_diagnostics.filter(|w| EOL_DIAGNOSTIC_WORDS.contains(&w.trim())) {
-            config.editor.end_of_line_diagnostics = word.trim().to_string();
+        if let Some(word) = self.editor.end_of_line_diagnostics.as_deref().and_then(eol_diagnostics_word) {
+            config.editor.end_of_line_diagnostics = word.to_string();
         }
         if let Some(on) = self.editor.modeline {
             config.editor.modeline = on;
@@ -6992,6 +7008,36 @@ mod tests {
         assert_eq!(system("[ime]\nsystem = \"kept\""), SystemImePolicy::Auto);
         assert!(SystemImePolicy::is_written("keep"));
         assert!(!SystemImePolicy::is_written("kept"));
+    }
+
+    /// End-of-line diagnostics: off unless asked; three words, helix's five
+    /// read as the three they mean, anything else said and left as it was.
+    #[test]
+    fn end_of_line_diagnostics_take_three_words_and_read_helix_s_five() {
+        let eol = |word: &str| {
+            let text = format!("[editor]\nend_of_line_diagnostics = \"{word}\"\n");
+            let raw: RawConfig = toml::from_str(&text).unwrap();
+            let mut said = Vec::new();
+            Config::complain_about(&raw, &mut said);
+            (Config::from_toml(&text).editor.end_of_line_diagnostics, said)
+        };
+        assert_eq!(Config::from_toml("").editor.end_of_line_diagnostics, "off");
+        for (word, means) in [
+            ("off", "off"),
+            ("basic", "basic"),
+            ("full", "full"),
+            ("disable", "off"),
+            ("error", "basic"),
+            ("warning", "basic"),
+            ("info", "full"),
+            ("hint", "full"),
+        ] {
+            assert_eq!(eol(word), (means.to_string(), Vec::new()), "{word}");
+        }
+        let (kept, said) = eol("loud");
+        assert_eq!(kept, "off");
+        assert_eq!(said.len(), 1);
+        assert!(said[0].contains("off、basic、full"), "{said:?}");
     }
 
     #[test]

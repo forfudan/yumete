@@ -359,11 +359,9 @@ const IME_SYSTEM_WAYS: &[Choice] = &[
 ];
 
 const EOL_DIAGNOSTIC_WAYS: &[Choice] = &[
-    Choice { word: "disable", label: "settings.pick.eol-diagnostics.disable" },
-    Choice { word: "hint", label: "settings.pick.eol-diagnostics.hint" },
-    Choice { word: "info", label: "settings.pick.eol-diagnostics.info" },
-    Choice { word: "warning", label: "settings.pick.eol-diagnostics.warning" },
-    Choice { word: "error", label: "settings.pick.eol-diagnostics.error" },
+    Choice { word: "off", label: "settings.pick.eol-diagnostics.off" },
+    Choice { word: "basic", label: "settings.pick.eol-diagnostics.basic" },
+    Choice { word: "full", label: "settings.pick.eol-diagnostics.full" },
 ];
 
 const IME_OTHERS_WAYS: &[Choice] = &[
@@ -619,7 +617,7 @@ pub const SETTINGS: &[Setting] = &[
         kind: Kind::Pick(EOL_DIAGNOSTIC_WAYS),
         label: "settings.editor.eol-diagnostics",
         hint: "settings.editor.eol-diagnostics.hint",
-        factory: r#""hint""#,
+        factory: r#""off""#,
     },
     Setting {
         table: "editor",

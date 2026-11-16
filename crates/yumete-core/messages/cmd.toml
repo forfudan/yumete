@@ -2679,10 +2679,10 @@ en = "code highlighting: fenced code coloured by its language"
 find = "代碼 代码 高亮 語法 语法 上色 圍欄 围栏 highlight syntax fence tree-sitter"
 
 [[message]]
-# `:` 命令選單裏 view-diagnostics 那一項的説明
+# `:` 命令選單裏 view-diagnostics 那一項的説明（草稿）
 key = "cmd.view.diagnostics"
-zhs = "行末诊断：hint、info、warning、error 或 off"
-en = "end-of-line diagnostics: hint, info, warning, error or off"
+zhs = "行末诊断：off、basic 或 full"
+en = "end-of-line diagnostics: off, basic or full"
 find = "診斷 诊断 行末 diagnostics virtual text"
 
 [[message]]

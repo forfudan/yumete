@@ -3783,8 +3783,9 @@ pub struct Editor {
     /// Files on the command line that could not be told, waiting for the
     /// encoding picker the one before them has open.
     encodings_to_ask: Vec<crate::encoding::Undecided>,
-    /// helix's end-of-line diagnostics: the least severity drawn after a
-    /// line, `None` for off.
+    /// End-of-line diagnostics: the least severity drawn after a line —
+    /// `Warn` for basic, `Hint` for full, `None` for off (the factory value:
+    /// a grammar checker has something to say on nearly every line of prose).
     end_of_line_diagnostics: Option<crate::problem::Severity>,
     /// Whether vim modelines are read (`[editor] modeline`).
     modeline: bool,
@@ -4921,7 +4922,7 @@ impl Editor {
             query: None,
             oversize_answered: false,
             encodings_to_ask: Vec::new(),
-            end_of_line_diagnostics: Some(crate::problem::Severity::Hint),
+            end_of_line_diagnostics: None,
             modeline: true,
             segment_memo: memo::LineMemo::default(),
             meter: false,

@@ -275,10 +275,10 @@ zhs = "行末诊断"
 en = "end-of-line diagnostics"
 
 [[message]]
-# 設置：行末診斷——一句話
+# 設置：行末診斷——一句話（草稿）
 key = "settings.editor.eol-diagnostics.hint"
-zhs = "在行末显示语言服务器诊断，从哪一级起显示"
-en = "show language-server diagnostics at line end, from which level up"
+zhs = "在行末显示语言服务器的诊断：关闭、基本(错误和警告)或完整(所有级别)"
+en = "show language-server diagnostics at line end: off, basic (errors and warnings) or full (every level)"
 
 [[message]]
 # 設置：模糊搜索出厂开着
@@ -1709,34 +1709,22 @@ zhs = "光标下一行"
 en = "below the cursor"
 
 [[message]]
-# 設置選項：行末診斷不畫
-key = "settings.pick.eol-diagnostics.disable"
-zhs = "不显示"
+# 設置選項：行末診斷畫錯誤與警告；面板只畫冒號前那個詞（草稿）
+key = "settings.pick.eol-diagnostics.basic"
+zhs = "基本：错误和警告"
+en = "basic: errors and warnings"
+
+[[message]]
+# 設置選項：行末診斷四級都畫；面板只畫冒號前那個詞（草稿）
+key = "settings.pick.eol-diagnostics.full"
+zhs = "完整：所有级别(错误、警告、说明、建议)"
+en = "full: every level (errors, warnings, info, hints)"
+
+[[message]]
+# 設置選項：行末診斷不畫（草稿）
+key = "settings.pick.eol-diagnostics.off"
+zhs = "关闭"
 en = "off"
-
-[[message]]
-# 設置選項：行末診斷只畫錯誤
-key = "settings.pick.eol-diagnostics.error"
-zhs = "只显示错误"
-en = "errors only"
-
-[[message]]
-# 設置選項：行末診斷從建議起
-key = "settings.pick.eol-diagnostics.hint"
-zhs = "建议及以上"
-en = "hints and up"
-
-[[message]]
-# 設置選項：行末診斷從說明起
-key = "settings.pick.eol-diagnostics.info"
-zhs = "说明及以上"
-en = "info and up"
-
-[[message]]
-# 設置選項：行末診斷從警告起
-key = "settings.pick.eol-diagnostics.warning"
-zhs = "警告及以上"
-en = "warnings and up"
 
 [[message]]
 # 設置：纸面——自己画纸
