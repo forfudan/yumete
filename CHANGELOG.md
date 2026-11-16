@@ -31,6 +31,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Changed
 
+- **Folded table columns use a wide window**: when the whole table fits with room to spare, the columns cut at 32 share the rest of the window's width, never past their widest cell; a narrower window draws exactly as before. Wrapped cells keep the 32 cap.
 - **The Unicode alarm marks the same bidi controls as VS Code** (the embeddings, overrides and isolates "Trojan Source" uses, and the left-to-right, right-to-left and Arabic letter marks), and the status line names every marked character from the Unicode data.
 - **The whole screen is drawn again whenever the windows move**: a split, a closed, moved or swapped window, a sidebar or a preview opened or closed, or the terminal resized clears the screen once and sends the previews' pictures again, so no window or picture is left at its old place or size. The clear goes out with the new frame, so no blank frame shows in between; typing and scrolling never clear.
 - **Word and reference completion are one list under the cursor, with helix's keys**: `Tab`/`C-n`/`Down` write the next entry into the text and `S-Tab`/`C-p`/`Up` the previous one, typing on keeps it, `Enter` keeps it without a new line, `Esc` keeps it and leaves Insert, `C-c` puts back what you typed; `C-y` and `C-e` do the same as `Enter` and `C-c` while the list is open. `[[`, `[^`, `](#`, `[@` and Typst `@` open it under the cursor rather than at the foot of the window.

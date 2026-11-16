@@ -50,6 +50,10 @@ pub struct Viewport {
 /// measured whole whichever way the switch is set. That is
 /// [`yumete_core::editor::Editor::cell_folds`]'s other half: the prose page folds by hiding
 /// characters, the grid by drawing narrow.
+///
+/// **Under 摺起 it is the least the cap is**: a window with room left over
+/// once every column is on it gives that room back to the columns it cut
+/// ([`share_spare`]).
 const MIN_COLUMN: usize = 3;
 const MAX_COLUMN: usize = 32;
 
@@ -95,9 +99,21 @@ fn layout(
     caret: (usize, usize),
     left: &mut usize,
 ) -> Vec<usize> {
-    let Some((mut widths, ceiling)) = heading_widths(editor, anchor, room) else {
+    let Some((mut capped, ceiling)) = heading_widths(editor, anchor, room, editor.cell_folds()) else {
         return Vec::new();
     };
+    // **What each column would take with no cap at all**, kept beside the
+    // capped widths so that room the window has over can go back to the
+    // columns the cap cut. Only under 摺起: 全文 has no cap to lift, and
+    // under 折行 the editor walks a wrapped cell's rows at the fixed cap
+    // (`cell_rows`), so a column drawn wider would put `j` in the middle of a
+    // drawn row.
+    let grow = editor.cell_folds() && !editor.cell_wrap();
+    let mut natural = match grow {
+        true => heading_widths(editor, anchor, room, false).map(|(w, _)| w).unwrap_or_default(),
+        false => Vec::new(),
+    };
+    let mut widths = capped.clone();
     // The height of each record taken so far, recounted whole only when a
     // record moved the widths or the columns: most change nothing, and the
     // page is then the old one plus this row.
@@ -105,7 +121,14 @@ fn layout(
     let mut line = top;
     while line <= last {
         let before = (widths.clone(), *left);
-        vote(editor, line, &mut widths, ceiling, room, caret);
+        vote(editor, line, &mut capped, ceiling, room, caret);
+        widths = match grow {
+            true => {
+                vote(editor, line, &mut natural, room.max(MIN_COLUMN), room, caret);
+                share_spare(&capped, &natural, room)
+            }
+            false => capped.clone(),
+        };
         scroll_columns(&widths, room, caret.1, left);
         if (widths.clone(), *left) != before {
             for (l, tall) in drawn.iter_mut() {
@@ -122,15 +145,52 @@ fn layout(
     widths
 }
 
+/// **The room a table leaves over, given back to the columns the cap cut.**
+///
+/// The cap is there so that one long cell cannot push the columns after it
+/// off the window; once every column is on the window at its capped width,
+/// there is nothing left for it to protect, and columns cut short beside an
+/// empty right half are the cap costing something for nothing. So the spare
+/// width is shared among the cut columns as if the cap rose with the window:
+/// the one that needs least is given all it needs when that is under an even
+/// share, and what it leaves goes to the rest. No column is drawn wider than
+/// its widest drawn cell.
+///
+/// Only a table that fits the window whole gets anything. One wider than the
+/// window scrolls by whole columns, and widths that hung on which column is
+/// first on screen would change under a sideways step.
+///
+/// Not the cursor's column first: a share that followed the caret would make
+/// every `l` a new layout, which is what the cap rule already declines in
+/// Normal ([`vote`]).
+fn share_spare(capped: &[usize], natural: &[usize], room: usize) -> Vec<usize> {
+    let mut widths = capped.to_vec();
+    let used: usize = capped.iter().filter(|&&w| w > 0).map(|w| w + GAP).sum();
+    let Some(mut spare) = room.checked_sub(used).filter(|&s| s > 0) else {
+        return widths;
+    };
+    let mut cut: Vec<usize> = (0..capped.len())
+        .filter(|&i| capped[i] > 0 && natural.get(i).is_some_and(|&n| n > capped[i]))
+        .collect();
+    cut.sort_by_key(|&i| (natural[i] - capped[i], i));
+    for (k, &i) in cut.iter().enumerate() {
+        let give = (natural[i] - capped[i]).min(spare / (cut.len() - k));
+        widths[i] += give;
+        spare -= give;
+    }
+    widths
+}
+
 /// The width each column starts from before a row is measured: its heading,
-/// or nothing for a hidden one — and the cap a cell is measured against.
-fn heading_widths(editor: &Editor, anchor: usize, room: usize) -> Option<(Vec<usize>, usize)> {
+/// or nothing for a hidden one — and the cap a cell is measured against:
+/// [`MAX_COLUMN`] when `folds`, the window otherwise.
+fn heading_widths(editor: &Editor, anchor: usize, room: usize, folds: bool) -> Option<(Vec<usize>, usize)> {
     let view = editor.table()?;
     // How wide a column may be drawn. Folding on, that is the cap; folding
     // off, it is the window — a column wider than the window buys nothing,
     // since the grid scrolls by whole columns and the rest could never be
     // reached.
-    let ceiling = match editor.cell_folds() {
+    let ceiling = match folds {
         true => MAX_COLUMN,
         false => room.max(MIN_COLUMN),
     };
@@ -1863,5 +1923,50 @@ pub(crate) fn tint_the_cell(buf: &mut ratatui::buffer::Buffer, ink: &crate::them
         if let Some(cell) = buf.cell_mut((cx, y)) {
             cell.set_style(cell.style().bg(ink.faint_wash()));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{share_spare, GAP, MAX_COLUMN};
+
+    /// What a row of columns takes on the window, walls included.
+    fn used(widths: &[usize]) -> usize {
+        widths.iter().filter(|&&w| w > 0).map(|w| w + GAP).sum()
+    }
+
+    #[test]
+    fn spare_width_goes_to_the_cut_columns_and_none_past_its_widest_cell() {
+        let capped = [3, MAX_COLUMN, MAX_COLUMN, 4];
+        let natural = [3, 70, 45, 4];
+        // Room for all of it: every column at its natural width, no wider.
+        assert_eq!(share_spare(&capped, &natural, 200), natural.to_vec());
+        // Room for some: the one needing less is given all it needs, the
+        // other takes what is left, and the window is filled exactly.
+        let shared = share_spare(&capped, &natural, 102);
+        assert_eq!(shared, vec![3, 46, 45, 4]);
+        assert_eq!(used(&shared), 102);
+        // Two cut columns both needing more than an even share split it.
+        let even = share_spare(&capped, &natural, 85);
+        assert_eq!(even, vec![3, 37, 37, 4]);
+        assert!(even.iter().zip(natural).all(|(&w, n)| w <= n));
+    }
+
+    #[test]
+    fn a_window_the_capped_table_fills_or_overflows_changes_nothing() {
+        let capped = [3, MAX_COLUMN, MAX_COLUMN, 4];
+        let natural = [3, 70, 45, 4];
+        for room in [20, 60, used(&capped)] {
+            assert_eq!(share_spare(&capped, &natural, room), capped.to_vec(), "room {room}");
+        }
+    }
+
+    #[test]
+    fn hidden_and_whole_columns_are_given_nothing() {
+        // A hidden column is drawn at no width and takes no wall; a column
+        // already at its widest cell has nothing to be given.
+        let capped = [0, 10, MAX_COLUMN];
+        let natural = [0, 10, 40];
+        assert_eq!(share_spare(&capped, &natural, 200), vec![0, 10, 40]);
     }
 }

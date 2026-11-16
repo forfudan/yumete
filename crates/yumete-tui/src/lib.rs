@@ -19894,7 +19894,9 @@ fn squeezed(text: &str) -> String {
                 editor.on_key(Key::Char(key));
             }
             let how: String = keys.iter().collect();
-            let frame = render(&editor, &config, 96, 10);
+            // Narrower than the cell, so the cut column cannot be given all
+            // of it back out of the spare width (`table::share_spare`).
+            let frame = render(&editor, &config, 60, 10);
             // The grid alone: the pane's panel prints the whole cell down the
             // right, and the mark is never drawn in it.
             let rows: Vec<String> = (0..10)
@@ -19983,16 +19985,21 @@ fn squeezed(text: &str) -> String {
         // **The grid, not the window**: the panel down the right is showing
         // the same cell whole, which is its job, and reading the two together
         // would let the panel answer for the grid.
-        let page = |editor: &Editor| -> String {
-            let frame = render(editor, &config, 120, 10);
+        let page_at = |editor: &Editor, wide: u16| -> String {
+            let frame = render(editor, &config, wide, 10);
             (0..10)
                 .map(|y| grid_half(&frame, y))
                 .collect::<Vec<_>>()
                 .join("\n")
         };
+        let page = |editor: &Editor| page_at(editor, 120);
+        // **A window the capped table just fills**, so there is no spare width
+        // for the cut column to be given back (`table::share_spare`): the two
+        // columns and their walls are 38 cells, and the gutter is three.
+        let tight = |editor: &Editor| page_at(editor, 41);
 
         // The caret is in 地名, so 備註 is cut — and says so.
-        let folded = page(&editor);
+        let folded = tight(&editor);
         assert!(!folded.contains("玄黃"), "the tail is off the grid:\n{folded}");
         assert!(
             folded.contains(&format!("{} >", "甲乙丙丁戊己庚辛壬癸子丑寅卯辰")),
@@ -20014,7 +20021,7 @@ fn squeezed(text: &str) -> String {
         ring(&mut editor);
         editor.on_key(Key::Char('l'));
         assert_eq!(editor.cell_position().map(|(_, c)| c), Some(1));
-        let stood_in = page(&editor);
+        let stood_in = tight(&editor);
         assert!(
             !stood_in.contains("玄黃"),
             "standing in it does not open it:\n{stood_in}"
@@ -20058,6 +20065,57 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Char('i'));
         let typing = page(&editor);
         assert!(typing.contains(long), "the cell being typed in is whole:\n{typing}");
+    }
+
+    /// **Under 摺起 the cap rises with the window**: a table that fits the
+    /// window at its capped widths gives the spare width back to the columns
+    /// the cap cut, never past a column's widest cell; a window too narrow for
+    /// the capped table is drawn exactly as the cap alone draws it.
+    #[test]
+    fn the_folded_grid_gives_a_wide_windows_spare_width_to_the_cut_columns() {
+        let note = "A harbour town on seven hills with yellow trams and tiled walls";
+        let place = "Rua Augusta 100 near the river and the square";
+        let mut editor = editor_with(&format!(
+            "| id | note | place |\n| --- | --- | --- |\n| 1 | {note} | {place} |\n| 2 | short | near |"
+        ));
+        for key in ['j', 'j', ' ', 't', 't'] {
+            editor.on_key(Key::Char(key));
+        }
+        assert!(editor.grid_has_the_pane(), "{}", editor.status());
+        let config = Config::default();
+        let row = |editor: &Editor, wide: u16| -> String {
+            let frame = render(editor, &config, wide, 10);
+            (0..10)
+                .map(|y| grid_half(&frame, y))
+                .find(|line| line.contains("A harbour"))
+                .unwrap_or_else(|| panic!("the row is on the page at {wide}"))
+        };
+        // 折行 keeps the fixed cap whatever the window: the editor walks a
+        // wrapped cell's rows at that width.
+        let wrapped = row(&editor, 200);
+        assert!(!wrapped.contains(note), "under 折行 the note still wraps:\n{wrapped}");
+        for key in [' ', 't', 'w'] {
+            editor.on_key(Key::Char(key));
+        }
+        let cut_at = |text: &str, n: usize| format!("{}>", text.chars().take(n).collect::<String>());
+
+        // Too narrow for the capped table: the cap alone.
+        let narrow = row(&editor, 60);
+        assert!(narrow.contains(&cut_at(note, 31)), "cut at the cap:\n{narrow}");
+
+        // Room for everything: every column at its widest cell and no wider.
+        let wide = row(&editor, 200);
+        assert!(wide.contains(&format!("{note}┆{place}┆")), "whole, and no wider:\n{wide}");
+        assert!(!wide.contains('>'), "nothing left cut:\n{wide}");
+
+        // Between the two: 100 cells less a gutter of three leave 97, and the
+        // capped table takes 70 of them (`id` 3, two cut columns at 32, three
+        // walls). Of the 27 over, the place needs 13 and is given all 13, and
+        // the note has the other 14 — so the table reaches the right edge.
+        let between = row(&editor, 100);
+        assert!(between.contains(&cut_at(note, 45)), "the note is given the rest:\n{between}");
+        assert!(between.contains(&format!("{place}┆")), "the place needs less and has it all:\n{between}");
+        assert_eq!(yumete_cjk::str_width(between.trim_end()), 100, "the table fills the window:\n{between}");
     }
 
     /// 格內軟折行: every over-long cell soft-wraps into the empty rows under
