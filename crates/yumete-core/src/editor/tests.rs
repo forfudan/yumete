@@ -44097,6 +44097,7 @@ fn the_wheel_over_a_preview_never_scrolls_the_text_instead() {
     ed.scroll_window(page, 3, false, None);
     ed.scroll_window(page, 2, true, None);
     assert_eq!(ed.take_page_steps(), vec![PageStep::Rows(3), PageStep::Rows(-2)], "the preview with the keys takes the rows");
+}
 
 /// **`C-c` closes `:`, `/` and a picker as `Esc` does**, under both keymaps
 /// (helix's `ui/prompt.rs` and `ui/picker.rs` take it with `Esc`; vim's
