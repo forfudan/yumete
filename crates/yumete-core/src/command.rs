@@ -371,8 +371,8 @@ pub enum Command {
     SetZongMeasure(Option<Option<usize>>),
     /// `:version` —— 這一版是哪一版，以及東西都放在哪。
     Version,
-    /// `:docs` — hand yumete's manual site to the system's browser.
-    Docs,
+    /// `:manual` — hand yumete's manual site to the system's browser.
+    Manual,
     /// `:yuhao` — hand the 宇浩 input-method site to the system's browser.
     Yuhao,
     /// `:pipe-before` / `:pipe-after` / `:pipe-to` — the other three of
@@ -5821,12 +5821,12 @@ pub const COMMANDS: &[Entry] = &[
         }),
     },
     Entry {
-        name: "docs",
+        name: "manual",
         aliases: &[],
-        help: "cmd.commands.docs",
+        help: "cmd.commands.manual",
         needs: &[],
         params: &[],
-        build: Some(|_| Ok(Command::Docs)),
+        build: Some(|_| Ok(Command::Manual)),
     },
     Entry {
         name: "yuhao",

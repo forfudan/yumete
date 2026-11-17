@@ -525,13 +525,6 @@ en = "show changes, by word rather than by line"
 find = "比較 比较 差異 差异 改動 改动 對照 对照 diff compare changes"
 
 [[message]]
-# （草稿）: 命令選單：:docs
-key = "cmd.commands.docs"
-zhs = "在浏览器里打开 yumete 手册网站"
-en = "open the yumete manual website in the browser"
-find = "手冊 手册 文檔 文档 說明 说明 網站 网站 manual docs documentation website"
-
-[[message]]
 # : 命令選單裏 earlier 那一項的説明(commands 組)
 key = "cmd.commands.earlier"
 zhs = "撤销若干步，或回到多久以前(5m、1h)"
@@ -904,6 +897,13 @@ key = "cmd.commands.lsp-rename"
 zhs = "通过语言服务器重命名光标下的符号(各处一起改)"
 en = "rename the symbol under the cursor everywhere, via the language server"
 find = "改名 重命名 rename refactor lsp"
+
+[[message]]
+# （草稿）: 命令選單：:manual
+key = "cmd.commands.manual"
+zhs = "在浏览器里打开 yumete 手册网站"
+en = "open the yumete manual website in the browser"
+find = "手冊 手册 文檔 文档 說明 说明 網站 网站 manual docs documentation website"
 
 [[message]]
 # : 命令選單裏 new 那一項的説明(commands 組)

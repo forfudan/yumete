@@ -652,12 +652,6 @@ zhs = "作者"
 en = "by"
 
 [[message]]
-# （草稿）開場屏：:docs 那一行
-key = "intro.docs"
-zhs = "打开 yumete 手册网站"
-en = "open the yumete manual website"
-
-[[message]]
 # 開場屏：:help 那一行
 key = "intro.help"
 zhs = "显示帮助信息"
@@ -686,6 +680,12 @@ en = "open the tutorial"
 key = "intro.leave"
 zhs = "退出编辑器"
 en = "quit"
+
+[[message]]
+# （草稿）開場屏：:manual 那一行
+key = "intro.manual"
+zhs = "打开 yumete 手册网站"
+en = "open the yumete manual website"
 
 [[message]]
 # 開場屏：空格 f 做什麼
