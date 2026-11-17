@@ -2,7 +2,7 @@
 
 Written for people who use it to write, not for the commit log: each line says what you can *do*, and what changed under you. The numbers are the feature table in `docs/development.md` §5.2.
 
-## Unreleased
+## 0.24.0 · 2026-11-17
 
 ### Added
 
@@ -83,7 +83,6 @@ Written for people who use it to write, not for the commit log: each line says w
 - **Vim keymap: `u` and `C-r` put the cursor where vim does**: at the start of what the command changed (the line's end after `A`, the first non-blank after `gUU` or `cc`, the column after `>>` or `dd`, the start of a Visual selection), and on the line a redone `o`, `p` or `J` began on.
 - **A counted insert with a bracket repeats the bracket after itself**: `3A(x` gives `(x)(x)(x)` as `.` does, not `(x(x(x)))`.
 - **On a narrow window the `Space n` lookup keeps one column** and says how many rows are left, instead of two columns whose values were all cut to `…`.
-- **The mouse wheel scrolls the window under the pointer**, not the one with the keys, and scrolling one window never moves the one beside it.
 - **Triple quotes and code fences come out as typed**: `"""` no longer gives four quotes and ```` ``` ```` no longer four backticks, and Enter after a fence opener no longer leaves a stray backtick on the line below. A quote typed right after the same quote does not pair, at every level and in every file type.
 - **`j` and `k` in a wrapped table cell land at the start of each drawn line**: they cut the cell every 32 characters while the grid wraps between words, so in English notes `j` put the cursor in the middle of a word on the line below.
 - **Soft wrap no longer starts a row with a space**: a word that ends exactly at the wrap width moves down with its space, as vim's linebreak does, at a set `:view-wrap-width`, at the window's edge and in two-page view alike.
