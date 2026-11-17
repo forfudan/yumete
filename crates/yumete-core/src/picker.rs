@@ -174,6 +174,10 @@ pub struct Picker {
     /// **The server is asked again as the query changes** (`空格 S`), as helix's workspace symbol picker does; the answer
     /// replaces the rows ([`Picker::replace_items`]).
     pub live: bool,
+    /// **The preview put away** (helix's `C-t`, `toggle_preview`): the
+    /// list takes the whole box. Shown or not, a box too narrow for both
+    /// draws the list alone.
+    pub preview_hidden: bool,
     /// **名單那一列有幾行**——翻一頁翻的就是這個數。
     ///
     /// 這個編輯器没有 viewport（`Editor::page_lines` 那一格同理），所以畫的那一
@@ -208,6 +212,7 @@ impl Picker {
             loose: true,
             verbatim: false,
             live: false,
+            preview_hidden: false,
             // 畫之前先按過鍵的話（`--keys`、測試），一頁就是這個數。
             rows: 10,
         }

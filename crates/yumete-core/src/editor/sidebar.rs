@@ -1942,6 +1942,25 @@ impl Editor {
         }
     }
 
+    /// **`C-s` `C-v`: what the picker stands on, in a new window** below or
+    /// beside (helix's `Action::HorizontalSplit` and `VerticalSplit`). Only a
+    /// file, a buffer or a place has a window to open in; any other entry
+    /// is taken as `Enter` takes it, as helix's pickers that have no window
+    /// ignore the action. A window that has no room for the split keeps the
+    /// picker open, its query and highlight with it.
+    fn choose_into_a_split(&mut self, how: crate::window::Split) {
+        use crate::picker::Item;
+        let windowed = self
+            .picker
+            .as_ref()
+            .and_then(crate::picker::Picker::chosen)
+            .is_some_and(|item| matches!(item, Item::File(_) | Item::Changed(..) | Item::Buffer(..) | Item::Place(..)));
+        if windowed && !self.split_window(how) {
+            return;
+        }
+        self.choose_from_picker();
+    }
+
     /// Open whatever the picker is standing on — from either layer.
     fn choose_from_picker(&mut self) {
         let chosen = self.picker.as_ref().and_then(crate::picker::Picker::chosen);
@@ -2608,6 +2627,9 @@ impl Editor {
             PlaceCmd::CycleHiddenFiles => self.cycle_what_the_picker_skips(),
             // 只在歷史版本那一扇有意思：別的挑選器裏没有「一版」可以放回去。
             PlaceCmd::RestoreVersion => self.restore_chosen_version(),
+            PlaceCmd::OpenEntryHsplit => self.choose_into_a_split(crate::window::Split::Below),
+            PlaceCmd::OpenEntryVsplit => self.choose_into_a_split(crate::window::Split::Beside),
+            PlaceCmd::TogglePreview => picker.preview_hidden = !picker.preview_hidden,
             // A query is typed text, and typed text is edited in the middle.
             PlaceCmd::DeleteCharForward => picker.delete(),
             PlaceCmd::MoveCharLeft => picker.move_caret(Caret::Left),

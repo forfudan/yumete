@@ -1461,6 +1461,18 @@ zhs = "进入：打开文件、跳到那一行"
 en = "go to the entry: open the file, or jump to the line"
 
 [[message]]
+# 挑選器的命令：把選中的那一項開在下面新分出來的窗口裏（草稿）
+key = "action.open-entry-hsplit"
+zhs = "在下方分出的窗口里打开选中的一项"
+en = "open the highlighted entry in a window split below"
+
+[[message]]
+# 挑選器的命令：把選中的那一項開在右邊新分出來的窗口裏（草稿）
+key = "action.open-entry-vsplit"
+zhs = "在右侧分出的窗口里打开选中的一项"
+en = "open the highlighted entry in a window split beside"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.open-here"
 zhs = "打开本行所写的文件"
@@ -2244,6 +2256,12 @@ en = "open or close the left sidebar"
 key = "action.toggle-links-graph"
 zhs = "链接面板：列表/图"
 en = "links panel: list or graph"
+
+[[message]]
+# 挑選器的命令：收起或放出右邊的預覽（草稿）
+key = "action.toggle-preview"
+zhs = "收起或放出预览"
+en = "hide or show the preview"
 
 [[message]]
 # 命令說明：toggle_right_sidebar

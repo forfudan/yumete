@@ -656,7 +656,8 @@ impl Editor {
             PlaceCmd::Confirm => self.adopt_lookfor(),
             // Its list is short and has no page; the history and the
             // completion are the `:` line's.
-            PlaceCmd::PageDown | PlaceCmd::PageUp | PlaceCmd::CycleHiddenFiles | PlaceCmd::RestoreVersion | PlaceCmd::HistoryPrev | PlaceCmd::HistoryNext | PlaceCmd::CompletionNext
+            PlaceCmd::PageDown | PlaceCmd::PageUp | PlaceCmd::CycleHiddenFiles | PlaceCmd::RestoreVersion
+            | PlaceCmd::OpenEntryHsplit | PlaceCmd::OpenEntryVsplit | PlaceCmd::TogglePreview | PlaceCmd::HistoryPrev | PlaceCmd::HistoryNext | PlaceCmd::CompletionNext
             | PlaceCmd::CompletionPrev | PlaceCmd::ToggleWideSearch => {}
             other => {
                 self.edit_prompt(other);

@@ -17293,7 +17293,8 @@ fn every_prompt_has_a_caret() {
     ed.on_key(Key::Left);
     ed.on_key(Key::Backspace);
     assert_eq!(ed.picker().map(|p| p.query()), Some("ac"));
-    ed.on_key(Key::Home);
+    // `C-a`: a helix picker's `Home` is its first entry.
+    ed.on_key(Key::Ctrl('a'));
     ed.on_key(Key::Delete);
     assert_eq!(ed.picker().map(|p| p.query()), Some("c"));
     assert_eq!(ed.picker().map(|p| p.caret()), Some(0));
@@ -44096,4 +44097,89 @@ fn the_wheel_over_a_preview_never_scrolls_the_text_instead() {
     ed.scroll_window(page, 3, false, None);
     ed.scroll_window(page, 2, true, None);
     assert_eq!(ed.take_page_steps(), vec![PageStep::Rows(3), PageStep::Rows(-2)], "the preview with the keys takes the rows");
+
+/// **`C-c` closes `:`, `/` and a picker as `Esc` does**, under both keymaps
+/// (helix's `ui/prompt.rs` and `ui/picker.rs` take it with `Esc`; vim's
+/// cmdline abandons on it), and the key after it reaches the text.
+#[test]
+fn ctrl_c_closes_the_command_line_the_search_line_and_a_picker() {
+    for vim in [false, true] {
+        let mut ed = match vim {
+            true => typed_vim("ab\ncd\nef\n"),
+            false => typed("ab\ncd\nef\n"),
+        };
+        press(&mut ed, "gg");
+        type_keys(&mut ed, ":xy");
+        ed.on_key(Key::Ctrl('c'));
+        assert_eq!((ed.mode(), ed.prompt()), (Mode::Normal, None), "vim {vim}: the : line");
+        type_keys(&mut ed, "/zz");
+        ed.on_key(Key::Ctrl('c'));
+        assert_eq!((ed.mode(), ed.prompt()), (Mode::Normal, None), "vim {vim}: the / line");
+        ed.open_buffer_picker();
+        type_keys(&mut ed, "q");
+        ed.on_key(Key::Ctrl('c'));
+        assert_eq!(ed.mode(), Mode::Normal, "vim {vim}: the picker");
+        assert!(ed.picker().is_none());
+        ed.on_key(Key::Char('j'));
+        assert_eq!(ed.cursor_line(), 1, "vim {vim}: j moves the cursor, not into a line");
+    }
+}
+
+/// **A picker's helix keys** (`ui/picker.rs`): `Home` `End` the first and
+/// the last entry, `C-d` `C-u` a page, `C-t` the preview, `C-v` `C-s` the
+/// entry in a split. Under vim the query keeps the cmdline's `Home` and
+/// `C-u`.
+#[test]
+fn a_pickers_helix_keys() {
+    let three = |vim: bool| {
+        let mut ed = match vim {
+            true => typed_vim("第一篇"),
+            false => typed("第一篇"),
+        };
+        ed.execute(":new").unwrap();
+        ed.current_buffer_mut().insert(0, "第二篇").unwrap();
+        ed.execute(":new").unwrap();
+        ed.current_buffer_mut().insert(0, "第三篇").unwrap();
+        ed.open_buffer_picker();
+        ed
+    };
+    let at = |ed: &Editor| ed.picker().map(|p| p.selected());
+    let mut ed = three(false);
+    ed.on_key(Key::End);
+    assert_eq!(at(&ed), Some(2), "End: the last entry");
+    ed.on_key(Key::Home);
+    assert_eq!(at(&ed), Some(0), "Home: the first");
+    ed.on_key(Key::PageDown);
+    let paged = at(&ed);
+    ed.on_key(Key::Home);
+    ed.on_key(Key::Ctrl('d'));
+    assert_eq!(at(&ed), paged, "C-d: PageDown");
+    ed.on_key(Key::Ctrl('u'));
+    assert_eq!(at(&ed), Some(0), "C-u: PageUp");
+    type_keys(&mut ed, "篇");
+    ed.on_key(Key::Ctrl('u'));
+    assert_eq!(ed.picker().map(|p| p.query()), Some("篇"), "C-u pages, the query stays");
+    assert_eq!(ed.picker().map(|p| p.preview_hidden), Some(false));
+    ed.on_key(Key::Ctrl('t'));
+    assert_eq!(ed.picker().map(|p| p.preview_hidden), Some(true), "C-t puts the preview away");
+    ed.on_key(Key::Ctrl('t'));
+    assert_eq!(ed.picker().map(|p| p.preview_hidden), Some(false), "and back");
+    ed.on_key(Key::Backspace);
+    ed.on_key(Key::Down);
+    let Some(crate::picker::Item::Buffer(i, _)) = ed.picker().and_then(|p| p.chosen()) else { panic!("a buffer") };
+    let wanted = ed.buffers[i].text();
+    ed.on_key(Key::Ctrl('v'));
+    assert_eq!(ed.mode(), Mode::Normal);
+    assert!(ed.other_pane().is_some(), "C-v split the window");
+    assert_eq!(ed.current_buffer().text(), wanted, "the new window shows the entry");
+
+    let mut ed = three(true);
+    type_keys(&mut ed, "篇");
+    ed.on_key(Key::Home);
+    assert_eq!(ed.picker().map(|p| p.caret()), Some(0), "vim: Home moves the caret");
+    ed.on_key(Key::End);
+    ed.on_key(Key::Ctrl('u'));
+    assert_eq!(ed.picker().map(|p| p.query()), Some(""), "vim: C-u clears to the caret");
+    ed.on_key(Key::Ctrl('s'));
+    assert!(ed.other_pane().is_some(), "vim: C-s split the window too");
 }

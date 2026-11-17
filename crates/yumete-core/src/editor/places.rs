@@ -20,8 +20,12 @@ use crate::input::Key;
 use yumete_cjk::actions::Place;
 
 /// A prompt's default keys: `:`, `/`, `::`, a reading, a picker's query.
+///
+/// `C-c` closes as `Esc` does: helix's prompt and picker both take it
+/// (`ui/prompt.rs`, `ui/picker.rs`), and vim's cmdline abandons on it.
 pub(super) const PROMPT_KEYS: &[(Key, PlaceCmd)] = &[
     (Key::Esc, PlaceCmd::NormalMode),
+    (Key::Ctrl('c'), PlaceCmd::NormalMode),
     (Key::Enter, PlaceCmd::Confirm),
     (Key::Tab, PlaceCmd::CompletionNext),
     (Key::BackTab, PlaceCmd::CompletionPrev),
@@ -55,6 +59,20 @@ pub(super) const PICKER_KEYS: &[(Key, PlaceCmd)] = &[
     (Key::PageUp, PlaceCmd::PageUp),
     (Key::Alt('h'), PlaceCmd::CycleHiddenFiles),
     (Key::Alt('r'), PlaceCmd::RestoreVersion),
+    (Key::Ctrl('s'), PlaceCmd::OpenEntryHsplit),
+    (Key::Ctrl('v'), PlaceCmd::OpenEntryVsplit),
+    (Key::Ctrl('t'), PlaceCmd::TogglePreview),
+];
+
+/// **A picker's keys under the helix keymap**, read before
+/// [`PICKER_KEYS`]: helix's `Home` `End` for the first and the last entry
+/// and `C-d` `C-u` for a page (`ui/picker.rs`). Under vim the query
+/// keeps the cmdline's: `Home` `End` move the caret and `C-u` clears to it.
+pub(super) const HELIX_PICKER_KEYS: &[(Key, PlaceCmd)] = &[
+    (Key::Home, PlaceCmd::FirstEntry),
+    (Key::End, PlaceCmd::LastEntry),
+    (Key::Ctrl('d'), PlaceCmd::PageDown),
+    (Key::Ctrl('u'), PlaceCmd::PageUp),
 ];
 
 /// A panel box's default keys, read before the prompt's: the boxes of a
@@ -189,9 +207,19 @@ impl Editor {
         order.iter().find_map(|&one| {
             let mine = || self.place_bindings[one as usize].get(&typed).cloned();
             let inherited = || self.inherited(one, &typed).map(|name| vec![name]);
-            let default = || place_keys(one).iter().find(|(k, _)| *k == key).map(|(_, cmd)| vec![cmd.name().to_string()]);
+            let default = || self.place_defaults(one).find(|(k, _)| *k == key).map(|(_, cmd)| vec![cmd.name().to_string()]);
             read.then(mine).flatten().or_else(|| read.then(inherited).flatten()).or_else(default)
         })
+    }
+
+    /// **A place's default keys under the keymap in use**: the keymap's own
+    /// first ([`HELIX_PICKER_KEYS`]), then the place's table.
+    pub(super) fn place_defaults(&self, place: Place) -> impl Iterator<Item = (Key, PlaceCmd)> + '_ {
+        let own: &[(Key, PlaceCmd)] = match (place, self.vim_keymap()) {
+            (Place::Picker, false) => HELIX_PICKER_KEYS,
+            _ => &[],
+        };
+        own.iter().chain(place_keys(place)).copied()
     }
 
     /// **A line of the reader's own that follows them into `place`**
@@ -328,9 +356,14 @@ impl Editor {
             1 => taken(key),
             _ => key.chars().next().is_some_and(|first| taken(&first.to_string())),
         };
-        let mut keys: Vec<String> = default_runs(place)
-            .into_iter()
-            .filter(|(_, one)| *one == name)
+        let shadowed = |key: &String| {
+            self.place_defaults(place).any(|(k, cmd)| super::keys::key_internal(k) == *key && cmd.name() != name)
+        };
+        let mut keys: Vec<String> = self
+            .place_defaults(place)
+            .map(|(key, cmd)| (super::keys::key_internal(key), cmd.name()))
+            .chain(default_runs(place).into_iter().filter(|(run, _)| run.chars().count() > 1))
+            .filter(|(key, one)| *one == name && !shadowed(key))
             .map(|(key, _)| key)
             .filter(|key| !taken(key))
             .collect();
@@ -366,7 +399,7 @@ impl Editor {
         // another command (a sidebar's `j` bound to go up is on the hint).
         let chain = place.chain();
         let default = |key: &Key, name: PlaceCmd| {
-            chain.iter().any(|&p| place_keys(p).iter().any(|(d, n)| d == key && *n == name))
+            chain.iter().any(|&p| self.place_defaults(p).any(|(d, n)| d == *key && n == name))
         };
         for &from in chain {
             for &name in &names {
@@ -385,7 +418,7 @@ impl Editor {
     /// The keys that run `name` in `place` now, as a hint writes them:
     /// its default keys still bound to it, then the reader's own.
     pub fn place_keys_written(&self, place: Place, name: PlaceCmd) -> Option<String> {
-        let spec: Vec<(Key, PlaceCmd)> = place_keys(place).iter().filter(|(_, one)| *one == name).copied().collect();
+        let spec: Vec<(Key, PlaceCmd)> = self.place_defaults(place).filter(|(_, one)| *one == name).collect();
         if !spec.is_empty() {
             return self.place_hint(place, &spec);
         }

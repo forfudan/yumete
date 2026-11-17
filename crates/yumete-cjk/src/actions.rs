@@ -1620,6 +1620,9 @@ place_commands! {
     LastEntry = "last_entry",
     CycleHiddenFiles = "cycle_hidden_files",
     RestoreVersion = "restore_version",
+    OpenEntryHsplit = "open_entry_hsplit",
+    OpenEntryVsplit = "open_entry_vsplit",
+    TogglePreview = "toggle_preview",
     MoveLineDown = "move_line_down",
     MoveLineUp = "move_line_up",
     GotoFileStart = "goto_file_start",
@@ -1686,6 +1689,9 @@ pub const PICKER: &[Action] = &[
     place("action.last-entry", PlaceCmd::LastEntry),
     place("action.cycle-hidden-files", PlaceCmd::CycleHiddenFiles),
     place("action.restore-version", PlaceCmd::RestoreVersion),
+    place("action.open-entry-hsplit", PlaceCmd::OpenEntryHsplit),
+    place("action.open-entry-vsplit", PlaceCmd::OpenEntryVsplit),
+    place("action.toggle-preview", PlaceCmd::TogglePreview),
 ];
 
 /// A panel's box: the next and the previous box of its form.

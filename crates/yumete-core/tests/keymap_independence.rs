@@ -25,6 +25,8 @@ const ROUTING: &[(&str, &str)] = &[
     ("editor/normal.rs", "run_now"),
     // A twin's own answer, else the keymap's twin for a key it routes.
     ("editor/normal.rs", "as_vim"),
+    // A picker's helix keys (`Home`, `End`, `C-d`, `C-u`).
+    ("editor/places.rs", "place_defaults"),
     // `:split` and `:vsplit`: which side they open on.
     ("editor/page.rs", "split_window"),
     // vim's `ZZ` and `ZQ` in a preview.

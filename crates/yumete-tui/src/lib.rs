@@ -12874,6 +12874,11 @@ fn picker_box(area: Rect) -> Option<(u16, u16)> {
     (wide >= 8 && rows <= area.height).then_some((wide, rows))
 }
 
+/// **The widest picker box drawn without its preview**: helix's
+/// `MIN_AREA_WIDTH_FOR_PREVIEW` (`ui/picker.rs`), so the list of a
+/// picker in an 80-column terminal is not squeezed to a third of it.
+const PICKER_PREVIEW_MIN_WIDTH: u16 = 72;
+
 /// 名單那一列有幾行：扣掉上下邊框、查詢框、橫線和腳注。
 ///
 /// 矮下去的時候橫線和腳注一樣樣讓（`rows >= 6`／`rows >= 5`），見
@@ -13012,9 +13017,11 @@ fn draw_picker(
     // 橫着掃一趟。
     let (wide, rows) = picker_box(area)?;
     let box_ = crate::chrome::place(area, (wide, rows), crate::chrome::Anchor::Centre)?;
-    // Two fifths for the names, the rest for the preview — and a window too
-    // narrow for both gives the whole of itself to the names.
-    let names = match box_.width >= 56 {
+    // Two fifths for the names, the rest for the preview — and a box no
+    // wider than helix's `MIN_AREA_WIDTH_FOR_PREVIEW` (72 columns, measured
+    // against the picker's own box as helix measures it), or one whose
+    // preview `C-t` put away, gives the whole of itself to the names.
+    let names = match box_.width > PICKER_PREVIEW_MIN_WIDTH && !picker.preview_hidden {
         true => (box_.width * 2 / 5).max(24),
         false => box_.width,
     };
@@ -29603,6 +29610,68 @@ fn squeezed(text: &str) -> String {
         assert_eq!(after(8, 0, 5, &[b]), (5, Some(1)), "no scrolloff, no pull");
     }
 
+    /// **helix's `C-f` `C-b` `PgDn` `PgUp` scroll the view a whole height and
+    /// leave the cursor, pushed in by scrolloff** (`commands.rs` `page_down`:
+    /// `scroll` without `sync_cursor`). Measured in hx 25.07.1 in a pty, 200
+    /// lines at 80x24 (22 rows of text, scrolloff 5): `C-f` shows lines 23–44
+    /// with the cursor on 28; `C-f C-f C-b` leaves it on 39. A frame is drawn
+    /// between keys, as the loop draws one: a page reads the last page drawn.
+    #[test]
+    fn under_helix_a_page_scrolls_the_view_and_leaves_the_cursor() {
+        let after = |keys: &[Key]| {
+            let mut editor = Editor::new();
+            editor.execute(":syntax text").unwrap();
+            editor.replace_everything(&(1..=200).map(|n| format!("line {n}\n")).collect::<String>());
+            let mut config = Config::default();
+            config.editor.line_numbers = yumete_config::LineNumbers::None;
+            config.editor.command_line = false;
+            crate::theme::settle(&config, None);
+            editor.set_page(22, 58);
+            editor.set_wrap_width(60);
+            let mut seats = Seats::default();
+            let frame = |editor: &mut Editor, seats: &mut Seats| {
+                caret_over_time(editor, &config, seats, 60, 23);
+                if let Some((a, b)) = seats[editor.live_pane()].drawn_span {
+                    editor.set_page_span(a, b);
+                }
+            };
+            frame(&mut editor, &mut seats);
+            for &key in keys {
+                editor.on_key(key);
+                frame(&mut editor, &mut seats);
+            }
+            let top = seats[editor.live_pane()].drawn_span.map(|(a, _)| editor.current_buffer().rope().char_to_line(a) + 1);
+            (editor.cursor_line() + 1, top)
+        };
+        let (f, b) = (Key::Ctrl('f'), Key::Ctrl('b'));
+        assert_eq!(after(&[f]), (28, Some(23)), "hx: lines 23–44, cursor 28");
+        assert_eq!(after(&[f, f, b]), (39, Some(23)), "hx: C-f C-f C-b, cursor 39");
+        assert_eq!(after(&[Key::PageDown, Key::PageDown, Key::PageUp]), (39, Some(23)), "hx: PgDn PgDn PgUp");
+    }
+
+    /// **A picker box no wider than 72 columns draws no preview** (helix's
+    /// `MIN_AREA_WIDTH_FOR_PREVIEW`, against the picker's own width), so an
+    /// 80-column terminal gives the list the whole box; `C-t` puts a preview
+    /// away where there is room for one.
+    #[test]
+    fn a_narrow_picker_draws_no_preview() {
+        let config = Config::default();
+        let boxes = |w: u16, hide: bool| {
+            let mut editor = Editor::new();
+            editor.execute(":new").unwrap();
+            editor.on_key(Key::Char(' '));
+            editor.on_key(Key::Char('b'));
+            if hide {
+                editor.on_key(Key::Ctrl('t'));
+            }
+            let (frame, _) = render_caret(&editor, &config, w, 24);
+            buffer_to_text(&frame).lines().map(|l| l.matches('╭').count()).max().unwrap_or(0)
+        };
+        assert_eq!(boxes(80, false), 1, "80 columns: a 72-column box, the list alone");
+        assert_eq!(boxes(100, false), 2, "100 columns: the list and the preview");
+        assert_eq!(boxes(100, true), 1, "C-t put the preview away");
+    }
+
     /// **A `C-f` that leaves the last line at the top takes the cursor to
     /// its end** when scrolloff is at least half an even window (nvim 0.12,
     /// measured with `scripts/oracle/view_sweep.py`): nvim's
@@ -32780,14 +32849,9 @@ fn squeezed(text: &str) -> String {
         // 框在哪一列：名單那一半的右牆就是 `limit`，照 `draw_picker` 自己那一套
         // 算（頁腳佔最後一行，所以它能用的那一塊高 23）。
         let room = Rect::new(0, 0, 80, 23);
-        let wide = (room.width * 4 / 5).clamp(24, 160).min(room.width.saturating_sub(2));
-        let box_ = crate::chrome::place(
-            room,
-            (wide, picker_height(room)),
-            crate::chrome::Anchor::Centre,
-        )
-        .expect("面板擺得下");
-        let names = match box_.width >= 56 {
+        let box_ = crate::chrome::place(room, picker_box(room).expect("面板擺得下"), crate::chrome::Anchor::Centre)
+            .expect("面板擺得下");
+        let names = match box_.width > PICKER_PREVIEW_MIN_WIDTH {
             true => (box_.width * 2 / 5).max(24),
             false => box_.width,
         };
