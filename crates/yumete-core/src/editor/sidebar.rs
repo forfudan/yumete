@@ -2733,10 +2733,15 @@ impl Editor {
         // **vim's paste arrives as keys, so a macro keeps it** as what it
         // typed: where the keys would type the same text, which is Insert and
         // the prompts. A paste in Normal replaces the selection, and no keys
-        // say that, so it is not recorded.
-        if self.recording.is_some() && self.keymap_rules().records_paste {
+        // say that, so it is not recorded. In Insert it is part of what `.`
+        // repeats too, and both keep it as written ([`Self::literal_keys`]):
+        // typed, `" (x` would come back as `" (x)"`.
+        let literal = self.mode == Mode::Insert && self.keymap_rules().records_paste;
+        if literal {
+            self.record_pasted_text(text);
+            self.insert_recording.push_str(text);
+        } else if self.recording.is_some() && self.keymap_rules().records_paste {
             let typed: Option<String> = match self.mode {
-                Mode::Insert => Some(text.to_string()),
                 Mode::Value => Some(value_paste(text)),
                 Mode::Field => Some(text.chars().filter(|c| !c.is_control()).collect()),
                 mode if mode.types_into_command_line() => Some(text.chars().filter(|c| !c.is_control()).collect()),

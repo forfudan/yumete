@@ -100,6 +100,7 @@ impl Editor {
         // reads as a key that is broken rather than one with no answer yet.
         if self.last_search.is_empty() {
             self.status = say!("find.nothing-searched-yet");
+            self.fail_the_motion();
             return;
         }
         // **The caller notes the jump**: confirming `/` does,
@@ -233,10 +234,12 @@ impl Editor {
             // `last_search`，找不到的時候狀態欄就寫着「找不到：(?i)zhongguo」，而那
             // 四個字符不是打的人寫的。
             None if scoped => {
+                self.fail_the_motion();
                 self.search_stand = None;
                 self.status = say!("find.not-in-table", as_typed(&pattern));
             }
             None => {
+                self.fail_the_motion();
                 self.search_stand = None;
                 self.status = say!("find.not-found", as_typed(&pattern));
             }

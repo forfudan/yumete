@@ -37176,17 +37176,18 @@ fn a_vim_macro_records_a_paste_and_a_helix_one_does_not() {
     ed.paste_text(" x-y");
     ed.on_key(Key::Esc);
     press(&mut ed, "jq");
-    assert_eq!(ed.held('a'), "A<space>x<minus>y<esc>j");
+    assert_eq!(ed.held('a'), "A<C-v><space><C-v>x<C-v><minus><C-v>y<esc>j");
     press(&mut ed, "@a");
     assert_eq!(ed.current_buffer().text(), "ab x-y\ncd x-y\n");
 
-    // A paste over lines: each break is Enter.
+    // A paste over lines: each break is Enter, all of it after `C-v` so
+    // it plays back as written.
     let mut ed = typed_vim("ab\n");
     press(&mut ed, "qaA");
     ed.paste_text("1\r\n2");
     ed.on_key(Key::Esc);
     press(&mut ed, "q");
-    assert_eq!(ed.held('a'), "A1<ret>2<esc>");
+    assert_eq!(ed.held('a'), "A<C-v>1<C-v><ret><C-v>2<esc>");
 
     // At a prompt, without the breaks the prompt drops.
     let mut ed = typed_vim("ab\nab\n");
@@ -41267,6 +41268,188 @@ fn visual_put_and_gv_behave_as_in_vim() {
     ed.on_key(Key::Esc);
     press(&mut ed, "Ggvd");
     assert_eq!(ed.current_buffer().text(), "c\n", "`gv` after `V` and Esc");
+}
+
+/// Where line `line`, column `col` (both from 1, as nvim reports them) is.
+fn at_line_col(text: &str, line: usize, col: usize) -> usize {
+    let start: usize = text.split_inclusive('\n').take(line - 1).map(|l| l.chars().count()).sum();
+    start + col - 1
+}
+
+/// Keys as a string, `\u{1b}` for Esc and `\n` for Enter.
+fn press_keys(ed: &mut Editor, keys: &str) {
+    for c in keys.chars() {
+        ed.on_key(match c {
+            '\u{1b}' => Key::Esc,
+            '\n' => Key::Enter,
+            c => Key::Char(c),
+        });
+    }
+}
+
+/// **vim's Visual `p` keeps each side's kind** (`:h v_p`, every case
+/// measured in nvim 0.12): over lines a charwise register is a line of its
+/// own, over characters a linewise one splits the line; the cursor lands
+/// on the first line put, or on the last character of text within a line.
+#[test]
+fn visual_put_keeps_what_kind_the_register_and_the_selection_are() {
+    let lines = "alpha beta\nsecond line\n第三行文字\nfour\n";
+    let cases = [
+        (lines, "yiwjVp", "alpha beta\nalpha\n第三行文字\nfour\n", (2, 1)),
+        (lines, "yiwjVP", "alpha beta\nalpha\n第三行文字\nfour\n", (2, 1)),
+        (lines, "yiwjVjp", "alpha beta\nalpha\nfour\n", (2, 1)),
+        (lines, "yiwjjVp", "alpha beta\nsecond line\nalpha\nfour\n", (3, 1)),
+        (lines, "vjyjjVp", "alpha beta\nsecond line\nalpha beta\ns\nfour\n", (3, 1)),
+        (lines, "yyjvep", "alpha beta\n\nalpha beta\n line\n第三行文字\nfour\n", (3, 1)),
+        (lines, "yyjvjp", "alpha beta\n\nalpha beta\n三行文字\nfour\n", (3, 1)),
+        (lines, "yyjv$p", "alpha beta\n\nalpha beta\n第三行文字\nfour\n", (3, 1)),
+        (lines, "yyjwvep", "alpha beta\nsecond \nalpha beta\n\n第三行文字\nfour\n", (3, 1)),
+        (lines, "yyGvep", "alpha beta\nsecond line\n第三行文字\n\nalpha beta\n\n", (5, 1)),
+        (lines, "wyiwjwvep", "alpha beta\nsecond beta\n第三行文字\nfour\n", (2, 11)),
+        (lines, "wyiwjwveP", "alpha beta\nsecond beta\n第三行文字\nfour\n", (2, 11)),
+        // `v` on an empty line takes its break, and the lines go in its
+        // place.
+        ("one\n\nthree\n", "yyjvp", "one\n\none\nthree\n", (3, 1)),
+        ("one\n\nthree\n", "yyGvp", "one\n\n\none\nhree\n", (4, 1)),
+        // The last line of a file with no final break.
+        ("alpha beta\nsecond line\nfour", "yiwGVp", "alpha beta\nsecond line\nalpha", (3, 1)),
+        ("alpha beta\nsecond line\nfour", "yyGVp", "alpha beta\nsecond line\nalpha beta", (3, 1)),
+        ("alpha beta\nsecond line\nfour", "yyGvep", "alpha beta\nsecond line\n\nalpha beta\n\n", (4, 1)),
+    ];
+    for (start, keys, end, (line, col)) in cases {
+        let mut ed = typed_vim(start);
+        press(&mut ed, keys);
+        assert_eq!(ed.current_buffer().text(), end, "{keys} on {start:?}");
+        assert_eq!(ed.cursor(), at_line_col(end, line, col), "{keys} on {start:?}: the cursor");
+    }
+}
+
+/// **`p` of an empty line after a last line with no break keeps the empty
+/// line** (nvim: `first`, ``, `last`, `` with the cursor on the new one).
+#[test]
+fn putting_an_empty_line_after_an_unterminated_last_line_keeps_it() {
+    let mut ed = typed_vim("first\n\nlast");
+    press(&mut ed, "jyyGp");
+    assert_eq!(ed.current_buffer().text(), "first\n\nlast\n\n");
+    assert_eq!(ed.cursor(), at_line_col("first\n\nlast\n\n", 4, 1));
+    let mut ed = typed_vim("first\nsecond\nlast");
+    press(&mut ed, "jyyGp");
+    assert_eq!(ed.current_buffer().text(), "first\nsecond\nlast\nsecond", "no break the file lacked");
+}
+
+/// **A block put pads a short piece out to the block's width where text
+/// follows it** (vim's `do_put`), so that text keeps its column; after `$`
+/// the width is the widest piece. Measured in nvim.
+#[test]
+fn a_block_put_pads_short_pieces_where_text_follows() {
+    let mut ed = typed_vim("one two\n\n第三行文字\n\nfive\n");
+    press(&mut ed, "jj");
+    ed.on_key(Key::Ctrl('v'));
+    press(&mut ed, "jlyjp");
+    assert_eq!(ed.current_buffer().text(), "one two\n\n第三行文字\n第\n  five\n");
+    let mut ed = typed_vim("abc\nd\nq\nxyz\n");
+    ed.on_key(Key::Ctrl('v'));
+    press(&mut ed, "j$yjjp");
+    assert_eq!(ed.current_buffer().text(), "abc\nd\nqabc\nxd  yz\n", "after `$`, as wide as the widest");
+    let mut ed = typed_vim("a\nde\nq\nxyz\n");
+    ed.on_key(Key::Ctrl('v'));
+    press(&mut ed, "jlyjjp");
+    assert_eq!(ed.current_buffer().text(), "a\nde\nqa\nxdeyz\n", "nothing follows on `q`: no spaces");
+}
+
+/// **A motion that fails ends a vim macro** (vim beeps and flushes it), every
+/// round still to come with it; helix plays every key. Measured in nvim.
+#[test]
+fn a_failing_motion_ends_a_vim_macro() {
+    let four = "alpha\nbeta\ngamma\ndelta\n";
+    let cases = [
+        ("qaA!\u{1b}jq10@a", "alpha!\nbeta!\ngamma!\ndelta!\n"),
+        ("Gqajjix\u{1b}q@a", "alpha\nbeta\ngamma\nxdelta\n"),
+        ("qajix\u{1b}q3@a", "alpha\nxbeta\nxgamma\nxdelta\n"),
+        ("Gqakix\u{1b}q5@a", "xalpha\nxbeta\nxgamma\ndelta\n"),
+        ("qa0fzix\u{1b}q@a", "xalpha\nbeta\ngamma\ndelta\n"),
+        ("qa$lix\u{1b}q@a", "alphxa\nbeta\ngamma\ndelta\n"),
+        ("qa/zzz\nix\u{1b}q@a", "xalpha\nbeta\ngamma\ndelta\n"),
+        ("qaddjq5@a", "beta\ndelta\n"),
+        // `w` on the last word goes to its end; from there it fails.
+        ("qa0wix\u{1b}q10@a", "alpha\nxbeta\nxgamma\nxdeltxxxxxxxxa\n"),
+    ];
+    for (keys, end) in cases {
+        let mut ed = typed_vim(four);
+        press_keys(&mut ed, keys);
+        assert_eq!(ed.current_buffer().text(), end, "{keys:?}");
+    }
+    // helix's macro plays every round, on past a `j` that cannot move.
+    let mut ed = typed("a\nb\n");
+    press_keys(&mut ed, "QAx\u{1b}jQ3q");
+    assert_eq!(ed.current_buffer().text(), "ax\nbx\nxx");
+}
+
+/// **A paste in Insert is part of what vim's `.` repeats, and a macro
+/// writes it back as it went in**: auto-pairs do not close a bracket in
+/// it (nvim's paste sets the redo; its macro holds the pasted text).
+#[test]
+fn a_paste_in_insert_is_repeated_and_replayed_as_written() {
+    let mut ed = typed_vim("ab\ncd\n");
+    press(&mut ed, "A a");
+    ed.paste_text("PP");
+    press_keys(&mut ed, "b\u{1b}j.");
+    assert_eq!(ed.current_buffer().text(), "ab aPPb\ncd aPPb\n");
+
+    let mut ed = typed_vim("ab\ncd\n");
+    press(&mut ed, "o");
+    ed.paste_text("new");
+    press_keys(&mut ed, "\u{1b}j.");
+    assert_eq!(ed.current_buffer().text(), "ab\nnew\ncd\nnew\n");
+
+    let mut ed = typed_vim("ab\ncd\n");
+    press(&mut ed, "A");
+    ed.paste_text(" (x");
+    press_keys(&mut ed, "\u{1b}j.");
+    assert_eq!(ed.current_buffer().text(), "ab (x\ncd (x\n", "`.` puts no closer in");
+
+    let mut ed = typed_vim("ab\ncd\n");
+    press(&mut ed, "qaA");
+    ed.paste_text(" (x");
+    press_keys(&mut ed, "\u{1b}jq@a");
+    assert_eq!(ed.current_buffer().text(), "ab (x\ncd (x\n", "the macro puts no closer in");
+
+    let mut ed = typed_vim("ab\ncd\n");
+    press(&mut ed, "qaA");
+    ed.paste_text("\"q");
+    press_keys(&mut ed, "\u{1b}jq@a");
+    assert_eq!(ed.current_buffer().text(), "ab\"q\ncd\"q\n");
+
+    // Over lines: each break as it went in, no indent carried.
+    let mut ed = typed_vim("  ab\ncd\n");
+    press(&mut ed, "A");
+    ed.paste_text("1\n2");
+    press_keys(&mut ed, "\u{1b}G.");
+    assert_eq!(ed.current_buffer().text(), "  ab1\n2\ncd1\n2\n");
+}
+
+/// **vim's `.` after a word was completed writes the word**, not the
+/// letters typed and the keys that walked the list (nvim: `quix C-n Esc`
+/// then `.` writes `quixotical`), and the `C-y` that kept it is not played
+/// as vim's `C-y` (the character above).
+#[test]
+fn dot_after_a_completed_word_writes_the_word() {
+    for keep in [None, Some(Key::Ctrl('y'))] {
+        let mut ed = typed_vim("quixotical\nfoo\nend\n");
+        press(&mut ed, "jA quix");
+        for _ in 0..3 {
+            if ed.current_buffer().text().contains("foo quixotical") {
+                break;
+            }
+            ed.on_key(Key::Ctrl('n'));
+        }
+        assert_eq!(ed.current_buffer().text(), "quixotical\nfoo quixotical\nend\n");
+        if let Some(key) = keep {
+            ed.on_key(key);
+        }
+        press_keys(&mut ed, "\u{1b}G.");
+        assert_eq!(ed.current_buffer().text(), "quixotical\nfoo quixotical\nend quixotical\n", "{keep:?}");
+    }
 }
 
 /// **A mark is a vim operator's motion** (`:h '`): `'a` the lines from here

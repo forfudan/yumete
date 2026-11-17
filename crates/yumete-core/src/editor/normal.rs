@@ -880,7 +880,9 @@ impl Editor {
             return true;
         }
         self.before_a_motion(cmd);
+        let before = (self.current, self.sel.head());
         run(self, Cx { key, count, operator_count, continuing_zong: false });
+        self.fail_if_it_stood_still(cmd, before);
         self.note_the_group_count(operator_count);
         true
     }
@@ -961,6 +963,37 @@ impl Editor {
         top_command(cx.key, &self.group_context(), &|holds| holds(self, cx)).map(NormalCmd::name)
     }
 
+    /// **A vim motion that must move or fail**: `h` `l` `j` `k` `+` `-`
+    /// `Enter`, `gj` `gk`, and the word motions, which beep in vim when
+    /// they cannot go a step (`j` on the last line, `w` at the end of the
+    /// file, measured in nvim) — and a beep ends the macro playing
+    /// ([`Self::fail_the_motion`]). `{` `}` `(` `)` and `%` are not on the
+    /// list: nvim lets a macro go on past them where they cannot move.
+    pub(super) fn fail_if_it_stood_still(&mut self, cmd: NormalCmd, before: (usize, usize)) {
+        use NormalCmd as C;
+        let must_move = matches!(
+            cmd,
+            C::MoveCharLeft
+                | C::MoveCharRight
+                | C::MoveLineUp
+                | C::MoveLineDown
+                | C::MoveVisualLineUp
+                | C::MoveVisualLineDown
+                | C::GotoNextLineNonwhitespace
+                | C::GotoPrevLineNonwhitespace
+                | C::JumpNextWordStart
+                | C::JumpNextLongWordStart
+                | C::JumpPrevWordStart
+                | C::JumpPrevLongWordStart
+                | C::JumpNextWordEnd
+                | C::JumpNextLongWordEnd
+                | C::JumpPrevWordEnd
+        );
+        if must_move && !self.expanding_alias && self.pending == Pending::None && before == (self.current, self.sel.head()) {
+            self.fail_the_motion();
+        }
+    }
+
     /// Run one Normal command by its variant, with its own row's key.
     pub(super) fn run_normal_cmd(&mut self, cx: Cx, cmd: NormalCmd) {
         if let Some(&(_, run, key)) = normal_cmd(cmd) {
@@ -992,7 +1025,9 @@ impl Editor {
         let was = self.extend;
         self.extend = true;
         if !self.takes_by_name(cmd, cx.count) {
+            let before = (self.current, self.sel.head());
             run(self, cx);
+            self.fail_if_it_stood_still(cmd, before);
         }
         if self.pending != Pending::None || self.jumping() {
             self.motion_extend = Some(true);
@@ -1573,6 +1608,8 @@ impl Editor {
             // 數目是「第 n 個」，重複要往前挪一個——兩件事都在
             // `find_nth_char` 裏，不靠把它叫 n 遍。
             self.find_nth_char(kind, ch, count, true);
+        } else {
+            self.fail_the_motion();
         }
     }
 

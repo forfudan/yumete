@@ -303,6 +303,11 @@ enum Pending {
     /// Warning: **helix 那個拼法抄不了**：它用 `C-s`，而終端裏 `C-s` 是 XOFF，按下去
     /// 屏幕會凍住（除非 `stty -ixon`）。
     UndoBreak,
+    /// **vim's Insert `C-v`, waiting for the character to write as it is**
+    /// (`:h i_CTRL-V`): no pair closes after it, no list opens, Enter is a
+    /// line break with no indent carried. Pasted and completed text is kept
+    /// for `.` and macros in this form, so it plays back as it went in.
+    Literal,
     /// **`空格 t x` — 轉換表格格式**，等着那一個格式名。
     ///
     /// 命令是 `:convert-table`；這一組是它的鍵位，`p` pipe、`c` csv、`t` tsv。
@@ -425,6 +430,7 @@ impl Pending {
             // `y`/`n`/`a`/`q`/`l` name what to do, not what to write；
             // `C-g` 後面那個 `u` 也不是要寫進去的字。
             Pending::UndoBreak
+            | Pending::Literal
             | Pending::Confirm | Pending::SwapRange | Pending::None
             | Pending::Goto
             | Pending::Yume
@@ -2745,6 +2751,11 @@ pub struct Editor {
     last_played: Option<char>,
     /// Whether a macro is being replayed, so it cannot record or replay itself.
     replaying: bool,
+    /// **A motion failed while a vim macro played**: vim beeps and flushes
+    /// what is left of the macro (`:h q`, `beep_flush`), so `10@a` whose `j`
+    /// meets the last line stops there instead of writing on that line ten
+    /// times. Set by [`Editor::fail_the_motion`], read by the player.
+    macro_failed: bool,
     /// What the last yank copied, lit until its moment is up
     /// ([`Editor::yank_flash`]).
     yank_lit: Option<edits::YankFlash>,
@@ -3380,6 +3391,10 @@ pub struct Editor {
     /// **The register holds a block**: `p` puts it back one piece a line.
     /// Any other store clears it.
     register_block: bool,
+    /// **How many columns wide the block in the register is**: a piece from
+    /// a short line is narrower, and `p` pads it out to this where text
+    /// follows (vim's `y_width`).
+    register_block_width: usize,
     /// The registers holding a charwise Visual yank that ends in a line
     /// break (`v$y`), `"` for the unnamed one: vim pastes those as text, not
     /// as lines.
@@ -4693,6 +4708,7 @@ impl Editor {
             last_recorded: None,
             last_played: None,
             replaying: false,
+            macro_failed: false,
             yank_lit: None,
             flavor: yumete_cjk::Flavor::default(),
             page_lines: 20,
@@ -4902,6 +4918,7 @@ impl Editor {
             block_replace: false,
             block_repeat: None,
             register_block: false,
+            register_block_width: 0,
             charwise_breaks: std::collections::HashSet::new(),
             lines_at_key: false,
             insert_keeps_tail: false,

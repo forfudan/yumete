@@ -1453,6 +1453,38 @@ impl Editor {
         }
     }
 
+    /// **Text kept as keys that write it as it is**: each character after
+    /// vim's Insert `C-v` ([`Pending::Literal`]), so `.` and a macro put a
+    /// paste or a completed word back without auto-pairs closing a bracket
+    /// in it or a list opening (vim's redo keeps a paste the same way,
+    /// `AppendToRedobuffLit`).
+    pub(super) fn literal_keys(text: &str) -> Vec<Key> {
+        text.chars()
+            .filter(|&c| c != '\r')
+            .flat_map(|c| {
+                let key = match c {
+                    '\n' => Key::Enter,
+                    '\t' => Key::Tab,
+                    c => Key::Char(c),
+                };
+                [Key::Ctrl('v'), key]
+            })
+            .collect()
+    }
+
+    /// A paste in Insert, into the recording and into what `.` repeats, as
+    /// [`Self::literal_keys`] (vim's paste sets the redo, `nvim_paste`).
+    pub(super) fn record_pasted_text(&mut self, text: &str) {
+        if self.replaying || self.expanding_alias || self.repeating_edit {
+            return;
+        }
+        let keys = Self::literal_keys(text);
+        if let Some(recording) = self.recording.as_mut() {
+            recording.extend(keys.iter().copied());
+        }
+        self.edit_keys.extend(keys);
+    }
+
     /// Stop recording and write the keys into their register as text
     /// ([`crate::input::macro_text`]), as helix and vim keep a macro. vim's `qA`
     /// adds to register `a`.
@@ -1526,7 +1558,8 @@ impl Editor {
         // 那一份的 `grouping` 永遠是 `true`——**從此一個撤回點都不記**，而且一聲
         // 不吭。所以記下號碼，照號碼關。
         let mut group: Option<(u64, bool)> = None;
-        for _ in 0..clipped {
+        self.macro_failed = false;
+        'rounds: for _ in 0..clipped {
             let before = (self.current, self.sel.head(), self.sel.anchor(), self.current_buffer().revision());
             for step in &steps {
                 match step {
@@ -1534,6 +1567,11 @@ impl Editor {
                         self.on_key(*key);
                     }
                     crate::input::MacroStep::Commit(text) => self.insert_committed(text),
+                }
+                // vim flushes the rest of the macro, every round still to
+                // come included, at the first motion that fails.
+                if std::mem::take(&mut self.macro_failed) {
+                    break 'rounds;
                 }
             }
             if (self.current, self.sel.head(), self.sel.anchor(), self.current_buffer().revision()) == before {
@@ -1552,6 +1590,16 @@ impl Editor {
         self.replaying = false;
         if count > clipped {
             self.status = say!("count.writing-ceiling", Self::WRITING_MAX);
+        }
+    }
+
+    /// **A vim motion that could not move**: `j` on the last line, `f`
+    /// with nothing to find, `n` with no match. vim beeps, and a beep ends
+    /// the macro that is playing (`beep_flush`); helix's macros play every
+    /// key, so only the vim keymap asks.
+    pub(super) fn fail_the_motion(&mut self) {
+        if self.replaying && self.as_vim() {
+            self.macro_failed = true;
         }
     }
 
@@ -2121,10 +2169,16 @@ impl Editor {
             && at == rope.len_chars()
             && at > 0
             && rope.char(at - 1) != '\n';
+        // Warning: **an empty last line keeps its break**: dropped, `jyyGp`
+        // of an empty line would put nothing but the break the file lacked,
+        // and the line would be gone (nvim puts it: `first`, ``, `last`, ``).
         let text = match at_the_unterminated_end {
             true => {
                 let ending = self.current_buffer().ending().to_string();
-                format!("{ending}{}", text.strip_suffix(ending.as_str()).unwrap_or(&text))
+                match text.strip_suffix(ending.as_str()) {
+                    Some(kept) if !kept.is_empty() && !kept.ends_with('\n') => format!("{ending}{kept}"),
+                    _ => format!("{ending}{text}"),
+                }
             }
             false => text,
         };

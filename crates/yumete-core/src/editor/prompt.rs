@@ -21,6 +21,23 @@ impl Editor {
                 return;
             }
         }
+        if self.pending == Pending::Literal {
+            self.pending = Pending::None;
+            let text = match key {
+                Key::Char(c) => c.to_string(),
+                Key::Tab => String::from('\t'),
+                Key::Enter => self.current_buffer().ending().to_string(),
+                // Any other key lets go of the wait and does nothing.
+                _ => return,
+            };
+            self.insert_recording.push_str(&text);
+            self.insert_str(&text);
+            return;
+        }
+        if key == Key::Ctrl('v') && self.vim_keymap() {
+            self.pending = Pending::Literal;
+            return;
+        }
         // `C-r` 在等寄存器的名字。Warning: 和 `Pending::UndoBreak` 一樣，這一格
         // 要在這裏吞：`Pending` 的分派只在 Normal 那一支跑。
         if self.pending == Pending::Register {
@@ -57,7 +74,9 @@ impl Editor {
             //
             // `C-x` 是 helix 的拼法（`default.rs` 的插入態 `completion`）：兩個
             // 拼法開同一張單子，插入態裏 `C-x` 本來什麼都不做。
-            if self.offer_from_the_text(true) || self.ask_what_comes_next(true) {
+            let asked = self.offer_from_the_text(true) || self.ask_what_comes_next(true);
+            self.drop_the_list_key(Some(key));
+            if asked {
                 return;
             }
         }

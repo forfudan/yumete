@@ -158,10 +158,14 @@ impl Editor {
             Key::Ctrl('c') | Key::Ctrl('e') => Step::TakeBack,
             _ => Step::Other,
         };
-        match words {
+        let took = match words {
             true => self.word_panel_key(key, step),
             false => self.reference_panel_key(key, step),
+        };
+        if took {
+            self.drop_the_list_key(Some(key));
         }
+        took
     }
 
     fn word_panel_key(&mut self, key: Key, step: Step) -> bool {

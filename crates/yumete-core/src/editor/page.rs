@@ -3468,6 +3468,68 @@ impl Editor {
             self.insert_recording.truncate(keep);
             self.insert_recording.push_str(giving);
         }
+        self.rerecord_keys(taking, giving);
+    }
+
+    /// **vim's `.` plays keys, so the keys say the choice too** (`:h
+    /// i_CTRL-N`; nvim's `quix C-n C-n Esc` then `.` writes the word chosen).
+    /// The key that walked the list goes, the letters it replaced come out
+    /// of the keys, and the choice goes in as it is written
+    /// ([`Self::literal_keys`]). Letters typed before this change are
+    /// taken back with Backspace, as vim's redo does. Replayed, the list
+    /// is never asked again, so what it offers then does not matter.
+    fn rerecord_keys(&mut self, taking: &str, giving: &str) {
+        if !self.as_vim() || self.repeating_edit || self.expanding_alias {
+            return;
+        }
+        self.drop_the_list_key(None);
+        let same = taking.chars().zip(giving.chars()).take_while(|(a, b)| a == b).count();
+        let gone: Vec<char> = taking.chars().skip(same).collect();
+        // Walk back over the keys that typed `gone`, typed or as written.
+        let mut cut = self.edit_keys.len();
+        let mut matched = 0;
+        for &c in gone.iter().rev() {
+            let want = match c {
+                '\n' => Key::Enter,
+                '\t' => Key::Tab,
+                c => Key::Char(c),
+            };
+            if cut == 0 || self.edit_keys[cut - 1] != want {
+                break;
+            }
+            cut -= 1;
+            if cut > 0 && self.edit_keys[cut - 1] == Key::Ctrl('v') {
+                cut -= 1;
+            }
+            matched += 1;
+        }
+        match matched == gone.len() {
+            true => self.edit_keys.truncate(cut),
+            false => self.edit_keys.extend(std::iter::repeat_n(Key::Backspace, gone.len())),
+        }
+        let new: String = giving.chars().skip(same).collect();
+        self.edit_keys.extend(Self::literal_keys(&new));
+    }
+
+    /// **A key the completion list took is not one `.` plays** under vim:
+    /// what it did is in the keys as text ([`Self::rerecord_keys`]), and
+    /// played on its own it would be vim's `C-y` (the character above) or
+    /// open a list. Only the last key, and only one that walks or answers a
+    /// list; `Some(key)` asks for that key alone.
+    pub(super) fn drop_the_list_key(&mut self, only: Option<Key>) {
+        if !self.as_vim() || self.repeating_edit || self.expanding_alias {
+            return;
+        }
+        let n = self.edit_keys.len();
+        let Some(&last) = self.edit_keys.last() else { return };
+        let written = n >= 2 && self.edit_keys[n - 2] == Key::Ctrl('v');
+        let lists = matches!(
+            last,
+            Key::Ctrl('n' | 'p' | 'x' | 'y' | 'e' | 'c') | Key::Tab | Key::BackTab | Key::Up | Key::Down
+        );
+        if lists && !written && only.is_none_or(|key| key == last) {
+            self.edit_keys.pop();
+        }
     }
 
     /// **替換多少是服務器說的**，不是這一頭猜的：`self.co` 補成 `count` 要

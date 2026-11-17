@@ -426,7 +426,7 @@ impl Editor {
         let word = match self.pending {
             // 撤銷已經斷了，光標旁邊那個牌子没什麽好報的。範圍寫反了那一問同理：
             // 它問的是剛打的那一條命令，不是光標旁邊正在攢的一串鍵。
-            Pending::UndoBreak | Pending::SwapRange | Pending::None => "",
+            Pending::UndoBreak | Pending::Literal | Pending::SwapRange | Pending::None => "",
             // A group of the reader's: the keys that opened it, below.
             Pending::Node(_) => "",
             Pending::Goto => "g",

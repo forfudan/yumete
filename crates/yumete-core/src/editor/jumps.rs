@@ -479,6 +479,7 @@ impl Editor {
             _ => false,
         };
         if span == crate::motion::Span::Missed || outside {
+            self.fail_the_motion();
             // **The sentence names the stretch that was searched.** 全窗裏
             // 「這一行」是「這一格」; under helix the search
             // runs on over line breaks, so outside a cell it is

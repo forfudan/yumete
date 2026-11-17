@@ -110,6 +110,15 @@ fn cells(rope: &crate::Rope, tab: usize, line: usize) -> Vec<(usize, usize, usiz
         .collect()
 }
 
+/// A piece's display width, as [`cells`] counts a line's.
+fn text_width(text: &str, tab: usize) -> usize {
+    let tab = tab.max(1);
+    text.chars().fold(0, |column, c| match c {
+        '\t' => column + tab - column % tab,
+        c => column + yumete_cjk::char_width(c),
+    })
+}
+
 /// A line's display width.
 fn width(rope: &crate::Rope, tab: usize, line: usize) -> usize {
     cells(rope, tab, line).last().map(|&(_, c, w)| c + w).unwrap_or(0)
@@ -396,16 +405,24 @@ impl super::Editor {
             true => usize::MAX,
             false => right,
         };
+        // After `$` the block is as wide as its widest piece (nvim pads
+        // `C-v j $ y` of `abc` and `d` to three columns).
+        let mut widest = 0;
         for (nth, line) in (first..=last).enumerate() {
             let text = match pieces.iter().find(|&&(l, _, _)| l == line) {
                 Some(&(_, a, b)) => piece_text(&rope, self.tab_stop(), line, a..b, left, right),
                 None => String::new(),
             };
+            widest = widest.max(text_width(&text, self.tab_stop()));
             self.edit_nth = Some(nth);
             self.store(text);
         }
         self.edit_nth = None;
         self.register_block = true;
+        self.register_block_width = match block.to_line_end {
+            true => widest,
+            false => right + 1 - left,
+        };
     }
 
     /// Take every line's piece out, bottom line first.
@@ -704,7 +721,17 @@ impl super::Editor {
                 true => (motion::line_end(&rope, rope.line_to_char(target)), " ".repeat(column - wide)),
                 false => (at_column(&rope, self.tab_stop(), target, column), String::new()),
             };
-            if !self.edit_insert(at, &format!("{pad}{piece}")) {
+            // **A short piece is padded out to the block's width where text
+            // follows it**, so that text keeps one column on every line
+            // (vim's `do_put`: trailing spaces 「only if there's text
+            // behind」).
+            let behind = wide > column;
+            let short = self.register_block_width.saturating_sub(text_width(piece, self.tab_stop()));
+            let fill = match behind {
+                true => " ".repeat(short),
+                false => String::new(),
+            };
+            if !self.edit_insert(at, &format!("{pad}{piece}{fill}")) {
                 break;
             }
         }

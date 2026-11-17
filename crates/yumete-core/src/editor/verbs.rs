@@ -1035,6 +1035,67 @@ impl Editor {
         self.sel.set_head(motion::prev_grapheme(self.current_buffer().rope(), end).max(start));
         self.clamp_cursor();
     }
+    /// **vim's Visual `p`/`P`**: the selection goes and the register comes
+    /// in its place, each keeping its own kind (`:h v_p`, measured in nvim).
+    /// Over whole lines (`V`) a charwise register becomes a line of its own
+    /// (`yiwjVp` leaves `alpha` on the line, not joined to the next); over
+    /// characters a linewise register splits the line, its lines going in
+    /// between the two halves (`yyjvep`). Answers where the cursor lands: on
+    /// the first non-blank of the first line put, or for text within a
+    /// line on its last character (its first, over several lines), as
+    /// vim's `p` leaves it. `None` when nothing was put.
+    pub(super) fn vim_put_over_selection(&mut self, lines: bool) -> Option<usize> {
+        if matches!(self.pending_register, Some('+' | '*')) {
+            self.replace_with_register();
+            return None;
+        }
+        let named = self.pending_register;
+        let copies = std::mem::replace(&mut self.paste_copies, 1).max(1);
+        let text = self.recall().repeat(copies);
+        if text.is_empty() {
+            self.status = match named {
+                Some(name) => say!("register.empty", name),
+                None => say!("register.nothing-yanked"),
+            };
+            return None;
+        }
+        let kind = named.filter(|n| n.is_ascii_alphanumeric()).map_or('"', |n| n.to_ascii_lowercase());
+        let line_wise = text.ends_with('\n') && !self.charwise_breaks.contains(&kind);
+        let (start, end) = self.selection();
+        let end = end.max(start);
+        let rope = self.current_buffer().rope();
+        let took_break = end > start && rope.char(end - 1) == '\n';
+        // The selection ran to the end of a file with no final break: the
+        // line left behind is an empty last line, which only a break after
+        // it keeps (as `p` after such a line does).
+        let unterminated_end = end == rope.len_chars() && !took_break;
+        let ending = self.current_buffer().ending().to_string();
+        let new = match (lines, line_wise) {
+            (true, false) if took_break => format!("{text}{ending}"),
+            // The last line of a file with no final break stays without
+            // one, unless dropping it would drop a last line that is empty.
+            (true, true) if !took_break => match text.strip_suffix(ending.as_str()) {
+                Some(kept) if !kept.is_empty() && !kept.ends_with('\n') => kept.to_string(),
+                _ => text.clone(),
+            },
+            (false, true) if unterminated_end => format!("{ending}{text}{ending}"),
+            (false, true) => format!("{ending}{text}"),
+            _ => text.clone(),
+        };
+        self.snapshot();
+        if !self.overwrite(start, end, &new) {
+            return None;
+        }
+        let rope = self.current_buffer().rope();
+        let to = match (lines, line_wise) {
+            (false, true) => motion::line_first_non_blank(rope, rope.line_to_char(rope.char_to_line(start) + 1)),
+            (true, _) => motion::line_first_non_blank(rope, start),
+            _ if text.contains('\n') => start,
+            _ => motion::prev_grapheme(rope, start + text.chars().count()).max(start),
+        };
+        Some(to)
+    }
+
     /// Indent (`>`) or unindent (`<`) every line a selection touches.
     ///
     /// **Every line once, however many selections touch it, and the

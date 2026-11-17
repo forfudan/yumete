@@ -955,7 +955,7 @@ impl Editor {
             self.snapshot();
             return self.fill_selected_lines();
         }
-        let start = self.selection().0;
+        let mut start = self.selection().0;
         match c {
             'u' => self.map_selection(|one| one.to_lowercase().collect()),
             'U' => self.map_selection(|one| one.to_uppercase().collect()),
@@ -966,13 +966,14 @@ impl Editor {
                 let (from, to) = self.selection();
                 let old = self.current_buffer().rope().slice(from..to).to_string();
                 let before = self.current_buffer().revision();
-                self.replace_with_register();
+                let landed = self.vim_put_over_selection(lines);
                 if c == 'p' && self.current_buffer().revision() != before {
                     self.vim_lines = lines;
                     self.pending_register = None;
                     self.store(old);
                     self.vim_lines = false;
                 }
+                start = landed.unwrap_or(start);
             }
             _ => {
                 let (anchor, head) = self.span();
@@ -1601,6 +1602,12 @@ impl Editor {
         let Some(target) = landed else {
             self.count = None;
             self.alias_count = None;
+            // `dj` on the last line and `dfz` with no `z` beep in vim and
+            // end a macro; `dh` in the first column only does nothing
+            // (measured in nvim).
+            if matches!(step.motion, motion::Motion::Line { .. } | motion::Motion::Find { .. }) {
+                self.fail_the_motion();
+            }
             return;
         };
         let rope = self.current_buffer().rope();
@@ -2433,7 +2440,7 @@ impl Editor {
                 return;
             }
             // 撤銷斷點只在插入模式裏按，走到 Normal 這一支就是它已經過期了。
-            Pending::UndoBreak => self.pending = Pending::None,
+            Pending::UndoBreak | Pending::Literal => self.pending = Pending::None,
             Pending::None => {}
             // The groups, answered above.
             _ => {}
@@ -2705,7 +2712,9 @@ impl Editor {
         let cx = super::normal::Cx { key, count, operator_count, continuing_zong };
         if let Some(run) = self.normal_command_for(&cx).and_then(super::normal::normal_command) {
             self.before_a_motion(run.0);
+            let before = (self.current, self.sel.head());
             (run.1)(self, cx);
+            self.fail_if_it_stood_still(run.0, before);
             self.note_the_group_count(operator_count);
         }
         // Warning: **An unbound key does nothing**. No phrasebook answering
