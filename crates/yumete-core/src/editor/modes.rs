@@ -34,24 +34,24 @@ impl Editor {
     ///    page deletes a line of the novel, and both must not read `NORMAL`.
     /// 2. **Is the selection being extended?** `SEL`, the way Helix writes it.
     /// 3. **Otherwise the mode's own word** — three letters.
+    ///
+    /// **An open picker changes nothing here.** It floats over the page with
+    /// everything behind it standing back, status lines included, and its
+    /// keys are on the command row; the status line under it goes on saying
+    /// what it says of its window. Closing a picker lands in Normal, so
+    /// Normal's word is the one that line keeps.
     pub fn mode_label(&self) -> Option<String> {
-        if self.mode == Mode::Normal && self.sidebar_focused() {
+        let mode = match self.mode {
+            Mode::Picker => Mode::Normal,
+            mode => mode,
+        };
+        if mode == Mode::Normal && self.sidebar_focused() {
             return Some("PAN.NOR".to_string());
         }
         // A preview has no caret and no text to dim, so the status line is
         // what says the keys are in it.
-        if self.mode == Mode::Normal && self.page_window_has_the_keys() {
+        if mode == Mode::Normal && self.page_window_has_the_keys() {
             return Some("PRV".to_string());
-        }
-        // **選擇器也報狀態**，同面板：讀者馬上知道現在是不是插入狀態。
-        //
-        // Warning: **只有一個詞。** 挑選器只有打字那一層——開門就在框裏，`Esc` 一下
-        // 關掉——所以不跟着兩層換。那個詞照樣寫，因為它答的正是「現在是不是插入狀態」。
-        //
-        // 模式一欄不空，狀態行那條「借一格給點站」的路就走得通（`draw_status`），
-        // 那八個點與檔名之間有一格空氣。
-        if self.mode == Mode::Picker {
-            return Some("PIC.INS".to_string());
         }
         // **覆寫模式報 `REP`**（vim 的 `R`）。vim 寫 `-- REPLACE --`；
         // 這一欄的詞一律三個大寫字母（`NOR` `INS` `SEL`），所以取頭三個。
@@ -61,16 +61,16 @@ impl Editor {
         // 哪一層那一問當場斷掉。先算出詞，
         // 最後一步統一加前綴，這樣再添一個詞也不會漏。
         // A block reads `SEL` too: it is a selection being grown.
-        let growing = (self.extend || self.block.is_some()) && self.mode == Mode::Normal;
+        let growing = (self.extend || self.block.is_some()) && mode == Mode::Normal;
         let word = match (growing, self.overwriting) {
             (true, _) => Some("SEL".to_string()),
-            (false, true) if self.mode == Mode::Insert => Some("REP".to_string()),
-            _ => self.mode.label().map(str::to_string),
+            (false, true) if mode == Mode::Insert => Some("REP".to_string()),
+            _ => mode.label().map(str::to_string),
         };
         // **A grid prefixes whatever word came out above**, so
         // `REP` and `SEL` come along without this line knowing they exist, and
-        // the layer answers 「where are my keys」 the way `PAN.` and `PIC.`
-        // already do. [`Layer::label`] owns the spelling, including the one
+        // the layer answers 「where are my keys」 the way `PAN.` already
+        // does. [`Layer::label`] owns the spelling, including the one
         // two prefixes: `TBL.` at the top layer, `CEL.` in a cell.
         // …and only where the layers are in force: a table drawn into a page
         // of prose is a document, and a document's mode word is the

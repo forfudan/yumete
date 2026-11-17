@@ -57,9 +57,9 @@ impl Mode {
     /// the character readout all give way in turn when the window narrows
     /// (#394, #500).
     ///
-    /// Warning: **選擇器不在那一組裏**，由 [`Editor::mode_label`] 報 `PIC.INS`。
-    /// 這一支仍回 `None`：它答的是「哪一種模式」，而那個詞答的是**鍵在哪一層**，
-    /// 同 `PAN.`。選擇器只有一層，所以那裏也只有一個詞。
+    /// **The picker has no word either**: it floats over the page, and the
+    /// status line under it keeps describing its window —
+    /// [`Editor::mode_label`] answers as Normal, where closing it lands.
     ///
     /// **The rest are three letters**, the way Helix writes them, not twelve
     /// cells (`-- NORMAL --  `) for one word.

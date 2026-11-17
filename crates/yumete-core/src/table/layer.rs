@@ -147,7 +147,7 @@ impl Layer {
     /// from either layer.
     ///
     /// The dotted spelling is the one this editor already uses for 「where the
-    /// keys are」 — `PIC.INS` in a picker, `PAN.NOR` in a side panel.
+    /// keys are」 — `PAN.NOR` in a side panel, `PAN.INS` in its field.
     ///
     /// Warning: **`CEL.INS` cannot say which layer `Esc` goes back to.** Both
     /// ways into insert read the same, and that is accepted:

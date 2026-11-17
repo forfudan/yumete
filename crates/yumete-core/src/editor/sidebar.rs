@@ -2371,7 +2371,7 @@ impl Editor {
     /// **最近開過的檔** — `:recent-files` / `:recent-files-global`.
     ///
     /// Two pickers rather than one with a switch, because **a picker is in
-    /// Insert from the moment it opens** (`PIC.INS`): a digit typed in there
+    /// its query from the moment it opens**: a digit typed in there
     /// is a digit in the query, not a key, so number keys cannot be
     /// shortcuts there: `空格 f` then `2` puts 「搜: 2」 in the box.
     pub(super) fn open_recent_picker(&mut self, here: bool) {

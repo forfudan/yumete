@@ -26745,6 +26745,20 @@ fn an_answer_to_a_question_that_was_dropped_is_not_shown() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **挑選器開着，模式詞照舊說它底下那扇窗**：挑選器浮在頁面上，鍵寫在命令行，
+/// 狀態行不換成它的詞。關掉落在 Normal，所以開着的時候說的也是 Normal 那個詞。
+#[test]
+fn an_open_picker_leaves_the_mode_word_to_the_window() {
+    let mut ed = typed("那年冬天很冷。");
+    ed.on_key(Key::Char(' '));
+    ed.on_key(Key::Char('b'));
+    assert_eq!(ed.mode(), Mode::Picker, "鍵歸挑選器");
+    assert_eq!(ed.mode_label().as_deref(), Some("NOR"), "狀態行說的是窗");
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.mode(), Mode::Normal);
+    assert_eq!(ed.mode_label().as_deref(), Some("NOR"), "關掉之後同一個詞");
+}
+
 /// **模式詞說的是「鍵在哪」，不只是「鍵是什麼」**。
 ///
 /// 站在結果名單上和站在正文裏按 `d` 的後果完全不同：一個清搜索詞，一個刪稿子。所

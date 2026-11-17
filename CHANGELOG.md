@@ -41,6 +41,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Changed
 
+- **While a picker is open, every window's status line dims along with the page under it**, and keeps its own mode word instead of switching to `PIC.INS`; only the command row, which shows the picker's keys, stays as it is.
 - **The picker is bigger**: nine tenths of the window's width and height (it was four fifths and three quarters), up to 200 columns, so more names and more of the preview show; it still leaves a margin, so it reads as a panel over the page.
 - **End-of-line diagnostics are off by default and take `off`, `basic` (errors and warnings) or `full` (every level)**, in `[editor] end_of_line_diagnostics`, the settings page and `:view-diagnostics`, as helix and Zed ship them off: a grammar checker tags nearly every line of prose. The gutter marks and `:diagnostics-all` are unchanged; helix's words (`disable`, `error`, `warning`, `info`, `hint`) are still read, so old configs and `--import helix` keep working.
 - **`:convert` needs nothing installed**: OpenCC and its dictionaries are built into yumete, so simplified/traditional conversion works the same on every system, Windows included, with no `opencc` on `PATH`, and converts in place at once. `:convert-opencc`, `:convert-opencc-install` and `:convert-opencc-update` are gone. `:convert!` converts vocabulary for Taiwan only; between simplified and Hong Kong it converts characters.

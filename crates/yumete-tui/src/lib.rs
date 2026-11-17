@@ -6904,9 +6904,20 @@ fn draw<'a>(
     // the query instead of over the page the list is already covering.
     //
     // Warning: **選擇器也不許蓋頁腳**——和候選框那一條是同一個（#387）。窗口高 14 的
-    // 時候它的下邊框會壓在狀態行上，畫出來是 `-- PIC╰────────╯ Latin`。這一行寫死
+    // 時候它的下邊框會壓在狀態行上，畫出來是 `NOR╰────────╯ Latin`。這一行寫死
     // 在頁腳之上，往後改成什麼形狀都不會壓過去。
     let room = Rect { height: floor.saturating_sub(area.y).max(1), ..area };
+    // **選擇器一開，它底下的一切都往後退一步**——正文、邊欄，連每一扇窗的狀態行
+    // 一起：狀態行說的是它那扇窗，而此刻鍵不在任何一扇窗裏。只有命令行不退，
+    // 選擇器的鍵寫在那一行上。
+    if editor.picker().is_some() {
+        let upto = match command_row {
+            true => command_area.y,
+            false => area.y + area.height,
+        };
+        let behind = Rect { height: upto.saturating_sub(area.y), ..area };
+        stand_back(frame, crate::theme::Palette::of(config), behind);
+    }
     let picker = draw_picker(frame, editor, config, ime, room);
     let picker_caret = picker.map(|(caret, _)| caret);
     panels.extend(picker.and_then(|(_, list)| list));
@@ -12565,9 +12576,8 @@ fn draw_picker(
 ) -> Option<(Position, Option<Rect>)> {
     let picker = editor.picker()?;
     let ink = crate::theme::Palette::of(config);
-    // **這扇窗一開，底下那一整屏往後退一步**，突出這扇窗。它是獨佔的：開着
-    // 的時候每一個鍵都歸它，而一屏同樣清晰的字沒說出這件事。
-    stand_back(frame, ink, area);
+    // Warning: **底下那一整屏的退後不在這裏做**（見 `draw` 裏調它之前那一段）：
+    // `area` 只到頁腳之上，而退後的要連頁腳上那幾條狀態行一起。
     let matches = picker.matches();
     // The name, and **which of its characters the query is standing on** — the
     // one thing that says why a name with scattered letters is on the list at
@@ -31737,6 +31747,55 @@ fn squeezed(text: &str) -> String {
             format!("{}", SetCursorStyle::SteadyBar),
             "挑選器一律是豎線"
         );
+    }
+
+    /// **挑選器一開，每一扇窗的狀態行都跟着正文退後**，只有命令行不退；而狀態行
+    /// 上的字不變——不寫 `PIC`，照舊說它那扇窗。關掉之後一格不差地回來。
+    #[test]
+    fn every_status_line_stands_back_behind_the_picker() {
+        let config = Config::default();
+        let mut ed = editor_with("一行字\n兩行字\n");
+        ed.execute(":vsplit").unwrap();
+        let (w, h) = (100, 30);
+        let areas = page_areas(&ed, &config, Rect::new(0, 0, w, h), 0);
+        assert_eq!(areas.lines.len(), 2, "two windows, two status lines");
+        assert_eq!(areas.command.height, 1, "a command row");
+        let cells = |r: Rect| -> Vec<(u16, u16)> {
+            (r.y..r.y + r.height).flat_map(|y| (r.x..r.x + r.width).map(move |x| (x, y))).collect()
+        };
+        let closed = render(&ed, &config, w, h);
+        ed.on_key(Key::Char(' '));
+        ed.on_key(Key::Char('b'));
+        assert_eq!(ed.mode(), Mode::Picker, "the buffer picker is open");
+        let open = render(&ed, &config, w, h);
+        assert!(!buffer_to_text(&open).contains("PIC"), "no picker word anywhere");
+        for line in &areas.lines {
+            assert_eq!(row_text(&open, line.y), row_text(&closed, line.y), "the same words");
+            // The cell after a wide 字 is left in the terminal's colours, which
+            // nothing mixes.
+            let painted = |&(x, y): &(u16, u16)| matches!(closed[(x, y)].style().fg, Some(Color::Rgb(..)));
+            for (x, y) in cells(*line).into_iter().filter(painted) {
+                let (was, now) = (closed[(x, y)].style(), open[(x, y)].style());
+                assert_ne!((was.fg, was.bg), (now.fg, now.bg), "({x},{y}) of a status line stands back");
+            }
+        }
+        // Its words change (the picker's keys are written there), its ground
+        // does not.
+        let paper = ink(&config).page().bg;
+        let grounds: Vec<_> = cells(areas.command)
+            .into_iter()
+            .filter_map(|(x, y)| open[(x, y)].style().bg.filter(|bg| matches!(bg, Color::Rgb(..))))
+            .collect();
+        assert!(!grounds.is_empty(), "the command row is painted");
+        assert!(grounds.iter().all(|bg| Some(*bg) == paper), "the command row does not stand back: {grounds:?}");
+        ed.on_key(Key::Esc);
+        assert_eq!(ed.mode(), Mode::Normal);
+        let again = render(&ed, &config, w, h);
+        for line in &areas.lines {
+            for (x, y) in cells(*line) {
+                assert_eq!(again[(x, y)], closed[(x, y)], "({x},{y}) comes back as it was");
+            }
+        }
     }
 
     /// **選中那一條畫成選中的樣子**。
