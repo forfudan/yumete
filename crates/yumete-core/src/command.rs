@@ -1081,6 +1081,17 @@ fn takes(command: &str, wants: Option<Wants>) -> Option<String> {
     })
 }
 
+/// **A word of helix's taken for one of a command's own**, kept off its
+/// list so the menu and the refusal name yumete's words only:
+/// `:view-diagnostics` reads helix's five `end-of-line-diagnostics` levels
+/// as the config does ([`crate::problem::level_from_word`]).
+fn word_from_helix(command: &str, word: &str) -> Option<&'static str> {
+    match command {
+        "view-diagnostics" => crate::problem::level_from_word(word).map(crate::problem::level_word),
+        _ => None,
+    }
+}
+
 /// A word list as a sentence says it: the one word, or 「one of」 them.
 fn one_of(words: &[Word]) -> String {
     match words {
@@ -1960,8 +1971,8 @@ fn read_params(
             // **The prefix rule is the walk's, not the parser's.** The menu
             // prints the shortest unambiguous spelling of every word; that
             // parenthesis is a promise, and this is where it is kept.
-            (Some(list), open) => match pick(head, list) {
-                Some(word) => args.push(word.name.to_string()),
+            (Some(list), open) => match pick(head, list).map(|w| w.name).or_else(|| word_from_helix(entry.name, head)) {
+                Some(word) => args.push(word.to_string()),
                 None if open => args.push(head.to_string()),
                 // The first list is what a bare refusal names; a later
                 // one is named by its slot.
@@ -7593,7 +7604,8 @@ pub fn about_the_line(line: &str) -> Result<Described, Option<String>> {
     for (at, word) in line.split_whitespace().skip(1).enumerate() {
         let Some(param) = param_at(e, at) else { break };
         let Some(list) = param.words() else { break };
-        match pick(word.trim_end_matches('!'), list) {
+        let helix = || word_from_helix(e.name, word).and_then(|name| list.iter().find(|w| w.name == name));
+        match pick(word.trim_end_matches('!'), list).or_else(helix) {
             // **命令的說明留着，參數的說明加在它下面**：一支函數和它的一個參數
             // 是兩句話，不是一句換掉另一句。
             Some(w) => {
@@ -9440,6 +9452,14 @@ mod tests {
         for word in [":tabnew", ":tabe", ":tabedit"] {
             assert!(parse(word).is_err(), "{word}");
         }
+        // `:view-diagnostics` takes helix's five levels as the config does,
+        // and names its own three when it refuses.
+        for (word, level) in [("off", "off"), ("disable", "off"), ("error", "basic"), ("warning", "basic"), ("info", "full"), ("hint", "full"), ("ba", "basic")] {
+            assert_eq!(parse(&format!(":view-diagnostics {word}")), Ok(Command::SetEolDiagnostics(Some(level.into()))), "{word}");
+        }
+        let refused = parse(":view-diagnostics loud").unwrap_err().to_string();
+        assert!(refused.contains("off") && !refused.contains("warning"), "{refused}");
+        assert!(about_the_line(":view-diagnostics warning").is_ok_and(|said| said.wrong.is_none()));
         // `:settings` takes vim's option words beside a setting's name.
         for word in [":settings ts=4 et", ":set ts=4 et", ":se ts=4 et"] {
             assert_eq!(parse(word), Ok(Command::VimSet("ts=4 et".into())), "{word}");
