@@ -449,7 +449,7 @@ pub(crate) fn colour(mark: Mark, ink: crate::theme::Palette) -> ratatui::style::
         Mark::Changed => ink.vcs(Accent::Azure),
         Mark::Warning => ink.amber(),
         Mark::Listing => ink.gold(),
-        Mark::Search => ink.wash(),
+        Mark::Search => ink.azure(),
         Mark::Error => ink.mark(),
     }
 }
