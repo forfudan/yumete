@@ -497,7 +497,9 @@ struct EditSnapshot {
     /// **How many saves had been made when that step was taken**, beside
     /// `at`: the states `:history` lists as unsaved are the ones begun after
     /// the last save ([`Buffer::undo_line`]). A count, not a time, so a save
-    /// and the edit after it never tie.
+    /// and the edit after it never tie. A save made with steps on the redo
+    /// stack counts them as after it: they lie past the saved state on the
+    /// line.
     saves: u64,
 }
 
@@ -1934,6 +1936,11 @@ impl Buffer {
         // added the digest is the one just taken.
         self.take_pristine(tail.is_empty().then_some(written));
         self.saves += 1;
+        // The states ahead on the redo stack come after the saved one on the
+        // line, whenever their steps were first taken.
+        for step in &mut self.history.redo {
+            step.saves = self.saves;
+        }
         self.version_due = Some((self.rope.clone(), wrote_over));
         // The document *is* the recovery copy now — but only ours goes; a draft
         // the writer has not looked at yet still holds text this file does not.

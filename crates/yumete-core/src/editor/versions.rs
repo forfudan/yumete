@@ -1028,6 +1028,35 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
+    /// **A save made with a redo ahead**: the states redone after it are
+    /// unsaved, in both keymaps' redo.
+    #[test]
+    fn a_save_with_a_redo_ahead_lists_what_is_redone_as_unsaved() {
+        for (preset, redo) in [(yumete_cjk::KeyPreset::Vim, Key::Ctrl('r')), (yumete_cjk::KeyPreset::Helix, Key::Char('U'))] {
+            let (dir, file) = book("unsaved-redo");
+            let mut ed = Editor::new();
+            ed.set_key_preset(preset);
+            ed.set_history_clock(Some(T0));
+            ed.open_file(&file).unwrap();
+            append(&mut ed, "一");
+            append(&mut ed, "二");
+            ed.on_key(Key::Char('u'));
+            ed.execute("w").unwrap();
+            let saved = ed.current_buffer().text();
+            ed.on_key(redo);
+            assert!(ed.current_buffer().is_modified(), "{preset:?}");
+            ed.execute("history").unwrap();
+            assert_eq!(states(&ed), [2, 1], "{preset:?}: {}", ed.status());
+            let shown = rows(&ed);
+            assert!(shown[0].label().contains(&say!("history.current")), "{preset:?}: {}", shown[0].label());
+            assert!(shown[1].label().contains(&say!("history.saved-state")), "{preset:?}: {}", shown[1].label());
+            ed.on_key(Key::Down);
+            ed.on_key(Key::Enter);
+            assert_eq!(ed.current_buffer().text(), saved, "{preset:?}");
+            std::fs::remove_dir_all(&dir).ok();
+        }
+    }
+
     #[test]
     fn a_private_run_lists_its_unsaved_states_alone() {
         let (dir, file) = book("unsaved-private");
