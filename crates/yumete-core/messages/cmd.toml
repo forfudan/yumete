@@ -534,8 +534,8 @@ find = "撤銷 撤销 撤消 以前 時間 时间 undo earlier ago time"
 [[message]]
 # : 命令選單裏 encoding 那一項的説明(commands 組)
 key = "cmd.commands.encoding"
-zhs = "文件保存时用的编码：utf-8、gb18030、big5、shift-jis"
-en = "the encoding the file is saved in: utf-8, gb18030, big5 or shift-jis"
+zhs = "文件保存时用的编码：utf-8、gb18030、big5、shift-jis、euc-jp、euc-kr、utf-16le、utf-16be"
+en = "the encoding the file is saved in: utf-8, gb18030, big5, shift-jis, euc-jp, euc-kr, utf-16le or utf-16be"
 find = "編碼 编码 encoding fenc 字符集"
 
 [[message]]

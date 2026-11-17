@@ -765,7 +765,9 @@ fn main() -> ExitCode {
         Some(word) => match yumete_core::encoding::by_name(word) {
             Some(encoding) => Some(encoding),
             None => {
-                eprintln!("yumete: no encoding called {word:?}; utf-8, gb18030, big5 or shift-jis");
+                eprintln!(
+                    "yumete: no encoding called {word:?}; utf-8, gb18030, big5, shift-jis, euc-jp, euc-kr, utf-16le or utf-16be"
+                );
                 return ExitCode::from(2);
             }
         },
@@ -2799,8 +2801,9 @@ OPTIONS:
                      text, or a code language (python, rust, …). Outranks
                      both the extension and the config.
         --encoding   What these files are written in when it cannot be told:
-                     utf-8, gb18030, big5 or shift-jis. Remembered for each
-                     file, as a choice made inside is.
+                     utf-8, gb18030, big5, shift-jis, euc-jp, euc-kr,
+                     utf-16le or utf-16be. Remembered for each file, as a
+                     choice made inside is.
         --preview    Print a non-interactive preview instead of the editor.
         --import EDITOR
                      Write another editor's config into yumete's, once, and
