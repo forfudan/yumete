@@ -302,7 +302,7 @@ impl Editor {
     }
 
     /// One of a prompt's commands, on the line a reading is typed into.
-    fn reading_command(&mut self, name: PlaceCmd) {
+    pub(super) fn reading_command(&mut self, name: PlaceCmd) {
         match name {
             PlaceCmd::NormalMode => {
                 self.command_line.clear();

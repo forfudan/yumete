@@ -1553,12 +1553,13 @@ pub fn run(
         // missing; put here, an event kind added tomorrow is covered the day it
         // is added. (#350 is the general form of that.)
         if let Ok(event) = &arrived {
+            // An open picker takes no mouse ([`mouse_held_off`]), so a click
+            // over it moves nothing and the word typed into its query stands.
             let moves_the_caret = match event {
                 Event::Paste(_) => true,
-                Event::Mouse(mouse) => !matches!(
-                    mouse.kind,
-                    MouseEventKind::ScrollDown | MouseEventKind::ScrollUp
-                ),
+                Event::Mouse(mouse) => {
+                    !matches!(mouse.kind, MouseEventKind::ScrollDown | MouseEventKind::ScrollUp) && editor.picker().is_none()
+                }
                 _ => false,
             };
             if moves_the_caret {
@@ -2855,6 +2856,10 @@ struct Seats {
     /// **Each buffer's rows, estimated for its scrollbar**, kept from frame
     /// to frame and built again only when the text or its width changes.
     rows: scrollbar::Estimates,
+    /// **The `:` and `::` menus as the last frame drew them**: a press or a
+    /// wheel on one is the menu's, and the menu takes no mouse, so it goes
+    /// no further — the text drawn under it is not what was pointed at.
+    menus: Vec<Rect>,
 }
 
 /// **一張捲動的單子，這一幀從第幾行畫起。**
@@ -6161,12 +6166,62 @@ struct Pointer {
     /// release: a drag sets the side's width step by step
     /// ([`drag_the_border`]), and a press let go where it was does nothing.
     border: Option<Side>,
+    /// The window whose text the press put the caret in, from the press to
+    /// the release: only a drag from there picks out a range, and only
+    /// while that window still has the keys. A press anywhere else — a
+    /// scrollbar, a sidebar, a tab — leaves it empty, so dragging on from
+    /// there into the text selects nothing.
+    text: Option<yumete_core::window::WindowId>,
+}
+
+/// **The columns a window without the keys folds its text to**: its
+/// rectangle's `width` less its gutter, asked through a peek since the
+/// gutter depends on its buffer. What the frame draws it at and what a
+/// scroll in it steps rows by.
+fn peeked_width(editor: &Editor, config: &Config, pane: &yumete_core::editor::Pane, width: u16) -> usize {
+    let _look = editor.view_pane(pane);
+    let gutter = gutter_in(width as usize, editor.current_buffer().line_count(), numbers(editor, config), editor.has_a_problem_lane());
+    (width as usize).saturating_sub(gutter)
+}
+
+/// [`peeked_width`] for `window` as the last frame laid it out; `None`
+/// for the live window, whose width the editor is told before every key,
+/// or before a frame.
+fn text_width_of(
+    editor: &Editor,
+    config: &Config,
+    size: Option<ratatui::layout::Size>,
+    seats: &Seats,
+    window: yumete_core::window::WindowId,
+) -> Option<usize> {
+    let pane = editor.pane_of(window)?;
+    let areas = drawn_areas(editor, config, size?, seats);
+    let i = editor.windows().leaves().iter().position(|&w| w == window)?;
+    Some(peeked_width(editor, config, pane, areas.panes.get(i)?.width))
+}
+
+/// **Whether the mouse stops at something drawn over the page**: the open
+/// picker, which stands everything behind it back and keeps the keys until
+/// it closes, or a `:` or `::` menu under the pointer. Neither takes the
+/// mouse, so a press, a drag or the wheel there reaches nothing at all —
+/// not the sidebar, the scrollbar or the text drawn under it.
+fn mouse_held_off(editor: &Editor, seats: &Seats, mouse: ratatui::crossterm::event::MouseEvent) -> bool {
+    if editor.picker().is_some() {
+        return true;
+    }
+    let menu_open = editor.prompt().is_some_and(|(prompt, _)| prompt == ":" || prompt == "::");
+    menu_open
+        && seats.menus.iter().any(|m| {
+            (m.x..m.x.saturating_add(m.width)).contains(&mouse.column) && (m.y..m.y.saturating_add(m.height)).contains(&mouse.row)
+        })
 }
 
 /// **A flick of the wheel**, `notches` of it: the window under the pointer
-/// scrolls ([`Editor::scroll_window`]) and the keys stay where they are.
-/// Off every window — a sidebar, the tab line, the command row — the live
-/// window scrolls, as it always has.
+/// scrolls ([`Editor::scroll_window`]) and the keys stay where they are,
+/// wherever they are. A sidebar keeps its own place by its highlight, so
+/// the wheel over one moves nothing; off every window and sidebar — the
+/// tab line, the command row — the live window scrolls. Over an open
+/// picker or a `:` menu, nothing does ([`mouse_held_off`]).
 fn wheel_scroll(
     editor: &mut Editor,
     config: &Config,
@@ -6175,10 +6230,17 @@ fn wheel_scroll(
     mouse: ratatui::crossterm::event::MouseEvent,
     notches: usize,
 ) {
+    if mouse_held_off(editor, seats, mouse) {
+        return;
+    }
     let back = mouse.kind == MouseEventKind::ScrollUp;
     let amount = editor.wheel_step() * notches;
     match window_at(editor, config, size, seats, mouse) {
-        Some(window) => editor.scroll_window(window, amount, back),
+        Some(window) => {
+            let width = text_width_of(editor, config, size, seats, window);
+            editor.scroll_window(window, amount, back, width);
+        }
+        None if sidebar_row_at(editor, config, size, seats, mouse).is_some() => {}
         None => editor.scroll(amount, back),
     }
 }
@@ -6200,6 +6262,12 @@ fn left_button(
     pointer: &mut Pointer,
     mouse: ratatui::crossterm::event::MouseEvent,
 ) {
+    if !matches!(mouse.kind, MouseEventKind::Up(_)) && mouse_held_off(editor, seats, mouse) {
+        pointer.bar = None;
+        pointer.border = None;
+        pointer.text = None;
+        return;
+    }
     if let Some(side) = pointer.border {
         match mouse.kind {
             MouseEventKind::Drag(_) => {
@@ -6216,7 +6284,10 @@ fn left_button(
         }
     }
     match mouse.kind {
-        MouseEventKind::Up(_) => pointer.bar = None,
+        MouseEventKind::Up(_) => {
+            pointer.bar = None;
+            pointer.text = None;
+        }
         MouseEventKind::Drag(_) => match pointer.bar {
             Some((window, grab)) if window == editor.live_window() => {
                 if let Some((bar, (_, cells), rows)) = held_bar(editor, config, size, seats) {
@@ -6227,15 +6298,18 @@ fn left_button(
             Some(_) => pointer.bar = None,
             // Dragging picks out a range — the thing the terminal's own
             // selection does, given back inside the editor, where it
-            // can become a yank, an edit, or the system clipboard.
-            None => {
+            // can become a yank, an edit, or the system clipboard —
+            // from a press that put the caret in this window's text.
+            None if pointer.text == Some(editor.live_window()) && editor.panel_focus().is_none() => {
                 if let Some(at) = text_at(editor, config, size, seats, mouse) {
                     editor.drag_to(at);
                 }
             }
+            None => pointer.text = None,
         },
         _ => {
             pointer.bar = None;
+            pointer.text = None;
             // A tab is a thing you point at; the mouse is already captured
             // for the wheel, so this costs nothing but the arithmetic.
             if let Some(side) = sidebar_border_at(editor, config, size, mouse) {
@@ -6276,6 +6350,7 @@ fn left_button(
                 if !editor.is_page_window(window) {
                     if let Some(at) = text_at(editor, config, size, seats, mouse) {
                         editor.point_at(at);
+                        pointer.text = Some(editor.live_window());
                     }
                 }
             } else if let Some(at) = text_at(editor, config, size, seats, mouse) {
@@ -6288,6 +6363,7 @@ fn left_button(
                     true => editor.point_into(at),
                     false => editor.point_at(at),
                 }
+                pointer.text = Some(editor.live_window());
                 // **Ctrl-click follows a link** (Feature #285) — the
                 // gesture every other editor already means by it, and
                 // the one modifier that survives a terminal. A bare
@@ -6752,19 +6828,9 @@ fn draw<'a>(
         let peek = (which != live)
             .then(|| leaves.get(which).and_then(|&id| editor.pane_of(id)))
             .flatten();
-        // A peeked window folds to its own width less its gutter, asked
-        // through a first peek since the gutter depends on its buffer —
+        // A peeked window folds to its own width less its gutter —
         // windows beside each other do not wrap at the live one's width.
-        let folded = peek.map(|pane| {
-            let _look = editor.view_pane(pane);
-            let gutter = gutter_in(
-                rect.width as usize,
-                editor.current_buffer().line_count(),
-                numbers(editor, config),
-                editor.has_a_problem_lane(),
-            );
-            (rect.width as usize).saturating_sub(gutter)
-        });
+        let folded = peek.map(|pane| peeked_width(editor, config, pane, rect.width));
         // **Everything below reads the file the caption names** (#281). The
         // whole dispatch is inside the scope, not only the drawing: which
         // layout a half is drawn in, and whether a grid has it, are questions
@@ -6962,9 +7028,12 @@ fn draw<'a>(
     // windows, where their status lines are, so a menu never covers a
     // position readout or the command row a `:` is typed in.
     let footer = Rect::new(area.x, floor, area.width, 1);
-    panels.extend(draw_command_menu(frame, editor, config, ime, area, footer));
+    let command_menu = draw_command_menu(frame, editor, config, ime, area, footer);
+    panels.extend(command_menu);
     panels.extend(draw_search_hint(frame, editor, config, area, footer));
-    panels.extend(draw_lookfor_menu(frame, editor, config, area, footer));
+    let lookfor_menu = draw_lookfor_menu(frame, editor, config, area, footer);
+    panels.extend(lookfor_menu);
+    viewport.menus = command_menu.into_iter().chain(lookfor_menu).collect();
     // Where the picker put its caret, so the candidate panel can stand under
     // the query instead of over the page the list is already covering.
     //
@@ -22818,6 +22887,173 @@ fn squeezed(text: &str) -> String {
             assert_ne!(after[other], before[other], "same buffer {same}: the window under the pointer scrolls");
             assert_eq!(after[live], before[live], "same buffer {same}: the live window keeps its page");
         }
+    }
+
+    /// The wheel, one notch down or up, at a cell.
+    fn notch(back: bool, x: u16, y: u16) -> ratatui::crossterm::event::MouseEvent {
+        let kind = match back {
+            true => MouseEventKind::ScrollUp,
+            false => MouseEventKind::ScrollDown,
+        };
+        ratatui::crossterm::event::MouseEvent { kind, column: x, row: y, modifiers: KeyModifiers::NONE }
+    }
+
+    /// Forty lines under three headings, the outline open on the left of a
+    /// frame with the keys back in the text, and one frame drawn.
+    fn headings_with_the_outline(config: &Config, (w, h): (u16, u16), seats: &mut Seats) -> Editor {
+        let mut text = String::new();
+        for heading in ["One", "Two", "Three"] {
+            text.push_str(&format!("# {heading}\n\n"));
+            for n in 1..=12 {
+                text.push_str(&format!("{heading} line {n:02}\n"));
+            }
+            text.push('\n');
+        }
+        let mut editor = editor_with(&text);
+        editor.execute(":sidebar-outline").unwrap();
+        let live = editor.live_window();
+        editor.focus_window(live);
+        centred_frame(&mut editor, config, w, h, seats);
+        editor
+    }
+
+    /// **An open picker takes the mouse from everything behind it**: a
+    /// press on the sidebar, its border, the scrollbar or the text, a drag
+    /// from any of them and the wheel all leave the page, the sidebar and
+    /// the keys as they were, the picker still open.
+    #[test]
+    fn an_open_picker_takes_the_mouse_from_everything_behind_it() {
+        let config = bare();
+        ink(&config);
+        let (w, h) = (100u16, 24u16);
+        let size = Some(ratatui::layout::Size::new(w, h));
+        let mut seats = Seats::default();
+        let mut editor = headings_with_the_outline(&config, (w, h), &mut seats);
+        let side = Side::BOTH.into_iter().find(|&s| editor.panel(s).is_some()).expect("the outline is open");
+        editor.on_key(Key::Char(' '));
+        editor.on_key(Key::Char('b'));
+        assert!(editor.picker().is_some(), "the picker is open");
+        centred_frame(&mut editor, &config, w, h, &mut seats);
+        let areas = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0);
+        let (panel, pane, bar) = (areas.panels[side as usize], areas.panes[0], areas.bars[0]);
+        let border = match side {
+            Side::Left => panel.x + panel.width - 1,
+            Side::Right => panel.x,
+        };
+        let before = (editor.selection(), editor.panel_focus(), editor.width_of(side), editor.panel(side).map(|p| p.selected()));
+        let mut pointer = Pointer::default();
+        let presses = [
+            (panel.x + panel.width / 2, panel.y + 2),
+            (border, panel.y + 3),
+            (bar.x, bar.y + bar.height / 2),
+            (pane.x + pane.width / 2, pane.y + 3),
+        ];
+        for (x, y) in presses {
+            left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("down", x, y));
+            left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("drag", pane.x + 4, pane.y + 6));
+            left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("drag", 2, pane.y + 6));
+            left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("up", 2, pane.y + 6));
+            wheel_scroll(&mut editor, &config, size, &seats, notch(false, x, y), 3);
+            let now = (editor.selection(), editor.panel_focus(), editor.width_of(side), editor.panel(side).map(|p| p.selected()));
+            assert_eq!(now, before, "a press at ({x}, {y}) reached behind the picker");
+            assert!(editor.picker().is_some(), "the picker stays open");
+        }
+        editor.on_key(Key::Esc);
+        assert!(editor.picker().is_none());
+        centred_frame(&mut editor, &config, w, h, &mut seats);
+        left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("down", pane.x + pane.width / 2, pane.y + 3));
+        assert_ne!(editor.selection(), before.0, "with the picker shut, a press in the text moves the caret");
+    }
+
+    /// **The wheel over a sidebar scrolls no window**: a sidebar keeps its
+    /// place by its highlight, and the page beside it is not what the
+    /// pointer was on.
+    #[test]
+    fn the_wheel_over_a_sidebar_leaves_the_page_where_it_is() {
+        let config = bare();
+        ink(&config);
+        let (w, h) = (100u16, 24u16);
+        let size = Some(ratatui::layout::Size::new(w, h));
+        let mut seats = Seats::default();
+        let mut editor = headings_with_the_outline(&config, (w, h), &mut seats);
+        let side = Side::BOTH.into_iter().find(|&s| editor.panel(s).is_some()).expect("the outline is open");
+        let panel = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0).panels[side as usize];
+        let before = (editor.selection(), editor.panel(side).map(|p| p.selected()));
+        wheel_scroll(&mut editor, &config, size, &seats, notch(false, panel.x + panel.width / 2, panel.y + 3), 3);
+        assert_eq!((editor.selection(), editor.panel(side).map(|p| p.selected())), before);
+    }
+
+    /// **A press or the wheel on the `:` menu stops there**: the menu takes
+    /// no mouse, and the text drawn under it is not what was pointed at.
+    #[test]
+    fn the_command_menu_keeps_the_mouse_off_the_text_under_it() {
+        let config = bare();
+        ink(&config);
+        let (w, h) = (80u16, 20u16);
+        let size = Some(ratatui::layout::Size::new(w, h));
+        let text: String = (1..=40).map(|n| format!("line {n:02}\n")).collect();
+        let mut editor = editor_with(&text);
+        let mut seats = Seats::default();
+        centred_frame(&mut editor, &config, w, h, &mut seats);
+        editor.on_key(Key::Char(':'));
+        centred_frame(&mut editor, &config, w, h, &mut seats);
+        let menu = *seats.menus.first().expect("the menu was drawn");
+        let at = (menu.x + menu.width / 2, menu.y + menu.height / 2);
+        let before = editor.selection();
+        let mut pointer = Pointer::default();
+        left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("down", at.0, at.1));
+        left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("up", at.0, at.1));
+        wheel_scroll(&mut editor, &config, size, &seats, notch(false, at.0, at.1), 3);
+        assert_eq!(editor.selection(), before, "nothing under the menu moved");
+        assert!(editor.prompt().is_some(), "the line is still open");
+    }
+
+    /// **Only a press in the text starts a range**: a drag on into the text
+    /// from a press on the scrollbar of a file that fits, from a press on a
+    /// sidebar's row, or from a press in a window that has since given the
+    /// keys away selects nothing.
+    #[test]
+    fn a_drag_selects_only_from_a_press_in_the_text() {
+        let config = bare();
+        ink(&config);
+        let (w, h) = (100u16, 24u16);
+        let size = Some(ratatui::layout::Size::new(w, h));
+
+        let mut editor = editor_with("one\ntwo\nthree\n");
+        let mut seats = Seats::default();
+        centred_frame(&mut editor, &config, w, h, &mut seats);
+        let areas = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0);
+        let (pane, bar) = (areas.panes[0], areas.bars[0]);
+        let mut pointer = Pointer::default();
+        left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("down", bar.x, bar.y + 1));
+        left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("drag", pane.x + pane.width / 2, pane.y + 2));
+        assert!(!editor.has_selection(), "from the bar of a file that fits");
+
+        let mut seats = Seats::default();
+        let mut editor = headings_with_the_outline(&config, (w, h), &mut seats);
+        let side = Side::BOTH.into_iter().find(|&s| editor.panel(s).is_some()).expect("the outline is open");
+        let areas = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0);
+        let (panel, pane) = (areas.panels[side as usize], areas.panes[0]);
+        let mut pointer = Pointer::default();
+        left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("down", panel.x + panel.width / 2, panel.y + 2));
+        let live = editor.live_window();
+        editor.focus_window(live);
+        left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("drag", pane.x + pane.width / 2, pane.y + 5));
+        assert!(!editor.has_selection(), "from a sidebar's row");
+
+        let mut seats = Seats::default();
+        let mut editor = two_windows_framed(true, &config, (w, h), &mut seats);
+        let panes = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0).panes;
+        let live = editor.live_pane();
+        let mut pointer = Pointer::default();
+        left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("down", panes[live].x + 6, panes[live].y + 1));
+        editor.on_key(Key::Ctrl('w'));
+        editor.on_key(Key::Char('w'));
+        assert_ne!(editor.live_pane(), live, "the keys went to the other window");
+        let before = editor.selection();
+        let into = panes[1 - live];
+        left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("drag", into.x + 6, into.y + 4));
+        assert_eq!(editor.selection(), before, "from a window that gave the keys away");
     }
 
     /// **The thumb dragged to the foot of its bar shows the end** — the

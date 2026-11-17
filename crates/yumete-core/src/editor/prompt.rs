@@ -759,6 +759,24 @@ impl Editor {
         }
     }
 
+    /// **Put down what is being typed**, as its own `Esc` puts it down:
+    /// Insert left, a `:`, `::`, `/` or reading line shut. For a click that
+    /// hands the keys to a sidebar, which reads them in Normal mode only —
+    /// left typing, the keys would go on into the text or the line while
+    /// the sidebar's frame said they were its.
+    pub(super) fn put_the_typing_down(&mut self) {
+        let was = self.before_a_change();
+        match self.mode {
+            Mode::Insert => self.leave_insert(),
+            Mode::Command => self.command_line_command(PlaceCmd::NormalMode),
+            Mode::Search => self.search_line_command(PlaceCmd::NormalMode),
+            Mode::Lookfor => self.lookfor_command(PlaceCmd::NormalMode),
+            Mode::Ruby => self.reading_command(PlaceCmd::NormalMode),
+            Mode::Normal | Mode::Picker | Mode::Field | Mode::Value => {}
+        }
+        self.settle_the_change(was);
+    }
+
     /// Shut the prompt and forget what was on it.
     fn close_prompt(&mut self) {
         self.command_line.clear();

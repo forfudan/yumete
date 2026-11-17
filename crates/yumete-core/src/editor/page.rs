@@ -1047,30 +1047,82 @@ impl Editor {
     }
 
     /// **The wheel over a window**: that window scrolls, and the keys stay
-    /// where they are — what helix does (`ui/editor.rs`, the view under the
-    /// pointer focused for the scroll and the focus put back) and what vim
-    /// does with `mouse=a`. The window is stepped into for the scroll and
-    /// stepped out of again, the live window's selections, the window
-    /// history `C-w p` walks and the status line put back as they were, so
-    /// all the scroll leaves behind is the other window's caret, which its
-    /// page follows. Over the live window, a preview, or with the keys in a
-    /// sidebar, it is [`Self::scroll`] as before.
-    pub fn scroll_window(&mut self, window: crate::window::WindowId, amount: usize, back: bool) {
-        if window == self.live || self.panel_focus().is_some() || self.is_page_window(window) || !self.windows.has(window) {
-            return self.scroll(amount, back);
-        }
-        let live = self.live;
-        let (sel, history, status) = (self.sel.clone(), self.window_history.clone(), self.status.clone());
-        if !self.switch_to(window) {
+    /// where they are, in a window or a sidebar — what helix does
+    /// (`ui/editor.rs`, the view under the pointer scrolled and the focus
+    /// left alone) and what vim does with `mouse=a`. The window with the
+    /// keys scrolls as [`Self::scroll`] moves it; a preview with the keys
+    /// takes the rows as its own scroll keys give them; any other window
+    /// scrolls in place ([`Self::scroll_in_place`]), its rows folded to
+    /// `width`, the columns its text is drawn in — `None` for the live
+    /// window's own. A preview without the keys does not scroll: its page
+    /// is moved by the keys in it.
+    pub fn scroll_window(&mut self, window: crate::window::WindowId, amount: usize, back: bool, width: Option<usize>) {
+        if !self.windows.has(window) {
             return;
         }
-        self.scroll(amount, back);
-        self.switch_to(live);
-        if self.live == live {
-            self.sel = sel;
+        if self.is_page_window(window) {
+            if window == self.live && self.page_window_has_the_keys() {
+                let rows = i32::try_from(amount).unwrap_or(i32::MAX);
+                self.page_steps.push(PageStep::Rows(if back { -rows } else { rows }));
+            }
+            return;
         }
-        self.window_history = history;
+        match window == self.live {
+            true => self.scroll(amount, back),
+            false => self.scroll_in_place(window, amount, back, width),
+        }
+    }
+
+    /// **Scroll a window without the keys where it stands**: its own place,
+    /// file, folds and grid stood in for the live window's for the length
+    /// of [`Self::scroll`], and the live window's put back after, so all the
+    /// scroll leaves behind is that window's caret, which its page follows.
+    ///
+    /// Nothing else about the window changes — the mark a preview was
+    /// opened to show, its caption and the `Esc` that puts it away stay —
+    /// and nothing about the live window does either: the keys never
+    /// move, so the sidebars, the language server's questions and what is
+    /// remembered about the live file are not touched, as a step into the
+    /// window and back would touch them.
+    fn scroll_in_place(&mut self, window: crate::window::WindowId, amount: usize, back: bool, width: Option<usize>) {
+        let Some(pane) = self.panes.get(&window) else { return };
+        let Some(index) = self.buffer_with(pane.buffer) else { return };
+        let len = self.buffers[index].rope().len_chars();
+        let (cursor, anchor) = (pane.cursor.min(len), pane.anchor.min(len));
+        let (goal, slot, extend) = (pane.goal_column, pane.goal_slot, pane.extend);
+        let grid = pane.table.view().cloned();
+        let (live, current, sel, was_extending) = (self.live, self.current, self.sel.clone(), self.extend);
+        let (status, wrap) = (self.status.clone(), self.viewing_wrap.get());
+        let table = std::mem::replace(&mut self.table, grid);
+        self.live = window;
+        self.current = index;
+        self.sel.keep_primary();
+        self.sel.set_head(cursor);
+        self.sel.set_anchor(anchor);
+        self.sel.set_goal(goal);
+        self.sel.set_goal_slot(slot);
+        self.extend = extend;
+        if let Some(width) = width {
+            self.viewing_wrap.set(Some(self.wrap_for(width)));
+        }
+        self.scroll(amount, back);
+        let (head, anchor, goal, slot) = (self.sel.head(), self.sel.anchor(), self.sel.goal(), self.sel.goal_slot());
+        let grid = std::mem::replace(&mut self.table, table);
+        self.live = live;
+        self.current = current;
+        self.sel = sel;
+        self.extend = was_extending;
         self.status = status;
+        self.viewing_wrap.set(wrap);
+        if let Some(pane) = self.panes.get_mut(&window) {
+            pane.cursor = head;
+            pane.anchor = anchor;
+            pane.goal_column = goal;
+            pane.goal_slot = slot;
+            if let super::PaneTable::Kept { view, .. } = &mut pane.table {
+                *view = grid;
+            }
+        }
     }
 
     pub fn live_window(&self) -> crate::window::WindowId {

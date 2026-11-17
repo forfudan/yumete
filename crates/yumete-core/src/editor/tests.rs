@@ -43765,3 +43765,152 @@ fn a_step_set_by_hand_is_where_w_walks_on_from() {
     assert_eq!(ed.status(), "", "the same step says nothing");
     assert_eq!(step(5).next(), step(1), "and w walks on from it, round to the narrowest");
 }
+
+/// Two windows side by side: the live one on a Markdown file with three
+/// headings, the other on sixty plain lines — two files, so a step into
+/// the other window and back would change file twice.
+fn two_files_side_by_side() -> (Editor, crate::window::WindowId) {
+    let text: String = (1..=60).map(|n| format!("line {n:02}\n")).collect();
+    let mut ed = typed(&text);
+    ed.execute(":vsplit").unwrap();
+    ed.execute(":new").unwrap();
+    ed.current_buffer_mut().set_syntax_by_hand(crate::syntax::Syntax::Markdown);
+    ed.on_key(Key::Char('i'));
+    for c in "# One\n\nfirst\n\n# Two\n\nsecond\n\n# Three\n\nthird\n".chars() {
+        ed.on_key(if c == '\n' { Key::Enter } else { Key::Char(c) });
+    }
+    ed.on_key(Key::Esc);
+    press(&mut ed, "gg");
+    let other = ed.other_window().expect("two windows");
+    (ed, other)
+}
+
+/// **The wheel over a window opened to show something leaves it showing
+/// it**: the mark, the caption and the `Esc` that puts it away all stay,
+/// and only its caret moves.
+#[test]
+fn the_wheel_over_a_shown_window_keeps_what_it_was_opened_to_show() {
+    let text: String = (1..=60).map(|n| format!("line {n:02}\n")).collect();
+    let mut ed = typed(&text);
+    let at = ed.current_buffer().rope().line_to_char(30);
+    ed.show_in_split(at, Some((at, at + 4)), "hit".to_string());
+    let shown = ed.other_window().expect("a window opened");
+    let live = (ed.live_window(), ed.sel.head());
+    ed.scroll_window(shown, 3, false, None);
+    let pane = &ed.panes[&shown];
+    assert_eq!(ed.current_buffer().rope().char_to_line(pane.cursor()), 33, "the window scrolled");
+    assert_eq!(pane.highlight, Some((at, at + 4)), "its mark stays");
+    assert!(pane.preview, "it is still a window opened to show something");
+    assert_eq!(pane.caption, "hit", "its caption stays");
+    assert_eq!((ed.live_window(), ed.sel.head()), live, "the keys and their caret stay");
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.windows().len(), 1, "Esc still puts it away");
+}
+
+/// **The wheel over another file's window touches nothing of the live
+/// file's**: the outline keeps the row picked in it, and a question out to
+/// the language server about the live file is still out.
+#[test]
+fn the_wheel_over_another_files_window_leaves_the_live_files_state_alone() {
+    let (mut ed, other) = two_files_side_by_side();
+    ed.execute(":sidebar-outline").unwrap();
+    let side = ed.panel_focus().expect("the outline has the keys");
+    press(&mut ed, "jj");
+    let picked = ed.panel(side).expect("open").selected();
+    let live = ed.live_window();
+    ed.focus_window(live);
+    assert!(ed.panel_focus().is_none());
+    let asked = Some((tmp().join("asked.md"), 1, 2));
+    ed.completion_query = asked.clone();
+    let (current, head) = (ed.current, ed.sel.head());
+    ed.scroll_window(other, 3, false, None);
+    assert_eq!(ed.panel(side).expect("open").selected(), picked, "the outline keeps its row");
+    assert_eq!(ed.completion_query, asked, "the question is still out");
+    assert_eq!((ed.current, ed.sel.head(), ed.live_window()), (current, head, live), "the live window is as it was");
+    let pane = &ed.panes[&other];
+    let rope = ed.buffers.iter().find(|b| b.id() == pane.buffer).expect("its file").rope();
+    assert_eq!(rope.char_to_line(pane.cursor()), 3, "the other window scrolled in its own file");
+}
+
+/// **The window under the pointer scrolls with the keys in a sidebar**,
+/// and the keys stay there.
+#[test]
+fn the_wheel_over_a_window_scrolls_it_with_the_keys_in_a_sidebar() {
+    let (mut ed, other) = two_files_side_by_side();
+    ed.execute(":sidebar-outline").unwrap();
+    let side = ed.panel_focus().expect("the outline has the keys");
+    let head = ed.sel.head();
+    ed.scroll_window(other, 3, false, None);
+    let pane = &ed.panes[&other];
+    let rope = ed.buffers.iter().find(|b| b.id() == pane.buffer).expect("its file").rope();
+    assert_eq!(rope.char_to_line(pane.cursor()), 3, "the window under the pointer scrolled");
+    assert_eq!(ed.sel.head(), head, "the live window did not");
+    assert_eq!(ed.panel_focus(), Some(side), "the keys stay in the sidebar");
+}
+
+/// **Another window's rows are its own width's**: a notch over a narrow
+/// window steps one of its rows, not one of the live window's.
+#[test]
+fn the_wheel_steps_another_windows_rows_at_its_own_width() {
+    let mut ed = typed(&format!("{}\nend\n", "a".repeat(100)));
+    ed.set_soft_wrap(true);
+    ed.set_wrap_width(80);
+    ed.execute(":vsplit").unwrap();
+    let other = ed.other_window().expect("two windows");
+    ed.scroll_window(other, 1, false, Some(20));
+    assert_eq!(ed.panes[&other].cursor(), 20, "one row of twenty");
+    assert_eq!(ed.wrap_width(), Some(80), "the live window folds at its own width again");
+}
+
+/// **A click into a sidebar puts the typing down first**: from Insert or
+/// with a `:` line open, the keys a sidebar reads are Normal mode's, so the
+/// text is left as `Esc` leaves it and the line is shut — and the next key
+/// moves in the sidebar instead of typing into the text.
+#[test]
+fn a_click_into_a_sidebar_puts_the_typing_down() {
+    let (mut ed, _) = two_files_side_by_side();
+    ed.execute(":sidebar-outline").unwrap();
+    let side = ed.panel_focus().expect("open");
+    let live = ed.live_window();
+    ed.focus_window(live);
+    let text = ed.current_buffer().rope().to_string();
+    press(&mut ed, "iX");
+    assert_eq!(ed.mode(), Mode::Insert);
+    ed.click_sidebar(side, Some(0));
+    assert_eq!(ed.mode(), Mode::Normal, "Insert is left");
+    assert_eq!(ed.panel_focus(), Some(side));
+    press(&mut ed, "j");
+    assert_eq!(ed.current_buffer().rope().to_string(), format!("X{text}"), "j moved in the sidebar, not into the text");
+    assert_eq!(ed.panel(side).expect("open").selected(), 1);
+    ed.focus_window(live);
+    press(&mut ed, "u");
+    assert_eq!(ed.current_buffer().rope().to_string(), text, "what was typed is one change, undone whole");
+
+    press(&mut ed, ":so");
+    assert_eq!(ed.mode(), Mode::Command);
+    ed.click_sidebar(side, Some(0));
+    assert_eq!(ed.mode(), Mode::Normal, "the line is shut");
+    assert!(ed.prompt().is_none());
+    assert_eq!(ed.panel_focus(), Some(side));
+}
+
+/// **The wheel over a preview moves that preview or nothing**: with the
+/// keys in it, the rows go to its page as its own scroll keys send them;
+/// without, the text window with the keys does not scroll in its place.
+#[test]
+fn the_wheel_over_a_preview_never_scrolls_the_text_instead() {
+    let (mut ed, dir) = a_typst_book("wheel");
+    let main = dir.join("main.typ");
+    let page = ed.open_page_window(main).expect("room enough");
+    assert!(!ed.page_window_has_the_keys());
+    let head = ed.sel.head();
+    ed.scroll_window(page, 3, false, None);
+    assert_eq!(ed.sel.head(), head, "the text with the keys stays");
+    assert!(ed.take_page_steps().is_empty(), "a preview without the keys is not moved");
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
+    assert!(ed.page_window_has_the_keys());
+    ed.scroll_window(page, 3, false, None);
+    ed.scroll_window(page, 2, true, None);
+    assert_eq!(ed.take_page_steps(), vec![PageStep::Rows(3), PageStep::Rows(-2)], "the preview with the keys takes the rows");
+}

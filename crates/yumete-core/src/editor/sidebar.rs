@@ -503,10 +503,15 @@ impl Editor {
     /// nothing is opened: opening is `Enter`'s, as in helix's pickers and a
     /// file tree, so a click to look never leaves the page. The info panel,
     /// the search panel and a table's record take the keys only.
+    ///
+    /// A sidebar reads its keys in Normal mode, so typing in the text or on
+    /// the command row is put down first, as `Esc` would put it down
+    /// ([`Self::put_the_typing_down`]).
     pub fn click_sidebar(&mut self, side: crate::sidebar::Side, row: Option<usize>) {
         if self.panel(side).is_none() {
             return;
         }
+        self.put_the_typing_down();
         self.go_to_region(Region::Side(side));
         let lists = |view: crate::sidebar::View| {
             use crate::sidebar::View;
