@@ -11,12 +11,18 @@
 //! | `Tab` `C-n` `Down` | choose the next one and write it in |
 //! | `S-Tab` `C-p` `Up` | the one before, written in |
 //! | typing on | keeps what is written and goes on |
-//! | `Enter` | keeps it and closes the panel, no line break |
+//! | `Enter` | keeps it, closes the panel and breaks the line |
+//! | `C-y` | keeps it and closes the panel, no line break |
 //! | `Esc` | keeps it, closes the panel and leaves Insert |
 //! | `C-c` | takes it back out, restoring what was typed; Insert stays |
 //!
 //! and vim's two for its popup menu, under both keymaps and only while the
-//! panel is open: `C-y` as `Enter`, `C-e` as `C-c`.
+//! panel is open: `C-y` keeps without a line break, `C-e` as `C-c`.
+//!
+//! Warning: **`Enter` is always the line break, chosen or not** — unlike helix,
+//! where it accepts. At the end of a list item or a sentence the hand reaching
+//! for a new line must get one; the choice is already written in, so `Enter`
+//! only has to keep it. Accepting without a line break is `C-y`.
 
 use super::*;
 
@@ -163,9 +169,9 @@ impl Editor {
         match step {
             Step::Next => self.choose_offer(true),
             Step::Back => self.choose_offer(false),
-            // `Enter` with nothing chosen is the line break it always is, as
-            // in helix, and the list goes with the line it was about.
-            Step::Keep if !chosen && key == Key::Enter => {
+            // `Enter` keeps what is written and is the line break it always
+            // is; the list goes with the line it was about.
+            Step::Keep if key == Key::Enter => {
                 self.offering = None;
                 false
             }
@@ -197,7 +203,12 @@ impl Editor {
         match step {
             Step::Next => self.cycle_reference(1),
             Step::Back => self.cycle_reference(-1),
-            Step::Keep if !chosen && key == Key::Enter => false,
+            Step::Keep if key == Key::Enter => {
+                if chosen {
+                    self.dismiss_reference();
+                }
+                false
+            }
             Step::Keep => {
                 self.dismiss_reference();
                 true

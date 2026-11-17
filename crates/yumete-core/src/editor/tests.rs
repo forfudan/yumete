@@ -43013,8 +43013,8 @@ fn harbour_list(keymap: &str) -> Editor {
 fn the_word_panel_takes_helix_menu_keys_under_both_keymaps() {
     for keymap in ["helix", "vim"] {
         let chosen = |ed: &Editor| ed.completion_panel().and_then(|p| p.chosen);
-        // Each Tab writes the next one in; the ends meet; Enter keeps it and
-        // closes the panel without a line break.
+        // Each Tab writes the next one in; the ends meet; Enter keeps it,
+        // closes the panel and breaks the line, as it does with no panel.
         let mut ed = harbour_list(keymap);
         assert_eq!(chosen(&ed), None, "{keymap}: nothing chosen until Tab");
         ed.on_key(Key::Tab);
@@ -43027,9 +43027,19 @@ fn the_word_panel_takes_helix_menu_keys_under_both_keymaps() {
         ed.on_key(Key::Tab);
         let lines = ed.current_buffer().rope().len_lines();
         ed.on_key(Key::Enter);
-        assert_eq!(caret_line(&ed), "harbourmaster", "{keymap}");
-        assert_eq!(ed.current_buffer().rope().len_lines(), lines, "{keymap}: no line break");
+        assert_eq!(ed.current_buffer().rope().len_lines(), lines + 1, "{keymap}: Enter breaks the line");
+        let above = ed.current_buffer().rope().line(ed.current_buffer().rope().char_to_line(ed.sel.head()) - 1).to_string();
+        assert_eq!(above.trim_end(), "harbourmaster", "{keymap}: the choice kept on the line above");
         assert_eq!(ed.mode(), Mode::Insert, "{keymap}");
+        assert!(ed.completion_panel().is_none(), "{keymap}: closed");
+
+        // `C-y` keeps it without the line break.
+        let mut ed = harbour_list(keymap);
+        ed.on_key(Key::Tab);
+        let lines = ed.current_buffer().rope().len_lines();
+        ed.on_key(Key::Ctrl('y'));
+        assert_eq!(caret_line(&ed), "harbourside", "{keymap}");
+        assert_eq!(ed.current_buffer().rope().len_lines(), lines, "{keymap}: C-y, no line break");
         assert!(ed.completion_panel().is_none(), "{keymap}: closed");
 
         // `C-n` writes the first in, and typing on keeps it.
@@ -43129,7 +43139,7 @@ fn footnote_panel(keymap: &str) -> Editor {
 }
 
 /// **References take the same keys**: `Tab` writes the next one in, closing
-/// bracket and all, `Enter` keeps it without a line break, `C-c` puts back
+/// bracket and all, `Enter` keeps it and breaks the line, `C-c` puts back
 /// what was typed and the panel stays shut until the text moves on.
 #[test]
 fn the_reference_panel_takes_the_same_keys() {
@@ -43142,7 +43152,7 @@ fn the_reference_panel_takes_the_same_keys() {
         let lines = ed.current_buffer().rope().len_lines();
         ed.on_key(Key::Enter);
         assert_eq!(first(&ed), "正文[^舊註]和[^7]。[^7]", "{keymap}");
-        assert_eq!(ed.current_buffer().rope().len_lines(), lines, "{keymap}: no line break");
+        assert_eq!(ed.current_buffer().rope().len_lines(), lines + 1, "{keymap}: Enter breaks the line");
         assert_eq!(ed.mode(), Mode::Insert, "{keymap}");
         assert!(ed.completion_panel().is_none(), "{keymap}");
 
@@ -43226,7 +43236,7 @@ fn a_reference_brings_its_brackets_and_takes_them_back() {
     assert_eq!(caret_line(&ed), "見[[");
     ed.on_key(Key::Char('雨'));
     ed.on_key(Key::Tab);
-    ed.on_key(Key::Enter);
+    ed.on_key(Key::Ctrl('y'));
     assert_eq!(caret_line(&ed), "見[[雨夜]]");
     std::fs::remove_dir_all(&dir).ok();
 }

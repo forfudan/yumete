@@ -44,6 +44,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Changed
 
+- **`Enter` in the completion list always starts a new line**, after keeping what is written in, so the end of a list item or a sentence gets its line break; `C-y` keeps the choice without one. helix's `Enter` accepts instead.
 - **Every window's scrollbar column has a quiet track** a shade off the paper, under the thumb and the marks, also while the file fits.
 - **The sidebar buttons at the ends of the tab line are one cell each, with an ASCII arrow** saying what a click does (`>` / `<`), over the window's first column and its scrollbar column; the cell beside each still takes a click.
 - **While a picker is open, every window's status line dims along with the page under it**, and keeps its own mode word instead of switching to `PIC.INS`; only the command row, which shows the picker's keys, stays as it is.
