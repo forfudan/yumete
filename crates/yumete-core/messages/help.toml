@@ -682,10 +682,10 @@ zhs = "退出编辑器"
 en = "quit"
 
 [[message]]
-# （草稿）開場屏：:manual 那一行
+# 開場屏：:manual 那一行
 key = "intro.manual"
-zhs = "打开 yumete 手册网站"
-en = "open the yumete manual website"
+zhs = "打开用户手册"
+en = "open the user manual"
 
 [[message]]
 # 開場屏：空格 f 做什麼
