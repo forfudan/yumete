@@ -750,10 +750,22 @@ impl Editor {
     pub(super) fn spend_the_insert_count(&mut self, again: usize, typed: &str) {
         let opened = self.insert_opened.take();
         let ending = self.current_buffer().ending().to_string();
+        let owed = self.closers_owed(typed);
         for _ in 0..again {
             match opened {
                 // `i a I A` — 接着打，就在光標這裏。
-                None => self.type_through_pairs(typed),
+                // **Each copy after the closers the last one left open**,
+                // as `.` writes it: `3A(x` is `(x)(x)(x)`, not three pairs
+                // inside each other.
+                None => {
+                    let rope = self.current_buffer().rope();
+                    let at = self.sel.head().min(rope.len_chars());
+                    let n = owed.chars().count();
+                    if n > 0 && rope.slice(at..(at + n).min(rope.len_chars())).chars().eq(owed.chars()) {
+                        self.set_cursor(at + n);
+                    }
+                    self.type_through_pairs(typed);
+                }
                 // Warning: **`o`/`O` 這兩路要自己拼字串，不許叫 `add_blank_line`**。
                 // ① 那一支自己 `snapshot()`，叫了它「整段算一個命令」就是假的——`3o`
                 // 打完要按三下 `u` 纔回得去；② 它把光標跟着原來那段文字往下挪，`O`

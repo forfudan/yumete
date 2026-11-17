@@ -308,14 +308,30 @@ impl Editor {
                 return None;
             }
             self.read_the_open_buffers();
+            // **The word the caret stands inside is not offered to itself**
+            // (vim's `C-n` skips the match where it started): an offer
+            // replaces only what is before the caret, so `quix` in front of
+            // `end` offered `quixend` would write `quixendend`. The same word
+            // written elsewhere is still offered, once fewer.
+            let rest: String = after.iter().take_while(|&&c| latin_letter(c)).collect();
+            let across = (!rest.is_empty()).then(|| format!("{typed}{rest}"));
+            let (here, revision) = (self.current_buffer().id(), self.current_buffer().revision());
             // **Completion first, fuzzy after**. A word that starts
             // with what was typed is offered in the case typed (see
             // [`in_the_case_typed`]), so `When` and `when` are one row; then the
             // words that only hold the letters in order, as written.
             // Shown → (fuzzy?, score, how often).
             let mut found: HashMap<String, (bool, i64, u32)> = HashMap::new();
-            for index in self.word_index.values() {
+            for (&id, index) in &self.word_index {
+                let read_now = id == here && index.revision == Some(revision);
                 for (word, &count) in &index.latin {
+                    let count = match across.as_deref() == Some(word.as_str()) && read_now {
+                        true => count.saturating_sub(1),
+                        false => count,
+                    };
+                    if count == 0 {
+                        continue;
+                    }
                     let (shown, fuzzy, score) = match in_the_case_typed(word, &typed) {
                         Some(shown) => (shown, false, 0),
                         None => match super::modes::in_order(word, &typed) {

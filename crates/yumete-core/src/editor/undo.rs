@@ -91,8 +91,8 @@ impl Editor {
     /// 25.07.1: after `C` `A` `X` `Esc` `u`, helix has both cursors back where
     /// the typing began).
     ///
-    /// Warning: **the helix keymap only.** vim's `u` leaves one cursor at the
-    /// start of the change, and the vim keymap keeps doing that.
+    /// Warning: **the helix keymap only.** vim's `u` leaves one cursor where
+    /// [`Self::where_vim_lands`] says, and the vim keymap keeps doing that.
     fn come_back_to(&mut self, cursor: usize, every: Option<crate::selection::Selections>) {
         self.selections_restored = true;
         match every {

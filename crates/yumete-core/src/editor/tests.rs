@@ -4956,6 +4956,28 @@ fn auto_pairs_after_the_review() {
     ed.on_key(Key::Esc);
     assert_eq!(text(&ed), "foo\n(x)\n(x)\n(x)\n");
 
+    // **A counted insert repeats the typing, as `.` does**: each copy
+    // after the closer the last one left, not inside it (helix ignores a
+    // count on an insert, so it has no say here).
+    for (keys, want) in [
+        ("3A(x", "foo(x)(x)(x)\n"),
+        ("3i(x", "(x(x(xfoo\n"),
+        ("2A \"x", "foo \"x\" \"x\"\n"),
+        ("3A(x)", "foo(x)(x)(x)\n"),
+        ("2A[(", "foo[()][()]\n"),
+        ("3Ax", "fooxxx\n"),
+    ] {
+        let mut ed = typed_vim("foo\n");
+        press(&mut ed, keys);
+        ed.on_key(Key::Esc);
+        assert_eq!(text(&ed), want, "{keys}");
+    }
+    let mut ed = typed_vim("foo\nbar\n");
+    press(&mut ed, "A(x");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "j.");
+    assert_eq!(text(&ed), "foo(x)\nbar(x)\n", "`.` writes the same flat copy");
+
     // An input-method commit of several characters pairs as they would typed.
     let mut ed = typed("");
     ed.set_auto_pairs(AutoPairs::Full);
@@ -44290,5 +44312,62 @@ fn vims_undo_and_redo_land_where_nvim_lands() {
         assert_eq!(ed.current_buffer().text(), text);
         feed(&mut ed, keys);
         assert_eq!(at(&ed), want, "nvim: {keys}");
+    }
+}
+
+/// **The word the caret stands inside is not offered to itself** (vim's
+/// `C-n` skips the match where it started, measured in nvim 0.12): `quix`
+/// typed in front of `end` offers `quixotical`, never `quixend`, and the
+/// offer replaces only what is before the caret, under either keymap.
+#[test]
+fn completing_in_front_of_a_word_does_not_offer_the_word_across_the_caret() {
+    let labels = |ed: &Editor| -> Vec<String> {
+        ed.offers_here().map(|(items, _)| items.iter().map(|o| o.label.clone()).collect()).unwrap_or_default()
+    };
+    for vim in [true, false] {
+        let mut ed = typed("a quixotical plan\nend\n");
+        if vim {
+            ed.execute(":keymap vim").unwrap();
+            press(&mut ed, "ggji");
+        } else {
+            press(&mut ed, "ggjgsi");
+        }
+        press(&mut ed, "quix");
+        ed.on_key(Key::Ctrl('n'));
+        assert_eq!(labels(&ed), ["quixotical"], "vim keymap: {vim}");
+        ed.on_key(Key::Ctrl('n'));
+        ed.on_key(Key::Esc);
+        assert_eq!(ed.current_buffer().text(), "a quixotical plan\nquixoticalend\n", "vim keymap: {vim}");
+    }
+    // The same word written elsewhere is still a word of the text.
+    let mut ed = typed("a quixend plan\nend\n");
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "ggjiquix");
+    ed.on_key(Key::Ctrl('n'));
+    assert_eq!(labels(&ed), ["quixend"]);
+}
+
+/// **`C-w` and `C-u` leave the closer an opener they take had written**,
+/// as helix 25.07.1 does (measured): only Backspace inside an empty pair
+/// takes both halves. `delete_word_backward` and `kill_to_line_start` know
+/// nothing of pairs there.
+#[test]
+fn control_w_and_u_leave_an_auto_paired_closer_as_helix_does() {
+    for (keys, want) in [
+        (vec![Key::Char('A'), Key::Char(' '), Key::Char('('), Key::Ctrl('w')], "Some text here )\n"),
+        (
+            "A say \"".chars().map(Key::Char).chain([Key::Ctrl('w')]).collect(),
+            "Some text here say \"\n",
+        ),
+        (vec![Key::Char('A'), Key::Char('('), Key::Ctrl('w')], "Some text here)\n"),
+        (vec![Key::Char('A'), Key::Char(' '), Key::Char('('), Key::Ctrl('u')], ")\n"),
+        (vec![Key::Char('A'), Key::Char(' '), Key::Char('('), Key::Backspace], "Some text here \n"),
+    ] {
+        let mut ed = typed("Some text here\n");
+        for key in &keys {
+            ed.on_key(*key);
+        }
+        ed.on_key(Key::Esc);
+        assert_eq!(ed.current_buffer().text(), want, "{keys:?}");
     }
 }
