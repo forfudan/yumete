@@ -31,9 +31,9 @@ use std::time::{Duration, Instant};
 use yumete_core::editor::Editor;
 use yumete_core::wrap::Anchor;
 
-/// How many buffers' tables are kept: a split showing two files must not
-/// rebuild one table each frame, and a session that has opened many files
-/// does not keep a table for each.
+/// How many tables are kept: a split showing two files, or one file in two
+/// windows of different widths, must not rebuild a table each frame, and a
+/// session that has opened many files does not keep a table for each.
 const KEPT: usize = 8;
 
 /// **A table that took this long to build waits for the typing to stop.**
@@ -133,10 +133,12 @@ impl Rows {
     }
 }
 
-/// **The tables of rows, one per buffer**, kept across frames.
+/// **The tables of rows, one per buffer, width and blank-line folding**, kept
+/// across frames: one file in two windows of different widths is two tables,
+/// each asked for in turn on every frame.
 #[derive(Debug, Default)]
 pub(crate) struct Estimates {
-    by_buffer: HashMap<u64, Rows>,
+    tables: HashMap<(u64, Option<usize>, bool), Rows>,
     /// A clock for [`Rows::used`].
     clock: u64,
     /// How many tables have been built: the test that a scroll builds none.
@@ -154,15 +156,15 @@ impl Estimates {
             width: editor.wrap_width(),
             blank_lines_fold: editor.blank_lines_off_the_page().is_some(),
         };
-        let id = buffer.id();
+        let id = (buffer.id(), key.width, key.blank_lines_fold);
         self.clock += 1;
         let now = Instant::now();
-        let stale = match self.by_buffer.get_mut(&id) {
+        let stale = match self.tables.get_mut(&id) {
             None => true,
             Some(rows) if rows.key == key => false,
             // **Typed into, and slow to count**: the table as it was, until
             // the typing has been still for a moment.
-            Some(rows) if rows.took >= SLOW && Key { revision: key.revision, ..rows.key } == key => {
+            Some(rows) if rows.took >= SLOW => {
                 if rows.seen.0 != key.revision {
                     rows.seen = (key.revision, now);
                 }
@@ -171,26 +173,30 @@ impl Estimates {
             Some(_) => true,
         };
         if stale {
-            if !self.by_buffer.contains_key(&id) && self.by_buffer.len() >= KEPT {
-                if let Some(oldest) = self.by_buffer.iter().min_by_key(|(_, rows)| rows.used).map(|(&id, _)| id) {
-                    self.by_buffer.remove(&oldest);
+            if !self.tables.contains_key(&id) && self.tables.len() >= KEPT {
+                if let Some(oldest) = self.tables.iter().min_by_key(|(_, rows)| rows.used).map(|(&id, _)| id) {
+                    self.tables.remove(&oldest);
                 }
             }
-            self.by_buffer.insert(id, Rows::build(editor, key));
+            self.tables.insert(id, Rows::build(editor, key));
             self.builds += 1;
         }
-        let rows = self.by_buffer.get_mut(&id).expect("put in above");
+        let rows = self.tables.get_mut(&id).expect("put in above");
         rows.used = self.clock;
         rows
     }
 
     /// How long until a table left standing over an edit is owed again: the
-    /// loop wakes then and draws, and the frame builds it.
+    /// loop wakes then and draws, and the frame builds it. A table whose pause
+    /// has gone by is owed nothing more: the frame drawn on that wake built it
+    /// if a window still shows it, and one no window shows (its file put
+    /// away, its width left behind) would otherwise keep the loop awake.
     pub(crate) fn due_in(&self) -> Option<Duration> {
-        self.by_buffer
+        self.tables
             .values()
             .filter(|rows| rows.seen.0 != rows.key.revision)
             .map(|rows| PAUSE.saturating_sub(rows.seen.1.elapsed()))
+            .filter(|left| !left.is_zero())
             .min()
     }
 
@@ -198,7 +204,7 @@ impl Estimates {
     /// still as the pause: the waiting, without a long file or a clock.
     #[cfg(test)]
     pub(crate) fn as_if(&mut self, slow: bool, paused: bool) {
-        for rows in self.by_buffer.values_mut() {
+        for rows in self.tables.values_mut() {
             if slow {
                 rows.took = SLOW;
             }

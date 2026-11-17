@@ -22375,6 +22375,12 @@ fn squeezed(text: &str) -> String {
         assert_eq!(seats.rows.builds, built + 1, "and once only");
         centred_frame(&mut editor, &config, w + 10, h, &mut seats);
         assert_eq!(seats.rows.builds, built + 2, "a new width counts once");
+        // One file in two windows of different widths: both tables kept.
+        for _ in 0..3 {
+            centred_frame(&mut editor, &config, w, h, &mut seats);
+            centred_frame(&mut editor, &config, w + 10, h, &mut seats);
+        }
+        assert_eq!(seats.rows.builds, built + 2, "two widths of one text are both kept");
     }
 
     /// **A table slow to count waits for the typing to stop**: typed into,
@@ -22406,6 +22412,14 @@ fn squeezed(text: &str) -> String {
         seats.rows.as_if(true, false);
         centred_frame(&mut editor, &config, w + 10, h, &mut seats);
         assert_eq!(seats.rows.builds, built + 2);
+        // Typed into and no frame since: once the pause is over, a table no
+        // window asks for owes the loop no wake.
+        seats.rows.as_if(true, false);
+        editor.on_key(Key::Char('z'));
+        centred_frame(&mut editor, &config, w + 10, h, &mut seats);
+        assert!(seats.rows.due_in().is_some(), "a wake owed while the pause runs");
+        seats.rows.as_if(false, true);
+        assert_eq!(seats.rows.due_in(), None, "and none once it is over");
     }
 
     /// The marks on a frame's scrollbar, a letter a cell: `s` a search hit,
