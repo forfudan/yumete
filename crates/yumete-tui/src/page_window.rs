@@ -814,7 +814,7 @@ pub fn draw(frame: &mut ratatui::Frame, editor: &Editor, config: &yumete_config:
             if editor.scrollbar() {
                 let total = page.total.map(|t| t * rows as usize);
                 let from = (page.number.saturating_sub(1)) * rows as usize + top as usize;
-                bar_on_the_wall(frame.buffer_mut(), area, total.map(|t| (from, from + spot.height as usize, t)), ink.scrollbar());
+                bar_on_the_wall(frame.buffer_mut(), area, total.map(|t| (from, from + spot.height as usize, t)), (ink.scrollbar_track(), ink.scrollbar()));
             }
             let mark = cursor_row.map(|row| cursor_mark(row - top as i32, spot.height));
             mark_the_cursor(frame.buffer_mut(), area, spot, mark, ink.page().fg(ink.gold()));
@@ -826,7 +826,7 @@ pub fn draw(frame: &mut ratatui::Frame, editor: &Editor, config: &yumete_config:
             crate::graphics::put_picture(frame.buffer_mut(), spot, picture);
             if editor.scrollbar() {
                 let at = page.number.saturating_sub(1);
-                bar_on_the_wall(frame.buffer_mut(), area, page.total.map(|t| (at, at + 1, t)), ink.scrollbar());
+                bar_on_the_wall(frame.buffer_mut(), area, page.total.map(|t| (at, at + 1, t)), (ink.scrollbar_track(), ink.scrollbar()));
             }
             let mark = board
                 .jump
@@ -851,11 +851,19 @@ pub fn draw(frame: &mut ratatui::Frame, editor: &Editor, config: &yumete_config:
 /// **Where the window is in the document, on the frame's right wall**
 /// beside `area`: `[a, b)` of `len`, in rows of the page across its width
 /// (the page before this one counting a whole page) or in pages when a page
-/// fits whole. Nothing when tinymist has not said how many pages there are.
-/// Drawn before the cursor's marks, so a `◀` on its row stands over it.
-fn bar_on_the_wall(buf: &mut ratatui::buffer::Buffer, area: Rect, span: Option<(usize, usize, usize)>, tint: ratatui::style::Color) {
-    let Some((a, b, len)) = span else { return };
+/// fits whole. The wall beside the picture is the bar's track, as a text
+/// window's column is; no thumb when tinymist has not said how many pages
+/// there are. Drawn before the cursor's marks, so a `◀` on its row stands
+/// over it.
+fn bar_on_the_wall(
+    buf: &mut ratatui::buffer::Buffer,
+    area: Rect,
+    span: Option<(usize, usize, usize)>,
+    (track, tint): (ratatui::style::Color, ratatui::style::Color),
+) {
     let wall = Rect { x: area.x + area.width, width: 1, ..area };
+    crate::paint_the_track(buf, wall, track);
+    let Some((a, b, len)) = span else { return };
     crate::tint_the_thumb(buf, wall, crate::thumb(area.height as usize, (a, b), len), tint);
 }
 

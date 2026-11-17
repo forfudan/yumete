@@ -410,6 +410,22 @@ impl Editor {
         self.width[side as usize]
     }
 
+    /// **Put this side at a step**, the one place its width changes: `w`
+    /// walks through it and dragging the border lands on it, so the two
+    /// agree on what the side is set to. A change is echoed as `w` echoes
+    /// it; the same step again says nothing, so a drag that stays on one
+    /// step does not repeat itself.
+    pub fn set_width_of(&mut self, side: crate::sidebar::Side, width: crate::sidebar::Width) {
+        if self.width[side as usize] == width {
+            return;
+        }
+        self.width[side as usize] = width;
+        let (num, den) = width.fraction();
+        // 一句回聲，三秒之後自己下去——按的人眼睛已經看見邊欄寬了一檔，
+        // 而這一行底下正是按鍵提示的位子。
+        self.murmur(say!("sidebar.width", num, den));
+    }
+
     /// **一扇側面板要這麼多欄纔擺得下**。
     ///
     /// 版面算術是 `正文保底 = max(窗口/3, 24)`，面板分的是剩下的（見 `yumete-tui`
@@ -476,6 +492,30 @@ impl Editor {
                     .filter(|&view| self.side_for(view) == side)
                     .unwrap_or_else(|| self.side_view(side));
                 self.open_panel_without_the_keys(side, view);
+            }
+        }
+    }
+
+    /// **A click inside a sidebar**: the keys go to it, as a click on
+    /// another window gives that window the keys, and its frame lights. On
+    /// a row of a list — the tree, the buffers, the outline, the links —
+    /// the highlight moves to that row, as `j` and `k` would move it, and
+    /// nothing is opened: opening is `Enter`'s, as in helix's pickers and a
+    /// file tree, so a click to look never leaves the page. The info panel,
+    /// the search panel and a table's record take the keys only.
+    pub fn click_sidebar(&mut self, side: crate::sidebar::Side, row: Option<usize>) {
+        if self.panel(side).is_none() {
+            return;
+        }
+        self.go_to_region(Region::Side(side));
+        let lists = |view: crate::sidebar::View| {
+            use crate::sidebar::View;
+            matches!(view, View::Explorer | View::Buffers | View::Outline | View::Links)
+        };
+        let is_a_list = self.info_in_this_sidebar(side).is_none() && self.panel(side).is_some_and(|p| lists(p.view()));
+        if let (true, Some(row)) = (is_a_list, row) {
+            if let Some(sidebar) = self.panel_mut(side).filter(|s| row < s.rows().len()) {
+                sidebar.select(row);
             }
         }
     }
@@ -944,14 +984,7 @@ impl Editor {
             //
             // Warning: **不問這一格裏裝的是什麼**：寬度歸側欄，面板只是借它。所以字典、
             // 懸停、表格詳情按 `w` 一樣管用。
-            PlaceCmd::CycleSidebarWidth => {
-                let step = self.width[side as usize].next();
-                self.width[side as usize] = step;
-                let (num, den) = step.fraction();
-                // 一句回聲，三秒之後自己下去——按的人眼睛已經看見邊欄寬了一檔，
-                // 而這一行底下正是按鍵提示的位子。
-                self.murmur(say!("sidebar.width", num, den));
-            }
+            PlaceCmd::CycleSidebarWidth => self.set_width_of(side, self.width[side as usize].next()),
             // **Tab walks the views that live in *this* slot.** Which ones
             // those are is a setting, so the question belongs to the editor
             // rather than to the panel — with the outline moved across, this

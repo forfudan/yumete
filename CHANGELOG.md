@@ -6,6 +6,9 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Added
 
+- **Drag a sidebar's inner border, marked `⣿`, to resize it**: the width jumps between its steps as you drag, to the one that would come out nearest, and stops at the narrowest.
+- **Click inside a sidebar to give it the keys**: its frame lights gold, and a click on a row of a list moves the highlight there without opening it; `Enter` opens it as before.
+- **Sidebars have a 1/10 step**, so `w` walks 1/10 to 5/10; an open sidebar always keeps at least three columns.
 - **Drag the scrollbar**: drag the thumb with the mouse to scroll; it stays under the pointer where you took it. A click elsewhere in the bar jumps the thumb there, centred on the click, and the drag can carry on from it. The cursor stays where it is while it is still on screen and is pushed in from the edge otherwise, as with `C-e`, and a drag that starts on the bar never selects text. Two pages scroll as one spread; clicking another window's bar gives it the keys. A click after scrolling no longer pulls the page back to where the cursor was.
 - **`:manual` opens the manual site** (yumete.shurufa.app) in the browser, and the welcome screen lists it; its `Space ?` line now reads `::` search commands.
 - **`auto_pairs = "minimal"`** pairs only the three brackets `()` `[]` `{}`, and no quotes. The levels are `off`, `minimal`, `basic` (default) and `full`, in `:auto-pairs`, on the settings panel and through `--import helix`, which also carries a helix `[editor.auto-pairs]` table when it is exactly one of these levels.
@@ -41,6 +44,8 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Changed
 
+- **Every window's scrollbar column has a quiet track** a shade off the paper, under the thumb and the marks, also while the file fits.
+- **The sidebar buttons at the ends of the tab line are one cell each, with an ASCII arrow** saying what a click does (`>` / `<`), over the window's first column and its scrollbar column; the cell beside each still takes a click.
 - **While a picker is open, every window's status line dims along with the page under it**, and keeps its own mode word instead of switching to `PIC.INS`; only the command row, which shows the picker's keys, stays as it is.
 - **The picker is bigger**: nine tenths of the window's width and height (it was four fifths and three quarters), up to 200 columns, so more names and more of the preview show; it still leaves a margin, so it reads as a panel over the page.
 - **End-of-line diagnostics are off by default and take `off`, `basic` (errors and warnings) or `full` (every level)**, in `[editor] end_of_line_diagnostics`, the settings page and `:view-diagnostics`, as helix and Zed ship them off: a grammar checker tags nearly every line of prose. The gutter marks and `:diagnostics-all` are unchanged; helix's words (`disable`, `error`, `warning`, `info`, `hint`) are still read, so old configs and `--import helix` keep working.
@@ -55,6 +60,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Fixed
 
+- **Scrolling one window no longer moves the window beside it**: dragging a scrollbar moved every window's page, and the mouse wheel now scrolls the window under the pointer rather than the one with the keys.
 - **Triple quotes and code fences come out as typed**: `"""` no longer gives four quotes and ```` ``` ```` no longer four backticks, and Enter after a fence opener no longer leaves a stray backtick on the line below. A quote typed right after the same quote does not pair, at every level and in every file type.
 - **`j` and `k` in a wrapped table cell land at the start of each drawn line**: they cut the cell every 32 characters while the grid wraps between words, so in English notes `j` put the cursor in the middle of a word on the line below.
 - **Soft wrap no longer starts a row with a space**: a word that ends exactly at the wrap width moves down with its space, as vim's linebreak does, at a set `:view-wrap-width`, at the window's edge and in two-page view alike.

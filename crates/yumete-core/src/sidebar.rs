@@ -236,13 +236,14 @@ impl View {
         [View::Explorer, View::Buffers, View::Outline, View::Search, View::Links, View::Info];
 }
 
-/// **一個側欄有多寬**，四檔，分母都是十。
+/// **一個側欄有多寬**，五檔，分母都是十。
 ///
-/// `2/10 → 3/10 → 4/10 → 5/10`，`w` 按一下走一格，到頭回到 2/10。**出廠 3/10**。
+/// `1/10 → 2/10 → 3/10 → 4/10 → 5/10`，`w` 按一下走一格，到頭回到 1/10。**出廠 3/10**。
 ///
 /// Warning: **同一個分母，次序纔一眼看得出來。** 這一檔的名字就是那個分數，寫在狀態欄
-/// 上；`3/10 → 4/10` 是升一格，而 `3/10 → 2/5` 要心算。2/10 到 5/10，
-/// 調節的範圍也寬（20%–50%）。
+/// 上；`3/10 → 4/10` 是升一格，而 `3/10 → 2/5` 要心算。1/10 到 5/10，
+/// 調節的範圍也寬（10%–50%）。1/10 是一條只露出名字頭一兩個字的窄欄：拖邊框
+/// 拖到最窄就停在這裏，不會把側欄關掉——關是點標籤欄那一格或按鍵的事。
 ///
 /// Warning: **名字不寫「窄/中/綽/寬」**。「綽」和「寬」是近義詞，狀態欄寫着
 /// 「邊欄：綽」的時候讀者看不出它比「寬」窄還是寬——他得記。分數自己排序，不用學
@@ -264,16 +265,24 @@ impl Default for Width {
 }
 
 impl Width {
-    /// 分母。四個檔位共用它，所以它們的名字排得成一列。
+    /// 分母。五個檔位共用它，所以它們的名字排得成一列。
     pub const DEN: usize = 10;
 
-    /// 四個分子，從窄到寬——`w` 按這個次序走。加一檔就是往這裏加一個數。
-    pub const STEPS: [u8; 4] = [2, 3, 4, 5];
+    /// 五個分子，從窄到寬——`w` 按這個次序走。加一檔就是往這裏加一個數。
+    pub const STEPS: [u8; 5] = [1, 2, 3, 4, 5];
 
     /// `w` 按一下走一格，到頭回到最窄。
     pub fn next(self) -> Width {
         let at = Width::STEPS.iter().position(|&n| n == self.0).unwrap_or(0);
         Width(Width::STEPS[(at + 1) % Width::STEPS.len()])
+    }
+
+    /// **Every step, narrowest first** — what dragging a sidebar's border
+    /// chooses among: the width snaps to one of these, never to a column
+    /// between them, so the status line, `w` and a reopened sidebar all
+    /// name the width the drag left.
+    pub fn every() -> impl Iterator<Item = Width> {
+        Width::STEPS.iter().map(|&n| Width(n))
     }
 
     /// 這一檔佔窗口幾欄。

@@ -1046,6 +1046,33 @@ impl Editor {
         }
     }
 
+    /// **The wheel over a window**: that window scrolls, and the keys stay
+    /// where they are — what helix does (`ui/editor.rs`, the view under the
+    /// pointer focused for the scroll and the focus put back) and what vim
+    /// does with `mouse=a`. The window is stepped into for the scroll and
+    /// stepped out of again, the live window's selections, the window
+    /// history `C-w p` walks and the status line put back as they were, so
+    /// all the scroll leaves behind is the other window's caret, which its
+    /// page follows. Over the live window, a preview, or with the keys in a
+    /// sidebar, it is [`Self::scroll`] as before.
+    pub fn scroll_window(&mut self, window: crate::window::WindowId, amount: usize, back: bool) {
+        if window == self.live || self.panel_focus().is_some() || self.is_page_window(window) || !self.windows.has(window) {
+            return self.scroll(amount, back);
+        }
+        let live = self.live;
+        let (sel, history, status) = (self.sel.clone(), self.window_history.clone(), self.status.clone());
+        if !self.switch_to(window) {
+            return;
+        }
+        self.scroll(amount, back);
+        self.switch_to(live);
+        if self.live == live {
+            self.sel = sel;
+        }
+        self.window_history = history;
+        self.status = status;
+    }
+
     pub fn live_window(&self) -> crate::window::WindowId {
         self.live
     }

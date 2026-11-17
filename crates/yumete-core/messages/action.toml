@@ -189,8 +189,8 @@ en = "cycle which files are skipped: hidden, ignored"
 [[message]]
 # 命令說明：cycle_sidebar_width
 key = "action.cycle-sidebar-width"
-zhs = "切换宽度：窄、中、宽"
-en = "cycle width: narrow, medium, wide"
+zhs = "切换宽度：窄、窄中、中、中宽、宽"
+en = "cycle width: narrow, narrow-medium, medium, medium-wide, wide"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽

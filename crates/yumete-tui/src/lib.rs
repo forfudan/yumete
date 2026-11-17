@@ -2107,11 +2107,10 @@ pub fn run(
                 // of the burst first turns a flick into one scroll and one
                 // frame.
                 MouseEventKind::ScrollDown | MouseEventKind::ScrollUp => {
-                    let back = mouse.kind == MouseEventKind::ScrollUp;
                     diag::beat(diag::Stage::Wheel, 0);
                     let notches = 1 + drain_the_flick(mouse.kind, &events, &mut inbox);
                     diag::beat(diag::Stage::Scrolling, notches as u64);
-                    editor.scroll(editor.wheel_step() * notches, back);
+                    wheel_scroll(editor, config, terminal.size().ok(), &viewport, mouse, notches);
                 }
                 MouseEventKind::Down(MouseButton::Left)
                 | MouseEventKind::Drag(MouseButton::Left)
@@ -6080,9 +6079,10 @@ struct Areas {
     /// status-line row so the two lines read as two.
     dividers: Vec<Rect>,
     tabs: Rect,
-    /// **The sidebars' blocks at the two ends of the tab line**, by [`Side`]:
-    /// zero wide when there is no tab line, the setting is off
-    /// or the window has no room for a sidebar.
+    /// **The sidebars' blocks at the two ends of the tab line**, by [`Side`],
+    /// as wide as a click on them reaches ([`BLOCK`]); the outer cell of
+    /// each is the one drawn ([`drawn_block`]). Zero wide when there is no
+    /// tab line, the setting is off or the window has no room for a sidebar.
     blocks: [Rect; 2],
     /// **Two rows at the top of the page, or none** (#379): the column numbers
     /// and names of a table whose own head has scrolled away.
@@ -6157,6 +6157,30 @@ struct Pointer {
     /// the press took it, which the thumb keeps under the pointer as it is
     /// dragged. A drag that starts here moves the page, never a selection.
     bar: Option<(yumete_core::window::WindowId, usize)>,
+    /// The sidebar whose inner border is held, from a press on it to the
+    /// release: a drag sets the side's width step by step
+    /// ([`drag_the_border`]), and a press let go where it was does nothing.
+    border: Option<Side>,
+}
+
+/// **A flick of the wheel**, `notches` of it: the window under the pointer
+/// scrolls ([`Editor::scroll_window`]) and the keys stay where they are.
+/// Off every window — a sidebar, the tab line, the command row — the live
+/// window scrolls, as it always has.
+fn wheel_scroll(
+    editor: &mut Editor,
+    config: &Config,
+    size: Option<ratatui::layout::Size>,
+    seats: &Seats,
+    mouse: ratatui::crossterm::event::MouseEvent,
+    notches: usize,
+) {
+    let back = mouse.kind == MouseEventKind::ScrollUp;
+    let amount = editor.wheel_step() * notches;
+    match window_at(editor, config, size, seats, mouse) {
+        Some(window) => editor.scroll_window(window, amount, back),
+        None => editor.scroll(amount, back),
+    }
 }
 
 /// **The left button, pressed, dragged and let go.**
@@ -6165,7 +6189,9 @@ struct Pointer {
 /// what it says; a press on a window's scrollbar takes its thumb — on the
 /// thumb where it was pressed, off it with the thumb jumped to stand
 /// centred on the press — and a drag then carries the thumb, and the page
-/// with it, until the release. A drag from the text picks out a range.
+/// with it, until the release. A press on a sidebar's inner border takes
+/// the border, and a drag snaps the side from step to step.
+/// A drag from the text picks out a range.
 fn left_button(
     editor: &mut Editor,
     config: &Config,
@@ -6174,6 +6200,21 @@ fn left_button(
     pointer: &mut Pointer,
     mouse: ratatui::crossterm::event::MouseEvent,
 ) {
+    if let Some(side) = pointer.border {
+        match mouse.kind {
+            MouseEventKind::Drag(_) => {
+                if !drag_the_border(editor, size, side, mouse.column) {
+                    pointer.border = None;
+                }
+                return;
+            }
+            MouseEventKind::Up(_) => {
+                pointer.border = None;
+                return;
+            }
+            _ => pointer.border = None,
+        }
+    }
     match mouse.kind {
         MouseEventKind::Up(_) => pointer.bar = None,
         MouseEventKind::Drag(_) => match pointer.bar {
@@ -6197,8 +6238,12 @@ fn left_button(
             pointer.bar = None;
             // A tab is a thing you point at; the mouse is already captured
             // for the wheel, so this costs nothing but the arithmetic.
-            if let Some(side) = sidebar_block_at(editor, config, size, mouse) {
+            if let Some(side) = sidebar_border_at(editor, config, size, mouse) {
+                pointer.border = Some(side);
+            } else if let Some(side) = sidebar_block_at(editor, config, size, mouse) {
                 editor.toggle_sidebar(side);
+            } else if let Some((side, row)) = sidebar_row_at(editor, config, size, seats, mouse) {
+                editor.click_sidebar(side, row);
             } else if let Some(i) = tab_at(editor, config, size, mouse) {
                 editor.show_buffer_at(i);
             } else if let Some(window) = bar_at(editor, config, size, seats, mouse) {
@@ -6433,7 +6478,9 @@ fn page_areas(editor: &Editor, config: &Config, area: Rect, head_rows: u16) -> A
         false => (Rect::new(body.x, body.y, body.width, 0), body),
     };
     // Two cells at each end of the tab line for the sidebars, taken from
-    // the tabs and not from the text.
+    // the tabs and not from the text: the outer one drawn, over the first
+    // window's first column and the last one's scrollbar, the inner one
+    // air before the first tab and after the last.
     let blocked = config.editor.sidebar_buttons && tabs.height > 0 && editor.room_for_a_panel() && tabs.width > 12;
     let (tabs, blocks) = match blocked {
         true => (
@@ -6534,10 +6581,27 @@ fn keeps_a_bar(editor: &Editor, leaf: Option<yumete_core::window::WindowId>, pan
     editor.layout() == WritingLayout::Horizontal && !editor.grid_has_the_pane()
 }
 
+/// **Paint a scrollbar's track** into the column `bar`: every cell of it
+/// takes `tint` as its ground, under whatever the column already holds, so
+/// a `␊` drawn there stays on top. Painted whether or not there is a thumb:
+/// the column is the bar's while the file fits too, and a groove of its own
+/// says so where a column of paper would read as a stray margin. The thumb
+/// and the marks go on top of it.
+pub(crate) fn paint_the_track(buf: &mut ratatui::buffer::Buffer, bar: Rect, tint: Color) {
+    for y in bar.y..bar.y + bar.height {
+        for x in bar.x..bar.x + bar.width {
+            if let Some(cell) = buf.cell_mut((x, y)) {
+                cell.set_bg(tint);
+            }
+        }
+    }
+}
+
 /// **Paint a scrollbar's thumb** into the column `bar`: `thumb` as
 /// [`thumb`] answers it, as a ground of `tint` under whatever the column
-/// already holds, so a `␊` drawn there stays on top of it. No track: the
-/// cells outside the thumb keep the ground they have.
+/// already holds, so a `␊` drawn there stays on top of it. The cells
+/// outside the thumb keep the ground they have, the track where the bar
+/// has one ([`paint_the_track`]).
 pub(crate) fn tint_the_thumb(buf: &mut ratatui::buffer::Buffer, bar: Rect, thumb: Option<(usize, usize)>, tint: Color) {
     let Some((at, cells)) = thumb else { return };
     for y in (at..at + cells).map(|n| bar.y + n as u16).take_while(|&y| y < bar.y + bar.height) {
@@ -6847,6 +6911,7 @@ fn draw<'a>(
                         (thumb, marks)
                     });
                     let (thumb, marks) = placed.unwrap_or((None, None));
+                    paint_the_track(frame.buffer_mut(), bar, ink.scrollbar_track());
                     tint_the_thumb(frame.buffer_mut(), bar, thumb, ink.scrollbar());
                     if let Some(marks) = marks {
                         let caret = (which == live).then_some(caret);
@@ -9997,29 +10062,60 @@ fn text_at_under(
 /// The bar's rectangle is worked out the same way `draw` works it out — below
 /// nothing, to the right of the sidebar — rather than remembered, so a click
 /// cannot be answered from a layout that is a frame out of date.
-/// How wide a sidebar's block is: as wide as one 字, an easy target.
+/// **How much of the tab line a sidebar's block answers a click on**: as
+/// wide as one 字, an easy target. Only the outer cell of it is drawn
+/// ([`drawn_block`]); the inner one is the tab line's air, so the first
+/// tab keeps a cell of the bar's ground between it and the block.
 const BLOCK: u16 = 2;
 
-/// **The sidebars' blocks**: a coloured space at each end of the
-/// tab line, quiet when that side is closed, the panel's frame colour when it
-/// is open, gold when the keys are in it. A space rather than `▌`, whose
-/// width a terminal may draw as two.
+/// **The cell of a block that is drawn**: the outer one, so the left block
+/// stands in the first window's first column and the right one in the last
+/// window's scrollbar column, each over the edge it opens.
+fn drawn_block(side: Side, hit: Rect) -> Rect {
+    match side {
+        Side::Left => Rect { width: hit.width.min(1), ..hit },
+        Side::Right => Rect { x: hit.x + hit.width.saturating_sub(1), width: hit.width.min(1), ..hit },
+    }
+}
+
+/// **What a block says a click does**, as an arrow the way the edge will
+/// move: a closed side opens toward the page, an open one closes back to
+/// the window's edge. ASCII, so one cell in every terminal however it draws
+/// the ambiguous triangles.
+fn block_arrow(side: Side, open: bool) -> &'static str {
+    match (side, open) {
+        (Side::Left, false) | (Side::Right, true) => ">",
+        (Side::Left, true) | (Side::Right, false) => "<",
+    }
+}
+
+/// **The sidebars' blocks**: a coloured cell at each end of the tab line,
+/// the rule's grey when that side is closed, the panel's frame colour when
+/// it is open, gold when the keys are in it, with the arrow of
+/// [`block_arrow`] knocked out of it in the paper's colour. The other cell
+/// a click answers on keeps the tab line's ground.
 fn draw_sidebar_blocks(frame: &mut Frame, editor: &Editor, config: &Config, blocks: [Rect; 2]) {
     let ink = crate::theme::Palette::of(config);
+    let air = ink.ground(yumete_config::rung::CHROME);
     let buf = frame.buffer_mut();
     for side in Side::BOTH {
-        let rect = blocks[side as usize];
-        if rect.width == 0 || rect.height == 0 {
+        let hit = blocks[side as usize];
+        if hit.width == 0 || hit.height == 0 {
             continue;
         }
-        let colour = match (editor.panel(side).is_some(), editor.panel_focus() == Some(side)) {
+        let open = editor.panel(side).is_some();
+        let colour = match (open, editor.panel_focus() == Some(side)) {
             (true, true) => ink.gold(),
             (true, false) => ink.quiet(),
             (false, _) => ink.at(yumete_config::rung::RULE),
         };
-        for x in rect.x..rect.x + rect.width {
-            if let Some(cell) = buf.cell_mut((x, rect.y)) {
-                cell.set_symbol(" ").set_style(Style::default().bg(colour));
+        let drawn = drawn_block(side, hit);
+        for x in hit.x..hit.x + hit.width {
+            if let Some(cell) = buf.cell_mut((x, hit.y)) {
+                match x == drawn.x {
+                    true => cell.set_symbol(block_arrow(side, open)).set_style(Style::default().bg(colour).fg(ink.paper())),
+                    false => cell.set_symbol(" ").set_style(air),
+                };
             }
         }
     }
@@ -10911,31 +11007,157 @@ fn sidebar_columns(editor: &Editor, total: u16) -> [u16; 2] {
     if !editor.room_for_a_panel() {
         return [0, 0];
     }
+    columns_for(total, Side::BOTH.map(|side| editor.panel(side).is_some().then(|| editor.width_of(side))))
+}
+
+/// **[`sidebar_columns`]' arithmetic on its own**: the columns each side
+/// gets of `total` when it asks for the step in `asked`, `None` for a
+/// closed side. Pure, so dragging a border can ask it what every step
+/// would come to before choosing one ([`snap_width`]).
+fn columns_for(total: u16, asked: [Option<yumete_core::sidebar::Width>; 2]) -> [u16; 2] {
     let total = total as usize;
-    let mut want = [0usize; 2];
-    for side in Side::BOTH {
-        let open = editor.panel(side).is_some();
-        if open {
-            want[side as usize] = editor.width_of(side).of(total);
-        }
-    }
+    let mut want = asked.map(|step| step.map_or(0, |step| step.of(total)));
     // **正文保底**，而這是唯一的硬約束：24 欄是十二個漢字，比那更窄的正文不成其為
     // 正文。Warning: 它也封住了「兩側都要一半」那一種——那時兩邊一起縮，而不是後算的那
     // 一邊吃虧。
     let keep = (total / 3).max(24);
     let cap = total.saturating_sub(keep);
-    let asked: usize = want.iter().sum();
-    if asked > cap && asked > 0 {
+    let sum: usize = want.iter().sum();
+    if sum > cap && sum > 0 {
         for w in want.iter_mut() {
-            *w = *w * cap / asked;
+            *w = *w * cap / sum;
+        }
+    }
+    // **An open side is never squeezed out of sight**: the 1/10 step beside
+    // a wide other side in a small window comes to a column or two, which
+    // draws nothing, and a side that holds the keys and draws nothing is
+    // the one thing a step must not do. It keeps the least a frame can be,
+    // taken from the other side while that one has more. A window with
+    // room for a panel at all keeps twelve columns for the two, so both
+    // fit.
+    for side in [0, 1] {
+        if asked[side].is_some() && want[side] < LEAST_PANEL {
+            let short = LEAST_PANEL - want[side];
+            want[side] = LEAST_PANEL;
+            let other = 1 - side;
+            if asked[other].is_some() {
+                want[other] = want[other].saturating_sub(short).max(LEAST_PANEL);
+            }
         }
     }
     // 三欄以下畫不出一個格子，也就不發那個矩形——發了不畫，原封不動留在那裏的
-    // 矩形在淺色頁面上是一條黑帶。
+    // 矩形在淺色頁面上是一條黑帶。只有窗口本身窄過三欄時纔會走到這一支。
     want.map(|w| match (w as u16).min(total as u16) {
-        got if got < 3 => 0,
+        got if (got as usize) < LEAST_PANEL => 0,
         got => got,
     })
+}
+
+/// The fewest columns a sidebar's frame can be drawn in: two walls and a
+/// cell between them.
+const LEAST_PANEL: usize = 3;
+
+/// **The step a dragged border lands on**: `side` of a window `total` columns wide, the other side asking what
+/// `asked` says, the pointer saying the side should be `wanted` columns.
+///
+/// There is no width between the steps — the width is a step, so the
+/// status line, `w` and a reopened side all name it — and **each step is
+/// judged by the columns it would really get**, the text's keep and the
+/// other side's share included, not by its fraction: in a narrow window
+/// two steps can come to the same columns, and the one already set is
+/// kept among them, so the border never jumps to a step that looks the
+/// same. Of two steps as near, the one nearer the step already set wins.
+///
+/// Past the narrowest step the border stops at it: a drag never closes the
+/// side — closing is the tab line's block, or the keys, where it is meant.
+fn snap_width(
+    total: u16,
+    side: Side,
+    asked: [Option<yumete_core::sidebar::Width>; 2],
+    now: yumete_core::sidebar::Width,
+    wanted: usize,
+) -> yumete_core::sidebar::Width {
+    use yumete_core::sidebar::Width;
+    let gets = |step: Width| {
+        let mut asked = asked;
+        asked[side as usize] = Some(step);
+        columns_for(total, asked)[side as usize] as usize
+    };
+    Width::every()
+        .min_by_key(|&step| (gets(step).abs_diff(wanted), step.fraction().0.abs_diff(now.fraction().0)))
+        .unwrap_or(now)
+}
+
+/// **The sidebar whose inner border is under the pointer**: the whole
+/// column of the frame that faces the page, any row of it. A closed side
+/// has no border, so a drag only ever narrows or widens an open one.
+fn sidebar_border_at(
+    editor: &Editor,
+    config: &Config,
+    size: Option<ratatui::layout::Size>,
+    mouse: ratatui::crossterm::event::MouseEvent,
+) -> Option<Side> {
+    let size = size?;
+    let panels = page_areas(editor, config, Rect::new(0, 0, size.width, size.height), 0).panels;
+    Side::BOTH.into_iter().find(|&side| {
+        let p = panels[side as usize];
+        let inside = match side {
+            Side::Left => p.x + p.width.saturating_sub(1),
+            Side::Right => p.x,
+        };
+        editor.panel(side).is_some() && p.width > 0 && mouse.column == inside && mouse.row >= p.y && mouse.row < p.y + p.height
+    })
+}
+
+/// **The sidebar under the pointer, and the row of its list there**: any
+/// cell of an open side's frame but its inner wall (the border's, for a
+/// drag), with the list's row when the pointer is on one — the rows start
+/// under the title and are counted from where the list was last scrolled
+/// to, as the frame drew them. `None` for the row on the title, the foot
+/// or past the last row; whether the side shows a list at all is
+/// [`Editor::click_sidebar`]'s to ask.
+fn sidebar_row_at(
+    editor: &Editor,
+    config: &Config,
+    size: Option<ratatui::layout::Size>,
+    seats: &Seats,
+    mouse: ratatui::crossterm::event::MouseEvent,
+) -> Option<(Side, Option<usize>)> {
+    let size = size?;
+    let panels = page_areas(editor, config, Rect::new(0, 0, size.width, size.height), 0).panels;
+    let side = Side::BOTH.into_iter().find(|&side| {
+        let p = panels[side as usize];
+        editor.panel(side).is_some()
+            && p.width > 0
+            && (p.x..p.x + p.width).contains(&mouse.column)
+            && (p.y..p.y + p.height).contains(&mouse.row)
+    })?;
+    let p = panels[side as usize];
+    let foot = match p.height >= 3 {
+        true => p.y + p.height - 1,
+        false => p.y + p.height,
+    };
+    let row = (mouse.row > p.y && mouse.row < foot)
+        .then(|| seats.listed[usize::from(side == Side::Right)] + (mouse.row - p.y - 1) as usize);
+    Some((side, row))
+}
+
+/// **A held border dragged to the pointer's column**: the side set to the
+/// step [`snap_width`] chooses for the width the pointer implies — the
+/// columns from the window's edge to the pointer, the border's own
+/// included. `false` once there is no border left to hold.
+fn drag_the_border(editor: &mut Editor, size: Option<ratatui::layout::Size>, side: Side, column: u16) -> bool {
+    let Some(size) = size else { return false };
+    if editor.panel(side).is_none() || !editor.room_for_a_panel() {
+        return false;
+    }
+    let wanted = match side {
+        Side::Left => column as usize + 1,
+        Side::Right => (size.width as usize).saturating_sub(column as usize),
+    };
+    let asked = Side::BOTH.map(|s| editor.panel(s).is_some().then(|| editor.width_of(s)));
+    editor.set_width_of(side, snap_width(size.width, side, asked, editor.width_of(side), wanted));
+    true
 }
 
 /// The file sidebar, in the columns taken off the left of the page.
@@ -11129,6 +11351,23 @@ fn draw_sidebar(
     None
 }
 
+/// **The grip on a sidebar's inner wall**, on the two rows at its middle
+/// ([`grip_rows`]): the wall can be dragged. `⣿` fills the whole Braille
+/// cell, two columns of four dots, so the two rows stack into two unbroken
+/// columns of eight — the look of a handle. Warning: not `⠿`, which leaves
+/// the cell's bottom row empty and shows as a gap between the two rows.
+/// Braille is neutral in East Asian width, so one cell in every terminal.
+const BORDER_GRIP: &str = "\u{28ff}";
+
+/// **The rows of a sidebar's wall the grip stands on**: the two in the
+/// middle of those between its corners, or the one there is.
+fn grip_rows(area: Rect) -> std::ops::Range<u16> {
+    let between = area.height.saturating_sub(2);
+    let rows = between.min(2);
+    let first = area.y + 1 + (between - rows) / 2;
+    first..first + rows
+}
+
 /// **邊欄這個容器**：一圈框、標題、底邊，以及它說的第二件事——鍵在不在這一欄裏。
 ///
 /// **容器歸容器，內容歸內容**：側邊欄的外框、底色、標題和底部 tab 提示都是容器，
@@ -11225,6 +11464,15 @@ pub(crate) fn sidebar_shell(
     }
     if let Some(cell) = buf.cell_mut((inside, area.y)) {
         cell.set_symbol(corner(side, true, true, focused)).set_style(line);
+    }
+    // **The wall facing the page is a handle**: the whole column drags the
+    // side wider or narrower ([`sidebar_border_at`]), and two `⣿` at its
+    // middle, in the wall's own ink, say so without a word. Between the
+    // corners only.
+    for y in grip_rows(area) {
+        if let Some(cell) = buf.cell_mut((inside, y)) {
+            cell.set_symbol(BORDER_GRIP).set_style(line);
+        }
     }
     let head = match focused {
         true => line.add_modifier(Modifier::BOLD),
@@ -18517,6 +18765,286 @@ fn squeezed(text: &str) -> String {
         assert_eq!(areas.blocks.map(|r| r.width), [0, 0], "off");
     }
 
+    /// **A block is one cell drawn and two clicked**: the outer cell holds
+    /// an arrow saying what a click does — `>` opens the left side and `<`
+    /// closes it, the right side the other way round — in the paper's
+    /// colour on the block's; the cell beside it is the tab line's air and
+    /// still answers a click. The left block stands over the first window's
+    /// first column and the right one over the last window's scrollbar, in
+    /// a split too.
+    #[test]
+    fn a_block_is_an_arrow_in_one_cell_over_the_windows_edge() {
+        use ratatui::crossterm::event::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+        let mut editor = editor_with("那年冬天。\n");
+        editor.execute(":new").unwrap();
+        let config = Config::default();
+        let (w, h) = (100u16, 20u16);
+        let size = Some(ratatui::layout::Size::new(w, h));
+        let click = |x: u16, y: u16| MouseEvent { kind: MouseEventKind::Down(MouseButton::Left), column: x, row: y, modifiers: KeyModifiers::NONE };
+        let arrows = |editor: &Editor| {
+            let areas = page_areas(editor, &config, Rect::new(0, 0, w, h), 0);
+            let buffer = render(editor, &config, w, h);
+            let [l, r] = areas.blocks;
+            (buffer[(l.x, l.y)].symbol().to_string(), buffer[(r.x + r.width - 1, r.y)].symbol().to_string())
+        };
+        assert_eq!(arrows(&editor), (">".to_string(), "<".to_string()), "both closed: each opens toward the page");
+        let areas = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0);
+        let [left, right] = areas.blocks;
+        assert_eq!(left.x, areas.panes[0].x, "over the window's first column");
+        assert_eq!(right.x + right.width - 1, areas.bars[0].x, "over the window's scrollbar");
+        assert_eq!(areas.tabs.x, left.x + BLOCK, "the first tab after the air");
+        let buffer = render(&editor, &config, w, h);
+        let palette = ink(&config);
+        assert_eq!(buffer[(left.x, left.y)].fg, palette.paper(), "the arrow knocked out in the paper's colour");
+        assert_eq!(buffer[(left.x, left.y)].bg, palette.at(yumete_config::rung::RULE), "on the closed block's grey");
+        assert_eq!(buffer[(left.x + 1, left.y)].symbol(), " ", "the air cell is blank");
+        assert_eq!(buffer[(left.x + 1, left.y)].bg, palette.at(yumete_config::rung::CHROME), "on the tab line's ground");
+        assert_eq!(sidebar_block_at(&editor, &config, size, click(left.x + 1, left.y)), Some(Side::Left), "the air answers a click");
+        assert_eq!(sidebar_block_at(&editor, &config, size, click(right.x, right.y)), Some(Side::Right));
+        assert_eq!(sidebar_block_at(&editor, &config, size, click(left.x + 2, left.y)), None, "the first tab is not the block");
+        editor.toggle_sidebar(Side::Left);
+        editor.toggle_sidebar(Side::Right);
+        assert_eq!(arrows(&editor), ("<".to_string(), ">".to_string()), "both open: each closes back to the edge");
+        let areas = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0);
+        assert_eq!(areas.blocks[0].x, areas.panes[0].x, "beside the open sidebar, over the window's first column");
+        assert_eq!(areas.blocks[1].x + 1, areas.bars[0].x, "over the scrollbar");
+        editor.toggle_sidebar(Side::Left);
+        editor.toggle_sidebar(Side::Right);
+        editor.execute(":vsplit").unwrap();
+        let areas = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0);
+        assert_eq!(areas.panes.len(), 2, "two windows side by side");
+        let first = areas.panes.iter().map(|p| p.x).min().unwrap();
+        let last_bar = areas.bars.iter().map(|b| b.x).max().unwrap();
+        assert_eq!((areas.blocks[0].x, areas.blocks[1].x + 1), (first, last_bar), "a split: the outer window's edges");
+    }
+
+    /// **A dragged border lands on the step whose real columns are nearest**,
+    /// judged after the text's keep and the other side's share; of steps
+    /// that come to the same columns the one set is kept, and past the
+    /// narrowest step it stays there: a drag never closes the side.
+    #[test]
+    fn a_dragged_border_snaps_to_the_nearest_step_it_would_really_get() {
+        use yumete_core::sidebar::Width;
+        let step = |n: usize| Width::every().find(|w| w.fraction().0 == n).unwrap();
+        let one = |side: Side| {
+            let mut asked = [None; 2];
+            asked[side as usize] = Some(step(3));
+            asked
+        };
+        // Two hundred columns, one side: 20, 40, 60, 80 and 100.
+        for side in Side::BOTH {
+            assert_eq!(snap_width(200, side, one(side), step(3), 58), step(3));
+            assert_eq!(snap_width(200, side, one(side), step(3), 75), step(4), "80 is nearer than 60");
+            assert_eq!(snap_width(200, side, one(side), step(3), 300), step(5), "past the widest, the widest");
+            assert_eq!(snap_width(200, side, one(side), step(3), 19), step(1));
+            assert_eq!(snap_width(200, side, one(side), step(3), 0), step(1), "at the window's edge, the narrowest");
+        }
+        // Forty columns keep twenty-four for the text: 4/10 and 5/10 both
+        // come to sixteen, and the one set stays.
+        assert_eq!(columns_for(40, [Some(step(4)), None]), columns_for(40, [Some(step(5)), None]));
+        assert_eq!(snap_width(40, Side::Left, [Some(step(5)), None], step(5), 40), step(5), "the same columns: kept");
+        assert_eq!(snap_width(40, Side::Left, [Some(step(4)), None], step(4), 40), step(4));
+        assert_eq!(snap_width(40, Side::Left, [Some(step(2)), None], step(2), 40), step(4), "the nearer of two alike");
+        // The other side's share counts: with the right at 5/10 in a hundred
+        // columns the left's steps are squeezed, and the drag is judged by
+        // what it would get.
+        let both = |left: usize| [Some(step(left)), Some(step(5))];
+        let gets: Vec<u16> = [1, 2, 3, 4, 5].iter().map(|&n| columns_for(100, both(n))[0]).collect();
+        assert_eq!(gets, vec![10, 19, 25, 29, 33], "squeezed beside the other side");
+        assert_eq!(snap_width(100, Side::Left, both(2), step(2), 28), step(4), "29, not the 40 that 4/10 is of a hundred");
+        assert_eq!(snap_width(100, Side::Left, both(2), step(2), 22), step(2), "as near 19 as 25: the step set");
+        assert_eq!(snap_width(100, Side::Left, both(2), step(2), 2), step(1), "the narrowest, never closed");
+    }
+
+    /// **No step squeezes an open side out of sight**: 1/10 beside 5/10 in a
+    /// forty-column window would come to two columns, which draws nothing;
+    /// it keeps three, taken from the other side. In every window with room
+    /// for a panel, every pair of steps leaves each open side a frame.
+    #[test]
+    fn no_step_squeezes_an_open_side_out_of_sight() {
+        use yumete_core::sidebar::Width;
+        let step = |n: usize| Width::every().find(|w| w.fraction().0 == n).unwrap();
+        assert_eq!(columns_for(40, [Some(step(1)), Some(step(5))]), [3, 12]);
+        assert_eq!(columns_for(40, [Some(step(5)), Some(step(1))]), [12, 3], "mirrored");
+        for total in 36..=240u16 {
+            for left in Width::every() {
+                for right in Width::every() {
+                    for asked in [[Some(left), Some(right)], [Some(left), None], [None, Some(right)]] {
+                        let got = columns_for(total, asked);
+                        for side in [0, 1] {
+                            if asked[side].is_some() {
+                                assert!(got[side] as usize >= LEAST_PANEL, "{total} {asked:?}: {got:?}");
+                            }
+                        }
+                        let keep = (total / 3).max(24);
+                        assert!(got[0] + got[1] + keep <= total, "{total} {asked:?}: {got:?} leaves the text its keep");
+                    }
+                }
+            }
+        }
+    }
+
+    /// **A click inside a sidebar gives it the keys**, as a click on another
+    /// window does, on either side and whatever it shows: on a list's row it
+    /// moves the highlight there and opens nothing; on the title, the info
+    /// panel or the search panel's box it only takes the keys. Its frame
+    /// lights gold. A press on its inner wall takes the border instead, the
+    /// tab line's block still toggles, and a click back in the text gives
+    /// the keys back.
+    #[test]
+    fn a_click_inside_a_sidebar_gives_it_the_keys() {
+        let config = Config::default();
+        let (w, h) = (120u16, 20u16);
+        let size = Some(ratatui::layout::Size::new(w, h));
+        let dir = std::env::temp_dir().join(format!("yumete-click-side-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        for name in ["alpha.md", "beta.md", "gamma.md"] {
+            std::fs::write(dir.join(name), "# one\n").unwrap();
+        }
+        let mut editor = editor_with("first line\nsecond line\n");
+        editor.execute(":new").unwrap();
+        editor.note_window(w, h);
+        let mut seats = Seats::default();
+        let mut pointer = Pointer::default();
+        let click = |editor: &mut Editor, x: u16, y: u16| {
+            let (mut seats, mut pointer) = (Seats::default(), Pointer::default());
+            left_button(editor, &config, size, &mut seats, &mut pointer, button("down", x, y));
+            left_button(editor, &config, size, &mut seats, &mut pointer, button("up", x, y));
+        };
+        let panels = |editor: &Editor| page_areas(editor, &config, Rect::new(0, 0, w, h), 0).panels;
+        let pane = |editor: &Editor| page_areas(editor, &config, Rect::new(0, 0, w, h), 0).panes[0];
+
+        // The tree, on the left: the third row is highlighted, nothing opened.
+        editor.open_sidebar_at(&dir);
+        let buffers = editor.buffer_count();
+        let text = pane(&editor);
+        click(&mut editor, text.x + 2, text.y + 1);
+        assert_eq!(editor.panel_focus(), None, "the text has the keys back");
+        let left = panels(&editor)[Side::Left as usize];
+        let rows = editor.panel(Side::Left).unwrap().rows().len();
+        assert!(rows >= 3, "three files listed");
+        click(&mut editor, left.x + 3, left.y + 3);
+        assert_eq!(editor.panel_focus(), Some(Side::Left), "the click gives the tree the keys");
+        assert_eq!(editor.panel(Side::Left).unwrap().selected(), 2, "on the row clicked");
+        assert_eq!(editor.buffer_count(), buffers, "nothing opened");
+        let buffer = render(&editor, &config, w, h);
+        assert_eq!(buffer[(left.x, left.y + 1)].fg, ink(&config).gold(), "the frame lights gold");
+        // The title takes the keys and moves nothing.
+        click(&mut editor, text.x + 2, text.y + 1);
+        click(&mut editor, left.x + 3, left.y);
+        assert_eq!((editor.panel_focus(), editor.panel(Side::Left).unwrap().selected()), (Some(Side::Left), 2), "the title");
+        // Past the last row: the keys, the highlight where it was.
+        click(&mut editor, left.x + 3, left.y + left.height - 3);
+        assert_eq!(editor.panel(Side::Left).unwrap().selected(), 2, "below the rows");
+
+        // The wall facing the page holds the border, and focuses nothing.
+        click(&mut editor, text.x + 2, text.y + 1);
+        let wall = left.x + left.width - 1;
+        left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("down", wall, left.y + 4));
+        assert_eq!((pointer.border, editor.panel_focus()), (Some(Side::Left), None), "the border, not the keys");
+        left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("up", wall, left.y + 4));
+
+        // The info panel on the right, opened without the keys: a click
+        // gives them to it.
+        editor.toggle_sidebar(Side::Right);
+        let right = panels(&editor)[Side::Right as usize];
+        assert_eq!(editor.panel_focus(), None);
+        click(&mut editor, right.x + 4, right.y + 3);
+        assert_eq!(editor.panel_focus(), Some(Side::Right), "the info panel takes the keys");
+        let text = pane(&editor);
+        click(&mut editor, text.x + 2, text.y + 1);
+        assert_eq!(editor.panel_focus(), None, "and gives them back");
+
+        // The search panel, its box on the row under the title.
+        editor.execute(":sidebar-search").unwrap();
+        let text = pane(&editor);
+        click(&mut editor, text.x + 2, text.y + 1);
+        assert_eq!(editor.panel_focus(), None);
+        let left = panels(&editor)[Side::Left as usize];
+        click(&mut editor, left.x + 4, left.y + 1);
+        assert_eq!(editor.panel_focus(), Some(Side::Left), "the search panel's box takes the keys");
+
+        // The block at the end of the tab line still opens and closes.
+        let block = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0).blocks[Side::Right as usize];
+        click(&mut editor, block.x, block.y);
+        assert!(editor.panel(Side::Right).is_none(), "the block closes the right side");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// **The inner border drags the side through its steps, both sides
+    /// mirrored**: a press on any row of it holds it, a drag sets the step
+    /// live, the release lets go, a press let go where it was changes
+    /// nothing, and dragged back to the window's edge the side stays open at
+    /// its narrowest step. The border wears two `⣿` at its middle rows.
+    #[test]
+    fn dragging_a_sidebars_border_sets_its_step_or_closes_it() {
+        use yumete_core::sidebar::Width;
+        let config = Config::default();
+        let (w, h) = (200u16, 20u16);
+        let size = Some(ratatui::layout::Size::new(w, h));
+        let step = |n: usize| Width::every().find(|s| s.fraction().0 == n).unwrap();
+        let mut seats = Seats::default();
+        for side in Side::BOTH {
+            let mut editor = editor_with("那年冬天。\n");
+            editor.note_window(w, h);
+            editor.toggle_sidebar(side);
+            let mut pointer = Pointer::default();
+            let border = |editor: &Editor| {
+                let p = page_areas(editor, &config, Rect::new(0, 0, w, h), 0).panels[side as usize];
+                (
+                    match side {
+                        Side::Left => p.x + p.width - 1,
+                        Side::Right => p.x,
+                    },
+                    p,
+                )
+            };
+            // The column a width of `n` columns puts the border in.
+            let at = |n: u16| match side {
+                Side::Left => n - 1,
+                Side::Right => w - n,
+            };
+            let (x, panel) = border(&editor);
+            assert_eq!(panel.width, 60, "3/10 out of the box");
+            let buffer = render(&editor, &config, w, h);
+            let gripped: Vec<u16> = (panel.y..panel.y + panel.height).filter(|&y| buffer[(x, y)].symbol() == BORDER_GRIP).collect();
+            let middle = panel.y + (panel.height - 2) / 2;
+            assert_eq!(gripped, vec![middle, middle + 1], "{side:?}: two rows at the middle");
+            left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("down", x, panel.y + 3));
+            left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("up", x, panel.y + 3));
+            assert_eq!(editor.width_of(side), step(3), "{side:?}: a press let go changes nothing");
+            left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("down", x, panel.y + 7));
+            assert_eq!(pointer.border, Some(side), "any row of the wall holds it");
+            left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("drag", at(78), 0));
+            assert_eq!(editor.width_of(side), step(4), "{side:?}: nearest 80");
+            assert_eq!(border(&editor).1.width, 80);
+            left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("drag", at(97), 15));
+            assert_eq!(editor.width_of(side), step(5), "live, as the pointer moves");
+            left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("drag", at(45), 15));
+            assert_eq!(editor.width_of(side), step(2));
+            left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("up", at(45), 15));
+            assert_eq!(pointer.border, None, "the release lets go");
+            left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("drag", at(100), 15));
+            assert_eq!(editor.width_of(side), step(2), "{side:?}: a drag after the release moves nothing");
+            // Back to the window's edge: the narrowest step, still open.
+            let (x, panel) = border(&editor);
+            left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("down", x, panel.y + 2));
+            left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("drag", at(1), 2));
+            assert!(editor.panel(side).is_some(), "{side:?}: a drag never closes the side");
+            assert_eq!(editor.width_of(side), step(1));
+            assert_eq!(border(&editor).1.width, 20);
+            assert_eq!(pointer.border, Some(side), "still held");
+            left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("up", at(1), 2));
+            // A closed side has no border to take.
+            editor.toggle_sidebar(side);
+            left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("down", x, panel.y + 2));
+            assert_eq!(pointer.border, None, "{side:?}: nothing to hold on a closed side");
+            left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("drag", at(100), 2));
+            assert!(editor.panel(side).is_none(), "{side:?}: a drag never opens a side");
+        }
+    }
+
     /// **The name sits in the corner of an empty row only**
     /// (`[editor] signature`, on): any word on the row and it is gone; off,
     /// the row is blank.
@@ -21675,14 +22203,50 @@ fn squeezed(text: &str) -> String {
         assert_eq!(thumb_cells(&buffer, &config, bar), ".......##", "at the end, at the bottom:\n{}", buffer_to_text(&buffer));
         let mut short = editor_with("one\ntwo\n");
         let (buffer, _) = centred_frame(&mut short, &config, w, h, &mut seats);
-        assert_eq!(thumb_cells(&buffer, &config, bar), ".........", "the whole file in view: blank");
-        assert_eq!(buffer[(bar.x, 0)].bg, ink(&config).paper(), "the page's ground");
+        assert_eq!(thumb_cells(&buffer, &config, bar), ".........", "the whole file in view: no thumb");
+        let track = ink(&config).scrollbar_track();
+        assert!((0..bar.height).all(|y| buffer[(bar.x, bar.y + y)].bg == track), "the track all the way down");
+        assert_ne!(buffer[(bar.x - 1, 0)].bg, track, "the page beside it keeps its own ground");
+    }
+
+    /// **The track fills the column, the thumb stands on it, and a mark
+    /// keeps the track as its ground**: every cell of the bar off the thumb
+    /// is the track, and the `▐` of a search hit drawn there has the
+    /// track's ground and the mark's ink.
+    #[test]
+    fn the_track_fills_the_column_under_the_thumb_and_the_marks() {
+        let config = bare();
+        ink(&config);
+        let (w, h) = (30u16, 14u16);
+        let mut seats = Seats::default();
+        let mut editor = editor_with(&harbour_lines());
+        search_for(&mut editor, "harbour");
+        let bar = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0).bars[0];
+        let (buffer, _) = centred_frame(&mut editor, &config, w, h, &mut seats);
+        let palette = ink(&config);
+        let grounds: String = (bar.y..bar.y + bar.height)
+            .map(|y| match buffer[(bar.x, y)].bg {
+                bg if bg == palette.scrollbar() => '#',
+                bg if bg == palette.scrollbar_track() => '.',
+                _ => '?',
+            })
+            .collect();
+        assert!(!grounds.contains('?') && grounds.contains('#') && grounds.contains('.'), "{grounds}\n{}", buffer_to_text(&buffer));
+        let off_the_thumb: Vec<u16> = (bar.y..bar.y + bar.height)
+            .filter(|&y| buffer[(bar.x, y)].symbol() == scrollbar::MARK && buffer[(bar.x, y)].bg != palette.scrollbar())
+            .collect();
+        assert!(!off_the_thumb.is_empty(), "hits off the thumb: {}", mark_cells(&buffer, &config, bar));
+        for y in off_the_thumb {
+            let cell = &buffer[(bar.x, y)];
+            assert_eq!(cell.bg, palette.scrollbar_track(), "a mark on the track keeps the track's ground");
+            assert_eq!(cell.fg, scrollbar::colour(scrollbar::Mark::Search, palette), "in the mark's ink");
+        }
     }
 
     /// **A centred page's scrollbar stands at the window's right edge**,
     /// in the margin past the measure: the column is kept before the page
     /// is centred, so the margins are equal in what is left, and the column
-    /// takes the margin's tint outside the thumb.
+    /// is the track outside the thumb, beside the margin's tint.
     #[test]
     fn a_centred_pages_scrollbar_stands_in_its_right_margin() {
         let config = bare();
@@ -21698,8 +22262,8 @@ fn squeezed(text: &str) -> String {
         assert_eq!(bar.x, 60, "the window's last column");
         assert_eq!(thumb_cells(&buffer, &config, bar).chars().next(), Some('#'), "the thumb at the top");
         let band = ink(&config).at(yumete_config::rung::BAND);
-        assert_eq!(buffer[(bar.x, bar.y + bar.height - 1)].bg, band, "outside the thumb, the margin's tint");
-        assert_eq!(buffer[(59, bar.y + bar.height - 1)].bg, band, "as the margin beside it");
+        assert_eq!(buffer[(bar.x, bar.y + bar.height - 1)].bg, ink(&config).scrollbar_track(), "outside the thumb, the track");
+        assert_eq!(buffer[(59, bar.y + bar.height - 1)].bg, band, "the margin beside it keeps its tint");
     }
 
     /// **Two pages side by side have one bar, for the spread**, at the
@@ -22126,6 +22690,120 @@ fn squeezed(text: &str) -> String {
     fn caret_shown(editor: &Editor, seats: &Seats) -> bool {
         let (first, last) = lines_shown(editor, seats);
         (first..=last).contains(&editor.cursor_line())
+    }
+
+    /// Two windows side by side over forty-line texts, framed: the same
+    /// buffer in both or a second buffer in one, the window without the keys
+    /// scrolled down to line 25 and the live one at the top — so a page
+    /// pulled along by the other's scroll has somewhere to go.
+    fn two_windows_framed(same_buffer: bool, config: &Config, (w, h): (u16, u16), seats: &mut Seats) -> Editor {
+        let mut editor = two_windows(same_buffer);
+        centred_frame(&mut editor, config, w, h, seats);
+        let first = editor.live_window();
+        editor.execute(":25").unwrap();
+        centred_frame(&mut editor, config, w, h, seats);
+        let second = editor.windows().leaves().into_iter().find(|&id| id != first).expect("two windows");
+        editor.focus_window(second);
+        centred_frame(&mut editor, config, w, h, seats);
+        centred_frame(&mut editor, config, w, h, seats);
+        editor
+    }
+
+    /// Two windows side by side over forty-line texts: the same buffer in
+    /// both, or a second buffer in the live one.
+    fn two_windows(same_buffer: bool) -> Editor {
+        let text: String = (1..=40).map(|n| format!("line {n:02}\n")).collect();
+        let mut editor = editor_with(&text);
+        editor.execute(":vsplit").unwrap();
+        if !same_buffer {
+            editor.execute(":new").unwrap();
+            editor.on_key(Key::Char('i'));
+            for n in 1..=40 {
+                for c in format!("row {n:02}").chars() {
+                    editor.on_key(Key::Char(c));
+                }
+                editor.on_key(Key::Enter);
+            }
+            editor.on_key(Key::Esc);
+            editor.on_key(Key::Char('g'));
+            editor.on_key(Key::Char('g'));
+        }
+        editor
+    }
+
+    /// What every window's last frame drew, in the tree's order.
+    fn spans(seats: &Seats, windows: usize) -> Vec<Option<(usize, usize)>> {
+        (0..windows).map(|i| seats[i].drawn_span).collect()
+    }
+
+    /// **Dragging one window's thumb scrolls that window and no other**, the
+    /// same buffer in both or not: the scroll's row aim belongs to the
+    /// window that scrolled, and a window drawn beside it keeps its page.
+    #[test]
+    fn dragging_one_windows_thumb_leaves_the_other_window_where_it_was() {
+        let config = bare();
+        ink(&config);
+        let (w, h) = (81u16, 12u16);
+        let size = Some(ratatui::layout::Size::new(w, h));
+        for same in [true, false] {
+            let mut seats = Seats::default();
+            let mut editor = two_windows_framed(same, &config, (w, h), &mut seats);
+            let mut pointer = Pointer::default();
+            let live = editor.live_pane();
+            let other = 1 - live;
+            let before = spans(&seats, 2);
+            let bar = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0).bars[live];
+            left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("down", bar.x, bar.y));
+            left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("drag", bar.x, bar.y + bar.height / 2));
+            centred_frame(&mut editor, &config, w, h, &mut seats);
+            centred_frame(&mut editor, &config, w, h, &mut seats);
+            let after = spans(&seats, 2);
+            assert_ne!(after[live], before[live], "same buffer {same}: the dragged window scrolls");
+            assert_eq!(after[other], before[other], "same buffer {same}: the other window keeps its page");
+        }
+    }
+
+    /// **The wheel scrolls the window under the pointer**, as helix's and
+    /// vim's do, and only that one: over the other window it scrolls that
+    /// window and leaves the keys and the live window's page where they were;
+    /// over the live window, the other one keeps its page.
+    #[test]
+    fn the_wheel_scrolls_the_window_under_the_pointer_and_no_other() {
+        let config = bare();
+        ink(&config);
+        let (w, h) = (81u16, 12u16);
+        let size = Some(ratatui::layout::Size::new(w, h));
+        let wheel = |x: u16, y: u16| ratatui::crossterm::event::MouseEvent {
+            kind: MouseEventKind::ScrollDown,
+            column: x,
+            row: y,
+            modifiers: KeyModifiers::NONE,
+        };
+        for same in [true, false] {
+            let mut seats = Seats::default();
+            let mut editor = two_windows_framed(same, &config, (w, h), &mut seats);
+            let live = editor.live_pane();
+            let window = editor.live_window();
+            let other = 1 - live;
+            let panes = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0).panes;
+            let before = spans(&seats, 2);
+            wheel_scroll(&mut editor, &config, size, &seats, wheel(panes[live].x + 2, panes[live].y + 2), 4);
+            centred_frame(&mut editor, &config, w, h, &mut seats);
+            centred_frame(&mut editor, &config, w, h, &mut seats);
+            let after = spans(&seats, 2);
+            assert_ne!(after[live], before[live], "same buffer {same}: the live window scrolls");
+            assert_eq!(after[other], before[other], "same buffer {same}: the other keeps its page");
+            let before = after;
+            let line = editor.cursor_line();
+            wheel_scroll(&mut editor, &config, size, &seats, wheel(panes[other].x + 2, panes[other].y + 2), 4);
+            assert_eq!(editor.cursor_line(), line, "same buffer {same}: the live caret stays");
+            centred_frame(&mut editor, &config, w, h, &mut seats);
+            centred_frame(&mut editor, &config, w, h, &mut seats);
+            let after = spans(&seats, 2);
+            assert_eq!(editor.live_window(), window, "same buffer {same}: the keys stay where they were");
+            assert_ne!(after[other], before[other], "same buffer {same}: the window under the pointer scrolls");
+            assert_eq!(after[live], before[live], "same buffer {same}: the live window keeps its page");
+        }
     }
 
     /// **The thumb dragged to the foot of its bar shows the end** — the
@@ -22969,7 +23647,7 @@ fn squeezed(text: &str) -> String {
         let cell = &b[(x, y)];
         matches!(
             cell.symbol(),
-            "│" | "┃" | "╭" | "╮" | "╰" | "╯" | "║" | "╔" | "╗" | "╚" | "╝"
+            "│" | "┃" | "╭" | "╮" | "╰" | "╯" | "║" | "╔" | "╗" | "╚" | "╝" | BORDER_GRIP
         ) || (cell.symbol() == " "
             && cell.style().bg == Some(ink(&Config::default()).gold()))
     }
@@ -26339,13 +27017,13 @@ fn squeezed(text: &str) -> String {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// **`w` 走四檔：2/10 → 3/10 → 4/10 → 5/10**。
+    /// **`w` 走五檔：1/10 → 2/10 → 3/10 → 4/10 → 5/10**。
     ///
     /// Warning: **寬度只看檔位，不是「攤開到剛好讀得下最長那一條」**：最長那一行通常比
     /// 下限短，clamp 就落回下限，`w` 十次有九次沒反應。面板自身不能改變側欄的寬度，
     /// 它只是借用了側欄這個容器。
     #[test]
-    fn w_walks_the_four_widths_and_wraps() {
+    fn w_walks_the_five_widths_and_wraps() {
         let mut editor = editor_with("那年冬天");
         let config = Config::default();
         let dir = std::env::temp_dir().join(format!("yumete-wide-{}", std::process::id()));
@@ -26354,19 +27032,19 @@ fn squeezed(text: &str) -> String {
         std::fs::write(dir.join("洞庭湖之舊硯臺.md"), "# 一\n").unwrap();
         editor.open_sidebar_at(&dir);
 
-        // 80 欄窗口：2/10 ＝ 16、3/10 ＝ 24、4/10 ＝ 32、5/10 ＝ 40。裏面那一堵牆
+        // 80 欄窗口：1/10 ＝ 8、2/10 ＝ 16、3/10 ＝ 24、4/10 ＝ 32、5/10 ＝ 40。裏面那一堵牆
         // 畫在最後一欄上，所以它的座標是寬度減一。
         let inner = |editor: &Editor| -> u16 {
             let buffer = render_with(editor, &config, no_ime(), 80, 12);
             (0..80u16).rfind(|&x| is_rule(&buffer, x, 1)).expect("a rule somewhere")
         };
         assert_eq!(inner(&editor), 23, "出廠 3/10");
-        for want in [31, 39, 15, 23] {
+        for want in [31, 39, 7, 15, 23] {
             editor.on_key(Key::Char('w'));
             assert_eq!(inner(&editor), want, "下一檔");
         }
 
-        // 攤到 5/10（40 欄）讀得下整個名字——這是四檔存在的理由。
+        // 攤到 5/10（40 欄）讀得下整個名字——這是寬檔存在的理由。
         for _ in 0..2 {
             editor.on_key(Key::Char('w'));
         }
@@ -26406,7 +27084,8 @@ fn squeezed(text: &str) -> String {
         // measure is tinted, on rows that reach it and rows that do not.
         assert_ne!(buffer[(19, 0)].style().bg, tint, "inside the measure");
         assert_eq!(buffer[(20, 0)].style().bg, tint, "the first cell past it");
-        assert_eq!(buffer[(39, 0)].style().bg, tint, "out to the edge");
+        assert_eq!(buffer[(38, 0)].style().bg, tint, "out to the scrollbar");
+        assert_eq!(buffer[(39, 0)].style().bg, Some(ink(&config).scrollbar_track()), "the bar's column is its track");
         assert_eq!(buffer[(20, 5)].style().bg, tint, "and down the empty rows");
 
         // Giving the window back takes the margin with it.

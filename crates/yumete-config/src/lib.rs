@@ -1428,6 +1428,17 @@ pub mod rung {
     /// be the same colour: the reader could not tell a word boundary from a
     /// highlighter.
     pub const WORD_TINT: u16 = 8600; // 第 86 檔
+    /// **A scrollbar's track**: the ground of every cell of a window's bar
+    /// column, under the thumb's [`SCROLLBAR`] and the marks.
+    ///
+    /// It says 「this column is the bar, not the page」 even while the file
+    /// fits and there is no thumb, so the column a window keeps for its bar
+    /// reads as a groove beside the writing and not as a stray margin. It is
+    /// the quietest ground on the ladder, two rungs off the paper: quieter
+    /// than [`WORD_TINT`], [`BAND`] and [`CHROME`], because it is on every
+    /// window all the time and says nothing about the text. The thumb stays
+    /// as far from it as from the paper.
+    pub const SCROLLBAR_TRACK: u16 = 8800; // 第 88 檔
     /// A band that must be **seen**, because position is not separating it
     /// from the text: the 縱書 number band sits in the text's own columns, the
     /// lit tab sits among the unlit ones, and a table's cursor row sits among

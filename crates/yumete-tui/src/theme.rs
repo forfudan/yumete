@@ -863,6 +863,11 @@ impl Palette {
     pub fn scrollbar(self) -> Color {
         self.at(rung::SCROLLBAR)
     }
+    /// A scrollbar's track: the ground of its whole column, thumb or none
+    /// ([`yumete_config::rung::SCROLLBAR_TRACK`]).
+    pub fn scrollbar_track(self) -> Color {
+        self.at(rung::SCROLLBAR_TRACK)
+    }
     /// Chrome, raised one notch off the page.
     pub fn chrome(self) -> Color {
         self.at(rung::CHROME)
@@ -1442,7 +1447,7 @@ mod ground_tests {
     }
 
     /// **A scrollbar's thumb is not the rule's grey**, and is seen on every
-    /// ground it is drawn on — the paper, the margin past a measure, a raised
+    /// ground it is drawn on — its track, the paper, the margin past a measure, a raised
     /// status ground and a sunken one (the completion list's) — in every
     /// theme and both moods; a different colour from the selection and the
     /// cursor row too, though neither reaches the bar.
@@ -1461,6 +1466,7 @@ mod ground_tests {
                 for (other, what) in [
                     (at(ladder, rung::RULE), "the rule (a closed sidebar's block)"),
                     (at(ladder, rung::PAPER), "the paper"),
+                    (at(ladder, rung::SCROLLBAR_TRACK), "the track under it"),
                     (at(ladder, rung::BAND), "the margin past a measure"),
                     (at(ladder, rung::CHROME), "a raised ground"),
                     (sunken, "a sunken ground"),
@@ -1471,6 +1477,7 @@ mod ground_tests {
                 for other in [rung::SELECTION, rung::HEAD] {
                     assert_ne!(thumb, at(ladder, other), "{name} {mood}: rung {other}");
                 }
+                assert_ne!(at(ladder, rung::SCROLLBAR_TRACK), at(ladder, rung::PAPER), "{name} {mood}: the track is not the paper");
             }
         }
     }

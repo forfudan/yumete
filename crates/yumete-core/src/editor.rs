@@ -5164,7 +5164,16 @@ impl Editor {
     /// 繪製那一層問它，是為了讓自己那幾條「貼邊就推一把」的修正讓路：指定過的
     /// 位置是讀者剛剛親口說的，推一把就把它推没了。
     pub fn aimed(&self) -> bool {
-        self.aim.is_some()
+        self.aim_here().is_some()
+    }
+
+    /// **The aim, for the window being drawn**: the live window's, and none
+    /// while another window is drawn through [`Self::view_pane`]. An aim is
+    /// what a key or a scroll in the live window asked of *its* page; a
+    /// window drawn beside it that took the aim as its own would move its
+    /// own caret's row to match, and scroll with a window it is not.
+    fn aim_here(&self) -> Option<Aim> {
+        self.aim.filter(|_| self.viewing.get().is_none())
     }
 
     /// **Replace the whole document**, as one undoable edit.
@@ -5303,15 +5312,22 @@ impl Editor {
     }
 
     /// Whether the page stays where a vim scroll left it, the cursor not
-    /// having moved since (see `page_inset`).
+    /// having moved since (see `page_inset`). The live window's page only:
+    /// a window drawn beside it was not the one scrolled.
     pub fn holds_the_page(&self) -> bool {
-        self.keymap_rules().vim_scrolling && self.scrolled_at.get() == Some((self.sel.head(), self.current_buffer().revision()))
+        self.viewing.get().is_none() && self.keymap_rules().vim_scrolling && self.scrolled_at.get() == Some((self.sel.head(), self.current_buffer().revision()))
     }
 
     /// `before`: whether a cursor off the page is above it.
     pub fn page_inset(&self, distance: Option<usize>, before: bool, last: usize, scrolloff: usize) -> Option<usize> {
-        self.scrolloff_seen.set(scrolloff);
         let answer = self.page_inset_now(distance, before, last, scrolloff);
+        // A window drawn beside the live one answers for its own page and
+        // leaves the live window's notes alone: what the scrolls read back
+        // is the live window's last frame, not the last window drawn.
+        if self.viewing.get().is_some() {
+            return answer;
+        }
+        self.scrolloff_seen.set(scrolloff);
         let here = (self.sel.head(), self.current_buffer().revision());
         match self.aim.is_some() {
             true => self.scrolled_at.set(Some(here)),
@@ -5333,7 +5349,7 @@ impl Editor {
         // 纔留在原地的。瞄第 0 行的話，下一幀底下那一句 `d < scrolloff` 立刻把它推開
         // ——按完 `zt` 隨便動一下，頁面自己往下跳三行。vim 的 `zt` 也是留 `scrolloff`
         // 的，同一個理由。
-        if let Some(aim) = self.aim {
+        if let Some(aim) = self.aim_here() {
             // With scrolloff at least half the window, vim's `zt` `zz` `zb`
             // land where its scrolling functions count them to, a line or
             // two off any rule near the file's ends (see `vim_view`).

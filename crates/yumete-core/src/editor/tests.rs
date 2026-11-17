@@ -43690,3 +43690,22 @@ fn table_delimiter_auto_forgets_the_choice() {
     assert_eq!(grid_of(&third), None, "forgotten");
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// **A side set to a step is where `w` walks on from**, and the change is
+/// echoed as `w` echoes it; setting the step it is already at says nothing,
+/// so a drag that stays on one step does not repeat itself.
+#[test]
+fn a_step_set_by_hand_is_where_w_walks_on_from() {
+    use crate::sidebar::{Side, Width};
+    let mut ed = Editor::new();
+    let step = |n: usize| Width::every().find(|w| w.fraction().0 == n).unwrap();
+    assert_eq!(ed.width_of(Side::Right), step(3), "3/10 out of the box");
+    ed.set_width_of(Side::Right, step(5));
+    assert_eq!(ed.width_of(Side::Right), step(5));
+    assert_eq!(ed.width_of(Side::Left), step(3), "the other side keeps its own");
+    assert_eq!(ed.status(), say!("sidebar.width", 5, 10), "echoed as w echoes it");
+    ed.murmur(String::new());
+    ed.set_width_of(Side::Right, step(5));
+    assert_eq!(ed.status(), "", "the same step says nothing");
+    assert_eq!(step(5).next(), step(1), "and w walks on from it, round to the narrowest");
+}
