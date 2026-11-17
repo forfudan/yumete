@@ -297,7 +297,7 @@ fn bare(v: &toml_edit::Value) -> String {
 }
 
 /// 一個 [`Change`] 寫進 toml 會是什麽樣子。
-fn written(change: &Change) -> String {
+pub fn written(change: &Change) -> String {
     match change {
         Change::Tick(on) => on.to_string(),
         Change::Count(n) => n.to_string(),
@@ -713,9 +713,11 @@ impl Panel {
             .unwrap_or(name)
             .trim();
         let all = all_rows();
-        let by_path = all.iter().position(|s| s.path() == name);
+        // helix spells its keys in kebab case (`end-of-line-diagnostics`).
+        let snake = name.replace('-', "_");
+        let by_path = all.iter().position(|s| s.path() == name || s.path() == snake);
         let by_key = || {
-            let keyed: Vec<usize> = (0..all.len()).filter(|i| all[*i].key == name).collect();
+            let keyed: Vec<usize> = (0..all.len()).filter(|i| all[*i].key == name || all[*i].key == snake).collect();
             (keyed.len() == 1).then(|| keyed[0])
         };
         let folded = name.to_lowercase();

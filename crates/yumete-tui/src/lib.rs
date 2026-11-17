@@ -2205,7 +2205,7 @@ fn reload_and_settle(
     let back = editor.take_config_back();
     if editor.take_config_reload() {
         // 項目配置從**工作路徑**往上找，同啓動那一趟。
-        let (fresh, said) = Config::load_reporting_from(&editor.root());
+        let (fresh, said) = Config::load_reporting_from_with(&editor.root(), &settings.session_toml());
         // **What was said before stays**: pushing a setting can
         // say something of its own (「夾行：按視覺縱」), and it must not cover
         // the settings panel's 「已寫入 …」 on every change.

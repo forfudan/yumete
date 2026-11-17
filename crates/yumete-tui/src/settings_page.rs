@@ -302,9 +302,68 @@ pub struct Seat {
     /// **The IME holds a half-typed word**, set by the loop before each key:
     /// `Enter` then commits the word instead of writing the value.
     pub composing: bool,
+    /// **What `:set key value` gave for this run**, by TOML path: read over
+    /// the config files at every reload ([`Seat::session_toml`]), written to
+    /// neither, as helix's `:set` is.
+    session: std::collections::BTreeMap<(String, String), String>,
 }
 
 impl Seat {
+    /// The values `:set key value` gave, as a TOML document.
+    pub fn session_toml(&self) -> String {
+        let mut text = String::new();
+        let mut table = "";
+        for ((t, key), value) in &self.session {
+            if t != table {
+                text.push_str(&format!("[{t}]\n"));
+                table = t;
+            }
+            text.push_str(&format!("{key} = {value}\n"));
+        }
+        text
+    }
+
+    /// **`:set key value`** (helix's `:set-option`): the setting the panel
+    /// would go to for `key` — its TOML path, its key in helix's kebab case or
+    /// yumete's own, its name — given `value` for this run, by the panel's
+    /// own rules; helix's own names and values (`auto-pairs false`,
+    /// `end-of-line-diagnostics warning`) read as the config import reads
+    /// them. `None` when the text is a setting's name alone, or one word,
+    /// for the panel to open on; otherwise what the status line says.
+    fn set_from_the_line(&mut self, editor: &mut Editor, text: &str) -> Option<String> {
+        let mut page = Panel::open(
+            Some(yumete_config::config_dir().join("config.toml")),
+            Some(yumete_config::panel::local_sheet_path(&editor.root())),
+        );
+        if page.go_to(text, |s| every_name(s.label)) {
+            return None;
+        }
+        let (key, value) = text.trim().split_once(char::is_whitespace)?;
+        let value = value.trim();
+        let ours = page.go_to(key, |s| every_name(s.label)).then(|| page.here()).flatten();
+        let checked = ours.map(|setting| page.check(setting, value));
+        let lines: Vec<(String, String, String)> = match (ours, checked) {
+            (Some(setting), Some(Ok(change))) => {
+                vec![(setting.table.to_string(), setting.key.to_string(), yumete_config::panel::written(&change))]
+            }
+            (ours, checked) => match yumete_config::helix::option(key, value) {
+                Ok(lines) => lines,
+                Err(why) => {
+                    return Some(match checked {
+                        Some(Err(refused)) => refusal_said(&refused),
+                        _ if ours.is_some() || why.is_some() => why.unwrap_or_default(),
+                        _ => say!("settings.no-such-setting-from-text", key),
+                    })
+                }
+            },
+        };
+        let said: Vec<String> = lines.iter().map(|(_, key, value)| format!("{key} = {value}")).collect();
+        for (table, key, value) in lines {
+            self.session.insert((table, key), value);
+        }
+        editor.set_config_reload();
+        Some(say!("settings.set-for-the-session", said.join(&say!("label.comma"))))
+    }
     /// **那扇窗開着嗎？** 開着的時候一個鍵都到不了正文。
     pub fn open(&self) -> bool {
         self.panel.is_some()
@@ -867,6 +926,15 @@ impl Seat {
     /// 交回來的那一段字。
     pub fn settle(&mut self, editor: &mut Editor) {
         let _ = self.notice(editor);
+        // `:set key value` sets it and opens nothing.
+        if self.panel.is_none() {
+            if let Some(said) = editor.settings_target().map(str::to_string).and_then(|text| self.set_from_the_line(editor, &text)) {
+                editor.take_settings_request();
+                editor.take_settings_target();
+                editor.set_status(said);
+                return;
+            }
+        }
         let opening = editor.take_settings_request() && self.panel.is_none();
         if opening {
             // 本項目那一頁跟着工作路徑走。
@@ -3027,8 +3095,67 @@ mod tests {
             ed.execute(&format!(":set {words}")).unwrap();
             seat.settle(&mut ed);
             assert!(seat.panel.is_none(), "{words}");
-            assert_eq!(ed.status(), say!("settings.no-such-setting-from-text", words));
+            // `key value` names its key.
+            let key = words.split_whitespace().next().unwrap();
+            assert_eq!(ed.status(), say!("settings.no-such-setting-from-text", key));
         }
+    }
+
+    /// **`:set key value` sets it for this run and opens nothing**
+    /// (helix's `:set-option`): yumete's key or helix's kebab-case one,
+    /// helix's values read as the config import reads them, a value out of
+    /// range refused by the panel's own rules, and nothing written to a file.
+    #[test]
+    fn set_with_a_value_sets_it_for_the_run() {
+        let set = |line: &str| {
+            let mut ed = Editor::new();
+            let mut seat = Seat::default();
+            ed.execute(line).unwrap();
+            seat.settle(&mut ed);
+            assert!(seat.panel.is_none(), "{line}: no panel");
+            let reload = ed.take_config_reload();
+            (seat.session_toml(), ed.status().to_string(), reload)
+        };
+        let (toml, said, reload) = set(":set-option scrolloff 3");
+        assert_eq!(toml, "[editor]\nscrolloff = 3\n");
+        assert!(reload, "the config is read again with it");
+        assert_eq!(said, say!("settings.set-for-the-session", "scrolloff = 3"));
+        assert_eq!(set(":set scrolloff 3").0, "[editor]\nscrolloff = 3\n");
+        assert_eq!(set(":set editor.scrolloff 3").0, "[editor]\nscrolloff = 3\n");
+        assert_eq!(set(":set auto-pairs false").0, "[editor]\nauto_pairs = \"off\"\n");
+        assert_eq!(set(":set auto_pairs minimal").0, "[editor]\nauto_pairs = \"minimal\"\n");
+        assert_eq!(set(":set end-of-line-diagnostics warning").0, "[editor]\nend_of_line_diagnostics = \"basic\"\n");
+        assert_eq!(set(":set end-of-line-diagnostics hint").0, "[editor]\nend_of_line_diagnostics = \"full\"\n");
+        assert_eq!(set(":set soft-wrap.enable true").0, "[editor]\nsoft_wrap = true\n");
+        let (toml, said, reload) = set(":set scrolloff 99");
+        assert_eq!((toml.as_str(), reload), ("", false), "refused: {said}");
+        assert_eq!(said, say!("settings.refused.out-of-range", say!("settings.range", 0, 20)));
+        let (toml, said, _) = set(":set nosuch 3");
+        assert_eq!(toml, "");
+        assert_eq!(said, say!("settings.no-such-setting-from-text", "nosuch"));
+        // A name alone still opens the panel on its row.
+        let mut ed = Editor::new();
+        let mut seat = Seat::default();
+        ed.execute(":set end-of-line-diagnostics").unwrap();
+        seat.settle(&mut ed);
+        assert_eq!(page(&seat).here().map(|s| s.key), Some("end_of_line_diagnostics"));
+    }
+
+    /// The values `:set` gave come back over the files at every reload, a
+    /// later one for the same key winning.
+    #[test]
+    fn what_set_gave_is_read_over_the_files() {
+        let mut ed = Editor::new();
+        let mut seat = Seat::default();
+        for line in [":set scrolloff 3", ":set auto-pairs false", ":set scrolloff 4"] {
+            ed.execute(line).unwrap();
+            seat.settle(&mut ed);
+        }
+        let dir = std::env::temp_dir().join(format!("yumete-set-session-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let (config, said) = Config::load_reporting_from_with(&dir, &seat.session_toml());
+        assert_eq!(config.editor.scrolloff, 4, "{said:?}");
+        assert_eq!(config.editor.auto_pairs, "off");
     }
 
     /// **A file that cannot be read is said at the top**, its layer is

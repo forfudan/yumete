@@ -2149,6 +2149,12 @@ zhs = "设置已保存到 {0}。警告：期间该文件被外部修改"
 en = "saved to {0}. Warning: it was changed outside meanwhile"
 
 [[message]]
+# :set 名字 值 之後：这一次运行里设好了，不写进配置文件。{0} 是设好的那几项，例如 scrolloff = 3（草稿）
+key = "settings.set-for-the-session"
+zhs = "本次运行：{0}（没有写进配置文件）"
+en = "for this run: {0} (not written to the config)"
+
+[[message]]
 # 設置面板：改的那一層被上面蓋着，眼前那個值不會動
 key = "settings.shadowed"
 zhs = "注意：你修改的是全局设置，当前生效的是项目设置"

@@ -2433,6 +2433,11 @@ impl Editor {
         std::mem::take(&mut self.settings_request)
     }
 
+    /// The setting `:settings <name>` named, left where it is.
+    pub fn settings_target(&self) -> Option<&str> {
+        self.settings_target.as_deref()
+    }
+
     /// The setting `:settings <name>` named, if one was.
     pub fn take_settings_target(&mut self) -> Option<String> {
         self.settings_target.take()

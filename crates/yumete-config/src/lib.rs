@@ -16,6 +16,7 @@
 // `///` 是**它的**文檔（紙與墨的階梯），中間插一行 `pub mod` 就把那段註釋搶過去，
 // 而編譯照過、測試照綠——文檔掛在誰身上是看不見的。
 pub mod faults;
+pub mod helix;
 pub mod panel;
 pub mod settings_ui;
 pub mod write_back;
@@ -3763,7 +3764,14 @@ impl Config {
     /// `/tmp` 敲的時候，編輯器的根算出來是 `~/書/三體`，而從 cwd 找就一個
     /// `.yumete/config.toml` 都載不到。命令行說了一個地方，那就從那裏找。
     pub fn load_reporting_from(from: &Path) -> (Config, Vec<String>) {
-        Config::load_reporting_in(Some(from))
+        Config::load_reporting_in(Some(from), "")
+    }
+
+    /// **[`Config::load_reporting_from`], and `session` over both files**:
+    /// the values `:set key value` gave for this run, TOML as the files
+    /// write it, read last so they win and never written to disk.
+    pub fn load_reporting_from_with(from: &Path, session: &str) -> (Config, Vec<String>) {
+        Config::load_reporting_in(Some(from), session)
     }
 
     /// Load the config, and say what went wrong while loading it.
@@ -3774,10 +3782,10 @@ impl Config {
     /// `zong_lenght = 24` must say so rather than look like a setting that does
     /// not work. Each problem is one line, ready for the status bar.
     pub fn load_reporting() -> (Config, Vec<String>) {
-        Config::load_reporting_in(None)
+        Config::load_reporting_in(None, "")
     }
 
-    fn load_reporting_in(from: Option<&Path>) -> (Config, Vec<String>) {
+    fn load_reporting_in(from: Option<&Path>, session: &str) -> (Config, Vec<String>) {
         let mut raw = RawConfig::default();
         let mut problems = Vec::new();
 
@@ -3884,6 +3892,12 @@ impl Config {
                         Err(err) => problems.push(Self::describe(&local, &err, true)),
                     }
                 }
+            }
+        }
+        if !session.is_empty() {
+            match toml::from_str::<RawConfig>(session) {
+                Ok(parsed) => raw.merge(parsed),
+                Err(err) => problems.push(format!(":set: {}", err.message().lines().next().unwrap_or_default())),
             }
         }
 
