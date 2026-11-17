@@ -37119,6 +37119,52 @@ fn a_macro_records_what_the_input_method_commits() {
     assert_eq!(ed.current_buffer().text(), "ab你好\ncd你好\n");
 }
 
+/// **A commit `r` takes plays back as that commit**: `r` writes a commit of
+/// several characters over the selection, and the macro keeps it as one, so
+/// replaying does what the commit did — not `r` with its first character and
+/// the rest as commands. A single character `r` takes as it takes the key,
+/// and goes in as that key.
+#[test]
+fn a_macro_replays_a_commit_r_took_as_the_commit() {
+    // helix: `e` selects the word; several characters become it, one is
+    // written over each of its characters, as the key is.
+    for (commit, held, text) in [
+        ("你好", "er<commit>你好</commit>jgh", "你好\n你好\n"),
+        ("你", "er你jgh", "你你你\n你你你\n"),
+    ] {
+        let mut ed = typed("abc\nabc\n");
+        press(&mut ed, "Qer");
+        ed.insert_committed(commit);
+        press(&mut ed, "jghQ");
+        assert_eq!(ed.held('@'), held);
+        press(&mut ed, "q");
+        assert_eq!(ed.current_buffer().text(), text);
+    }
+
+    // vim: over the caret's character, and over a Visual selection.
+    for (keys, line) in [("qar", "你好bc"), ("qaver", "你好")] {
+        let mut ed = typed_vim("abc\nabc\n");
+        press(&mut ed, keys);
+        ed.insert_committed("你好");
+        press(&mut ed, "j0q");
+        assert!(ed.held('a').contains("<commit>你好</commit>"), "{keys}: {}", ed.held('a'));
+        press(&mut ed, "@a");
+        let text = ed.current_buffer().text();
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(lines[0], line, "{keys}: {text:?}");
+        assert_eq!(lines[1], line, "{keys}: {text:?}");
+    }
+    // vim's Visual `r` ends Visual, the cursor at the start, for a commit of
+    // several characters as for a key.
+    let mut ed = typed_vim("abc def\n");
+    press(&mut ed, "ver");
+    ed.insert_committed("你好");
+    assert_eq!(ed.current_buffer().text(), "你好 def\n");
+    assert_eq!(ed.selection(), (0, 1));
+    press(&mut ed, "x");
+    assert_eq!(ed.current_buffer().text(), "好 def\n", "x takes one character: Visual is over");
+}
+
 /// **A terminal's paste goes into a vim macro as what it typed**, as vim's
 /// paste arrives as keys and is recorded with them; helix records keys alone.
 /// A paste in Normal mode replaces the selection, which no keys say, so it is

@@ -1413,6 +1413,7 @@ impl Editor {
     pub(super) fn start_recording(&mut self, register: char) {
         self.recording = Some(Vec::new());
         self.recording_from = 0;
+        self.recording_commits.clear();
         self.recording_into = register;
         self.status = say!("macro.recording");
     }
@@ -1434,6 +1435,24 @@ impl Editor {
         }
     }
 
+    /// **A commit of several characters `r` takes goes in as one commit**:
+    /// `r` writes the whole of it over the selection, where its characters
+    /// played as keys would be `r`'s one character and then commands. Played back, it is committed
+    /// again ([`Self::play_register`]), so the macro does what the commit did.
+    pub(super) fn record_commit(&mut self, text: &str) {
+        if self.replaying || self.expanding_alias {
+            return;
+        }
+        if let Some(keys) = self.recording.as_mut() {
+            let from = keys.len();
+            keys.extend(text.chars().filter(|&c| c != '\r').map(|c| match c {
+                '\n' => Key::Enter,
+                c => Key::Char(c),
+            }));
+            self.recording_commits.push(from..keys.len());
+        }
+    }
+
     /// Stop recording and write the keys into their register as text
     /// ([`crate::input::macro_text`]), as helix and vim keep a macro. vim's `qA`
     /// adds to register `a`.
@@ -1441,7 +1460,9 @@ impl Editor {
         let Some(mut keys) = self.recording.take() else { return };
         keys.truncate(self.recording_from);
         let n = keys.len();
-        let text = crate::input::macro_text(&keys);
+        let mut commits = std::mem::take(&mut self.recording_commits);
+        commits.retain(|run| run.end <= n);
+        let text = crate::input::macro_text_with_commits(&keys, &commits);
         let into = self.recording_into;
         let (name, text) = match into.is_ascii_uppercase() && self.keymap_rules().vim_registers {
             true => {
@@ -1482,8 +1503,8 @@ impl Editor {
             };
             return;
         }
-        let keys = match crate::input::macro_keys(&text) {
-            Ok(keys) => keys,
+        let steps = match crate::input::macro_steps(&text) {
+            Ok(steps) => steps,
             Err(bad) => {
                 self.status = say!("macro.cannot-read", register, bad);
                 return;
@@ -1507,8 +1528,13 @@ impl Editor {
         let mut group: Option<(u64, bool)> = None;
         for _ in 0..clipped {
             let before = (self.current, self.sel.head(), self.sel.anchor(), self.current_buffer().revision());
-            for &key in &keys {
-                self.on_key(key);
+            for step in &steps {
+                match step {
+                    crate::input::MacroStep::Key(key) => {
+                        self.on_key(*key);
+                    }
+                    crate::input::MacroStep::Commit(text) => self.insert_committed(text),
+                }
             }
             if (self.current, self.sel.head(), self.sel.anchor(), self.current_buffer().revision()) == before {
                 break;

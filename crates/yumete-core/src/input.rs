@@ -201,6 +201,28 @@ pub enum Key {
 /// Chosen for both keymaps, so `"ap` shows a macro and an
 /// edited line can be yanked back and played.
 pub fn macro_text(keys: &[Key]) -> String {
+    macro_text_with_commits(keys, &[])
+}
+
+/// The marks a commit is written between in a macro's text
+/// ([`macro_text_with_commits`]). Neither is a key's name, and a `<` inside
+/// a commit is written `<lt>`, so neither can turn up any other way.
+const COMMIT_OPEN: &str = "<commit>";
+const COMMIT_CLOSE: &str = "</commit>";
+
+/// **One step of a macro**: a key, or text an input method committed in
+/// one piece, played back as that commit and not as its characters typed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MacroStep {
+    Key(Key),
+    Commit(String),
+}
+
+/// [`macro_text`], with the runs of `keys` in `commits` written as commits:
+/// `r<commit>你好</commit>`. A commit `r` takes writes the whole of it over
+/// the selection, which its characters played one by one as keys would not
+/// do, so the macro has to say where it begins and ends.
+pub fn macro_text_with_commits(keys: &[Key], commits: &[std::ops::Range<usize>]) -> String {
     fn name(c: char) -> String {
         match c {
             ' ' => "space".into(),
@@ -210,28 +232,66 @@ pub fn macro_text(keys: &[Key]) -> String {
             c => c.to_string(),
         }
     }
-    keys.iter()
-        .map(|key| match key {
-            Key::Char(c) if !matches!(c, ' ' | '-' | '<' | '>') => c.to_string(),
-            Key::Char(c) => format!("<{}>", name(*c)),
-            Key::Ctrl(c) => format!("<C-{}>", name(*c)),
-            Key::Alt(c) => format!("<A-{}>", name(*c)),
-            Key::Enter => "<ret>".into(),
-            Key::Backspace => "<backspace>".into(),
-            Key::Delete => "<del>".into(),
-            Key::Esc => "<esc>".into(),
-            Key::Left => "<left>".into(),
-            Key::Right => "<right>".into(),
-            Key::Up => "<up>".into(),
-            Key::Down => "<down>".into(),
-            Key::Home => "<home>".into(),
-            Key::End => "<end>".into(),
-            Key::PageUp => "<pageup>".into(),
-            Key::PageDown => "<pagedown>".into(),
-            Key::Tab => "<tab>".into(),
-            Key::BackTab => "<S-tab>".into(),
-        })
-        .collect()
+    let one = |key: &Key| match key {
+        Key::Char(c) if !matches!(c, ' ' | '-' | '<' | '>') => c.to_string(),
+        Key::Char(c) => format!("<{}>", name(*c)),
+        Key::Ctrl(c) => format!("<C-{}>", name(*c)),
+        Key::Alt(c) => format!("<A-{}>", name(*c)),
+        Key::Enter => "<ret>".into(),
+        Key::Backspace => "<backspace>".into(),
+        Key::Delete => "<del>".into(),
+        Key::Esc => "<esc>".into(),
+        Key::Left => "<left>".into(),
+        Key::Right => "<right>".into(),
+        Key::Up => "<up>".into(),
+        Key::Down => "<down>".into(),
+        Key::Home => "<home>".into(),
+        Key::End => "<end>".into(),
+        Key::PageUp => "<pageup>".into(),
+        Key::PageDown => "<pagedown>".into(),
+        Key::Tab => "<tab>".into(),
+        Key::BackTab => "<S-tab>".into(),
+    };
+    let mut text = String::new();
+    for (i, key) in keys.iter().enumerate() {
+        if commits.iter().any(|run| run.start == i && !run.is_empty()) {
+            text.push_str(COMMIT_OPEN);
+        }
+        text.push_str(&one(key));
+        if commits.iter().any(|run| run.end == i + 1 && !run.is_empty()) {
+            text.push_str(COMMIT_CLOSE);
+        }
+    }
+    text
+}
+
+/// **The steps a macro's text names**: [`macro_keys`], with each
+/// `<commit>…</commit>` read as one [`MacroStep::Commit`]. A commit left
+/// open, or holding a key that types no text, is an error.
+pub fn macro_steps(text: &str) -> Result<Vec<MacroStep>, String> {
+    let mut steps = Vec::new();
+    let mut rest = text;
+    loop {
+        let (keys, after) = match rest.find(COMMIT_OPEN) {
+            Some(at) => (&rest[..at], Some(&rest[at + COMMIT_OPEN.len()..])),
+            None => (rest, None),
+        };
+        steps.extend(macro_keys(keys)?.into_iter().map(MacroStep::Key));
+        let Some(after) = after else { return Ok(steps) };
+        let Some(end) = after.find(COMMIT_CLOSE) else { return Err(format!("{COMMIT_OPEN}{after}")) };
+        let inner = &after[..end];
+        let committed = macro_keys(inner)?
+            .into_iter()
+            .map(|key| match key {
+                Key::Char(c) => Ok(c),
+                Key::Enter => Ok('\n'),
+                Key::Tab => Ok('\t'),
+                _ => Err(format!("{COMMIT_OPEN}{inner}{COMMIT_CLOSE}")),
+            })
+            .collect::<Result<String, String>>()?;
+        steps.push(MacroStep::Commit(committed));
+        rest = &after[end + COMMIT_CLOSE.len()..];
+    }
 }
 
 /// **The keys a macro's text names**: [`macro_text`] read back, as helix's
@@ -348,6 +408,24 @@ mod tests {
         assert_eq!(macro_keys("a>b"), Err(">".to_string()));
         assert_eq!(macro_keys("<nope>"), Err("<nope>".to_string()));
         assert_eq!(macro_keys("a<b"), Err("<b".to_string()));
+    }
+
+    /// A commit is written between its marks and read back as one step;
+    /// the keys around it are keys.
+    #[test]
+    fn a_commit_in_a_macro_is_one_step() {
+        use super::{macro_steps, macro_text_with_commits, Key, MacroStep};
+        let keys = [Key::Char('r'), Key::Char('你'), Key::Char('<'), Key::Char('好'), Key::Char('w')];
+        let commits = vec![std::ops::Range { start: 1, end: 4 }];
+        let text = macro_text_with_commits(&keys, &commits);
+        assert_eq!(text, "r<commit>你<lt>好</commit>w");
+        assert_eq!(
+            macro_steps(&text),
+            Ok(vec![MacroStep::Key(Key::Char('r')), MacroStep::Commit("你<好".into()), MacroStep::Key(Key::Char('w'))])
+        );
+        assert_eq!(macro_steps("ab"), Ok(vec![MacroStep::Key(Key::Char('a')), MacroStep::Key(Key::Char('b'))]));
+        assert_eq!(macro_steps("r<commit>你"), Err("<commit>你".to_string()));
+        assert_eq!(macro_steps("r<commit><esc></commit>"), Err("<commit><esc></commit>".to_string()));
     }
 
     /// Every mode, asked all four questions (#351).

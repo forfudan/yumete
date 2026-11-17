@@ -2725,6 +2725,9 @@ pub struct Editor {
     /// what stopping it keeps, so the keys that asked to stop are not part
     /// of the macro, whichever they are.
     recording_from: usize,
+    /// The runs of the recording that are one commit each, written into the
+    /// macro as commits ([`crate::input::macro_text_with_commits`]).
+    recording_commits: Vec<std::ops::Range<usize>>,
     /// **A wait asked to extend**: `extend_next_char` from a binding in
     /// Normal mode extends when its character arrives, after the command
     /// itself has finished (and `g w`'s label likewise).
@@ -4683,6 +4686,7 @@ impl Editor {
             lines_from: None,
             recording: None,
             recording_from: 0,
+            recording_commits: Vec::new(),
             motion_extend: None,
             acting_as_vim: None,
             recording_into: '@',

@@ -857,7 +857,10 @@ impl Editor {
         let was = self.before_a_change();
         // A key that waits for one character (`f`, `mi`, `ms`) takes the
         // commit's first, so that one is what the macro plays to it; the rest
-        // would reach Normal mode as commands. `r` takes the whole commit.
+        // would reach Normal mode as commands. `r` takes the whole commit,
+        // and the macro keeps one of several characters as one
+        // ([`Self::record_commit`]); a single one `r` takes as it takes the
+        // key, so the key is what goes in.
         let one = self.pending.takes_a_character()
             && self.pending != Pending::Replace
             && !matches!(self.mode, Mode::Field | Mode::Picker)
@@ -865,7 +868,9 @@ impl Editor {
         // In Normal mode with nothing waiting the commit is written in, which
         // its characters played as keys would not do: they would be commands.
         let typed_as_keys = self.mode != Mode::Normal || self.pending != Pending::None;
-        if typed_as_keys {
+        if typed_as_keys && self.pending == Pending::Replace && text.chars().nth(1).is_some() {
+            self.record_commit(text);
+        } else if typed_as_keys {
             let recorded: String = text.chars().take(if one { 1 } else { usize::MAX }).collect();
             self.record_typed_text(&recorded);
         }
@@ -960,6 +965,20 @@ impl Editor {
                 e.pending = Pending::None;
                 match single {
                     Some(c) if e.keymap_rules().replace_from_caret => e.replace_by_key(c),
+                    // vim's Visual `r` ends Visual with the cursor at the
+                    // start (`:h v_r`), for several characters as for one.
+                    _ if e.extend && e.keymap_rules().replace_from_caret => {
+                        if e.vim_lines {
+                            e.extend_to_line_bounds();
+                            e.vim_lines = false;
+                        }
+                        let start = e.selection().0;
+                        e.replace_str(&each);
+                        e.extend = false;
+                        e.sel.set_anchor(start);
+                        e.sel.set_head(start);
+                        e.clamp_cursor();
+                    }
                     _ => e.replace_str(&each),
                 }
             });
