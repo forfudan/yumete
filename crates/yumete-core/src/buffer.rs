@@ -2363,6 +2363,20 @@ impl Buffer {
         }
     }
 
+    /// [`Self::retarget_pending`] for the one cursor vim's `u` comes back
+    /// to, the selections kept as they were announced.
+    pub fn retarget_pending_cursor(&mut self, cursor: usize) {
+        if let Some(point) = self.history.pending.as_mut() {
+            point.cursor = cursor;
+        }
+    }
+
+    /// Where the change the next redo makes began: the cursor its undo
+    /// point kept, for vim's rule of where a redo lands.
+    pub fn redo_began_at(&self) -> Option<usize> {
+        self.history.redo.last().and_then(|next| next.far.as_ref().map(|far| far.0))
+    }
+
     /// Stop announcing undo points until [`Self::end_undo_group`], and say what
     /// the setting was — a group opened inside a group is still one group.
     /// **撤銷棧上現在有幾個點**。

@@ -3304,6 +3304,11 @@ pub struct Editor {
     /// An undo or redo just put every selection back where the history kept
     /// it: the follow-the-edit net must not move them again.
     selections_restored: bool,
+    /// **Where vim's `u` comes back to for the operator running**: the
+    /// start of what it acts on (`oap->start`), which is not where the
+    /// caret stands while the verb selects its text. [`Editor::snapshot`]
+    /// takes it over the caret while it is set.
+    undo_lands_at: Option<usize>,
     /// The character `IndentHint::Symbol` draws there.
     indent_symbol: String,
     /// A pending count prefix, so `3w` moves three words (Helix counts).
@@ -4871,6 +4876,7 @@ impl Editor {
             auto_pairs: AutoPairs::default(),
             stepped_over: false,
             selections_restored: false,
+            undo_lands_at: None,
             indent_symbol: "↵".to_string(),
             count: None,
             edit_keys: Vec::new(),

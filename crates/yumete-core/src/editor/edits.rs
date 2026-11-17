@@ -1270,9 +1270,15 @@ impl Editor {
             self.status = why;
             return;
         }
+        // vim's `X` is `dh`: its `u` comes back to where the cut begins.
+        if self.as_vim() {
+            self.undo_lands_at = Some(start);
+            self.snapshot();
+        }
         self.sel.set_anchor(start);
         self.sel.set_head(last);
         self.cut_selection_to_register();
+        self.undo_lands_at = None;
     }
 
     /// The one implementation of both: `yanks` says whether the text taken out

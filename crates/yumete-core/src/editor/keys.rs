@@ -284,6 +284,7 @@ impl Editor {
                 // reach (`run_one_binding`): `"zx" = "delete_selection"` must
                 // not run at the first cursor and send a plain `x` to the
                 // rest, just because `x` alone moves every cursor.
+                self.undo_lands_at = self.vim_visual_start();
                 match self.binding_fan(key) {
                     Fan::Key(waiting, acting) => self.fan_out(waiting, acting, true, &|e| e.on_normal_key(key)),
                     Fan::Once => {
@@ -292,6 +293,7 @@ impl Editor {
                         self.after_a_primary_edit(before);
                     }
                 }
+                self.undo_lands_at = None;
                 // **An undo point is where the typing begins** (helix's): `A` announces it and then goes to the line's end,
                 // and `u` comes back to that end, with every cursor.
                 //
@@ -312,6 +314,12 @@ impl Editor {
                     });
                     let at = every.primary().head;
                     self.current_buffer_mut().retarget_pending(at, every);
+                } else if self.mode == Mode::Insert && self.as_vim() {
+                    // **vim's is where the first character goes in**
+                    // (`u_save` runs as it is typed): the line's end for `A`,
+                    // a character on for `a`, the first non-blank for `I`.
+                    let at = self.sel.head();
+                    self.current_buffer_mut().retarget_pending_cursor(at);
                 }
                 KeyOutcome::Continue
             }
@@ -1354,6 +1362,13 @@ impl Editor {
             return self.do_vim(op, motion::Span::Over { anchor, head });
         }
         let span = self.line_span(first, last, op == 'c');
+        // **vim's `u` after a doubled operator** comes back to where the line
+        // operator put the caret before it acted (`nv_lineop`): the column
+        // for `dd` `>>` `<<`, the first non-blank for the rest (`gUU` `cc`
+        // `==`), measured in nvim.
+        if !matches!(op, 'd' | '<' | '>') {
+            self.undo_lands_at = Some(motion::line_first_non_blank(rope, rope.line_to_char(first)));
+        }
         self.do_vim_span(op, span, Shape::Lines);
         // `gUU` `guu` `g~~` leave the cursor at the line's start, where
         // `gUj` keeps its column (as in nvim).
@@ -1772,6 +1787,30 @@ impl Editor {
         self.do_vim(op, span);
     }
 
+    /// **Where vim's Visual operators begin** (`oap->start` in vim's
+    /// `do_pending_operator`), for `u` to come back to: the selection's
+    /// start; in linewise Visual the start of the line it began on when that
+    /// lies above the cursor, else the cursor. `None` outside vim's Visual
+    /// mode with one selection.
+    pub(super) fn vim_visual_start(&self) -> Option<usize> {
+        if !self.as_vim() || !self.extend || self.sel.is_plural() {
+            return None;
+        }
+        let rope = self.current_buffer().rope();
+        let len = rope.len_chars();
+        let one = self.sel.primary();
+        let (anchor, head) = (one.anchor.min(len), one.head.min(len));
+        if !self.vim_lines {
+            return Some(anchor.min(head));
+        }
+        let (from, to) = (rope.char_to_line(anchor), rope.char_to_line(head));
+        Some(match from < to {
+            true => rope.line_to_char(from),
+            false if from == to => rope.line_to_char(to),
+            false => self.column_on_line(to, self.vim_line_column),
+        })
+    }
+
     /// Whole lines, for a linewise motion (`dj`, `dG`).
     fn do_vim_lines(&mut self, op: char, first: usize, last: usize) {
         let span = self.line_span(first, last, op == 'c');
@@ -1787,6 +1826,7 @@ impl Editor {
     /// 都不做」的閘只擋行內的（見底下）。
     fn do_vim_span(&mut self, op: char, span: motion::Span, shape: Shape) {
         let lines_from = self.lines_from.take();
+        let doubled = self.undo_lands_at.take();
         if matches!(op, 'd' | 'c' | 'y') && self.refuse_unwritable_register() {
             return;
         }
@@ -1879,7 +1919,36 @@ impl Editor {
             };
             (top, self.column_wanted())
         });
+        // **Where vim's `u` comes back to**: where the operator begins
+        // (`oap->start`), which is the `` `[ `` mark `>` works out below —
+        // a charwise span's start, the line above at the column wanted for
+        // `dk`, the cursor for `dj`.
+        if self.as_vim() {
+            let rope = self.current_buffer().rope();
+            let here = self.sel.head();
+            let began = match span {
+                motion::Span::Over { anchor, head } => {
+                    let start = anchor.min(head).min(rope.len_chars());
+                    let first = rope.char_to_line(start);
+                    match (shape, lines_from) {
+                        (Shape::Chars, _) => start,
+                        (Shape::Lines, Some(at)) => at.min(rope.len_chars()),
+                        (Shape::Lines, None) if first == rope.char_to_line(here.min(rope.len_chars())) => here,
+                        (Shape::Lines, None) => self.char_at_line_column(first, self.column_wanted()),
+                    }
+                }
+                motion::Span::Missed => here,
+            };
+            self.undo_lands_at = Some(doubled.unwrap_or(began));
+        }
         self.snapshot();
+        self.do_vim_verb(op, span, shape, kept, lines_from);
+        self.undo_lands_at = None;
+    }
+
+    /// The verb of [`Self::do_vim_span`], once its span and snapshot are
+    /// settled.
+    fn do_vim_verb(&mut self, op: char, span: motion::Span, shape: Shape, kept: Option<(usize, usize)>, lines_from: Option<usize>) {
         // 見 [`Editor::yank_whole_lines`]：`dd`／`yy` 取的是整行，末行缺終止符就補。
         self.yank_whole_lines = shape == Shape::Lines;
         match op {

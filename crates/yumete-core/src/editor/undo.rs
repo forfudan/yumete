@@ -74,7 +74,7 @@ impl Editor {
     /// The history lives on the [`Buffer`], not here: `u` must undo *this*
     /// file's last change, whatever was edited in between.
     pub(super) fn snapshot(&mut self) {
-        let at = self.sel.head();
+        let at = self.undo_lands_at.unwrap_or_else(|| self.sel.head());
         let every = self.sel.clone();
         self.current_buffer_mut().snapshot_with(at, Some(every));
     }
@@ -117,6 +117,54 @@ impl Editor {
         self.clamp_cursor();
     }
 
+    /// Whether a step of the history lands by vim's rule: the vim keymap,
+    /// one cursor ([`Self::come_back_to`] puts several back as they were).
+    fn lands_as_vim(&self, kept: &Option<crate::selection::Selections>) -> bool {
+        !self.keymap_rules().restores_every_selection && !kept.as_ref().is_some_and(|every| every.is_plural())
+    }
+
+    /// **Where vim's `u` and `C-r` put the cursor** (`u_undoredo` in vim's
+    /// `undo.c`), `began` being where the change began (line, column) and
+    /// `before` the text the step left.
+    ///
+    /// On the line the change began on when that line is inside what the
+    /// step changed or one past it, else on the first line it changed; one
+    /// line below where the change began goes up to it (`o`'s line, `p`'s).
+    /// On the line it began on the column is where it began; on any other
+    /// the column wanted (nvim's 'nostartofline').
+    fn where_vim_lands(&self, before: &ropey::Rope, began: (usize, usize), want: usize) -> usize {
+        let after = self.current_buffer().rope();
+        let (na, nb) = (after.len_lines(), before.len_lines());
+        let mut same_ahead = 0;
+        while same_ahead < na.min(nb) && after.line(same_ahead) == before.line(same_ahead) {
+            same_ahead += 1;
+        }
+        let mut same_behind = 0;
+        while same_behind < na.min(nb) - same_ahead && after.line(na - 1 - same_behind) == before.line(nb - 1 - same_behind) {
+            same_behind += 1;
+        }
+        // vim's numbers, from 1: `top` is the line above what changed, and
+        // `size` how many lines the step put there.
+        let (top, size) = (same_ahead, na - same_ahead - same_behind);
+        let from = began.0 + 1;
+        let mut line = match from >= top && from <= top + size + 1 {
+            true => from,
+            false => top + 1,
+        };
+        let lines = match na > 1 && after.len_chars() > 0 && after.char(after.len_chars() - 1) == '\n' {
+            true => na - 1,
+            false => na,
+        };
+        line = line.clamp(1, lines.max(1));
+        if from + 1 == line && line > 1 {
+            line -= 1;
+        }
+        match from == line {
+            true => self.column_on_line(line - 1, began.1),
+            false => self.char_at_line_column(line - 1, want),
+        }
+    }
+
     /// Undo the last change to this buffer (`u` / `:undo`).
     pub(super) fn undo(&mut self) {
         if self.refuse_readonly() {
@@ -124,8 +172,17 @@ impl Editor {
         }
         let at = self.sel.head();
         let every = self.sel.clone();
+        let before = self.current_buffer().rope().clone();
+        let want = self.column_wanted();
         match self.current_buffer_mut().undo_with(at, Some(every)) {
             Some((cursor, kept)) => {
+                let cursor = match self.lands_as_vim(&kept) {
+                    true => {
+                        let began = line_and_column(self.current_buffer().rope(), cursor);
+                        self.where_vim_lands(&before, began, want)
+                    }
+                    false => cursor,
+                };
                 self.come_back_to(cursor, kept);
                 // **A step back can move a record's boundary**:
                 // undoing the line break typed into a cell leaves the grid's
@@ -222,8 +279,15 @@ impl Editor {
         }
         let at = self.sel.head();
         let every = self.sel.clone();
+        let before = self.current_buffer().rope().clone();
+        let want = self.column_wanted();
+        let began = self.current_buffer().redo_began_at().map(|at| line_and_column(&before, at));
         match self.current_buffer_mut().redo_with(at, Some(every)) {
             Some((cursor, kept)) => {
+                let cursor = match (self.lands_as_vim(&kept), began) {
+                    (true, Some(began)) => self.where_vim_lands(&before, began, want),
+                    _ => cursor,
+                };
                 self.come_back_to(cursor, kept);
                 // The same reason as `undo`'s: a step either way can put a
                 // record's boundary back or take it away.
@@ -232,4 +296,11 @@ impl Editor {
             None => self.status = say!("edit.redo-at-newest"),
         }
     }
+}
+
+/// `at` as (line, column in characters), both from 0.
+fn line_and_column(rope: &ropey::Rope, at: usize) -> (usize, usize) {
+    let at = at.min(rope.len_chars());
+    let line = rope.char_to_line(at);
+    (line, at - rope.line_to_char(line))
 }

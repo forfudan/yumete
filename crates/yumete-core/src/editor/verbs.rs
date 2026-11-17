@@ -842,12 +842,17 @@ impl Editor {
         // Visual `r` writes over the selection and leaves Visual mode, the
         // cursor at its start (`:h v_r`).
         if self.extend {
+            // The character can come as a commit of the input method, not
+            // through the Normal key that names this start for every verb.
+            let lands = self.vim_visual_start();
             if self.vim_lines {
                 self.extend_to_line_bounds();
                 self.vim_lines = false;
             }
             let start = self.selection().0;
+            let was = std::mem::replace(&mut self.undo_lands_at, lands);
             self.replace_chars(c);
+            self.undo_lands_at = was;
             self.extend = false;
             self.sel.set_anchor(start);
             self.sel.set_head(start);

@@ -44184,3 +44184,111 @@ fn a_pickers_helix_keys() {
     ed.on_key(Key::Ctrl('s'));
     assert!(ed.other_pane().is_some(), "vim: C-s split the window too");
 }
+
+/// **Where vim's `u` and `C-r` put the cursor** (`u_undoredo` in vim's
+/// `undo.c`), every row measured in nvim 0.12 `--clean` on this text:
+/// the start of what the command acted on (`oap->start`), the line's end
+/// for `A`, the first non-blank for `gUU`, the line above for `o` and `p`.
+#[test]
+fn vims_undo_and_redo_land_where_nvim_lands() {
+    let text = "Some text here and more.\n  second line is indented\nthird line\n\nlast one\n";
+    let at = |ed: &Editor| {
+        let rope = ed.current_buffer().rope();
+        let line = rope.char_to_line(ed.sel.head());
+        (line + 1, ed.sel.head() - rope.line_to_char(line) + 1)
+    };
+    // `⎋` Esc, `⏎` Enter, `ʳ` C-r, `ᵛ` C-v.
+    let feed = |ed: &mut Editor, keys: &str| {
+        for c in keys.chars() {
+            ed.on_key(match c {
+                '⎋' => Key::Esc,
+                '⏎' => Key::Enter,
+                'ʳ' => Key::Ctrl('r'),
+                'ᵛ' => Key::Ctrl('v'),
+                c => Key::Char(c),
+            });
+        }
+    };
+    for (keys, want) in [
+        ("A more⎋u", (1, 24)),
+        ("A more⎋uʳ", (1, 25)),
+        ("wa more⎋u", (1, 7)),
+        ("jwIx⎋u", (2, 3)),
+        ("jwIx⎋uʳ", (2, 3)),
+        ("w>>u", (1, 6)),
+        ("w>>uʳ", (1, 6)),
+        ("w2>>u", (1, 6)),
+        ("jw<<u", (2, 3)),
+        ("wgUUu", (1, 1)),
+        ("wgUUuʳ", (1, 1)),
+        ("wwguuu", (1, 1)),
+        ("wccx⎋u", (1, 1)),
+        ("wSx⎋u", (1, 1)),
+        ("wcwnew⎋u", (1, 6)),
+        ("wcwnew⎋uʳ", (1, 6)),
+        ("oNew line⎋u", (1, 1)),
+        ("oNew line⎋uʳ", (1, 1)),
+        ("wwoabc⎋u", (1, 11)),
+        ("jwOabc⎋u", (2, 3)),
+        ("jJu", (2, 1)),
+        ("jJuʳ", (2, 1)),
+        ("jwJu", (2, 3)),
+        ("jw3Ju", (2, 3)),
+        ("jwgJu", (2, 3)),
+        ("yyjpu", (2, 1)),
+        ("yyjpuʳ", (2, 1)),
+        ("yyjwpu", (2, 3)),
+        ("jwyyGpu", (5, 3)),
+        ("jwyyggPuʳ", (1, 3)),
+        ("wwyiwjwPu", (2, 15)),
+        ("jj$ddu", (3, 10)),
+        ("jj$dduʳ", (3, 1)),
+        ("Gddu", (5, 1)),
+        ("Gdduʳ", (4, 1)),
+        ("jw3ddu", (2, 3)),
+        ("wwdbu", (1, 6)),
+        ("wwdbuʳ", (1, 6)),
+        ("jjwdku", (2, 7)),
+        ("jjwdkuʳ", (2, 1)),
+        ("jjwdju", (3, 7)),
+        ("jjw>ku", (2, 7)),
+        ("jjwgUku", (2, 7)),
+        ("jj>ku", (2, 1)),
+        ("jwdGu", (2, 3)),
+        ("jjwdggu", (1, 7)),
+        ("jjwdgguʳ", (1, 1)),
+        ("jwdapu", (1, 1)),
+        ("wwgUiwu", (1, 11)),
+        ("wwgUiwuʳ", (1, 11)),
+        ("wwDu", (1, 11)),
+        ("wwCx⎋u", (1, 11)),
+        ("wwXu", (1, 10)),
+        ("ww3Xu", (1, 8)),
+        ("ww5xuʳ", (1, 11)),
+        ("wwsx⎋u", (1, 11)),
+        ("wwrxuʳ", (1, 11)),
+        ("ww4~u", (1, 11)),
+        ("jj:s/line/LINE/⏎u", (3, 1)),
+        ("G:1s/text/TXT/⏎uʳ", (1, 1)),
+        ("wwvjdu", (1, 11)),
+        ("wwvjduʳ", (1, 11)),
+        ("jwvkdu", (1, 3)),
+        ("wwVjdu", (1, 1)),
+        ("jwVkdu", (1, 3)),
+        ("jwVkduʳ", (1, 3)),
+        ("wwvjUu", (1, 11)),
+        ("wwVj>u", (1, 1)),
+        ("jwVk>u", (1, 3)),
+        ("wwvjJu", (1, 11)),
+        ("jjwVkJu", (2, 7)),
+        ("wwvecX⎋u", (1, 11)),
+        ("wwviwrxu", (1, 11)),
+        ("jwVkrxu", (1, 3)),
+        ("jlᵛjlldu", (2, 2)),
+    ] {
+        let mut ed = typed_vim(text);
+        assert_eq!(ed.current_buffer().text(), text);
+        feed(&mut ed, keys);
+        assert_eq!(at(&ed), want, "nvim: {keys}");
+    }
+}
