@@ -214,6 +214,7 @@ impl Editor {
         // 上，`j` 走一行整頁跟着挪一行——那是打字機模式，不是 `zt`。清掉之後視口停在
         // 剛纔擺好的地方，因為下一幀 `page_inset` 回的是「光標舒舒服服在頁面上，別動」。
         self.aim = None;
+        self.pane_aims.clear();
         // Warning: **An expansion is not a command of its own**. Every key
         // `play_keys` replays arrives here in Normal mode with nothing pending,
         // so recording it would clear the record and write itself into it: `.`

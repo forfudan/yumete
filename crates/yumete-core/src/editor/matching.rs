@@ -521,7 +521,7 @@ impl Editor {
     }
 
     /// The rows the page last drew, from its top: `None` before a frame.
-    fn page_rows(&self) -> Option<Vec<crate::wrap::Row>> {
+    pub(super) fn page_rows(&self) -> Option<Vec<crate::wrap::Row>> {
         let (from, to) = self.page_span;
         let len = self.current_buffer().rope().len_chars();
         if to <= from || from > len {
@@ -660,6 +660,90 @@ impl Editor {
         // Written back as a guess, so keys faster than the frames add up.
         self.page_span = span;
         self.aim = Some(crate::editor::Aim::Row(row));
+    }
+
+    /// **The 縱書 page moves `n` 縱 and the cursor stays**, pushed in only
+    /// as far as scrolloff — [`Self::scroll_the_page`] counted in 縱, for
+    /// the wheel. `onward` turns the page to the left, the way the text
+    /// runs. A pushed cursor lands at the 縱's head under helix, as a
+    /// pushed one lands at a line's start, and keeps its slot under vim.
+    /// `false` before a page has been drawn.
+    ///
+    /// The page's first 縱 and how many it holds come from the span the
+    /// last frame drew, and the span the scroll leaves is written back as a
+    /// guess, so a flick faster than the frames still adds up.
+    pub(super) fn scroll_the_zongs(&mut self, onward: bool, n: usize) -> bool {
+        let (from, to) = self.page_span;
+        let vim = self.keymap_rules().vim_scrolling;
+        let head = self.sel.head();
+        let moved = {
+            let hidden = |line: usize| self.markup_hidden_on_line(line);
+            let folded = |line: usize| self.line_is_folded(line);
+            let drawn = |line: usize| self.drawn_runs_on_line(line);
+            let turned = |line: usize| self.line_is_table_row(line);
+            let grid = self.grid_with(&hidden, &folded, &drawn, &turned);
+            let rope = self.current_buffer().rope();
+            if to <= from || from > rope.len_chars() {
+                return false;
+            }
+            let anchor = |z: &zong::Zong| zong::Anchor { line: z.line, index_in_line: z.index_in_line };
+            let was = zong::Anchor::from(zong::position(rope, from, grid));
+            // The 縱 drawn: up to the one the span ends in.
+            let shown = zong::zongs_from(rope, was, grid, self.page_columns.max(1));
+            let height = shown.iter().position(|z| z.end >= to).map_or(shown.len(), |i| i + 1).max(1);
+            let (above, below) = match vim {
+                true => self.vim_margins(height),
+                false => {
+                    let so = self.scrolloff_seen.get().min(height.saturating_sub(1) / 2);
+                    (so, so)
+                }
+            };
+            let top = match onward {
+                true => zong::zongs_from(rope, was, grid, n.max(1) + 1).last().map_or(was, anchor),
+                false => zong::retreat(rope, was, grid, n.max(1)),
+            };
+            // Nothing to scroll moves nothing under vim, as `C-y` at the top.
+            if vim && top == was {
+                None
+            } else {
+                let page = zong::zongs_from(rope, top, grid, height);
+                let edge = match onward {
+                    true => page.get(above),
+                    false => page.get(height.saturating_sub(1 + below)).or(page.last()),
+                };
+                let here = zong::Anchor::from(zong::position(rope, head, grid));
+                let mut to = head;
+                if let Some(edge) = edge {
+                    let at = anchor(edge);
+                    let pushed = match onward {
+                        true => here < at,
+                        false => here > at,
+                    };
+                    if pushed {
+                        to = match vim {
+                            true => zong::at_slot(rope, at, self.sel.goal_slot().unwrap_or_else(|| zong::slot_of(rope, head, grid)), grid),
+                            false => edge.start,
+                        };
+                    }
+                }
+                let at = zong::Anchor::from(zong::position(rope, to, grid));
+                let row = zong::distance(rope, top, at, grid, height + 1).unwrap_or(0);
+                let span = (page.first().map_or(0, |z| z.start), page.last().map_or(0, |z| z.end));
+                Some((to, row, span))
+            }
+        };
+        let Some((to, row, span)) = moved else { return true };
+        if to != head {
+            let slot = self.sel.goal_slot();
+            self.move_head(to);
+            // The slot wanted stays wanted, as a 縱 motion keeps it.
+            if vim {
+                self.sel.set_goal_slot(slot);
+            }
+        }
+        self.page_span = span;
+        self.aim = Some(crate::editor::Aim::Row(row));
+        true
     }
 
     /// The rows the window holds: its height, which is more than the page

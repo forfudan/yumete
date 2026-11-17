@@ -1046,37 +1046,47 @@ impl Editor {
         }
     }
 
-    /// **The wheel over a window**: that window scrolls, and the keys stay
-    /// where they are, in a window or a sidebar — what helix does
+    /// **The wheel over a window**: that window's page scrolls, and the keys
+    /// stay where they are, in a window or a sidebar — what helix does
     /// (`ui/editor.rs`, the view under the pointer scrolled and the focus
     /// left alone) and what vim does with `mouse=a`. The window with the
     /// keys scrolls as [`Self::scroll`] moves it; a preview with the keys
     /// takes the rows as its own scroll keys give them; any other window
-    /// scrolls in place ([`Self::scroll_in_place`]), its rows folded to
-    /// `width`, the columns its text is drawn in — `None` for the live
-    /// window's own. A preview without the keys does not scroll: its page
-    /// is moved by the keys in it.
-    pub fn scroll_window(&mut self, window: crate::window::WindowId, amount: usize, back: bool, width: Option<usize>) {
+    /// scrolls in place ([`Self::scroll_in_place`]), measured as `drawn`
+    /// says its last frame was (`None`: at the live window's width, with
+    /// no frame to scroll, so its caret walks the steps instead). A preview without the keys does not
+    /// scroll: its page is moved by the keys in it.
+    ///
+    /// The answer is the span of text a window without the keys is left
+    /// showing, a guess for the front end to keep as that window's last
+    /// frame until the next one is drawn, so a flick faster than the
+    /// frames still adds up. The live window keeps its own guess.
+    pub fn scroll_window(&mut self, window: crate::window::WindowId, amount: usize, back: bool, drawn: Option<DrawnWindow>) -> Option<(usize, usize)> {
         if !self.windows.has(window) {
-            return;
+            return None;
         }
         if self.is_page_window(window) {
             if window == self.live && self.page_window_has_the_keys() {
                 let rows = i32::try_from(amount).unwrap_or(i32::MAX);
                 self.page_steps.push(PageStep::Rows(if back { -rows } else { rows }));
             }
-            return;
+            return None;
         }
         match window == self.live {
-            true => self.scroll(amount, back),
-            false => self.scroll_in_place(window, amount, back, width),
+            true => {
+                self.scroll(amount, back);
+                None
+            }
+            false => self.scroll_in_place(window, amount, back, drawn),
         }
     }
 
     /// **Scroll a window without the keys where it stands**: its own place,
-    /// file, folds and grid stood in for the live window's for the length
-    /// of [`Self::scroll`], and the live window's put back after, so all the
-    /// scroll leaves behind is that window's caret, which its page follows.
+    /// file, folds, grid and last frame stood in for the live window's for
+    /// the length of [`Self::scroll`], and the live window's put back after,
+    /// so all the scroll leaves behind is that window's caret, pushed in as
+    /// far as its scrolloff, and the row the caret sits on in its page
+    /// ([`Self::pane_aims`]), which the page is drawn around.
     ///
     /// Nothing else about the window changes — the mark a preview was
     /// opened to show, its caption and the `Esc` that puts it away stay —
@@ -1084,15 +1094,16 @@ impl Editor {
     /// move, so the sidebars, the language server's questions and what is
     /// remembered about the live file are not touched, as a step into the
     /// window and back would touch them.
-    fn scroll_in_place(&mut self, window: crate::window::WindowId, amount: usize, back: bool, width: Option<usize>) {
-        let Some(pane) = self.panes.get(&window) else { return };
-        let Some(index) = self.buffer_with(pane.buffer) else { return };
+    fn scroll_in_place(&mut self, window: crate::window::WindowId, amount: usize, back: bool, drawn: Option<DrawnWindow>) -> Option<(usize, usize)> {
+        let pane = self.panes.get(&window)?;
+        let index = self.buffer_with(pane.buffer)?;
         let len = self.buffers[index].rope().len_chars();
         let (cursor, anchor) = (pane.cursor.min(len), pane.anchor.min(len));
         let (goal, slot, extend) = (pane.goal_column, pane.goal_slot, pane.extend);
         let grid = pane.table.view().cloned();
         let (live, current, sel, was_extending) = (self.live, self.current, self.sel.clone(), self.extend);
         let (status, wrap) = (self.status.clone(), self.viewing_wrap.get());
+        let (span, lines, aim) = (self.page_span, self.page_lines, self.aim.take());
         let table = std::mem::replace(&mut self.table, grid);
         self.live = window;
         self.current = index;
@@ -1102,11 +1113,21 @@ impl Editor {
         self.sel.set_goal(goal);
         self.sel.set_goal_slot(slot);
         self.extend = extend;
-        if let Some(width) = width {
-            self.viewing_wrap.set(Some(self.wrap_for(width)));
+        if let Some(drawn) = drawn {
+            self.viewing_wrap.set(Some(self.wrap_for(drawn.width)));
+            if self.layout() == Layout::Horizontal {
+                self.page_lines = drawn.rows.max(1);
+            }
         }
+        let given = drawn.and_then(|d| d.span).unwrap_or_default();
+        self.page_span = given;
         self.scroll(amount, back);
         let (head, anchor, goal, slot) = (self.sel.head(), self.sel.anchor(), self.sel.goal(), self.sel.goal_slot());
+        let left = (self.page_span != given).then_some(self.page_span);
+        match std::mem::replace(&mut self.aim, aim) {
+            Some(aimed) => self.pane_aims.insert(window, aimed),
+            None => self.pane_aims.remove(&window),
+        };
         let grid = std::mem::replace(&mut self.table, table);
         self.live = live;
         self.current = current;
@@ -1114,6 +1135,8 @@ impl Editor {
         self.extend = was_extending;
         self.status = status;
         self.viewing_wrap.set(wrap);
+        self.page_span = span;
+        self.page_lines = lines;
         if let Some(pane) = self.panes.get_mut(&window) {
             pane.cursor = head;
             pane.anchor = anchor;
@@ -1123,6 +1146,7 @@ impl Editor {
                 *view = grid;
             }
         }
+        left
     }
 
     pub fn live_window(&self) -> crate::window::WindowId {
@@ -3624,16 +3648,23 @@ impl Editor {
         self.annotation_request.take()
     }
 
-    /// Move `amount` steps onward (or `back`) the way the text is read.
+    /// **What the mouse wheel does**: the page moves `amount` steps onward
+    /// (or `back`) the way the text is read, and the cursor stays where it
+    /// is, pushed in only as far as scrolloff when the page would leave it
+    /// behind — helix's wheel (`ui/editor.rs` calls `commands::scroll`
+    /// without `sync_cursor`) and vim's `<ScrollWheelDown>`, which are
+    /// `C-e` and `C-y` by another name ([`Self::scroll_the_page`]). A step
+    /// is a screen row set horizontally, a 縱 set vertically
+    /// ([`Self::scroll_the_zongs`]), so the wheel turns a 縱書 page sideways.
     ///
-    /// What the mouse wheel does. Set vertically that is across the 縱, which is
-    /// what makes a wheel useful on a page of them; set horizontally it is down
-    /// the lines.
+    /// Reading on with the wheel is reading, not moving: the place being
+    /// written stays put until the page would carry it off, and a click
+    /// puts the cursor where the eye has got to.
     ///
-    /// It moves the **cursor**, not just the view. A view scrolled on its own
-    /// would be pulled straight back the moment the cursor had to stay on
-    /// screen, so the cursor travels with the page — which in a modal editor is
-    /// where you wanted to be anyway.
+    /// Two cases move the cursor instead. A table that takes the whole
+    /// window is drawn around its cursor and keeps no page of its own, so
+    /// there the wheel walks its rows; and before the first frame there is
+    /// no page to move, so the cursor walks the steps the page would have.
     pub fn scroll(&mut self, amount: usize, back: bool) {
         let vertical = self.layout() == Layout::Vertical;
         // **A flick does not leave 全窗表格 either** — it is a window onto one
@@ -3646,6 +3677,18 @@ impl Editor {
             .is_some_and(|view| view.takes_the_pane())
             .then(|| self.table_row_span())
             .flatten();
+        if held.is_none() {
+            let scrolled = match vertical {
+                true => self.scroll_the_zongs(!back, amount),
+                false => self.page_rows().is_some() && {
+                    self.scroll_the_page(!back, amount);
+                    true
+                },
+            };
+            if scrolled {
+                return;
+            }
+        }
         for _ in 0..amount.max(1) {
             let before = self.sel.head();
             if vertical {
@@ -3664,6 +3707,17 @@ impl Editor {
             }
         }
     }
+}
+
+/// **How a window without the keys was last drawn**, for the wheel to
+/// scroll it where it stands ([`Editor::scroll_window`]): the columns its
+/// text is folded to, the span of text its last frame showed (`None`
+/// before one), and the rows it holds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DrawnWindow {
+    pub width: usize,
+    pub span: Option<(usize, usize)>,
+    pub rows: usize,
 }
 
 /// Where a keymap's own lines are kept: helix's first, vim's second.

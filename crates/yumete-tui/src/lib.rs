@@ -2111,7 +2111,7 @@ pub fn run(
                     diag::beat(diag::Stage::Wheel, 0);
                     let notches = 1 + drain_the_flick(mouse.kind, &events, &mut inbox);
                     diag::beat(diag::Stage::Scrolling, notches as u64);
-                    wheel_scroll(editor, config, terminal.size().ok(), &viewport, mouse, notches);
+                    wheel_scroll(editor, config, terminal.size().ok(), &mut viewport, mouse, notches);
                 }
                 MouseEventKind::Down(MouseButton::Left)
                 | MouseEventKind::Drag(MouseButton::Left)
@@ -6184,20 +6184,23 @@ fn peeked_width(editor: &Editor, config: &Config, pane: &yumete_core::editor::Pa
     (width as usize).saturating_sub(gutter)
 }
 
-/// [`peeked_width`] for `window` as the last frame laid it out; `None`
-/// for the live window, whose width the editor is told before every key,
-/// or before a frame.
-fn text_width_of(
+/// **How `window` was last drawn**, for the wheel to scroll it where it
+/// stands: its [`peeked_width`], the span its last frame showed and its
+/// rows. `None` for the live window, whose page the editor is told before
+/// every key, or before a frame.
+fn drawn_window(
     editor: &Editor,
     config: &Config,
     size: Option<ratatui::layout::Size>,
     seats: &Seats,
     window: yumete_core::window::WindowId,
-) -> Option<usize> {
+) -> Option<(usize, yumete_core::editor::DrawnWindow)> {
     let pane = editor.pane_of(window)?;
     let areas = drawn_areas(editor, config, size?, seats);
     let i = editor.windows().leaves().iter().position(|&w| w == window)?;
-    Some(peeked_width(editor, config, pane, areas.panes.get(i)?.width))
+    let area = areas.panes.get(i)?;
+    let width = peeked_width(editor, config, pane, area.width);
+    Some((i, yumete_core::editor::DrawnWindow { width, span: seats[i].drawn_span, rows: area.height as usize }))
 }
 
 /// **Whether the mouse stops at something drawn over the page**: the open
@@ -6226,7 +6229,7 @@ fn wheel_scroll(
     editor: &mut Editor,
     config: &Config,
     size: Option<ratatui::layout::Size>,
-    seats: &Seats,
+    seats: &mut Seats,
     mouse: ratatui::crossterm::event::MouseEvent,
     notches: usize,
 ) {
@@ -6237,8 +6240,13 @@ fn wheel_scroll(
     let amount = editor.wheel_step() * notches;
     match window_at(editor, config, size, seats, mouse) {
         Some(window) => {
-            let width = text_width_of(editor, config, size, seats, window);
-            editor.scroll_window(window, amount, back, width);
+            let drawn = drawn_window(editor, config, size, seats, window);
+            let left = editor.scroll_window(window, amount, back, drawn.map(|(_, d)| d));
+            // What the window is left showing stands for its last frame till
+            // the next is drawn, as the live window's guess does.
+            if let (Some((i, _)), Some(span)) = (drawn, left) {
+                seats[i].drawn_span = Some(span);
+            }
         }
         None if sidebar_row_at(editor, config, size, seats, mouse).is_some() => {}
         None => editor.scroll(amount, back),
@@ -22877,7 +22885,7 @@ fn squeezed(text: &str) -> String {
             let other = 1 - live;
             let panes = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0).panes;
             let before = spans(&seats, 2);
-            wheel_scroll(&mut editor, &config, size, &seats, wheel(panes[live].x + 2, panes[live].y + 2), 4);
+            wheel_scroll(&mut editor, &config, size, &mut seats, wheel(panes[live].x + 2, panes[live].y + 2), 4);
             centred_frame(&mut editor, &config, w, h, &mut seats);
             centred_frame(&mut editor, &config, w, h, &mut seats);
             let after = spans(&seats, 2);
@@ -22885,7 +22893,7 @@ fn squeezed(text: &str) -> String {
             assert_eq!(after[other], before[other], "same buffer {same}: the other keeps its page");
             let before = after;
             let line = editor.cursor_line();
-            wheel_scroll(&mut editor, &config, size, &seats, wheel(panes[other].x + 2, panes[other].y + 2), 4);
+            wheel_scroll(&mut editor, &config, size, &mut seats, wheel(panes[other].x + 2, panes[other].y + 2), 4);
             assert_eq!(editor.cursor_line(), line, "same buffer {same}: the live caret stays");
             centred_frame(&mut editor, &config, w, h, &mut seats);
             centred_frame(&mut editor, &config, w, h, &mut seats);
@@ -22894,6 +22902,174 @@ fn squeezed(text: &str) -> String {
             assert_ne!(after[other], before[other], "same buffer {same}: the window under the pointer scrolls");
             assert_eq!(after[live], before[live], "same buffer {same}: the live window keeps its page");
         }
+    }
+
+    /// Two hundred `line N` lines in a window of 22 rows with scrolloff 5,
+    /// under helix's keys or vim's, and a frame drawn.
+    fn two_hundred_lines(vim: bool) -> (Editor, Config, Seats) {
+        let mut editor = Editor::new();
+        editor.execute(":syntax text").unwrap();
+        editor.replace_everything(&(1..=200).map(|n| format!("line {n}\n")).collect::<String>());
+        if vim {
+            editor.execute(":keymap vim").unwrap();
+        }
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        config.editor.command_line = false;
+        config.editor.scrolloff = 5;
+        crate::theme::settle(&config, None);
+        editor.set_page(22, 58);
+        editor.set_wrap_width(60);
+        let mut seats = Seats::default();
+        loop_frame(&mut editor, &config, &mut seats);
+        (editor, config, seats)
+    }
+
+    /// A frame of the window, its page then told to the editor, as the
+    /// loop tells it after every frame.
+    fn loop_frame(editor: &mut Editor, config: &Config, seats: &mut Seats) {
+        caret_over_time(editor, config, seats, 60, 23);
+        if let Some((a, b)) = seats[editor.live_pane()].drawn_span {
+            editor.set_page_span(a, b);
+        }
+    }
+
+    /// The live window's top line and the cursor's, counted from one.
+    fn top_and_cursor(editor: &Editor, seats: &Seats) -> (Option<usize>, usize) {
+        let top = seats[editor.live_pane()].drawn_span.map(|(a, _)| editor.current_buffer().rope().char_to_line(a) + 1);
+        (top, editor.cursor_line() + 1)
+    }
+
+    /// **The wheel moves the page and leaves the cursor**, pushed in only as
+    /// far as scrolloff, under either keymap — helix 25.07.1 in a pty,
+    /// 200 lines, 22 rows, scrolloff 5: three notches from the top leave
+    /// line 10 at the top and the cursor on line 15, and a notch back
+    /// leaves line 7 at the top and the cursor where it was. Notches
+    /// faster than the frames still add up; the wheel up at the top moves
+    /// nothing.
+    #[test]
+    fn the_wheel_moves_the_page_and_the_cursor_only_at_scrolloff() {
+        for vim in [false, true] {
+            let (mut editor, config, mut seats) = two_hundred_lines(vim);
+            editor.scroll(3, true);
+            loop_frame(&mut editor, &config, &mut seats);
+            assert_eq!(top_and_cursor(&editor, &seats), (Some(1), 1), "vim {vim}: the wheel up at the top");
+            for _ in 0..3 {
+                editor.scroll(3, false);
+            }
+            loop_frame(&mut editor, &config, &mut seats);
+            assert_eq!(top_and_cursor(&editor, &seats), (Some(10), 15), "vim {vim}: three notches down");
+            editor.scroll(3, true);
+            loop_frame(&mut editor, &config, &mut seats);
+            assert_eq!(top_and_cursor(&editor, &seats), (Some(7), 15), "vim {vim}: a notch back");
+            loop_frame(&mut editor, &config, &mut seats);
+            assert_eq!(top_and_cursor(&editor, &seats), (Some(7), 15), "vim {vim}: the page stays");
+        }
+    }
+
+    /// **A notch steps screen rows**, as `C-e` does: a line folded to three
+    /// rows takes three steps to pass.
+    #[test]
+    fn the_wheel_steps_the_rows_a_folded_line_is_drawn_in() {
+        let (mut editor, config, mut seats) = two_hundred_lines(false);
+        let long = format!("line 1 {}\n", "word ".repeat(30));
+        let text = editor.current_buffer().rope().to_string().replacen("line 1\n", &long, 1);
+        editor.replace_everything(&text);
+        editor.on_key(Key::Char('g'));
+        editor.on_key(Key::Char('g'));
+        loop_frame(&mut editor, &config, &mut seats);
+        editor.scroll(3, false);
+        loop_frame(&mut editor, &config, &mut seats);
+        assert_eq!(top_and_cursor(&editor, &seats).0, Some(2), "three rows of line 1, then line 2 at the top");
+    }
+
+    /// **The window under the pointer moves its own page**: a notch over the
+    /// window without the keys scrolls its page three lines and pushes its
+    /// caret in to its scrolloff, two notches back before a frame scroll it
+    /// six and push the caret in from the foot, and the live window's page,
+    /// its caret and the keys are left
+    /// where they were.
+    #[test]
+    fn the_wheel_moves_the_page_of_the_window_under_the_pointer_in_place() {
+        let config = bare();
+        ink(&config);
+        let (w, h) = (81u16, 12u16);
+        let size = Some(ratatui::layout::Size::new(w, h));
+        for same in [true, false] {
+            let mut seats = Seats::default();
+            let mut editor = two_windows_framed(same, &config, (w, h), &mut seats);
+            let (live, window) = (editor.live_pane(), editor.live_window());
+            let other = 1 - live;
+            let id = editor.windows().leaves()[other];
+            let panes = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0).panes;
+            let rows = panes[other].height as usize;
+            let so = config.editor.scrolloff.min((rows - 1) / 2);
+            let shown = |editor: &Editor, seats: &Seats| {
+                let pane = editor.pane_of(id).expect("the other window");
+                let _viewing = editor.view_pane(pane);
+                let rope = editor.current_buffer().rope();
+                (rope.char_to_line(seats[other].drawn_span.expect("a frame").0), rope.char_to_line(pane.cursor()))
+            };
+            let (top, _) = shown(&editor, &seats);
+            let before = (spans(&seats, 2)[live], editor.selection());
+            let (x, y) = (panes[other].x + 2, panes[other].y + 2);
+            wheel_scroll(&mut editor, &config, size, &mut seats, notch(false, x, y), 1);
+            centred_frame(&mut editor, &config, w, h, &mut seats);
+            let (now, caret) = shown(&editor, &seats);
+            assert_eq!(now, top + 3, "same buffer {same}: a notch is three lines");
+            assert!(caret >= now + so && caret + so < now + rows, "same buffer {same}: the caret inside scrolloff");
+            for _ in 0..2 {
+                wheel_scroll(&mut editor, &config, size, &mut seats, notch(true, x, y), 1);
+            }
+            centred_frame(&mut editor, &config, w, h, &mut seats);
+            centred_frame(&mut editor, &config, w, h, &mut seats);
+            assert_eq!(shown(&editor, &seats), (top - 3, top - 3 + rows - 1 - so), "same buffer {same}: two notches back, the caret pushed up from the foot");
+            assert_eq!((spans(&seats, 2)[live], editor.selection()), before, "same buffer {same}: the live window as it was");
+            assert_eq!(editor.live_window(), window, "same buffer {same}: the keys stay");
+        }
+    }
+
+    /// **On a 縱書 page the wheel turns the page sideways**, a 縱 a step,
+    /// and the cursor stays until scrolloff pushes it, as on a horizontal
+    /// page: three notches from the first 縱 leave the tenth first and the
+    /// cursor on the fifteenth.
+    #[test]
+    fn the_wheel_turns_a_vertical_page_and_leaves_the_cursor() {
+        let text: String = (0..80).map(|_| "甲乙丙\n").collect();
+        let mut editor = editor_with(&text);
+        editor.set_ruby(yumete_core::ruby::Dialects::NONE);
+        editor.set_layout(WritingLayout::Vertical);
+        let mut config = vertical_config();
+        config.editor.scrolloff = 5;
+        let (w, h) = (80u16, 12u16);
+        let mut seats = Seats::default();
+        let frame = |editor: &mut Editor, seats: &mut Seats| {
+            let lines = editor.current_buffer().line_count();
+            let look = vertical::Look::of(editor, &config);
+            let page = page_areas(editor, &config, Rect::new(0, 0, w, h), 0).panes[0];
+            editor.set_zong_length(vertical::zong_length_for(&config, page.height, lines, look));
+            editor.set_page(page.height as usize, vertical::Metrics::new(&config, page.height, lines, look).capacity(page.width));
+            caret_over_time(editor, &config, seats, w, h);
+            if let Some((a, b)) = seats[0].drawn_span {
+                editor.set_page_span(a, b);
+            }
+        };
+        let first = |editor: &Editor, seats: &Seats| {
+            let rope = editor.current_buffer().rope();
+            (rope.char_to_line(seats[0].drawn_span.expect("a frame").0), editor.cursor_line())
+        };
+        frame(&mut editor, &mut seats);
+        editor.scroll(3, true);
+        frame(&mut editor, &mut seats);
+        assert_eq!(first(&editor, &seats), (0, 0), "the wheel back at the start moves nothing");
+        for _ in 0..3 {
+            editor.scroll(3, false);
+        }
+        frame(&mut editor, &mut seats);
+        assert_eq!(first(&editor, &seats), (9, 14), "three notches on");
+        editor.scroll(3, true);
+        frame(&mut editor, &mut seats);
+        assert_eq!(first(&editor, &seats), (6, 14), "a notch back leaves the cursor");
     }
 
     /// The wheel, one notch down or up, at a cell.
@@ -22960,7 +23136,7 @@ fn squeezed(text: &str) -> String {
             left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("drag", pane.x + 4, pane.y + 6));
             left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("drag", 2, pane.y + 6));
             left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("up", 2, pane.y + 6));
-            wheel_scroll(&mut editor, &config, size, &seats, notch(false, x, y), 3);
+            wheel_scroll(&mut editor, &config, size, &mut seats, notch(false, x, y), 3);
             let now = (editor.selection(), editor.panel_focus(), editor.width_of(side), editor.panel(side).map(|p| p.selected()));
             assert_eq!(now, before, "a press at ({x}, {y}) reached behind the picker");
             assert!(editor.picker().is_some(), "the picker stays open");
@@ -22986,7 +23162,7 @@ fn squeezed(text: &str) -> String {
         let side = Side::BOTH.into_iter().find(|&s| editor.panel(s).is_some()).expect("the outline is open");
         let panel = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0).panels[side as usize];
         let before = (editor.selection(), editor.panel(side).map(|p| p.selected()));
-        wheel_scroll(&mut editor, &config, size, &seats, notch(false, panel.x + panel.width / 2, panel.y + 3), 3);
+        wheel_scroll(&mut editor, &config, size, &mut seats, notch(false, panel.x + panel.width / 2, panel.y + 3), 3);
         assert_eq!((editor.selection(), editor.panel(side).map(|p| p.selected())), before);
     }
 
@@ -23010,7 +23186,7 @@ fn squeezed(text: &str) -> String {
         let mut pointer = Pointer::default();
         left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("down", at.0, at.1));
         left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("up", at.0, at.1));
-        wheel_scroll(&mut editor, &config, size, &seats, notch(false, at.0, at.1), 3);
+        wheel_scroll(&mut editor, &config, size, &mut seats, notch(false, at.0, at.1), 3);
         assert_eq!(editor.selection(), before, "nothing under the menu moved");
         assert!(editor.prompt().is_some(), "the line is still open");
     }

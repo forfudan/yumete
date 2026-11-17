@@ -1454,6 +1454,13 @@ fn char_at(rope: &Rope, line: usize, index_in_line: usize, slot: usize, grid: Gr
     }
 }
 
+/// The char index of `slot` in the 縱 at `at`, or of its last slot when
+/// the 縱 is shorter: where a cursor wanting that slot lands in it.
+pub fn at_slot(rope: &Rope, at: Anchor, slot: usize, grid: Grid) -> usize {
+    let slot = slot.min(max_slot(rope, at.line, at.index_in_line, grid));
+    char_at(rope, at.line, at.index_in_line, slot, grid)
+}
+
 /// Move to the **next** 縱 — the one drawn to the *left*, since 縱 run right to
 /// left — keeping `goal_slot` where the new 縱 is long enough. Stays put at the
 /// end of the buffer.

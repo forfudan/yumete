@@ -2888,6 +2888,7 @@ impl Editor {
         // `on_key` clears it: kept, the page would carry the clicked line
         // to that row.
         self.aim = None;
+        self.pane_aims.clear();
     }
 
     /// Drag the selection's head to char index `pos`, keeping its anchor.

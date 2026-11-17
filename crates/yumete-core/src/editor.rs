@@ -3598,6 +3598,11 @@ pub struct Editor {
     /// （`on_key` 開頭）放倒。中間那一幀已經畫過了，視口就停在那裏——再下一幀
     /// `page_inset` 回 `None`（光標舒舒服服在頁面上），没人會把它拉回去。
     aim: Option<Aim>,
+    /// **The same, for a window without the keys** that the wheel scrolled
+    /// where it stands ([`Editor::scroll_window`]): the row its caret sits
+    /// on, which its page is drawn around as the live window's page is
+    /// drawn around [`Self::aim`], and dropped with it at the next key.
+    pane_aims: HashMap<crate::window::WindowId, Aim>,
     /// A pending `:format` or `:run <name>`, waiting for the front end — the
     /// editor knows *what* was asked for and the front end knows how to run a
     /// program.
@@ -4959,6 +4964,7 @@ impl Editor {
             side_gutter: std::cell::Cell::new(0),
             side_aim: std::cell::Cell::new(None),
             aim: None,
+            pane_aims: HashMap::new(),
             language_run: None,
             preview_request: None,
             open_request: None,
@@ -5194,13 +5200,17 @@ impl Editor {
         self.aim_here().is_some()
     }
 
-    /// **The aim, for the window being drawn**: the live window's, and none
-    /// while another window is drawn through [`Self::view_pane`]. An aim is
-    /// what a key or a scroll in the live window asked of *its* page; a
-    /// window drawn beside it that took the aim as its own would move its
-    /// own caret's row to match, and scroll with a window it is not.
+    /// **The aim, for the window being drawn**: the live window's, and
+    /// while another window is drawn through [`Self::view_pane`], that
+    /// window's own ([`Self::pane_aims`]). An aim is what a key or a scroll
+    /// asked of *one* page; a window drawn beside it that took the aim as
+    /// its own would move its own caret's row to match, and scroll with a
+    /// window it is not.
     fn aim_here(&self) -> Option<Aim> {
-        self.aim.filter(|_| self.viewing.get().is_none())
+        match self.viewing.get() {
+            None => self.aim,
+            Some(viewing) => self.pane_aims.get(&viewing.window).copied(),
+        }
     }
 
     /// **Replace the whole document**, as one undoable edit.
@@ -5423,7 +5433,8 @@ impl Editor {
         let vim = self.keymap_rules().vim_scrolling;
         let centres = match self.centring {
             Some(Centring::OffPage) => true,
-            // Until the cursor moves on (the wheel moves it with no key).
+            // Until the cursor moves on (a click or the wheel can move it
+            // with no key).
             Some(Centring::At(at)) => at == self.sel.head(),
             None => false,
         };
@@ -6527,6 +6538,7 @@ mod multi;
 mod normal;
 pub(crate) use normal::default_key_written;
 mod page;
+pub use page::DrawnWindow;
 mod page_preview;
 pub use page_preview::{in_the_book, PageStep, PageTarget, PageWindow, PreviewFit};
 mod pairing;

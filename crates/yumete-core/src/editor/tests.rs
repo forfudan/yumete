@@ -4481,8 +4481,10 @@ fn a_macro_records_and_replays() {
     assert_eq!(ed.current_buffer().text(), "〇〇〇〇〇六");
 }
 
+/// **Before a frame there is no page for the wheel to move**, so the
+/// cursor walks the steps the page would have, the way the text runs.
 #[test]
-fn the_wheel_turns_pages_the_way_the_text_runs() {
+fn before_a_frame_the_wheel_walks_the_cursor_the_way_the_text_runs() {
     // Horizontally a notch goes down the lines…
     let text = (0..40).map(|_| "字").collect::<Vec<_>>().join("\n");
     let mut ed = typed(&text);
@@ -38062,7 +38064,7 @@ fn helix_centres_a_definition_even_on_the_page() {
         assert_eq!(ed.cursor_line(), 99);
         let want = (!vim).then_some(10);
         assert_eq!(ed.page_inset(Some(7), false, 21, 5), want, "vim {vim}");
-        // The wheel moves the cursor with no key: the page is left alone.
+        // The wheel can move the cursor with no key: the page is left alone.
         ed.scroll(1, false);
         assert_eq!(ed.page_inset(Some(11), false, 21, 5), None, "vim {vim}");
     }
@@ -44063,7 +44065,7 @@ fn the_wheel_steps_another_windows_rows_at_its_own_width() {
     ed.set_wrap_width(80);
     ed.execute(":vsplit").unwrap();
     let other = ed.other_window().expect("two windows");
-    ed.scroll_window(other, 1, false, Some(20));
+    ed.scroll_window(other, 1, false, Some(crate::editor::DrawnWindow { width: 20, span: None, rows: 10 }));
     assert_eq!(ed.panes[&other].cursor(), 20, "one row of twenty");
     assert_eq!(ed.wrap_width(), Some(80), "the live window folds at its own width again");
 }
