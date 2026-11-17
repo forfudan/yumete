@@ -44371,3 +44371,30 @@ fn control_w_and_u_leave_an_auto_paired_closer_as_helix_does() {
         assert_eq!(ed.current_buffer().text(), want, "{keys:?}");
     }
 }
+
+/// **`C-n` and `C-p` with no list open are vim's** (`i_CTRL-N`, `i_CTRL-P`),
+/// under both keymaps: one press opens the list with the first entry, or the
+/// last, already written in. `C-x` opens it with nothing chosen.
+#[test]
+fn control_n_and_p_open_the_list_with_an_entry_written_in() {
+    for keymap in ["helix", "vim"] {
+        let open = |keys: Key| {
+            let mut ed = typed("harbourmaster and harbourside walk\n");
+            ed.execute(&format!(":keymap {keymap}")).unwrap();
+            ed.execute(":flavor basic").ok();
+            press(&mut ed, "Go");
+            press(&mut ed, "harb");
+            ed.on_key(keys);
+            ed
+        };
+        let ed = open(Key::Ctrl('n'));
+        assert_eq!(caret_line(&ed), "harbourside", "{keymap}: C-n writes the first in");
+        assert_eq!(ed.completion_panel().and_then(|p| p.chosen), Some(0), "{keymap}");
+        let ed = open(Key::Ctrl('p'));
+        assert_eq!(caret_line(&ed), "harbourmaster", "{keymap}: C-p writes the last in");
+        assert_eq!(ed.completion_panel().and_then(|p| p.chosen), Some(1), "{keymap}");
+        let ed = open(Key::Ctrl('x'));
+        assert_eq!(caret_line(&ed), "harb", "{keymap}: C-x only opens it");
+        assert_eq!(ed.completion_panel().and_then(|p| p.chosen), None, "{keymap}");
+    }
+}

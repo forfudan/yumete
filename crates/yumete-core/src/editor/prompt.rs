@@ -66,15 +66,24 @@ impl Editor {
         if self.completion_key(key) {
             return;
         }
-        if key == Key::Ctrl('x')
-            || (key == Key::Ctrl('n') && (self.vim_keymap() || self.flavor_on(yumete_cjk::FlavorItem::InsertExtras)))
-        {
+        let vims_pair = matches!(key, Key::Ctrl('n') | Key::Ctrl('p'));
+        if key == Key::Ctrl('x') || (vims_pair && (self.vim_keymap() || self.flavor_on(yumete_cjk::FlavorItem::InsertExtras))) {
             // **叫它出來。** 稿子裏没有服務器可問，那就什麽都不做——`C-n` 在
             // 這個編輯器裏還没有別的意思，無聲勝過一句用不上的抱怨。
             //
             // `C-x` 是 helix 的拼法（`default.rs` 的插入態 `completion`）：兩個
             // 拼法開同一張單子，插入態裏 `C-x` 本來什麼都不做。
-            let asked = self.offer_from_the_text(true) || self.ask_what_comes_next(true);
+            //
+            // **`C-n` and `C-p` are vim's under both keymaps** (`i_CTRL-N`,
+            // `i_CTRL-P`): the list opens with the first entry written in, or
+            // the last, so one press completes. helix has no such key, so there
+            // is no second habit to keep. `C-x` only opens the list. A server's
+            // list arrives later and opens with nothing chosen.
+            let from_the_text = self.offer_from_the_text(true);
+            let asked = from_the_text || self.ask_what_comes_next(true);
+            if from_the_text && vims_pair {
+                self.choose_offer(key == Key::Ctrl('n'));
+            }
             self.drop_the_list_key(Some(key));
             if asked {
                 return;
