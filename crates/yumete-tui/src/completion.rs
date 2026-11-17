@@ -70,7 +70,9 @@ pub(crate) fn draw_rows_in(
     rows: &[CompletionRow],
     chosen: Option<usize>,
 ) -> Option<Rect> {
-    if rows.is_empty() || area.height == 0 {
+    // Narrower than the panel's least width, nothing is drawn: `place`
+    // refuses such a box anyway.
+    if rows.is_empty() || area.height == 0 || area.width < 8 {
         return None;
     }
     let all = rows.len();
@@ -118,7 +120,7 @@ pub(crate) fn draw_rows_in(
         }
     }
     let right = rect.x + rect.width;
-    let note_end = right - 1 - bar as u16;
+    let note_end = right.saturating_sub(1 + bar as u16);
     for (n, row) in rows[from..from + shown].iter().enumerate() {
         let y = rect.y + n as u16;
         if chosen == Some(from + n) {
@@ -300,5 +302,25 @@ mod tests {
         let rows: Vec<CompletionRow> = (1..=4).map(|i| row(&format!("harbour{i}"), None)).collect();
         let (rect, _) = drawn("ink", true, &rows, None, (2, 11));
         assert_eq!(rect.y + rect.height, 11, "its last row just over the caret's");
+    }
+
+    /// **A page narrower than the panel's least width draws no panel**, and
+    /// one just as wide draws it, with or without a scrollbar and a note.
+    #[test]
+    fn a_page_too_narrow_draws_no_panel() {
+        let config = config_for("ink");
+        let ink = crate::theme::Palette::in_mood(&config, true);
+        let rows: Vec<CompletionRow> = (1..=20).map(|i| row(&format!("alphabet{i}"), Some("word"))).collect();
+        for width in 1..=9u16 {
+            let mut terminal = Terminal::new(TestBackend::new(width, 10)).unwrap();
+            let mut rect = None;
+            terminal
+                .draw(|frame| {
+                    let area = Rect::new(0, 0, width, 9);
+                    rect = draw_rows_in(frame, &config, ink, area, (9, Spot::cell((0, 0)), false), &rows, Some(3));
+                })
+                .unwrap();
+            assert_eq!(rect.is_some(), width >= 8, "{width} cells wide");
+        }
     }
 }

@@ -1167,7 +1167,7 @@ impl Palette {
             apart.min(360.0 - apart) < 30.0
         };
         let sat = match near {
-            true => sat.clamp(page_sat + 15.0, 100.0),
+            true => sat.clamp((page_sat + 15.0).min(100.0), 100.0),
             false => sat.clamp(BAND.0, BAND.1),
         };
         // Away from the page: a dark page is lifted, a light one is lowered.
