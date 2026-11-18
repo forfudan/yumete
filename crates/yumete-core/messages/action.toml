@@ -2405,10 +2405,22 @@ zhs = "在第一个非空白字符前插入(vim 的 I)"
 en = "insert before the first non-blank (vim's I)"
 
 [[message]]
+# 命令說明：vim_insert_indent（草稿）
+key = "action.vim-insert-indent"
+zhs = "这一行缩进一级，取整到缩进宽度(vim 插入模式的 C-t)"
+en = "indent this line one level, rounded to the indent width (vim's Insert C-t)"
+
+[[message]]
 # 命令說明：vim_insert_mode
 key = "action.vim-insert-mode"
 zhs = "在光标前插入(vim 的 i)"
 en = "insert before the cursor (vim's i)"
+
+[[message]]
+# 命令說明：vim_insert_unindent（草稿）
+key = "action.vim-insert-unindent"
+zhs = "这一行退一级缩进，取整到缩进宽度(vim 插入模式的 C-d)"
+en = "take one level of indent off this line, rounded to the indent width (vim's Insert C-d)"
 
 [[message]]
 # 命令說明：vim_join_selections

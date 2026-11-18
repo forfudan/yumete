@@ -44794,3 +44794,38 @@ fn vims_normal_command_runs_keys_on_each_line_as_nvim_does() {
     feed_vim(&mut ed, "qa:norm A;⏎q");
     assert_eq!(ed.held('a'), ":norm<space>A;<ret>");
 }
+
+/// **vim's Insert `C-t` and `C-d` shift the line by one indent width,
+/// rounded to a multiple of it** (`:h i_CTRL-T`), every row measured in
+/// nvim 0.12 `--clean` with `sw=4 et`: the cursor stays on its text, and
+/// inside the indent it keeps its distance from the first non-blank.
+#[test]
+fn vims_insert_control_t_and_d_shift_the_line_as_nvim_does() {
+    let text = "alpha beta\n  two sp\n      six\n\nlast\n";
+    for (keys, want, at) in [
+        ("wiᵗX", "    alpha Xbeta\n  two sp\n      six\n\nlast\n", (1, 11)),
+        ("iᵗX", "    Xalpha beta\n  two sp\n      six\n\nlast\n", (1, 5)),
+        ("AᵗX", "    alpha betaX\n  two sp\n      six\n\nlast\n", (1, 15)),
+        ("jiᵗX", "alpha beta\n  X  two sp\n      six\n\nlast\n", (2, 3)),
+        ("jAᵗᵗX", "alpha beta\n        two spX\n      six\n\nlast\n", (2, 15)),
+        ("jjiᵗX", "alpha beta\n  two sp\n  X      six\n\nlast\n", (3, 3)),
+        ("jjlliᵗX", "alpha beta\n  two sp\n    X    six\n\nlast\n", (3, 5)),
+        ("jjaᵗX", "alpha beta\n  two sp\n   X     six\n\nlast\n", (3, 4)),
+        ("jjjiᵗX", "alpha beta\n  two sp\n      six\n    X\nlast\n", (4, 5)),
+        ("jjwiᵈX", "alpha beta\n  two sp\n    Xsix\n\nlast\n", (3, 5)),
+        ("jjiᵈX", "alpha beta\n  two sp\nX    six\n\nlast\n", (3, 1)),
+        ("jjlllliᵈX", "alpha beta\n  two sp\n  X  six\n\nlast\n", (3, 3)),
+        ("jjAᵈᵈX", "alpha beta\n  two sp\nsixX\n\nlast\n", (3, 4)),
+        ("jwiᵗᵈX", "alpha beta\nXtwo sp\n      six\n\nlast\n", (2, 1)),
+        ("wiᵗᵗᵈX", "    alpha Xbeta\n  two sp\n      six\n\nlast\n", (1, 11)),
+        ("wiᵗX⎋j.", "    alpha Xbeta\n    two sXp\n      six\n\nlast\n", (2, 10)),
+    ] {
+        let mut ed = typed_vim(text);
+        ed.current_buffer_mut().set_syntax_by_hand(crate::syntax::Syntax::Text);
+        feed_vim(&mut ed, keys);
+        ed.on_key(Key::Esc);
+        assert_eq!(ed.current_buffer().text(), want, "nvim: {keys}");
+        // nvim's cursor is read after the `Esc` that leaves Insert.
+        assert_eq!(vim_at(&ed), at, "nvim: {keys}");
+    }
+}

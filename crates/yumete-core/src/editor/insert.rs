@@ -29,9 +29,10 @@ pub(super) const INSERT_KEYS: &[(Key, NormalCmd, InsertWhen)] = &[
     (Key::Backspace, NormalCmd::DeleteCharBackward, None),
     (Key::Ctrl('h'), NormalCmd::DeleteCharBackward, None),
     (Key::Delete, NormalCmd::DeleteCharForward, None),
-    // vim's Insert `C-d` takes an indent off the line;
-    // helix's deletes forward.
-    (Key::Ctrl('d'), NormalCmd::Unindent, Some(|e| e.vim_keymap())),
+    // vim's Insert `C-t` and `C-d` put an indent on the line and take one
+    // off; helix's `C-d` deletes forward.
+    (Key::Ctrl('t'), NormalCmd::VimInsertIndent, Some(|e| e.vim_keymap())),
+    (Key::Ctrl('d'), NormalCmd::VimInsertUnindent, Some(|e| e.vim_keymap())),
     (Key::Ctrl('d'), NormalCmd::DeleteCharForward, None),
     (Key::Alt('d'), NormalCmd::DeleteWordForward, Some(|e| e.flavor_on(FlavorItem::HelixKeysUnderVim))),
     (Key::Ctrl('w'), NormalCmd::DeleteWordBackward, None),
@@ -92,11 +93,67 @@ pub(super) const INSERT_COMMANDS: &[NormalCommand] = &[
     }, Key::Ctrl('g')),
     (NormalCmd::InsertCharAbove, |e, _| e.insert_char_from_line(false), Key::Ctrl('y')),
     (NormalCmd::InsertCharBelow, |e, _| e.insert_char_from_line(true), Key::Ctrl('e')),
+    (NormalCmd::VimInsertIndent, |e, _| e.shift_line_in_insert(true), Key::Ctrl('t')),
+    (NormalCmd::VimInsertUnindent, |e, _| e.shift_line_in_insert(false), Key::Ctrl('d')),
     (NormalCmd::InsertTab, |e, _| e.insert_indent(true), Key::Tab),
     (NormalCmd::InsertOtherTab, |e, _| e.insert_indent(false), Key::BackTab),
 ];
 
 impl Editor {
+    /// **vim's Insert `C-t` / `C-d`** (`:h i_CTRL-T`): the cursor line's
+    /// indent one indent width more or less, rounded to a multiple of it
+    /// (vim's `change_indent` with `shiftround` behaviour), written afresh as
+    /// `>>` writes it. The cursor stays on its text; inside the indent it
+    /// keeps its distance from the first non-blank, never going before the
+    /// line's start.
+    pub(super) fn shift_line_in_insert(&mut self, add: bool) {
+        let rope = self.current_buffer().rope();
+        let head = self.sel.head().min(rope.len_chars());
+        let line = rope.char_to_line(head);
+        let start = rope.line_to_char(line);
+        let old: String = rope.line(line).chars().take_while(|c| *c == ' ' || *c == '\t').collect();
+        let ts = self.tab_stop().max(1);
+        let column_of = |text: &str| text.chars().fold(0, |col, c| match c {
+            '\t' => col + ts - col % ts,
+            _ => col + 1,
+        });
+        let cols = column_of(&old);
+        let sw = self.indent_width().max(1);
+        let new_cols = match add {
+            true => (cols / sw + 1) * sw,
+            false if cols == 0 => return,
+            false => (cols - 1) / sw * sw,
+        };
+        let new = self.vim_indent_text(new_cols);
+        let (o, n) = (old.chars().count(), new.chars().count());
+        let offset = head - start;
+        let to = match offset >= o {
+            true => start + offset - o + n,
+            false => {
+                let before: String = old.chars().take(offset).collect();
+                let want = new_cols.saturating_sub(cols - column_of(&before));
+                // The characters of the new indent that end at or before it.
+                let mut column = 0;
+                let taken = new
+                    .chars()
+                    .take_while(|&c| {
+                        column += match c {
+                            '\t' => ts - column % ts,
+                            _ => 1,
+                        };
+                        column <= want
+                    })
+                    .count();
+                start + taken
+            }
+        };
+        if old != new && !self.overwrite(start, start + o, &new) {
+            return;
+        }
+        self.sel = crate::selection::Selections::one(crate::selection::Range::at(to));
+        self.refresh_goal_column();
+    }
+
     /// **vim's Insert `C-y` / `C-e`**: the character in the line above (or
     /// below) at the cursor's screen column, typed here. A wide character
     /// covers two columns and is found from either.
