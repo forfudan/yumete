@@ -2,6 +2,27 @@
 
 Written for people who use it to write, not for the commit log: each line says what you can *do*, and what changed under you. The numbers are the feature table in `docs/development.md` §5.2.
 
+## Unreleased
+
+### Added
+
+- **`[editor] mouse = false` leaves the mouse to the terminal**: yumete takes no clicks, wheel or drags, so dragging makes the terminal's own selection. helix's `editor.mouse` and vim's emptied `mouse` come over on import; `:set mouse false` turns it off for this run.
+- **`[editor] undo_steps = "sentence"` makes each typed sentence its own undo step**, as if `C-g u` followed it: after `。！？`, and after `.!?` when a space or a line break follows, so code like `a.b` never cuts one. The default, `"insert"`, keeps one step per Insert, as vim and helix do.
+- **`[editor] hud = "off" | "basic" | "full"`** keeps the cursor hint's level in the config; `:view-hud` still changes it for this run.
+- **vim's `:normal`** (`:norm`, `:normal!`) runs keys as typed in Normal mode, once or on each line of a range or of the selection, with vim's aborts and one undo step for the run.
+- **vim's `gp` / `gP`** put like `p` / `P` and leave the cursor just past what was put.
+- **Insert `C-t`** puts one indent width on the line under the vim keymap; `C-d` now takes one off rounded to the width, as vim does.
+- **Insert `C-v` reads vim's codes**: `C-v065`, `C-vx41`, `C-vo101`, `C-vu4e2d`, `C-vU…`; `C-v Enter` writes a carriage return.
+- **A picker's `A-Enter` opens the entry and keeps the picker open**, and every prompt (`:`, `/`, a picker's query) takes helix's `A-b` / `A-f`, `C-k` and `C-r` with a register name.
+
+### Changed
+
+- **Recovery copies are kept in yumete's data directory**, named for the file's whole path, as Neovim keeps its swap files, so nothing is written into the folder you work in. Copies older versions left beside a file are still found and offered.
+- **The view at the end of a file stops where helix's and vim's do**: under helix the empty line after the last newline counts, so `gb`, `C-f` and `C-d` land as in helix; under vim `C-e` scrolls on until the last line is at the top, and `M` on the last page lands as in vim.
+- **Under helix, `.` after a completion writes the word chosen**, as helix replays the completion it applied, not whatever the list offers first at the new place.
+- **A vim macro stops when `J`, `gJ` or Visual `J` has nothing below to join**, so `999@q` ends there; `2gJ` joins two lines, as in vim.
+- **A vim block's corner may stand past a short line's end**, so `C-v j l` from `abc` onto `d` is two columns wide, as in vim.
+
 ## 0.24.0 · 2026-11-17
 
 ### Added
