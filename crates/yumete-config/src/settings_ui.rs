@@ -840,6 +840,15 @@ pub const SETTINGS: &[Setting] = &[
     },
     Setting {
         table: "editor",
+        key: "mouse",
+        group: Group::Interface,
+        kind: Kind::Tick,
+        label: "settings.editor.mouse",
+        hint: "settings.editor.mouse.hint",
+        factory: "true",
+    },
+    Setting {
+        table: "editor",
         key: "tabs",
         group: Group::Interface,
         kind: Kind::Pick(EDITOR_TABS_WAYS),

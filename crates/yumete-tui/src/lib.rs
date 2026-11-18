@@ -718,7 +718,8 @@ pub fn run(
     // click-and-drag selection stops working and needs whatever modifier that
     // terminal reserves for it (Option, on macOS) — which is still the way to
     // copy something that is not in the buffer, such as the status line.
-    let _ = execute!(stdout(), EnableMouseCapture);
+    // `[editor] mouse = false` leaves it to the terminal.
+    hold_the_mouse(config.editor.mouse);
     // Bracketed paste, so text arriving from the system clipboard is *text*.
     // Without it a paste is a stream of keystrokes: in Normal mode every
     // character of the pasted paragraph runs as a command, which is not a
@@ -2160,6 +2161,7 @@ pub fn run(
         DisableMouseCapture,
         SetCursorStyle::DefaultUserShape
     );
+    MOUSE_HELD.store(false, std::sync::atomic::Ordering::Relaxed);
     // **Give the terminal its own three colours back** (#493, #502). They
     // outlive the process, so a page that set them and did not put them back
     // leaves the reader's shell wearing yumete's ink and paper.
@@ -2218,6 +2220,7 @@ fn reload_and_settle(
         settings::apply_ime(&fresh, ime);
         system_ime.set_others(fresh.ime.others);
         *config = fresh;
+        hold_the_mouse(config.editor.mouse);
         // Back to the saved settings means the saved theme too: what
         // `:theme` chose would otherwise stay on.
         if back {
@@ -2264,6 +2267,22 @@ fn reload_and_settle(
             }
         }
     }
+}
+
+/// **Whether the editor holds the mouse** (`[editor] mouse`), so that a
+/// reload turning it off gives the mouse back at once, and a program run
+/// in the terminal (`:!`, `C-z`) hands the editor back only what it held.
+static MOUSE_HELD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Take the mouse from the terminal, or give it back, when that changes.
+fn hold_the_mouse(on: bool) {
+    if MOUSE_HELD.swap(on, std::sync::atomic::Ordering::Relaxed) == on {
+        return;
+    }
+    let _ = match on {
+        true => execute!(stdout(), EnableMouseCapture),
+        false => execute!(stdout(), DisableMouseCapture),
+    };
 }
 
 /// Put the terminal back after a panic tore the loop down (#300).
@@ -3315,9 +3334,11 @@ fn step_back<B: ratatui::backend::Backend + io::Write>(
     execute!(terminal.backend_mut(), ratatui::crossterm::terminal::EnterAlternateScreen)?;
     // The pictures may have gone with the screen; upload again.
     crate::graphics::forget();
+    if MOUSE_HELD.load(std::sync::atomic::Ordering::Relaxed) {
+        let _ = execute!(stdout(), EnableMouseCapture);
+    }
     let _ = execute!(
         stdout(),
-        EnableMouseCapture,
         EnableBracketedPaste,
         // Asked for so a lost Shift release can be noticed: ⌘-Tab away with a
         // modifier down and the release never arrives (see `ShiftTap`).

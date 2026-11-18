@@ -581,6 +581,18 @@ zhs = "文件首尾五行内的 vim: set ft=… ts=…: 可设置文件类型、
 en = "vim: set ft=… ts=…: in the first or last five lines of a file sets its type, indentation and hard-wrap width"
 
 [[message]]
+# 設置面板：[editor] mouse 那一行（草稿）
+key = "settings.editor.mouse"
+zhs = "鼠标"
+en = "mouse"
+
+[[message]]
+# 設置面板：[editor] mouse 那一行底下的說明（草稿）
+key = "settings.editor.mouse.hint"
+zhs = "开：点击、拖选、滚轮归 yumete。关：鼠标留给终端，可直接用终端自己的选择"
+en = "on: clicks, drags and the wheel go to yumete. off: the terminal keeps the mouse, and its own selection works"
+
+[[message]]
 # 設置面板：橫排分頁那一行
 key = "settings.editor.pages-horizontal"
 zhs = "横排分页"

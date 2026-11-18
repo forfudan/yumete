@@ -335,6 +335,12 @@ fn options(user: &Dump, base: &Dump, from: Source, own: &mut Own) {
             _ => {}
         }
     }
+    // `mouse=` empty is the mouse left to the terminal; any letters in it
+    // are yumete's default already.
+    if changed("mouse") && user.string("mouse").is_empty() {
+        handled.insert("mouse");
+        set(own, "mouse = false".to_string());
+    }
     handled.insert("mousescroll");
     if changed("mousescroll") {
         let ms = user.string("mousescroll");
@@ -1322,5 +1328,21 @@ mod tests {
         for to in BARE {
             assert!(has(to), "{to}");
         }
+    }
+
+    /// **`set mouse=` is `mouse = false`**; mouse letters are yumete's
+    /// default and carry nothing.
+    #[test]
+    fn an_empty_mouse_option_leaves_the_mouse_to_the_terminal() {
+        let dump = |mouse: &str| {
+            let json = format!(
+                r#"{{ "nvim": "0.11", "options": {{ "mouse": {{ "value": "{mouse}", "script": "/home/me/init.lua" }} }}, "keymaps": [] }}"#
+            );
+            Dump::from_json(&serde_json::from_str(&json).unwrap())
+        };
+        let own = translate(&dump(""), &dump("nvi"), Source::Neovim);
+        assert_eq!(own.editor, ["mouse = false"]);
+        let own = translate(&dump("a"), &dump("nvi"), Source::Neovim);
+        assert!(!own.editor.iter().any(|l| l.starts_with("mouse")), "{:?}", own.editor);
     }
 }

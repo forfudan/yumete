@@ -3295,4 +3295,23 @@ mod tests {
         assert_eq!(one_line("a5\r\n"), "a5");
         assert_eq!(one_line("a\tb\u{7}"), "a b");
     }
+
+    /// **`[editor] mouse`**: on by default, `false` in the config, from
+    /// `:set` (yumete's key or helix's) and from a helix config.
+    #[test]
+    fn mouse_is_a_setting_set_like_the_others() {
+        assert!(Config::default().editor.mouse);
+        assert!(!Config::from_toml("[editor]\nmouse = false\n").editor.mouse);
+        let mut ed = Editor::new();
+        let mut seat = Seat::default();
+        ed.execute(":set mouse false").unwrap();
+        seat.settle(&mut ed);
+        assert!(seat.panel.is_none());
+        assert!(ed.take_config_reload(), "the config is read again with it");
+        assert_eq!(seat.session_toml(), "[editor]\nmouse = false\n");
+        assert_eq!(
+            yumete_config::helix::option("mouse", "false"),
+            Ok(vec![("editor".to_string(), "mouse".to_string(), "false".to_string())])
+        );
+    }
 }

@@ -158,6 +158,10 @@ pub fn editor_table(table: &toml::Table) -> Carried {
                 Ok(n) => set(got, "hard_wrap", n.to_string()),
                 Err(why) => skip(got, &why),
             },
+            "mouse" => match value.as_bool() {
+                Some(on) => set(got, "mouse", on.to_string()),
+                None => skip(got, "not true or false"),
+            },
             "insert-final-newline" => match value.as_bool() {
                 Some(on) => set(got, "insert_final_newline", on.to_string()),
                 None => skip(got, "not true or false"),

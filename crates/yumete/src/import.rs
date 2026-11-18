@@ -1426,7 +1426,7 @@ j = { k = "normal_mode" }
         assert!(list.contains("[keys.normal] A-x = \"dap_launch\": yumete has no debugger"), "{list}");
         assert!(list.contains("[keys.normal] C-space: yumete cannot bind C-space"), "{list}");
         assert!(list.contains("[keys.normal] esc: yumete cannot bind esc"), "{list}");
-        assert!(list.contains("[editor] mouse: no counterpart in yumete"), "{list}");
+        assert!(!list.contains("mouse"), "{list}");
         assert!(list.contains("[editor.soft-wrap] max-wrap: no counterpart in yumete"), "{list}");
         assert!(list.contains("[editor.lsp]: no counterpart in yumete"), "{list}");
         assert!(list.contains("rulers after the first"), "{list}");
@@ -1453,6 +1453,7 @@ j = { k = "normal_mode" }
             "indent_guides_character = \"╎\"",
             "indent_guides_skip_levels = 1",
             "smart_case = false",
+            "mouse = false",
         ] {
             assert!(editor.lines().any(|l| l == line), "{line} missing from:\n{editor}");
         }
@@ -1468,8 +1469,8 @@ j = { k = "normal_mode" }
     fn a_helix_import_is_a_config_the_editor_takes_without_a_word() {
         let imported = sample();
         assert_eq!(complaints(&imported.text), Vec::<String>::new(), "{}", imported.text);
-        // Ten settings and nine bindings; the theme is not carried.
-        assert_eq!(imported.carried, 19);
+        // Eleven settings and nine bindings; the theme is not carried.
+        assert_eq!(imported.carried, 20);
         // An empty helix config is still a clean one.
         let empty = helix("", Path::new("x"), "t", false, None).unwrap();
         assert_eq!(complaints(&empty.text), Vec::<String>::new(), "{}", empty.text);

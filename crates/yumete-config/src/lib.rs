@@ -105,6 +105,11 @@ pub struct EditorConfig {
     /// multiplier on something already large: `1` is the setting for anyone
     /// who finds the page jumps.
     pub wheel_step: usize,
+    /// **Whether yumete takes the mouse** (helix's `mouse`). On by default:
+    /// clicks place the cursor, a drag selects, the wheel turns the page.
+    /// Off, the terminal keeps the mouse, so its own click-and-drag
+    /// selection works without a modifier, and yumete sees no mouse at all.
+    pub mouse: bool,
     /// Whether the line-number band carries a ground of its own.
     ///
     /// Off, and the same in both layouts: 縱書 painted its number band and
@@ -570,6 +575,7 @@ impl Default for EditorConfig {
             line_numbers: LineNumbers::Absolute,
             scrolloff: 5,
             wheel_step: 3,
+            mouse: true,
             line_number_fill: false,
             diff_gutter: true,
             end_of_line_diagnostics: "off".to_string(),
@@ -4941,6 +4947,7 @@ struct RawEditor {
     line_numbers: Option<String>,
     scrolloff: Option<usize>,
     wheel_step: Option<usize>,
+    mouse: Option<bool>,
     line_number_fill: Option<bool>,
     diff_gutter: Option<bool>,
     end_of_line_diagnostics: Option<String>,
@@ -5146,6 +5153,9 @@ impl RawConfig {
         }
         if other.editor.wheel_step.is_some() {
             self.editor.wheel_step = other.editor.wheel_step;
+        }
+        if other.editor.mouse.is_some() {
+            self.editor.mouse = other.editor.mouse;
         }
         if other.editor.table_rules.is_some() {
             self.editor.table_rules = other.editor.table_rules.clone();
@@ -5627,6 +5637,9 @@ impl RawConfig {
         if let Some(step) = self.editor.wheel_step {
             config.editor.wheel_step =
                 as_declared(problems, "editor", "wheel_step", step, step.max(1));
+        }
+        if let Some(on) = self.editor.mouse {
+            config.editor.mouse = on;
         }
         if let Some(rules) = self.editor.table_rules {
             config.editor.table_rules = rules;
