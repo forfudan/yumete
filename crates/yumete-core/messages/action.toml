@@ -2459,6 +2459,12 @@ zhs = "向后粘贴(vim 的 p)"
 en = "paste after (vim's p)"
 
 [[message]]
+# 命令說明：vim_paste_after_go_past（草稿）
+key = "action.vim-paste-after-go-past"
+zhs = "向后粘贴，光标停在粘贴的文字之后(vim 的 gp)"
+en = "paste after, the cursor just past what it put (vim's gp)"
+
+[[message]]
 # 命令說明：vim_paste_after_indented
 key = "action.vim-paste-after-indented"
 zhs = "向后粘贴，缩进对齐这一行(vim 的 ]p)"
@@ -2469,6 +2475,12 @@ en = "paste after, indented like this line (vim's ]p)"
 key = "action.vim-paste-before"
 zhs = "向前粘贴(vim 的 P)"
 en = "paste before (vim's P)"
+
+[[message]]
+# 命令說明：vim_paste_before_go_past（草稿）
+key = "action.vim-paste-before-go-past"
+zhs = "向前粘贴，光标停在粘贴的文字之后(vim 的 gP)"
+en = "paste before, the cursor just past what it put (vim's gP)"
 
 [[message]]
 # 命令說明：vim_paste_before_indented

@@ -2237,6 +2237,7 @@ impl Editor {
         // **A record pasted into a grid may be several lines of it**: a field with a line break in it is one record over two
         // lines, so which lines are rows has changed.
         self.rescan_records();
+        let go_past = std::mem::take(&mut self.paste_goes_past);
         // The pasted text becomes the selection, ending on its last grapheme.
         let rope = self.current_buffer().rope();
         let head = motion::prev_grapheme(rope, at + len).max(at);
@@ -2245,6 +2246,13 @@ impl Editor {
         // linewise one on the first non-blank of its first line. Leaving the
         // pasted text selected would make the next `i` type at its start.
         if self.as_vim() {
+            if go_past {
+                let to = self.just_past_the_put(at + len, line_wise);
+                self.sel.set_anchor(to);
+                self.sel.set_head(to);
+                self.refresh_goal_column();
+                return;
+            }
             let to = match line_wise {
                 true => {
                     let first = match at_the_unterminated_end {
@@ -2266,6 +2274,24 @@ impl Editor {
         self.sel.set_anchor(at);
         self.sel.set_head(head);
         self.refresh_goal_column();
+    }
+
+    /// **Where vim's `gp` leaves the cursor**, `end` being just past the
+    /// text put (`do_put` with `PUT_CURSEND`): put lines leave it at the
+    /// start of the line after them, or on the last line when they were put
+    /// at the end of the file; text within lines leaves it on the character
+    /// after it, or on the line's last character when nothing follows.
+    pub(super) fn just_past_the_put(&self, end: usize, line_wise: bool) -> usize {
+        let rope = self.current_buffer().rope();
+        let end = end.min(rope.len_chars());
+        let line = rope.char_to_line(end);
+        if line_wise {
+            return rope.line_to_char(line.min(motion::last_line(rope)));
+        }
+        match rope.get_char(end) {
+            Some('\n' | '\r') | None if end > rope.line_to_char(line) => motion::prev_grapheme(rope, end),
+            _ => end,
+        }
     }
 
     /// The indent of `line` in columns, as vim's `get_indent` counts it:

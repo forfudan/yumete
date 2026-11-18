@@ -2719,6 +2719,9 @@ pub struct Editor {
     paste_copies: usize,
     /// Whether the next paste takes the cursor line's indent (vim's `]p`).
     paste_fixes_indent: bool,
+    /// Whether the next paste leaves the cursor just past what it put
+    /// (vim's `gp` `gP`).
+    paste_goes_past: bool,
     /// Where this Insert began, for vim's `C-u` and `C-w`, which take back
     /// what was typed before going further (`:h i_CTRL-U`).
     insert_began: Option<usize>,
@@ -4720,6 +4723,7 @@ impl Editor {
             pending_register: None,
             paste_copies: 1,
             paste_fixes_indent: false,
+            paste_goes_past: false,
             insert_began: None,
             session_names: Vec::new(),
             vim_line_column: 0,

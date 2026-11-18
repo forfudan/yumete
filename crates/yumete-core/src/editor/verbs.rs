@@ -1091,6 +1091,9 @@ impl Editor {
         if !self.overwrite(start, end, &new) {
             return None;
         }
+        if self.paste_goes_past {
+            return Some(self.just_past_the_put(start + new.chars().count(), line_wise || lines));
+        }
         let rope = self.current_buffer().rope();
         let to = match (lines, line_wise) {
             (false, true) => motion::line_first_non_blank(rope, rope.line_to_char(rope.char_to_line(start) + 1)),

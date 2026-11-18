@@ -44674,3 +44674,66 @@ fn alt_enter_opens_the_entry_and_keeps_the_picker() {
     assert_eq!(ed.mode(), Mode::Normal);
     assert_eq!(ed.current_buffer().text(), next);
 }
+
+/// `keys` pressed on `ed`: `⎋` Esc, `⏎` Enter, `ᵛ` C-v, `ᵗ` C-t, `ᵈ` C-d.
+fn feed_vim(ed: &mut Editor, keys: &str) {
+    for c in keys.chars() {
+        ed.on_key(match c {
+            '⎋' => Key::Esc,
+            '⏎' => Key::Enter,
+            'ᵛ' => Key::Ctrl('v'),
+            'ᵗ' => Key::Ctrl('t'),
+            'ᵈ' => Key::Ctrl('d'),
+            c => Key::Char(c),
+        });
+    }
+}
+
+/// The cursor as vim reports it: line and character column, from 1.
+fn vim_at(ed: &Editor) -> (usize, usize) {
+    let rope = ed.current_buffer().rope();
+    let line = rope.char_to_line(ed.sel.head());
+    (line + 1, ed.sel.head() - rope.line_to_char(line) + 1)
+}
+
+/// **vim's `gp` and `gP` leave the cursor just past what they put**
+/// (`:h gp`), every row measured in nvim 0.12 `--clean`: after the last
+/// character of text, on the line's last when nothing follows; at the
+/// start of the line after put lines, on the last line at the file's end;
+/// after a block on its last line. Counted, in Visual mode, and with `.`.
+#[test]
+fn vims_gp_leaves_the_cursor_just_past_the_put_as_nvim_does() {
+    let text = "alpha beta\nsecond line\nthird\nfour\n";
+    for (keys, want, at) in [
+        ("yiwgp", "aalphalpha beta\nsecond line\nthird\nfour\n", (1, 7)),
+        ("yiwgP", "alphaalpha beta\nsecond line\nthird\nfour\n", (1, 6)),
+        ("yiw3gp", "aalphaalphaalphalpha beta\nsecond line\nthird\nfour\n", (1, 17)),
+        ("yiw2gP", "alphaalphaalpha beta\nsecond line\nthird\nfour\n", (1, 11)),
+        ("yiw$gp", "alpha betaalpha\nsecond line\nthird\nfour\n", (1, 15)),
+        ("xgp", "lapha beta\nsecond line\nthird\nfour\n", (1, 3)),
+        ("yyjgp", "alpha beta\nsecond line\nalpha beta\nthird\nfour\n", (4, 1)),
+        ("yyjgP", "alpha beta\nalpha beta\nsecond line\nthird\nfour\n", (3, 1)),
+        ("yyj2gp", "alpha beta\nsecond line\nalpha beta\nalpha beta\nthird\nfour\n", (5, 1)),
+        ("yyGgp", "alpha beta\nsecond line\nthird\nfour\nalpha beta\n", (5, 1)),
+        ("yyGgP", "alpha beta\nsecond line\nthird\nalpha beta\nfour\n", (5, 1)),
+        ("yjGgp", "alpha beta\nsecond line\nthird\nfour\nalpha beta\nsecond line\n", (6, 1)),
+        ("yjgP", "alpha beta\nsecond line\nalpha beta\nsecond line\nthird\nfour\n", (3, 1)),
+        ("vjyGgp", "alpha beta\nsecond line\nthird\nfalpha beta\nsour\n", (5, 2)),
+        ("vjygP", "alpha beta\nsalpha beta\nsecond line\nthird\nfour\n", (2, 2)),
+        ("lᵛjlyjgp", "alpha beta\nselpcond line\nthecird\nfour\n", (3, 5)),
+        ("lᵛjlyjgP", "alpha beta\nslpecond line\ntechird\nfour\n", (3, 4)),
+        ("lᵛjly2gp", "allplppha beta\nseececcond line\nthird\nfour\n", (2, 7)),
+        ("lᵛjly2p", "allplppha beta\nseececcond line\nthird\nfour\n", (1, 3)),
+        ("lᵛjlyGgp", "alpha beta\nsecond line\nthird\nfolpur\n  ec\n", (5, 4)),
+        ("yiwwviwgp", "alpha alpha\nsecond line\nthird\nfour\n", (1, 11)),
+        ("yiwjVgp", "alpha beta\nalpha\nthird\nfour\n", (3, 1)),
+        ("yyjviwgp", "alpha beta\n\nalpha beta\n line\nthird\nfour\n", (4, 1)),
+        ("yyGVgp", "alpha beta\nsecond line\nthird\nalpha beta\n", (4, 1)),
+        ("yiwgp.", "aalphalalphapha beta\nsecond line\nthird\nfour\n", (1, 13)),
+    ] {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        assert_eq!(ed.current_buffer().text(), want, "nvim: {keys}");
+        assert_eq!(vim_at(&ed), at, "nvim: {keys}");
+    }
+}

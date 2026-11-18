@@ -193,6 +193,8 @@ pub(super) const NORMAL_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::VimPasteBefore, |e, cx| e.acting(true, |e| e.cmd_paste(cx.with_key(Key::Char('P')))), Key::Char('P')),
     (NormalCmd::VimPasteAfterIndented, |e, cx| e.acting(true, |e| e.paste_indented(cx.with_key(Key::Char('p')))), Key::Char('p')),
     (NormalCmd::VimPasteBeforeIndented, |e, cx| e.acting(true, |e| e.paste_indented(cx.with_key(Key::Char('P')))), Key::Char('P')),
+    (NormalCmd::VimPasteAfterGoPast, |e, cx| e.acting(true, |e| e.paste_going_past(cx.with_key(Key::Char('p')))), Key::Char('p')),
+    (NormalCmd::VimPasteBeforeGoPast, |e, cx| e.acting(true, |e| e.paste_going_past(cx.with_key(Key::Char('P')))), Key::Char('P')),
     (NormalCmd::SelectInnerObject, |e, cx| e.cmd_select_object(cx.with_key(Key::Char('i'))), Key::Char('i')),
     (NormalCmd::SelectAroundObject, |e, cx| e.cmd_select_object(cx.with_key(Key::Char('a'))), Key::Char('a')),
     (NormalCmd::InsertMode, |e, cx| e.acting(false, |e| e.cmd_insert_mode(cx)), Key::Char('i')),
@@ -1922,6 +1924,7 @@ impl Editor {
         // vim's: a block taken is a block pasted (`:h v_b_p`), and Visual
         // `p` writes the register over the selection.
         if self.as_vim() && self.register_block && self.pending_register.is_none() {
+            self.paste_copies = count.clamp(1, Self::WRITING_MAX);
             return self.paste_block(key == Key::Char('p'));
         }
         if self.as_vim() && self.extend && !self.expanding_alias {
@@ -1943,6 +1946,15 @@ impl Editor {
         self.paste_fixes_indent = true;
         self.cmd_paste(cx);
         self.paste_fixes_indent = false;
+    }
+
+    /// vim's `gp` and `gP`: `p` and `P` with the cursor left just past what
+    /// was put — after its last character, or at the start of the line after
+    /// put lines — in Normal and in Visual alike.
+    pub(super) fn paste_going_past(&mut self, cx: Cx) {
+        self.paste_goes_past = true;
+        self.cmd_paste(cx);
+        self.paste_goes_past = false;
     }
 
     // Insert (`i` before the selection, `a` after it, `I`/`A` line ends).

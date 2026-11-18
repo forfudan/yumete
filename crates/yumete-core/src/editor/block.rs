@@ -680,12 +680,15 @@ impl super::Editor {
     }
 
     /// **`p`/`P` after a block was taken**: each piece onto its own line, from
-    /// the cursor's column down, a short line padded out to it.
+    /// the cursor's column down, a short line padded out to it. A count puts
+    /// that many copies side by side, each padded to the block's width but
+    /// the last where nothing follows (vim's `do_put`).
     pub(super) fn paste_block(&mut self, after: bool) {
         let pieces: Vec<String> = match self.register_parts.len() {
             0 => vec![self.register.clone()],
             _ => self.register_parts.clone(),
         };
+        let copies = std::mem::replace(&mut self.paste_copies, 1).max(1);
         let rope = self.current_buffer().rope().clone();
         let (line, column, w) = place(&rope, self.tab_stop(), self.sel.head());
         let column = match after && width(&rope, self.tab_stop(), line) > 0 {
@@ -694,6 +697,8 @@ impl super::Editor {
         };
         self.snapshot();
         let grouping = self.current_buffer_mut().begin_undo_group();
+        // Where the last line's copies end, for `gp`.
+        let mut past = None;
         // **Top down**: bottom up, the first piece past the file's end would
         // become its last line, and the next one up would then be pasted into
         // that line instead of onto its own. Each round reads the
@@ -701,19 +706,32 @@ impl super::Editor {
         for (i, piece) in pieces.iter().enumerate() {
             let target = line + i;
             let rope = self.current_buffer().rope().clone();
+            let short = self.register_block_width.saturating_sub(text_width(piece, self.tab_stop()));
+            let side_by_side = |behind: bool| {
+                let mut row = String::new();
+                for j in 0..copies {
+                    row.push_str(piece);
+                    if j + 1 < copies || behind {
+                        row.push_str(&" ".repeat(short));
+                    }
+                }
+                row
+            };
             if target > motion::last_line(&rope) {
                 let end = rope.len_chars();
                 let ending = self.current_buffer().ending().to_string();
                 let pad = " ".repeat(column);
+                let row = side_by_side(false);
                 // A file that ends in a break has its new line before that
                 // break; one that does not gets a break first.
-                let line = match end > 0 && rope.char(end - 1) == '\n' {
-                    true => format!("{pad}{piece}{ending}"),
-                    false => format!("{ending}{pad}{piece}"),
+                let (line, from) = match end > 0 && rope.char(end - 1) == '\n' {
+                    true => (format!("{pad}{row}{ending}"), end),
+                    false => (format!("{ending}{pad}{row}"), end + ending.chars().count()),
                 };
                 if !self.edit_insert(end, &line) {
                     break;
                 }
+                past = Some(from + column + row.chars().count());
                 continue;
             }
             let wide = width(&rope, self.tab_stop(), target);
@@ -725,19 +743,18 @@ impl super::Editor {
             // follows it**, so that text keeps one column on every line
             // (vim's `do_put`: trailing spaces 「only if there's text
             // behind」).
-            let behind = wide > column;
-            let short = self.register_block_width.saturating_sub(text_width(piece, self.tab_stop()));
-            let fill = match behind {
-                true => " ".repeat(short),
-                false => String::new(),
-            };
-            if !self.edit_insert(at, &format!("{pad}{piece}{fill}")) {
+            let row = format!("{pad}{}", side_by_side(wide > column));
+            if !self.edit_insert(at, &row) {
                 break;
             }
+            past = Some(at + row.chars().count());
         }
         self.current_buffer_mut().end_undo_group(grouping);
         let rope = self.current_buffer().rope().clone();
-        let at = at_column(&rope, self.tab_stop(), line, column);
+        let at = match (std::mem::take(&mut self.paste_goes_past), past) {
+            (true, Some(end)) => self.just_past_the_put(end, false),
+            _ => at_column(&rope, self.tab_stop(), line, column),
+        };
         self.sel = Selections::one(Range::at(at));
         self.clamp_cursor();
     }

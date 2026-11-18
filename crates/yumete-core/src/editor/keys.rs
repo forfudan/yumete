@@ -3321,7 +3321,12 @@ pub(super) fn typed_as(key: Key) -> Option<char> {
 fn keyless_place(name: &str) -> Option<(Pending, Key)> {
     let like = match name {
         "vim_delete_char_forward" => Key::Char('d'),
-        "vim_paste_after" | "vim_paste_before" | "vim_paste_after_indented" | "vim_paste_before_indented" => Key::Char('p'),
+        "vim_paste_after"
+        | "vim_paste_before"
+        | "vim_paste_after_indented"
+        | "vim_paste_before_indented"
+        | "vim_paste_after_go_past"
+        | "vim_paste_before_go_past" => Key::Char('p'),
         "vim_match_brackets" | "vim_goto_line_end" | "vim_goto_first_nonwhitespace" => Key::Char('w'),
         _ => return None,
     };

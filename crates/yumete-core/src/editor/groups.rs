@@ -891,6 +891,8 @@ pub(super) static GOTO: Group = Group {
         ch('N', NormalCmd::SearchPrev, "hint.goto.next-match").when(Only::Vim),
         ch('n', NormalCmd::GotoNextBuffer, "hint.goto.next-or-previous-buffer"),
         ch('p', NormalCmd::GotoPreviousBuffer, "hint.goto.next-or-previous-buffer").when(Only::Helix),
+        ch('p', NormalCmd::VimPasteAfterGoPast, "action.vim-paste-after-go-past").when(Only::Vim),
+        ch('P', NormalCmd::VimPasteBeforeGoPast, "action.vim-paste-before-go-past").when(Only::Vim),
         ch('d', NormalCmd::GotoDefinition, "hint.goto.follow-note"),
         // helix's `gD` `gy` `gi` `gm`. vim's `gD` is its global
         // declaration, the same question; its `gi` and `gm` are its own
