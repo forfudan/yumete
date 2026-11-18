@@ -44561,3 +44561,24 @@ fn undo_steps_sentence_leaves_repeat_and_macros_one_step() {
     press(&mut ed, "u");
     assert_eq!(ed.current_buffer().text(), "丙。丁", "the replay is one step");
 }
+
+/// **helix's `.` after a completion writes what was chosen** (helix
+/// 25.07.1, path completion: `A ./qu Tab Tab Esc` then `j.` writes the same
+/// file name again; `C-c` before `Esc` leaves `./qu` for both), not what
+/// the list offers first at the new place, where a nearer word now stands.
+#[test]
+fn helix_dot_after_a_completion_writes_the_choice() {
+    for (walk, end) in [(&[Key::Tab, Key::Tab][..], "quixotical"), (&[Key::Tab, Key::Tab, Key::Ctrl('c')][..], "quix")] {
+        let mut ed = typed("quixotical quixotic\nfoo\nend\n");
+        press(&mut ed, "jA quix");
+        ed.on_key(Key::Ctrl('x'));
+        for &key in walk {
+            ed.on_key(key);
+        }
+        ed.on_key(Key::Esc);
+        let line = |ed: &Editor, n: usize| ed.current_buffer().text().lines().nth(n).unwrap_or_default().to_string();
+        assert_eq!(line(&ed, 1), format!("foo {end}"), "{walk:?}");
+        press(&mut ed, "j.");
+        assert_eq!(line(&ed, 2), format!("end {end}"), "{walk:?}");
+    }
+}

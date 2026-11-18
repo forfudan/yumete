@@ -3500,15 +3500,18 @@ impl Editor {
         self.rerecord_keys(taking, giving);
     }
 
-    /// **vim's `.` plays keys, so the keys say the choice too** (`:h
-    /// i_CTRL-N`; nvim's `quix C-n C-n Esc` then `.` writes the word chosen).
+    /// **`.` plays keys, so the keys say the choice too**, under both
+    /// keymaps: nvim's `quix C-n C-n Esc` then `.` writes the word chosen
+    /// (`:h i_CTRL-N`), and helix's `.` applies the completion it recorded
+    /// (`InsertEvent::CompletionApply`) instead of opening the menu again.
     /// The key that walked the list goes, the letters it replaced come out
     /// of the keys, and the choice goes in as it is written
     /// ([`Self::literal_keys`]). Letters typed before this change are
     /// taken back with Backspace, as vim's redo does. Replayed, the list
-    /// is never asked again, so what it offers then does not matter.
+    /// is never asked again, so what it offers then, nearer words first
+    /// at another place, does not matter.
     fn rerecord_keys(&mut self, taking: &str, giving: &str) {
-        if !self.as_vim() || self.repeating_edit || self.expanding_alias {
+        if self.repeating_edit || self.expanding_alias {
             return;
         }
         self.drop_the_list_key(None);
@@ -3540,13 +3543,13 @@ impl Editor {
         self.edit_keys.extend(Self::literal_keys(&new));
     }
 
-    /// **A key the completion list took is not one `.` plays** under vim:
-    /// what it did is in the keys as text ([`Self::rerecord_keys`]), and
-    /// played on its own it would be vim's `C-y` (the character above) or
-    /// open a list. Only the last key, and only one that walks or answers a
-    /// list; `Some(key)` asks for that key alone.
+    /// **A key the completion list took is not one `.` plays**: what it did
+    /// is in the keys as text ([`Self::rerecord_keys`]), and played on its
+    /// own it would be vim's `C-y` (the character above) or open a list,
+    /// which helix's `.` never asks for again. Only the last key, and only
+    /// one that walks or answers a list; `Some(key)` asks for that key alone.
     pub(super) fn drop_the_list_key(&mut self, only: Option<Key>) {
-        if !self.as_vim() || self.repeating_edit || self.expanding_alias {
+        if self.repeating_edit || self.expanding_alias {
             return;
         }
         let n = self.edit_keys.len();

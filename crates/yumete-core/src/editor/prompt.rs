@@ -34,7 +34,10 @@ impl Editor {
             self.insert_str(&text);
             return;
         }
-        if key == Key::Ctrl('v') && self.vim_keymap() {
+        // **helix has no `C-v` in Insert**, so under it the key waits only
+        // in what `.` replays, where it stands before a completed word
+        // written as it is ([`Self::literal_keys`]).
+        if key == Key::Ctrl('v') && (self.vim_keymap() || self.repeating_edit) {
             self.pending = Pending::Literal;
             return;
         }
