@@ -2367,7 +2367,10 @@ impl Editor {
     /// [`Self::add_buffer`], saying whether the pristine scratch buffer may
     /// be replaced. A blank window must not replace it: the window it was
     /// split from is still showing it.
-    pub(super) fn add_buffer_kept(&mut self, buffer: Buffer, replace_pristine: bool) {
+    pub(super) fn add_buffer_kept(&mut self, mut buffer: Buffer, replace_pristine: bool) {
+        if let Some(dir) = &self.drafts_dir {
+            buffer.keep_copies_in(dir);
+        }
         // Remember where the buffer being left had its cursor, so coming back
         // to it returns to the same place.
         let at = self.sel.head();

@@ -366,9 +366,10 @@ pub struct EditorConfig {
     /// 而空格在這裏是菜單引導鍵。出廠因此是 `b` 而不是 `b,s`——行為與 vim 出廠
     /// 一模一樣，只是不擺一個做不了事的字母。
     pub which_wrap: String,
-    /// Whether a recovery copy is kept beside each document while it has
-    /// unsaved changes (Feature #79). On by default, and removed on save and on
-    /// quit, so in an ordinary session it is never seen.
+    /// Whether a recovery copy of each document is kept in the data
+    /// directory's `drafts/` while it has unsaved changes (Feature #79). On
+    /// by default, and removed on save and on quit, so in an ordinary
+    /// session it is never seen.
     pub autosave: bool,
     /// **盤上那一份變了就讀回來**（`:reload-auto`，出廠開着）。
     ///

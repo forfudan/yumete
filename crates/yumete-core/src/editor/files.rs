@@ -1120,8 +1120,12 @@ impl Editor {
                 return Err(err);
             }
         };
-        if !self.reads_drafts {
-            buffer.pass_over_the_draft();
+        if let Some(dir) = &self.drafts_dir {
+            buffer.keep_copies_in(dir);
+        }
+        match self.reads_drafts {
+            true => buffer.look_for_copies(),
+            false => buffer.pass_over_the_draft(),
         }
         // Nothing to remember of a file that is not there yet.
         if told.is_some() && path.exists() {

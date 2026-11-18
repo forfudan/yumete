@@ -44400,3 +44400,78 @@ fn control_n_and_p_open_the_list_with_an_entry_written_in() {
         assert_eq!(ed.completion_panel().and_then(|p| p.chosen), None, "{keymap}");
     }
 }
+
+/// **A file's recovery copy is kept in the drafts directory**, not beside
+/// the file: written there under the file's whole path, offered to the next
+/// session, and taken over by `:recover`.
+#[test]
+fn a_files_recovery_copy_is_kept_in_the_drafts_directory() {
+    let dir = tmp().join(format!("yumete-copies-in-data-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let (book, drafts) = (dir.join("book"), dir.join("drafts"));
+    std::fs::create_dir_all(&book).unwrap();
+    std::fs::create_dir_all(&drafts).unwrap();
+    let path = book.join("a.md");
+    std::fs::write(&path, "The first line.\n").unwrap();
+
+    let mut ed = Editor::new();
+    ed.keep_drafts_in(drafts.clone());
+    ed.set_autosave(true);
+    ed.open_file(&path).unwrap();
+    press(&mut ed, "Go");
+    for c in "An unsaved line.".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Esc);
+    ed.autosave_tick();
+    let copy = ed.current_buffer().recovery_copy().map(Path::to_path_buf).expect("a copy was written");
+    assert_eq!(copy.parent(), Some(drafts.as_path()), "{copy:?}");
+    let name = copy.file_name().unwrap().to_string_lossy().into_owned();
+    let full = std::fs::canonicalize(&path).unwrap().to_string_lossy().replace(['/', '\\', ':'], "%");
+    assert_eq!(name, format!("{full}.{}.yumete-swp", std::process::id()));
+    let beside: Vec<_> = std::fs::read_dir(&book).unwrap().flatten().map(|e| e.file_name()).collect();
+    assert_eq!(beside.len(), 1, "nothing beside the file: {beside:?}");
+    assert!(ed.orphan_drafts().is_empty(), "a file's copy is not an unnamed buffer's");
+
+    // A crash: the copy stays, under another session's number.
+    let crashed = drafts.join(format!("{full}.999993.yumete-swp"));
+    std::fs::rename(&copy, &crashed).unwrap();
+    drop(ed);
+    let mut next = Editor::new();
+    next.keep_drafts_in(drafts.clone());
+    next.open_file(&path).unwrap();
+    assert!(next.current_buffer().draft_wants_asking());
+    next.execute(":recover").unwrap();
+    next.on_key(Key::Char('y'));
+    next.on_key(Key::Char('y'));
+    assert!(next.current_buffer().text().contains("An unsaved line."));
+    assert!(!crashed.exists(), "taken over, so not offered again");
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **Copies older versions left beside the file are still offered** with a
+/// drafts directory given, in both older spellings, and `d` still removes
+/// them.
+#[test]
+fn copies_left_beside_the_file_are_still_offered_and_discarded() {
+    let dir = tmp().join(format!("yumete-copies-beside-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let drafts = dir.join("drafts");
+    std::fs::create_dir_all(&drafts).unwrap();
+    let path = dir.join("b.md");
+    std::fs::write(&path, "Saved text.\n").unwrap();
+    for left in [".b.md.999994.yumete-swp", ".b.md.yumete.999995"] {
+        let at = dir.join(left);
+        std::fs::write(&at, "Saved text.\nLost text.\n").unwrap();
+        let mut ed = Editor::new();
+        ed.keep_drafts_in(drafts.clone());
+        ed.open_file(&path).unwrap();
+        assert_eq!(ed.current_buffer().recovered_draft(), Some("Saved text.\nLost text.\n"), "{left}");
+        ed.execute(":recover").unwrap();
+        ed.on_key(Key::Char('d'));
+        assert!(!at.exists(), "{left}: discarded");
+        assert!(ed.current_buffer().recovered_draft().is_none());
+    }
+    std::fs::remove_dir_all(&dir).ok();
+}

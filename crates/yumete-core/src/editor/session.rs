@@ -46,7 +46,7 @@ const PLACES: usize = 1000;
 impl Editor {
     // ---- Crash recovery (Feature #79) --------------------------------------
 
-    /// Whether a recovery copy is kept beside each document.
+    /// Whether a recovery copy is kept of each document.
     pub fn autosave(&self) -> bool {
         self.autosave
     }
@@ -376,19 +376,23 @@ impl Editor {
     /// The draft is *not* loaded on its own: silently showing text that is not
     /// what is on disk is how a writer ends up unsure which version they are
     /// reading. `:recover` 把那一問擺出來，收下還是丟掉在那三格裏。
-    /// Where buffers with no file keep their recovery copies.
+    /// Where recovery copies are kept: every file's, and those of buffers
+    /// with no file.
     ///
     /// Set by the front end, which is the only part that knows where the data
-    /// directory is. Without it a file-less buffer keeps no copy at all, which
-    /// is what it did before.
+    /// directory is. Without it a file-less buffer keeps no copy at all, and a
+    /// file's copy is written beside it.
     pub fn keep_drafts_in(&mut self, dir: PathBuf) {
+        for buffer in &mut self.buffers {
+            buffer.keep_copies_in(&dir);
+        }
         self.drafts_dir = Some(dir);
     }
 
-    /// **Whether recovery copies already on disk are looked for** — beside
-    /// each file opened, and the unnamed buffers' in the drafts directory.
+    /// **Whether recovery copies already on disk are looked for** — each
+    /// file's, and the unnamed buffers', in the drafts directory.
     /// `--shot` turns it off: a picture is of the keys pressed, and a copy a
-    /// crash left beside the file would put its question on the frame on one
+    /// crash left would put its question on the frame on one
     /// machine and not on another. `--private` leaves it on, as a run that
     /// forgets where it has been must still give back unsaved work.
     pub fn set_reading_drafts(&mut self, on: bool) {
@@ -1288,6 +1292,9 @@ impl Editor {
         };
         let session = std::process::id();
         for buffer in self.buffers.iter_mut() {
+            // A buffer made without a file and named by `:w` later has its
+            // copies kept here too.
+            buffer.keep_copies_in(&dir);
             if buffer.path().is_none() && buffer.is_modified() {
                 let id = buffer.id();
                 buffer.keep_drafts_at(dir.join(format!("scratch-{session}-{id}{}", crate::buffer::DRAFT_ENDING)));

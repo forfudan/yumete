@@ -4116,7 +4116,7 @@ pub struct Editor {
     zong_motion: bool,
     /// Whether long paragraphs soft-wrap in horizontal layout (Feature #77).
     soft_wrap: bool,
-    /// Whether a recovery copy is kept beside each document (Feature #79).
+    /// Whether a recovery copy is kept of each document (Feature #79).
     autosave: bool,
     /// When the recovery copies were last written, so typing does not write a
     /// file on every keystroke.

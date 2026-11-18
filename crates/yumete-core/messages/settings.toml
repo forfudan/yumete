@@ -179,8 +179,8 @@ en = "autosave"
 [[message]]
 # 設置：抢救副本——一句話
 key = "settings.editor.autosave.hint"
-zhs = "未保存时在文件旁保留副本，崩溃后可恢复"
-en = "keep a copy beside unsaved files to recover from a crash"
+zhs = "未保存时在数据目录保留副本，崩溃后可恢复"
+en = "keep a copy of unsaved files in the data directory to recover from a crash"
 
 
 

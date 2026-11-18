@@ -218,7 +218,7 @@ pub struct Buffer {
     pending_draft: Option<String>,
     /// Where that draft was found. Kept because it is not always the
     /// canonical name: a second session, or a session that reopened a file
-    /// after a crash, keeps its own copy beside it (#305).
+    /// after a crash, keeps its own copy under its own name (#305).
     pending_swap: Option<PathBuf>,
     /// Where *this* session last wrote its recovery copy — the only one it may
     /// remove. A copy it did not write is somebody's unrecovered work.
@@ -244,7 +244,7 @@ pub struct Buffer {
     draft_left_alone: bool,
     /// Whether the recovery copy on disk is *this session's*.
     ///
-    /// Until this session writes one, the copy beside the document belongs to
+    /// Until this session writes one, the copy of the document found belongs to
     /// whoever wrote it — a session that crashed, or another yumete running
     /// right now — and must be neither written over nor deleted. Everything
     /// that touches the copy asks this first; it is the whole reason the
@@ -363,6 +363,10 @@ pub struct Buffer {
     seen: Option<(u64, std::time::SystemTime)>,
     /// Where a buffer with no file keeps its recovery copy.
     scratch_swap: Option<PathBuf>,
+    /// **The directory a file's recovery copy is written to**: the data
+    /// directory's `drafts/`, given by the editor. `None` while nobody has
+    /// said where that is, and then the copy is written beside the file.
+    copies_dir: Option<PathBuf>,
     /// **A save local history has yet to keep**: the text written, and
     /// [`digest_of`] the text the save wrote over (what was last read or
     /// saved), which is how a file renamed outside the editor finds its
@@ -615,6 +619,7 @@ impl Buffer {
             clean_at: std::cell::Cell::new(None),
             beyond_the_file: false,
             scratch_swap: None,
+            copies_dir: None,
             version_due: None,
             readonly: false,
             computed: false,
@@ -685,6 +690,7 @@ impl Buffer {
             clean_at: std::cell::Cell::new(None),
             beyond_the_file: false,
             scratch_swap: None,
+            copies_dir: None,
             version_due: None,
             readonly: false,
             computed: false,
@@ -809,7 +815,7 @@ impl Buffer {
         // Whether a crash left a draft here is decided once, now: the status
         // line asks every frame, and the answer cannot change under us.
         let tag = std::process::id().to_string();
-        let (pending_draft, pending_swap) = match read_draft(path, &rope, &tag) {
+        let (pending_draft, pending_swap) = match read_draft(path, &rope, &tag, None) {
             Some((text, at)) => (Some(text), Some(at)),
             None => (None, None),
         };
@@ -865,6 +871,7 @@ impl Buffer {
             clean_at: std::cell::Cell::new(None),
             beyond_the_file: false,
             scratch_swap: None,
+            copies_dir: None,
             version_due: None,
             // **What the disk says, asked now rather than at `:w`.** A file
             // somebody `chmod 444`-ed is one they meant nobody to change, and
@@ -1644,15 +1651,10 @@ impl Buffer {
 
     // ---- Crash recovery (Feature #79) -------------------------------------
 
-    /// The recovery copy's old name, `chapter.md` → `.chapter.md.yumete` —
-    /// still read and still removed by a discard, never
+    /// The recovery copy's oldest name, `chapter.md` → `.chapter.md.yumete`
+    /// beside it — still read and still removed by a discard, never
     /// written; a scratch buffer's copy in the data directory. A session
     /// writes [`Self::session_swap_path`].
-    ///
-    /// Beside the document on purpose. A novel is written over weeks on one
-    /// directory; a recovery copy filed away under `~/.local/state` is one the
-    /// writer will never find, and one that goes stale when the document moves.
-    /// An unnamed scratch buffer has nowhere to put one, and gets none.
     pub fn swap_path(&self) -> Option<PathBuf> {
         match &self.path {
             Some(path) => swap_path_for(path),
@@ -1703,8 +1705,29 @@ impl Buffer {
         self.scratch_swap.as_deref()
     }
 
+    /// **Write this file's recovery copies into `dir`** — the data
+    /// directory's `drafts/` — rather than beside the file. The first answer
+    /// stands, as with [`Self::keep_drafts_at`].
+    pub fn keep_copies_in(&mut self, dir: &Path) {
+        if self.copies_dir.is_none() {
+            self.copies_dir = Some(dir.to_path_buf());
+        }
+    }
+
+    /// **Look again for a copy a crash left**, now that the directory the
+    /// copies are kept in is known: the newest of those in it and of those
+    /// older versions left beside the file is the one offered.
+    pub fn look_for_copies(&mut self) {
+        let Some(path) = self.path.clone() else { return };
+        if let Some((text, at)) = read_draft(&path, &self.rope, &self.draft_tag, self.copies_dir.as_deref()) {
+            self.pending_draft = Some(text);
+            self.pending_swap = Some(at);
+        }
+    }
+
     /// Where *this* session writes its recovery copy: **a name of its own**,
-    /// `.ch1.md.yumete.4321`.
+    /// `%home%me%ch1.md.4321.yumete-swp` in the copies directory (see
+    /// [`draft_path_for`]).
     ///
     /// **This is the whole of #305.** Refusing to overwrite an un-taken draft
     /// was right; refusing to write *at all* was the accident, and it made the
@@ -1719,7 +1742,7 @@ impl Buffer {
     /// 了。實測 6/6 丟。
     ///
     /// 分了家，`clear_swap` 拿走的只會是 `wrote_at`（自己這一份），刪不到別
-    /// 人的；開檔時 `read_draft` 本來就掃整個 `.<名字>.yumete*`，所以撿得回來。
+    /// 人的；開檔時 `read_draft` 本來就掃這個檔的每一份，所以撿得回來。
     fn session_swap_path(&self) -> Option<PathBuf> {
         let swap = self.swap_path()?;
         // **没有檔名的那一種已經是自己的了**：草稿路徑是編輯器給的，一個會話
@@ -1727,7 +1750,7 @@ impl Buffer {
         if self.path.is_none() {
             return Some(swap);
         }
-        draft_path_for(self.path.as_deref()?, &self.draft_tag)
+        draft_path_for(self.path.as_deref()?, &self.draft_tag, self.copies_dir.as_deref())
     }
 
     /// Stand in for another yumete — **a test's way of being two sessions**.
@@ -2712,10 +2735,18 @@ pub const DRAFT_ENDING: &str = ".yumete-swp";
 /// the middle of one.
 pub const TEMP_ENDING: &str = ".yumete-tmp";
 
-/// Where a session writes the recovery copy of `path`: a dotfile beside it,
-/// `chapter.md` → `.chapter.md.4321.yumete-swp`, the number being the
-/// session's (#305).
-fn draft_path_for(path: &Path, tag: &str) -> Option<PathBuf> {
+/// Where a session writes the recovery copy of `path`: in `dir`, the data
+/// directory's `drafts/`, under the file's whole path with every separator
+/// written `%` (Neovim's swap names), the session's number after it (#305):
+/// `/home/me/ch1.md` → `%home%me%ch1.md.4321.yumete-swp`. The whole path,
+/// because two books both have a `ch1.md`.
+///
+/// With no `dir` — nobody said where the data directory is — beside the file:
+/// `.ch1.md.4321.yumete-swp`.
+fn draft_path_for(path: &Path, tag: &str, dir: Option<&Path>) -> Option<PathBuf> {
+    if let Some(dir) = dir {
+        return Some(dir.join(format!("{}.{tag}{DRAFT_ENDING}", copy_stem(path))));
+    }
     let name = path.file_name()?.to_string_lossy();
     let dir = match path.parent() {
         Some(p) if !p.as_os_str().is_empty() => p.to_path_buf(),
@@ -2724,14 +2755,60 @@ fn draft_path_for(path: &Path, tag: &str) -> Option<PathBuf> {
     Some(dir.join(format!(".{name}.{tag}{DRAFT_ENDING}")))
 }
 
-/// The session's number in a recovery copy of the file called `name`, in
-/// either spelling: `.ch1.md.4321.yumete-swp`, or the old
+/// **A file's whole path as one file name**, separators and the drive's
+/// colon written `%`.
+///
+/// Warning: **a file name has 255 bytes**, and a deep path of 漢字 needs more.
+/// A path that does not fit keeps its tail — the file's own name, which is
+/// what a reader looking in the directory recognises — behind a hash of the
+/// whole path, so two long paths with one tail still get two names. The hash
+/// is FNV-1a, spelled out here: the name has to come out the same in every
+/// version, which `std`'s hasher does not promise.
+fn copy_stem(path: &Path) -> String {
+    let stem: String = path
+        .to_string_lossy()
+        .chars()
+        .map(|c| if matches!(c, '/' | '\\' | ':') { '%' } else { c })
+        .collect();
+    // Room for `.`, the session's number (moved aside, three digits more:
+    // see `draft_moved_aside`) and the ending.
+    let room = 255 - 1 - 16 - DRAFT_ENDING.len();
+    if stem.len() <= room {
+        return stem;
+    }
+    let hash = stem.bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ b as u64).wrapping_mul(0x0100_0000_01b3));
+    let head = format!("{hash:016x}");
+    let mut from = stem.len() - (room - head.len());
+    while !stem.is_char_boundary(from) {
+        from += 1;
+    }
+    format!("{head}{}", &stem[from..])
+}
+
+/// The session's number in a recovery copy of the file called `name`, beside
+/// it, in either older spelling: `.ch1.md.4321.yumete-swp`, or
 /// `.ch1.md.yumete.4321`. Digits only, so a file the writer keeps beside the
 /// chapter is never mistaken for a copy.
 fn draft_tag<'a>(file: &'a str, name: &str) -> Option<&'a str> {
     let tag = match file.strip_suffix(DRAFT_ENDING) {
         Some(rest) => rest.strip_prefix(&format!(".{name}."))?,
         None => file.strip_prefix(&format!(".{name}.yumete."))?,
+    };
+    (!tag.is_empty() && tag.chars().all(|c| c.is_ascii_digit())).then_some(tag)
+}
+
+/// The session's number in a copy in the copies directory whose name begins
+/// `stem` (see [`copy_stem`]), digits only.
+fn copy_tag<'a>(file: &'a str, stem: &str) -> Option<&'a str> {
+    let tag = file.strip_suffix(DRAFT_ENDING)?.strip_prefix(stem)?.strip_prefix('.')?;
+    (!tag.is_empty() && tag.chars().all(|c| c.is_ascii_digit())).then_some(tag)
+}
+
+/// The session's number in any recovery copy's name, of whichever spelling.
+fn any_copy_tag(file: &str) -> Option<&str> {
+    let tag = match file.strip_suffix(DRAFT_ENDING) {
+        Some(base) => base.rsplit('.').next()?,
+        None => file.rsplit_once(".yumete.")?.1,
     };
     (!tag.is_empty() && tag.chars().all(|c| c.is_ascii_digit())).then_some(tag)
 }
@@ -2771,7 +2848,7 @@ fn swap_path_for(path: &Path) -> Option<PathBuf> {
     Some(dir.join(format!(".{name}.yumete")))
 }
 
-/// The draft waiting beside `path`, if there is one worth offering.
+/// The draft waiting for `path`, if there is one worth offering.
 ///
 /// Only when the recovery copy differs from the document *and* is not older
 /// than it. A copy older than the file is the residue of a session that ended
@@ -2797,17 +2874,18 @@ fn process_is_running(pid: i32) -> bool {
     }
 }
 
-fn read_draft(path: &Path, rope: &Rope, tag: &str) -> Option<(String, PathBuf)> {
+fn read_draft(path: &Path, rope: &Rope, tag: &str, dir: Option<&Path>) -> Option<(String, PathBuf)> {
     let swap = swap_path_for(path)?;
-    // Every copy a session kept beside the file under a name of its own
-    // (`.ch1.md.4321.yumete-swp`, see [`Buffer::session_swap_path`]), and the
-    // two older spellings: `.ch1.md.yumete.4321`, and the plain
-    // `.ch1.md.yumete` from before #305. A copy left by a session that
-    // crashed is the only place its work is, whatever it is called.
+    // Every copy a session kept in the copies directory under a name of its
+    // own (`%home%me%ch1.md.4321.yumete-swp`, see
+    // [`Buffer::session_swap_path`]), and the spellings older versions left
+    // beside the file: `.ch1.md.4321.yumete-swp`, `.ch1.md.yumete.4321`, and
+    // the plain `.ch1.md.yumete` from before #305. A copy left by a session
+    // that crashed is the only place its work is, wherever it is and
+    // whatever it is called.
     let mut found: Vec<(std::time::SystemTime, String, PathBuf)> = Vec::new();
-    let plain = swap.file_name()?.to_string_lossy().into_owned();
     let document = path.file_name()?.to_string_lossy().into_owned();
-    let mine = draft_path_for(path, tag)?.file_name()?.to_string_lossy().into_owned();
+    let mine = draft_path_for(path, tag, dir)?;
     let mut consider = |at: PathBuf| {
         let Ok(draft) = fs::read_to_string(&at) else { return };
         // An old copy may carry the document's BOM, which the rope does not —
@@ -2829,10 +2907,7 @@ fn read_draft(path: &Path, rope: &Rope, tag: &str) -> Option<(String, PathBuf)> 
         // 搶救稿」。
         // 「別人那一份」＝ 帶 pid 後綴、而那個 pid 不是我。不帶後綴的那一個是
         // #305 之前的老名字，不是別人的，照舊按時間判。
-        let someone_elses = at
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .is_some_and(|n| n != plain && n != mine);
+        let someone_elses = at != swap && at != mine;
         // **A copy whose yumete is still running is not left behind**:
         // offering it as a crashed run's work would let `d` delete a
         // live session's only copy, and that session, unchanged since, did not
@@ -2841,7 +2916,7 @@ fn read_draft(path: &Path, rope: &Rope, tag: &str) -> Option<(String, PathBuf)> 
         let suffix = at
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
-            .and_then(|n| draft_tag(&n, &document).map(str::to_string));
+            .and_then(|n| any_copy_tag(&n).map(str::to_string));
         if someone_elses && suffix.as_deref().and_then(|d| d.parse::<i32>().ok()).is_some_and(process_is_running) {
             return;
         }
@@ -2862,6 +2937,17 @@ fn read_draft(path: &Path, rope: &Rope, tag: &str) -> Option<(String, PathBuf)> 
                 let this = entry.file_name();
                 let this = this.to_string_lossy();
                 if draft_tag(&this, &document).is_some() {
+                    consider(entry.path());
+                }
+            }
+        }
+    }
+    if let Some(dir) = dir {
+        let stem = copy_stem(path);
+        if let Ok(entries) = fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let this = entry.file_name();
+                if copy_tag(&this.to_string_lossy(), &stem).is_some() {
                     consider(entry.path());
                 }
             }
@@ -4487,5 +4573,33 @@ fn tmp() -> std::path::PathBuf {
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "x\n");
         let _ = std::fs::remove_dir_all(&dir);
     }
-}
 
+    /// **A copy in the drafts directory is named for the file's whole
+    /// path**, separators written `%`, so two books' `ch1.md` never share
+    /// one; a path too long for one file name keeps its tail behind a hash.
+    #[test]
+    fn a_copy_in_the_drafts_directory_is_named_for_the_whole_path() {
+        let dir = Path::new("/drafts");
+        let at = draft_path_for(Path::new("/home/a/book/ch1.md"), "4321", Some(dir)).unwrap();
+        assert_eq!(at, dir.join("%home%a%book%ch1.md.4321.yumete-swp"));
+        let other = draft_path_for(Path::new("/home/a/notes/ch1.md"), "4321", Some(dir)).unwrap();
+        assert_ne!(at, other);
+        assert_eq!(copy_stem(Path::new(r"C:\Users\a\ch1.md")), "C%%Users%a%ch1.md");
+        let stem = copy_stem(Path::new("/home/a/book/ch1.md"));
+        assert_eq!(copy_tag("%home%a%book%ch1.md.4321.yumete-swp", &stem), Some("4321"));
+        assert_eq!(copy_tag("%home%a%book%ch1.md.bak.yumete-swp", &stem), None, "digits only");
+        assert_eq!(copy_tag("%home%a%book%ch1.md.x.4321.yumete-swp", &stem), None, "another file's");
+        assert_eq!(any_copy_tag("%home%a%book%ch1.md.4321.yumete-swp"), Some("4321"));
+        assert_eq!(any_copy_tag(".ch1.md.yumete.4321"), Some("4321"));
+
+        let deep: PathBuf = (0..40).fold(PathBuf::from("/"), |p, n| p.join(format!("第{n}卷")));
+        let long = deep.join("終章.md");
+        let name = draft_path_for(&long, "4294967295000", Some(dir)).unwrap();
+        let name = name.file_name().unwrap().to_string_lossy().into_owned();
+        assert!(name.len() <= 255, "{}", name.len());
+        assert!(name.ends_with("終章.md.4294967295000.yumete-swp"), "{name}");
+        let twin = deep.join("..").join("終章.md");
+        assert_ne!(copy_stem(&long), copy_stem(&twin), "the hash tells two long paths apart");
+        assert_eq!(copy_tag(&name, &copy_stem(&long)), Some("4294967295000"));
+    }
+}

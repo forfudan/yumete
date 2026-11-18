@@ -1,6 +1,7 @@
-//! **`--shot` draws the same frame whatever a crash left beside the file.**
+//! **`--shot` draws the same frame whatever recovery copies a crash left.**
 //!
-//! A recovery copy another session left (`.a.md.<pid>.yumete-swp`) makes the
+//! A recovery copy another session left (in the drafts directory, or beside
+//! the file as older versions wrote it: `.a.md.<pid>.yumete-swp`) makes the
 //! editor ask about it on opening; a picture of the keys pressed must not
 //! carry that question on one machine and not on another. The copy itself is
 //! left where it is, for the next session that does read it.
@@ -36,11 +37,14 @@ fn a_left_recovery_copy_is_not_on_the_frame() {
     let unnamed = home.join("data").join("yumete").join("drafts");
     std::fs::create_dir_all(&unnamed).expect("a drafts directory");
     std::fs::write(unnamed.join("scratch-999991-1.yumete-swp"), "lost\n").expect("an unnamed draft");
+    let full = std::fs::canonicalize(&path).expect("the file").to_string_lossy().replace(['/', '\\', ':'], "%");
+    let kept = unnamed.join(format!("{full}.999992.yumete-swp"));
+    std::fs::write(&kept, "one\ntwo\nkept\n").expect("a copy in the drafts directory");
     let left = frame(&path, &home);
 
     assert!(clean.contains("one"), "{clean}");
     assert!(!left.contains("draft"), "the left copies reached the frame:\n{left}");
     assert_eq!(left, clean, "the same keys drew another frame");
-    assert!(swap.exists(), "the copy is left for a session that reads it");
+    assert!(swap.exists() && kept.exists(), "the copies are left for a session that reads them");
     let _ = std::fs::remove_dir_all(&dir);
 }

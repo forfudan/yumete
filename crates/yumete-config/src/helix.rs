@@ -240,7 +240,7 @@ pub fn editor_table(table: &toml::Table) -> Carried {
             }
             "auto-save" => skip(
                 got,
-                "helix saves the file; yumete's autosave, on already, keeps an unsaved copy beside it instead",
+                "helix saves the file; yumete's autosave, on already, keeps an unsaved copy in its data directory instead",
             ),
             _ if value.is_table() => got.skipped.push(format!("[editor.{key}]: no counterpart in yumete")),
             _ => skip(got, "no counterpart in yumete"),
