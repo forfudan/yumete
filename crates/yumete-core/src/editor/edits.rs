@@ -1750,6 +1750,18 @@ impl Editor {
         }
     }
 
+    /// **vim's `J` with nothing below to join** (`nv_join`): one join asked
+    /// for (`J`, `2J`, `J` on one line in Visual) where the first line is the
+    /// last beeps, and the beep ends the macro playing. `3J` there joins
+    /// what there is and does not.
+    pub(super) fn fail_the_joining(&mut self) {
+        let rope = self.current_buffer().rope();
+        let (start, _) = self.selection();
+        if rope.char_to_line(start.min(rope.len_chars())) >= motion::last_line(rope) {
+            self.fail_the_motion();
+        }
+    }
+
     /// Read the register the next command should use, and forget the request.
     fn take_register(&mut self) -> Option<char> {
         self.pending_register.take()

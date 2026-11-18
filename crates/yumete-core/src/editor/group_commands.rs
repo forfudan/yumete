@@ -114,6 +114,15 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
         if !e.extend {
             e.stand_where_hidden(true);
         }
+        // Nothing below to join: vim beeps ([`Editor::fail_the_joining`]).
+        let one_line = {
+            let rope = e.current_buffer().rope();
+            let (start, end) = e.selection();
+            rope.char_to_line(start) == rope.char_to_line(end.saturating_sub(1).max(start))
+        };
+        if one_line && (e.extend || cx.count <= 2) {
+            e.fail_the_joining();
+        }
         let n = match e.extend {
             true => {
                 let rope = e.current_buffer().rope();
@@ -126,7 +135,8 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
                 e.sel.set_head(seat);
                 lines.max(1)
             }
-            false => cx.count,
+            // A count is how many lines end up as one, as `J`'s.
+            false => cx.count.saturating_sub(1).max(1),
         };
         e.repeat_writing(n, |e| e.join_lines_raw());
     }, Key::Char('J')),

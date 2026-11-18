@@ -2464,6 +2464,9 @@ impl Editor {
             self.status = say!("table.join-would-change-columns");
         } else {
             let n = self.join_count(operator_count);
+            if self.as_vim() && n == 1 {
+                self.fail_the_joining();
+            }
             let kept = self.sel.primary();
             let rope = self.current_buffer().rope();
             let (len, seam) = (rope.len_chars(), motion::line_end(rope, kept.span().0));

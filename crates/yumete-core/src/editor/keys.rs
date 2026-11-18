@@ -895,6 +895,7 @@ impl Editor {
             let last = rope.char_to_line(end.saturating_sub(1).max(start));
             (line, last - line + 1)
         };
+        let revision = self.current_buffer().revision();
         let was = std::mem::replace(&mut self.expanding_alias, true);
         self.on_normal_key(key);
         self.expanding_alias = was;
@@ -910,6 +911,8 @@ impl Editor {
         self.block_repeat = Some(again);
         self.extend = false;
         let to = match c {
+            // A join with nothing to join leaves the cursor where `V` had it.
+            'J' if self.current_buffer().revision() == revision => self.column_on_line(line, column),
             'J' => self.sel.head(),
             _ => self.column_on_line(line, column),
         };

@@ -44887,3 +44887,32 @@ fn vims_insert_control_v_reads_codes_as_nvim_does() {
     press(&mut ed, ".");
     assert_eq!(ed.current_buffer().text(), "ab1x\n(o21x\n(o21x\n(o2\n");
 }
+
+/// **A vim macro stops where `J` has nothing to join and where `;` or `,`
+/// find nothing**, as a beep flushes it in vim (`:h q`); every row measured
+/// in nvim 0.12 `--clean`. `J`, `2J`, `gJ` and `J` on one line in Visual
+/// fail on the last line; `3J` there joins nothing and goes on. `gJ`'s
+/// count is how many lines become one, as `J`'s.
+#[test]
+fn a_vim_macro_stops_where_join_or_a_repeated_find_fails_as_nvim_does() {
+    let text = "aa bb\ncc dd\nee ff\ngg\n";
+    for (keys, want, at) in [
+        ("qaJAx⎋q5@a", "aa bb cc ddx ee ffx ggx\n", (1, 23)),
+        ("Gkqa0JAx⎋q3@a", "aa bb\ncc dd\nee ff ggx\n", (3, 1)),
+        ("qa0gJAx⎋q5@a", "aa bbcc ddxee ffxggx\n", (1, 1)),
+        ("qa02JAx⎋q5@a", "aa bb cc ddx ee ffx ggx\n", (1, 1)),
+        ("qa03JAx⎋q5@a", "aa bb cc dd ee ffx ggxxxxx\n", (1, 26)),
+        ("qa0VJAx⎋q5@a", "aa bb cc ddx ee ffx ggx\n", (1, 1)),
+        ("qa02gJAx⎋q5@a", "aa bbcc ddxee ffxggx\n", (1, 1)),
+        ("3gJ", "aa bbcc ddee ff\ngg\n", (1, 11)),
+        ("fbqa;Ax⎋q3@a", "aa bbx\ncc dd\nee ff\ngg\n", (1, 6)),
+        ("Fbqa$,Ax⎋q3@a", "aa bbx\ncc dd\nee ff\ngg\n", (1, 6)),
+        ("fbqa0,Ax⎋q3@a", "aa bbx\ncc dd\nee ff\ngg\n", (1, 1)),
+    ] {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        ed.on_key(Key::Esc);
+        assert_eq!(ed.current_buffer().text(), want, "nvim: {keys}");
+        assert_eq!(vim_at(&ed), at, "nvim: {keys}");
+    }
+}
