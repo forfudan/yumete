@@ -341,6 +341,18 @@ zhs = "每次保存在书的 .yumete/history/ 里留一份（书外的文件留�
 en = "every save keeps a copy in the book's .yumete/history/ (files outside a book: in the data directory): all of today, one an hour for a week, one a day for sixty days, named ones for good. Nothing is kept with --private or when remember is off"
 
 [[message]]
+# 設置面板：[editor] hud 那一行（草稿）
+key = "settings.editor.hud"
+zhs = "光标提示"
+en = "cursor hint"
+
+[[message]]
+# 設置面板：[editor] hud 那一行底下的說明（草稿）
+key = "settings.editor.hud.hint"
+zhs = "光标旁显示已输入的按键。关：只在状态行右端显示；胶囊：在空白处，不遮挡文字；面板：固定在光标下方，会遮挡正文。:view-hud 只改本次"
+en = "what has been typed so far, beside the cursor. off: only at the right of the status line; basic: a pill in blank space, covering nothing; full: a panel under the cursor, covering the text. :view-hud changes it for this session"
+
+[[message]]
 # 設置：没有焦点的窗口怎么画状态栏（草稿）
 key = "settings.editor.inactive-status"
 zhs = "非焦点窗口的状态栏"
@@ -1767,6 +1779,24 @@ en = "editor"
 key = "settings.pick.ground.terminal"
 zhs = "终端背景"
 en = "terminal"
+
+[[message]]
+# 設置面板：光標提示 basic，胶囊（草稿）
+key = "settings.pick.hud.basic"
+zhs = "胶囊"
+en = "basic"
+
+[[message]]
+# 設置面板：光標提示 full，面板（草稿）
+key = "settings.pick.hud.full"
+zhs = "面板"
+en = "full"
+
+[[message]]
+# 設置面板：光標提示 off（草稿）
+key = "settings.pick.hud.off"
+zhs = "关"
+en = "off"
 
 [[message]]
 # 設置：非焦点窗口状态栏 line（草稿）

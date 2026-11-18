@@ -1065,6 +1065,20 @@ fn hud_says(how: Hud) -> String {
 }
 
 impl Hud {
+    /// The words the config and `:view-hud` write, in the order a complaint
+    /// lists them.
+    pub const NAMES: &'static [&'static str] = &["off", "basic", "full"];
+
+    /// A config value (`[editor] hud`).
+    pub fn parse(word: &str) -> Option<Hud> {
+        match word.trim() {
+            "off" => Some(Hud::Off),
+            "basic" => Some(Hud::Basic),
+            "full" => Some(Hud::Full),
+            _ => None,
+        }
+    }
+
     /// The name it is written with, on the command line and in a report.
     pub fn tag(self) -> &'static str {
         match self {

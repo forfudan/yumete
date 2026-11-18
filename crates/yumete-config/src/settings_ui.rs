@@ -251,6 +251,12 @@ const EDITOR_STATUS_COUNT_WAYS: &[Choice] = &[
     Choice { word: "off", label: "settings.pick.status-count.off" },
 ];
 
+const EDITOR_HUD_WAYS: &[Choice] = &[
+    Choice { word: "off", label: "settings.pick.hud.off" },
+    Choice { word: "basic", label: "settings.pick.hud.basic" },
+    Choice { word: "full", label: "settings.pick.hud.full" },
+];
+
 const EDITOR_INACTIVE_STATUS_WAYS: &[Choice] = &[
     Choice { word: "line", label: "settings.pick.inactive-status.line" },
     Choice { word: "rule", label: "settings.pick.inactive-status.rule" },
@@ -887,6 +893,15 @@ pub const SETTINGS: &[Setting] = &[
         label: "settings.editor.inactive-status",
         hint: "settings.editor.inactive-status.hint",
         factory: r#""line""#,
+    },
+    Setting {
+        table: "editor",
+        key: "hud",
+        group: Group::Interface,
+        kind: Kind::Pick(EDITOR_HUD_WAYS),
+        label: "settings.editor.hud",
+        hint: "settings.editor.hud.hint",
+        factory: r#""full""#,
     },
     Setting {
         table: "editor",

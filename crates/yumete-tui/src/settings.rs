@@ -288,6 +288,10 @@ pub fn complaints(config: &Config) -> Vec<String> {
     if !word.is_empty() && !matches!(word, "text" | "all" | "off") {
         said.push(only("[editor] status_count", word, &["text", "all", "off"]));
     }
+    let word = config.editor.hud.trim();
+    if !word.is_empty() && yumete_core::editor::Hud::parse(word).is_none() {
+        said.push(only("[editor] hud", word, yumete_core::editor::Hud::NAMES));
+    }
     let word = config.editor.inactive_status.trim();
     if !word.is_empty() && !matches!(word, "line" | "rule") {
         said.push(only("[editor] inactive_status", word, &["line", "rule"]));
@@ -651,6 +655,9 @@ fn apply_to_editor(config: &Config, editor: &mut Editor, layout: Option<yumete_c
     editor.set_line_breaks(config.editor.show_line_breaks);
     editor.set_centre(config.editor.centre_measure);
     editor.set_scrollbar(config.editor.scrollbar);
+    if let Some(how) = yumete_core::editor::Hud::parse(&config.editor.hud) {
+        editor.set_hud(how);
+    }
     editor.set_scrollbar_marks(yumete_core::editor::ScrollbarMarks::from_words(&config.editor.scrollbar_marks));
     editor.set_diff_gutter(config.editor.diff_gutter);
     editor.set_modeline(config.editor.modeline);
@@ -1678,5 +1685,29 @@ q = ":quit"
         assert_eq!(ed.undo_steps(), UndoSteps::Insert, "the reload puts the config's back");
         let config = yumete_config::Config::from_toml("[editor]\nundo_steps = \"word\"\n");
         assert!(super::complaints(&config).iter().any(|c| c.contains("undo_steps")), "{:?}", super::complaints(&config));
+    }
+
+    /// **`[editor] hud`**: `"full"` out of the box, the config's word at
+    /// start, a `:view-hud` the config would not give kept by the session,
+    /// and the config's put back at a reload; a word that is none of the
+    /// three is said.
+    #[test]
+    fn the_hud_comes_from_the_config_and_view_hud_is_kept_by_the_session() {
+        use yumete_core::editor::Hud;
+        let mut config = yumete_config::Config::default();
+        assert_eq!(config.editor.hud, "full");
+        let mut ed = yumete_core::Editor::new();
+        config.editor.hud = "off".to_string();
+        super::apply_to_editor(&config, &mut ed, None);
+        assert_eq!(ed.hud(), Hud::Off, "the config's at start");
+        ed.execute(":view-hud basic").unwrap();
+        assert_eq!(ed.hud(), Hud::Basic);
+        let kept = super::view_to_keep(&ed, &config);
+        assert!(kept.contains(&"view-hud basic".to_string()), "{kept:?}");
+        super::view_back_to_config(&mut ed, &config);
+        assert_eq!(ed.hud(), Hud::Off, "the reload puts the config's back");
+        assert!(super::view_to_keep(&ed, &config).iter().all(|l| !l.starts_with("view-hud")));
+        let config = yumete_config::Config::from_toml("[editor]\nhud = \"pill\"\n");
+        assert!(super::complaints(&config).iter().any(|c| c.contains("[editor] hud")), "{:?}", super::complaints(&config));
     }
 }

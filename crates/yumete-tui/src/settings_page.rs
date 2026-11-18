@@ -3314,4 +3314,20 @@ mod tests {
             Ok(vec![("editor".to_string(), "mouse".to_string(), "false".to_string())])
         );
     }
+
+    /// **`:set hud basic`** sets the editor key for the run, as any other.
+    #[test]
+    fn set_hud_sets_it_for_the_run() {
+        let mut ed = Editor::new();
+        let mut seat = Seat::default();
+        ed.execute(":set hud basic").unwrap();
+        seat.settle(&mut ed);
+        assert!(seat.panel.is_none());
+        assert_eq!(seat.session_toml(), "[editor]\nhud = \"basic\"\n");
+        let mut ed = Editor::new();
+        let mut seat = Seat::default();
+        ed.execute(":set hud pill").unwrap();
+        seat.settle(&mut ed);
+        assert_eq!(seat.session_toml(), "", "refused: {}", ed.status());
+    }
 }

@@ -421,6 +421,12 @@ pub struct EditorConfig {
     /// file, the column blank while the whole file fits. On by default;
     /// `:view-scrollbar` toggles. Off gives the column back to the text.
     pub scrollbar: bool,
+    /// **What is typed so far, shown beside the cursor** (the count and keys
+    /// of a command not yet finished): `"full"` (default) a bordered panel
+    /// under the cursor, `"basic"` a pill in the nearest margin that covers
+    /// nothing, `"off"` none — the status line's right end says it either
+    /// way. `:view-hud` sets it for the session.
+    pub hud: String,
     /// **The kinds of mark the scrollbar carries**, any of `search` (the
     /// lines a search hit, while its count shows), `listing` (the lines of
     /// this file the last listing points at), `changes` (what
@@ -639,6 +645,7 @@ impl Default for EditorConfig {
             measure: 0,
             centre_measure: true,
             scrollbar: true,
+            hud: "full".to_string(),
             scrollbar_marks: vec!["search".to_string(), "listing".to_string()],
             hard_wrap: 0,
             char_info: true,
@@ -5019,6 +5026,7 @@ struct RawEditor {
     measure: Option<usize>,
     centre_measure: Option<bool>,
     scrollbar: Option<bool>,
+    hud: Option<String>,
     scrollbar_marks: Option<Vec<String>>,
     hard_wrap: Option<usize>,
     char_info: Option<bool>,
@@ -5344,6 +5352,9 @@ impl RawConfig {
         }
         if other.editor.scrollbar.is_some() {
             self.editor.scrollbar = other.editor.scrollbar;
+        }
+        if other.editor.hud.is_some() {
+            self.editor.hud = other.editor.hud.clone();
         }
         if other.editor.scrollbar_marks.is_some() {
             self.editor.scrollbar_marks = other.editor.scrollbar_marks.clone();
@@ -5918,6 +5929,9 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.scrollbar {
             config.editor.scrollbar = on;
+        }
+        if let Some(how) = self.editor.hud {
+            config.editor.hud = how;
         }
         if let Some(words) = self.editor.scrollbar_marks {
             config.editor.scrollbar_marks =
