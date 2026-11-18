@@ -1369,7 +1369,13 @@ impl Editor {
         };
         // 挪之前先記下它坐在第幾行——挪完就問不出來了。
         let sat_at = self.sat_at();
-        let steps = ((page as f64 * fraction).round() as usize).max(1) * count;
+        // helix's half page is the height halved and rounded down
+        // (`page_cursor_half_down`): five rows of an eleven-row view.
+        let helix_half = fraction == 0.5 && !self.keymap_rules().vim_scrolling;
+        let steps = match helix_half {
+            true => (page / 2).max(1) * count,
+            false => ((page as f64 * fraction).round() as usize).max(1) * count,
+        };
         // **Every cursor moves by the half page** (helix's
         // `page_cursor_half_down`/`_up`: `scroll` with `sync_cursor` transforms
         // each selection), not only the primary. A whole page (`C-f`, `PgDn`) is helix's `page_down`, which scrolls
@@ -1405,6 +1411,19 @@ impl Editor {
                 break;
             }
             moved += 1;
+        }
+        // **helix's view moves the whole step even where the cursor stops
+        // short** at the file's end (`scroll` moves the view, then the
+        // cursor with it): `ge C-d` leaves the cursor six rows down, not where
+        // it sat, and a second `C-d` scrolls on to scrolloff above the end.
+        // The row the cursor sits on rises by the steps it could not take;
+        // scrolloff holds it on the next frame. At the top the view stops
+        // where the cursor does, at the first line, so only the end needs it.
+        if !self.keymap_rules().vim_scrolling && !vertical && !back && moved < steps {
+            if let Some(row) = sat_at {
+                self.aim = Some(crate::editor::Aim::Row(row.saturating_sub(steps - moved)));
+            }
+            return;
         }
         // Warning: **一步都没挪就別釘**（到頭了）：釘住反而會把視窗拉過來，而使用者
         // 看到的是「按了没反應，頁面卻動了一下」。

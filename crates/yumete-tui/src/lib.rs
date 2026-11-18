@@ -29708,6 +29708,8 @@ fn squeezed(text: &str) -> String {
     /// unless `PROBE` names a file of `lines height scrolloff keys` rows; it
     /// writes `line column top` per row beside it. A frame is drawn between
     /// keys, as the loop draws one, because paging reads the last page.
+    /// `PROBE_KEYMAP=helix` runs the keys under helix's keymap, and
+    /// `PROBE_NOEOL` drops the file's closing newline.
     #[test]
     fn vim_view_probe() {
         let Ok(file) = std::env::var("PROBE") else { return };
@@ -29720,8 +29722,13 @@ fn squeezed(text: &str) -> String {
             let ks = parts.next().unwrap();
             let mut editor = Editor::new();
             editor.execute(":syntax text").unwrap();
-            editor.replace_everything(&(1..=n).map(|i| format!("line {i}\n")).collect::<String>());
-            editor.execute(":keymap vim").unwrap();
+            let mut text: String = (1..=n).map(|i| format!("line {i}\n")).collect();
+            if std::env::var("PROBE_NOEOL").is_ok() {
+                text.pop();
+            }
+            editor.replace_everything(&text);
+            let keymap = std::env::var("PROBE_KEYMAP").unwrap_or_else(|_| "vim".into());
+            editor.execute(&format!(":keymap {keymap}")).unwrap();
             let mut config = Config::default();
             if std::env::var("PROBE_GUTTER").is_err() {
                 config.editor.line_numbers = yumete_config::LineNumbers::None;
@@ -35087,6 +35094,79 @@ fn squeezed(text: &str) -> String {
         assert_eq!(innermost(1, 17), Some(Kind::Token(Token::Comment)), "to its `*/`");
         assert_eq!(innermost(1, 21), Some(Kind::Token(Token::Number)), "and code after it");
     }
+    /// Cursor line and top line after `keys` on 250 lines of `line N` in a
+    /// view `height` rows tall, scrolloff `so`, a frame drawn between keys.
+    fn view_at_the_end(keymap: &str, height: u16, so: usize, keys: &str) -> (usize, usize) {
+        let mut editor = Editor::new();
+        editor.execute(":syntax text").unwrap();
+        editor.replace_everything(&(1..=250).map(|n| format!("line {n}\n")).collect::<String>());
+        editor.execute(&format!(":keymap {keymap}")).unwrap();
+        let mut config = Config::default();
+        config.editor.line_numbers = yumete_config::LineNumbers::None;
+        config.editor.command_line = false;
+        config.editor.scrolloff = so;
+        crate::theme::settle(&config, None);
+        editor.set_page(height as usize, 58);
+        editor.set_wrap_width(60);
+        let mut seats = Seats::default();
+        let frame = |editor: &mut Editor, seats: &mut Seats| {
+            caret_over_time(editor, &config, seats, 60, height + 1);
+            if let Some((a, b)) = seats[editor.live_pane()].drawn_span {
+                editor.set_page_span(a, b);
+            }
+        };
+        frame(&mut editor, &mut seats);
+        let mut it = keys.chars();
+        while let Some(c) = it.next() {
+            let key = match c {
+                '^' => Key::Ctrl(it.next().unwrap()),
+                c => Key::Char(c),
+            };
+            editor.on_key(key);
+            frame(&mut editor, &mut seats);
+        }
+        let top = seats[editor.live_pane()].drawn_span.map_or(0, |(a, _)| editor.current_buffer().rope().char_to_line(a) + 1);
+        (editor.cursor_line() + 1, top)
+    }
+
+    /// **helix's view at the end of the file counts the empty line after
+    /// the closing newline**, which it draws and the cursor can stand on
+    /// (hx 25.07.1 in a pty, 250 lines at 80x24: 22 rows, scrolloff 5).
+    /// `gb` lands scrolloff above that line; `C-f` and `C-d` scroll the
+    /// view their whole step and take the cursor to it, the view stopping
+    /// with it scrolloff rows down; a half page is the height halved and
+    /// rounded down.
+    #[test]
+    fn under_helix_the_view_at_the_end_counts_the_empty_last_line() {
+        let at = |keys: &str| view_at_the_end("helix", 22, 5, keys);
+        assert_eq!(at("ge"), (250, 234));
+        assert_eq!(at("gegb"), (246, 234));
+        assert_eq!(at("gegt"), (239, 234));
+        assert_eq!(at("geztgt"), (246, 241), "two margins on seven rows: the lower one wins");
+        assert_eq!(at("ge^d"), (251, 245));
+        assert_eq!(at("ge^d^d"), (251, 246));
+        assert_eq!(at("ge^f"), (251, 246));
+        assert_eq!(at(&"zj".repeat(260)), (251, 246));
+        assert_eq!(view_at_the_end("helix", 11, 5, "^d^d^d"), (16, 11), "eleven rows: five a half page");
+    }
+
+    /// **vim's view stops with the last line at its top and keeps no
+    /// scrolloff there** (nvim 0.12, `scripts/oracle/view_sweep.py`, 250
+    /// lines): `G` then `C-e` scrolls on until line 250 is the top line, the
+    /// cursor staying on it in its column; `C-y` from there leaves it; `H`
+    /// and `M` on a page the file ends in keep the window's scrolloff.
+    #[test]
+    fn under_vim_the_view_at_the_end_keeps_no_scrolloff() {
+        let at = |height: u16, so: usize, keys: &str| view_at_the_end("vim", height, so, keys);
+        assert_eq!(at(22, 5, &format!("G{}", "^e".repeat(17))), (250, 246));
+        assert_eq!(at(22, 5, &format!("G{}", "^e".repeat(24))), (250, 250));
+        assert_eq!(at(22, 0, &format!("G{}", "^e".repeat(24))), (250, 250));
+        assert_eq!(at(7, 3, "Gzt^y"), (250, 246));
+        assert_eq!(at(22, 5, "GztH"), (250, 245));
+        assert_eq!(at(22, 5, "GztM"), (250, 245));
+        assert_eq!(at(10, 5, "GztH"), (249, 245));
+    }
+
 }
 
 #[cfg(test)]

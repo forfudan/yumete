@@ -485,32 +485,51 @@ impl Editor {
     }
 
     /// **`H` `M` `L` and helix's `gt` `gc` `gb`**: [`Self::screen_line`]
-    /// kept `scrolloff` rows in from the edges (measured). helix
-    /// keeps them always; vim keeps none above when the page starts the file
+    /// kept `scrolloff` rows in from the edges (measured), scrolloff as the
+    /// window's height allows it, not the rows the file still fills.
+    ///
+    /// helix keeps them always, and its last row is the empty line after a
+    /// closing newline, which it draws (`last_visual_line`): `gb` with that
+    /// line on the page lands scrolloff rows above it, and where the page
+    /// holds too few rows for both margins the lower one wins
+    /// (`goto_window`). vim keeps none above when the page starts the file
     /// and none below when it ends it, and counts no row past the file's
     /// last line.
     fn screen_line_kept(&self, which: char, nth: usize) -> Option<usize> {
         let mut rows = self.page_rows()?;
         let vim = self.keymap_rules().vim_scrolling;
-        let end = self.last_row_end();
-        if vim {
-            while rows.len() > 1 && rows.last().is_some_and(|r| r.start > end) {
-                rows.pop();
+        let height = self.window_rows(rows.len());
+        let step = nth.max(1) - 1;
+        if !vim {
+            if rows.len() < height {
+                let more = self.with_page_measure(self.wrap_width().unwrap_or(crate::wrap::NO_WRAP), |rope, m| {
+                    let last = rows[rows.len() - 1];
+                    let open = rope.len_lines().saturating_sub(1);
+                    let follows = last.ends_line && last.line + 1 == open && motion::last_line(rope) < open;
+                    match follows {
+                        true => crate::wrap::rows_from(rope, crate::wrap::Anchor { line: open, index_in_line: 0 }, m, 1),
+                        false => Vec::new(),
+                    }
+                });
+                rows.extend(more);
             }
+            let last = rows.len() - 1;
+            let so = self.scrolloff_seen.get().min(height.saturating_sub(1) / 2);
+            let at = match which {
+                'H' => so + step,
+                'L' => last.saturating_sub(so + step),
+                _ => last / 2,
+            };
+            return Some(rows[at.max(so).min(last.saturating_sub(so))].line);
+        }
+        let end = self.last_row_end();
+        while rows.len() > 1 && rows.last().is_some_and(|r| r.start > end) {
+            rows.pop();
         }
         let last = rows.len() - 1;
-        let so = self.scrolloff_seen.get().min(last / 2);
-        let (above, below) = match vim {
-            true => {
-                let (above, below) = self.vim_margins(rows.len());
-                (
-                    if rows[0].start == 0 { 0 } else { above },
-                    if rows[last].end >= end { 0 } else { below },
-                )
-            }
-            false => (so, so),
-        };
-        let step = nth.max(1) - 1;
+        let (above, below) = self.vim_margins(height);
+        let above = if rows[0].start == 0 { 0 } else { above };
+        let below = if rows[last].end >= end { 0 } else { below };
         let at = match which {
             'H' => step.max(above),
             'L' => last.saturating_sub(step).min(last.saturating_sub(below)),
@@ -611,7 +630,15 @@ impl Editor {
         let moved = self.with_page_measure(width, |rope, m| {
             use crate::wrap::{distance, position, rows_from, Anchor};
             let was = Anchor { line: rows[0].line, index_in_line: rows[0].index_in_line };
-            let top = top_of(rope, was, m, height);
+            // **vim's view stops with the file's last line at its top** (nvim:
+            // `G` then `C-e` until it stands); the empty line after a closing
+            // newline is no row of vim's. helix's goes on to that line, which
+            // it draws.
+            let end = last_row(rope, m);
+            let top = match vim {
+                true => top_of(rope, was, m, height).min(end.max(was)),
+                false => top_of(rope, was, m, height),
+            };
             // **Nothing to scroll moves nothing** under vim: `C-y` in a file
             // that fits the window leaves the cursor, as nvim does, rather than
             // pulling it in by scrolloff. A jump to where the view stands
@@ -623,9 +650,24 @@ impl Editor {
             // A jump pushes the cursor down from the top edge when it is
             // above that edge's row, up from the bottom edge otherwise.
             let down = down.unwrap_or_else(|| page.get(above).is_some_and(|edge| head < edge.start));
+            // **A page with fewer rows than the margin pushes the cursor to
+            // its last row**: helix's cursor goes to the file's end, the
+            // empty line after a closing newline (`scroll` clamps the row it
+            // looks for), and scrolloff then sets the view on the next frame;
+            // vim's stays on the file's last line, inside scrolloff, as nvim's
+            // `cursor_correct` keeps none at the file's end.
+            let shown = match vim {
+                true => page.iter().take_while(|r| Anchor { line: r.line, index_in_line: r.index_in_line } <= end).count().max(1),
+                false => page.len(),
+            };
+            let edged = &page[..shown.min(page.len())];
+            // …and keeps none below it there either (`Gzt` then `C-y`
+            // leaves the cursor on the last line).
+            let ends = edged.last().is_some_and(|r| Anchor { line: r.line, index_in_line: r.index_in_line } >= end);
+            let below = if vim && ends { 0 } else { below };
             let edge = match down {
-                true => page.get(above),
-                false => page.get(height.saturating_sub(1 + below)).or(page.last()),
+                true => edged.get(above).or(edged.last()),
+                false => edged.get(height.saturating_sub(1 + below)).or(edged.last()),
             };
             let mut to = head;
             if let Some(edge) = edge {
