@@ -1948,9 +1948,10 @@ fn found_here(command: &str, from: Option<&Path>) -> Option<PathBuf> {
         for under in NESTED {
             let Ok(entries) = std::fs::read_dir(step.join(under)) else { continue };
             // 同一個 `.pixi/envs` 底下可能有幾個環境，次序要穩，不然兩次啓動
-            // 挑到不同的那一個。
+            // 挑到不同的那一個。見 [`environment_rank`]。
             let mut names: Vec<PathBuf> = entries.flatten().map(|e| e.path()).collect();
-            names.sort();
+            let active = std::env::var_os("CONDA_PREFIX").map(PathBuf::from);
+            names.sort_by_key(|env| (environment_rank(env, active.as_deref()), env.clone()));
             for env in names {
                 for leaf in LEAVES {
                     let dir = match leaf.is_empty() {
@@ -1969,6 +1970,22 @@ fn found_here(command: &str, from: Option<&Path>) -> Option<PathBuf> {
     }
     let path = std::env::var_os("PATH")?;
     std::env::split_paths(&path).find_map(|dir| executable_in(&dir, command))
+}
+
+/// **幾個環境並排時先問哪一個**：正在用的那一個，再是 `default`，其餘按名字。
+///
+/// `pixi run` 與編輯器的擴展用的都是 `default`；別的環境（只給基準測試、只給文檔
+/// 的那種）常常缺東西，按名字排會讓 `benchdoc` 排在 `default` 前面，起來的服務器
+/// 找不到標準庫，整份檔報假錯。從 `pixi shell` 裏起的 yumete 帶着 `CONDA_PREFIX`，
+/// 那個環境就是使用者此刻選的，排第一。
+fn environment_rank(env: &Path, active: Option<&Path>) -> u8 {
+    if active.is_some_and(|a| a == env) {
+        0
+    } else if env.file_name() == Some("default".as_ref()) {
+        1
+    } else {
+        2
+    }
 }
 
 /// **一個裝在 pixi 環境裏的服務器要拿到那個環境**。
@@ -2400,6 +2417,21 @@ mod tests {
             bare.why_it_cannot_ask(&editor, &none, "rust").is_some_and(|c| !c.for_now),
             "沒配服務器：等多久都一樣"
         );
+    }
+
+    /// **幾個 pixi 環境並排時，`default` 先於按名字排在它前面的那一個**，而
+    /// `pixi shell` 裏正在用的那一個又先於 `default`。
+    #[test]
+    fn the_default_pixi_environment_answers_before_one_named_ahead_of_it() {
+        let envs = Path::new("/p/.pixi/envs");
+        let mut names = [envs.join("default"), envs.join("benchdoc"), envs.join("zeta")];
+        names.sort_by_key(|env| (environment_rank(env, None), env.clone()));
+        assert_eq!(names[0], envs.join("default"));
+        assert_eq!(names[1], envs.join("benchdoc"));
+        let active = envs.join("zeta");
+        names.sort_by_key(|env| (environment_rank(env, Some(&active)), env.clone()));
+        assert_eq!(names[0], active);
+        assert_eq!(names[1], envs.join("default"));
     }
 
     /// **項目自己帶的那個可執行檔找得到，而且贏過 `PATH`**。
