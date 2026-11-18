@@ -6563,7 +6563,7 @@ mod pairing;
 mod places;
 pub use pairing::AutoPairs;
 mod prompt;
-pub(crate) use prompt::word_cut;
+pub(crate) use prompt::{word_cut, word_step};
 mod render;
 mod results;
 mod ruby;

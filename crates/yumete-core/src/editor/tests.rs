@@ -44582,3 +44582,95 @@ fn helix_dot_after_a_completion_writes_the_choice() {
         assert_eq!(line(&ed, 2), format!("end {end}"), "{walk:?}");
     }
 }
+
+/// **helix's prompt keys on the `:` line and a picker's query** (hx
+/// 25.07.1 in a pty, `:insert-output echo one two` and the keys, then
+/// Enter): `A-b` lands before `two`, twice before `one`; `A-f` twice from
+/// the start before `echo`'s next word; `A-b C-k` leaves `one`; between
+/// two spaces `A-b` stops after the first; a `/` ends a word; `C-r "`
+/// puts the yank at the caret, its line break left out, and `C-r` then
+/// `Esc` closes the prompt.
+#[test]
+fn helix_prompt_keys_edit_the_line_and_a_pickers_query() {
+    let line = |ed: &Editor| (ed.command_line.clone(), ed.command_caret);
+    let typed_line = |text: &str, keys: &[Key]| {
+        let mut ed = typed("kiwi\n");
+        press(&mut ed, ":");
+        type_keys(&mut ed, text);
+        for &key in keys {
+            ed.on_key(key);
+        }
+        ed
+    };
+    let (b, f) = (Key::Alt('b'), Key::Alt('f'));
+    let ed = typed_line("echo one two", &[b]);
+    assert_eq!(line(&ed), ("echo one two".into(), 9));
+    let ed = typed_line("echo one two", &[b, b]);
+    assert_eq!(line(&ed).1, 5);
+    let ed = typed_line("echo one two", &[Key::Ctrl('a'), f, f]);
+    assert_eq!(line(&ed).1, 9);
+    let ed = typed_line("echo one two", &[b, Key::Ctrl('k')]);
+    assert_eq!(line(&ed), ("echo one ".into(), 9));
+    let ed = typed_line("echo one  two", &[b, b]);
+    assert_eq!(line(&ed).1, 9, "between two spaces, after the first");
+    let ed = typed_line("echo a/bc/de", &[b]);
+    assert_eq!(line(&ed).1, 10, "a slash ends a word");
+
+    let mut ed = typed("kiwi\n");
+    press(&mut ed, "xy:echo Q");
+    ed.on_key(Key::Ctrl('r'));
+    press(&mut ed, "\"");
+    assert_eq!(line(&ed), ("echo Qkiwi".into(), 10), "C-r \" the yank, no line break");
+    ed.on_key(Key::Ctrl('r'));
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.mode(), Mode::Normal, "C-r then Esc closes the prompt");
+    press(&mut ed, "j");
+    assert!(ed.pending_register.is_none(), "and the wait is over");
+
+    // The same keys on a picker's query.
+    let mut ed = typed("kiwi\n");
+    press(&mut ed, "xy");
+    ed.open_buffer_picker();
+    type_keys(&mut ed, "ab cd");
+    let query = |ed: &Editor| ed.picker().map(|p| (p.query().to_string(), p.caret()));
+    ed.on_key(b);
+    assert_eq!(query(&ed), Some(("ab cd".into(), 3)));
+    ed.on_key(Key::Ctrl('k'));
+    assert_eq!(query(&ed), Some(("ab ".into(), 3)));
+    ed.on_key(Key::Home);
+    ed.on_key(f);
+    assert_eq!(query(&ed), Some(("ab ".into(), 3)));
+    ed.on_key(Key::Ctrl('r'));
+    press(&mut ed, "\"");
+    assert_eq!(query(&ed), Some(("ab kiwi".into(), 7)));
+    assert_eq!(ed.mode(), Mode::Picker);
+}
+
+/// **`A-Enter` opens what a picker stands on and keeps the picker** (helix's
+/// `alt!(Enter)`: the entry's action with no `close_fn`), its highlight
+/// where it was; `Enter` then opens the next one and closes it.
+#[test]
+fn alt_enter_opens_the_entry_and_keeps_the_picker() {
+    let mut ed = typed("第一篇");
+    ed.execute(":new").unwrap();
+    ed.current_buffer_mut().insert(0, "第二篇").unwrap();
+    ed.execute(":new").unwrap();
+    ed.current_buffer_mut().insert(0, "第三篇").unwrap();
+    ed.open_buffer_picker();
+    ed.on_key(Key::Down);
+    let chosen = |ed: &Editor| match ed.picker().and_then(|p| p.chosen()) {
+        Some(crate::picker::Item::Buffer(i, _)) => ed.buffers[i].text(),
+        _ => panic!("a buffer"),
+    };
+    let wanted = chosen(&ed);
+    let selected = ed.picker().map(|p| p.selected());
+    ed.on_key(Key::Alt('\n'));
+    assert_eq!(ed.current_buffer().text(), wanted, "the entry is open");
+    assert_eq!(ed.mode(), Mode::Picker, "the picker stays");
+    assert_eq!(ed.picker().map(|p| p.selected()), selected, "on the same entry");
+    ed.on_key(Key::Down);
+    let next = chosen(&ed);
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.mode(), Mode::Normal);
+    assert_eq!(ed.current_buffer().text(), next);
+}

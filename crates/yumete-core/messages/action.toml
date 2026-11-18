@@ -1467,6 +1467,12 @@ zhs = "在下方分出的窗口里打开选中的一项"
 en = "open the highlighted entry in a window split below"
 
 [[message]]
+# 挑選器的命令：打開選中的那一項，挑選器不關（草稿）
+key = "action.open-entry-keep-picker"
+zhs = "打开选中的一项，选择器留着"
+en = "open the highlighted entry and keep the picker open"
+
+[[message]]
 # 挑選器的命令：把選中的那一項開在右邊新分出來的窗口裏（草稿）
 key = "action.open-entry-vsplit"
 zhs = "在右侧分出的窗口里打开选中的一项"

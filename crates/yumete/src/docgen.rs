@@ -183,6 +183,15 @@ fn key_part(part: &str) -> String {
     if spelled == "空格" {
         return "Space".to_string();
     }
+    // `A-<enter>` is written `A-Enter`, as `A-d` is.
+    if let Some(named) = spelled.strip_prefix("A-").filter(|rest| rest.starts_with('<')) {
+        return format!("A-{}", key_part_named(named));
+    }
+    key_part_named(spelled)
+}
+
+/// A key the docs name (`<pagedown>` → `PageDown`), or what is spelled.
+fn key_part_named(spelled: &str) -> String {
     match spelled.strip_prefix('<').and_then(|s| s.strip_suffix('>')) {
         Some("pageup") => "PageUp".to_string(),
         Some("pagedown") => "PageDown".to_string(),

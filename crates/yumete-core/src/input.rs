@@ -169,7 +169,8 @@ pub enum Key {
     Char(char),
     /// A character held with Control (`C-a`), for the chords Helix binds.
     Ctrl(char),
-    /// A character held with Alt/Option (`A-.`).
+    /// A character held with Alt/Option (`A-.`). `Alt('\n')` is Alt with
+    /// Enter, which helix's picker takes.
     Alt(char),
     Enter,
     Backspace,
@@ -229,6 +230,7 @@ pub fn macro_text_with_commits(keys: &[Key], commits: &[std::ops::Range<usize>])
             '-' => "minus".into(),
             '<' => "lt".into(),
             '>' => "gt".into(),
+            '\n' => "ret".into(),
             c => c.to_string(),
         }
     }
@@ -330,6 +332,9 @@ pub fn macro_keys(text: &str) -> Result<Vec<Key>, String> {
                 }
             }
         };
+        if alt && !ctrl && matches!(rest, "ret" | "enter") {
+            return Some(Key::Alt('\n'));
+        }
         match (ctrl, alt, plain) {
             (true, false, Some(c)) => return Some(Key::Ctrl(c)),
             (false, true, Some(c)) => return Some(Key::Alt(c)),
@@ -467,5 +472,15 @@ mod tests {
             // …and one that collects into the command line is a prompt too.
             assert!(!line || prompt, "{mode:?} types into a line it has not got");
         }
+    }
+
+    /// Alt with Enter, which helix's picker takes, is written `<A-ret>` and
+    /// read back, as helix spells it.
+    #[test]
+    fn alt_enter_is_written_as_helix_writes_it() {
+        use super::{macro_keys, macro_text, Key};
+        assert_eq!(macro_text(&[Key::Alt('\n')]), "<A-ret>");
+        assert_eq!(macro_keys("<A-ret>"), Ok(vec![Key::Alt('\n')]));
+        assert_eq!(macro_keys("<A-enter>"), Ok(vec![Key::Alt('\n')]));
     }
 }

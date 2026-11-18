@@ -137,7 +137,15 @@ pub fn written(spelled: &str) -> String {
             rest = &rest[at + 1..];
             continue;
         };
-        out.push_str(&modifiers(&rest[..at]));
+        // `A-<enter>`: Alt held with a named key.
+        let before = &rest[..at];
+        match before.strip_suffix("A-") {
+            Some(before) => {
+                out.push_str(&modifiers(before));
+                out.push(ALT);
+            }
+            None => out.push_str(&modifiers(before)),
+        }
         out.push(key);
         rest = &rest[shut + 1..];
     }
@@ -196,8 +204,14 @@ pub fn spell(keys: &str) -> String {
             }
             ALT => {
                 out.push_str("A-");
-                if let Some(next) = chars.next() {
-                    out.push(next);
+                match chars.next() {
+                    Some(next) if key_name(next).is_some() => {
+                        out.push('<');
+                        out.push_str(key_name(next).unwrap_or_default());
+                        out.push('>');
+                    }
+                    Some(next) => out.push(next),
+                    None => {}
                 }
                 // **A chord is a word of its own**: `C-w w`,
                 // not `C-ww`, which reads as one chord with two letters.
@@ -1611,6 +1625,10 @@ place_commands! {
     DeleteCharForward = "delete_char_forward",
     DeleteWordBackward = "delete_word_backward",
     KillToLineStart = "kill_to_line_start",
+    KillToLineEnd = "kill_to_line_end",
+    MovePrevWordStart = "move_prev_word_start",
+    MoveNextWordStart = "move_next_word_start",
+    InsertRegister = "insert_register",
     ToggleWideSearch = "toggle_wide_search",
     NextEntry = "next_entry",
     PrevEntry = "prev_entry",
@@ -1622,6 +1640,7 @@ place_commands! {
     RestoreVersion = "restore_version",
     OpenEntryHsplit = "open_entry_hsplit",
     OpenEntryVsplit = "open_entry_vsplit",
+    OpenEntryKeepPicker = "open_entry_keep_picker",
     TogglePreview = "toggle_preview",
     MoveLineDown = "move_line_down",
     MoveLineUp = "move_line_up",
@@ -1676,6 +1695,10 @@ pub const PROMPT: &[Action] = &[
     place("action.delete-char-forward", PlaceCmd::DeleteCharForward),
     place("action.delete-word-backward", PlaceCmd::DeleteWordBackward),
     place("action.kill-to-line-start", PlaceCmd::KillToLineStart),
+    place("action.delete-to-line-end", PlaceCmd::KillToLineEnd),
+    place("action.move-prev-word-start", PlaceCmd::MovePrevWordStart),
+    place("action.move-next-word-start", PlaceCmd::MoveNextWordStart),
+    place("action.insert-register", PlaceCmd::InsertRegister),
     place("action.toggle-wide-search", PlaceCmd::ToggleWideSearch),
 ];
 
@@ -1691,6 +1714,7 @@ pub const PICKER: &[Action] = &[
     place("action.restore-version", PlaceCmd::RestoreVersion),
     place("action.open-entry-hsplit", PlaceCmd::OpenEntryHsplit),
     place("action.open-entry-vsplit", PlaceCmd::OpenEntryVsplit),
+    place("action.open-entry-keep-picker", PlaceCmd::OpenEntryKeepPicker),
     place("action.toggle-preview", PlaceCmd::TogglePreview),
 ];
 
@@ -1832,5 +1856,13 @@ mod control_keys_of_their_own {
         assert_ne!(written("C-i"), written("<tab>"));
         assert_eq!(spell(&written("C-j")), "C-j");
         assert_eq!(spell(&written("C-o")), "C-o");
+    }
+
+    /// `A-<enter>` is Alt held with Enter, and spells back as written.
+    #[test]
+    fn alt_takes_a_named_key() {
+        assert_eq!(written("A-<enter>"), format!("{ALT}\n"));
+        assert_eq!(spell(&written("A-<enter>")), "A-<enter>");
+        assert_eq!(written("xA-<tab>"), format!("x{ALT}\t"));
     }
 }

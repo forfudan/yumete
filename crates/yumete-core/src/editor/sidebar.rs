@@ -1961,6 +1961,27 @@ impl Editor {
         self.choose_from_picker();
     }
 
+    /// **`A-Enter`: what the picker stands on, opened, and the picker kept**
+    /// (helix's picker runs the entry's action with `Action::Replace` and
+    /// does not close), its query, highlight and list as they were and its
+    /// walk still filling, so the next entry is one key away. An entry
+    /// that opens a picker or a prompt of its own (a folder, an action)
+    /// leaves that one standing.
+    fn choose_and_keep_the_picker(&mut self) {
+        if self.picker.as_ref().and_then(crate::picker::Picker::chosen).is_none() {
+            return self.choose_from_picker();
+        }
+        let filling = self.filling.take();
+        self.choose_from_picker();
+        if self.picker.is_none() && self.mode == Mode::Normal {
+            if let Some(picker) = self.last_picker.clone() {
+                self.picker = Some(picker);
+                self.mode = Mode::Picker;
+                self.filling = filling;
+            }
+        }
+    }
+
     /// Open whatever the picker is standing on — from either layer.
     fn choose_from_picker(&mut self) {
         let chosen = self.picker.as_ref().and_then(crate::picker::Picker::chosen);
@@ -2593,6 +2614,9 @@ impl Editor {
     }
 
     fn picker_key(&mut self, key: Key) {
+        if self.register_into_the_line(key) {
+            return;
+        }
         let place = yumete_cjk::actions::Place::Picker;
         match self.commands_in(place, key) {
             Some(commands) => self.run_in_place(place, &commands, |e, name| e.picker_command(name)),
@@ -2638,6 +2662,11 @@ impl Editor {
             PlaceCmd::GotoLineEnd => picker.move_caret(Caret::End),
             PlaceCmd::KillToLineStart => picker.clear_before_caret(),
             PlaceCmd::DeleteWordBackward => picker.delete_word_before_caret(),
+            PlaceCmd::KillToLineEnd => picker.clear_after_caret(),
+            PlaceCmd::MovePrevWordStart => picker.move_caret(Caret::PrevWord),
+            PlaceCmd::MoveNextWordStart => picker.move_caret(Caret::NextWord),
+            PlaceCmd::InsertRegister => self.pending = Pending::Register,
+            PlaceCmd::OpenEntryKeepPicker => self.choose_and_keep_the_picker(),
             _ => {}
         }
     }
@@ -2692,6 +2721,9 @@ impl Editor {
 
     /// Shut the picker and go back to Normal.
     pub(super) fn close_picker(&mut self) {
+        if self.pending == Pending::Register {
+            self.pending = Pending::None;
+        }
         let was_asking = self.asking_an_encoding();
         self.stop_filling_the_picker();
         if let Some(picker) = self.picker.take() {

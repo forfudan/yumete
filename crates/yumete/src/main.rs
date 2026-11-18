@@ -1745,6 +1745,7 @@ fn press(
                     if let Some(rest) = name.strip_prefix("alt-") {
                         match rest.chars().next() {
                             Some(c) if rest.chars().count() == 1 => Key::Alt(c),
+                            _ if rest == "enter" => Key::Alt('\n'),
                             _ => {
                                 eprintln!("yumete: --keys: alt- wants one character, got {rest:?}");
                                 std::process::exit(2);

@@ -23,6 +23,8 @@ use yumete_cjk::actions::Place;
 ///
 /// `C-c` closes as `Esc` does: helix's prompt and picker both take it
 /// (`ui/prompt.rs`, `ui/picker.rs`), and vim's cmdline abandons on it.
+/// `A-b` `A-f` `C-k` and `C-r` are helix's prompt's too; `C-r` is also
+/// vim's cmdline's.
 pub(super) const PROMPT_KEYS: &[(Key, PlaceCmd)] = &[
     (Key::Esc, PlaceCmd::NormalMode),
     (Key::Ctrl('c'), PlaceCmd::NormalMode),
@@ -43,11 +45,15 @@ pub(super) const PROMPT_KEYS: &[(Key, PlaceCmd)] = &[
     (Key::Delete, PlaceCmd::DeleteCharForward),
     (Key::Ctrl('w'), PlaceCmd::DeleteWordBackward),
     (Key::Ctrl('u'), PlaceCmd::KillToLineStart),
+    (Key::Ctrl('k'), PlaceCmd::KillToLineEnd),
+    (Key::Alt('b'), PlaceCmd::MovePrevWordStart),
+    (Key::Alt('f'), PlaceCmd::MoveNextWordStart),
+    (Key::Ctrl('r'), PlaceCmd::InsertRegister),
     (Key::Alt('j'), PlaceCmd::ToggleWideSearch),
 ];
 
 /// A picker's default keys, read before the prompt's (helix's `Tab`, `C-n`
-/// and `Down` for the next entry).
+/// and `Down` for the next entry, `A-Enter` to open an entry and stay).
 pub(super) const PICKER_KEYS: &[(Key, PlaceCmd)] = &[
     (Key::Tab, PlaceCmd::NextEntry),
     (Key::Ctrl('n'), PlaceCmd::NextEntry),
@@ -61,6 +67,7 @@ pub(super) const PICKER_KEYS: &[(Key, PlaceCmd)] = &[
     (Key::Alt('r'), PlaceCmd::RestoreVersion),
     (Key::Ctrl('s'), PlaceCmd::OpenEntryHsplit),
     (Key::Ctrl('v'), PlaceCmd::OpenEntryVsplit),
+    (Key::Alt('\n'), PlaceCmd::OpenEntryKeepPicker),
     (Key::Ctrl('t'), PlaceCmd::TogglePreview),
 ];
 
@@ -494,6 +501,7 @@ pub(super) fn hint_key(key: Key) -> String {
         Key::PageUp => "PgUp".to_string(),
         Key::PageDown => "PgDn".to_string(),
         Key::Ctrl(c) => format!("C-{c}"),
+        Key::Alt('\n') => "A-Enter".to_string(),
         Key::Alt(c) => format!("A-{c}"),
     }
 }

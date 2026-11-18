@@ -469,6 +469,9 @@ impl Editor {
     }
 
     pub(super) fn on_command_key(&mut self, key: Key) {
+        if self.register_into_the_line(key) {
+            return;
+        }
         let commands = self.commands_in(yumete_cjk::actions::Place::Prompt, key);
         let runs = |these: &[PlaceCmd]| {
             commands.as_ref().is_some_and(|c| c.iter().any(|one| PlaceCmd::from_name(one).is_some_and(|cmd| these.contains(&cmd))))
@@ -628,6 +631,9 @@ impl Editor {
     /// always the line the reader can see. `:q!` is not undoable, and a mode
     /// that guessed which command was meant would eventually guess that one.
     pub(super) fn on_lookfor_key(&mut self, key: Key) {
+        if self.register_into_the_line(key) {
+            return;
+        }
         // A picker over the commands: the picker's keys, then the prompt's.
         let place = yumete_cjk::actions::Place::Picker;
         match self.commands_in(place, key) {
@@ -811,6 +817,9 @@ impl Editor {
 
     /// Shut the prompt and forget what was on it.
     fn close_prompt(&mut self) {
+        if self.pending == Pending::Register {
+            self.pending = Pending::None;
+        }
         self.command_line.clear();
         self.command_caret = 0;
         self.history_at = None;
@@ -878,8 +887,46 @@ impl Editor {
                 self.command_line = head.chain(tail).collect();
                 self.command_caret = floor;
             }
+            PlaceCmd::KillToLineEnd => self.command_line = self.command_line.chars().take(self.command_caret).collect(),
+            PlaceCmd::MovePrevWordStart => self.command_caret = word_step(&self.command_line, self.command_caret, false).max(floor),
+            PlaceCmd::MoveNextWordStart => self.command_caret = word_step(&self.command_line, self.command_caret, true),
+            PlaceCmd::InsertRegister => self.pending = Pending::Register,
             _ => {}
         }
+    }
+
+    /// **`C-r` on a prompt or a picker's query, then a register's name**
+    /// (helix's prompt's `C-r`; vim's cmdline has it too): the register's
+    /// text goes in at the caret, its line breaks left out as a paste into
+    /// a prompt leaves them, and `"` is the unnamed register. Only a
+    /// character answers: any other key lets go of the wait and does what
+    /// it does, `Esc` closing the prompt as in helix. Whether the key was
+    /// the answer.
+    pub(super) fn register_into_the_line(&mut self, key: Key) -> bool {
+        if self.pending != Pending::Register {
+            return false;
+        }
+        self.pending = Pending::None;
+        let Key::Char(name) = key else { return false };
+        let held = match name {
+            '"' => self.register.clone(),
+            name => self.held(name),
+        };
+        let text: String = held.chars().filter(|c| !c.is_control()).collect();
+        match (self.mode, self.picker.as_mut()) {
+            (Mode::Picker, Some(picker)) => text.chars().for_each(|c| picker.push(c)),
+            _ => {
+                for c in text.chars() {
+                    self.type_into_prompt(c);
+                }
+                match self.mode {
+                    Mode::Command => self.ask_for_a_trial(),
+                    Mode::Lookfor => self.lookfor_focus = 0,
+                    _ => {}
+                }
+            }
+        }
+        true
     }
 
     /// A character typed into a prompt, at the caret.
@@ -954,6 +1001,9 @@ impl Editor {
     }
 
     pub(super) fn on_search_key(&mut self, key: Key) {
+        if self.register_into_the_line(key) {
+            return;
+        }
         let place = yumete_cjk::actions::Place::Prompt;
         let commands = self.commands_in(place, key);
         let walks_history = |c: &Vec<String>| c.iter().any(|one| PlaceCmd::from_name(one).is_some_and(|cmd| HISTORY.contains(&cmd)));
@@ -1121,6 +1171,9 @@ impl Editor {
     }
 
     pub(super) fn on_value_key(&mut self, key: Key) {
+        if self.register_into_the_line(key) {
+            return;
+        }
         let place = yumete_cjk::actions::Place::Prompt;
         match self.commands_in(place, key) {
             Some(commands) => self.run_in_place(place, &commands, |e, name| e.value_command(name)),
@@ -1172,4 +1225,35 @@ pub(crate) fn word_cut(head: &str) -> usize {
         .rev()
         .find(|(_, c)| c.is_whitespace())
         .map_or(0, |(i, c)| kept[..i + c.len_utf8()].chars().count())
+}
+
+/// **Where `A-b` and `A-f` take the caret** on a prompt's `line`, in
+/// characters: helix's prompt's `BackwardWord` and `ForwardWord`, where a
+/// word ends at white space or a `/`, so a path is walked a folder at a
+/// time. Forward goes past the word and the separators after it to the
+/// next word's start, or the end. Back looks for a separator from two
+/// characters before the caret, so from a word's start it goes to the start
+/// of the word before, and between two spaces it stops after the first.
+pub(crate) fn word_step(line: &str, caret: usize, forward: bool) -> usize {
+    let chars: Vec<char> = line.chars().collect();
+    let sep = |c: char| c == '/' || c.is_whitespace();
+    if chars.is_empty() {
+        return caret;
+    }
+    match forward {
+        true => {
+            let mut at = caret.min(chars.len());
+            while at < chars.len() && !sep(chars[at]) {
+                at += 1;
+            }
+            while at < chars.len() && sep(chars[at]) {
+                at += 1;
+            }
+            at
+        }
+        false => {
+            let at = caret.min(chars.len() - 1);
+            (0..at.saturating_sub(1)).rev().find(|&i| sep(chars[i])).map_or(0, |i| i + 1)
+        }
+    }
 }

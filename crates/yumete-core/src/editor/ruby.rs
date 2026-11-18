@@ -290,6 +290,9 @@ impl Editor {
     }
 
     pub(super) fn on_ruby_key(&mut self, key: Key) {
+        if self.register_into_the_line(key) {
+            return;
+        }
         let place = yumete_cjk::actions::Place::Prompt;
         match self.commands_in(place, key) {
             Some(commands) => self.run_in_place(place, &commands, |e, name| e.reading_command(name)),

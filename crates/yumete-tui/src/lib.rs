@@ -5756,6 +5756,7 @@ fn terminal_key(key: Key) -> (KeyCode, KeyModifiers) {
     match key {
         Key::Char(c) => (KeyCode::Char(c), plain),
         Key::Ctrl(c) => (KeyCode::Char(c), KeyModifiers::CONTROL),
+        Key::Alt('\n') => (KeyCode::Enter, KeyModifiers::ALT),
         Key::Alt(c) => (KeyCode::Char(c), KeyModifiers::ALT),
         Key::Enter => (KeyCode::Enter, plain),
         Key::Backspace => (KeyCode::Backspace, plain),
@@ -5800,6 +5801,9 @@ fn map_key(code: KeyCode, modifiers: KeyModifiers) -> Option<Key> {
         }
         KeyCode::Char(c) if modifiers.contains(KeyModifiers::ALT) => Some(Key::Alt(c)),
         KeyCode::Char(c) => Some(Key::Char(c)),
+        // `A-Enter` (helix's picker opens an entry and stays): `ESC CR` from
+        // a terminal without the Kitty protocol, `CSI 13;3u` with it.
+        KeyCode::Enter if modifiers.contains(KeyModifiers::ALT) => Some(Key::Alt('\n')),
         KeyCode::Enter => Some(Key::Enter),
         KeyCode::Backspace => Some(Key::Backspace),
         KeyCode::Delete => Some(Key::Delete),
@@ -35167,6 +35171,15 @@ fn squeezed(text: &str) -> String {
         assert_eq!(at(10, 5, "GztH"), (249, 245));
     }
 
+
+    /// **`A-Enter` is a key of its own**, for helix's picker: `ESC CR` and
+    /// the Kitty protocol's `CSI 13;3u` both arrive as Enter with Alt.
+    #[test]
+    fn alt_enter_is_not_enter() {
+        assert_eq!(map_key(KeyCode::Enter, KeyModifiers::ALT), Some(Key::Alt('\n')));
+        assert_eq!(map_key(KeyCode::Enter, KeyModifiers::NONE), Some(Key::Enter));
+        assert_eq!(terminal_key(Key::Alt('\n')), (KeyCode::Enter, KeyModifiers::ALT));
+    }
 }
 
 #[cfg(test)]

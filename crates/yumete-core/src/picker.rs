@@ -192,6 +192,9 @@ pub enum Caret {
     Right,
     Start,
     End,
+    /// helix's prompt's `A-b` and `A-f` ([`crate::editor::word_step`]).
+    PrevWord,
+    NextWord,
 }
 
 impl Picker {
@@ -463,7 +466,7 @@ impl Picker {
         self.selected = 0;
     }
 
-    /// Move the caret: `Left`, `Right`, `Home`/`C-a`, `End`/`C-e`.
+    /// Move the caret: `Left`, `Right`, `Home`/`C-a`, `End`/`C-e`, `A-b`, `A-f`.
     pub fn move_caret(&mut self, to: Caret) {
         let len = self.query.chars().count();
         self.caret = match to {
@@ -471,6 +474,8 @@ impl Picker {
             Caret::Right => (self.caret() + 1).min(len),
             Caret::Start => 0,
             Caret::End => len,
+            Caret::PrevWord => crate::editor::word_step(&self.query, self.caret(), false),
+            Caret::NextWord => crate::editor::word_step(&self.query, self.caret(), true),
         };
     }
 
@@ -479,6 +484,13 @@ impl Picker {
         let at = self.byte(self.caret());
         self.query = self.query[at..].to_string();
         self.caret = 0;
+        self.selected = 0;
+    }
+
+    /// Everything from the caret to the end, gone (`C-k`).
+    pub fn clear_after_caret(&mut self) {
+        let at = self.byte(self.caret());
+        self.query.truncate(at);
         self.selected = 0;
     }
 
