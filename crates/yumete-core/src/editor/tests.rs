@@ -37201,18 +37201,18 @@ fn a_vim_macro_records_a_paste_and_a_helix_one_does_not() {
     ed.paste_text(" x-y");
     ed.on_key(Key::Esc);
     press(&mut ed, "jq");
-    assert_eq!(ed.held('a'), "A<C-v><space><C-v>x<C-v><minus><C-v>y<esc>j");
+    assert_eq!(ed.held('a'), "A<C-v><space><C-v>120<C-v><minus><C-v>y<esc>j");
     press(&mut ed, "@a");
     assert_eq!(ed.current_buffer().text(), "ab x-y\ncd x-y\n");
 
-    // A paste over lines: each break is Enter, all of it after `C-v` so
-    // it plays back as written.
+    // A paste over lines: each break is `C-j` and a digit its code, all of
+    // it after `C-v` so it plays back as written (`C-v` Enter is a CR).
     let mut ed = typed_vim("ab\n");
     press(&mut ed, "qaA");
     ed.paste_text("1\r\n2");
     ed.on_key(Key::Esc);
     press(&mut ed, "q");
-    assert_eq!(ed.held('a'), "A<C-v>1<C-v><ret><C-v>2<esc>");
+    assert_eq!(ed.held('a'), "A<C-v>049<C-v><C-j><C-v>050<esc>");
 
     // At a prompt, without the breaks the prompt drops.
     let mut ed = typed_vim("ab\nab\n");
@@ -44828,4 +44828,62 @@ fn vims_insert_control_t_and_d_shift_the_line_as_nvim_does() {
         // nvim's cursor is read after the `Esc` that leaves Insert.
         assert_eq!(vim_at(&ed), at, "nvim: {keys}");
     }
+}
+
+/// **vim's Insert `C-v` reads a character's code** (`:h i_CTRL-V_digit`),
+/// every row measured in nvim 0.12 `--clean`: three decimal digits at most
+/// and 255 at most, `x` two hex digits, `o` three octal, `u` four hex, `U`
+/// eight; a key that is not a digit ends the code early and is typed, and
+/// a base letter is taken wherever it comes. Enter is a carriage return.
+#[test]
+fn vims_insert_control_v_reads_codes_as_nvim_does() {
+    for (keys, want) in [
+        ("aᵛ065", "aAb\n"),
+        ("aᵛ65x", "aAb\n"),
+        ("aᵛ6x1", "aab\n"),
+        ("aᵛ0651", "aA1b\n"),
+        ("aᵛu4e2d", "a中b\n"),
+        ("aᵛu4e2dz", "a中zb\n"),
+        ("aᵛu41z", "aAzb\n"),
+        ("aᵛU0001F600", "a😀b\n"),
+        ("aᵛU4e2dq", "a中qb\n"),
+        ("aᵛx41", "aAb\n"),
+        ("aᵛx4g", "a\u{4}gb\n"),
+        ("aᵛo101", "aAb\n"),
+        ("aᵛo1011", "aA1b\n"),
+        ("aᵛX41", "aAb\n"),
+        ("aᵛO101", "aAb\n"),
+        ("aᵛ256", "aÿb\n"),
+        ("aᵛo777", "aÿb\n"),
+        ("aᵛuz", "azb\n"),
+        ("aᵛxg", "agb\n"),
+        ("aᵛ000", "a\0b\n"),
+        ("aᵛ6 ", "a\u{6} b\n"),
+        ("aᵛ12⏎", "a\u{c}\nb\n"),
+        ("aᵛo18", "a\u{1}8b\n"),
+        ("aᵛ⏎", "a\rb\n"),
+        ("aᵛ⎋", "a\u{1b}b\n"),
+        ("aᵛᵛ", "a\u{16}b\n"),
+        ("aᵛ(", "a(b\n"),
+        ("aᵛ065⎋.", "aAAb\n"),
+        ("aᵛu4e2d⎋j.", "a中中b\n"),
+        ("qaaᵛu4e2d⎋q@a", "a中中b\n"),
+    ] {
+        let mut ed = typed_vim("ab\n");
+        feed_vim(&mut ed, keys);
+        ed.on_key(Key::Esc);
+        assert_eq!(ed.current_buffer().text(), want, "nvim: {keys}");
+    }
+    // A paste over lines with digits and base letters in it plays back as
+    // it went in, from a macro and from `.`.
+    let mut ed = typed_vim("ab\n");
+    press(&mut ed, "qaA");
+    ed.paste_text("1x\n(o2");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "q");
+    assert_eq!(ed.current_buffer().text(), "ab1x\n(o2\n");
+    press(&mut ed, "@a");
+    assert_eq!(ed.current_buffer().text(), "ab1x\n(o21x\n(o2\n");
+    press(&mut ed, ".");
+    assert_eq!(ed.current_buffer().text(), "ab1x\n(o21x\n(o21x\n(o2\n");
 }

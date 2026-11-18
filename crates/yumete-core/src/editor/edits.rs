@@ -1499,12 +1499,17 @@ impl Editor {
         text.chars()
             .filter(|&c| c != '\r')
             .flat_map(|c| {
-                let key = match c {
-                    '\n' => Key::Enter,
-                    '\t' => Key::Tab,
-                    c => Key::Char(c),
+                let keys: Vec<Key> = match c {
+                    '\n' => vec![Key::Ctrl('j')],
+                    '\t' => vec![Key::Tab],
+                    // After `C-v` these begin a code, so they are written as
+                    // one, three decimal digits (as vim's redo writes `0`).
+                    c if c.is_ascii_digit() || matches!(c, 'x' | 'X' | 'o' | 'O' | 'u' | 'U') => {
+                        format!("{:03}", c as u32).chars().map(Key::Char).collect()
+                    }
+                    c => vec![Key::Char(c)],
                 };
-                [Key::Ctrl('v'), key]
+                std::iter::once(Key::Ctrl('v')).chain(keys)
             })
             .collect()
     }

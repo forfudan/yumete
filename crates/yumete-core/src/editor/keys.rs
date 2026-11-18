@@ -2527,7 +2527,7 @@ impl Editor {
                 return;
             }
             // 撤銷斷點只在插入模式裏按，走到 Normal 這一支就是它已經過期了。
-            Pending::UndoBreak | Pending::Literal => self.pending = Pending::None,
+            Pending::UndoBreak | Pending::Literal(_) => self.pending = Pending::None,
             Pending::None => {}
             // The groups, answered above.
             _ => {}

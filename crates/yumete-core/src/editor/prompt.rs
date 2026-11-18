@@ -21,24 +21,34 @@ impl Editor {
                 return;
             }
         }
-        if self.pending == Pending::Literal {
+        if let Pending::Literal(code) = self.pending {
             self.pending = Pending::None;
-            let text = match key {
-                Key::Char(c) => c.to_string(),
-                Key::Tab => String::from('\t'),
-                Key::Enter => self.current_buffer().ending().to_string(),
-                // Any other key lets go of the wait and does nothing.
-                _ => return,
+            let (written, then) = match code.read(key) {
+                Literally::Waiting(code) => {
+                    self.pending = Pending::Literal(code);
+                    return;
+                }
+                Literally::Write(written, then) => (written, then),
             };
-            self.insert_recording.push_str(&text);
-            self.insert_str(&text);
-            return;
+            let text = match written {
+                Written::Char(c) => c.to_string(),
+                Written::LineBreak => self.current_buffer().ending().to_string(),
+                Written::Nothing => String::new(),
+            };
+            if !text.is_empty() {
+                self.insert_recording.push_str(&text);
+                self.insert_str(&text);
+            }
+            // A code ended by a key that is not its digit: that key is typed.
+            if !then {
+                return;
+            }
         }
         // **helix has no `C-v` in Insert**, so under it the key waits only
         // in what `.` replays, where it stands before a completed word
         // written as it is ([`Self::literal_keys`]).
         if key == Key::Ctrl('v') && (self.vim_keymap() || self.repeating_edit) {
-            self.pending = Pending::Literal;
+            self.pending = Pending::Literal(LiteralCode::default());
             return;
         }
         // `C-r` 在等寄存器的名字。Warning: 和 `Pending::UndoBreak` 一樣，這一格

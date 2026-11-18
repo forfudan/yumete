@@ -276,6 +276,106 @@ enum RubyTarget {
     New { span: (usize, usize) },
 }
 
+/// **What vim's Insert `C-v` has read of a character's code** (vim's
+/// `get_literal`): up to three decimal digits (255 at most), `x` and two hex
+/// digits, `o` and three octal ones, `u` and four hex digits, `U` and eight.
+/// The letters name a base wherever they come, as vim reads them: `C-v 6 5 x`
+/// is `A`, its `x` taken.
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+struct LiteralCode {
+    hex: bool,
+    octal: bool,
+    unicode: Option<char>,
+    value: u32,
+    digits: u8,
+}
+
+/// What a key after Insert `C-v` comes to.
+enum Literally {
+    /// Part of a code still being typed.
+    Waiting(LiteralCode),
+    /// Write this, and then, when `true`, press the key as typed: a code
+    /// ended early by a key that is not one of its digits.
+    Write(Written, bool),
+}
+
+/// What Insert `C-v` writes.
+enum Written {
+    Char(char),
+    /// The buffer's own line ending: `C-v C-j`, how pasted text keeps its
+    /// line breaks for `.` and macros.
+    LineBreak,
+    Nothing,
+}
+
+impl LiteralCode {
+    /// The next key typed after `C-v` and what came before it.
+    fn read(self, key: Key) -> Literally {
+        let mut code = self;
+        match key {
+            Key::Char('x' | 'X') => code.hex = true,
+            Key::Char('o' | 'O') => code.octal = true,
+            Key::Char(u @ ('u' | 'U')) => code.unicode = Some(u),
+            _ => {
+                let radix = match (code.hex || code.unicode.is_some(), code.octal) {
+                    (true, _) => 16,
+                    (false, true) => 8,
+                    (false, false) => 10,
+                };
+                let digit = match key {
+                    Key::Char(c) => c.to_digit(radix),
+                    _ => None,
+                };
+                let Some(digit) = digit else {
+                    return match code.digits {
+                        0 => Literally::Write(Self::as_typed(key), false),
+                        _ => Literally::Write(code.written(), true),
+                    };
+                };
+                code.value = code.value.saturating_mul(radix).saturating_add(digit);
+                code.digits += 1;
+            }
+        }
+        if code.value > 255 && code.unicode.is_none() {
+            code.value = 255;
+        }
+        let enough = match (code.hex, code.unicode) {
+            (true, _) => 2,
+            (false, Some('u')) => 4,
+            (false, Some(_)) => 8,
+            (false, None) => 3,
+        };
+        match code.digits >= enough {
+            true => Literally::Write(code.written(), false),
+            false => Literally::Waiting(code),
+        }
+    }
+
+    /// The character the code names. vim keeps a NUL as one, and so does
+    /// the text; a number no character has writes nothing.
+    fn written(self) -> Written {
+        char::from_u32(self.value).map_or(Written::Nothing, Written::Char)
+    }
+
+    /// A key written as the character it sends: Enter a carriage return,
+    /// a control key its control character.
+    fn as_typed(key: Key) -> Written {
+        match key {
+            Key::Char(c) => Written::Char(c),
+            Key::Tab => Written::Char('\t'),
+            Key::Enter => Written::Char('\r'),
+            Key::Esc => Written::Char('\u{1b}'),
+            Key::Ctrl('j') => Written::LineBreak,
+            Key::Ctrl('?') => Written::Char('\u{7f}'),
+            Key::Ctrl(c) => match c.to_ascii_uppercase() as u32 {
+                n @ 0x40..=0x5f => char::from_u32(n - 0x40).map_or(Written::Nothing, Written::Char),
+                _ => Written::Nothing,
+            },
+            _ => Written::Nothing,
+        }
+    }
+}
+
 /// A pending multi-key operator awaiting its next key.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Pending {
@@ -304,10 +404,12 @@ enum Pending {
     /// 屏幕會凍住（除非 `stty -ixon`）。
     UndoBreak,
     /// **vim's Insert `C-v`, waiting for the character to write as it is**
-    /// (`:h i_CTRL-V`): no pair closes after it, no list opens, Enter is a
-    /// line break with no indent carried. Pasted and completed text is kept
-    /// for `.` and macros in this form, so it plays back as it went in.
-    Literal,
+    /// (`:h i_CTRL-V`): no pair closes after it and no list opens; Enter is
+    /// a carriage return, Esc and Tab are themselves, and digits, or `x` `o`
+    /// `u` `U` and digits, are a character's code ([`LiteralCode`]). Pasted
+    /// and completed text is kept for `.` and macros in this form, so it
+    /// plays back as it went in; a line break in it is `C-v C-j`.
+    Literal(LiteralCode),
     /// **`空格 t x` — 轉換表格格式**，等着那一個格式名。
     ///
     /// 命令是 `:convert-table`；這一組是它的鍵位，`p` pipe、`c` csv、`t` tsv。
@@ -430,7 +532,7 @@ impl Pending {
             // `y`/`n`/`a`/`q`/`l` name what to do, not what to write；
             // `C-g` 後面那個 `u` 也不是要寫進去的字。
             Pending::UndoBreak
-            | Pending::Literal
+            | Pending::Literal(_)
             | Pending::Confirm | Pending::SwapRange | Pending::None
             | Pending::Goto
             | Pending::Yume
