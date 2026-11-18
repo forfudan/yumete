@@ -258,8 +258,15 @@ impl super::Editor {
     fn leave_block(&mut self, at: usize) {
         self.block = None;
         self.block_replace = false;
-        let len = self.current_buffer().rope().len_chars();
-        self.sel = Selections::one(Range::at(at.min(len)));
+        let rope = self.current_buffer().rope();
+        let at = at.min(rope.len_chars());
+        // Off a line's end, where the block's corner may have stood.
+        let line_start = rope.line_to_char(rope.char_to_line(at));
+        let at = match at > line_start && at == motion::line_end(rope, line_start) {
+            true => motion::prev_grapheme(rope, at),
+            false => at,
+        };
+        self.sel = Selections::one(Range::at(at));
         self.clamp_cursor();
     }
 
@@ -372,8 +379,25 @@ impl super::Editor {
                 _ => {}
             }
         }
+        // **The corner may stand just past a line's end**, as vim's Visual
+        // cursor may (`nv_right`'s `past_line`, `coladvance` in Visual mode):
+        // `l` on a line's last character goes there, and `j` or `k` aimed
+        // at a column the line does not reach lands there. So `C-v j l` over
+        // `abc` and `d` is two columns wide, as the cursor's column says, not
+        // one, as the short line's last character would.
+        let rightward = quiet && matches!(key, Key::Char('l') | Key::Right);
+        let rope = self.current_buffer().rope();
+        let corner_line = rope.char_to_line(block.cursor.min(rope.len_chars()));
+        let corner_end = motion::line_end(rope, rope.line_to_char(corner_line));
+        if rightward && block.cursor == corner_end {
+            return self.show_block();
+        }
         // A motion: run it from the cursor's corner, alone.
-        self.sel = Selections::one(Range { goal: block.goal, ..Range::at(block.cursor) });
+        let at = match block.cursor == corner_end && block.cursor > rope.line_to_char(corner_line) {
+            true => motion::prev_grapheme(rope, block.cursor),
+            false => block.cursor,
+        };
+        self.sel = Selections::one(Range { goal: block.goal, ..Range::at(at) });
         self.extend = false;
         let before = self.current_buffer().revision();
         self.on_normal_key(key);
@@ -381,13 +405,26 @@ impl super::Editor {
             self.block = None;
             return;
         }
-        let stays_at_the_end = matches!(
+        let vertical = matches!(
             key,
-            Key::Char('j' | 'k' | 'G' | 'g' | '$') | Key::Up | Key::Down | Key::Ctrl('d' | 'u' | 'f' | 'b')
+            Key::Char('j' | 'k' | 'G' | 'g') | Key::Up | Key::Down | Key::Ctrl('d' | 'u' | 'f' | 'b')
         ) || matches!(key, Key::Char(c) if c.is_ascii_digit());
+        let stays_at_the_end = vertical || key == Key::Char('$');
+        let rope = self.current_buffer().rope();
+        let head = self.sel.head().min(rope.len_chars());
+        let line = rope.char_to_line(head);
+        let (start, end) = (rope.line_to_char(line), motion::line_end(rope, rope.line_to_char(line)));
+        let wide = width(rope, self.tab_stop(), line);
+        let goal = self.sel.primary().goal;
+        let (cursor, goal) = match (rightward, vertical, goal) {
+            // `l` that could not step on, from the line's last character.
+            (true, _, _) if head == at && end > start && motion::next_grapheme(rope, head) == end => (end, Some(wide)),
+            (_, true, Some(want)) if want >= wide && end > start => (end, goal),
+            _ => (self.sel.head(), goal),
+        };
         if let Some(b) = self.block.as_mut() {
-            b.cursor = self.sel.head();
-            b.goal = self.sel.primary().goal;
+            b.cursor = cursor;
+            b.goal = goal;
             b.to_line_end = key == Key::Char('$') || (b.to_line_end && stays_at_the_end);
         }
         self.show_block();

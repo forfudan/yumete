@@ -44916,3 +44916,32 @@ fn a_vim_macro_stops_where_join_or_a_repeated_find_fails_as_nvim_does() {
         assert_eq!(vim_at(&ed), at, "nvim: {keys}");
     }
 }
+
+/// **A block's corner may stand just past a short line's end**, as vim's
+/// Visual cursor may: `C-v j l` over `abc` and `d` is two columns wide, the
+/// columns coming from the cursor's, not from the short line's last
+/// character. Every row measured in nvim 0.12 `--clean`.
+#[test]
+fn a_vim_block_reaches_past_a_short_line_as_nvim_does() {
+    for (text, keys, want, at) in [
+        ("abc\nd\n", "ᵛjld", "c\n\n", (1, 1)),
+        ("abc\nd\n", "ᵛjly$p", "abcab\nd  d\n", (1, 4)),
+        ("abc\nd\n", "ᵛjlAZ⎋", "abZc\nd Z\n", (1, 1)),
+        ("abc\nd\n", "ᵛjlcZ⎋", "Zc\nZ\n", (1, 1)),
+        ("abc\nd\n", "ᵛjlkd", "c\nd\n", (1, 1)),
+        ("abc\nd\n", "ᵛjllld", "c\n\n", (1, 1)),
+        ("abc\nd\n", "ᵛjlhd", "bc\n\n", (1, 1)),
+        ("abc\nd\n", "ᵛjlrZ", "ZZc\nZ\n", (1, 1)),
+        ("abc\nd\n", "ᵛjl⎋", "abc\nd\n", (2, 1)),
+        ("abc\nd\nxyz\n", "ᵛjljd", "c\n\nz\n", (1, 1)),
+        ("abcd\nd\nxyz\n", "lᵛjljd", "acd\nd\nxz\n", (1, 2)),
+        ("d\nabc\n", "ᵛljd", "\nc\n", (1, 1)),
+        ("a中文b\nd\n", "lᵛjld", "a文b\nd\n", (1, 2)),
+    ] {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        ed.on_key(Key::Esc);
+        assert_eq!(ed.current_buffer().text(), want, "nvim: {keys} on {text:?}");
+        assert_eq!(vim_at(&ed), at, "nvim: {keys} on {text:?}");
+    }
+}
