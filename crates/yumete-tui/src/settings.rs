@@ -280,6 +280,10 @@ pub fn complaints(config: &Config) -> Vec<String> {
     if !word.is_empty() && yumete_core::editor::AutoPairs::parse(word).is_none() {
         said.push(only("[editor] auto_pairs", word, &["off", "minimal", "basic", "full"]));
     }
+    let word = config.editor.undo_steps.trim();
+    if !word.is_empty() && yumete_core::editor::UndoSteps::parse(word).is_none() {
+        said.push(only("[editor] undo_steps", word, yumete_core::editor::UndoSteps::NAMES));
+    }
     let word = config.editor.status_count.trim();
     if !word.is_empty() && !matches!(word, "text" | "all" | "off") {
         said.push(only("[editor] status_count", word, &["text", "all", "off"]));
@@ -655,6 +659,9 @@ fn apply_to_editor(config: &Config, editor: &mut Editor, layout: Option<yumete_c
     }
     if let Some(hint) = yumete_core::zong::IndentHint::parse(&config.editor.indent_hint) {
         editor.set_indent_hint(hint, Some(config.editor.indent_symbol.clone()));
+    }
+    if let Some(steps) = yumete_core::editor::UndoSteps::parse(&config.editor.undo_steps) {
+        editor.set_undo_steps(steps);
     }
     if let Some(level) = yumete_core::editor::AutoPairs::parse(&config.editor.auto_pairs) {
         editor.set_auto_pairs(level);
@@ -1652,5 +1659,24 @@ q = ":quit"
         assert_eq!(menu(&ed).0, "hunks", "the digit went, not the level");
         press(&mut ed, "l");
         assert_eq!(ed.cursor(), 1, "and with it the count");
+    }
+
+    /// **`[editor] undo_steps`**: `"insert"` out of the box, `"sentence"`
+    /// from the config and back again at a reload; a word that is neither
+    /// is said.
+    #[test]
+    fn undo_steps_come_from_the_config() {
+        use yumete_core::editor::UndoSteps;
+        let mut config = yumete_config::Config::default();
+        assert_eq!(config.editor.undo_steps, "insert");
+        let mut ed = yumete_core::Editor::new();
+        config.editor.undo_steps = "sentence".to_string();
+        super::apply_to_editor(&config, &mut ed, None);
+        assert_eq!(ed.undo_steps(), UndoSteps::Sentence);
+        let config = yumete_config::Config::default();
+        super::apply_to_editor(&config, &mut ed, None);
+        assert_eq!(ed.undo_steps(), UndoSteps::Insert, "the reload puts the config's back");
+        let config = yumete_config::Config::from_toml("[editor]\nundo_steps = \"word\"\n");
+        assert!(super::complaints(&config).iter().any(|c| c.contains("undo_steps")), "{:?}", super::complaints(&config));
     }
 }

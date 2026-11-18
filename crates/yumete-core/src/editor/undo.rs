@@ -5,7 +5,112 @@
 
 use super::*;
 
+/// **How much one `u` takes back of what was typed in Insert**
+/// (`[editor] undo_steps`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum UndoSteps {
+    /// The whole run, from entering Insert to leaving it, as vim and helix.
+    #[default]
+    Insert,
+    /// One sentence: a checkpoint right after each sentence end typed, the
+    /// one Insert `C-g u` commits. A sentence end is `。` `！` `？`, and `.`
+    /// `!` `?` when a space or a line break is typed after them, so `a.b`
+    /// and `x!=y` end nothing. The same in every kind of file.
+    Sentence,
+}
+
+impl UndoSteps {
+    /// The words the config writes, in the order a complaint lists them.
+    pub const NAMES: &'static [&'static str] = &["insert", "sentence"];
+
+    /// A config value.
+    pub fn parse(word: &str) -> Option<UndoSteps> {
+        match word.trim() {
+            "insert" => Some(UndoSteps::Insert),
+            "sentence" => Some(UndoSteps::Sentence),
+            _ => None,
+        }
+    }
+}
+
+/// A sentence end that needs nothing after it.
+fn ends_a_sentence(c: char) -> bool {
+    matches!(c, '。' | '！' | '？')
+}
+
+/// A sentence end when a space or a line break follows it.
+fn ends_a_sentence_before_a_space(c: char) -> bool {
+    matches!(c, '.' | '!' | '?')
+}
+
+/// **Where in `text`, typed after `before`, a sentence ends**: the byte
+/// offsets to commit an undo checkpoint at, in order. `0` is before the
+/// first character, when `before` is `.` and `text` begins with a space.
+pub(super) fn sentence_ends(before: Option<char>, text: &str) -> Vec<usize> {
+    let mut ends = Vec::new();
+    let mut last = before;
+    for (at, c) in text.char_indices() {
+        if matches!(c, ' ' | '\n' | '\r') && last.is_some_and(ends_a_sentence_before_a_space) {
+            ends.push(at);
+        }
+        if ends_a_sentence(c) {
+            ends.push(at + c.len_utf8());
+        }
+        last = Some(c);
+    }
+    ends.dedup();
+    ends
+}
+
 impl Editor {
+    /// `[editor] undo_steps`.
+    pub fn undo_steps(&self) -> UndoSteps {
+        self.undo_steps
+    }
+
+    /// Set it.
+    pub fn set_undo_steps(&mut self, steps: UndoSteps) {
+        self.undo_steps = steps;
+    }
+
+    /// Whether typing here is cut into sentences: Insert, `undo_steps =
+    /// "sentence"`, and neither `.` nor a macro replaying — each of those is
+    /// one undo step whatever it types.
+    pub(super) fn cuts_sentences(&self) -> bool {
+        self.undo_steps == UndoSteps::Sentence
+            && self.mode == Mode::Insert
+            && !self.repeating_edit
+            && !self.replaying
+    }
+
+    /// The character before the caret, which a typed space may end a
+    /// sentence after.
+    pub(super) fn char_before_caret(&self) -> Option<char> {
+        let rope = self.current_buffer().rope();
+        let head = self.sel.head().min(rope.len_chars());
+        head.checked_sub(1).map(|at| rope.char(at))
+    }
+
+    /// **Type `text` with a checkpoint at each sentence end in it**: `put`
+    /// writes one piece, and between pieces the point `C-g u` commits is
+    /// announced, so the next piece is a new undo step.
+    pub(super) fn type_by_sentences(&mut self, text: &str, put: &mut dyn FnMut(&mut Editor, &str)) {
+        if !self.cuts_sentences() {
+            return put(self, text);
+        }
+        let mut from = 0;
+        for end in sentence_ends(self.char_before_caret(), text) {
+            if end > from {
+                put(self, &text[from..end]);
+            }
+            self.snapshot();
+            from = end;
+        }
+        if from < text.len() {
+            put(self, &text[from..]);
+        }
+    }
+
     // ---- Undo / redo (Feature #11) ----------------------------------------
 
     /// Leave the editor, unless some open buffer has unsaved changes.

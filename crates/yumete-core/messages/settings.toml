@@ -893,6 +893,18 @@ zhs = "竖排时一格内横排几个半角字符，年份、页码就不会一�
 en = "half-width characters set across inside one cell, so a year is not one digit to a row"
 
 [[message]]
+# 設置面板：[editor] undo_steps 那一行（草稿）
+key = "settings.editor.undo-steps"
+zhs = "撤销步长"
+en = "undo steps"
+
+[[message]]
+# 設置面板：[editor] undo_steps 那一行底下的說明（草稿）
+key = "settings.editor.undo-steps.hint"
+zhs = "一次插入：一次 u 撤回整段输入，同 vim、helix。一句：每到句末（。！？，或 . ! ? 后接空格、换行）分一步"
+en = "insert: one u takes back a whole run of typing, as in vim and helix. sentence: a step at each sentence end (。！？, or . ! ? followed by a space or a line break)"
+
+[[message]]
 # 設置面板：可疑字符
 key = "settings.editor.unicode-alarm"
 zhs = "可疑字符"
@@ -2007,6 +2019,18 @@ en = "two or more"
 key = "settings.pick.tabs.never"
 zhs = "不显示"
 en = "never"
+
+[[message]]
+# 設置面板：撤銷步長 insert（一次插入一步）（草稿）
+key = "settings.pick.undo-steps.insert"
+zhs = "一次插入"
+en = "insert"
+
+[[message]]
+# 設置面板：撤銷步長 sentence（一句一步）（草稿）
+key = "settings.pick.undo-steps.sentence"
+zhs = "一句"
+en = "sentence"
 
 [[message]]
 # 設置：竪排的 hjkl——邏輯那一種

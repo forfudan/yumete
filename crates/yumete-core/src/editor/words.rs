@@ -1087,18 +1087,23 @@ impl Editor {
         if !self.repeating_edit && !self.expanding_alias {
             self.edit_keys.extend(text.chars().map(Key::Char));
         }
-        let text = text.to_string();
-        self.edit_each_from(self.mode != Mode::Insert, move |e| {
-            e.insert_recording.push_str(&text);
-            // Through the pairs a character at a time, as helix takes a
-            // commit, so `.` and a count (which replay it a character at a
-            // time) write what this wrote.
-            match e.mode == Mode::Insert && e.auto_pairs() != super::AutoPairs::Off {
-                true => e.type_through_pairs(&text),
-                false => e.insert_str(&text),
-            }
-            e.maybe_ask_what_comes_next(&text);
-            e.maybe_ask_for_a_signature(&text);
+        // `undo_steps = "sentence"` cuts the commit at each sentence end in
+        // it, a checkpoint between the pieces.
+        let point = self.mode != Mode::Insert;
+        self.type_by_sentences(text, &mut |e, piece| {
+            let text = piece.to_string();
+            e.edit_each_from(point, move |e| {
+                e.insert_recording.push_str(&text);
+                // Through the pairs a character at a time, as helix takes a
+                // commit, so `.` and a count (which replay it a character at a
+                // time) write what this wrote.
+                match e.mode == Mode::Insert && e.auto_pairs() != super::AutoPairs::Off {
+                    true => e.type_through_pairs(&text),
+                    false => e.insert_str(&text),
+                }
+                e.maybe_ask_what_comes_next(&text);
+                e.maybe_ask_for_a_signature(&text);
+            });
         });
     }
 }

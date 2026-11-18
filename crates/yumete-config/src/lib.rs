@@ -221,6 +221,12 @@ pub struct EditorConfig {
     /// `"minimal"` (the three ASCII brackets), `"basic"` (default, helix's
     /// six), `"full"` (every pair the `m` group knows). Checked and applied by the front end, as `indent_hint` is.
     pub auto_pairs: String,
+    /// **How much one `u` takes back of what was typed in Insert**:
+    /// `"insert"` (default) the whole run, as vim and helix; `"sentence"` one
+    /// sentence, a checkpoint right after each `。` `！` `？`, and after `.`
+    /// `!` `?` followed by a space or a line break. Checked and applied by
+    /// the front end, as `auto_pairs` is.
+    pub undo_steps: String,
     /// The character the `symbol` hint draws in the first of them.
     pub indent_symbol: String,
     /// How a grid's columns are told apart (Feature #157).
@@ -596,6 +602,7 @@ impl Default for EditorConfig {
             screenshot: screenshot_command(),
             indent_hint: "none".to_string(),
             auto_pairs: "basic".to_string(),
+            undo_steps: "insert".to_string(),
             indent_symbol: "↵".to_string(),
             table_rules: "line dash".to_string(),
             language_key: "C-\\".to_string(),
@@ -4968,6 +4975,7 @@ struct RawEditor {
     screenshot: Option<String>,
     indent_hint: Option<String>,
     auto_pairs: Option<String>,
+    undo_steps: Option<String>,
     indent_symbol: Option<String>,
     table_rules: Option<String>,
     language_key: Option<String>,
@@ -5222,6 +5230,9 @@ impl RawConfig {
         }
         if other.editor.auto_pairs.is_some() {
             self.editor.auto_pairs = other.editor.auto_pairs.clone();
+        }
+        if other.editor.undo_steps.is_some() {
+            self.editor.undo_steps = other.editor.undo_steps.clone();
         }
         if other.editor.indent_symbol.is_some() {
             self.editor.indent_symbol = other.editor.indent_symbol.clone();
@@ -5731,6 +5742,9 @@ impl RawConfig {
         }
         if let Some(level) = self.editor.auto_pairs {
             config.editor.auto_pairs = level;
+        }
+        if let Some(steps) = self.editor.undo_steps {
+            config.editor.undo_steps = steps;
         }
         // One character, as the guide, wide or narrow: it
         // stands in a paragraph's opening square.

@@ -44475,3 +44475,89 @@ fn copies_left_beside_the_file_are_still_offered_and_discarded() {
     }
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// An empty editor in Insert with `undo_steps` set, `text` typed key by key.
+fn typing_by(steps: crate::editor::UndoSteps, text: &str) -> Editor {
+    let mut ed = Editor::new();
+    ed.set_undo_steps(steps);
+    ed.on_key(Key::Char('i'));
+    for c in text.chars() {
+        ed.on_key(if c == '\n' { Key::Enter } else { Key::Char(c) });
+    }
+    ed
+}
+
+/// **`undo_steps = "sentence"`**: one `u` a sentence, `。！？` ending one
+/// whatever follows; out of the box the whole run is one step.
+#[test]
+fn undo_steps_sentence_takes_back_one_sentence() {
+    use crate::editor::UndoSteps;
+    let mut ed = typing_by(UndoSteps::Sentence, "风停了。雨也停了！还走吗？好");
+    ed.on_key(Key::Esc);
+    let mut seen = Vec::new();
+    for _ in 0..4 {
+        press(&mut ed, "u");
+        seen.push(ed.current_buffer().text());
+    }
+    assert_eq!(seen, ["风停了。雨也停了！还走吗？", "风停了。雨也停了！", "风停了。", ""]);
+
+    let mut ed = typing_by(UndoSteps::Insert, "风停了。雨也停了！");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "u");
+    assert_eq!(ed.current_buffer().text(), "", "one run, one step");
+}
+
+/// **`.` `!` `?` end a sentence only before a space or a line break**:
+/// `a.b` and `x!=y` are one step, commas never cut.
+#[test]
+fn undo_steps_sentence_needs_a_space_after_a_full_stop() {
+    use crate::editor::UndoSteps;
+    let mut ed = typing_by(UndoSteps::Sentence, "It rained. Then?\nNo, a.b and x!=y");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "u");
+    assert_eq!(ed.current_buffer().text(), "It rained. Then?");
+    press(&mut ed, "u");
+    assert_eq!(ed.current_buffer().text(), "It rained.");
+    press(&mut ed, "u");
+    assert_eq!(ed.current_buffer().text(), "");
+}
+
+/// **A sentence end inside an input-method commit cuts it too**.
+#[test]
+fn undo_steps_sentence_cuts_a_commit_at_its_sentence_end() {
+    use crate::editor::UndoSteps;
+    let mut ed = typing_by(UndoSteps::Sentence, "");
+    ed.insert_committed("天黑了。灯亮");
+    ed.insert_committed("了。");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "u");
+    assert_eq!(ed.current_buffer().text(), "天黑了。");
+    press(&mut ed, "u");
+    assert_eq!(ed.current_buffer().text(), "");
+}
+
+/// **`.` and a macro replay the typing as one step**, and replay the same
+/// keys, sentences or not.
+#[test]
+fn undo_steps_sentence_leaves_repeat_and_macros_one_step() {
+    use crate::editor::UndoSteps;
+    let mut ed = typing_by(UndoSteps::Sentence, "甲。乙");
+    ed.on_key(Key::Esc);
+    press(&mut ed, ".");
+    assert_eq!(ed.current_buffer().text().matches("甲。乙").count(), 2, "{}", ed.current_buffer().text());
+    press(&mut ed, "u");
+    assert_eq!(ed.current_buffer().text(), "甲。乙", "the repeat is one step");
+
+    let mut ed = Editor::new();
+    ed.set_undo_steps(UndoSteps::Sentence);
+    press(&mut ed, "Q");
+    press(&mut ed, "i");
+    press(&mut ed, "丙。丁");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "Q");
+    assert_eq!(ed.current_buffer().text(), "丙。丁");
+    press(&mut ed, "q");
+    assert_eq!(ed.current_buffer().text().matches("丙。丁").count(), 2, "{}", ed.current_buffer().text());
+    press(&mut ed, "u");
+    assert_eq!(ed.current_buffer().text(), "丙。丁", "the replay is one step");
+}

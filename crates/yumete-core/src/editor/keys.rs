@@ -2102,9 +2102,26 @@ impl Editor {
         // `C-n` 歸它，不是往 N 處各寫一次。
         let (was_len, was_head) = (self.current_buffer().rope().len_chars(), self.sel.head());
         self.stepped_over = false;
+        // `undo_steps = "sentence"`: a checkpoint before a space or a line
+        // break typed after `.` `!` `?`, and after a `。` `！` `？` typed.
+        let typed = match key {
+            Key::Char(c) => Some(c),
+            Key::Enter | Key::Ctrl('j') => Some('\n'),
+            _ => None,
+        };
+        let ends = match (typed, self.cuts_sentences()) {
+            (Some(c), true) => super::undo::sentence_ends(self.char_before_caret(), c.encode_utf8(&mut [0; 4])),
+            _ => Vec::new(),
+        };
+        if ends.first() == Some(&0) {
+            self.snapshot();
+        }
         match multi::types_at_every_selection(key) && self.offers_here().is_none() {
             true => self.edit_each_from(false, |e| e.insert_key_carrying_the_tail(key)),
             false => self.insert_key_carrying_the_tail(key),
+        }
+        if ends.last().is_some_and(|&at| at > 0) && self.current_buffer().rope().len_chars() != was_len {
+            self.snapshot();
         }
         // **A move ends the selection `i` or `a` kept** (measured: helix's
         // `i` `→` `X` leaves a one-character cursor). From here on typing is

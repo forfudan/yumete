@@ -3298,6 +3298,9 @@ pub struct Editor {
     indent_hint: crate::zong::IndentHint,
     /// `[editor] auto_pairs`: which brackets and quotes close themselves.
     auto_pairs: AutoPairs,
+    /// `[editor] undo_steps`: whether typing in Insert is one undo step or
+    /// one a sentence.
+    undo_steps: UndoSteps,
     /// The key just typed stepped over a closer: typing, not a move, so the
     /// selection `i` or `a` keeps stays kept.
     stepped_over: bool,
@@ -4879,6 +4882,7 @@ impl Editor {
             object_missed: false,
             indent_hint: crate::zong::IndentHint::default(),
             auto_pairs: AutoPairs::default(),
+            undo_steps: UndoSteps::default(),
             stepped_over: false,
             selections_restored: false,
             undo_lands_at: None,
@@ -6560,6 +6564,7 @@ pub use symbols::SymbolAsk;
 mod sidebar;
 mod tables;
 mod undo;
+pub use undo::UndoSteps;
 mod versions;
 mod verbs;
 mod vim_view;

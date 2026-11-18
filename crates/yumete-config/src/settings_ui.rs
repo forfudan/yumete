@@ -228,6 +228,11 @@ const EDITOR_VERTICAL_KEYS_WAYS: &[Choice] = &[
     Choice { word: "visual", label: "settings.pick.vertical-keys.visual" },
 ];
 
+const EDITOR_UNDO_STEPS_WAYS: &[Choice] = &[
+    Choice { word: "insert", label: "settings.pick.undo-steps.insert" },
+    Choice { word: "sentence", label: "settings.pick.undo-steps.sentence" },
+];
+
 const EDITOR_AUTO_PAIRS_WAYS: &[Choice] = &[
     Choice { word: "off", label: "settings.pick.auto-pairs.off" },
     Choice { word: "minimal", label: "settings.pick.auto-pairs.minimal" },
@@ -1172,6 +1177,15 @@ pub const SETTINGS: &[Setting] = &[
         label: "settings.editor.auto-pairs",
         hint: "settings.editor.auto-pairs.hint",
         factory: r#""basic""#,
+    },
+    Setting {
+        table: "editor",
+        key: "undo_steps",
+        group: Group::Editing,
+        kind: Kind::Pick(EDITOR_UNDO_STEPS_WAYS),
+        label: "settings.editor.undo-steps",
+        hint: "settings.editor.undo-steps.hint",
+        factory: r#""insert""#,
     },
     Setting {
         table: "editor",
