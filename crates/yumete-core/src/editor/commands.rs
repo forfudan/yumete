@@ -787,6 +787,12 @@ impl Editor {
                 self.sort(how, rows);
                 Ok(CommandOutcome::Continue)
             }
+            Command::Normal { keys, plain, rows } => {
+                if let Err(said) = self.run_normal_command(&keys, plain, rows) {
+                    self.status = said;
+                }
+                Ok(CommandOutcome::Continue)
+            }
             Command::SplitJoin => {
                 self.edit_each(|e| e.split_join_here());
                 Ok(CommandOutcome::Continue)

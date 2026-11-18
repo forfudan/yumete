@@ -1596,6 +1596,7 @@ impl Editor {
         // 不吭。所以記下號碼，照號碼關。
         let mut group: Option<(u64, bool)> = None;
         self.macro_failed = false;
+        let mut failed = false;
         'rounds: for _ in 0..clipped {
             let before = (self.current, self.sel.head(), self.sel.anchor(), self.current_buffer().revision());
             for step in &steps {
@@ -1608,6 +1609,7 @@ impl Editor {
                 // vim flushes the rest of the macro, every round still to
                 // come included, at the first motion that fails.
                 if std::mem::take(&mut self.macro_failed) {
+                    failed = true;
                     break 'rounds;
                 }
             }
@@ -1625,9 +1627,112 @@ impl Editor {
             }
         }
         self.replaying = false;
+        // A macro `:normal` plays fails its line's keys with it.
+        self.macro_failed = failed && self.normal_depth > 0;
         if count > clipped {
             self.status = say!("count.writing-ceiling", Self::WRITING_MAX);
         }
+    }
+
+    /// How deep `:normal` may run inside the keys of a `:normal`.
+    const NORMAL_DEPTH: usize = 10;
+
+    /// **vim's `:normal`**: `keys` pressed as typed in Normal mode, once
+    /// where the cursor is, or with the cursor put at the start of each line
+    /// of `rows` in turn (the selected lines when the line was given from
+    /// Visual mode). The lines are taken by number as vim takes them, one
+    /// past the end standing for the last, so keys that add or take lines
+    /// move what the later numbers name.
+    ///
+    /// A vim motion that fails ends that line's keys, as it ends a macro, and
+    /// a command left unfinished at the end — an operator waiting, Insert, a
+    /// `:` or `/` line — is given up as `Esc` gives it up. The whole run is
+    /// one undo point, and none of its keys goes into a recording. `plain`
+    /// (`!`) leaves the reader's own key bindings out while it runs.
+    pub(super) fn run_normal_command(&mut self, keys: &str, plain: bool, rows: Option<crate::command::Rows>) -> Result<(), String> {
+        if self.normal_depth >= Self::NORMAL_DEPTH {
+            return Ok(());
+        }
+        let keys = crate::input::typed_keys(keys);
+        let rows = match rows {
+            None if self.extend || self.block.is_some() => Some(crate::command::Rows::Selection),
+            rows => rows,
+        };
+        let lines: Option<Vec<usize>> = match rows {
+            None => None,
+            Some(rows) => Some(match self.substitution_rows(rows)? {
+                Chosen::Span(first, last) => (first..=last).collect(),
+                Chosen::These(mut lines) => {
+                    lines.sort_unstable();
+                    lines.dedup();
+                    lines
+                }
+            }),
+        };
+        if lines.is_some() && (self.extend || self.block.is_some()) {
+            self.on_key(Key::Esc);
+        }
+        let recording = self.recording.take();
+        self.normal_depth += 1;
+        let was_plain = self.plain_keys;
+        self.plain_keys |= plain;
+        if self.plain_keys != was_plain {
+            self.lay_aliases();
+        }
+        // **One undo point**: announced here, and every command the keys run
+        // inside the group goes back to it.
+        self.snapshot();
+        let id = self.current_buffer().id();
+        let was = self.current_buffer_mut().begin_undo_group();
+        match lines {
+            None => self.press_normal_keys(&keys),
+            Some(lines) => {
+                for line in lines {
+                    let rope = self.current_buffer().rope();
+                    let at = rope.line_to_char(line.min(motion::last_line(rope)));
+                    self.sel = crate::selection::Selections::one(crate::selection::Range::at(at));
+                    self.refresh_goal_column();
+                    self.press_normal_keys(&keys);
+                }
+            }
+        }
+        if let Some(i) = self.buffer_with(id) {
+            self.with_buffer(i, |e| e.current_buffer_mut().end_undo_group(was));
+        }
+        if self.plain_keys != was_plain {
+            self.plain_keys = was_plain;
+            self.lay_aliases();
+        }
+        self.normal_depth -= 1;
+        self.recording = recording;
+        Ok(())
+    }
+
+    /// One round of `:normal`'s keys, stopped at a failing vim motion, and
+    /// what they leave unfinished given up.
+    fn press_normal_keys(&mut self, keys: &[Key]) {
+        self.macro_failed = false;
+        for key in keys {
+            self.on_key(*key);
+            if std::mem::take(&mut self.macro_failed) {
+                break;
+            }
+        }
+        // `Esc` until nothing waits: an operator's count or register first,
+        // then the operator; Insert; a `:` or `/` line. Visual mode is not
+        // unfinished, and stays (as nvim's does).
+        for _ in 0..4 {
+            let waiting = self.mode != Mode::Normal
+                || self.pending != Pending::None
+                || self.count.is_some()
+                || self.pending_register.is_some()
+                || !self.alias_held.is_empty();
+            if !waiting {
+                break;
+            }
+            self.on_key(Key::Esc);
+        }
+        self.macro_failed = false;
     }
 
     /// **A vim motion that could not move**: `j` on the last line, `f`
@@ -1635,7 +1740,7 @@ impl Editor {
     /// the macro that is playing (`beep_flush`); helix's macros play every
     /// key, so only the vim keymap asks.
     pub(super) fn fail_the_motion(&mut self) {
-        if self.replaying && self.as_vim() {
+        if (self.replaying || self.normal_depth > 0) && self.as_vim() {
             self.macro_failed = true;
         }
     }

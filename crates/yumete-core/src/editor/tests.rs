@@ -44737,3 +44737,60 @@ fn vims_gp_leaves_the_cursor_just_past_the_put_as_nvim_does() {
         assert_eq!(vim_at(&ed), at, "nvim: {keys}");
     }
 }
+
+/// **vim's `:normal` runs its keys as typed in Normal mode** (`:h :normal`),
+/// every row measured in nvim 0.12 `--clean`: once at the cursor, or from
+/// the start of each line of a range or of the lines selected, lines taken
+/// by number; a failing motion ends that line's keys; an unfinished command
+/// is given up as `Esc` gives it up; the run is one undo point, `.` repeats
+/// its last change, and a macro plays inside it.
+#[test]
+fn vims_normal_command_runs_keys_on_each_line_as_nvim_does() {
+    let text = "one two\nthree four\nfive\nsix seven\n";
+    for (keys, want, at) in [
+        (":%norm A;⏎", "one two;\nthree four;\nfive;\nsix seven;\n", (4, 10)),
+        (":%normal A;⏎", "one two;\nthree four;\nfive;\nsix seven;\n", (4, 10)),
+        (":2,3norm Ix ⏎", "one two\nx three four\nx five\nsix seven\n", (3, 2)),
+        (":2-3norm Ix ⏎", "one two\nx three four\nx five\nsix seven\n", (3, 2)),
+        ("w:norm dw⏎", "one \nthree four\nfive\nsix seven\n", (1, 4)),
+        (":%norm! A;⏎", "one two;\nthree four;\nfive;\nsix seven;\n", (4, 10)),
+        ("jVj:norm A!⏎", "one two\nthree four!\nfive!\nsix seven\n", (3, 5)),
+        ("jVj:'<,'>norm A!⏎", "one two\nthree four!\nfive!\nsix seven\n", (3, 5)),
+        (":%norm d⏎", "one two\nthree four\nfive\nsix seven\n", (4, 1)),
+        (":%norm 2x⏎", "e two\nree four\nve\nx seven\n", (4, 1)),
+        (":norm ihello⏎", "helloone two\nthree four\nfive\nsix seven\n", (1, 5)),
+        (":%norm jdd⏎", "one two\nfive\n", (2, 1)),
+        (":%norm fvx⏎", "one two\nthree four\nfie\nsix seen\n", (4, 7)),
+        (":%norm yyp⏎", "one two\none two\none two\none two\none two\nthree four\nfive\nsix seven\n", (5, 1)),
+        (":%norm 99jx⏎", "one two\nthree four\nfive\n seven\n", (4, 1)),
+        ("G:%norm A;⏎u", "one two\nthree four\nfive\nsix seven\n", (1, 7)),
+        (":%norm A;⏎j.", "one two;\nthree four;\nfive;\nsix seven;;\n", (4, 11)),
+        (":norm :s/o/X/⏎x", "ne two\nthree four\nfive\nsix seven\n", (1, 1)),
+        (":norm /four⏎x", "ne two\nthree four\nfive\nsix seven\n", (1, 1)),
+        ("qa0xjq:%norm @a⏎", "e two\nhree four\nive\nix seven\n", (4, 1)),
+        (":%norm i\"q\" ⏎", "\"q\" one two\n\"q\" three four\n\"q\" five\n\"q\" six seven\n", (4, 4)),
+    ] {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        assert_eq!(ed.current_buffer().text(), want, "nvim: {keys}");
+        assert_eq!(vim_at(&ed), at, "nvim: {keys}");
+    }
+    // Nothing to run is vim's `E471`.
+    let mut ed = typed_vim(text);
+    assert!(ed.execute(":3norm").is_err());
+    // `!` leaves the reader's bindings out, the keymap's own still there.
+    let mut ed = typed_vim(text);
+    let mut aliases = std::collections::HashMap::new();
+    aliases.insert("x".to_string(), "@dd".to_string());
+    ed.set_key_aliases(aliases);
+    feed_vim(&mut ed, ":2norm! x⏎");
+    assert_eq!(ed.current_buffer().text(), "one two\nhree four\nfive\nsix seven\n", ":normal! x");
+    feed_vim(&mut ed, ":2norm x⏎");
+    assert_eq!(ed.current_buffer().text(), "one two\nfive\nsix seven\n", ":normal x, the binding");
+    feed_vim(&mut ed, "x");
+    assert_eq!(ed.current_buffer().text(), "one two\nsix seven\n", "the binding is back after `!`");
+    // The keys are no part of a recording: the `:` line is.
+    let mut ed = typed_vim(text);
+    feed_vim(&mut ed, "qa:norm A;⏎q");
+    assert_eq!(ed.held('a'), ":norm<space>A;<ret>");
+}

@@ -115,6 +115,12 @@ zhs = "<几格，1–16>"
 en = "<width, 1–16>"
 
 [[message]]
+# : 命令参数的占位：一串按键（草稿）
+key = "cmd.arg.keys"
+zhs = "<按键>"
+en = "<keys>"
+
+[[message]]
 # 命令參數的佔位：一個名字（:history-label）（草稿）
 key = "cmd.arg.label"
 zhs = "<名字>"
@@ -911,6 +917,13 @@ key = "cmd.commands.new"
 zhs = "新建空缓冲区"
 en = "new empty buffer"
 find = "新建 空白 新檔 新文件 empty"
+
+[[message]]
+# : 命令菜单里 normal 那一项的说明（草稿）
+key = "cmd.commands.normal"
+zhs = "把按键当作在普通模式里打的来执行；带范围时从每一行行首执行一遍，! 不用自己绑定的键"
+en = "run keys as though typed in Normal mode; with a range, from the start of each line; ! leaves your own key bindings out"
+find = "普通模式 按键 每一行 批量 宏 normal keys macro each line"
 
 [[message]]
 # : 命令選單裏 open 那一項的説明(commands 組)

@@ -372,15 +372,31 @@ pub fn macro_keys(text: &str) -> Result<Vec<Key>, String> {
                 rest = &rest[end + 1..];
                 named(name).ok_or_else(|| format!("<{name}>"))?
             }
-            '\n' | '\r' => Key::Enter,
-            '\t' => Key::Tab,
-            '\u{1b}' => Key::Esc,
-            c if (c as u32) < 32 => Key::Ctrl((b'a' + c as u8 - 1) as char),
-            c => Key::Char(c),
+            c => char_key(c),
         };
         keys.push(key);
     }
     Ok(keys)
+}
+
+/// **Keys as a line of text spells them**, one to a character, as vim's
+/// `:normal` reads its argument: no names in angle brackets, and a control
+/// character the key it is.
+pub fn typed_keys(text: &str) -> Vec<Key> {
+    text.chars().map(char_key).collect()
+}
+
+/// The key a character is when text is read as keys: a line break is
+/// `Enter`, a tab `Tab`, `ESC` is `Esc`, and the other control characters
+/// are `C-`.
+fn char_key(c: char) -> Key {
+    match c {
+        '\n' | '\r' => Key::Enter,
+        '\t' => Key::Tab,
+        '\u{1b}' => Key::Esc,
+        c if (c as u32) < 32 => Key::Ctrl((b'a' + c as u8 - 1) as char),
+        c => Key::Char(c),
+    }
 }
 
 #[cfg(test)]

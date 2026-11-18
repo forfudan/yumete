@@ -2773,6 +2773,13 @@ pub struct Editor {
     /// meets the last line stops there instead of writing on that line ten
     /// times. Set by [`Editor::fail_the_motion`], read by the player.
     macro_failed: bool,
+    /// How deep `:normal` is running keys (`Editor::run_normal`): a failing
+    /// vim motion ends that line's keys as it ends a macro, and the keys
+    /// are no part of a recording.
+    normal_depth: usize,
+    /// The reader's own key bindings are left out of the trees while
+    /// `:normal!` runs its keys.
+    plain_keys: bool,
     /// What the last yank copied, lit until its moment is up
     /// ([`Editor::yank_flash`]).
     yank_lit: Option<edits::YankFlash>,
@@ -4740,6 +4747,8 @@ impl Editor {
             last_played: None,
             replaying: false,
             macro_failed: false,
+            normal_depth: 0,
+            plain_keys: false,
             yank_lit: None,
             flavor: yumete_cjk::Flavor::default(),
             page_lines: 20,

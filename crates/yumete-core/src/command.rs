@@ -257,6 +257,13 @@ pub enum Command {
     /// `rows` is a range written in front (`:%sort`, `:2,3sort`), which
     /// takes the place of the selection.
     Sort { how: SortHow, rows: Option<Rows> },
+    /// `:[range]normal[!] {keys}` (vim's `:normal`): the keys run as though
+    /// typed in Normal mode, once where the cursor is, or from the start of
+    /// each line of `rows` (of the selected lines when the line is given
+    /// from Visual mode). A command the keys leave unfinished is given up
+    /// as `Esc` would give it up. `plain` (`!`) leaves the reader's own key
+    /// bindings out, the keymap's own still in force.
+    Normal { keys: String, plain: bool, rows: Option<Rows> },
     /// `:vsplit [file]` / `:hsplit [file]`: a new window beside or below the
     /// live one, showing `file` when one is named.
     SplitWindow { how: crate::window::Split, file: Option<String> },
@@ -1199,6 +1206,9 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         };
     }
 
+    if let Some(normal) = parse_normal(input.trim_start().trim_start_matches(':').trim_start()) {
+        return normal;
+    }
     if let Some(ranged) = parse_ranged(trimmed) {
         return ranged;
     }
@@ -1261,6 +1271,34 @@ fn parse_ranged(line: &str) -> Option<Result<Command, CommandError>> {
         Err(e) if matches!(&e, CommandError::Wants { command: "sort", .. }) => Some(Err(e)),
         _ => None,
     }
+}
+
+/// **`:normal {keys}`**, a range and a `!` allowed: read before the walk and
+/// before anything is trimmed, because the keys are taken as written to the
+/// end of the line — `:%norm Ix ` writes the space too, as vim's does — and
+/// quotes and backslashes in them are keys, not quoting.
+fn parse_normal(line: &str) -> Option<Result<Command, CommandError>> {
+    let (rows, rest) = parse_rows(line);
+    let ranged = rest.len() != line.len();
+    let name_end = rest.find(|c: char| c.is_whitespace() || c == '!').unwrap_or(rest.len());
+    let (name, after) = rest.split_at(name_end);
+    if name.is_empty() || entry_named(name).is_none_or(|e| e.name != "normal") {
+        return None;
+    }
+    let (plain, after) = match after.strip_prefix('!') {
+        Some(after) => (true, after),
+        None => (false, after),
+    };
+    let keys = after.trim_start();
+    if keys.is_empty() {
+        return Some(Err(CommandError::MissingArgument("normal")));
+    }
+    let rows = match (ranged, rows) {
+        (false, _) => None,
+        (true, Ok(rows)) => Some(rows),
+        (true, Err(BadRange)) => return Some(Err(CommandError::InvalidArgument { command: "normal", value: line[..line.len() - rest.len()].to_string() })),
+    };
+    Some(Ok(Command::Normal { keys: keys.to_string(), plain, rows }))
 }
 
 /// **`:read !cmd`** (and `:read! cmd`, `:read!cmd`): the command's output
@@ -2206,6 +2244,8 @@ const FORCEABLE: &[&str] = &[
     "file-rename!",
     // vim's `:sort!`, in reverse.
     "sort!",
+    // vim's `:normal!`, without the reader's key bindings.
+    "normal!",
     // vim's `:read! cmd`, a command's output read in.
     "read!",
     "write!",
@@ -5417,6 +5457,19 @@ pub const COMMANDS: &[Entry] = &[
         }),
     },
     Entry {
+        name: "normal",
+        aliases: &["norm"],
+        help: "cmd.commands.normal",
+        needs: &[],
+        params: &[Param::Free("cmd.arg.keys")],
+        // Read by [`parse_normal`] before the walk; this is what the menu
+        // and the help show, and the walk's answer when that one has none.
+        build: Some(|p| match p.arg(0).filter(|keys| !keys.is_empty()) {
+            None => Err(CommandError::MissingArgument("normal")),
+            Some(keys) => Ok(Command::Normal { keys: keys.to_string(), plain: p.force, rows: None }),
+        }),
+    },
+    Entry {
         name: "align",
         aliases: &[],
         help: "cmd.commands.align",
@@ -7809,6 +7862,11 @@ fn parse_rows(input: &str) -> (Result<Rows, BadRange>, &str) {
     if let Some(rest) = input.strip_prefix('%') {
         return (Ok(Rows::All), rest);
     }
+    // vim's `'<,'>`, what its `:` writes in from Visual mode: the selected
+    // lines, which a line with no range names here.
+    if let Some(rest) = input.strip_prefix("'<,'>") {
+        return (Ok(Rows::Selection), rest);
+    }
     let Some((first, took)) = parse_bound(input) else {
         return (Ok(Rows::Selection), input);
     };
@@ -9841,6 +9899,7 @@ mod tests {
                     "ex" => ":ex html".to_string(),
                     "md" => ":md footnote".to_string(),
                     "insert-output" | "append-output" | "sh" | "run-shell-command" => format!(":{alias} date"),
+                    "norm" => ":norm x".to_string(),
                     alias => format!(":{alias}"),
                 };
                 assert!(parse(&line).is_ok(), "alias {alias} does not parse");

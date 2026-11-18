@@ -928,13 +928,23 @@ impl Editor {
             return;
         }
         let preset = preset_lines(self.key_preset);
-        // The shared lines, then this keymap's own over them.
-        let own = self.keymap_user[keymap_index(self.key_preset)].clone();
+        // The shared lines, then this keymap's own over them; none of the
+        // reader's while `:normal!` runs.
+        let own = match self.plain_keys {
+            true => KeymapLines::default(),
+            false => self.keymap_user[keymap_index(self.key_preset)].clone(),
+        };
         let written = |lines: &HashMap<String, Vec<String>>| -> Vec<(String, Vec<String>)> {
             lines.iter().map(|(k, v)| (yumete_cjk::actions::written(k), v.clone())).collect()
         };
-        let user: Vec<(String, Vec<String>)> = written(&self.user_aliases).into_iter().chain(written(&own.normal)).collect();
-        self.insert_aliases = written(&self.user_insert).into_iter().chain(written(&own.insert)).collect();
+        let user: Vec<(String, Vec<String>)> = match self.plain_keys {
+            true => Vec::new(),
+            false => written(&self.user_aliases).into_iter().chain(written(&own.normal)).collect(),
+        };
+        self.insert_aliases = match self.plain_keys {
+            true => HashMap::new(),
+            false => written(&self.user_insert).into_iter().chain(written(&own.insert)).collect(),
+        };
         self.insert_held.clear();
         let mut all = preset.clone();
         all.extend(user);
@@ -963,6 +973,9 @@ impl Editor {
     fn layers(&self, own: &KeymapLines, select: bool, grid: bool) -> super::keymap::Lines {
         let shared = &self.key_shapes;
         let mut lines = super::keymap::Lines::default();
+        if self.plain_keys {
+            return lines;
+        }
         lines.add(&self.user_aliases, &shared.normal);
         lines.add(&own.normal, &own.shapes.normal);
         if select {
