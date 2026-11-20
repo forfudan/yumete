@@ -14,6 +14,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **Insert `C-t`** puts one indent width on the line under the vim keymap; `C-d` now takes one off rounded to the width, as vim does.
 - **Insert `C-v` reads vim's codes**: `C-v065`, `C-vx41`, `C-vo101`, `C-vu4e2d`, `C-vU…`; `C-v Enter` writes a carriage return.
 - **A picker's `A-Enter` opens the entry and keeps the picker open**, and every prompt (`:`, `/`, a picker's query) takes helix's `A-b` / `A-f`, `C-k` and `C-r` with a register name.
+- **`scripts/build.sh --profile=release-termux` builds with less memory**, with thin LTO, for Termux on Android and other small machines where the full release build runs out of memory (#3, by kimitrois).
 
 ### Changed
 
