@@ -1554,16 +1554,7 @@ pub fn run(
         // missing; put here, an event kind added tomorrow is covered the day it
         // is added. (#350 is the general form of that.)
         if let Ok(event) = &arrived {
-            // An open picker takes no mouse ([`mouse_held_off`]), so a click
-            // over it moves nothing and the word typed into its query stands.
-            let moves_the_caret = match event {
-                Event::Paste(_) => true,
-                Event::Mouse(mouse) => {
-                    !matches!(mouse.kind, MouseEventKind::ScrollDown | MouseEventKind::ScrollUp) && editor.picker().is_none()
-                }
-                _ => false,
-            };
-            if moves_the_caret {
+            if moves_the_caret(event, editor.picker().is_some()) {
                 end_the_composition(ime, editor);
             }
         }
@@ -2424,6 +2415,9 @@ fn spawn_reader() -> (std::sync::mpsc::Receiver<Arrival>, crate::server::Doorbel
             }
         }
         let outcome = event::read();
+        if outcome.as_ref().is_ok_and(|event| !worth_a_pass(event)) {
+            continue;
+        }
         let failed = outcome.is_err();
         // A send that fails means the loop has gone; so does an error, and it
         // is delivered first so the loop can say why.
@@ -5475,6 +5469,30 @@ fn annotation_said(ime: &ImeSession) -> String {
 /// space commits it *there*. A few characters of somebody else's chapter, in a
 /// document they were not even looking at, and nothing on the screen said so.
 ///
+/// Whether an event is about to move the caret, so a half-typed word must
+/// end before it does: a paste, a click, a drag. Not the wheel, which moves
+/// the page, and not the pointer merely passing over the screen. An open
+/// picker takes no mouse ([`mouse_held_off`]), so a click over it moves
+/// nothing and the word typed into its query stands.
+fn moves_the_caret(event: &Event, picker_open: bool) -> bool {
+    match event {
+        Event::Paste(_) => true,
+        Event::Mouse(mouse) => {
+            !matches!(mouse.kind, MouseEventKind::ScrollDown | MouseEventKind::ScrollUp | MouseEventKind::Moved)
+                && !picker_open
+        }
+        _ => false,
+    }
+}
+
+/// Whether an event read from the terminal is worth a pass of the loop. The
+/// pointer passing over the screen with no button held answers nothing, yet
+/// the terminal reports every cell it crosses, and each pass draws a whole
+/// frame: one sweep across the screen was dozens of frames for nothing.
+fn worth_a_pass(event: &Event) -> bool {
+    !matches!(event, Event::Mouse(mouse) if mouse.kind == MouseEventKind::Moved)
+}
+
 /// Discarded rather than committed. A preedit is not writing yet: half a code
 /// has not chosen a character, and inserting whatever the engine happens to
 /// have on top would be putting a word in the writer's mouth. What is lost is
@@ -18064,6 +18082,25 @@ mod preview_wire {
 #[cfg(test)]
 mod tests {
     /// **A command's coloured complaint reaches the status line plain**:
+    /// **The pointer passing over the screen neither ends a half-typed word
+    /// nor costs a frame**; a click still ends the word, and the wheel still
+    /// leaves it.
+    #[test]
+    fn a_passing_pointer_keeps_the_composition_and_draws_nothing() {
+        use ratatui::crossterm::event::{Event, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+        let mouse = |kind| Event::Mouse(MouseEvent { kind, column: 3, row: 4, modifiers: KeyModifiers::NONE });
+        let moved = mouse(MouseEventKind::Moved);
+        let click = mouse(MouseEventKind::Down(MouseButton::Left));
+        let wheel = mouse(MouseEventKind::ScrollDown);
+        assert!(!super::moves_the_caret(&moved, false));
+        assert!(super::moves_the_caret(&click, false));
+        assert!(!super::moves_the_caret(&click, true));
+        assert!(!super::moves_the_caret(&wheel, false));
+        assert!(!super::worth_a_pass(&moved));
+        assert!(super::worth_a_pass(&click));
+        assert!(super::worth_a_pass(&wheel));
+    }
+
     /// decimo writes `Error:` in bold red even into a pipe.
     #[test]
     fn a_complaint_loses_its_terminal_colours() {

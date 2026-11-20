@@ -23,6 +23,10 @@ Written for people who use it to write, not for the commit log: each line says w
 - **A vim macro stops when `J`, `gJ` or Visual `J` has nothing below to join**, so `999@q` ends there; `2gJ` joins two lines, as in vim.
 - **A vim block's corner may stand past a short line's end**, so `C-v j l` from `abc` onto `d` is two columns wide, as in vim.
 
+### Fixed
+
+- **Moving the mouse no longer drops a half-typed code** of the built-in IME, and no longer redraws the screen once for every cell the pointer crosses.
+
 ## 0.24.0 · 2026-11-17
 
 ### Added
