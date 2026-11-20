@@ -57,7 +57,11 @@ opt-level = 3
 [profile.release.package.zstd-sys]
 opt-level = 3
 
-#On a memory-constrained environment like Termux on Android, fat LTO combined with codegen-units = 1 can exhaust the memory available to the compiler. That’s what causes LLVM ERROR: out of memory. Switching to lto = "thin" keeps most of the optimization benefit and avoids the huge single-module memory spike.
+# **For a machine with little memory, such as Termux on Android.** Fat LTO with
+# one codegen unit puts the whole program into a single LLVM module, and the
+# compiler can run out of memory on it (`LLVM ERROR: out of memory`). Thin LTO
+# over 16 units keeps most of the optimisation without that peak:
+# `scripts/build.sh --profile=release-termux`.
 [profile.release-termux]
 inherits = "release"
 lto = "thin"

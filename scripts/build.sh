@@ -14,7 +14,8 @@
 # Finally it points ~/.local/bin/yumete — and ~/.local/bin/ye, the short name —
 # at the binary it just built, so `yumete` (or `ye`) typed in any directory is
 # this build. Set YUMETE_BIN_DIR to link elsewhere, or
-# --no-link to leave the global command alone.
+# --no-link to leave the global command alone. --profile=NAME builds with
+# another Cargo profile, such as release-termux on a machine with little memory.
 #
 # On Windows, run this under **Git Bash** (or MSYS2): it is the same script,
 # because the file list below must match `yume_core::data_manifest` and a second
@@ -22,7 +23,7 @@
 # is only the three things that are genuinely different — `.exe`, `%APPDATA%`,
 # and that a symlink needs Developer Mode there, so the global command is a copy.
 #
-# Usage: scripts/build.sh [--no-data] [--no-link]
+# Usage: scripts/build.sh [--no-data] [--no-link] [--profile=NAME]
 set -euo pipefail
 
 # Repository root (this script lives in <root>/scripts).
@@ -63,10 +64,12 @@ data_dir() {
 
 install_data=1
 link_global=1
+profile=release
 for arg in "$@"; do
   case "$arg" in
     --no-data) install_data=0 ;;
     --no-link) link_global=0 ;;
+    --profile=?*) profile="${arg#--profile=}" ;;
     *) echo "build.sh: unknown option '$arg'" >&2; exit 2 ;;
   esac
 done
@@ -305,8 +308,8 @@ else
   echo "==> IME data: skipped (--no-data)"
 fi
 
-cargo build --release
-cp "target/release/yumete$EXE" "./yumete$EXE"
+cargo build --profile "$profile"
+cp "target/${profile}/yumete$EXE" "./yumete$EXE"
 
 # On macOS, `strip = true` invalidates the linker's ad-hoc code signature, and
 # AMFI then kills the binary on launch (SIGKILL). Re-sign it ad-hoc.
