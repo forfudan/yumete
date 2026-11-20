@@ -56,3 +56,13 @@ split-debuginfo = "packed"
 opt-level = 3
 [profile.release.package.zstd-sys]
 opt-level = 3
+
+# **For a machine with little memory, such as Termux on Android.** Fat LTO with
+# one codegen unit puts the whole program into a single LLVM module, and the
+# compiler can run out of memory on it (`LLVM ERROR: out of memory`). Thin LTO
+# over 16 units keeps most of the optimisation without that peak:
+# `scripts/build.sh --profile=release-termux`.
+[profile.release-termux]
+inherits = "release"
+lto = "thin"
+codegen-units = 16
