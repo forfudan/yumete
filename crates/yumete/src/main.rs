@@ -161,6 +161,9 @@ fn main() -> ExitCode {
     // Text, or the same frame with its colours as HTML — a theme is judged on
     // what it looks like, and a terminal is not always there to look at.
     let mut shot_html = false;
+    // …or the window's writing alone with terminal colours, for a preview
+    // pane: `fzf --preview 'ye --ansi --shot=${FZF_PREVIEW_COLUMNS}x${FZF_PREVIEW_LINES} {}'`.
+    let mut shot_ansi = false;
     // `--readonly` opens the session locked (Feature #213): a reference 碼表,
     // somebody else's manuscript, a file you came to read. Every buffer this
     // run opens is locked, not only the ones named here — `:open` opens them
@@ -422,6 +425,7 @@ fn main() -> ExitCode {
                 }
             },
             "--html" => shot_html = true,
+            "--ansi" => shot_ansi = true,
             s if s.starts_with("--keys=") => keys = Some(s["--keys=".len()..].to_string()),
             "--syntax" => owed = Some("--syntax"),
             "--encoding" => owed = Some("--encoding"),
@@ -1206,6 +1210,14 @@ fn main() -> ExitCode {
     // editor — carries the build under it, so a shot in a bug report says what
     // it is a picture of.
     yumete_tui::set_build(VERSION);
+    // **`--ansi` asks for the writing to be WxH**, not the frame: the frame
+    // is drawn larger by the status line and the rest it leaves out, and the
+    // keys are pressed at that size, so `j` walks the page that is printed.
+    let page_asked = shot;
+    let shot = match shot_ansi {
+        true => shot.map(|(w, h)| yumete_tui::room_for_the_page(&editor, &config, w, h)),
+        false => shot,
+    };
     let mut settings_page = None;
     let mut genda_page = yumete_tui::genda_page::Seat::default();
     let mut words_page = yumete_tui::words_page::Seat::default();
@@ -1441,22 +1453,24 @@ fn main() -> ExitCode {
         }
         yumete_tui::fit_the_page(&mut ime, &mut editor, &config, width, height);
         // The layout the flags asked for, before the picture is taken.
-        let picture = match shot_html {
-            true => yumete_tui::frame_to_html_with(
+        let pages = yumete_tui::Pages { settings: settings_page.as_ref(), genda: Some(&genda_page), words: Some(&words_page) };
+        let picture = match (shot_ansi, page_asked) {
+            (true, Some((w, h))) => yumete_tui::frame_to_ansi_with(&mut editor, &config, &ime, w, h, pages),
+            _ if shot_html => yumete_tui::frame_to_html_with(
                 &mut editor,
                 &config,
                 &ime,
                 width,
                 height,
-                yumete_tui::Pages { settings: settings_page.as_ref(), genda: Some(&genda_page), words: Some(&words_page) },
+                pages,
             ),
-            false => yumete_tui::frame_to_text_with(
+            _ => yumete_tui::frame_to_text_with(
                 &mut editor,
                 &config,
                 &ime,
                 width,
                 height,
-                yumete_tui::Pages { settings: settings_page.as_ref(), genda: Some(&genda_page), words: Some(&words_page) },
+                pages,
             ),
         };
         // **A reader that walks away is not an error.** `--shot | head -5`, or a
@@ -2983,6 +2997,10 @@ SEARCHING FROM THE SHELL:
                      `--keys='::竖排'` opens the command search with that in it.
         --html       With --shot: the frame with its colours, as one
                      self-contained HTML <pre>. What a theme is judged on.
+        --ansi       With --shot: the page alone, coloured with terminal
+                     escapes — no status line, command row or tab bar, so
+                     all of WxH is the file. For fzf's preview pane:
+                     --preview 'ye --ansi --shot=${{FZF_PREVIEW_COLUMNS}}x${{FZF_PREVIEW_LINES}} {{}}'
         --timing     Print how long each part of starting up took, and exit.
     -h, --help       Print this help and exit.
     -V, --version    Print the version and exit.

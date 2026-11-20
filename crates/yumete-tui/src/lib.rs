@@ -235,17 +235,68 @@ pub fn frame_to_text(
     height: u16,
     /* 那扇設置面板，`--keys` 開過的話 */ settings: Option<&yumete_config::panel::Panel>,
 ) -> String {
-    frame_to(editor, config, ime, width, height, false, Pages { settings, genda: None, words: None })
+    frame_to(editor, config, ime, width, height, Form::Text, Pages { settings, genda: None, words: None })
 }
 
 /// [`frame_to_text`] with every page `--keys` may have opened over the text.
 pub fn frame_to_text_with(editor: &mut Editor, config: &Config, ime: &ImeSession, width: u16, height: u16, pages: Pages) -> String {
-    frame_to(editor, config, ime, width, height, false, pages)
+    frame_to(editor, config, ime, width, height, Form::Text, pages)
 }
 
 /// [`frame_to_html`] with every page `--keys` may have opened over the text.
 pub fn frame_to_html_with(editor: &mut Editor, config: &Config, ime: &ImeSession, width: u16, height: u16, pages: Pages) -> String {
-    frame_to(editor, config, ime, width, height, true, pages)
+    frame_to(editor, config, ime, width, height, Form::Html, pages)
+}
+
+/// **The window's writing alone, coloured with terminal escapes** — for a
+/// preview pane such as fzf's `--preview`, which reads SGR colours and
+/// nothing else.
+///
+/// `width × height` is the writing asked for, not the frame: the status
+/// line, the command row, the tab bar, the sidebars and the scrollbar are
+/// drawn around it and left out, so every row printed is the file. The
+/// frame is grown by what they take ([`room_for_the_page`]), which keeps the
+/// wrap at the width asked for.
+///
+/// Laid out the way `bat --color=always --style=plain` lays a file out: the
+/// page's own ground is left to the terminal and only the cells that differ
+/// from it carry one, trailing blanks and the blank rows past the end of the
+/// file are dropped, and every styled row ends in a reset, so fzf can cut a
+/// row anywhere without the colour running on. No cursor, no screen
+/// switching, no build footer.
+pub fn frame_to_ansi_with(editor: &mut Editor, config: &Config, ime: &ImeSession, width: u16, height: u16, pages: Pages) -> String {
+    let (frame_width, frame_height) = room_for_the_page(editor, config, width, height);
+    frame_to(editor, config, ime, frame_width, frame_height, Form::Ansi { width, height }, pages)
+}
+
+/// **The frame whose window has `width × height` of writing**: the size to
+/// draw, fit and press keys at for [`frame_to_ansi_with`].
+///
+/// What surrounds the writing depends on the frame (the command row comes in
+/// above four rows, the scrollbar with two columns of text, a sidebar takes a
+/// share of the width), so the answer is found by growing the frame by what
+/// is missing until the window comes out right — two rounds in practice.
+pub fn room_for_the_page(editor: &Editor, config: &Config, width: u16, height: u16) -> (u16, u16) {
+    let (mut w, mut h) = (width.max(1), height.max(1));
+    for _ in 0..4 {
+        let areas = page_areas(editor, config, Rect::new(0, 0, w, h), 0);
+        let pane = areas.panes[editor.live_pane()];
+        if pane.width == width && pane.height == height {
+            break;
+        }
+        let grow = |at: u16, want: u16, got: u16| (i32::from(at) + i32::from(want) - i32::from(got)).clamp(1, i32::from(u16::MAX / 4)) as u16;
+        (w, h) = (grow(w, width, pane.width), grow(h, height, pane.height));
+    }
+    (w, h)
+}
+
+/// What [`frame_to`] turns the drawn buffer into.
+#[derive(Clone, Copy)]
+enum Form {
+    Text,
+    Html,
+    /// The live window's writing only, at most this much of it.
+    Ansi { width: u16, height: u16 },
 }
 
 /// **The pages that cover the text while they are open**: the settings
@@ -278,7 +329,7 @@ pub fn frame_to_html(
     height: u16,
     /* 那扇設置面板，`--keys` 開過的話 */ settings: Option<&yumete_config::panel::Panel>,
 ) -> String {
-    frame_to(editor, config, ime, width, height, true, Pages { settings, genda: None, words: None })
+    frame_to(editor, config, ime, width, height, Form::Html, Pages { settings, genda: None, words: None })
 }
 
 fn frame_to(
@@ -287,7 +338,7 @@ fn frame_to(
     ime: &ImeSession,
     width: u16,
     height: u16,
-    html: bool,
+    form: Form,
     pages: Pages,
 ) -> String {
     let settings = pages.settings;
@@ -409,9 +460,14 @@ fn frame_to(
         .draw(|frame| draw(frame, editor, config, ime, &mut viewport, pages))
         .expect("draw one frame");
     let buffer = terminal.backend().buffer();
-    match html {
-        true => buffer_to_html(buffer),
-        false => buffer_to_text(buffer),
+    match form {
+        Form::Html => buffer_to_html(buffer),
+        Form::Text => buffer_to_text(buffer),
+        Form::Ansi { width: most_w, height: most_h } => {
+            let pane = page_areas(editor, config, Rect::new(0, 0, width, height), 0).panes[editor.live_pane()];
+            let pane = Rect { width: pane.width.min(most_w), height: pane.height.min(most_h), ..pane };
+            buffer_to_ansi(buffer, pane)
+        }
     }
 }
 
@@ -635,6 +691,122 @@ pub(crate) fn buffer_to_text(buffer: &ratatui::buffer::Buffer) -> String {
     }
     if let Some(footer) = build_footer() {
         out.push_str(&footer);
+        out.push('\n');
+    }
+    out
+}
+
+/// One rectangle of a drawn frame as text with SGR colours: truecolor for
+/// the theme's own colours, the 256 and 16 colour codes for a cell that
+/// names one of those. See [`frame_to_ansi_with`] for what is left out.
+fn buffer_to_ansi(buffer: &ratatui::buffer::Buffer, area: Rect) -> String {
+    use ratatui::style::{Color, Modifier, Style};
+    let right = area.x + area.width;
+    // **The page's ground is the one most cells stand on**, not the colour of
+    // some cell picked by position: the caret, the current line or a
+    // selection may sit on any row.
+    let mut grounds: Vec<(Option<Color>, usize)> = Vec::new();
+    for y in area.y..area.y + area.height {
+        for x in area.x..right {
+            let bg = buffer[(x, y)].style().bg;
+            match grounds.iter_mut().find(|(c, _)| *c == bg) {
+                Some((_, n)) => *n += 1,
+                None => grounds.push((bg, 1)),
+            }
+        }
+    }
+    let ground = grounds.iter().max_by_key(|(_, n)| *n).and_then(|(c, _)| *c);
+    let colour = |c: Option<Color>, base: u8| -> Option<String> {
+        let named = |n: u8| Some((base - 8 + n).to_string());
+        let bright = |n: u8| Some((base + 52 + n).to_string());
+        match c? {
+            Color::Reset => None,
+            Color::Rgb(r, g, b) => Some(format!("{base};2;{r};{g};{b}")),
+            Color::Indexed(i) => Some(format!("{base};5;{i}")),
+            Color::Black => named(0),
+            Color::Red => named(1),
+            Color::Green => named(2),
+            Color::Yellow => named(3),
+            Color::Blue => named(4),
+            Color::Magenta => named(5),
+            Color::Cyan => named(6),
+            Color::Gray => named(7),
+            Color::DarkGray => bright(0),
+            Color::LightRed => bright(1),
+            Color::LightGreen => bright(2),
+            Color::LightYellow => bright(3),
+            Color::LightBlue => bright(4),
+            Color::LightMagenta => bright(5),
+            Color::LightCyan => bright(6),
+            Color::White => bright(7),
+        }
+    };
+    // Every run starts from a reset and says all of its style, so a reader
+    // that drops or reorders a run never inherits the one before it.
+    let sgr = |style: Style| -> String {
+        let mut codes = vec!["0".to_string()];
+        for (bit, code) in [
+            (Modifier::BOLD, "1"),
+            (Modifier::DIM, "2"),
+            (Modifier::ITALIC, "3"),
+            (Modifier::UNDERLINED, "4"),
+            (Modifier::REVERSED, "7"),
+            (Modifier::CROSSED_OUT, "9"),
+        ] {
+            if style.add_modifier.contains(bit) {
+                codes.push(code.to_string());
+            }
+        }
+        codes.extend(colour(style.fg, 38));
+        if style.bg != ground {
+            codes.extend(colour(style.bg, 48));
+        }
+        format!("\x1b[{}m", codes.join(";"))
+    };
+    // A blank shows nothing unless it is painted or ruled.
+    let shows = |cell: &ratatui::buffer::Cell| {
+        let style = cell.style();
+        cell.symbol().trim() != ""
+            || style.bg != ground
+            || style.add_modifier.intersects(Modifier::REVERSED | Modifier::UNDERLINED | Modifier::CROSSED_OUT)
+    };
+    let mut rows: Vec<String> = Vec::new();
+    for y in area.y..area.y + area.height {
+        // The cells of the row, a wide glyph's spare cell left out, cut at
+        // the last one that shows.
+        let mut cells = Vec::new();
+        let mut x = area.x;
+        while x < right {
+            let cell = &buffer[(x, y)];
+            let wide = yumete_cjk::drawn_width(cell.symbol()).max(1) as u16;
+            if x + wide > right {
+                break;
+            }
+            cells.push(cell);
+            x += wide;
+        }
+        let end = cells.iter().rposition(|c| shows(c)).map_or(0, |i| i + 1);
+        let mut row = String::new();
+        let mut was: Option<Style> = None;
+        for cell in &cells[..end] {
+            let style = cell.style();
+            if was != Some(style) {
+                row.push_str(&sgr(style));
+                was = Some(style);
+            }
+            row.push_str(cell.symbol());
+        }
+        if was.is_some() {
+            row.push_str("\x1b[0m");
+        }
+        rows.push(row);
+    }
+    while rows.last().is_some_and(String::is_empty) {
+        rows.pop();
+    }
+    let mut out = String::new();
+    for row in rows {
+        out.push_str(&row);
         out.push('\n');
     }
     out
