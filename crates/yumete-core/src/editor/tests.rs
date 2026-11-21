@@ -45315,6 +45315,29 @@ fn a_vim_block_after_dollar_runs_to_every_line_end() {
     }
 }
 
+/// **A mark jump in Visual mode moves the cursor and keeps the selection**
+/// (measured in nvim 0.12): `` `a `` and `'a` under `v`, `V` and `C-v`
+/// alike, and the `<` `>` marks too.
+#[test]
+fn a_vim_mark_jump_keeps_the_visual_selection() {
+    let text = "one two\nthree four\nfive six\nseven eight\nnine ten\n";
+    let cases: &[(&str, &str, (usize, usize))] = &[
+        ("majjvl`ad", "ive six\nseven eight\nnine ten\n", (1, 1)),
+        ("lmajjvl`ad", "ove six\nseven eight\nnine ten\n", (1, 2)),
+        ("jjlmaggvl`ad", "ove six\nseven eight\nnine ten\n", (1, 2)),
+        ("majjvl'ad", "ive six\nseven eight\nnine ten\n", (1, 1)),
+        ("majjV`ad", "seven eight\nnine ten\n", (1, 1)),
+        ("lmajj^l`ad", "oe two\ntree four\nfve six\nseven eight\nnine ten\n", (1, 2)),
+        ("lmajj^l'ad", "e two\nree four\nve six\nseven eight\nnine ten\n", (1, 1)),
+        ("jjvl\u{1b}gg0v`>d", "ve six\nseven eight\nnine ten\n", (1, 1)),
+        ("jjlmaggvl`a\u{1b}iX\u{1b}", "one two\nthree four\nfXive six\nseven eight\nnine ten\n", (3, 2)),
+    ];
+    for &(keys, want, at) in cases {
+        let (_, got, cursor) = vim_block_run(text, keys);
+        assert_eq!((got.as_str(), cursor), (want, at), "{keys:?}");
+    }
+}
+
 /// **`/` and `?` are motions after an operator** (`:h /`, exclusive),
 /// measured against nvim: the operator waits on the search line and takes
 /// the text up to the match when Enter is pressed.

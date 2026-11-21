@@ -53,6 +53,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **A vim block yank or delete fills every register it names as a block**: `"cy` holds the whole block, not its first line, and `"0`, `"1` and `"-` get the block as vim gives it, each put back as a block.
 - **A vim block taken over a line that ends before it keeps its columns**: that line comes as the block's width in spaces, as in vim, so the block put back stays rectangular.
 - **vim's `$` then `C-v j` makes a block that runs to every line's end**, as in vim, so `d`, `y` and `A` act to each line's end; `h` there steps onto the last character, and `0` is a motion again.
+- **A vim mark jump in Visual mode keeps the selection**: `` `a ``, `'a`, `` `< `` and the others move the cursor under `v`, `V` and `C-v`, as in vim, instead of dropping what was selected.
 
 ## 0.24.0 · 2026-11-17
 

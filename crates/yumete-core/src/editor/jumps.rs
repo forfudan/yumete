@@ -42,7 +42,8 @@ impl Editor {
     }
 
     /// Go back to the place a letter names (`' a`): its line, or with
-    /// `exact` the very place (vim's `` ` ``).
+    /// `exact` the very place (vim's `` ` ``). In Visual mode the cursor goes
+    /// and the selection stays, as any motion's does.
     pub(super) fn go_to_mark(&mut self, name: char, exact: bool) {
         // `''` and ``` `` ```: where the last jump came from, and pressed
         // again, back (vim's).
@@ -73,7 +74,7 @@ impl Editor {
                 }
                 _ => pos,
             };
-            self.set_cursor(pos);
+            self.move_head(pos);
             return;
         }
         let Some(spot) = self.mark_named(name) else {
@@ -91,7 +92,7 @@ impl Editor {
                 }
                 self.move_to_line(line + 1);
                 if let Some(at) = self.mark_here(name).filter(|_| exact) {
-                    self.set_cursor(at);
+                    self.move_head(at);
                 }
                 self.status = say!("goto.mark-in-another-file", name, self.current_buffer().display_name(), line + 1);
             }
@@ -106,7 +107,7 @@ impl Editor {
                 // `'[` and `'a` go to the line's first non-blank, `` `[ ``
                 // and `` `a `` to the very place (`:h '[`).
                 match exact {
-                    true => self.set_cursor(pos),
+                    true => self.move_head(pos),
                     false => self.move_to_line(rope.char_to_line(pos) + 1),
                 }
                 self.status = say!("goto.mark-in-this-file", name);
