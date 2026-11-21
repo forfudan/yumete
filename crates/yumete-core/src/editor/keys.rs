@@ -1437,7 +1437,17 @@ impl Editor {
         let (first, last) = (rope.char_to_line(start), rope.char_to_line(end));
         if last > first && end == rope.line_to_char(last) {
             if start <= motion::line_first_non_blank(rope, rope.line_to_char(first)) {
-                return self.do_vim_lines(op, first, last - 1);
+                // **`d` leaves the cursor where the line's writing begins**
+                // (vim's `end_adjusted`: a motion made linewise this way does
+                // not get its column back, as `dj` does).
+                self.do_vim_lines(op, first, last - 1);
+                if op == 'd' {
+                    let rope = self.current_buffer().rope();
+                    let at = motion::line_first_non_blank(rope, self.sel.head());
+                    self.move_head(at);
+                    self.sel.set_goal(None);
+                }
+                return;
             }
             let stop = motion::line_end(rope, rope.line_to_char(last - 1));
             return match stop > start {

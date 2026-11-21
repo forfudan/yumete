@@ -45354,6 +45354,23 @@ fn gn_selects_the_match() {
     assert_eq!((ed.sel.anchor(), ed.sel.head()), (0, 4));
 }
 
+/// **`d/pat` made linewise by `:h exclusive-linewise` leaves the cursor
+/// where the line's writing begins**, not in its old column.
+#[test]
+fn a_search_delete_made_linewise_lands_on_the_first_non_blank() {
+    let run = |text: &str, keys: &str| {
+        let mut ed = typed_vim(text);
+        keyed(&mut ed, keys);
+        (ed.current_buffer().text(), ed.sel.head())
+    };
+    let text = "  alpha beta\n  gamma delta\n  epsilon zeta\nend\n";
+    assert_eq!(run(text, "j0d/^  epsilon⏎"), ("  alpha beta\n  epsilon zeta\nend\n".into(), 15));
+    assert_eq!(run(text, "j0ld/^end⏎"), ("  alpha beta\nend\n".into(), 13));
+    assert_eq!(run(text, "/^end⏎ggj0ldn"), ("  alpha beta\nend\n".into(), 13));
+    // From past the indent it stays charwise.
+    assert_eq!(run(text, "j0llld/^end⏎").0, "  alpha beta\n  g\nend\n");
+}
+
 /// **A `.` recorded in a macro repeats once when the macro plays**: the
 /// keys the `.` plays are not typed, so they are not recorded too.
 #[test]

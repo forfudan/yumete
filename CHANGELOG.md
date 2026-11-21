@@ -47,6 +47,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **vim's `` `< ``, `` `> ``, `'<` and `'>` go to where the last selection began and ended**, and work after an operator (`` d`> ``).
 - **A `.` recorded in a vim macro repeats once when the macro plays**; `qadw.q` then `@a` deleted three words, because the keys the `.` played went into the recording too.
 - **vim's `C`, `cw`, `ciw` and `s` on an empty line open Insert there**, as in vim; they did nothing, or `cw` changed the next line's first word. `cw` takes the empty line into the register, as `cc` does.
+- **A vim `d/word` that takes whole lines leaves the cursor where the next line's writing begins**, as vim does, not in its old column; so do `dn` and `` d`a ``.
 
 ## 0.24.0 · 2026-11-17
 
