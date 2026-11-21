@@ -45367,3 +45367,27 @@ fn a_dot_in_a_macro_repeats_once() {
     assert_eq!(run("dwqa.q@a"), "four five six\nseven eight\n");
     assert_eq!(run("qadw..q@a"), "\nseven eight\n");
 }
+
+/// **`C`, `cw`, `ciw` and `s` on an empty line open Insert there** and
+/// leave the next line alone; `cw` changes the empty line as `cc` does,
+/// the others take nothing. `.` repeats each (measured against nvim).
+#[test]
+fn a_change_on_an_empty_line_writes_there() {
+    let run = |keys: &str| {
+        let mut ed = typed_vim("first\n\nnext word here\nlast\n");
+        keyed(&mut ed, keys);
+        ed.current_buffer().text()
+    };
+    for change in ["C", "cw", "cW", "ciw", "s", "3s", "cl"] {
+        assert_eq!(run(&format!("j{change}X⎋")), "first\nX\nnext word here\nlast\n", "{change}");
+    }
+    assert_eq!(run("jCX⎋j."), "first\nX\nX\nlast\n");
+    assert_eq!(run("jcwX⎋j."), "first\nX\nX word here\nlast\n");
+    assert_eq!(run("jciwX⎋j."), "first\nX\nX word here\nlast\n");
+    assert_eq!(run("jsX⎋j."), "first\nX\nXext word here\nlast\n");
+    // `cw` takes the empty line into the register, as `cc` does; `C` and
+    // `s` take nothing.
+    assert_eq!(run("jcw⎋Gp"), "first\n\nnext word here\nlast\n\n");
+    assert_eq!(run("jC⎋Gp"), "first\n\nnext word here\nlast\n");
+    assert_eq!(run("j2cwX⎋"), "first\nXword here\nlast\n");
+}

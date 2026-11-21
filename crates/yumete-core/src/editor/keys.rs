@@ -1586,10 +1586,13 @@ impl Editor {
         // 的末尾」，不是「換兩次詞尾」——所以規則落在**最後一跳**上，前面幾跳還
         // 是 `w`。整個動作換成詞尾的話，第二跳問到的還是同一個詞尾，`c2w` 只換
         // 一個詞（拿 nvim 逐欄量過）。
+        //
+        // Warning: **只看光標底下那一格**，不許退回上一格去問：空行上那一格是換行符，
+        // `cw` 在那裏是 `w`（vim 的 `n != NUL` 那一條），走到下一行的頭上，再由
+        // 底下「空行上的 `w`」那一支整行地換——下一行的詞一個字不動。
+        let in_a_word = self.current_buffer().rope().get_char(start).is_some_and(|c| !c.is_whitespace());
         let (step, finally) = match (op, step.motion) {
-            ('c', motion::Motion::WordForward(grain))
-                if !self.char_at_cursor().is_some_and(char::is_whitespace) =>
-            {
+            ('c', motion::Motion::WordForward(grain)) if in_a_word => {
                 let reach = crate::vim::Reach::Inclusive;
                 (crate::vim::Step { reach, ..step }, Some(motion::Motion::WordEndHere(grain)))
             }
@@ -1620,6 +1623,20 @@ impl Editor {
                 _ => step,
             };
             let span = self.read_motion(step.motion, motion::Reading::Caret);
+            // **`ciw` on an empty line opens Insert there** (measured in
+            // nvim): there is no word to take, and `diw` takes nothing.
+            if span == motion::Span::Missed
+                && op == 'c'
+                && matches!(step.motion, motion::Motion::Object { what: motion::Object::Word { .. }, around: false, .. })
+                && self.on_an_empty_line()
+                && !self.refuse_readonly()
+            {
+                self.count = None;
+                self.alias_count = None;
+                self.snapshot();
+                self.enter_insert();
+                return;
+            }
             if span == motion::Span::Missed {
                 // Warning: **The refusal has to reach the edit, not just the status
                 // line**: an empty selection cuts the character under the
@@ -1761,10 +1778,12 @@ impl Editor {
             // **`c0` and `c^` at the line's start still change**:
             // they type in front of the line (measured in nvim), where `cb`
             // at the file's start is refused.
-            let begins_the_line = matches!(
-                step.motion,
-                motion::Motion::LineStart | motion::Motion::LineFirstNonBlank
-            );
+            // `cl` (`s`) on an empty line opens Insert there too.
+            let begins_the_line = match step.motion {
+                motion::Motion::LineStart | motion::Motion::LineFirstNonBlank => true,
+                motion::Motion::Char { forward: true } => self.on_an_empty_line(),
+                _ => false,
+            };
             if op == 'c' && begins_the_line && !self.refuse_readonly() {
                 self.snapshot();
                 self.enter_insert();
@@ -1929,6 +1948,13 @@ impl Editor {
         })
     }
 
+    /// Whether the cursor's line holds nothing but its line break.
+    fn on_an_empty_line(&self) -> bool {
+        let rope = self.current_buffer().rope();
+        let here = self.sel.head().min(rope.len_chars());
+        motion::line_start(rope, here) == motion::line_end(rope, here)
+    }
+
     /// Whole lines, for a linewise motion (`dj`, `dG`).
     fn do_vim_lines(&mut self, op: char, first: usize, last: usize) {
         let span = self.line_span(first, last, op == 'c');
@@ -2021,6 +2047,13 @@ impl Editor {
                 let on_a_break =
                     rope.get_char(anchor).is_some_and(|c| c == '\n' || c == '\r');
                 if anchor == head && on_a_break {
+                    // **`c` still opens Insert there** (`C`, `s`, `ciw` on an
+                    // empty line, measured in nvim): nothing is taken, and the
+                    // line below is left alone.
+                    if op == 'c' && !self.refuse_readonly() {
+                        self.snapshot();
+                        self.enter_insert();
+                    }
                     return;
                 }
             }

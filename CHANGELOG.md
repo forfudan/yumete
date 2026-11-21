@@ -46,6 +46,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **vim's `gv` selects the last block again**; it said nothing had been selected.
 - **vim's `` `< ``, `` `> ``, `'<` and `'>` go to where the last selection began and ended**, and work after an operator (`` d`> ``).
 - **A `.` recorded in a vim macro repeats once when the macro plays**; `qadw.q` then `@a` deleted three words, because the keys the `.` played went into the recording too.
+- **vim's `C`, `cw`, `ciw` and `s` on an empty line open Insert there**, as in vim; they did nothing, or `cw` changed the next line's first word. `cw` takes the empty line into the register, as `cc` does.
 
 ## 0.24.0 · 2026-11-17
 
