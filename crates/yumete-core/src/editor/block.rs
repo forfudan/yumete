@@ -246,9 +246,12 @@ impl super::Editor {
                 self.extend = false;
                 self.vim_lines = false;
                 // The column the cursor was already aiming at comes along
-                // (`j` onto a short line, then `C-v j`).
+                // (`j` onto a short line, then `C-v j`), and after `$` that
+                // is every line's end (vim's `curswant` of `MAXCOL`), so
+                // `$ C-v j d` takes each line to its end.
                 let goal = self.sel.primary().goal;
-                self.block = Some(Block { anchor: at, cursor: at, to_line_end: false, goal });
+                let to_line_end = goal == Some(super::keys::LINE_END_GOAL);
+                self.block = Some(Block { anchor: at, cursor: at, to_line_end, goal });
                 self.show_block();
             }
         }
@@ -423,8 +426,11 @@ impl super::Editor {
         if rightward && block.cursor == corner_end {
             return self.show_block();
         }
-        // A motion: run it from the cursor's corner, alone.
-        let at = match block.cursor == corner_end && block.cursor > rope.line_to_char(corner_line) {
+        // A motion: run it from the cursor's corner, alone. **`h` steps
+        // back from past the line's end**, where vim's corner stands after
+        // `$`, so its first step lands on the last character.
+        let leftward = self.pending == Pending::None && matches!(key, Key::Char('h') | Key::Left);
+        let at = match block.cursor == corner_end && block.cursor > rope.line_to_char(corner_line) && !leftward {
             true => motion::prev_grapheme(rope, block.cursor),
             false => block.cursor,
         };
@@ -436,10 +442,11 @@ impl super::Editor {
             self.block = None;
             return;
         }
+        // A digit of a count waits for its motion; `0` with none is one.
         let vertical = matches!(
             key,
             Key::Char('j' | 'k' | 'G' | 'g') | Key::Up | Key::Down | Key::Ctrl('d' | 'u' | 'f' | 'b')
-        ) || matches!(key, Key::Char(c) if c.is_ascii_digit());
+        ) || matches!(key, Key::Char(c) if c.is_ascii_digit() && self.count.is_some());
         let stays_at_the_end = vertical || key == Key::Char('$');
         let rope = self.current_buffer().rope();
         let head = self.sel.head().min(rope.len_chars());
@@ -451,6 +458,8 @@ impl super::Editor {
             // `l` that could not step on, from the line's last character.
             (true, _, _) if head == at && end > start && motion::next_grapheme(rope, head) == end => (end, Some(wide)),
             (_, true, Some(want)) if want >= wide && end > start => (end, goal),
+            // `$` leaves the corner past the line's end, as `j` after it does.
+            _ if key == Key::Char('$') && end > start => (end, goal),
             _ => (self.sel.head(), goal),
         };
         if let Some(b) = self.block.as_mut() {

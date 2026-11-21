@@ -45292,6 +45292,29 @@ fn a_vim_block_yank_pads_a_line_that_ends_before_it() {
     }
 }
 
+/// **`$` then `C-v` makes a block that runs to every line's end** (vim's
+/// `curswant` of `MAXCOL`, measured in nvim 0.12): `d`, `y`, `A` and `gv`
+/// act to each line's end. Its corner stands past the line's end, so `h`
+/// steps back onto the last character, and `0` brings it home.
+#[test]
+fn a_vim_block_after_dollar_runs_to_every_line_end() {
+    let text = "abc\nabcdef\nab\nabcdefgh\nxyz\n";
+    let cases: &[(&str, &str, (usize, usize))] = &[
+        ("$^jjd", "ab\nab\nab\nabcdefgh\nxyz\n", (1, 2)),
+        ("$^jjjAX\u{1b}", "abcX\nabcdefX\nabX\nabcdefghX\nxyz\n", (1, 3)),
+        ("$^jy0P", "c   abc\ncdefabcdef\nab\nabcdefgh\nxyz\n", (1, 1)),
+        ("$^jjhd", "a\nadef\na\nabcdefgh\nxyz\n", (1, 1)),
+        ("$^jj0d", "\ndef\n\nabcdefgh\nxyz\n", (1, 1)),
+        ("$^jj\u{1b}gvd", "ab\nab\nab\nabcdefgh\nxyz\n", (1, 2)),
+        ("^jj$hd", "c\ncdef\n\nabcdefgh\nxyz\n", (1, 1)),
+        ("j$^jj2hd", "abc\nabcde\nab\nabcdeh\nxyz\n", (2, 5)),
+    ];
+    for &(keys, want, at) in cases {
+        let (_, got, cursor) = vim_block_run(text, keys);
+        assert_eq!((got.as_str(), cursor), (want, at), "{keys:?}");
+    }
+}
+
 /// **`/` and `?` are motions after an operator** (`:h /`, exclusive),
 /// measured against nvim: the operator waits on the search line and takes
 /// the text up to the match when Enter is pressed.
