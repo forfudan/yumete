@@ -2275,7 +2275,7 @@ pub fn run(
                     diag::beat(diag::Stage::Wheel, 0);
                     let notches = 1 + drain_the_flick(mouse.kind, &events, &mut inbox);
                     diag::beat(diag::Stage::Scrolling, notches as u64);
-                    wheel_scroll(editor, config, terminal.size().ok(), &mut viewport, mouse, notches);
+                    wheel_scroll(editor, config, terminal.size().ok(), &mut viewport, mouse, notches, ime.is_composing());
                 }
                 MouseEventKind::Down(MouseButton::Left)
                 | MouseEventKind::Drag(MouseButton::Left)
@@ -5670,9 +5670,10 @@ fn worth_a_pass(event: &Event) -> bool {
 /// have on top would be putting a word in the writer's mouth. What is lost is
 /// three keystrokes they were about to abandon anyway — they clicked away.
 ///
-/// Warning: **Not on the wheel.** Scrolling moves the page, not the caret, so the
-/// composition is still where the writer left it and cancelling it because
-/// they looked somewhere would be its own small betrayal.
+/// Warning: **Not on the wheel.** The wheel leaves the caret alone while a code is
+/// half-typed ([`wheel_scroll`]), so the composition is still where the writer
+/// left it and cancelling it because they looked somewhere would be its own
+/// small betrayal.
 fn end_the_composition(ime: &mut ImeSession, editor: &mut Editor) {
     if !ime.is_composing() {
         return;
@@ -6440,6 +6441,14 @@ fn mouse_held_off(editor: &Editor, seats: &Seats, mouse: ratatui::crossterm::eve
 /// the wheel over one moves nothing; off every window and sidebar — the
 /// tab line, the command row — the live window scrolls. Over an open
 /// picker or a `:` menu, nothing does ([`mouse_held_off`]).
+///
+/// **While a code is half-typed (`composing`) the live window holds still.**
+/// Its page scrolling would push the caret in at scrolloff, and the preedit
+/// is drawn at the caret and committed there, so the code would land
+/// somewhere the writer never put it. Scrolling the page away from the
+/// caret is no better: the preedit and its candidates would go off the
+/// window with it. Other windows scroll as ever: their carets are not the
+/// one being written at.
 fn wheel_scroll(
     editor: &mut Editor,
     config: &Config,
@@ -6447,6 +6456,7 @@ fn wheel_scroll(
     seats: &mut Seats,
     mouse: ratatui::crossterm::event::MouseEvent,
     notches: usize,
+    composing: bool,
 ) {
     if mouse_held_off(editor, seats, mouse) {
         return;
@@ -6454,6 +6464,7 @@ fn wheel_scroll(
     let back = mouse.kind == MouseEventKind::ScrollUp;
     let amount = editor.wheel_step() * notches;
     match window_at(editor, config, size, seats, mouse) {
+        Some(window) if composing && window == editor.live_window() => {}
         Some(window) => {
             let drawn = drawn_window(editor, config, size, seats, window);
             let left = editor.scroll_window(window, amount, back, drawn.map(|(_, d)| d));
@@ -6463,7 +6474,7 @@ fn wheel_scroll(
                 seats[i].drawn_span = Some(span);
             }
         }
-        None if sidebar_row_at(editor, config, size, seats, mouse).is_some() => {}
+        None if composing || sidebar_row_at(editor, config, size, seats, mouse).is_some() => {}
         None => editor.scroll(amount, back),
     }
 }
@@ -19801,6 +19812,33 @@ fn squeezed(text: &str) -> String {
         assert!(composes_here(&ed));
     }
 
+    /// **What the input method commits in Normal mode is in the macro**, the
+    /// keys routed as the loop routes them: vim's `f`, `t` and `r` with a
+    /// character typed through the input method, recorded with `qa` and
+    /// played back with `@a`, do on the next place what they did on the first.
+    #[test]
+    fn a_macro_replays_what_the_input_method_committed_in_normal_mode() {
+        let run = |text: &str, keys: &str| {
+            let mut ed = Editor::new();
+            ed.execute(":keymap vim").unwrap();
+            ed.replace_everything(text);
+            let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "di 地\nxr 玄\n");
+            for c in keys.chars() {
+                let (code, key) = match c {
+                    '⎋' => (KeyCode::Esc, Key::Esc),
+                    c => (KeyCode::Char(c), Key::Char(c)),
+                };
+                if !(composes_here(&ed) && ime_handle(&mut ime, &mut ed, code, KeyModifiers::NONE)) {
+                    ed.on_key(key);
+                }
+            }
+            (ed.current_buffer().text().to_string(), ed.cursor())
+        };
+        assert_eq!(run("天地天地天地\n", "qafdi q@a").1, 3, "`f` finds the next 地");
+        assert_eq!(run("天地天地天地\n", "qatdi lq@a").1, 3, "`t` stops short of the next 地");
+        assert_eq!(run("天地\n天地\n", "qarxr jq@a").0, "玄地\n玄地\n", "`r` writes 玄 again");
+    }
+
     /// **What the IME is composing counts in fitting a value line**, so a
     /// reading being composed does not run off the right edge: the label
     /// gives way and the start of the line scrolls off, so the line, the
@@ -23119,7 +23157,7 @@ fn squeezed(text: &str) -> String {
             let other = 1 - live;
             let panes = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0).panes;
             let before = spans(&seats, 2);
-            wheel_scroll(&mut editor, &config, size, &mut seats, wheel(panes[live].x + 2, panes[live].y + 2), 4);
+            wheel_scroll(&mut editor, &config, size, &mut seats, wheel(panes[live].x + 2, panes[live].y + 2), 4, false);
             centred_frame(&mut editor, &config, w, h, &mut seats);
             centred_frame(&mut editor, &config, w, h, &mut seats);
             let after = spans(&seats, 2);
@@ -23127,7 +23165,7 @@ fn squeezed(text: &str) -> String {
             assert_eq!(after[other], before[other], "same buffer {same}: the other keeps its page");
             let before = after;
             let line = editor.cursor_line();
-            wheel_scroll(&mut editor, &config, size, &mut seats, wheel(panes[other].x + 2, panes[other].y + 2), 4);
+            wheel_scroll(&mut editor, &config, size, &mut seats, wheel(panes[other].x + 2, panes[other].y + 2), 4, false);
             assert_eq!(editor.cursor_line(), line, "same buffer {same}: the live caret stays");
             centred_frame(&mut editor, &config, w, h, &mut seats);
             centred_frame(&mut editor, &config, w, h, &mut seats);
@@ -23136,6 +23174,41 @@ fn squeezed(text: &str) -> String {
             assert_ne!(after[other], before[other], "same buffer {same}: the window under the pointer scrolls");
             assert_eq!(after[live], before[live], "same buffer {same}: the live window keeps its page");
         }
+    }
+
+    /// **While a code is half-typed the wheel leaves the live window alone**,
+    /// its page and the caret the preedit is drawn and committed at; the
+    /// window beside it scrolls as ever. With the code done, the same flick
+    /// scrolls the live page and pushes the caret in.
+    #[test]
+    fn the_wheel_holds_the_live_window_while_a_code_is_half_typed() {
+        let config = bare();
+        ink(&config);
+        let (w, h) = (81u16, 12u16);
+        let size = Some(ratatui::layout::Size::new(w, h));
+        let mut seats = Seats::default();
+        let mut editor = two_windows_framed(true, &config, (w, h), &mut seats);
+        let (live, other) = (editor.live_pane(), 1 - editor.live_pane());
+        let panes = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0).panes;
+        let over = |i: usize| (panes[i].x + 2, panes[i].y + 2);
+        let before = (spans(&seats, 2), editor.selection());
+        for at in [Some(over(live)), None] {
+            let (x, y) = at.unwrap_or((w - 1, h - 1));
+            wheel_scroll(&mut editor, &config, size, &mut seats, notch(false, x, y), 4, true);
+            centred_frame(&mut editor, &config, w, h, &mut seats);
+            assert_eq!((spans(&seats, 2), editor.selection()), before, "over {at:?}: nothing moves");
+        }
+        let (x, y) = over(other);
+        wheel_scroll(&mut editor, &config, size, &mut seats, notch(false, x, y), 1, true);
+        centred_frame(&mut editor, &config, w, h, &mut seats);
+        let after = spans(&seats, 2);
+        assert_ne!(after[other], before.0[other], "the other window scrolls");
+        assert_eq!((after[live], editor.selection()), (before.0[live], before.1), "the live window stays");
+        let (x, y) = over(live);
+        wheel_scroll(&mut editor, &config, size, &mut seats, notch(false, x, y), 4, false);
+        centred_frame(&mut editor, &config, w, h, &mut seats);
+        assert_ne!(spans(&seats, 2)[live], before.0[live], "done composing: the live page scrolls");
+        assert_ne!(editor.selection(), before.1, "…and pushes the caret in");
     }
 
     /// Two hundred `line N` lines in a window of 22 rows with scrolloff 5,
@@ -23247,13 +23320,13 @@ fn squeezed(text: &str) -> String {
             let (top, _) = shown(&editor, &seats);
             let before = (spans(&seats, 2)[live], editor.selection());
             let (x, y) = (panes[other].x + 2, panes[other].y + 2);
-            wheel_scroll(&mut editor, &config, size, &mut seats, notch(false, x, y), 1);
+            wheel_scroll(&mut editor, &config, size, &mut seats, notch(false, x, y), 1, false);
             centred_frame(&mut editor, &config, w, h, &mut seats);
             let (now, caret) = shown(&editor, &seats);
             assert_eq!(now, top + 3, "same buffer {same}: a notch is three lines");
             assert!(caret >= now + so && caret + so < now + rows, "same buffer {same}: the caret inside scrolloff");
             for _ in 0..2 {
-                wheel_scroll(&mut editor, &config, size, &mut seats, notch(true, x, y), 1);
+                wheel_scroll(&mut editor, &config, size, &mut seats, notch(true, x, y), 1, false);
             }
             centred_frame(&mut editor, &config, w, h, &mut seats);
             centred_frame(&mut editor, &config, w, h, &mut seats);
@@ -23370,7 +23443,7 @@ fn squeezed(text: &str) -> String {
             left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("drag", pane.x + 4, pane.y + 6));
             left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("drag", 2, pane.y + 6));
             left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("up", 2, pane.y + 6));
-            wheel_scroll(&mut editor, &config, size, &mut seats, notch(false, x, y), 3);
+            wheel_scroll(&mut editor, &config, size, &mut seats, notch(false, x, y), 3, false);
             let now = (editor.selection(), editor.panel_focus(), editor.width_of(side), editor.panel(side).map(|p| p.selected()));
             assert_eq!(now, before, "a press at ({x}, {y}) reached behind the picker");
             assert!(editor.picker().is_some(), "the picker stays open");
@@ -23396,7 +23469,7 @@ fn squeezed(text: &str) -> String {
         let side = Side::BOTH.into_iter().find(|&s| editor.panel(s).is_some()).expect("the outline is open");
         let panel = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0).panels[side as usize];
         let before = (editor.selection(), editor.panel(side).map(|p| p.selected()));
-        wheel_scroll(&mut editor, &config, size, &mut seats, notch(false, panel.x + panel.width / 2, panel.y + 3), 3);
+        wheel_scroll(&mut editor, &config, size, &mut seats, notch(false, panel.x + panel.width / 2, panel.y + 3), 3, false);
         assert_eq!((editor.selection(), editor.panel(side).map(|p| p.selected())), before);
     }
 
@@ -23420,7 +23493,7 @@ fn squeezed(text: &str) -> String {
         let mut pointer = Pointer::default();
         left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("down", at.0, at.1));
         left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("up", at.0, at.1));
-        wheel_scroll(&mut editor, &config, size, &mut seats, notch(false, at.0, at.1), 3);
+        wheel_scroll(&mut editor, &config, size, &mut seats, notch(false, at.0, at.1), 3, false);
         assert_eq!(editor.selection(), before, "nothing under the menu moved");
         assert!(editor.prompt().is_some(), "the line is still open");
     }
