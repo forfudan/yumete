@@ -45353,3 +45353,17 @@ fn gn_selects_the_match() {
     assert!(!ed.vim_lines);
     assert_eq!((ed.sel.anchor(), ed.sel.head()), (0, 4));
 }
+
+/// **A `.` recorded in a macro repeats once when the macro plays**: the
+/// keys the `.` plays are not typed, so they are not recorded too.
+#[test]
+fn a_dot_in_a_macro_repeats_once() {
+    let run = |keys: &str| {
+        let mut ed = typed_vim("one two three four five six\nseven eight\n");
+        keyed(&mut ed, keys);
+        ed.current_buffer().text()
+    };
+    assert_eq!(run("qadw.q@a"), "five six\nseven eight\n");
+    assert_eq!(run("dwqa.q@a"), "four five six\nseven eight\n");
+    assert_eq!(run("qadw..q@a"), "\nseven eight\n");
+}

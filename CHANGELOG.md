@@ -45,6 +45,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **vim's `p`, `P`, `gp` and `gP` on a block replace the block**, as in vim: a block taken goes in as a block, a word on every line of the block, lines below it; `vp` and `Vp` with a block taken put it as a block and as lines, and Visual `gP` puts what it replaced in the register, as `p` does.
 - **vim's `gv` selects the last block again**; it said nothing had been selected.
 - **vim's `` `< ``, `` `> ``, `'<` and `'>` go to where the last selection began and ended**, and work after an operator (`` d`> ``).
+- **A `.` recorded in a vim macro repeats once when the macro plays**; `qadw.q` then `@a` deleted three words, because the keys the `.` played went into the recording too.
 
 ## 0.24.0 · 2026-11-17
 
