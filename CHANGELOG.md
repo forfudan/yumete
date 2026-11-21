@@ -48,6 +48,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **A `.` recorded in a vim macro repeats once when the macro plays**; `qadw.q` then `@a` deleted three words, because the keys the `.` played went into the recording too.
 - **vim's `C`, `cw`, `ciw` and `s` on an empty line open Insert there**, as in vim; they did nothing, or `cw` changed the next line's first word. `cw` takes the empty line into the register, as `cc` does.
 - **A vim `d/word` that takes whole lines leaves the cursor where the next line's writing begins**, as vim does, not in its old column; so do `dn` and `` d`a ``.
+- **vim's Visual `gn` that wraps past the file's end puts the cursor on the match's start**, and **`V` then `gn` selects charwise from where `V` was pressed** to the match's end, as in vim.
 
 ## 0.24.0 · 2026-11-17
 

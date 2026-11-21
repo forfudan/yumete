@@ -45354,6 +45354,46 @@ fn gn_selects_the_match() {
     assert_eq!((ed.sel.anchor(), ed.sel.head()), (0, 4));
 }
 
+/// **Visual `gn` that wraps past the file's end lands on the match's
+/// start**, the anchor staying where it was, so the selection runs back
+/// to the match (measured against nvim).
+#[test]
+fn visual_gn_that_wraps_lands_on_the_match_start() {
+    let run = |keys: &str| {
+        let mut ed = typed_vim("foo one\nbar two\nfoo three\nlast line\n");
+        keyed(&mut ed, "/foo⏎");
+        keyed(&mut ed, keys);
+        ed
+    };
+    let ed = run("G$vgn");
+    assert_eq!((ed.sel.anchor(), ed.sel.head()), (34, 0));
+    assert_eq!(run("G$vgnd").current_buffer().text(), "\n");
+    assert_eq!(run("G$v2gnd").current_buffer().text(), "foo one\nbar two\n\n");
+    // Without a wrap, the end of the match.
+    assert_eq!(run("0vgnd").current_buffer().text(), "foo one\nbar two\n three\nlast line\n");
+}
+
+/// **`V` then `gn` goes charwise from where `V` was pressed** to the
+/// match's last character, as nvim does.
+#[test]
+fn linewise_visual_gn_goes_charwise_from_where_v_was_pressed() {
+    let run = |keys: &str| {
+        let mut ed = typed_vim("foo one\nbar two\nfoo three\nlast line\n");
+        keyed(&mut ed, "/three⏎");
+        keyed(&mut ed, keys);
+        ed
+    };
+    let ed = run("ggjVgn");
+    assert!(ed.extend && !ed.vim_lines);
+    assert_eq!((ed.sel.anchor(), ed.sel.head()), (12, 24));
+    assert_eq!(run("ggjVgnd").current_buffer().text(), "foo one\nbar \nlast line\n");
+    assert_eq!(run("ggjVjgnd").current_buffer().text(), "foo one\nbar \nlast line\n");
+    // A match before the anchor: the cursor goes to its start.
+    let mut ed = typed_vim("foo one\nbar two\nfoo three\nlast line\n");
+    keyed(&mut ed, "/two⏎G0VgNd");
+    assert_eq!(ed.current_buffer().text(), "foo one\nbar ast line\n");
+}
+
 /// **`d/pat` made linewise by `:h exclusive-linewise` leaves the cursor
 /// where the line's writing begins**, not in its old column.
 #[test]

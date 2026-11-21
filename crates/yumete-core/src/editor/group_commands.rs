@@ -591,14 +591,28 @@ impl Editor {
     /// the selection grows instead, to the far end of the match after
     /// (before) the cursor, as vim's `current_search` does; and `gn` with
     /// the cursor before the anchor goes to the next match's start.
+    ///
+    /// Where the cursor lands is vim's rule, read from the anchor: on the
+    /// match's last character when the match ends past the anchor, on its
+    /// start when it ends before it — which a search that wrapped past the
+    /// file's end always does.
+    ///
+    /// Linewise Visual becomes charwise, from where `V` was pressed.
     fn select_the_match(&mut self, forward: bool, count: usize) {
         if self.block.is_some() {
             return;
         }
-        let (anchor, head) = (self.sel.anchor(), self.sel.head());
+        let visual = self.extend;
+        let (anchor, head) = match visual && self.vim_lines {
+            true => {
+                let rope = self.current_buffer().rope();
+                let (from, to) = (rope.char_to_line(self.sel.anchor()), rope.char_to_line(self.sel.head()));
+                (self.column_on_line(from, self.vim_line_column), self.column_on_line(to, self.vim_line_column))
+            }
+            false => (self.sel.anchor(), self.sel.head()),
+        };
         let rope = self.current_buffer().rope();
         let (after, before) = (motion::next_grapheme(rope, head), motion::prev_grapheme(rope, head));
-        let visual = self.extend;
         let hit = match (visual, forward) {
             (true, true) if head < anchor => self.search_hit_from(true, after, count),
             (true, true) => self.gn_hit(true, after, count),
@@ -606,13 +620,16 @@ impl Editor {
             _ => self.gn_hit(forward, head, count),
         };
         let Some((from, to)) = hit else { return };
-        let last = motion::prev_grapheme(self.current_buffer().rope(), to).max(from);
+        let rope = self.current_buffer().rope();
+        let last = motion::prev_grapheme(rope, to);
         let (anchor, head) = match (visual, forward) {
-            (true, true) if head < anchor => (anchor, from),
-            (true, true) => (anchor, last),
+            (true, true) if anchor < to && head < anchor => (anchor, from),
+            (true, true) if anchor < to => (anchor, last),
+            (true, true) if to < anchor => (anchor, from),
+            (true, true) => (anchor, to),
             (true, false) => (anchor, from),
-            (false, true) => (from, last),
-            (false, false) => (last, from),
+            (false, true) => (from, last.max(from)),
+            (false, false) => (last.max(from), from),
         };
         self.extend = true;
         self.vim_lines = false;
