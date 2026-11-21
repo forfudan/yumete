@@ -803,7 +803,14 @@ fn break_within(
     // Then keep a Latin word whole. A space is the obvious place to break at,
     // and in English prose it is the only one there is.
     if latin_word_char(char_at(cut.saturating_sub(1))) && latin_word_char(char_at(cut)) {
-        if let Some(space) = (g + 1..cut).rev().find(|&i| char_at(i - 1) == ' ') {
+        // **A word glued to a 漢字 starts after it**, even with a space
+        // earlier on the row: `x 甲乙丙English` breaks before `English`, not
+        // after `x`, which would leave the `x` (or a list's `-`) alone.
+        let word = (g + 1..cut).rev().find(|&i| !latin_word_char(char_at(i - 1)));
+        let glued = word.filter(|&w| widths.get(w - 1).is_some_and(|&n| n >= 2) && (w - g) * 2 >= end - g);
+        if let Some(word) = glued {
+            cut = word;
+        } else if let Some(space) = (g + 1..cut).rev().find(|&i| char_at(i - 1) == ' ') {
             cut = space;
         } else if let Some(word) = (g + 1..cut).rev().find(|&i| !latin_word_char(char_at(i - 1))) {
             // …and in Chinese prose there is no space, because the word
@@ -1881,6 +1888,18 @@ mod tests {
             .collect();
         assert_eq!(text[0], "一二三四五六");
         assert!(text[1].starts_with("Helix"), "{text:?}");
+    }
+
+    /// A space earlier on the row does not draw the break back past the
+    /// 漢字 a Latin word is glued to: a list's `-` stays with its text.
+    #[test]
+    fn a_short_token_before_a_glued_word_keeps_its_row() {
+        for head in ["x ", "- "] {
+            let text = format!("{head}甲乙丙丁戊己庚辛壬癸English mixed");
+            let rows: Vec<String> =
+                line_rows(&text, 28).iter().map(|&(a, b)| text.chars().skip(a).take(b - a).collect()).collect();
+            assert_eq!(rows, [format!("{head}甲乙丙丁戊己庚辛壬癸"), "English mixed".to_string()]);
+        }
     }
 
     #[test]
