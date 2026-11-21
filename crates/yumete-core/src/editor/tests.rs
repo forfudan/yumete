@@ -45488,6 +45488,27 @@ fn a_put_over_a_vim_block_marks_what_it_put() {
     }
 }
 
+/// **After `p` over a `v` or `V` selection, `gv` and the `<` `>` marks are
+/// the text put**, selected as the selection was (vim's `nv_put_opt`,
+/// measured in nvim): lines put into a line begin `` `[ `` on the first of
+/// them, and their `` `] `` stands on the last one's last character.
+#[test]
+fn a_put_over_a_vim_selection_marks_what_it_put() {
+    let text = "sun moon\nred blue\nhot cold\n";
+    let cases: &[(&str, &str, (usize, usize))] = &[
+        ("yyjwvep`[x", "sun moon\nred \nun moon\n\nhot cold\n", (3, 1)),
+        ("yyjwvepgvd", "sun moon\nred \n\n\nhot cold\n", (3, 1)),
+        ("wyiwjvjpgvrX", "sun moon\nred XXXXold\n", (2, 5)),
+        ("wyiwjjVP`<x", "sun moon\nred blue\noon\n", (3, 1)),
+        ("yyjjvhpgv\u{1b}", "sun moon\nred blue\n\nsun moon\not cold\n", (4, 8)),
+        ("wyiwjVp`>x", "sun moon\nmoo\nhot cold\n", (2, 3)),
+    ];
+    for &(keys, want, at) in cases {
+        let (_, got, cursor) = vim_block_run(text, keys);
+        assert_eq!((got.as_str(), cursor), (want, at), "{keys:?}");
+    }
+}
+
 /// **`/` and `?` are motions after an operator** (`:h /`, exclusive),
 /// measured against nvim: the operator waits on the search line and takes
 /// the text up to the match when Enter is pressed.

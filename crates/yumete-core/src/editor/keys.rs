@@ -476,6 +476,23 @@ impl Editor {
         })
     }
 
+    /// **The selection a Visual `p` leaves for `gv`**: the text put, from
+    /// `` `[ `` to `` `] ``, selected as the selection it replaced was —
+    /// characters or whole lines (vim's `nv_put_opt`).
+    fn settle_on_the_put(&mut self, lines: bool) {
+        let Some((start, end)) = self.current_buffer().change_span() else { return };
+        let rope = self.current_buffer().rope();
+        let place = |at: usize| {
+            let line = rope.char_to_line(at);
+            (line, at - rope.line_to_char(line))
+        };
+        let put = match lines {
+            true => LastSelection::Lines(place(start).0, place(end).0),
+            false => LastSelection::Chars(place(start), place(end)),
+        };
+        self.current_buffer_mut().settle_selection(put);
+    }
+
     /// Where a place [`LastSelection`] keeps stands now: on its line and
     /// column, the line's end when the line is shorter, the last line when
     /// the file is.
@@ -1049,11 +1066,15 @@ impl Editor {
                 let before = self.current_buffer().revision();
                 let keep = c == 'P' && !self.paste_goes_past;
                 let landed = self.vim_put_over_selection(lines);
-                if !keep && self.current_buffer().revision() != before {
+                let put = self.current_buffer().revision() != before;
+                if !keep && put {
                     self.vim_lines = lines;
                     self.pending_register = None;
                     self.store(old);
                     self.vim_lines = false;
+                }
+                if put {
+                    self.settle_on_the_put(lines);
                 }
                 start = landed.unwrap_or(start);
             }

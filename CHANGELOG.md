@@ -60,6 +60,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **`\zs` and `\ze` in a search pattern set where the match starts and ends**, as in vim, for `/`, `?`, `n`, `N`, `gn`, `d/` and `:s`: `/a\zsb` lands on the `b`, the next match is looked for from where the last one ended, and `:s` replaces only that part, `$1` still naming the pattern's first group.
 - **vim's `/$` on a line's last character goes to the next line's end**, as in vim: a match at a line's end counts as on its last character, so `n` and `N` no longer stand still on it, and `d/$` keeps the last character it reaches.
 - **vim's `cc`, `S` and linewise `c` on a line of blanks keep its blanks in code**, as autoindent does in vim, and take them back out when nothing is typed after them.
+- **After vim's `p` or `P` over a `v` or `V` selection, `gv` and the `<` `>` marks name the text put**, selected as the selection was, as in vim; lines put into a line start `` `[ `` on the first of them, not at the split.
 
 ## 0.24.0 · 2026-11-17
 
