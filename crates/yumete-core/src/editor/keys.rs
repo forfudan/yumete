@@ -22,19 +22,7 @@ enum Shape {
     Chars,
 }
 
-/// **The last Visual selection**, which `gv` selects again and the `<` and
-/// `>` marks name.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum LastSelection {
-    /// Characters (`v`): its first and last position.
-    Chars(usize, usize),
-    /// Whole lines (`V`): its first and last line, by number, which an
-    /// indent does not move.
-    Lines(usize, usize),
-    /// A block (`C-v`): each corner's line and display column, the corner
-    /// that stays first, and whether `$` stretched it to the line ends.
-    Block { anchor: (usize, usize), cursor: (usize, usize), to_line_end: bool },
-}
+pub(super) use crate::buffer::LastSelection;
 
 /// How a Normal key reaches the cursors (see `Editor::binding_fan`).
 enum Fan {
@@ -269,23 +257,13 @@ impl Editor {
         // 插入態的 `C-o` 借走了一個鍵嗎——借的是**這一鍵之前**就借好的，所以要在
         // 這裏記下來（見 [`Self::go_back_after_one_key`]）。
         let borrowed = self.one_normal_key;
-        // 這一鍵按下去之前延伸開着没有——`gv` 要的那一段就是它關掉的那一刻留下
-        // 的（見 [`Self::keep_the_last_selection`]）。
-        let was_extending = self.extend.then(|| {
-            let (from, to) = self.span();
-            match self.vim_lines {
-                // Lines by their numbers, which an indent does not move.
-                true => {
-                    let rope = self.current_buffer().rope();
-                    let line = |at: usize| rope.char_to_line(at.min(rope.len_chars()));
-                    ((line(from), line(to)), true)
-                }
-                false => ((from, to), false),
-            }
+        // 這一鍵按下去之前的可視選區——`gv` 要的那一段就是它關掉的那一刻留下
+        // 的（見 [`Self::keep_the_last_selection`]）。The buffer holds it while
+        // the key runs, so the key's own edits move it.
+        let holding = self.visual_selection().map(|selection| {
+            self.current_buffer_mut().hold_selection(selection);
+            self.current_buffer().id()
         });
-        // A block is kept by its corners' lines and columns, read before the
-        // key moves the text under it.
-        let was_block = self.block.map(|block| self.block_corners(block));
         // Where the pane's window was pointed before this key — see
         // [`Self::hold_the_pane`].
         let held = self
@@ -410,7 +388,7 @@ impl Editor {
         // `takes_the_pane()`，不佔窗就直接回來，走出猜來的塊照舊把它忘掉。
         self.hold_the_pane(held);
         self.forget_a_guessed_table();
-        self.keep_the_last_selection(was_extending, was_block);
+        self.keep_the_last_selection(holding);
         self.go_back_after_one_key(borrowed);
         self.keep_off_the_newline();
         self.find_the_table_here();
@@ -456,28 +434,56 @@ impl Editor {
     /// 問一次，而「延伸是從哪幾條路關掉的」不止一條（`Esc`、`v` 再按一次、`d`、
     /// `y`、可視模式那八個鍵…）。寫在出口上，就不會漏。
     ///
-    /// Warning: **動完手的那一段也記**，同 vim：`vjd` 之後 `gv` 選的是那一段原來佔的
-    /// 位置。文字已經不在了，所以還原的時候要夾一次——vim 在這件事上同樣是「大致
-    /// 那一塊」。
+    /// Warning: **動完手的那一段也記**，同 vim：the key's own edits have moved it
+    /// as vim moves its marks, so after `Vjd` `gv` selects the line that came
+    /// up into its place, and what no longer reaches its column is clamped.
     ///
     /// 記的還有它是不是整行（`V`）：整行記行號，`Vj>gv` 重選的是那幾行。
     ///
-    /// A block (`C-v`) is kept when it closes, as its corners: `was_block`.
-    fn keep_the_last_selection(&mut self, was: Option<((usize, usize), bool)>, was_block: Option<LastSelection>) {
-        if let Some(block) = was_block.filter(|_| self.block.is_none()) {
-            self.last_selection = Some(block);
-            return;
-        }
-        let Some(((anchor, head), lines)) = was else {
+    /// `held` is the buffer that held the selection while the key ran, whose
+    /// edits moved it as vim moves its marks; it is kept there, per buffer,
+    /// when the key ended Visual mode.
+    fn keep_the_last_selection(&mut self, held: Option<u64>) {
+        let Some(i) = held.and_then(|id| self.buffer_with(id)) else {
             return;
         };
-        if self.extend {
-            return;
+        let selection = self.buffers[i].release_selection();
+        if self.block.is_none() && !self.extend && selection.is_some() {
+            self.buffers[i].set_last_selection(selection);
         }
-        self.last_selection = Some(match lines {
-            true => LastSelection::Lines(anchor, head),
-            false => LastSelection::Chars(anchor, head),
-        });
+    }
+
+    /// **The Visual selection up now**, as [`LastSelection`] keeps it: a
+    /// block by its corners, characters by where they begin and end, whole
+    /// lines by their numbers.
+    fn visual_selection(&self) -> Option<LastSelection> {
+        if let Some(block) = self.block {
+            return Some(self.block_corners(block));
+        }
+        if !self.extend {
+            return None;
+        }
+        let (from, to) = self.span();
+        let rope = self.current_buffer().rope();
+        let place = |at: usize| {
+            let at = at.min(rope.len_chars());
+            let line = rope.char_to_line(at);
+            (line, at - rope.line_to_char(line))
+        };
+        Some(match self.vim_lines {
+            true => LastSelection::Lines(place(from).0, place(to).0),
+            false => LastSelection::Chars(place(from), place(to)),
+        })
+    }
+
+    /// Where a place [`LastSelection`] keeps stands now: on its line and
+    /// column, the line's end when the line is shorter, the last line when
+    /// the file is.
+    pub(super) fn place_at(&self, (line, column): (usize, usize)) -> usize {
+        let rope = self.current_buffer().rope();
+        let start = rope.line_to_char(line.min(motion::last_line(rope)));
+        let end = motion::line_end(rope, start);
+        (start + column).min(end)
     }
 
     /// **Where the last selection began and ended**, for the `<` and `>`
@@ -487,10 +493,9 @@ impl Editor {
     /// line's start to its last line's last character.
     pub(super) fn last_selection_ends(&self) -> Option<(usize, usize)> {
         let rope = self.current_buffer().rope();
-        let len = rope.len_chars();
         let last_line = motion::last_line(rope);
-        Some(match self.last_selection? {
-            LastSelection::Chars(from, to) => (from.min(len), to.min(len)),
+        Some(match self.current_buffer().last_selection()? {
+            LastSelection::Chars(from, to) => (self.place_at(from), self.place_at(to)),
             LastSelection::Lines(first, last) => {
                 let (first, last) = (first.min(last_line), last.min(last_line));
                 let start = rope.line_to_char(last);

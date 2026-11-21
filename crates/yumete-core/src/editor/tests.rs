@@ -45338,6 +45338,36 @@ fn a_vim_mark_jump_keeps_the_visual_selection() {
     }
 }
 
+/// **`gv` and the `<` `>` marks move with the lines added or taken above
+/// them**, as vim's marks do (`mark_adjust`, measured in nvim 0.12), for
+/// `v`, `V` and `C-v`: the operator that ends the selection moves it too
+/// (`Vjd` leaves it on the line after), lines joined carry it onto the
+/// joined line, and `u` brings back the selection the change began with.
+#[test]
+fn a_vim_last_selection_moves_with_the_lines() {
+    let text = "one two\nthree four\nfive six\nseven eight\nnine ten\nlast line\n";
+    let cases: &[(&str, &str, (usize, usize))] = &[
+        ("jjvjl\u{1b}ggOnew\u{1b}gvd", "new\none two\nthree four\nven eight\nnine ten\nlast line\n", (4, 1)),
+        ("jjVj\u{1b}ggOnew\u{1b}gvd", "new\none two\nthree four\nnine ten\nlast line\n", (4, 1)),
+        ("jjl^jl\u{1b}ggOnew\u{1b}gvd", "new\none two\nthree four\nfe six\nsen eight\nnine ten\nlast line\n", (4, 2)),
+        ("jjvjl\u{1b}ggddgvd", "three four\nven eight\nnine ten\nlast line\n", (2, 1)),
+        ("jjVj\u{1b}ggddgvd", "three four\nnine ten\nlast line\n", (2, 1)),
+        ("jjl^jl\u{1b}ggddgvd", "three four\nfe six\nsen eight\nnine ten\nlast line\n", (2, 2)),
+        ("jjvjl\u{1b}ggOnew\u{1b}`<x", "new\none two\nthree four\nive six\nseven eight\nnine ten\nlast line\n", (4, 1)),
+        ("jjvjl\u{1b}ggdd`>x", "three four\nfive six\nsven eight\nnine ten\nlast line\n", (3, 2)),
+        ("jjVjdgvd", "one two\nthree four\nlast line\n", (3, 1)),
+        ("jjvjdgvd", "one two\nthree four\nven eight\nnine ten\nlast line\n", (3, 1)),
+        ("jjVjJgvd", "one two\nthree four\nnine ten\nlast line\n", (3, 1)),
+        ("jjVjcxx\u{1b}gvd", "one two\nthree four\nlast line\n", (3, 1)),
+        ("jjVjdugvd", "one two\nthree four\nnine ten\nlast line\n", (3, 1)),
+        ("jjvjl\u{1b}ggddugvd", "one two\nthree four\nven eight\nnine ten\nlast line\n", (3, 1)),
+    ];
+    for &(keys, want, at) in cases {
+        let (_, got, cursor) = vim_block_run(text, keys);
+        assert_eq!((got.as_str(), cursor), (want, at), "{keys:?}");
+    }
+}
+
 /// **`/` and `?` are motions after an operator** (`:h /`, exclusive),
 /// measured against nvim: the operator waits on the search line and takes
 /// the text up to the match when Enter is pressed.

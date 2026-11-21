@@ -54,6 +54,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **A vim block taken over a line that ends before it keeps its columns**: that line comes as the block's width in spaces, as in vim, so the block put back stays rectangular.
 - **vim's `$` then `C-v j` makes a block that runs to every line's end**, as in vim, so `d`, `y` and `A` act to each line's end; `h` there steps onto the last character, and `0` is a motion again.
 - **A vim mark jump in Visual mode keeps the selection**: `` `a ``, `'a`, `` `< `` and the others move the cursor under `v`, `V` and `C-v`, as in vim, instead of dropping what was selected.
+- **vim's `gv` and the `<` `>` marks move with the lines added or taken above them**, for `v`, `V` and `C-v`, as vim's marks do; the operator that ends a selection moves it too, `u` brings back the one the change began with, and each buffer keeps its own.
 
 ## 0.24.0 · 2026-11-17
 

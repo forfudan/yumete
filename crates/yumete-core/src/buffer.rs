@@ -343,6 +343,13 @@ pub struct Buffer {
     /// Whether the next edit joins `change_span` (one command's several
     /// edits: `cw`'s delete and what it typed) or starts it afresh.
     change_span_open: bool,
+    /// The last Visual selection here; see [`LastSelection`].
+    last_selection: Option<LastSelection>,
+    /// **The Visual selections up while a key runs**, innermost last, moved
+    /// with that key's edits as [`Self::last_selection`] is: vim keeps the
+    /// selection an operator ends before the operator changes the text, and
+    /// moves it with the change (`Vjd` leaves `gv` on the line after).
+    held_selections: Vec<LastSelection>,
     /// **Each window's folds in this buffer**, moved by every
     /// edit and kept in the undo points; see [`crate::fold`].
     folds: crate::fold::FoldMap,
@@ -479,6 +486,92 @@ impl PreviewKind {
     }
 }
 
+/// A place as vim's marks keep it: a line, and a column on it.
+pub type Place = (usize, usize);
+
+/// **The last Visual selection**, which `gv` selects again and the `<` and
+/// `>` marks name: one per buffer, as vim's `b_visual` is.
+///
+/// Kept by lines and columns, which an edit moves only where it adds or
+/// takes lines, as vim moves its marks (`mark_adjust`, and `mark_col_adjust`
+/// on the line an edit splits or joins): typing on a line leaves the column
+/// as it was, and a line added above moves the selection down with its text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LastSelection {
+    /// Characters (`v`): where it was anchored and where its head stood,
+    /// each a line and a character on it.
+    Chars(Place, Place),
+    /// Whole lines (`V`): its anchor's line and its head's.
+    Lines(usize, usize),
+    /// A block (`C-v`): each corner's line and display column, the corner
+    /// that stays first, and whether `$` stretched it to the line ends.
+    Block { anchor: Place, cursor: Place, to_line_end: bool },
+}
+
+impl LastSelection {
+    /// The same selection with every place moved by `by`.
+    fn moved(self, by: impl Fn(Place) -> Place) -> Self {
+        match self {
+            LastSelection::Chars(anchor, head) => LastSelection::Chars(by(anchor), by(head)),
+            LastSelection::Lines(anchor, head) => LastSelection::Lines(by((anchor, 0)).0, by((head, 0)).0),
+            LastSelection::Block { anchor, cursor, to_line_end } => {
+                LastSelection::Block { anchor: by(anchor), cursor: by(cursor), to_line_end }
+            }
+        }
+    }
+}
+
+/// **What an edit took, as vim's marks see it**: where it began, how many
+/// line breaks it took and the column it ended at on its last line, and
+/// whether it ran to that line's end.
+#[derive(Debug, Clone, Copy)]
+struct Cut {
+    line: usize,
+    column: usize,
+    lines: usize,
+    end_column: usize,
+    to_line_end: bool,
+}
+
+/// **A place moved through an edit** that took `cut` and put text
+/// `put_lines` line breaks long, ending at column `put_column` of its last
+/// line: vim's `mark_adjust` and `mark_col_adjust`, as its operators call
+/// them.
+///
+/// - An edit that neither takes nor puts a line break moves nothing.
+/// - Before the edit, a place stays; after it, its line moves by the lines
+///   taken and put, and on the line the edit ended on its column moves too.
+/// - Inside what was taken it stays on its column (vim keeps the column of
+///   a mark whose line goes): on the edit's first line when that line is
+///   kept or whole lines went (vim's `ONE_ADJUST_NODEL` puts it on the first
+///   line deleted, which the next line now is); on the line after when the
+///   edit took lines from a line's start to another's end and left the first
+///   one empty (a linewise `c`, which deletes the lines below the first);
+///   on the joined line, past the join, when the edit joined two lines.
+fn carry_place((line, column): Place, cut: Cut, put_lines: usize, put_column: usize) -> Place {
+    if cut.lines == 0 && put_lines == 0 {
+        return (line, column);
+    }
+    let start = (cut.line, cut.column);
+    if (line, column) < start {
+        return (line, column);
+    }
+    let last = cut.line + cut.lines;
+    let whole = cut.lines > 0 && cut.column == 0 && cut.end_column == 0;
+    let (line, column) = match (line, column) >= (last, cut.end_column) {
+        true if line == last => (cut.line, cut.column + (column - cut.end_column)),
+        true => (line - cut.lines, column),
+        false if line == cut.line || whole => (cut.line, column),
+        false if cut.column == 0 && cut.to_line_end => (cut.line + 1, column),
+        false => (cut.line, cut.column + column.saturating_sub(cut.end_column)),
+    };
+    match (line, column) >= start {
+        true if line == cut.line => (line + put_lines, column - cut.column + put_column),
+        true => (line + put_lines, column),
+        false => (line, column),
+    }
+}
+
 /// One point in a buffer's edit history.
 #[derive(Clone)]
 struct EditSnapshot {
@@ -505,6 +598,10 @@ struct EditSnapshot {
     /// stack counts them as after it: they lie past the saved state on the
     /// line.
     saves: u64,
+    /// **The Visual selection when the step was taken**, which an undo or
+    /// a redo brings back as vim's does (`uh_visual`): `u` after `Vjd`
+    /// leaves `gv` on the lines that came back.
+    visual: Option<LastSelection>,
 }
 
 /// **One state on the line `u` and redo walk**, as `:history` lists it.
@@ -598,6 +695,8 @@ impl Buffer {
             insert_stop: None,
             change_span: None,
             change_span_open: false,
+            last_selection: None,
+            held_selections: Vec::new(),
             folds: crate::fold::FoldMap::new(),
             line_edits: Vec::new(),
             local: Local::default(),
@@ -670,6 +769,8 @@ impl Buffer {
             insert_stop: None,
             change_span: None,
             change_span_open: false,
+            last_selection: None,
+            held_selections: Vec::new(),
             folds: crate::fold::FoldMap::new(),
             line_edits: Vec::new(),
             local: Local::default(),
@@ -851,6 +952,8 @@ impl Buffer {
             insert_stop: None,
             change_span: read_span,
             change_span_open: false,
+            last_selection: None,
+            held_selections: Vec::new(),
             folds: crate::fold::FoldMap::new(),
             line_edits: Vec::new(),
             local: Local::default(),
@@ -1316,7 +1419,9 @@ impl Buffer {
         }
         self.earn_snapshot();
         self.shift_folds(char_idx, 0, text);
+        let cut = self.cut_of(char_idx, 0);
         self.rope.insert(char_idx, text);
+        self.carry_selections(cut, char_idx + text.chars().count());
         self.edited = next_edit();
         self.revision += 1;
         self.edit = Some((char_idx, text.chars().count() as isize));
@@ -1344,7 +1449,9 @@ impl Buffer {
         self.earn_snapshot();
         let at = range.start;
         self.shift_folds(at, taken, "");
+        let cut = self.cut_of(at, taken);
         self.rope.remove(range);
+        self.carry_selections(cut, at);
         self.edited = next_edit();
         self.revision += 1;
         self.edit = Some((at, -(taken as isize)));
@@ -1375,8 +1482,10 @@ impl Buffer {
         let taken = range.end - range.start;
         self.earn_snapshot();
         self.shift_folds(start, taken, text);
+        let cut = self.cut_of(start, taken);
         self.rope.remove(range);
         self.rope.insert(start, text);
+        self.carry_selections(cut, start + text.chars().count());
         self.edited = next_edit();
         self.revision += 1;
         self.edit = Some((start, text.chars().count() as isize - taken as isize));
@@ -1489,6 +1598,76 @@ impl Buffer {
         let last = (now - tail).saturating_sub(1).max(first).min(last_line);
         self.change_span = Some((self.rope.line_to_char(first), self.rope.line_to_char(last)));
         self.change_span_open = false;
+        // The lines it changed went and others came, as vim's `u_undoredo`
+        // tells `mark_adjust`: a place on them goes to the first, one below
+        // moves with the lines.
+        let (old_end, new_end) = (was - tail, now - tail);
+        if old_end != new_end {
+            self.move_selections(|(line, column)| match line {
+                line if line < head => (line, column),
+                line if line >= old_end => (line - old_end + new_end, column),
+                _ => (head, column),
+            });
+        }
+    }
+
+    /// The last Visual selection here; see [`LastSelection`].
+    pub fn last_selection(&self) -> Option<LastSelection> {
+        self.last_selection
+    }
+
+    /// Keep `selection` as the last Visual selection here.
+    pub fn set_last_selection(&mut self, selection: Option<LastSelection>) {
+        self.last_selection = selection;
+    }
+
+    /// Hold the Visual selection up while a key runs, so its edits move it
+    /// (see [`Self::held_selections`]).
+    pub fn hold_selection(&mut self, selection: LastSelection) {
+        self.held_selections.push(selection);
+    }
+
+    /// The selection [`Self::hold_selection`] held, moved with what the key
+    /// did.
+    pub fn release_selection(&mut self) -> Option<LastSelection> {
+        self.held_selections.pop()
+    }
+
+    /// What an edit taking `taken` characters at `at` takes, read before it
+    /// does; `None` when nothing is kept to move.
+    fn cut_of(&self, at: usize, taken: usize) -> Option<Cut> {
+        if self.last_selection.is_none() && self.held_selections.is_empty() {
+            return None;
+        }
+        let rope = &self.rope;
+        let line = rope.char_to_line(at);
+        let end = at + taken;
+        let last = rope.char_to_line(end);
+        let last_start = rope.line_to_char(last);
+        Some(Cut {
+            line,
+            column: at - rope.line_to_char(line),
+            lines: last - line,
+            end_column: end - last_start,
+            to_line_end: end == crate::motion::line_end(rope, last_start),
+        })
+    }
+
+    /// Move the kept selections through the edit that took `cut` and put
+    /// text ending at `put_end`.
+    fn carry_selections(&mut self, cut: Option<Cut>, put_end: usize) {
+        let Some(cut) = cut else { return };
+        let put_line = self.rope.char_to_line(put_end);
+        let put_lines = put_line - cut.line;
+        let put_column = put_end - self.rope.line_to_char(put_line);
+        self.move_selections(|place| carry_place(place, cut, put_lines, put_column));
+    }
+
+    fn move_selections(&mut self, by: impl Fn(Place) -> Place) {
+        self.last_selection = self.last_selection.map(|one| one.moved(&by));
+        for one in &mut self.held_selections {
+            *one = one.moved(&by);
+        }
     }
 
     fn note_lines_changed(&mut self, before: &Rope) {
@@ -2360,6 +2539,7 @@ impl Buffer {
             far: None,
             at: SystemTime::now(),
             saves: self.saves,
+            visual: self.visual_now(),
         });
     }
 
@@ -2477,6 +2657,9 @@ impl Buffer {
         self.note_lines_changed(&before);
         self.mark_lines_stepped(&before);
         self.restore_folds(&prev.folds, &before);
+        if prev.visual.is_some() {
+            self.last_selection = prev.visual;
+        }
         Some((prev.cursor.min(self.rope.len_chars()), prev.selections))
     }
 
@@ -2515,6 +2698,9 @@ impl Buffer {
         self.note_lines_changed(&before);
         self.mark_lines_stepped(&before);
         self.restore_folds(&next.folds, &before);
+        if next.visual.is_some() {
+            self.last_selection = next.visual;
+        }
         Some((next.cursor.min(self.rope.len_chars()), next.selections))
     }
 
@@ -2528,7 +2714,14 @@ impl Buffer {
             far: None,
             at: SystemTime::now(),
             saves: self.saves,
+            visual: self.visual_now(),
         }
+    }
+
+    /// The Visual selection as an undo point keeps it: the one a running
+    /// key holds, or the last one.
+    fn visual_now(&self) -> Option<LastSelection> {
+        self.held_selections.last().copied().or(self.last_selection)
     }
 
     /// **Every state on the undo line, oldest first, and which one the

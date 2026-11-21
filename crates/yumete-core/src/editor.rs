@@ -3594,8 +3594,6 @@ pub struct Editor {
     /// **走查走到哪了**（§5.101）。三條走查路（管道、前景、背景）都
     /// 往它寫，畫面和命令行各按自己的節拍讀。
     search_progress: std::sync::Arc<Progress>,
-    /// The selection `gv` selects again and the `<` `>` marks name.
-    last_selection: Option<keys::LastSelection>,
     /// **插入態的 `C-o`：做一個 Normal 命令就回來**（vim）。
     ///
     /// 記的是「回哪一個模式」，不是一個布爾——將來若有第二種進得去的模式，這一格
@@ -5064,7 +5062,6 @@ impl Editor {
             in_the_background: false,
             search_generation: 0,
             search_progress: std::sync::Arc::default(),
-            last_selection: None,
             one_normal_key: None,
             overwriting: false,
             overwritten: Vec::new(),

@@ -74,7 +74,7 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::MovePrevZong, |e, cx| e.walk_zongs(cx, false), Key::Char('k')),
     (NormalCmd::GotoLastModification, |e, _| e.goto_last_modification(), Key::Char('.')),
     (NormalCmd::ReselectLastSelection, |e, _| {
-        let (anchor, head, lines) = match e.last_selection {
+        let (anchor, head, lines) = match e.current_buffer().last_selection() {
             None => {
                 e.status = say!("selection.nothing-to-reselect");
                 return;
@@ -82,18 +82,10 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
             Some(super::keys::LastSelection::Block { anchor, cursor, to_line_end }) => {
                 return e.reselect_block(anchor, cursor, to_line_end);
             }
-            Some(super::keys::LastSelection::Chars(anchor, head)) => (anchor, head, false),
-            Some(super::keys::LastSelection::Lines(anchor, head)) => (anchor, head, true),
+            Some(super::keys::LastSelection::Chars(anchor, head)) => (e.place_at(anchor), e.place_at(head), false),
+            Some(super::keys::LastSelection::Lines(anchor, head)) => (e.place_at((anchor, 0)), e.place_at((head, 0)), true),
         };
-        let rope = e.current_buffer().rope();
-        let len = rope.len_chars();
-        let (anchor, head) = match lines {
-            true => {
-                let start = |line: usize| rope.line_to_char(line.min(rope.len_lines().saturating_sub(1)));
-                (start(anchor), start(head))
-            }
-            false => (anchor, head),
-        };
+        let len = e.current_buffer().rope().len_chars();
         e.sel.set_anchor(anchor.min(len));
         e.sel.set_head(head.min(len));
         e.extend = true;
