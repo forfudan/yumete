@@ -44469,7 +44469,7 @@ fn a_files_recovery_copy_is_kept_in_the_drafts_directory() {
     let copy = ed.current_buffer().recovery_copy().map(Path::to_path_buf).expect("a copy was written");
     assert_eq!(copy.parent(), Some(drafts.as_path()), "{copy:?}");
     let name = copy.file_name().unwrap().to_string_lossy().into_owned();
-    let full = std::fs::canonicalize(&path).unwrap().to_string_lossy().replace(['/', '\\', ':'], "%");
+    let full = std::fs::canonicalize(&path).unwrap().to_string_lossy().trim_start_matches(r"\\?\").replace(['/', '\\', ':'], "%");
     assert_eq!(name, format!("{full}.{}.yumete-swp", std::process::id()));
     let beside: Vec<_> = std::fs::read_dir(&book).unwrap().flatten().map(|e| e.file_name()).collect();
     assert_eq!(beside.len(), 1, "nothing beside the file: {beside:?}");

@@ -37,7 +37,7 @@ fn a_left_recovery_copy_is_not_on_the_frame() {
     let unnamed = home.join("data").join("yumete").join("drafts");
     std::fs::create_dir_all(&unnamed).expect("a drafts directory");
     std::fs::write(unnamed.join("scratch-999991-1.yumete-swp"), "lost\n").expect("an unnamed draft");
-    let full = std::fs::canonicalize(&path).expect("the file").to_string_lossy().replace(['/', '\\', ':'], "%");
+    let full = std::fs::canonicalize(&path).expect("the file").to_string_lossy().trim_start_matches(r"\\?\").replace(['/', '\\', ':'], "%");
     let kept = unnamed.join(format!("{full}.999992.yumete-swp"));
     std::fs::write(&kept, "one\ntwo\nkept\n").expect("a copy in the drafts directory");
     let left = frame(&path, &home);
