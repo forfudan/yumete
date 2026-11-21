@@ -51,6 +51,8 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::GotoCharByPinyin, |e, _| e.start_seek(true), Key::Char('z')),
     (NormalCmd::GotoLastAccessedFile, |e, _| e.goto_last_file(), Key::Char('a')),
     (NormalCmd::GotoNextBuffer, |e, _| e.next_buffer(), Key::Char('n')),
+    (NormalCmd::VimSelectNextMatch, |e, cx| e.select_the_match(true, cx.count), Key::Char('n')),
+    (NormalCmd::VimSelectPrevMatch, |e, cx| e.select_the_match(false, cx.count), Key::Char('N')),
     (NormalCmd::GotoPreviousBuffer, |e, _| e.prev_buffer(), Key::Char('p')),
     (NormalCmd::GotoDefinition, |e, _| {
         let was = (e.current_buffer().id(), e.sel.head());
@@ -581,6 +583,42 @@ impl Editor {
             let span = e.read_motion(motion::Motion::WordEndBack(grain), motion::Reading::Caret);
             e.jump_to(span);
         });
+    }
+
+    /// **vim's `gn` / `gN`**: the match the cursor stands in, or the next
+    /// (previous) one, selected in charwise Visual mode — start to last
+    /// character for `gn`, the other way round for `gN`. In Visual mode
+    /// the selection grows instead, to the far end of the match after
+    /// (before) the cursor, as vim's `current_search` does; and `gn` with
+    /// the cursor before the anchor goes to the next match's start.
+    fn select_the_match(&mut self, forward: bool, count: usize) {
+        if self.block.is_some() {
+            return;
+        }
+        let (anchor, head) = (self.sel.anchor(), self.sel.head());
+        let rope = self.current_buffer().rope();
+        let (after, before) = (motion::next_grapheme(rope, head), motion::prev_grapheme(rope, head));
+        let visual = self.extend;
+        let hit = match (visual, forward) {
+            (true, true) if head < anchor => self.search_hit_from(true, after, count),
+            (true, true) => self.gn_hit(true, after, count),
+            (true, false) if head > 0 => self.gn_hit(false, before, count),
+            _ => self.gn_hit(forward, head, count),
+        };
+        let Some((from, to)) = hit else { return };
+        let last = motion::prev_grapheme(self.current_buffer().rope(), to).max(from);
+        let (anchor, head) = match (visual, forward) {
+            (true, true) if head < anchor => (anchor, from),
+            (true, true) => (anchor, last),
+            (true, false) => (anchor, from),
+            (false, true) => (from, last),
+            (false, false) => (last, from),
+        };
+        self.extend = true;
+        self.vim_lines = false;
+        self.sel.set_anchor(anchor);
+        self.sel.set_head(head);
+        self.refresh_goal_column();
     }
 
     fn walk_zongs(&mut self, cx: Cx, onward: bool) {

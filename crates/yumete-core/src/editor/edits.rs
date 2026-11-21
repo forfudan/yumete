@@ -1744,7 +1744,7 @@ impl Editor {
     /// the macro that is playing (`beep_flush`); helix's macros play every
     /// key, so only the vim keymap asks.
     pub(super) fn fail_the_motion(&mut self) {
-        if (self.replaying || self.normal_depth > 0) && self.as_vim() {
+        if (self.replaying || self.normal_depth > 0 || self.repeating_edit) && self.as_vim() {
             self.macro_failed = true;
         }
     }

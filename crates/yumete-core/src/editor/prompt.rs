@@ -834,6 +834,8 @@ impl Editor {
         self.command_caret = 0;
         self.history_at = None;
         self.lookfor_focus = 0;
+        // An operator waiting on a `/` line is let go of with the line.
+        self.operator_search = None;
         self.mode = Mode::Normal;
     }
 
@@ -1068,6 +1070,11 @@ impl Editor {
                     return;
                 }
                 let forward = self.search_forward;
+                // **`d/eta⏎`**: the operator that opened this line takes the
+                // text up to the match; the cursor goes nowhere first.
+                if let Some((op, count)) = self.operator_search.take() {
+                    return self.vim_operator_to_match(op, count, forward);
+                }
                 self.remember_jump();
                 self.repeat_search(forward);
             }

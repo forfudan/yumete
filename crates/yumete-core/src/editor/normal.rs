@@ -2214,21 +2214,23 @@ impl Editor {
     #[allow(unused_variables)]
     pub(super) fn cmd_search(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
-        self.mode = Mode::Search;
-        self.search_forward = true;
-        self.command_line.clear();
-        self.command_caret = self.command_line.chars().count();
-        // A new search takes `n` back from the table's.
-        self.hits = None;
+        self.open_search_line(true);
     }
 
     #[allow(unused_variables)]
     pub(super) fn cmd_rsearch(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
+        self.open_search_line(false);
+    }
+
+    /// The `/` (or `?`) line, empty, for a search that moves the cursor.
+    pub(super) fn open_search_line(&mut self, forward: bool) {
         self.mode = Mode::Search;
-        self.search_forward = false;
+        self.search_forward = forward;
         self.command_line.clear();
-        self.command_caret = self.command_line.chars().count();
+        self.command_caret = 0;
+        self.operator_search = None;
+        // A new search takes `n` back from the table's.
         self.hits = None;
     }
 

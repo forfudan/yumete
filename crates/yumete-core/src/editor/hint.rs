@@ -47,8 +47,9 @@ impl Editor {
         // word」, which the table leaves out because helix's `ge` means
         // something else; `;`/`,` are 「that find again」 and live in
         // `vim_operator_key` because the editor remembers which find it was;
-        // `s` is vim-surround's.
-        out.extend(["h", "l", "␣", "ge", "gE", ";", ",", "s"]);
+        // `s` is vim-surround's; `/` `?` `n` `N` `gn` `gN` ask the last
+        // search, which the editor keeps too.
+        out.extend(["h", "l", "␣", "ge", "gE", ";", ",", "/", "?", "n", "N", "gn", "gN", "s"]);
         out.join(" ")
     }
 

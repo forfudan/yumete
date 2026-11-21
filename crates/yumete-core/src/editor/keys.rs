@@ -1083,8 +1083,8 @@ impl Editor {
     /// `D` (剪切), not its `d` (刪除，不動寄存器).
     fn vim_operator_key(&mut self, op: char, first: Option<char>, key: Key) {
         // **`:h quote1`'s motions**: a delete made with one of these goes into
-        // `"1` however short it is. `/` `?` `n` `N` are on vim's list too, but
-        // they are no motions after an operator here.
+        // `"1` however short it is. `/` `?` `n` `N` are on vim's list too,
+        // and [`Self::vim_operator_to_match`] says so for them.
         self.use_reg_one = match (first, key) {
             (None, Key::Char(c)) => matches!(c, '%' | '(' | ')' | '{' | '}'),
             (Some('`'), Key::Char(_)) => true,
@@ -1319,30 +1319,37 @@ impl Editor {
                 self.lines_from = Some(here.min(motion::line_first_non_blank(rope, rope.line_to_char(b))));
                 return self.do_vim_lines(op, a.min(b), a.max(b));
             }
-            let (start, end) = (here.min(at), here.max(at));
-            if start == end {
-                if op == 'c' && !self.refuse_readonly() {
-                    self.snapshot();
-                    self.enter_insert();
-                }
-                return;
-            }
-            // **`:h exclusive`'s two rules** for an end in column 1 of a later
-            // line: from the indent or before it the motion takes whole lines,
-            // and from further in it stops at the end of the line before, so
-            // `` d`] `` from mid-line keeps the line break.
-            let (first, last) = (rope.char_to_line(start), rope.char_to_line(end));
-            if last > first && end == rope.line_to_char(last) {
-                if start <= motion::line_first_non_blank(rope, rope.line_to_char(first)) {
-                    return self.do_vim_lines(op, first, last - 1);
-                }
-                let stop = motion::line_end(rope, rope.line_to_char(last - 1));
-                return match stop > start {
-                    true => self.do_vim(op, motion::Span::Over { anchor: start, head: stop - 1 }),
-                    false => self.do_vim(op, motion::Span::Over { anchor: start, head: start }),
-                };
-            }
-            return self.do_vim(op, motion::Span::Over { anchor: start, head: end - 1 });
+            return self.vim_exclusive_to(op, at);
+        }
+        // **`/` and `?` are motions** (`:h /`, exclusive): the operator
+        // waits on the search line, and Enter there runs it up to the
+        // match ([`Self::vim_operator_to_match`]). `d2/x` and `2d/x` reach
+        // the second match.
+        if first.is_none() && matches!(c, '/' | '?') {
+            self.settle_alias_count();
+            let count = self.count.take();
+            self.open_search_line(c == '/');
+            self.operator_search = Some((op, count));
+            return;
+        }
+        // **`n` and `N` are the same motion without the line**: up to the
+        // next match of the last pattern, `N` the other way.
+        if first.is_none() && matches!(c, 'n' | 'N') {
+            self.settle_alias_count();
+            let count = self.count.take();
+            let forward = self.search_forward == (c == 'n');
+            return self.vim_operator_to_match(op, count, forward);
+        }
+        // **`gn` and `gN` are the match itself** (`:h gn`): `dgn` takes the
+        // match the cursor stands in or the next one, both ends, and `.`
+        // after `cgn` changes the next — vim's way of changing matches one
+        // at a time.
+        if first == Some('g') && matches!(c, 'n' | 'N') {
+            self.settle_alias_count();
+            let n = self.count.take().unwrap_or(1);
+            let Some((from, to)) = self.gn_hit(c == 'n', self.sel.head(), n) else { return };
+            let head = motion::prev_grapheme(self.current_buffer().rope(), to).max(from);
+            return self.do_vim(op, motion::Span::Over { anchor: from, head });
         }
         // A motion still owed a character (`df,`, `di(`) takes this one.
         if let Some(f) = first {
@@ -1395,6 +1402,48 @@ impl Editor {
                 self.status = say!("keys.not-a-motion", typed);
             }
         }
+    }
+
+    /// **An operator up to a match of the last pattern** (`d/eta⏎`, `dn`,
+    /// `dN`), exclusive as vim's search motions are. Such a delete goes into
+    /// `"1` however short it is (`:h quote1`).
+    pub(super) fn vim_operator_to_match(&mut self, op: char, count: Option<usize>, forward: bool) {
+        let here = self.sel.head();
+        let Some((at, _)) = self.search_hit_from(forward, here, count.unwrap_or(1)) else { return };
+        self.use_reg_one = true;
+        self.vim_exclusive_to(op, at);
+        self.use_reg_one = false;
+    }
+
+    /// **An exclusive motion to `at`**, whichever side of the cursor it
+    /// lies: the characters between, not the one at the far end.
+    fn vim_exclusive_to(&mut self, op: char, at: usize) {
+        let here = self.sel.head();
+        let rope = self.current_buffer().rope();
+        let (start, end) = (here.min(at), here.max(at));
+        if start == end {
+            if op == 'c' && !self.refuse_readonly() {
+                self.snapshot();
+                self.enter_insert();
+            }
+            return;
+        }
+        // **`:h exclusive`'s two rules** for an end in column 1 of a later
+        // line: from the indent or before it the motion takes whole lines,
+        // and from further in it stops at the end of the line before, so
+        // `` d`] `` from mid-line keeps the line break.
+        let (first, last) = (rope.char_to_line(start), rope.char_to_line(end));
+        if last > first && end == rope.line_to_char(last) {
+            if start <= motion::line_first_non_blank(rope, rope.line_to_char(first)) {
+                return self.do_vim_lines(op, first, last - 1);
+            }
+            let stop = motion::line_end(rope, rope.line_to_char(last - 1));
+            return match stop > start {
+                true => self.do_vim(op, motion::Span::Over { anchor: start, head: stop - 1 }),
+                false => self.do_vim(op, motion::Span::Over { anchor: start, head: start }),
+            };
+        }
+        self.do_vim(op, motion::Span::Over { anchor: start, head: end - 1 })
     }
 
     /// **`dd`, `cc`, `yy`** — the operator doubled, which in vim is 「this

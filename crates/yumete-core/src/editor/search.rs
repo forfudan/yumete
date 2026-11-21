@@ -81,6 +81,105 @@ impl Editor {
         *self.compiled.borrow_mut() = None;
     }
 
+    /// **The scanner for [`Self::last_search`]**, as `/` and the panel
+    /// both read it.
+    fn last_search_look(&self) -> Result<super::find::Look, String> {
+        let pattern = &self.last_search;
+        let re = self.compile(pattern)?;
+        // **`/` 和面板走同一支掃描器**。通配關着的時候這就是一條光
+        // 禿禿的式子，答案與拿裸正則掃的逐字相同；開着的時候同一個 `Look` 多
+        // 帶了折過的字形與讀音，而掃描器一個字都不用改。
+        Ok(match self.search.wild {
+            false => super::find::Look::plain(re),
+            // 折不出來（式子解析不了）就照舊用那條光禿禿的——通配是錦上添花，
+            // 添不上就不添，同 `search_pattern` 裏那一條。
+            true => self.wild_look(pattern).unwrap_or_else(|| super::find::Look::plain(re)),
+        })
+    }
+
+    /// The scanner for the last pattern, or `None` having said why there
+    /// is none (nothing searched yet, a pattern that does not compile).
+    fn look_for_a_motion(&mut self) -> Option<super::find::Look> {
+        if self.last_search.is_empty() {
+            self.status = say!("find.nothing-searched-yet");
+            self.fail_the_motion();
+            return None;
+        }
+        match self.last_search_look() {
+            Ok(look) => Some(look),
+            Err(message) => {
+                self.status = message;
+                self.fail_the_motion();
+                None
+            }
+        }
+    }
+
+    /// **Where `n` would land, `count` times over, without going there** —
+    /// the match an operator takes up to (`d/eta⏎`, `dn`, `dN`): forward, a
+    /// match starting after `from`; backward, one starting before it. It
+    /// wraps at the ends as `n` does. `None` says so on the status line.
+    pub(super) fn search_hit_from(&mut self, forward: bool, from: usize, count: usize) -> Option<(usize, usize)> {
+        let look = self.look_for_a_motion()?;
+        let within = self.search_rows();
+        let rope = self.current_buffer().rope();
+        let len = rope.len_chars();
+        let mut at = from;
+        let mut hit = None;
+        for _ in 0..count.max(1) {
+            hit = match forward {
+                true => search_forward(rope, &look, (at + 1).min(len), within.clone()),
+                false => search_backward(rope, &look, at, within.clone()),
+            };
+            let Some((start, _)) = hit else { break };
+            at = start;
+        }
+        if hit.is_none() {
+            self.status = say!("find.not-found", as_typed(&self.last_search));
+            self.fail_the_motion();
+        }
+        hit
+    }
+
+    /// **The match vim's `gn` / `gN` takes** (`current_search` in vim's
+    /// `search.c`): forward, the `count`-th match whose last character is at
+    /// or after `at`, so a match the cursor stands in is the first; backward,
+    /// the `count`-th whose first character is at or before `at`. Both wrap.
+    pub(super) fn gn_hit(&mut self, forward: bool, at: usize, count: usize) -> Option<(usize, usize)> {
+        let look = self.look_for_a_motion()?;
+        let within = self.search_rows();
+        let rope = self.current_buffer().rope();
+        let len = rope.len_chars();
+        let at = at.min(len);
+        let mut hit = match forward {
+            // A match never crosses a line, so the one the cursor stands in
+            // starts on the cursor's line: walk that line's matches up to
+            // the first that reaches the cursor.
+            true => {
+                let mut from = motion::line_start(rope, at);
+                loop {
+                    match search_forward(rope, &look, from, within.clone()) {
+                        Some((start, end)) if start >= from && end <= at => from = start + 1,
+                        other => break other,
+                    }
+                }
+            }
+            false => search_backward(rope, &look, (at + 1).min(len), within.clone()),
+        };
+        for _ in 1..count.max(1) {
+            let Some((start, _)) = hit else { break };
+            hit = match forward {
+                true => search_forward(rope, &look, (start + 1).min(len), within.clone()),
+                false => search_backward(rope, &look, start, within.clone()),
+            };
+        }
+        if hit.is_none() {
+            self.status = say!("find.not-found", as_typed(&self.last_search));
+            self.fail_the_motion();
+        }
+        hit
+    }
+
     /// Search for [`Self::last_search`] in `forward` direction and move there.
     /// The lines a search may land in: the table's own rows while the grid
     /// holds the pane, and the whole buffer otherwise (#354).
@@ -110,21 +209,12 @@ impl Editor {
         // helix centres a hit off the page (`search_impl`).
         self.centre_off_the_page();
         let pattern = self.last_search.clone();
-        let re = match self.compile(&pattern) {
-            Ok(re) => re,
+        let look = match self.last_search_look() {
+            Ok(look) => look,
             Err(message) => {
                 self.status = message;
                 return;
             }
-        };
-        // **`/` 和面板走同一支掃描器**。通配關着的時候這就是一條光
-        // 禿禿的式子，答案與拿裸正則掃的逐字相同；開着的時候同一個 `Look` 多
-        // 帶了折過的字形與讀音，而掃描器一個字都不用改。
-        let look = match self.search.wild {
-            false => super::find::Look::plain(re),
-            // 折不出來（式子解析不了）就照舊用那條光禿禿的——通配是錦上添花，
-            // 添不上就不添，同 `search_pattern` 裏那一條。
-            true => self.wild_look(&pattern).unwrap_or_else(|| super::find::Look::plain(re)),
         };
         let rope = self.current_buffer().rope();
         let len = rope.len_chars();

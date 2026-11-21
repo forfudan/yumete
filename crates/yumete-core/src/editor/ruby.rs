@@ -450,9 +450,25 @@ impl Editor {
         };
         let keys = keys.clone();
         self.repeating_edit = true;
+        self.macro_failed = false;
         for key in keys {
             self.on_key(key);
+            // **A motion that fails ends the repeat**, as vim's beep flushes
+            // what is left of it: `.` after `cgnX⎋` with no match left
+            // changes nothing, where playing on would press `X` in Normal
+            // mode. Selecting the area again for a Visual or block change
+            // stops short at the file's end instead, as vim's visual-repeat
+            // does, and goes on.
+            if self.macro_failed {
+                if self.extend || self.block.is_some() {
+                    self.macro_failed = false;
+                    continue;
+                }
+                break;
+            }
         }
+        // A macro or `:normal` playing this `.` stops with it.
+        self.macro_failed &= self.replaying || self.normal_depth > 0;
         // An IME `r` left `Pending::Replace` armed — its answer came from the
         // candidate panel, not from a key, so there is nothing in `keys` to
         // supply it. Supply it here, or `.` would leave `r` waiting and eat

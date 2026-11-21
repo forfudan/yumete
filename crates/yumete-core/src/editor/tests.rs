@@ -30262,16 +30262,18 @@ fn the_keys_that_were_waiting_on_a_decision() {
     press(&mut ed, "g~~");
     assert_eq!(ed.current_buffer().text(), "Al\n", "g~~ 整行互換");
 
-    // vim 的 `gn` 走到下一處匹配；helix 鍵位下 `gn` 仍是換稿子。
+    // vim's `gn` selects the match the cursor stands in (measured in nvim:
+    // `/甲⏎gnd` leaves `甲乙丙甲`); under helix `gn` is still the next file.
     let mut ed = typed_vim("甲乙甲丙甲\n");
     press(&mut ed, "gg");
     press(&mut ed, "/甲");
     ed.on_key(Key::Enter);
     let before = ed.sel.head();
     press(&mut ed, "gn");
-    assert!(ed.sel.head() != before, "gn 走到下一處");
-    press(&mut ed, "gN");
-    assert_eq!(ed.sel.head(), before, "gN 走回來");
+    assert!(ed.extend, "gn selects");
+    assert_eq!((ed.sel.anchor(), ed.sel.head()), (before, before), "the match under the cursor");
+    press(&mut ed, "d");
+    assert_eq!(ed.current_buffer().text(), "甲乙丙甲\n");
 }
 
 /// **`z` 那一層照 helix 的 view mode 補齊**。
@@ -45239,4 +45241,113 @@ fn vim_reselects_a_block_and_goes_to_the_selection_marks() {
     assert_eq!(ed.register, "one two three\nfo");
     let (ed, ..) = vim_block_run(four, "5l^jjhhh\u{1b}gg0y`>");
     assert_eq!(ed.register, "one two three\nfour five\nsi");
+/// **`/` and `?` are motions after an operator** (`:h /`, exclusive),
+/// measured against nvim: the operator waits on the search line and takes
+/// the text up to the match when Enter is pressed.
+#[test]
+fn an_operator_takes_a_search_motion() {
+    let run = |text: &str, keys: &str| {
+        let mut ed = typed_vim(text);
+        keyed(&mut ed, keys);
+        (ed.current_buffer().text(), ed.register_contents(None), ed.sel.head())
+    };
+    assert_eq!(run("alpha beta gamma\n", "d/eta⏎"), ("eta gamma\n".into(), "alpha b".into(), 0));
+    assert_eq!(run("alpha beta gamma\n", "y/ga⏎"), ("alpha beta gamma\n".into(), "alpha beta ".into(), 0));
+    // Backwards onto the first column of a line above, from the first
+    // column: `:h exclusive-linewise` makes it the line.
+    assert_eq!(run("one\nalpha beta\nthree\n", "jjd?alpha⏎").0, "one\nthree\n");
+    // From mid-line the motion stops at the end of the line before.
+    assert_eq!(run("one\ntwo\nthree\n", "ld/thr⏎").0, "o\nthree\n");
+    assert_eq!(run("one\ntwo\nthree\n", "c/thr⏎X⎋").0, "X\nthree\n");
+    // A count reaches that many matches, written before or after `d`.
+    assert_eq!(run("ab cd ab cd ab\n", "d2/cd⏎").0, "cd ab\n");
+    assert_eq!(run("ab cd ab cd ab\n", "2d/cd⏎").0, "cd ab\n");
+    // `.` searches again from where it is pressed.
+    assert_eq!(run("ab cd ab cd ab\n", "c/ab⏎X⎋w.").0, "Xab Xab\n");
+    // No match: nothing is taken.
+    assert_eq!(run("ab cd ab cd ab\n", "d/zz⏎").0, "ab cd ab cd ab\n");
+    // `n` afterwards walks the pattern the operator searched for.
+    assert_eq!(run("ab cd ab cd ab\n", "d/cd⏎n").2, 6);
+    // A search motion's delete goes into `"1` however short (`:h quote1`).
+    assert_eq!(run("ab cd ab cd ab\n", "d/cd⏎\"1p").0, "cab d ab cd ab\n");
+}
+
+/// **Esc on an operator's search line lets go of the operator**, and the
+/// next plain `/` only moves.
+#[test]
+fn an_operators_search_line_given_up_forgets_the_operator() {
+    let mut ed = typed_vim("ab cd ab cd ab\n");
+    keyed(&mut ed, "d/cd⎋");
+    assert_eq!(ed.mode(), Mode::Normal);
+    keyed(&mut ed, "/cd⏎");
+    assert_eq!(ed.current_buffer().text(), "ab cd ab cd ab\n");
+    assert_eq!(ed.sel.head(), 3);
+}
+
+/// **Chinese typed into an operator's search line** is searched for, as on
+/// the plain `/` line.
+#[test]
+fn an_operators_search_line_takes_chinese() {
+    let mut ed = typed_vim("甲乙丙丁\n");
+    keyed(&mut ed, "d/");
+    assert_eq!(ed.mode(), Mode::Search);
+    ed.insert_committed("丙");
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.current_buffer().text(), "丙丁\n");
+}
+
+/// **`dn`, `dN`, `dgn`, `cgn`, `ygn`**, measured against nvim on the same
+/// line after `/cd⏎`.
+#[test]
+fn an_operator_takes_n_and_gn() {
+    let run = |keys: &str| {
+        let mut ed = typed_vim("ab cd ab cd ab\n");
+        keyed(&mut ed, "/cd⏎");
+        keyed(&mut ed, keys);
+        (ed.current_buffer().text(), ed.register_contents(None), ed.sel.head())
+    };
+    assert_eq!(run("0dn").0, "cd ab cd ab\n");
+    assert_eq!(run("$dN").0, "ab cd ab b\n");
+    assert_eq!(run("0d2n").0, "cd ab\n");
+    // Past the last match `n` wraps, and the motion goes backwards.
+    assert_eq!(run("$dn").0, "ab b\n");
+    assert_eq!(run("0dgn"), ("ab  ab cd ab\n".into(), "cd".into(), 3));
+    // Standing in a match, `gn` is that match.
+    assert_eq!(run("0wldgn").0, "ab  ab cd ab\n");
+    assert_eq!(run("$dgN").0, "ab cd ab  ab\n");
+    assert_eq!(run("0dgN").0, "ab cd ab  ab\n");
+    assert_eq!(run("0d2gn").0, "ab cd ab  ab\n");
+    assert_eq!(run("0ygn"), ("ab cd ab cd ab\n".into(), "cd".into(), 3));
+    // `.` after `cgn` changes the next match, and with none left changes
+    // nothing: the `X` it would type is not pressed in Normal mode.
+    assert_eq!(run("0cgnX⎋.").0, "ab X ab X ab\n");
+    assert_eq!(run("0cgnX⎋..").0, "ab X ab X ab\n");
+}
+
+/// **`gn` and `gN` select the match in Visual mode**, and in Visual mode
+/// grow the selection to the next match (measured against nvim).
+#[test]
+fn gn_selects_the_match() {
+    let run = |keys: &str| {
+        let mut ed = typed_vim("ab cd ab cd ab\n");
+        keyed(&mut ed, "/cd⏎");
+        keyed(&mut ed, keys);
+        ed
+    };
+    let ed = run("0gn");
+    assert!(ed.extend);
+    assert_eq!((ed.sel.anchor(), ed.sel.head()), (3, 4));
+    let ed = run("$gN");
+    assert_eq!((ed.sel.anchor(), ed.sel.head()), (10, 9));
+    assert_eq!(run("0gnd").current_buffer().text(), "ab  ab cd ab\n");
+    assert_eq!(run("0gngnd").current_buffer().text(), "ab  ab\n");
+    assert_eq!(run("0vgnd").current_buffer().text(), " ab cd ab\n");
+    assert_eq!(run("$vgNd").current_buffer().text(), "ab cd ab \n");
+    let ed = run("0llllvgN");
+    assert_eq!((ed.sel.anchor(), ed.sel.head()), (4, 3));
+    let ed = run("$vhhhhhgn");
+    assert_eq!((ed.sel.anchor(), ed.sel.head()), (13, 3));
+    let ed = run("0Vgn");
+    assert!(!ed.vim_lines);
+    assert_eq!((ed.sel.anchor(), ed.sel.head()), (0, 4));
 }

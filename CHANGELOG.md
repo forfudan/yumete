@@ -16,6 +16,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **A picker's `A-Enter` opens the entry and keeps the picker open**, and every prompt (`:`, `/`, a picker's query) takes helix's `A-b` / `A-f`, `C-k` and `C-r` with a register name.
 - **`scripts/build.sh --profile=release-termux` builds with less memory**, with thin LTO, for Termux on Android and other small machines where the full release build runs out of memory (#3, by kimitrois).
 - **Resting the mouse on the file name or the language-server cell of the status line, a cut-off message, a cut-off sidebar row, a problem sign or a scrollbar mark shows what the cell cannot fit**: the file's whole path, the language server's details, the whole message, what the marks stand for. Any key, click, wheel or move to another cell puts it away. `[editor] mouse_hover` (on by default) and `mouse_hover_delay` (500 ms) set it.
+- **vim's operators take search motions**: `d/word`, `c?word`, `y/word` (Enter ends the line, and the IME types into it as after `/`), `dn`, `dN`, and `dgn`, `cgn`, `ygn` on the match itself. **`gn` and `gN` select the match in Visual mode**, or grow a Visual selection to it, and `.` after `cgn` changes the next match, as in vim.
 - **`ye --ansi --shot=WxH FILE` prints the page alone in terminal colours**, without the status line and the other bars, for a preview pane such as fzf's `--preview`.
 
 ### Changed
@@ -35,6 +36,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **Moving the mouse no longer drops a half-typed code** of the built-in IME, and no longer redraws the screen once for every cell the pointer crosses.
 - **A vim macro keeps what the IME committed in Normal mode**, so replaying it writes the text again.
 - **The wheel no longer scrolls the window where an IME code is half-typed**; other windows still scroll.
+- **Under vim, `.` stops at a motion that fails**, as vim's does: repeating `cgn` with no match left changes nothing, instead of typing the rest of the change as Normal-mode keys.
 - **Insert `C-r` reads the registers that answer**, `%` (the file's name), `/` (the last search), `.` and `#`, as `"%p` and the others do.
 - **Phrase completion offers a repeated phrase when both copies go on with the same character**: after `长江三角洲的…长江三角洲的…`, `长江三角` offers `长江三角洲` again.
 - **Wrapping no longer leaves a list marker or a short word alone on its row** when a Latin word glued to 漢字 overflows: `- 甲乙丙…English` breaks before `English`.

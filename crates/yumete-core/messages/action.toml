@@ -2543,6 +2543,18 @@ zhs = "上一处(vim 的 N)"
 en = "the previous match (vim's N)"
 
 [[message]]
+# 命令說明：vim_select_next_match（草稿）
+key = "action.vim-select-next-match"
+zhs = "选中这一处或下一处匹配(vim 的 gn)"
+en = "select this or the next match (vim's gn)"
+
+[[message]]
+# 命令說明：vim_select_prev_match（草稿）
+key = "action.vim-select-prev-match"
+zhs = "选中这一处或上一处匹配(vim 的 gN)"
+en = "select this or the previous match (vim's gN)"
+
+[[message]]
 # 命令說明：vim_switch_case
 key = "action.vim-switch-case"
 zhs = "切换大小写并后移(vim 的 ~)"

@@ -2850,6 +2850,11 @@ pub struct Editor {
     /// `` ` `` `{` `}` goes into `"1` (and `"-` too, when it stays in one
     /// line), however short it is. Set while that operator runs.
     use_reg_one: bool,
+    /// **The operator a `/` or `?` line was opened for** (`d/eta⏎`), and its
+    /// count: Enter on that line runs the operator up to the match instead
+    /// of moving there. It borrows the search line whole, so the IME and
+    /// the pattern switches work in it as they do after a plain `/`.
+    operator_search: Option<(char, Option<usize>)>,
     /// **Where a linewise operator began**, when that is not the cursor:
     /// a paragraph's or sentence's first character, a mark's line. vim's
     /// `` `[ `` after `>ip` is there (`oap->start`), not at the line's start.
@@ -4847,6 +4852,7 @@ impl Editor {
             vim_line_column: 0,
             storing_a_yank: false,
             use_reg_one: false,
+            operator_search: None,
             lines_from: None,
             recording: None,
             recording_from: 0,

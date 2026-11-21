@@ -887,8 +887,8 @@ pub(super) static GOTO: Group = Group {
         // `ga` `gp` `gr` `gc` are vim's or Neovim's own (`index.txt`: ga, gp,
         // gr; Neovim's defaults: gc, gr*), so helix's are helix's alone.
         ch('a', NormalCmd::GotoLastAccessedFile, "hint.goto.last-file").when(Only::Helix),
-        ch('n', NormalCmd::SearchNext, "hint.goto.next-match").when(Only::Vim),
-        ch('N', NormalCmd::SearchPrev, "hint.goto.next-match").when(Only::Vim),
+        ch('n', NormalCmd::VimSelectNextMatch, "hint.goto.next-match").when(Only::Vim),
+        ch('N', NormalCmd::VimSelectPrevMatch, "hint.goto.next-match").when(Only::Vim),
         ch('n', NormalCmd::GotoNextBuffer, "hint.goto.next-or-previous-buffer"),
         ch('p', NormalCmd::GotoPreviousBuffer, "hint.goto.next-or-previous-buffer").when(Only::Helix),
         ch('p', NormalCmd::VimPasteAfterGoPast, "action.vim-paste-after-go-past").when(Only::Vim),
