@@ -45096,3 +45096,147 @@ fn ctrl_r_reads_the_answering_registers() {
     ed.on_key(Key::Char('/'));
     assert!(ed.command_line.ends_with("two"), "{:?}", ed.command_line);
 }
+
+/// Keys run under the vim preset from the top of `text`, `^` for `C-v`
+/// and `\u{1b}` for Esc: the text after, and the cursor as nvim reports
+/// it, line and column from 1.
+fn vim_block_run(text: &str, keys: &str) -> (Editor, String, (usize, usize)) {
+    let mut ed = typed_vim(text);
+    for c in keys.chars() {
+        ed.on_key(match c {
+            '^' => Key::Ctrl('v'),
+            '\u{1b}' => Key::Esc,
+            c => Key::Char(c),
+        });
+    }
+    let rope = ed.current_buffer().rope().clone();
+    let head = ed.sel.head();
+    let line = rope.char_to_line(head);
+    let at = (line + 1, head - rope.line_to_char(line) + 1);
+    let after = ed.current_buffer().text();
+    (ed, after, at)
+}
+
+/// **`p` and `P` over a block replace it** (`:h v_p`, every case measured
+/// in nvim 0.12 with `--clean`): a block register goes in as a block, a
+/// charwise one on every line of the block, a linewise one below the
+/// moving corner's line (`p`) or above the first (`P`); `gp` and `gP` land
+/// past what was put. A block over a `v` selection is put as a block, over
+/// `V` as lines.
+#[test]
+fn vim_put_over_a_block_replaces_it_as_nvim_does() {
+    let four = "one two three\nfour five\nsix seven eight nine\nten\n";
+    let short = "abcd\nabcd\nab\nabcd\n";
+    let even = "abcd\nabcd\nabcd\nabcd\n";
+    let cases: &[(&str, &str, &str, (usize, usize))] = &[
+        // A block register.
+        (four, "^jlyjj^jlp", "one two three\nfour five\nonx seven eight nine\nfon\n", (3, 1)),
+        (four, "^jlyjj^jlP", "one two three\nfour five\nonx seven eight nine\nfon\n", (3, 1)),
+        (four, "^jlyjj^jlgp", "one two three\nfour five\nonx seven eight nine\nfon\n", (4, 3)),
+        (four, "^jlyjj^jlgP", "one two three\nfour five\nonx seven eight nine\nfon\n", (4, 3)),
+        (four, "^jlyjj^jl2p", "one two three\nfour five\nononx seven eight nine\nfofon\n", (3, 1)),
+        (short, "^jlyll^jlp", "abab\nabab\nab\nabcd\n", (1, 3)),
+        (short, "^jlyll^jlgp", "abab\nabab\nab\nabcd\n", (2, 4)),
+        (short, "^jlyGll^kkkp", "ababd\nababd\nab\nabd\n", (1, 3)),
+        (short, "^jly3l^jjjp", "abcab\nabcab\nab\nabc\n", (1, 4)),
+        // A charwise register within a line: on every line of the block.
+        (four, "yiwjj^jlp", "one two three\nfour five\nonex seven eight nine\nonen\n", (3, 3)),
+        (four, "yiwjj^jlP", "one two three\nfour five\nonex seven eight nine\nonen\n", (3, 3)),
+        (four, "yiwjj^jlgp", "one two three\nfour five\nonex seven eight nine\nonen\n", (3, 4)),
+        (four, "yiwjj^jl2p", "one two three\nfour five\noneonex seven eight nine\noneonen\n", (3, 6)),
+        (four, "yiwgg^3jllp", "one two three\noner five\none seven eight nine\none\n", (1, 3)),
+        (four, "yiwgg8l^3jp", "oneonehree\nfouone\nsixone eight nine\ntenone\n", (1, 6)),
+        (four, "yiwgg8l^3jgp", "oneonehree\nfouone\nsixone eight nine\ntenone\n", (1, 7)),
+        (short, "yiwll^jlp", "ababcd\nababcd\nab\nabcd\n", (1, 6)),
+        (short, "yiwll^jlP", "ababcd\nababcd\nab\nabcd\n", (1, 6)),
+        (short, "yiw3l^jjjp", "abcabcd\nabcabcd\nab\nabcabcd\n", (1, 7)),
+        // A charwise register over lines: once, where the block began.
+        (four, "vjyjj^jlp", "one two three\nfour five\none two three\nfx seven eight nine\nn\n", (3, 1)),
+        (four, "vjyjj^jlgp", "one two three\nfour five\none two three\nfx seven eight nine\nn\n", (4, 2)),
+        // A linewise register.
+        (four, "Gyy^p", "one two three\nfour five\nsix seven eight nine\nen\nten\n", (5, 1)),
+        (four, "Gyy^gp", "one two three\nfour five\nsix seven eight nine\nen\nten\n", (5, 1)),
+        (four, "Gyy^P", "one two three\nfour five\nsix seven eight nine\nten\nen\n", (4, 1)),
+        (four, "Gyy^gP", "one two three\nfour five\nsix seven eight nine\nten\nen\n", (5, 1)),
+        (four, "Gyygg^jlp", "e two three\nur five\nten\nsix seven eight nine\nten\n", (3, 1)),
+        (four, "Gyygg^jlgp", "e two three\nur five\nten\nsix seven eight nine\nten\n", (4, 1)),
+        (four, "Gyygg^jlP", "ten\ne two three\nur five\nsix seven eight nine\nten\n", (1, 1)),
+        (four, "Gyygg^jlgP", "ten\ne two three\nur five\nsix seven eight nine\nten\n", (2, 1)),
+        (short, "yyll^jlp", "ab\nab\nabcd\nab\nabcd\n", (3, 1)),
+        (short, "yyll^jl2p", "ab\nab\nabcd\nabcd\nab\nabcd\n", (3, 1)),
+        // At the first line's end, `P` puts the lines below it.
+        (short, "yyll^jlP", "ab\nabcd\nab\nab\nabcd\n", (2, 1)),
+        // Below the moving corner's line, wherever that corner is.
+        (even, "yyGl^kkp", "abcd\nacd\nabcd\nacd\nacd\n", (3, 1)),
+        (even, "yyGl^kkP", "abcd\nabcd\nacd\nacd\nacd\n", (2, 1)),
+        (even, "yyGl^kkgp", "abcd\nacd\nabcd\nacd\nacd\n", (4, 1)),
+        (even, "yyl^jjop", "acd\nabcd\nacd\nacd\nabcd\n", (2, 1)),
+        (even, "yiw\"ayyjl^j\"ap", "abcd\nacd\nacd\nabcd\nabcd\n", (4, 1)),
+        // A block register over `v` and `V`.
+        (four, "^jlyjjwvep", "one two three\nfour five\nsix on eight nine\nten fo\n", (3, 5)),
+        (four, "^jlyjjwveP", "one two three\nfour five\nsix on eight nine\nten fo\n", (3, 5)),
+        (four, "^jlyjjwvegp", "one two three\nfour five\nsix on eight nine\nten fo\n", (4, 6)),
+        (four, "^jlyjjVp", "one two three\nfour five\non\nfo\nten\n", (3, 1)),
+        (four, "^jlyjjVP", "one two three\nfour five\non\nfo\nten\n", (3, 1)),
+        (four, "^jlyjjVgp", "one two three\nfour five\non\nfo\nten\n", (5, 1)),
+        (four, "^jlyjjVjp", "one two three\nfour five\non\nfo\n", (3, 1)),
+    ];
+    for &(text, keys, want, at) in cases {
+        let (_, got, cursor) = vim_block_run(text, keys);
+        assert_eq!((got.as_str(), cursor), (want, at), "{keys:?}");
+    }
+    // `p` leaves the block that went in the register, `P` the register as it was.
+    let (ed, ..) = vim_block_run(four, "^jlyjj^jlp");
+    assert!(ed.register_block);
+    assert_eq!(ed.register_parts, ["si", "te"]);
+    let (ed, ..) = vim_block_run(four, "yiwjj^jlP");
+    assert!(!ed.register_block);
+    assert_eq!(ed.register, "one");
+    let (ed, ..) = vim_block_run(four, "yiwjj^jlgP");
+    assert_eq!(ed.register_parts, ["si", "te"]);
+    // One `u` takes the whole of it back.
+    let (_, got, _) = vim_block_run(short, "yiwll^jlpu");
+    assert_eq!(got, short);
+    // nvim's `gP` over characters puts what it replaced in the register too.
+    let (ed, ..) = vim_block_run("one two\n", "yiwwvegP");
+    assert_eq!(ed.register, "two");
+}
+
+/// **`gv` selects the last block again, and the `<` `>` marks are where the
+/// last selection began and ended** (`:h gv`, `:h '<`, measured in nvim
+/// 0.12): ordered as they stand in the text, so on a block they are its
+/// two corners in that order; on whole lines `` `> `` is the last line's
+/// last character. They are motions, with operators too.
+#[test]
+fn vim_reselects_a_block_and_goes_to_the_selection_marks() {
+    let four = "one two three\nfour five\nsix seven eight nine\nten\n";
+    let cases: &[(&str, &str, (usize, usize))] = &[
+        ("ll^jjl\u{1b}Ggvd", "ontwo three\nfo five\nsiseven eight nine\nten\n", (1, 3)),
+        ("5l^jjhhh\u{1b}gg0`<", four, (1, 6)),
+        ("5l^jjhhh\u{1b}gg0`>", four, (3, 3)),
+        ("5l^jjhhh\u{1b}G$'<", four, (1, 1)),
+        ("5l^jjhhh\u{1b}gg'>", four, (3, 1)),
+        ("jjll^jkk\u{1b}gg0`<", four, (2, 3)),
+        ("jjll^jkk\u{1b}gg0`>", four, (3, 3)),
+        ("jll^j\u{1b}gg0d`>", "x seven eight nine\nten\n", (1, 1)),
+        ("jll^j\u{1b}G$d`<", "one two three\nfon\n", (2, 3)),
+        ("jll^j\u{1b}gg0d'>", "ten\n", (1, 1)),
+        ("jllVj\u{1b}gg0`<", four, (2, 1)),
+        ("jllVj\u{1b}gg0`>", four, (3, 20)),
+        ("jllVj\u{1b}gg0d`>", "e\nten\n", (1, 1)),
+        ("jllVj\u{1b}G$d`<", "one two three\nn\n", (2, 1)),
+        ("jllvjl\u{1b}gg0d`>", " seven eight nine\nten\n", (1, 1)),
+        ("jllvjl\u{1b}G$d`<", "one two three\nfon\n", (2, 3)),
+        ("jllvjlo\u{1b}gg0`<", four, (2, 3)),
+        ("jllvjlo\u{1b}gg0`>", four, (3, 4)),
+        ("jllvjlo\u{1b}Ggvd", "one two three\nfoseven eight nine\nten\n", (2, 3)),
+    ];
+    for &(keys, want, at) in cases {
+        let (_, got, cursor) = vim_block_run(four, keys);
+        assert_eq!((got.as_str(), cursor), (want, at), "{keys:?}");
+    }
+    let (ed, ..) = vim_block_run(four, "jllvjl\u{1b}gg0y`<");
+    assert_eq!(ed.register, "one two three\nfo");
+    let (ed, ..) = vim_block_run(four, "5l^jjhhh\u{1b}gg0y`>");
+    assert_eq!(ed.register, "one two three\nfour five\nsi");
+}

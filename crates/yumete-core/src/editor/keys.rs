@@ -22,6 +22,20 @@ enum Shape {
     Chars,
 }
 
+/// **The last Visual selection**, which `gv` selects again and the `<` and
+/// `>` marks name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum LastSelection {
+    /// Characters (`v`): its first and last position.
+    Chars(usize, usize),
+    /// Whole lines (`V`): its first and last line, by number, which an
+    /// indent does not move.
+    Lines(usize, usize),
+    /// A block (`C-v`): each corner's line and display column, the corner
+    /// that stays first, and whether `$` stretched it to the line ends.
+    Block { anchor: (usize, usize), cursor: (usize, usize), to_line_end: bool },
+}
+
 /// How a Normal key reaches the cursors (see `Editor::binding_fan`).
 enum Fan {
     /// As this key would, with this pending.
@@ -267,6 +281,9 @@ impl Editor {
                 false => ((from, to), false),
             }
         });
+        // A block is kept by its corners' lines and columns, read before the
+        // key moves the text under it.
+        let was_block = self.block.map(|block| self.block_corners(block));
         // Where the pane's window was pointed before this key — see
         // [`Self::hold_the_pane`].
         let held = self
@@ -391,7 +408,7 @@ impl Editor {
         // `takes_the_pane()`，不佔窗就直接回來，走出猜來的塊照舊把它忘掉。
         self.hold_the_pane(held);
         self.forget_a_guessed_table();
-        self.keep_the_last_selection(was_extending);
+        self.keep_the_last_selection(was_extending, was_block);
         self.go_back_after_one_key(borrowed);
         self.keep_off_the_newline();
         self.find_the_table_here();
@@ -442,14 +459,51 @@ impl Editor {
     /// 那一塊」。
     ///
     /// 記的還有它是不是整行（`V`）：整行記行號，`Vj>gv` 重選的是那幾行。
-    fn keep_the_last_selection(&mut self, was: Option<((usize, usize), bool)>) {
+    ///
+    /// A block (`C-v`) is kept when it closes, as its corners: `was_block`.
+    fn keep_the_last_selection(&mut self, was: Option<((usize, usize), bool)>, was_block: Option<LastSelection>) {
+        if let Some(block) = was_block.filter(|_| self.block.is_none()) {
+            self.last_selection = Some(block);
+            return;
+        }
         let Some(((anchor, head), lines)) = was else {
             return;
         };
         if self.extend {
             return;
         }
-        self.last_selection = Some((anchor, head, lines));
+        self.last_selection = Some(match lines {
+            true => LastSelection::Lines(anchor, head),
+            false => LastSelection::Chars(anchor, head),
+        });
+    }
+
+    /// **Where the last selection began and ended**, for the `<` and `>`
+    /// marks: its two ends in the order they stand in the text (vim's
+    /// `getmark`), not its corners, so `` `< `` on a block drawn from the
+    /// top right is that top right corner. A linewise one runs from its first
+    /// line's start to its last line's last character.
+    pub(super) fn last_selection_ends(&self) -> Option<(usize, usize)> {
+        let rope = self.current_buffer().rope();
+        let len = rope.len_chars();
+        let last_line = motion::last_line(rope);
+        Some(match self.last_selection? {
+            LastSelection::Chars(from, to) => (from.min(len), to.min(len)),
+            LastSelection::Lines(first, last) => {
+                let (first, last) = (first.min(last_line), last.min(last_line));
+                let start = rope.line_to_char(last);
+                let end = motion::line_end(rope, start);
+                let end = match end > start {
+                    true => motion::prev_grapheme(rope, end),
+                    false => start,
+                };
+                (rope.line_to_char(first), end)
+            }
+            LastSelection::Block { anchor, cursor, .. } => {
+                let (a, b) = (self.block_corner_at(anchor), self.block_corner_at(cursor));
+                (a.min(b), a.max(b))
+            }
+        })
     }
 
     /// **vim 鍵位下光標不停在換行符上**（十三條的第 9 條，規劃在 §5.85）。
@@ -980,13 +1034,15 @@ impl Editor {
             'U' => self.map_selection(|one| one.to_uppercase().collect()),
             '~' => self.map_selection(switch_case),
             // **`p` puts what it replaced in the unnamed register, `P`
-            // leaves the registers as they were** (`:h v_P`).
+            // leaves the registers as they were** (`:h v_P`). `gP` is not
+            // `P` there: nvim's `gP` puts the replaced text in, as `p` does.
             'p' | 'P' => {
                 let (from, to) = self.selection();
                 let old = self.current_buffer().rope().slice(from..to).to_string();
                 let before = self.current_buffer().revision();
+                let keep = c == 'P' && !self.paste_goes_past;
                 let landed = self.vim_put_over_selection(lines);
-                if c == 'p' && self.current_buffer().revision() != before {
+                if !keep && self.current_buffer().revision() != before {
                     self.vim_lines = lines;
                     self.pending_register = None;
                     self.store(old);

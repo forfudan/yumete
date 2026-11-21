@@ -254,6 +254,37 @@ impl super::Editor {
         }
     }
 
+    /// The block's corners as lines and display columns, which is how `gv`
+    /// keeps it: positions would drift as the text before them changes.
+    pub(super) fn block_corners(&self, block: Block) -> super::keys::LastSelection {
+        let rope = self.current_buffer().rope();
+        let corner = |at: usize| {
+            let (line, column, _) = place(rope, self.tab_stop(), at);
+            (line, column)
+        };
+        super::keys::LastSelection::Block {
+            anchor: corner(block.anchor),
+            cursor: corner(block.cursor),
+            to_line_end: block.to_line_end,
+        }
+    }
+
+    /// Where a corner kept by [`Self::block_corners`] stands now: on its
+    /// column, or at its line's end when the line is shorter.
+    pub(super) fn block_corner_at(&self, (line, column): (usize, usize)) -> usize {
+        let rope = self.current_buffer().rope();
+        at_column(rope, self.tab_stop(), line.min(motion::last_line(rope)), column)
+    }
+
+    /// **`gv` after a block**: the same block again.
+    pub(super) fn reselect_block(&mut self, anchor: (usize, usize), cursor: (usize, usize), to_line_end: bool) {
+        let (anchor, cursor) = (self.block_corner_at(anchor), self.block_corner_at(cursor));
+        self.extend = false;
+        self.vim_lines = false;
+        self.block = Some(Block { anchor, cursor, to_line_end, goal: None });
+        self.show_block();
+    }
+
     /// Leave the block with the cursor at `at`.
     fn leave_block(&mut self, at: usize) {
         self.block = None;
@@ -721,10 +752,21 @@ impl super::Editor {
     /// that many copies side by side, each padded to the block's width but
     /// the last where nothing follows (vim's `do_put`).
     pub(super) fn paste_block(&mut self, after: bool) {
-        let pieces: Vec<String> = match self.register_parts.len() {
+        let pieces = self.block_register();
+        self.paste_pieces(after, &pieces, self.register_block_width);
+    }
+
+    /// The pieces of the block the register holds, one a line.
+    pub(super) fn block_register(&self) -> Vec<String> {
+        match self.register_parts.len() {
             0 => vec![self.register.clone()],
             _ => self.register_parts.clone(),
-        };
+        }
+    }
+
+    /// [`Self::paste_block`] with the pieces given, `block_width` columns
+    /// wide.
+    pub(super) fn paste_pieces(&mut self, after: bool, pieces: &[String], block_width: usize) {
         let copies = std::mem::replace(&mut self.paste_copies, 1).max(1);
         let rope = self.current_buffer().rope().clone();
         let (line, column, w) = place(&rope, self.tab_stop(), self.sel.head());
@@ -743,7 +785,7 @@ impl super::Editor {
         for (i, piece) in pieces.iter().enumerate() {
             let target = line + i;
             let rope = self.current_buffer().rope().clone();
-            let short = self.register_block_width.saturating_sub(text_width(piece, self.tab_stop()));
+            let short = block_width.saturating_sub(text_width(piece, self.tab_stop()));
             let side_by_side = |behind: bool| {
                 let mut row = String::new();
                 for j in 0..copies {
@@ -794,5 +836,111 @@ impl super::Editor {
         };
         self.sel = Selections::one(Range::at(at));
         self.clamp_cursor();
+    }
+
+    /// **`p` and `P` over a block** (`:h v_p`, measured in nvim 0.12): the
+    /// block goes and the register comes in its place, keeping its kind.
+    ///
+    /// - A block is put as a block where the old one began.
+    /// - Text within one line is put on every line of the block, at the
+    ///   column the block began on; a line too short for it is left alone.
+    /// - Text over several lines is put once, where the block began.
+    /// - Lines go below the line of the block's moving corner (`p`, `gp`),
+    ///   or above its first line (`P`, `gP`).
+    ///
+    /// **Where the block ran to its first line's end, what comes goes after
+    /// that line's last character**: vim's cursor, which cannot stand past
+    /// it, puts it there. `P` leaves the registers as they were; `p`, `gp`
+    /// and `gP` leave the block that went in the unnamed one.
+    pub(super) fn put_over_block(&mut self, key: char, count: usize) {
+        let Some(block) = self.block else { return };
+        enum Put {
+            Block(Vec<String>, usize),
+            Text(String, bool),
+        }
+        let named = self.pending_register;
+        let put = match self.register_block && named.is_none() {
+            true => Put::Block(self.block_register(), self.register_block_width),
+            false => {
+                let kind = named.filter(|n| n.is_ascii_alphanumeric()).map_or('"', |n| n.to_ascii_lowercase());
+                let text = self.recall();
+                if text.is_empty() {
+                    self.status = match named {
+                        Some(name) => say!("register.empty", name),
+                        None => say!("register.nothing-yanked"),
+                    };
+                    return;
+                }
+                let line_wise = text.ends_with('\n') && !self.charwise_breaks.contains(&kind);
+                Put::Text(text.repeat(count), line_wise)
+            }
+        };
+        self.pending_register = None;
+        let keep = key == 'P' && !self.paste_goes_past;
+        let (first, last, left, _) = self.block_shape(block);
+        let rope = self.current_buffer().rope();
+        let corner_line = rope.char_to_line(block.cursor.min(rope.len_chars()));
+        self.sel = Selections::one(Range::at(at_column(rope, self.tab_stop(), first, left)));
+        self.snapshot();
+        let grouping = self.current_buffer_mut().begin_undo_group();
+        if !keep {
+            self.block_yank(block);
+        }
+        self.block_delete(block);
+        self.block = None;
+        let rope = self.current_buffer().rope().clone();
+        let line_start = rope.line_to_char(first);
+        let at = at_column(&rope, self.tab_stop(), first, left);
+        let forward = at == motion::line_end(&rope, line_start) && at > line_start;
+        let cursor = match forward {
+            true => motion::prev_grapheme(&rope, at),
+            false => at,
+        };
+        self.sel = Selections::one(Range::at(cursor));
+        match put {
+            Put::Block(pieces, width) => {
+                self.paste_copies = count;
+                self.paste_pieces(forward, &pieces, width);
+            }
+            Put::Text(text, true) => {
+                if key == 'p' {
+                    self.sel = Selections::one(Range::at(rope.line_to_char(corner_line)));
+                }
+                self.put_text(key == 'p' || forward, text, true);
+            }
+            Put::Text(text, false) if text.contains('\n') => self.put_text(forward, text, false),
+            Put::Text(text, false) => self.put_on_each_line(at, first..=last, &text),
+        }
+        self.current_buffer_mut().end_undo_group(grouping);
+    }
+
+    /// Text within one line, put on each of `lines` at the display column
+    /// `at` stands on in the first, and not on a line that does not reach
+    /// that column (vim's `do_put` in Visual block mode). The cursor ends on
+    /// the first line's last character put, or after it for `gp`.
+    fn put_on_each_line(&mut self, at: usize, lines: std::ops::RangeInclusive<usize>, text: &str) {
+        let go_past = std::mem::take(&mut self.paste_goes_past);
+        let (_, column, _) = place(self.current_buffer().rope(), self.tab_stop(), at);
+        // Bottom up, so `at` on the first line stays where it is.
+        for line in (lines.start() + 1..=*lines.end()).rev() {
+            let rope = self.current_buffer().rope();
+            if width(rope, self.tab_stop(), line) < column {
+                continue;
+            }
+            let to = at_column(rope, self.tab_stop(), line, column);
+            if !self.edit_insert(to, text) {
+                return;
+            }
+        }
+        if !self.edit_insert(at, text) {
+            return;
+        }
+        let end = at + text.chars().count();
+        let to = match go_past {
+            true => self.just_past_the_put(end, false),
+            false => motion::prev_grapheme(self.current_buffer().rope(), end).max(at),
+        };
+        self.sel = Selections::one(Range::at(to));
+        self.refresh_goal_column();
     }
 }

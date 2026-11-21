@@ -1921,16 +1921,21 @@ impl Editor {
     #[allow(unused_variables)]
     pub(super) fn cmd_paste(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
-        // vim's: a block taken is a block pasted (`:h v_b_p`), and Visual
-        // `p` writes the register over the selection.
-        if self.as_vim() && self.register_block && self.pending_register.is_none() {
-            self.paste_copies = count.clamp(1, Self::WRITING_MAX);
-            return self.paste_block(key == Key::Char('p'));
+        // vim's Visual `p` writes the register over the selection, a block
+        // among them, and a block taken is a block pasted (`:h v_b_p`).
+        if self.as_vim() && !self.expanding_alias && !matches!(self.pending_register, Some('+' | '*')) {
+            if let (Some(_), Key::Char(c @ ('p' | 'P'))) = (self.block, key) {
+                return self.put_over_block(c, count.clamp(1, Self::WRITING_MAX));
+            }
         }
         if self.as_vim() && self.extend && !self.expanding_alias {
             if let Key::Char(c @ ('p' | 'P')) = key {
                 return self.vim_visual_key(c);
             }
+        }
+        if self.as_vim() && self.register_block && self.pending_register.is_none() {
+            self.paste_copies = count.clamp(1, Self::WRITING_MAX);
+            return self.paste_block(key == Key::Char('p'));
         }
         let Key::Char(c) = key else { return };
         self.paste_copies = count.clamp(1, Self::WRITING_MAX);

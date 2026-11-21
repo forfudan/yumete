@@ -2251,7 +2251,6 @@ impl Editor {
         // 「nothing has been yanked」 about a register they had just named.
         let named = self.pending_register;
         let copies = std::mem::replace(&mut self.paste_copies, 1).max(1);
-        let fix_indent = std::mem::take(&mut self.paste_fixes_indent);
         let text = self.recall().repeat(copies);
         if text.is_empty() {
             // A key that does nothing and says nothing is indistinguishable
@@ -2261,16 +2260,24 @@ impl Editor {
                 Some(name) => say!("register.empty", name),
                 None => say!("register.nothing-yanked"),
             };
+            self.paste_fixes_indent = false;
             return;
         }
-        self.snapshot();
-        let (start, end) = self.selection();
         // Whole lines go back as whole lines. `xy` copies a line *with* its
         // break, and dropping that in the middle of another line cuts it in
         // two — which is exactly what the standard way of moving a paragraph
         // (`xy`, move, `p`) does most.
         let kind = named.filter(|n| n.is_ascii_alphanumeric()).map_or('"', |n| n.to_ascii_lowercase());
         let line_wise = text.ends_with('\n') && !(self.keymap_rules().vim_registers && self.charwise_breaks.contains(&kind));
+        self.put_text(after, text, line_wise);
+    }
+
+    /// Put `text` after (`p`) or before (`P`) the selection, as lines when
+    /// `line_wise`; the rest of [`Self::paste`], once the text is known.
+    pub(super) fn put_text(&mut self, after: bool, text: String, line_wise: bool) {
+        let fix_indent = std::mem::take(&mut self.paste_fixes_indent);
+        self.snapshot();
+        let (start, end) = self.selection();
         let (start, end) = (start, end.max(start));
         let at = if line_wise {
             let rope = self.current_buffer().rope();

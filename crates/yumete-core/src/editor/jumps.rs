@@ -114,14 +114,23 @@ impl Editor {
         }
     }
 
-    /// A mark by its name: a letter set with `m`/`M`, or vim's `[` and `]`,
-    /// where the last change or yank began and ended.
+    /// A mark by its name: a letter set with `m`/`M`, vim's `[` and `]`,
+    /// where the last change or yank began and ended, or its `<` and `>`.
     fn mark_named(&self, name: char) -> Option<Spot> {
         match name {
             '[' | ']' => {
                 let (start, end) = self.current_buffer().change_span()?;
                 let pos = match name {
                     '[' => start,
+                    _ => end,
+                };
+                Some(Spot::InBuffer(self.current_buffer().id(), pos))
+            }
+            // Where the last Visual selection began and ended (`:h '<`).
+            '<' | '>' => {
+                let (start, end) = self.last_selection_ends()?;
+                let pos = match name {
+                    '<' => start,
                     _ => end,
                 };
                 Some(Spot::InBuffer(self.current_buffer().id(), pos))
