@@ -33,6 +33,13 @@ enum Fan {
 impl Editor {
     /// Handle a single key press according to the current mode.
     pub fn on_key(&mut self, key: Key) -> KeyOutcome {
+        // **`A-Enter` is a picker's key** (open and stay). Anywhere else it is
+        // Enter: a terminal without the Kitty protocol sends it as `ESC CR`,
+        // and Option+Enter for a new line is a habit of the hands.
+        let key = match key {
+            Key::Alt('\n') if self.picker.is_none() => Key::Enter,
+            key => key,
+        };
         let was = self.before_a_change();
         // A key outside Insert begins a new change for `` `[ `` and `` `] ``;
         // the keys of one Insert session are one change with the command

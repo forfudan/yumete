@@ -45004,3 +45004,32 @@ fn a_vim_block_reaches_past_a_short_line_as_nvim_does() {
         assert_eq!(vim_at(&ed), at, "nvim: {keys} on {text:?}");
     }
 }
+
+/// **Outside a picker `A-Enter` is Enter**: Option+Enter in Insert writes a
+/// line break, as it did before the picker took the key.
+#[test]
+fn alt_enter_outside_a_picker_is_enter() {
+    let mut ed = typed("ab\n");
+    press(&mut ed, "ggA");
+    ed.on_key(Key::Alt('\n'));
+    press(&mut ed, "cd");
+    assert_eq!(ed.current_buffer().text(), "ab\ncd\n");
+}
+
+/// **`C-r` reads the registers that answer**, in Insert and on the `:`
+/// line: `%` the file's name, `/` the last search, as `"%p` and `"/p` do.
+#[test]
+fn ctrl_r_reads_the_answering_registers() {
+    let mut ed = typed("one two\n");
+    press(&mut ed, "/two");
+    ed.on_key(Key::Enter);
+    press(&mut ed, "ggO");
+    ed.on_key(Key::Ctrl('r'));
+    ed.on_key(Key::Char('/'));
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.current_buffer().text(), "two\none two\n");
+    press(&mut ed, ":");
+    ed.on_key(Key::Ctrl('r'));
+    ed.on_key(Key::Char('/'));
+    assert!(ed.command_line.ends_with("two"), "{:?}", ed.command_line);
+}

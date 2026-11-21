@@ -947,10 +947,9 @@ impl Editor {
     /// `Esc`、`p`、再 `i` 回來——而這個倉的規矩是「一次插入是一次撤銷」（§5.12.3），
     /// 那一出一進白白多出一個撤銷點，一句話要按兩次 `u` 纔退得乾淨。
     pub(super) fn insert_register(&mut self, name: Option<char>) {
-        let text = match name {
-            Some(name) => self.held(name),
-            None => self.register.clone(),
-        };
+        // The registers `"ap` reads, the ones that answer (`%` `/` `.` `#`)
+        // too.
+        let text = self.register_text(name);
         if text.is_empty() {
             self.status = say!("edit.register-is-empty");
             return;
@@ -2006,7 +2005,7 @@ impl Editor {
         }
     }
 
-    fn register_text(&self, name: Option<char>) -> String {
+    pub(super) fn register_text(&self, name: Option<char>) -> String {
         match name {
             // **`#` 是選區的序號**（#405 Phase 3，helix 也是這個名字）。它不是一個存東
             // 西的格子，是一個問題的答案：「這是第幾段」。`"#p` 於是在第一段貼「1」、

@@ -919,8 +919,8 @@ impl Editor {
         self.pending = Pending::None;
         let Key::Char(name) = key else { return false };
         let held = match name {
-            '"' => self.register.clone(),
-            name => self.held(name),
+            '"' => self.register_text(None),
+            name => self.register_text(Some(name)),
         };
         let text: String = held.chars().filter(|c| !c.is_control()).collect();
         match (self.mode, self.picker.as_mut()) {
