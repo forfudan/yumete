@@ -1625,6 +1625,12 @@ zhs = "设置面板不接受命令「{0}」，按 q 关闭"
 en = "the settings panel takes no commands ({0}); q closes it"
 
 [[message]]
+# :set 名字! 或 :set no名字 用在不是开关的设置上。{0} 是设置名（草稿）
+key = "settings.not-on-off"
+zhs = "「{0}」不是开关设置"
+en = "{0} is not an on/off setting"
+
+[[message]]
 # 设置面板：按 d，而当前这一层的文件没有设这一项（草稿）
 key = "settings.nothing-to-drop"
 zhs = "本层没有设这一项，已在跟随下一层"

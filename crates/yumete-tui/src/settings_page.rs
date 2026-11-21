@@ -337,16 +337,36 @@ impl Seat {
             Some(yumete_config::config_dir().join("config.toml")),
             Some(yumete_config::panel::local_sheet_path(&editor.root())),
         );
-        if page.go_to(text, |s| every_name(s.label)) {
-            let setting = page.here().filter(|s| matches!(s.kind, Kind::Tick))?;
-            // What this run reads now: an earlier `:set` over the files.
-            let path = (setting.table.to_string(), setting.key.to_string());
-            let now = self.session.get(&path).cloned().unwrap_or_else(|| page.shown(setting).value);
-            let flipped = match now.trim() == "true" {
-                true => "false",
-                false => "true",
-            };
-            return Some(self.set_for_the_run(editor, vec![(path.0, path.1, flipped.to_string())]));
+        // vim's spellings of one word: `name!` flips, `noname` turns off,
+        // `name?` says the value. The name as typed wins over them, so a
+        // setting whose own name starts with `no` is still itself.
+        let word = text.trim();
+        let (name, spelling) = match () {
+            _ if word.contains(char::is_whitespace) || page.go_to(word, |s| every_name(s.label)) => (word, None),
+            _ => match (word.strip_suffix('!'), word.strip_suffix('?'), word.strip_prefix("no")) {
+                (Some(name), _, _) => (name, Some('!')),
+                (_, Some(name), _) => (name, Some('?')),
+                (_, _, Some(name)) => (name, Some('n')),
+                _ => (word, None),
+            },
+        };
+        if spelling.is_none() || page.go_to(name, |s| every_name(s.label)) {
+            if let Some(setting) = page.here().filter(|_| !word.contains(char::is_whitespace)) {
+                // What this run reads now: an earlier `:set` over the files.
+                let path = (setting.table.to_string(), setting.key.to_string());
+                let now = self.session.get(&path).cloned().unwrap_or_else(|| page.shown(setting).value);
+                if spelling == Some('?') {
+                    return Some(format!("{} = {}", path.1, now.trim()));
+                }
+                if !matches!(setting.kind, Kind::Tick) {
+                    return spelling.map(|_| say!("settings.not-on-off", name));
+                }
+                let on = match spelling {
+                    Some('n') => false,
+                    _ => now.trim() != "true",
+                };
+                return Some(self.set_for_the_run(editor, vec![(path.0, path.1, on.to_string())]));
+            }
         }
         let (key, value) = text.trim().split_once(char::is_whitespace)?;
         let value = value.trim();
@@ -3173,6 +3193,26 @@ mod tests {
             assert_eq!(seat.session_toml(), format!("[editor]\nmouse = {value}\n"));
             assert_eq!(ed.status(), say!("settings.set-for-the-session", format!("mouse = {value}")));
         }
+        // vim's spellings: `!` flips, `no` turns off, `?` says the value.
+        let mut ed = Editor::new();
+        let mut seat = Seat::default();
+        for (line, value) in [("mouse!", !factory), ("nomouse", false), ("mouse!", true), ("noeditor.mouse", false)] {
+            ed.execute(&format!(":set {line}")).unwrap();
+            seat.settle(&mut ed);
+            assert!(seat.panel.is_none(), "{line}: no panel");
+            assert_eq!(seat.session_toml(), format!("[editor]\nmouse = {value}\n"), "{line}");
+        }
+        ed.execute(":set mouse?").unwrap();
+        seat.settle(&mut ed);
+        assert_eq!(ed.status(), "mouse = false");
+        assert!(seat.panel.is_none());
+        ed.execute(":set scrolloff?").unwrap();
+        seat.settle(&mut ed);
+        assert_eq!(ed.status(), format!("scrolloff = {}", Config::default().editor.scrolloff));
+        ed.execute(":set scrolloff!").unwrap();
+        seat.settle(&mut ed);
+        assert_eq!(ed.status(), say!("settings.not-on-off", "scrolloff"));
+        assert!(seat.panel.is_none());
         // A count's name alone opens its row and sets nothing.
         let mut ed = Editor::new();
         let mut seat = Seat::default();

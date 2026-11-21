@@ -1732,14 +1732,15 @@ pub const QUIET: &[&str] = &[
 
 /// **Whether the words after `:settings` are vim's `:set` words** and not a
 /// setting's name. A setting is named by its path, which is always
-/// `table.key`, or by its label; neither has an `=` or a trailing `?`, and
-/// none is one of the five options vim's `:set` is taken for here.
+/// `table.key`, or by its label; neither has an `=`, and none is one of the
+/// five options vim's `:set` is taken for here. A `?` asks after one of those
+/// five here, and after any other name on the settings page.
 fn vim_options(text: &str) -> bool {
     const OPTIONS: &[&str] = &[
         "ft", "filetype", "ts", "tabstop", "sw", "shiftwidth", "tw", "textwidth",
         "et", "expandtab", "noet", "noexpandtab",
     ];
-    text.split_whitespace().all(|word| word.contains('=') || word.ends_with('?') || OPTIONS.contains(&word))
+    text.split_whitespace().all(|word| word.contains('=') || OPTIONS.contains(&word.strip_suffix('?').unwrap_or(word)))
 }
 
 pub fn setting_names() -> &'static [Word] {

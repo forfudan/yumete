@@ -29243,8 +29243,10 @@ fn vims_set_setf_ene_and_tabnew() {
     ed.execute(":set nu").unwrap();
     assert!(ed.take_settings_request());
     assert_eq!(ed.take_settings_target().as_deref(), Some("nu"));
+    // A question about any other name goes to the settings page too, which
+    // says the value or that there is no such setting.
     ed.execute(":set nu?").unwrap();
-    assert!(ed.status().contains("nu"), "says what it does not take: {}", ed.status());
+    assert_eq!(ed.take_settings_target().as_deref(), Some("nu?"));
     ed.execute(":se tw=60").unwrap();
     assert_eq!(ed.current_buffer().local().text_width, Some(60));
     // …and `gq` fills to it, as vim's does (nvim gives these three lines on
