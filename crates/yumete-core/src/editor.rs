@@ -6332,6 +6332,42 @@ pub(crate) fn pair_family(c: char) -> Vec<(char, char)> {
     }
 }
 
+/// **`f)` stops on `）` too**: a mark found by `f`/`t` matches its other widths.
+///
+/// With the input method in Chinese mode, `)` arrives as `）` and `"` as `“`, so
+/// an exact match would leave `dt)` stuck on `call(x, y)`. Brackets and quotes
+/// go by [`FAMILIES`], one side at a time (`(` finds `（`, never `）`); a straight
+/// `"` has no side, so it and `“`/`”` find each other. The other marks fold their
+/// full-width forms (`，` is `,`), and `。` is the IME's `.`.
+pub(crate) fn marks_match(target: char, c: char) -> bool {
+    if target == c {
+        return true;
+    }
+    let side = |x: char| {
+        FAMILIES.iter().enumerate().find_map(|(i, family)| {
+            family.iter().find_map(|&(open, close)| match x {
+                _ if x == open && x == close => Some((i, None)),
+                _ if x == open => Some((i, Some(true))),
+                _ if x == close => Some((i, Some(false))),
+                _ => None,
+            })
+        })
+    };
+    if let (Some((a, sa)), Some((b, sb))) = (side(target), side(c)) {
+        return a == b && (sa.is_none() || sb.is_none() || sa == sb);
+    }
+    let fold = |x: char| match x {
+        '。' => '.',
+        '\u{FF01}'..='\u{FF5E}' => {
+            let ascii = char::from_u32(x as u32 - 0xFEE0).unwrap_or(x);
+            if ascii.is_ascii_punctuation() { ascii } else { x }
+        }
+        x => x,
+    };
+    let (t, c) = (fold(target), fold(c));
+    t == c && t.is_ascii_punctuation()
+}
+
 /// The pair a delimiter names — either half selects the whole pair, so `mi「`
 /// and `mi」` mean the same thing.
 /// The pair a character names, for the vim grammar's objects.

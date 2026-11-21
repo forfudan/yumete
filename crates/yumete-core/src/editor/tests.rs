@@ -28661,6 +28661,13 @@ fn a_vim_operator_never_opens_the_input_method() {
     ed.insert_committed("然");
     assert_eq!(ed.current_buffer().text(), "然後\n", "df 然 連「然」一起刪");
 
+    // 中文狀態下 `)` 上屏成 `）`，照樣找得到代碼裏的半角括號。
+    let mut ed = typed("call(x, y);\n");
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "ggfxdt");
+    ed.insert_committed("）");
+    assert_eq!(ed.current_buffer().text(), "call();\n", "dt） 刪到半角 ) 之前");
+
     // 半角鍵就認得全角括號，所以那一族從頭到尾用不着輸入法。
     let mut ed = typed("他說（不要走）然後走了。\n");
     ed.execute(":keymap vim").unwrap();

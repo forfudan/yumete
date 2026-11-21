@@ -22,6 +22,7 @@
 //! What the rest of them want is an incremental grapheme cursor over the
 //! rope's chunks; `ropey`'s `chars_at` is the handle for it.
 
+use crate::editor::marks_match;
 use ropey::Rope;
 use yumete_cjk::{
     grapheme_width, graphemes, next_grapheme_boundary, prev_grapheme_boundary, Segmenter,
@@ -1060,7 +1061,7 @@ pub fn find_char(
             true => rope
                 .chars_at((pos + 1).min(len))
                 .enumerate()
-                .filter(|&(_, c)| c == target)
+                .filter(|&(_, c)| marks_match(target, c))
                 .nth(nth - 1)
                 .map(|(i, _)| pos + 1 + i),
             false => {
@@ -1070,7 +1071,7 @@ pub fn find_char(
                 let mut found = None;
                 while let Some(c) = it.prev() {
                     at -= 1;
-                    if c == target {
+                    if marks_match(target, c) {
                         seen += 1;
                         if seen == nth {
                             found = Some(at);
@@ -1107,10 +1108,10 @@ pub fn find_char(
     // `9f,`→1（不動）、`2t,`→3、`3t,`→5。
     let nth = nth.max(1);
     let found = match forward {
-        true => (col + 1..chars.len()).filter(|&i| chars[i] == target).nth(nth - 1),
+        true => (col + 1..chars.len()).filter(|&i| marks_match(target, chars[i])).nth(nth - 1),
         false => (0..col.min(chars.len()))
             .rev()
-            .filter(|&i| chars[i] == target)
+            .filter(|&i| marks_match(target, chars[i]))
             .nth(nth - 1),
     };
     let Some(at) = found else { return Span::Missed };
@@ -2199,6 +2200,31 @@ mod tests {
         // 到了緩衝區的盡頭是 `Missed`，不是一個空的 span —— 動詞要分得出
         // 「没東西」和「一格」，那正是 `wdiw` 當初栽的地方。
         assert_eq!(word_forward(&r, r.len_chars(), Grain::Word, &two), Span::Missed);
+    }
+
+    /// **A mark finds its other widths**: the input method in Chinese mode
+    /// sends `）` for `)`, and `call(x, y)` still has to be reachable.
+    #[test]
+    fn a_found_mark_matches_both_widths() {
+        let r = rope("call(x, y)。他說「好」");
+        for across in [false, true] {
+            let at = |t: char, till: bool| find_char(&r, 0, true, t, till, 1, across);
+            assert_eq!(at('）', false), Span::Over { anchor: 0, head: 9 });
+            assert_eq!(at('）', true), Span::Over { anchor: 0, head: 8 });
+            assert_eq!(at('，', false), Span::Over { anchor: 0, head: 6 });
+            assert_eq!(at('.', false), Span::Over { anchor: 0, head: 10 });
+            assert_eq!(at('[', false), Span::Over { anchor: 0, head: 13 });
+            assert_eq!(at(']', false), Span::Over { anchor: 0, head: 15 });
+        }
+        // A side is a side: `（` opens, so it never stops on a `)`.
+        assert_eq!(find_char(&r, 5, true, '（', false, 1, false), Span::Missed);
+        // A straight quote has no side; curly ones keep theirs.
+        let r = rope("say \"hi\" “x”");
+        assert_eq!(find_char(&r, 0, true, '“', false, 1, false), Span::Over { anchor: 0, head: 4 });
+        assert_eq!(find_char(&r, 0, true, '"', false, 4, false), Span::Over { anchor: 0, head: 11 });
+        assert_eq!(find_char(&r, 8, true, '”', false, 1, false), Span::Over { anchor: 8, head: 11 });
+        // Letters and digits are not folded.
+        assert_eq!(find_char(&rope("ａa"), 0, true, 'a', false, 1, false), Span::Over { anchor: 0, head: 1 });
     }
 
     /// **vim's `f` stays on its line**, and 「not there」 is `Missed` — the

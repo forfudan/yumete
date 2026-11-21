@@ -27,7 +27,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **A vim block's corner may stand past a short line's end**, so `C-v j l` from `abc` onto `d` is two columns wide, as in vim.
 - **Of several pixi environments, a language server is taken from the active one** (`pixi shell`), then `default`, then the rest by name.
 - **A bare `:set` on an on/off setting flips it**, as vim's `:set wrap!` and helix's `:toggle` do; any other setting still opens its row in the settings page.
-- **Under vim, `df`, `dt`, `cF` and `yT` open the IME as `f` does**, so `dt京` deletes up to 京.
+- **Under vim, `df`, `dt`, `cF` and `yT` open the IME as `f` does**, so `dt京` deletes up to 京. **A punctuation mark found by `f` or `t` matches both widths**: `)` stops on `)` or `）`, so `dt)` reaches the bracket in `call(x, y)` with the IME in Chinese mode.
 - **`--shot --keys` draws the frame between keys that the editor draws**, so page and scroll keys move the view as they do in the editor.
 
 ### Fixed
