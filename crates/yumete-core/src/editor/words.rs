@@ -855,24 +855,26 @@ impl Editor {
     /// Meaningful in Insert mode; grouped as one undo step (Feature #27).
     pub fn insert_committed(&mut self, text: &str) {
         let was = self.before_a_change();
-        // A key that waits for one character (`f`, `mi`, `ms`) takes the
-        // commit's first, so that one is what the macro plays to it; the rest
-        // would reach Normal mode as commands. `r` takes the whole commit,
-        // and the macro keeps one of several characters as one
-        // ([`Self::record_commit`]); a single one `r` takes as it takes the
-        // key, so the key is what goes in.
-        let one = self.pending.takes_a_character()
-            && self.pending != Pending::Replace
-            && !matches!(self.mode, Mode::Field | Mode::Picker)
-            && !self.mode.types_into_command_line();
-        // In Normal mode with nothing waiting the commit is written in, which
-        // its characters played as keys would not do: they would be commands.
-        let typed_as_keys = self.mode != Mode::Normal || self.pending != Pending::None;
-        if typed_as_keys && self.pending == Pending::Replace && text.chars().nth(1).is_some() {
+        // **Every commit goes into the macro**, as keys when its characters
+        // typed would do what it does, and as one commit
+        // ([`Self::record_commit`]) when they would not. Outside Normal mode
+        // the characters are typed. In Normal mode a key waiting for one
+        // character (`f`, `t`, `ms`, `df`) takes the commit's first, so that
+        // one is what the macro plays to it, and `r` takes a single one as it
+        // takes the key. Anything else in Normal mode would read the
+        // characters as commands: several characters `r` writes over the
+        // selection, or a commit written in with nothing waiting.
+        let typed = self.mode != Mode::Normal;
+        let answers = !typed
+            && self.pending.takes_a_character()
+            && (self.pending != Pending::Replace || text.chars().nth(1).is_none());
+        if typed {
+            self.record_typed_text(text);
+        } else if answers {
+            let first: String = text.chars().take(1).collect();
+            self.record_typed_text(&first);
+        } else {
             self.record_commit(text);
-        } else if typed_as_keys {
-            let recorded: String = text.chars().take(if one { 1 } else { usize::MAX }).collect();
-            self.record_typed_text(&recorded);
         }
         self.insert_committed_now(text);
         // Where redo comes back to, as for a key — `r`, `ms` and Chinese typed

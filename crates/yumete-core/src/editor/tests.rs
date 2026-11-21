@@ -37144,6 +37144,33 @@ fn a_macro_records_what_the_input_method_commits() {
     assert_eq!(ed.current_buffer().text(), "ab你好\ncd你好\n");
 }
 
+/// **No commit in Normal mode is left out of a macro.** A key waiting for a
+/// character (`f`, `t`) takes a commit's first and the macro holds that
+/// one; a commit written in with nothing waiting goes in as a commit,
+/// because its characters played as keys would be commands.
+#[test]
+fn a_macro_records_every_commit_in_normal_mode() {
+    let mut ed = typed_vim("天，地，玄，黄\n");
+    press(&mut ed, "0qat");
+    ed.insert_committed("，地");
+    press(&mut ed, "lq");
+    assert_eq!(ed.held('a'), "t，l");
+    assert_eq!(ed.cursor(), 1);
+    press(&mut ed, "@a");
+    assert_eq!(ed.cursor(), 3, "the macro goes on to the next one");
+
+    // Nothing waiting: written in, and written in again.
+    let mut ed = typed_vim("天地\n");
+    press(&mut ed, "0qa");
+    ed.insert_committed("玄黄");
+    press(&mut ed, "q");
+    assert_eq!(ed.held('a'), "<commit>玄黄</commit>");
+    let once = ed.current_buffer().text().to_string();
+    assert_eq!(once.matches("玄黄").count(), 1, "{once:?}");
+    press(&mut ed, "@a");
+    assert_eq!(ed.current_buffer().text().matches("玄黄").count(), 2);
+}
+
 /// **A commit `r` takes plays back as that commit**: `r` writes a commit of
 /// several characters over the selection, and the macro keeps it as one, so
 /// replaying does what the commit did — not `r` with its first character and
