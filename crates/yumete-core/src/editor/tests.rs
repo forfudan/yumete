@@ -45241,6 +45241,8 @@ fn vim_reselects_a_block_and_goes_to_the_selection_marks() {
     assert_eq!(ed.register, "one two three\nfo");
     let (ed, ..) = vim_block_run(four, "5l^jjhhh\u{1b}gg0y`>");
     assert_eq!(ed.register, "one two three\nfour five\nsi");
+}
+
 /// **`/` and `?` are motions after an operator** (`:h /`, exclusive),
 /// measured against nvim: the operator waits on the search line and takes
 /// the text up to the match when Enter is pressed.
