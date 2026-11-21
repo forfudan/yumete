@@ -854,12 +854,19 @@ impl Editor {
     /// Insert already-composed text (an IME commit) at the cursor, as if typed.
     /// Meaningful in Insert mode; grouped as one undo step (Feature #27).
     pub fn insert_committed(&mut self, text: &str) {
+        // `dt` then 京 through the input method is `dt` then the key 京.
+        if self.mode == Mode::Normal && self.pending.owes_a_found_character() {
+            if let Some(c) = text.chars().next() {
+                self.on_key(Key::Char(c));
+            }
+            return;
+        }
         let was = self.before_a_change();
         // **Every commit goes into the macro**, as keys when its characters
         // typed would do what it does, and as one commit
         // ([`Self::record_commit`]) when they would not. Outside Normal mode
         // the characters are typed. In Normal mode a key waiting for one
-        // character (`f`, `t`, `ms`, `df`) takes the commit's first, so that
+        // character (`f`, `t`, `ms`) takes the commit's first, so that
         // one is what the macro plays to it, and `r` takes a single one as it
         // takes the key. Anything else in Normal mode would read the
         // characters as commands: several characters `r` writes over the

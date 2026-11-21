@@ -28623,7 +28623,7 @@ fn a_full_pane_table_holds_one_cursor() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// **`di`/`da` 之後輸入法不開**。
+/// **`di`/`da` 之後輸入法不開，`df`/`dt` 之後開**。
 ///
 /// 「`di（` 要的是一個全角括號」不是開的理由：**它等的那一個鍵多半根本不是要寫進
 /// 去的字**——`diw` 的 `w` 是「詞」，`dip` 的 `p` 是「段」。開着輸入法的話 `w` 被
@@ -28643,8 +28643,23 @@ fn a_vim_operator_never_opens_the_input_method() {
     assert!(!waiting("di"), "di 等的是「詞」「段」「句」這種名字，不是一個字");
     assert!(!waiting("da"), "da 也是");
     assert!(!waiting("ci"), "ci 也是");
-    assert!(!waiting("df"), "df 要的是分隔符，多半是 ASCII");
     assert!(!waiting("d"), "光一個 d 在等動作，不是字符");
+    assert!(!waiting("dg"), "dg 等的是 g 的下一鍵");
+    // `f` 單獨找得到的字，帶算符也要找得到：`df`/`dt`/`cF`/`yT` 請輸入法來。
+    for steps in ["df", "dt", "cF", "yT"] {
+        assert!(waiting(steps), "{steps} 等的是稿子裏的字");
+    }
+
+    // 上屏的字走按鍵那一路：刪到「然」之前，`.` 再做一遍也一樣。
+    let mut ed = typed("他說要走然後走了然後\n");
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "ggdt");
+    ed.insert_committed("然後");
+    assert_eq!(ed.current_buffer().text(), "然後走了然後\n", "dt 然 刪到「然」之前");
+    assert!(ed.pending == Pending::None, "多出來的「後」不留下");
+    press(&mut ed, "ldf");
+    ed.insert_committed("然");
+    assert_eq!(ed.current_buffer().text(), "然後\n", "df 然 連「然」一起刪");
 
     // 半角鍵就認得全角括號，所以那一族從頭到尾用不着輸入法。
     let mut ed = typed("他說（不要走）然後走了。\n");

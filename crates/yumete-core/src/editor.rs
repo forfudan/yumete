@@ -589,7 +589,17 @@ impl Pending {
     /// 還没有模態挂起）`ma「` 照樣要管用，所以 [`Self::takes_a_character`] 仍然
     /// 收它——這裏改的只是「不主動請輸入法來」。
     fn wants_the_ime(self) -> bool {
-        self.takes_a_character() && !matches!(self, Pending::MatchPair { .. })
+        (self.takes_a_character() && !matches!(self, Pending::MatchPair { .. }))
+            || self.owes_a_found_character()
+    }
+
+    /// **A vim operator owed the character of its `f`/`t`** (`df`, `dt`,
+    /// `cF`): what `f` alone looks for, `df` looks for too, so `dt京` is typed
+    /// the way `f京` is. Not in [`Self::takes_a_character`]: the operator
+    /// reads the character as the key path does ([`Editor::insert_committed`]),
+    /// where `.`, the macro and every cursor are already answered.
+    fn owes_a_found_character(self) -> bool {
+        matches!(self, Pending::VimOperator { first: Some('f' | 'F' | 't' | 'T'), .. })
     }
 }
 
