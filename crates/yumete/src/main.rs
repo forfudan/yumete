@@ -1221,6 +1221,9 @@ fn main() -> ExitCode {
     let mut settings_page = None;
     let mut genda_page = yumete_tui::genda_page::Seat::default();
     let mut words_page = yumete_tui::words_page::Seat::default();
+    // **The screen the keys are pressed in front of**, kept from the first key
+    // to the picture: the view a key leaves is the view the next key scrolls.
+    let mut screen = shot.map(|(width, height)| yumete_tui::Offscreen::new(width, height));
     if let Some(pressed) = &keys {
         // Warning: **`\{ime}` 之後那幾個鍵走輸入法**。`--keys` 一律直接叫
         // `editor.on_key` 的話，**離屏拍不到任何 preedit**——而輸入法是這個編輯器最不一樣
@@ -1278,7 +1281,7 @@ fn main() -> ExitCode {
         // 一個緩衝區自己收攤——`ConfigWatch` 記着版本號。
         let mut watch = yumete_tui::settings::ConfigWatch::default();
         watch.follow(&mut editor);
-        (settings_page, genda_page, words_page) = press(&mut editor, pressed, &config, &mut ime, shot);
+        (settings_page, genda_page, words_page) = press(&mut editor, pressed, &config, &mut ime, screen.as_mut());
         watch.follow(&mut editor);
         // …and `:check-config` is answered **after** the keys, because it is a
         // key that asks. Reading two small files is not 「needs the loop」.
@@ -1451,28 +1454,20 @@ fn main() -> ExitCode {
                 "        candidate panel need a real terminal (a pty), not this."
             );
         }
-        yumete_tui::fit_the_page(&mut ime, &mut editor, &config, width, height);
         // The layout the flags asked for, before the picture is taken.
-        let pages = yumete_tui::Pages { settings: settings_page.as_ref(), genda: Some(&genda_page), words: Some(&words_page) };
-        let picture = match (shot_ansi, page_asked) {
-            (true, Some((w, h))) => yumete_tui::frame_to_ansi_with(&mut editor, &config, &ime, w, h, pages),
-            _ if shot_html => yumete_tui::frame_to_html_with(
-                &mut editor,
-                &config,
-                &ime,
-                width,
-                height,
-                pages,
-            ),
-            _ => yumete_tui::frame_to_text_with(
-                &mut editor,
-                &config,
-                &ime,
-                width,
-                height,
-                pages,
-            ),
+        let form = match (shot_ansi, page_asked) {
+            (true, Some((width, height))) => yumete_tui::Form::Ansi { width, height },
+            _ if shot_html => yumete_tui::Form::Html,
+            _ => yumete_tui::Form::Text,
         };
+        let mut screen = screen.unwrap_or_else(|| yumete_tui::Offscreen::new(width, height));
+        let picture = screen.shot(
+            &mut editor,
+            &config,
+            &mut ime,
+            form,
+            yumete_tui::Pages { settings: settings_page.as_ref(), genda: Some(&genda_page), words: Some(&words_page) },
+        );
         // **A reader that walks away is not an error.** `--shot | head -5`, or a
         // `| grep -q`, closes the pipe as soon as it has what it came for, and
         // `print!` *panics* on that — a Rust backtrace printed where the frame
@@ -1658,7 +1653,7 @@ fn press(
     keys: &str,
     config: &yumete_config::Config,
     ime: &mut ImeSession,
-    shot: Option<(u16, u16)>,
+    mut screen: Option<&mut yumete_tui::Offscreen>,
 ) -> (Option<yumete_config::panel::Panel>, yumete_tui::genda_page::Seat, yumete_tui::words_page::Seat) {
     let mut settings = yumete_tui::settings_page::Seat::default();
     // The typing trainer, on a clock that moves 200 ms a key: a picture of
@@ -1666,8 +1661,6 @@ fn press(
     let mut genda = yumete_tui::genda_page::Seat::default();
     genda.tick = Some(200);
     let mut words = yumete_tui::words_page::Seat::default();
-    // Where the grid is scrolled to, kept from key to key as a frame keeps it.
-    let mut grid = yumete_tui::table::Viewport::default();
     // **`\{ime}` 撥一下這一格**：往後那幾個鍵交給輸入法，再按一次撥回來。
     let mut composing = false;
     let mut chars = keys.chars().peekable();
@@ -1683,25 +1676,24 @@ fn press(
         //
         // 和底下 `gw` 那一處同一族（#406），也和這支函數開頭說的 `:settings`
         // 同一族：**主循環在兩個鍵之間做的事，這裏一件都不許少**，不然拍到的
-        // 面板和人按出來的面板不是同一扇。只是這一件便宜，不必真畫一幀。
+        // 面板和人按出來的面板不是同一扇。
         catch_up_with_the_loop(editor, config, ime);
-        // Warning: **按鍵之前先把頁夾好**（#516）。互動的循環是
-        // 「畫一幀、讀一個鍵、再畫一幀」，所以按鍵那一刻用的是上一幀量出來的高
-        // 度；離屏這一支沒有循環。不補這一下，`--keys='…wo3'` 在六行的窗口上照
-        // 樣上屏那個從沒畫出來的字——**而那正是要驗的那個 bug**。
-        //
-        // Warning: **每一個鍵之前都要答，不是整串之前答一次**。
-        // `:vertical` 本身就是一個鍵，而版面一換，一縱多長就變了——這一句站在
-        // 迴圈外面的話，`--keys=':vertical\n…h'` 裏的 `h` 走的是橫排留下
-        // 的格子（出廠縱長 32），在折了兩縱的段落上跳過整整一縱，而照片是按窗
-        // 口高度畫的。量到的和拍到的不是同一頁。
-        //
-        // Warning: **不能靠「先白畫一幀」把高度量出來。** `frame_to_text` 收的是
-        // `&mut Editor`，白畫那一幀給了編輯器一個它本來沒有的視口，後面那幾個動作
-        // 就落在别的地方（`多選區` 那張金樣會變）。算出來，别畫出來。
-        if let Some((w, h)) = shot {
-            yumete_tui::fit_the_page(ime, editor, config, w, h);
-            yumete_tui::fit_the_grid(editor, config, w, h, &mut grid);
+        // **…and the frame itself**, drawn as the loop draws it before every
+        // key: measured for the keys (#516: a page no bigger than the window
+        // has room for; `:vertical` is itself a key, so a 縱's length is asked
+        // again before each one), drawn, and the span it showed handed back.
+        // Pressed with no frame between them, `C-f` `C-d` `C-e` `zt` `zj` have
+        // no view to scroll, the caret moves instead, and a picture checked
+        // against nvim or helix differs where no reader's screen would.
+        // Warning: **the same function as the loop's, not a copy of it**
+        // ([`yumete_tui::Offscreen::between_keys`]): a copy drifts, and the
+        // drift is a picture of a program nobody runs.
+        if let Some(screen) = screen.as_deref_mut() {
+            screen.between_keys(editor, config, ime, yumete_tui::Pages {
+                settings: settings.panel.as_ref(),
+                genda: Some(&genda),
+                words: Some(&words),
+            });
         }
         let key = match c {
             '\\' => match chars.next() {
@@ -1906,18 +1898,6 @@ fn press(
         settings.settle(editor);
         genda.settle(editor, ime);
         words.settle(editor, ime);
-        // Warning: **`gw` 的標籤要等一幀纔算得出來**（#406）：落腳點只算屏幕上的，而哪一
-        // 段在屏幕上是**畫的時候**量的。一批鍵是一次餵完的，所以餵到欠着的那一刻
-        // 先畫一幀丟掉——不然 `--keys='gwf'` 裏那個 `f` 落到正文上當成別的鍵，而
-        // 這個倉審前端就是靠拍照。
-        // Warning: **`go`/`gu` 和 `gw` 同病，所以同一道門**（§5.73）。少了它，
-        // `--keys='gudo'` 裏那個 `d` 落到正文上**當成刪除**。離屏路徑和真路徑不許
-        // 分家。
-        if editor.owes_a_jump() || editor.owes_a_seek() {
-            if let Some((w, h)) = shot {
-                let _ = yumete_tui::frame_to_text(editor, config, ime, w, h, settings.panel.as_ref());
-            }
-        }
     }
     // **最後一個鍵欠下的那幾件也要做完**：迴圈頂上那一下只補得了鍵**之間**的，
     // 而 `R y` 正是按在最後，`\{space}f` 也是（見 [`catch_up_with_the_loop`]）。不補這一下，照片上是「按了 `y`，什麼都沒發生」。
@@ -3267,7 +3247,7 @@ mod tests {
 
         // 開面板、打一個字、Enter，再把範圍轉到工作路徑，然後一路往下走。
         // `6` 兩下是 本文件 → 緩衝區 → 工作路徑；`j` 四下到名單，再四下走到底。
-        press(&mut editor, "\\{space}/霜\\n66jjjjjjjj", &config, &mut ime, Some((100, 30)));
+        press(&mut editor, "\\{space}/霜\\n66jjjjjjjj", &config, &mut ime, Some(&mut yumete_tui::Offscreen::new(100, 30)));
 
         assert_eq!(
             editor.current_buffer().display_name(),

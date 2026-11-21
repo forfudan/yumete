@@ -652,27 +652,12 @@ struct Settled {
     widths: Vec<usize>,
 }
 
-/// **Tell the editor how wide the grid in `area` draws its columns**, without
-/// drawing it — for `--keys`, which presses every key before the one frame it
-/// draws. `viewport` is kept from key to key, as the live loop keeps it from
-/// frame to frame: the widths are the drawn rows', and a page scrolled afresh
-/// on every key would measure other rows than the ones the reader was shown.
-/// The page is not asked where the cursor should sit (`page_inset`): that
-/// answer is recorded as the last frame's, and no frame is drawn here. The
-/// live loop says the same thing from every frame it draws ([`draw`]).
-pub fn note_drawn_columns(editor: &Editor, config: &Config, area: Rect, viewport: &mut Viewport) {
-    if let Some(settled) = settle(editor, config, area, viewport, None, true) {
-        editor.note_drawn_columns(settled.top_row, settled.widths);
-    }
-}
-
 fn settle(
     editor: &Editor,
     config: &Config,
     area: Rect,
     viewport: &mut Viewport,
     peek: Option<&yumete_core::editor::Pane>,
-    quiet: bool,
 ) -> Option<Settled> {
     let view = editor.table()?;
     // **The table's own lines, not the file's**. `t t` hands
@@ -782,13 +767,9 @@ fn settle(
         room,
         rows,
     );
-    // **Asked only by a frame that is drawn**: the editor records where the
-    // page put the cursor each time it answers, and a measure taken between
-    // two keys is no frame.
-    let inset = match quiet {
-        true => None,
-        false => editor.page_inset(distance, cursor_row < viewport.top, rows.saturating_sub(1), scrolloff),
-    };
+    // Asked once per drawn frame: the editor records where the page put the
+    // cursor each time it answers.
+    let inset = editor.page_inset(distance, cursor_row < viewport.top, rows.saturating_sub(1), scrolloff);
     if !rowless {
         let from = viewport.top;
         if let Some(inset) = inset {
@@ -940,7 +921,7 @@ pub fn draw(
         head,
         gutter,
         widths,
-    }) = settle(editor, config, area, viewport, peek, false)
+    }) = settle(editor, config, area, viewport, peek)
     else {
         return (area.x, area.y);
     };

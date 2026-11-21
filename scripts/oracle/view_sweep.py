@@ -12,8 +12,9 @@ Keys are typed as written; `<C-f>` `<C-b>` `<C-d>` `<C-u>` `<C-e>` `<C-y>` and
 `<Esc>` are the named ones. The file is N lines of `line N`.
 
 yumete's side is the `vim_view_probe` test in `crates/yumete-tui`, which draws
-a frame between keys as the loop does. `--shot` cannot stand in for it:
-paging reads the last page drawn, and `--shot` draws none between keys.
+a frame between keys as the loop does, in a window of exactly the height and
+scrolloff asked for. `--shot --keys` draws the same frame between keys too
+(`Offscreen::between_keys`), so its top line can be held against nvim as well.
 
 Warning: **Leave out a two-row window.** nvim's column there comes back at the
 end of the line after any page, which the harness cannot tell from a quirk; and

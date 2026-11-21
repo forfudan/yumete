@@ -290,9 +290,9 @@ pub fn room_for_the_page(editor: &Editor, config: &Config, width: u16, height: u
     (w, h)
 }
 
-/// What [`frame_to`] turns the drawn buffer into.
+/// What a picture of the frame is written as.
 #[derive(Clone, Copy)]
-enum Form {
+pub enum Form {
     Text,
     Html,
     /// The live window's writing only, at most this much of it.
@@ -341,6 +341,110 @@ fn frame_to(
     form: Form,
     pages: Pages,
 ) -> String {
+    let Offscreen { mut terminal, mut seats } = Offscreen::new(width, height);
+    frame_into(&mut terminal, &mut seats, editor, config, ime, form, pages)
+}
+
+/// **A terminal over a buffer, kept from frame to frame** — what `--keys`
+/// draws into between two keys, so the keys see the page a person's keys see.
+///
+/// The loop draws a frame between every two keys, and drawing is where the
+/// view follows the caret, where `C-e` and `zt` leave the page, and where the
+/// page span `C-f` `C-d` `zj` scroll from is measured. Pressed with no frame
+/// between them, a page key has no view to scroll and moves the caret
+/// instead, and a review against nvim or helix reports a difference that
+/// no reader would ever see. So the screen and its [`Seats`] live as long as
+/// the keys do, and each key gets the frame [`run`] would have drawn before it.
+pub struct Offscreen {
+    terminal: ratatui::Terminal<ratatui::backend::TestBackend>,
+    seats: Seats,
+}
+
+impl Offscreen {
+    pub fn new(width: u16, height: u16) -> Offscreen {
+        let backend = ratatui::backend::TestBackend::new(width, height);
+        Offscreen {
+            terminal: ratatui::Terminal::new(backend).expect("a terminal over a buffer"),
+            seats: Seats::default(),
+        }
+    }
+
+    fn size(&self) -> (u16, u16) {
+        size_of(&self.terminal)
+    }
+
+    /// **The frame the loop draws before the next key**, in the loop's own
+    /// order: measured for the keys, the page fitted, drawn, the span it drew
+    /// handed back — and a `gw` or `go` owed by the last key run against
+    /// that frame and drawn again, as the loop's `continue` does.
+    pub fn between_keys(&mut self, editor: &mut Editor, config: &Config, ime: &mut ImeSession, pages: Pages) {
+        let (width, height) = self.size();
+        loop {
+            measure_for_the_keys(editor, config, ime, width, height, &self.seats);
+            editor.keep_the_lists_current();
+            fit_the_page(ime, editor, config, width, height);
+            editor.move_the_problems();
+            offscreen_frame(&mut self.terminal, &mut self.seats, editor, config, ime, pages);
+            if editor.take_owed_jump() {
+                editor.run_owed_jump();
+                continue;
+            }
+            if let Some(only_han) = editor.take_owed_seek() {
+                editor.run_owed_seek(only_han);
+                continue;
+            }
+            break;
+        }
+    }
+
+    /// **The frame to hand out**: the loop's frame before the next key, as
+    /// [`Self::between_keys`] draws it, then everything a still picture
+    /// must settle that the loop would leave to a later frame.
+    pub fn shot(&mut self, editor: &mut Editor, config: &Config, ime: &mut ImeSession, form: Form, pages: Pages) -> String {
+        let (width, height) = self.size();
+        measure_for_the_keys(editor, config, ime, width, height, &self.seats);
+        fit_the_page(ime, editor, config, width, height);
+        frame_into(&mut self.terminal, &mut self.seats, editor, config, ime, form, pages)
+    }
+}
+
+fn size_of(terminal: &ratatui::Terminal<ratatui::backend::TestBackend>) -> (u16, u16) {
+    let area = terminal.backend().buffer().area;
+    (area.width, area.height)
+}
+
+/// One frame drawn into the offscreen buffer, and the span it showed told
+/// to the editor for the keys that come next — said after the draw, as the
+/// loop says it.
+fn offscreen_frame(
+    terminal: &mut ratatui::Terminal<ratatui::backend::TestBackend>,
+    seats: &mut Seats,
+    editor: &mut Editor,
+    config: &Config,
+    ime: &ImeSession,
+    pages: Pages,
+) {
+    terminal
+        .draw(|frame| draw(frame, editor, config, ime, seats, pages))
+        .expect("one frame into a buffer");
+    if let Some((a, b)) = seats[editor.live_pane()].drawn_span {
+        editor.set_page_span(a, b);
+    }
+}
+
+/// **The picture**, settled for a still frame: what the loop would answer on
+/// a later frame — the owed search, the picker's walk, a `gw` — answered
+/// before this one is drawn, since a picture has no later frame.
+fn frame_into(
+    terminal: &mut ratatui::Terminal<ratatui::backend::TestBackend>,
+    seats: &mut Seats,
+    editor: &mut Editor,
+    config: &Config,
+    ime: &ImeSession,
+    form: Form,
+    pages: Pages,
+) -> String {
+    let (width, height) = size_of(terminal);
     let settings = pages.settings;
     // **The mood, before the first cell is painted.** `run` settles this and
     // the shot did not, so every picture came out in the theme's default mood
@@ -348,9 +452,6 @@ fn frame_to(
     // light/dark comparison, all of them light. There is no terminal here to
     // ask, so `auto` takes the same answer an unanswering terminal gets: dark.
     crate::theme::settle(config, None);
-    let backend = ratatui::backend::TestBackend::new(width, height);
-    let mut terminal = ratatui::Terminal::new(backend).expect("a terminal over a buffer");
-    let mut viewport = Seats::default();
     // **The page is settled the way the loop settles it**, or the picture is
     // not of the page: without the wrap width a paragraph runs off the right
     // edge and the shot shows a book with no second line in it. The 縱 length
@@ -438,27 +539,15 @@ fn frame_to(
     // 哪一段在屏幕上是畫的時候量的。主循環是「畫完 `continue` 再畫一幀」，這一支
     // 沒有下一幀，所以自己先畫一幀丟掉。
     if editor.take_owed_jump() {
-        terminal
-            .draw(|frame| draw(frame, editor, config, ime, &mut viewport, pages))
-            .expect("one frame to measure the page by");
-        if let Some((a, b)) = viewport[editor.live_pane()].drawn_span {
-            editor.set_page_span(a, b);
-        }
+        offscreen_frame(terminal, seats, editor, config, ime, pages);
         editor.run_owed_jump();
     }
     // `go`/`gu` 同病，同一道門（§5.73）。
     if let Some(only_han) = editor.take_owed_seek() {
-        terminal
-            .draw(|frame| draw(frame, editor, config, ime, &mut viewport, pages))
-            .expect("one frame to measure the page by");
-        if let Some((a, b)) = viewport[editor.live_pane()].drawn_span {
-            editor.set_page_span(a, b);
-        }
+        offscreen_frame(terminal, seats, editor, config, ime, pages);
         editor.run_owed_seek(only_han);
     }
-    terminal
-        .draw(|frame| draw(frame, editor, config, ime, &mut viewport, pages))
-        .expect("draw one frame");
+    offscreen_frame(terminal, seats, editor, config, ime, pages);
     let buffer = terminal.backend().buffer();
     match form {
         Form::Html => buffer_to_html(buffer),
@@ -468,6 +557,76 @@ fn frame_to(
             let pane = Rect { width: pane.width.min(most_w), height: pane.height.min(most_h), ..pane };
             buffer_to_ansi(buffer, pane)
         }
+    }
+}
+
+/// **What the loop tells the editor before the next key**, from the frame it
+/// last drew: where the page starts and what it showed, how long a 縱 is and
+/// how much a page holds, the candidate in the text and the 字典 answered.
+///
+/// One function for the loop and for [`Offscreen`], so the keys `--keys`
+/// presses see the same page the keys a person presses do: `C-f` `C-e` `zt`
+/// read the page span from here, and without it they have no view to scroll.
+fn measure_for_the_keys(editor: &mut Editor, config: &Config, ime: &ImeSession, width: u16, height: u16, seats: &Seats) {
+    // The page's own rectangle, not the terminal's: the command row, the
+    // tab bar and the detail panel are not writing, and a 縱 measured
+    // against them is one longer than the 縱 on the screen.
+    // …and the half of it the **keys** are in: with a split open the
+    // whole text area is twice the page, so `C-f` turned two pages and
+    // `C-d` moved a whole pane instead of half of one.
+    let areas = page_areas(editor, config, Rect::new(0, 0, width, height), 0);
+    let page = areas.panes[editor.live_pane()];
+    let lines = editor.current_buffer().line_count();
+    // **Where the page starts**, from the scroll this loop already
+    // keeps (#378): a table's columns are measured against the rows on
+    // the screen, and this is the only place that knows which those
+    // are. Last frame's, necessarily — it is settled while drawing.
+    editor.set_page_top(seats[editor.live_pane()].top.line);
+    // **挑選器的「一頁」也是這裏量的**：那扇窗的高度只有
+    // 畫的那一支算得出來，而 `PageUp`/`PageDown` 跑在核心裏。同上一句，
+    // 上一幀的答案——窗口沒改大小的話兩幀一樣。
+    editor.note_picker_rows(picker_depth(picker_height(Rect {
+        height: areas.floor.max(1),
+        ..Rect::new(0, 0, width, height)
+    })));
+    // **…以及這一頁真畫了哪一段**（#406）：`gw` 的落腳點只算屏幕上的，而
+    // 「屏幕上」是畫的那一支上一幀量出來的。同上一句，上一幀的答案。
+    if let Some((a, b)) = seats[editor.live_pane()].drawn_span {
+        editor.set_page_span(a, b);
+    }
+    if editor.layout() == WritingLayout::Vertical {
+        let look = vertical::Look::of(editor, config);
+        editor.set_zong_length(vertical::zong_length_for(config, page.height, lines, look));
+        // How much a page is, for `C-f`/`C-d`: how many 縱 actually fit,
+        // which with 段組 is a band's worth times the number of bands.
+        let metrics = vertical::Metrics::new(config, page.height, lines, look);
+        editor.set_page(page.height as usize, metrics.capacity(page.width));
+    } else {
+        // The width paragraphs soft-wrap at depends on the gutter as
+        // well; `j` and `k` walk those rows, so it too is settled
+        // before the keys that use it — a page's width, with
+        // `:view-pages-horizontal`.
+        settle_the_pages(editor, config, page);
+    }
+    // …and what the input method is offering, in the text, before anybody
+    // measures the page. `draw` only holds the editor by reference, and
+    // the caret, `j`, the mouse and 折行 all have to agree that the
+    // candidate is on the page — which is the whole reason #210 made drawn
+    // text an input to the layout rather than something painted over it.
+    settle_inline_candidate(editor, ime);
+    answer_the_dictionary(editor, ime);
+}
+
+/// 字典 asked about a character (#215). The 拆分表 is yume's, not the
+/// editor's, so the question is parked in the editor and answered here —
+/// before the draw, so the panel is filled on the very frame the key opened it.
+fn answer_the_dictionary(editor: &mut Editor, ime: &ImeSession) {
+    if let Some(ch) = editor.take_dictionary_query() {
+        let found = ime.glosses(&ch);
+        editor.set_dictionary(&ch, yumete_core::editor::Found {
+            rows: found.rows,
+            divided: found.divided,
+        });
     }
 }
 
@@ -504,12 +663,6 @@ static PANEL_ROOM: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsi
 
 
 
-/// **把頁夾到上一幀畫得下的那麼大**（#516）。
-///
-/// 互動的循環每一幀叫一次；離屏出圖那一支在按鍵**之前**叫一次。高度是
-/// [`page_areas`] 算出來的，不是畫出來的——白畫一幀會動到編輯器（`多選區` 那張
-/// 金樣當場就變了）。**不叫的話離屏看不見這個 bug**，而這個倉審前端靠的就是離
-/// 屏那張圖。
 /// **Where the lines break** — the one answer motion and drawing have to share.
 ///
 /// 竪排問的是一縱多長，橫排問的是折行的寬度，兩邊都是「`j` 走過的那一頁，要
@@ -541,21 +694,11 @@ fn settle_the_pages(editor: &mut Editor, config: &Config, page: Rect) {
     editor.note_side_width((first.width as usize).saturating_sub(gutter).max(1), gutter);
 }
 
-/// **How wide the grid draws its columns, said before a key** — for
-/// `--keys`, which has no frame between two keys to say it. A wrapped cell's
-/// rows are cut at those widths, so `j` inside a cell must know them before
-/// it is pressed. The live loop needs none of this: every frame it draws
-/// says it ([`table::draw`]).
-pub fn fit_the_grid(editor: &Editor, config: &Config, width: u16, height: u16, seat: &mut table::Viewport) {
-    if !editor.grid_has_the_pane() {
-        return;
-    }
-    let areas = page_areas(editor, config, Rect::new(0, 0, width, height), 0);
-    if let Some(&pane) = areas.panes.get(editor.live_pane()) {
-        table::note_drawn_columns(editor, config, pane, seat);
-    }
-}
-
+/// **把頁夾到上一幀畫得下的那麼大**（#516）。
+///
+/// 互動的循環每一幀叫一次；離屏出圖那一支（[`Offscreen`]）在每一個鍵之前的那
+/// 一幀裏叫，同一個次序。高度是 [`page_areas`] 算出來的。**不叫的話離屏看不見
+/// 這個 bug**，而這個倉審前端靠的就是離屏那張圖。
 pub fn fit_the_page(
     ime: &mut ImeSession,
     editor: &mut Editor,
@@ -577,13 +720,10 @@ pub fn fit_the_page(
     let room = areas.floor.saturating_sub(area.y).max(1);
     PANEL_ROOM.store(usize::from(room), std::sync::atomic::Ordering::Relaxed);
     let fits = page_for_window(wish, room);
-    // **行在哪裏斷，也要在按鍵之前答。** 只有真畫那一步答（[`frame_to`]）的話，
-    // 離屏這一支的 `--keys` 跑在任何一幀**之前**——動作用的是出廠的縱長 32、畫面
-    // 用的是窗口算出來的那個，竪排的 `h` 在折了兩縱的段落上量到的落點與照片對不上
-    // （`gj` 同理，橫排那一側是 `wrap_width` 為 `None`，於是「視覺行」與「行文行」
-    // 在離屏下根本分不出來）。同一條「算出來，别畫出來」——所以這裏只答折行，
-    // **不碰 `set_page`**：視口是另一件事，按鍵之前給了它會讓動作落在别處（見
-    // `main.rs` 這一支的呼叫處）。
+    // **行在哪裏斷，也要在按鍵之前答。** 只有真畫那一步答的話，動作用的是出廠的
+    // 縱長 32、畫面用的是窗口算出來的那個，竪排的 `h` 在折了兩縱的段落上量到的落
+    // 點與照片對不上（`gj` 同理：橫排那一側 `wrap_width` 是 `None` 的話，「視覺
+    // 行」與「行文行」分不出來）。
     settle_the_wrap(editor, config, areas.panes[editor.live_pane()]);
     // **挑選器擺不下就不許開着**（見 [`picker_box`]）。問在這裏，是
     // 因為這一支是「每一幀一次、離屏那一支在按鍵之前一次」的那個鉤子——窄窗口
@@ -1144,63 +1284,10 @@ pub fn run(
         // The 縱 wrap length depends on the terminal height, and the motions
         // that cross 縱 run before the next draw, so settle it up front.
         if let Ok(size) = terminal.size() {
-            // The page's own rectangle, not the terminal's: the command row, the
-            // tab bar and the detail panel are not writing, and a 縱 measured
-            // against them is one longer than the 縱 on the screen.
-            // …and the half of it the **keys** are in: with a split open the
-            // whole text area is twice the page, so `C-f` turned two pages and
-            // `C-d` moved a whole pane instead of half of one.
-            let areas = page_areas(editor, config, Rect::new(0, 0, size.width, size.height), 0);
-            let page = areas.panes[editor.live_pane()];
-            let lines = editor.current_buffer().line_count();
-            // **Where the page starts**, from the scroll this loop already
-            // keeps (#378): a table's columns are measured against the rows on
-            // the screen, and this is the only place that knows which those
-            // are. Last frame's, necessarily — it is settled while drawing.
-            editor.set_page_top(viewport[editor.live_pane()].top.line);
-            // **挑選器的「一頁」也是這裏量的**：那扇窗的高度只有
-            // 畫的那一支算得出來，而 `PageUp`/`PageDown` 跑在核心裏。同上一句，
-            // 上一幀的答案——窗口沒改大小的話兩幀一樣。
-            editor.note_picker_rows(picker_depth(picker_height(Rect {
-                height: areas.floor.max(1),
-                ..Rect::new(0, 0, size.width, size.height)
-            })));
-            // **…以及這一頁真畫了哪一段**（#406）：`gw` 的落腳點只算屏幕上的，而
-            // 「屏幕上」是畫的那一支上一幀量出來的。同上一句，上一幀的答案。
-            if let Some((a, b)) = viewport[editor.live_pane()].drawn_span {
-                editor.set_page_span(a, b);
-            }
-            if editor.layout() == WritingLayout::Vertical {
-                let look = vertical::Look::of(editor, config);
-                editor.set_zong_length(vertical::zong_length_for(config, page.height, lines, look));
-                // How much a page is, for `C-f`/`C-d`: how many 縱 actually fit,
-                // which with 段組 is a band's worth times the number of bands.
-                let metrics = vertical::Metrics::new(config, page.height, lines, look);
-                editor.set_page(page.height as usize, metrics.capacity(page.width));
-            } else {
-                // The width paragraphs soft-wrap at depends on the gutter as
-                // well; `j` and `k` walk those rows, so it too is settled
-                // before the keys that use it — a page's width, with
-                // `:view-pages-horizontal`.
-                settle_the_pages(editor, config, page);
-            }
-        }
-        // …and what the input method is offering, in the text, before anybody
-        // measures the page. `draw` only holds the editor by reference, and
-        // the caret, `j`, the mouse and 折行 all have to agree that the
-        // candidate is on the page — which is the whole reason #210 made drawn
-        // text an input to the layout rather than something painted over it.
-        settle_inline_candidate(editor, ime);
-        // …and 字典 asked about a character (#215). The 拆分表 is yume's, not
-        // the editor's, so the question is parked in the editor and answered
-        // here — before the draw, so the panel is filled on the very frame the
-        // key opened it.
-        if let Some(ch) = editor.take_dictionary_query() {
-            let found = ime.glosses(&ch);
-            editor.set_dictionary(&ch, yumete_core::editor::Found {
-                rows: found.rows,
-                divided: found.divided,
-            });
+            measure_for_the_keys(editor, config, ime, size.width, size.height, &viewport);
+        } else {
+            settle_inline_candidate(editor, ime);
+            answer_the_dictionary(editor, ime);
         }
         // The frame is drawn **and kept**: `draw` hands back the buffer it just
         // filled, and that is the only honest way to reach it — see the picture
@@ -29987,6 +30074,65 @@ fn squeezed(text: &str) -> String {
             .draw(|frame| draw(frame, editor, config, no_ime(), viewport, None))
             .unwrap();
         Some(caret_of(&mut terminal, config))
+    }
+
+    /// **`--keys` pages from the frame the loop would have drawn.** Two
+    /// runs over the same 200 lines: one steps as [`run`] steps — measured
+    /// for the keys, the page fitted, a frame drawn, the span it showed
+    /// handed back, then the key — and one through [`Offscreen`], the path
+    /// `--shot --keys` takes. A page key reads the span the last frame
+    /// drew, so with no frame between keys `C-f` had no view to scroll and
+    /// moved the caret instead. The tops are nvim's (`C-f`, 22 rows,
+    /// scrolloff 5: line 21) and helix's (`C-d`: line 7, where `gt` then
+    /// lands on 12), both measured with `scripts/oracle/`.
+    #[test]
+    fn the_offscreen_keys_page_from_the_frame_the_loop_draws() {
+        let text: String = (1..=200).map(|i| format!("line {i}\n")).collect();
+        let (w, h) = (80u16, 24u16);
+        let editor_for = |keymap: &str| {
+            let mut editor = Editor::new();
+            editor.execute(":syntax text").unwrap();
+            editor.replace_everything(&text);
+            editor.execute(&format!(":keymap {keymap}")).unwrap();
+            editor
+        };
+        let config = Config::default();
+        crate::theme::settle(&config, None);
+        let top = |editor: &Editor, seats: &Seats| {
+            let (a, _) = seats[editor.live_pane()].drawn_span.expect("a frame");
+            editor.current_buffer().rope().char_to_line(a) + 1
+        };
+        for (keymap, key, want) in [("vim", Key::Ctrl('f'), 21), ("helix", Key::Ctrl('d'), 7)] {
+            // As the loop steps.
+            let mut editor = editor_for(keymap);
+            let mut ime = ImeSession::new(Scheme::LINGMING, vec![]);
+            let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+            let mut seats = Seats::default();
+            let mut frame = |editor: &mut Editor, ime: &mut ImeSession, seats: &mut Seats| {
+                measure_for_the_keys(editor, &config, ime, w, h, seats);
+                fit_the_page(ime, editor, &config, w, h);
+                terminal.draw(|f| draw(f, editor, &config, ime, seats, Pages::default())).unwrap();
+                if let Some((a, b)) = seats[editor.live_pane()].drawn_span {
+                    editor.set_page_span(a, b);
+                }
+            };
+            frame(&mut editor, &mut ime, &mut seats);
+            editor.on_key(key);
+            frame(&mut editor, &mut ime, &mut seats);
+            let looped = (top(&editor, &seats), editor.cursor_line());
+            // As `--shot --keys` steps.
+            let mut editor = editor_for(keymap);
+            let mut ime = ImeSession::new(Scheme::LINGMING, vec![]);
+            let mut screen = Offscreen::new(w, h);
+            screen.between_keys(&mut editor, &config, &mut ime, Pages::default());
+            editor.on_key(key);
+            let picture = screen.shot(&mut editor, &config, &mut ime, Form::Text, Pages::default());
+            let shot = (top(&editor, &screen.seats), editor.cursor_line());
+            assert_eq!(shot, looped, "{keymap}: --shot and the loop see different pages");
+            assert_eq!(looped.0, want, "{keymap}: the top line nvim and helix show");
+            let first: usize = picture.lines().next().unwrap().split_whitespace().next().unwrap().parse().unwrap();
+            assert_eq!(first, want, "{keymap}: the picture starts where the page does\n{picture}");
+        }
     }
 
     /// Where vim's keys leave the cursor and the page, for
