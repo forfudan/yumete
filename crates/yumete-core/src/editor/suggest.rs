@@ -469,12 +469,15 @@ impl Editor {
                 }
             }
         }
-        // How often the most written run one character longer is written.
+        // A run has to end on a word: `长江三角洲的` ends on 的, so it is no
+        // run, and it does not hide `长江三角洲` below either.
+        seen.retain(|run, _| self.segmenter.segment(run).last().is_some_and(|&(a, b)| b - a >= 2));
+        // How often the most written longer run that goes on from it is
+        // written: `中华人民` always goes on to `中华人民共和国`.
         let mut longer: HashMap<&str, u32> = HashMap::new();
         for (&run, &count) in &seen {
-            let parent = &run[..run.char_indices().last().map_or(0, |(i, _)| i)];
-            if parent.len() > typed.len() {
-                let most = longer.entry(parent).or_default();
+            for (i, _) in run.char_indices().skip(t + 1) {
+                let most = longer.entry(&run[..i]).or_default();
                 *most = (*most).max(count);
             }
         }
@@ -484,7 +487,6 @@ impl Editor {
                 let rest: Vec<char> = run.chars().skip(t).collect();
                 !after.starts_with(&rest)
             })
-            .filter(|&(run, _)| self.segmenter.segment(run).last().is_some_and(|&(a, b)| b - a >= 2))
             .map(|(run, count)| (run.to_string(), count))
             .collect()
     }

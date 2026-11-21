@@ -27663,6 +27663,17 @@ fn a_repeated_run_of_han_is_offered_where_the_segmenter_cuts_it() {
     assert_eq!(offered(&ed), ["长江三角洲"]);
     ed.on_key(Key::Tab);
     assert!(ed.current_buffer().text().ends_with("\n那座城市位于长江三角洲\n"));
+
+    // Both copies go on with the same character: `长江三角洲的` ends on 的,
+    // so it is not offered, and 长江三角洲 still is.
+    let mut ed = typed("长江三角洲的人口很多。\n长江三角洲的城市很多。\n");
+    ed.set_segmenter(Box::new(crate::DictionarySegmenter::new(
+        "长江 三角洲 人口 城市 很多".split_whitespace().map(|w| (w.to_string(), 100)),
+        1,
+    )));
+    press(&mut ed, "Go");
+    ed.insert_committed("长江三角");
+    assert_eq!(offered(&ed), ["长江三角洲"], "four open the list, and the 的 after both copies hides nothing");
 }
 
 /// **A word of the index and a repeated run are one row**, the most written
@@ -27727,8 +27738,8 @@ fn a_repeated_run_ends_on_a_word_of_two_han_or_more() {
     ed.insert_committed("说图");
     ed.on_key(Key::Ctrl('n'));
     // 说图书馆 is written twice and goes on to 的 every time; 说图书馆的
-    // ends on 的. And 说图 going on nowhere is not 图.
-    assert!(offered(&ed).is_empty(), "{:?}", offered(&ed));
+    // ends on 的, so it is 说图书馆 that is offered.
+    assert_eq!(offered(&ed), ["说图书馆"]);
     ed.on_key(Key::Esc);
     press(&mut ed, "o");
     ed.insert_committed("图");
