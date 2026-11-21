@@ -1152,7 +1152,8 @@ impl Editor {
             // (`shift_line`, measured in nvim): tabs as far as they go and
             // spaces for the rest, unless Tab types spaces. So `ts=4 sw=6
             // noet` gives a TAB and two spaces, not six spaces.
-            if vim {
+            let tabbed = self.current_buffer().rope().line(line).chars().take_while(|c| c.is_whitespace() && *c != '\n').any(|c| c == '\t');
+            if vim || tabbed {
                 if let Some((old, new)) = self.vim_shifted_indent(line, add) {
                     let spaces = |s: &str| s.chars().all(|c| c == ' ');
                     if !(spaces(&old) && spaces(&new)) {
@@ -1234,11 +1235,36 @@ impl Editor {
         if !add && cols == 0 {
             return None;
         }
+        let step = self.shift_step(&old);
         let cols = match add {
-            true => cols + self.indent_width(),
-            false => cols.saturating_sub(self.indent_width()),
+            true => cols + step,
+            false => cols.saturating_sub(step),
         };
-        Some((old, self.vim_indent_text(cols)))
+        let new = self.indent_text_like(&old, cols);
+        Some((old, new))
+    }
+
+    /// **How far one shift goes, by the line's own indent**: where Tab types
+    /// spaces but the line is indented with TABs, a level is a TAB (what `o`
+    /// carries down, `indent_unit`); else `indent_width` columns, as vim's
+    /// `sw`. Counting a TAB's columns against the setting would turn a Go
+    /// file's `\t\t` into twenty spaces.
+    pub(super) fn shift_step(&self, old: &str) -> usize {
+        match old.contains('\t') && self.tab_spaces() {
+            true => self.tab_stop().max(1),
+            false => self.indent_width().max(1),
+        }
+    }
+
+    /// `cols` columns of indent written as the line already writes its own:
+    /// TABs and spaces after them on a TAB-indented line, else as
+    /// [`vim_indent_text`](Self::vim_indent_text) does.
+    pub(super) fn indent_text_like(&self, old: &str, cols: usize) -> String {
+        let ts = self.tab_stop().max(1);
+        match old.contains('\t') {
+            true => format!("{}{}", "\t".repeat(cols / ts), " ".repeat(cols % ts)),
+            false => self.vim_indent_text(cols),
+        }
     }
 
     /// `cols` columns of indent as vim writes them: spaces when Tab types

@@ -39373,12 +39373,33 @@ fn vims_shift_and_tab_write_tabs_when_tab_types_tabs() {
     assert_eq!(vim("    y\n", "I»q⎋"), "\t  qy\n");
     assert_eq!(vim("ab\n", "A»q⎋"), "ab\tq\n", "after text: a TAB");
     assert_eq!(vim("ab\n", "I»»«q⎋"), "\t  qab\n", "Backspace in the indent: back to sw");
-    // With Tab typing spaces, `>>` takes the TABs out.
+    // With Tab typing spaces, a line indented with TABs keeps them, a TAB a
+    // level, under either keymap and for Insert `C-t`/`C-d` too: what `o`
+    // carries down on that line.
+    for keymap in ["vim", "helix"] {
+        let shifted = |text: &str, keys: &str| {
+            let mut ed = typed(text);
+            ed.execute(&format!(":keymap {keymap}")).unwrap();
+            ed.set_tab_stop(8);
+            ed.set_indent_width(4);
+            press(&mut ed, "gg");
+            keyed(&mut ed, keys);
+            ed.current_buffer().text()
+        };
+        let (right, left) = if keymap == "vim" { (">>", "<<") } else { (">", "<") };
+        assert_eq!(shifted("\t\treturn y\n", right), "\t\t\treturn y\n", "{keymap}");
+        assert_eq!(shifted("\t\treturn y\n", left), "\treturn y\n", "{keymap}");
+        assert_eq!(shifted("    y\n", right), "        y\n", "{keymap}: spaces stay spaces");
+    }
     let mut ed = typed("\tz\n");
     ed.execute(":keymap vim").unwrap();
-    ed.set_tab_stop(4);
-    press(&mut ed, "gg>>");
-    assert_eq!(ed.current_buffer().text(), "        z\n");
+    ed.set_tab_stop(8);
+    press(&mut ed, "ggA");
+    ed.on_key(Key::Ctrl('t'));
+    assert_eq!(ed.current_buffer().text(), "\t\tz\n", "C-t");
+    ed.on_key(Key::Ctrl('d'));
+    ed.on_key(Key::Ctrl('d'));
+    assert_eq!(ed.current_buffer().text(), "z\n", "C-d");
     // Helix's `>` is as it was.
     let mut ed = typed("x\n");
     ed.set_tab_stop(4);

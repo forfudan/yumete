@@ -118,13 +118,13 @@ impl Editor {
             _ => col + 1,
         });
         let cols = column_of(&old);
-        let sw = self.indent_width().max(1);
+        let sw = self.shift_step(&old);
         let new_cols = match add {
             true => (cols / sw + 1) * sw,
             false if cols == 0 => return,
             false => (cols - 1) / sw * sw,
         };
-        let new = self.vim_indent_text(new_cols);
+        let new = self.indent_text_like(&old, new_cols);
         let (o, n) = (old.chars().count(), new.chars().count());
         let offset = head - start;
         let to = match offset >= o {
