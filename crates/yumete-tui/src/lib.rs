@@ -291,6 +291,12 @@ pub fn room_for_the_page(editor: &Editor, config: &Config, width: u16, height: u
     (w, h)
 }
 
+thread_local! {
+    /// **A picture of the page alone has no caret** ([`Form::Ansi`]): it
+    /// is a preview of the file, and a block at 1:1 would sit on every one.
+    static NO_CARET: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
 /// What a picture of the frame is written as.
 #[derive(Clone, Copy)]
 pub enum Form {
@@ -548,7 +554,9 @@ fn frame_into(
         offscreen_frame(terminal, seats, editor, config, ime, pages);
         editor.run_owed_seek(only_han);
     }
+    NO_CARET.set(matches!(form, Form::Ansi { .. }));
     offscreen_frame(terminal, seats, editor, config, ime, pages);
+    NO_CARET.set(false);
     let buffer = terminal.backend().buffer();
     match form {
         Form::Html => buffer_to_html(buffer),
@@ -7618,6 +7626,8 @@ fn draw<'a>(
         // hides it — the same way the settings page and a panel field above
         // already hide it. Typing puts it back: [`Layer::caret`] is asked the
         // mode, and `i` at this layer leaves the layer alone.
+    } else if NO_CARET.get() {
+        // A preview of the page: nothing set, so no caret.
     } else if editor.layout() == WritingLayout::Horizontal || editor.mode() == Mode::Insert {
         the_caret_reads_back(editor, config, area, viewport, (cursor_x, cursor_y), Some(head_rows));
         // **A block is painted into the page; a bar is the terminal's.**

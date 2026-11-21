@@ -68,6 +68,10 @@ fn the_ansi_shot_is_the_file_in_colour_and_nothing_else() {
     for row in coloured.lines() {
         assert!(!row.contains('\x1b') || row.ends_with("\x1b[0m"), "a row runs its colour on: {row:?}");
     }
+    // A preview has no caret: the `l` of the first `let` is not a cell of
+    // its own colour, as the block at 1:1 would make it.
+    let first = coloured.lines().next().unwrap_or_default();
+    assert!(!first.contains("ml\x1b["), "a caret block on the first row: {first:?}");
     for row in seen.lines() {
         assert!(row.chars().count() <= 60, "wider than asked: {row:?}");
     }
