@@ -2850,6 +2850,10 @@ pub struct Editor {
     /// `` ` `` `{` `}` goes into `"1` (and `"-` too, when it stays in one
     /// line), however short it is. Set while that operator runs.
     use_reg_one: bool,
+    /// Set while an operator takes a match of no width that stands before
+    /// a line break (`dgn` on `/^$`): the break is the character it takes,
+    /// where any other operator landing on a break takes nothing.
+    take_the_break: bool,
     /// **The operator a `/` or `?` line was opened for** (`d/eta⏎`), and its
     /// count: Enter on that line runs the operator up to the match instead
     /// of moving there. It borrows the search line whole, so the IME and
@@ -4852,6 +4856,7 @@ impl Editor {
             vim_line_column: 0,
             storing_a_yank: false,
             use_reg_one: false,
+            take_the_break: false,
             operator_search: None,
             lines_from: None,
             recording: None,

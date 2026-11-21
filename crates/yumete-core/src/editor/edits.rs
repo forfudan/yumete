@@ -1803,8 +1803,11 @@ impl Editor {
         let named = self.take_register();
         // **vim keeps the kind with the register** (`:h linewise-register`):
         // `v$y` holds a line break but is charwise, so
-        // `p` puts it inside the line, not on a line of its own.
-        let charwise = self.keymap_rules().vim_registers && self.extend && !self.vim_lines && !self.lines_at_key && text.ends_with('\n');
+        // `p` puts it inside the line, not on a line of its own; so does the
+        // lone break `ygn` takes on `/$`.
+        let charwise = self.keymap_rules().vim_registers
+            && ((self.extend && !self.vim_lines && !self.lines_at_key) || self.take_the_break)
+            && text.ends_with('\n');
         let kept = named.is_none_or(|n| n.is_ascii_alphanumeric());
         for key in ['"'].into_iter().chain(named.filter(|n| n.is_ascii_alphanumeric()).map(|n| n.to_ascii_lowercase())).filter(|_| kept) {
             match charwise {

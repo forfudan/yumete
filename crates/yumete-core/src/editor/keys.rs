@@ -1350,8 +1350,15 @@ impl Editor {
             self.settle_alias_count();
             let n = self.count.take().unwrap_or(1);
             let Some((from, to)) = self.gn_hit(c == 'n', self.sel.head(), n) else { return };
-            let head = motion::prev_grapheme(self.current_buffer().rope(), to).max(from);
-            return self.do_vim(op, motion::Span::Over { anchor: from, head });
+            let rope = self.current_buffer().rope();
+            let head = motion::prev_grapheme(rope, to).max(from);
+            // **A match of no width takes the character it stands before**,
+            // a line break too — `dgn` on `/^$` deletes the empty line —
+            // except the file's last, which has no line after it to join.
+            self.take_the_break = from == to && from + 1 < rope.len_chars();
+            self.do_vim(op, motion::Span::Over { anchor: from, head });
+            self.take_the_break = false;
+            return;
         }
         // A motion still owed a character (`df,`, `di(`) takes this one.
         if let Some(f) = first {
@@ -2056,7 +2063,7 @@ impl Editor {
                 let rope = self.current_buffer().rope();
                 let on_a_break =
                     rope.get_char(anchor).is_some_and(|c| c == '\n' || c == '\r');
-                if anchor == head && on_a_break {
+                if anchor == head && on_a_break && !self.take_the_break {
                     // **`c` still opens Insert there** (`C`, `s`, `ciw` on an
                     // empty line, measured in nvim): nothing is taken, and the
                     // line below is left alone.

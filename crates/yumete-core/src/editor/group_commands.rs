@@ -595,7 +595,9 @@ impl Editor {
     /// Where the cursor lands is vim's rule, read from the anchor: on the
     /// match's last character when the match ends past the anchor, on its
     /// start when it ends before it — which a search that wrapped past the
-    /// file's end always does.
+    /// file's end always does. A match of no width selects the character
+    /// it stands before, or, grown to from an anchor before it, ends on the
+    /// character before it (an empty line's break, for `/^$`).
     ///
     /// Linewise Visual becomes charwise, from where `V` was pressed.
     fn select_the_match(&mut self, forward: bool, count: usize) {
@@ -611,8 +613,20 @@ impl Editor {
             }
             false => (self.sel.anchor(), self.sel.head()),
         };
+        // One character on, or back, as vim's `incl` and `decl` step: over
+        // the break at a written line's end, which is no place to stand.
         let rope = self.current_buffer().rope();
-        let (after, before) = (motion::next_grapheme(rope, head), motion::prev_grapheme(rope, head));
+        let past_a_break = |at: usize| matches!(rope.get_char(at), Some('\n' | '\r')) && motion::line_start(rope, at) < at;
+        let after = motion::next_grapheme(rope, head);
+        let after = match past_a_break(after) {
+            true => motion::next_grapheme(rope, after),
+            false => after,
+        };
+        let before = motion::prev_grapheme(rope, head);
+        let before = match past_a_break(before) {
+            true => motion::prev_grapheme(rope, before),
+            false => before,
+        };
         let hit = match (visual, forward) {
             (true, true) if head < anchor => self.search_hit_from(true, after, count),
             (true, true) => self.gn_hit(true, after, count),

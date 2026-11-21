@@ -45394,6 +45394,37 @@ fn linewise_visual_gn_goes_charwise_from_where_v_was_pressed() {
     assert_eq!(ed.current_buffer().text(), "foo one\nbar ast line\n");
 }
 
+/// **`gn` takes a match of no width**: `/^$` on an empty line selects its
+/// line break, so `dgn` deletes the empty line, `cgn` writes there, and
+/// `.` goes on to the next (measured against nvim).
+#[test]
+fn gn_takes_a_match_of_no_width() {
+    let run = |text: &str, keys: &str| {
+        let mut ed = typed_vim(text);
+        keyed(&mut ed, keys);
+        ed
+    };
+    let text = "alpha\n\nbeta\n\ngamma\n";
+    assert_eq!(run(text, "/^$⏎dgn").current_buffer().text(), "alpha\nbeta\n\ngamma\n");
+    assert_eq!(run(text, "/^$⏎dgn.").current_buffer().text(), "alpha\nbeta\ngamma\n");
+    assert_eq!(run(text, "/^$⏎cgnX⎋").current_buffer().text(), "alpha\nXbeta\n\ngamma\n");
+    assert_eq!(run(text, "/^$⏎gnd").current_buffer().text(), "alpha\nbeta\n\ngamma\n");
+    // Grown from Visual, the selection ends on the line break before the match.
+    assert_eq!(run(text, "/^$⏎vgnd").current_buffer().text(), "alpha\n\ngamma\n");
+    assert_eq!(run(text, "/^$⏎ggvgnd").current_buffer().text(), "\nbeta\n\ngamma\n");
+    // The empty line after the last line break is not a line to find.
+    assert_eq!(run(text, "G/^$⏎").sel.head(), 6);
+    assert_eq!(run(text, "/^$⏎v3gnd").current_buffer().text(), "alpha\n\ngamma\n");
+    // The file's last line break has no line after it: nothing to join.
+    assert_eq!(run("alpha\n\nbeta\n\n", "/^$⏎Gdgn").current_buffer().text(), "alpha\n\nbeta\n\n");
+    // At a written line's end, the break joins the lines, and taken by `y`
+    // it is put inside a line.
+    let text = "alpha\nbeta\ngamma\n";
+    assert_eq!(run(text, "/$⏎dgn").current_buffer().text(), "alphabeta\ngamma\n");
+    assert_eq!(run(text, "/$⏎ygnGP").current_buffer().text(), "alpha\nbeta\ngamm\na\n");
+    assert_eq!(run(text, "/$⏎vgnd").current_buffer().text(), "alph\ngamma\n");
+}
+
 /// **`d/pat` made linewise by `:h exclusive-linewise` leaves the cursor
 /// where the line's writing begins**, not in its old column.
 #[test]

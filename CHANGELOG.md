@@ -49,6 +49,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **vim's `C`, `cw`, `ciw` and `s` on an empty line open Insert there**, as in vim; they did nothing, or `cw` changed the next line's first word. `cw` takes the empty line into the register, as `cc` does.
 - **A vim `d/word` that takes whole lines leaves the cursor where the next line's writing begins**, as vim does, not in its old column; so do `dn` and `` d`a ``.
 - **vim's Visual `gn` that wraps past the file's end puts the cursor on the match's start**, and **`V` then `gn` selects charwise from where `V` was pressed** to the match's end, as in vim.
+- **vim's `gn` takes a match of no width**: `dgn`, `cgn` and Visual `gn` on `/^$` act on the empty line, and `/^$` no longer finds the empty line after the file's last line break.
 
 ## 0.24.0 · 2026-11-17
 

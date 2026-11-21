@@ -145,6 +145,8 @@ impl Editor {
     /// `search.c`): forward, the `count`-th match whose last character is at
     /// or after `at`, so a match the cursor stands in is the first; backward,
     /// the `count`-th whose first character is at or before `at`. Both wrap.
+    /// A match of no width counts as covering the character it stands
+    /// before, so `/^$` takes the empty line the cursor is on.
     pub(super) fn gn_hit(&mut self, forward: bool, at: usize, count: usize) -> Option<(usize, usize)> {
         let look = self.look_for_a_motion()?;
         let within = self.search_rows();
@@ -159,7 +161,7 @@ impl Editor {
                 let mut from = motion::line_start(rope, at);
                 loop {
                     match search_forward(rope, &look, from, within.clone()) {
-                        Some((start, end)) if start >= from && end <= at => from = start + 1,
+                        Some((start, end)) if start >= from && end.max(start + 1) <= at => from = start + 1,
                         other => break other,
                     }
                 }
@@ -182,9 +184,15 @@ impl Editor {
 
     /// Search for [`Self::last_search`] in `forward` direction and move there.
     /// The lines a search may land in: the table's own rows while the grid
-    /// holds the pane, and the whole buffer otherwise (#354).
+    /// holds the pane, and the whole buffer otherwise (#354) — without the
+    /// empty line after the last line break where the caret never stands
+    /// on a break, so vim's `/^$` does not find the file's end.
     fn search_rows(&self) -> std::ops::Range<usize> {
-        let all = 0..self.current_buffer().rope().len_lines();
+        let rope = self.current_buffer().rope();
+        let all = match self.keymap_rules().caret_off_newline {
+            true => 0..motion::last_line(rope) + 1,
+            false => 0..rope.len_lines(),
+        };
         if !self.table().is_some_and(|view| view.takes_the_pane()) {
             return all;
         }
