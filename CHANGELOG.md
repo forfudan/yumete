@@ -50,6 +50,8 @@ Written for people who use it to write, not for the commit log: each line says w
 - **A vim `d/word` that takes whole lines leaves the cursor where the next line's writing begins**, as vim does, not in its old column; so do `dn` and `` d`a ``.
 - **vim's Visual `gn` that wraps past the file's end puts the cursor on the match's start**, and **`V` then `gn` selects charwise from where `V` was pressed** to the match's end, as in vim.
 - **vim's `gn` takes a match of no width**: `dgn`, `cgn` and Visual `gn` on `/^$` act on the empty line, and `/^$` no longer finds the empty line after the file's last line break.
+- **A vim block yank or delete fills every register it names as a block**: `"cy` holds the whole block, not its first line, and `"0`, `"1` and `"-` get the block as vim gives it, each put back as a block.
+- **A vim block taken over a line that ends before it keeps its columns**: that line comes as the block's width in spaces, as in vim, so the block put back stays rectangular.
 
 ## 0.24.0 · 2026-11-17
 

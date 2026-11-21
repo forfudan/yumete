@@ -1933,9 +1933,10 @@ impl Editor {
                 return self.vim_visual_key(c);
             }
         }
-        if self.as_vim() && self.register_block && self.pending_register.is_none() {
+        if let Some((pieces, width)) = self.as_vim().then(|| self.held_block(self.pending_register)).flatten() {
+            self.pending_register = None;
             self.paste_copies = count.clamp(1, Self::WRITING_MAX);
-            return self.paste_block(key == Key::Char('p'));
+            return self.paste_pieces(key == Key::Char('p'), &pieces, width);
         }
         let Key::Char(c) = key else { return };
         self.paste_copies = count.clamp(1, Self::WRITING_MAX);

@@ -45243,6 +45243,55 @@ fn vim_reselects_a_block_and_goes_to_the_selection_marks() {
     assert_eq!(ed.register, "one two three\nfour five\nsi");
 }
 
+/// **A block goes whole into the register named for it, and into the ones
+/// vim fills beside it** (`:h quote_number`, measured in nvim 0.12):
+/// `"cy` holds every line of the block, `"0` holds a block yank, `"1` a
+/// block delete over several lines and `"-` one within a line, each put
+/// back as a block. `"_` leaves the registers as they were.
+#[test]
+fn a_vim_block_fills_every_register_it_names_as_a_block() {
+    let text = "one two\nthree four\nfive six\n";
+    let cases: &[(&str, &str, (usize, usize))] = &[
+        ("l^jl\"cyG\"cp", "one two\nthree four\nfineve six\n  hr\n", (3, 3)),
+        ("l^jl\"cyjp", "one two\nthneree four\nfihrve six\n", (2, 3)),
+        ("l^jlyjdd\"0P", "one two\nfneive six\n hr\n", (2, 2)),
+        ("yyl^jl\"cdG\"1p", "o two\ntee four\nfineve six\n  hr\n", (3, 3)),
+        ("yyl^jdG\"-p", "oe two\ntree four\nfive six\n", (3, 2)),
+        ("yyl^ldG\"-p", "o two\nthree four\nfineve six\n", (3, 3)),
+        ("l^jl\"_dG\"0p", "o two\ntee four\nfive six\n", (3, 2)),
+        ("yiwl^jl\"_dGp", "o two\ntee four\nfioneve six\n", (3, 5)),
+    ];
+    for &(keys, want, at) in cases {
+        let (_, got, cursor) = vim_block_run(text, keys);
+        assert_eq!((got.as_str(), cursor), (want, at), "{keys:?}");
+    }
+}
+
+/// **A block yank keeps its columns over short lines** (nvim's
+/// `block_prep`, measured in nvim 0.12): a line that ends before the block
+/// begins is taken as the block's width in spaces, one more after `$`; a
+/// line that reaches the block and ends inside it is taken as it is, and
+/// padded only where text follows it when put. A delete takes the same.
+#[test]
+fn a_vim_block_yank_pads_a_line_that_ends_before_it() {
+    let text = "abcdefgh\nab\nabcdefgh\na\nabcdefgh\n";
+    let cases: &[(&str, &str, (usize, usize))] = &[
+        ("ll^jjjjlllyggP", "abcdefcdefgh\nab\nabcdefcdefgh\na     \nabcdefcdefgh\n", (1, 3)),
+        ("ll^jjjjllldggP", "abcdefgh\nab\nabcdefgh\na     \nabcdefgh\n", (1, 3)),
+        ("ll^jjjj$yggP", "abcdefghcdefgh\nab\nabcdefghcdefgh\na        \nabcdefghcdefgh\n", (1, 3)),
+        ("ll^jjjj$ygg$p", "abcdefghcdefgh\nab      \nabcdefghcdefgh\na              \nabcdefghcdefgh\n", (1, 9)),
+        (
+            "ll^jjjjlllyG$p",
+            "abcdefgh\nab\nabcdefgh\na\nabcdefghcdef\n        \n        cdef\n            \n        cdef\n",
+            (5, 9),
+        ),
+    ];
+    for &(keys, want, at) in cases {
+        let (_, got, cursor) = vim_block_run(text, keys);
+        assert_eq!((got.as_str(), cursor), (want, at), "{keys:?}");
+    }
+}
+
 /// **`/` and `?` are motions after an operator** (`:h /`, exclusive),
 /// measured against nvim: the operator waits on the search line and takes
 /// the text up to the match when Enter is pressed.

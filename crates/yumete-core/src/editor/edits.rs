@@ -1545,6 +1545,7 @@ impl Editor {
             false => (into, text),
         };
         self.registers.insert(name, vec![text]);
+        self.block_registers.remove(&name);
         self.last_recorded = Some(name);
         self.status = say!("macro.recorded-keys", n);
     }
@@ -1771,6 +1772,18 @@ impl Editor {
         self.registers.get(&name).map(|p| p.concat()).unwrap_or_default()
     }
 
+    /// **The block register `name` holds** (the unnamed one for `None`):
+    /// its pieces and its width, or `None` when it holds text or lines.
+    pub(super) fn held_block(&self, name: Option<char>) -> Option<(Vec<String>, usize)> {
+        match name.map(|name| name.to_ascii_lowercase()) {
+            None | Some('"') => self.register_block.then(|| (self.block_register(), self.register_block_width)),
+            Some(name) => {
+                let width = *self.block_registers.get(&name)?;
+                Some((self.registers.get(&name)?.clone(), width))
+            }
+        }
+    }
+
     /// Put `text` in the register named by a pending `"`, or the unnamed one.
     pub(super) fn store(&mut self, text: String) {
         // **Whatever the grid remembered about this register is now stale.**
@@ -1801,6 +1814,9 @@ impl Editor {
             }
         };
         let named = self.take_register();
+        if let Some(name) = named {
+            self.block_registers.remove(&name.to_ascii_lowercase());
+        }
         // **vim keeps the kind with the register** (`:h linewise-register`):
         // `v$y` holds a line break but is charwise, so
         // `p` puts it inside the line, not on a line of its own; so does the
@@ -1888,6 +1904,7 @@ impl Editor {
                 // whether or not `"1` took it as well.
                 if short && fresh && self.keymap_rules().vim_registers && !self.storing_a_yank {
                     self.registers.insert('-', self.register_parts.clone());
+                    self.block_registers.remove(&'-');
                 }
             }
         }
@@ -1895,13 +1912,18 @@ impl Editor {
 
     /// Put a delete in `"1`, the older ones moving down to `"9` and the
     /// ninth falling off (`:h quote_number`).
-    fn push_numbered(&mut self, parts: Vec<String>) {
+    pub(super) fn push_numbered(&mut self, parts: Vec<String>) {
         for n in (b'1'..b'9').rev() {
             if let Some(older) = self.registers.remove(&(n as char)) {
                 self.registers.insert((n + 1) as char, older);
+                match self.block_registers.remove(&(n as char)) {
+                    Some(width) => self.block_registers.insert((n + 1) as char, width),
+                    None => self.block_registers.remove(&((n + 1) as char)),
+                };
             }
         }
         self.registers.insert('1', parts);
+        self.block_registers.remove(&'1');
     }
 
     /// **vim's `""` follows the register just written** (`:h quotequote`):
@@ -2005,6 +2027,7 @@ impl Editor {
         self.yank_whole_lines = whole;
         if named.is_none() && self.keymap_rules().vim_registers {
             self.registers.insert('0', self.register_parts.clone());
+            self.block_registers.remove(&'0');
         }
     }
 
@@ -2168,6 +2191,7 @@ impl Editor {
         // fills the unnamed register, and `"0p` still has what was yanked.
         if named.is_none() && self.keymap_rules().vim_registers {
             self.registers.insert('0', self.register_parts.clone());
+            self.block_registers.remove(&'0');
         }
         self.status = say!("edit.yanked-characters", end - start);
         self.mark_change_to_last(start, end);

@@ -1057,14 +1057,17 @@ impl Editor {
         let named = self.pending_register;
         // **A block over characters is put as a block** where they began;
         // over lines its pieces are put as lines (nvim's `PUT_LINE`).
-        let block = (self.register_block && named.is_none()).then(|| self.block_register());
-        if let (Some(pieces), false) = (&block, lines) {
-            return self.put_block_over_chars(pieces);
+        let block = self.held_block(named);
+        if named.is_some() && block.is_some() {
+            self.pending_register = None;
+        }
+        if let (Some((pieces, width)), false) = (&block, lines) {
+            return self.put_block_over_chars(pieces, *width);
         }
         let copies = std::mem::replace(&mut self.paste_copies, 1).max(1);
         let ending = self.current_buffer().ending().to_string();
         let (text, line_wise) = match block {
-            Some(pieces) => (pieces.iter().map(|piece| format!("{piece}{ending}")).collect::<String>(), true),
+            Some((pieces, _)) => (pieces.iter().map(|piece| format!("{piece}{ending}")).collect::<String>(), true),
             None => {
                 let text = self.recall();
                 let kind = named.filter(|n| n.is_ascii_alphanumeric()).map_or('"', |n| n.to_ascii_lowercase());
@@ -1121,7 +1124,7 @@ impl Editor {
     /// and the block is put where they began, or after the line's last
     /// character when they ran to its end (as vim's cursor, which cannot
     /// stand past it, puts it). Answers where the cursor lands.
-    fn put_block_over_chars(&mut self, pieces: &[String]) -> Option<usize> {
+    fn put_block_over_chars(&mut self, pieces: &[String], width: usize) -> Option<usize> {
         let copies = std::mem::replace(&mut self.paste_copies, 1).max(1);
         let (start, end) = self.selection();
         self.snapshot();
@@ -1139,7 +1142,7 @@ impl Editor {
         };
         self.sel = crate::selection::Selections::one(crate::selection::Range::at(cursor));
         self.paste_copies = copies;
-        self.paste_pieces(forward, pieces, self.register_block_width);
+        self.paste_pieces(forward, pieces, width);
         self.current_buffer_mut().end_undo_group(grouping);
         Some(self.sel.head())
     }

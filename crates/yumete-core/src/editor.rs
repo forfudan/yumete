@@ -3548,6 +3548,11 @@ pub struct Editor {
     /// a short line is narrower, and `p` pads it out to this where text
     /// follows (vim's `y_width`).
     register_block_width: usize,
+    /// **The named and numbered registers that hold a block**, each with its
+    /// width: `"cy` and `"0`/`"1`/`"-` of a block put it back as one, as
+    /// the unnamed register's [`Self::register_block`] does. Any other
+    /// write to the register clears its entry.
+    block_registers: HashMap<char, usize>,
     /// The registers holding a charwise Visual yank that ends in a line
     /// break (`v$y`), `"` for the unnamed one: vim pastes those as text, not
     /// as lines.
@@ -5083,6 +5088,7 @@ impl Editor {
             block_repeat: None,
             register_block: false,
             register_block_width: 0,
+            block_registers: HashMap::new(),
             charwise_breaks: std::collections::HashSet::new(),
             lines_at_key: false,
             insert_keeps_tail: false,

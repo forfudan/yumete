@@ -339,13 +339,13 @@ impl super::Editor {
                         _ => block,
                     };
                     let size = self.block_size(block);
-                    self.block_yank(block);
+                    self.block_yank(block, false);
                     self.block_delete(block);
                     self.remember_block(size, 'd', "");
                     return self.leave_block(top_left);
                 }
                 Key::Char('y') => {
-                    self.block_yank(block);
+                    self.block_yank(block, true);
                     return self.leave_block(top_left);
                 }
                 // vim-surround's `xmap S` holds in a block too.
@@ -358,7 +358,7 @@ impl super::Editor {
                     // Measured before the cut: the corners are positions, and
                     // the cut moves what they point at.
                     let (shape, size) = (self.block_shape(block), self.block_size(block));
-                    self.block_yank(block);
+                    self.block_yank(block, false);
                     self.block_delete(block);
                     return self.begin_block_insert(size, shape, Lay::Before, 'c');
                 }
@@ -462,35 +462,107 @@ impl super::Editor {
     }
 
     /// Every line's piece into the register, one piece a line, and marked as a
-    /// block so `p` puts it back as one.
-    fn block_yank(&mut self, block: Block) {
+    /// block so `p` puts it back as one; `yank` for `y`, not for the delete
+    /// of `d`, `c` or a put over the block.
+    ///
+    /// **A line that ends before the block begins is taken as the block's
+    /// width in spaces**, one more after `$`, and a line that reaches the
+    /// block but ends inside it as it is (nvim's `block_prep`, whose
+    /// `endspaces` only the first kind gets, and whose `$` block ends one
+    /// column past its longest line): put back, the block keeps its columns
+    /// where text follows it. A delete takes the same.
+    ///
+    /// The register named for it gets every piece, and so do the ones vim
+    /// fills beside it: `"0` for a yank into no named register, `"1` for a
+    /// delete over several lines and `"-` for one within a line (`:h
+    /// quote_number`).
+    fn block_yank(&mut self, block: Block, yank: bool) {
         let rope = self.current_buffer().rope().clone();
+        let tab = self.tab_stop();
         let pieces = self.block_pieces(block);
-        let (first, last, _, _) = self.block_shape(block);
+        let (first, last, left, right) = self.block_shape(block);
         self.edit_round += 1;
-        let (_, _, left, right) = self.block_shape(block);
-        let right = match block.to_line_end {
-            true => usize::MAX,
-            false => right,
-        };
+        let texts: Vec<Option<String>> = (first..=last)
+            .map(|line| {
+                pieces
+                    .iter()
+                    .find(|&&(l, _, _)| l == line)
+                    .map(|&(_, a, b)| piece_text(&rope, tab, line, a..b, left, right))
+            })
+            .collect();
         // After `$` the block is as wide as its widest piece (nvim pads
         // `C-v j $ y` of `abc` and `d` to three columns).
-        let mut widest = 0;
-        for (nth, line) in (first..=last).enumerate() {
-            let text = match pieces.iter().find(|&&(l, _, _)| l == line) {
-                Some(&(_, a, b)) => piece_text(&rope, self.tab_stop(), line, a..b, left, right),
-                None => String::new(),
-            };
-            widest = widest.max(text_width(&text, self.tab_stop()));
-            self.edit_nth = Some(nth);
-            self.store(text);
-        }
-        self.edit_nth = None;
-        self.register_block = true;
-        self.register_block_width = match block.to_line_end {
-            true => widest,
+        let block_width = match block.to_line_end {
+            true => texts.iter().flatten().map(|text| text_width(text, tab)).max().unwrap_or(0),
             false => right + 1 - left,
         };
+        let texts: Vec<String> = texts
+            .into_iter()
+            .zip(first..=last)
+            .map(|(text, line)| match text {
+                Some(text) => text,
+                None if width(&rope, tab, line) < left => " ".repeat(block_width + usize::from(block.to_line_end)),
+                None => String::new(),
+            })
+            .collect();
+        let named = self.pending_register.take();
+        let vim = self.keymap_rules().vim_registers;
+        let unnamed_was = (self.register_block, self.register_block_width);
+        self.storing_a_yank = true;
+        match named {
+            // One text to these: the clipboard holds a string, and `"C`
+            // adds the pieces as vim adds a block to what it holds.
+            Some(name) if matches!(name, '+' | '*') || (name.is_ascii_uppercase() && vim) => {
+                self.pending_register = Some(name);
+                self.store(texts.join("\n"));
+            }
+            _ => {
+                for (nth, text) in texts.iter().enumerate() {
+                    self.pending_register = named;
+                    self.edit_nth = Some(nth);
+                    self.store(text.clone());
+                }
+                self.edit_nth = None;
+            }
+        }
+        self.storing_a_yank = false;
+        self.pending_register = None;
+        match named {
+            None | Some('"') => {}
+            Some(name) if name.is_ascii_alphanumeric() && !name.is_ascii_uppercase() => {
+                self.block_registers.insert(name, block_width);
+            }
+            // `"C` holds text now, and the unnamed register follows it.
+            Some(name) if name.is_ascii_uppercase() && vim => return,
+            // `"_`, the clipboard, a register that refuses writes: the
+            // unnamed one is as it was.
+            Some(_) => {
+                (self.register_block, self.register_block_width) = unnamed_was;
+                return;
+            }
+        }
+        self.register_block = true;
+        self.register_block_width = block_width;
+        if !vim {
+            return;
+        }
+        let parts = self.register_parts.clone();
+        match yank {
+            true if named.is_none() => {
+                self.registers.insert('0', parts);
+                self.block_registers.insert('0', block_width);
+            }
+            true => {}
+            false if texts.len() > 1 => {
+                self.push_numbered(parts);
+                self.block_registers.insert('1', block_width);
+            }
+            false if named.is_none() => {
+                self.registers.insert('-', parts);
+                self.block_registers.insert('-', block_width);
+            }
+            false => {}
+        }
     }
 
     /// Take every line's piece out, bottom line first.
@@ -747,15 +819,6 @@ impl super::Editor {
         self.block_repeat = Some(keys);
     }
 
-    /// **`p`/`P` after a block was taken**: each piece onto its own line, from
-    /// the cursor's column down, a short line padded out to it. A count puts
-    /// that many copies side by side, each padded to the block's width but
-    /// the last where nothing follows (vim's `do_put`).
-    pub(super) fn paste_block(&mut self, after: bool) {
-        let pieces = self.block_register();
-        self.paste_pieces(after, &pieces, self.register_block_width);
-    }
-
     /// The pieces of the block the register holds, one a line.
     pub(super) fn block_register(&self) -> Vec<String> {
         match self.register_parts.len() {
@@ -764,8 +827,10 @@ impl super::Editor {
         }
     }
 
-    /// [`Self::paste_block`] with the pieces given, `block_width` columns
-    /// wide.
+    /// **`p`/`P` of a block**, `block_width` columns wide: each piece onto
+    /// its own line, from the cursor's column down, a short line padded out
+    /// to it. A count puts that many copies side by side, each padded to the
+    /// block's width but the last where nothing follows (vim's `do_put`).
     pub(super) fn paste_pieces(&mut self, after: bool, pieces: &[String], block_width: usize) {
         let copies = std::mem::replace(&mut self.paste_copies, 1).max(1);
         let rope = self.current_buffer().rope().clone();
@@ -859,9 +924,9 @@ impl super::Editor {
             Text(String, bool),
         }
         let named = self.pending_register;
-        let put = match self.register_block && named.is_none() {
-            true => Put::Block(self.block_register(), self.register_block_width),
-            false => {
+        let put = match self.held_block(named) {
+            Some((pieces, width)) => Put::Block(pieces, width),
+            None => {
                 let kind = named.filter(|n| n.is_ascii_alphanumeric()).map_or('"', |n| n.to_ascii_lowercase());
                 let text = self.recall();
                 if text.is_empty() {
@@ -884,7 +949,7 @@ impl super::Editor {
         self.snapshot();
         let grouping = self.current_buffer_mut().begin_undo_group();
         if !keep {
-            self.block_yank(block);
+            self.block_yank(block, false);
         }
         self.block_delete(block);
         self.block = None;
