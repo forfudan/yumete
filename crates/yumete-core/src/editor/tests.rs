@@ -38064,6 +38064,28 @@ fn vims_page_follows_a_cursor_above_it_as_nvim_does() {
     assert_eq!(ed.page_inset(None, false, 9, 3), Some(4), "a move does");
 }
 
+/// **helix halves a large scrolloff unevenly** (`view.rs`): on a ten-row page
+/// scrolloff 5 keeps (10−1)/2 = 4 rows above the cursor and 10/2 = 5 below,
+/// so `50gg` puts line 50 on the fifth row (top 46).
+#[test]
+fn helix_keeps_one_row_more_below_on_an_even_page() {
+    let text: String = (1..=100).map(|n| format!("line {n}\n")).collect();
+    let mut ed = typed(&text);
+    ed.note_scrolloff(5);
+    let (last, so) = (9, 4);
+    press(&mut ed, "50gg");
+    assert_eq!(ed.page_inset(None, false, last, so), Some(4), "50gg: top 46");
+    assert_eq!(ed.page_inset(Some(5), false, last, so), Some(4), "row 5 is inside the five below");
+    assert_eq!(ed.page_inset(Some(4), false, last, so), None, "row 4 leaves five below");
+    assert_eq!(ed.page_inset(None, true, last, so), Some(4), "from below: four above");
+    // vim keeps the even split.
+    let mut ed = typed(&text);
+    ed.execute(":keymap vim").unwrap();
+    ed.note_scrolloff(5);
+    press(&mut ed, "50gg");
+    assert_eq!(ed.page_inset(Some(5), false, last, so), None);
+}
+
 /// **helix's page centres only some moves off it** (hx 25.07.1, 200 lines on
 /// 22 rows, scrolloff 5): a search hit and the jump list land in the middle
 /// (`ensure_cursor_in_view_center`); `ge`, `gg`, `30j` scroll as little as

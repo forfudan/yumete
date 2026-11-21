@@ -29516,6 +29516,8 @@ fn squeezed(text: &str) -> String {
         editor.set_soft_wrap(true);
         let mut config = Config::default();
         config.editor.line_numbers = yumete_config::LineNumbers::None;
+        // About the rows the indent makes, not where scrolloff puts the page.
+        config.editor.scrolloff = 0;
         // Eight cells: two go to the indent, so the first row holds three 字
         // and the rows under it hold four. Read from the *first* paragraph,
         // where the cursor is not standing — the one it is standing in is

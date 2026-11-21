@@ -36,6 +36,10 @@ Written for people who use it to write, not for the commit log: each line says w
 - **A vim macro keeps what the IME committed in Normal mode**, so replaying it writes the text again.
 - **The wheel no longer scrolls the window where an IME code is half-typed**; other windows still scroll.
 - **Insert `C-r` reads the registers that answer**, `%` (the file's name), `/` (the last search), `.` and `#`, as `"%p` and the others do.
+- **Phrase completion offers a repeated phrase when both copies go on with the same character**: after `长江三角洲的…长江三角洲的…`, `长江三角` offers `长江三角洲` again.
+- **Wrapping no longer leaves a list marker or a short word alone on its row** when a Latin word glued to 漢字 overflows: `- 甲乙丙…English` breaks before `English`.
+- **`>>`, `<<`, Visual `>`/`<` and Insert `C-t`/`C-d` keep a TAB-indented line's TABs** when Tab types spaces, a TAB a level, as `o` already did; a Go file's `\t\treturn` no longer becomes twenty spaces.
+- **Under helix, a page with an even number of rows keeps one more row below the cursor than above**, as helix does: on ten rows with scrolloff 5, `50gg` shows line 46 at the top.
 
 ## 0.24.0 · 2026-11-17
 

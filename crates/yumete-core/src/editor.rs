@@ -5585,13 +5585,20 @@ impl Editor {
         if !vim && centres && matches!(self.centring, Some(Centring::At(_))) {
             return Some(last / 2);
         }
+        // **helix halves a large scrolloff unevenly** (`view.rs`): above the
+        // cursor no more than (h−1)/2 rows, below it no more than h/2, so on a
+        // ten-row page scrolloff 5 keeps four above and five below.
+        let below = match vim {
+            true => scrolloff,
+            false => self.scrolloff_asked.get().map_or(scrolloff, |asked| asked.min(last.div_ceil(2)).max(scrolloff)),
+        };
         match distance {
             // On the page with room to spare: leave it alone. A jump to a
             // line on screen (`H` `M` `L`, helix's `gt` `gc` `gb`, `n` to a
             // hit in view) leaves it too, as in vim and helix.
-            Some(d) if d >= scrolloff && d + scrolloff <= last => None,
+            Some(d) if d >= scrolloff && d + below <= last => None,
             Some(d) if d < scrolloff => Some(scrolloff),
-            Some(_) => Some(last.saturating_sub(scrolloff)),
+            Some(_) => Some(last.saturating_sub(below)),
             // Off the page, vim's horizontal page has its own rule; its
             // other surfaces centre. So do helix's searches and jump list;
             // helix's other moves scroll as little as scrolloff allows
@@ -5599,7 +5606,7 @@ impl Editor {
             // line 184 at the top, not 190).
             None if vim || centres => Some(last / 2),
             None if before => Some(scrolloff),
-            None => Some(last.saturating_sub(scrolloff)),
+            None => Some(last.saturating_sub(below)),
         }
     }
 
