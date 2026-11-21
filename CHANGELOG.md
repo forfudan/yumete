@@ -7,15 +7,15 @@ Written for people who use it to write, not for the commit log: each line says w
 ### Added
 
 - **`[editor] mouse = false` leaves the mouse to the terminal**: yumete takes no clicks, wheel or drags, so dragging makes the terminal's own selection. helix's `editor.mouse` and vim's emptied `mouse` come over on import; `:set mouse false` turns it off for this run.
-- **`[editor] undo_steps = "sentence"` makes each typed sentence its own undo step**, as if `C-g u` followed it: after `。！？`, and after `.!?` when a space or a line break follows, so code like `a.b` never cuts one. The default, `"insert"`, keeps one step per Insert, as vim and helix do.
+- **`[editor] undo_steps = "sentence"` makes each typed sentence its own undo step**, as if `C-g u` followed it: after `。！？` and any closing quote or bracket after them, and after `.!?` when a space or a line break follows, so code like `a.b` never cuts one. The default, `"insert"`, keeps one step per Insert, as vim and helix do.
 - **`[editor] hud = "off" | "basic" | "full"`** keeps the cursor hint's level in the config; `:view-hud` still changes it for this run.
 - **vim's `:normal`** (`:norm`, `:normal!`) runs keys as typed in Normal mode, once or on each line of a range or of the selection, with vim's aborts and one undo step for the run.
 - **vim's `gp` / `gP`** put like `p` / `P` and leave the cursor just past what was put.
-- **Insert `C-t`** puts one indent width on the line under the vim keymap; `C-d` now takes one off rounded to the width, as vim does.
-- **Insert `C-v` reads vim's codes**: `C-v065`, `C-vx41`, `C-vo101`, `C-vu4e2d`, `C-vU…`; `C-v Enter` writes a carriage return.
+- **Insert `C-t`** puts one indent width on the line under the vim keymap, and `C-d` now takes one off, both rounded to the width, as vim does.
+- **Insert `C-v` reads vim's codes**: `C-v065`, `C-vx41`, `C-vo101`, `C-vu4e2d`, `C-vU…`; `C-v Enter` writes a carriage return, and `C-v` before `Esc` or a Ctrl key writes that control character.
 - **A picker's `A-Enter` opens the entry and keeps the picker open**, and every prompt (`:`, `/`, a picker's query) takes helix's `A-b` / `A-f`, `C-k` and `C-r` with a register name.
 - **`scripts/build.sh --profile=release-termux` builds with less memory**, with thin LTO, for Termux on Android and other small machines where the full release build runs out of memory (#3, by kimitrois).
-- **Resting the mouse on the status line, a cut-off sidebar row, a problem sign or a scrollbar mark shows what the cell cannot fit**: the file's whole path, the language server's details, the whole message, what the marks stand for. Any key, click or move to another cell puts it away. `[editor] mouse_hover` (on by default) and `mouse_hover_delay` (500 ms) set it.
+- **Resting the mouse on the file name or the language-server cell of the status line, a cut-off message, a cut-off sidebar row, a problem sign or a scrollbar mark shows what the cell cannot fit**: the file's whole path, the language server's details, the whole message, what the marks stand for. Any key, click, wheel or move to another cell puts it away. `[editor] mouse_hover` (on by default) and `mouse_hover_delay` (500 ms) set it.
 - **`ye --ansi --shot=WxH FILE` prints the page alone in terminal colours**, without the status line and the other bars, for a preview pane such as fzf's `--preview`.
 
 ### Changed
@@ -25,6 +25,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **Under helix, `.` after a completion writes the word chosen**, as helix replays the completion it applied, not whatever the list offers first at the new place.
 - **A vim macro stops when `J`, `gJ` or Visual `J` has nothing below to join**, so `999@q` ends there; `2gJ` joins two lines, as in vim.
 - **A vim block's corner may stand past a short line's end**, so `C-v j l` from `abc` onto `d` is two columns wide, as in vim.
+- **Of several pixi environments, a language server is taken from the active one** (`pixi shell`), then `default`, then the rest by name.
 - **A bare `:set` on an on/off setting flips it**, as vim's `:set wrap!` and helix's `:toggle` do; any other setting still opens its row in the settings page.
 - **Under vim, `df`, `dt`, `cF` and `yT` open the IME as `f` does**, so `dt京` deletes up to 京.
 - **`--shot --keys` draws the frame between keys that the editor draws**, so page and scroll keys move the view as they do in the editor.
@@ -34,6 +35,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **Moving the mouse no longer drops a half-typed code** of the built-in IME, and no longer redraws the screen once for every cell the pointer crosses.
 - **A vim macro keeps what the IME committed in Normal mode**, so replaying it writes the text again.
 - **The wheel no longer scrolls the window where an IME code is half-typed**; other windows still scroll.
+- **Insert `C-r` reads the registers that answer**, `%` (the file's name), `/` (the last search), `.` and `#`, as `"%p` and the others do.
 
 ## 0.24.0 · 2026-11-17
 
