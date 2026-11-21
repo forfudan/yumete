@@ -2027,7 +2027,9 @@ fn found_here(command: &str, from: Option<&Path>) -> Option<PathBuf> {
 /// 找不到標準庫，整份檔報假錯。從 `pixi shell` 裏起的 yumete 帶着 `CONDA_PREFIX`，
 /// 那個環境就是使用者此刻選的，排第一。
 fn environment_rank(env: &Path, active: Option<&Path>) -> u8 {
-    if active.is_some_and(|a| a == env) {
+    // `env` is found from the file's canonical path; `CONDA_PREFIX` is spelled
+    // as the shell had it, through a link or without Windows' `\\?\`.
+    if active.is_some_and(|a| a == env || std::fs::canonicalize(a).is_ok_and(|a| a == env)) {
         0
     } else if env.file_name() == Some("default".as_ref()) {
         1

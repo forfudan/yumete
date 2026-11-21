@@ -18608,7 +18608,9 @@ mod tests {
             .map(|row| (left..w).map(|col| buf.cell((col, row)).map(|c| c.symbol().to_string()).unwrap_or_default()).collect())
             .unwrap_or_default();
         assert!(title.replace(' ', "").contains(&yumete_core::say!("file.title")), "{title}");
-        let whole = file.display().to_string();
+        // The file as the editor holds it: links resolved, and on Windows the
+        // long name of an 8.3 temp directory.
+        let whole = yumete_core::buffer::plain_spelling(&std::fs::canonicalize(&file).unwrap());
         assert!(inside.concat().contains(&whole), "{whole} in {inside:#?}");
         assert!(inside.concat().contains("UTF-8") && inside.concat().contains("LF"), "{inside:#?}");
 

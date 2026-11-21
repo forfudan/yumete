@@ -224,7 +224,7 @@ impl Editor {
         let mut rows: Vec<(String, String)> = Vec::new();
         let mut row = |name: String, what: String| rows.push((name, what));
         match &path {
-            Some(path) => row(say!("file.where"), format!("`{}`", path.display())),
+            Some(path) => row(say!("file.where"), format!("`{}`", crate::buffer::plain_spelling(path))),
             None => row(say!("file.where"), say!("file.never-saved")),
         }
         let on_disk = path.as_ref().and_then(|p| std::fs::metadata(p).ok());
@@ -2667,10 +2667,6 @@ impl Editor {
     }
 }
 
-/// **多大**，給人看的那一種：`812 B`、`12.4 KB`、`3.1 MB`。
-///
-/// 一千零二十四進一位，小數點後一位——`:info` 那一頁上這個數是拿來估量的，不是
-/// 拿來對賬的（要準的那個數在 `ls -l` 那裏）。
 /// **What [`Editor::file_facts`] reads off the current file.**
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FileFacts {
@@ -2686,6 +2682,10 @@ pub struct FileFacts {
     pub modified: Option<String>,
 }
 
+/// **多大**，給人看的那一種：`812 B`、`12.4 KB`、`3.1 MB`。
+///
+/// 一千零二十四進一位，小數點後一位——`:info` 那一頁上這個數是拿來估量的，不是
+/// 拿來對賬的（要準的那個數在 `ls -l` 那裏）。
 fn how_big(bytes: u64) -> String {
     const STEP: f64 = 1024.0;
     let names = ["B", "KB", "MB", "GB"];

@@ -310,7 +310,7 @@ pub fn file_words(facts: &yumete_core::editor::FileFacts) -> Said {
         field(
             say!("file.where"),
             match &facts.path {
-                Some(path) => path.display().to_string(),
+                Some(path) => yumete_core::buffer::plain_spelling(path),
                 None => say!("file.never-saved"),
             },
         ),

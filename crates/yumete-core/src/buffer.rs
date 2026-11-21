@@ -2755,6 +2755,19 @@ fn draft_path_for(path: &Path, tag: &str, dir: Option<&Path>) -> Option<PathBuf>
     Some(dir.join(format!(".{name}.{tag}{DRAFT_ENDING}")))
 }
 
+/// **A path as people write it**: Windows answers `canonicalize` with the
+/// verbatim form, `\\?\C:\book\ch1.md` or `\\?\UNC\host\share\…`, which is
+/// the same file as `C:\book\ch1.md` or `\\host\share\…`. Shown to a
+/// reader, or made into a file name (`?` is not allowed in one), it is the
+/// plain form. Any other path is as it was.
+pub fn plain_spelling(path: &Path) -> String {
+    let full = path.to_string_lossy();
+    if let Some(share) = full.strip_prefix(r"\\?\UNC\") {
+        return format!(r"\\{share}");
+    }
+    full.strip_prefix(r"\\?\").unwrap_or(&full).to_string()
+}
+
 /// **A file's whole path as one file name**, separators and the drive's
 /// colon written `%`.
 ///
@@ -2765,8 +2778,7 @@ fn draft_path_for(path: &Path, tag: &str, dir: Option<&Path>) -> Option<PathBuf>
 /// is FNV-1a, spelled out here: the name has to come out the same in every
 /// version, which `std`'s hasher does not promise.
 fn copy_stem(path: &Path) -> String {
-    let stem: String = path
-        .to_string_lossy()
+    let stem: String = plain_spelling(path)
         .chars()
         .map(|c| if matches!(c, '/' | '\\' | ':') { '%' } else { c })
         .collect();
@@ -4577,7 +4589,17 @@ fn tmp() -> std::path::PathBuf {
     /// **A copy in the drafts directory is named for the file's whole
     /// path**, separators written `%`, so two books' `ch1.md` never share
     /// one; a path too long for one file name keeps its tail behind a hash.
-    #[test]
+    /// The verbatim form Windows gives a canonical path makes the same name
+/// as the plain one: `?` cannot be in a file name.
+#[test]
+fn a_verbatim_windows_path_names_its_copy_as_the_plain_one() {
+    assert_eq!(plain_spelling(Path::new(r"\\?\C:\Users\a\ch1.md")), r"C:\Users\a\ch1.md");
+    assert_eq!(plain_spelling(Path::new(r"\\?\UNC\host\share\ch1.md")), r"\\host\share\ch1.md");
+    assert_eq!(plain_spelling(Path::new("/home/a/ch1.md")), "/home/a/ch1.md");
+    assert_eq!(copy_stem(Path::new(r"\\?\C:\Users\a\ch1.md")), copy_stem(Path::new(r"C:\Users\a\ch1.md")));
+}
+
+#[test]
     fn a_copy_in_the_drafts_directory_is_named_for_the_whole_path() {
         let dir = Path::new("/drafts");
         let at = draft_path_for(Path::new("/home/a/book/ch1.md"), "4321", Some(dir)).unwrap();
