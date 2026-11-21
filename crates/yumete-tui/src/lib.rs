@@ -12,6 +12,7 @@
 pub mod chrome;
 mod completion;
 mod scrollbar;
+mod hover;
 pub mod panel;
 pub mod table;
 pub mod spinner;
@@ -1149,6 +1150,10 @@ pub fn run(
     // 「一轉問一次」，只是它問的是 yumete 自己的設定檔，而且不開進程。
     let mut config_watch = crate::settings::ConfigWatch::default();
 
+    // A pass that only heard the pointer move, and draws nothing for it;
+    // and whether a pass skipped the frame it had to draw.
+    let mut pointer_only = false;
+    let mut frame_owed = false;
     let result = loop {
         // **Extend is a mode as far as the cursor is concerned.**
         // helix's `[editor.cursor-shape]` has three slots — normal, insert and
@@ -1234,6 +1239,12 @@ pub fn run(
         let typing_in_a_cell =
             settings.panel.as_ref().and_then(|p| p.cell.as_ref()).is_some_and(|c| c.bar) || genda.typing();
         system_ime.want(!(composes_here(editor) || typing_in_a_cell) || yume_has_the_keys);
+        // **The hover panel's settings, and never while composing.** The
+        // reader passes the pointer's motion on only while one may be wanted.
+        let hover_on = config.editor.mouse && config.editor.mouse_hover;
+        HOVER_WANTED.store(hover_on, std::sync::atomic::Ordering::Relaxed);
+        viewport.hover.configure(hover_on, std::time::Duration::from_millis(config.editor.mouse_hover_delay as u64));
+        viewport.hover.composing(ime.is_composing());
         // 挑選器只有打字這一層，走的是 `is_prompt()` 那條路，豎線是對的。
         // **Typing a value in the settings panel is typing**: the
         // editor stays in Normal behind the panel, so its mode alone would
@@ -1325,11 +1336,17 @@ pub fn run(
         // 80 毫秒，沒到那道閘。只要收件箱裏躺着一個鍵（`waiting`），這一整塊就會被跳
         // 過：**那一批不往前走，而鍵落到了下面**，而此刻 `self.current` 是
         // `buffer_for` 剛為了改某一章打開的那一份——`x` 會砍進一個你沒打開過的檔。
-        if wants_picture.is_some()
-            || !waiting
-            || painted.elapsed() >= floor
-            || editor.replacing_a_batch()
-        {
+        // **The pointer passing over the screen changes nothing on it** unless
+        // a hover panel comes or goes: that pass draws no frame — unless one
+        // is owed from a pass that skipped its own.
+        let still = std::mem::take(&mut pointer_only) && !frame_owed;
+        let draws = !still
+            && (wants_picture.is_some()
+                || !waiting
+                || painted.elapsed() >= floor
+                || editor.replacing_a_batch());
+        frame_owed = !draws && (frame_owed || !still);
+        if draws {
             // **正文改過的話，把改過的那一份重搜一遍，就在畫之前。**
             // Warning: **不能放在畫完之後**：那樣這一幀畫的還是舊名單，讀者要等
             // 到下一次按鍵纔看得見側欄跟上。指紋對得上它立刻回來，所以每一幀問
@@ -1380,6 +1397,13 @@ pub fn run(
                     );
                 }
             }
+            // **The hover panel's clock**, and what it would say of the
+            // servers — worded only while a panel is wanted, here, since the
+            // loop holds the servers and the drawing does not.
+            viewport.hover.tick(std::time::Instant::now());
+            viewport.hover.servers = viewport.hover.showing().and_then(|_| {
+                crate::hover::server_words(&servers.standing(editor, config), &servers.facts(editor), editor.problem_counts())
+            });
             let began = std::time::Instant::now();
             let completed = match terminal
                 .draw(|frame| draw(frame, editor, config, ime, &mut viewport, Pages { settings: settings.panel.as_ref(), genda: Some(&genda), words: Some(&words) }))
@@ -1770,6 +1794,8 @@ pub fn run(
                 // 轉圈那八個點：不給這個數，它畫一格就睡着了，於是那八個點成
                 // 了一個不動的點（同上面那幾個鬧鐘）。
                 spinner::due_in(editor.server_busy_since()),
+                // The pointer resting long enough for a hover panel.
+                viewport.hover.due_in(std::time::Instant::now()),
             ]
                 .into_iter()
                 .flatten()
@@ -1816,6 +1842,14 @@ pub fn run(
             if moves_the_caret(event, editor.picker().is_some()) {
                 end_the_composition(ime, editor);
             }
+            // **The hover panel hears everything first**: the pointer coming
+            // to a cell, and whatever puts a panel away.
+            let pages = settings.open() || genda.open() || words.open();
+            let before = viewport.hover.on_screen();
+            hear_for_the_hover(editor, &mut viewport, event, pages, std::time::Instant::now());
+            pointer_only = matches!(event, Event::Mouse(m) if m.kind == MouseEventKind::Moved)
+                && !before
+                && viewport.hover.showing().is_none();
         }
         match arrived {
             Ok(Event::Key(key)) => {
@@ -2627,6 +2661,7 @@ fn spawn_reader() -> (std::sync::mpsc::Receiver<Arrival>, crate::server::Doorbel
     let console = crate::console_shift::console::Console::open();
     #[cfg(windows)]
     let mut lone_shift = crate::console_shift::LoneShift::default();
+    let mut last_cell: Option<(u16, u16)> = None;
     std::thread::spawn(move || loop {
         // **Off the terminal while a program has it** ([`pause_the_reader`]):
         // a reader still reading would take half the keys typed to it.
@@ -2674,7 +2709,8 @@ fn spawn_reader() -> (std::sync::mpsc::Receiver<Arrival>, crate::server::Doorbel
             }
         }
         let outcome = event::read();
-        if outcome.as_ref().is_ok_and(|event| !worth_a_pass(event)) {
+        let hover = HOVER_WANTED.load(std::sync::atomic::Ordering::Relaxed);
+        if outcome.as_ref().is_ok_and(|event| !worth_a_pass(event, hover, &mut last_cell)) {
             continue;
         }
         let failed = outcome.is_err();
@@ -3132,6 +3168,9 @@ struct Seats {
     /// wheel on one is the menu's, and the menu takes no mouse, so it goes
     /// no further — the text drawn under it is not what was pointed at.
     menus: Vec<Rect>,
+    /// **The hover panel's timing** (`crate::hover`): about the pointer
+    /// and the screen, so the front end's, beside the scroll.
+    hover: crate::hover::Hover,
 }
 
 /// **一張捲動的單子，這一幀從第幾行畫起。**
@@ -5748,8 +5787,43 @@ fn moves_the_caret(event: &Event, picker_open: bool) -> bool {
 /// pointer passing over the screen with no button held answers nothing, yet
 /// the terminal reports every cell it crosses, and each pass draws a whole
 /// frame: one sweep across the screen was dozens of frames for nothing.
-fn worth_a_pass(event: &Event) -> bool {
-    !matches!(event, Event::Mouse(mouse) if mouse.kind == MouseEventKind::Moved)
+///
+/// **Except where a hover panel may be wanted** (`hover`, the loop's
+/// [`HOVER_WANTED`]): then the pointer coming to a cell it was not on is
+/// news, since resting there may bring a panel up and leaving puts one
+/// away. Motion within a cell still costs nothing. `last` is the cell of
+/// the last mouse event read, whichever kind.
+fn worth_a_pass(event: &Event, hover: bool, last: &mut Option<(u16, u16)>) -> bool {
+    let Event::Mouse(mouse) = event else { return true };
+    let cell = (mouse.column, mouse.row);
+    let new = *last != Some(cell);
+    *last = Some(cell);
+    mouse.kind != MouseEventKind::Moved || (hover && new)
+}
+
+/// **Whether the reader passes the pointer's motion on** ([`worth_a_pass`]):
+/// set by the loop from `[editor] mouse` and `mouse_hover`, read by the
+/// reader thread on every event.
+static HOVER_WANTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// **What the hover panel hears** (`crate::hover`): the pointer coming to a
+/// cell — over nothing a panel is for when a page that takes the mouse is
+/// open or a picker or a `:` menu holds it off ([`mouse_held_off`]) — and
+/// whatever puts a panel away: a key, a click, a drag, the wheel, a paste,
+/// the window resized, focus leaving.
+fn hear_for_the_hover(editor: &Editor, seats: &mut Seats, event: &Event, pages: bool, now: std::time::Instant) {
+    use ratatui::crossterm::event::KeyEventKind;
+    match event {
+        Event::Mouse(mouse) if mouse.kind == MouseEventKind::Moved => {
+            let free = !pages && !mouse_held_off(editor, seats, *mouse);
+            seats.hover.moved(free.then_some((mouse.column, mouse.row)), now);
+        }
+        Event::Mouse(mouse) => seats.hover.pressed((mouse.column, mouse.row), now),
+        Event::Key(key) if key.kind != KeyEventKind::Release => seats.hover.dismiss(),
+        Event::Paste(_) | Event::Resize(..) => seats.hover.dismiss(),
+        Event::FocusLost => seats.hover.lost_focus(),
+        _ => {}
+    }
 }
 
 /// Discarded rather than committed. A preedit is not writing yet: half a code
@@ -7045,6 +7119,11 @@ fn draw<'a>(
     let words = pages.words.filter(|w| w.open());
     viewport.follow(&editor.windows().leaves());
     let area = frame.area();
+    // **Where a hover panel is wanted**, for each place drawn below to offer
+    // what it would say there (`crate::hover`). Not over a page that takes
+    // the mouse itself.
+    let pointed = viewport.hover.showing().filter(|_| settings.is_none() && genda.is_none() && words.is_none());
+    crate::hover::begin(pointed, viewport.hover.servers.clone());
     // **Two rows for a table's columns, and only once its own head has gone**
     // (#379). Asked before the page is divided, because the answer is how tall
     // the page is, and answered from last frame's scroll together with this
@@ -7295,6 +7374,16 @@ fn draw<'a>(
                         let rows = viewport.rows.rows(editor);
                         let (thumb, total) = scrollbar::place(rows, &folds, top, bar.height as usize, chain, b >= len);
                         let marks = thumb.map(|_| scrollbar::marks(editor, rows, &folds, total, bar.height as usize));
+                        // **A mark under the pointer says what its cell holds**
+                        // (`crate::hover`); an unmarked cell says nothing.
+                        if let Some(marks) = &marks {
+                            crate::hover::offer(bar, false, |(_, y)| {
+                                let cell = y.saturating_sub(bar.y) as usize;
+                                marks.get(cell).copied().flatten()?;
+                                let covered = scrollbar::covered(editor, rows, &folds, total, bar.height as usize, cell);
+                                crate::hover::scrollbar_words(&covered)
+                            });
+                        }
                         (thumb, marks)
                     });
                     let (thumb, marks) = placed.unwrap_or((None, None));
@@ -7397,6 +7486,16 @@ fn draw<'a>(
         keep: editor.word_cells_here(),
     };
     let taken = !panels.is_empty() || picker_caret.is_some();
+    // **A hover panel**, over the caret's floats while it is up: the
+    // pointer is where the reader is looking. What it says was offered by
+    // the place under the pointer as that place was drawn, above.
+    let hover_panel = match taken {
+        true => None,
+        false => crate::hover::draw(frame, config, area),
+    };
+    viewport.hover.drawn(hover_panel.is_some());
+    panels.extend(hover_panel);
+    let taken = taken || hover_panel.is_some();
     let keys_panel = match taken {
         true => None,
         false => draw_which_key(frame, editor, config, text_area, footer.y, spot),
@@ -11717,6 +11816,11 @@ fn draw_sidebar(
         // A closed row keeps two cells for at least one dot.
         let title = elide(&line, if closed { room.saturating_sub(2) } else { room });
         put_text(buf, from + 1, y, to, &title, style);
+        // **A row cut with `…` has its whole name in a hover panel**; a row
+        // shown whole has nothing to add.
+        crate::hover::offer(Rect::new(from + 1, y, room as u16, 1), false, |_| {
+            crate::hover::cut_words(&line, &title).map(|_| crate::hover::Said::new(String::new(), row.name.clone()))
+        });
         if closed {
             let start = from as usize + 2 + yumete_cjk::str_width(&title);
             let end = from as usize + 1 + room;
@@ -14688,7 +14792,9 @@ fn draw_horizontal(
         true => maths_spots(editor, rope, measure, &on_screen),
         false => Vec::new(),
     };
-    for (_, row) in on_screen {
+    for (row_y, row) in on_screen {
+        // The screen row it is drawn on, for a hover panel's places on it.
+        let screen_y = text_area.y + row_y as u16;
         // Which palette this row is drawn off. Everything below asks `ink`, so
         // the whole of 焦點模式 is this one decision. The gutter goes with the
         // row: a line number is the row's own furniture, unlike the 縱書 number
@@ -14749,7 +14855,14 @@ fn draw_horizontal(
             if problem_gutter > 0 {
                 match row.starts_line().then(|| editor.problem_on_line(row.line)).flatten() {
                     None => spans.push(Span::styled(" ", band)),
-                    Some(severity) => spans.push(problem_cell(severity, ink, band)),
+                    Some(severity) => {
+                        spans.push(problem_cell(severity, ink, band));
+                        // **The sign has every diagnostic of its line** in a
+                        // hover panel; the lane has room for one mark.
+                        crate::hover::offer(Rect::new(text_area.x, screen_y, problem_gutter as u16, 1), false, |_| {
+                            crate::hover::problem_words(editor.problems_here().iter().filter(|p| p.line == row.line))
+                        });
+                    }
                 }
                 spans.push(Span::styled(" ", band));
             }
@@ -15526,6 +15639,14 @@ fn draw_horizontal(
                         yumete_core::problem::Severity::Hint => ink.furniture(),
                     };
                     let said = format!("  {}", panel::clip(&message, room));
+                    // **…and so has the message drawn after the line**, which
+                    // is only the loudest, and cut at the edge.
+                    let from = text_area.x + used.saturating_sub(left) as u16 + 2;
+                    let wide = yumete_cjk::str_width(&said).saturating_sub(2) as u16;
+                    let to = (from + wide).min(text_area.x + text_area.width);
+                    crate::hover::offer(Rect::new(from, screen_y, to.saturating_sub(from), 1), false, |_| {
+                        crate::hover::problem_words(editor.problems_here().iter().filter(|p| p.line == row.line))
+                    });
                     // On the row's own ground, or a banded row has a hole.
                     spans.push(Span::styled(said, fill.fg(colour)));
                 }
@@ -15813,7 +15934,7 @@ fn draw_status(
     // shape of this line but the last: the sidebar's own row starts with its
     // keys, and an open prompt starts with `:` or 「搜索:」. Only the ordinary
     // line begins with the mode, and only it gets the gold below.
-    let (status, mode, tail) = if editor.sidebar_focused() && !command_row {
+    let (status, mode, tail, spans) = if editor.sidebar_focused() && !command_row {
         let keys = say!("ui.sidebar-mode", editor.sidebar_keys());
         let readout = char_info(editor, config);
         let used = yumete_cjk::str_width(&keys) + 2;
@@ -15821,7 +15942,7 @@ fn draw_status(
             .into_iter()
             .find(|t| yumete_cjk::str_width(t) + 2 < (status_area.width as usize).saturating_sub(used))
             .unwrap_or_default();
-        (keys, String::new(), tail)
+        (keys, String::new(), tail, StatusSpans::default())
     } else if let (false, Some(_)) = (command_row, editor.prompt()) {
         // A value line is fitted as on its own row ([`prompt_view`]), where
         // the caret is put, and stops short of the tag.
@@ -15881,6 +16002,22 @@ fn draw_status(
     // byte length is its width and the cut is always on a boundary.
     let cut = mode.len().min(status.len());
     let (word, rest) = status.split_at(cut);
+    // **The hover panel's three places on this line** (`crate::hover`): the
+    // language-server cell, the file name and a message cut short. The line
+    // is drawn a cell in, with the server's cell set in after the mode word,
+    // so a cell `c` of the line built stands at `c + 2`.
+    if crate::hover::wanted() {
+        let y = status_area.y;
+        let modes = yumete_cjk::str_width(word) as u16 + u16::from(!mode.is_empty());
+        crate::hover::offer(Rect::new(status_area.x + 1 + modes, y, 1, 1), true, |_| crate::hover::servers());
+        let at = |(from, to): (usize, usize)| Rect::new(status_area.x + 2 + from as u16, y, to.saturating_sub(from) as u16, 1);
+        if let Some(span) = spans.name {
+            crate::hover::offer(at(span), true, |_| Some(crate::hover::file_words(&editor.file_facts())));
+        }
+        if let Some(span) = spans.message {
+            crate::hover::offer(at(span), true, |_| crate::hover::cut_words(&drawable(editor.status()), &drawable(&spans.said)));
+        }
+    }
     frame.render_widget(
         Paragraph::new(room_for_wide_glyphs(Line::from(vec![
             // 左邊那一格是留白，和底下那一行對齊。
@@ -15925,7 +16062,7 @@ fn draw_status(
 
 /// **`:info`'s language-server row**, `None` when no server is in question
 /// for this file (the row is left out, as the cell is blank).
-fn standing_in_words(standing: &crate::server::Standing) -> Option<String> {
+pub(crate) fn standing_in_words(standing: &crate::server::Standing) -> Option<String> {
     use crate::server::{Lost, Standing};
     Some(match standing {
         Standing::Unserved => return None,
@@ -16068,7 +16205,7 @@ fn ordinary_status(
     status_area: Rect,
     tab_area: Rect,
     command_row: bool,
-) -> (String, String, String) {
+) -> (String, String, String, StatusSpans) {
     let buffer = editor.current_buffer();
     // **A preview has no text**: no place in it, no count, and
     // no lock to mention — its name is all the line says of it.
@@ -16192,7 +16329,10 @@ fn ordinary_status(
     };
     let name = buffer.display_name();
     let width = status_area.width as usize;
-    let build = |k: &Kept| -> String {
+    // **The line and where its file name and message landed**, in one pass:
+    // the fields shift as others give way, so the spans a hover panel is
+    // found by are the ones of the line as built.
+    let assemble = |k: &Kept| -> (String, StatusSpans) {
         let name = match k.name {
             None => name.clone(),
             Some(room) => shorten_name(&name, room),
@@ -16202,7 +16342,9 @@ fn ordinary_status(
         if k.ime {
             left.push_str(if k.scheme { &ime_tag } else { &ime_bare });
         }
+        let name_from = yumete_cjk::str_width(&left);
         left.push_str(&name);
+        let name_to = yumete_cjk::str_width(&left);
         if k.dirty {
             left.push_str(dirty);
         }
@@ -16225,6 +16367,7 @@ fn ordinary_status(
             true => "",
             false => "   ",
         };
+        let message_from = yumete_cjk::str_width(left) + lead.len();
         let position = match (k.position, k.zi) {
             (false, _) => "",
             (true, true) => position_full.as_str(),
@@ -16248,8 +16391,17 @@ fn ordinary_status(
             false => " ".repeat(k.gap),
         };
         // 末尾那一段空隙是給位置讀數留的，位置讓完之後它什麼都不隔。
-        format!("{left}{lead}{message}{gap}{readout}").trim_end().to_string()
+        let line = format!("{left}{lead}{message}{gap}{readout}").trim_end().to_string();
+        let drawn = yumete_cjk::str_width(&line);
+        let spans = StatusSpans {
+            name: (name_to > name_from).then_some((name_from, name_to.min(drawn))),
+            message: (!message.is_empty())
+                .then(|| (message_from, (message_from + yumete_cjk::str_width(&message)).min(drawn))),
+            said: message.clone(),
+        };
+        (line, spans)
     };
+    let build = |k: &Kept| -> String { assemble(k).0 };
     // Warning: **那兩格是畫出來的，不是算出來的。** 這一行畫的是
     // 「行首一格留白 ＋ 模式 ＋ 轉圈那一格 ＋ 其餘」，轉不轉都佔着，所以左半邊
     // 真正能用的比 `width` 少兩格。右端那一段也減了 2，兩邊是同一筆賬。
@@ -16352,7 +16504,19 @@ fn ordinary_status(
         }
     }
     let tail = tail(&k, &line).unwrap_or_default();
-    (line, mode, tail)
+    let (line, spans) = assemble(&k);
+    (line, mode, tail, spans)
+}
+
+/// **Where the file name and the message landed on the status line**, in
+/// cells from the start of the line [`ordinary_status`] builds: the hover
+/// panel's places on it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct StatusSpans {
+    name: Option<(usize, usize)>,
+    message: Option<(usize, usize)>,
+    /// The message as drawn, cut to fit or whole.
+    said: String,
 }
 
 /// **Something said, fitted to `room` cells with its point kept** — the one
@@ -18366,9 +18530,96 @@ mod tests {
         assert!(super::moves_the_caret(&click, false));
         assert!(!super::moves_the_caret(&click, true));
         assert!(!super::moves_the_caret(&wheel, false));
-        assert!(!super::worth_a_pass(&moved));
-        assert!(super::worth_a_pass(&click));
-        assert!(super::worth_a_pass(&wheel));
+        let mut last = None;
+        assert!(!super::worth_a_pass(&moved, false, &mut last));
+        assert!(super::worth_a_pass(&click, false, &mut last));
+        assert!(super::worth_a_pass(&wheel, false, &mut last));
+    }
+
+    /// **With hover wanted, the pointer coming to a new cell is passed on;
+    /// motion inside one cell is not, and with hover off none is.** A
+    /// click's cell counts as the last one seen, so the motion a terminal
+    /// reports on the cell it was clicked in is not news either.
+    #[test]
+    fn the_reader_passes_the_pointer_only_into_a_new_cell_and_only_for_hover() {
+        use ratatui::crossterm::event::{Event, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+        let at = |kind, column, row| Event::Mouse(MouseEvent { kind, column, row, modifiers: KeyModifiers::NONE });
+        let moved = |column, row| at(MouseEventKind::Moved, column, row);
+        let mut last = None;
+        assert!(super::worth_a_pass(&moved(3, 4), true, &mut last), "a new cell");
+        assert!(!super::worth_a_pass(&moved(3, 4), true, &mut last), "the same cell");
+        assert!(super::worth_a_pass(&moved(4, 4), true, &mut last), "the next cell");
+        assert!(super::worth_a_pass(&at(MouseEventKind::Down(MouseButton::Left), 6, 4), true, &mut last));
+        assert!(!super::worth_a_pass(&moved(6, 4), true, &mut last), "where it was clicked");
+        assert!(!super::worth_a_pass(&moved(9, 9), false, &mut last), "hover off: a new cell is nothing");
+        assert!(!super::worth_a_pass(&moved(9, 8), false, &mut last));
+    }
+
+    /// **The pointer resting on the status line's file name brings up its
+    /// whole path**, drawn in the frame, and resting on the text brings up
+    /// nothing: the text is never a place a panel is for.
+    #[test]
+    fn resting_on_the_file_name_shows_the_whole_path() {
+        use ratatui::{backend::TestBackend, Terminal};
+        let dir = std::env::temp_dir().join(format!("yumete-hover-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("draft-one.md");
+        std::fs::write(&file, "天地玄黄，宇宙洪荒。\n").unwrap();
+        let mut editor = Editor::new();
+        editor.open_file(&file).unwrap();
+        let config = Config::default();
+        ink(&config);
+        let (w, h) = (100u16, 24u16);
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+        let mut seats = Seats::default();
+        let screen = |terminal: &Terminal<TestBackend>| -> Vec<String> {
+            let buf = terminal.backend().buffer();
+            (0..h).map(|y| (0..w).filter_map(|x| buf.cell((x, y)).map(|c| c.symbol().to_string())).collect()).collect()
+        };
+        terminal.draw(|frame| draw(frame, &editor, &config, no_ime(), &mut seats, None)).unwrap();
+        let rows = screen(&terminal);
+        let (y, line) = rows.iter().enumerate().rev().find(|(_, r)| r.contains("draft-one.md")).unwrap_or_else(|| panic!("the name on the status line: {rows:#?}"));
+        let x = line.split("draft-one.md").next().map(|before| yumete_cjk::str_width(before) as u16).unwrap();
+        let t = std::time::Instant::now();
+        seats.hover.configure(true, std::time::Duration::from_millis(500));
+        seats.hover.moved(Some((x + 1, y as u16)), t);
+        seats.hover.tick(t + std::time::Duration::from_millis(500));
+        terminal.draw(|frame| draw(frame, &editor, &config, no_ime(), &mut seats, None)).unwrap();
+        assert!(seats.hover.on_screen(), "the panel was drawn");
+        // The panel's inside, row by row: it stands at the pointer, above
+        // the status line, between two walls.
+        let buf = terminal.backend().buffer().clone();
+        let left = x + 1;
+        let inside: Vec<String> = (0..y as u16)
+            .filter(|&row| buf.cell((left, row)).is_some_and(|c| c.symbol() == "│"))
+            .map(|row| {
+                (left + 1..w)
+                    .map(|col| buf.cell((col, row)).map(|c| c.symbol().to_string()).unwrap_or_default())
+                    .take_while(|s| s != "│")
+                    .collect::<String>()
+                    .trim()
+                    .to_string()
+            })
+            .collect();
+        assert!(!inside.is_empty(), "a panel above the status line");
+        let title_row = (0..y as u16).find(|&row| buf.cell((left, row)).is_some_and(|c| c.symbol() == "╭" || c.symbol() == "┌"));
+        let title: String = title_row
+            .map(|row| (left..w).map(|col| buf.cell((col, row)).map(|c| c.symbol().to_string()).unwrap_or_default()).collect())
+            .unwrap_or_default();
+        assert!(title.replace(' ', "").contains(&yumete_core::say!("file.title")), "{title}");
+        let whole = file.display().to_string();
+        assert!(inside.concat().contains(&whole), "{whole} in {inside:#?}");
+        assert!(inside.concat().contains("UTF-8") && inside.concat().contains("LF"), "{inside:#?}");
+
+        // On the text: nothing.
+        seats.hover.moved(Some((8, 0)), t + std::time::Duration::from_millis(1000));
+        seats.hover.tick(t + std::time::Duration::from_millis(2000));
+        assert_eq!(seats.hover.showing(), Some((8, 0)));
+        terminal.draw(|frame| draw(frame, &editor, &config, no_ime(), &mut seats, None)).unwrap();
+        assert!(!seats.hover.on_screen(), "the text has no panel");
+        assert!(!screen(&terminal).concat().contains(&whole));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// decimo writes `Error:` in bold red even into a pipe.

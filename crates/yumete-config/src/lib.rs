@@ -110,6 +110,15 @@ pub struct EditorConfig {
     /// Off, the terminal keeps the mouse, so its own click-and-drag
     /// selection works without a modifier, and yumete sees no mouse at all.
     pub mouse: bool,
+    /// **Whether the pointer resting on the interface brings up what its
+    /// cell cannot fit**: the status line's file name and language-server
+    /// cell, a cut message, a sidebar row cut with `…`, the gutter's problem
+    /// sign and the scrollbar's marks. Never the text itself. On by default;
+    /// nothing with `mouse` off, which leaves the pointer to the terminal.
+    pub mouse_hover: bool,
+    /// How long the pointer rests on one place before that panel comes up,
+    /// in milliseconds.
+    pub mouse_hover_delay: usize,
     /// Whether the line-number band carries a ground of its own.
     ///
     /// Off, and the same in both layouts: 縱書 painted its number band and
@@ -588,6 +597,8 @@ impl Default for EditorConfig {
             scrolloff: 5,
             wheel_step: 3,
             mouse: true,
+            mouse_hover: true,
+            mouse_hover_delay: 500,
             line_number_fill: false,
             diff_gutter: true,
             end_of_line_diagnostics: "off".to_string(),
@@ -4962,6 +4973,8 @@ struct RawEditor {
     scrolloff: Option<usize>,
     wheel_step: Option<usize>,
     mouse: Option<bool>,
+    mouse_hover: Option<bool>,
+    mouse_hover_delay: Option<usize>,
     line_number_fill: Option<bool>,
     diff_gutter: Option<bool>,
     end_of_line_diagnostics: Option<String>,
@@ -5172,6 +5185,12 @@ impl RawConfig {
         }
         if other.editor.mouse.is_some() {
             self.editor.mouse = other.editor.mouse;
+        }
+        if other.editor.mouse_hover.is_some() {
+            self.editor.mouse_hover = other.editor.mouse_hover;
+        }
+        if other.editor.mouse_hover_delay.is_some() {
+            self.editor.mouse_hover_delay = other.editor.mouse_hover_delay;
         }
         if other.editor.table_rules.is_some() {
             self.editor.table_rules = other.editor.table_rules.clone();
@@ -5662,6 +5681,13 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.mouse {
             config.editor.mouse = on;
+        }
+        if let Some(on) = self.editor.mouse_hover {
+            config.editor.mouse_hover = on;
+        }
+        if let Some(wait) = self.editor.mouse_hover_delay {
+            config.editor.mouse_hover_delay =
+                as_declared(problems, "editor", "mouse_hover_delay", wait, wait);
         }
         if let Some(rules) = self.editor.table_rules {
             config.editor.table_rules = rules;

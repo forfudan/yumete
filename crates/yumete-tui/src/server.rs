@@ -162,6 +162,10 @@ struct Server {
     /// handshake, then its name and version, either of which it may leave
     /// out. The page window asks this of tinymist.
     said_it_is: Option<(Option<String>, Option<String>)>,
+    /// **The pixi environment it was started in**, by the name of its
+    /// directory under `.pixi/envs/`; `None` for a program outside one
+    /// ([`in_its_environment`]).
+    environment: Option<String>,
     /// The commands asked for the page window whose answers are still out
     /// (`workspace/executeCommand`): the id each was asked under, and the
     /// ticket [`Servers::execute`] handed out for it.
@@ -192,6 +196,23 @@ impl Server {
             true => self.working_since,
         }
     }
+}
+
+/// **One server watching the current file, as its hover tells it**
+/// ([`Servers::facts`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Facts {
+    /// The command the config names it by.
+    pub command: String,
+    /// Its name and version as it said them (`serverInfo`), when it said
+    /// more than the command already says.
+    pub said: Option<String>,
+    /// Whether the handshake is done.
+    pub ready: bool,
+    /// The program that was started.
+    pub path: Option<PathBuf>,
+    /// The pixi environment it runs in.
+    pub environment: Option<String>,
 }
 
 /// **How the one server a language had stopped being there**, kept per
@@ -863,6 +884,33 @@ impl Servers {
             .map(|name| {
                 let ready = self.running.get(&name).is_some_and(|s| s.ready);
                 (name, ready)
+            })
+            .collect()
+    }
+
+    /// **What is known of each server watching the current file**, for the
+    /// status line's hover: what it said it is, whether the handshake is
+    /// done, the program that was started and the environment it runs in.
+    pub fn facts(&self, editor: &Editor) -> Vec<Facts> {
+        let Some(language) = self.language_of(editor) else { return Vec::new() };
+        self.serving(language)
+            .into_iter()
+            .filter_map(|command| {
+                let server = self.running.get(&command)?;
+                let said = server.said_it_is.as_ref().and_then(|(name, version)| {
+                    let name = name.as_deref().unwrap_or(&command);
+                    match version.as_deref().filter(|v| !v.is_empty()) {
+                        Some(version) => Some(format!("{name} {version}")),
+                        None => name.ne(&command).then(|| name.to_string()),
+                    }
+                });
+                Some(Facts {
+                    path: self.found.get(&command).cloned(),
+                    said,
+                    ready: server.ready,
+                    environment: server.environment.clone(),
+                    command,
+                })
             })
             .collect()
     }
@@ -2002,20 +2050,10 @@ fn environment_rank(env: &Path, active: Option<&Path>) -> u8 {
 /// 的程序本來就該在那個環境裏跑。於是兩件事一起給：那個環境的 `bin` 排進 `PATH`
 /// 的最前面（它要叫別的工具就叫到同一環境裏那一個），`share/max` 真的在就設
 /// `MODULAR_HOME`。別的語言用不上第二條，而第一條對它們都是對的。
-fn in_its_environment(command: &mut Command, at: &Path) {
-    // `<環境>/bin/<命令>` → `<環境>`。兩級都要對得上，不然隨便一個 `bin/` 都算。
-    let Some(env) = at.parent().filter(|bin| bin.file_name() == Some("bin".as_ref())).and_then(Path::parent)
-    else {
-        return;
-    };
-    // 真的是 pixi 的環境纔算：`.pixi/envs/<名字>`。
-    let pixi = env
-        .parent()
-        .is_some_and(|envs| envs.file_name() == Some("envs".as_ref())
-            && envs.parent().is_some_and(|p| p.file_name() == Some(".pixi".as_ref())));
-    if !pixi {
-        return;
-    }
+///
+/// Answers the environment's name, the one the server is said to run in.
+fn in_its_environment(command: &mut Command, at: &Path) -> Option<String> {
+    let env = pixi_environment(at)?;
     let bin = env.join("bin");
     if let Some(path) = std::env::var_os("PATH") {
         let mut dirs = vec![bin];
@@ -2028,6 +2066,21 @@ fn in_its_environment(command: &mut Command, at: &Path) {
     if max.is_dir() {
         command.env("MODULAR_HOME", max);
     }
+    env.file_name().map(|name| name.to_string_lossy().into_owned())
+}
+
+/// **The pixi environment a program lives in**: `…/.pixi/envs/<name>`
+/// for a program at `…/.pixi/envs/<name>/bin/<command>`, and `None` for
+/// any other place.
+fn pixi_environment(at: &Path) -> Option<&Path> {
+    // `<環境>/bin/<命令>` → `<環境>`。兩級都要對得上，不然隨便一個 `bin/` 都算。
+    let env = at.parent().filter(|bin| bin.file_name() == Some("bin".as_ref())).and_then(Path::parent)?;
+    // 真的是 pixi 的環境纔算：`.pixi/envs/<名字>`。
+    let pixi = env
+        .parent()
+        .is_some_and(|envs| envs.file_name() == Some("envs".as_ref())
+            && envs.parent().is_some_and(|p| p.file_name() == Some(".pixi".as_ref())));
+    pixi.then_some(env)
 }
 
 /// Start one server and get its threads going.
@@ -2040,7 +2093,7 @@ fn start(
     // Warning: **起的是找到的那一個絕對路徑**，不是配置裏那個名字——不然 `Command`
     // 自己又去問一遍 `PATH`，項目裏那一個白找了。
     let mut command = Command::new(at);
-    in_its_environment(&mut command, at);
+    let environment = in_its_environment(&mut command, at);
     let mut child = command
         .args(&named.args)
         .stdin(Stdio::piped())
@@ -2129,6 +2182,7 @@ fn start(
         asked_next: None,
         configured: named.config.as_ref().map(lsp::did_change_configuration),
         said_it_is: None,
+        environment,
         asked_exec: HashMap::new(),
         told: 0,
     };
@@ -2242,6 +2296,7 @@ mod tests {
                     asked_next: None,
                     configured: None,
                     said_it_is: Some((None, None)),
+                    environment: None,
                     asked_exec: HashMap::new(),
                     told: 0,
                 },

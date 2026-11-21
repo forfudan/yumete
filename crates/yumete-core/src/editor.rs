@@ -6655,6 +6655,7 @@ mod folds;
 mod tree_select;
 mod prose_tree;
 mod files;
+pub use files::FileFacts;
 mod group_commands;
 mod groups;
 mod insert;

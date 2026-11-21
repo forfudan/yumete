@@ -599,6 +599,30 @@ zhs = "鼠标"
 en = "mouse"
 
 [[message]]
+# 設置面板：[editor] mouse_hover 那一行（草稿）
+key = "settings.editor.mouse-hover"
+zhs = "鼠标悬停"
+en = "mouse hover"
+
+[[message]]
+# 設置面板：[editor] mouse_hover_delay 那一行（草稿）
+key = "settings.editor.mouse-hover-delay"
+zhs = "悬停延迟"
+en = "hover delay"
+
+[[message]]
+# 設置面板：[editor] mouse_hover_delay 那一行底下的說明（草稿）
+key = "settings.editor.mouse-hover-delay.hint"
+zhs = "指针停住多少毫秒后浮出"
+en = "how many milliseconds the pointer rests before the panel shows"
+
+[[message]]
+# 設置面板：[editor] mouse_hover 那一行底下的說明（草稿）
+key = "settings.editor.mouse-hover.hint"
+zhs = "指针停在状态栏、被截断的边栏行、诊断标记或滚动条标记上，浮出那一格放不下的信息；不浮在正文上"
+en = "the pointer resting on the status line, a cut sidebar row, a problem sign or a scrollbar mark shows what that cell cannot fit; never over the text"
+
+[[message]]
 # 設置面板：[editor] mouse 那一行底下的說明（草稿）
 key = "settings.editor.mouse.hint"
 zhs = "开：点击、拖选、滚轮归 yumete。关：鼠标留给终端，可直接用终端自己的选择"

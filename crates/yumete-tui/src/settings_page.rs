@@ -3357,6 +3357,27 @@ mod tests {
         );
     }
 
+    /// **`[editor] mouse_hover` and `mouse_hover_delay`**: on and 500 ms by
+    /// default, from the config and from `:set`, the delay held to its range.
+    #[test]
+    fn mouse_hover_is_a_setting_set_like_the_others() {
+        assert!(Config::default().editor.mouse_hover);
+        assert_eq!(Config::default().editor.mouse_hover_delay, 500);
+        let config = Config::from_toml("[editor]\nmouse_hover = false\nmouse_hover_delay = 300\n");
+        assert!(!config.editor.mouse_hover);
+        assert_eq!(config.editor.mouse_hover_delay, 300);
+        assert_eq!(Config::from_toml("[editor]\nmouse_hover_delay = 99999\n").editor.mouse_hover_delay, 5000);
+        let mut ed = Editor::new();
+        let mut seat = Seat::default();
+        ed.execute(":set mouse_hover false").unwrap();
+        seat.settle(&mut ed);
+        ed.execute(":set mouse_hover_delay 300").unwrap();
+        seat.settle(&mut ed);
+        assert!(seat.panel.is_none());
+        assert!(ed.take_config_reload(), "the config is read again with it");
+        assert_eq!(seat.session_toml(), "[editor]\nmouse_hover = false\nmouse_hover_delay = 300\n");
+    }
+
     /// **`:set hud basic`** sets the editor key for the run, as any other.
     #[test]
     fn set_hud_sets_it_for_the_run() {

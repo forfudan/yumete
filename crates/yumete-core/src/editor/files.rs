@@ -186,9 +186,34 @@ impl Editor {
         std::mem::take(&mut self.file_info_request)
     }
 
-    pub fn file_report(&self, servers: Option<String>, checking: bool) -> String {
+    /// **Where the current file is and how it is written**: the rows of
+    /// `:info` that the status line's file name cannot hold, for its hover
+    /// as for the report — one reading of each, so the two never disagree.
+    pub fn file_facts(&self) -> FileFacts {
         let buffer = self.current_buffer();
         let path = buffer.path().map(|p| p.to_path_buf());
+        let modified = path
+            .as_ref()
+            .and_then(|p| std::fs::metadata(p).ok())
+            .and_then(|it| it.modified().ok())
+            .map(when_was);
+        FileFacts {
+            path,
+            root: self.project_root(),
+            encoding: crate::encoding::name(buffer.encoding()).to_string(),
+            // 換行符：檔案自己那一種（`\r\n` 的檔存回去還是 `\r\n`，#309）。
+            ending: match buffer.ending() {
+                "\r\n" => "CRLF",
+                _ => "LF",
+            },
+            modified,
+        }
+    }
+
+    pub fn file_report(&self, servers: Option<String>, checking: bool) -> String {
+        let buffer = self.current_buffer();
+        let facts = self.file_facts();
+        let path = facts.path.clone();
         let text = buffer.rope().to_string();
         let (han, chars, _) = self.counts_of(&text);
         let yes_no = |yes: bool| match yes {
@@ -216,22 +241,15 @@ impl Editor {
         row(say!("file.chars"), chars.to_string());
         row(say!("file.han"), han.to_string());
         row(say!("file.language"), buffer.syntax().name().to_string());
-        // 換行符：檔案自己那一種（`\r\n` 的檔存回去還是 `\r\n`，#309）。
-        row(
-            say!("file.ending"),
-            match buffer.ending() {
-                "\r\n" => "CRLF".to_string(),
-                _ => "LF".to_string(),
-            },
-        );
-        row(say!("file.encoding"), crate::encoding::name(buffer.encoding()).to_string());
+        row(say!("file.ending"), facts.ending.to_string());
+        row(say!("file.encoding"), facts.encoding);
         if let Some(said) = &buffer.local().said {
             row(say!("file.modeline"), format!("`{said}`"));
         }
-        if let Some(when) = on_disk.as_ref().and_then(|it| it.modified().ok()) {
-            row(say!("file.modified-at"), when_was(when));
+        if let Some(when) = facts.modified {
+            row(say!("file.modified-at"), when);
         }
-        row(say!("file.root"), format!("`{}`", self.project_root().display()));
+        row(say!("file.root"), format!("`{}`", facts.root.display()));
         // The diagnostics beside the servers that said them: the same three
         // numbers the status line's cell is drawn from. Said whenever a server
         // is `checking` the file or anything has been said, so a clean file
@@ -2653,6 +2671,21 @@ impl Editor {
 ///
 /// 一千零二十四進一位，小數點後一位——`:info` 那一頁上這個數是拿來估量的，不是
 /// 拿來對賬的（要準的那個數在 `ls -l` 那裏）。
+/// **What [`Editor::file_facts`] reads off the current file.**
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FileFacts {
+    /// Where it is on disk; `None` before its first save.
+    pub path: Option<PathBuf>,
+    /// The project it belongs to.
+    pub root: PathBuf,
+    /// The encoding it is read and written in, by its usual name.
+    pub encoding: String,
+    /// `LF` or `CRLF`.
+    pub ending: &'static str,
+    /// When the file on disk last changed; `None` when there is none.
+    pub modified: Option<String>,
+}
+
 fn how_big(bytes: u64) -> String {
     const STEP: f64 = 1024.0;
     let names = ["B", "KB", "MB", "GB"];

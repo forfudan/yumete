@@ -1,4 +1,4 @@
-# prefixes: ui genda label panel sidebar hud menu picker preview region pane theme show detail info fold
+# prefixes: ui genda label panel sidebar hud menu picker preview region pane theme show detail info fold hover
 #
 # What the editor says, one block per tag; see README.md beside this file.
 
@@ -730,6 +730,66 @@ en = "working directory's top {0|character|characters}"
 key = "genda.whole"
 zhs = "全文"
 en = "whole"
+
+[[message]]
+# 鼠标悬停在状态栏的语言服务器那一格：服务器那个可执行文件的位置（草稿）
+key = "hover.command"
+zhs = "路径"
+en = "path"
+
+[[message]]
+# 鼠标悬停面板里一行：名字与它的值（草稿）
+key = "hover.field"
+zhs = "{0}：{1}"
+en = "{0}: {1}"
+
+[[message]]
+# 鼠标悬停在状态栏的语言服务器那一格：服务器所在的 pixi 环境的名字（草稿）
+key = "hover.pixi-environment"
+zhs = "pixi 环境"
+en = "pixi environment"
+
+[[message]]
+# 鼠标悬停在滚动条的标记上：面板的名字（草稿）
+key = "hover.scrollbar"
+zhs = "滚动条"
+en = "scrollbar"
+
+[[message]]
+# 鼠标悬停在滚动条的标记上：那一格里有几处 :view-diff 标出的改动（草稿）
+key = "hover.scrollbar-changes"
+zhs = "改动 {0} 处"
+en = "{0|change|changes}"
+
+[[message]]
+# 鼠标悬停在滚动条的标记上：最后一行，说点一下会怎样（草稿）
+key = "hover.scrollbar-click"
+zhs = "点击：翻到这里"
+en = "click: scroll the page here"
+
+[[message]]
+# 鼠标悬停在滚动条的标记上：那一格里有几个错误，和第一个错误说的话（草稿）
+key = "hover.scrollbar-errors"
+zhs = "错误 {0} 处：{1}"
+en = "{0|error|errors}: {1}"
+
+[[message]]
+# 鼠标悬停在滚动条的标记上：那一格里有几行是上一份清单指到的（草稿）
+key = "hover.scrollbar-listing"
+zhs = "清单中的 {0} 行"
+en = "{0|line|lines} of the listing"
+
+[[message]]
+# 鼠标悬停在滚动条的标记上：那一格里有几行被搜索命中（草稿）
+key = "hover.scrollbar-search"
+zhs = "搜索命中 {0} 行"
+en = "{0|line|lines} hit by the search"
+
+[[message]]
+# 鼠标悬停在滚动条的标记上：那一格里有几个警告，和第一个警告说的话（草稿）
+key = "hover.scrollbar-warnings"
+zhs = "警告 {0} 处：{1}"
+en = "{0|warning|warnings}: {1}"
 
 [[message]]
 # :view-hud basic(出廠)——也是 :view-hud 不帶參數時的回答

@@ -439,6 +439,54 @@ pub(crate) fn marks(editor: &Editor, rows: &Rows, folds: &[(usize, usize)], tota
     cells
 }
 
+/// **What the lines under cell `cell` of the bar hold**, of the kinds
+/// [`marks`] draws — counted the same way, so the hover panel of a mark
+/// speaks of the lines that put it there.
+pub(crate) fn covered(
+    editor: &Editor,
+    rows: &Rows,
+    folds: &[(usize, usize)],
+    total: usize,
+    bar: usize,
+    cell: usize,
+) -> crate::hover::Covered {
+    let mut covered = crate::hover::Covered::default();
+    if bar == 0 {
+        return covered;
+    }
+    let places = Places::new(rows, folds, total, bar);
+    let kinds = editor.scrollbar_marks();
+    if kinds.changes {
+        covered.changes = editor.vcs_runs().iter().filter(|run| places.run(run.at.clone()).contains(&cell)).count();
+    }
+    if kinds.problems {
+        use yumete_core::problem::Severity;
+        for problem in editor.problems_here().iter().filter(|p| places.line(p.line) == cell) {
+            let tally = match problem.severity {
+                Severity::Error => &mut covered.errors,
+                Severity::Warn => &mut covered.warnings,
+                Severity::Note | Severity::Hint => continue,
+            };
+            tally.0 += 1;
+            if tally.1.is_none() {
+                tally.1 = problem.message.lines().map(str::trim).find(|l| !l.is_empty()).map(str::to_string);
+            }
+        }
+    }
+    if kinds.listing {
+        covered.listing = editor
+            .listing_lines_here()
+            .iter()
+            .flat_map(|lines| lines.iter())
+            .filter(|&&line| places.line(line as usize) == cell)
+            .count();
+    }
+    if kinds.search {
+        covered.search = editor.search_hit_lines().iter().filter(|&&line| places.line(line as usize) == cell).count();
+    }
+    covered
+}
+
 /// The colour a mark is drawn in: the colour the same thing has elsewhere
 /// on the page — a search's hit, the gold of what the reader puts on the
 /// page, the gutter's green and blue, 朱 for an error.

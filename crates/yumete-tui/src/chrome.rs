@@ -151,6 +151,9 @@ pub fn room(area: Rect, vertical: bool, what: Use) -> (u16, u16) {
         // Layout does not turn this one round: a key table is drawn across in
         // both layouts, so there is no 縱 for a wide box to cut the top off.
         (Use::Scan, _) => (area.width, area.height / 2),
+        // A hover panel is short and read at a glance: a narrow measure,
+        // and as deep as it needs, since it covers nothing being written.
+        (Use::Point, _) => (area.width.min(crate::hover::WIDEST), area.height * 2 / 3),
     }
 }
 
@@ -169,6 +172,8 @@ pub enum Use {
     /// is where it starts; a key menu grows past it to keep its meanings
     /// whole (`panel::draw`).
     Scan,
+    /// A hover panel at the mouse pointer (`crate::hover`).
+    Point,
 }
 
 /// **光標那一點，連同要讓開的那一段**。

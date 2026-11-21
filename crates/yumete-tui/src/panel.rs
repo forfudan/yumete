@@ -74,6 +74,10 @@ pub enum Stand {
     /// 站上面還是下面由 [`crate::chrome::Anchor::Band`] 挑——通欄之後「右下、
     /// 右上」就是「下、上」。
     Band,
+    /// **At the mouse pointer** — a hover panel (`crate::hover`): under the
+    /// pointer's cell, over it where there is no room below, across in both
+    /// layouts, since what it says is about the interface and not the page.
+    Pointer,
 }
 
 /// A floating panel: what it is called, what it holds, and one short thing
@@ -669,6 +673,7 @@ pub fn draw(
     // 和別的四種信息一樣是讀的，該和它們一樣大。
     let prose = matches!(panel.body, Body::Prose(_));
     let what = match (prose, panel.reading) {
+        _ if matches!(panel.stand, Stand::Pointer) => crate::chrome::Use::Point,
         (true, _) => crate::chrome::Use::Read,
         (false, true) => crate::chrome::Use::Fields,
         (false, false) => crate::chrome::Use::Scan,
@@ -1076,7 +1081,7 @@ pub fn draw(
     // 而補全那張單子只在代碼檔裏出來（代碼檔不竦排），所以竦的那一邊回老規矩。
     let stand = match (&panel.stand, vertical) {
         (Stand::Band, false) => crate::chrome::Anchor::Band { at: caret.at, bottom },
-        (Stand::UnderCaret, false) => {
+        (Stand::UnderCaret, false) | (Stand::Pointer, _) => {
             crate::chrome::Anchor::UnderCaret { at: caret.at, bottom }
         }
         _ => crate::chrome::Anchor::Caret {
