@@ -328,15 +328,25 @@ impl Seat {
     /// yumete's own, its name — given `value` for this run, by the panel's
     /// own rules; helix's own names and values (`auto-pairs false`,
     /// `end-of-line-diagnostics warning`) read as the config import reads
-    /// them. `None` when the text is a setting's name alone, or one word,
-    /// for the panel to open on; otherwise what the status line says.
+    /// them. **An on/off setting's name alone flips it**, as vim's
+    /// `:set wrap!` and helix's `:toggle`. `None` when the text is any other
+    /// setting's name alone, or one word, for the panel to open on;
+    /// otherwise what the status line says.
     fn set_from_the_line(&mut self, editor: &mut Editor, text: &str) -> Option<String> {
         let mut page = Panel::open(
             Some(yumete_config::config_dir().join("config.toml")),
             Some(yumete_config::panel::local_sheet_path(&editor.root())),
         );
         if page.go_to(text, |s| every_name(s.label)) {
-            return None;
+            let setting = page.here().filter(|s| matches!(s.kind, Kind::Tick))?;
+            // What this run reads now: an earlier `:set` over the files.
+            let path = (setting.table.to_string(), setting.key.to_string());
+            let now = self.session.get(&path).cloned().unwrap_or_else(|| page.shown(setting).value);
+            let flipped = match now.trim() == "true" {
+                true => "false",
+                false => "true",
+            };
+            return Some(self.set_for_the_run(editor, vec![(path.0, path.1, flipped.to_string())]));
         }
         let (key, value) = text.trim().split_once(char::is_whitespace)?;
         let value = value.trim();
@@ -357,12 +367,17 @@ impl Seat {
                 }
             },
         };
+        Some(self.set_for_the_run(editor, lines))
+    }
+
+    /// `(table, key, value)` given for this run, and what the status line says.
+    fn set_for_the_run(&mut self, editor: &mut Editor, lines: Vec<(String, String, String)>) -> String {
         let said: Vec<String> = lines.iter().map(|(_, key, value)| format!("{key} = {value}")).collect();
         for (table, key, value) in lines {
             self.session.insert((table, key), value);
         }
         editor.set_config_reload();
-        Some(say!("settings.set-for-the-session", said.join(&say!("label.comma"))))
+        say!("settings.set-for-the-session", said.join(&say!("label.comma")))
     }
     /// **那扇窗開着嗎？** 開着的時候一個鍵都到不了正文。
     pub fn open(&self) -> bool {
@@ -3139,6 +3154,33 @@ mod tests {
         ed.execute(":set end-of-line-diagnostics").unwrap();
         seat.settle(&mut ed);
         assert_eq!(page(&seat).here().map(|s| s.key), Some("end_of_line_diagnostics"));
+    }
+
+    /// **A bare `:set` on an on/off setting flips it** for the run, from
+    /// what the run reads now, and opens nothing; any other setting's name
+    /// alone opens the panel on its row, as before.
+    #[test]
+    fn a_bare_set_on_an_on_off_setting_flips_it() {
+        let mut ed = Editor::new();
+        let mut seat = Seat::default();
+        let factory = Config::default().editor.mouse;
+        for (flips, name) in [(1, "mouse"), (2, "editor.mouse")] {
+            ed.execute(&format!(":set {name}")).unwrap();
+            seat.settle(&mut ed);
+            assert!(seat.panel.is_none(), "{name}: no panel");
+            assert!(ed.take_config_reload(), "the config is read again with it");
+            let value = if flips % 2 == 1 { !factory } else { factory };
+            assert_eq!(seat.session_toml(), format!("[editor]\nmouse = {value}\n"));
+            assert_eq!(ed.status(), say!("settings.set-for-the-session", format!("mouse = {value}")));
+        }
+        // A count's name alone opens its row and sets nothing.
+        let mut ed = Editor::new();
+        let mut seat = Seat::default();
+        ed.execute(":set scrolloff").unwrap();
+        seat.settle(&mut ed);
+        assert_eq!(page(&seat).here().map(|s| s.key), Some("scrolloff"));
+        assert_eq!(seat.session_toml(), "");
+        assert!(!ed.take_config_reload());
     }
 
     /// The values `:set` gave come back over the files at every reload, a
