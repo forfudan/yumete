@@ -2260,7 +2260,15 @@ impl Editor {
         let before = (self.current_buffer().id(), self.current_buffer().revision());
         self.paste_now(after);
         let put = (self.current_buffer().id(), self.current_buffer().revision());
-        if let Some((start, end)) = self.current_buffer().change_span().filter(|_| put != before) {
+        if put != before {
+            self.mark_the_put();
+        }
+    }
+
+    /// `` `] `` on the last character of what was just put (see
+    /// [`Self::mark_change_to_last`]).
+    pub(super) fn mark_the_put(&mut self) {
+        if let Some((start, end)) = self.current_buffer().change_span() {
             self.mark_change_to_last(start, end);
         }
     }

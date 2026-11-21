@@ -850,7 +850,9 @@ impl super::Editor {
         };
         self.snapshot();
         let grouping = self.current_buffer_mut().begin_undo_group();
-        // Where the last line's copies end, for `gp`.
+        // Where the first line's copies begin and the last line's end, for
+        // `` `[ ``, `` `] `` and `gp`.
+        let mut first = None;
         let mut past = None;
         // **Top down**: bottom up, the first piece past the file's end would
         // become its last line, and the next one up would then be pasted into
@@ -884,6 +886,7 @@ impl super::Editor {
                 if !self.edit_insert(end, &line) {
                     break;
                 }
+                first.get_or_insert(from + column);
                 past = Some(from + column + row.chars().count());
                 continue;
             }
@@ -900,9 +903,15 @@ impl super::Editor {
             if !self.edit_insert(at, &row) {
                 break;
             }
+            first.get_or_insert(at + pad.chars().count());
             past = Some(at + row.chars().count());
         }
         self.current_buffer_mut().end_undo_group(grouping);
+        // `` `[ `` on the first character put, `` `] `` on the last line's
+        // last, its padding among them (vim's `do_put`).
+        if let (Some(start), Some(end)) = (first, past) {
+            self.current_buffer_mut().set_change_span(start, end.saturating_sub(1).max(start));
+        }
         let rope = self.current_buffer().rope().clone();
         let at = match (std::mem::take(&mut self.paste_goes_past), past) {
             (true, Some(end)) => self.just_past_the_put(end, false),
@@ -926,6 +935,10 @@ impl super::Editor {
     /// that line's last character**: vim's cursor, which cannot stand past
     /// it, puts it there. `P` leaves the registers as they were; `p`, `gp`
     /// and `gP` leave the block that went in the unnamed one.
+    ///
+    /// **`` `[ ``, `` `] ``, `gv` and the `<` `>` marks are then the text
+    /// put** (vim's `nv_put_opt`): `gv` selects a block from its first
+    /// character to its last, as the block that went was a block.
     pub(super) fn put_over_block(&mut self, key: char, count: usize) {
         let Some(block) = self.block else { return };
         enum Put {
@@ -962,6 +975,9 @@ impl super::Editor {
         }
         self.block_delete(block);
         self.block = None;
+        // What is put is a change of its own: `` `[ `` and `` `] `` name it,
+        // not the block that went.
+        self.current_buffer_mut().close_change_span();
         let rope = self.current_buffer().rope().clone();
         let line_start = rope.line_to_char(first);
         let at = at_column(&rope, self.tab_stop(), first, left);
@@ -981,11 +997,19 @@ impl super::Editor {
                     self.sel = Selections::one(Range::at(rope.line_to_char(corner_line)));
                 }
                 self.put_text(key == 'p' || forward, text, true);
+                self.mark_the_put();
             }
-            Put::Text(text, false) if text.contains('\n') => self.put_text(forward, text, false),
+            Put::Text(text, false) if text.contains('\n') => {
+                self.put_text(forward, text, false);
+                self.mark_the_put();
+            }
             Put::Text(text, false) => self.put_on_each_line(at, first..=last, &text),
         }
         self.current_buffer_mut().end_undo_group(grouping);
+        if let Some((start, end)) = self.current_buffer().change_span() {
+            let put = self.block_corners(Block { anchor: start, cursor: end, to_line_end: block.to_line_end, goal: None });
+            self.current_buffer_mut().settle_selection(put);
+        }
     }
 
     /// Text within one line, put on each of `lines` at the display column
@@ -1010,6 +1034,9 @@ impl super::Editor {
             return;
         }
         let end = at + text.chars().count();
+        // The first line's copy is the change vim names (`` `] `` on its
+        // last character), not the lines below.
+        self.current_buffer_mut().set_change_span(at, end.saturating_sub(1).max(at));
         let to = match go_past {
             true => self.just_past_the_put(end, false),
             false => motion::prev_grapheme(self.current_buffer().rope(), end).max(at),

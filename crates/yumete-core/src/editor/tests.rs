@@ -45368,6 +45368,37 @@ fn a_vim_last_selection_moves_with_the_lines() {
     }
 }
 
+/// **After `p` over a block, `` `[ ``, `` `] ``, `gv` and the `<` `>`
+/// marks are the text put** (vim's `nv_put_opt`, measured in nvim 0.12):
+/// `` `] `` on its last character, padding and all, and `gv` a block from
+/// its first character to its last, whether a block, a word on every line,
+/// lines or text over lines went in. A block's plain `p` leaves `` `] `` on
+/// its last character too.
+#[test]
+fn a_put_over_a_vim_block_marks_what_it_put() {
+    let text = "one two three\nfour five\nsix seven eight nine\nten\n";
+    let cases: &[(&str, &str, (usize, usize))] = &[
+        ("^jlyjj^jlp`[x", "one two three\nfour five\nnx seven eight nine\nfon\n", (3, 1)),
+        ("^jlyjj^jlp`]x", "one two three\nfour five\nonx seven eight nine\nfn\n", (4, 2)),
+        ("^jlyjj^jlpgvd", "one two three\nfour five\nx seven eight nine\nn\n", (3, 1)),
+        ("^jlyjj^jlP`<x", "one two three\nfour five\nnx seven eight nine\nfon\n", (3, 1)),
+        ("^jlyjj^jlgp`>x", "one two three\nfour five\nonx seven eight nine\nfn\n", (4, 2)),
+        ("^jlyjj^jl2pgvd", "one two three\nfour five\nx seven eight nine\nn\n", (3, 1)),
+        ("yiwgg8l^3jp`]x", "oneonhree\nfouone\nsixone eight nine\ntenone\n", (1, 6)),
+        ("yiwgg8l^3jpgvd", "onehree\nfouone\nsixone eight nine\ntenone\n", (1, 4)),
+        ("Gyygg^jlp`[x", "e two three\nur five\nen\nsix seven eight nine\nten\n", (3, 1)),
+        ("Gyygg^jlp`]x", "e two three\nur five\nte\nsix seven eight nine\nten\n", (3, 2)),
+        ("Gyygg^jlPgvd", "\ne two three\nur five\nsix seven eight nine\nten\n", (1, 1)),
+        ("vjyjj^jlp`]x", "one two three\nfour five\none two three\nx seven eight nine\nn\n", (4, 1)),
+        ("vjyjj^jlpgvd", "one two three\nfour five\nne two three\nx seven eight nine\nn\n", (3, 1)),
+        ("^jly$p`]x", "one two threeon\nfour five    f\nsix seven eight nine\nten\n", (2, 14)),
+    ];
+    for &(keys, want, at) in cases {
+        let (_, got, cursor) = vim_block_run(text, keys);
+        assert_eq!((got.as_str(), cursor), (want, at), "{keys:?}");
+    }
+}
+
 /// **`/` and `?` are motions after an operator** (`:h /`, exclusive),
 /// measured against nvim: the operator waits on the search line and takes
 /// the text up to the match when Enter is pressed.

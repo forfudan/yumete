@@ -1627,6 +1627,16 @@ impl Buffer {
         self.held_selections.push(selection);
     }
 
+    /// **The selection the running key ends with**, in place of the one
+    /// it held: vim's Visual `p` leaves `gv` on the text put. With nothing
+    /// held, the last selection.
+    pub fn settle_selection(&mut self, selection: LastSelection) {
+        match self.held_selections.last_mut() {
+            Some(held) => *held = selection,
+            None => self.last_selection = Some(selection),
+        }
+    }
+
     /// The selection [`Self::hold_selection`] held, moved with what the key
     /// did.
     pub fn release_selection(&mut self) -> Option<LastSelection> {
