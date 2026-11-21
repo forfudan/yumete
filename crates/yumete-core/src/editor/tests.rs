@@ -44549,6 +44549,23 @@ fn undo_steps_sentence_takes_back_one_sentence() {
     assert_eq!(ed.current_buffer().text(), "", "one run, one step");
 }
 
+/// **A closing quote or bracket stays with its sentence**, and a run of
+/// end marks is one end: one `u` never leaves half a quotation.
+#[test]
+fn undo_steps_sentence_keeps_the_closing_marks() {
+    use crate::editor::UndoSteps;
+    let undone = |text: &str| {
+        let mut ed = typing_by(UndoSteps::Sentence, text);
+        ed.on_key(Key::Esc);
+        press(&mut ed, "u");
+        ed.current_buffer().text()
+    };
+    assert_eq!(undone("他说：“好。”然后走了。"), "他说：“好。”");
+    assert_eq!(undone("（这是括号里的句子。）后面"), "（这是括号里的句子。）");
+    assert_eq!(undone("真的？！好"), "真的？！");
+    assert_eq!(undone("He said \"Yes.\" Then"), "He said \"Yes.\"");
+}
+
 /// **`.` `!` `?` end a sentence only before a space or a line break**:
 /// `a.b` and `x!=y` are one step, commas never cut.
 #[test]

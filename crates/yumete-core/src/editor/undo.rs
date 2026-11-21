@@ -43,22 +43,56 @@ fn ends_a_sentence_before_a_space(c: char) -> bool {
     matches!(c, '.' | '!' | '?')
 }
 
+/// **A closing mark goes with the sentence it closes**: `他说：“好。”` and
+/// `（这是括号里的句子。）` end after the `”` and the `）`, as `L` and `mis`
+/// take them.
+fn closes(c: char) -> bool {
+    matches!(c, '”' | '’' | '」' | '』' | '）' | '】' | '》' | '〉' | '〕' | '］' | '｝' | '"' | '\'' | ')' | ']' | '}')
+}
+
+/// What the text typed so far ends in.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Tail {
+    /// Nothing that ends a sentence.
+    Open,
+    /// `。` `！` `？`, then any closing marks: the next character of anything
+    /// else begins a new sentence.
+    Ended,
+    /// `.` `!` `?`, then any closing marks: a space or a line break ends it.
+    Stopped,
+}
+
+impl Tail {
+    fn then(self, c: char) -> Tail {
+        match c {
+            c if ends_a_sentence(c) => Tail::Ended,
+            c if ends_a_sentence_before_a_space(c) && self == Tail::Ended => Tail::Ended,
+            c if ends_a_sentence_before_a_space(c) => Tail::Stopped,
+            c if closes(c) => self,
+            _ => Tail::Open,
+        }
+    }
+}
+
 /// **Where in `text`, typed after `before`, a sentence ends**: the byte
-/// offsets to commit an undo checkpoint at, in order. `0` is before the
-/// first character, when `before` is `.` and `text` begins with a space.
-pub(super) fn sentence_ends(before: Option<char>, text: &str) -> Vec<usize> {
+/// offsets to commit an undo checkpoint at, in order. A cut falls before
+/// the first character after the end marks and their closing marks
+/// (`真的？！”好` cuts before `好`), and before the space or line break
+/// after `.` `!` `?` and theirs. `0` is a cut before the first character.
+pub(super) fn sentence_ends(before: &str, text: &str) -> Vec<usize> {
+    let mut tail = before.chars().fold(Tail::Open, Tail::then);
     let mut ends = Vec::new();
-    let mut last = before;
     for (at, c) in text.char_indices() {
-        if matches!(c, ' ' | '\n' | '\r') && last.is_some_and(ends_a_sentence_before_a_space) {
+        let ended = match tail {
+            Tail::Ended => !ends_a_sentence(c) && !ends_a_sentence_before_a_space(c) && !closes(c),
+            Tail::Stopped => matches!(c, ' ' | '\n' | '\r'),
+            Tail::Open => false,
+        };
+        if ended {
             ends.push(at);
         }
-        if ends_a_sentence(c) {
-            ends.push(at + c.len_utf8());
-        }
-        last = Some(c);
+        tail = tail.then(c);
     }
-    ends.dedup();
     ends
 }
 
@@ -83,12 +117,12 @@ impl Editor {
             && !self.replaying
     }
 
-    /// The character before the caret, which a typed space may end a
-    /// sentence after.
-    pub(super) fn char_before_caret(&self) -> Option<char> {
+    /// The last few characters before the caret: the sentence end, and
+    /// the closing marks after it, that what is typed next may follow.
+    pub(super) fn text_before_caret(&self) -> String {
         let rope = self.current_buffer().rope();
         let head = self.sel.head().min(rope.len_chars());
-        head.checked_sub(1).map(|at| rope.char(at))
+        rope.slice(head.saturating_sub(16)..head).to_string()
     }
 
     /// **Type `text` with a checkpoint at each sentence end in it**: `put`
@@ -99,7 +133,7 @@ impl Editor {
             return put(self, text);
         }
         let mut from = 0;
-        for end in sentence_ends(self.char_before_caret(), text) {
+        for end in sentence_ends(&self.text_before_caret(), text) {
             if end > from {
                 put(self, &text[from..end]);
             }

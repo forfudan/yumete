@@ -2105,15 +2105,15 @@ impl Editor {
         // `C-n` 歸它，不是往 N 處各寫一次。
         let (was_len, was_head) = (self.current_buffer().rope().len_chars(), self.sel.head());
         self.stepped_over = false;
-        // `undo_steps = "sentence"`: a checkpoint before a space or a line
-        // break typed after `.` `!` `?`, and after a `。` `！` `？` typed.
+        // `undo_steps = "sentence"`: a checkpoint before what is typed
+        // after a sentence's end and its closing marks.
         let typed = match key {
             Key::Char(c) => Some(c),
             Key::Enter | Key::Ctrl('j') => Some('\n'),
             _ => None,
         };
         let ends = match (typed, self.cuts_sentences()) {
-            (Some(c), true) => super::undo::sentence_ends(self.char_before_caret(), c.encode_utf8(&mut [0; 4])),
+            (Some(c), true) => super::undo::sentence_ends(&self.text_before_caret(), c.encode_utf8(&mut [0; 4])),
             _ => Vec::new(),
         };
         if ends.first() == Some(&0) {
