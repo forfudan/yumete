@@ -2375,6 +2375,10 @@ impl Editor {
     pub(super) fn cmd_search_next(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
         if self.walking_hits() {
+            // vim's `n` is a jump after `*` as after `/`.
+            if self.as_vim() {
+                self.remember_jump();
+            }
             self.repeat(count, |e| {
                 e.walk_table_hits(true);
             });
@@ -2390,6 +2394,10 @@ impl Editor {
     pub(super) fn cmd_search_prev(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
         if self.walking_hits() {
+            // vim's `n` is a jump after `*` as after `/`.
+            if self.as_vim() {
+                self.remember_jump();
+            }
             self.repeat(count, |e| {
                 e.walk_table_hits(false);
             });

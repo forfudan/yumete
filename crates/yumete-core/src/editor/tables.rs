@@ -6937,9 +6937,21 @@ impl Editor {
         if n == 0 {
             return false;
         }
-        let at = match forward != hits.backward {
-            true => (hits.at + 1) % n,
-            false => (hits.at + n - 1) % n,
+        // **vim's `n` searches from the cursor**: once it has left the hit
+        // it was put on (`*`, then `gg`), the next one is the first past
+        // where it stands, wrapping, as after `/`. Not where the hits are
+        // shown in the other work area and the cursor stays behind.
+        let here = match self.extend {
+            true => self.sel.head(),
+            false => self.sel.anchor().min(self.sel.head()),
+        };
+        let shown_elsewhere = self.definition_preview && self.live_pane() == 0;
+        let moved = self.as_vim() && !shown_elsewhere && hits.spans.get(hits.at).is_none_or(|&(from, _)| from != here);
+        let at = match (moved, forward != hits.backward) {
+            (true, true) => hits.spans.iter().position(|&(from, _)| from > here).unwrap_or(0),
+            (true, false) => hits.spans.iter().rposition(|&(from, _)| from < here).unwrap_or(n - 1),
+            (false, true) => (hits.at + 1) % n,
+            (false, false) => (hits.at + n - 1) % n,
         };
         if let Some(hits) = self.hits.as_mut() {
             hits.at = at;

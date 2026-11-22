@@ -48189,3 +48189,27 @@ fn vims_ap_on_trailing_blank_lines_takes_nothing() {
     feed_vim(&mut ed, "jdap");
     assert_eq!(ed.current_buffer().text(), "pen\n");
 }
+
+/// **vim's `n` after `*` and `#` searches from the cursor**: once the
+/// cursor has left the match it was put on, `n` and `N` go to the next one
+/// past where it stands, wrapping, and each is a jump `''` comes back from
+/// (measured in nvim).
+#[test]
+fn vims_n_after_star_searches_from_the_cursor() {
+    for (keys, want) in [
+        ("3G*ggn", (2, 1)),
+        ("3G*Gn", (1, 1)),
+        ("3G*ggN", (5, 1)),
+        ("3G#ggn", (5, 1)),
+        ("3G#Gn", (4, 1)),
+        ("3G#3Gn", (2, 1)),
+        ("3G*lN", (4, 1)),
+        ("3G*n", (5, 1)),
+        ("3G*n''", (4, 1)),
+        ("3G#n''", (2, 1)),
+    ] {
+        let mut ed = typed_vim("foo a\nfoo b\nfoo c\nfoo d\nfoo e\n");
+        feed_vim(&mut ed, keys);
+        assert_eq!(vim_at(&ed), want, "{keys}");
+    }
+}
