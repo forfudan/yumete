@@ -47002,6 +47002,28 @@ fn vims_enter_in_replace_mode_splits_the_line_and_backspace_joins_it() {
     assert_eq!(run("jjR", 2, "x"), "fn main() {\n    let x = a +   bx\n}\n");
 }
 
+/// **Backspace after Replace mode's Enter under a TAB indent takes the
+/// indent back, then the break** (measured in nvim with `ai sw=4 sts=4`,
+/// the indent this keymap keeps): the TAB carried down goes back to four
+/// spaces, then to none, and the next Backspace joins the line as it was.
+#[test]
+fn replace_mode_backspace_under_a_tab_indent_joins_the_line_back() {
+    let text = "void f() {\n\tputs(s);\n}\n";
+    let run = |backs: usize| {
+        let mut ed = typed_vim(text);
+        ed.execute(":syntax c").unwrap();
+        feed_vim(&mut ed, "jwR⏎");
+        for _ in 0..backs {
+            ed.on_key(Key::Backspace);
+        }
+        feed_vim(&mut ed, "⎋");
+        ed.current_buffer().text()
+    };
+    assert_eq!(run(1), "void f() {\n\t\n    puts(s);\n}\n");
+    assert_eq!(run(2), "void f() {\n\t\nputs(s);\n}\n");
+    assert_eq!(run(3), text);
+}
+
 /// **`|` in a `:s` line is read as vim reads it** (measured in nvim): in the
 /// replacement it is a `|`; after the flags it ends the substitution, the
 /// rest run as the next command, the two one undo step.

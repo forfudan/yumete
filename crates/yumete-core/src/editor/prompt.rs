@@ -424,14 +424,20 @@ impl Editor {
                     if self.keymap_rules().vim_indent_keys
                         && self.caret_in_the_indent().is_some_and(|(start, _)| self.sel.head() > start) =>
                 {
+                    // Every blank left before the caret is one Enter put
+                    // there: a TAB the indent takes back to spaces leaves
+                    // more of them than it found, and the break is still
+                    // under them all.
                     let before = self.sel.head();
                     self.vim_backspace_in_the_indent();
-                    for _ in 1..before.saturating_sub(self.sel.head()) {
+                    let after = self.sel.head();
+                    for _ in 1..before.saturating_sub(after) {
                         match self.overwritten.last() {
                             Some(Overwrote::Char(None)) => self.overwritten.pop(),
                             _ => break,
                         };
                     }
+                    self.overwritten.extend((0..(after + 1).saturating_sub(before)).map(|_| Overwrote::Char(None)));
                     return;
                 }
                 Some(Overwrote::Char(was)) => return self.put_back_what_was_overwritten(was),
