@@ -47077,3 +47077,17 @@ fn cutting_an_unterminated_last_line_empty_keeps_the_line() {
         assert_eq!(ed.current_buffer().text(), want, "{keys}");
     }
 }
+
+/// **Under helix a `:s` over the selection takes every selection's lines**,
+/// with no range or with `'<,'>`, as the commands that act on each
+/// selection do.
+#[test]
+fn a_helix_substitution_takes_the_lines_of_every_selection() {
+    for command in ["'<,'>s/a/X/g", "s/a/X/g"] {
+        let mut ed = typed("a1 a\na2 a\na3 a\na4 a\na5 a\n");
+        ed.execute(":keymap helix").unwrap();
+        press(&mut ed, "ggjxCjC");
+        assert!(ed.execute(command).is_ok(), "{command}: {}", ed.status());
+        assert_eq!(ed.current_buffer().text(), "a1 a\na2 a\nX3 X\nX4 X\nX5 X\n", "{command}");
+    }
+}

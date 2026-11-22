@@ -101,6 +101,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **`:s …c` no longer asks forever at a pattern that matches nothing**, such as `z*`: it asks once about each place `:s` without `c` changes, then ends.
 - **A `|` after a `:s` command's flags runs the command after it**, as in vim: `:s/a/b/ | s/c/d/` makes both changes, one `u` taking them back, instead of refusing the line.
 - **vim's `*` and `#` are jumps, and `:$`, `:+3` and `:-3` go to their line**, as in vim: `C-o` comes back to where `*` was pressed, `:40` and the others keep the cursor's column, and `dw`, `D` or `cc` that empties a last line with no final line break leaves that line, empty.
+- **Under helix, `:s` and `:'<,'>s` with several selections change the lines of every selection**, as the commands that act on each selection do, instead of only the primary's.
 
 ## 0.24.0 · 2026-11-17
 

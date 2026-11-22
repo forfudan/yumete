@@ -617,6 +617,12 @@ impl Editor {
                 Bound::Mark(name) => self.mark_line(name),
             }
         };
+        // A range that names the selection names every one of them under
+        // helix's keymap, as the commands that act on each selection do.
+        let naming_it = matches!(rows, Rows::Selection | Rows::Span(Bound::Mark('<'), Bound::Mark('>')));
+        if let Some(lines) = self.every_selected_line().filter(|_| naming_it) {
+            return Ok(Chosen::These(lines));
+        }
         Ok(match rows {
             Rows::All => Chosen::Span(0, last_line),
             Rows::Span(a, b) => {
@@ -637,6 +643,34 @@ impl Editor {
                 Chosen::Span(first, last)
             }
         })
+    }
+
+    /// **The lines every selection covers**, each once and in order, when
+    /// helix's keymap holds more than one.
+    fn every_selected_line(&self) -> Option<Vec<usize>> {
+        if self.as_vim() || !self.sel.is_plural() {
+            return None;
+        }
+        let rope = self.current_buffer().rope();
+        let mut lines = Vec::new();
+        for range in self.sel.iter() {
+            let (start, end) = range.span();
+            // The character the caret stands on is selected too, as in
+            // [`Self::selection`].
+            let end = match self.mode == Mode::Insert {
+                true => end,
+                false => motion::next_grapheme(rope, end),
+            };
+            let first = rope.char_to_line(start.min(rope.len_chars()));
+            let last = match end > start {
+                true => rope.char_to_line((end - 1).min(rope.len_chars())),
+                false => first,
+            };
+            lines.extend(first..=last);
+        }
+        lines.sort_unstable();
+        lines.dedup();
+        Some(lines)
     }
 
     /// The first and last line the selection covers.
