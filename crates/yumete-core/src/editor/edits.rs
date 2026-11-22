@@ -1970,10 +1970,20 @@ impl Editor {
                     Some(width) => self.block_registers.insert((n + 1) as char, width),
                     None => self.block_registers.remove(&((n + 1) as char)),
                 };
+                // Each keeps its kind as it moves down (`v$d` then `"2p`).
+                match self.charwise_breaks.remove(&(n as char)) {
+                    true => self.charwise_breaks.insert((n + 1) as char),
+                    false => self.charwise_breaks.remove(&((n + 1) as char)),
+                };
             }
         }
         self.registers.insert('1', parts);
         self.block_registers.remove(&'1');
+        // Of the kind the delete just stored for the unnamed register.
+        match self.charwise_breaks.contains(&'"') {
+            true => self.charwise_breaks.insert('1'),
+            false => self.charwise_breaks.remove(&'1'),
+        };
     }
 
     /// **vim's `""` follows the register just written** (`:h quotequote`):
@@ -2076,9 +2086,20 @@ impl Editor {
         self.storing_a_yank = false;
         self.yank_whole_lines = whole;
         if named.is_none() && self.keymap_rules().vim_registers {
-            self.registers.insert('0', self.register_parts.clone());
-            self.block_registers.remove(&'0');
+            self.keep_the_yank_in_zero();
         }
+    }
+
+    /// **vim's `"0` is the last yank** (`:h quote0`), of the kind the
+    /// unnamed register now holds: a charwise yank ending in a line break
+    /// (`v$y`, `ygn` on `/^$`) is put by `"0p` as text, as `p` puts it.
+    fn keep_the_yank_in_zero(&mut self) {
+        self.registers.insert('0', self.register_parts.clone());
+        self.block_registers.remove(&'0');
+        match self.charwise_breaks.contains(&'"') {
+            true => self.charwise_breaks.insert('0'),
+            false => self.charwise_breaks.remove(&'0'),
+        };
     }
 
     pub(super) fn register_text(&self, name: Option<char>) -> String {
@@ -2240,8 +2261,7 @@ impl Editor {
         // **vim's `"0` is the last yank** (`:h quote0`): a delete
         // fills the unnamed register, and `"0p` still has what was yanked.
         if named.is_none() && self.keymap_rules().vim_registers {
-            self.registers.insert('0', self.register_parts.clone());
-            self.block_registers.remove(&'0');
+            self.keep_the_yank_in_zero();
         }
         self.status = say!("edit.yanked-characters", end - start);
         self.mark_change_to_last(start, end);

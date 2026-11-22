@@ -45509,6 +45509,34 @@ fn a_vim_put_ends_its_last_mark_as_nvim_does() {
     }
 }
 
+/// **`"0` and `"1` keep a charwise yank or delete that ends in a line
+/// break charwise**, as the unnamed register does (measured in nvim): the
+/// lone break `ygn` takes on `/^$`, and `v$y`, put by `"0p` into the line,
+/// not as a line below it.
+#[test]
+fn vim_numbered_registers_keep_a_charwise_line_break() {
+    let text = "sun moon\n\nred blue\n";
+    let cases: &[(&str, &str, (usize, usize))] = &[
+        ("/^$\nygn\"0p", "sun moon\n\n\nred blue\n", (2, 1)),
+        ("v$yjj\"0p", "sun moon\n\nrsun moon\ned blue\n", (3, 2)),
+        ("v$djj\"1p", "\nrsun moon\ned blue\n", (2, 2)),
+    ];
+    for &(keys, want, at) in cases {
+        let mut ed = typed_vim(text);
+        for c in keys.chars() {
+            ed.on_key(match c {
+                '\n' => Key::Enter,
+                c => Key::Char(c),
+            });
+        }
+        let rope = ed.current_buffer().rope().clone();
+        let head = ed.sel.head();
+        let line = rope.char_to_line(head);
+        let cursor = (line + 1, head - rope.line_to_char(line) + 1);
+        assert_eq!((ed.current_buffer().text().as_str(), cursor), (want, at), "{keys:?}");
+    }
+}
+
 /// **A vim mark moves with the lines added or taken above it**, as vim's
 /// `mark_adjust` moves it (measured in nvim 0.12): `ma` then a line opened
 /// above, deleted above or joined; a lowercase mark on a deleted line is

@@ -66,6 +66,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **Insert `C-r` puts a block register whole**, as in vim: the unnamed one as lines, one named by a letter or number as a block from the cursor's column; vim's `C-r C-r` puts as `C-r` does, and `C-r C-o` and `C-r C-p` put as `P` does, lines above the line and a block as a block, with the cursor just past them.
 - **vim's ``` `` ``` and `''` before any jump go to the first line's start**, as in vim, instead of nowhere; pressed again they come back, and `d''`, ``` y`` ``` and the other operators take them as motions.
 - **Marks move with the lines added or taken above them**, as vim's do: `ma`, a line opened above, then `'a` lands on the marked line, not the one above it; under vim a lowercase mark on a deleted line is gone until `u` brings it back, and an uppercase one moves to the line after. `gv` and marks stay on a line split before them and count a joined line's columns as vim does.
+- **vim's `"0p` and `"1p` put a charwise yank or delete that ends in a line break into the line**, as `p` does and as in vim: the lone break `ygn` takes on `/^$`, `v$y`, `v$d`, not a line below the cursor's.
 
 ## 0.24.0 · 2026-11-17
 
