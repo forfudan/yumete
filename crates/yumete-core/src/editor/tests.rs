@@ -46761,3 +46761,23 @@ fn an_empty_line_opened_after_an_unterminated_last_line_is_kept() {
         assert_eq!((ed.current_buffer().text().as_str(), vim_at(&ed)), (want, at), "{keys}");
     }
 }
+
+/// **vim's `}` and `{` from among empty lines cross them** (measured in
+/// nvim): the empty line they stop on comes after a line with text, so `}`
+/// on an empty line followed by another goes past the paragraph after them,
+/// and `d}` takes it.
+#[test]
+fn a_paragraph_motion_from_among_empty_lines_crosses_them() {
+    let cases: &[(&str, &str, &str, (usize, usize))] = &[
+        ("\n\nfig\n\nkiwi\n", "}", "\n\nfig\n\nkiwi\n", (4, 1)),
+        ("\n\nfig\n\nkiwi\n", "d}", "\nkiwi\n", (1, 1)),
+        ("lime\n\n\nfig\nyam\n\n\nkiwi\n", "j}", "lime\n\n\nfig\nyam\n\n\nkiwi\n", (6, 1)),
+        ("lime\n\n\nfig\nyam\n\n\nkiwi\n", "Gk{", "lime\n\n\nfig\nyam\n\n\nkiwi\n", (3, 1)),
+        ("lime\n\n\nfig\nyam\n\n\nkiwi\n", "Gkd{", "lime\n\n\nkiwi\n", (3, 1)),
+    ];
+    for &(text, keys, want, at) in cases {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        assert_eq!((ed.current_buffer().text().as_str(), vim_at(&ed)), (want, at), "{keys} on {text:?}");
+    }
+}

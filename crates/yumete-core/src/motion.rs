@@ -1416,13 +1416,20 @@ fn empty(rope: &Rope, line: usize) -> bool {
 /// a 中文 manuscript means by the word and what the rest of this editor works
 /// in, but vim has no soft wrap, so a vim paragraph is a run of lines with an
 /// empty one between them. The vim preset owes a vim hand that answer.
+///
+/// The empty line it stops on comes after a line with text (vim's
+/// `findpar`), so from among empty lines it crosses them and the paragraph
+/// after them.
 pub fn vim_next_paragraph(rope: &Rope, pos: usize) -> usize {
     let last = last_line(rope);
     let mut line = line_of(rope, pos);
+    let mut crossed_text = !empty(rope, line);
     while line < last {
         line += 1;
-        if empty(rope, line) {
-            return rope.line_to_char(line);
+        match empty(rope, line) {
+            true if crossed_text => return rope.line_to_char(line),
+            true => {}
+            false => crossed_text = true,
         }
     }
     document_end(rope)
@@ -1431,10 +1438,13 @@ pub fn vim_next_paragraph(rope: &Rope, pos: usize) -> usize {
 /// **vim's `{`** — the previous empty line, [`vim_next_paragraph`] backwards.
 pub fn vim_prev_paragraph(rope: &Rope, pos: usize) -> usize {
     let mut line = line_of(rope, pos);
+    let mut crossed_text = !empty(rope, line);
     while line > 0 {
         line -= 1;
-        if empty(rope, line) {
-            return rope.line_to_char(line);
+        match empty(rope, line) {
+            true if crossed_text => return rope.line_to_char(line),
+            true => {}
+            false => crossed_text = true,
         }
     }
     0
