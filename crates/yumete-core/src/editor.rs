@@ -6065,18 +6065,22 @@ fn picks_in_line(line: &str, look: &find::Look, global: bool) -> Vec<(usize, usi
 
 /// **The matches a `:s …c` asks about**, line by line, with what each would
 /// become: the same matches [`replace_in_line`] replaces, in char indices
-/// of the text.
-fn hits_in_lines(text: &str, look: &find::Look, replacement: &str, global: bool, chosen: &Chosen) -> Vec<Hit> {
+/// of the text. `ending` is the break a last line with none gets when its
+/// replacement ends in one, as `:s` without `c` gives it.
+fn hits_in_lines(text: &str, look: &find::Look, replacement: &str, global: bool, chosen: &Chosen, ending: &str) -> Vec<Hit> {
     let mut hits = Vec::new();
     // Char index of the start of the line being looked at.
     let mut at = 0usize;
     for (idx, line) in text.split_inclusive('\n').enumerate() {
         if chosen.has(idx) {
             // 換行符不進正則，見 [`line_body`]。
-            let (body, _) = line_body(line);
+            let (body, eol) = line_body(line);
             let picks = picks_in_line(body, look, global);
             let mut chars = find::CharCount::new(body);
-            for (&(b0, b1), with) in picks.iter().zip(look.expand_each(body, &picks, replacement)) {
+            for (&(b0, b1), mut with) in picks.iter().zip(look.expand_each(body, &picks, replacement)) {
+                if eol.is_empty() && b1 == body.len() && with.ends_with('\n') {
+                    with.push_str(ending);
+                }
                 hits.push(Hit {
                     start: at + chars.at(b0),
                     end: at + chars.at(b1),
@@ -6399,9 +6403,15 @@ fn replace_across_lines(text: &str, look: &find::Look, replacement: &str, global
     while rows.len() < lines {
         rows.push(row(rows.len(), delta));
     }
-    // The break added at the end goes again.
+    // The break added at the end goes again, unless a replacement put one
+    // before it: the last line it made is a line of its own, as vim's is.
     if hay.added {
         out.pop();
+        if out.ends_with("\r\n") {
+            out.push_str("\r\n");
+        } else if out.ends_with('\n') {
+            out.push('\n');
+        }
     }
     let last_join = last_join.map(|at: usize| out[..at.min(out.len())].chars().count());
     Across { text: out, count: picks.len(), rows, joined, last_row, last_join }
@@ -6414,14 +6424,21 @@ fn hits_across_lines(text: &str, look: &find::Look, replacement: &str, global: b
     let hay = Hay::of(text);
     let picks = picks_across_lines(&hay, look, global, chosen);
     let spans: Vec<(usize, usize)> = picks.iter().map(|p| p.read).collect();
+    let text_end = text.chars().count();
     picks
         .iter()
         .zip(look.expand_each(&hay.read, &spans, replacement))
-        .map(|(pick, with)| Hit {
-            start: pick.chars.0,
-            end: pick.chars.1,
-            found: hay.text[pick.bytes.0..pick.bytes.1].to_string(),
-            text: with,
+        .map(|(pick, mut with)| {
+            // The same last line of its own as in `replace_across_lines`.
+            if hay.added && pick.chars.1 == text_end && with.ends_with('\n') {
+                with.push_str(if with.ends_with("\r\n") { "\r\n" } else { "\n" });
+            }
+            Hit {
+                start: pick.chars.0,
+                end: pick.chars.1,
+                found: hay.text[pick.bytes.0..pick.bytes.1].to_string(),
+                text: with,
+            }
         })
         .collect()
 }

@@ -517,6 +517,12 @@ impl Editor {
                     row += breaks;
                     rebuilt.push_str(&new_line);
                     rebuilt.push_str(eol);
+                    // A last line with no break of its own that now ends in
+                    // one made a line after it, which needs its own break, as
+                    // vim's last line has.
+                    if eol.is_empty() && n > 0 && new_line.ends_with('\n') {
+                        rebuilt.push_str(ending);
+                    }
                 } else {
                     rebuilt.push_str(line);
                 }
@@ -672,9 +678,10 @@ impl Editor {
         across: bool,
     ) {
         let text = self.current_buffer().text();
+        let ending = self.current_buffer().ending();
         let hits = match across {
             true => hits_across_lines(&text, &look, &replacement, global, &chosen),
-            false => hits_in_lines(&text, &look, &replacement, global, &chosen),
+            false => hits_in_lines(&text, &look, &replacement, global, &chosen, ending),
         };
         self.ask_or_finish(Confirming {
             reshape,

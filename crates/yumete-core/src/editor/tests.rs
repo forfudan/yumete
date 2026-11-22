@@ -20651,10 +20651,11 @@ fn patterns_are_regular_expressions() {
     ed.execute(":%s/[他她]說/X/g").unwrap();
     assert_eq!(ed.current_buffer().text(), "X。X。他問。");
 
-    // 「每個。後面斷行」 — the batch edit a Chinese draft needs most.
+    // 「每個。後面斷行」 — the batch edit a Chinese draft needs most. The
+    // last 。 ends the file, so its break starts a last line, as in vim.
     let mut ed = typed("甲。乙。丙。");
     ed.execute(r":%s/。/。\r/g").unwrap();
-    assert_eq!(ed.current_buffer().text(), "甲。\n乙。\n丙。\n");
+    assert_eq!(ed.current_buffer().text(), "甲。\n乙。\n丙。\n\n");
 
     // Capture groups.
     let mut ed = typed("阿寧說道：好。");
@@ -46941,4 +46942,15 @@ fn a_multi_line_substitution_takes_the_marks_of_the_lines_it_joins() {
     assert!(ed.current_buffer().named_mark('a').is_none(), "the joined line's mark went with it");
     feed_vim(&mut ed, "gg'b");
     assert_eq!(vim_at(&ed), (3, 1));
+}
+
+/// **A line break put at the very end of a file with no final break starts
+/// a last line of its own** (nvim writes `three\n\n`), by a multi-line `:s`
+/// and by one that goes a line at a time.
+#[test]
+fn a_break_put_at_the_end_of_an_unterminated_file_makes_a_line() {
+    for command in ["%s/\\n/\\r/g", "3s/$/\\r/"] {
+        assert_eq!(substituted("ink,\npen,\npaper", command), "ink,\npen,\npaper\n\n", "{command}");
+    }
+    assert_eq!(substituted("ink\r\npaper", "%s/\\n/\\r/g"), "ink\r\npaper\r\n\r\n");
 }
