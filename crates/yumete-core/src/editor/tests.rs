@@ -47456,3 +47456,25 @@ fn a_failing_motion_ends_the_binding_and_its_macro() {
     assert_eq!(ed.current_buffer().text(), "ab\ncd!\nef!\n");
     assert_eq!(vim_at(&ed), (3, 3));
 }
+
+/// **vim's `` `[ `` after Insert `C-u` or `C-w` is where the cursor stood
+/// as the key was pressed** (measured in nvim, whose own mappings put
+/// `<C-G>u` before both): the Insert starts over there, by line and
+/// column, and what is typed after does not move it.
+#[test]
+fn the_change_start_after_insert_ctrl_u_is_where_it_was_pressed() {
+    let mut ed = typed_vim("pine cone\nbirch bark\n");
+    feed_vim(&mut ed, "wiab");
+    ed.on_key(Key::Ctrl('u'));
+    feed_vim(&mut ed, "cd⎋`[");
+    assert_eq!(ed.current_buffer().text(), "pine cdcone\nbirch bark\n");
+    assert_eq!(vim_at(&ed), (1, 8));
+    let mut ed = typed_vim("pine cone\nbirch bark\n");
+    feed_vim(&mut ed, "jwiyz");
+    ed.on_key(Key::Ctrl('w'));
+    feed_vim(&mut ed, "⎋`[");
+    assert_eq!(ed.current_buffer().text(), "pine cone\nbirch bark\n");
+    assert_eq!(vim_at(&ed), (2, 9));
+    feed_vim(&mut ed, "`]");
+    assert_eq!(vim_at(&ed), (2, 7));
+}

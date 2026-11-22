@@ -112,6 +112,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **vim's cursor keeps its own column under `V`**, as in vim, instead of jumping to the line's end: `l`, `f`, `e` and the rest move it from where it stood, Esc, `o`, `gv`, `<`, `>` and `d` leave it in the column it reached, `$` stands past the last character so `$h` comes back onto it, and `ip` ends at its last line's start; the selection still covers whole lines.
 - **vim's `X`, `D`, `Y`, `C` and `R` in Visual mode take the selection's whole lines**, as in vim: under `v` as under `V`, instead of deleting a character, cutting to the line's end or doing nothing; in a block `X` and `Y` take the block, as `d` and `y` do.
 - **A motion that fails in a key binding under the vim keys ends the binding**, as in vim: with `"C-q" = "@kJ"` on the first line the `k` fails and the `J` after it does not join, and a macro or `:normal` that pressed the binding stops there too, instead of going on.
+- **vim's `` `[ `` after Insert `C-u` or `C-w` is where the cursor stood as the key was pressed**, as in vim, whose Insert starts over there, instead of where the Insert first began.
 
 ## 0.24.0 · 2026-11-17
 

@@ -298,6 +298,7 @@ impl Editor {
         self.insert_recording.clear();
         let stop = self.sel.head();
         self.current_buffer_mut().set_insert_stop(stop);
+        self.mark_where_the_insert_started_over();
         self.mode = Mode::Normal;
         let caret = self.sel.head();
         self.step_back_out_of_insert();

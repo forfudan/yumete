@@ -54,6 +54,7 @@ impl Editor {
         self.overwritten.clear();
         self.reference = None;
         self.insert_began = Some(self.sel.head());
+        self.insert_restart = None;
         self.mode = Mode::Insert;
     }
 

@@ -910,6 +910,7 @@ impl Editor {
     /// deleted the whole paragraph would be worse than not having it.
     pub(super) fn delete_word_before_cursor(&mut self) {
         let at = self.sel.head();
+        self.start_the_insert_over(at);
         let rope = self.current_buffer().rope();
         let mut from = motion::prev_word_start(rope, at, self.word_grain(), self.segmenter.as_ref());
         // At the start of a word, the word to take back is the one before it.
@@ -1126,8 +1127,32 @@ impl Editor {
             .then_some(began)
     }
 
+    /// **vim's Insert starts over at `C-u` and `C-w`** (nvim maps each to
+    /// `<C-G>u` first): `` `[ `` then names where the cursor stood as the key
+    /// was pressed ([`Self::mark_where_the_insert_started_over`]).
+    fn start_the_insert_over(&mut self, at: usize) {
+        if self.as_vim() && self.mode == Mode::Insert {
+            let rope = self.current_buffer().rope();
+            let line = rope.char_to_line(at.min(rope.len_chars()));
+            self.insert_restart = Some((line, at - rope.line_to_char(line)));
+        }
+    }
+
+    /// As Insert ends, `` `[ `` at the line and column it last started over
+    /// at, clamped to the line as vim's mark is read; `` `] `` stays where
+    /// the Insert ended.
+    pub(super) fn mark_where_the_insert_started_over(&mut self) {
+        let Some((line, column)) = self.insert_restart.take() else { return };
+        let Some((_, end)) = self.current_buffer().change_span() else { return };
+        let rope = self.current_buffer().rope();
+        let start = rope.line_to_char(line.min(motion::last_line(rope)));
+        let at = (start + column).min(motion::line_last(rope, start));
+        self.current_buffer_mut().set_change_span(at, end);
+    }
+
     pub(super) fn delete_to_line_start(&mut self) {
         let at = self.sel.head();
+        self.start_the_insert_over(at);
         // vim's `C-u` takes back what this Insert typed first (`:h i_CTRL-U`,
         // measured: `Afoo bar<C-u>` leaves the line as it was).
         if let Some(began) = self.vim_insert_began(at) {

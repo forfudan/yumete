@@ -2845,6 +2845,11 @@ pub struct Editor {
     /// Where this Insert began, for vim's `C-u` and `C-w`, which take back
     /// what was typed before going further (`:h i_CTRL-U`).
     insert_began: Option<usize>,
+    /// Where vim's Insert starts over, by line and column: the cursor as
+    /// `C-u` or `C-w` was pressed, which nvim's own mappings of the two
+    /// (`<C-G>u` before each) make the start `` `[ `` names when the Insert
+    /// ends. Kept by line and column as vim keeps it, not moved by edits.
+    insert_restart: Option<(usize, usize)>,
     /// The open files the session file last named, so the autosave tick
     /// writes it again only when they change.
     session_names: Vec<std::path::PathBuf>,
@@ -4887,6 +4892,7 @@ impl Editor {
             paste_goes_past: false,
             insert_register_how: None,
             insert_began: None,
+            insert_restart: None,
             session_names: Vec::new(),
             storing_a_yank: false,
             use_reg_one: false,
