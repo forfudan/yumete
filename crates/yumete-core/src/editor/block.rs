@@ -243,6 +243,12 @@ impl super::Editor {
             Some(block) => self.sel = Selections::one(Range::at(block.cursor)),
             None => {
                 let at = self.sel.head();
+                // From vim's `v` or `V` the block keeps the other end
+                // where the Visual selection began (`:h v_CTRL-V`).
+                let anchor = match self.extend && self.as_vim() {
+                    true => self.sel.anchor(),
+                    false => at,
+                };
                 self.extend = false;
                 self.vim_lines = false;
                 self.drop_register_into_visual();
@@ -252,7 +258,7 @@ impl super::Editor {
                 // `$ C-v j d` takes each line to its end.
                 let goal = self.sel.primary().goal;
                 let to_line_end = goal == Some(super::keys::LINE_END_GOAL);
-                self.block = Some(Block { anchor: at, cursor: at, to_line_end, goal });
+                self.block = Some(Block { anchor, cursor: at, to_line_end, goal });
                 self.show_block();
             }
         }
@@ -289,6 +295,36 @@ impl super::Editor {
         self.show_block();
     }
 
+    /// **vim's `v` or `V` in a block**: Visual mode over the same two
+    /// corners, by characters or by lines (`:h v_v`).
+    fn block_to_visual(&mut self, block: Block, lines: bool) {
+        let rope = self.current_buffer().rope();
+        // A corner may stand just past a line's end; a Visual end may not,
+        // but after `$` the cursor takes the line's end, as `v$` does.
+        let on_a_character = |at: usize| {
+            let at = at.min(rope.len_chars());
+            let line_start = rope.line_to_char(rope.char_to_line(at));
+            match at > line_start && at == motion::line_end(rope, line_start) {
+                true => motion::prev_grapheme(rope, at),
+                false => at,
+            }
+        };
+        let cursor = match block.to_line_end {
+            true => motion::line_end(rope, block.cursor.min(rope.len_chars())),
+            false => on_a_character(block.cursor),
+        };
+        let anchor = on_a_character(block.anchor);
+        self.block = None;
+        self.block_replace = false;
+        self.sel = Selections::one(Range::new(anchor, cursor));
+        self.extend = true;
+        self.vim_lines = lines;
+        match block.goal {
+            Some(goal) => self.sel.set_goal(Some(goal)),
+            None => self.refresh_goal_column(),
+        }
+    }
+
     /// Leave the block with the cursor at `at`.
     fn leave_block(&mut self, at: usize) {
         self.block = None;
@@ -322,7 +358,7 @@ impl super::Editor {
             let top_left = at_column(self.current_buffer().rope(), self.tab_stop(), first, left);
             match key {
                 Key::Esc | Key::Ctrl('v') | Key::Ctrl('c') => return self.leave_block(block.cursor),
-                Key::Char('v' | 'V') => return self.leave_block(block.cursor),
+                Key::Char(c @ ('v' | 'V')) => return self.block_to_visual(block, c == 'V'),
                 Key::Char('o') => {
                     self.block = Some(Block { anchor: block.cursor, cursor: block.anchor, goal: None, ..block });
                     return self.show_block();

@@ -113,6 +113,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **vim's `X`, `D`, `Y`, `C` and `R` in Visual mode take the selection's whole lines**, as in vim: under `v` as under `V`, instead of deleting a character, cutting to the line's end or doing nothing; in a block `X` and `Y` take the block, as `d` and `y` do.
 - **A motion that fails in a key binding under the vim keys ends the binding**, as in vim: with `"C-q" = "@kJ"` on the first line the `k` fails and the `J` after it does not join, and a macro or `:normal` that pressed the binding stops there too, instead of going on.
 - **vim's `` `[ `` after Insert `C-u` or `C-w` is where the cursor stood as the key was pressed**, as in vim, whose Insert starts over there, instead of where the Insert first began.
+- **vim's `v`, `V` and `C-v` inside Visual mode switch to their kind of Visual**, as in vim: `Vjv` selects characters from where `V` was pressed, `Vj` `C-v` a block between the two ends, and `v` or `V` in a block characters or lines over its corners, instead of leaving Visual mode or starting again at the cursor; `V` under `V` leaves Visual mode.
 
 ## 0.24.0 · 2026-11-17
 

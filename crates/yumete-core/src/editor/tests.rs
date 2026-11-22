@@ -47478,3 +47478,25 @@ fn the_change_start_after_insert_ctrl_u_is_where_it_was_pressed() {
     feed_vim(&mut ed, "`]");
     assert_eq!(vim_at(&ed), (2, 7));
 }
+
+/// **vim's `v`, `V` and `C-v` switch Visual mode's kind, keeping both
+/// ends, and the one already up leaves it** (measured in nvim): `Vjv`
+/// deletes characters from where `V` was pressed, `VV` selects nothing,
+/// and a block becomes characters or lines over its two corners.
+#[test]
+fn visual_kinds_switch_and_keep_both_ends() {
+    let text = "red fox jumps\nblue owl sings\ngrey cat naps\n";
+    let cases: &[(&str, &str)] = &[
+        ("wVjvd", "red owl sings\ngrey cat naps\n"),
+        ("wVVd⎋", text),
+        ("wVjᵛd", "red ox jumps\nblueowl sings\ngrey cat naps\n"),
+        ("wᵛjvd", "red owl sings\ngrey cat naps\n"),
+        ("wᵛjVd", "grey cat naps\n"),
+    ];
+    for &(keys, after) in cases {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        assert_eq!(ed.current_buffer().text(), after, "{keys}");
+        assert_eq!(vim_at(&ed), (1, 5), "{keys}");
+    }
+}

@@ -1528,6 +1528,10 @@ impl Editor {
         // pressed to the cursor's, whole however far along them the two
         // stand ([`Self::selection`]). From charwise Visual both ends stay.
         if self.as_vim() {
+            // `V` again leaves Visual, as `v` does charwise.
+            if self.extend && self.vim_lines {
+                return self.vim_leave_visual();
+            }
             if !self.extend {
                 let head = self.sel.head();
                 self.sel.set_anchor(head);
@@ -1586,6 +1590,12 @@ impl Editor {
     #[allow(unused_variables)]
     pub(super) fn cmd_select_mode(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
+        // **vim's `v` under `V` makes the lines characters**, from where
+        // `V` was pressed to the cursor (`:h v_v`), and stays in Visual.
+        if self.as_vim() && self.extend && self.vim_lines {
+            self.vim_lines = false;
+            return;
+        }
         self.extend = !self.extend;
         self.vim_lines = false;
         if self.extend {
@@ -1652,20 +1662,25 @@ impl Editor {
         // cursor where it stood** (`:h v_<Esc>`), under `V` too: the
         // cursor keeps its own column there.
         if self.as_vim() && self.extend {
-            let at = self.sel.head();
-            self.extend = false;
-            self.vim_lines = false;
-            self.sel.set_anchor(at);
-            self.sel.set_head(at);
-            self.clamp_cursor();
-            self.refresh_goal_column();
-            return;
+            return self.vim_leave_visual();
         }
         let idle = !self.extend;
         self.extend = false;
         if idle {
             self.say_it_again = true;
         }
+    }
+
+    /// Leave vim's Visual mode with nothing selected and the cursor where
+    /// it stood.
+    pub(super) fn vim_leave_visual(&mut self) {
+        let at = self.sel.head();
+        self.extend = false;
+        self.vim_lines = false;
+        self.sel.set_anchor(at);
+        self.sel.set_head(at);
+        self.clamp_cursor();
+        self.refresh_goal_column();
     }
 
     // `;` collapses the selection but leaves select mode standing —
