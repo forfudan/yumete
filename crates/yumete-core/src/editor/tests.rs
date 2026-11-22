@@ -48213,3 +48213,19 @@ fn vims_n_after_star_searches_from_the_cursor() {
         assert_eq!(vim_at(&ed), want, "{keys}");
     }
 }
+
+/// **vim's Visual `n` after `*` grows the selection to the match**, as
+/// after `/` (measured in nvim): `*`, `v`, `n`, `d` takes both words.
+#[test]
+fn vims_visual_n_after_star_grows_the_selection() {
+    for (keys, want, text) in [
+        ("3G*vnd", (4, 1), "foo a\nfoo b\nfoo c\noo e\n"),
+        ("3G*vNd", (3, 1), "foo a\nfoo b\noo d\nfoo e\n"),
+        ("3G*Vnd", (3, 1), "foo a\nfoo b\nfoo c\n"),
+        ("3G*ggvnd", (1, 1), "oo b\nfoo c\nfoo d\nfoo e\n"),
+    ] {
+        let mut ed = typed_vim("foo a\nfoo b\nfoo c\nfoo d\nfoo e\n");
+        feed_vim(&mut ed, keys);
+        assert_eq!((vim_at(&ed), ed.current_buffer().rope().to_string().as_str()), (want, text), "{keys}");
+    }
+}

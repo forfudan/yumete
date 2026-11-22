@@ -7003,6 +7003,14 @@ impl Editor {
         // on its last grapheme, not one past it; under vim the cursor stands
         // on the match's first character, as vim's `/` and `*` leave it.
         let head = if self.keymap_rules().search_moves_caret { from } else { head };
+        // **vim's Visual `n` grows the selection to the match**, as after
+        // `/`: `*`, then `v` and `n`, then `d` takes both words.
+        if self.as_vim() && self.extend {
+            self.sel.set_head(from);
+            self.refresh_goal_column();
+            self.status = which;
+            return;
+        }
         self.sel.set_anchor(from);
         self.sel.set_head(head);
         self.extend = false;
