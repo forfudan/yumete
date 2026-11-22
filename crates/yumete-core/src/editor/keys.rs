@@ -258,6 +258,9 @@ impl Editor {
         // 插入態的 `C-o` 借走了一個鍵嗎——借的是**這一鍵之前**就借好的，所以要在
         // 這裏記下來（見 [`Self::go_back_after_one_key`]）。
         let borrowed = self.one_normal_key;
+        // Whether this key names a register (the `a` of `"a`), which only
+        // begins the command after `C-o`.
+        let naming = self.pending == Pending::Register;
         // 這一鍵按下去之前的可視選區——`gv` 要的那一段就是它關掉的那一刻留下
         // 的（見 [`Self::keep_the_last_selection`]）。The buffer holds it while
         // the key runs, so the key's own edits move it.
@@ -388,7 +391,7 @@ impl Editor {
         self.hold_the_pane(held);
         self.forget_a_guessed_table();
         self.keep_the_last_selection(holding);
-        self.go_back_after_one_key(borrowed);
+        self.go_back_after_one_key(borrowed, naming);
         self.keep_off_the_newline();
         self.find_the_table_here();
         outcome
@@ -401,7 +404,10 @@ impl Editor {
     ///
     /// Warning: **進了別的模式就不放**：`C-o` 之後按 `:`、`/`、`i` 都是人自己要去的
     /// 地方，把他拽回插入態是搶鍵。只有還站在 Normal 上才回去。
-    fn go_back_after_one_key(&mut self, borrowed: Option<crate::input::Mode>) {
+    ///
+    /// `naming` says the key named a register (`"a`), which the command
+    /// after it takes: the command is not over yet.
+    pub(super) fn go_back_after_one_key(&mut self, borrowed: Option<crate::input::Mode>, naming: bool) {
         let Some(back) = borrowed else {
             return;
         };
@@ -414,6 +420,7 @@ impl Editor {
         // 放回插入態的話，第二個 `g` 就打進稿子裏了。數字也一樣（`C-o` `3` `j`）。
         // 所以要等這一串**湊完**：没有半截的序列、没有攢着的數字、没有按住的別名。
         let halfway = self.pending != Pending::None
+            || (naming && self.pending_register.is_some())
             || self.count.is_some()
             || self.operator_count.is_some()
             || self.alias_count.is_some()

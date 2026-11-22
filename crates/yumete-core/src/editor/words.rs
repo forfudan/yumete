@@ -886,8 +886,14 @@ impl Editor {
         // A commit that answers Visual `r` ends Visual mode as the key does,
         // and `gv` reselects what it wrote over.
         let holding = self.hold_the_visual_selection();
+        let borrowed = self.one_normal_key;
         self.insert_committed_now(text);
         self.keep_the_last_selection(holding);
+        // **A commit that answers `f`, `t` or `r` after Insert `C-o` ends
+        // the command** as the key would, and Insert comes back.
+        if answers {
+            self.go_back_after_one_key(borrowed, false);
+        }
         // Where redo comes back to, as for a key — `r`, `ms` and Chinese typed
         // through the input method included.
         self.settle_the_change(was);

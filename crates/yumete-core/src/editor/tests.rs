@@ -48041,3 +48041,33 @@ fn vims_percent_and_marks_before_a_bar() {
     assert_eq!(vim_at(&ed), (1, 1));
 }
 
+
+/// **vim's Insert `C-o` comes back to Insert after a command that waits
+/// for a character** (measured in nvim): `f`, `t`, `F`, `T` and `r`,
+/// answered by a key or by the input method, a find that fails, and a
+/// register named before the command.
+#[test]
+fn vims_insert_ctrl_o_comes_back_after_a_waiting_command() {
+    for (keys, want) in [
+        ("jIᵒffX⎋", "pen\nloXfty\n"),
+        ("jIᵒtfX⎋", "pen\nlXofty\n"),
+        ("jAᵒFoX⎋", "pen\nlXofty\n"),
+        ("jAᵒToX⎋", "pen\nloXfty\n"),
+        ("jIᵒrRX⎋", "pen\nXRofty\n"),
+        ("jIᵒFqX⎋", "pen\nXlofty\n"),
+        ("jIᵒ2fqX⎋", "pen\nXlofty\n"),
+        ("jIᵒ\"ayyX⎋", "pen\nXlofty\n"),
+        ("jIᵒ\"_dlX⎋", "pen\nXofty\n"),
+    ] {
+        let mut ed = typed_vim("pen\nlofty\n");
+        feed_vim(&mut ed, keys);
+        assert_eq!(ed.current_buffer().text(), want, "{keys}");
+    }
+    for (keys, commit, want) in [("jIᵒf", "f", "pen\nloXfty\n"), ("jIᵒr", "R", "pen\nXRofty\n")] {
+        let mut ed = typed_vim("pen\nlofty\n");
+        feed_vim(&mut ed, keys);
+        ed.insert_committed(commit);
+        feed_vim(&mut ed, "X⎋");
+        assert_eq!(ed.current_buffer().text(), want, "{keys} {commit}");
+    }
+}
