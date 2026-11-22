@@ -90,6 +90,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **vim's `J` onto a line of nothing but blanks keeps the marks on it**, as in vim: they go onto the joined line at the seam instead of being dropped, or, for an uppercase mark, sent to its first column.
 - **vim's `ge` and `gE` from below an empty line stop on it**, as in vim, as `b` does: `dge` there deletes to the empty line.
 - **A digit after vim's `g` drops the `g`**, as in vim, and the keys after it start afresh: `g2UU` changes nothing instead of uppercasing the line, and `g2~~` switches two characters.
+- **vim's Enter in a code file drops the blanks after the cursor**, as vim's autoindent does: Enter at the start of an indented line moves the line down without its indent, and `cw` then Enter leaves no blank in front of the text carried down. Prose is as before.
 
 ## 0.24.0 · 2026-11-17
 

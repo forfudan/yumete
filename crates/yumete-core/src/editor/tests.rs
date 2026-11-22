@@ -39397,6 +39397,32 @@ fn vims_colon_line_from_visual_leaves_visual() {
     assert!(ed.is_extending(), "helix untouched");
 }
 
+/// **vim's Enter in code drops the blanks after the caret** (autoindent,
+/// measured in nvim): in a line's indent it moves the line down with only
+/// the indent before the caret, and after `cw` no blank is left in front of
+/// what went down. Prose keeps them, having no autoindent.
+#[test]
+fn vims_enter_in_code_drops_the_blanks_after_the_caret() {
+    let code = "fn main() {\n    let a = b + c;\n}\n";
+    let vim = |keys: &str| {
+        let mut ed = typed(code);
+        ed.execute(":syntax rust").unwrap();
+        ed.execute(":keymap vim").unwrap();
+        press(&mut ed, "gg");
+        keyed(&mut ed, keys);
+        ed.on_key(Key::Esc);
+        (ed.current_buffer().text(), vim_at(&ed))
+    };
+    let want = |text: &str, at| (text.to_string(), at);
+    assert_eq!(vim("j0i⏎"), want("fn main() {\n\nlet a = b + c;\n}\n", (3, 1)));
+    assert_eq!(vim("j02li⏎"), want("fn main() {\n  \n  let a = b + c;\n}\n", (3, 2)));
+    assert_eq!(vim("jwwcwx⏎"), want("fn main() {\n    let x\n    = b + c;\n}\n", (3, 4)));
+    assert_eq!(vim("jwwcw⏎"), want("fn main() {\n    let \n    = b + c;\n}\n", (3, 4)));
+    let mut ed = typed_vim("a\n    b c\n");
+    keyed(&mut ed, "jwcwx⏎⎋");
+    assert_eq!(ed.current_buffer().text(), "a\n    x\n c\n", "prose keeps them");
+}
+
 /// **vim's `cc`, `S` and linewise `c` keep the first line's indent in code**
 /// (autoindent, measured in nvim), and the indent goes again when nothing is
 /// typed after it, after `o`, `O` and Enter too. Not in a text file: no

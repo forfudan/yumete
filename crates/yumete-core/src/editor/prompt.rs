@@ -357,6 +357,17 @@ impl Editor {
         // An autoindent nothing was typed after goes; the next line still
         // gets it.
         self.take_back_fresh_indent();
+        // **vim's autoindent drops the blanks after the caret** (`open_line`):
+        // the new line has its indent already, so Enter in a line's indent
+        // moves the line down by what stood before the caret, and `cw` then
+        // Enter leaves no blank in front of the text carried down.
+        if self.writes_code() && self.keymap_rules().vim_indent_keys {
+            let head = self.sel.head();
+            let blanks = self.current_buffer().rope().chars_at(head).take_while(|c| matches!(c, ' ' | '\t')).count();
+            if blanks > 0 && !self.edit_remove(head..head + blanks) {
+                return;
+            }
+        }
         // 重放（`3i…`、`.`）是把記下來的字串原樣插進去的，所以縮進要記在
         // 裏面——不記，`.` 重放出來的那幾行就貼着左邊。
         self.insert_recording.push_str(&ending);
