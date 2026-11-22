@@ -47163,3 +47163,17 @@ fn the_jump_list_starts_at_the_first_line() {
     ed.on_key(Key::Ctrl('o'));
     assert_eq!(vim_at(&ed), (3, 1));
 }
+
+/// **vim's `` `[ `` after Insert `C-r C-o` of lines stays where the Insert
+/// began** (measured in nvim): by line and column, so on the first line put
+/// above, while `` `] `` ends where the Insert goes on.
+#[test]
+fn the_change_start_after_putting_lines_in_insert_is_where_insert_began() {
+    let mut ed = typed_vim("pine cone\nbirch bark\n");
+    feed_vim(&mut ed, "yyjwiab");
+    ed.on_key(Key::Ctrl('r'));
+    ed.on_key(Key::Ctrl('o'));
+    feed_vim(&mut ed, "\"⎋`[");
+    assert_eq!(ed.current_buffer().text(), "pine cone\npine cone\nbirch abbark\n");
+    assert_eq!(vim_at(&ed), (2, 7));
+}

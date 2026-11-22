@@ -1083,6 +1083,13 @@ impl Editor {
         let rope = self.current_buffer().rope();
         let line = rope.char_to_line(self.sel.head().min(rope.len_chars()));
         let at = rope.line_to_char(line);
+        // **`` `[ `` keeps the line and column the Insert began at** (vim's
+        // `Insstart`, which the put does not move): when that is on the line
+        // the lines go above, it names the first line put, at that column.
+        let began = self
+            .insert_began
+            .filter(|&b| self.as_vim() && b >= at && rope.char_to_line(b.min(rope.len_chars())) == line)
+            .map(|b| b - at);
         let want = fix_indent.then(|| self.indent_columns(line));
         if !self.edit_insert(at, &text) {
             return;
@@ -1095,6 +1102,10 @@ impl Editor {
         // The Insert goes on from the line's start, and `` `] `` with it,
         // as vim's ends where the Insert ends.
         if let Some((first, _)) = self.current_buffer().change_span() {
+            let first = match began {
+                Some(column) => (at + column).min(motion::line_last(self.current_buffer().rope(), at)),
+                None => first,
+            };
             self.current_buffer_mut().set_change_span(first, at + len);
         }
     }
