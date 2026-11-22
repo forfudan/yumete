@@ -46003,6 +46003,22 @@ fn a_substitution_over_many_matches_on_one_line_writes_each() {
     assert_eq!(ed.current_buffer().text(), want);
 }
 
+/// **A run written once is never offered, and hides no shorter run**:
+/// after `天地玄黄宇宙` twice and `天地玄黄日月` once, `天地` offers the two
+/// runs written more than once, the more written first.
+#[test]
+fn a_run_written_once_is_not_offered_and_hides_nothing() {
+    let mut ed = typed("天地玄黄宇宙。\n天地玄黄宇宙。\n天地玄黄日月。\n");
+    ed.set_segmenter(Box::new(crate::DictionarySegmenter::new(
+        "天地 玄黄 宇宙 日月".split_whitespace().map(|w| (w.to_string(), 100)),
+        1,
+    )));
+    press(&mut ed, "Go");
+    ed.insert_committed("天地");
+    ed.on_key(Key::Ctrl('n'));
+    assert_eq!(offered(&ed), ["天地玄黄", "天地玄黄宇宙"]);
+}
+
 /// **vim's `gn` takes the match the cursor stands in or the next one**
 /// (measured in nvim 0.12), from the line's matches found once: on the
 /// last match or past several, at a count, and round from the last line.

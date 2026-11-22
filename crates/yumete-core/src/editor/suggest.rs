@@ -469,9 +469,12 @@ impl Editor {
                 }
             }
         }
-        // A run has to end on a word: `长江三角洲的` ends on 的, so it is no
-        // run, and it does not hide `长江三角洲` below either.
-        seen.retain(|run, _| self.segmenter.segment(run).last().is_some_and(|&(a, b)| b - a >= 2));
+        // A run has to be written twice, and to end on a word: `长江三角洲的`
+        // ends on 的, so it is no run, and it does not hide `长江三角洲` below
+        // either. The count goes first, so only those are segmented: a run
+        // written once could hide no other, since a run is written as often
+        // as any run that goes on from it, at least.
+        seen.retain(|run, count| *count >= 2 && self.segmenter.segment(run).last().is_some_and(|&(a, b)| b - a >= 2));
         // How often the most written longer run that goes on from it is
         // written: `中华人民` always goes on to `中华人民共和国`.
         let mut longer: HashMap<&str, u32> = HashMap::new();
@@ -482,7 +485,7 @@ impl Editor {
             }
         }
         seen.into_iter()
-            .filter(|&(run, count)| count >= 2 && longer.get(run).is_none_or(|&most| most < count))
+            .filter(|&(run, count)| longer.get(run).is_none_or(|&most| most < count))
             .filter(|&(run, _)| {
                 let rest: Vec<char> = run.chars().skip(t).collect();
                 !after.starts_with(&rest)
