@@ -46841,3 +46841,90 @@ fn a_vim_line_number_command_is_not_a_jump() {
     ed.on_key(Key::Ctrl('o'));
     assert_eq!(vim_at(&ed).0, 1, "C-o");
 }
+
+/// **Run `work` on a thread of its own and fail if it has not finished in
+/// ten seconds**, so a regression that loops forever is a failing test, not
+/// a test run that never ends.
+fn in_time<T: Send + 'static>(what: &str, work: impl FnOnce() -> T + Send + 'static) -> T {
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(work());
+    });
+    match rx.recv_timeout(std::time::Duration::from_secs(10)) {
+        Ok(answer) => answer,
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => panic!("{what}: still running after ten seconds"),
+        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => panic!("{what}: panicked"),
+    }
+}
+
+/// A `:s` line run over `text`, in a thread of its own ([`in_time`]).
+fn substituted(text: &'static str, command: &'static str) -> String {
+    in_time(command, move || {
+        let mut ed = Editor::new();
+        ed.add_buffer(crate::Buffer::from_text(text));
+        assert!(ed.execute(command).is_ok(), "{command}: {}", ed.status());
+        ed.current_buffer().text()
+    })
+}
+
+/// **A CRLF break is one unit to a multi-line `:s`** (nvim reads such a
+/// file as `dos`, the `\r` no part of its text): no match starts or ends
+/// between the two, `[\r\n]` takes the break once, and the last line keeps
+/// its break.
+#[test]
+fn a_multi_line_substitution_takes_a_crlf_break_whole() {
+    assert_eq!(substituted("pen ink\r\n", "s/\\s|\\n//g"), "penink\r\n");
+    assert_eq!(substituted("pen ink\r\n", "s/[\\r\\n]/X/g"), "pen inkX\r\n");
+    assert_eq!(substituted("pen ink\r\n", "s/\\r|\\n/X/"), "pen inkX\r\n");
+    assert_eq!(substituted("pen ink\r\ncup tea\r\n", "%s/\\s|\\n//g"), "peninkcuptea\r\n");
+    assert_eq!(substituted("pen\r\ncup\r\n", "%s/[\\r\\n]/X/g"), "penXcupX\r\n");
+    // Nor does an empty match land between the two, `t` or not.
+    assert_eq!(substituted("pe\r\ncu\r\n", "%s/\\n*/X/gt"), "XpXeXcXuX\r\n");
+}
+
+/// **A multi-line `:s` searches each line of its range from that line's
+/// start**, as vim does (measured in nvim): a match that is not taken — on
+/// a line outside the range, or a second one without `g` — hides nothing on
+/// the next line, and `\zs` may start a match on the line after the one it
+/// was tried from.
+#[test]
+fn a_multi_line_substitution_searches_each_line_from_its_start() {
+    let run = |text: &str, command: &str| {
+        let mut ed = typed(text);
+        assert!(ed.execute(command).is_ok(), "{command}: {}", ed.status());
+        ed.current_buffer().text()
+    };
+    assert_eq!(run("top\n\n\n\nend\n", "2s/\\n\\n/\\r/"), "top\n\n\nend\n");
+    assert_eq!(run("p,\nq,\nr\n", "2s/,\\nq|q/X/"), "p,\nX,\nr\n");
+    assert_eq!(run("kp\npq\n", "%s/k|p\\np|p/X/"), "Xp\nXq\n");
+    assert_eq!(run("mn\nop\nqr\n", "%s/\\n*/X/"), "Xmn\nXop\nXqr\n");
+    assert_eq!(run("mn\nop\nqr\n", "3s/\\n*/X/g"), "mn\nop\nXqXrX\n");
+    assert_eq!(run("p,\nq,\nr\n", "%s/\\n\\zs/>/"), "p,\n>q,\n>r\n");
+}
+
+/// **`:s …c` asks about the matches the same `:s` without `c` replaces**,
+/// found once when it starts: `y` to each gives the same text, the walk
+/// ends after the last one — the last line's break too, so the key after it
+/// is a key again — and an empty match is asked about once.
+#[test]
+fn the_c_walk_asks_about_what_the_substitution_replaces() {
+    let walk = |text: &'static str, command: &'static str, keys: &'static str| {
+        in_time(command, move || {
+            let mut ed = Editor::new();
+            ed.add_buffer(crate::Buffer::from_text(text));
+            ed.execute(":keymap vim").unwrap();
+            assert!(ed.execute(command).is_ok(), "{command}: {}", ed.status());
+            press(&mut ed, keys);
+            (ed.current_buffer().text(), ed.pending_menu().is_some())
+        })
+    };
+    // Each of these two crashed on its last `y`.
+    assert_eq!(walk("pen\r\ncup\r\n", "%s/[\\n]/X/gc", "yy"), ("penXcupX\r\n".to_string(), false));
+    assert_eq!(walk("pq\nrs\n", "%s/q\\n|\\z/X/gc", "y"), ("pXrs\n".to_string(), false));
+    let text = "red,\ngreen,\nblue\n\nend,\nlast\n";
+    assert_eq!(walk(text, "%s/\\n/ /gc", "yyyyyy"), ("red, green, blue  end, last \n".to_string(), false));
+    assert_eq!(walk(text, "%s/\\n/ /gc", "yyyyyyu").0, text);
+    assert_eq!(walk(text, "3-6s/\\n/_/gc", "yyyy"), ("red,\ngreen,\nblue__end,_last_\n".to_string(), false));
+    let all = substituted("pq\n", "%s/z*/X/g");
+    assert_eq!(walk("pq\n", "%s/z*/X/gc", "yyy"), (all, false));
+}

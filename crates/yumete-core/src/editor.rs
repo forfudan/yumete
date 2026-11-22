@@ -5831,12 +5831,12 @@ impl Chosen {
     }
 }
 
-/// One match a `:s …c` is about to ask about.
+/// One match a `:s …c` asks about.
 struct Hit {
-    /// Char indices into the buffer.
+    /// Char indices into the text the walk began on.
     start: usize,
     end: usize,
-    /// What is there now — the question shows it, so the writer is looking at
+    /// What is there — the question shows it, so the writer is looking at
     /// the same thing the editor is.
     found: String,
     /// The replacement with its `$1` already resolved **for this match**.
@@ -5849,26 +5849,20 @@ struct Hit {
 /// sees each match before it changes, so the walk outlives the command that
 /// started it and lives here between keystrokes.
 struct Confirming {
-    /// 是 `find::Look` 而不是光禿禿的正則：`:s` 的 `j`／`y` 要的那兩路（折過的字形、
-    /// 讀音）都從它的 `spans` 出來。
-    re: find::Look,
-    /// Still with its `$1` in it; expanded per match.
-    replacement: String,
-    /// `g`: every match on a line, not only the first.
-    global: bool,
-    /// The lines the range named.
-    chosen: Chosen,
     /// `t`: the writer means to let a row's cell count change.
     reshape: bool,
-    /// The pattern matches line breaks: the text is searched as one, not a
-    /// line at a time (see [`breaks_lines`]).
-    across: bool,
-    /// Matches starting before this char index have been decided.
-    ///
-    /// The match **on screen** is simply the next one at or after this, found
-    /// again when the key arrives: nothing can have touched the buffer in
-    /// between, because this pending eats every key.
-    from: usize,
+    /// **Every match the walk asks about**, found once when it began: the
+    /// matches the same `:s` without `c` replaces, so answering `y` to each
+    /// gives what it gives, and the walk ends after the last. vim matches
+    /// against the line as it was, not as the answers leave it, and so
+    /// does this.
+    hits: Vec<Hit>,
+    /// The next one to ask about.
+    next: usize,
+    /// How far the answers so far have moved the text after them, in chars:
+    /// a hit stands at its place plus this. Nothing else can move it, since
+    /// this pending eats every key.
+    shift: isize,
     changed: usize,
     skipped: usize,
     /// The writer said `a`: go through the rest without asking.
@@ -6027,9 +6021,26 @@ fn replace_in_line(
     replacement: &str,
     global: bool,
 ) -> (String, usize) {
+    let picks = picks_in_line(line, look, global);
+    if picks.is_empty() {
+        return (line.to_string(), 0);
+    }
+    let mut out = String::with_capacity(line.len());
+    let mut copied = 0;
+    for (&(b0, b1), with) in picks.iter().zip(look.expand_each(line, &picks, replacement)) {
+        out.push_str(&line[copied..b0]);
+        out.push_str(&with);
+        copied = b1;
+    }
+    out.push_str(&line[copied..]);
+    (out, picks.len())
+}
+
+/// The matches [`replace_in_line`] replaces in `line`, as byte spans.
+fn picks_in_line(line: &str, look: &find::Look, global: bool) -> Vec<(usize, usize)> {
     let spans = look.spans(line);
     if spans.is_empty() {
-        return (line.to_string(), 0);
+        return Vec::new();
     }
     let cuts: Vec<usize> = line
         .char_indices()
@@ -6049,15 +6060,34 @@ fn replace_in_line(
             picks.push((b0, b1));
         }
     }
-    let mut out = String::with_capacity(line.len());
-    let mut copied = 0;
-    for (&(b0, b1), with) in picks.iter().zip(look.expand_each(line, &picks, replacement)) {
-        out.push_str(&line[copied..b0]);
-        out.push_str(&with);
-        copied = b1;
+    picks
+}
+
+/// **The matches a `:s …c` asks about**, line by line, with what each would
+/// become: the same matches [`replace_in_line`] replaces, in char indices
+/// of the text.
+fn hits_in_lines(text: &str, look: &find::Look, replacement: &str, global: bool, chosen: &Chosen) -> Vec<Hit> {
+    let mut hits = Vec::new();
+    // Char index of the start of the line being looked at.
+    let mut at = 0usize;
+    for (idx, line) in text.split_inclusive('\n').enumerate() {
+        if chosen.has(idx) {
+            // 換行符不進正則，見 [`line_body`]。
+            let (body, _) = line_body(line);
+            let picks = picks_in_line(body, look, global);
+            let mut chars = find::CharCount::new(body);
+            for (&(b0, b1), with) in picks.iter().zip(look.expand_each(body, &picks, replacement)) {
+                hits.push(Hit {
+                    start: at + chars.at(b0),
+                    end: at + chars.at(b1),
+                    found: body[b0..b1].to_string(),
+                    text: with,
+                });
+            }
+        }
+        at += line.chars().count();
     }
-    out.push_str(&line[copied..]);
-    (out, picks.len())
+    hits
 }
 
 /// A replacement string with its backslash escapes resolved.
@@ -6156,79 +6186,163 @@ fn across_lines(pattern: &str) -> String {
     out
 }
 
-/// **The text a multi-line `:s` searches**: the buffer, ending in a line
-/// break even when the file does not, because vim's `\n` matches at the end
-/// of the last line all the same; and whether that break was added.
-fn with_a_last_break(text: &str) -> (std::borrow::Cow<'_, str>, bool) {
-    match text.is_empty() || text.ends_with('\n') {
-        true => (std::borrow::Cow::Borrowed(text), false),
-        false => (std::borrow::Cow::Owned(format!("{text}\n")), true),
-    }
+/// **The text a multi-line `:s` searches**, and the way back to the buffer.
+///
+/// It ends in a line break even when the file does not, because vim's `\n`
+/// matches at the end of the last line all the same. **A CRLF break is one
+/// unit**: the pattern reads each `\r\n` as `\n`, as vim reads a `dos` file,
+/// so no match starts or ends between the two and `[\r\n]` takes the break
+/// once; what is copied back keeps each break as it was.
+struct Hay<'a> {
+    /// The buffer's text, with the break added at the end when it has none.
+    text: std::borrow::Cow<'a, str>,
+    /// The same with every CRLF break written `\n`: what the pattern reads.
+    read: std::borrow::Cow<'a, str>,
+    /// Where in `read` each `\n` stands that is `\r\n` in `text`, ascending.
+    crlf: Vec<usize>,
+    /// Where each line begins in `read`.
+    starts: Vec<usize>,
+    /// Whether the last break was added.
+    added: bool,
 }
 
-/// Where the text's last line ends, before its break: a match running past
-/// it replaces up to there and the break stays, as vim's last line keeps its
-/// end of line.
-fn last_body_end(hay: &str) -> usize {
-    let body = hay.strip_suffix('\n').unwrap_or(hay);
-    body.strip_suffix('\r').unwrap_or(body).len()
+impl<'a> Hay<'a> {
+    fn of(text: &'a str) -> Hay<'a> {
+        let added = !text.ends_with('\n');
+        let text: std::borrow::Cow<'a, str> = match added {
+            true => std::borrow::Cow::Owned(format!("{text}\n")),
+            false => std::borrow::Cow::Borrowed(text),
+        };
+        let (read, crlf) = match text.contains("\r\n") {
+            false => (text.clone(), Vec::new()),
+            true => {
+                let (mut read, mut crlf) = (String::with_capacity(text.len()), Vec::new());
+                for line in text.split_inclusive('\n') {
+                    match line.strip_suffix("\r\n") {
+                        Some(body) => {
+                            read.push_str(body);
+                            crlf.push(read.len());
+                            read.push('\n');
+                        }
+                        None => read.push_str(line),
+                    }
+                }
+                (std::borrow::Cow::Owned(read), crlf)
+            }
+        };
+        let starts = std::iter::once(0)
+            .chain(read.match_indices('\n').map(|(at, _)| at + 1))
+            .filter(|&at| at < read.len())
+            .collect();
+        Hay { text, read, crlf, starts, added }
+    }
+
+    /// The byte of `text` that byte `at` of `read` stands for.
+    fn to_text(&self, at: usize) -> usize {
+        at + self.crlf.partition_point(|&n| n < at)
+    }
+
+    /// The line byte `at` of `read` is on.
+    fn line_of(&self, at: usize) -> usize {
+        self.starts.partition_point(|&start| start <= at).saturating_sub(1)
+    }
+
+    /// Where the last line's text ends in `read`, before its break: a match
+    /// running past it replaces up to there and the break stays, as vim's
+    /// last line keeps its end of line.
+    fn body_end(&self) -> usize {
+        self.read.len().saturating_sub(1)
+    }
 }
 
 /// One match a multi-line `:s` replaces.
 struct Pick {
-    /// Char indices into the text searched.
-    chars: (usize, usize),
-    /// Byte offsets, as the regex found them.
+    /// Byte offsets into [`Hay::read`], the end held at the last line's
+    /// break ([`Hay::body_end`]).
+    read: (usize, usize),
+    /// Byte offsets into [`Hay::text`].
     bytes: (usize, usize),
+    /// Char indices into [`Hay::text`], which are the buffer's.
+    chars: (usize, usize),
     /// The lines its start and its end are on.
     lines: (usize, usize),
 }
 
-/// A walk through a text by chars that keeps the byte offset and the line.
-struct Walk<'a> {
-    chars: std::str::Chars<'a>,
-    at: usize,
-    byte: usize,
-    line: usize,
-}
+/// A match as [`find::Look::find_from`] answers: where it was tried, and
+/// where it starts and ends.
+type TriedMatch = (usize, usize, usize);
 
-impl Walk<'_> {
-    fn to(&mut self, to: usize) {
-        while self.at < to {
-            let Some(c) = self.chars.next() else { break };
-            self.byte += c.len_utf8();
-            self.line += usize::from(c == '\n');
-            self.at += 1;
-        }
-    }
-}
-
-/// **The matches a multi-line `:s` replaces in `hay`**, in order: each must
-/// start on a chosen line, at or after char `from`, and without `global`
-/// only the first to start on a line counts, as vim's do. A match may run on
-/// past the chosen lines.
-fn picks_across_lines(hay: &str, look: &find::Look, global: bool, chosen: &Chosen, from: usize) -> Vec<Pick> {
+/// **The matches a multi-line `:s` replaces**, in order, found the way vim
+/// finds them: line by line, each chosen line searched again from its own
+/// start, so a match that is not taken (on a line outside the range, or a
+/// second one without `global`) hides nothing on the next line. A match is
+/// tried on the line searched, though `\zs` can start it on a later one,
+/// and none starts past the last line's text; with `global` the line goes
+/// on after it,
+/// and a match that runs into a later line goes on from where it ended, on
+/// that line, when the range has it. An empty match where the last one
+/// ended is passed over by a character, as vim's are.
+fn picks_across_lines(hay: &Hay, look: &find::Look, global: bool, chosen: &Chosen) -> Vec<Pick> {
+    let read: &str = &hay.read;
+    let (body_end, lines) = (hay.body_end(), hay.starts.len());
     let mut picks = Vec::new();
-    let mut walk = Walk { chars: hay.chars(), at: 0, byte: 0, line: 0 };
-    let (mut end, mut taken) = (0usize, None);
-    for (a, b) in look.spans(hay) {
-        // Of two matches that overlap (one by the pattern, one by the
-        // reading), the first is the one replaced.
-        if a < end {
+    // The last search and where it was asked from: a search from anywhere
+    // between there and the match it found finds that match again, so a
+    // pattern that matches far down is not looked for again from each line.
+    let mut found: Option<(usize, Option<TriedMatch>)> = None;
+    let mut find = |at: usize| -> Option<TriedMatch> {
+        match found {
+            Some((from, hit)) if from <= at && hit.is_none_or(|(tried, _, _)| at <= tried) => {}
+            _ => found = Some((at, look.find_from(read, at))),
+        }
+        found.and_then(|(_, hit)| hit)
+    };
+    let mut chars = find::CharCount::new(&hay.text);
+    let (mut line, mut at, mut last_end) = (0usize, 0usize, None);
+    'lines: while line < lines {
+        if !chosen.has(line) {
+            line += 1;
             continue;
         }
-        walk.to(a);
-        let (b0, la) = (walk.byte, walk.line);
-        if !chosen.has(la) || (!global && taken == Some(la)) {
-            continue;
+        let next = hay.starts.get(line + 1).copied().unwrap_or(read.len());
+        at = at.max(hay.starts[line]);
+        loop {
+            let Some((tried, start, end)) = find(at) else { break 'lines };
+            if tried >= next {
+                break;
+            }
+            if start == end && last_end == Some(start) {
+                match read[start..].chars().next() {
+                    Some(c) => at = start + c.len_utf8(),
+                    None => break 'lines,
+                }
+                continue;
+            }
+            if start > body_end {
+                break 'lines;
+            }
+            let held = end.min(body_end);
+            let ends_on = hay.line_of(held);
+            let bytes = (hay.to_text(start), hay.to_text(held));
+            picks.push(Pick {
+                read: (start, held),
+                bytes,
+                chars: (chars.at(bytes.0), chars.at(bytes.1)),
+                lines: (hay.line_of(start), ends_on),
+            });
+            (at, last_end) = (end, Some(end));
+            if end > body_end {
+                break 'lines;
+            }
+            if ends_on > line {
+                line = ends_on;
+                continue 'lines;
+            }
+            if !global {
+                break;
+            }
         }
-        taken = Some(la);
-        if a < from {
-            continue;
-        }
-        walk.to(b);
-        picks.push(Pick { chars: (a, b), bytes: (b0, walk.byte), lines: (la, walk.line) });
-        end = b;
+        line += 1;
     }
     picks
 }
@@ -6247,43 +6361,28 @@ struct Across {
     last_join: Option<usize>,
 }
 
-/// **`:s` over the whole text**, for a pattern that [`breaks_lines`]: one
-/// scan of the text, each match taken by [`picks_across_lines`], the text
-/// written out once. The matches before char `from` are left as they are.
-fn replace_across_lines(
-    text: &str,
-    look: &find::Look,
-    replacement: &str,
-    global: bool,
-    chosen: &Chosen,
-    from: usize,
-) -> Across {
-    let (hay, added) = with_a_last_break(text);
-    let lines = hay.matches('\n').count();
-    let body_end = last_body_end(&hay);
-    let picks = picks_across_lines(&hay, look, global, chosen, from);
-    let spans: Vec<(usize, usize)> = picks.iter().map(|p| p.bytes).collect();
-    let mut out = String::with_capacity(hay.len());
+/// **`:s` over the whole text**, for a pattern that [`breaks_lines`]: the
+/// matches [`picks_across_lines`] takes, the text written out once.
+fn replace_across_lines(text: &str, look: &find::Look, replacement: &str, global: bool, chosen: &Chosen) -> Across {
+    let hay = Hay::of(text);
+    let lines = hay.starts.len();
+    let picks = picks_across_lines(&hay, look, global, chosen);
+    let spans: Vec<(usize, usize)> = picks.iter().map(|p| p.read).collect();
+    let mut out = String::with_capacity(hay.text.len());
     let mut rows = Vec::with_capacity(lines);
     let (mut copied, mut delta, mut last_row, mut last_join) = (0usize, 0isize, None, None);
-    for (pick, with) in picks.iter().zip(look.expand_each(&hay, &spans, replacement)) {
+    let row = |line: usize, delta: isize| line.checked_add_signed(delta).unwrap_or(0);
+    for (pick, with) in picks.iter().zip(look.expand_each(&hay.read, &spans, replacement)) {
         let ((b0, b1), (la, lb)) = (pick.bytes, pick.lines);
-        // The last line's break stays where it is.
-        let (b1, lb) = match b1 > body_end {
-            true => (body_end, lb - 1),
-            false => (b1, lb),
-        };
-        out.push_str(&hay[copied..b0]);
+        out.push_str(&hay.text[copied..b0]);
         out.push_str(&with);
         copied = b1;
-        let start_row = (la as isize + delta) as usize;
+        let start_row = row(la, delta);
         let end_row = start_row + with.matches('\n').count();
         while rows.len() <= la {
-            rows.push((rows.len() as isize + delta) as usize);
+            rows.push(row(rows.len(), delta));
         }
-        // The lines the match ran into, unless it ended where one begins.
-        let inside = lb - usize::from(b1 > 0 && hay.as_bytes()[b1 - 1] == b'\n' && lb > la);
-        while rows.len() <= inside {
+        while rows.len() <= lb {
             rows.push(end_row);
         }
         delta += end_row as isize - start_row as isize - (lb - la) as isize;
@@ -6292,15 +6391,35 @@ fn replace_across_lines(
             last_join = Some(out.len());
         }
     }
-    out.push_str(&hay[copied..]);
+    out.push_str(&hay.text[copied..]);
     while rows.len() < lines {
-        rows.push((rows.len() as isize + delta) as usize);
+        rows.push(row(rows.len(), delta));
     }
-    if added {
+    // The break added at the end goes again.
+    if hay.added {
         out.pop();
     }
-    let last_join = last_join.map(|at| out[..at.min(out.len())].chars().count());
+    let last_join = last_join.map(|at: usize| out[..at.min(out.len())].chars().count());
     Across { text: out, count: picks.len(), rows, last_row, last_join }
+}
+
+/// **The matches a multi-line `:s …c` asks about**, with what each would
+/// become: the same matches [`replace_across_lines`] replaces, in char
+/// indices of the text.
+fn hits_across_lines(text: &str, look: &find::Look, replacement: &str, global: bool, chosen: &Chosen) -> Vec<Hit> {
+    let hay = Hay::of(text);
+    let picks = picks_across_lines(&hay, look, global, chosen);
+    let spans: Vec<(usize, usize)> = picks.iter().map(|p| p.read).collect();
+    picks
+        .iter()
+        .zip(look.expand_each(&hay.read, &spans, replacement))
+        .map(|(pick, with)| Hit {
+            start: pick.chars.0,
+            end: pick.chars.1,
+            found: hay.text[pick.bytes.0..pick.bytes.1].to_string(),
+            text: with,
+        })
+        .collect()
 }
 
 /// The first occurrence of `pattern` at or after char index `from`, wrapping

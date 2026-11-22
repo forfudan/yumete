@@ -31,7 +31,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **Under vim, `df`, `dt`, `cF` and `yT` open the IME as `f` does**, so `dt京` deletes up to 京. **A punctuation mark found by `f` or `t` matches both widths**: `)` stops on `)` or `）`, so `dt)` reaches the bracket in `call(x, y)` with the IME in Chinese mode.
 - **`--shot --keys` draws the frame between keys that the editor draws**, so page and scroll keys move the view as they do in the editor.
 - **In a `:s` replacement `\r` breaks the line and `\n` puts a NUL**, as in vim: `:%s/。/。\r/g` puts a line break after every 。.
-- **`\n` in a `:s` pattern matches a line break**, as in vim: `:%s/,\n/, /` joins each line ending in a comma to the next, and `:%s/\n\n\n/\r\r/` squeezes runs of blank lines. A match starts on a line of the range and may run on past it.
+- **`\n` in a `:s` pattern matches a line break**, as in vim: `:%s/,\n/, /` joins each line ending in a comma to the next, and `:%s/\n\n\n/\r\r/` squeezes runs of blank lines. A match starts on a line of the range and may run on past it, a CRLF break counts as one, and `c` asks about the matches it would replace.
 
 ### Fixed
 
@@ -98,6 +98,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **A count before vim's `*` and `#` counts**, as in vim: `3*` goes to the third match of the word, instead of the first.
 - **vim's `p`, Visual `p` and Insert `C-r` write the file's own line breaks**, as in vim: lines yanked in a LF file go into a CRLF file as CRLF, and back, instead of leaving it with two kinds of line.
 - **vim's `:40` is no longer a jump**, as in vim: `''` and `C-o` after it go back to where the jump before it came from.
+- **`:s …c` no longer asks forever at a pattern that matches nothing**, such as `z*`: it asks once about each place `:s` without `c` changes, then ends.
 
 ## 0.24.0 · 2026-11-17
 

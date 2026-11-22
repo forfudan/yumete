@@ -495,7 +495,7 @@ impl Editor {
         let mut joined_at = None;
 
         if across {
-            let done = replace_across_lines(&text, &look, &replacement, global, &chosen, 0);
+            let done = replace_across_lines(&text, &look, &replacement, global, &chosen);
             (rebuilt, count, rows, last_hit) = (done.text, done.count, done.rows, done.last_row);
             if pattern == "\\n" && replacement.is_empty() && !ignore_case && !reshape && !pinyin && !glyphs {
                 joined_at = done.last_join;
@@ -663,21 +663,23 @@ impl Editor {
     /// Open the walk and put the first question.
     fn start_confirming(
         &mut self,
-        re: super::find::Look,
+        look: super::find::Look,
         replacement: String,
         global: bool,
         chosen: Chosen,
         reshape: bool,
         across: bool,
     ) {
+        let text = self.current_buffer().text();
+        let hits = match across {
+            true => hits_across_lines(&text, &look, &replacement, global, &chosen),
+            false => hits_in_lines(&text, &look, &replacement, global, &chosen),
+        };
         self.ask_or_finish(Confirming {
-            re,
-            replacement,
-            global,
-            chosen,
             reshape,
-            across,
-            from: 0,
+            hits,
+            next: 0,
+            shift: 0,
             changed: 0,
             skipped: 0,
             all: false,
@@ -685,151 +687,50 @@ impl Editor {
         });
     }
 
-    /// The next match still to be decided.
-    ///
-    /// Recomputed from the buffer each time rather than held as a list: every
-    /// accepted change moves everything after it, and a stale offset in a
-    /// walk that writes is a walk that writes in the wrong place.
+    /// The next match still to be decided, where it stands now.
     fn next_hit(&self, walk: &Confirming) -> Option<Hit> {
-        let text = self.current_buffer().text();
-        if walk.across {
-            let (hay, _) = with_a_last_break(&text);
-            let pick = picks_across_lines(&hay, &walk.re, walk.global, &walk.chosen, walk.from).into_iter().next()?;
-            let ((b0, b1), (a, b)) = (pick.bytes, pick.chars);
-            // The last line's break stays (see `last_body_end`).
-            let body_end = last_body_end(&hay);
-            let end = match b1 > body_end {
-                true => a + hay[b0..body_end].chars().count(),
-                false => b,
-            };
-            return Some(Hit {
-                start: a,
-                end,
-                found: hay[b0..b1].to_string(),
-                text: walk.re.expand_in(&hay, b0, b1, &walk.replacement),
-            });
-        }
-        // Char index of the start of the line being looked at.
-        let mut at = 0usize;
-        for (idx, line) in text.split_inclusive('\n').enumerate() {
-            if walk.chosen.has(idx) {
-                // 換行符不進正則，見 [`crate::editor::line_body`]。
-                let (line, _) = crate::editor::line_body(line);
-                // **跨度，不是捕獲**：讀音那一路的命中不是正則配上
-                // 的，`captures_iter` 看不見它。`$1` 照樣在 `expand` 裏展開——那一
-                // 支自己分得清哪一路配上的。
-                let cuts: Vec<usize> = line
-                    .char_indices()
-                    .map(|(b, _)| b)
-                    .chain(std::iter::once(line.len()))
-                    .collect();
-                for (a, b) in walk.re.spans(line) {
-                    let start = at + a;
-                    if start >= walk.from {
-                        let (Some(&b0), Some(&b1)) = (cuts.get(a), cuts.get(b)) else {
-                            continue;
-                        };
-                        let found = &line[b0..b1];
-                        return Some(Hit {
-                            start,
-                            end: at + b,
-                            found: found.to_string(),
-                            // `$1` resolved **for this match**, so the question
-                            // shows what will actually be written.
-                            text: walk.re.expand_in(line, b0, b1, &walk.replacement),
-                        });
-                    }
-                    // Without `g`, only the first match on a line is offered —
-                    // and it stays the only one after it has been answered.
-                    if !walk.global {
-                        break;
-                    }
-                }
-            }
-            at += line.chars().count();
-        }
-        None
+        let hit = walk.hits.get(walk.next)?;
+        let at = |n: usize| n.checked_add_signed(walk.shift).unwrap_or(0);
+        Some(Hit { start: at(hit.start), end: at(hit.end), found: hit.found.clone(), text: hit.text.clone() })
     }
 
     /// Write every match still undecided, in **one** pass.
     ///
     /// Warning: This is what `a` runs, and it exists because the obvious loop is
-    /// quadratic. `next_hit` serialises the whole document and rescans it from
-    /// the top for every match, and `write_one` copies it again for the grid
-    /// guard — fine at one keystroke per `y`, ruinous when `a` does it N times
-    /// with no key in between. Measured, the loop takes **28.5 s** on a 680 KB
-    /// chapter with 20,000 matches against 0.02 s for the same `:s` without
-    /// `c`, and **4 minutes 35 seconds** on a 2 MB one — on the main thread,
-    /// with no progress and no key that could stop it. A writer watching a
-    /// frozen screen kills the process, and loses both the substitution and
-    /// the last few seconds of typing.
+    /// quadratic. `write_one` copies the whole document for the grid guard —
+    /// fine at one keystroke per `y`, ruinous when `a` does it N times with
+    /// no key in between: on a 680 KB chapter with 20,000 matches that loop
+    /// ran for half a minute on the main thread, with no progress and no key
+    /// that could stop it. A writer watching a frozen screen kills the
+    /// process, and loses both the substitution and the last few seconds of
+    /// typing.
     ///
     /// One pass, one grid check, one `replace` — the same shape [`substitute`]
-    /// uses, restricted to the matches at or after `walk.from`.
+    /// uses.
     ///
     /// [`substitute`]: Self::substitute
     fn finish_all(&mut self, walk: &mut Confirming) -> Option<String> {
         let text = self.current_buffer().text();
-        if walk.across {
-            let done = replace_across_lines(&text, &walk.re, &walk.replacement, walk.global, &walk.chosen, walk.from);
-            return self.write_the_rest(walk, &done.text, done.count);
-        }
+        let rest = &walk.hits[walk.next.min(walk.hits.len())..];
         let mut rebuilt = String::with_capacity(text.len());
-        // Char index of the start of the line being looked at, the way
-        // `next_hit` counts it.
-        let mut at = 0usize;
-        let mut changed = 0usize;
-        for (idx, line) in text.split_inclusive('\n').enumerate() {
-            if !walk.chosen.has(idx) {
-                rebuilt.push_str(line);
-                at += line.chars().count();
-                continue;
-            }
-            // 換行符不進正則，原樣寫回去——見 [`crate::editor::line_body`]。
-            // `at` 數的仍舊是**整行**，它是跨行的字元計數。
-            let (body, eol) = crate::editor::line_body(line);
-            // Byte cursor inside `body`: everything before it is already in
-            // `rebuilt`. `spans` comes back in order, so it only ever moves
-            // forward（不用 `captures_iter`，理由同 `next_hit`：讀音那一路的命中
-            // 不是正則配上的）。
-            let cuts: Vec<usize> = body
-                .char_indices()
-                .map(|(b, _)| b)
-                .chain(std::iter::once(body.len()))
-                .collect();
-            // The matches to replace, chosen first and expanded together, so
-            // the line is walked once for all of them.
-            let mut picks: Vec<(usize, usize)> = Vec::new();
-            for (a, b) in walk.re.spans(body) {
-                let (Some(&b0), Some(&b1)) = (cuts.get(a), cuts.get(b)) else {
-                    continue;
-                };
-                // 疊着的兩處（正則一處、讀音一處）只認頭一處：已經抄過去的那一段
-                // 不許再動。
-                if picks.last().is_some_and(|&(_, end)| b0 < end) {
-                    continue;
-                }
-                if at + a >= walk.from {
-                    picks.push((b0, b1));
-                }
-                // Without `g`, only the first match on a line was ever
-                // offered — and one already answered leaves the line alone.
-                if !walk.global {
-                    break;
-                }
-            }
-            let mut copied = 0usize;
-            // `$1` resolved for each match, as in `next_hit`.
-            for (&(b0, b1), with) in picks.iter().zip(walk.re.expand_each(body, &picks, &walk.replacement)) {
-                rebuilt.push_str(&body[copied..b0]);
-                rebuilt.push_str(&with);
-                copied = b1;
-            }
-            changed += picks.len();
-            rebuilt.push_str(&body[copied..]);
-            rebuilt.push_str(eol);
-            at += line.chars().count();
+        // Char and byte of the text copied so far; the hits come in order.
+        let (mut char_at, mut byte_at) = (0usize, 0usize);
+        let mut byte_of = |to: usize| {
+            byte_at += text[byte_at..].chars().take(to.saturating_sub(char_at)).map(char::len_utf8).sum::<usize>();
+            char_at = char_at.max(to);
+            byte_at
+        };
+        let mut copied = 0usize;
+        for hit in rest {
+            let at = |n: usize| n.checked_add_signed(walk.shift).unwrap_or(0);
+            let (b0, b1) = (byte_of(at(hit.start)), byte_of(at(hit.end)));
+            rebuilt.push_str(&text[copied..b0]);
+            rebuilt.push_str(&hit.text);
+            copied = b1;
         }
+        rebuilt.push_str(&text[copied..]);
+        let changed = rest.len();
+        walk.next = walk.hits.len();
         self.write_the_rest(walk, &rebuilt, changed)
     }
 
@@ -919,13 +820,8 @@ impl Editor {
             return Some(self.status.clone());
         }
         walk.changed += 1;
-        let past = hit.start + hit.text.chars().count();
-        // A pattern that matches nothing (`x*`) would be found at the same
-        // place forever, and `a` would never come back.
-        walk.from = match hit.start == hit.end {
-            true => past.max(hit.start + 1),
-            false => past,
-        };
+        walk.next += 1;
+        walk.shift += hit.text.chars().count() as isize - (hit.end - hit.start) as isize;
         None
     }
 
@@ -965,7 +861,7 @@ impl Editor {
             }
             Key::Char('n') => {
                 walk.skipped += 1;
-                walk.from = hit.end.max(hit.start + 1);
+                walk.next += 1;
             }
             Key::Char('a') => walk.all = true,
             Key::Char('l') => {

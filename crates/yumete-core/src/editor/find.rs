@@ -3278,19 +3278,14 @@ impl Look {
         }
     }
 
-    /// **The replacement for the match at bytes `from..to` of `line`** —
-    /// [`Self::expand`], reading the match in its line.
+    /// **The replacement for each match at byte spans `picks` of `line`** —
+    /// [`Self::expand`], reading each match in its line, in order, walking
+    /// the line once rather than once a match: on a long line with many
+    /// matches the walk is what costs.
     ///
     /// A pattern with `\zs` or `\ze` matched more than the text it
     /// replaces, so its groups are found again in the line, not in the
     /// matched text alone; `$0` is the text replaced, as vim's `&` is.
-    pub(super) fn expand_in(&self, line: &str, from: usize, to: usize, with: &str) -> String {
-        self.expand_each(line, &[(from, to)], with).pop().unwrap_or_default()
-    }
-
-    /// **[`Self::expand_in`] for each match at byte spans `picks` of `line`**,
-    /// in order, walking the line once rather than once a match: on a long
-    /// line with many matches the walk is what costs.
     pub(super) fn expand_each(&self, line: &str, picks: &[(usize, usize)], with: &str) -> Vec<String> {
         let (How::Pattern(re), Some(marks)) = (&self.how, &self.marks) else {
             return picks.iter().map(|&(from, to)| self.expand(&line[from..to], with)).collect();
@@ -3324,6 +3319,32 @@ impl Look {
         match self.doubled {
             true => with.replace("$$", "$"),
             false => with.to_string(),
+        }
+    }
+
+    /// **The first match tried at or after byte `at` of `text`**, as
+    /// `(tried, start, end)` in bytes: where the try began, and the text the
+    /// match replaces, which `\zs` and `\ze` can set apart from it. The text
+    /// before `at` is still read as context, so `^` and `\b` answer as they
+    /// would in a walk from the start. A look that is not one pattern reads
+    /// from `at` alone.
+    pub(super) fn find_from(&self, text: &str, at: usize) -> Option<(usize, usize, usize)> {
+        match (&self.how, &self.marks, &self.said) {
+            (How::Pattern(re), None, None) => re.find_at(text, at).map(|m| (m.start(), m.start(), m.end())),
+            (How::Pattern(re), Some(marks), None) => {
+                let caps = re.captures_at(text, at)?;
+                let whole = caps.get(0)?;
+                let start = marks.starts.iter().rev().find_map(|&i| caps.get(i)).map_or(whole.start(), |m| m.start());
+                let end = marks.ends.iter().rev().find_map(|&i| caps.get(i)).map_or(whole.end(), |m| m.start());
+                Some((whole.start(), start, end.max(start)))
+            }
+            _ => {
+                let rest = &text[at..];
+                let &(a, b) = self.spans(rest).first()?;
+                let cut = |n: usize| at + rest.char_indices().nth(n).map_or(rest.len(), |(i, _)| i);
+                let start = cut(a);
+                Some((start, start, cut(b)))
+            }
         }
     }
 
@@ -3523,19 +3544,19 @@ impl Marks {
 /// **Characters before a byte offset of one text**, counted on from the
 /// last offset asked, so the matches of a line, asked in order, cost the
 /// line once rather than once a match.
-struct CharCount<'t> {
+pub(super) struct CharCount<'t> {
     text: &'t str,
     byte: usize,
     chars: usize,
 }
 
 impl<'t> CharCount<'t> {
-    fn new(text: &'t str) -> Self {
+    pub(super) fn new(text: &'t str) -> Self {
         CharCount { text, byte: 0, chars: 0 }
     }
 
     /// The characters before byte `at`, a character boundary.
-    fn at(&mut self, at: usize) -> usize {
+    pub(super) fn at(&mut self, at: usize) -> usize {
         if at < self.byte {
             (self.byte, self.chars) = (0, 0);
         }
