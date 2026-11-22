@@ -46642,3 +46642,26 @@ fn helix_range_marks_name_the_current_selection() {
     ed.execute(":'<,'>s/o/0/g").unwrap();
     assert_eq!(ed.current_buffer().text(), "sun\nm00n\nstar\nsoon\n");
 }
+
+/// **A rewrite compares only the lines it wrote over**: `~` on every line
+/// of a long file with a mark set costs what the lines cost, not the file
+/// once a line, and a rewrite that adds a line still moves the marks below.
+#[test]
+fn a_rewrite_with_marks_set_costs_the_lines_it_touches() {
+    let dir = tmp().join(format!("yumete-rewrite-cost-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("long.txt");
+    std::fs::write(&path, "pear plum\n".repeat(4000)).unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&path).unwrap();
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "ggjjwma");
+    let started = std::time::Instant::now();
+    ed.execute(":%norm ~").unwrap();
+    let took = started.elapsed();
+    assert!(took < std::time::Duration::from_secs(3), "{took:?}");
+    feed_vim(&mut ed, "ggwr⏎`a");
+    assert_eq!(vim_at(&ed), (4, 6), "the mark moved down with its line");
+    let _ = std::fs::remove_dir_all(&dir);
+}

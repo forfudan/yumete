@@ -1600,7 +1600,10 @@ impl Buffer {
         self.rope.insert(start, text);
         match (carry, before) {
             (Carry::Cut, _) => self.carry_selections(cut, start + text.chars().count()),
-            (Carry::Lines(rows), Some(before)) => self.carry_lines(&before, first, rows),
+            (Carry::Lines(rows), Some(before)) => {
+                let last = (before.char_to_line(start + taken), self.rope.char_to_line(start + text.chars().count()));
+                self.carry_lines(&before, first, last, rows);
+            }
             (Carry::Lines(_), None) => {}
         }
         self.edited = next_edit();
@@ -1792,15 +1795,26 @@ impl Buffer {
     }
 
     /// Move the kept selections through a rewrite of the lines from `first`
-    /// (see [`Self::rewrite`]), the text having been `before`.
-    fn carry_lines(&mut self, before: &Rope, first: usize, rows: Option<&[usize]>) {
+    /// to `last` (see [`Self::rewrite`]): the last line written over as the
+    /// text was, `before`, and as it is now.
+    ///
+    /// Only those lines are compared. The lines past them are the same text
+    /// moved by the lines added or taken, and when there are none every
+    /// place keeps its line, so nothing is compared at all: `~` or `r` on a
+    /// long file costs what the lines they touch cost.
+    fn carry_lines(&mut self, before: &Rope, first: usize, last: (usize, usize), rows: Option<&[usize]>) {
         let (was, now) = (before.len_lines(), self.rope.len_lines());
+        if rows.is_none() && was == now {
+            return;
+        }
         let (head, tail) = match rows {
             Some(_) => (0, 0),
             None => {
-                let head = first + (first..was.min(now)).take_while(|&i| before.line(i) == self.rope.line(i)).count();
+                let within = last.0.min(last.1) + 1;
+                let head = first + (first..within.min(was.min(now))).take_while(|&i| before.line(i) == self.rope.line(i)).count();
                 let most = was.min(now) - head;
-                let tail = (1..=most).take_while(|&i| before.line(was - i) == self.rope.line(now - i)).count();
+                let past = (was - 1 - last.0).min(most);
+                let tail = past + (past + 1..=most).take_while(|&i| before.line(was - i) == self.rope.line(now - i)).count();
                 (head, tail)
             }
         };
