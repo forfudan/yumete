@@ -2775,6 +2775,9 @@ pub struct Editor {
     swapping_is_fine: bool,
     /// The `:s …c` walk `Pending::Confirm` is the keyboard half of.
     confirming: Option<Confirming>,
+    /// **The `:` command just run failed as vim's fail with an error**, and
+    /// under vim the rest of its `|` line is not run.
+    command_failed: bool,
     /// The count typed before a pending operator, kept because the count is
     /// consumed by the key that *opens* the operator — `10g` has already spent
     /// the 10 by the time the second `g` arrives.
@@ -4862,6 +4865,7 @@ impl Editor {
             status: String::new(),
             pending: Pending::None,
             confirming: None,
+            command_failed: false,
             operator_count: None,
             extend: false,
             vim_lines: false,

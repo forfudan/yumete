@@ -396,6 +396,9 @@ impl Editor {
     /// Replace `pattern` with `replacement` on the cursor's line, or on every
     /// line when `whole_file`; `global` replaces every match on a line.
     pub(super) fn substitute(&mut self, how: Substitution<'_>) {
+        // **Failed until it finds a match**, as vim's `:s` is (E486): every
+        // early return below is a failure that ends its `|` line.
+        self.command_failed = true;
         if self.refuse_readonly() {
             return;
         }
@@ -540,6 +543,7 @@ impl Editor {
             }
         }
         // `n` in vi means "count, and change nothing".
+        self.command_failed = count == 0;
         if count_only {
             self.status = say!("find.substitute-nothing-changed", count);
             return;
@@ -553,6 +557,7 @@ impl Editor {
             let len = self.current_buffer().char_count();
             let done = self.without_cell_guard(|e| e.current_buffer_mut().rewrite_rows(0..len, &rebuilt, &rows, &joined));
             if !self.applied(done) {
+                self.command_failed = true;
                 return;
             }
             self.clamp_cursor();
@@ -717,6 +722,7 @@ impl Editor {
             true => hits_across_lines(&text, &look, &replacement, global, &chosen),
             false => hits_in_lines(&text, &look, &replacement, global, &chosen, ending),
         };
+        self.command_failed = hits.is_empty();
         self.ask_or_finish(Confirming {
             reshape,
             hits,

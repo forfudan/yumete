@@ -47,6 +47,7 @@ impl Editor {
         // answer was: a failed `:export` must not leave 「存了 ch1.md」
         // standing, which reads as an export that worked.
         self.status.clear();
+        self.command_failed = false;
         // Warning: **`:/` 和 `:?` 這裏一個字都不做**。做成 `/` 和 `?` 的別名的話
         // **它和 vim 不是同一件事**，而像到足以讓人以為是——vim 的 `:/式子` 是一個
         // **行地址**（`:/foo/d` 是「跳到配得上的那一行，刪掉它」），別名做的是
@@ -387,6 +388,8 @@ impl Editor {
                         self.swap_asked = Some(line.to_string());
                         self.pending = Pending::SwapRange;
                         self.status = say!("find.range-runs-backwards", first, second);
+                        // The rest of the line does not run past the question.
+                        self.command_failed = true;
                         return Ok(CommandOutcome::Continue);
                     }
                 }
@@ -838,7 +841,7 @@ impl Editor {
                 if let Some(walk) = self.confirming.as_mut().filter(|_| matches!(outcome, Ok(CommandOutcome::Continue))) {
                     walk.rest = Some(then);
                     walk.snapped = true;
-                } else if matches!(outcome, Ok(CommandOutcome::Continue)) {
+                } else if matches!(outcome, Ok(CommandOutcome::Continue)) && !(self.command_failed && self.as_vim()) {
                     let said = std::mem::take(&mut self.status);
                     outcome = self.execute_now(&then);
                     if self.status.is_empty() {

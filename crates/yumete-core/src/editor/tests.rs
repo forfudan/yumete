@@ -47046,6 +47046,21 @@ fn a_confirm_walk_runs_the_rest_of_its_line_when_it_ends() {
     assert_eq!(ed.current_buffer().text(), "pq\npq\n");
 }
 
+/// **A `:s` that finds nothing ends its `|` line** (measured in nvim, E486):
+/// the commands after it do not run, with or without `c` or `n`, nor after
+/// a range past the end; a `:s` that finds its pattern lets the line go on.
+#[test]
+fn a_substitution_that_finds_nothing_ends_its_line() {
+    for line in ["s/z/K/|s/q/W/", "s/z/K/c|s/q/W/", "s/z/K/n|s/q/W/", "%s/z/K/g|s/q/W/", "7s/p/K/|s/q/W/"] {
+        let mut ed = typed_vim("pq\npq\n");
+        let _ = ed.execute(line);
+        assert_eq!(ed.current_buffer().text(), "pq\npq\n", "{line}");
+    }
+    let mut ed = typed_vim("pq\npq\n");
+    assert!(ed.execute("s/p/K/n|s/q/W/").is_ok());
+    assert_eq!(ed.current_buffer().text(), "pW\npq\n");
+}
+
 /// **vim's `*` and `#` are jumps** (`:h jump-motions`): `C-o` comes back to
 /// where they were pressed.
 #[test]
