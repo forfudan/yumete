@@ -1733,8 +1733,15 @@ impl Editor {
             '"' => self.register_text(None),
             name => self.held(name),
         };
-        // **An empty register fails as a motion does** (vim's `do_execreg`):
-        // inside a macro or a `:normal` it ends the keys still to press.
+        // **A register set to nothing plays nothing** under vim, as `qaq`
+        // leaves `a` for the `qaqqa…@aq` idiom, and the keys after it run.
+        let set_to_nothing = self.as_vim() && !matches!(register, '"' | '@') && self.registers.contains_key(&register);
+        if text.is_empty() && set_to_nothing {
+            return;
+        }
+        // **A register never set fails as a motion does** (vim's
+        // `do_execreg`): inside a macro or a `:normal` it ends the keys
+        // still to press.
         if text.is_empty() {
             self.status = match register {
                 '@' => say!("macro.nothing-recorded"),

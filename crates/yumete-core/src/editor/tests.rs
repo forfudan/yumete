@@ -47223,9 +47223,10 @@ fn the_change_start_after_putting_lines_in_insert_is_where_insert_began() {
     assert_eq!(vim_at(&ed), (2, 7));
 }
 
-/// **vim's `@` of an empty register fails like a motion** (measured in
+/// **vim's `@` of a register never set fails like a motion** (measured in
 /// nvim): it ends the macro playing it and the rest of a `:normal` line,
-/// while a macro that ran that `:normal` goes on after it.
+/// while a macro that ran that `:normal` goes on after it. One `qaq` set to
+/// nothing plays nothing, and the keys after it run.
 #[test]
 fn playing_an_empty_register_ends_what_plays_it() {
     let mut ed = typed_vim("@zAx\u{1b}\nreed\n");
@@ -47236,6 +47237,13 @@ fn playing_an_empty_register_ends_what_plays_it() {
     let mut ed = typed_vim(":normal @zAy\nAw\u{1b}\nreed\n");
     feed_vim(&mut ed, "\"a2yyjj@a");
     assert_eq!(ed.current_buffer().text(), ":normal @zAy\nAw\u{1b}\nreedw\n");
+    let mut ed = typed_vim("kite sail\n");
+    feed_vim(&mut ed, "qaq:normal x@ax⏎");
+    assert_eq!(ed.current_buffer().text(), "te sail\n");
+    let mut ed = typed_vim("xyz\nxyz\nxyz\n");
+    feed_vim(&mut ed, "qaqqbx@ajxq@b");
+    assert_eq!(ed.current_buffer().text(), "yz\nz\nyz\n");
+    assert_eq!(vim_at(&ed), (3, 1));
 }
 
 /// **A key binding whose keys play a macro, pressed while a macro
