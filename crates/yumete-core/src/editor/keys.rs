@@ -969,6 +969,12 @@ impl Editor {
                 head - rope.line_to_char(rope.char_to_line(head))
             }
         };
+        // `>` and `<` put it back in the column it wanted, on the screen
+        // (vim's 'curswant'), as `>>` does.
+        let want = match self.vim_lines {
+            true => self.vim_line_want,
+            false => self.column_wanted(),
+        };
         if self.vim_lines {
             self.extend_to_line_bounds();
             self.vim_lines = false;
@@ -999,7 +1005,10 @@ impl Editor {
             // A join with nothing to join leaves the cursor where `V` had it.
             'J' if self.current_buffer().revision() == revision => self.column_on_line(line, column),
             'J' => self.sel.head(),
-            _ => self.column_on_line(line, column),
+            _ => {
+                self.land_at_column(line, want);
+                return self.clamp_cursor();
+            }
         };
         self.sel.set_anchor(to);
         self.sel.set_head(to);

@@ -62,6 +62,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **vim's `cc`, `S` and linewise `c` on a line of blanks keep its blanks in code**, as autoindent does in vim, and take them back out when nothing is typed after them.
 - **After vim's `p` or `P` over a `v` or `V` selection, `gv` and the `<` `>` marks name the text put**, selected as the selection was, as in vim; lines put into a line start `` `[ `` on the first of them, not at the split.
 - **vim's `` `] `` after a put or a yank stands where vim's does**: past a last line of one character after `gp`, at the start of the line after text ending in a line break, and on an empty last line rather than the line above it.
+- **vim's `Vd`, `V>` and `V<` leave the cursor in the column it wanted**, as `dd` and `>>` do and as in vim, instead of the first column; `$` before `V` lands at the line's end, and `>>` counts the column on the screen, as in vim.
 
 ## 0.24.0 · 2026-11-17
 

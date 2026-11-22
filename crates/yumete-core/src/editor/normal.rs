@@ -1484,6 +1484,7 @@ impl Editor {
     #[allow(unused_variables)]
     pub(super) fn cmd_select_line_mode(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
+        self.vim_line_want = self.column_wanted();
         self.vim_line_column = {
             let rope = self.current_buffer().rope();
             let head = self.sel.head().min(rope.len_chars());
@@ -1828,6 +1829,12 @@ impl Editor {
         // **`V` means whole lines**, however far along one the caret
         // stopped (B3).
         let whole_lines = self.vim_lines;
+        // **Whole lines deleted keep the column the cursor wanted** (vim's
+        // 'nostartofline'): `V`'s, or the cursor's on a closed fold.
+        let want = match self.extend {
+            true => self.vim_line_want,
+            false => self.column_wanted(),
+        };
         if self.vim_lines {
             self.extend_to_line_bounds();
             self.vim_lines = false;
@@ -1891,7 +1898,11 @@ impl Editor {
             self.yank_whole_lines = false;
             return;
         }
+        let revision = self.current_buffer().revision();
         self.apply(op, motion::Span::Over { anchor, head });
+        if whole_lines && self.as_vim() && self.current_buffer().revision() != revision {
+            self.land_at_column(self.cursor_line(), want);
+        }
     }
 
     // Yank / paste (Helix `y` / `p` / `P`).
@@ -2732,20 +2743,12 @@ impl Editor {
             }
         }
         let Key::Char(c) = key else { return };
-        // vim's `>>` keeps the cursor's column (nvim, `nostartofline`);
-        // helix's `>` keeps the selection on its text.
-        let kept = (self.as_vim()).then(|| {
-            let rope = self.current_buffer().rope();
-            let head = self.sel.head();
-            let line = rope.char_to_line(head);
-            (line, head - rope.line_to_char(line))
-        });
+        // vim's `>>` keeps the column the cursor wants, on the screen (nvim,
+        // `nostartofline`); helix's `>` keeps the selection on its text.
+        let kept = (self.as_vim()).then(|| (self.cursor_line(), self.column_wanted()));
         self.repeat_writing(count, |e| e.indent(c == '>'));
-        if let Some((line, column)) = kept {
-            let to = self.column_on_line(line, column);
-            self.sel.set_anchor(to);
-            self.sel.set_head(to);
-            self.refresh_goal_column();
+        if let Some((line, want)) = kept {
+            self.land_at_column(line, want);
         }
     }
 

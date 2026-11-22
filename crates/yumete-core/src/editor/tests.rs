@@ -45509,6 +45509,28 @@ fn a_vim_put_ends_its_last_mark_as_nvim_does() {
     }
 }
 
+/// **A linewise Visual `d`, `>` or `<` leaves the cursor in the column it
+/// wanted** (nvim's 'nostartofline', measured with `sw=4 et`): the one on
+/// the screen when `V` was pressed, a wide character counting two, `$`
+/// the line's end, not the first column.
+#[test]
+fn a_vim_linewise_visual_operator_keeps_the_column() {
+    let text = "alpha beta\nshort\n    indented line\n天地玄黄宇宙洪荒\n\nend\n";
+    let cases: &[(&str, &str, (usize, usize))] = &[
+        ("jjlllVkkd", "天地玄黄宇宙洪荒\n\nend\n", (1, 2)),
+        ("jj$Vd", "alpha beta\nshort\n天地玄黄宇宙洪荒\n\nend\n", (3, 8)),
+        ("jjjjVjd", "alpha beta\nshort\n    indented line\n天地玄黄宇宙洪荒\n", (4, 1)),
+        ("5lvjVd", "    indented line\n天地玄黄宇宙洪荒\n\nend\n", (1, 6)),
+        ("jjjllV>", "alpha beta\nshort\n    indented line\n    天地玄黄宇宙洪荒\n\nend\n", (4, 5)),
+        ("jj$Vj>", "alpha beta\nshort\n        indented line\n    天地玄黄宇宙洪荒\n\nend\n", (3, 21)),
+        ("jjlllVkk>", "    alpha beta\n    short\n        indented line\n天地玄黄宇宙洪荒\n\nend\n", (1, 4)),
+    ];
+    for &(keys, want, at) in cases {
+        let (_, got, cursor) = vim_block_run(text, keys);
+        assert_eq!((got.as_str(), cursor), (want, at), "{keys:?}");
+    }
+}
+
 /// **After `p` over a `v` or `V` selection, `gv` and the `<` `>` marks are
 /// the text put**, selected as the selection was (vim's `nv_put_opt`,
 /// measured in nvim): lines put into a line begin `` `[ `` on the first of
