@@ -1171,6 +1171,21 @@ impl Editor {
         });
     }
 
+    /// **The first non-blank of `pos`'s line**, and on a line of blanks
+    /// under vim the last blank (vim's `beginline(BL_WHITE | BL_FIX)`,
+    /// measured in nvim: `^`, `_`, `'a`), as vim's cursor cannot stand on
+    /// the line break.
+    pub(super) fn first_non_blank_of(&self, pos: usize) -> usize {
+        let rope = self.current_buffer().rope();
+        let first = motion::line_first_non_blank(rope, pos);
+        let (start, end) = (motion::line_start(rope, pos), motion::line_end(rope, pos));
+        let blanks = end > start && rope.slice(start..end).chars().all(|c| c == ' ' || c == '\t');
+        match self.keymap_rules().caret_off_newline && first == start && blanks {
+            true => motion::line_last(rope, pos),
+            false => first,
+        }
+    }
+
     /// The cursor to its line's first character that is not a blank.
     fn past_the_indent(&mut self) {
         let rope = self.current_buffer().rope();
@@ -3488,9 +3503,7 @@ impl Editor {
             motion::Motion::FileEnd => at(motion::buffer_end(rope, self.sel.head())),
             motion::Motion::LineStart => at(motion::line_start(rope, self.sel.head())),
             motion::Motion::LineEnd => at(motion::line_last(rope, self.sel.head())),
-            motion::Motion::LineFirstNonBlank => {
-                at(motion::line_first_non_blank(rope, self.sel.head()))
-            }
+            motion::Motion::LineFirstNonBlank => at(self.first_non_blank_of(self.sel.head())),
             // **Paragraphs and sentences keep the same forward rule as words**
             // (B1): it was written three times before this, once per unit.
             motion::Motion::Paragraph { forward } => {

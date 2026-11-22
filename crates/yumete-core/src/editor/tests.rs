@@ -46375,3 +46375,24 @@ fn a_count_before_a_search_goes_to_that_match() {
         assert_eq!(vim_at(&ed), at, "{keys}");
     }
 }
+
+/// **vim's `^` on a line of blanks stops on the last one** (measured in
+/// nvim), and so do `_`, `'a` and `d^`, which takes the blanks before it.
+#[test]
+fn first_non_blank_on_a_line_of_blanks_is_its_last_blank() {
+    let text = "sun\n    \n\t\t\nend\n";
+    let cases: &[(&str, &str, (usize, usize))] = &[
+        ("0j^", text, (2, 4)),
+        ("0jj^", text, (3, 2)),
+        ("0j_", text, (2, 4)),
+        ("0jmagg'a", text, (2, 4)),
+        ("0jd^", "sun\n \n\t\t\nend\n", (2, 1)),
+        ("0j$d^", text, (2, 4)),
+        ("0jy^P", "sun\n       \n\t\t\nend\n", (2, 3)),
+    ];
+    for &(keys, want, at) in cases {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        assert_eq!((ed.current_buffer().text().as_str(), vim_at(&ed)), (want, at), "{keys}");
+    }
+}

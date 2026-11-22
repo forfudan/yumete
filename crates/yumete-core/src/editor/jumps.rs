@@ -149,8 +149,12 @@ impl Editor {
                     }
                 }
                 self.move_to_line(line + 1);
-                if let Some(at) = self.mark_here(name).filter(|_| exact) {
-                    self.move_head(at);
+                match self.mark_here(name).filter(|_| exact) {
+                    Some(at) => self.move_head(at),
+                    None => {
+                        let home = self.first_non_blank_of(self.sel.head());
+                        self.move_head(home);
+                    }
                 }
                 self.status = say!("goto.mark-in-another-file", name, self.current_buffer().display_name(), line + 1);
             }
@@ -166,7 +170,11 @@ impl Editor {
                 // and `` `a `` to the very place (`:h '[`).
                 match exact {
                     true => self.move_head(pos),
-                    false => self.move_to_line(rope.char_to_line(pos) + 1),
+                    false => {
+                        self.move_to_line(rope.char_to_line(pos) + 1);
+                        let home = self.first_non_blank_of(self.sel.head());
+                        self.move_head(home);
+                    }
                 }
                 self.status = say!("goto.mark-in-this-file", name);
             }
