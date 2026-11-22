@@ -327,9 +327,26 @@ fn same_value(a: &str, b: &str) -> bool {
     match (a.parse::<toml_edit::Value>(), b.parse::<toml_edit::Value>()) {
         (Ok(x), Ok(y)) => match (x.as_str(), y.as_str()) {
             (Some(x), Some(y)) => x == y,
-            _ => false,
+            // A list of numbers, `[80,100]` in the file and `[80, 100]` from
+            // the panel: the same list.
+            _ => match (x.as_array(), y.as_array()) {
+                (Some(x), Some(y)) => {
+                    let numbers = |a: &toml_edit::Array| a.iter().map(toml_edit::Value::as_integer).collect::<Vec<_>>();
+                    numbers(x) == numbers(y)
+                }
+                _ => false,
+            },
         },
         _ => false,
+    }
+}
+
+/// **A list of columns as it is typed**: `[80, 100]` is `80 100`, and the
+/// empty list nothing.
+pub fn columns_typed(repr: &str) -> String {
+    match repr.parse::<toml_edit::Value>().ok().as_ref().and_then(toml_edit::Value::as_array) {
+        Some(list) => list.iter().map(|v| v.to_string().trim().to_string()).collect::<Vec<_>>().join(" "),
+        None => repr.to_string(),
     }
 }
 
@@ -958,13 +975,18 @@ impl Panel {
     /// **Whether this row's value is typed**: a number or a piece of text.
     /// `Enter`, Space and `p` open the one-line editor on it.
     pub fn types_here(&self) -> bool {
-        self.here().is_some_and(|s| matches!(s.kind, Kind::Count { .. } | Kind::Text))
+        self.here().is_some_and(|s| matches!(s.kind, Kind::Count { .. } | Kind::Columns { .. } | Kind::Text))
     }
 
     /// What the one-line editor starts from: this file's value, or what the
     /// layers below give.
     pub fn typing_from(&self) -> String {
-        self.here().map(|s| unwritten(&self.mine_now(s))).unwrap_or_default()
+        self.here()
+            .map(|s| match s.kind {
+                Kind::Columns { .. } => columns_typed(&self.mine_now(s)),
+                _ => unwritten(&self.mine_now(s)),
+            })
+            .unwrap_or_default()
     }
 
     /// **Space**: a tick flips, a choice moves to the next, a page opens. A
@@ -988,7 +1010,7 @@ impl Panel {
                 };
                 Change::Text(words[next].clone())
             }
-            Kind::Count { .. } | Kind::Text => return,
+            Kind::Count { .. } | Kind::Columns { .. } | Kind::Text => return,
         };
         self.settle(setting, next);
     }
@@ -1083,6 +1105,24 @@ impl Panel {
                     true => Ok(Change::Count(n)),
                     false => Err(Refusal::OutOfRange { low, high, zero: apart }),
                 }
+            }
+            // Each word a number in the range, as a single count is: a list
+            // with one bad column in it is refused whole, not taken in part.
+            Kind::Columns { low, high } => {
+                let mut columns = Vec::new();
+                for word in word.split(|c: char| c.is_whitespace() || c == ',').filter(|w| !w.is_empty()) {
+                    let Ok(n) = word.parse::<i64>() else {
+                        return Err(Refusal::NotANumber { low, high, zero: false });
+                    };
+                    if n < low as i64 || n > high as i64 {
+                        return Err(Refusal::OutOfRange { low, high, zero: false });
+                    }
+                    columns.push(n);
+                }
+                columns.sort_unstable();
+                columns.dedup();
+                let list = columns.iter().map(i64::to_string).collect::<Vec<_>>().join(", ");
+                Ok(Change::Written(format!("[{list}]")))
             }
             Kind::PickOr(_) | Kind::Pick(_) => {
                 let names = self.choices(setting);
@@ -2134,6 +2174,30 @@ mod tests {
         assert_eq!(p.check(find("editor.zong_length"), "4"), Err(Refusal::OutOfRange { low: 8, high: 64, zero: true }));
     }
 
+    /// **`rulers` is typed as its numbers and written as a list**: `100 80`
+    /// becomes `[80, 100]`, nothing typed the empty list, a column outside
+    /// 1 to 400 or a word that is not a number refuses the whole; the file's
+    /// list is typed back as `80 100`, and typing the same list in another
+    /// spelling changes nothing.
+    #[test]
+    fn rulers_are_typed_as_numbers_and_written_as_a_list() {
+        let rulers = find("editor.rulers");
+        let mut p = on(panel("[editor]\nrulers = [80,100]\n", ""), "editor.rulers");
+        assert!(p.types_here());
+        assert_eq!(p.typing_from(), "80 100");
+        assert_eq!(p.check(rulers, "100 80 80"), Ok(Change::Written("[80, 100]".into())));
+        assert_eq!(p.check(rulers, "72, 120"), Ok(Change::Written("[72, 120]".into())));
+        assert_eq!(p.check(rulers, "  "), Ok(Change::Written("[]".into())));
+        assert_eq!(p.check(rulers, "80 401"), Err(Refusal::OutOfRange { low: 1, high: 400, zero: false }));
+        assert_eq!(p.check(rulers, "80 0"), Err(Refusal::OutOfRange { low: 1, high: 400, zero: false }));
+        assert_eq!(p.check(rulers, "80 x"), Err(Refusal::NotANumber { low: 1, high: 400, zero: false }));
+        assert!(p.commit_value("100 80"));
+        assert!(!p.dirty(), "the same list: {:?}", p.global.edits);
+        assert!(p.commit_value("72"));
+        assert_eq!(p.global.edits.get("editor.rulers"), Some(&Change::Written("[72]".into())));
+        assert_eq!(columns_typed("[]"), "");
+    }
+
     /// **A name is one the config takes**: `nosuch` as a theme is not saved
     /// and said to be in force.
     #[test]
@@ -2483,12 +2547,12 @@ mod tests {
         // Set again, then a line added outside: `u` keeps it.
         assert!(p.commit_value("4"));
         p.flush().unwrap();
-        std::fs::write(&path, "[editor]\nscrolloff = 4 # a\nindent = 2\nruler = 72 # mine\n").unwrap();
+        std::fs::write(&path, "[editor]\nscrolloff = 4 # a\nindent = 2\ntint_past = 72 # mine\n").unwrap();
         let saved = p.undo().unwrap().unwrap();
         assert_eq!(saved.changed_underneath, vec![path.clone()]);
-        assert_eq!(std::fs::read_to_string(&path).unwrap(), "[editor]\nscrolloff = 9 # a\nindent = 2\nruler = 72 # mine\n");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "[editor]\nscrolloff = 9 # a\nindent = 2\ntint_past = 72 # mine\n");
         p.redo().unwrap();
-        assert_eq!(std::fs::read_to_string(&path).unwrap(), "[editor]\nscrolloff = 4 # a\nindent = 2\nruler = 72 # mine\n", "exact again");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "[editor]\nscrolloff = 4 # a\nindent = 2\ntint_past = 72 # mine\n", "exact again");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -2536,13 +2600,13 @@ mod tests {
         std::fs::write(&path, "[editor]\nscrolloff = 3\nindent = 2\n").unwrap();
         let mut p = on(Panel::open(Some(path.clone()), None), "editor.scrolloff");
         assert!(p.refresh().is_empty(), "nothing changed");
-        std::fs::write(&path, "[editor]\nscrolloff = 9\nindent = 2\nruler = 80\n").unwrap();
+        std::fs::write(&path, "[editor]\nscrolloff = 9\nindent = 2\ntint_past = 80\n").unwrap();
         assert_eq!(p.refresh(), vec![path.clone()]);
         assert_eq!(p.shown(find("editor.scrolloff")).value, "9");
         assert!(p.refresh().is_empty(), "said once");
         std::fs::remove_file(&path).unwrap();
         assert_eq!(p.refresh(), vec![path.clone()]);
-        assert!(!p.global.there && p.shown(find("editor.ruler")).from == Layer::Factory);
+        assert!(!p.global.there && p.shown(find("editor.tint_past")).from == Layer::Factory);
         assert!(p.commit_value("7"));
         p.flush().unwrap();
         let after = std::fs::read_to_string(&path).unwrap();

@@ -1,4 +1,4 @@
-# prefixes: layout vertical-keys wrap hard-wrap rules page view sentence level wheel md render
+# prefixes: layout vertical-keys wrap hard-wrap rulers page view sentence level wheel md render
 #
 # What the editor says, one block per tag; see README.md beside this file.
 
@@ -448,16 +448,16 @@ en = "WYSIWYG: markup shows only at the cursor"
 # ── ruby ──────────────────────────────────────────────────────────────
 
 [[message]]
-# :rules off
-key = "rules.off"
+# :rulers off
+key = "rulers.off"
 zhs = "竖线：关"
-en = "rules: off"
+en = "rulers: off"
 
 [[message]]
-# :rules 撥開了，説鋪在哪幾欄(#424)
-key = "rules.on"
+# :rulers 撥開了，説鋪在哪幾欄(#424)
+key = "rulers.on"
 zhs = "竖线：第 {0} 列"
-en = "rules: column {0}"
+en = "rulers: column {0}"
 
 [[message]]
 # :view-sentence off——回到滿縱排

@@ -1636,27 +1636,22 @@ impl Editor {
     }
 
     /// Whether the line-number band carries a ground of its own.
-    /// **哪幾欄鋪着底紋**（`:rules`，#424）。
-    pub fn rules(&self) -> &[usize] {
-        &self.rules
+    /// **哪幾欄鋪着底紋**（`[editor] rulers`，`:rulers`，#424）。
+    pub fn rulers(&self) -> &[usize] {
+        &self.rulers
     }
 
-    /// `:rules` — 設那幾欄，空着就是關掉。
+    /// The columns to stripe, empty for none: the config's, or `:rulers`
+    /// over them for the session. In order, each once; says nothing — the
+    /// command says what it set.
     ///
     /// Warning: **出廠一道都不鋪。** 這主要是一個寫稿子的編輯器，而「第 80 欄」
-    /// 對一頁散文没有意思；要它的人打一次 `:rules` 就有（不帶數字＝ 80）。
-    pub fn set_rules(&mut self, mut columns: Vec<usize>) {
+    /// 對一頁散文没有意思；要它的人寫進配置，或者打一次 `:rulers`（不帶數字＝ 80 和 100）。
+    pub fn set_rulers(&mut self, mut columns: Vec<usize>) {
         columns.retain(|&n| n > 0);
         columns.sort_unstable();
         columns.dedup();
-        self.status = match columns.is_empty() {
-            true => say!("rules.off"),
-            false => say!(
-                "rules.on",
-                columns.iter().map(usize::to_string).collect::<Vec<_>>().join(" ")
-            ),
-        };
-        self.rules = columns;
+        self.rulers = columns;
     }
 
     pub fn number_fill(&self) -> bool {

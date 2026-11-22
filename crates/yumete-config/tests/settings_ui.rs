@@ -241,6 +241,19 @@ fn a_value_that_is_not_the_factory_one_actually_lands() {
                 }
                 continue;
             }
+            // Each end of the range, one column: neither is the empty list
+            // the factory gives.
+            Kind::Columns { low, high } => {
+                for column in [low, high] {
+                    assert_ne!(
+                        Config::from_toml(&one(setting, &format!("[{column}]"))),
+                        nothing_said(),
+                        "{} 設成 [{column}] 之後什麽都没變",
+                        setting.path()
+                    );
+                }
+                continue;
+            }
             // 一段自己打的字没有「另一個值」可推——跳過，那一族靠上面那條。
             // A page holds rows of its own (`panel.rs` tests the flavour's).
             Kind::Text | Kind::Page => continue,
@@ -311,6 +324,7 @@ fn every_factory_value_parses_as_the_kind_it_says_it_is() {
         let fits = match setting.kind {
             Kind::Tick => v.is_bool(),
             Kind::Count { .. } => v.is_integer(),
+            Kind::Columns { .. } => v.as_array().is_some_and(|a| a.iter().all(toml::Value::is_integer)),
             Kind::Pick(_) | Kind::PickOr(_) | Kind::Text => v.is_str(),
             Kind::Page => v.is_table(),
         };

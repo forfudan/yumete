@@ -45,3 +45,15 @@ fn every_count_a_command_can_set_stops_where_the_panel_stops() {
     }
     assert!(loose.is_empty(), "命令行和面板說的不是同一個域：\n{}", loose.join("\n"));
 }
+
+/// **`:rulers` takes each column the range `[editor] rulers` declares**, and
+/// nothing past it.
+#[test]
+fn a_ruler_the_command_takes_is_one_the_panel_takes() {
+    let (low, high) = yumete_config::settings_ui::columns("editor", "rulers").expect("rulers is a list of columns");
+    assert_eq!(high, yumete_core::command::RULER_MOST, "one top for both");
+    let takes = |n: usize| yumete_core::command::parse(&format!(":rulers 80 {n}")).is_ok();
+    assert!(takes(low) && takes(high), "{low} and {high}");
+    assert!(!takes(high + 1), "past {high}");
+    assert!(!takes(low - 1), "below {low}");
+}

@@ -3409,11 +3409,11 @@ pub struct Editor {
     /// first of these still standing, as VS Code and tmux do; ids are never
     /// reused, so a closed one is only skipped.
     window_history: Vec<crate::window::WindowId>,
-    /// **哪幾欄上鋪一道底紋**（`:rules`，#424）。空 ＝ 一道都不鋪。
+    /// **哪幾欄上鋪一道底紋**（`[editor] rulers`，`:rulers`，#424）。空 ＝ 一道都不鋪。
     ///
-    /// 在給定的欄上鋪一道底紋（比如 80），`:rules 80 100 120` 鋪多道。Warning: **是底紋不是綫**——一條真的竪綫
+    /// 在給定的欄上鋪一道底紋（比如 80），`:rulers 80 100 120` 鋪多道。Warning: **是底紋不是綫**——一條真的竪綫
     /// 要佔一欄，那一欄就寫不了字；鋪底紋不佔地方。
-    rules: Vec<usize>,
+    rulers: Vec<usize>,
     /// Whether the line-number band carries a ground of its own.
     number_fill: bool,
     /// Whether a quiet mark is drawn after every line that ends in a line
@@ -5073,7 +5073,7 @@ impl Editor {
             panes: std::collections::HashMap::new(),
             live: 1,
             window_history: Vec::new(),
-            rules: Vec::new(),
+            rulers: Vec::new(),
             number_fill: false,
             line_breaks: false,
             centre: true,

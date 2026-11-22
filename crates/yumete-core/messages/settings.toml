@@ -69,6 +69,12 @@ zhs = "可选：{0}；出厂 {1}"
 en = "one of {0}; factory {1}"
 
 [[message]]
+# 设置面板底下的说明：这一项是几个列号，{0} 是每个可取的范围，{1} 是出厂的值（草稿）
+key = "settings.about.columns"
+zhs = "列号，用空格隔开，每个 {0}；出厂 {1}"
+en = "column numbers apart by spaces, each {0}; factory {1}"
+
+[[message]]
 # 设置面板底下的说明：这一项是数字，{0} 是可取的范围，{1} 是出厂的值（草稿）
 key = "settings.about.count"
 zhs = "数字，{0}；出厂 {1}"
@@ -145,6 +151,12 @@ en = "From"
 key = "settings.column.value"
 zhs = "值"
 en = "Value"
+
+[[message]]
+# 设置面板：一列列号一个都没有（草稿）
+key = "settings.columns.none"
+zhs = "无"
+en = "none"
 
 [[message]]
 # 設置：歧义宽度
@@ -737,16 +749,16 @@ zhs = "关闭后不再记录或读取：各文件上次的位置、最近的文�
 en = "when off, none of this is saved or read: the line each file was left on, recent files and projects, the last session"
 
 [[message]]
-# 設置：想寫多長
-key = "settings.editor.ruler"
-zhs = "标尺"
-en = "ruler"
+# 設置：在哪幾欄鋪一道底紋（草稿）
+key = "settings.editor.rulers"
+zhs = "竖线"
+en = "rulers"
 
 [[message]]
-# 設置：想寫多長——一句話
-key = "settings.editor.ruler.hint"
-zhs = "只画一条线：超出此列的字变色，不换行"
-en = "a guide, not a break: text past it changes colour"
+# 設置：在哪幾欄鋪一道底紋——一句話（草稿）
+key = "settings.editor.rulers.hint"
+zhs = "在这几列各铺一道底纹，如 80 100"
+en = "a faint stripe down each of these columns, such as 80 100"
 
 [[message]]
 # 设置：窗口右边的滚动条（草稿）
@@ -963,6 +975,18 @@ en = "tatechuyoko"
 key = "settings.editor.tatechuyoko.hint"
 zhs = "竖排时一格内横排几个半角字符，年份、页码就不会一位占一行"
 en = "half-width characters set across inside one cell, so a year is not one digit to a row"
+
+[[message]]
+# 設置：想寫多長，超出的部分換底色（草稿）
+key = "settings.editor.tint-past"
+zhs = "超出变色"
+en = "tint past"
+
+[[message]]
+# 設置：想寫多長，超出的部分換底色——一句話（草稿）
+key = "settings.editor.tint-past.hint"
+zhs = "只作提示：超出此列的部分换底色，不换行"
+en = "a guide, not a break: everything past this column is tinted"
 
 [[message]]
 # 設置面板：[editor] undo_steps 那一行（草稿）
@@ -2521,10 +2545,10 @@ zhs = "0 = 不缩进"
 en = "0 = no indent"
 
 [[message]]
-# 設置：0 的意思——不畫那條線
-key = "settings.zero.no-ruler"
-zhs = "0 = 不画"
-en = "0 = no ruler"
+# 設置：0 的意思——不換底色（草稿）
+key = "settings.zero.no-tint"
+zhs = "0 = 不变色"
+en = "0 = no tint"
 
 [[message]]
 # 設置：0 的意思——關

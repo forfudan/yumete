@@ -110,6 +110,10 @@ pub enum Kind {
         /// `0` 另有意思的時候，這裏是那句話的 tag；没有就是 `None`。
         zero: Option<&'static str>,
     },
+    /// **A list of column numbers**, each `low` to `high`: typed as the
+    /// numbers apart by spaces (`80 100`), written as a TOML array
+    /// (`[80, 100]`). Nothing typed is the empty list.
+    Columns { low: usize, high: usize },
     /// 幾選一，狀態名裝在方括號裏——同搜索面板的 `[智能] 大小寫`。
     Pick(&'static [Choice]),
     /// 幾選一，**可是別的也收**：撥得過這幾個，也可以自己打一個名字進去。
@@ -434,6 +438,16 @@ pub fn counted(table: &str, key: &str) -> Option<(usize, usize, bool)> {
     })
 }
 
+/// **The range each column of a list of columns is held to** (`rulers`),
+/// declared once for the loader, the panel and `:rulers`, as [`counted`] is
+/// for a single number.
+pub fn columns(table: &str, key: &str) -> Option<(usize, usize)> {
+    SETTINGS.iter().find_map(|one| match one.kind {
+        Kind::Columns { low, high } if one.table == table && one.key == key => Some((low, high)),
+        _ => None,
+    })
+}
+
 pub const SETTINGS: &[Setting] = &[
     // ---- 版面 --------------------------------------------------------------
     Setting {
@@ -545,11 +559,20 @@ pub const SETTINGS: &[Setting] = &[
     },
     Setting {
         table: "editor",
-        key: "ruler",
+        key: "rulers",
         group: Group::Layout,
-        kind: Kind::Count { low: 0, high: 400, zero: Some("settings.zero.no-ruler") },
-        label: "settings.editor.ruler",
-        hint: "settings.editor.ruler.hint",
+        kind: Kind::Columns { low: 1, high: 400 },
+        label: "settings.editor.rulers",
+        hint: "settings.editor.rulers.hint",
+        factory: "[]",
+    },
+    Setting {
+        table: "editor",
+        key: "tint_past",
+        group: Group::Layout,
+        kind: Kind::Count { low: 0, high: 400, zero: Some("settings.zero.no-tint") },
+        label: "settings.editor.tint-past",
+        hint: "settings.editor.tint-past.hint",
         factory: "0",
     },
     Setting {

@@ -456,7 +456,7 @@ fn settings() -> String {
                     " ({})",
                     ways.iter().map(|c| format!("`{}` {}", c.word, say(c.label, &[]))).collect::<Vec<_>>().join(", ")
                 ),
-                Kind::Count { low, high, .. } => format!(" ({low}–{high})"),
+                Kind::Count { low, high, .. } | Kind::Columns { low, high } => format!(" ({low}–{high})"),
                 _ => String::new(),
             };
             let _ = writeln!(

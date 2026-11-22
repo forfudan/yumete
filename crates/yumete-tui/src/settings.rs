@@ -331,6 +331,10 @@ fn view_lines(editor: &Editor) -> Vec<String> {
         format!("view-scrollbar-marks listing {}", on(marks.listing)),
         format!("view-scrollbar-marks changes {}", on(marks.changes)),
         format!("view-scrollbar-marks problems {}", on(marks.problems)),
+        match editor.rulers() {
+            [] => "rulers off".to_string(),
+            at => format!("rulers {}", at.iter().map(usize::to_string).collect::<Vec<_>>().join(" ")),
+        },
         format!("view-wrap-height {}", editor.zong_measure().unwrap_or(0)),
         format!("view-pages-vertical {}", editor.pages_vertical()),
         format!("view-pages-horizontal {}", editor.pages_horizontal()),
@@ -659,6 +663,7 @@ fn apply_to_editor(config: &Config, editor: &mut Editor, layout: Option<yumete_c
         editor.set_hud(how);
     }
     editor.set_scrollbar_marks(yumete_core::editor::ScrollbarMarks::from_words(&config.editor.scrollbar_marks));
+    editor.set_rulers(config.editor.rulers.clone());
     editor.set_diff_gutter(config.editor.diff_gutter);
     editor.set_modeline(config.editor.modeline);
     if let Some(level) = yumete_core::problem::level_from_word(&config.editor.end_of_line_diagnostics) {
@@ -1075,6 +1080,39 @@ mod config_watch_tests {
         assert_eq!(replayed.scrollbar_marks(), ed.scrollbar_marks(), "the session puts it back");
         super::view_back_to_config(&mut ed, &config);
         assert_eq!(ed.scrollbar_marks().words(), ["problems"], "the reload puts the config's back");
+    }
+
+    /// **`[editor] rulers` with `:rulers` over it**: the config's columns
+    /// out of the box; `:rulers` sets others, or none, for the session, which
+    /// keeps them as its own line; the reload puts the config's back; and
+    /// columns the config gives are not kept.
+    #[test]
+    fn the_rulers_come_from_the_config_and_the_command_sets_them_for_the_session() {
+        let mut config = yumete_config::Config::default();
+        let mut ed = yumete_core::Editor::new();
+        super::apply_to_editor(&config, &mut ed, None);
+        assert!(ed.rulers().is_empty(), "none out of the box");
+        config.editor.rulers = vec![72];
+        super::apply_to_editor(&config, &mut ed, None);
+        assert_eq!(ed.rulers(), [72], "the config's");
+        assert!(!super::view_to_keep(&ed, &config).iter().any(|l| l.starts_with("rulers")), "what the config gives");
+        ed.execute(":rulers").unwrap();
+        assert_eq!(ed.rulers(), [80, 100], "bare is 80 and 100, over the config's");
+        assert_eq!(ed.status(), yumete_core::say!("rulers.on", "80 100"));
+        let kept = super::view_to_keep(&ed, &config);
+        assert!(kept.contains(&"rulers 80 100".to_string()), "{kept:?}");
+        let mut replayed = yumete_core::Editor::new();
+        super::apply_to_editor(&config, &mut replayed, None);
+        for line in &kept {
+            replayed.execute_quietly(&format!(":{line}"));
+        }
+        assert_eq!(replayed.rulers(), ed.rulers(), "the session puts it back");
+        ed.execute(":rulers off").unwrap();
+        assert!(ed.rulers().is_empty());
+        assert_eq!(ed.status(), yumete_core::say!("rulers.off"));
+        assert!(super::view_to_keep(&ed, &config).contains(&"rulers off".to_string()), "none is kept too");
+        super::view_back_to_config(&mut ed, &config);
+        assert_eq!(ed.rulers(), [72], "the reload puts the config's back");
     }
 
     /// **The session and the reload**: the

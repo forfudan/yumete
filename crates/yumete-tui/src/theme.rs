@@ -854,7 +854,7 @@ impl Palette {
     pub fn marker(self) -> Color {
         self.at(rung::MARKER)
     }
-    /// A rule: a ring, an edge, the ruler's line, a 稿紙 tick.
+    /// A rule: a ring, an edge, a 稿紙 tick.
     pub fn rule(self) -> Color {
         self.at(rung::RULE)
     }

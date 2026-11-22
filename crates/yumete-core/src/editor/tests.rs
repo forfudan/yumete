@@ -3872,19 +3872,19 @@ fn tab_cycles_the_command_completion() {
     for c in "ru".chars() {
         ed.on_key(Key::Char(c));
     }
-    // Tab walks the matches, writing each onto the line — `ruby`, `rules`
+    // Tab walks the matches, writing each onto the line — `ruby`, `rulers`
     // and `run` all start with `ru`, in the menu's alphabetical order.
     ed.on_key(Key::Tab);
     assert_eq!(ed.prompt(), Some((":", "ruby")), "one `ruby` family now, folded (#369)");
     ed.on_key(Key::Tab);
-    assert_eq!(ed.prompt(), Some((":", "rules")));
+    assert_eq!(ed.prompt(), Some((":", "rulers")));
     ed.on_key(Key::Tab);
     assert_eq!(ed.prompt(), Some((":", "run")));
     // …and the prefix is remembered rather than re-read from the line, so
     // walking back returns to the same one instead of starting over from
     // what Tab just wrote.
     ed.on_key(Key::BackTab);
-    assert_eq!(ed.prompt(), Some((":", "rules")));
+    assert_eq!(ed.prompt(), Some((":", "rulers")));
 
     // Typing abandons the completion, so the next Tab starts from the line.
     ed.on_key(Key::Char('x'));
@@ -3900,7 +3900,7 @@ fn tab_cycles_the_command_completion() {
 fn ctrl_p_and_ctrl_n_walk_the_history_while_tab_walks_the_menu() {
     let mut ed = Editor::new();
     // 兩條歷史：翻的時候新的在前。
-    for line in ["rules", "run"] {
+    for line in ["rulers", "run"] {
         ed.on_key(Key::Char(':'));
         for c in line.chars() {
             ed.on_key(Key::Char(c));
@@ -3912,7 +3912,7 @@ fn ctrl_p_and_ctrl_n_walk_the_history_while_tab_walks_the_menu() {
     ed.on_key(Key::Ctrl('p'));
     assert_eq!(ed.prompt(), Some((":", "run")), "最近那一條");
     ed.on_key(Key::Ctrl('p'));
-    assert_eq!(ed.prompt(), Some((":", "rules")), "再往回一條");
+    assert_eq!(ed.prompt(), Some((":", "rulers")), "再往回一條");
     ed.on_key(Key::Ctrl('n'));
     assert_eq!(ed.prompt(), Some((":", "run")), "往回走得了");
     // **兩個方向各從一頭起**（照 helix）：空行上 `C-n` 去最舊那一條，於是一個鍵
@@ -3920,7 +3920,7 @@ fn ctrl_p_and_ctrl_n_walk_the_history_while_tab_walks_the_menu() {
     ed.on_key(Key::Esc);
     ed.on_key(Key::Char(':'));
     ed.on_key(Key::Ctrl('n'));
-    assert_eq!(ed.prompt(), Some((":", "rules")), "空行上 C-n 是最舊那一條");
+    assert_eq!(ed.prompt(), Some((":", "rulers")), "空行上 C-n 是最舊那一條");
     ed.on_key(Key::Ctrl('n'));
     assert_eq!(ed.prompt(), Some((":", "run")));
     ed.on_key(Key::Ctrl('n'));
@@ -3930,7 +3930,7 @@ fn ctrl_p_and_ctrl_n_walk_the_history_while_tab_walks_the_menu() {
     ed.on_key(Key::Ctrl('p'));
     // **`Up`/`Down` 是同一件事**，同 helix 那個 arm。
     ed.on_key(Key::Up);
-    assert_eq!(ed.prompt(), Some((":", "rules")));
+    assert_eq!(ed.prompt(), Some((":", "rulers")));
     ed.on_key(Key::Down);
     assert_eq!(ed.prompt(), Some((":", "run")));
 
@@ -3951,7 +3951,7 @@ fn ctrl_p_and_ctrl_n_walk_the_history_while_tab_walks_the_menu() {
     ed.on_key(Key::Tab);
     assert_eq!(ed.prompt(), Some((":", "ruby")));
     ed.on_key(Key::Tab);
-    assert_eq!(ed.prompt(), Some((":", "rules")));
+    assert_eq!(ed.prompt(), Some((":", "rulers")));
     ed.on_key(Key::BackTab);
     assert_eq!(ed.prompt(), Some((":", "ruby")));
 }

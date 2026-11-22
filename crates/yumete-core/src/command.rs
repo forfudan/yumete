@@ -712,10 +712,11 @@ pub enum Command {
     /// Off: the backtick and the `>` are drawn already, so the run's extent is
     /// on the page and a ground behind it says it a second time.
     ThemeFill(Switch),
-    /// **`:rules 80 100 120`：在那幾欄上鋪一道底紋**（#424）。
+    /// **`:rulers 80 100 120`：這一趟在那幾欄上鋪一道底紋**（#424），蓋過
+    /// `[editor] rulers`。
     ///
-    /// 空的 `Vec` ＝ `off`，一道都不鋪。不帶參數的 `:rules` 送的是 `[80]`。
-    Rules(Vec<usize>),
+    /// 空的 `Vec` ＝ `off`，一道都不鋪。不帶參數的 `:rulers` 送的是 `[80, 100]`。
+    Rulers(Vec<usize>),
     /// **`:info <名>`：即時顯示哪一種信息**（#426）。
     ///
     /// `None` ＝ 光打了 `:info`，回到按稿子算（散文百科、代碼診斷、表格數據）。
@@ -2094,6 +2095,12 @@ fn read_params(
 /// Whitespace is not in it, because the two differ there for a real reason:
 /// `:table 3 4` is two words on a command line, while `--shot` reads one
 /// argument and lets ` 40 x 10 ` be trimmed at the ends.
+/// **The furthest column `:rulers` takes**, the top of the range
+/// `[editor] rulers` declares for a column (`settings_ui::columns`; this
+/// crate cannot see that one, and `yumete-tui/tests/declared_ranges.rs`
+/// holds the two to one number).
+pub const RULER_MOST: usize = 400;
+
 pub const BETWEEN_TWO_NUMBERS: &[char] = &['x', 'X', '×', '*', ','];
 
 /// What a path argument says once its quotes are off, or `None` if a quote
@@ -4708,27 +4715,31 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|p| Ok(Command::Info(p.arg(0).and_then(crate::sidebar::Info::parse)))),
     },
     Entry {
-        name: "rules",
+        name: "rulers",
         aliases: &[],
-        help: "cmd.commands.rules",
+        help: "cmd.commands.rulers",
         needs: &[],
         params: &[Param::Free("cmd.arg.columns-or-off")],
         build: Some(|p| {
-            Ok(Command::Rules(match p.arg(0) {
-                // **光禿禿的 `:rules` ＝ 80 和 100**：Python 的文檔字串一道，
+            Ok(Command::Rulers(match p.arg(0) {
+                // **光禿禿的 `:rulers` ＝ 80 和 100**：Python 的文檔字串一道，
                 // 代碼一道，本來就是兩條。
                 None => vec![80, 100],
                 Some("off" | "none" | "0") => Vec::new(),
                 // Warning: `Param::Free` 交回來的是**剩下的一整串**，不是一個
-                // 一個詞——`:rules 80 100 120` 到這裏是 `"80 100 120"`。
+                // 一個詞——`:rulers 80 100 120` 到這裏是 `"80 100 120"`。
+                //
+                // Each column 1 to 400, the range `[editor] rulers` holds a
+                // column to: a number the config would refuse is refused here too.
                 Some(rest) => rest
                     .split_whitespace()
-                    .map(|word| {
-                        word.parse().map_err(|_| CommandError::Wants {
-                            command: "rules",
+                    .map(|word| match word.parse::<usize>() {
+                        Ok(n) if (1..=RULER_MOST).contains(&n) => Ok(n),
+                        _ => Err(CommandError::Wants {
+                            command: "rulers",
                             value: word.to_string(),
-                            wants: Wants::Said("cmd.takes.rules"),
-                        })
+                            wants: Wants::Said("cmd.takes.rulers"),
+                        }),
                     })
                     .collect::<Result<Vec<usize>, _>>()?,
             }))
@@ -9700,7 +9711,7 @@ mod tests {
         }
         assert_eq!(names("e").first().map(String::as_str), Some("open"));
         assert_eq!(names("w").first().map(String::as_str), Some("write"));
-        assert_eq!(names("ru"), ["ruby", "rules", "run"]);
+        assert_eq!(names("ru"), ["ruby", "rulers", "run"]);
     }
 
     /// **`:view-scrollbar-marks` turns one kind at a time**: the kind and
@@ -9715,6 +9726,23 @@ mod tests {
         assert!(parse(":view-scrollbar-marks colours").is_err(), "no such kind");
         let words: Vec<&str> = SCROLLBAR_MARKS.iter().map(|w| w.name).collect();
         assert_eq!(words, crate::editor::ScrollbarMarks::WORDS, "one list of kinds");
+    }
+
+    /// **`:rulers` sets the columns for the session**: bare, 80 and 100;
+    /// `off`, `none` or `0`, none; each column 1 to 400 as the setting holds
+    /// it, and a word that is not one refused. `:rules` is not a command.
+    #[test]
+    fn rulers_take_columns_from_1_to_400_or_off() {
+        assert_eq!(parse(":rulers"), Ok(Command::Rulers(vec![80, 100])));
+        assert_eq!(parse(":rulers 72 120"), Ok(Command::Rulers(vec![72, 120])));
+        assert_eq!(parse(":rulers 1 400"), Ok(Command::Rulers(vec![1, 400])));
+        for off in [":rulers off", ":rulers none", ":rulers 0"] {
+            assert_eq!(parse(off), Ok(Command::Rulers(Vec::new())), "{off}");
+        }
+        for bad in [":rulers 401", ":rulers 80 0", ":rulers 80 x"] {
+            assert!(parse(bad).is_err(), "{bad}");
+        }
+        assert!(parse(":rules 80").is_err(), "no old name");
     }
 
     /// **`:outline` opens and closes the outline**, as a writer expects of the

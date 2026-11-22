@@ -1841,8 +1841,15 @@ impl Editor {
                 self.theme_request = Some((name, mood));
                 Ok(CommandOutcome::Continue)
             }
-            Command::Rules(at) => {
-                self.set_rules(at);
+            Command::Rulers(at) => {
+                self.set_rulers(at);
+                self.status = match self.rulers.is_empty() {
+                    true => say!("rulers.off"),
+                    false => say!(
+                        "rulers.on",
+                        self.rulers.iter().map(usize::to_string).collect::<Vec<_>>().join(" ")
+                    ),
+                };
                 Ok(CommandOutcome::Continue)
             }
             Command::Info(which) => {

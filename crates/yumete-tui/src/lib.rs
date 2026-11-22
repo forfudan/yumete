@@ -11058,7 +11058,7 @@ fn leading_columns(rope: &yumete_core::Rope, line: usize, tab: usize) -> Option<
 /// at each level of a code line's leading blanks, `skip_levels` outer ones
 /// left out, as helix's `draw_indent_guides` places them: a line indented
 /// two levels has rules at columns 0 and one level. A blank line takes the
-/// line above's, as helix's does. Only into blank cells, as the ruler is.
+/// line above's, as helix's does. Only into blank cells.
 ///
 /// **The cursor's block a rung darker** (`indent_guides_scope`, LazyVim's
 /// snacks.indent and mini.indentscope): the rule just inside the cursor
@@ -14046,18 +14046,6 @@ fn scrolled(line: Line<'static>, gutter: usize, left: usize) -> Line<'static> {
 /// the right edge — which is why wrapping is on by default for
 /// prose, where a paragraph is routinely one line of several hundred
 /// characters.
-/// **`:rules` 的那幾道底紋**（#424）。
-///
-/// 默認第 80 欄；`:rules 80 100 120` 繪製多條。
-///
-/// Warning: **是底紋不是綫。** 一條真的竪綫要佔一欄，而那一欄本來是寫字的；鋪底
-/// 紋不佔地方，字照樣寫在上面。
-///
-/// Warning: **只補底色，不動已經有底色的格。** 選區、光標行、表格的間色都自帶
-/// 底——蓋掉它們就成了「底紋壓過選區」。所以這一趟只給還是紙色的那些格上色。
-///
-/// Warning: **竪排下不畫。** 那一頭的單位是「第幾縱」不是「第幾欄」，「第 80 欄」
-/// 在那裏沒有意思（#424 的第一個問題：先不畫，等真有人要）。
 /// **空手打開 `ye` 看見的那一屏。**
 ///
 /// 不畫它的話是一片空白加一個 `[scratch]`——一個新來的人不知道可以按什麼。vim
@@ -14130,7 +14118,19 @@ fn draw_the_intro(frame: &mut Frame, editor: &Editor, config: &Config, area: Rec
     }
 }
 
-fn tint_the_rules(
+/// **`[editor] rulers` 的那幾道底紋**（#424），`:rulers` 這一趟蓋過它。
+///
+/// 出廠一道都沒有；`:rulers 80 100 120` 繪製多條。
+///
+/// Warning: **是底紋不是綫。** 一條真的竪綫要佔一欄，而那一欄本來是寫字的；鋪底
+/// 紋不佔地方，字照樣寫在上面。
+///
+/// Warning: **只補底色，不動已經有底色的格。** 選區、光標行、表格的間色都自帶
+/// 底——蓋掉它們就成了「底紋壓過選區」。所以這一趟只給還是紙色的那些格上色。
+///
+/// Warning: **竪排下不畫。** 那一頭的單位是「第幾縱」不是「第幾欄」，「第 80 欄」
+/// 在那裏沒有意思（#424 的第一個問題：先不畫，等真有人要）。
+fn tint_the_rulers(
     frame: &mut Frame,
     editor: &Editor,
     config: &Config,
@@ -14138,7 +14138,7 @@ fn tint_the_rules(
     gutter: usize,
     left: usize,
 ) {
-    let at = editor.rules();
+    let at = editor.rulers();
     if at.is_empty() || text_area.width == 0 || text_area.height == 0 {
         return;
     }
@@ -14748,21 +14748,21 @@ fn draw_horizontal(
     let show_segmentation = editor.segmentation_visible();
     let mark = editor.word_mark();
     let show_markup = editor.markup_visible();
-    // The measure is counted in *text*: `ruler = 80` means eighty columns of
+    // The measure is counted in *text*: `tint_past = 80` means eighty columns of
     // writing, which is what a writer means by it. The line-number gutter is
-    // furniture, not text, so it does not eat into the measure — and the ruler
+    // furniture, not text, so it does not eat into the measure — and the tint
     // moves with the gutter rather than the writing moving under it.
-    // A measure set with `:view-wrap-width 50` is a ruler by definition — it is the width
+    // A measure set with `:view-wrap-width 50` is where the tint starts by definition — it is the width
     // the writer asked to write to — so it stands in for the configured one,
     // **but only while it is folding rows**. `:view-wrap` (off) stops the folding and
-    // keeps the number, so that `:view-wrap` on its own can put it back; drawing a
-    // rule at fifty and tinting everything past it, while the rows run straight
-    // through both, names an edge the page no longer has. A ruler out of the
+    // keeps the number, so that `:view-wrap` on its own can put it back; tinting
+    // everything past fifty, while the rows run straight
+    // through it, names an edge the page no longer has. A `tint_past` out of the
     // config is a mark the reader asked for and stands either way.
-    let ruler = editor
+    let tint_past = editor
         .measure()
         .filter(|_| editor.wrap_width().is_some())
-        .unwrap_or(config.editor.ruler);
+        .unwrap_or(config.editor.tint_past);
 
     // Word ranges are per paragraph and consecutive rows usually share one, so
     // each paragraph the page touches is segmented once. Its Markdown runs are
@@ -15425,14 +15425,14 @@ fn draw_horizontal(
         // Past the measure, tinted. Information even with soft wrap on: it
         // says this row has run past the length the writer wants a sentence to
         // be, which is what somebody breaking long ones by hand is looking for.
-        if ruler > 0 {
+        if tint_past > 0 {
             // Warning: **一個 `char` 一個樣式，而寬度是字簇的**（#422）：`cells_per_char`
             // 把字簇的格數記在它第一個 `char` 上，後面那幾個記 0。逐字加的話，一行
             // 上每有一個 `Warning: `，尺子就往後挪一格。
             let cells = yumete_cjk::cells_per_char(&chars);
             let mut column = 0;
             for i in 0..chars.len() {
-                if column >= ruler {
+                if column >= tint_past {
                     styles[i] = styles[i].bg(ink.at(yumete_config::rung::BAND));
                 }
                 column += cells[i];
@@ -15955,8 +15955,8 @@ fn draw_horizontal(
     //
     // Only cells nothing else has coloured, so a selection reaching into the
     // margin still reads as selected.
-    if ruler > 0 {
-        let edge = text_area.x + (gutter + ruler.saturating_sub(left)) as u16;
+    if tint_past > 0 {
+        let edge = text_area.x + (gutter + tint_past.saturating_sub(left)) as u16;
         // The scrollbar's column ends the margin it stands in.
         let past = u16::from(past == PastThePage::Bar && edge <= text_area.x + text_area.width);
         let buf = frame.buffer_mut();
@@ -15971,32 +15971,12 @@ fn draw_horizontal(
         }
     }
 
-    // The line itself, only with wrap off. With it on, the edge of the tint is
-    // already the line, and drawing one would be saying the same thing twice.
-    if ruler > 0 && editor.wrap_width().is_none() {
-        let x = text_area.x + (gutter + ruler) as u16 - left.min(ruler) as u16;
-        if ruler >= left && x < text_area.x + text_area.width {
-            let buf = frame.buffer_mut();
-            for y in text_area.y..text_area.y + text_area.height {
-                if let Some(cell) = buf.cell_mut((x, y)) {
-                    if cell.symbol().trim().is_empty() {
-                        // A **rule**, not the tint it stands in: drawn in the
-                        // colour of the ground behind it, at 1.00:1, it would
-                        // never be visible.
-                        cell.set_symbol("│")
-                            .set_style(Style::default().fg(ink.rule()));
-                    }
-                }
-            }
-        }
-    }
-
     if !guide_rows.is_empty() {
         let at = Guides { area: text_area, gutter, left, cursor_line: peek.is_none().then_some(cursor_line) };
         draw_indent_guides(frame, editor, config, rope, &guide_rows, at, ink);
     }
 
-    tint_the_rules(frame, editor, config, text_area, gutter, left);
+    tint_the_rulers(frame, editor, config, text_area, gutter, left);
 
     // The `␊` of the rows that fill the page, in the cell past it.
     if past != PastThePage::Nothing {
@@ -22504,7 +22484,7 @@ fn squeezed(text: &str) -> String {
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
         config.editor.show_segmentation = false;
-        config.editor.ruler = 0;
+        config.editor.tint_past = 0;
         config
     }
 
@@ -28006,13 +27986,13 @@ fn squeezed(text: &str) -> String {
     }
 
     #[test]
-    fn the_measure_is_tinted_and_only_ruled_when_nothing_wraps() {
+    fn the_measure_is_tinted_and_never_ruled() {
         let mut editor = editor_with(&"字".repeat(30));
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
         editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         config.editor.show_segmentation = false;
-        config.editor.ruler = 20;
+        config.editor.tint_past = 20;
         let tint = Some(ink(&config).at(yumete_config::rung::BAND));
         // The measure is twenty columns of *writing*; with the gutter off it is
         // also cell twenty, which is what makes the coordinates below readable.
@@ -28026,19 +28006,23 @@ fn squeezed(text: &str) -> String {
         assert_eq!(buffer[(20, 0)].style().bg, tint, "past it");
         assert_ne!(at(&buffer, 20, 0), "│", "no line while it wraps");
 
-        // Wrap off: the line is drawn, in the cells the text does not fill.
+        // Wrap off: still the tint, and still no line — in the cells the text
+        // does not fill as well as in those it does.
         editor.set_soft_wrap(false);
         let buffer = render_wrapped(&mut editor, &config, 40, 8);
-        assert_eq!(at(&buffer, 20, 4), "│", "a measure to write to");
+        assert!((0..8).all(|y| at(&buffer, 20, y) != "│"), "no line with wrap off either");
+        assert_eq!(buffer[(20, 4)].style().bg, tint, "the blank past it is tinted");
+        assert_ne!(buffer[(18, 4)].style().bg, tint, "the blank before it is not");
 
         // The measure is counted in writing, not in cells: turning the gutter
-        // on moves the ruler over rather than eating twenty columns of text.
+        // on moves the tint over rather than eating twenty columns of text.
         config.editor.line_numbers = LineNumbers::Absolute;
         editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::Absolute);
         let buffer = render_wrapped(&mut editor, &config, 40, 8);
         let gutter =
             gutter_width(editor.current_buffer().line_count(), LineNumbers::Absolute, false);
-        assert_eq!(at(&buffer, 20 + gutter as u16, 4), "│");
+        assert_eq!(buffer[(20 + gutter as u16, 4)].style().bg, tint);
+        assert_ne!(buffer[(18 + gutter as u16, 4)].style().bg, tint);
     }
 
     /// **Every `j` and every `k`, checked against the frame it drew.**
@@ -28312,7 +28296,7 @@ fn squeezed(text: &str) -> String {
         editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         config.editor.show_segmentation = false;
         // Nothing configured: every mark on this page comes from `:view-wrap-width 20`.
-        assert_eq!(config.editor.ruler, 0);
+        assert_eq!(config.editor.tint_past, 0);
         let tint = Some(ink(&config).at(yumete_config::rung::BAND));
 
         // Centred, as out of the box: ten cells of margin either side of
@@ -28437,9 +28421,9 @@ fn squeezed(text: &str) -> String {
         editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         config.editor.show_segmentation = false;
         let tint = Some(ink(&config).at(yumete_config::rung::BAND));
-        // No configured ruler: the measure is the only thing saying where the
+        // No configured tint: the measure is the only thing saying where the
         // page ends.
-        assert_eq!(config.editor.ruler, 0);
+        assert_eq!(config.editor.tint_past, 0);
 
         // Against the left edge, so the margin is all on the right.
         editor.execute("view-centre off").unwrap();
@@ -35295,7 +35279,7 @@ fn squeezed(text: &str) -> String {
         };
 
         // 第 4 欄是「年」的後半格（1-2 那、3-4 年）。
-        editor.execute(":rules 4").unwrap();
+        editor.execute(":rulers 4").unwrap();
         let shot = render(&editor, &config, 90, 6);
         let lead = band + 2;
         assert_eq!(shot.cell((lead, 0)).map(|c| c.symbol().to_string()), Some("年".into()));
@@ -35305,7 +35289,7 @@ fn squeezed(text: &str) -> String {
         );
 
         // 第 3 欄是同一個字的前半格——塗的還是它，不是左邊那個。
-        editor.execute(":rules 3").unwrap();
+        editor.execute(":rulers 3").unwrap();
         let shot = render(&editor, &config, 90, 6);
         assert!(shot.cell((lead, 0)).is_some_and(|c| c.bg == tint), "前半格照舊");
         assert!(
@@ -35314,14 +35298,14 @@ fn squeezed(text: &str) -> String {
         );
     }
 
-        /// **`:rules` 在指定的欄上鋪一道底紋**（#424）。
+    /// **`:rulers` 在指定的欄上鋪一道底紋**（#424）。
     ///
-    /// 默認第 80 欄；`:rules 80 100 120` 繪製多條。
+    /// 出廠一道都沒有；`:rulers 80 100 120` 繪製多條。
     ///
     /// Warning: **量的是格子的底色，不是 HTML 的 span 數。** 相鄰同色的格會併成
     /// 一個 span，所以數 span 數不出鋪了幾格。
     #[test]
-    fn rules_tint_the_columns_they_name() {
+    fn rulers_tint_the_columns_they_name() {
         let config = Config::default();
         // Warning: 讀墨色要先定明暗，見 §5.12.58——`ink()` 那一支會先定。
         let ink = ink(&config);
@@ -35346,7 +35330,7 @@ fn squeezed(text: &str) -> String {
         );
 
         // 撥兩道：正好那兩欄變色，別的不變。
-        editor.execute(":rules 5 12").unwrap();
+        editor.execute(":rulers 5 12").unwrap();
         let after = render(&editor, &config, 90, 8);
         for (column, want) in [(5u16, true), (12, true), (4, false), (6, false), (11, false)] {
             let x = band + column - 1;
@@ -35360,16 +35344,16 @@ fn squeezed(text: &str) -> String {
         );
 
         // `off` 收乾淨。
-        editor.execute(":rules off").unwrap();
+        editor.execute(":rulers off").unwrap();
         let gone = render(&editor, &config, 90, 8);
         assert!(
             (0..90u16).all(|x| gone.cell((x, 0)).is_none_or(|c| c.bg != tint)),
             "關掉就一格都沒有"
         );
 
-        // 光禿禿的 `:rules` ＝ 第 80 欄。
-        editor.execute(":rules").unwrap();
-        assert_eq!(editor.rules(), &[80, 100], "光禿禿的是兩道：文檔字串一道，代碼一道");
+        // 光禿禿的 `:rulers` ＝ 第 80 和第 100 欄。
+        editor.execute(":rulers").unwrap();
+        assert_eq!(editor.rulers(), &[80, 100], "光禿禿的是兩道：文檔字串一道，代碼一道");
     }
 
     /// **語言服務器在忙的時候，狀態行左邊那一格轉起來**。

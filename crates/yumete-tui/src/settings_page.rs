@@ -1226,6 +1226,11 @@ fn drawn(setting: &Setting, value: &str) -> String {
         // Warning: **`trim_matches` 不是 toml 轉義的反函數**（見
         // `yumete_config::panel::unwritten`）——`"a\"b"` 畫出來是 `a\"b`。
         Kind::Count { .. } | Kind::Text => yumete_config::panel::unwritten(value),
+        // The columns as they are typed, `80 100`; the empty list says so.
+        Kind::Columns { .. } => match yumete_config::panel::columns_typed(value) {
+            typed if typed.is_empty() => say!("settings.columns.none"),
+            typed => typed,
+        },
         // The page's own row draws its counts (see [`row_value`]).
         Kind::Page => String::new(),
     }
@@ -1888,6 +1893,7 @@ fn note_lines(panel: &Panel) -> Vec<String> {
             let names: Vec<String> = panel.choices(setting).iter().map(|w| drawn(setting, &format!("{w:?}"))).collect();
             say!("settings.about.choice", names.join(&say!("label.comma")), factory)
         }
+        Kind::Columns { low, high } => say!("settings.about.columns", say!("settings.range", low, high), factory),
         Kind::Text => say!("settings.about.text", factory),
         Kind::Page => return lines,
     };
@@ -2882,7 +2888,7 @@ mod tests {
         let (mut ed, mut seat) = seated(&dir, "[editor]\nscrolloff = 3 # a\nindent = 2\n", "editor.scrolloff");
         // A second apart, so the stamp tells it on any file system.
         std::thread::sleep(std::time::Duration::from_millis(20));
-        std::fs::write(dir.join("config.toml"), "[editor]\nscrolloff = 9 # a\nindent = 2\nruler = 80\n").unwrap();
+        std::fs::write(dir.join("config.toml"), "[editor]\nscrolloff = 9 # a\nindent = 2\ntint_past = 80\n").unwrap();
         seat.watch(&mut ed);
         assert_eq!(ed.status(), say!("settings.changed-outside", shorten(&dir.join("config.toml"))));
         assert_eq!(page(&seat).shown(page(&seat).here().unwrap()).value, "9");
@@ -2893,9 +2899,9 @@ mod tests {
         keys(&mut seat, &mut ed, &[Key::Enter]);
         assert_eq!(page(&seat).cell.as_ref().map(|c| c.text.as_str()), Some("9"), "the cell starts from the file as it is");
         keys(&mut seat, &mut ed, &[Key::Char('c'), Key::Char('5'), Key::Enter]);
-        assert_eq!(file(&dir), "[editor]\nscrolloff = 5 # a\nindent = 2\nruler = 80\n");
+        assert_eq!(file(&dir), "[editor]\nscrolloff = 5 # a\nindent = 2\ntint_past = 80\n");
         keys(&mut seat, &mut ed, &[Key::Char('u')]);
-        assert_eq!(file(&dir), "[editor]\nscrolloff = 9 # a\nindent = 2\nruler = 80\n", "back to 9, not 3");
+        assert_eq!(file(&dir), "[editor]\nscrolloff = 9 # a\nindent = 2\ntint_past = 80\n", "back to 9, not 3");
         // Deleted outside: read as empty, said, and only the new line written.
         std::fs::remove_file(dir.join("config.toml")).unwrap();
         keys(&mut seat, &mut ed, &[Key::Char('j')]);
@@ -2906,10 +2912,10 @@ mod tests {
         assert!(file(&dir).contains("soft_wrap = false") && !file(&dir).contains("scrolloff"), "{}", file(&dir));
         // Found by the key that opens the cell: the write says it.
         std::fs::remove_file(dir.join("config.toml")).unwrap();
-        page_mut(&mut seat).go_to("editor.ruler", |_| Vec::new());
+        page_mut(&mut seat).go_to("editor.tint_past", |_| Vec::new());
         keys(&mut seat, &mut ed, &[Key::Char('c'), Key::Char('8'), Key::Char('0'), Key::Enter]);
         assert_eq!(ed.status(), say!("settings.saved-moved", shorten(&dir.join("config.toml"))));
-        assert_eq!(file(&dir).trim(), "[editor]\nruler = 80");
+        assert_eq!(file(&dir).trim(), "[editor]\ntint_past = 80");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -3174,6 +3180,25 @@ mod tests {
         ed.execute(":set end-of-line-diagnostics").unwrap();
         seat.settle(&mut ed);
         assert_eq!(page(&seat).here().map(|s| s.key), Some("end_of_line_diagnostics"));
+    }
+
+    /// **`:set rulers` takes the columns as typed or as helix writes them**,
+    /// each 1 to 400, and `:set tint_past` one column.
+    #[test]
+    fn set_takes_rulers_as_numbers_or_a_list() {
+        let set = |line: &str| {
+            let mut ed = Editor::new();
+            let mut seat = Seat::default();
+            ed.execute(line).unwrap();
+            seat.settle(&mut ed);
+            assert!(seat.panel.is_none(), "{line}: no panel");
+            (seat.session_toml(), ed.status().to_string())
+        };
+        assert_eq!(set(":set rulers 100 80").0, "[editor]\nrulers = [80, 100]\n");
+        assert_eq!(set(":set rulers [72, 120]").0, "[editor]\nrulers = [72, 120]\n");
+        let (toml, said) = set(":set rulers 80 401");
+        assert_eq!(toml, "", "refused: {said}");
+        assert_eq!(set(":set tint_past 72").0, "[editor]\ntint_past = 72\n");
     }
 
     /// **`[editor] selection_highlight` is an on/off setting a bare `:set`

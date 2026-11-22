@@ -424,18 +424,23 @@ pub struct EditorConfig {
     /// drawn (Feature #81, #193). `"auto"` by default, which asks the terminal;
     /// `"wide"` and `"narrow"` say so outright.
     pub ambiguous_width: Ambiguity,
+    /// **The columns a faint stripe runs down**, each 1 to 400; empty, the
+    /// default, for none. `:rulers` sets them for the session.
+    ///
+    /// A ground, not a line: a line would take a column of its own, and that
+    /// column is one the writing can no longer use.
+    pub rulers: Vec<usize>,
     /// The measure a horizontal page is written to, in cells; `0` for none
     /// (Feature #101).
     ///
     /// Everything past it is tinted, which is information even with soft wrap
     /// on: it says this row has run past the length you want your sentences to
     /// be, which is what somebody breaking long sentences by hand is looking
-    /// for. The *line* is only drawn with wrap off — with it on, the edge of
-    /// the tint is already the line.
-    pub ruler: usize,
+    /// for. No line is drawn: the edge of the tint already is one.
+    pub tint_past: usize,
     /// The width to write to, in columns; `0` for the width of the window.
     ///
-    /// A measure rather than a mark: unlike `ruler`, which only says where the
+    /// A measure rather than a mark: unlike `tint_past`, which only says where the
     /// line is, this folds the rows there and leaves the rest of the window as
     /// margin. `:view-wrap-width 50` sets it for one session (Feature #113).
     pub measure: usize,
@@ -687,7 +692,8 @@ impl Default for EditorConfig {
             reload_auto: true,
             ambiguous_width: Ambiguity::default(),
             syntax: String::new(),
-            ruler: 0,
+            rulers: Vec::new(),
+            tint_past: 0,
             measure: 0,
             centre_measure: true,
             scrollbar: true,
@@ -1449,7 +1455,7 @@ pub mod rung {
     /// The markup itself — `**`, `#`, `[]()`. Shown, and set back far enough
     /// that it is never read as a word.
     pub const MARKER: u16 = 4000; // 第 40 檔
-    /// A rule: a panel's ring, the sidebar's edge, the ruler's line, a 稿紙
+    /// A rule: a panel's ring, the sidebar's edge, a 稿紙
     /// tick. Not text and not a ground, and the only thing that belongs in the
     /// middle of the ladder.
     pub const RULE: u16 = 5000; // 第 50 檔
@@ -5094,7 +5100,8 @@ struct RawEditor {
     ambiguous_width: Option<String>,
     tabs: Option<String>,
     syntax: Option<String>,
-    ruler: Option<usize>,
+    rulers: Option<Vec<usize>>,
+    tint_past: Option<usize>,
     measure: Option<usize>,
     centre_measure: Option<bool>,
     scrollbar: Option<bool>,
@@ -5431,8 +5438,11 @@ impl RawConfig {
         if other.editor.syntax.is_some() {
             self.editor.syntax = other.editor.syntax.clone();
         }
-        if other.editor.ruler.is_some() {
-            self.editor.ruler = other.editor.ruler;
+        if other.editor.rulers.is_some() {
+            self.editor.rulers = other.editor.rulers.clone();
+        }
+        if other.editor.tint_past.is_some() {
+            self.editor.tint_past = other.editor.tint_past;
         }
         if other.editor.measure.is_some() {
             self.editor.measure = other.editor.measure;
@@ -5737,6 +5747,27 @@ impl RawConfig {
             };
             held(problems, &format!("[{table}] {key}"), want, got, &range)
         }
+        /// **Each column held to the range the setting declares**, the way
+        /// [`as_declared`] holds a number: one outside it is left out and
+        /// said, rather than pulled in to a stripe nobody asked for. In
+        /// order, each once.
+        fn rulers_held(problems: &mut Vec<String>, want: Vec<usize>) -> Vec<usize> {
+            let (low, high) = crate::settings_ui::columns("editor", "rulers").unwrap_or((1, 400));
+            let mut kept = Vec::new();
+            for column in want {
+                match (low..=high).contains(&column) {
+                    true => kept.push(column),
+                    false => problems.push(said(
+                        format!("[editor] rulers：输入的 {column} 不在合法范围 {}", span(low, high)),
+                        format!("[editor] rulers：輸入的 {column} 不在合法範圍 {}", span(low, high)),
+                        format!("[editor] rulers: {column} is outside {}", span(low, high)),
+                    )),
+                }
+            }
+            kept.sort_unstable();
+            kept.dedup();
+            kept
+        }
         let mut config = Config::default();
         if let Some(width) = self.editor.indent_width {
             config.editor.indent_width =
@@ -6034,8 +6065,12 @@ impl RawConfig {
         if let Some(on) = self.editor.autosave {
             config.editor.autosave = on;
         }
-        if let Some(ruler) = self.editor.ruler {
-            config.editor.ruler = held(problems, "[editor] ruler", ruler, ruler.min(400), &span(0, 400));
+        if let Some(columns) = self.editor.rulers {
+            config.editor.rulers = rulers_held(problems, columns);
+        }
+        if let Some(column) = self.editor.tint_past {
+            config.editor.tint_past =
+                held(problems, "[editor] tint_past", column, column.min(400), &span(0, 400));
         }
         if let Some(measure) = self.editor.measure {
             config.editor.measure =
@@ -7678,6 +7713,40 @@ mod tests {
         assert_eq!(config.editor.scrollbar_marks, ["changes", "problems"]);
         assert!(Config::from_toml("[editor]\nscrollbar_marks = []\n").editor.scrollbar_marks.is_empty());
         assert_eq!(SCROLLBAR_MARK_WORDS, ["search", "listing", "changes", "problems"]);
+    }
+
+    /// **`[editor] rulers`**: none out of the box; the columns written, in
+    /// order and each once; a column outside 1 to 400 left out and said,
+    /// the others kept; and a project's list in place of the global one,
+    /// not added to it.
+    #[test]
+    fn rulers_read_as_a_list_of_columns_from_1_to_400() {
+        assert!(Config::from_toml("").editor.rulers.is_empty());
+        assert_eq!(Config::from_toml("[editor]\nrulers = [100, 80, 80]\n").editor.rulers, [80, 100]);
+        assert!(Config::from_toml("[editor]\nrulers = []\n").editor.rulers.is_empty());
+        let (c, said) = Config::from_toml_saying("[editor]\nrulers = [0, 72, 400, 401]\n");
+        assert_eq!(c.editor.rulers, [72, 400]);
+        assert_eq!(said.len(), 2, "{said:?}");
+        assert!(said.iter().all(|s| s.contains("[editor] rulers")), "{said:?}");
+        let c = Config::from_sources(Some("[editor]\nrulers = [80, 100]\n"), Some("[editor]\nrulers = [72]\n"));
+        assert_eq!(c.editor.rulers, [72]);
+        let c = Config::from_sources(Some("[editor]\nrulers = [80, 100]\n"), Some("[editor]\nrulers = []\n"));
+        assert!(c.editor.rulers.is_empty(), "an empty project list clears the global one");
+        let c = Config::from_sources(Some("[editor]\nrulers = [80]\n"), Some("[editor]\nscrolloff = 3\n"));
+        assert_eq!(c.editor.rulers, [80], "a project that does not say keeps the global list");
+    }
+
+    /// **`[editor] tint_past`**: one column, 0 for none, held to 0 to 400;
+    /// `ruler`, the name it had, is a key like any other the loader does
+    /// not know.
+    #[test]
+    fn tint_past_is_one_column_and_ruler_is_gone() {
+        assert_eq!(Config::from_toml("").editor.tint_past, 0);
+        assert_eq!(Config::from_toml("[editor]\ntint_past = 72\n").editor.tint_past, 72);
+        let (c, said) = Config::from_toml_saying("[editor]\ntint_past = 999\n");
+        assert_eq!(c.editor.tint_past, 400);
+        assert!(said.iter().any(|s| s.contains("[editor] tint_past")), "{said:?}");
+        assert!(toml::from_str::<RawConfig>("[editor]\nruler = 80\n").is_err(), "an unknown key");
     }
 
     /// 單字派: Yume's defaults — 字詞同出 character by character, 嚴格單字 in
