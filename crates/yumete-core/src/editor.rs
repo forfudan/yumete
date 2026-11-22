@@ -2919,6 +2919,11 @@ pub struct Editor {
     /// vim motion ends that line's keys as it ends a macro, and the keys
     /// are no part of a recording.
     normal_depth: usize,
+    /// How deep key bindings are running their commands
+    /// (`Editor::run_binding`): under the vim keymap a failing motion ends
+    /// the binding's keys as it ends a macro, since vim's beep flushes the
+    /// rest of a mapping and what plays it.
+    binding_depth: usize,
     /// The reader's own key bindings are left out of the trees while
     /// `:normal!` runs its keys.
     plain_keys: bool,
@@ -4902,6 +4907,7 @@ impl Editor {
             macro_depth: 0,
             macro_level: (0, false),
             macro_failed: false,
+            binding_depth: 0,
             normal_depth: 0,
             plain_keys: false,
             yank_lit: None,

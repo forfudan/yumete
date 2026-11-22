@@ -47430,3 +47430,29 @@ fn linewise_visual_keeps_the_cursor_column() {
         assert_eq!(vim_at(&ed), at, "{keys}");
     }
 }
+
+/// **A failing motion ends the keys of a binding under the vim keymap,
+/// and the macro playing it** (measured in nvim with `nmap <C-q> jA!<Esc>`):
+/// on the last line the `j` fails and the `A!` after it never runs, and a
+/// macro of the binding stops at that round.
+#[test]
+fn a_failing_motion_ends_the_binding_and_its_macro() {
+    let bound = || {
+        let mut ed = typed_vim("ab\ncd\nef\n");
+        let mut aliases = std::collections::HashMap::new();
+        aliases.insert("C-q".to_string(), "@jA!\u{1b}".to_string());
+        ed.set_key_aliases(aliases);
+        ed
+    };
+    let mut ed = bound();
+    feed_vim(&mut ed, "G");
+    ed.on_key(Key::Ctrl('q'));
+    assert_eq!(ed.current_buffer().text(), "ab\ncd\nef\n");
+    assert_eq!(vim_at(&ed), (3, 1));
+    let mut ed = bound();
+    feed_vim(&mut ed, "qq");
+    ed.on_key(Key::Ctrl('q'));
+    feed_vim(&mut ed, "q4@q");
+    assert_eq!(ed.current_buffer().text(), "ab\ncd!\nef!\n");
+    assert_eq!(vim_at(&ed), (3, 3));
+}

@@ -1015,7 +1015,9 @@ impl Editor {
                 | C::JumpNextLongWordEnd
                 | C::JumpPrevWordEnd
         );
-        if must_move && !self.expanding_alias && self.pending == Pending::None && before == (self.current, self.sel.head()) {
+        // Keys a binding plays are asked too: its run is vim's mapping.
+        let asked = !self.expanding_alias || self.binding_depth > 0;
+        if must_move && asked && self.pending == Pending::None && before == (self.current, self.sel.head()) {
             self.fail_the_motion();
         }
     }

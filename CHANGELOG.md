@@ -111,6 +111,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **A macro played by a key binding under the vim keys reads its keys as vim's**, as in vim: `"C-q" = "@@bj"` with `x` recorded in `b` deletes a character, in a macro or out of one, instead of selecting the line.
 - **vim's cursor keeps its own column under `V`**, as in vim, instead of jumping to the line's end: `l`, `f`, `e` and the rest move it from where it stood, Esc, `o`, `gv`, `<`, `>` and `d` leave it in the column it reached, `$` stands past the last character so `$h` comes back onto it, and `ip` ends at its last line's start; the selection still covers whole lines.
 - **vim's `X`, `D`, `Y`, `C` and `R` in Visual mode take the selection's whole lines**, as in vim: under `v` as under `V`, instead of deleting a character, cutting to the line's end or doing nothing; in a block `X` and `Y` take the block, as `d` and `y` do.
+- **A motion that fails in a key binding under the vim keys ends the binding**, as in vim: with `"C-q" = "@kJ"` on the first line the `k` fails and the `J` after it does not join, and a macro or `:normal` that pressed the binding stops there too, instead of going on.
 
 ## 0.24.0 · 2026-11-17
 

@@ -2727,12 +2727,20 @@ impl Editor {
     /// a line and never installs it, so nothing should reach here — and if
     /// something ever does, the manuscript is not where it gets to say so.
     pub(super) fn run_binding(&mut self, commands: &[String]) {
-        // **A list runs in order** (helix's), and stops at a quit.
+        // **A list runs in order** (helix's), and stops at a quit. Under the
+        // vim keymap it stops, too, at a motion that fails, as vim's beep
+        // flushes the rest of a mapping: the failure goes on to the macro or
+        // `:normal` that pressed the binding, and ends there with it.
+        self.binding_depth += 1;
         for one in commands {
             self.run_one_binding(one);
-            if self.quit_from_binding {
+            if self.quit_from_binding || self.macro_failed {
                 break;
             }
+        }
+        self.binding_depth -= 1;
+        if self.binding_depth == 0 && !(self.replaying || self.normal_depth > 0 || self.repeating_edit) {
+            self.macro_failed = false;
         }
     }
 
@@ -2823,6 +2831,10 @@ impl Editor {
             // `on_key` above this one is told.
             if self.on_key(key) == KeyOutcome::Quit {
                 self.quit_from_binding = true;
+                break;
+            }
+            // A failing vim motion ends the run ([`Self::run_binding`]).
+            if self.macro_failed && self.binding_depth > 0 && !self.replaying_held {
                 break;
             }
         }
