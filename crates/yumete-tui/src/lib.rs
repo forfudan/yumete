@@ -11227,6 +11227,16 @@ fn wash_of(callout: yumete_core::markdown::Callout) -> crate::theme::Accent {
     }
 }
 
+/// **How `[editor] selection_highlight` matches**, from its two companions.
+/// A case word the config did not know was already refused on loading, so
+/// anything else here is the factory's `respect`.
+pub(crate) fn copy_rule(config: &Config) -> yumete_core::editor::CopyRule {
+    yumete_core::editor::CopyRule {
+        case: yumete_core::editor::CopyCase::parse(&config.editor.selection_highlight_case).unwrap_or_default(),
+        glyphs: config.editor.selection_highlight_glyphs,
+    }
+}
+
 /// How a whole row is set, given the block its line belongs to.
 ///
 /// Blocks colour the *row*, inline runs colour the characters, and the two
@@ -14758,6 +14768,27 @@ fn draw_horizontal(
         (_, _, false, kept) => kept,
         _ => None,
     };
+    // **The selection's other copies on this page** (`[editor]
+    // selection_highlight`), looked for in the rows drawn and nowhere else:
+    // each line's rows as one span, cut where the row loop below cuts a long
+    // one, so a line of a megabyte costs the window's width. This frame's
+    // rows, not the span the editor was told after the last frame: a page
+    // just scrolled would light its new lines a key late.
+    let copies = match peek.is_none() && config.editor.selection_highlight {
+        true => {
+            let keep = (left + page) * 2 + 1024;
+            let mut spans: Vec<(usize, usize)> = Vec::new();
+            for (_, row) in &on_screen {
+                let end = row.end.min(row.start + keep);
+                match spans.last_mut() {
+                    Some(last) if last.1 == row.start => last.1 = end,
+                    _ => spans.push((row.start, end)),
+                }
+            }
+            editor.selection_copies(&spans, copy_rule(config))
+        }
+        false => Vec::new(),
+    };
     // Where the next page of a chain starts: the row after this page's last.
     // `None` once the text has run out, so a page past the end stays blank.
     let next_page = on_screen.last().and_then(|(_, row)| {
@@ -15512,7 +15543,11 @@ fn draw_horizontal(
 
         // **別的那幾處命中，墊在最底下一層**——站着的那一處畫在它之後，所以蓋
         // 在它上面。兩層的次序就是它們的要緊程度。
-        for (from, to) in &search_marks {
+        //
+        // The selection's copies wear the same ground: both say 「this too」.
+        // None of them overlaps a selection, so this layer coming after the
+        // selection's hides nothing.
+        for (from, to) in search_marks.iter().chain(&copies) {
             if *to > row.start && *from < row_end {
                 let a = from.saturating_sub(row.start).min(chars.len());
                 let b = to.saturating_sub(row.start).min(chars.len());
@@ -25071,6 +25106,65 @@ fn squeezed(text: &str) -> String {
         assert_eq!(selected, Some(ink(&config).selection()), "selected, flash off");
         config.editor.yank_flash = true;
         assert_ne!(ground(&config), selected, "the flash is seen over the selection");
+    }
+
+    /// **The selection's other copies wear the search panel's faint ground**
+    /// (`[editor] selection_highlight`), under either keymap, and only with
+    /// the setting on; the selection keeps its own ground.
+    #[test]
+    fn a_selection_s_copies_are_lit_only_when_the_setting_is_on() {
+        // Where each `word` starts on row `y`, by cell.
+        let starts = |buffer: &ratatui::buffer::Buffer, y: u16, word: &str| -> Vec<u16> {
+            let row: Vec<String> = (0..buffer.area.width).map(|x| buffer[(x, y)].symbol().to_string()).collect();
+            let want: Vec<String> = word.chars().map(String::from).collect();
+            (0..row.len().saturating_sub(want.len()))
+                .filter(|&x| row[x..x + want.len()] == want[..])
+                .map(|x| x as u16)
+                .collect()
+        };
+        for keymap in [":keymap helix", ":keymap vim"] {
+            let mut editor = editor_with("rain on the rain\ndrain\n");
+            editor.execute(keymap).unwrap();
+            for c in "vlll".chars() {
+                editor.on_key(Key::Char(c));
+            }
+            assert_eq!(editor.selection(), (0, 4), "{keymap}: `rain` selected");
+            let grounds = |on: bool| {
+                let mut config = Config::default();
+                config.editor.line_numbers = LineNumbers::None;
+                config.editor.selection_highlight = on;
+                let buffer = render_with(&editor, &config, no_ime(), 40, 6);
+                let ink = ink(&config);
+                let first = starts(&buffer, 0, "rain");
+                let second = starts(&buffer, 1, "rain");
+                assert_eq!((first.len(), second.len()), (2, 1), "{keymap}: drawn");
+                let ground = |x: u16, y: u16| buffer[(x + 1, y)].style().bg;
+                assert_eq!(ground(first[0], 0), Some(ink.selection()), "{keymap}: the selection's own");
+                [ground(first[1], 0), ground(second[0], 1)].map(|bg| bg == Some(ink.faint_wash()))
+            };
+            assert_eq!(grounds(true), [true, true], "{keymap}: lit with the setting on");
+            assert_eq!(grounds(false), [false, false], "{keymap}: dark with it off");
+        }
+    }
+
+    /// **A vertical page lights the copies too**, on the same ground.
+    #[test]
+    fn a_vertical_page_lights_the_selection_s_copies() {
+        let mut editor = editor_with("雨水和雨水\n");
+        let mut config = vertical_config();
+        render_vertical(&mut editor, &config, 30, 12);
+        editor.on_key(Key::Char('v'));
+        editor.on_key(Key::Char('j'));
+        assert_eq!(editor.selection(), (0, 2), "雨水 selected down the 縱");
+        let ink = ink(&config);
+        let lit = |editor: &mut Editor, config: &Config| {
+            let buffer = render_vertical(editor, config, 30, 12);
+            assert_eq!(at(&buffer, 28, 3), "雨");
+            [3u16, 4].map(|y| buffer[(28, y)].style().bg == Some(ink.faint_wash()))
+        };
+        assert_eq!(lit(&mut editor, &config), [false, false], "off");
+        config.editor.selection_highlight = true;
+        assert_eq!(lit(&mut editor, &config), [true, true], "on");
     }
 
     /// **A float drawn whole gives `C-d` back to the text**: with a diagnostic

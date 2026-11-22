@@ -1141,6 +1141,24 @@ pub fn draw(
         true => editor.yank_flash(),
         false => Vec::new(),
     };
+    // **The selection's other copies on this page** (`[editor]
+    // selection_highlight`), on the faint ground the horizontal page gives
+    // them: looked for in the 縱 drawn, each line's 縱 as one span.
+    let copies = match peek.is_none() && config.editor.selection_highlight {
+        true => {
+            let mut spans: Vec<(usize, usize)> = Vec::new();
+            for placed in &page {
+                let (from, to) = (placed.zong.start, placed.zong.end);
+                match spans.last_mut() {
+                    Some(last) if last.1 == from => last.1 = to,
+                    _ => spans.push((from, to)),
+                }
+            }
+            editor.selection_copies(&spans, crate::copy_rule(config))
+        }
+        false => Vec::new(),
+    };
+    let faint_style = Style::default().bg(ink.faint_wash());
     // **光標停在括號上的時候，另一半那一格塗成金的**——竪排這一頁
     // 也有，理由與規矩全在 `lib.rs` 的 `partner` 那一段：只畫遠那一半，金，不換
     // 底色。兩頁同形，不然同一份稿子換個版面就少一個記號。
@@ -1695,6 +1713,14 @@ pub fn draw(
             // word marking all colour off this 縱's own palette already.
             if stands_back && style.fg.is_none() {
                 style = style.fg(ink.text());
+            }
+
+            // The selection's copies, under every selection: none overlaps one.
+            // In order and apart, so the first that ends past this slot is the
+            // only one that can cover it.
+            let next = copies.partition_point(|&(_, to)| to <= at);
+            if copies.get(next).is_some_and(|&(from, _)| from < at + len.max(1)) {
+                style = style.patch(faint_style);
             }
 
             // 次選區墊在主選區之前。不變式保證不重疊，寫成這個次序是因為「主選區壓在
