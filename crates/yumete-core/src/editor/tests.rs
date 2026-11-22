@@ -47291,6 +47291,28 @@ fn star_motions_and_their_g_forms() {
     assert_eq!(vim_at(&ed), (2, 1));
 }
 
+/// **vim's Visual `g*` and `g#` grow the selection** (measured in nvim):
+/// the cursor goes to the start of the word's match inside other words, the
+/// mode stays Visual, so `d` and `y` take everything up to it, and `n`
+/// after it goes on with the word.
+#[test]
+fn visual_g_star_and_g_hash_grow_the_selection() {
+    let text = "sun moon sunset\nmoon sun x\n";
+    for (keys, want, at) in [
+        ("vg*⎋", text, (1, 10)),
+        ("vg*d", "unset\nmoon sun x\n", (1, 1)),
+        ("vg#d", "un x\n", (1, 1)),
+        ("vg*⎋n", text, (2, 6)),
+        ("wvg*y", text, (1, 5)),
+        ("Vg*d", "moon sun x\n", (1, 10)),
+    ] {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        assert_eq!(ed.current_buffer().text(), want, "{keys}");
+        assert_eq!(vim_at(&ed), at, "{keys}");
+    }
+}
+
 /// **vim's cursor keeps its own column under `V`** (measured in nvim):
 /// motions move it from where it stood, Esc, `o`, `gv`, `<` and `d` honour
 /// the column it reached, `$` stands past the last character so `$h` comes

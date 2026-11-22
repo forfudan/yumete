@@ -405,7 +405,13 @@ impl Editor {
     /// The same, the word looked for `whole` (`*`) or inside other words
     /// too (vim's `g*`).
     pub(super) fn search_the_page_as(&mut self, back: bool, count: usize, whole: bool) {
-        let Some((pattern, needle, begins)) = self.what_to_look_for(whole) else { return };
+        // **vim's Visual `g*` and `g#` are motions**: the selection grows to
+        // the match, where Visual `*` and `#` (nvim's default mappings)
+        // search for what is selected.
+        if !whole && self.as_vim() && (self.extend || self.block.is_some()) {
+            return self.extend_to_the_word_inside(back, count);
+        }
+        let Some((pattern, needle, begins)) = self.what_to_look_for(whole, false) else { return };
         let spans = self.every_match(&pattern);
         if spans.len() <= 1 {
             self.status = say!("find.only-here", needle);
@@ -446,17 +452,36 @@ impl Editor {
         self.show_table_hit();
     }
 
-    /// **What `*` and `#` look for here**: the selection as selected, else
-    /// the word under the cursor, `whole` with `\b` at its Latin edges; the
-    /// pattern, the text, and where the thing looked for begins.
-    pub(super) fn what_to_look_for(&mut self, whole: bool) -> Option<(String, String, usize)> {
+    /// **vim's Visual `g*` and `g#`** (measured in nvim): the word under the
+    /// cursor, looked for inside other words too, becomes the last search,
+    /// and the cursor goes to the start of the `count`th match before or
+    /// after the word, the selection growing with it.
+    fn extend_to_the_word_inside(&mut self, back: bool, count: usize) {
+        let Some((pattern, _, begins)) = self.what_to_look_for(false, true) else {
+            return self.fail_the_motion();
+        };
+        self.last_search = pattern;
+        self.search_forward = !back;
+        self.hits = None;
+        let Some((at, _)) = self.search_hit_from(!back, begins, count) else {
+            return self.fail_the_motion();
+        };
+        self.remember_jump();
+        self.move_head(at);
+    }
+
+    /// **What `*` and `#` look for here**: the selection as selected, unless
+    /// `word`, else the word under the cursor, `whole` with `\b` at its
+    /// Latin edges; the pattern, the text, and where the thing looked for
+    /// begins.
+    pub(super) fn what_to_look_for(&mut self, whole: bool, word: bool) -> Option<(String, String, usize)> {
         let rope = self.current_buffer().rope();
         let (from, to) = self.selection();
         // Warning: **一個字寬的「選區」是光標，不是選中**。這個編輯器裏每一次移動
         // 都留下選區，而光標蓋着自己那一格——所以問 `to > from` 的話它恆真，下面
         // 那條「取光標下那個詞」的路**一次都走不到**。搜索面板那一扇同一條規矩
         // （`open_search` 的 `to > from + 1`）。
-        let selected = to > from + 1;
+        let selected = !word && to > from + 1;
         // Where the thing looked for begins here: `#` looks before it.
         let mut begins = from;
         let needle = match selected {

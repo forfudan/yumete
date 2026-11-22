@@ -1403,7 +1403,7 @@ impl Editor {
         if matches!(c, '*' | '#') && matches!(first, None | Some('g')) {
             self.settle_alias_count();
             let count = self.count.take();
-            let Some((pattern, _, begins)) = self.what_to_look_for(first.is_none()) else {
+            let Some((pattern, _, begins)) = self.what_to_look_for(first.is_none(), false) else {
                 self.fail_the_motion();
                 return;
             };
