@@ -46002,3 +46002,27 @@ fn a_substitution_over_many_matches_on_one_line_writes_each() {
     keyed(&mut ed, ":s/(a)\\zsb/[$1]/gc⏎a");
     assert_eq!(ed.current_buffer().text(), want);
 }
+
+/// **vim's `gn` takes the match the cursor stands in or the next one**
+/// (measured in nvim 0.12), from the line's matches found once: on the
+/// last match or past several, at a count, and round from the last line.
+#[test]
+fn vims_gn_finds_the_match_at_or_after_the_cursor_on_its_line() {
+    let text = "ox ab cd ab ef ab\nab end\n";
+    let cases: &[(&str, &str, (usize, usize))] = &[
+        ("/ab⏎$dgn", "ox ab cd ab ef \nab end\n", (1, 15)),
+        ("/ab⏎0fedgn", "ox ab cd ab ef \nab end\n", (1, 15)),
+        ("/ab⏎0fcdgn", "ox ab cd  ef ab\nab end\n", (1, 10)),
+        ("/ab⏎0fc2gnd", "ox ab cd ab ef \nab end\n", (1, 15)),
+        ("/ab⏎0fbdgn", "ox  cd ab ef ab\nab end\n", (1, 4)),
+        ("/ab⏎j$dgn", "ox  cd ab ef ab\nab end\n", (1, 4)),
+    ];
+    for &(keys, want, at) in cases {
+        let mut ed = typed_vim(text);
+        keyed(&mut ed, keys);
+        let rope = ed.current_buffer().rope().clone();
+        let line = rope.char_to_line(ed.sel.head());
+        let cursor = (line + 1, ed.sel.head() - rope.line_to_char(line) + 1);
+        assert_eq!((ed.current_buffer().text().as_str(), cursor), (want, at), "{keys:?}");
+    }
+}

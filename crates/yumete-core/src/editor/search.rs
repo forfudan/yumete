@@ -157,16 +157,28 @@ impl Editor {
         let at = at.min(len);
         let mut hit = match forward {
             // A match never crosses a line, so the one the cursor stands in
-            // starts on the cursor's line: walk that line's matches up to
-            // the first that reaches the cursor.
+            // starts on the cursor's line: its matches, found once, up to the
+            // first that reaches the cursor, else the next one past the line.
             true => {
-                let mut from = motion::line_start(rope, at);
-                loop {
-                    match search_forward(rope, &look, from, within.clone(), false) {
-                        Some((start, end)) if start >= from && end.max(start + 1) <= at => from = start + 1,
-                        other => break other,
+                let line = rope.char_to_line(at);
+                let start = rope.line_to_char(line);
+                let mut from = start;
+                let mut here = None;
+                if within.contains(&line) {
+                    let text = rope.line(line).to_string();
+                    let (body, _) = crate::editor::line_body(&text);
+                    for (a, b) in look.spans(body) {
+                        if start + a < from {
+                            continue;
+                        }
+                        if start + b.max(a + 1) > at {
+                            here = Some((start + a, start + b));
+                            break;
+                        }
+                        from = start + a + 1;
                     }
                 }
+                here.or_else(|| search_forward(rope, &look, from, within.clone(), false))
             }
             false => search_backward(rope, &look, (at + 1).min(len), within.clone()),
         };
