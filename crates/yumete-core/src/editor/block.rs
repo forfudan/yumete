@@ -245,6 +245,7 @@ impl super::Editor {
                 let at = self.sel.head();
                 self.extend = false;
                 self.vim_lines = false;
+                self.drop_register_into_visual();
                 // The column the cursor was already aiming at comes along
                 // (`j` onto a short line, then `C-v j`), and after `$` that
                 // is every line's end (vim's `curswant` of `MAXCOL`), so

@@ -46294,3 +46294,23 @@ fn a_line_break_put_at_an_unterminated_end_opens_a_line() {
         assert_eq!((ed.current_buffer().text().as_str(), vim_at(&ed)), (want, at), "{keys}");
     }
 }
+
+/// **A register named before vim's `v`, `V` or `C-v` is let go** (measured
+/// in nvim): the yank goes to the unnamed register, `"ap` then finds `a`
+/// empty, and a register named inside Visual mode still counts.
+#[test]
+fn a_register_named_before_visual_is_let_go() {
+    let text = "sun moon\nsea\n";
+    let cases: &[(&str, &str, (usize, usize))] = &[
+        ("\"aveyj\"ap", text, (2, 1)),
+        ("\"aVyj\"ap", text, (2, 1)),
+        ("\"aᵛjyj\"ap", text, (2, 1)),
+        ("\"aveyjp", "sun moon\nssunea\n", (2, 4)),
+        ("v\"ayj\"ap", "sun moon\nssea\n", (2, 2)),
+    ];
+    for &(keys, want, at) in cases {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        assert_eq!((ed.current_buffer().text().as_str(), vim_at(&ed)), (want, at), "{keys}");
+    }
+}

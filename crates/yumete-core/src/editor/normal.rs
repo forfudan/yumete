@@ -1508,6 +1508,7 @@ impl Editor {
         }
         self.extend = true;
         self.vim_lines = true;
+        self.drop_register_into_visual();
     }
 
     #[allow(unused_variables)]
@@ -1515,6 +1516,18 @@ impl Editor {
         let Cx { key, count, operator_count, continuing_zong } = cx;
         self.extend = !self.extend;
         self.vim_lines = false;
+        if self.extend {
+            self.drop_register_into_visual();
+        }
+    }
+
+    /// **A register named before vim's `v`, `V` or `C-v` is let go**, as in
+    /// vim: `"av` then `y` yanks into the unnamed register, and a register
+    /// is named inside Visual mode, before its operator.
+    pub(super) fn drop_register_into_visual(&mut self) {
+        if self.as_vim() {
+            self.pending_register = None;
+        }
     }
 
     // Esc is every modal editor's way out. It leaves select mode and
