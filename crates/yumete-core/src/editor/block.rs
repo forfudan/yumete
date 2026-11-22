@@ -454,9 +454,13 @@ impl super::Editor {
         let (start, end) = (rope.line_to_char(line), motion::line_end(rope, rope.line_to_char(line)));
         let wide = width(rope, self.tab_stop(), line);
         let goal = self.sel.primary().goal;
+        let unmoved = !rightward && !vertical && head == at && key != Key::Char('$');
         let (cursor, goal) = match (rightward, vertical, goal) {
             // `l` that could not step on, from the line's last character.
             (true, _, _) if head == at && end > start && motion::next_grapheme(rope, head) == end => (end, Some(wide)),
+            // A key that did not move the cursor (`"a`, a count's digit)
+            // leaves the corner where it stood, past the line's end too.
+            (false, false, _) if unmoved => (block.cursor, block.goal),
             (_, true, Some(want)) if want >= wide && end > start => (end, goal),
             // `$` leaves the corner past the line's end, as `j` after it does.
             _ if key == Key::Char('$') && end > start => (end, goal),
@@ -465,7 +469,7 @@ impl super::Editor {
         if let Some(b) = self.block.as_mut() {
             b.cursor = cursor;
             b.goal = goal;
-            b.to_line_end = key == Key::Char('$') || (b.to_line_end && stays_at_the_end);
+            b.to_line_end = key == Key::Char('$') || (b.to_line_end && (stays_at_the_end || unmoved));
         }
         self.show_block();
     }

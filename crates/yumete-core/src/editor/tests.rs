@@ -46205,3 +46205,23 @@ fn the_change_marks_after_an_opened_line_are_on_it() {
         assert_eq!((ed.current_buffer().text().as_str(), vim_at(&ed)), (want, at), "{keys}");
     }
 }
+
+/// **Naming a register in a block leaves its corner where it stood** past
+/// a short line's end (measured in nvim): `l C-v j l "a y` over `sun` and
+/// `x` yanks the one column the cursor is in, as plain `y` does, and after
+/// `$` the block still runs to every line's end.
+#[test]
+fn a_register_named_in_a_block_keeps_the_corner() {
+    let text = "sun\nx\nmoon\n";
+    let cases: &[(&str, &str, (usize, usize))] = &[
+        ("lᵛjl\"ayG\"ap", "sun\nx\nmouon\n  \n", (3, 3)),
+        ("lᵛjl\"ayG\"aP", "sun\nx\nmuoon\n \n", (3, 2)),
+        ("lᵛjlyGp", "sun\nx\nmouon\n  \n", (3, 3)),
+        ("ᵛj$\"ayG\"ap", "sun\nx\nmsunoon\n x\n", (3, 2)),
+    ];
+    for &(keys, want, at) in cases {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        assert_eq!((ed.current_buffer().text().as_str(), vim_at(&ed)), (want, at), "{keys}");
+    }
+}
