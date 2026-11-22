@@ -47539,6 +47539,25 @@ fn a_visual_search_lands_on_the_match_start() {
     assert_eq!(vim_at(&ed), (3, 7));
 }
 
+/// **vim's `v` in a block keeps a corner past a short line's end**
+/// (measured in nvim): Visual mode then takes that line's break too, so
+/// `d` joins the line after it, from either corner.
+#[test]
+fn visual_from_a_block_keeps_a_corner_past_the_line_end() {
+    let text = "plum tree\n\tkiwi fig jam\n石榴苹果香蕉\nsoy\n\nlast row here\n";
+    let cases: &[(&str, &str, (usize, usize))] = &[
+        ("jjlllᵛjvd", "plum tree\n\tkiwi fig jam\n石榴苹\nlast row here\n", (3, 3)),
+        ("jlllᵛjjvd", "plum tree\n\tki\nlast row here\n", (2, 3)),
+        ("jlllᵛjjovd", "plum tree\n\tki\nlast row here\n", (2, 3)),
+    ];
+    for &(keys, after, at) in cases {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        assert_eq!(ed.current_buffer().text(), after, "{keys}");
+        assert_eq!(vim_at(&ed), at, "{keys}");
+    }
+}
+
 /// **vim's `*` goes to the only match there is** (measured in nvim): the
 /// search wraps round to it, so the cursor lands on the word's start, and
 /// from Visual mode on the selection's start with Visual mode ended.

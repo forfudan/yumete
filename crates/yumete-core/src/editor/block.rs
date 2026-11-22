@@ -299,21 +299,15 @@ impl super::Editor {
     /// corners, by characters or by lines (`:h v_v`).
     fn block_to_visual(&mut self, block: Block, lines: bool) {
         let rope = self.current_buffer().rope();
-        // A corner may stand just past a line's end; a Visual end may not,
-        // but after `$` the cursor takes the line's end, as `v$` does.
-        let on_a_character = |at: usize| {
-            let at = at.min(rope.len_chars());
-            let line_start = rope.line_to_char(rope.char_to_line(at));
-            match at > line_start && at == motion::line_end(rope, line_start) {
-                true => motion::prev_grapheme(rope, at),
-                false => at,
-            }
-        };
+        // A corner just past a line's end stays there, as a Visual end may
+        // stand in vim (`:h 'selection'`): the line's break is then selected
+        // too. After `$` the cursor takes the line's end, as `v$` does.
+        let len = rope.len_chars();
         let cursor = match block.to_line_end {
-            true => motion::line_end(rope, block.cursor.min(rope.len_chars())),
-            false => on_a_character(block.cursor),
+            true => motion::line_end(rope, block.cursor.min(len)),
+            false => block.cursor.min(len),
         };
-        let anchor = on_a_character(block.anchor);
+        let anchor = block.anchor.min(len);
         self.block = None;
         self.block_replace = false;
         self.sel = Selections::one(Range::new(anchor, cursor));
