@@ -1834,7 +1834,8 @@ impl Editor {
         motion::Span::Over { anchor: rope.line_to_char(first), head: tail }
     }
 
-    /// 光標底下那個**詞**（`mi w`/`ma w`，以及 vim 的 `ciw`/`daw`）。
+    /// 光標底下那個**詞**（`mi w`/`ma w`）。vim 的 keymap 走
+    /// [`Self::vim_word_object`]，下面這一套是 helix 那一頭的。
     ///
     /// `around` ＝ vim 的 `aw`：詞本身，再加它後面那一段空白；後面没有空白就取
     /// 它前面的，這是 vim 自己的規矩，也是 `daw` 讀起來「整個詞連着那道縫一起
@@ -1853,6 +1854,16 @@ impl Editor {
     /// 没有空白，於是 `daw` 和 `diw` 拿到同一段。這是 vim 那條規矩在中文裏的自然結果，
     /// 不是這一支算錯了。
     fn word_object_span(&self, around: bool, big: bool, count: usize) -> motion::Span {
+        // vim's keymap walks vim's own `current_word`; the Visual reading
+        // takes the object up to and including where that walk ends.
+        if self.keymap_rules().vim_text_objects {
+            return match self.vim_word_object(around, big, count) {
+                Ok(VimWordObject { start, end, .. }) => {
+                    motion::Span::Over { anchor: start.min(end), head: start.max(end) }
+                }
+                Err(_) => motion::Span::Missed,
+            };
+        }
         let rope = self.current_buffer().rope().clone();
         let line = rope.char_to_line(self.sel.head().min(rope.len_chars()));
         let start = rope.line_to_char(line);
@@ -2021,6 +2032,86 @@ impl Editor {
             }
         }
         motion::Span::Over { anchor: a, head: b.max(a) }
+    }
+
+    /// **vim's `iw`/`aw`/`iW`/`aW`**, step for step as vim's `current_word`
+    /// walks them, over this editor's words.
+    ///
+    /// The units alternate between a word and the white space after it, and
+    /// **an empty line is a unit of its own**: `daw` on an empty line takes
+    /// it and the next line's first word, `d2iw` there takes the line and
+    /// the next line's indent. The walk is vim's (`back_in_line`,
+    /// `end_word`, `fwd_word`, `incl`); only the classes are this editor's —
+    /// a word is one of [`crate::motion::line_words`], so 中文 splits where
+    /// `w` stops, as everywhere else.
+    ///
+    /// `Err` when the object cannot be made, the count included: vim takes
+    /// nothing at all then, and its cursor stays where the walk stopped,
+    /// which the `Err` holds.
+    pub(super) fn vim_word_object(
+        &self,
+        around: bool,
+        big: bool,
+        count: usize,
+    ) -> Result<VimWordObject, usize> {
+        let rope = self.current_buffer().rope();
+        let grain = match big {
+            true => crate::motion::Grain::Big,
+            false => self.word_grain(),
+        };
+        let mut w = VimWalker::new(rope, grain, self.segmenter.as_ref(), self.sel.head());
+        w.back_in_line();
+        let mut start = w.p;
+        let mut include_white = false;
+        let mut inclusive = true;
+        if (w.cls() == 0) == around {
+            if !w.end_word() {
+                return Err(w.p);
+            }
+        } else {
+            w.fwd_word();
+            match w.col0() {
+                true => {
+                    w.decl();
+                }
+                false => {
+                    w.oneleft();
+                }
+            }
+            include_white = around;
+        }
+        for left in (1..count.max(1)).rev() {
+            inclusive = true;
+            if w.incl() == -1 {
+                return Err(w.p);
+            }
+            if around != (w.cls() == 0) {
+                if !w.fwd_word() && left > 1 {
+                    return Err(w.p);
+                }
+                // Past a line's end the unit stops before the next line's
+                // first character.
+                if !w.oneleft() {
+                    inclusive = false;
+                }
+            } else if !w.end_word() {
+                return Err(w.p);
+            }
+        }
+        // No white space after the word: take the white space before it,
+        // but never a line's indent.
+        if include_white && (w.cls() != 0 || (w.col0() && !inclusive)) {
+            let end = w.p;
+            w.p = start;
+            if w.oneleft() {
+                w.back_in_line();
+                if w.cls() == 0 && !w.col0() {
+                    start = w.p;
+                }
+            }
+            w.p = end;
+        }
+        Ok(VimWordObject { start, end: w.p, inclusive })
     }
 
     /// Wrap the selection in the pair named by `c` (`ms`).
@@ -3590,6 +3681,219 @@ impl Editor {
         // 去切 rope，`next_grapheme` 當場 panic（`Char index out of bounds`），整個
         // 編輯器退出。
         self.sel.clamp(len);
+    }
+}
+
+/// What vim's `current_word` answers ([`Editor::vim_word_object`]): where
+/// the object starts, where the walk ended, and whether that end is part of
+/// it. An end outside it is the first character of a line, and an operator
+/// reads it by `:h exclusive`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct VimWordObject {
+    pub(super) start: usize,
+    pub(super) end: usize,
+    pub(super) inclusive: bool,
+}
+
+/// A cursor that moves as vim's does through a buffer: every line has one
+/// more position, its end (vim's `NUL`, the line break here), and the empty
+/// line after a closing break is not a line.
+struct VimWalker<'a> {
+    rope: &'a ropey::Rope,
+    grain: crate::motion::Grain,
+    seg: &'a dyn yumete_cjk::Segmenter,
+    last: usize,
+    words: std::collections::HashMap<usize, Vec<(usize, usize)>>,
+    p: usize,
+}
+
+impl<'a> VimWalker<'a> {
+    fn new(
+        rope: &'a ropey::Rope,
+        grain: crate::motion::Grain,
+        seg: &'a dyn yumete_cjk::Segmenter,
+        at: usize,
+    ) -> Self {
+        let last = motion::last_line(rope);
+        let p = at.min(motion::line_end(rope, rope.line_to_char(last)));
+        VimWalker { rope, grain, seg, last, words: Default::default(), p }
+    }
+
+    fn line(&self) -> usize {
+        self.rope.char_to_line(self.p)
+    }
+
+    fn col0(&self) -> bool {
+        self.p == self.rope.line_to_char(self.line())
+    }
+
+    /// On the line's end, where vim's `NUL` is.
+    fn at_end(&self) -> bool {
+        self.p == motion::line_end(self.rope, self.p)
+    }
+
+    /// vim's `cls()`: 0 for white space and a line's end, else which word
+    /// the character belongs to.
+    fn cls(&mut self) -> usize {
+        if self.at_end() || self.rope.char(self.p).is_whitespace() {
+            return 0;
+        }
+        let line = self.line();
+        let (rope, grain, seg) = (self.rope, self.grain, self.seg);
+        let words = self
+            .words
+            .entry(line)
+            .or_insert_with(|| crate::motion::line_words(rope, line, grain, seg));
+        match words.iter().find(|&&(a, b)| (a..b).contains(&self.p)) {
+            Some(&(a, _)) => a + 1,
+            None => self.rope.len_chars() + 1 + self.p,
+        }
+    }
+
+    /// vim's `inc()`: 1 onto the next line, 2 onto a line's end, -1 at the
+    /// file's end.
+    fn inc(&mut self) -> i32 {
+        if self.at_end() {
+            let line = self.line();
+            if line >= self.last {
+                return -1;
+            }
+            self.p = self.rope.line_to_char(line + 1);
+            return 1;
+        }
+        self.p += 1;
+        match self.at_end() {
+            true => 2,
+            false => 0,
+        }
+    }
+
+    /// vim's `dec()`: from a line's start onto the end of the line above.
+    fn dec(&mut self) -> i32 {
+        if self.col0() {
+            let line = self.line();
+            if line == 0 {
+                return -1;
+            }
+            self.p = motion::line_end(self.rope, self.rope.line_to_char(line - 1));
+            return 1;
+        }
+        self.p -= 1;
+        0
+    }
+
+    /// vim's `incl()`: [`Self::inc`], passing a line's end that is not an
+    /// empty line.
+    fn incl(&mut self) -> i32 {
+        let r = self.inc();
+        match r >= 1 && !self.col0() {
+            true => self.inc(),
+            false => r,
+        }
+    }
+
+    /// vim's `decl()`.
+    fn decl(&mut self) -> i32 {
+        let r = self.dec();
+        match r == 1 && !self.col0() {
+            true => self.dec(),
+            false => r,
+        }
+    }
+
+    fn oneleft(&mut self) -> bool {
+        match self.col0() {
+            true => false,
+            false => {
+                self.p -= 1;
+                true
+            }
+        }
+    }
+
+    /// Back to the start of the word or white space the cursor is in,
+    /// never past the line's start.
+    fn back_in_line(&mut self) {
+        let class = self.cls();
+        while !self.col0() {
+            self.dec();
+            if self.cls() != class {
+                self.inc();
+                break;
+            }
+        }
+    }
+
+    /// Forward while the class stays `class`; true at the file's end.
+    fn skip(&mut self, class: usize) -> bool {
+        while self.cls() == class {
+            if self.inc() == -1 {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// vim's `end_word(1, bigword, TRUE, TRUE)`: the end of this word, or of
+    /// the next one past white space; an empty line on the way is where it
+    /// stops.
+    fn end_word(&mut self) -> bool {
+        let class = self.cls();
+        if self.inc() == -1 {
+            return false;
+        }
+        if self.cls() == class && class != 0 {
+            if self.skip(class) {
+                return false;
+            }
+        } else if class == 0 {
+            while self.cls() == 0 {
+                if self.col0() && self.at_end() {
+                    return true;
+                }
+                if self.inc() == -1 {
+                    return false;
+                }
+            }
+            let class = self.cls();
+            if self.skip(class) {
+                return false;
+            }
+        }
+        self.dec();
+        true
+    }
+
+    /// vim's `fwd_word(1, bigword, TRUE)`: to the next word's start, but
+    /// stopping on a line's end and on an empty line.
+    fn fwd_word(&mut self) -> bool {
+        let class = self.cls();
+        let last_line = self.line() == self.last;
+        let i = self.inc();
+        if i == -1 || (i >= 1 && last_line) {
+            return false;
+        }
+        if i >= 1 {
+            return true;
+        }
+        if class != 0 {
+            while self.cls() == class {
+                let i = self.inc();
+                if i == -1 || i >= 1 {
+                    return true;
+                }
+            }
+        }
+        while self.cls() == 0 {
+            if self.col0() && self.at_end() {
+                break;
+            }
+            let i = self.inc();
+            if i == -1 || i >= 1 {
+                return true;
+            }
+        }
+        true
     }
 }
 

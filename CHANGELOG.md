@@ -56,6 +56,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **A vim mark jump in Visual mode keeps the selection**: `` `a ``, `'a`, `` `< `` and the others move the cursor under `v`, `V` and `C-v`, as in vim, instead of dropping what was selected.
 - **vim's `gv` and the `<` `>` marks move with the lines added or taken above them**, for `v`, `V` and `C-v`, as vim's marks do; the operator that ends a selection moves it too, `u` brings back the one the change began with, and each buffer keeps its own.
 - **After vim's `p` over a block, `gv`, `` `[ ``, `` `] ``, `` `< `` and `` `> `` name the text put**, as in vim, instead of the block that went; a block's plain `p` leaves `` `] `` on its last character, not past it.
+- **vim's `aw` on an empty line reaches the next line's first word**, as in vim: `daw`, `caw` and `yaw` there take the line and that word, and a count such as `d2iw` or `d3aw` counts an empty line as one unit and goes on over it.
 
 ## 0.24.0 · 2026-11-17
 

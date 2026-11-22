@@ -1644,7 +1644,39 @@ impl Editor {
                 }
                 _ => step,
             };
-            let span = self.read_motion(step.motion, motion::Reading::Caret);
+            let span = match step.motion {
+                motion::Motion::Object { what: motion::Object::Word { big }, around, count }
+                    if self.keymap_rules().vim_text_objects =>
+                {
+                    match self.vim_word_object(around, big, count) {
+                        Ok(object) => match self.vim_word_operand(op, object) {
+                            Ok(span) => span,
+                            Err((first, last, adjusted)) => {
+                                self.lines_from = Some(object.start);
+                                self.do_vim_lines(op, first, last);
+                                // Lines the column-one rule made keep no
+                                // column: `d` leaves the caret on the first
+                                // non-blank, as `op_delete` does.
+                                if adjusted && op == 'd' {
+                                    let rope = self.current_buffer().rope();
+                                    let to = motion::line_first_non_blank(rope, self.sel.head());
+                                    self.set_cursor(to);
+                                }
+                                return;
+                            }
+                        },
+                        // A count the text runs out of takes nothing, and
+                        // leaves the caret where vim's walk gave up.
+                        Err(stopped) => {
+                            let rope = self.current_buffer().rope();
+                            let at = stopped.min(motion::line_last(rope, stopped));
+                            self.set_cursor(at);
+                            motion::Span::Missed
+                        }
+                    }
+                }
+                _ => self.read_motion(step.motion, motion::Reading::Caret),
+            };
             // **`ciw` on an empty line opens Insert there** (measured in
             // nvim): there is no word to take, and `diw` takes nothing.
             if span == motion::Span::Missed
@@ -1721,7 +1753,14 @@ impl Editor {
                     }
                 }
             }
-            return self.do_vim(op, span);
+            // vim's word object is charwise even where it ends in a line
+            // break: `yaw` on an empty line holds a break that `P` puts
+            // inside the line, and `caw` there takes the break alone.
+            let word = matches!(step.motion, motion::Motion::Object { what: motion::Object::Word { .. }, .. });
+            self.take_the_break = word && self.keymap_rules().vim_text_objects;
+            self.do_vim(op, span);
+            self.take_the_break = false;
+            return;
         }
         // Walk the motion `n` times to find where vim would have left the
         // caret. Warning: **A motion that stops moving has ended**, and one that
@@ -1967,6 +2006,69 @@ impl Editor {
             true => rope.line_to_char(from),
             false if from == to => rope.line_to_char(to),
             false => self.column_on_line(to, self.vim_line_column),
+        })
+    }
+
+    /// **What an operator takes of vim's word object**: the characters, or
+    /// whole lines (`Err`, and whether the column-one rule made them) where
+    /// vim turns it linewise.
+    ///
+    /// Two of vim's operator rules read the object here. An end outside it
+    /// in a line's first column moves back to the end of the line above
+    /// (`:h exclusive`), and goes linewise when the object starts in the
+    /// indent. And `d` over more than one line that starts in the indent
+    /// and leaves only white space after its end takes the lines whole
+    /// (`op_delete`'s 「strange Vi behaviour」): `daw` on an empty line
+    /// before an empty line takes both.
+    ///
+    /// An end on an empty line stands on no character, so it adds none: the
+    /// object up to it holds the line break before it. Nothing at all is
+    /// [`motion::Span::Missed`] — `diw` on an empty line.
+    fn vim_word_operand(
+        &self,
+        op: char,
+        object: super::matching::VimWordObject,
+    ) -> Result<motion::Span, (usize, usize, bool)> {
+        let rope = self.current_buffer().rope();
+        let super::matching::VimWordObject { start, end, mut inclusive } = object;
+        // The walk can end before it began (`diw` on a last empty line
+        // reaches back to the line above); the operator takes the two ends
+        // in order.
+        let (start, mut end) = (start.min(end), start.max(end));
+        let at_end = |p: usize| p == motion::line_end(rope, p);
+        let first = rope.char_to_line(start);
+        let mut last = rope.char_to_line(end);
+        let in_indent = rope
+            .slice(motion::line_start(rope, start)..start)
+            .chars()
+            .all(|c| c == ' ' || c == '\t');
+        if !inclusive && end == motion::line_start(rope, end) && last > first {
+            last -= 1;
+            if in_indent {
+                return Err((first, last, true));
+            }
+            end = motion::line_end(rope, rope.line_to_char(last));
+            if end > rope.line_to_char(last) {
+                end -= 1;
+                inclusive = true;
+            }
+        }
+        if op == 'd' && last > first && in_indent {
+            let mut after = end;
+            if !at_end(after) && inclusive {
+                after += 1;
+            }
+            while !at_end(after) && matches!(rope.char(after), ' ' | '\t') {
+                after += 1;
+            }
+            if at_end(after) {
+                return Err((first, last, false));
+            }
+        }
+        Ok(match (inclusive && !at_end(end), end > start) {
+            (true, _) => motion::Span::Over { anchor: start, head: end },
+            (false, true) => motion::Span::Over { anchor: start, head: end - 1 },
+            (false, false) => motion::Span::Missed,
         })
     }
 

@@ -33919,6 +33919,41 @@ fn an_around_word_on_trailing_space_reaches_over_one_line_break() {
     assert_eq!(after("ab  \n\ncd\nxx\n", "lldaw"), "ab\ncd\nxx\n", "下一行是空行就停");
 }
 
+/// **An empty line is a word unit of its own** (measured in nvim): `aw` on
+/// it reaches the next line's first word, a count counts it, and `d` that
+/// starts in the indent and leaves only blanks takes whole lines.
+#[test]
+fn vim_word_objects_count_an_empty_line_as_a_unit() {
+    let after = |text: &str, keys: &str| -> (String, (usize, usize)) {
+        let mut ed = typed(text);
+        ed.execute(":keymap vim").unwrap();
+        press(&mut ed, "gg0");
+        press_vim_surround(&mut ed, keys);
+        let rope = ed.current_buffer().rope();
+        let line = rope.char_to_line(ed.cursor());
+        (ed.current_buffer().text(), (line, ed.cursor() - rope.line_to_char(line)))
+    };
+    let text = "sun moon\n\n  star sky cloud\nrain\n";
+    assert_eq!(after(text, "jdaw").0, "sun moon\n sky cloud\nrain\n");
+    assert_eq!(after(text, "jcawup\x1b").0, "sun moon\nup sky cloud\nrain\n");
+    assert_eq!(after(text, "jyawP").0, "sun moon\n\n  star\n  star sky cloud\nrain\n");
+    assert_eq!(after(text, "jd2aw").0, "sun moon\n cloud\nrain\n");
+    assert_eq!(after(text, "jd3aw").0, "sun moon\nrain\n", "the rest is blank: whole lines");
+    assert_eq!(after(text, "jd2iw").0, "sun moon\nstar sky cloud\nrain\n");
+    assert_eq!(after(text, "jdiw").0, text, "one empty line holds nothing to take");
+    assert_eq!(after(text, "jvawd").0, "sun moon\n sky cloud\nrain\n");
+    // Two empty lines: `daw` stops on the second and takes both lines; a
+    // count past the column-one end leaves the caret on the first non-blank.
+    let two = "sun\n\n\n  star sky\nrain\n";
+    assert_eq!(after(two, "jdaw").0, "sun\n  star sky\nrain\n");
+    assert_eq!(after(two, "jd2iw"), ("sun\n  star sky\nrain\n".to_string(), (1, 2)));
+    // From a word, the count goes on over the empty lines.
+    assert_eq!(after("sun moon\n\n\nstar sky\n", "wd3aw").0, "sun sky\n");
+    // A count the text runs out of takes nothing; the caret stays where
+    // vim's walk gave up.
+    assert_eq!(after("sun moon\nrain\n", "jd2iw"), ("sun moon\nrain\n".to_string(), (1, 3)));
+}
+
 /// **數目：括號往外數一層，引號連引號一起拿，詞對象跨得過換行**（逐條問過
 /// nvim）。
 #[test]
