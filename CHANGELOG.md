@@ -123,6 +123,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **vim's `~` sets the column the cursor wants**, as in vim: `~j~` switches the character below the one `~` stepped to, or stayed on at a line's end, instead of below where it was pressed.
 - **vim's Visual `N` looks back from the cursor**, as in vim, instead of from where the selection began: `/cat` then `vnN` comes back to the first match instead of wrapping round to the last.
 - **vim's Insert `C-o` pressed past a line's end comes back past it**, as in vim, when the command leaves the cursor on that line's last character, or wanting a column further right as after `$`: `ox`, `C-o h`, `y` writes `xy`, not `yx`.
+- **vim's Visual `*` and `#` look for what is selected when it is one character or blanks too**, as nvim's do, instead of the word under the cursor or nothing.
 
 ## 0.24.0 · 2026-11-17
 

@@ -484,7 +484,11 @@ impl Editor {
         // 都留下選區，而光標蓋着自己那一格——所以問 `to > from` 的話它恆真，下面
         // 那條「取光標下那個詞」的路**一次都走不到**。搜索面板那一扇同一條規矩
         // （`open_search` 的 `to > from + 1`）。
-        let selected = !word && to > from + 1;
+        //
+        // vim's Visual mode is the exception (nvim's default `v_*`): what is
+        // selected is looked for as it is, one character or blanks included.
+        let visual = self.as_vim() && self.extend;
+        let selected = !word && (to > from + 1 || visual);
         // Where the thing looked for begins here: `#` looks before it.
         let mut begins = from;
         let needle = match selected {
@@ -513,7 +517,10 @@ impl Editor {
                 }
             }
         };
-        let needle = needle.trim().to_string();
+        let needle = match selected && visual {
+            true => needle,
+            false => needle.trim().to_string(),
+        };
         if needle.is_empty() {
             self.status = say!("find.nothing-here-to-look-for");
             return None;

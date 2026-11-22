@@ -47643,3 +47643,18 @@ fn vims_insert_ctrl_o_at_the_line_end_comes_back_past_it() {
     feed_vim(&mut ed, "Aᵒhy⎋");
     assert_eq!(ed.current_buffer().text(), "yab\n");
 }
+
+/// **vim's Visual `*` and `#` look for what is selected** (nvim's default
+/// `v_*`), one character or a blank as well, not the word under the cursor.
+#[test]
+fn vims_visual_star_looks_for_one_selected_character() {
+    let mut ed = typed_vim("ten to tent t\n");
+    feed_vim(&mut ed, "v*");
+    assert_eq!(vim_at(&ed), (1, 5));
+    let mut ed = typed_vim("a  b a b\n");
+    feed_vim(&mut ed, "lv*");
+    assert_eq!(vim_at(&ed), (1, 3));
+    let mut ed = typed_vim("ten to tent t\n");
+    feed_vim(&mut ed, "$v#");
+    assert_eq!(vim_at(&ed), (1, 11));
+}
