@@ -215,7 +215,12 @@ impl Editor {
     pub(super) fn snapshot(&mut self) {
         let at = self.undo_lands_at.unwrap_or_else(|| self.sel.head());
         let every = self.sel.clone();
-        self.current_buffer_mut().snapshot_with(at, Some(every));
+        let lands = self.undo_lands_bytes;
+        let buffer = self.current_buffer_mut();
+        buffer.snapshot_with(at, Some(every));
+        if let Some(lands) = lands {
+            buffer.land_pending_at(lands);
+        }
     }
 
     /// The same, with `at` as the place vim's `u` puts its one cursor back:
@@ -274,14 +279,15 @@ impl Editor {
     }
 
     /// **Where vim's `u` and `C-r` put the cursor** (`u_undoredo` in vim's
-    /// `undo.c`), `began` being where the change began (line, column) and
-    /// `before` the text the step left.
+    /// `undo.c`), `began` being where the change began (line, byte column,
+    /// as vim keeps it) and `before` the text the step left.
     ///
     /// On the line the change began on when that line is inside what the
     /// step changed or one past it, else on the first line it changed; one
     /// line below where the change began goes up to it (`o`'s line, `p`'s).
-    /// On the line it began on the column is where it began; on any other
-    /// the column wanted (nvim's 'nostartofline').
+    /// On the line it began on the column is where it began, the character
+    /// holding that byte when `C-r` has changed the line; on any other the
+    /// column wanted (nvim's 'nostartofline').
     fn where_vim_lands(&self, before: &ropey::Rope, began: (usize, usize), want: usize) -> usize {
         let after = self.current_buffer().rope();
         let (na, nb) = (after.len_lines(), before.len_lines());
@@ -309,18 +315,21 @@ impl Editor {
         if from + 1 == line && line > 1 {
             line -= 1;
         }
+        let start = after.line_to_char(line - 1);
+        let end = motion::line_end(after, start);
         let at = match from == line {
-            true => self.column_on_line(line - 1, began.1),
+            true => {
+                let byte = (after.line_to_byte(line - 1) + began.1).min(after.char_to_byte(end));
+                after.byte_to_char(byte).min(motion::line_last(after, start)).max(start)
+            }
             false => self.char_at_line_column(line - 1, want),
         };
         // **During Insert `C-o` the cursor may stand past the line's end**
         // (vim's `check_cursor_col` and `coladvance` allow one more with
         // `restart_edit` set): a column past the last character lands on the
         // line break, and the Insert goes on after it.
-        let start = after.line_to_char(line - 1);
-        let end = motion::line_end(after, start);
         let past = match from == line {
-            true => start + began.1 >= end,
+            true => after.line_to_byte(line - 1) + began.1 >= after.char_to_byte(end),
             false => want >= self.line_column(end),
         };
         match self.one_normal_key.is_some() && at < end && motion::next_grapheme(after, at) == end && past {
@@ -338,12 +347,13 @@ impl Editor {
         let every = self.sel.clone();
         let before = self.current_buffer().rope().clone();
         let want = self.column_wanted();
+        let lands = self.current_buffer().undo_lands();
         match self.current_buffer_mut().undo_with(at, Some(every)) {
             Some((cursor, kept)) => {
                 let as_vim = self.lands_as_vim(&kept);
                 let cursor = match as_vim {
                     true => {
-                        let began = line_and_column(self.current_buffer().rope(), cursor);
+                        let began = lands.unwrap_or_else(|| line_and_column(self.current_buffer().rope(), cursor));
                         self.where_vim_lands(&before, began, want)
                     }
                     false => cursor,
@@ -447,7 +457,7 @@ impl Editor {
         let every = self.sel.clone();
         let before = self.current_buffer().rope().clone();
         let want = self.column_wanted();
-        let began = self.current_buffer().redo_began_at().map(|at| line_and_column(&before, at));
+        let began = self.current_buffer().redo_lands().or_else(|| self.current_buffer().redo_began_at().map(|at| line_and_column(&before, at)));
         match self.current_buffer_mut().redo_with(at, Some(every)) {
             Some((cursor, kept)) => {
                 let as_vim = self.lands_as_vim(&kept);
@@ -466,9 +476,9 @@ impl Editor {
     }
 }
 
-/// `at` as (line, column in characters), both from 0.
+/// `at` as (line, column in bytes), both from 0.
 fn line_and_column(rope: &ropey::Rope, at: usize) -> (usize, usize) {
     let at = at.min(rope.len_chars());
     let line = rope.char_to_line(at);
-    (line, at - rope.line_to_char(line))
+    (line, rope.char_to_byte(at) - rope.line_to_byte(line))
 }

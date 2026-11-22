@@ -3492,6 +3492,10 @@ pub struct Editor {
     /// caret stands while the verb selects its text. [`Editor::snapshot`]
     /// takes it over the caret while it is set.
     undo_lands_at: Option<usize>,
+    /// Where vim's `u` comes back to as a line and a byte column, beside
+    /// [`Self::undo_lands_at`], when the column is carried onto another
+    /// line ([`crate::buffer::Buffer::land_pending_at`]).
+    undo_lands_bytes: Option<(usize, usize)>,
     /// The character `IndentHint::Symbol` draws there.
     indent_symbol: String,
     /// A pending count prefix, so `3w` moves three words (Helix counts).
@@ -5088,6 +5092,7 @@ impl Editor {
             stepped_over: false,
             selections_restored: false,
             undo_lands_at: None,
+            undo_lands_bytes: None,
             indent_symbol: "↵".to_string(),
             count: None,
             edit_keys: Vec::new(),

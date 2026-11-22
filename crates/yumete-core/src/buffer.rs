@@ -684,6 +684,12 @@ struct EditSnapshot {
     /// which an undo or a redo brings back as vim's does (`uh_namedm`): `u`
     /// after `dd` gives back the mark on the line.
     marks: std::collections::BTreeMap<char, NamedMark>,
+    /// **Where vim's `u` and `C-r` come back to, as a line and a byte
+    /// column**, when that is not a character of the text: after a change
+    /// of several whole lines vim keeps the column the change began in,
+    /// carried onto the second line (`uh_cursor`), and the line it lands on
+    /// takes the character holding that byte.
+    lands: Option<(usize, usize)>,
 }
 
 /// **One state on the line `u` and redo walk**, as `:history` lists it.
@@ -2820,7 +2826,27 @@ impl Buffer {
             saves: self.saves,
             visual: self.visual_now(),
             marks: self.marks_now(),
+            lands: None,
         });
+    }
+
+    /// Say where vim's `u` and `C-r` come back to for the announced point,
+    /// as a line and a byte column ([`EditSnapshot::lands`]).
+    pub fn land_pending_at(&mut self, lands: (usize, usize)) {
+        if let Some(point) = self.history.pending.as_mut() {
+            point.lands = Some(lands);
+        }
+    }
+
+    /// Where vim's next `u` comes back to, as a line and a byte column,
+    /// when the change kept one ([`EditSnapshot::lands`]).
+    pub fn undo_lands(&self) -> Option<(usize, usize)> {
+        self.history.undo.last().and_then(|point| point.lands)
+    }
+
+    /// The same for the next redo.
+    pub fn redo_lands(&self) -> Option<(usize, usize)> {
+        self.history.redo.last().and_then(|point| point.lands)
     }
 
     /// Say where the change on top of the undo stack left the cursors, for a
@@ -2843,6 +2869,7 @@ impl Buffer {
         if let Some(point) = self.history.pending.as_mut() {
             point.cursor = cursor;
             point.selections = Some(selections);
+            point.lands = None;
         }
     }
 
@@ -2851,6 +2878,7 @@ impl Buffer {
     pub fn retarget_pending_cursor(&mut self, cursor: usize) {
         if let Some(point) = self.history.pending.as_mut() {
             point.cursor = cursor;
+            point.lands = None;
         }
     }
 
@@ -2928,6 +2956,7 @@ impl Buffer {
             far: Some((prev.cursor, prev.selections.clone())),
             at: prev.at,
             saves: prev.saves,
+            lands: prev.lands,
             ..self.here(cursor, selections)
         });
         self.revision += 1;
@@ -2970,6 +2999,7 @@ impl Buffer {
             far: Some((next.cursor, next.selections.clone())),
             at: next.at,
             saves: next.saves,
+            lands: next.lands,
             ..self.here(back.0, back.1)
         });
         self.revision += 1;
@@ -2998,6 +3028,7 @@ impl Buffer {
             saves: self.saves,
             visual: self.visual_now(),
             marks: self.marks_now(),
+            lands: None,
         }
     }
 

@@ -1918,6 +1918,7 @@ impl Editor {
             let (from, to) = self.span();
             let several = rope.char_to_line(to.min(rope.len_chars())) > rope.char_to_line(from.min(rope.len_chars()));
             if let Some(lands) = self.undo_lands_at.filter(|_| several) {
+                self.undo_lands_bytes = Some(self.line_and_byte(lands));
                 self.undo_lands_at = Some(self.second_line_of_a_change(lands));
             }
         }

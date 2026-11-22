@@ -47951,3 +47951,61 @@ fn vims_insert_ctrl_o_d0_comes_back_in_front() {
         assert_eq!(ed.current_buffer().text(), want, "{keys} on {text:?}");
     }
 }
+
+/// **vim's `u` and `C-r` after a change of several whole lines carry the
+/// byte column** onto the second line (measured in nvim), not the count of
+/// characters.
+#[test]
+fn vims_undo_after_a_change_of_lines_carries_the_byte_column() {
+    let mut ed = typed_vim("pq\n春夏秋冬晴雨風雪\n  山川草木花鳥蟲魚\nzz\n");
+    feed_vim(&mut ed, "3G4lckX⎋u");
+    assert_eq!(vim_at(&ed), (3, 5));
+    // `C-r` lands on the line now second at the same byte.
+    for keys in ["2GwckX⎋u", "2GwVkcX⎋u"] {
+        let mut ed = typed_vim("春夏秋冬晴雨風雪\n  山川草木花鳥蟲魚\n日月星辰江河湖海\n");
+        feed_vim(&mut ed, keys);
+        ed.on_key(Key::Ctrl('r'));
+        assert_eq!(vim_at(&ed), (2, 2), "{keys}");
+    }
+}
+
+/// **vim's operator on a closed fold begins in the fold's first column**
+/// (`oap->start.col = 0`), which is where `u` comes back to.
+#[test]
+fn vims_undo_after_an_operator_on_a_closed_fold_lands_in_column_one() {
+    for (keys, want) in [("3G3lzfkccX⎋u", (3, 1)), ("3G3lzfkcjX⎋u", (3, 1)), ("3G3lzfkddu", (2, 1))] {
+        let mut ed = typed_vim("pq\nabcdef\nghijklm\nzz\n");
+        feed_vim(&mut ed, keys);
+        assert_eq!(vim_at(&ed), want, "{keys}");
+    }
+}
+
+/// **vim's `-` and `+` under an operator land on the first non-blank**,
+/// and the operator begins at whichever of that and the cursor comes first
+/// (measured in nvim); `d` still lands in the column it wanted. `gUU`,
+/// `guu`, `g~~` and `zf_` begin at the first non-blank too.
+#[test]
+fn vims_minus_and_plus_under_an_operator_go_to_the_first_non_blank() {
+    for (keys, want) in [
+        ("3G4ly-", (2, 3)),
+        ("2G4ly+", (2, 5)),
+        ("3G4lgU-", (2, 3)),
+        ("3G4lzf-", (2, 3)),
+        ("3G4ld-u", (2, 3)),
+        ("3G4lc-X⎋u", (3, 3)),
+        ("3G4ly-j", (3, 3)),
+        ("3G4ld-", (2, 5)),
+        ("2G4lgUU", (2, 3)),
+        ("2G4lgu_", (2, 3)),
+        ("2G4lg~~", (2, 3)),
+        ("2G4l2gUU", (2, 5)),
+        ("2G4lzf_", (2, 3)),
+    ] {
+        let mut ed = typed_vim("pq\n  abcdef\n  ghijklm\nlonger line\n");
+        feed_vim(&mut ed, keys);
+        assert_eq!(vim_at(&ed), want, "{keys}");
+    }
+    let mut ed = typed_vim("pq\n  abcdef\n  ghijklm\n");
+    feed_vim(&mut ed, "$y+j");
+    assert_eq!(vim_at(&ed), (2, 2));
+}

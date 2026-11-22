@@ -297,6 +297,7 @@ impl Editor {
                     }
                 }
                 self.undo_lands_at = None;
+                self.undo_lands_bytes = None;
                 // **An undo point is where the typing begins** (helix's): `A` announces it and then goes to the line's end,
                 // and `u` comes back to that end, with every cursor.
                 //
@@ -1637,6 +1638,19 @@ impl Editor {
             let head = end.saturating_sub(1).max(anchor);
             return self.do_vim(op, motion::Span::Over { anchor, head });
         }
+        // **`gUU`, `g~~`, `guu` and `zf_` begin at the first non-blank**
+        // (vim's `nv_lineop` calls `beginline(BL_WHITE)` on the last line),
+        // or at the cursor when that comes first, and leave the cursor
+        // there.
+        if matches!(op, 'u' | 'U' | '~' | 'Z') {
+            let rope = self.current_buffer().rope();
+            let writing = motion::line_first_non_blank(rope, rope.line_to_char(last));
+            if writing < self.sel.head() {
+                self.move_head(writing);
+            }
+            self.sel.set_goal(None);
+        }
+        let rope = self.current_buffer().rope();
         let span = self.line_span(first, last, op == 'c');
         // **vim's `u` after a doubled operator** comes back to where the line
         // operator put the caret before it acted (`nv_lineop`): the column
@@ -1650,11 +1664,6 @@ impl Editor {
             self.undo_lands_at = Some(motion::line_first_non_blank(rope, rope.line_to_char(first)));
         }
         self.do_vim_span(op, span, Shape::Lines);
-        // `gUU` `guu` `g~~` leave the cursor at the line's start, where
-        // `gUj` keeps its column (as in nvim).
-        if matches!(op, 'u' | 'U' | '~') {
-            self.land_at_column(first, 0);
-        }
     }
 
     /// `n` lines from `here`, a closed fold counting as one: the first line
@@ -2031,6 +2040,27 @@ impl Editor {
         let span = match step.reach {
             crate::vim::Reach::Linewise => {
                 let (a, b) = (rope.char_to_line(start), rope.char_to_line(target));
+                // **`-` and `+` land on the first non-blank** (vim's
+                // `nv_up`/`nv_down` call `beginline(BL_WHITE)`), and the
+                // operator begins at whichever of that and the cursor comes
+                // first, wanting that column: `y-` leaves the cursor on the
+                // upper line's first non-blank, `y+` where it was.
+                //
+                // `d`, `>`, `<` and `=` still land in the column wanted before
+                // (they end in `coladvance(curswant)`), and after any of them
+                // the column wanted is where the cursor stands.
+                if step.first_non_blank {
+                    let writing = motion::line_first_non_blank(rope, rope.line_to_char(b));
+                    let keeps = matches!(op, 'd' | '>' | '<' | '=');
+                    let want = self.column_wanted();
+                    if writing < start {
+                        self.move_head(writing);
+                    }
+                    self.sel.set_goal(keeps.then_some(want));
+                    self.do_vim_lines(op, a.min(b), a.max(b));
+                    self.sel.set_goal(None);
+                    return;
+                }
                 return self.do_vim_lines(op, a.min(b), a.max(b));
             }
             // Warning: **Backwards takes the target and leaves the caret's own
@@ -2311,6 +2341,17 @@ impl Editor {
         if matches!(op, 'd' | 'c' | 'y') && self.refuse_unwritable_register() {
             return;
         }
+        // **An operator beginning in a closed fold begins in its first
+        // column** (vim's `do_pending_operator` sets `oap->start.col` to 0
+        // there outside Visual mode), which is where its `u` comes back to.
+        let folded = match span {
+            motion::Span::Over { anchor, head } if self.as_vim() && !self.extend => {
+                let rope = self.current_buffer().rope();
+                let first = rope.char_to_line(anchor.min(head).min(rope.len_chars()));
+                self.shut_around(first).map(|(first, _)| rope.line_to_char(first))
+            }
+            _ => None,
+        };
         // **An operator takes a closed fold whole** (`:h fold-behavior`: 「dl
         // deletes the whole closed fold under the cursor」, measured).
         let (span, shape) = match op {
@@ -2427,12 +2468,13 @@ impl Editor {
                 }
                 motion::Span::Missed => here,
             };
-            let lands = doubled.unwrap_or(began);
+            let lands = folded.or(doubled).unwrap_or(began);
             let lands = match (op, shape, span) {
                 ('c', Shape::Lines, motion::Span::Over { anchor, head })
                     if rope.char_to_line(anchor.max(head).min(rope.len_chars()))
                         > rope.char_to_line(anchor.min(head).min(rope.len_chars())) =>
                 {
+                    self.undo_lands_bytes = Some(self.line_and_byte(lands));
                     self.second_line_of_a_change(lands)
                 }
                 _ => lands,
@@ -2442,17 +2484,38 @@ impl Editor {
         self.snapshot();
         self.do_vim_verb(op, span, shape, kept, lines_from);
         self.undo_lands_at = None;
+        self.undo_lands_bytes = None;
+    }
+
+    /// The line below `lands` and the byte column `lands` has on its own
+    /// line: where vim's `u` and `C-r` come back to after a change of
+    /// several whole lines ([`Self::second_line_of_a_change`]), which the
+    /// undo point keeps as it stands for the redo to read on its own text.
+    pub(super) fn line_and_byte(&self, lands: usize) -> (usize, usize) {
+        let rope = self.current_buffer().rope();
+        let lands = lands.min(rope.len_chars());
+        let line = rope.char_to_line(lands);
+        (line + 1, rope.char_to_byte(lands) - rope.line_to_byte(line))
     }
 
     /// **Where vim's `u` comes back to after a change of several whole
     /// lines**: the second of them, in the column `lands` has on the first
     /// (measured in nvim). vim's `op_change` deletes all but the first line
     /// from the line below, and that is where its undo keeps the cursor.
+    ///
+    /// vim's column is a byte offset, and it is carried as one: on the
+    /// second line it lands on the character holding that byte, which next
+    /// to CJK text is not the character at the same count.
     pub(super) fn second_line_of_a_change(&self, lands: usize) -> usize {
         let rope = self.current_buffer().rope();
         let lands = lands.min(rope.len_chars());
         let line = rope.char_to_line(lands);
-        self.column_on_line(line + 1, lands - rope.line_to_char(line))
+        let byte = rope.char_to_byte(lands) - rope.line_to_byte(line);
+        let below = (line + 1).min(rope.len_lines().saturating_sub(1));
+        let start = rope.line_to_char(below);
+        let end = motion::line_end(rope, start);
+        let at = rope.byte_to_char((rope.line_to_byte(below) + byte).min(rope.char_to_byte(end)));
+        at.min(motion::line_last(rope, start)).max(start)
     }
 
     /// The verb of [`Self::do_vim_span`], once its span and snapshot are

@@ -44,14 +44,21 @@ pub struct Step {
     pub reach: Reach,
     /// Whether the key still has to be told a character (`f,`, `i(`).
     pub asks: bool,
+    /// Whether the motion lands on its line's first non-blank (`+`, `-`),
+    /// where the operator then begins when that is before the cursor.
+    pub first_non_blank: bool,
 }
 
 const fn step(motion: Motion, reach: Reach) -> Step {
-    Step { motion, reach, asks: false }
+    Step { motion, reach, asks: false, first_non_blank: false }
 }
 
 const fn asking(motion: Motion, reach: Reach) -> Step {
-    Step { motion, reach, asks: true }
+    Step { motion, reach, asks: true, first_non_blank: false }
+}
+
+const fn to_first_non_blank(motion: Motion, reach: Reach) -> Step {
+    Step { motion, reach, asks: false, first_non_blank: true }
 }
 
 /// **The motion a key names**, given the grain the editor is set to and the
@@ -85,9 +92,10 @@ pub fn step_for(typed: &str, grain: Grain, told: Option<char>) -> Option<Step> {
         ("h", _) => step(Motion::Char { forward: false }, Reach::Exclusive),
         ("j", _) => step(Motion::Line { down: true }, Reach::Linewise),
         // `+` and `-` are the next and previous line, linewise like `j` `k`
-        // (`:h +`); `d<Enter>` arrives here as `+`.
-        ("+", _) => step(Motion::Line { down: true }, Reach::Linewise),
-        ("-", _) => step(Motion::Line { down: false }, Reach::Linewise),
+        // but landing on the first non-blank (`:h +`); `d<Enter>` arrives
+        // here as `+`.
+        ("+", _) => to_first_non_blank(Motion::Line { down: true }, Reach::Linewise),
+        ("-", _) => to_first_non_blank(Motion::Line { down: false }, Reach::Linewise),
         ("k", _) => step(Motion::Line { down: false }, Reach::Linewise),
         ("G", _) => step(Motion::FileEnd, Reach::Linewise),
         ("gg", _) => step(Motion::FileStart, Reach::Linewise),

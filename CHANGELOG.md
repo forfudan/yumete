@@ -130,8 +130,9 @@ Written for people who use it to write, not for the commit log: each line says w
 - **vim's `&` and `\0` in a `:s` replacement are the whole match, `\1` to `\9` the groups, `\&` a plain `&`, and `~` the previous replacement**, as in vim, instead of written as they stand; `$0` and `$1` still work.
 - **vim's `R` in a block changes the block's whole lines**, as `V` then `c` would, as in vim, instead of leaving the block and writing over the text from the cursor.
 - **vim's bare range before a `|` goes to its line**, as in vim: `:3|s/a/b/` substitutes on line 3 and `:2,5|…` goes to line 5; a range past the last line is an error and the rest of the line does not run.
-- **vim's `u` after a change of several whole lines puts the cursor on the second of them**, as in vim, in the column the change began in: after `cj`, `3cc` or `Vjc`, instead of on the first.
+- **vim's `u` after a change of several whole lines puts the cursor on the second of them**, as in vim, in the column the change began in, counted in bytes as vim counts it, or in the first column when the change began on a closed fold: after `cj`, `3cc` or `Vjc`, instead of on the first.
 - **vim's Insert `C-o` pressed past a line's end keeps the column past it**, as in vim: `j`, `k`, `gg` or `dd` onto a longer line types in that column, so `A`, `C-o j`, `X` on `abc` over `abcdef` writes `abcXdef`, not `abXcdef`.
+- **vim's `-`, `+` and Enter under an operator begin at the first non-blank**, as in vim: `y-` leaves the cursor on the first non-blank of the line above, and `u` after `d-` comes back there; `gUU`, `guu`, `g~~` and `zf_` on an indented line leave the cursor on its first non-blank, instead of at the line's start or in the column it stood in.
 
 ## 0.24.0 · 2026-11-17
 
