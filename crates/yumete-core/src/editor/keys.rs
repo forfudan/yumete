@@ -1640,7 +1640,11 @@ impl Editor {
         // operator put the caret before it acted (`nv_lineop`): the column
         // for `dd` `>>` `<<`, the first non-blank for the rest (`gUU` `cc`
         // `==`), measured in nvim.
-        if !matches!(op, 'd' | '<' | '>') {
+        // A change of several lines keeps the cursor's own column, on the
+        // second line ([`Self::second_line_of_a_change`]).
+        if op == 'c' && last > first {
+            self.undo_lands_at = Some(self.sel.head());
+        } else if !matches!(op, 'd' | '<' | '>') {
             self.undo_lands_at = Some(motion::line_first_non_blank(rope, rope.line_to_char(first)));
         }
         self.do_vim_span(op, span, Shape::Lines);
@@ -2421,11 +2425,32 @@ impl Editor {
                 }
                 motion::Span::Missed => here,
             };
-            self.undo_lands_at = Some(doubled.unwrap_or(began));
+            let lands = doubled.unwrap_or(began);
+            let lands = match (op, shape, span) {
+                ('c', Shape::Lines, motion::Span::Over { anchor, head })
+                    if rope.char_to_line(anchor.max(head).min(rope.len_chars()))
+                        > rope.char_to_line(anchor.min(head).min(rope.len_chars())) =>
+                {
+                    self.second_line_of_a_change(lands)
+                }
+                _ => lands,
+            };
+            self.undo_lands_at = Some(lands);
         }
         self.snapshot();
         self.do_vim_verb(op, span, shape, kept, lines_from);
         self.undo_lands_at = None;
+    }
+
+    /// **Where vim's `u` comes back to after a change of several whole
+    /// lines**: the second of them, in the column `lands` has on the first
+    /// (measured in nvim). vim's `op_change` deletes all but the first line
+    /// from the line below, and that is where its undo keeps the cursor.
+    pub(super) fn second_line_of_a_change(&self, lands: usize) -> usize {
+        let rope = self.current_buffer().rope();
+        let lands = lands.min(rope.len_chars());
+        let line = rope.char_to_line(lands);
+        self.column_on_line(line + 1, lands - rope.line_to_char(line))
     }
 
     /// The verb of [`Self::do_vim_span`], once its span and snapshot are

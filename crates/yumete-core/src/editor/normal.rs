@@ -1913,6 +1913,14 @@ impl Editor {
         if !matches!(key, Key::Alt('d') | Key::Alt('c')) && self.refuse_unwritable_register() {
             return;
         }
+        if self.vim_lines && matches!(key, Key::Char('c') | Key::Alt('c')) {
+            let rope = self.current_buffer().rope();
+            let (from, to) = self.span();
+            let several = rope.char_to_line(to.min(rope.len_chars())) > rope.char_to_line(from.min(rope.len_chars()));
+            if let Some(lands) = self.undo_lands_at.filter(|_| several) {
+                self.undo_lands_at = Some(self.second_line_of_a_change(lands));
+            }
+        }
         self.snapshot();
         // A count deletes that many graphemes when there is nothing
         // selected, the way `3x` does in vim; with a selection it is

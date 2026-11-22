@@ -47843,3 +47843,25 @@ fn vims_visual_star_over_lines_looks_for_the_line_end() {
     }
 }
 
+
+/// **vim's `u` after a change of several whole lines comes back to the
+/// second of them** (measured in nvim), in the column the change began in:
+/// vim's `op_change` deletes the lines after the first from the line below.
+#[test]
+fn vims_undo_after_changing_lines_lands_on_the_second() {
+    for (keys, at) in [
+        ("Vjcpq⎋u", (2, 1)),
+        ("lVjcpq⎋u", (2, 1)),
+        ("jjllVkcpq⎋u", (3, 3)),
+        ("cjpq⎋u", (2, 1)),
+        ("lcjpq⎋u", (2, 2)),
+        ("l2Spq⎋u", (2, 2)),
+        ("3ccpq⎋u", (2, 1)),
+        ("ccpq⎋u", (1, 1)),
+    ] {
+        let mut ed = typed_vim("ant\nbee\ncat\ndog\nelk\n");
+        feed_vim(&mut ed, keys);
+        assert_eq!(ed.current_buffer().text(), "ant\nbee\ncat\ndog\nelk\n", "{keys}");
+        assert_eq!(vim_at(&ed), at, "{keys}");
+    }
+}
