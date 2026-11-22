@@ -347,6 +347,9 @@ impl super::Editor {
             return;
         }
         let quiet = self.pending == Pending::None && self.alias_held.is_empty() && self.count.is_none();
+        if self.pending == Pending::None && self.alias_held.is_empty() && matches!(key, Key::Char('*' | '#')) {
+            return self.search_for_the_block(block, key == Key::Char('*'));
+        }
         if quiet {
             let (first, _, left, _) = self.block_shape(block);
             let top_left = at_column(self.current_buffer().rope(), self.tab_stop(), first, left);
@@ -529,34 +532,8 @@ impl super::Editor {
     /// delete over several lines and `"-` for one within a line (`:h
     /// quote_number`).
     fn block_yank(&mut self, block: Block, yank: bool) {
-        let rope = self.current_buffer().rope().clone();
-        let tab = self.tab_stop();
-        let pieces = self.block_pieces(block);
-        let (first, last, left, right) = self.block_shape(block);
         self.edit_round += 1;
-        let texts: Vec<Option<String>> = (first..=last)
-            .map(|line| {
-                pieces
-                    .iter()
-                    .find(|&&(l, _, _)| l == line)
-                    .map(|&(_, a, b)| piece_text(&rope, tab, line, a..b, left, right))
-            })
-            .collect();
-        // After `$` the block is as wide as its widest piece (nvim pads
-        // `C-v j $ y` of `abc` and `d` to three columns).
-        let block_width = match block.to_line_end {
-            true => texts.iter().flatten().map(|text| text_width(text, tab)).max().unwrap_or(0),
-            false => right + 1 - left,
-        };
-        let texts: Vec<String> = texts
-            .into_iter()
-            .zip(first..=last)
-            .map(|(text, line)| match text {
-                Some(text) => text,
-                None if width(&rope, tab, line) < left => " ".repeat(block_width + usize::from(block.to_line_end)),
-                None => String::new(),
-            })
-            .collect();
+        let (texts, block_width) = self.block_texts(block);
         let named = self.pending_register.take();
         let named = self.register_to_write(named);
         let vim = self.keymap_rules().vim_registers;
@@ -616,6 +593,69 @@ impl super::Editor {
             }
             false => {}
         }
+    }
+
+    /// **vim's `*` and `#` on a block** (nvim's `v_star-default`): the
+    /// block's pieces, one a line and joined by line breaks, become the last
+    /// search, looked for exactly as written, and the block ends with the
+    /// cursor going `count` matches on from where it stood, as `n` goes.
+    /// `#` counts one more from a cursor past the block's first corner, so
+    /// the block's own text is passed over.
+    fn search_for_the_block(&mut self, block: Block, forward: bool) {
+        let mut count = self.count.take().unwrap_or(1).max(1);
+        let (texts, _) = self.block_texts(block);
+        let rope = self.current_buffer().rope();
+        let byte_place = |at: usize| {
+            let at = at.min(rope.len_chars());
+            let line = rope.char_to_line(at);
+            (line, rope.char_to_byte(at) - rope.line_to_byte(line))
+        };
+        let ((anchor_line, anchor_col), (line, col)) = (byte_place(block.anchor), byte_place(block.cursor));
+        self.leave_block(block.cursor);
+        if texts.iter().all(|text| text.is_empty()) {
+            self.status = say!("find.nothing-here-to-look-for");
+            return;
+        }
+        if !forward && (line > anchor_line || col > anchor_col) {
+            count += 1;
+        }
+        self.last_search = texts.iter().map(|text| regex::escape(text)).collect::<Vec<_>>().join("\n");
+        self.search_forward = forward;
+        self.hits = None;
+        self.remember_jump();
+        self.repeat(count, |e| e.repeat_search(forward));
+    }
+
+    /// The block's text, one piece a line as a yank takes it, and its width.
+    fn block_texts(&self, block: Block) -> (Vec<String>, usize) {
+        let rope = self.current_buffer().rope();
+        let tab = self.tab_stop();
+        let pieces = self.block_pieces(block);
+        let (first, last, left, right) = self.block_shape(block);
+        let texts: Vec<Option<String>> = (first..=last)
+            .map(|line| {
+                pieces
+                    .iter()
+                    .find(|&&(l, _, _)| l == line)
+                    .map(|&(_, a, b)| piece_text(rope, tab, line, a..b, left, right))
+            })
+            .collect();
+        // After `$` the block is as wide as its widest piece (nvim pads
+        // `C-v j $ y` of `abc` and `d` to three columns).
+        let block_width = match block.to_line_end {
+            true => texts.iter().flatten().map(|text| text_width(text, tab)).max().unwrap_or(0),
+            false => right + 1 - left,
+        };
+        let texts: Vec<String> = texts
+            .into_iter()
+            .zip(first..=last)
+            .map(|(text, line)| match text {
+                Some(text) => text,
+                None if width(rope, tab, line) < left => " ".repeat(block_width + usize::from(block.to_line_end)),
+                None => String::new(),
+            })
+            .collect();
+        (texts, block_width)
     }
 
     /// Take every line's piece out, bottom line first.

@@ -47558,6 +47558,31 @@ fn visual_from_a_block_keeps_a_corner_past_the_line_end() {
     }
 }
 
+/// **vim's `*` and `#` on a block look for the block's text** (nvim's
+/// `v_star-default`, measured): its pieces, joined by line breaks, become
+/// the last search, the block ends, and the cursor goes from where it
+/// stood as `n` would, `#` passing the block's own text over.
+#[test]
+fn star_and_hash_on_a_block_look_for_its_text() {
+    let text = "oak elm ash\nelm oak\nash ash elm\n";
+    let cases: &[(&str, &str, (usize, usize))] = &[
+        ("wᵛll*x", "oak elm ash\nlm oak\nash ash elm\n", (2, 1)),
+        ("wᵛ*x", "oak elm ash\nlm oak\nash ash elm\n", (2, 1)),
+        ("wllᵛhh#x", "oak elm ash\nelm oak\nash ash lm\n", (3, 9)),
+        ("jwᵛll2#x", "oak elm ash\nelm ak\nash ash elm\n", (2, 5)),
+        ("wᵛll*nx", "oak elm ash\nelm oak\nash ash lm\n", (3, 9)),
+        // Over two lines nothing matches, and the cursor stays.
+        ("wᵛjl*x", "oak elm ash\nelm ok\nash ash elm\n", (2, 6)),
+    ];
+    for &(keys, after, at) in cases {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        assert_eq!(ed.current_buffer().text(), after, "{keys}");
+        assert_eq!(vim_at(&ed), at, "{keys}");
+        assert!(ed.block.is_none() && !ed.extend, "{keys}");
+    }
+}
+
 /// **vim's `*` goes to the only match there is** (measured in nvim): the
 /// search wraps round to it, so the cursor lands on the word's start, and
 /// from Visual mode on the selection's start with Visual mode ended.
