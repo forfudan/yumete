@@ -46003,6 +46003,28 @@ fn a_substitution_over_many_matches_on_one_line_writes_each() {
     assert_eq!(ed.current_buffer().text(), want);
 }
 
+/// **helix's `>` puts one indent unit before the line and keeps what was
+/// there** (`indent`, helix 25.07.1): a TAB before a line indented with
+/// TABs or with spaces and a TAB, spaces before one indented with spaces;
+/// `<` on a line indented with TABs takes one off.
+#[test]
+fn helix_shift_puts_one_indent_unit_before_the_line() {
+    let shifted = |text: &str, keys: &str| {
+        let mut ed = typed(text);
+        ed.set_tab_stop(8);
+        ed.set_indent_width(4);
+        ed.set_tab_spaces(true);
+        press(&mut ed, "gg");
+        keyed(&mut ed, keys);
+        ed.current_buffer().text()
+    };
+    assert_eq!(shifted("  \t玄黄\n", ">"), "\t  \t玄黄\n");
+    assert_eq!(shifted("\t  天地\n", ">"), "\t\t  天地\n");
+    assert_eq!(shifted("\t\t宇宙\n", ">"), "\t\t\t宇宙\n");
+    assert_eq!(shifted("  洪荒\n", ">"), "      洪荒\n");
+    assert_eq!(shifted("\t\t宇宙\n", "<"), "\t宇宙\n");
+}
+
 /// **A run written once is never offered, and hides no shorter run**:
 /// after `天地玄黄宇宙` twice and `天地玄黄日月` once, `天地` offers the two
 /// runs written more than once, the more written first.

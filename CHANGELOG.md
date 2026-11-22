@@ -40,7 +40,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **Insert `C-r` reads the registers that answer**, `%` (the file's name), `/` (the last search), `.` and `#`, as `"%p` and the others do.
 - **Phrase completion offers a repeated phrase when both copies go on with the same character**: after `长江三角洲的…长江三角洲的…`, `长江三角` offers `长江三角洲` again.
 - **Wrapping no longer leaves a list marker or a short word alone on its row** when a Latin word glued to 漢字 overflows: `- 甲乙丙…English` breaks before `English`.
-- **`>>`, `<<`, Visual `>`/`<` and Insert `C-t`/`C-d` keep a TAB-indented line's TABs** when Tab types spaces, a TAB a level, as `o` already did; a Go file's `\t\treturn` no longer becomes twenty spaces.
+- **`>>`, `<<`, Visual `>`/`<` and Insert `C-t`/`C-d` keep a TAB-indented line's TABs** when Tab types spaces, a TAB a level, as `o` already did; a Go file's `\t\treturn` no longer becomes twenty spaces. helix's `>` puts the TAB before the line and leaves the rest of its indent as it was, as helix does.
 - **Under helix, a page with an even number of rows keeps one more row below the cursor than above**, as helix does: on ten rows with scrolloff 5, `50gg` shows line 46 at the top.
 - **vim's `p`, `P`, `gp` and `gP` on a block replace the block**, as in vim: a block taken goes in as a block, a word on every line of the block, lines below it; `vp` and `Vp` with a block taken put it as a block and as lines, and Visual `gP` puts what it replaced in the register, as `p` does.
 - **vim's `gv` selects the last block again**; it said nothing had been selected.

@@ -1179,7 +1179,6 @@ impl Editor {
         let primary = self.sel.primary();
         let which = self.sel.iter().position(|one| *one == primary).unwrap_or(0);
         let mut ranges: Vec<crate::selection::Range> = self.sel.iter().copied().collect();
-        let pad = " ".repeat(self.indent_width());
         self.snapshot();
         // Bottom-up, so earlier edits do not shift the lines still to come.
         let vim = self.as_vim();
@@ -1203,8 +1202,16 @@ impl Editor {
             // (`shift_line`, measured in nvim): tabs as far as they go and
             // spaces for the rest, unless Tab types spaces. So `ts=4 sw=6
             // noet` gives a TAB and two spaces, not six spaces.
-            let tabbed = self.current_buffer().rope().line(line).chars().take_while(|c| c.is_whitespace() && *c != '\n').any(|c| c == '\t');
-            if vim || tabbed {
+            //
+            // **helix's `>` puts one indent unit before the line** (`indent`,
+            // helix 25.07.1) and leaves what was there: a TAB where the line
+            // indents with TABs, as helix's own unit is in a file it finds
+            // indented so, else `indent_width` spaces. Its `<` takes whole characters of the
+            // indent until a level's columns are gone, which for a
+            // TAB-indented line is what the shift below writes.
+            let leading: String = self.current_buffer().rope().line(line).chars().take_while(|c| *c == ' ' || *c == '\t').collect();
+            let tabbed = leading.contains('\t');
+            if vim || (tabbed && !add) {
                 if let Some((old, new)) = self.vim_shifted_indent(line, add) {
                     let spaces = |s: &str| s.chars().all(|c| c == ' ');
                     if !(spaces(&old) && spaces(&new)) {
@@ -1227,7 +1234,11 @@ impl Editor {
             }
             // `(at, n, grows)`: what changed at `at`, for moving the ranges.
             let change = if add {
-                self.edit_insert(at, &pad).then_some((at, self.indent_width(), true))
+                let unit = match tabbed {
+                    true => "\t".to_string(),
+                    false => " ".repeat(self.indent_width()),
+                };
+                self.edit_insert(at, &unit).then_some((at, unit.chars().count(), true))
             } else {
                 let rope = self.current_buffer().rope();
                 let len = rope.len_chars();
