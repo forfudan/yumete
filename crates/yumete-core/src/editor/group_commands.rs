@@ -102,13 +102,13 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::GotoOlderChange, |e, _| e.walk_changes(true), Key::Char(';')),
     (NormalCmd::GotoNewerChange, |e, _| e.walk_changes(false), Key::Char(',')),
     // vim's `g` operators, each waiting for a motion.
-    (NormalCmd::OperatorLowercase, |e, _| e.g_operator('u'), Key::Char('u')),
-    (NormalCmd::OperatorUppercase, |e, _| e.g_operator('U'), Key::Char('U')),
-    (NormalCmd::OperatorSwitchCase, |e, _| e.g_operator('~'), Key::Char('~')),
+    (NormalCmd::OperatorLowercase, |e, cx| e.g_operator('u', cx.operator_count), Key::Char('u')),
+    (NormalCmd::OperatorUppercase, |e, cx| e.g_operator('U', cx.operator_count), Key::Char('U')),
+    (NormalCmd::OperatorSwitchCase, |e, cx| e.g_operator('~', cx.operator_count), Key::Char('~')),
     // `gc` is `#` inside: the operator's own letter is taken by `c`.
-    (NormalCmd::OperatorComment, |e, _| e.g_operator('#'), Key::Char('c')),
-    (NormalCmd::OperatorFill, |e, _| e.g_operator('q'), Key::Char('q')),
-    (NormalCmd::OperatorFillKeepCursor, |e, _| e.g_operator('w'), Key::Char('w')),
+    (NormalCmd::OperatorComment, |e, cx| e.g_operator('#', cx.operator_count), Key::Char('c')),
+    (NormalCmd::OperatorFill, |e, cx| e.g_operator('q', cx.operator_count), Key::Char('q')),
+    (NormalCmd::OperatorFillKeepCursor, |e, cx| e.g_operator('w', cx.operator_count), Key::Char('w')),
     (NormalCmd::JoinSelectionsNoSpace, |e, cx| {
         // A group's key is not seen by `before_a_motion`: on a closed fold,
         // vim's `gJ` joins the line the cursor is hidden on, as `J` does.
@@ -287,7 +287,7 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     // ── z: vim's folds ────────────────────────────────────────────────
     // vim's an operator, helix's the selection's lines (the flavour's `zf`).
     (NormalCmd::CreateFold, |e, _| e.fold_selection(), Key::Char('f')),
-    (NormalCmd::VimCreateFold, |e, _| e.fold_operator(), Key::Char('f')),
+    (NormalCmd::VimCreateFold, |e, cx| e.fold_operator(cx.operator_count), Key::Char('f')),
     (NormalCmd::CreateFoldLines, |e, cx| { let line = e.cursor_line(); e.fold_lines(line, line + cx.count.max(1) - 1) }, Key::Char('F')),
     (NormalCmd::OpenFold, |e, cx| e.fold_open(cx.count, false), Key::Char('o')),
     (NormalCmd::OpenFoldsRecursively, |e, cx| e.fold_open(cx.count, true), Key::Char('O')),
@@ -656,15 +656,18 @@ impl Editor {
     /// has selected.
     /// vim's `zf`: an operator over a motion, or the Visual selection's
     /// lines folded.
-    fn fold_operator(&mut self) {
-        self.g_operator('Z');
+    fn fold_operator(&mut self, count: Option<usize>) {
+        self.g_operator('Z', count);
     }
 
-    fn g_operator(&mut self, op: char) {
+    /// The count before the `g` goes with the operator, as `d`'s does:
+    /// `2gUU` is two lines and `3gUw` three words.
+    fn g_operator(&mut self, op: char, count: Option<usize>) {
         if self.extend {
             return self.vim_visual_key(op);
         }
         self.pending = Pending::VimOperator { op, first: None };
+        self.count = count;
     }
 
     /// The character under the cursor, looked up in the dictionary: in a

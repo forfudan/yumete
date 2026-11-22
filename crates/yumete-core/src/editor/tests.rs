@@ -46125,3 +46125,23 @@ fn a_counted_word_motion_counts_an_empty_line() {
         assert_eq!((ed.current_buffer().text().as_str(), vim_at(&ed)), (want, at), "{keys}");
     }
 }
+
+/// **The count before a `g` operator goes with it** (measured in nvim):
+/// `2gUU` and `2g~~` take two lines, `2gUw` two words, and `2gUU` on the
+/// last line does nothing, as `2dd` there does.
+#[test]
+fn a_count_before_a_g_operator_counts() {
+    let text = "sun moon star\nsea sky\nend\n";
+    let cases: &[(&str, &str)] = &[
+        ("2gUU", "SUN MOON STAR\nSEA SKY\nend\n"),
+        ("2g~~", "SUN MOON STAR\nSEA SKY\nend\n"),
+        ("2gUgU", "SUN MOON STAR\nSEA SKY\nend\n"),
+        ("2gUw", "SUN MOON star\nsea sky\nend\n"),
+        ("G2gUU", text),
+    ];
+    for &(keys, want) in cases {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        assert_eq!(ed.current_buffer().text(), want, "{keys}");
+    }
+}
