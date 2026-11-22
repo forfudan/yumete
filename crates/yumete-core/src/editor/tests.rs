@@ -46225,3 +46225,28 @@ fn a_register_named_in_a_block_keeps_the_corner() {
         assert_eq!((ed.current_buffer().text().as_str(), vim_at(&ed)), (want, at), "{keys}");
     }
 }
+
+/// **vim's Esc after `V` and `j` or `k` leaves the cursor in the column
+/// on the screen they kept** (measured in nvim), over wide characters and
+/// tabs; and `j` under `V` on the last line does not reach past it.
+#[test]
+fn esc_after_a_linewise_visual_keeps_the_screen_column() {
+    let text = "天地玄黄\nab\n宇宙洪荒x\n\tabcdefgh\nlast line\n";
+    let cases: &[(&str, (usize, usize))] = &[
+        ("0llVjjj⎋", (4, 1)),
+        ("03GllVj⎋", (4, 1)),
+        ("04GwlVk⎋", (3, 5)),
+        ("0llVjjj⎋j", (5, 8)),
+        ("0llVjj⎋", (3, 3)),
+        ("0GVj⎋", (5, 1)),
+        ("0GV5j⎋", (5, 1)),
+    ];
+    for &(keys, at) in cases {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        assert_eq!(vim_at(&ed), at, "{keys}");
+    }
+    let mut ed = typed_vim(text);
+    feed_vim(&mut ed, "0GkVjjd");
+    assert_eq!(ed.current_buffer().text(), "天地玄黄\nab\n宇宙洪荒x\n");
+}

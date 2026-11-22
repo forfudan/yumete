@@ -1485,6 +1485,9 @@ impl Editor {
     pub(super) fn cmd_select_line_mode(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
         self.vim_line_want = self.column_wanted();
+        // `j` and `k` under `V` aim at that column, not at the line's end
+        // where the selection's head stands.
+        self.sel.set_goal(Some(self.vim_line_want));
         self.vim_line_column = {
             let rope = self.current_buffer().rope();
             let head = self.sel.head().min(rope.len_chars());
@@ -1562,13 +1565,15 @@ impl Editor {
         // 那一句。
         // **vim's Esc leaves Visual with nothing selected and the
         // cursor where it stood** (`:h v_<Esc>`).
-        // After `V` the cursor goes back to the column it was in.
+        // After `V` that is the column on the screen `j` and `k` kept, on
+        // the line they reached (vim's 'curswant'), however wide the
+        // characters or tabs between.
         if self.as_vim() && self.extend {
             let at = match self.vim_lines {
                 true => {
                     let rope = self.current_buffer().rope();
                     let line = rope.char_to_line(self.sel.head().min(rope.len_chars()));
-                    self.column_on_line(line, self.vim_line_column)
+                    self.char_at_line_column(line, self.sel.goal().unwrap_or(self.vim_line_want))
                 }
                 false => self.sel.head(),
             };

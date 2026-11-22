@@ -598,7 +598,6 @@ impl Editor {
     pub(super) fn vim_cannot_reach(&self, rope: &crate::Rope, pos: usize) -> bool {
         self.keymap_rules().caret_off_newline
             && self.mode == Mode::Normal
-            && !(self.vim_lines && self.extend)
             && rope.char_to_line(pos) > self.last_real_line(rope)
     }
 
