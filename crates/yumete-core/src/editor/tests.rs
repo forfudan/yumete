@@ -47237,3 +47237,32 @@ fn star_motions_and_their_g_forms() {
     assert_eq!(ed.current_buffer().text(), "sun x\nsun end\n");
     assert_eq!(vim_at(&ed), (2, 1));
 }
+
+/// **vim's cursor keeps its own column under `V`** (measured in nvim):
+/// motions move it from where it stood, Esc, `o`, `gv`, `<` and `d` honour
+/// the column it reached, `$` stands past the last character so `$h` comes
+/// back onto it, and the selection still covers the whole lines.
+#[test]
+fn linewise_visual_keeps_the_cursor_column() {
+    let text = "maple leaf\na much longer line\nbirch\n";
+    let mut ed = typed_vim(text);
+    feed_vim(&mut ed, "llV");
+    assert_eq!(vim_at(&ed), (1, 3));
+    assert_eq!(ed.selection(), (0, 10), "the whole first line");
+    feed_vim(&mut ed, "fe⎋");
+    assert_eq!(vim_at(&ed), (1, 5));
+    let cases: &[(&str, (usize, usize))] = &[
+        ("lllVhhj<", (1, 2)),
+        ("llVll⎋", (1, 5)),
+        ("jwwVj$h⎋", (3, 5)),
+        ("jwwV$h⎋", (2, 18)),
+        ("llVlo⎋", (1, 3)),
+        ("llVl⎋ggjgv⎋", (1, 4)),
+        ("lllVhhjd", (1, 2)),
+    ];
+    for &(keys, at) in cases {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        assert_eq!(vim_at(&ed), at, "{keys}");
+    }
+}

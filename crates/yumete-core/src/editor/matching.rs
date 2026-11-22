@@ -238,6 +238,15 @@ impl Editor {
             return;
         }
         self.take_object(span);
+        // **Under vim's `V` a paragraph leaves the cursor at its last line's
+        // start**, as vim's `ip` and `ap` do: the lines are the selection.
+        if what == motion::Object::Paragraph && self.vim_lines && self.extend && self.as_vim() {
+            let rope = self.current_buffer().rope();
+            let head = self.sel.head().min(rope.len_chars());
+            let start = rope.line_to_char(rope.char_to_line(head));
+            self.sel.set_head(start);
+            self.refresh_goal_column();
+        }
     }
 
     /// **Take both ends exactly as the object named them** (B1).
@@ -2727,7 +2736,7 @@ impl Editor {
         // at a line's end takes the break), as `keep_off_the_newline` allows.
         let last = match self.mode {
             crate::editor::Mode::Insert => motion::line_end(rope, here),
-            _ if self.extend && !self.vim_lines => motion::line_end(rope, here),
+            _ if self.extend => motion::line_end(rope, here),
             _ => motion::line_last(rope, here),
         };
         if (first..=last).contains(&pos) {

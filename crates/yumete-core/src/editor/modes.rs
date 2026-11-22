@@ -96,6 +96,9 @@ impl Editor {
     /// cursor). Helix treats the cursor as a one-wide selection, so `d` still
     /// deletes the grapheme under a collapsed cursor.
     pub fn selection(&self) -> (usize, usize) {
+        if let Some(lines) = self.visual_lines() {
+            return lines;
+        }
         let (start, end) = (self.mark().min(self.caret()), self.mark().max(self.caret()));
         // The grapheme the cursor sits on is *inside* the selection, as it is
         // in Helix. Without this the block cursor covers a character that an
@@ -198,7 +201,24 @@ impl Editor {
     /// in it — so it cannot answer this. The renderer needs the difference: a
     /// bare cursor is drawn as a cursor, not as a one-character highlight.
     pub fn has_selection(&self) -> bool {
-        self.mark() != self.caret()
+        self.mark() != self.caret() || self.visual_lines().is_some()
+    }
+
+    /// **vim's linewise Visual covers whole lines** while its two ends stand
+    /// where they are: from the first line's start to the last one's last
+    /// character, as the selection it shows and the one a command reads.
+    /// `None` outside it.
+    fn visual_lines(&self) -> Option<(usize, usize)> {
+        if !(self.extend && self.vim_lines && self.mode == Mode::Normal && self.block.is_none() && self.viewing.get().is_none() && self.as_vim()) {
+            return None;
+        }
+        let rope = self.current_buffer().rope();
+        let len = rope.len_chars();
+        let (a, b) = (self.mark().min(len), self.caret().min(len));
+        let (first, last) = (rope.char_to_line(a.min(b)), rope.char_to_line(a.max(b)));
+        let start = rope.line_to_char(first);
+        let last = motion::line_last(rope, rope.line_to_char(last));
+        Some((start, motion::next_grapheme(rope, last)))
     }
 
     /// The text typed so far in Command mode (without the leading `:`).

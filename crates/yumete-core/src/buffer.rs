@@ -509,8 +509,11 @@ pub enum LastSelection {
     /// Characters (`v`): where it was anchored and where its head stood,
     /// each a line and a character on it.
     Chars(Place, Place),
-    /// Whole lines (`V`): its anchor's line and its head's.
-    Lines(usize, usize),
+    /// Whole lines (`V`): where it was anchored and where its head stood,
+    /// each a line and a character on it, and the screen column the cursor
+    /// wanted then (vim's `vi_curswant`), which `gv` gives back however an
+    /// edit has moved the head.
+    Lines(Place, Place, usize),
     /// A block (`C-v`): each corner's line and display column, the corner
     /// that stays first, and whether `$` stretched it to the line ends.
     Block { anchor: Place, cursor: Place, to_line_end: bool },
@@ -521,7 +524,7 @@ impl LastSelection {
     fn moved(self, by: impl Fn(Place) -> Place) -> Self {
         match self {
             LastSelection::Chars(anchor, head) => LastSelection::Chars(by(anchor), by(head)),
-            LastSelection::Lines(anchor, head) => LastSelection::Lines(by((anchor, 0)).0, by((head, 0)).0),
+            LastSelection::Lines(anchor, head, want) => LastSelection::Lines(by(anchor), by(head), want),
             LastSelection::Block { anchor, cursor, to_line_end } => {
                 LastSelection::Block { anchor: by(anchor), cursor: by(cursor), to_line_end }
             }

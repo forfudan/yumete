@@ -2845,13 +2845,6 @@ pub struct Editor {
     /// The open files the session file last named, so the autosave tick
     /// writes it again only when they change.
     session_names: Vec<std::path::PathBuf>,
-    /// The cursor's column when `V` was pressed: the selection then reaches
-    /// the line's end, and vim's `>`/`<` put the cursor back in this column.
-    vim_line_column: usize,
-    /// The column the cursor wanted when `V` was pressed, counted on the
-    /// screen as `j` and `k` keep it (vim's 'curswant'): a linewise Visual
-    /// `d`, `>` or `<` puts the cursor back in it (vim's 'nostartofline').
-    vim_line_want: usize,
     /// Set while a yank stores its text, so the store can tell a yank from
     /// a delete (vim's `"0` is the one, `"1` the other).
     storing_a_yank: bool,
@@ -4886,8 +4879,6 @@ impl Editor {
             insert_register_how: None,
             insert_began: None,
             session_names: Vec::new(),
-            vim_line_column: 0,
-            vim_line_want: 0,
             storing_a_yank: false,
             use_reg_one: false,
             take_the_break: false,

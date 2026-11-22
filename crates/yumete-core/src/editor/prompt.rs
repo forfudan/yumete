@@ -847,7 +847,7 @@ impl Editor {
         let len = rope.len_chars();
         let (top, cursor) = (rope.char_to_line(anchor.min(len)), rope.char_to_line(head.min(len)));
         Some(match cursor < top {
-            true => self.column_on_line(cursor, self.vim_line_column),
+            true => head.min(len),
             false => rope.line_to_char(top),
         })
     }

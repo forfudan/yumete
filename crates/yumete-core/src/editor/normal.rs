@@ -1167,9 +1167,10 @@ impl Editor {
             self.sel.set_goal(Some(super::keys::LINE_END_GOAL));
             // **vim's Visual `$` takes the line break** (`:h v_$`, as nvim
             // does): `v$d` joins the next line on, `v$y`
-            // yanks the break. Charwise only; in Normal `$` stays on the
-            // last character.
-            if self.extend && !self.vim_lines {
+            // yanks the break, and under `V` the cursor stands past the last
+            // character, so `$h` comes back onto it. In Normal `$` stays on
+            // the last character.
+            if self.extend {
                 let rope = self.current_buffer().rope();
                 let head = self.sel.head();
                 let line = rope.char_to_line(head);
@@ -1505,12 +1506,25 @@ impl Editor {
     #[allow(unused_variables)]
     pub(super) fn cmd_select_line_mode(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
-        self.vim_line_want = self.column_wanted();
-        self.vim_line_column = {
-            let rope = self.current_buffer().rope();
-            let head = self.sel.head().min(rope.len_chars());
-            head - rope.line_to_char(rope.char_to_line(head))
-        };
+        // **vim's cursor stays where it is under `V`**, and motions move it
+        // as they do anywhere: the selection is the lines from where `V` was
+        // pressed to the cursor's, whole however far along them the two
+        // stand ([`Self::selection`]). From charwise Visual both ends stay.
+        if self.as_vim() {
+            if !self.extend {
+                let head = self.sel.head();
+                self.sel.set_anchor(head);
+            }
+            // The column wanted is read as Normal mode reads it, on a tab's
+            // end, before Visual reads it at the tab's start.
+            let want = self.column_wanted();
+            self.sel.set_goal(Some(want));
+            self.extend = true;
+            self.vim_lines = true;
+            self.drop_register_into_visual();
+            return;
+        }
+        let want = self.column_wanted();
         // From a caret, the caret's line alone: helix's `x` on an empty
         // line, already whole, takes the next line too, so `V` `d` on an
         // empty line would delete two.
@@ -1526,7 +1540,7 @@ impl Editor {
         }
         // `j` and `k` under `V` aim at that column, not at the line's end
         // where the selection's head stands.
-        self.sel.set_goal(Some(self.vim_line_want));
+        self.sel.set_goal(Some(want));
         self.extend = true;
         self.vim_lines = true;
         self.drop_register_into_visual();
@@ -1598,19 +1612,10 @@ impl Editor {
         // 「還有選區」不算 Esc 有事可做——否則選區留着的時候 Esc 永遠說不出
         // 那一句。
         // **vim's Esc leaves Visual with nothing selected and the
-        // cursor where it stood** (`:h v_<Esc>`).
-        // After `V` that is the column on the screen `j` and `k` kept, on
-        // the line they reached (vim's 'curswant'), however wide the
-        // characters or tabs between.
+        // cursor where it stood** (`:h v_<Esc>`), under `V` too: the
+        // cursor keeps its own column there.
         if self.as_vim() && self.extend {
-            let at = match self.vim_lines {
-                true => {
-                    let rope = self.current_buffer().rope();
-                    let line = rope.char_to_line(self.sel.head().min(rope.len_chars()));
-                    self.char_at_line_column(line, self.column_wanted())
-                }
-                false => self.sel.head(),
-            };
+            let at = self.sel.head();
             self.extend = false;
             self.vim_lines = false;
             self.sel.set_anchor(at);

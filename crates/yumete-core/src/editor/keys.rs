@@ -479,7 +479,7 @@ impl Editor {
             (line, at - rope.line_to_char(line))
         };
         Some(match self.vim_lines {
-            true => LastSelection::Lines(place(from).0, place(to).0),
+            true => LastSelection::Lines(place(self.sel.anchor()), place(self.sel.head()), self.column_wanted()),
             false => LastSelection::Chars(place(from), place(to)),
         })
     }
@@ -487,7 +487,9 @@ impl Editor {
     /// **The selection a Visual `p` leaves for `gv`**: the text put, from
     /// `` `[ `` to `` `] ``, selected as the selection it replaced was —
     /// characters or whole lines (vim's `nv_put_opt`).
-    fn settle_on_the_put(&mut self, lines: bool) {
+    /// Whole lines keep `want`, the column the cursor wanted in the
+    /// selection the put replaced.
+    fn settle_on_the_put(&mut self, lines: bool, want: usize) {
         let Some((start, end)) = self.current_buffer().change_span() else { return };
         let rope = self.current_buffer().rope();
         let place = |at: usize| {
@@ -495,7 +497,7 @@ impl Editor {
             (line, at - rope.line_to_char(line))
         };
         let put = match lines {
-            true => LastSelection::Lines(place(start).0, place(end).0),
+            true => LastSelection::Lines(place(start), place(end), want),
             false => LastSelection::Chars(place(start), place(end)),
         };
         self.current_buffer_mut().settle_selection(put);
@@ -521,8 +523,8 @@ impl Editor {
         let last_line = motion::last_line(rope);
         Some(match self.current_buffer().last_selection()? {
             LastSelection::Chars(from, to) => (self.place_at(from), self.place_at(to)),
-            LastSelection::Lines(first, last) => {
-                let (first, last) = (first.min(last_line), last.min(last_line));
+            LastSelection::Lines((a, _), (b, _), _) => {
+                let (first, last) = (a.min(b).min(last_line), a.max(b).min(last_line));
                 let start = rope.line_to_char(last);
                 let end = motion::line_end(rope, start);
                 let end = match end > start {
@@ -563,20 +565,17 @@ impl Editor {
         if !self.keymap_rules().caret_off_newline {
             return;
         }
-        // Warning: **`vim_lines && extend`，不是光看 `vim_lines`**。那個旗標只在 `d`/`c`/`y` 幾個 arm 裏花掉，所以
-        // `V` 之後按 `Esc`（或者任何一條不動手就走的路）它會**一直留着 true**，
-        // 而夾這件事從此整個關掉。問「那一段**現在**還是不是整行可視選區」纔對。
-        if self.mode != Mode::Normal || (self.vim_lines && self.extend) {
+        if self.mode != Mode::Normal {
             return;
         }
         let rope = self.current_buffer().rope().clone();
         let floor = self.last_real_line(&rope);
-        // **Charwise Visual may stand on the line break** (measured against
+        // **Visual may stand on the line break** (measured against
         // nvim): vim's `coladvance` allows one past the
         // last character while Visual is active, so `v$` reaches the break
-        // and `v$d` joins the lines. The empty line after the last break is
+        // and `v$d` joins the lines; `V$` stands there too. The empty line after the last break is
         // still out of reach.
-        let visual = self.extend && !self.vim_lines;
+        let visual = self.extend;
         let hold = |at: usize| match visual {
             true => match rope.char_to_line(at.min(rope.len_chars())) > floor {
                 true => hold_in_line(&rope, at, floor),
@@ -965,20 +964,13 @@ impl Editor {
     pub(super) fn vim_visual_lines(&mut self, key: Key, c: char) {
         // The cursor's own column, read before a linewise
         // selection is widened to whole lines (nvim keeps it).
-        // Under `V` the selection already reaches the line's end, so
-        // the column is the one `V` was pressed in. (Not yet followed
-        // through `h`/`l` inside `V`, which vim does.)
-        let column = match self.vim_lines {
-            true => self.vim_line_column,
-            false => {
-                let rope = self.current_buffer().rope();
-                let head = self.sel.head().min(rope.len_chars());
-                head - rope.line_to_char(rope.char_to_line(head))
-            }
+        let column = {
+            let rope = self.current_buffer().rope();
+            let head = self.sel.head().min(rope.len_chars());
+            head - rope.line_to_char(rope.char_to_line(head))
         };
         // `>` and `<` put it back in the column it wanted, on the screen
-        // (vim's 'curswant'), as `>>` does: under `V` the one `V` was
-        // pressed in until a motion inside `V` moves it.
+        // (vim's 'curswant'), as `>>` does.
         let want = self.column_wanted();
         if self.vim_lines {
             self.extend_to_line_bounds();
@@ -1042,11 +1034,7 @@ impl Editor {
         // Under `V` the cursor wants the column `V` was pressed in, and the
         // other end keeps the one the cursor left, for the next `o`.
         if c == 'o' {
-            let left = self.column_wanted();
             self.flip_selection();
-            if self.vim_lines {
-                self.sel.set_goal(Some(std::mem::replace(&mut self.vim_line_want, left)));
-            }
             return;
         }
         // **`p` from an empty register still takes the selection** (nvim's
@@ -1105,6 +1093,7 @@ impl Editor {
                 let old = self.current_buffer().rope().slice(from..to).to_string();
                 let before = self.current_buffer().revision();
                 let keep = c == 'P' && !self.paste_goes_past;
+                let want = self.column_wanted();
                 let landed = self.vim_put_over_selection(lines);
                 let put = self.current_buffer().revision() != before;
                 if !keep && put {
@@ -1114,7 +1103,7 @@ impl Editor {
                     self.vim_lines = false;
                 }
                 if put {
-                    self.settle_on_the_put(lines);
+                    self.settle_on_the_put(lines, want);
                 }
                 start = landed.unwrap_or(start);
             }
@@ -2176,7 +2165,7 @@ impl Editor {
         Some(match from < to {
             true => rope.line_to_char(from),
             false if from == to => rope.line_to_char(to),
-            false => self.column_on_line(to, self.vim_line_column),
+            false => head,
         })
     }
 

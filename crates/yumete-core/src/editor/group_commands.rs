@@ -82,6 +82,7 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::MovePrevZong, |e, cx| e.walk_zongs(cx, false), Key::Char('k')),
     (NormalCmd::GotoLastModification, |e, _| e.goto_last_modification(), Key::Char('.')),
     (NormalCmd::ReselectLastSelection, |e, _| {
+        let mut want = None;
         let (anchor, head, lines) = match e.current_buffer().last_selection() {
             None => {
                 e.status = say!("selection.nothing-to-reselect");
@@ -91,7 +92,10 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
                 return e.reselect_block(anchor, cursor, to_line_end);
             }
             Some(super::keys::LastSelection::Chars(anchor, head)) => (e.place_at(anchor), e.place_at(head), false),
-            Some(super::keys::LastSelection::Lines(anchor, head)) => (e.place_at((anchor, 0)), e.place_at((head, 0)), true),
+            Some(super::keys::LastSelection::Lines(anchor, head, wanted)) => {
+                want = Some(wanted);
+                (e.place_at(anchor), e.place_at(head), true)
+            }
         };
         let len = e.current_buffer().rope().len_chars();
         e.sel.set_anchor(anchor.min(len));
@@ -100,10 +104,10 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
         e.vim_lines = lines;
         e.clamp_cursor();
         e.refresh_goal_column();
-        // Lines kept by their numbers alone: the cursor wants the column
-        // the last `V` was pressed in.
-        if lines {
-            e.sel.set_goal(Some(e.vim_line_want));
+        // The column the cursor wanted when the lines were let go, not the
+        // one an edit since has moved the head to.
+        if let Some(want) = want {
+            e.sel.set_goal(Some(want));
         }
     }, Key::Char('v')),
     (NormalCmd::InsertAtLastInsert, |e, _| {
@@ -610,14 +614,7 @@ impl Editor {
             return;
         }
         let visual = self.extend;
-        let (anchor, head) = match visual && self.vim_lines {
-            true => {
-                let rope = self.current_buffer().rope();
-                let (from, to) = (rope.char_to_line(self.sel.anchor()), rope.char_to_line(self.sel.head()));
-                (self.column_on_line(from, self.vim_line_column), self.column_on_line(to, self.vim_line_column))
-            }
-            false => (self.sel.anchor(), self.sel.head()),
-        };
+        let (anchor, head) = (self.sel.anchor(), self.sel.head());
         // One character on, or back, as vim's `incl` and `decl` step: over
         // the break at a written line's end, which is no place to stand.
         let rope = self.current_buffer().rope();
