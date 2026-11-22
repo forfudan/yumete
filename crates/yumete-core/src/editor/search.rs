@@ -327,10 +327,9 @@ impl Editor {
                         let merged = self.sel.push(found);
                         self.say_the_merge(merged);
                     }
-                    (true, true) => self.sel.set_head(match forward {
-                        true => head,
-                        false => pos,
-                    }),
+                    // vim's Visual cursor goes to the match's first
+                    // character either way, as Normal mode's does.
+                    (true, true) => self.sel.set_head(pos),
                     // vim's cursor goes to the match's first character
                     // (on the last, `/bar` then `x` would take the `r`).
                     (false, true) => {

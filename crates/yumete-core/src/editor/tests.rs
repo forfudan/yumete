@@ -47500,3 +47500,16 @@ fn visual_kinds_switch_and_keep_both_ends() {
         assert_eq!(vim_at(&ed), (1, 5), "{keys}");
     }
 }
+
+/// **vim's `/` in Visual mode puts the cursor on the match's first
+/// character** (measured in nvim), as it does in Normal mode: the
+/// selection then ends there, so `d` keeps the rest of the match.
+#[test]
+fn a_visual_search_lands_on_the_match_start() {
+    let mut ed = typed_vim("red fox jumps\nblue owl sings\ngrey cat naps\n");
+    feed_vim(&mut ed, "wv/ow⏎d");
+    assert_eq!(ed.current_buffer().text(), "red wl sings\ngrey cat naps\n");
+    let mut ed = typed_vim("red fox jumps\nblue owl sings\ngrey cat naps\n");
+    feed_vim(&mut ed, "wV/at⏎");
+    assert_eq!(vim_at(&ed), (3, 7));
+}
