@@ -2461,10 +2461,25 @@ impl Editor {
             }
             false => text,
         };
+        // **Text ending in a line break put after a last line with none**
+        // opens an empty line there, as in vim, where the break the file
+        // lacks is only added on writing: one more break keeps that line,
+        // which would otherwise read as the missing break.
+        let rope = self.current_buffer().rope();
+        let opens_a_line = self.keymap_rules().vim_registers
+            && !line_wise
+            && at == rope.len_chars()
+            && at > 0
+            && rope.char(at - 1) != '\n'
+            && text.ends_with('\n');
+        let put = match opens_a_line {
+            true => format!("{text}{}", self.current_buffer().ending()),
+            false => text.clone(),
+        };
         let mut len = text.chars().count();
         // The cursor's line, for `]p`, read before the paste moves it.
         let indent_here = fix_indent.then(|| self.indent_columns(self.current_buffer().rope().char_to_line(self.sel.head())));
-        if !self.edit_insert(at, &text) {
+        if !self.edit_insert(at, &put) {
             return;
         }
         // vim's `]p` `[p`: the lines put in take the cursor line's indent

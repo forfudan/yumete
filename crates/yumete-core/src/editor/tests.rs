@@ -46275,3 +46275,22 @@ fn a_linewise_delete_wants_the_column_it_lands_in() {
         assert_eq!(ed.current_buffer().text(), "abcdef\nxy\nacdef\nabcdef\n", "{keys}");
     }
 }
+
+/// **A lone line break put after a last line with none opens an empty
+/// line** (measured in nvim, whose written file then ends `moon⏎⏎`): the
+/// break the file lacked does not swallow the line put.
+#[test]
+fn a_line_break_put_at_an_unterminated_end_opens_a_line() {
+    let text = "sun\n\nmoon";
+    let cases: &[(&str, &str, (usize, usize))] = &[
+        ("jvyG$p", "sun\n\nmoon\n\n", (3, 4)),
+        ("jvyG$2p", "sun\n\nmoon\n\n\n", (3, 4)),
+        ("jvyG$gp", "sun\n\nmoon\n\n", (4, 1)),
+        ("jvyG$P", "sun\n\nmoo\nn", (3, 3)),
+    ];
+    for &(keys, want, at) in cases {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        assert_eq!((ed.current_buffer().text().as_str(), vim_at(&ed)), (want, at), "{keys}");
+    }
+}

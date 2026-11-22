@@ -79,6 +79,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **vim's `"a` typed in a `C-v` block leaves the block as it was**, as in vim: with its corner past a short line's end, `"ay` yanks the same columns `y` does instead of reaching one column further left.
 - **vim's Esc after `V` and `j` or `k` leaves the cursor in the screen column they kept**, as in vim, over wide characters and tabs, instead of the character column `V` was pressed in; and `j` under `V` on the last line stays there instead of reaching the empty line after the file's last line break.
 - **After vim's `dd`, `Vd` or `dj` the cursor wants the column it landed in**, as in vim: landing on a tab, `.` or `j` next goes under the tab's end, not to the first column; landing on a short line, under its last character.
+- **vim's `p` of a lone line break after the last line of a file with no final line break opens an empty line**, as in vim, instead of only adding the break the file lacked.
 
 ## 0.24.0 · 2026-11-17
 
