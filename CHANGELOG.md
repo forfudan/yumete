@@ -97,6 +97,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **vim's `}` and `{` on an empty line next to another go past the paragraph after them**, as in vim, instead of stopping at the next empty line, so `d}` there takes that paragraph.
 - **A count before vim's `*` and `#` counts**, as in vim: `3*` goes to the third match of the word, instead of the first.
 - **vim's `p`, Visual `p` and Insert `C-r` write the file's own line breaks**, as in vim: lines yanked in a LF file go into a CRLF file as CRLF, and back, instead of leaving it with two kinds of line.
+- **vim's `:40` is no longer a jump**, as in vim: `''` and `C-o` after it go back to where the jump before it came from.
 
 ## 0.24.0 · 2026-11-17
 

@@ -809,7 +809,16 @@ impl Editor {
                 // does not cover it (`a_quoted_field_is_read_as_the_one_field_it_is`
                 // uses `:3` for the third **line**).
                 self.fold_stays_closed = true;
-                self.goto_line(n);
+                // **Not a jump under vim** (measured in nvim): `''` and `C-o`
+                // after `:40` go back past it, to where the jump before it
+                // came from. The page still treats the move as a jump.
+                match self.as_vim() {
+                    true => {
+                        self.jumped = true;
+                        self.move_to_line(n);
+                    }
+                    false => self.goto_line(n),
+                }
                 Ok(CommandOutcome::Continue)
             }
             Command::Count => {

@@ -46827,3 +46827,17 @@ fn a_vim_put_writes_the_line_breaks_of_the_file_it_goes_into() {
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// **vim's `:40` is not a jump** (measured in nvim): `''` and `C-o` after
+/// it go back past it, to where the jump before it came from.
+#[test]
+fn a_vim_line_number_command_is_not_a_jump() {
+    let text: String = (1..=9).map(|n| format!("row {n}\n")).collect();
+    let mut ed = typed_vim(&text);
+    feed_vim(&mut ed, "3G:5⏎''");
+    assert_eq!(vim_at(&ed).0, 1, "''");
+    let mut ed = typed_vim(&text);
+    feed_vim(&mut ed, "3G:5⏎:7⏎");
+    ed.on_key(Key::Ctrl('o'));
+    assert_eq!(vim_at(&ed).0, 1, "C-o");
+}
