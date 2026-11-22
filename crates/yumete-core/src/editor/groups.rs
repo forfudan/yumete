@@ -864,7 +864,7 @@ pub(super) static GOTO: Group = Group {
         ch('g', NormalCmd::VimGotoFileStart, "hint.goto.start-of-file").when(Only::Vim),
         ch('g', NormalCmd::ExtendToFileStart, "hint.goto.start-of-file").when(Only::Selecting),
         ch('g', NormalCmd::GotoFileStart, "hint.goto.start-of-file"),
-        note("<N>g", "hint.goto.line-n"),
+        note("<N>g", "hint.goto.line-n").listed(Only::Helix),
         ch('e', NormalCmd::JumpPrevWordEnd, "action.jump-prev-word-end").when(Only::Vim),
         ch('E', NormalCmd::JumpPrevLongWordEnd, "action.jump-prev-long-word-end").when(Only::Vim),
         // helix's `ge` is the start of the last line, not the end of the
