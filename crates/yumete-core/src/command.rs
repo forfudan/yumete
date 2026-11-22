@@ -241,6 +241,9 @@ pub enum Command {
     /// `:s/a/b/ | …`: a substitution, then the command after the `|`, run
     /// as one line (one undo step).
     Then(String, String),
+    /// vim's `:$`, `:+3`, `:.-2` — put the cursor on the line the address
+    /// names: a line, the cursor's or the last, moved by the offset.
+    GotoAddress(LineAddress),
     /// `:earlier [n|span]` / `:later [n|span]` — helix's: so many undo steps,
     /// or to the change nearest a time span back or ahead.
     Earlier(UndoSpan),
@@ -1183,6 +1186,10 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         return cmd;
     }
 
+    // `:$`, `:+3`, `:.-2`: vim's bare range, a line too.
+    if let Some(address) = parse_line_address(trimmed) {
+        return Ok(Command::GotoAddress(address));
+    }
     // `:42` is a line number, as it is in vi and in Helix. Recognised before
     // the name split so no command can ever be named a number.
     if let Ok(n) = trimmed.parse::<usize>() {
@@ -7803,6 +7810,59 @@ pub enum Rows {
     Span(Bound, Bound),
     /// `1,5,9` — these lines and no others.
     List(Vec<Bound>),
+}
+
+/// **A line as vim's bare range names one** (`:h :range`): a number, `.`
+/// or `$`, then any `+N` and `-N`, where a bare `+` or `-` counts one and a
+/// number right after `.` or `$` adds; the address alone is `.`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LineAddress {
+    /// Where it counts from: [`Bound::Line`], [`Bound::Cursor`] or [`Bound::Last`].
+    pub from: Bound,
+    pub offset: isize,
+    /// As typed, for the keymap that does not read it.
+    pub typed: String,
+}
+
+/// [`LineAddress`] from the whole of `input`, when that is all it is and
+/// not a bare number ([`Command::GotoLine`]).
+fn parse_line_address(input: &str) -> Option<LineAddress> {
+    let digits = |s: &str| s.chars().take_while(char::is_ascii_digit).count();
+    let (from, mut rest, mut offset) = match input.chars().next()? {
+        '.' | '$' => {
+            let from = if input.starts_with('.') { Bound::Cursor } else { Bound::Last };
+            let n = digits(&input[1..]);
+            let offset = match n {
+                0 => 0,
+                n => input[1..1 + n].parse::<isize>().ok()?,
+            };
+            (from, &input[1 + n..], offset)
+        }
+        '+' | '-' => (Bound::Cursor, input, 0),
+        c if c.is_ascii_digit() => {
+            let n = digits(input);
+            (Bound::Line(input[..n].parse().ok()?), &input[n..], 0)
+        }
+        _ => return None,
+    };
+    if matches!(from, Bound::Line(_)) && rest.is_empty() {
+        return None;
+    }
+    while let Some(sign) = rest.chars().next() {
+        let sign = match sign {
+            '+' => 1,
+            '-' => -1,
+            _ => return None,
+        };
+        let n = digits(&rest[1..]);
+        let step = match n {
+            0 => 1,
+            n => rest[1..1 + n].parse::<isize>().ok()?,
+        };
+        offset = offset.checked_add(sign * step)?;
+        rest = &rest[1 + n..];
+    }
+    Some(LineAddress { from, offset, typed: input.to_string() })
 }
 
 /// One end of a `:s` range.

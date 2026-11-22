@@ -812,10 +812,14 @@ impl Editor {
                 // **Not a jump under vim** (measured in nvim): `''` and `C-o`
                 // after `:40` go back past it, to where the jump before it
                 // came from. The page still treats the move as a jump.
+                // The cursor keeps its column, as vim's `nostartofline` does.
                 match self.as_vim() {
                     true => {
                         self.jumped = true;
-                        self.move_to_line(n);
+                        match self.line_jump_keeps() {
+                            Some(want) => self.land_at_column(n.saturating_sub(1), want),
+                            None => self.move_to_line(n),
+                        }
                     }
                     false => self.goto_line(n),
                 }
@@ -837,6 +841,35 @@ impl Editor {
                     self.with_buffer(i, |e| e.current_buffer_mut().end_undo_group(was));
                 }
                 outcome
+            }
+            // **vim's bare range is a line** (`:h :range`), the cursor kept
+            // in its column as vim's `nostartofline` keeps it, and the line
+            // held within the file. The other keymap reads the line as it
+            // read it before: `:+3` as line 3, the rest as no command.
+            Command::GotoAddress(address) => {
+                use crate::command::Bound;
+                if !self.as_vim() {
+                    let Some(n) = address.typed.strip_prefix('+').and_then(|n| n.parse::<usize>().ok()) else {
+                        return Err(EditorError::Command(CommandError::Unknown(address.typed)));
+                    };
+                    self.fold_stays_closed = true;
+                    self.goto_line(n);
+                    return Ok(CommandOutcome::Continue);
+                }
+                let last = motion::last_line(self.current_buffer().rope());
+                let base = match address.from {
+                    Bound::Line(n) => n.saturating_sub(1),
+                    Bound::Last => last,
+                    _ => self.cursor_line(),
+                };
+                let line = base.saturating_add_signed(address.offset).min(last);
+                self.fold_stays_closed = true;
+                self.jumped = true;
+                match self.line_jump_keeps() {
+                    Some(want) => self.land_at_column(line, want),
+                    None => self.move_to_line(line + 1),
+                }
+                Ok(CommandOutcome::Continue)
             }
             Command::Count => {
                 self.status = self.count_report();

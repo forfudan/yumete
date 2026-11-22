@@ -47030,3 +47030,31 @@ fn vims_star_and_hash_are_jumps() {
         assert_eq!(vim_at(&ed), (1, 5), "{keys}");
     }
 }
+
+/// **vim's bare ranges go to their line** (`:h :range`, measured in nvim):
+/// `:$`, `:+3`, `:-3`, `:.5`, `:$-1`, held within the file, and like `:40`
+/// they keep the cursor's column. helix's keymap reads them as before.
+#[test]
+fn vims_line_addresses_go_to_their_line_and_keep_the_column() {
+    let text = "one two three\n  four five\nsix seven\n    eight nine\nten\n";
+    for (keys, at) in [
+        ("ll:$⏎", (5, 3)),
+        ("ll:+3⏎", (4, 3)),
+        ("G:-3⏎", (2, 1)),
+        ("jj:-⏎", (2, 1)),
+        ("llll:2⏎", (2, 5)),
+        (":.5⏎", (5, 1)),
+        (":$-1⏎", (4, 1)),
+        ("jjll:+2-1⏎", (4, 3)),
+        ("G:+3⏎", (5, 1)),
+    ] {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        assert_eq!(vim_at(&ed), at, "{keys}");
+    }
+    let mut ed = typed(text);
+    ed.execute(":keymap helix").unwrap();
+    assert!(ed.execute(":$").is_err());
+    assert!(ed.execute(":+3").is_ok());
+    assert_eq!(ed.current_buffer().rope().char_to_line(ed.caret()), 2);
+}

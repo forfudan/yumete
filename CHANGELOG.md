@@ -100,7 +100,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **vim's `:40` is no longer a jump**, as in vim: `''` and `C-o` after it go back to where the jump before it came from.
 - **`:s …c` no longer asks forever at a pattern that matches nothing**, such as `z*`: it asks once about each place `:s` without `c` changes, then ends.
 - **A `|` after a `:s` command's flags runs the command after it**, as in vim: `:s/a/b/ | s/c/d/` makes both changes, one `u` taking them back, instead of refusing the line.
-- **vim's `*` and `#` are jumps**, as in vim: `C-o` comes back to where they were pressed.
+- **vim's `*` and `#` are jumps, and `:$`, `:+3` and `:-3` go to their line**, as in vim: `C-o` comes back to where `*` was pressed, and `:40` and the others keep the cursor's column.
 
 ## 0.24.0 · 2026-11-17
 
