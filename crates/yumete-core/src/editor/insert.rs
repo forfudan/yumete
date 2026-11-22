@@ -80,12 +80,22 @@ pub(super) const INSERT_COMMANDS: &[NormalCommand] = &[
     // vim's `i_CTRL-O`: one Normal-mode command, then back. The Insert's
     // count goes, as vim's does: `3o` then `C-o` opens one line. The
     // Insert after it is a new one for `` `[ ``, which no longer starts over
-    // where an earlier `C-u` or `C-w` stood.
+    // where an earlier `C-u` or `C-w` stood. Pressed past a line's end, the
+    // column it wants is at least one past the line's last character, where
+    // Normal mode cannot stand: `j` then goes to that column of a longer
+    // line, as vim's `curswant` does, and a column wanted further right
+    // from an earlier `j` is kept.
     (NormalCmd::RunOneNormalCommand, |e, _| {
         e.insert_again = 0;
         let rope = e.current_buffer().rope();
         let head = e.sel.head().min(rope.len_chars());
         e.one_normal_eol = (head == motion::line_end(rope, head)).then(|| rope.char_to_line(head));
+        if e.one_normal_eol.is_some() {
+            let column = e.line_column(head);
+            if e.sel.goal().is_none_or(|goal| goal < column) {
+                e.sel.set_goal(Some(column));
+            }
+        }
         e.insert_restart = None;
         e.one_normal_key = Some(Mode::Insert);
         e.mode = Mode::Normal;

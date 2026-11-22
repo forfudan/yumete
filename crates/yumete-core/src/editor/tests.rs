@@ -47891,3 +47891,27 @@ fn vims_range_before_a_bar_checks_both_ends() {
     ed.execute(":2,3|s/a/b/").unwrap();
     assert_eq!(ed.current_buffer().text(), "a\na\nb\na\n");
 }
+
+/// **vim's Insert `C-o` pressed past a line's end wants the column past
+/// it** (vim's `curswant`, measured in nvim): a line moved to that is
+/// longer gets the typing in that column, not one before it.
+#[test]
+fn vims_insert_ctrl_o_past_the_end_keeps_the_column() {
+    let mut ed = typed_vim("pen\npencil\n");
+    feed_vim(&mut ed, "Aᵒjq⎋");
+    assert_eq!(ed.current_buffer().text(), "pen\npenqcil\n");
+    for keys in ["jAᵒkq⎋", "jAᵒggq⎋", "jAᵒ2kq⎋"] {
+        let mut ed = typed_vim("pencil\npen\n");
+        feed_vim(&mut ed, keys);
+        assert_eq!(ed.current_buffer().text(), "penqcil\npen\n", "{keys}");
+    }
+    let mut ed = typed_vim("pen\npencil\n");
+    feed_vim(&mut ed, "Aᵒddq⎋");
+    assert_eq!(ed.current_buffer().text(), "penqcil\n");
+    // The column wanted from the longer line above is kept past a
+    // shorter one.
+    let mut ed = typed_vim("pencils\nab\npencil\n");
+    feed_vim(&mut ed, "Aᵒjᵒjq⎋");
+    assert_eq!(ed.current_buffer().text(), "pencils\nab\npencilq\n");
+}
+

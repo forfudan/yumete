@@ -130,6 +130,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **vim's `R` in a block changes the block's whole lines**, as `V` then `c` would, as in vim, instead of leaving the block and writing over the text from the cursor.
 - **vim's bare range before a `|` goes to its line**, as in vim: `:3|s/a/b/` substitutes on line 3 and `:2,5|…` goes to line 5; a range past the last line is an error and the rest of the line does not run.
 - **vim's `u` after a change of several whole lines puts the cursor on the second of them**, as in vim, in the column the change began in: after `cj`, `3cc` or `Vjc`, instead of on the first.
+- **vim's Insert `C-o` pressed past a line's end keeps the column past it**, as in vim: `j`, `k`, `gg` or `dd` onto a longer line types in that column, so `A`, `C-o j`, `X` on `abc` over `abcdef` writes `abcXdef`, not `abXcdef`.
 
 ## 0.24.0 · 2026-11-17
 
