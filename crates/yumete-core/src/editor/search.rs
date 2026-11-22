@@ -190,18 +190,25 @@ impl Editor {
     /// empty line after the last line break where the caret never stands
     /// on a break, so vim's `/^$` does not find the file's end.
     fn search_rows(&self) -> std::ops::Range<usize> {
+        self.table_search_rows().unwrap_or_else(|| self.every_search_row())
+    }
+
+    /// Every line a search may land in, the table aside.
+    fn every_search_row(&self) -> std::ops::Range<usize> {
         let rope = self.current_buffer().rope();
-        let all = match self.keymap_rules().caret_off_newline {
+        match self.keymap_rules().caret_off_newline {
             true => 0..motion::last_line(rope) + 1,
             false => 0..rope.len_lines(),
-        };
+        }
+    }
+
+    /// The table's rows, when the grid holds the pane and a search keeps to
+    /// them.
+    fn table_search_rows(&self) -> Option<std::ops::Range<usize>> {
         if !self.table().is_some_and(|view| view.takes_the_pane()) {
-            return all;
+            return None;
         }
-        match self.table_row_span() {
-            Some((first, last)) => first..last + 1,
-            None => all,
-        }
+        self.table_row_span().map(|(first, last)| first..last + 1)
     }
 
     pub(super) fn repeat_search(&mut self, forward: bool) {
@@ -241,7 +248,9 @@ impl Editor {
         // this search is concerned.
         let within = self.search_rows();
         let end_is_last = self.keymap_rules().caret_off_newline;
-        let scoped = within != (0..rope.len_lines());
+        // A table that keeps the search to fewer lines than the file's says
+        // so when nothing is found there.
+        let scoped = within != self.every_search_row();
         // Warning: **往回找要從這一處的開頭數起，不是從光標數起**。一次搜索落地之後光標停在匹配的**最後
         // 一個字**上，開頭在 `anchor`；而 `search_backward` 找的是「開頭在
         // `from` 之前的最後一處」，拿光標去問，當前這一處的開頭就在光標之前，

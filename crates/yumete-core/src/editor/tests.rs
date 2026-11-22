@@ -45975,3 +45975,15 @@ fn the_vim_selection_marks_in_a_range_name_the_last_selection() {
         assert_eq!((ed.current_buffer().text().as_str(), cursor), (want, at), "{keys:?}");
     }
 }
+
+/// **A vim search that finds nothing says it was not found**, for `/` and
+/// for `n`: outside a table the whole file was searched, and the line after
+/// the last line break, which vim's search leaves out, is no table.
+#[test]
+fn a_failed_vim_search_says_not_found() {
+    let mut ed = typed_vim("天地玄黄\n宇宙洪荒\n");
+    keyed(&mut ed, "/日月⏎");
+    assert_eq!(ed.status(), say!("find.not-found", "日月"));
+    keyed(&mut ed, "n");
+    assert_eq!(ed.status(), say!("find.not-found", "日月"));
+}
