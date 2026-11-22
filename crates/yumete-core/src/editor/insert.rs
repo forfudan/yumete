@@ -77,8 +77,10 @@ pub(super) const INSERT_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::VimKillToLineStart, |e, _| e.acting(true, |e| e.delete_to_line_start()), Key::Ctrl('u')),
     (NormalCmd::VimKillToLineEnd, |e, _| e.acting(true, |e| e.delete_to_line_end()), Key::Ctrl('k')),
     (NormalCmd::InsertRegister, |e, _| e.pending = Pending::Register, Key::Ctrl('r')),
-    // vim's `i_CTRL-O`: one Normal-mode command, then back.
+    // vim's `i_CTRL-O`: one Normal-mode command, then back. The Insert's
+    // count goes, as vim's does: `3o` then `C-o` opens one line.
     (NormalCmd::RunOneNormalCommand, |e, _| {
+        e.insert_again = 0;
         e.one_normal_key = Some(Mode::Insert);
         e.mode = Mode::Normal;
     }, Key::Ctrl('o')),

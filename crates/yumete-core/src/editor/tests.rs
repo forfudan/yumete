@@ -44971,7 +44971,8 @@ fn alt_enter_opens_the_entry_and_keeps_the_picker() {
     assert_eq!(ed.current_buffer().text(), next);
 }
 
-/// `keys` pressed on `ed`: `⎋` Esc, `⏎` Enter, `ᵛ` C-v, `ᵗ` C-t, `ᵈ` C-d.
+/// `keys` pressed on `ed`: `⎋` Esc, `⏎` Enter, `ᵛ` C-v, `ᵗ` C-t, `ᵈ` C-d,
+/// `ᵒ` C-o.
 fn feed_vim(ed: &mut Editor, keys: &str) {
     for c in keys.chars() {
         ed.on_key(match c {
@@ -44980,6 +44981,7 @@ fn feed_vim(ed: &mut Editor, keys: &str) {
             'ᵛ' => Key::Ctrl('v'),
             'ᵗ' => Key::Ctrl('t'),
             'ᵈ' => Key::Ctrl('d'),
+            'ᵒ' => Key::Ctrl('o'),
             c => Key::Char(c),
         });
     }
@@ -47289,6 +47291,24 @@ fn star_motions_and_their_g_forms() {
     feed_vim(&mut ed, "d*n");
     assert_eq!(ed.current_buffer().text(), "sun x\nsun end\n");
     assert_eq!(vim_at(&ed), (2, 1));
+}
+
+/// **vim's `C-o` in Insert drops the Insert's count** (measured in nvim):
+/// `3o` or `3O` then `C-o` opens one line, and `3i` types once.
+#[test]
+fn ctrl_o_in_insert_drops_the_count() {
+    let text = "red fox\nend\n";
+    for (keys, want, at) in [
+        ("3oᵒx⎋", "red fox\n\nend\n", (2, 1)),
+        ("3Oᵒx⎋", "\nred fox\nend\n", (1, 1)),
+        ("3oxᵒx⎋", "red fox\n\nend\n", (2, 1)),
+        ("3iabᵒhc⎋", "acbred fox\nend\n", (1, 2)),
+    ] {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        assert_eq!(ed.current_buffer().text(), want, "{keys}");
+        assert_eq!(vim_at(&ed), at, "{keys}");
+    }
 }
 
 /// **vim's `:s/\n//` joins as `J` does** (measured in nvim): the marks on
