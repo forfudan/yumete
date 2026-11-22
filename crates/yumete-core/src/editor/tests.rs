@@ -46793,3 +46793,37 @@ fn a_count_before_star_or_hash_goes_that_many_matches_on() {
         assert_eq!(vim_at(&ed), at, "{keys}");
     }
 }
+
+/// **vim's put writes the file's own line breaks** (nvim keeps lines, and
+/// writes a CRLF file's with CRLF): lines yanked in a LF file go into a
+/// CRLF one as CRLF, by `p`, Visual `p` and Insert `C-r`.
+#[test]
+fn a_vim_put_writes_the_line_breaks_of_the_file_it_goes_into() {
+    let dir = tmp().join(format!("yumete-put-ending-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let (lf, crlf) = (dir.join("lf.txt"), dir.join("crlf.txt"));
+    for (keys, want) in [
+        ("p", "ab\r\nsun\r\nmoon\r\ncd\r\n"),
+        ("Vp", "sun\r\nmoon\r\ncd\r\n"),
+        ("oʳ\"⎋", "ab\r\nsun\r\nmoon\r\n\r\ncd\r\n"),
+    ] {
+        std::fs::write(&lf, "sun\nmoon\n").unwrap();
+        std::fs::write(&crlf, "ab\r\ncd\r\n").unwrap();
+        let mut ed = Editor::new();
+        ed.open_file(&lf).unwrap();
+        ed.execute(":keymap vim").unwrap();
+        feed_vim(&mut ed, "yj");
+        ed.open_file(&crlf).unwrap();
+        for c in keys.chars() {
+            match c {
+                'ʳ' => {
+                    ed.on_key(Key::Ctrl('r'));
+                }
+                c => feed_vim(&mut ed, &c.to_string()),
+            }
+        }
+        assert_eq!(ed.current_buffer().text(), want, "{keys}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}

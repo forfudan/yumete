@@ -1093,6 +1093,7 @@ impl Editor {
             Some((pieces, _)) => (pieces.iter().map(|piece| format!("{piece}{ending}")).collect::<String>(), true),
             None => {
                 let text = self.recall();
+                let text = self.in_the_buffer_ending(text);
                 let kind = named.filter(|n| n.is_ascii_alphanumeric()).map_or('"', |n| n.to_ascii_lowercase());
                 let line_wise = text.ends_with('\n') && !self.charwise_breaks.contains(&kind);
                 (text, line_wise)

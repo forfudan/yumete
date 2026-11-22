@@ -1015,6 +1015,7 @@ impl Editor {
             (Some((pieces, _)), _) => pieces.join(self.current_buffer().ending()),
             (None, _) => self.register_text(name),
         };
+        let text = self.in_the_buffer_ending(text);
         if text.is_empty() {
             self.status = say!("edit.register-is-empty");
             return;
@@ -1056,6 +1057,7 @@ impl Editor {
         if !text.ends_with('\n') || self.charwise_breaks.contains(&kind) {
             return self.insert_register(name);
         }
+        let text = self.in_the_buffer_ending(text);
         let rope = self.current_buffer().rope();
         let line = rope.char_to_line(self.sel.head().min(rope.len_chars()));
         let at = rope.line_to_char(line);
@@ -2478,7 +2480,22 @@ impl Editor {
 
     /// Put `text` after (`p`) or before (`P`) the selection, as lines when
     /// `line_wise`; the rest of [`Self::paste`], once the text is known.
+    /// **Register text with this buffer's line breaks**: vim's registers
+    /// hold lines, and a put writes them with the file's own ending, so a
+    /// line yanked in a LF file goes into a CRLF one as CRLF and back.
+    pub(super) fn in_the_buffer_ending(&self, text: String) -> String {
+        if !self.keymap_rules().vim_registers || !text.contains('\n') {
+            return text;
+        }
+        let lf = text.replace("\r\n", "\n");
+        match self.current_buffer().ending() {
+            "\n" => lf,
+            ending => lf.replace('\n', ending),
+        }
+    }
+
     pub(super) fn put_text(&mut self, after: bool, text: String, line_wise: bool) {
+        let text = self.in_the_buffer_ending(text);
         let fix_indent = std::mem::take(&mut self.paste_fixes_indent);
         self.snapshot();
         let (start, end) = self.selection();
