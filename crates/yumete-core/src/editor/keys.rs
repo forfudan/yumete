@@ -1541,6 +1541,13 @@ impl Editor {
         // after it, measured in nvim).
         let (first, last) = self.lines_counted_over_folds(here, n);
         let rope = self.current_buffer().rope();
+        // **A count reaching past the file fails on its last line** (vim's
+        // `cursor_down`, measured in nvim): `2dd`, `3>>` or `2yy` there beep
+        // and do nothing, where `5dd` two lines from the end takes those two.
+        if n > 1 && !matches!(op, 's' | 'S') && self.lines_counted_over_folds(here, 1).1 >= motion::last_line(rope) {
+            self.fail_the_motion();
+            return;
+        }
         // **`yss` is not a linewise `ys`.** vim-surround spells it
         // `^v{count}$h`, which is 「from where the writing begins to the last
         // character of the line」 — the indent stays outside the opener and

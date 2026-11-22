@@ -46064,3 +46064,19 @@ fn vims_gn_finds_the_match_at_or_after_the_cursor_on_its_line() {
         assert_eq!((ed.current_buffer().text().as_str(), cursor), (want, at), "{keys:?}");
     }
 }
+
+/// **A doubled operator with a count fails on the last line** (vim's
+/// `cursor_down`, measured in nvim): `2dd`, `2yy`, `2cc` and `2gUU` there
+/// do nothing, where `5dd` two lines from the end takes those two.
+#[test]
+fn a_counted_line_operator_on_the_last_line_does_nothing() {
+    let text = "天地玄黄\nsea and sky\nlast words\n";
+    for keys in ["G2dd", "G2yyP", "G2ccX⎋", "G2gUU", "G3dd"] {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        assert_eq!((ed.current_buffer().text().as_str(), vim_at(&ed)), (text, (3, 1)), "{keys}");
+    }
+    let mut ed = typed_vim(text);
+    feed_vim(&mut ed, "j5dd");
+    assert_eq!(ed.current_buffer().text(), "天地玄黄\n");
+}

@@ -69,6 +69,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **vim's ``` `` ``` and `''` before any jump go to the first line's start**, as in vim, instead of nowhere; pressed again they come back, and `d''`, ``` y`` ``` and the other operators take them as motions.
 - **Marks move with the lines added or taken above them**, as vim's do: `ma`, a line opened above, then `'a` lands on the marked line, not the one above it; under vim a lowercase mark on a deleted line is gone until `u` brings it back, and an uppercase one moves to the line after. `gv` and marks stay on a line split before them and count a joined line's columns as vim does, and `:s`, `~`, `U`, `u` and Visual `r` over several lines leave them on their lines and columns, moving only those below the line breaks `:s` puts.
 - **vim's `"0p` and `"1p` put a charwise yank or delete that ends in a line break into the line**, as `p` does and as in vim: the lone break `ygn` takes on `/^$`, `v$y`, `v$d`, not a line below the cursor's.
+- **vim's `2dd`, `2yy`, `2cc` and the other doubled operators with a count do nothing on the last line**, as in vim, instead of taking that line; a count reaching past the end from higher up still takes the lines there are.
 
 ## 0.24.0 · 2026-11-17
 
