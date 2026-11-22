@@ -1844,6 +1844,13 @@ impl Editor {
                 false => step.motion,
             };
             let span = self.read_motion_nth(what, motion::Reading::Caret, nth);
+            // **An empty line is a word to vim** under an operator too, as
+            // `b` alone stops on one: `db` from below an empty line lands
+            // on it.
+            let span = match what {
+                motion::Motion::WordBack(_) => self.stop_on_an_empty_line(span, false),
+                _ => span,
+            };
             let Some(head) = span.head() else { break };
             // Warning: **The first hop counts even if it does not move.** `t,` with
             // the caret already one short of the comma lands where it stands,
@@ -1939,21 +1946,32 @@ impl Editor {
                 let head = motion::prev_grapheme(rope, start);
                 match rope.char(head.min(rope.len_chars().saturating_sub(1))) == '\n' {
                     false => motion::Span::Over { anchor: target, head },
-                    // Warning: **上一行是空的就別再退**（拿 nvim 量過）。
-                    // 退那一步是為了 `j0db`：上一行有字，終點該落在它的末一**格**，
-                    // 而不是那個換行符。上一行空着的時候，那個換行符**就是**整行，
-                    // 退過去就連下一個換行一起吃，兩行焊成一行（`))d(` 就是這樣）。
-                    true if motion::line_start(rope, head) == head => {
-                        // 那一行整個就是一個換行符，取的正是「一整行（空的）」，
-                        // 所以交給整行那一支——零寬的跨度會被底下那道閘擋掉，
-                        // 做出「按了没反應」。
-                        let line = rope.char_to_line(head);
-                        return self.do_vim_lines(op, line, line);
+                    // **`:h exclusive-linewise` from the far end**: the caret in
+                    // column 1 and the target in its line's indent (or at its
+                    // start) make whole lines, the target's down to the line
+                    // above the caret — `d{` from a paragraph's first column,
+                    // `db` onto a line's only word, `d(` onto an empty line —
+                    // and `d` then leaves the cursor where the writing begins
+                    // (vim's `end_adjusted`), as the forward motions do.
+                    true if in_indent(rope, target) => {
+                        let (first, above) = (rope.char_to_line(target), rope.char_to_line(head));
+                        self.do_vim_lines(op, first, above);
+                        if op == 'd' {
+                            let rope = self.current_buffer().rope();
+                            let at = motion::line_first_non_blank(rope, self.sel.head());
+                            self.move_head(at);
+                            self.sel.set_goal(None);
+                        }
+                        return;
                     }
-                    true => motion::Span::Over {
-                        anchor: target,
-                        head: motion::prev_grapheme(rope, head),
-                    },
+                    // Otherwise the end goes back onto the line above: its last
+                    // character, or, when that line is empty, the line break
+                    // before it (vim's end stays exclusive in column 1 there).
+                    true => {
+                        let head = motion::prev_grapheme(rope, head);
+                        self.take_the_break = rope.get_char(head) == Some('\n');
+                        motion::Span::Over { anchor: target, head }
+                    }
                 }
             }
             crate::vim::Reach::Inclusive => motion::Span::Over { anchor: start, head: target },
@@ -2041,6 +2059,7 @@ impl Editor {
             }
         };
         self.do_vim(op, span);
+        self.take_the_break = false;
     }
 
     /// **Where vim's Visual operators begin** (`oap->start` in vim's
@@ -3521,6 +3540,12 @@ pub(super) const MOTION_STEPS: &[(NormalCmd, &str)] = &[
     (NormalCmd::SelectInnerObject, "i"),
     (NormalCmd::SelectAroundObject, "a"),
 ];
+
+/// Whether only blanks stand before `at` on its line (vim's `inindent`).
+fn in_indent(rope: &crate::Rope, at: usize) -> bool {
+    let at = at.min(rope.len_chars());
+    rope.slice(motion::line_start(rope, at)..at).chars().all(|c| c == ' ' || c == '\t')
+}
 
 /// **The key a played character stands for** — the other half of
 /// [`yumete_cjk::actions::spell`], which prints these for `:keymap`.

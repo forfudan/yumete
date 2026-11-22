@@ -46080,3 +46080,26 @@ fn a_counted_line_operator_on_the_last_line_does_nothing() {
     feed_vim(&mut ed, "j5dd");
     assert_eq!(ed.current_buffer().text(), "天地玄黄\n");
 }
+
+/// **A backward exclusive motion from column 1 goes linewise when it lands
+/// in an indent** (`:h exclusive-linewise`, measured in nvim): `d{` from a
+/// paragraph's first column, `db` and `dB` onto a line's only word take
+/// whole lines and leave the cursor where the writing begins; landing
+/// mid-line, the end stops on the line above's last character.
+#[test]
+fn a_backward_exclusive_motion_from_column_one_takes_whole_lines() {
+    let text = "wind\n玄黄 宇宙\n\n  sun moon\nstars\n";
+    let cases: &[(&str, &str, (usize, usize))] = &[
+        ("jdb", "玄黄 宇宙\n\n  sun moon\nstars\n", (1, 1)),
+        ("jdB", "玄黄 宇宙\n\n  sun moon\nstars\n", (1, 1)),
+        ("jjjd{", "wind\n玄黄 宇宙\n  sun moon\nstars\n", (3, 3)),
+        ("Gd{", "wind\n玄黄 宇宙\nstars\n", (3, 1)),
+        ("Gdb", "wind\n玄黄 宇宙\n\n  sun \nstars\n", (4, 6)),
+        ("Gy{P", "wind\n玄黄 宇宙\n\n  sun moon\n\n  sun moon\nstars\n", (3, 1)),
+    ];
+    for &(keys, want, at) in cases {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        assert_eq!((ed.current_buffer().text().as_str(), vim_at(&ed)), (want, at), "{keys}");
+    }
+}
