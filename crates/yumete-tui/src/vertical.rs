@@ -1159,6 +1159,13 @@ pub fn draw(
         false => Vec::new(),
     };
     let faint_style = Style::default().bg(ink.faint_wash());
+    // **Whitespace marks** (`[editor] whitespace`), as the horizontal page
+    // draws them: a blank slot takes the glyph in the guide's faint ink.
+    let blank_marks = crate::BlankMarks::of(
+        config,
+        peek.is_some(),
+        has_selection.then_some((sel_start, sel_end)).into_iter().chain(secondary.iter().copied()).collect(),
+    );
     // **光標停在括號上的時候，另一半那一格塗成金的**——竪排這一頁
     // 也有，理由與規矩全在 `lib.rs` 的 `partner` 那一段：只畫遠那一半，金，不換
     // 底色。兩頁同形，不然同一份稿子換個版面就少一個記號。
@@ -1351,6 +1358,7 @@ pub fn draw(
         }
 
         let line_start = rope.line_to_char(zong.line);
+        let blanks = blank_marks.on(rope, zong.line, zong.start, zong.end);
         // Warning: **Which `|` is a wall, worked out once for the 縱**.
         // The glyph swap below must not fire on *any* pipe in a table row:
         // Markdown's one escape is `\|` — a pipe the cell holds. A cell
@@ -1748,6 +1756,20 @@ pub fn draw(
             if partner.is_some_and(|mate| at <= mate && mate < at + len.max(1)) {
                 style = style.fg(ink.gold());
             }
+
+            // A blank slot marked takes the glyph and the guide's faint ink,
+            // and nothing else: its ground is every layer's above.
+            let symbol = match len == 1 && matches!(symbol.as_str(), " " | "\t") && blanks.binary_search(&at).is_ok() {
+                true => {
+                    style = style.fg(ink.rule());
+                    match symbol.as_str() {
+                        " " => blank_marks.space,
+                        _ => blank_marks.tab,
+                    }
+                    .to_string()
+                }
+                false => symbol,
+            };
 
             // Hung right, so half-width characters line up as one edge running
             // down the 縱 beside the 漢字 rather than drifting to its left — and

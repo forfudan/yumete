@@ -11107,6 +11107,13 @@ fn draw_indent_guides(
     });
     let plain = Style::default().fg(ink.rule());
     let dark = Style::default().fg(ink.furniture());
+    // A guide stands in the leading blanks, so a whitespace mark there is
+    // one of those blanks and the guide takes its cell, in the same ink.
+    let blanks = BlankMarks::of(config, false, Vec::new());
+    let marks: Vec<String> = match blanks.show {
+        yumete_core::whitespace::Show::Off => Vec::new(),
+        _ => vec![blanks.space.to_string(), blanks.tab.to_string()],
+    };
     let buf = frame.buffer_mut();
     for (y, line, columns) in levels {
         let y = at.area.y + y as u16;
@@ -11120,7 +11127,7 @@ fn draw_indent_guides(
                 break;
             }
             let Some(cell) = buf.cell_mut((x as u16, y)) else { continue };
-            if !cell.symbol().trim().is_empty() {
+            if !cell.symbol().trim().is_empty() && !marks.iter().any(|m| m == cell.symbol()) {
                 continue;
             }
             let style = match scope {
@@ -11234,6 +11241,44 @@ pub(crate) fn copy_rule(config: &Config) -> yumete_core::editor::CopyRule {
     yumete_core::editor::CopyRule {
         case: yumete_core::editor::CopyCase::parse(&config.editor.selection_highlight_case).unwrap_or_default(),
         glyphs: config.editor.selection_highlight_glyphs,
+    }
+}
+
+/// **Whitespace marks on this page** (`[editor] whitespace`): which blanks
+/// wear one, the glyph a space and a tab's first cell take, and the drawn
+/// selections the `selection` mode marks inside. Off in a pane only being
+/// read, as the selection's copies are.
+pub(crate) struct BlankMarks {
+    pub show: yumete_core::whitespace::Show,
+    pub space: char,
+    pub tab: char,
+    pub selected: Vec<(usize, usize)>,
+}
+
+impl BlankMarks {
+    /// From the config, with the selections drawn on this page. A glyph the
+    /// running width setting would draw in other than one cell falls back to
+    /// the factory's, as the indent guide's does.
+    pub(crate) fn of(config: &Config, peek: bool, selected: Vec<(usize, usize)>) -> Self {
+        let glyph = |written: &str, factory: char| match (yumete_cjk::str_width(written), written.chars().next()) {
+            (1, Some(c)) if written.chars().count() == 1 => c,
+            _ => factory,
+        };
+        let show = match peek {
+            true => yumete_core::whitespace::Show::Off,
+            false => yumete_core::whitespace::Show::parse(&config.editor.whitespace).unwrap_or_default(),
+        };
+        BlankMarks {
+            show,
+            space: glyph(&config.editor.whitespace_space_character, '\u{22c5}'),
+            tab: glyph(&config.editor.whitespace_tab_character, '\u{21e5}'),
+            selected,
+        }
+    }
+
+    /// The blanks of `from..to` on `line` to mark, as rope indices.
+    pub(crate) fn on(&self, rope: &yumete_core::Rope, line: usize, from: usize, to: usize) -> Vec<usize> {
+        yumete_core::whitespace::marks(rope, line, from, to, self.show, &self.selected)
     }
 }
 
@@ -14789,6 +14834,14 @@ fn draw_horizontal(
         }
         false => Vec::new(),
     };
+    // **Whitespace marks** (`[editor] whitespace`), asked row by row below:
+    // inside a selection means under a ground the selection paints, so a bare
+    // cursor marks nothing.
+    let blank_marks = BlankMarks::of(
+        config,
+        peek.is_some(),
+        has_selection.then_some((sel_start, sel_end)).into_iter().chain(secondary.iter().copied()).collect(),
+    );
     // Where the next page of a chain starts: the row after this page's last.
     // `None` once the text has run out, so a page past the end stays blank.
     let next_page = on_screen.last().and_then(|(_, row)| {
@@ -15588,12 +15641,56 @@ fn draw_horizontal(
             }
         }
 
+        // **Whitespace marks** (`[editor] whitespace`): a blank cell takes the
+        // glyph, in the indent guide's faint ink, and nothing else — its
+        // ground, the caret's place, the wrap and the click map are as they
+        // were. Set last, so the markup above read the row's own spaces. A
+        // tab's glyph goes in the first cell of the space it opens (the
+        // drawing in front of it), or in its own cell when it opens none.
+        let mut marked_tabs: Vec<usize> = Vec::new();
+        let mut swaps: Vec<(usize, char)> = Vec::new();
+        if blank_marks.show != yumete_core::whitespace::Show::Off {
+            for at in blank_marks.on(rope, row.line, row.start, row.start + chars.len()) {
+                let i = at - row.start;
+                if chars.get(i) != Some(&' ') || !shown[i] {
+                    continue;
+                }
+                let pulled = || runs.iter().any(|r| r.ink == yumete_core::drawn::Ink::Tab && r.column == i);
+                match tabs.contains(&i) {
+                    true if pulled() => {
+                        marked_tabs.push(i);
+                        continue;
+                    }
+                    true => swaps.push((i, blank_marks.tab)),
+                    false => swaps.push((i, blank_marks.space)),
+                }
+                styles[i] = styles[i].fg(ink.rule());
+            }
+        }
+        let chars: std::borrow::Cow<[char]> = match swaps.is_empty() {
+            true => std::borrow::Cow::Borrowed(&chars),
+            false => {
+                let mut swapped = chars.clone();
+                for (i, glyph) in swaps {
+                    swapped[i] = glyph;
+                }
+                std::borrow::Cow::Owned(swapped)
+            }
+        };
+
         // Coalesce the per-character styles into as few spans as the row needs,
         // leaving out what is not on the page.
         let mut at = 0;
         let mut gi = 0;
         loop {
             while gi < runs.len() && runs[gi].column <= at {
+                if runs[gi].ink == yumete_core::drawn::Ink::Tab && marked_tabs.contains(&runs[gi].column) {
+                    let rest: String = runs[gi].text.chars().skip(1).collect();
+                    let style = run_style(runs[gi].ink).fg(ink.rule());
+                    spans.push(Span::styled(format!("{}{rest}", blank_marks.tab), style));
+                    gi += 1;
+                    continue;
+                }
                 // Padding inside the cell is part of the cell. Without this the
                 // tint stops at the last character the file actually holds and
                 // the column it is squaring up to stays bare — the one place
@@ -25165,6 +25262,95 @@ fn squeezed(text: &str) -> String {
         assert_eq!(lit(&mut editor, &config), [false, false], "off");
         config.editor.selection_highlight = true;
         assert_eq!(lit(&mut editor, &config), [true, true], "on");
+    }
+
+    /// The text row `y` of a page drawn with `[editor] whitespace = word`,
+    /// trailing blanks off.
+    fn row_with_blanks(editor: &Editor, word: &str, y: u16) -> String {
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        config.editor.whitespace = word.to_string();
+        let buffer = render_with(editor, &config, no_ime(), 40, 6);
+        row_text(&buffer, y).trim_end().to_string()
+    }
+
+    /// **Whitespace marks follow their mode** (`[editor] whitespace`): a dot
+    /// in a space's cell, an arrow in the first cell of the room a tab
+    /// opens and the rest of it blank; the one space between two words is
+    /// left bare by `boundary`, and `selection` marks only inside it.
+    #[test]
+    fn whitespace_marks_follow_their_mode() {
+        let mut editor = editor_with("ab\tc d  e \n");
+        let room = editor.tab_stop() - 2 % editor.tab_stop();
+        let tab = format!("\u{21e5}{}", " ".repeat(room - 1));
+        assert_eq!(row_with_blanks(&editor, "off", 0), format!("ab{}c d  e", " ".repeat(room)));
+        assert_eq!(row_with_blanks(&editor, "all", 0), format!("ab{tab}c\u{22c5}d\u{22c5}\u{22c5}e\u{22c5}"));
+        assert_eq!(row_with_blanks(&editor, "boundary", 0), format!("ab{tab}c d\u{22c5}\u{22c5}e\u{22c5}"));
+        assert_eq!(row_with_blanks(&editor, "trailing", 0), format!("ab{}c d  e\u{22c5}", " ".repeat(room)));
+        assert_eq!(row_with_blanks(&editor, "selection", 0), format!("ab{}c d  e", " ".repeat(room)), "a bare cursor");
+        for c in "vllll".chars() {
+            editor.on_key(Key::Char(c));
+        }
+        assert_eq!(editor.selection(), (0, 5), "ab, the tab, c and a space selected");
+        assert_eq!(row_with_blanks(&editor, "selection", 0), format!("ab{tab}c\u{22c5}d  e"));
+        // A glyph the page could not draw in one cell is the factory's.
+        let mut config = Config::default();
+        config.editor.whitespace_space_character = "\u{6c34}".to_string();
+        assert_eq!(BlankMarks::of(&config, false, Vec::new()).space, '\u{22c5}');
+        assert_eq!(BlankMarks::of(&config, true, Vec::new()).show, yumete_core::whitespace::Show::Off, "a peek");
+    }
+
+    /// **A mark changes a blank cell's glyph and ink and nothing else**: with
+    /// a selection and its copies lit on the faint ground the search panel's
+    /// hits share, every ground and the caret are where they were with the
+    /// marks off.
+    #[test]
+    fn whitespace_marks_leave_every_ground_and_the_caret_alone() {
+        let mut editor = editor_with("ab  cd ab  cd\n\tab cd \n");
+        for c in "vlll".chars() {
+            editor.on_key(Key::Char(c));
+        }
+        assert_eq!(editor.selection(), (0, 4), "`ab` and two spaces selected");
+        let drawn = |word: &str| {
+            let mut config = Config::default();
+            config.editor.line_numbers = LineNumbers::None;
+            config.editor.selection_highlight = true;
+            config.editor.whitespace = word.to_string();
+            let (buffer, caret) = render_caret(&editor, &config, 40, 6);
+            (buffer, caret, ink(&config))
+        };
+        let (bare, caret, ink) = drawn("off");
+        let (marked, marked_caret, _) = drawn("all");
+        assert_eq!(marked_caret, caret, "the caret");
+        let mut changed = 0;
+        for y in 0..6 {
+            for x in 0..40 {
+                let (a, b) = (&bare[(x, y)], &marked[(x, y)]);
+                assert_eq!(a.bg, b.bg, "the ground at {x},{y}");
+                if a.symbol() != b.symbol() {
+                    assert_eq!(a.symbol(), " ", "only a blank cell changes, at {x},{y}");
+                    assert!(["\u{22c5}", "\u{21e5}"].contains(&b.symbol()), "{x},{y}: {:?}", b.symbol());
+                    assert_eq!(b.fg, ink.rule(), "the guide's ink at {x},{y}");
+                    changed += 1;
+                }
+            }
+        }
+        assert_eq!(changed, 8, "six spaces on the first line, a tab and two spaces on the second");
+        assert!(bare.content().iter().any(|c| c.bg == ink.selection()), "a selection drawn");
+        assert!(bare.content().iter().any(|c| c.bg == ink.faint_wash()), "copies drawn");
+    }
+
+    /// **A vertical page marks its blanks too**, a slot each.
+    #[test]
+    fn a_vertical_page_marks_its_blanks() {
+        let count = |buffer: &ratatui::buffer::Buffer, glyph: &str| buffer.content().iter().filter(|c| c.symbol() == glyph).count();
+        let mut editor = editor_with("\u{6c34} \u{706b}  \u{6728}\t\u{91d1} \n");
+        let mut config = vertical_config();
+        for (word, spaces, tabs) in [("off", 0, 0), ("all", 4, 1), ("boundary", 3, 1), ("trailing", 1, 0)] {
+            config.editor.whitespace = word.to_string();
+            let buffer = render_vertical(&mut editor, &config, 30, 12);
+            assert_eq!((count(&buffer, "\u{22c5}"), count(&buffer, "\u{21e5}")), (spaces, tabs), "{word}");
+        }
     }
 
     /// **A float drawn whole gives `C-d` back to the text**: with a diagnostic
