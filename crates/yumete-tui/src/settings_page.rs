@@ -3176,6 +3176,26 @@ mod tests {
         assert_eq!(page(&seat).here().map(|s| s.key), Some("end_of_line_diagnostics"));
     }
 
+    /// **`[editor] selection_highlight` is an on/off setting a bare `:set`
+    /// flips**, and its case rule takes its three words and no other.
+    #[test]
+    fn set_reaches_the_selection_highlight() {
+        let mut ed = Editor::new();
+        let mut seat = Seat::default();
+        ed.execute(":set selection_highlight").unwrap();
+        seat.settle(&mut ed);
+        assert!(seat.panel.is_none());
+        assert_eq!(seat.session_toml(), "[editor]\nselection_highlight = true\n");
+        ed.execute(":set selection_highlight_case by_place").unwrap();
+        seat.settle(&mut ed);
+        assert!(seat.session_toml().contains("selection_highlight_case = \"by_place\"\n"), "{}", seat.session_toml());
+        let mut ed = Editor::new();
+        let mut seat = Seat::default();
+        ed.execute(":set selection_highlight_case smart").unwrap();
+        seat.settle(&mut ed);
+        assert_eq!(seat.session_toml(), "", "refused: {}", ed.status());
+    }
+
     /// **A bare `:set` on an on/off setting flips it** for the run, from
     /// what the run reads now, and opens nothing; any other setting's name
     /// alone opens the panel on its row, as before.

@@ -773,6 +773,42 @@ zhs = "光标与边缘之间至少保留几行(竖排为几纵)"
 en = "how many lines (columns, on a vertical page) to keep between the cursor and the edge"
 
 [[message]]
+# 設置：選區高亮（草稿）
+key = "settings.editor.selection-highlight"
+zhs = "选区高亮"
+en = "selection highlight"
+
+[[message]]
+# 設置：選區高亮是否區分大小寫（草稿）
+key = "settings.editor.selection-highlight-case"
+zhs = "选区高亮的大小写"
+en = "selection highlight case"
+
+[[message]]
+# 設置：選區高亮是否區分大小寫——一句話（草稿）
+key = "settings.editor.selection-highlight-case.hint"
+zhs = "选区高亮比较拉丁字母时是否区分大小写"
+en = "whether the copies lit must match the selection's case"
+
+[[message]]
+# 設置：選區高亮也認繁簡（草稿）
+key = "settings.editor.selection-highlight-glyphs"
+zhs = "选区高亮认繁简"
+en = "selection highlight variants"
+
+[[message]]
+# 設置：選區高亮也認繁簡——一句話（草稿）
+key = "settings.editor.selection-highlight-glyphs.hint"
+zhs = "选区高亮把繁体字和简体字当作同一个字（选「書」也标出「书」），与搜索面板的开关无关"
+en = "light simplified and traditional forms as one character (書 lights 书), apart from the search panel's switch"
+
+[[message]]
+# 設置：選區高亮——一句話（草稿）
+key = "settings.editor.selection-highlight.hint"
+zhs = "有选区时，屏幕上同样的文字都标出淡底色；多个选区时按主选区"
+en = "light every other copy of the selected text on the screen; with several selections, the primary one's"
+
+[[message]]
 # 設置：接着上次
 key = "settings.editor.session"
 zhs = "恢复会话"
@@ -1977,6 +2013,24 @@ en = "whole page"
 key = "settings.pick.preview-fit.width"
 zhs = "页宽"
 en = "width"
+
+[[message]]
+# 設置面板：選區高亮的大小寫——代碼裏區分、正文與註釋裏不區分，按每一處自己的位置（草稿）
+key = "settings.pick.selection-highlight-case.by-place"
+zhs = "代码里区分，正文和注释里不区分"
+en = "respected in code, ignored in prose and comments"
+
+[[message]]
+# 設置面板：選區高亮的大小寫——不區分（草稿）
+key = "settings.pick.selection-highlight-case.ignore"
+zhs = "不区分"
+en = "ignore"
+
+[[message]]
+# 設置面板：選區高亮的大小寫——區分（草稿）
+key = "settings.pick.selection-highlight-case.respect"
+zhs = "区分"
+en = "respect"
 
 [[message]]
 # 設置：状态栏的底——往墨抬一阶

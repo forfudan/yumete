@@ -370,6 +370,12 @@ const IME_SYSTEM_WAYS: &[Choice] = &[
     Choice { word: "keep", label: "settings.pick.system.keep" },
 ];
 
+const SELECTION_HIGHLIGHT_CASE_WAYS: &[Choice] = &[
+    Choice { word: "respect", label: "settings.pick.selection-highlight-case.respect" },
+    Choice { word: "ignore", label: "settings.pick.selection-highlight-case.ignore" },
+    Choice { word: "by_place", label: "settings.pick.selection-highlight-case.by-place" },
+];
+
 const EOL_DIAGNOSTIC_WAYS: &[Choice] = &[
     Choice { word: "off", label: "settings.pick.eol-diagnostics.off" },
     Choice { word: "basic", label: "settings.pick.eol-diagnostics.basic" },
@@ -638,6 +644,33 @@ pub const SETTINGS: &[Setting] = &[
         kind: Kind::Tick,
         label: "settings.editor.yank-flash",
         hint: "settings.editor.yank-flash.hint",
+        factory: "false",
+    },
+    Setting {
+        table: "editor",
+        key: "selection_highlight",
+        group: Group::Marks,
+        kind: Kind::Tick,
+        label: "settings.editor.selection-highlight",
+        hint: "settings.editor.selection-highlight.hint",
+        factory: "false",
+    },
+    Setting {
+        table: "editor",
+        key: "selection_highlight_case",
+        group: Group::Marks,
+        kind: Kind::Pick(SELECTION_HIGHLIGHT_CASE_WAYS),
+        label: "settings.editor.selection-highlight-case",
+        hint: "settings.editor.selection-highlight-case.hint",
+        factory: r#""respect""#,
+    },
+    Setting {
+        table: "editor",
+        key: "selection_highlight_glyphs",
+        group: Group::Marks,
+        kind: Kind::Tick,
+        label: "settings.editor.selection-highlight-glyphs",
+        hint: "settings.editor.selection-highlight-glyphs.hint",
         factory: "false",
     },
     Setting {

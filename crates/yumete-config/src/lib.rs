@@ -183,6 +183,25 @@ pub struct EditorConfig {
     /// it; `--import lazyvim` turns it on, as LazyVim does. Under vim `yap`
     /// and `yis` copy what was never shown selected.
     pub yank_flash: bool,
+    /// **Every other copy of the selected text on the screen, lit**: the
+    /// faint ground the search panel gives its other hits, under each place
+    /// the visible lines hold the same text — as a substring, so 中国 lights
+    /// the 中国 of 中国人. Only while something is selected (a cursor one
+    /// character wide is not a selection), and never for a selection of
+    /// blanks only, one over a line break, or one longer than 200
+    /// characters. With several selections the primary one's text is
+    /// looked for. Off.
+    pub selection_highlight: bool,
+    /// **Whether case tells two copies apart**: `"respect"` (the default),
+    /// `"ignore"`, or `"by_place"` — each copy judged where it sits, case
+    /// told apart in code (a code file, a fenced code block) and not in
+    /// writing (prose, a code file's comments). Latin letters only; 漢字
+    /// have no case.
+    pub selection_highlight_case: String,
+    /// **Simplified and traditional forms as one character** for the copies
+    /// lit (書 lights 书), by the search panel's table but not its switch.
+    /// Off.
+    pub selection_highlight_glyphs: bool,
     /// **Every Markdown and Typst heading is a fold over its section**, all
     /// open at first; off, folds are only those made with `zf`.
     pub heading_folds: bool,
@@ -610,6 +629,9 @@ impl Default for EditorConfig {
             preview_vertical: true,
             preview_font_family: String::new(),
             yank_flash: false,
+            selection_highlight: false,
+            selection_highlight_case: "respect".to_string(),
+            selection_highlight_glyphs: false,
             heading_folds: true,
             block_comment_lines: true,
             indent_guides: false,
@@ -3378,6 +3400,9 @@ const TAB_INSERTS_NAMES: &[&str] = &["spaces", "tab"];
 /// `[ime] system`.
 const SYSTEM_IME_NAMES: &[&str] = &["auto", "keep"];
 
+/// The words `[editor] selection_highlight_case` takes.
+pub const SELECTION_HIGHLIGHT_CASE_WORDS: &[&str] = &["respect", "ignore", "by_place"];
+
 /// The words `[editor] end_of_line_diagnostics` writes.
 pub const EOL_DIAGNOSTIC_WORDS: &[&str] = &["off", "basic", "full"];
 
@@ -4233,6 +4258,12 @@ impl Config {
         }
     }
 
+    if let Some(word) = raw.editor.selection_highlight_case.as_deref() {
+        if !SELECTION_HIGHLIGHT_CASE_WORDS.contains(&word) {
+            problems.push(one_of("[editor] selection_highlight_case", word, SELECTION_HIGHLIGHT_CASE_WORDS));
+        }
+    }
+
     if let Some(word) = raw.editor.end_of_line_diagnostics.as_deref() {
         if eol_diagnostics_word(word).is_none() {
             problems.push(one_of("[editor] end_of_line_diagnostics", word, EOL_DIAGNOSTIC_WORDS));
@@ -4986,6 +5017,9 @@ struct RawEditor {
     preview_vertical: Option<bool>,
     preview_font_family: Option<String>,
     yank_flash: Option<bool>,
+    selection_highlight: Option<bool>,
+    selection_highlight_case: Option<String>,
+    selection_highlight_glyphs: Option<bool>,
     heading_folds: Option<bool>,
     block_comment_lines: Option<bool>,
     indent_guides: Option<bool>,
@@ -5212,6 +5246,15 @@ impl RawConfig {
         }
         if other.editor.yank_flash.is_some() {
             self.editor.yank_flash = other.editor.yank_flash;
+        }
+        if other.editor.selection_highlight.is_some() {
+            self.editor.selection_highlight = other.editor.selection_highlight;
+        }
+        if other.editor.selection_highlight_case.is_some() {
+            self.editor.selection_highlight_case = other.editor.selection_highlight_case.clone();
+        }
+        if other.editor.selection_highlight_glyphs.is_some() {
+            self.editor.selection_highlight_glyphs = other.editor.selection_highlight_glyphs;
         }
         if other.editor.heading_folds.is_some() {
             self.editor.heading_folds = other.editor.heading_folds;
@@ -5722,6 +5765,17 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.yank_flash {
             config.editor.yank_flash = on;
+        }
+        if let Some(on) = self.editor.selection_highlight {
+            config.editor.selection_highlight = on;
+        }
+        if let Some(word) = self.editor.selection_highlight_case.as_deref() {
+            if SELECTION_HIGHLIGHT_CASE_WORDS.contains(&word) {
+                config.editor.selection_highlight_case = word.to_string();
+            }
+        }
+        if let Some(on) = self.editor.selection_highlight_glyphs {
+            config.editor.selection_highlight_glyphs = on;
         }
         if let Some(on) = self.editor.heading_folds {
             config.editor.heading_folds = on;
@@ -7119,6 +7173,26 @@ mod tests {
         assert_eq!(system("[ime]\nsystem = \"kept\""), SystemImePolicy::Auto);
         assert!(SystemImePolicy::is_written("keep"));
         assert!(!SystemImePolicy::is_written("kept"));
+    }
+
+    /// **The selection highlight**: off, its case rule `respect` unless one
+    /// of its three words is written, anything else said and left as it was.
+    #[test]
+    fn the_selection_highlight_reads_its_three_settings() {
+        let factory = Config::from_toml("");
+        assert!(!factory.editor.selection_highlight && !factory.editor.selection_highlight_glyphs);
+        assert_eq!(factory.editor.selection_highlight_case, "respect");
+        let c = Config::from_toml(
+            "[editor]\nselection_highlight = true\nselection_highlight_case = \"by_place\"\nselection_highlight_glyphs = true\n",
+        );
+        assert!(c.editor.selection_highlight && c.editor.selection_highlight_glyphs);
+        assert_eq!(c.editor.selection_highlight_case, "by_place");
+        let text = "[editor]\nselection_highlight_case = \"smart\"\n";
+        let raw: RawConfig = toml::from_str(text).unwrap();
+        let mut said = Vec::new();
+        Config::complain_about(&raw, &mut said);
+        assert_eq!(said.len(), 1, "{said:?}");
+        assert_eq!(Config::from_toml(text).editor.selection_highlight_case, "respect");
     }
 
     /// End-of-line diagnostics: off unless asked; three words, helix's five
