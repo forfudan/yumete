@@ -220,6 +220,9 @@ impl Editor {
                 }
             },
         };
+        if what == motion::Object::Paragraph && self.extend && self.as_vim() {
+            return self.vim_visual_paragraph(around, count);
+        }
         let span = self.run_motion(motion::Motion::Object { what, around, count });
         if span == motion::Span::Missed {
             self.status = match what {
@@ -238,14 +241,100 @@ impl Editor {
             return;
         }
         self.take_object(span);
-        // **Under vim's `V` a paragraph leaves the cursor at its last line's
-        // start**, as vim's `ip` and `ap` do: the lines are the selection.
-        if what == motion::Object::Paragraph && self.vim_lines && self.extend && self.as_vim() {
-            let rope = self.current_buffer().rope();
-            let head = self.sel.head().min(rope.len_chars());
-            let start = rope.line_to_char(rope.char_to_line(head));
-            self.sel.set_head(start);
-            self.refresh_goal_column();
+    }
+
+    /// **vim's `ip` and `ap` in Visual mode** (`current_par`): over one
+    /// line, the paragraph or the blank lines the cursor is in, `count` of
+    /// them, made whole lines with the cursor at the last one's start. A
+    /// selection over more lines than one, or `V` on the first line of what
+    /// it would take (a lone blank line), grows instead by as many again
+    /// from the cursor's end, the kind of Visual mode kept. A count that
+    /// runs off the file fails, as a motion does.
+    fn vim_visual_paragraph(&mut self, around: bool, count: usize) {
+        let rope = self.current_buffer().rope().clone();
+        let last = motion::last_line(&rope) as isize;
+        let white = |line: isize| rope.line(line as usize).to_string().trim().is_empty();
+        let line_of = |at: usize| rope.char_to_line(at.min(rope.len_chars())) as isize;
+        let (visual, cursor) = (line_of(self.sel.anchor()), line_of(self.sel.head()));
+        let count = count.max(1);
+        let mut start = cursor;
+        let mut grow = start != visual;
+        if !grow {
+            let white_in_front = white(start);
+            while start > 0 && white(start - 1) == white_in_front {
+                start -= 1;
+            }
+            let mut end = start;
+            while end <= last && white(end) {
+                end += 1;
+            }
+            end -= 1;
+            let mut left = count - usize::from(!around && white_in_front);
+            while left > 0 {
+                left -= 1;
+                if end == last {
+                    return self.fail_the_motion();
+                }
+                let do_white = !around && white(end + 1);
+                if around || !do_white {
+                    end += 1;
+                    while end < last && !white(end + 1) {
+                        end += 1;
+                    }
+                }
+                if left == 0 && white_in_front && around {
+                    break;
+                }
+                if around || do_white {
+                    while end < last && white(end + 1) {
+                        end += 1;
+                    }
+                }
+            }
+            if !white_in_front && !white(end) && around {
+                while start > 0 && white(start - 1) {
+                    start -= 1;
+                }
+            }
+            grow = self.vim_lines && start == cursor;
+            if !grow {
+                if start != visual {
+                    self.sel.set_anchor(rope.line_to_char(start as usize));
+                }
+                self.sel.set_head(rope.line_to_char(end as usize));
+                self.vim_lines = true;
+                return self.refresh_goal_column();
+            }
+        }
+        let dir: isize = if start < visual { -1 } else { 1 };
+        let edge = if dir < 0 { 0 } else { last };
+        let mut failed = false;
+        for _ in 0..count {
+            if start == edge {
+                failed = true;
+                break;
+            }
+            let mut before: Option<bool> = None;
+            for _ in 0..2 {
+                start += dir;
+                let blank = white(start);
+                if before == Some(blank) {
+                    start -= dir;
+                    break;
+                }
+                while start != edge && white(start + dir) == blank {
+                    start += dir;
+                }
+                if !around || start == edge {
+                    break;
+                }
+                before = Some(blank);
+            }
+        }
+        self.sel.set_head(rope.line_to_char(start as usize));
+        self.refresh_goal_column();
+        if failed {
+            self.fail_the_motion();
         }
     }
 

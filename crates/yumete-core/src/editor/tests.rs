@@ -47541,3 +47541,25 @@ fn linewise_put_from_an_empty_register_goes_to_the_line_start() {
     feed_vim(&mut ed, "k");
     assert_eq!(vim_at(&ed), (1, 1));
 }
+
+/// **vim's `ip` and `ap` in Visual mode** (measured in nvim): charwise
+/// `vip` turns to whole lines with the cursor at the last one's start, and
+/// `V` on a lone blank line, or a selection over several lines, grows by a
+/// paragraph from the cursor's end instead of taking the same lines again.
+#[test]
+fn visual_paragraph_objects_grow_as_vim_does() {
+    let text = "one fish\ntwo fish\n\nred fish\nblue fish\n\nend\n";
+    let mut ed = typed_vim(text);
+    feed_vim(&mut ed, "wvip");
+    assert_eq!(vim_at(&ed), (2, 1));
+    let cases: &[(&str, &str)] = &[
+        ("jjVipd", "one fish\ntwo fish\n\nend\n"),
+        ("wVjipd", "red fish\nblue fish\n\nend\n"),
+        ("jjjjVkapd", "\nend\n"),
+    ];
+    for &(keys, after) in cases {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        assert_eq!(ed.current_buffer().text(), after, "{keys}");
+    }
+}

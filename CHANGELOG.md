@@ -117,6 +117,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **vim's `/` in Visual mode puts the cursor on the first character of the match**, as in vim and as in Normal mode, instead of its last, so `v/ow` then `d` keeps the `w`.
 - **vim's `*` and `#` go to a word or a Visual selection found only once**, as in vim: the cursor goes to its start and Visual mode ends, instead of staying where it was, still selecting.
 - **vim's `Vp` from an empty register leaves the cursor at the start of the line**, as in vim, instead of in the column it stood in.
+- **vim's `ip` and `ap` in Visual mode grow the selection as vim's do**: `vip` turns to whole lines with the cursor at the start of the last, and `V` on a lone blank line, or a selection over several lines, takes the next paragraph or blank lines from the cursor's end, instead of selecting the same lines again.
 
 ## 0.24.0 · 2026-11-17
 
