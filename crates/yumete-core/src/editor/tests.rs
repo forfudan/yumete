@@ -47611,3 +47611,15 @@ fn vims_switch_case_sets_the_column_j_keeps() {
     assert_eq!(ed.current_buffer().text(), "plaiN\npL\npLain\n");
     assert_eq!(vim_at(&ed), (3, 3));
 }
+
+/// **vim's Visual `N` looks back from the cursor** (measured in nvim), which
+/// stands on a match's first character, not from where the selection began.
+#[test]
+fn vims_visual_n_looks_back_from_the_cursor() {
+    let mut ed = typed_vim("one cat\ntwo cat\ncat end\n");
+    feed_vim(&mut ed, "/cat⏎vnN⎋");
+    assert_eq!(vim_at(&ed), (1, 5));
+    let mut ed = typed_vim("one cat\ntwo cat\ncat end\n");
+    feed_vim(&mut ed, "?cat⏎ggvnn⎋");
+    assert_eq!(vim_at(&ed), (2, 5));
+}

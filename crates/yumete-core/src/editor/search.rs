@@ -270,10 +270,17 @@ impl Editor {
         //
         // Warning: **匹配只有一個字的時候兩種問法一樣**——那時光標就在開頭上，所以
         // 拿一個字母去試看不出這個分別。
+        // vim's cursor already stands on a match's first character, Visual
+        // or not, and the anchor of a Visual selection is wherever it began.
+        let vim = self.acting_as_vim.unwrap_or(self.keymap_rules().search_moves_caret);
+        let back_from = match vim {
+            true => self.sel.head(),
+            false => self.sel.anchor().min(self.sel.head()),
+        };
         let found = if forward {
             search_forward(rope, &look, (self.sel.head() + 1).min(len), within.clone(), end_is_last)
         } else {
-            search_backward(rope, &look, self.sel.anchor().min(self.sel.head()), within.clone())
+            search_backward(rope, &look, back_from, within.clone())
         };
         let counted = found.map(|(pos, _)| super::count_matches(rope, &look, within, pos));
         let (counted, hit_lines) = match counted {
@@ -317,7 +324,6 @@ impl Editor {
                 // the selections already made stay. vim's visual `n` grows the
                 // one selection, and the vim keymap keeps that.
                 // `n` and `N` are twins and say which; `/` asks the rule.
-                let vim = self.acting_as_vim.unwrap_or(self.keymap_rules().search_moves_caret);
                 match (self.extend, vim) {
                     (true, false) => {
                         let mut found = crate::selection::Range::new(pos, head);

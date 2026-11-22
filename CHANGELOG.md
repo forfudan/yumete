@@ -121,6 +121,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **vim's `:s` with a pattern that matches nothing at the end of a line leaves the line's end alone**, as in vim: `:s/z*/X/g` on `abc` gives `XaXbXc`, instead of `XaXbXcX`; `:s/$/!/` still writes there, and `c` answered `y` each time gives the same.
 - **vim's cursor after a `:s …c` walk stands where vim leaves it**: at the start of the line of the last match changed by `y` or `l`, on that line's first non-blank after `a`, and on the first character of the match answered `n` last or left with `q`, instead of after the last match.
 - **vim's `~` sets the column the cursor wants**, as in vim: `~j~` switches the character below the one `~` stepped to, or stayed on at a line's end, instead of below where it was pressed.
+- **vim's Visual `N` looks back from the cursor**, as in vim, instead of from where the selection began: `/cat` then `vnN` comes back to the first match instead of wrapping round to the last.
 
 ## 0.24.0 · 2026-11-17
 
