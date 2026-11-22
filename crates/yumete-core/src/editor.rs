@@ -6352,8 +6352,11 @@ struct Across {
     text: String,
     count: usize,
     /// The line each line of the old text now begins on, for the marks; a
-    /// line a match ran into goes with the line the match left.
+    /// line a match joined to the one above goes with that line.
     rows: Vec<usize>,
+    /// The old lines a match joined to the line above: vim deletes them,
+    /// and the marks that go with their line with them.
+    joined: Vec<usize>,
     /// The line the last replacement ends on.
     last_row: Option<usize>,
     /// The char just past the last replacement that joined a line to the
@@ -6369,7 +6372,7 @@ fn replace_across_lines(text: &str, look: &find::Look, replacement: &str, global
     let picks = picks_across_lines(&hay, look, global, chosen);
     let spans: Vec<(usize, usize)> = picks.iter().map(|p| p.read).collect();
     let mut out = String::with_capacity(hay.text.len());
-    let mut rows = Vec::with_capacity(lines);
+    let (mut rows, mut joined) = (Vec::with_capacity(lines), Vec::new());
     let (mut copied, mut delta, mut last_row, mut last_join) = (0usize, 0isize, None, None);
     let row = |line: usize, delta: isize| line.checked_add_signed(delta).unwrap_or(0);
     for (pick, with) in picks.iter().zip(look.expand_each(&hay.read, &spans, replacement)) {
@@ -6383,6 +6386,7 @@ fn replace_across_lines(text: &str, look: &find::Look, replacement: &str, global
             rows.push(row(rows.len(), delta));
         }
         while rows.len() <= lb {
+            joined.push(rows.len());
             rows.push(end_row);
         }
         delta += end_row as isize - start_row as isize - (lb - la) as isize;
@@ -6400,7 +6404,7 @@ fn replace_across_lines(text: &str, look: &find::Look, replacement: &str, global
         out.pop();
     }
     let last_join = last_join.map(|at: usize| out[..at.min(out.len())].chars().count());
-    Across { text: out, count: picks.len(), rows, last_row, last_join }
+    Across { text: out, count: picks.len(), rows, joined, last_row, last_join }
 }
 
 /// **The matches a multi-line `:s …c` asks about**, with what each would

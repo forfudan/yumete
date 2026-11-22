@@ -488,15 +488,16 @@ impl Editor {
         let mut rebuilt = String::with_capacity(text.len());
         // The last line substituted, counted in the new text.
         let (mut row, mut last_hit) = (0usize, None);
-        // The line each line now begins on, for the marks.
-        let mut rows = Vec::new();
+        // The line each line now begins on, for the marks, and the lines a
+        // match joined to the one above.
+        let (mut rows, mut joined) = (Vec::new(), Vec::new());
         // vim reads `:s/\n//` as a join (`ex_join`), which leaves the cursor
         // where the last line was joined on.
         let mut joined_at = None;
 
         if across {
             let done = replace_across_lines(&text, &look, &replacement, global, &chosen);
-            (rebuilt, count, rows, last_hit) = (done.text, done.count, done.rows, done.last_row);
+            (rebuilt, count, rows, joined, last_hit) = (done.text, done.count, done.rows, done.joined, done.last_row);
             if pattern == "\\n" && replacement.is_empty() && !ignore_case && !reshape && !pinyin && !glyphs {
                 joined_at = done.last_join;
             }
@@ -544,7 +545,7 @@ impl Editor {
         if count > 0 && rebuilt != text {
             self.snapshot();
             let len = self.current_buffer().char_count();
-            let done = self.without_cell_guard(|e| e.current_buffer_mut().rewrite_rows(0..len, &rebuilt, &rows));
+            let done = self.without_cell_guard(|e| e.current_buffer_mut().rewrite_rows(0..len, &rebuilt, &rows, &joined));
             if !self.applied(done) {
                 return;
             }

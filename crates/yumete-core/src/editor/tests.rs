@@ -46928,3 +46928,17 @@ fn the_c_walk_asks_about_what_the_substitution_replaces() {
     let all = substituted("pq\n", "%s/z*/X/g");
     assert_eq!(walk("pq\n", "%s/z*/X/gc", "yyy"), (all, false));
 }
+
+/// **A multi-line `:s` deletes the marks on the lines it joins**, as vim's
+/// `:s` deletes those lines (`'a` after it is E20 in nvim); the marks below
+/// move up with their lines.
+#[test]
+fn a_multi_line_substitution_takes_the_marks_of_the_lines_it_joins() {
+    let mut ed = typed_vim("red,\ngreen,\nblue\n\nend\n");
+    feed_vim(&mut ed, "jma4jmb");
+    assert!(ed.execute("%s/,\\n/ /").is_ok(), "{}", ed.status());
+    assert_eq!(ed.current_buffer().text(), "red green blue\n\nend\n");
+    assert!(ed.current_buffer().named_mark('a').is_none(), "the joined line's mark went with it");
+    feed_vim(&mut ed, "gg'b");
+    assert_eq!(vim_at(&ed), (3, 1));
+}

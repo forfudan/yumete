@@ -543,8 +543,9 @@ enum Carry<'a> {
     /// As a cut and a put ([`carry_place`]).
     Cut,
     /// As a rewrite of the lines it covers ([`Buffer::rewrite`]), with where
-    /// each line went when the caller knows.
-    Lines(Option<&'a [usize]>),
+    /// each line went when the caller knows, and the lines it joined to the
+    /// line above.
+    Lines(Option<(&'a [usize], &'a [usize])>),
 }
 
 /// **What an edit took, as vim's marks see it**: where it began, how many
@@ -1577,10 +1578,12 @@ impl Buffer {
     /// [`Self::rewrite`], told where each line went: `rows[i]` is the line
     /// the `i`th line from the range's first now begins on, as `:s` knows
     /// when its replacement puts line breaks (vim keeps a mark on the first
-    /// of the lines its line became).
+    /// of the lines its line became). The lines in `joined`, counted the
+    /// same way, were joined to the line above, and the marks that go with
+    /// their line go with them, as vim's `:s` deletes those lines.
     #[must_use = "a read-only buffer refuses the edit; the caller has to say so"]
-    pub fn rewrite_rows(&mut self, range: Range<usize>, text: &str, rows: &[usize]) -> Edit {
-        self.write_over(range, text, Carry::Lines(Some(rows)))
+    pub fn rewrite_rows(&mut self, range: Range<usize>, text: &str, rows: &[usize], joined: &[usize]) -> Edit {
+        self.write_over(range, text, Carry::Lines(Some((rows, joined))))
     }
 
     fn write_over(&mut self, range: Range<usize>, text: &str, carry: Carry) -> Edit {
@@ -1802,7 +1805,9 @@ impl Buffer {
     /// moved by the lines added or taken, and when there are none every
     /// place keeps its line, so nothing is compared at all: `~` or `r` on a
     /// long file costs what the lines they touch cost.
-    fn carry_lines(&mut self, before: &Rope, first: usize, last: (usize, usize), rows: Option<&[usize]>) {
+    fn carry_lines(&mut self, before: &Rope, first: usize, last: (usize, usize), rows: Option<(&[usize], &[usize])>) {
+        let joined = rows.map_or(&[][..], |(_, joined)| joined);
+        let rows = rows.map(|(rows, _)| rows);
         let (was, now) = (before.len_lines(), self.rope.len_lines());
         if rows.is_none() && was == now {
             return;
@@ -1830,7 +1835,10 @@ impl Buffer {
                 None => (line < now - tail).then_some(line),
             }
         };
-        self.named_marks.retain(|_, mark| !(mark.goes_with_line && to(mark.place.0).is_none()));
+        self.named_marks.retain(|_, mark| {
+            let gone = mark.place.0 >= first && joined.binary_search(&(mark.place.0 - first)).is_ok();
+            !(mark.goes_with_line && (gone || to(mark.place.0).is_none()))
+        });
         self.move_selections(|(line, column)| (to(line).unwrap_or(first), column));
     }
 
