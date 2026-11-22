@@ -47682,3 +47682,18 @@ fn vims_block_r_changes_whole_lines() {
     assert_eq!(ed.current_buffer().text(), "XY\nijkl\n");
     assert_eq!(vim_at(&ed), (1, 2));
 }
+
+/// **vim's bare range before a `|` goes to its line** (measured in nvim),
+/// and the command after the `|` runs there; past the last line the range
+/// is an error and nothing after it runs.
+#[test]
+fn vims_bare_range_before_a_bar_goes_to_the_line() {
+    let mut ed = typed_vim("a\na\na\na\n");
+    ed.execute(":3|s/a/b/").unwrap();
+    assert_eq!(ed.current_buffer().text(), "a\na\nb\na\n");
+    ed.execute(":9|s/a/c/").unwrap();
+    assert_eq!(ed.current_buffer().text(), "a\na\nb\na\n");
+    ed.execute(":1,2|s/a/d/").unwrap();
+    assert_eq!(ed.current_buffer().text(), "a\nd\nb\na\n");
+    assert_eq!(vim_at(&ed), (2, 1));
+}

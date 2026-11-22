@@ -41,6 +41,18 @@ impl Editor {
         outcome
     }
 
+    /// The line a [`crate::command::LineAddress`] names, counted from 1 and
+    /// not yet held within the file.
+    fn address_line(&self, address: &crate::command::LineAddress) -> isize {
+        use crate::command::Bound;
+        let base = match address.from {
+            Bound::Line(n) => n.saturating_sub(1),
+            Bound::Last => motion::last_line(self.current_buffer().rope()),
+            _ => self.cursor_line(),
+        };
+        base as isize + 1 + address.offset
+    }
+
     fn execute_now(&mut self, line: &str) -> Result<CommandOutcome, EditorError> {
         // **The line belongs to this command.** A command that fails says so
         // through its error, and the status is where the *last* command's
@@ -858,7 +870,6 @@ impl Editor {
             // held within the file. The other keymap reads the line as it
             // read it before: `:+3` as line 3, the rest as no command.
             Command::GotoAddress(address) => {
-                use crate::command::Bound;
                 if !self.as_vim() {
                     let Some(n) = address.typed.strip_prefix('+').and_then(|n| n.parse::<usize>().ok()) else {
                         return Err(EditorError::Command(CommandError::Unknown(address.typed)));
@@ -868,15 +879,10 @@ impl Editor {
                     return Ok(CommandOutcome::Continue);
                 }
                 let last = motion::last_line(self.current_buffer().rope());
-                let base = match address.from {
-                    Bound::Line(n) => n.saturating_sub(1),
-                    Bound::Last => last,
-                    _ => self.cursor_line(),
-                };
                 // **Before line 0 is no line** (vim's E16), and the cursor
                 // stays; line 0 is the first, and past the last is the last,
                 // as in vim.
-                let typed = base as isize + 1 + address.offset;
+                let typed = self.address_line(&address);
                 if typed < 0 {
                     self.status = say!("find.no-such-line", typed, last + 1);
                     self.command_failed = true;
@@ -890,6 +896,31 @@ impl Editor {
                     None => self.move_to_line(line + 1),
                 }
                 Ok(CommandOutcome::Continue)
+            }
+            // Before a `|` past the last line is no line either (vim's
+            // E16), and the rest of the line does not run.
+            Command::RangeThen { line: address, then, typed } => {
+                if !self.as_vim() {
+                    return Err(EditorError::Command(CommandError::Unknown(typed)));
+                }
+                let last = motion::last_line(self.current_buffer().rope());
+                let line = self.address_line(&address);
+                if line < 0 || line > last as isize + 1 {
+                    self.status = say!("find.no-such-line", line, last + 1);
+                    self.command_failed = true;
+                    return Ok(CommandOutcome::Continue);
+                }
+                let line = (line.max(1) as usize - 1).min(last);
+                self.fold_stays_closed = true;
+                self.jumped = true;
+                match self.line_jump_keeps() {
+                    Some(want) => self.land_at_column(line, want),
+                    None => self.move_to_line(line + 1),
+                }
+                match then.is_empty() {
+                    true => Ok(CommandOutcome::Continue),
+                    false => self.execute_now(&then),
+                }
             }
             Command::Count => {
                 self.status = self.count_report();

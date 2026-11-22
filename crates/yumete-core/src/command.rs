@@ -244,6 +244,11 @@ pub enum Command {
     /// vim's `:$`, `:+3`, `:.-2` — put the cursor on the line the address
     /// names: a line, the cursor's or the last, moved by the offset.
     GotoAddress(LineAddress),
+    /// vim's `:3|…` and `:2,5|…`: a bare range before a `|` puts the cursor
+    /// on its last line, then the command after the `|` runs; past the last
+    /// line the range is an error and nothing more runs. `typed` is the
+    /// whole line, for the keymap that does not read it.
+    RangeThen { line: LineAddress, then: String, typed: String },
     /// `:earlier [n|span]` / `:later [n|span]` — helix's: so many undo steps,
     /// or to the change nearest a time span back or ahead.
     Earlier(UndoSpan),
@@ -1186,6 +1191,9 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         return cmd;
     }
 
+    if let Some(ranged) = parse_range_then(trimmed) {
+        return Ok(ranged);
+    }
     // `:$`, `:+3`, `:.-2`: vim's bare range, a line too.
     if let Some(address) = parse_line_address(trimmed) {
         return Ok(Command::GotoAddress(address));
@@ -7863,6 +7871,29 @@ fn parse_line_address(input: &str) -> Option<LineAddress> {
         rest = &rest[1 + n..];
     }
     Some(LineAddress { from, offset, typed: input.to_string() })
+}
+
+/// [`Command::RangeThen`] from `input`: one or two addresses, a `|`, and
+/// what follows it.
+fn parse_range_then(input: &str) -> Option<Command> {
+    let bar = input.find('|')?;
+    let head = input[..bar].trim_end();
+    let address = |part: &str| -> Option<LineAddress> {
+        let part = part.trim();
+        match !part.is_empty() && part.chars().all(|c| c.is_ascii_digit()) {
+            true => Some(LineAddress { from: Bound::Line(part.parse().ok()?), offset: 0, typed: part.to_string() }),
+            false => parse_line_address(part),
+        }
+    };
+    let parts: Vec<&str> = head.split(',').collect();
+    if parts.len() > 2 || parts.iter().any(|part| address(part).is_none()) {
+        return None;
+    }
+    Some(Command::RangeThen {
+        line: address(parts[parts.len() - 1])?,
+        then: input[bar + 1..].trim_start().to_string(),
+        typed: input.to_string(),
+    })
 }
 
 /// One end of a `:s` range.
