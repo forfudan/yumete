@@ -399,60 +399,13 @@ impl Editor {
     /// Under vim a `count` goes that many places on, round the file's end as
     /// vim's `3*` does.
     pub(super) fn search_the_page(&mut self, back: bool, count: usize) {
-        let rope = self.current_buffer().rope();
-        let (from, to) = self.selection();
-        // Warning: **一個字寬的「選區」是光標，不是選中**。這個編輯器裏每一次移動
-        // 都留下選區，而光標蓋着自己那一格——所以問 `to > from` 的話它恆真，下面
-        // 那條「取光標下那個詞」的路**一次都走不到**。搜索面板那一扇同一條規矩
-        // （`open_search` 的 `to > from + 1`）。
-        let selected = to > from + 1;
-        // Where the thing looked for begins here: `#` looks before it.
-        let mut begins = from;
-        let needle = match selected {
-            true => rope.slice(from..to.min(rope.len_chars())).to_string(),
-            false => {
-                // Warning: **問 `line_words`，不要問 `segment_line`**。`segment_line` 是**畫分詞底線**用的，它有意把拉丁詞整段濾
-                // 掉（`words.rs`：「標點 runs and Latin words are never words to
-                // paint」）——問它的話英文上永遠落到下面那條退路，取的是**一個
-                // 字母**：`one two three alpha` 站在 `o` 上按 `*`，搜的會是 `o`。
-                //
-                // `line_words` 正是 `w`/`b` 問的那一支（`word_object_span` 也問
-                // 它），所以這一行的註釋「which is what `w` would have taken」
-                // 是真的。
-                let line = rope.char_to_line(self.sel.head());
-                let words = crate::motion::line_words(rope, line, self.word_grain(), self.segmenter.as_ref());
-                let here = self.sel.head();
-                match words.iter().find(|&&(a, b)| (a..b).contains(&here)) {
-                    Some(&(a, b)) => {
-                        begins = a;
-                        rope.slice(a..b.min(rope.len_chars())).to_string()
-                    }
-                    None => {
-                        begins = here;
-                        rope.get_char(here).map(|c| c.to_string()).unwrap_or_default()
-                    }
-                }
-            }
-        };
-        let needle = needle.trim().to_string();
-        if needle.is_empty() {
-            self.status = say!("find.nothing-here-to-look-for");
-            return;
-        }
-        // **The word under the cursor is looked for whole** (vim's `*`, `#`):
-        // `the` does not stop inside `then`. The ends that are Latin letters
-        // or digits take `\b`; a Chinese word has no such edge, so it matches
-        // as written. A selection is looked for exactly as selected.
-        let edge = |c: Option<char>| c.is_some_and(|c| c.is_ascii_alphanumeric() || (c.is_alphabetic() && !yumete_cjk::is_han(c)));
-        let pattern = match selected {
-            true => regex::escape(&needle),
-            false => format!(
-                "{}{}{}",
-                if edge(needle.chars().next()) { "\\b" } else { "" },
-                regex::escape(&needle),
-                if edge(needle.chars().last()) { "\\b" } else { "" },
-            ),
-        };
+        self.search_the_page_as(back, count, true)
+    }
+
+    /// The same, the word looked for `whole` (`*`) or inside other words
+    /// too (vim's `g*`).
+    pub(super) fn search_the_page_as(&mut self, back: bool, count: usize, whole: bool) {
+        let Some((pattern, needle, begins)) = self.what_to_look_for(whole) else { return };
         let spans = self.every_match(&pattern);
         if spans.len() <= 1 {
             self.status = say!("find.only-here", needle);
@@ -491,6 +444,67 @@ impl Editor {
         }
         self.remember_hits(spans, at);
         self.show_table_hit();
+    }
+
+    /// **What `*` and `#` look for here**: the selection as selected, else
+    /// the word under the cursor, `whole` with `\b` at its Latin edges; the
+    /// pattern, the text, and where the thing looked for begins.
+    pub(super) fn what_to_look_for(&mut self, whole: bool) -> Option<(String, String, usize)> {
+        let rope = self.current_buffer().rope();
+        let (from, to) = self.selection();
+        // Warning: **一個字寬的「選區」是光標，不是選中**。這個編輯器裏每一次移動
+        // 都留下選區，而光標蓋着自己那一格——所以問 `to > from` 的話它恆真，下面
+        // 那條「取光標下那個詞」的路**一次都走不到**。搜索面板那一扇同一條規矩
+        // （`open_search` 的 `to > from + 1`）。
+        let selected = to > from + 1;
+        // Where the thing looked for begins here: `#` looks before it.
+        let mut begins = from;
+        let needle = match selected {
+            true => rope.slice(from..to.min(rope.len_chars())).to_string(),
+            false => {
+                // Warning: **問 `line_words`，不要問 `segment_line`**。`segment_line` 是**畫分詞底線**用的，它有意把拉丁詞整段濾
+                // 掉（`words.rs`：「標點 runs and Latin words are never words to
+                // paint」）——問它的話英文上永遠落到下面那條退路，取的是**一個
+                // 字母**：`one two three alpha` 站在 `o` 上按 `*`，搜的會是 `o`。
+                //
+                // `line_words` 正是 `w`/`b` 問的那一支（`word_object_span` 也問
+                // 它），所以這一行的註釋「which is what `w` would have taken」
+                // 是真的。
+                let line = rope.char_to_line(self.sel.head());
+                let words = crate::motion::line_words(rope, line, self.word_grain(), self.segmenter.as_ref());
+                let here = self.sel.head();
+                match words.iter().find(|&&(a, b)| (a..b).contains(&here)) {
+                    Some(&(a, b)) => {
+                        begins = a;
+                        rope.slice(a..b.min(rope.len_chars())).to_string()
+                    }
+                    None => {
+                        begins = here;
+                        rope.get_char(here).map(|c| c.to_string()).unwrap_or_default()
+                    }
+                }
+            }
+        };
+        let needle = needle.trim().to_string();
+        if needle.is_empty() {
+            self.status = say!("find.nothing-here-to-look-for");
+            return None;
+        }
+        // **The word under the cursor is looked for whole** (vim's `*`, `#`):
+        // `the` does not stop inside `then`. The ends that are Latin letters
+        // or digits take `\b`; a Chinese word has no such edge, so it matches
+        // as written. A selection is looked for exactly as selected.
+        let edge = |c: Option<char>| c.is_some_and(|c| c.is_ascii_alphanumeric() || (c.is_alphabetic() && !yumete_cjk::is_han(c)));
+        let pattern = match selected || !whole {
+            true => regex::escape(&needle),
+            false => format!(
+                "{}{}{}",
+                if edge(needle.chars().next()) { "\\b" } else { "" },
+                regex::escape(&needle),
+                if edge(needle.chars().last()) { "\\b" } else { "" },
+            ),
+        };
+        Some((pattern, needle, begins))
     }
 
     /// Every match of `pattern` in the buffer, as character ranges.

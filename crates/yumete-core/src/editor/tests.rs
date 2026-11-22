@@ -47213,3 +47213,27 @@ fn a_binding_that_plays_a_macro_plays_it_in_place_inside_a_macro() {
     assert_eq!(ed.current_buffer().text(), "pen\ncup2\nhat\nug2\n");
     assert_eq!(vim_at(&ed), (4, 3));
 }
+
+/// **vim's `g*` and `g#` find the word inside other words, and operators
+/// take all four of `*` `#` `g*` `g#`** (measured in nvim): `d2*` deletes
+/// up to the second match of the whole word, `dg*` up to the word inside a
+/// longer one, and `n` after them goes on with that word.
+#[test]
+fn star_motions_and_their_g_forms() {
+    let mut ed = typed_vim("sun moon sunset\nmoon sun x\nsun end\n");
+    feed_vim(&mut ed, "g*");
+    assert_eq!(vim_at(&ed), (1, 10));
+    let mut ed = typed_vim("sun moon sunset\nmoon sun x\nsun end\n");
+    feed_vim(&mut ed, "g#");
+    assert_eq!(vim_at(&ed), (3, 1));
+    let mut ed = typed_vim("sun moon sunset\nmoon sun x\nsun end\n");
+    feed_vim(&mut ed, "dg*");
+    assert_eq!(ed.current_buffer().text(), "sunset\nmoon sun x\nsun end\n");
+    let mut ed = typed_vim("sun moon sunset\nmoon sun x\nsun end\n");
+    feed_vim(&mut ed, "d2*");
+    assert_eq!(ed.current_buffer().text(), "sun end\n");
+    let mut ed = typed_vim("sun moon sunset\nmoon sun x\nsun end\n");
+    feed_vim(&mut ed, "d*n");
+    assert_eq!(ed.current_buffer().text(), "sun x\nsun end\n");
+    assert_eq!(vim_at(&ed), (2, 1));
+}

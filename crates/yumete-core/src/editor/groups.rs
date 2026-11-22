@@ -915,6 +915,9 @@ pub(super) static GOTO: Group = Group {
         ch('m', NormalCmd::GotoLastModifiedFile, "hint.goto.last-modified-file").when(Only::Helix),
         ch('r', NormalCmd::GotoReference, "hint.goto.references").when(Only::Helix),
         ch('/', NormalCmd::SearchSelection, "hint.goto.search-word").flavor(FlavorItem::GotoExtras),
+        // vim's `g*` and `g#`: `*` and `#` without the word's edges.
+        ch('*', NormalCmd::SearchPartForward, "action.search-part-forward").when(Only::Vim),
+        ch('#', NormalCmd::SearchPartBackward, "action.search-part-backward").when(Only::Vim),
         ch('j', NormalCmd::MoveNextZong, "hint.goto.by-file-line-vertical").when(Only::VimVertical),
         ch('k', NormalCmd::MovePrevZong, "hint.goto.by-file-line-vertical").when(Only::VimVertical),
         ch('j', NormalCmd::MoveVisualLineDown, "action.move-visual-line-down").when(Only::Vim),

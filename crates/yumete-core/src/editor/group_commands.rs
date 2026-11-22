@@ -68,6 +68,14 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
         e.definition_preview = false;
         e.search_the_page(false, cx.count)
     }, Key::Char('/')),
+    (NormalCmd::SearchPartForward, |e, cx| {
+        e.definition_preview = false;
+        e.search_the_page_as(false, cx.count, false)
+    }, Key::Char('*')),
+    (NormalCmd::SearchPartBackward, |e, cx| {
+        e.definition_preview = false;
+        e.search_the_page_as(true, cx.count, false)
+    }, Key::Char('#')),
     // A vertical page under the vim preset: `gj` walks the 縱 the way the
     // writing runs, one line of the file at a time.
     (NormalCmd::MoveNextZong, |e, cx| e.walk_zongs(cx, true), Key::Char('j')),

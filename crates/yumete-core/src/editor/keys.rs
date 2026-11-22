@@ -1408,6 +1408,21 @@ impl Editor {
             let forward = self.search_forward == (c == 'n');
             return self.vim_operator_to_match(op, count, forward);
         }
+        // **`*` `#` `g*` `g#` are searches for the word under the cursor**
+        // (`:h star`), exclusive as `n` is: the pattern becomes the last
+        // search, and the match is counted from the word's start.
+        if matches!(c, '*' | '#') && matches!(first, None | Some('g')) {
+            self.settle_alias_count();
+            let count = self.count.take();
+            let Some((pattern, _, begins)) = self.what_to_look_for(first.is_none()) else {
+                self.fail_the_motion();
+                return;
+            };
+            self.last_search = pattern;
+            self.search_forward = c == '*';
+            self.hits = None;
+            return self.vim_operator_to_match_from(op, count, c == '*', begins);
+        }
         // **`gn` and `gN` are the match itself** (`:h gn`): `dgn` takes the
         // match the cursor stands in or the next one, both ends, and `.`
         // after `cgn` changes the next — vim's way of changing matches one
@@ -1483,8 +1498,12 @@ impl Editor {
     /// `dN`), exclusive as vim's search motions are. Such a delete goes into
     /// `"1` however short it is (`:h quote1`).
     pub(super) fn vim_operator_to_match(&mut self, op: char, count: Option<usize>, forward: bool) {
-        let here = self.sel.head();
-        let Some((at, _)) = self.search_hit_from(forward, here, count.unwrap_or(1)) else { return };
+        self.vim_operator_to_match_from(op, count, forward, self.sel.head())
+    }
+
+    /// The same, the matches counted from `from` rather than the cursor.
+    fn vim_operator_to_match_from(&mut self, op: char, count: Option<usize>, forward: bool, from: usize) {
+        let Some((at, _)) = self.search_hit_from(forward, from, count.unwrap_or(1)) else { return };
         // **A match at a line's end is reached on the line's last
         // character**, where vim's cursor stands after the search: `d/$`
         // keeps that character, as `d/$` in vim does.

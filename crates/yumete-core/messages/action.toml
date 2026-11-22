@@ -1917,6 +1917,18 @@ en = "search panel"
 find = "搜索 搜尋 搜寻 面板 跨文件 替換 替换 panel replace"
 
 [[message]]
+# 命令說明：search_part_backward（草稿）
+key = "action.search-part-backward"
+zhs = "往前找光标下的词，词中的也算(vim 的 g#)"
+en = "search backward for the word under the cursor, inside other words too (vim's g#)"
+
+[[message]]
+# 命令說明：search_part_forward（草稿）
+key = "action.search-part-forward"
+zhs = "往后找光标下的词，词中的也算(vim 的 g*)"
+en = "search forward for the word under the cursor, inside other words too (vim's g*)"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.search-prev"
 zhs = "上一处"
