@@ -2250,12 +2250,14 @@ impl Editor {
     pub(super) fn cmd_search(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
         self.open_search_line(true);
+        self.search_count = operator_count.filter(|_| self.as_vim());
     }
 
     #[allow(unused_variables)]
     pub(super) fn cmd_rsearch(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
         self.open_search_line(false);
+        self.search_count = operator_count.filter(|_| self.as_vim());
     }
 
     /// The `/` (or `?`) line, empty, for a search that moves the cursor.
@@ -2265,6 +2267,7 @@ impl Editor {
         self.command_line.clear();
         self.command_caret = 0;
         self.operator_search = None;
+        self.search_count = None;
         // A new search takes `n` back from the table's.
         self.hits = None;
     }

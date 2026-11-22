@@ -1091,7 +1091,10 @@ impl Editor {
                     return self.vim_operator_to_match(op, count, forward);
                 }
                 self.remember_jump();
-                self.repeat_search(forward);
+                // `3/bar⏎` goes to the third match from the cursor.
+                for _ in 0..self.search_count.take().unwrap_or(1).clamp(1, Self::WRITING_MAX) {
+                    self.repeat_search(forward);
+                }
             }
             other => self.edit_prompt(other),
         }

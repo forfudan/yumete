@@ -46355,3 +46355,23 @@ fn a_vim_macro_plays_itself_until_a_motion_fails() {
     feed_vim(&mut ed, "qbxqqa@bq@a");
     assert_eq!(ed.current_buffer().text(), "\na2\na3\na4\n");
 }
+
+/// **A count before vim's `/` or `?` goes to that match** (measured in
+/// nvim), counted from the cursor and round the end of the file; `n`
+/// afterwards goes one further.
+#[test]
+fn a_count_before_a_search_goes_to_that_match() {
+    let text = "sun moon\nmoon sea\nsky moon\nmoon star moon\nend\n";
+    let cases: &[(&str, (usize, usize))] = &[
+        ("3/moon⏎", (3, 5)),
+        ("G3?moon⏎", (3, 5)),
+        ("3/moon⏎n", (4, 1)),
+        ("7/moon⏎", (2, 1)),
+        ("/moon⏎", (1, 5)),
+    ];
+    for &(keys, at) in cases {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, &format!("0{keys}"));
+        assert_eq!(vim_at(&ed), at, "{keys}");
+    }
+}
