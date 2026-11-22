@@ -2762,7 +2762,18 @@ impl Editor {
     /// its own letters into the chapter. The config refuses such
     /// a line and never installs it, so nothing should reach here — and if
     /// something ever does, the manuscript is not where it gets to say so.
+    ///
+    /// **Bindings that press bindings, through the macros they play, stop
+    /// at [`Self::BINDING_DEPTH`]** (vim's `maxmapdepth` and its `E223`):
+    /// the failure ends every key still to press, and the reader is told,
+    /// where pressing on would take the stack, and the unsaved buffers with
+    /// it.
     pub(super) fn run_binding(&mut self, commands: &[String]) {
+        if self.binding_depth >= Self::BINDING_DEPTH {
+            self.status = say!("macro.too-deep", Self::BINDING_DEPTH);
+            self.macro_failed = true;
+            return;
+        }
         // **A list runs in order** (helix's), and stops at a quit. Under the
         // vim keymap it stops, too, at a motion that fails, as vim's beep
         // flushes the rest of a mapping: the failure goes on to the macro or
@@ -2821,6 +2832,9 @@ impl Editor {
         self.play_keys(keys);
         self.replaying_held = outer;
     }
+
+    /// How deep bindings may press bindings ([`Self::run_binding`]).
+    pub(super) const BINDING_DEPTH: usize = 100;
 
     fn play_keys(&mut self, keys: &str) {
         // Warning: **Saved and restored, not set and cleared**. An operator

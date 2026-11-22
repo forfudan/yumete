@@ -47459,6 +47459,25 @@ fn a_failing_motion_ends_the_binding_and_its_macro() {
     assert_eq!(vim_at(&ed), (3, 3));
 }
 
+/// **A binding that plays a macro that presses the binding stops** (vim's
+/// `E223`), saying so, instead of taking the stack and the editor with it.
+#[test]
+fn a_binding_that_presses_itself_through_a_macro_stops() {
+    let mut ed = typed_vim("one\ntwo\nthree\n");
+    let mut aliases = std::collections::HashMap::new();
+    aliases.insert("C-k".to_string(), "@@aj".to_string());
+    ed.set_key_aliases(aliases);
+    feed_vim(&mut ed, "qa");
+    ed.on_key(Key::Ctrl('k'));
+    feed_vim(&mut ed, "q");
+    ed.on_key(Key::Ctrl('k'));
+    assert_eq!(ed.status(), say!("macro.too-deep", Editor::BINDING_DEPTH));
+    assert_eq!(ed.current_buffer().text(), "one\ntwo\nthree\n");
+    // The keys still to press were given up, and the next ones work.
+    feed_vim(&mut ed, "jx");
+    assert_eq!(ed.current_buffer().text(), "one\nwo\nthree\n");
+}
+
 /// **vim's `` `[ `` after Insert `C-u` or `C-w` is where the cursor stood
 /// as the key was pressed** (measured in nvim, whose own mappings put
 /// `<C-G>u` before both): the Insert starts over there, by line and

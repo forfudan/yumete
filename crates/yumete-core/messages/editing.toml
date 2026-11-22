@@ -659,6 +659,12 @@ key = "macro.recording"
 zhs = "正在录制…"
 en = "recording…"
 
+[[message]]
+# 按鍵綁定與巨集一層套一層，套得太深，停下來（草稿）：{0} 層數上限
+key = "macro.too-deep"
+zhs = "按键绑定与宏嵌套超过 {0} 层，已停止"
+en = "key bindings and macros nested more than {0} deep; stopped"
+
 
 # ── md ────────────────────────────────────────────────────────────────
 
