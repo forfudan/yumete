@@ -1845,9 +1845,11 @@ impl Editor {
             };
             let span = self.read_motion_nth(what, motion::Reading::Caret, nth);
             // **An empty line is a word to vim** under an operator too, as
-            // `b` alone stops on one: `db` from below an empty line lands
-            // on it.
+            // `w` and `b` alone stop on one: `db` from below an empty line
+            // lands on it, and `d2w` from a line's last word over one counts
+            // it as the first hop.
             let span = match what {
+                motion::Motion::WordForward(_) => self.stop_on_an_empty_line(span, true),
                 motion::Motion::WordBack(_) => self.stop_on_an_empty_line(span, false),
                 _ => span,
             };
@@ -2006,8 +2008,32 @@ impl Editor {
                     && motion::line_end(rope, before) == motion::line_start(rope, before)
                 {
                     let at = motion::line_start(rope, before);
-                    let span = motion::Span::Over { anchor: start.min(at), head: at };
-                    return self.do_vim_span(op, span, Shape::Lines);
+                    if start >= at {
+                        let span = motion::Span::Over { anchor: start.min(at), head: at };
+                        return self.do_vim_span(op, span, Shape::Lines);
+                    }
+                    // **The last hop leaving an empty line further down**
+                    // (`d2w` from a line's last word over an empty line,
+                    // measured in nvim): the end stays exclusive in that
+                    // line's column 1, so the break before it is the last
+                    // character taken — or, from an indent, the lines down
+                    // to the empty one go whole.
+                    if in_indent(rope, start) {
+                        self.do_vim_lines(op, rope.char_to_line(start), rope.char_to_line(at));
+                        if op == 'd' {
+                            let rope = self.current_buffer().rope();
+                            let at = motion::line_first_non_blank(rope, self.sel.head());
+                            self.move_head(at);
+                            self.sel.set_goal(None);
+                        }
+                        return;
+                    }
+                    // Still charwise, ending in that break: `y2w` then `P`
+                    // puts it inside the line.
+                    self.take_the_break = true;
+                    self.do_vim(op, motion::Span::Over { anchor: start, head: at - 1 });
+                    self.take_the_break = false;
+                    return;
                 }
                 // Warning: **行末那道夾子是給詞的，不是通則**（拿 nvim 量過）。
                 // `:h word-motions` 那一條只說「最後走過的那個**詞**在行末」；套在每一個

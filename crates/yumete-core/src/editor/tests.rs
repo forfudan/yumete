@@ -46103,3 +46103,25 @@ fn a_backward_exclusive_motion_from_column_one_takes_whole_lines() {
         assert_eq!((ed.current_buffer().text().as_str(), vim_at(&ed)), (want, at), "{keys}");
     }
 }
+
+/// **An empty line is one of the words a counted `w` crosses under an
+/// operator** (measured in nvim): `d2w` from a line's last word stops in
+/// the empty line's first column, so it takes the word and its line break;
+/// `y2w` holds them charwise, and from the line's start `d3w` takes the
+/// lines down to the empty one whole.
+#[test]
+fn a_counted_word_motion_counts_an_empty_line() {
+    let text = "sun moon\n\nsky blue\nend\n";
+    let cases: &[(&str, &str, (usize, usize))] = &[
+        ("wd2w", "sun \nsky blue\nend\n", (1, 4)),
+        ("wd2W", "sun \nsky blue\nend\n", (1, 4)),
+        ("wd3w", "sun blue\nend\n", (1, 5)),
+        ("wy2wP", "sun moon\nmoon\n\nsky blue\nend\n", (1, 5)),
+        ("d3w", "sky blue\nend\n", (1, 1)),
+    ];
+    for &(keys, want, at) in cases {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        assert_eq!((ed.current_buffer().text().as_str(), vim_at(&ed)), (want, at), "{keys}");
+    }
+}

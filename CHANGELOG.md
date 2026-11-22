@@ -71,6 +71,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **vim's `"0p` and `"1p` put a charwise yank or delete that ends in a line break into the line**, as `p` does and as in vim: the lone break `ygn` takes on `/^$`, `v$y`, `v$d`, not a line below the cursor's.
 - **vim's `2dd`, `2yy`, `2cc` and the other doubled operators with a count do nothing on the last line**, as in vim, instead of taking that line; a count reaching past the end from higher up still takes the lines there are.
 - **vim's `d{`, `db`, `dB` and `d(` from a line's first column take whole lines when they land in an indent**, as vim's exclusive motions do and as `d}` and `d/` already did: `d{` from the start of a paragraph's line takes the lines up to the blank line, `db` onto a line's only word takes that line, and `y{` yanks lines.
+- **vim's `d2w`, `y2w` and other counted word motions after an operator count an empty line as a word**, as `w` alone does and as in vim: `d2w` from a line's last word over an empty line takes that word and its line break, not the next line's first word too.
 
 ## 0.24.0 · 2026-11-17
 
