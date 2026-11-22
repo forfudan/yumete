@@ -1040,10 +1040,19 @@ impl Editor {
         // **`p` from an empty register still takes the selection** (nvim's
         // `nv_put` deletes before it puts, then finds nothing to put): into
         // the unnamed register as `d` would, or into none for `P`.
+        // Over whole lines the cursor then goes to the line's very start,
+        // where the put would have begun.
         if matches!(c, 'p' | 'P') && self.visual_put_has_nothing() {
             let named = self.pending_register;
+            let lines = self.vim_lines;
             self.pending_register = (c == 'P').then_some('_');
             self.on_normal_key(Key::Char('d'));
+            if lines {
+                let rope = self.current_buffer().rope();
+                let at = rope.line_to_char(rope.char_to_line(self.sel.head().min(rope.len_chars())));
+                self.sel = crate::selection::Selections::one(crate::selection::Range::at(at));
+                self.refresh_goal_column();
+            }
             self.status = match named {
                 Some(name) => say!("register.empty", name),
                 None => say!("register.nothing-yanked"),

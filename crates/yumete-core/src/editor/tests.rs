@@ -47527,3 +47527,17 @@ fn star_goes_to_the_only_match() {
     assert_eq!(ed.current_buffer().text(), "red fox jumps\nblue owl sings\ngrey cat naps\n");
     assert_eq!(vim_at(&ed), (1, 10));
 }
+
+/// **vim's `Vp` from an empty register leaves the cursor at the start of
+/// the line** (measured in nvim): the lines go, nothing is put, and the
+/// cursor stands at the very start of the line that came up, wanting that
+/// column after.
+#[test]
+fn linewise_put_from_an_empty_register_goes_to_the_line_start() {
+    let mut ed = typed_vim("red fox jumps\nblue owl sings\ngrey cat naps\n");
+    feed_vim(&mut ed, "jwwVp");
+    assert_eq!(ed.current_buffer().text(), "red fox jumps\ngrey cat naps\n");
+    assert_eq!(vim_at(&ed), (2, 1));
+    feed_vim(&mut ed, "k");
+    assert_eq!(vim_at(&ed), (1, 1));
+}
