@@ -120,7 +120,7 @@ impl Editor {
         // **The keys a `.` plays are not typed**: the `.` is in the
         // recording already, and played back it repeats the change once.
         // Nor are a macro's: `@b` recorded into `a` plays `b` again.
-        if self.recording.is_some() && !self.expanding_alias && !self.repeating_edit && !self.replaying {
+        if self.recording.is_some() && !self.expanding_alias && !self.repeating_edit && !self.replaying && self.binding_depth == 0 {
             // **Every key goes in, and stopping cuts back to where the keys
             // that stopped it began**, so a recording stopped by any key
             // (`"C-r" = "record_macro"`, or `Space q` bound to it) does not end
@@ -2871,7 +2871,9 @@ impl Editor {
     ///    after the day the editor's own `d` moves somewhere else, and it says
     ///    what it does without the reader knowing which key does it today.
     /// 3. `@xxd` — **keys**, played as though typed (#428), which is what the
-    ///    vim preset is made of.
+    ///    vim preset is made of. `mine` says the binding is the reader's,
+    ///    whose keys under the vim keymap are vim's, as typed
+    ///    ([`Self::play_as_typed`]); the preset's are the editor's own.
     ///
     /// Warning: **A right-hand side that is none of the three plays nothing.**
     /// Falling through to 「then it must be keys」, a misspelt name would type
@@ -2884,7 +2886,7 @@ impl Editor {
     /// the failure ends every key still to press, and the reader is told,
     /// where pressing on would take the stack, and the unsaved buffers with
     /// it.
-    pub(super) fn run_binding(&mut self, commands: &[String]) {
+    pub(super) fn run_binding(&mut self, commands: &[String], mine: bool) {
         if self.binding_depth >= Self::BINDING_DEPTH {
             self.status = say!("macro.too-deep", Self::BINDING_DEPTH);
             self.macro_failed = true;
@@ -2895,12 +2897,14 @@ impl Editor {
         // flushes the rest of a mapping: the failure goes on to the macro or
         // `:normal` that pressed the binding, and ends there with it.
         self.binding_depth += 1;
+        let outer = std::mem::replace(&mut self.binding_is_mine, mine);
         for one in commands {
             self.run_one_binding(one);
             if self.quit_from_binding || self.macro_failed {
                 break;
             }
         }
+        self.binding_is_mine = outer;
         self.binding_depth -= 1;
         if self.binding_depth == 0 && !(self.replaying || self.normal_depth > 0 || self.repeating_edit) {
             self.macro_failed = false;
@@ -2912,7 +2916,11 @@ impl Editor {
             Some(yumete_cjk::actions::Bound::Command(line)) => self.run_bound_command(line),
             // `A-d`、`C-o` 這種寫法在這裏纔翻成內部拼法。
             Some(yumete_cjk::actions::Bound::Keys(keys)) => {
-                self.play_keys(&yumete_cjk::actions::written(keys))
+                let keys = yumete_cjk::actions::written(keys);
+                match self.binding_is_mine && self.as_vim() {
+                    true => self.play_as_typed(&keys),
+                    false => self.play_keys(&keys),
+                }
             }
             Some(yumete_cjk::actions::Bound::Named(action)) => match action.how {
                 yumete_cjk::actions::How::Command(line) => self.run_bound_command(line),
@@ -2949,10 +2957,37 @@ impl Editor {
         self.replaying_held = outer;
     }
 
+    fn play_keys(&mut self, keys: &str) {
+        self.press_bound_keys(keys, true);
+    }
+
     /// How deep bindings may press bindings ([`Self::run_binding`]).
     pub(super) const BINDING_DEPTH: usize = 100;
 
-    fn play_keys(&mut self, keys: &str) {
+    /// **The keys of a binding of the reader's under the vim keymap are
+    /// vim's, as typed** (`"C-l" = "@wrQ"` is vim's `w`, which goes on to
+    /// the next line and fails at the file's end): the keymap's own keys
+    /// read them, the reader's are left out (vim's `noremap`), and none of
+    /// them goes into a recording, which holds the key that was pressed.
+    fn play_as_typed(&mut self, keys: &str) {
+        let was_plain = self.plain_keys;
+        if !was_plain {
+            self.plain_keys = true;
+            self.lay_aliases();
+        }
+        self.press_bound_keys(keys, false);
+        if !was_plain {
+            // A run of the keymap's own the keys began is still held.
+            let held = std::mem::take(&mut self.alias_held);
+            self.plain_keys = false;
+            self.lay_aliases();
+            self.alias_held = held;
+        }
+    }
+
+    /// The keys of a binding pressed one by one, `expanding` as the
+    /// editor's own keys or else as typed.
+    fn press_bound_keys(&mut self, keys: &str, expanding: bool) {
         // Warning: **Saved and restored, not set and cleared**. An operator
         // inside an expansion replays its motion through this same function,
         // and an inner `= false` on the way out would re-arm the alias layer
@@ -2960,7 +2995,7 @@ impl Editor {
         // `Q = "dwQ"` would be expanded again and the stack would go with it —
         // an abort, which takes unsaved buffers with it.
         let outer = self.expanding_alias;
-        self.expanding_alias = true;
+        self.expanding_alias = expanding;
         let mut count = self.count.take();
         // **`{n}` says where the count goes**. Without it the
         // count lands on the first key that acts, which is right for
@@ -3274,6 +3309,10 @@ impl Editor {
                     }
                     _ => None,
                 });
+                let mine = !self.tree().preset.contains(&held);
+                // Under the vim keymap a key of the reader's that stands for
+                // one the keymap binds itself (`"X" = "@$"`) plays it as typed.
+                let one_key = one_key.filter(|c| !(mine && self.as_vim() && self.aliases().contains_key(&c.to_string())));
                 match found {
                     Some(_) if held.chars().count() == 1 && one_key.is_some() => {
                         self.settle_alias_count();
@@ -3281,7 +3320,7 @@ impl Editor {
                     }
                     Some(bound) => {
                         self.settle_alias_count();
-                        return self.run_binding(&bound);
+                        return self.run_binding(&bound, mine);
                     }
                     None => {
                         // 放掉剛按的那一下——Alt 那一種是兩個 `char`，掉一個會留

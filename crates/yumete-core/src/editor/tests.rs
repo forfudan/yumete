@@ -33834,12 +33834,15 @@ fn the_vim_preset_hides_two_helix_letters_but_keeps_the_motions() {
     assert_eq!(at(Vim, "$"), 4, "vim 的 `$`");
     assert_eq!(at(Vim, "ll0"), 0, "vim 的 `0`");
     assert_eq!(at(Vim, "ll^"), 0, "vim 的 `^`");
-    // 別名也走得到：配置裏綁的、`::` 挑的，都是這條路。
-    let mut ed = typed("abcde\nfghij\n");
-    ed.set_key_preset(Vim);
-    ed.set_key_aliases([("X".to_string(), "@gl".to_string())].into_iter().collect());
-    press(&mut ed, "ggX");
-    assert_eq!(ed.sel.head(), 4, "別名展開出來的 `gl` 照走");
+    // A binding of the reader's presses its keys as typed: `gl` is
+    // nothing there either, and vim's `$` is the line's end.
+    for (keys, end) in [("@gl", 0), ("@$", 4)] {
+        let mut ed = typed("abcde\nfghij\n");
+        ed.set_key_preset(Vim);
+        ed.set_key_aliases([("X".to_string(), keys.to_string())].into_iter().collect());
+        press(&mut ed, "ggX");
+        assert_eq!(ed.sel.head(), end, "{keys}");
+    }
 }
 
 /// **折了行的那一縱纔分得出兩套鍵位**。
@@ -47457,6 +47460,41 @@ fn a_failing_motion_ends_the_binding_and_its_macro() {
     feed_vim(&mut ed, "q4@q");
     assert_eq!(ed.current_buffer().text(), "ab\ncd!\nef!\n");
     assert_eq!(vim_at(&ed), (3, 3));
+}
+
+/// **The keys of a binding of the reader's under the vim keys are vim's,
+/// as typed** (measured in nvim with `nmap <C-l> wrQ` and `nmap <C-l> $l`):
+/// `w` goes on to the next line, fails at the file's last character and
+/// ends the binding there, and `$` is vim's.
+#[test]
+fn a_binding_presses_its_keys_as_typed_under_vim() {
+    let bound = |keys: &str| {
+        let mut ed = typed_vim("fig nut\nyam pea\n");
+        let mut aliases = std::collections::HashMap::new();
+        aliases.insert("C-l".to_string(), keys.to_string());
+        ed.set_key_aliases(aliases);
+        ed
+    };
+    let mut ed = bound("@wrQ");
+    ed.on_key(Key::Ctrl('l'));
+    assert_eq!(ed.current_buffer().text(), "fig Qut\nyam pea\n");
+    ed.on_key(Key::Ctrl('l'));
+    assert_eq!(ed.current_buffer().text(), "fig Qut\nQam pea\n");
+    assert_eq!(vim_at(&ed), (2, 1));
+    let mut ed = bound("@wrQ");
+    feed_vim(&mut ed, "G$");
+    ed.on_key(Key::Ctrl('l'));
+    assert_eq!(ed.current_buffer().text(), "fig nut\nyam pea\n");
+    let mut ed = bound("@$l");
+    ed.on_key(Key::Ctrl('l'));
+    feed_vim(&mut ed, "x");
+    assert_eq!(ed.current_buffer().text(), "fig nu\nyam pea\n");
+    // Recorded, the binding is its key, played once.
+    let mut ed = bound("@wrQ");
+    feed_vim(&mut ed, "qa");
+    ed.on_key(Key::Ctrl('l'));
+    feed_vim(&mut ed, "q@a");
+    assert_eq!(ed.current_buffer().text(), "fig Qut\nQam pea\n");
 }
 
 /// **A binding that plays a macro that presses the binding stops** (vim's

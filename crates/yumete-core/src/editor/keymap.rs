@@ -919,7 +919,7 @@ impl Editor {
         self.count = self.group_count.take().or(self.operator_count.take());
         self.operator_count = None;
         self.settle_alias_count();
-        self.run_binding(commands);
+        self.run_binding(commands, true);
         if sticky && self.pending == Pending::None && self.mode == Mode::Normal {
             self.pending = was;
         }
@@ -965,7 +965,8 @@ impl Editor {
             let start = keys[..cut].concat();
             let Some(commands) = self.tree().runs.get(&start).cloned() else { continue };
             self.settle_alias_count();
-            self.run_binding(&commands);
+            let mine = !self.tree().preset.contains(&start);
+            self.run_binding(&commands, mine);
             let rest = keys[cut..].concat();
             if !rest.is_empty() {
                 self.play_held(&rest);

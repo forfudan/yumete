@@ -1248,6 +1248,13 @@ impl Editor {
         let grain = self.word_grain();
         let step = crate::vim::step_for(&c.to_string(), grain, None)
             .expect("the guard just asked");
+        // **`w` from the file's last character fails** (nvim's `fwd_word`),
+        // ending the macro or binding playing it; one that gets there on
+        // the way does not.
+        let rope = self.current_buffer().rope();
+        let from = self.sel.head().min(rope.len_chars());
+        let stop = motion::line_end(rope, rope.line_to_char(motion::last_line(rope)));
+        let stuck = matches!(c, 'w' | 'W') && (from >= stop || motion::next_grapheme(rope, from) >= stop);
         self.repeat(count, |e| {
             let span = e.read_motion(step.motion, motion::Reading::Caret);
             // **An empty line is a word to vim** (`:h word`, measured):
@@ -1259,6 +1266,9 @@ impl Editor {
             };
             e.jump_to(span);
         });
+        if stuck {
+            self.fail_the_motion();
+        }
     }
 
     /// **A count of vim paragraphs that runs past the file** (`5}` with

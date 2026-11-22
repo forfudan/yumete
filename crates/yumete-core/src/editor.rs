@@ -2912,11 +2912,12 @@ pub struct Editor {
     macro_queue: std::collections::VecDeque<(crate::input::MacroStep, usize)>,
     /// How deep in macros played inside macros the key being pressed is.
     macro_depth: usize,
-    /// **Where the queue is pressed from**: the `:normal` depth and alias
-    /// state of the player. A macro played from deeper — a `:normal @b` or
-    /// a binding the macro's keys run — plays where it stands, as vim's
-    /// typeahead runs it before the `:normal` or binding goes on.
-    macro_level: (usize, bool),
+    /// **Where the queue is pressed from**: the `:normal` depth, alias
+    /// state and binding depth of the player. A macro played from deeper —
+    /// a `:normal @b` or a binding the macro's keys run — plays where it
+    /// stands, as vim's typeahead runs it before the `:normal` or binding
+    /// goes on.
+    macro_level: (usize, bool, usize),
     /// **A motion failed while a vim macro played**: vim beeps and flushes
     /// what is left of the macro (`:h q`, `beep_flush`), so `10@a` whose `j`
     /// meets the last line stops there instead of writing on that line ten
@@ -2931,6 +2932,9 @@ pub struct Editor {
     /// the binding's keys as it ends a macro, since vim's beep flushes the
     /// rest of a mapping and what plays it.
     binding_depth: usize,
+    /// Whether the binding running now is the reader's, not the keymap's
+    /// own (`Editor::run_binding`).
+    binding_is_mine: bool,
     /// The reader's own key bindings are left out of the trees while
     /// `:normal!` runs its keys.
     plain_keys: bool,
@@ -4924,9 +4928,10 @@ impl Editor {
             replaying: false,
             macro_queue: std::collections::VecDeque::new(),
             macro_depth: 0,
-            macro_level: (0, false),
+            macro_level: (0, false, 0),
             macro_failed: false,
             binding_depth: 0,
+            binding_is_mine: false,
             normal_depth: 0,
             plain_keys: false,
             yank_lit: None,

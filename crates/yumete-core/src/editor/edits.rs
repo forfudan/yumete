@@ -1796,7 +1796,7 @@ impl Editor {
             self.status = say!("count.writing-ceiling", Self::WRITING_MAX);
             return;
         }
-        if self.replaying && self.macro_level == (self.normal_depth, self.expanding_alias) {
+        if self.replaying && self.macro_level == (self.normal_depth, self.expanding_alias, self.binding_depth) {
             for _ in 0..count.clamp(1, Self::WRITING_MAX) {
                 for step in steps.iter().rev() {
                     self.macro_queue.push_front((step.clone(), depth));
@@ -1815,7 +1815,14 @@ impl Editor {
         if self.as_vim() {
             self.expanding_alias = false;
         }
-        self.macro_level = (self.normal_depth, self.expanding_alias);
+        // The reader's own bindings too, as in vim, where `:normal!` and a
+        // `noremap` leave a register's keys mapped.
+        let was_plain = self.plain_keys;
+        if was_plain {
+            self.plain_keys = false;
+            self.lay_aliases();
+        }
+        self.macro_level = (self.normal_depth, self.expanding_alias, self.binding_depth);
         // A macro may write, so it answers to the writing ceiling; and a round
         // that moved nothing and changed nothing will never move anything on
         // the next one either, so stop (#318). `revision`, not `char_count`:
@@ -1864,6 +1871,10 @@ impl Editor {
             }
         }
         self.expanding_alias = expanding;
+        if was_plain {
+            self.plain_keys = true;
+            self.lay_aliases();
+        }
         match outer {
             // A failure ends the keys of the `:normal` or binding that
             // played this one.

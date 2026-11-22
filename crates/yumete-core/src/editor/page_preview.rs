@@ -681,7 +681,7 @@ impl Editor {
         for one in &commands {
             match Self::a_page_command(one) {
                 Some(cmd) => self.page_command(cmd, count),
-                None => self.run_binding(std::slice::from_ref(one)),
+                None => self.run_binding(std::slice::from_ref(one), theirs),
             }
             if self.quit_from_binding {
                 break;

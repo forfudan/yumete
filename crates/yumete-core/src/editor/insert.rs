@@ -236,7 +236,7 @@ impl Editor {
             return true;
         }
         if let Some(commands) = self.insert_aliases.get(&held).cloned() {
-            self.run_binding(&commands);
+            self.run_binding(&commands, true);
             return true;
         }
         if earlier.is_empty() {
