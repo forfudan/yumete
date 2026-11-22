@@ -3634,6 +3634,10 @@ pub struct Editor {
     /// 記的是「回哪一個模式」，不是一個布爾——將來若有第二種進得去的模式，這一格
     /// 不用改。按下去先回 Normal；那一鍵走完，`on_key` 的出口把模式放回來。
     one_normal_key: Option<crate::input::Mode>,
+    /// The line `C-o` was pressed on when the cursor stood past its last
+    /// character (vim's `ins_at_eol`): coming back on that line's last
+    /// character puts the cursor past it again.
+    one_normal_eol: Option<usize>,
     overwriting: bool,
     /// 蓋掉的字，一個進去的字一格——原處没有字（蓋到行尾外面去了）就是 `None`。
     /// 退格照這張單子倒着還回去，同 vim。
@@ -5106,6 +5110,7 @@ impl Editor {
             search_generation: 0,
             search_progress: std::sync::Arc::default(),
             one_normal_key: None,
+            one_normal_eol: None,
             overwriting: false,
             overwritten: Vec::new(),
             insert_opened: None,

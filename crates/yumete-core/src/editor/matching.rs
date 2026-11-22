@@ -1398,7 +1398,7 @@ impl Editor {
 
     /// The column `pos` stands at on its line, a tab spanning to its stop
     /// (see [`Self::stands_at_tab_end`]).
-    fn line_column(&self, pos: usize) -> usize {
+    pub(super) fn line_column(&self, pos: usize) -> usize {
         let rope = self.current_buffer().rope();
         let start = rope.line_to_char(rope.char_to_line(pos));
         let ts = self.tab_stop();

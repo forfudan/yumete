@@ -423,6 +423,33 @@ impl Editor {
         self.one_normal_key = None;
         if self.mode == Mode::Normal {
             self.mode = back;
+            self.back_past_the_line_end();
+        }
+    }
+
+    /// **vim's way back into Insert after `C-o`**: a cursor on its line's
+    /// last character goes past it when `C-o` was pressed past the end of
+    /// that same line, or when the column it wants lies further right
+    /// (after `$`, or a `j` from a longer line). Normal mode had to stand it
+    /// on that character; Insert can stand after it.
+    fn back_past_the_line_end(&mut self) {
+        let eol_line = self.one_normal_eol.take();
+        if self.mode != Mode::Insert || self.extend {
+            return;
+        }
+        let rope = self.current_buffer().rope();
+        let head = self.sel.head().min(rope.len_chars());
+        let end = motion::line_end(rope, head);
+        if head >= end || motion::next_grapheme(rope, head) != end {
+            return;
+        }
+        let same_line = eol_line == Some(rope.char_to_line(head));
+        let wants_further = self.sel.goal().is_some_and(|goal| goal > self.line_column(head));
+        if same_line || wants_further {
+            let goal = self.sel.goal();
+            self.sel.set_head(end);
+            self.sel.set_anchor(end);
+            self.sel.set_goal(goal);
         }
     }
 

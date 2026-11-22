@@ -81,6 +81,9 @@ pub(super) const INSERT_COMMANDS: &[NormalCommand] = &[
     // count goes, as vim's does: `3o` then `C-o` opens one line.
     (NormalCmd::RunOneNormalCommand, |e, _| {
         e.insert_again = 0;
+        let rope = e.current_buffer().rope();
+        let head = e.sel.head().min(rope.len_chars());
+        e.one_normal_eol = (head == motion::line_end(rope, head)).then(|| rope.char_to_line(head));
         e.one_normal_key = Some(Mode::Insert);
         e.mode = Mode::Normal;
     }, Key::Ctrl('o')),

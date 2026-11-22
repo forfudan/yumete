@@ -24123,7 +24123,8 @@ fn vim_reselects_and_borrows_one_normal_key() {
     assert_eq!(ed.mode(), Mode::Insert, "一鍵走完就回插入態");
     assert_eq!(ed.current_buffer().rope().char_to_line(ed.sel.head()), 0);
     press(&mut ed, "Y");
-    assert_eq!(ed.current_buffer().text(), "Y甲\n乙\n丙X\n", "接着打字");
+    // The column it wants lies past `甲`, so it types after it, as in vim.
+    assert_eq!(ed.current_buffer().text(), "甲Y\n乙\n丙X\n", "接着打字");
 
     // Warning: **進了別的模式就不拽回來**——`C-o` 之後按 `:` 是人自己要去的地方。
     let mut ed = typed_vim("甲\n");
@@ -47622,4 +47623,23 @@ fn vims_visual_n_looks_back_from_the_cursor() {
     let mut ed = typed_vim("one cat\ntwo cat\ncat end\n");
     feed_vim(&mut ed, "?cat⏎ggvnn⎋");
     assert_eq!(vim_at(&ed), (2, 5));
+}
+
+/// **vim's Insert `C-o` past a line's end comes back past it** (measured in
+/// nvim): when the cursor ends on that line's last character, or the column
+/// it wants lies further right, as after `$`.
+#[test]
+fn vims_insert_ctrl_o_at_the_line_end_comes_back_past_it() {
+    let mut ed = typed_vim("ab\n");
+    feed_vim(&mut ed, "3oxᵒhy⎋");
+    assert_eq!(ed.current_buffer().text(), "ab\nxy\n");
+    let mut ed = typed_vim("abc\n");
+    feed_vim(&mut ed, "Aᵒ$y⎋");
+    assert_eq!(ed.current_buffer().text(), "abcy\n");
+    let mut ed = typed_vim("abc\n");
+    feed_vim(&mut ed, "izᵒ$y⎋");
+    assert_eq!(ed.current_buffer().text(), "zabcy\n");
+    let mut ed = typed_vim("ab\n");
+    feed_vim(&mut ed, "Aᵒhy⎋");
+    assert_eq!(ed.current_buffer().text(), "yab\n");
 }
