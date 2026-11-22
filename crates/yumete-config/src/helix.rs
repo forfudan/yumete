@@ -133,21 +133,26 @@ pub fn editor_table(table: &toml::Table) -> Carried {
                     None => skip(got, "no layout yumete can read"),
                 }
             }
-            "rulers" => {
-                let first = value.as_array().and_then(|r| r.first());
-                match first.map(|v| number_in(v, 1, 400)) {
-                    Some(Ok(n)) => {
-                        set(got, "ruler", n.to_string());
-                        if value.as_array().is_some_and(|r| r.len() > 1) {
-                            got.skipped.push(format!(
-                                "[editor] rulers after the first: yumete draws one ruler, at {n}"
-                            ));
+            // Each column of helix's list a column of yumete's; one out of
+            // range is listed and the rest still come over.
+            "rulers" => match value.as_array() {
+                Some(list) => {
+                    let mut kept: Vec<i64> = Vec::new();
+                    for one in list {
+                        match number_in(one, 1, 400) {
+                            Ok(n) => kept.push(n),
+                            Err(why) => skip(got, &why),
                         }
                     }
-                    Some(Err(why)) => skip(got, &why),
-                    None => skip(got, "no ruler in the list"),
+                    kept.sort_unstable();
+                    kept.dedup();
+                    if !kept.is_empty() || list.is_empty() {
+                        let written = kept.iter().map(i64::to_string).collect::<Vec<_>>().join(", ");
+                        set(got, "rulers", format!("[{written}]"));
+                    }
                 }
-            }
+                None => skip(got, "not a list of columns"),
+            },
             "bufferline" => match value.as_str() {
                 Some("always") => set(got, "tabs", quote("always")),
                 Some("never") => set(got, "tabs", quote("never")),

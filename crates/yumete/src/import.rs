@@ -1429,7 +1429,7 @@ j = { k = "normal_mode" }
         assert!(!list.contains("mouse"), "{list}");
         assert!(list.contains("[editor.soft-wrap] max-wrap: no counterpart in yumete"), "{list}");
         assert!(list.contains("[editor.lsp]: no counterpart in yumete"), "{list}");
-        assert!(list.contains("rulers after the first"), "{list}");
+        assert!(!list.contains("rulers"), "every ruler comes over: {list}");
         assert!(list.contains("languages.toml [[language]]: not read"), "{list}");
         assert!(list.lines().all(|l| l.starts_with("#   ")), "{list}");
         assert_eq!(imported.skipped, list.lines().count());
@@ -1446,7 +1446,7 @@ j = { k = "normal_mode" }
             "scrolloff = 8",
             "line_numbers = \"relative\"",
             "tabs = \"auto\"",
-            "ruler = 80",
+            "rulers = [80, 100]",
             "hard_wrap = 72",
             "soft_wrap = true",
             "indent_guides = true",

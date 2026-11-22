@@ -271,24 +271,27 @@ fn options(user: &Dump, base: &Dump, from: Source, own: &mut Own) {
     if changed("pumheight") && user.number("pumheight") > 0 {
         ranged(own, "pumheight", "completion_page_size", user.number("pumheight"), 1, 20);
     }
-    // colorcolumn: the first is the ruler; `+N` counts from textwidth.
+    // colorcolumn: each column a ruler; `+N` and `-N` count from textwidth.
     handled.insert("colorcolumn");
     if changed("colorcolumn") {
         let columns = user.string("colorcolumn");
-        let mut all = columns.split(',').filter(|c| !c.is_empty());
-        if let Some(first) = all.next() {
-            let at = match first.strip_prefix('+').or(first.strip_prefix('-').map(|_| first)) {
+        let mut kept: Vec<i64> = Vec::new();
+        for one in columns.split(',').filter(|c| !c.is_empty()) {
+            let at = match one.strip_prefix('+').or(one.strip_prefix('-').map(|_| one)) {
                 Some(rel) if tw > 0 => rel.parse::<i64>().ok().map(|n| tw + n),
                 Some(_) => None,
-                None => first.parse::<i64>().ok(),
+                None => one.parse::<i64>().ok(),
             };
             match at {
-                Some(n) => ranged(own, "colorcolumn", "ruler", n, 1, 400),
-                None => own.skipped.push(format!("colorcolumn={columns}: yumete's ruler is one column number")),
+                Some(n) if (1..=400).contains(&n) => kept.push(n),
+                Some(n) => own.skipped.push(format!("colorcolumn={one}: {n} is outside yumete's 1–400 for rulers")),
+                None => own.skipped.push(format!("colorcolumn={one}: a ruler is a column number")),
             }
-            if all.next().is_some() {
-                own.skipped.push(format!("colorcolumn={columns}: yumete draws one ruler, the first"));
-            }
+        }
+        kept.sort_unstable();
+        kept.dedup();
+        if !kept.is_empty() {
+            set(own, format!("rulers = [{}]", kept.iter().map(i64::to_string).collect::<Vec<_>>().join(", ")));
         }
     }
     for (name, key, yes, no) in [
@@ -1328,6 +1331,35 @@ mod tests {
         for to in BARE {
             assert!(has(to), "{to}");
         }
+    }
+
+    /// **Every `colorcolumn` column is a ruler**: a number as it is, `+N`
+    /// and `-N` counted from `textwidth`, in order and each once; one
+    /// outside 1 to 400, or relative with no `textwidth`, is listed and the
+    /// others still come over.
+    #[test]
+    fn every_colorcolumn_column_becomes_a_ruler() {
+        let dump = |cc: &str, tw: u32| {
+            let json = format!(
+                r#"{{ "nvim": "0.11", "options": {{ "colorcolumn": {{ "value": "{cc}", "script": "/home/me/init.lua" }},
+                   "textwidth": {{ "value": {tw}, "script": "/home/me/init.lua" }} }}, "keymaps": [] }}"#
+            );
+            Dump::from_json(&serde_json::from_str(&json).unwrap())
+        };
+        let base = dump("", 0);
+        let rulers = |own: &Own| own.editor.iter().filter(|l| l.starts_with("rulers")).cloned().collect::<Vec<_>>();
+        let own = translate(&dump("100,80,80", 0), &base, Source::Neovim);
+        assert_eq!(rulers(&own), ["rulers = [80, 100]"]);
+        assert!(own.skipped.is_empty(), "{:?}", own.skipped);
+        let own = translate(&dump("+1,120,-2", 72), &base, Source::Neovim);
+        assert_eq!(rulers(&own), ["rulers = [70, 73, 120]"]);
+        let own = translate(&dump("80,500", 0), &base, Source::Neovim);
+        assert_eq!(rulers(&own), ["rulers = [80]"]);
+        assert_eq!(own.skipped.len(), 1, "{:?}", own.skipped);
+        let own = translate(&dump("+1", 0), &base, Source::Neovim);
+        assert!(rulers(&own).is_empty(), "{:?}", own.editor);
+        assert_eq!(own.skipped.len(), 1, "{:?}", own.skipped);
+        assert!(!own.editor.iter().any(|l| l.starts_with("ruler ")), "{:?}", own.editor);
     }
 
     /// **`set mouse=` is `mouse = false`**; mouse letters are yumete's
