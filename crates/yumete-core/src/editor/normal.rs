@@ -265,7 +265,10 @@ pub(super) const NORMAL_COMMANDS: &[NormalCommand] = &[
     // vim's `Q`: the register last recorded into, played (Neovim's).
     (NormalCmd::VimReplayLastMacro, |e, cx| match e.last_recorded {
         Some(name) => e.play_register(name, cx.count),
-        None => e.status = say!("macro.nothing-recorded"),
+        None => {
+            e.status = say!("macro.nothing-recorded");
+            e.fail_the_motion();
+        }
     }, Key::Char('Q')),
     (NormalCmd::VimReplayMacro, |e, cx| e.pending = Pending::MacroRegister { record: false, count: cx.count }, Key::Char('@')),
     // vim's `_`: the first non-blank character, count \u{2212} 1 lines down.

@@ -47177,3 +47177,18 @@ fn the_change_start_after_putting_lines_in_insert_is_where_insert_began() {
     assert_eq!(ed.current_buffer().text(), "pine cone\npine cone\nbirch abbark\n");
     assert_eq!(vim_at(&ed), (2, 7));
 }
+
+/// **vim's `@` of an empty register fails like a motion** (measured in
+/// nvim): it ends the macro playing it and the rest of a `:normal` line,
+/// while a macro that ran that `:normal` goes on after it.
+#[test]
+fn playing_an_empty_register_ends_what_plays_it() {
+    let mut ed = typed_vim("@zAx\u{1b}\nreed\n");
+    feed_vim(&mut ed, "\"qy$j@q");
+    assert_eq!(ed.current_buffer().text(), "@zAx\u{1b}\nreed\n");
+    feed_vim(&mut ed, ":normal @zAy⏎");
+    assert_eq!(ed.current_buffer().text(), "@zAx\u{1b}\nreed\n");
+    let mut ed = typed_vim(":normal @zAy\nAw\u{1b}\nreed\n");
+    feed_vim(&mut ed, "\"a2yyjj@a");
+    assert_eq!(ed.current_buffer().text(), ":normal @zAy\nAw\u{1b}\nreedw\n");
+}

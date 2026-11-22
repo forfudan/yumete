@@ -1733,11 +1733,14 @@ impl Editor {
             '"' => self.register_text(None),
             name => self.held(name),
         };
+        // **An empty register fails as a motion does** (vim's `do_execreg`):
+        // inside a macro or a `:normal` it ends the keys still to press.
         if text.is_empty() {
             self.status = match register {
                 '@' => say!("macro.nothing-recorded"),
                 name => say!("register.empty", name),
             };
+            self.fail_the_motion();
             return;
         }
         let steps = match crate::input::macro_steps(&text) {
