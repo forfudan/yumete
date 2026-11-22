@@ -48,9 +48,7 @@ impl Editor {
         // `''` and ``` `` ```: where the last jump came from, and pressed
         // again, back (vim's).
         if matches!(name, '\'' | '`') {
-            let Some((index, pos)) =
-                self.jump_at.checked_sub(1).and_then(|at| self.jumps.get(at)).and_then(|jump| self.jump_place(jump))
-            else {
+            let Some((index, pos)) = self.came_from() else {
                 self.status = say!("goto.no-such-mark", name);
                 return;
             };
@@ -115,10 +113,27 @@ impl Editor {
         }
     }
 
+    /// **Where the last jump came from**, vim's `'` mark: its buffer's
+    /// index and the place there. With no jump made yet it is the start of
+    /// this buffer, as vim's is the first line's start; `None` when the
+    /// buffer it was in is closed.
+    fn came_from(&self) -> Option<(usize, usize)> {
+        match self.jump_at.checked_sub(1).and_then(|at| self.jumps.get(at)) {
+            Some(jump) => self.jump_place(jump),
+            None => Some((self.current, 0)),
+        }
+    }
+
     /// A mark by its name: a letter set with `m`/`M`, vim's `[` and `]`,
     /// where the last change or yank began and ended, or its `<` and `>`.
     fn mark_named(&self, name: char) -> Option<Spot> {
         match name {
+            // Where the last jump came from, when that is in this buffer:
+            // the end of an operator's `''` and ``` `` ```.
+            '\'' | '`' => {
+                let (index, pos) = self.came_from().filter(|&(index, _)| index == self.current)?;
+                Some(Spot::InBuffer(self.buffers[index].id(), pos))
+            }
             '[' | ']' => {
                 let (start, end) = self.current_buffer().change_span()?;
                 let pos = match name {

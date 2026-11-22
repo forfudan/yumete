@@ -45509,6 +45509,24 @@ fn a_vim_put_ends_its_last_mark_as_nvim_does() {
     }
 }
 
+/// **``` `` ``` and `''` before any jump go to the first line's start**, as
+/// vim's `'` mark stands there (measured in nvim): pressed again they come
+/// back, and an operator takes them as its motion.
+#[test]
+fn a_vim_quote_mark_before_any_jump_is_the_first_line() {
+    let text = "sun moon\nred blue\n  hot cold\n";
+    let cases: &[(&str, &str, (usize, usize))] = &[
+        ("jjll``x", "un moon\nred blue\n  hot cold\n", (1, 1)),
+        ("jjll''''x", "sun moon\nred blue\n  ot cold\n", (3, 3)),
+        ("jjlld``", "hot cold\n", (1, 1)),
+        ("jlld''", "  hot cold\n", (1, 3)),
+    ];
+    for &(keys, want, at) in cases {
+        let (_, got, cursor) = vim_block_run(text, keys);
+        assert_eq!((got.as_str(), cursor), (want, at), "{keys:?}");
+    }
+}
+
 /// **Insert's `C-r` puts a block register as nvim 0.12 does**: the unnamed
 /// one's pieces as lines (`C-r "`, `C-r C-r "`); a register named by its
 /// letter or number as a block from the cursor's column down, as

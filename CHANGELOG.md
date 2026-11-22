@@ -64,6 +64,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **vim's `` `] `` after a put or a yank stands where vim's does**: past a last line of one character after `gp`, at the start of the line after text ending in a line break, and on an empty last line rather than the line above it.
 - **vim's `Vd`, `V>` and `V<` leave the cursor in the column it wanted**, as `dd` and `>>` do and as in vim, instead of the first column; `$` before `V` lands at the line's end, and `>>` counts the column on the screen, as in vim.
 - **Insert `C-r` puts a block register whole**, as in vim: the unnamed one as lines, one named by a letter or number as a block from the cursor's column; vim's `C-r C-r` puts as `C-r` does, and `C-r C-o` and `C-r C-p` put as `P` does, lines above the line and a block as a block, with the cursor just past them.
+- **vim's ``` `` ``` and `''` before any jump go to the first line's start**, as in vim, instead of nowhere; pressed again they come back, and `d''`, ``` y`` ``` and the other operators take them as motions.
 
 ## 0.24.0 · 2026-11-17
 
