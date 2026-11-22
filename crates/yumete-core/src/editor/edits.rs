@@ -218,12 +218,19 @@ impl Editor {
 
     /// **A yank or a put leaves `` `] `` on its last character**, not past it
     /// as typing does; a whole line's last character is the one before its
-    /// line break (nvim: `yyp` gives `` `] `` on the pasted line's last letter).
+    /// line break (nvim: `yyp` gives `` `] `` on the pasted line's last letter),
+    /// and an empty last line's is its start.
     fn mark_change_to_last(&mut self, start: usize, end: usize) {
         let rope = self.current_buffer().rope();
         let mut last = end.saturating_sub(1).max(start);
-        while last > start && rope.get_char(last) == Some('\n') {
-            last -= 1;
+        if last > start && rope.get_char(last) == Some('\n') {
+            let line_start = rope.line_to_char(rope.char_to_line(last));
+            if last > line_start && rope.get_char(last - 1) == Some('\r') {
+                last -= 1;
+            }
+            if last > line_start {
+                last = motion::prev_grapheme(rope, last);
+            }
         }
         self.current_buffer_mut().set_change_span(start, last);
     }
@@ -2254,23 +2261,6 @@ impl Editor {
     /// Paste the register after (`p`) or before (`P`) the selection, and select
     /// the pasted text. Does nothing when the register is empty.
     pub(super) fn paste(&mut self, after: bool) {
-        let before = (self.current_buffer().id(), self.current_buffer().revision());
-        self.paste_now(after);
-        let put = (self.current_buffer().id(), self.current_buffer().revision());
-        if put != before {
-            self.mark_the_put();
-        }
-    }
-
-    /// `` `] `` on the last character of what was just put (see
-    /// [`Self::mark_change_to_last`]).
-    pub(super) fn mark_the_put(&mut self) {
-        if let Some((start, end)) = self.current_buffer().change_span() {
-            self.mark_change_to_last(start, end);
-        }
-    }
-
-    fn paste_now(&mut self, after: bool) {
         // `"+p` asks the front end for the system clipboard and pastes what
         // comes back, the way `Space p` does.
         if matches!(self.pending_register, Some('+' | '*')) {
@@ -2398,6 +2388,7 @@ impl Editor {
         // lines, so which lines are rows has changed.
         self.rescan_records();
         let go_past = std::mem::take(&mut self.paste_goes_past);
+        self.mark_put_text(at, at + len, line_wise, go_past);
         // The pasted text becomes the selection, ending on its last grapheme.
         let rope = self.current_buffer().rope();
         let head = motion::prev_grapheme(rope, at + len).max(at);
@@ -2434,6 +2425,29 @@ impl Editor {
         self.sel.set_anchor(at);
         self.sel.set_head(head);
         self.refresh_goal_column();
+    }
+
+    /// **`` `[ `` and `` `] `` over text just put** from `start` to `end`
+    /// (vim's `do_put`). `` `] `` stands on the last character put, a
+    /// whole line's being the one before its break. Text over lines, which
+    /// ends on its last line's last character, ends at that line's start
+    /// when nothing of it is on that line; after `gp` (`PUT_CURSEND`) a
+    /// last line of one byte leaves `` `] `` just past it, where the cursor
+    /// goes.
+    pub(super) fn mark_put_text(&mut self, start: usize, end: usize, line_wise: bool, go_past: bool) {
+        let Some((first, _)) = self.current_buffer().change_span() else { return };
+        let rope = self.current_buffer().rope();
+        let tail_start = rope.line_to_char(rope.char_to_line(end));
+        if line_wise || tail_start <= start {
+            return self.mark_change_to_last(first, end);
+        }
+        let tail: String = rope.slice(tail_start..end).chars().collect();
+        let last = match tail.len() {
+            0 => end,
+            1 if go_past => end,
+            _ => motion::prev_grapheme(rope, end),
+        };
+        self.current_buffer_mut().set_change_span(first, last);
     }
 
     /// **Where vim's `gp` leaves the cursor**, `end` being just past the

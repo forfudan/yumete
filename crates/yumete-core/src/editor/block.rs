@@ -997,11 +997,9 @@ impl super::Editor {
                     self.sel = Selections::one(Range::at(rope.line_to_char(corner_line)));
                 }
                 self.put_text(key == 'p' || forward, text, true);
-                self.mark_the_put();
             }
             Put::Text(text, false) if text.contains('\n') => {
                 self.put_text(forward, text, false);
-                self.mark_the_put();
             }
             Put::Text(text, false) => self.put_on_each_line(at, first..=last, &text),
         }

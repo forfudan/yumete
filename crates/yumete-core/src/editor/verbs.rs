@@ -1107,21 +1107,13 @@ impl Editor {
         if !self.overwrite(start, end, &new) {
             return None;
         }
-        // Lines put run `` `[ `` to `` `] `` from the first line's start to
-        // the last line's last character, not its break; between a line's
-        // two halves they begin on the first of them, not at the split
-        // (vim's `PUT_LINE_SPLIT`).
-        if let (true, Some((first, last))) = (lines || line_wise, self.current_buffer().change_span()) {
+        self.mark_put_text(start, start + new.chars().count(), lines || line_wise, self.paste_goes_past);
+        // Lines put between a line's two halves begin `` `[ `` on the first
+        // of them, not at the split (vim's `PUT_LINE_SPLIT`).
+        if let (false, true, Some((_, last))) = (lines, line_wise, self.current_buffer().change_span()) {
             let rope = self.current_buffer().rope();
-            let first = match lines {
-                true => first,
-                false => rope.line_to_char(rope.char_to_line(start) + 1).min(last),
-            };
-            let last = match rope.get_char(last) {
-                Some('\n' | '\r') if last > rope.line_to_char(rope.char_to_line(last)) => motion::prev_grapheme(rope, last),
-                _ => last,
-            };
-            self.current_buffer_mut().set_change_span(first, last.max(first));
+            let first = rope.line_to_char(rope.char_to_line(start) + 1).min(last);
+            self.current_buffer_mut().set_change_span(first, last);
         }
         if self.paste_goes_past {
             return Some(self.just_past_the_put(start + new.chars().count(), line_wise || lines));

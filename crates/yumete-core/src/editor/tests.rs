@@ -45488,6 +45488,27 @@ fn a_put_over_a_vim_block_marks_what_it_put() {
     }
 }
 
+/// **`` `] `` after a put or a yank stands where nvim's does** (`do_put`):
+/// text over lines whose last line is one character leaves it just past
+/// that character after `gp`, on it after `p`; text ending in a line break
+/// leaves it at the start of the line after; lines whose last is empty
+/// leave it on that empty line.
+#[test]
+fn a_vim_put_ends_its_last_mark_as_nvim_does() {
+    let text = "sun\nx\nred moon\n\nend\n";
+    let cases: &[(&str, &str, (usize, usize))] = &[
+        ("vj0yjjlgp`]x", "sun\nx\nresun\nx moon\n\nend\n", (4, 2)),
+        ("vj0yjjlp`]x", "sun\nx\nresun\nd moon\n\nend\n", (4, 1)),
+        ("vj0yjjvgp`]x", "sun\nx\nsun\nxd moon\n\nend\n", (4, 2)),
+        ("v$yjjp`]x", "sun\nx\nrsun\nd moon\n\nend\n", (4, 1)),
+        ("jjyjgg`]x", text, (4, 1)),
+    ];
+    for &(keys, want, at) in cases {
+        let (_, got, cursor) = vim_block_run(text, keys);
+        assert_eq!((got.as_str(), cursor), (want, at), "{keys:?}");
+    }
+}
+
 /// **After `p` over a `v` or `V` selection, `gv` and the `<` `>` marks are
 /// the text put**, selected as the selection was (vim's `nv_put_opt`,
 /// measured in nvim): lines put into a line begin `` `[ `` on the first of
