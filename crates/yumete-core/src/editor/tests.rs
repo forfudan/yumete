@@ -46781,3 +46781,15 @@ fn a_paragraph_motion_from_among_empty_lines_crosses_them() {
         assert_eq!((ed.current_buffer().text().as_str(), vim_at(&ed)), (want, at), "{keys} on {text:?}");
     }
 }
+
+/// **A count before vim's `*` or `#` goes that many matches on** (measured
+/// in nvim), round the file's end.
+#[test]
+fn a_count_before_star_or_hash_goes_that_many_matches_on() {
+    let text = "cat one\ncat two\nthe cat\ncat end\ncatnap\n";
+    for (keys, at) in [("2*", (3, 5)), ("3*", (4, 1)), ("4*", (1, 1)), ("2#", (3, 5)), ("5#", (4, 1)), ("3*n", (1, 1))] {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        assert_eq!(vim_at(&ed), at, "{keys}");
+    }
+}

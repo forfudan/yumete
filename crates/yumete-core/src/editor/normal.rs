@@ -2670,7 +2670,7 @@ impl Editor {
     pub(super) fn cmd_search_word_backward(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
         self.definition_preview = false;
-        self.search_the_page(true);
+        self.search_the_page(true, count);
     }
 
     // Replacing the selection with the register. Joining is on `gJ`:

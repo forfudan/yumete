@@ -95,6 +95,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **vim's `''` after `C-o` goes back to where `C-o` first jumped from**, as in vim, instead of the first line.
 - **vim's `o` or `A` Enter on a last line with no final line break, then Esc, keeps the empty line it opened**, as in vim, instead of losing it.
 - **vim's `}` and `{` on an empty line next to another go past the paragraph after them**, as in vim, instead of stopping at the next empty line, so `d}` there takes that paragraph.
+- **A count before vim's `*` and `#` counts**, as in vim: `3*` goes to the third match of the word, instead of the first.
 
 ## 0.24.0 · 2026-11-17
 

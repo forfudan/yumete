@@ -64,9 +64,9 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
         }
     }, Key::Char('d')),
     (NormalCmd::GotoReference, |e, _| e.ask_references(), Key::Char('r')),
-    (NormalCmd::SearchSelection, |e, _| {
+    (NormalCmd::SearchSelection, |e, cx| {
         e.definition_preview = false;
-        e.search_the_page(false)
+        e.search_the_page(false, cx.count)
     }, Key::Char('/')),
     // A vertical page under the vim preset: `gj` walks the 縱 the way the
     // writing runs, one line of the file at a time.

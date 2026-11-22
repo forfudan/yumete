@@ -396,7 +396,9 @@ impl Editor {
     /// so a phrase is asked about by selecting it — and the word under the
     /// cursor when there is not, which is what `w` would have taken.
     /// `back` ＝ 往回找（vim 的 `#`）：取光標**之前**最後一處，繞回去就是最末一處。
-    pub(super) fn search_the_page(&mut self, back: bool) {
+    /// Under vim a `count` goes that many places on, round the file's end as
+    /// vim's `3*` does.
+    pub(super) fn search_the_page(&mut self, back: bool, count: usize) {
         let rope = self.current_buffer().rope();
         let (from, to) = self.selection();
         // Warning: **一個字寬的「選區」是光標，不是選中**。這個編輯器裏每一次移動
@@ -473,6 +475,14 @@ impl Editor {
                 .rposition(|&(from, _)| from < from_here)
                 .unwrap_or(spans.len() - 1),
             false => spans.iter().position(|&(from, _)| from > here).unwrap_or(0),
+        };
+        let more = match self.as_vim() {
+            true => (count.max(1) - 1) % spans.len(),
+            false => 0,
+        };
+        let at = match back {
+            true => (at + spans.len() - more) % spans.len(),
+            false => (at + more) % spans.len(),
         };
         self.remember_hits(spans, at);
         self.show_table_hit();
