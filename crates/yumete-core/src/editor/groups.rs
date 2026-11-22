@@ -499,12 +499,24 @@ impl Editor {
     /// `sticky` keeps it open after the key (the group's own, or a table of
     /// the reader's that says `sticky = true`).
     pub(super) fn on_group_key(&mut self, group: &'static Group, key: Key, typed_before: &str, continuing_zong: bool, sticky: bool) {
+        let at = self.context_in(group);
+        // **vim's `g` takes no count after it** (`nv_g_cmd`): `g2` names no
+        // command, so it is dropped with a beep, and the keys after it start
+        // afresh — `g2UU` is `UU`. The count before the `g` still goes with
+        // it (`2gUU`).
+        if group.pending == Pending::Goto && at.vim && matches!(key, Key::Char('0'..='9')) {
+            self.pending = Pending::None;
+            self.operator_count = None;
+            self.sequence = None;
+            self.pending_register = None;
+            self.fail_the_motion();
+            return;
+        }
         if let Some(before) = group.before {
             if before(self, key) {
                 return;
             }
         }
-        let at = self.context_in(group);
         // **helix counts inside its view modes** (`z3j`, `Z3j` scroll three,
         // measured): a digit adds to the count and the mode stays.
         // vim's digits there are `z{height}<CR>`.

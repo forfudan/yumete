@@ -46184,6 +46184,28 @@ fn a_count_before_a_g_operator_counts() {
     }
 }
 
+/// **vim's `g` takes no count after it** (measured in nvim): `g2` is no
+/// command and is dropped, and the keys after it start afresh, so `g2UU`
+/// changes nothing, `g2~~` switches two characters and `g2dd` deletes one
+/// line.
+#[test]
+fn a_digit_after_vims_g_drops_the_g() {
+    let text = "sun moon star\nsea sky\nend\n";
+    let cases: &[(&str, &str, (usize, usize))] = &[
+        ("g2UU", text, (1, 1)),
+        ("g2~~", "SUn moon star\nsea sky\nend\n", (1, 3)),
+        ("2g2UU", text, (1, 1)),
+        ("g2gUU", "SUN MOON STAR\nsea sky\nend\n", (1, 1)),
+        ("g2dd", "sea sky\nend\n", (1, 1)),
+        ("g2j", text, (2, 1)),
+    ];
+    for &(keys, want, at) in cases {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        assert_eq!((ed.current_buffer().text().as_str(), vim_at(&ed)), (want, at), "{keys}");
+    }
+}
+
 /// **A count before vim's Visual `p` puts the register that many times**
 /// in the selection's place (measured in nvim), words and lines alike.
 #[test]

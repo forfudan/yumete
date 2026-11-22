@@ -89,6 +89,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **vim's Visual `p` from an empty register still deletes the selection**, as in vim, and says the register is empty: `p` puts what it took in the unnamed register as `d` would, `P` keeps no copy, and a `C-v` block goes the same way.
 - **vim's `J` onto a line of nothing but blanks keeps the marks on it**, as in vim: they go onto the joined line at the seam instead of being dropped, or, for an uppercase mark, sent to its first column.
 - **vim's `ge` and `gE` from below an empty line stop on it**, as in vim, as `b` does: `dge` there deletes to the empty line.
+- **A digit after vim's `g` drops the `g`**, as in vim, and the keys after it start afresh: `g2UU` changes nothing instead of uppercasing the line, and `g2~~` switches two characters.
 
 ## 0.24.0 · 2026-11-17
 
