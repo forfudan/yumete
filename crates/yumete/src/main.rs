@@ -880,6 +880,9 @@ fn main() -> ExitCode {
     if let Some(first) = first_opened.filter(|&first| first + 1 != editor.buffer_position().0) {
         editor.show_buffer_at(first);
     }
+    if first_opened.is_some() {
+        editor.note_the_starting_place();
+    }
     // **`ye 稿/` 開的是那本書，所以開完要看得見它。** 沒有一個檔可開的時候，
     // 那扇文件樹就是這一趟的答案。
     if let Some(root) = &opened_a_folder {

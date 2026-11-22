@@ -287,12 +287,48 @@ impl Editor {
             return;
         }
         let here = self.jump_here();
+        // **A line is kept once**: the older entry for it goes (vim's
+        // `:h jumplist`), under every keymap.
+        self.forget_the_line_of(&here);
+        self.jumps.push(here);
+        // Bounded: a session of a thousand jumps does not need a thousandth of
+        // them, and the oldest is the one nobody comes back to.
+        if self.jumps.len() > JUMPS {
+            self.jumps.remove(0);
+        }
+        self.jump_at = self.jumps.len();
+    }
+
+    /// **vim starts its jump list at the first file's first line**: the
+    /// file named on the command line is entered there, so `C-o` from
+    /// anywhere in it before any jump goes back to line 1, column 1, and
+    /// that place stays the oldest one behind later jumps. Only under vim.
+    pub fn note_the_starting_place(&mut self) {
+        if !self.as_vim() {
+            return;
+        }
+        let buffer = self.current_buffer();
+        let start = Jump {
+            buffer: buffer.id(),
+            path: buffer.path().map(Path::to_path_buf),
+            revision: buffer.revision(),
+            ranges: vec![(0, 0)],
+            primary: 0,
+        };
+        let on_line_one = |j: &Jump| j.buffer == start.buffer && self.jump_place(j).map(|(_, at)| self.current_line_of(j.buffer, at)) == Some(0);
+        if self.jumps.iter().any(on_line_one) {
+            return;
+        }
+        self.jumps.insert(0, start);
+        self.jump_at += 1;
+    }
+
+    /// Drop every entry on the line `here` is on, in its buffer.
+    fn forget_the_line_of(&mut self, here: &Jump) {
         let line_of = |e: &Editor, jump: &Jump| {
             e.jump_place(jump).map(|(_, at)| e.current_line_of(jump.buffer, at))
         };
-        // **A line is kept once**: the older entry for it goes (vim's
-        // `:h jumplist`), under every keymap.
-        let line = line_of(self, &here);
+        let line = line_of(self, here);
         let mut i = 0;
         while i < self.jumps.len() {
             if self.jumps[i].buffer == here.buffer && line_of(self, &self.jumps[i]) == line {
@@ -304,13 +340,6 @@ impl Editor {
                 i += 1;
             }
         }
-        self.jumps.push(here);
-        // Bounded: a session of a thousand jumps does not need a thousandth of
-        // them, and the oldest is the one nobody comes back to.
-        if self.jumps.len() > JUMPS {
-            self.jumps.remove(0);
-        }
-        self.jump_at = self.jumps.len();
     }
 
     /// This place, as a jump list keeps it.
@@ -404,6 +433,11 @@ impl Editor {
                     // or `C-i` would have nowhere to come back to.
                     if self.jump_at == self.jumps.len() {
                         let here = self.jump_here();
+                        // vim notes it as any jump is noted, its line kept
+                        // once: an older entry on this line goes.
+                        if self.as_vim() {
+                            self.forget_the_line_of(&here);
+                        }
                         if !self.jumps.last().is_some_and(|last| self.same_place(last, &here)) {
                             self.jumps.push(here);
                         }

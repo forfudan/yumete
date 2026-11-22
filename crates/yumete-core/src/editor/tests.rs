@@ -16818,7 +16818,7 @@ fn vim_counts_its_own_jump_motions() {
     let far = ed.cursor_line();
     ed.on_key(Key::Ctrl('o'));
     assert!(ed.cursor_line() < far, "{}", ed.status());
-    let mut ed = typed_vim("one two three\n");
+    let mut ed = typed_vim("one two three\nfour\n");
     press(&mut ed, "$");
     assert_eq!(ed.cursor(), 12);
     press(&mut ed, "ge");
@@ -47130,4 +47130,36 @@ fn a_paragraph_count_past_the_end_moves_nothing() {
     let mut ed = typed_vim("oak\nelm\n\n");
     feed_vim(&mut ed, "d2}");
     assert_eq!(ed.current_buffer().text(), "\n");
+}
+
+/// **vim's jump list starts at the first line of the file opened**
+/// (measured in nvim): `C-o` before any jump goes back to line 1, that
+/// place stays behind later jumps, and stepping back from the newest place
+/// keeps one entry for its line. The list is emptied first: a file just
+/// opened has noted no jump, and the helper's own `gg` has.
+#[test]
+fn the_jump_list_starts_at_the_first_line() {
+    let mut ed = typed_vim("ash\nbay\ncedar\ndune\n");
+    ed.jumps.clear();
+    ed.jump_at = 0;
+    ed.note_the_starting_place();
+    feed_vim(&mut ed, "jjl");
+    ed.on_key(Key::Ctrl('o'));
+    assert_eq!(vim_at(&ed), (1, 1));
+    let mut ed = typed_vim("ash\nbay\ncedar\ndune\n");
+    ed.jumps.clear();
+    ed.jump_at = 0;
+    ed.note_the_starting_place();
+    feed_vim(&mut ed, "jjG");
+    ed.on_key(Key::Ctrl('o'));
+    ed.on_key(Key::Ctrl('o'));
+    assert_eq!(vim_at(&ed), (1, 1));
+    let mut ed = typed_vim("ash\nbay\ncedar\ndune\n");
+    ed.jumps.clear();
+    ed.jump_at = 0;
+    ed.note_the_starting_place();
+    feed_vim(&mut ed, "jjgg");
+    ed.on_key(Key::Ctrl('o'));
+    ed.on_key(Key::Ctrl('o'));
+    assert_eq!(vim_at(&ed), (3, 1));
 }
