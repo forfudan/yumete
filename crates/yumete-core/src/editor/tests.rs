@@ -41824,7 +41824,8 @@ fn an_empty_command_line_repeats_the_last_command() {
 
 /// **Small vim counts and empty changes** (measured in nvim): `2$` is the
 /// next line's end, after `v`, `d` or as `2D`; `c0` and `c^` at the line's
-/// start type in front of it, and `cb` at the file's start does not.
+/// start type in front of it, and `cb` at the file's start does not; `v$d`
+/// on a last line with no break leaves it there, empty.
 #[test]
 fn a_count_on_dollar_and_an_empty_change_go_as_in_vim() {
     let cases = [
@@ -41835,7 +41836,7 @@ fn a_count_on_dollar_and_an_empty_change_go_as_in_vim() {
         ("abc def\nghi\njkl\n", "lv2$d", "ajkl\n"),
         ("abc def\nghi\njkl\n", "ld2$", "a\njkl\n"),
         ("abc def\nghi\njkl\n", "l2D", "a\njkl\n"),
-        ("abc\ndef", "jv$d", "abc\n"),
+        ("abc\ndef", "jv$d", "abc\n\n"),
     ];
     for (start, keys, end) in cases {
         let mut ed = typed_vim(start);
@@ -47057,4 +47058,22 @@ fn vims_line_addresses_go_to_their_line_and_keep_the_column() {
     assert!(ed.execute(":$").is_err());
     assert!(ed.execute(":+3").is_ok());
     assert_eq!(ed.current_buffer().rope().char_to_line(ed.caret()), 2);
+}
+
+/// **A last line with no break, cut empty, stays a line** (nvim writes it
+/// as an empty line): `dw` on its only word, `D`, `cc` then Esc; `dd` still
+/// takes the line, and `u` gives the word back.
+#[test]
+fn cutting_an_unterminated_last_line_empty_keeps_the_line() {
+    for (keys, want) in [
+        ("Gdw", "one two\n\n"),
+        ("GD", "one two\n\n"),
+        ("Gcc⎋", "one two\n\n"),
+        ("Gdd", "one two\n"),
+        ("Gdwu", "one two\nthree"),
+    ] {
+        let mut ed = typed_vim("one two\nthree");
+        feed_vim(&mut ed, keys);
+        assert_eq!(ed.current_buffer().text(), want, "{keys}");
+    }
 }

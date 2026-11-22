@@ -473,7 +473,17 @@ impl Editor {
         if end == start && cut {
             self.store("\n".to_string());
         }
+        let emptied_past_the_end = self.emptied_past_the_end(start, end);
         self.cut_range((start, end), cut);
+        // The line stays a line, as in `cut_range`.
+        if emptied_past_the_end && self.current_buffer().char_count() == start {
+            let ending = self.current_buffer().ending();
+            let done = self.current_buffer_mut().insert(start, ending);
+            if !self.applied(done) {
+                return;
+            }
+            self.set_cursor(start);
+        }
         self.enter_insert();
         if indent.is_empty() || self.mode != Mode::Insert {
             return;
@@ -562,6 +572,15 @@ impl Editor {
             true => "\t".to_string(),
             false => " ".repeat(self.indent_width()),
         }
+    }
+
+    /// Whether cutting `start..end` under vim leaves empty a last line with
+    /// no break of its own.
+    fn emptied_past_the_end(&self, start: usize, end: usize) -> bool {
+        self.keymap_rules().vim_registers
+            && self.unterminated_end(end)
+            && start > 0
+            && self.current_buffer().rope().char(start - 1) == '\n'
     }
 
     /// Whether `at` is the end of a file whose last line has no line break.
@@ -1451,12 +1470,25 @@ impl Editor {
                 let text = self.current_buffer().rope().slice(start..end).to_string();
                 self.store(text);
             }
+            let charwise = !(self.yank_whole_lines || self.vim_lines || self.lines_at_key);
+            let emptied_past_the_end = charwise && self.emptied_past_the_end(start, end);
             // **Nothing below this line may run on a refusal**: collapsing the
             // selection onto `start` over text that is still there is the
             // fault §5.2.3 ⑤ closes.
             let done = self.current_buffer_mut().remove(start..end);
             if !self.applied(done) {
                 return;
+            }
+            // **A last line with no break, cut empty, stays a line**, as
+            // vim's does (`dw` on its only word, not `dd`): the text would
+            // read the break before it as the file's last, so one more holds
+            // it, as the break vim adds on writing would.
+            if emptied_past_the_end {
+                let ending = self.current_buffer().ending();
+                let done = self.current_buffer_mut().insert(start, ending);
+                if !self.applied(done) {
+                    return;
+                }
             }
         }
         self.sel.set_head(start);
