@@ -143,6 +143,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **vim's `ap` on blank lines at the end of the file takes nothing**, as in vim: with no paragraph after them, `cap`, `dap` and `yap` change nothing, instead of taking the blank lines and the paragraph above.
 - **After a vim operator `j` and `k` keep the column the cursor stands in**, as in vim: `$` then `yj` and `j` stays under where `y` left the cursor, instead of going on to the line's end.
 - **A vim operator on a closed fold leaves the cursor in the fold's first column**, as in vim: after `yy`, `yj`, `yw` or `gUU` on a fold, and after `zf` made one, `j` and `k` go on from column 1; `d`, `>` and `<` still land in the column wanted.
+- **vim's `zF` leaves the cursor on the first non-blank**, as `zfzf` does in vim, instead of in column 1.
 
 ## 0.24.0 · 2026-11-17
 

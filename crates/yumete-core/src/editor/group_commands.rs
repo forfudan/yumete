@@ -308,7 +308,7 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     // vim's an operator, helix's the selection's lines (the flavour's `zf`).
     (NormalCmd::CreateFold, |e, _| e.fold_selection(), Key::Char('f')),
     (NormalCmd::VimCreateFold, |e, cx| e.fold_operator(cx.operator_count), Key::Char('f')),
-    (NormalCmd::CreateFoldLines, |e, cx| { let line = e.cursor_line(); e.fold_lines(line, line + cx.count.max(1) - 1) }, Key::Char('F')),
+    (NormalCmd::CreateFoldLines, |e, cx| e.fold_count_lines(cx.count), Key::Char('F')),
     (NormalCmd::OpenFold, |e, cx| e.fold_open(cx.count, false), Key::Char('o')),
     (NormalCmd::OpenFoldsRecursively, |e, cx| e.fold_open(cx.count, true), Key::Char('O')),
     (NormalCmd::CloseFold, |e, cx| e.fold_close(cx.count, false), Key::Char('c')),

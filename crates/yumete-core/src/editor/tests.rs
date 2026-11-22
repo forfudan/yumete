@@ -48020,6 +48020,25 @@ fn vims_undo_after_an_operator_on_a_closed_fold_lands_in_column_one() {
     }
 }
 
+/// **vim's `zF` is `zfzf`** (`nv_fold`): the doubled fold operator over
+/// `count` lines, beginning at the first non-blank of the last line or at
+/// the cursor when that comes first (measured in nvim).
+#[test]
+fn vims_zf_capital_begins_at_the_first_non_blank_as_zf_doubled() {
+    for (keys, want) in [
+        ("2G4lzF", (2, 3)),
+        ("2G$zF", (2, 3)),
+        ("2G0zF", (2, 1)),
+        ("2G4l2zF", (2, 5)),
+        ("2G4l2zFj", (4, 1)),
+        ("2G4lzFj", (3, 3)),
+    ] {
+        let mut ed = typed_vim("pq\n  abcdef\n  ghijklm\nlonger line\nend\n");
+        feed_vim(&mut ed, keys);
+        assert_eq!(vim_at(&ed), want, "{keys}");
+    }
+}
+
 /// **After any vim operator the column wanted is where the cursor stands**
 /// (`w_set_curswant`), so `$` stops being sticky: `$yj` and then `j` keep
 /// the column `y` left, where `$` alone would go on to the line's end

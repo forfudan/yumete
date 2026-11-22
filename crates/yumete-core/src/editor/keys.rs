@@ -1618,6 +1618,14 @@ impl Editor {
         MOTION_STEPS.iter().find(|(name, _)| name.name() == one).map(|(_, spelled)| *spelled)
     }
 
+    /// **vim's `zF`**: 「like `zfzf`」 (`nv_fold`), the fold operator
+    /// doubled over `count` lines, so it begins at the first non-blank as
+    /// `zf_` does.
+    pub(super) fn fold_count_lines(&mut self, count: usize) {
+        self.count = Some(count.max(1));
+        self.run_vim_line('Z');
+    }
+
     fn run_vim_line(&mut self, op: char) {
         self.settle_alias_count();
         let n = self.count.take().unwrap_or(1).max(1);
