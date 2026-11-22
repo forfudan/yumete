@@ -66,6 +66,13 @@ impl Editor {
         if !self.markup_visible() {
             return crate::markdown::Block::Prose;
         }
+        self.scanned_block(line)
+    }
+
+    /// Which block the line at `line` is in **by what the file says**, drawn
+    /// or not: [`Editor::block_of`] answers for the page, where `:render off`
+    /// draws every line as prose; this one asks whether a fence is there.
+    pub(super) fn scanned_block(&self, line: usize) -> crate::markdown::Block {
         self.scan_blocks();
         let key = (
             self.current_buffer().id(),

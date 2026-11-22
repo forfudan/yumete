@@ -7213,6 +7213,8 @@ mod commands;
 pub mod complete;
 pub mod completion;
 mod conflicts;
+mod copies;
+pub use copies::{CopyCase, CopyRule};
 mod convert;
 mod detail;
 mod docs;
