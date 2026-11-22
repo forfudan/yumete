@@ -1851,6 +1851,8 @@ impl Editor {
         let mut target = None;
         // Where the caret stood before the last hop, for the line rule below.
         let mut before = start;
+        // Whether a later `w` hop could not leave the empty last line.
+        let mut stuck = false;
         // Warning: **`f`/`t` 的數目是「第 n 個」，一次問完**（拿 nvim 量過）。走底下
         // 那個迴圈的話每一趟都從上一個落點重新下錨，`d2f,` 刪的
         // 就是「第一個逗號到第二個」；而數目超出的時候迴圈留下走成的那幾跳，
@@ -1878,6 +1880,23 @@ impl Editor {
                 _ => span,
             };
             let Some(head) = span.head() else { break };
+            // **`w` cannot leave the empty last line** (vim's `fwd_word`
+            // fails there): a hop that would only reach past the file's last
+            // line break stands still. After the first, the operator ends on
+            // that line's column 1 as any exclusive motion does; the first
+            // leaves nothing to take, but `cw` there still opens Insert.
+            if (i > 0 || op != 'c') && matches!(what, motion::Motion::WordForward(_)) {
+                let rope = self.current_buffer().rope();
+                let here = self.sel.head();
+                let line = rope.char_to_line(here);
+                if line == motion::last_line(rope)
+                    && motion::line_start(rope, here) == motion::line_end(rope, here)
+                    && rope.char_to_line(head) > line
+                {
+                    stuck = true;
+                    break;
+                }
+            }
             // Warning: **The first hop counts even if it does not move.** `t,` with
             // the caret already one short of the comma lands where it stands,
             // and `dt,` still takes that character — stopping here made `dt,`
@@ -2026,7 +2045,7 @@ impl Editor {
                 // 那一行是不是空的」，而**每一個**往前的排他動作走到空行上都會中——
                 // `d2}` 的第一跳正停在段落之間的那個空行上，給了它的話第二跳的落點
                 // 被丟掉，刪到空行就停。
-                let word = matches!(step.motion, motion::Motion::WordForward(_));
+                let word = matches!(step.motion, motion::Motion::WordForward(_)) && !stuck;
                 if word
                     && crossed
                     && motion::line_end(rope, before) == motion::line_start(rope, before)

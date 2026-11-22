@@ -46611,3 +46611,24 @@ fn a_motion_inside_linewise_visual_moves_the_wanted_column() {
         assert_eq!(vim_at(&ed), at, "{keys}");
     }
 }
+
+/// **vim's `w` cannot leave the empty last line** (measured in nvim): a
+/// counted `d2w` or `y2w` whose count runs out there ends on that line's
+/// column 1, taking no line break, and `dw` on that line takes nothing.
+#[test]
+fn a_counted_word_motion_stops_at_an_empty_last_line() {
+    let cases: &[(&str, &str, &str, (usize, usize))] = &[
+        ("ox fox\n\n", "wd2w", "ox \n\n", (1, 3)),
+        ("ox fox\n\n", "wd3w", "ox \n\n", (1, 3)),
+        ("ox fox\n\n", "wy2wP", "ox foxfox\n\n", (1, 6)),
+        ("ox fox\n\n", "d3w", "\n", (1, 1)),
+        ("ox fox\n\n", "jdw", "ox fox\n\n", (2, 1)),
+        ("ox fox\n\n", "jcwZ⎋", "ox fox\nZ\n", (2, 1)),
+        ("ox fox\n\n\n", "wd2w", "ox \n\n", (1, 3)),
+    ];
+    for &(text, keys, want, at) in cases {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        assert_eq!((ed.current_buffer().text().as_str(), vim_at(&ed)), (want, at), "{keys} on {text:?}");
+    }
+}
