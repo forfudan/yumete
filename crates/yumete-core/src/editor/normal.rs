@@ -2712,6 +2712,9 @@ impl Editor {
             self.sel.set_head(at);
             self.sel.set_anchor(at);
             self.clamp_cursor();
+            // The column the cursor wants is the one it now stands on, moved
+            // or not, so `~j~` works down a column.
+            self.refresh_goal_column();
         }
     }
 

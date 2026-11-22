@@ -47597,3 +47597,17 @@ fn the_cursor_after_a_confirm_walk_is_where_vim_leaves_it() {
         assert_eq!(vim_at(&ed), at, "{keys}");
     }
 }
+
+/// **vim's `~` sets the column the cursor wants** (measured in nvim): to
+/// the one it steps to, or the one it stays on at a line's end, so `~j~`
+/// works down a column.
+#[test]
+fn vims_switch_case_sets_the_column_j_keeps() {
+    let mut ed = typed_vim("plain\nplain\nplain\n");
+    feed_vim(&mut ed, "ll~j~j~");
+    assert_eq!(ed.current_buffer().text(), "plAin\nplaIn\nplaiN\n");
+    let mut ed = typed_vim("plain\npl\nplain\n");
+    feed_vim(&mut ed, "llll~j~j~");
+    assert_eq!(ed.current_buffer().text(), "plaiN\npL\npLain\n");
+    assert_eq!(vim_at(&ed), (3, 3));
+}
