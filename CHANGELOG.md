@@ -32,7 +32,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **Under vim, `df`, `dt`, `cF` and `yT` open the IME as `f` does**, so `dt京` deletes up to 京. **A punctuation mark found by `f` or `t` matches both widths**: `)` stops on `)` or `）`, so `dt)` reaches the bracket in `call(x, y)` with the IME in Chinese mode.
 - **`--shot --keys` draws the frame between keys that the editor draws**, so page and scroll keys move the view as they do in the editor.
 - **In a `:s` replacement `\r` breaks the line and `\n` puts a NUL**, as in vim: `:%s/。/。\r/g` puts a line break after every 。.
-- **`\n` in a `:s` pattern matches a line break**, as in vim: `:%s/,\n/, /` joins each line ending in a comma to the next, and `:%s/\n\n\n/\r\r/` squeezes runs of blank lines. A match starts on a line of the range and may run on past it, a CRLF break counts as one, the marks on the lines it joins go with them, as in vim, and `c` asks about the matches it would replace.
+- **`\n` in a `:s` pattern matches a line break**, as in vim: `:%s/,\n/, /` joins each line ending in a comma to the next, and `:%s/\n\n\n/\r\r/` squeezes runs of blank lines. A match starts on a line of the range and may run on past it, a CRLF break counts as one, the marks on the lines it joins go with them, as in vim, unless the pattern is `\n` alone with nothing for it, which joins as `J` does and moves them onto the line above, and `c` asks about the matches it would replace.
 
 ### Fixed
 

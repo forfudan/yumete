@@ -550,8 +550,9 @@ enum Carry<'a> {
     Cut,
     /// As a rewrite of the lines it covers ([`Buffer::rewrite`]), with where
     /// each line went when the caller knows, and the lines it joined to the
-    /// line above.
-    Lines(Option<(&'a [usize], &'a [usize])>),
+    /// line above, with how far right the places on them move when they
+    /// were joined as `J` joins.
+    Lines(Option<(&'a [usize], &'a [usize], &'a [usize])>),
 }
 
 /// **What an edit took, as vim's marks see it**: where it began, how many
@@ -1589,10 +1590,13 @@ impl Buffer {
     /// when its replacement puts line breaks (vim keeps a mark on the first
     /// of the lines its line became). The lines in `joined`, counted the
     /// same way, were joined to the line above, and the marks that go with
-    /// their line go with them, as vim's `:s` deletes those lines.
+    /// their line go with them, as vim's `:s` deletes those lines — unless
+    /// `shifts` is not empty: then the lines were joined as vim's `J` joins
+    /// them (`:s/\n//`), and the places on the `i`th of them move onto the
+    /// line above, `shifts[i]` columns to the right.
     #[must_use = "a read-only buffer refuses the edit; the caller has to say so"]
-    pub fn rewrite_rows(&mut self, range: Range<usize>, text: &str, rows: &[usize], joined: &[usize]) -> Edit {
-        self.write_over(range, text, Carry::Lines(Some((rows, joined))))
+    pub fn rewrite_rows(&mut self, range: Range<usize>, text: &str, rows: &[usize], joined: &[usize], shifts: &[usize]) -> Edit {
+        self.write_over(range, text, Carry::Lines(Some((rows, joined, shifts))))
     }
 
     fn write_over(&mut self, range: Range<usize>, text: &str, carry: Carry) -> Edit {
@@ -1814,9 +1818,16 @@ impl Buffer {
     /// moved by the lines added or taken, and when there are none every
     /// place keeps its line, so nothing is compared at all: `~` or `r` on a
     /// long file costs what the lines they touch cost.
-    fn carry_lines(&mut self, before: &Rope, first: usize, last: (usize, usize), rows: Option<(&[usize], &[usize])>) {
-        let joined = rows.map_or(&[][..], |(_, joined)| joined);
-        let rows = rows.map(|(rows, _)| rows);
+    fn carry_lines(&mut self, before: &Rope, first: usize, last: (usize, usize), rows: Option<(&[usize], &[usize], &[usize])>) {
+        let (joined, shifts) = rows.map_or((&[][..], &[][..]), |(_, joined, shifts)| (joined, shifts));
+        let rows = rows.map(|(rows, _, _)| rows);
+        // Joined as `J` joins: nothing on them goes, and each place moves
+        // right by the length of the line it now follows.
+        let kept = !shifts.is_empty();
+        let shift = |line: usize| match kept && line >= first {
+            true => joined.binary_search(&(line - first)).ok().and_then(|i| shifts.get(i)).copied().unwrap_or(0),
+            false => 0,
+        };
         let (was, now) = (before.len_lines(), self.rope.len_lines());
         if rows.is_none() && was == now {
             return;
@@ -1845,10 +1856,10 @@ impl Buffer {
             }
         };
         self.named_marks.retain(|_, mark| {
-            let gone = mark.place.0 >= first && joined.binary_search(&(mark.place.0 - first)).is_ok();
+            let gone = !kept && mark.place.0 >= first && joined.binary_search(&(mark.place.0 - first)).is_ok();
             !(mark.goes_with_line && (gone || to(mark.place.0).is_none()))
         });
-        self.move_selections(|(line, column)| (to(line).unwrap_or(first), column));
+        self.move_selections(|(line, column)| (to(line).unwrap_or(first), column + shift(line)));
     }
 
     /// Move the kept selections through the edit that took `cut` and put

@@ -47291,6 +47291,23 @@ fn star_motions_and_their_g_forms() {
     assert_eq!(vim_at(&ed), (2, 1));
 }
 
+/// **vim's `:s/\n//` joins as `J` does** (measured in nvim): the marks on
+/// the lines it joins move onto the line above, right by the length of
+/// what they now follow, where a real replacement of the break deletes them.
+#[test]
+fn a_bare_line_break_substitution_keeps_the_marks_on_the_lines_it_joins() {
+    let text = "ox,\npig,\nhen,\nyak\n";
+    for (keys, at) in [("jmagg:s/\\n//⏎'a", (1, 1)), ("jma:%s/\\n//g⏎`a", (1, 4)), ("jjlmb:%s/\\n//g⏎`b", (1, 9)), ("jjlmb:%s/\\n//g⏎u`b", (3, 2))] {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        assert_eq!(vim_at(&ed), at, "{keys}");
+    }
+    let mut ed = typed_vim(text);
+    feed_vim(&mut ed, "jjlmb:%s/,\\n/ /g⏎`b");
+    assert_eq!(ed.current_buffer().text(), "ox pig hen yak\n");
+    assert_eq!(vim_at(&ed), (1, 1), "the mark went with its line");
+}
+
 /// **vim's Visual `g*` and `g#` grow the selection** (measured in nvim):
 /// the cursor goes to the start of the word's match inside other words, the
 /// mode stays Visual, so `d` and `y` take everything up to it, and `n`

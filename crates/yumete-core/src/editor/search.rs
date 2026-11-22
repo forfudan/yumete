@@ -497,12 +497,16 @@ impl Editor {
         // vim reads `:s/\n//` as a join (`ex_join`), which leaves the cursor
         // where the last line was joined on.
         let mut joined_at = None;
+        // …and moves the marks on the lines it joins as `J` does, onto the
+        // line above, where vim's other joins delete them.
+        let mut shifts = Vec::new();
 
         if across {
             let done = replace_across_lines(&text, &look, &replacement, global, &chosen);
             (rebuilt, count, rows, joined, last_hit) = (done.text, done.count, done.rows, done.joined, done.last_row);
             if pattern == "\\n" && replacement.is_empty() && !ignore_case && !reshape && !pinyin && !glyphs {
                 joined_at = done.last_join;
+                shifts = join_shifts(&text, &joined);
             }
         } else {
             for (idx, line) in text.split_inclusive('\n').enumerate() {
@@ -555,7 +559,7 @@ impl Editor {
         if count > 0 && rebuilt != text {
             self.snapshot();
             let len = self.current_buffer().char_count();
-            let done = self.without_cell_guard(|e| e.current_buffer_mut().rewrite_rows(0..len, &rebuilt, &rows, &joined));
+            let done = self.without_cell_guard(|e| e.current_buffer_mut().rewrite_rows(0..len, &rebuilt, &rows, &joined, &shifts));
             if !self.applied(done) {
                 self.command_failed = true;
                 return;
@@ -958,6 +962,23 @@ impl Editor {
         }
         self.ask_or_finish(walk);
     }
+}
+
+/// **How far right `J` moves the places on each joined line**: the length
+/// of the line it now follows, the lines joined before it included, for
+/// `joined` in order.
+fn join_shifts(text: &str, joined: &[usize]) -> Vec<usize> {
+    let bodies: Vec<usize> = text.split_inclusive('\n').map(|line| crate::editor::line_body(line).0.chars().count()).collect();
+    let mut shifts: Vec<usize> = Vec::with_capacity(joined.len());
+    for (i, &line) in joined.iter().enumerate() {
+        let before = line.checked_sub(1).and_then(|above| bodies.get(above)).copied().unwrap_or(0);
+        let carried = match i.checked_sub(1) {
+            Some(j) if joined[j] + 1 == line => shifts[j],
+            _ => 0,
+        };
+        shifts.push(carried + before);
+    }
+    shifts
 }
 
 /// **一條式子裏，打的人自己寫的那一段** —— 報給他看的時候用這一支。
