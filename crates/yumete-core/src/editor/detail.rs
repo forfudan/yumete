@@ -451,6 +451,11 @@ impl Editor {
         if self.as_vim() {
             self.remember_jump();
         }
+        // Visual ends with the search, `V` as well (nvim's `v_*` begins
+        // with `Esc`): what the cursor lands on is a character, not a line.
+        if self.as_vim() && self.extend {
+            self.vim_leave_visual();
+        }
         self.remember_hits(spans, at);
         self.show_table_hit();
     }
@@ -517,12 +522,33 @@ impl Editor {
                 }
             }
         };
+        // vim's Visual selection is looked for as its lines joined by line
+        // breaks (nvim's `getregion`), without the last line's own break,
+        // which a selection ending at a line's end (`v$`, `V`) also holds.
         let needle = match selected && visual {
-            true => needle,
+            true => {
+                let lines = needle.strip_suffix('\n').unwrap_or(&needle);
+                lines.strip_suffix('\r').unwrap_or(lines).to_string()
+            }
             false => needle.trim().to_string(),
         };
-        if needle.is_empty() {
-            self.status = say!("find.nothing-here-to-look-for");
+        // A break left at its end is the end of a line: `vj$` over `abc` and
+        // an empty line looks for `abc` ending a line. A search does not
+        // cross lines here, so text on both sides of a break is not looked
+        // for at all, and Visual ends as nvim's `*` ends it.
+        let at_line_end = match visual && selected {
+            true => needle.strip_suffix('\n').map(|text| text.strip_suffix('\r').unwrap_or(text).to_string()),
+            false => None,
+        };
+        let needle = at_line_end.clone().unwrap_or(needle);
+        if needle.is_empty() || needle.contains('\n') {
+            self.status = match needle.is_empty() {
+                true => say!("find.nothing-here-to-look-for"),
+                false => say!("find.not-found", needle.replace('\r', "").replace('\n', "\\n")),
+            };
+            if visual {
+                self.vim_leave_visual();
+            }
             return None;
         }
         // **The word under the cursor is looked for whole** (vim's `*`, `#`):
@@ -531,6 +557,7 @@ impl Editor {
         // as written. A selection is looked for exactly as selected.
         let edge = |c: Option<char>| c.is_some_and(|c| c.is_ascii_alphanumeric() || (c.is_alphabetic() && !yumete_cjk::is_han(c)));
         let pattern = match selected || !whole {
+            true if at_line_end.is_some() => format!("{}(?m:$)", regex::escape(&needle)),
             true => regex::escape(&needle),
             false => format!(
                 "{}{}{}",

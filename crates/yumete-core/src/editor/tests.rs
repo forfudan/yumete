@@ -47810,3 +47810,36 @@ fn vims_line_start_after_insert_ctrl_o_stays_in_front() {
     assert_eq!(ed.current_buffer().text(), "zQ\n");
 }
 
+
+/// **vim's Visual `*` over several lines** (nvim's `v_*`): the lines are
+/// looked for joined, without the last one's own break, so `xyz` and the
+/// empty line after it look for `xyz` at a line's end. Text on both sides
+/// of a break is not looked for, and Visual ends where the cursor stood,
+/// as it does on an empty line with nothing to look for.
+#[test]
+fn vims_visual_star_over_lines_looks_for_the_line_end() {
+    for keys in ["vj$*", "vj*", "vj$#"] {
+        let mut ed = typed_vim("xyz\n\nxyz\nxyzw\n");
+        feed_vim(&mut ed, keys);
+        assert_eq!(vim_at(&ed), (3, 1), "{keys}");
+        assert!(!ed.extend, "{keys}");
+    }
+    let mut ed = typed_vim("xyz\n\nxyz\nxyzw\n");
+    feed_vim(&mut ed, "vj$*n");
+    assert_eq!(vim_at(&ed), (1, 1));
+    let mut ed = typed_vim("xyz\n\nxyz\n");
+    feed_vim(&mut ed, "jv*");
+    assert_eq!(vim_at(&ed), (2, 1));
+    assert!(!ed.extend);
+    let mut ed = typed_vim("xyz\nuvw\nxyz\nuvw\n");
+    feed_vim(&mut ed, "vjl*");
+    assert_eq!(vim_at(&ed), (2, 2));
+    assert!(!ed.extend);
+    // `V` ends too, so `x` after it takes a character, not the line.
+    for keys in ["V*x", "Vj*x"] {
+        let mut ed = typed_vim("xyz\n\nxyz\n");
+        feed_vim(&mut ed, keys);
+        assert_eq!(ed.current_buffer().text(), "xyz\n\nyz\n", "{keys}");
+    }
+}
+
