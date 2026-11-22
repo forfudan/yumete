@@ -484,6 +484,11 @@ impl Editor {
             true => (at + spans.len() - more) % spans.len(),
             false => (at + more) % spans.len(),
         };
+        // **vim's `*` and `#` are jumps** (`:h jump-motions`): `C-o` comes
+        // back to where they were pressed.
+        if self.as_vim() {
+            self.remember_jump();
+        }
         self.remember_hits(spans, at);
         self.show_table_hit();
     }

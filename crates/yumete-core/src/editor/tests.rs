@@ -47017,3 +47017,16 @@ fn a_bar_in_a_substitution_line_is_read_as_vim_reads_it() {
     feed_vim(&mut ed, "u");
     assert_eq!(ed.current_buffer().text(), "abc\nabc\n");
 }
+
+/// **vim's `*` and `#` are jumps** (`:h jump-motions`): `C-o` comes back to
+/// where they were pressed.
+#[test]
+fn vims_star_and_hash_are_jumps() {
+    for keys in ["w*", "w#"] {
+        let mut ed = typed_vim("one two three\nfour two\nfive two\n");
+        feed_vim(&mut ed, keys);
+        assert_ne!(vim_at(&ed), (1, 5), "{keys}");
+        ed.on_key(Key::Ctrl('o'));
+        assert_eq!(vim_at(&ed), (1, 5), "{keys}");
+    }
+}
