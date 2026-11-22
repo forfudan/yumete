@@ -1843,6 +1843,17 @@ impl Editor {
         self.pending_register.take()
     }
 
+    /// **vim's `""` named for a yank or a delete is `"0`** (nvim's
+    /// `get_yank_register`): `""yy` and `""dd` fill `"0`, and the unnamed
+    /// register then holds what `"0` does. Read by a put, `""` is the
+    /// unnamed register itself.
+    pub(super) fn register_to_write(&self, named: Option<char>) -> Option<char> {
+        match named {
+            Some('"') if self.keymap_rules().vim_registers => Some('0'),
+            named => named,
+        }
+    }
+
     /// **一格寄存器裝着的那一整份**——N 段存進去的接起來。
     pub(super) fn held(&self, name: char) -> String {
         self.registers.get(&name).map(|p| p.concat()).unwrap_or_default()
@@ -1890,6 +1901,7 @@ impl Editor {
             }
         };
         let named = self.take_register();
+        let named = self.register_to_write(named);
         if let Some(name) = named {
             self.block_registers.remove(&name.to_ascii_lowercase());
         }
@@ -2080,7 +2092,7 @@ impl Editor {
     /// The contents of the register a command should read from, **taking the
     /// pending `"` with it**.
     pub(super) fn recall(&mut self) -> String {
-        let name = self.take_register();
+        let name = self.take_register().filter(|&name| !(name == '"' && self.keymap_rules().vim_registers));
         self.register_text(name)
     }
 

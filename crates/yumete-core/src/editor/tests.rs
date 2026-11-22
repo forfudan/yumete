@@ -46314,3 +46314,23 @@ fn a_register_named_before_visual_is_let_go() {
         assert_eq!((ed.current_buffer().text().as_str(), vim_at(&ed)), (want, at), "{keys}");
     }
 }
+
+/// **vim's `""` names the unnamed register** (measured in nvim): `""p`
+/// puts what `p` puts, over a selection too, and `""y` or `""d` fill `"0`
+/// as well, which the unnamed register then holds.
+#[test]
+fn the_unnamed_register_can_be_named() {
+    let text = "sun moon\nsea\nend\n";
+    let cases: &[(&str, &str, (usize, usize))] = &[
+        ("yiwj\"\"p", "sun moon\nssunea\nend\n", (2, 4)),
+        ("yiwjviw\"\"p", "sun moon\nsun\nend\n", (2, 3)),
+        ("\"\"yiwj\"0p", "sun moon\nssunea\nend\n", (2, 4)),
+        ("yyj\"\"dd\"0p", "sun moon\nend\nsea\n", (3, 1)),
+        ("\"\"yyjp", "sun moon\nsea\nsun moon\nend\n", (3, 1)),
+    ];
+    for &(keys, want, at) in cases {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        assert_eq!((ed.current_buffer().text().as_str(), vim_at(&ed)), (want, at), "{keys}");
+    }
+}

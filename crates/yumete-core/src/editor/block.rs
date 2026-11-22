@@ -520,6 +520,7 @@ impl super::Editor {
             })
             .collect();
         let named = self.pending_register.take();
+        let named = self.register_to_write(named);
         let vim = self.keymap_rules().vim_registers;
         let unnamed_was = (self.register_block, self.register_block_width);
         self.storing_a_yank = true;
