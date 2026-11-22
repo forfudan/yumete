@@ -1526,6 +1526,13 @@ impl Editor {
                 let below = match after {
                     None | Some(command::Bound::Cursor) => self.cursor_line() + 1,
                     Some(command::Bound::Last) => lines,
+                    Some(command::Bound::Mark(name)) => match self.mark_line(name) {
+                        Ok(line) => line + 1,
+                        Err(why) => {
+                            self.status = why;
+                            return Ok(CommandOutcome::Continue);
+                        }
+                    },
                     Some(command::Bound::Line(n)) if n <= lines => n,
                     Some(command::Bound::Line(n)) => {
                         self.status = say!("find.no-such-line", n, lines);

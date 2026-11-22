@@ -540,6 +540,7 @@ impl Editor {
             Bound::Line(n) => *n,
             Bound::Cursor => rope.char_to_line(self.caret().min(rope.len_chars())) + 1,
             Bound::Last => last + 1,
+            Bound::Mark(name) => self.mark_line(*name).map_or(0, |line| line + 1),
         };
         let (first, second) = (shown(a), shown(b));
         (first > second).then_some((first, second))
@@ -563,6 +564,7 @@ impl Editor {
                 Bound::Line(n) => Ok(n - 1),
                 Bound::Cursor => Ok(rope.char_to_line(self.caret().min(rope.len_chars()))),
                 Bound::Last => Ok(last_line),
+                Bound::Mark(name) => self.mark_line(name),
             }
         };
         Ok(match rows {
@@ -581,16 +583,34 @@ impl Editor {
             // cursor on the line below the one it selected — `:s` edited a
             // line the writer had not selected and could not see was selected.
             Rows::Selection => {
-                let (start, end) = self.selection();
-                let first = rope.char_to_line(start);
-                let last = if end > start {
-                    rope.char_to_line(end.saturating_sub(1))
-                } else {
-                    first
-                };
+                let (first, last) = self.selected_lines();
                 Chosen::Span(first, last)
             }
         })
+    }
+
+    /// The first and last line the selection covers.
+    fn selected_lines(&self) -> (usize, usize) {
+        let rope = self.current_buffer().rope();
+        let (start, end) = self.selection();
+        let first = rope.char_to_line(start);
+        let last = match end > start {
+            true => rope.char_to_line(end.saturating_sub(1)),
+            false => first,
+        };
+        (first, last)
+    }
+
+    /// **The line vim's `'<` or `'>` names in a range**: the first or last
+    /// line of the selection up, when the line was given from Visual mode,
+    /// else of the last Visual selection (`:h '<`), as vim reads them.
+    pub(super) fn mark_line(&self, name: char) -> Result<usize, String> {
+        if self.extend || self.block.is_some() {
+            let (first, last) = self.selected_lines();
+            return Ok(if name == '<' { first } else { last });
+        }
+        let at = self.mark_here(name).ok_or_else(|| say!("goto.no-such-mark", name))?;
+        Ok(self.current_buffer().rope().char_to_line(at))
     }
 
     // ---- `:s …c` — one match at a time (#415) -----------------------------

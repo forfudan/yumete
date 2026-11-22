@@ -7811,6 +7811,10 @@ pub enum Bound {
     Cursor,
     /// `$` — the last line.
     Last,
+    /// vim's `'<` and `'>`: the first and last line of the last Visual
+    /// selection, or of the selection up when the line was given from Visual
+    /// mode.
+    Mark(char),
 }
 
 /// Read one end of a range, and say how much of `input` it took.
@@ -7819,6 +7823,10 @@ fn parse_bound(input: &str) -> Option<(Bound, usize)> {
     match chars.next()? {
         (_, '.') => Some((Bound::Cursor, 1)),
         (_, '$') => Some((Bound::Last, 1)),
+        (_, '\'') => match chars.next()? {
+            (_, c @ ('<' | '>')) => Some((Bound::Mark(c), 2)),
+            _ => None,
+        },
         (_, c) if c.is_ascii_digit() => {
             let end = input
                 .find(|c: char| !c.is_ascii_digit())
@@ -7863,10 +7871,10 @@ fn parse_rows(input: &str) -> (Result<Rows, BadRange>, &str) {
     if let Some(rest) = input.strip_prefix('%') {
         return (Ok(Rows::All), rest);
     }
-    // vim's `'<,'>`, what its `:` writes in from Visual mode: the selected
-    // lines, which a line with no range names here.
+    // vim's `'<,'>`, what its `:` writes in from Visual mode: the lines of
+    // the selection, the one up or the last one, from the first to the last.
     if let Some(rest) = input.strip_prefix("'<,'>") {
-        return (Ok(Rows::Selection), rest);
+        return (Ok(Rows::Span(Bound::Mark('<'), Bound::Mark('>'))), rest);
     }
     let Some((first, took)) = parse_bound(input) else {
         return (Ok(Rows::Selection), input);

@@ -45953,3 +45953,25 @@ fn a_visual_r_answered_by_the_ime_keeps_the_last_selection() {
     keyed(&mut ed, "gvd");
     assert_eq!(ed.current_buffer().text(), "天地玄黄\n洪荒\n日月盈昃\n");
 }
+
+/// **`'<,'>`, `'<` and `'>` typed outside Visual mode name the last Visual
+/// selection's lines** (measured in nvim 0.12), for `:s` and `:normal`
+/// alike, not the cursor's line; with no selection made, nothing changes.
+#[test]
+fn the_vim_selection_marks_in_a_range_name_the_last_selection() {
+    let text = "red fox\nblue jay\ngreen eel\ngrey owl\n";
+    let cases: &[(&str, &str, (usize, usize))] = &[
+        ("Vj⎋G:'<,'>s/e/E/g⏎", "rEd fox\nbluE jay\ngreen eel\ngrey owl\n", (2, 1)),
+        ("jVj⎋G:'<s/e/E/g⏎", "red fox\nbluE jay\ngreen eel\ngrey owl\n", (2, 1)),
+        ("jVj⎋gg:'>norm Ax⏎", "red fox\nblue jay\ngreen eelx\ngrey owl\n", (3, 10)),
+        ("G:'<,'>s/e/E/⏎", text, (4, 1)),
+    ];
+    for &(keys, want, at) in cases {
+        let mut ed = typed_vim(text);
+        keyed(&mut ed, keys);
+        let rope = ed.current_buffer().rope().clone();
+        let line = rope.char_to_line(ed.sel.head());
+        let cursor = (line + 1, ed.sel.head() - rope.line_to_char(line) + 1);
+        assert_eq!((ed.current_buffer().text().as_str(), cursor), (want, at), "{keys:?}");
+    }
+}
