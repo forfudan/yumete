@@ -454,11 +454,13 @@ impl Editor {
     }
 
     /// **vim's `0`, `^` and `Home` stay before a line's end after
-    /// `C-o`** (`nv_beginline` and `nv_home` clear `ins_at_eol`), under an
-    /// operator too: on a line of one character `C-o 0` comes back in front
-    /// of it, where [`Self::back_past_the_line_end`] would put it after.
+    /// `C-o`** (`nv_beginline` and `nv_home` clear `ins_at_eol` and set
+    /// `w_set_curswant`), under an operator too: on a line of one character
+    /// `C-o 0` or `C-o d0` comes back in front of it, where
+    /// [`Self::back_past_the_line_end`] would put it after.
     pub(super) fn begin_the_line(&mut self) {
         self.one_normal_eol = None;
+        self.sel.set_goal(None);
     }
 
     /// **記下延伸關掉那一刻的那一段**，`gv` 拿它重選（vim）。

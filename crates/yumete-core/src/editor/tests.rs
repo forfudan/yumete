@@ -47934,3 +47934,20 @@ fn vims_undo_after_insert_ctrl_o_forgets_the_column() {
     feed_vim(&mut ed, "q⎋");
     assert_eq!(ed.current_buffer().text(), "peq\nlarch\n");
 }
+
+/// **vim's `d0`, `d^`, `y0` and `y^` after Insert `C-o` forget the column
+/// wanted** as `0` and `^` do: one that moves nothing still comes back in
+/// front of a line's last character.
+#[test]
+fn vims_insert_ctrl_o_d0_comes_back_in_front() {
+    for (text, keys, want) in [
+        ("o\n", "Aᵒd0q⎋", "qo\n"),
+        ("o\n", "Aᵒy0q⎋", "qo\n"),
+        ("\tz\n", "Aᵒd^q⎋", "\tqz\n"),
+        ("\tz\n", "Aᵒy^q⎋", "\tqz\n"),
+    ] {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        assert_eq!(ed.current_buffer().text(), want, "{keys} on {text:?}");
+    }
+}
