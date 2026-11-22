@@ -2205,8 +2205,10 @@ impl Editor {
         let widened = crate::glyphs::widen_pattern(pattern)
             .filter(|wide| regex::Regex::new(wide).is_ok())
             .unwrap_or_else(|| pattern.to_string());
+        let re = self.compile(&widened).ok()?;
         Some(Look {
-            how: How::Pattern(self.compile(&widened).ok()?),
+            marks: Marks::of(&re),
+            how: How::Pattern(re),
             said: crate::pinyin::atoms(pattern),
             keep_case: false,
             doubled: false,
@@ -2228,8 +2230,10 @@ impl Editor {
                 .unwrap_or_else(|| cased.to_string()),
             false => cased.to_string(),
         };
+        let re = self.compile_exactly(&body).ok()?;
         Some(Look {
-            how: How::Pattern(self.compile_exactly(&body).ok()?),
+            marks: Marks::of(&re),
+            how: How::Pattern(re),
             said: match pinyin {
                 true => crate::pinyin::atoms(cased),
                 false => None,
@@ -2272,6 +2276,7 @@ impl Editor {
         };
         Some(Look {
             how,
+            marks: None,
             said,
             keep_case: self.search.preserve_case,
             doubled: !self.regex_on(),
@@ -3191,6 +3196,8 @@ fn excerpt(
 pub(super) struct Look {
     /// 字面那一路：一個正則，或者「差不多是這幾個字」。
     how: How,
+    /// Where vim's `\zs` and `\ze` stand in the pattern, when it has them.
+    marks: Option<Marks>,
     /// 換上去的那一段要不要跟着原文的大小寫。見 [`Field::PreserveCase`]。
     keep_case: bool,
     /// **拼音那一路**，`None` ＝ 不跑（開關關着，或者查詢不全是字母）。
@@ -3236,6 +3243,7 @@ impl Look {
     /// ——開關彼此解耦，搜索面板、`/` 與 `:s` 一樣。
     pub(super) fn plain(re: Regex) -> Look {
         Look {
+            marks: Marks::of(&re),
             how: How::Pattern(re),
             keep_case: false,
             said: None,
@@ -3270,6 +3278,27 @@ impl Look {
         }
     }
 
+    /// **The replacement for the match at bytes `from..to` of `line`** —
+    /// [`Self::expand`], reading the match in its line.
+    ///
+    /// A pattern with `\zs` or `\ze` matched more than the text it
+    /// replaces, so its groups are found again in the line, not in the
+    /// matched text alone; `$0` is the text replaced, as vim's `&` is.
+    pub(super) fn expand_in(&self, line: &str, from: usize, to: usize, with: &str) -> String {
+        let (How::Pattern(re), Some(marks)) = (&self.how, &self.marks) else {
+            return self.expand(&line[from..to], with);
+        };
+        let Some((caps, ..)) = marks.walk(re, line).into_iter().find(|&(_, a, b)| (a, b) == (from, to)) else {
+            return self.expand(&line[from..to], with);
+        };
+        let mut grown = String::new();
+        caps.expand(&marks.renumbered(with, &line[from..to]), &mut grown);
+        match self.keep_case {
+            true => follow_the_case_of(&line[from..to], &grown),
+            false => grown,
+        }
+    }
+
     /// `caps.expand` 没跑到的時候，自己把加倍的 `$` 還原回來。見 [`Look::doubled`]。
     fn undoubled(&self, with: &str) -> String {
         match self.doubled {
@@ -3283,12 +3312,17 @@ impl Look {
     /// Warning: **兩路合並之後要排序去重**：`excerpt` 按這個次序編號（`nth`），而讀者
     /// 看見的是一行一行往下走的單子。同一段被兩路都配上，只算一條。
     pub(super) fn spans(&self, text: &str) -> Vec<(usize, usize)> {
-        let mut out = match &self.how {
-            How::Pattern(re) => re
+        let mut out = match (&self.how, &self.marks) {
+            (How::Pattern(re), Some(marks)) => marks
+                .walk(re, text)
+                .into_iter()
+                .map(|(_, a, b)| (text[..a].chars().count(), text[..b].chars().count()))
+                .collect(),
+            (How::Pattern(re), None) => re
                 .find_iter(text)
                 .map(|m| (text[..m.start()].chars().count(), text[..m.end()].chars().count()))
                 .collect(),
-            How::Nearby { needle, fold, shapes } => {
+            (How::Nearby { needle, fold, shapes }, _) => {
                 let hay: Vec<char> = text.chars().collect();
                 crate::nearby::spans(&hay, needle, *fold, *shapes)
             }
@@ -3301,6 +3335,169 @@ impl Look {
                 out.dedup();
             }
         }
+        out
+    }
+}
+
+/// The name every group standing for vim's `\zs` begins with
+/// ([`with_match_marks`]); `\ze`'s is [`END_MARK`].
+const START_MARK: &str = "yumete_zs";
+const END_MARK: &str = "yumete_ze";
+
+/// **vim's `\zs` and `\ze` written as groups the regex crate reads**: each
+/// becomes an empty group of its own, whose place in a match is where the
+/// match starts or ends ([`Marks`]). The pattern means what it meant
+/// otherwise — `\z` alone is the regex crate's end of text, so `\zs` and
+/// `\ze` matched nothing before — and a `\zs` inside `[…]`, or after a
+/// backslash that is itself escaped, stays as it is.
+pub(super) fn with_match_marks(pattern: &str) -> std::borrow::Cow<'_, str> {
+    if !pattern.contains("\\z") {
+        return std::borrow::Cow::Borrowed(pattern);
+    }
+    let chars: Vec<char> = pattern.chars().collect();
+    let mut out = String::with_capacity(pattern.len() + 16);
+    // How deep in `[…]` the scan is; a `]` first in a class is a literal.
+    let mut class = 0usize;
+    let mut class_opened_at = None;
+    let mut marks = 0usize;
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        match c {
+            '\\' if i + 1 < chars.len() => {
+                let next = chars[i + 1];
+                let mark = match (class, next, chars.get(i + 2)) {
+                    (0, 'z', Some('s')) => Some(START_MARK),
+                    (0, 'z', Some('e')) => Some(END_MARK),
+                    _ => None,
+                };
+                match mark {
+                    Some(name) => {
+                        out.push_str(&format!("(?P<{name}{marks}>)"));
+                        marks += 1;
+                        i += 3;
+                    }
+                    None => {
+                        out.push(c);
+                        out.push(next);
+                        i += 2;
+                    }
+                }
+                continue;
+            }
+            '[' => {
+                class += 1;
+                class_opened_at = Some(out.len() + 1);
+                out.push(c);
+                if chars.get(i + 1) == Some(&'^') {
+                    out.push('^');
+                    i += 1;
+                    class_opened_at = Some(out.len());
+                }
+            }
+            ']' if class > 0 && class_opened_at != Some(out.len()) => {
+                class -= 1;
+                out.push(c);
+            }
+            _ => out.push(c),
+        }
+        i += 1;
+    }
+    std::borrow::Cow::Owned(out)
+}
+
+/// **Where a match begins and ends when the pattern says so** (vim's `\zs`
+/// and `\ze`, [`with_match_marks`]): the groups that stand for them, and
+/// the pattern's own groups, which a replacement numbers without them.
+#[derive(Debug, Clone)]
+pub(super) struct Marks {
+    starts: Vec<usize>,
+    ends: Vec<usize>,
+    groups: Vec<usize>,
+}
+
+impl Marks {
+    /// The marks in a compiled pattern; `None` when it has none.
+    pub(super) fn of(re: &Regex) -> Option<Marks> {
+        let mut marks = Marks { starts: Vec::new(), ends: Vec::new(), groups: Vec::new() };
+        for (i, name) in re.capture_names().enumerate().skip(1) {
+            match name {
+                Some(name) if name.starts_with(START_MARK) => marks.starts.push(i),
+                Some(name) if name.starts_with(END_MARK) => marks.ends.push(i),
+                _ => marks.groups.push(i),
+            }
+        }
+        (!marks.starts.is_empty() || !marks.ends.is_empty()).then_some(marks)
+    }
+
+    /// **The matches in one line as vim walks them**, in bytes: each try
+    /// starts where the last match ended — its end as the marks set it — or
+    /// one character on from an empty one, and none starts at the line's
+    /// end after a match (vim's `searchit` with `cpoptions` `c`). A mark
+    /// set twice counts where it was set last.
+    pub(super) fn walk<'t>(&self, re: &Regex, text: &'t str) -> Vec<(regex::Captures<'t>, usize, usize)> {
+        let mut out = Vec::new();
+        let mut at = 0;
+        while at <= text.len() && (out.is_empty() || at < text.len()) {
+            let Some(caps) = re.captures_at(text, at) else { break };
+            let Some(whole) = caps.get(0) else { break };
+            let start = self.starts.iter().rev().find_map(|&i| caps.get(i)).map_or(whole.start(), |m| m.start());
+            let end = self.ends.iter().rev().find_map(|&i| caps.get(i)).map_or(whole.end(), |m| m.start());
+            let end = end.max(start);
+            at = match end > start {
+                true => end,
+                false => match text[start..].chars().next() {
+                    Some(c) => start + c.len_utf8(),
+                    None => text.len() + 1,
+                },
+            };
+            out.push((caps, start, end));
+        }
+        out
+    }
+
+    /// A replacement's `$1`, `${2}` renumbered past the marks' groups, and
+    /// `$0` as the text the match replaces.
+    pub(super) fn renumbered(&self, with: &str, replaced: &str) -> String {
+        let mut out = String::with_capacity(with.len());
+        let mut rest = with;
+        while let Some(at) = rest.find('$') {
+            out.push_str(&rest[..at]);
+            rest = &rest[at + 1..];
+            if let Some(after) = rest.strip_prefix('$') {
+                out.push_str("$$");
+                rest = after;
+                continue;
+            }
+            let (name, after, braced) = match rest.strip_prefix('{') {
+                Some(inner) => match inner.find('}') {
+                    Some(close) => (&inner[..close], &inner[close + 1..], true),
+                    None => ("", rest, false),
+                },
+                None => {
+                    let len = rest
+                        .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+                        .unwrap_or(rest.len());
+                    (&rest[..len], &rest[len..], false)
+                }
+            };
+            match name.parse::<usize>() {
+                Ok(0) => out.push_str(&replaced.replace('$', "$$")),
+                Ok(n) => {
+                    if let Some(real) = self.groups.get(n - 1) {
+                        out.push_str(&format!("${{{real}}}"));
+                    }
+                }
+                Err(_) if name.is_empty() => out.push('$'),
+                Err(_) if braced => out.push_str(&format!("${{{name}}}")),
+                Err(_) => {
+                    out.push('$');
+                    out.push_str(name);
+                }
+            }
+            rest = after;
+        }
+        out.push_str(rest);
         out
     }
 }

@@ -57,6 +57,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **vim's `gv` and the `<` `>` marks move with the lines added or taken above them**, for `v`, `V` and `C-v`, as vim's marks do; the operator that ends a selection moves it too, `u` brings back the one the change began with, and each buffer keeps its own.
 - **After vim's `p` over a block, `gv`, `` `[ ``, `` `] ``, `` `< `` and `` `> `` name the text put**, as in vim, instead of the block that went; a block's plain `p` leaves `` `] `` on its last character, not past it.
 - **vim's `aw` on an empty line reaches the next line's first word**, as in vim: `daw`, `caw` and `yaw` there take the line and that word, and a count such as `d2iw` or `d3aw` counts an empty line as one unit and goes on over it.
+- **`\zs` and `\ze` in a search pattern set where the match starts and ends**, as in vim, for `/`, `?`, `n`, `N`, `gn`, `d/` and `:s`: `/a\zsb` lands on the `b`, the next match is looked for from where the last one ended, and `:s` replaces only that part, `$1` still naming the pattern's first group.
 
 ## 0.24.0 · 2026-11-17
 

@@ -33954,6 +33954,37 @@ fn vim_word_objects_count_an_empty_line_as_a_unit() {
     assert_eq!(after("sun moon\nrain\n", "jd2iw"), ("sun moon\nrain\n".to_string(), (1, 3)));
 }
 
+/// **`\zs` and `\ze` set where a match starts and ends** (measured in nvim):
+/// `/`, `n`, `N`, `?`, `gn` and `:s` all act on that part, and the next
+/// match is looked for from where the last one ended, so `/a\zsa` on
+/// `aaaa` stops on the second and the fourth `a`.
+#[test]
+fn a_search_match_starts_at_zs_and_ends_at_ze() {
+    let run = |text: &str, keys: &str| -> (String, usize) {
+        let mut ed = typed_vim(text);
+        press_vim_surround(&mut ed, keys);
+        (ed.current_buffer().text(), ed.cursor())
+    };
+    let text = "abab xab\nfoo ab\n";
+    assert_eq!(run(text, "/a\\zsb\n").1, 1);
+    assert_eq!(run(text, "/a\\zsb\nn").1, 3);
+    assert_eq!(run(text, "/a\\zsb\nnn").1, 7);
+    assert_eq!(run(text, "/a\\zsb\nN").1, 14, "back from the first, round to the last");
+    assert_eq!(run(text, "/a\\zeb\nn").1, 6);
+    assert_eq!(run("aaaa\n", "/a\\zsa\n").1, 1);
+    assert_eq!(run("aaaa\n", "/a\\zsa\nn").1, 3, "not the overlapping third");
+    assert_eq!(run("aaaa\n", "$?a\\zsa\n").1, 1);
+    assert_eq!(run(text, "/a\\zsb\ngnd").0, "aab xab\nfoo ab\n");
+    assert_eq!(run(text, "/a\\zeb\ncgnY\x1b.").0, "abYb xYb\nfoo ab\n");
+    assert_eq!(run(text, ":%s/a\\zsb/X/g\n").0, "aXaX xaX\nfoo aX\n");
+    assert_eq!(run(text, ":%s/a\\zeb/Y/g\n").0, "YbYb xYb\nfoo Yb\n");
+    assert_eq!(run("aaaa\n", ":s/a\\zsa/Z/g\n").0, "aZaZ\n");
+    // The pattern's own groups keep their numbers, and `$0` is what goes.
+    assert_eq!(run("sun moon\n", ":s/(s)u\\zs(n)/<$2$1$0>/\n").0, "su<nsn> moon\n");
+    // In a class, or after an escaped backslash, it is not a mark.
+    assert_eq!(run("a\\zsb\n", ":s/a\\\\zs/X/\n").0, "Xb\n");
+}
+
 /// **數目：括號往外數一層，引號連引號一起拿，詞對象跨得過換行**（逐條問過
 /// nvim）。
 #[test]

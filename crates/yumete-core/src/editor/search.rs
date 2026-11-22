@@ -37,7 +37,8 @@ impl Editor {
                 return Ok(re.clone());
             }
         }
-        match Regex::new(pattern) {
+        // vim's `\zs` and `\ze` go in as groups, which the scanner reads.
+        match Regex::new(&super::find::with_match_marks(pattern)) {
             Ok(re) => {
                 *self.compiled.borrow_mut() = Some((pattern.to_string(), re.clone()));
                 Ok(re)
@@ -646,7 +647,7 @@ impl Editor {
                             found: found.to_string(),
                             // `$1` resolved **for this match**, so the question
                             // shows what will actually be written.
-                            text: walk.re.expand(found, &walk.replacement),
+                            text: walk.re.expand_in(line, b0, b1, &walk.replacement),
                         });
                     }
                     // Without `g`, only the first match on a line is offered —
@@ -716,7 +717,7 @@ impl Editor {
                 if at + a >= walk.from {
                     rebuilt.push_str(&body[copied..b0]);
                     // `$1` resolved for this match, as in `next_hit`.
-                    rebuilt.push_str(&walk.re.expand(&body[b0..b1], &walk.replacement));
+                    rebuilt.push_str(&walk.re.expand_in(body, b0, b1, &walk.replacement));
                     copied = b1;
                     changed += 1;
                 }

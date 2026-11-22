@@ -6006,7 +6006,7 @@ fn replace_in_line(
         let (Some(&b0), Some(&b1)) = (cuts.get(a), cuts.get(b)) else {
             continue;
         };
-        out.replace_range(b0..b1, &look.expand(&line[b0..b1], replacement));
+        out.replace_range(b0..b1, &look.expand_in(line, b0, b1, replacement));
         count += 1;
     }
     (out, count)
