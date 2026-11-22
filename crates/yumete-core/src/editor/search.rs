@@ -736,6 +736,7 @@ impl Editor {
             all: false,
             snapped: false,
             rest: None,
+            land: None,
         });
     }
 
@@ -773,17 +774,28 @@ impl Editor {
             byte_at
         };
         let mut copied = 0usize;
+        // Where the last replacement ends in the text rebuilt, in chars.
+        let (mut grown, mut last_end) = (0isize, None);
         for hit in rest {
             let at = |n: usize| n.checked_add_signed(walk.shift).unwrap_or(0);
             let (b0, b1) = (byte_of(at(hit.start)), byte_of(at(hit.end)));
             rebuilt.push_str(&text[copied..b0]);
             rebuilt.push_str(&hit.text);
             copied = b1;
+            let put = hit.text.chars().count();
+            last_end = (at(hit.start) + put).checked_add_signed(grown);
+            grown += put as isize - (hit.end - hit.start) as isize;
         }
         rebuilt.push_str(&text[copied..]);
         let changed = rest.len();
         walk.next = walk.hits.len();
-        self.write_the_rest(walk, &rebuilt, changed)
+        let why = self.write_the_rest(walk, &rebuilt, changed);
+        if let (None, Some(end)) = (&why, last_end) {
+            let rope = self.current_buffer().rope();
+            let end = end.min(rope.len_chars());
+            walk.land = Some(motion::line_first_non_blank(rope, rope.line_to_char(rope.char_to_line(end))));
+        }
+        why
     }
 
     /// The end of [`Self::finish_all`]: write `rebuilt`, which changed
@@ -874,6 +886,9 @@ impl Editor {
         walk.changed += 1;
         walk.next += 1;
         walk.shift += hit.text.chars().count() as isize - (hit.end - hit.start) as isize;
+        let rope = self.current_buffer().rope();
+        let end = (hit.start + hit.text.chars().count()).min(rope.len_chars());
+        walk.land = Some(rope.line_to_char(rope.char_to_line(end)));
         None
     }
 
@@ -881,6 +896,9 @@ impl Editor {
     fn close_confirming(&mut self, walk: &Confirming, why: Option<String>) {
         self.pending = Pending::None;
         self.confirming = None;
+        if let Some(at) = walk.land.filter(|_| why.is_none() && self.as_vim()) {
+            self.sel = crate::selection::Selections::one(crate::selection::Range::at(at));
+        }
         self.clamp_cursor();
         self.sel.set_anchor(self.sel.head());
         self.refresh_goal_column();
@@ -943,6 +961,7 @@ impl Editor {
             Key::Char('n') => {
                 walk.skipped += 1;
                 walk.next += 1;
+                walk.land = Some(hit.start);
             }
             Key::Char('a') => walk.all = true,
             Key::Char('l') => {
@@ -951,6 +970,7 @@ impl Editor {
                 return;
             }
             Key::Char('q') | Key::Esc => {
+                walk.land = Some(hit.start);
                 self.close_confirming(&walk, None);
                 return;
             }

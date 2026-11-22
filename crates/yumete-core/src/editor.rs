@@ -5889,6 +5889,11 @@ struct Confirming {
     snapped: bool,
     /// The rest of the `|` line the walk was typed on, run when it ends.
     rest: Option<String>,
+    /// **Where vim's cursor stands when the walk ends**: at the start of
+    /// the line of the last match written by `y` or `l`, on the first
+    /// non-blank of it after `a`, and on the match asked about when that
+    /// was answered `n`, `q` or Esc.
+    land: Option<usize>,
 }
 
 /// Whether a file is something a tool produced rather than something a writer

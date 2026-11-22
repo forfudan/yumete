@@ -47582,3 +47582,18 @@ fn vim_substitute_skips_the_empty_match_at_a_line_end() {
     ed.execute(":%s/s*/-/g").unwrap();
     assert_eq!(ed.current_buffer().text(), "-c-a-t-\n");
 }
+
+/// **Where vim's cursor stands after a `:s …c` walk** (measured in nvim):
+/// at the start of the line of the last match written by `y`, on the first
+/// non-blank of it after `a`, and on the first character of the match
+/// answered `n` last, or asked about when `q` ended the walk.
+#[test]
+fn the_cursor_after_a_confirm_walk_is_where_vim_leaves_it() {
+    let cases: &[(&str, (usize, usize))] = &[("yy", (2, 1)), ("yn", (2, 3)), ("a", (2, 3)), ("q", (1, 5))];
+    for &(keys, at) in cases {
+        let mut ed = typed_vim("big dog\n  dog bark\nend\n");
+        ed.execute(":%s/dog/cat/gc").unwrap();
+        feed_vim(&mut ed, keys);
+        assert_eq!(vim_at(&ed), at, "{keys}");
+    }
+}
