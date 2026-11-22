@@ -1869,6 +1869,14 @@ impl Editor {
                     motion::Motion::Object { what: motion::Object::NearestPair, .. } => {
                         say!("edit.no-pair-to-delete")
                     }
+                    // `ap` with no paragraph to take beeps in vim, and the
+                    // beep ends a macro.
+                    motion::Motion::Object { what: motion::Object::Paragraph, .. } => {
+                        self.count = None;
+                        self.alias_count = None;
+                        self.fail_the_motion();
+                        return;
+                    }
                     _ => return,
                 };
                 self.count = None;

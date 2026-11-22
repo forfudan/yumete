@@ -48071,3 +48071,18 @@ fn vims_insert_ctrl_o_comes_back_after_a_waiting_command() {
         assert_eq!(ed.current_buffer().text(), want, "{keys} {commit}");
     }
 }
+
+/// **vim's `ap` on blank lines at the end of the file takes nothing**
+/// (measured in nvim): there is no paragraph after them, so `cap`, `dap`
+/// and `yap` change nothing and leave the cursor where it was.
+#[test]
+fn vims_ap_on_trailing_blank_lines_takes_nothing() {
+    for keys in ["jcapq⎋", "jdap", "jyapP", "Gdap"] {
+        let mut ed = typed_vim("pen\n\n\n");
+        feed_vim(&mut ed, keys);
+        assert_eq!(ed.current_buffer().text(), "pen\n\n\n", "{keys}");
+    }
+    let mut ed = typed_vim("pen\n\n\nink\n");
+    feed_vim(&mut ed, "jdap");
+    assert_eq!(ed.current_buffer().text(), "pen\n");
+}

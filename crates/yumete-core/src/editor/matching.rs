@@ -1932,6 +1932,10 @@ impl Editor {
             }
             match after > end {
                 true => end = after,
+                // **vim's `ap` on blank lines takes the paragraph after
+                // them or nothing** (`current_par` fails): at the file's
+                // end there is none to take.
+                false if same && self.keymap_rules().vim_text_objects => return motion::Span::Missed,
                 false => {
                     while first > 0 && blank(first - 1) != same {
                         first -= 1;
