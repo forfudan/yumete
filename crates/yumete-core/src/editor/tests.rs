@@ -33985,6 +33985,27 @@ fn a_search_match_starts_at_zs_and_ends_at_ze() {
     assert_eq!(run("a\\zsb\n", ":s/a\\\\zs/X/\n").0, "Xb\n");
 }
 
+/// **A match at a line's end counts as on the line's last character**
+/// (measured in nvim): from that character `/$` and `n` go on to the next
+/// line's end, and `d/$` stops short of the last character it reaches.
+#[test]
+fn a_search_from_a_line_end_goes_to_the_next_line_end() {
+    let run = |keys: &str| -> (String, usize) {
+        let mut ed = typed_vim("one two\nthree four\nfive\n");
+        press_vim_surround(&mut ed, keys);
+        (ed.current_buffer().text(), ed.cursor())
+    };
+    assert_eq!(run("$/$\n").1, 17, "the end of the second line, on its last character");
+    assert_eq!(run("/$\nn").1, 17);
+    assert_eq!(run("$/$\nn").1, 22);
+    assert_eq!(run("$/$\nnn").1, 6, "round to the first line's end");
+    assert_eq!(run("$?$\nN").1, 6, "back to the top past the end it stands on");
+    assert_eq!(run("G$/$\n").1, 6);
+    assert_eq!(run("lld/$\n").0, "ono\nthree four\nfive\n");
+    assert_eq!(run("$d/$\n").0, "one twr\nfive\n");
+    assert_eq!(run("jjd?$\n").0, "one two\nthree fou\nfive\n");
+}
+
 /// **數目：括號往外數一層，引號連引號一起拿，詞對象跨得過換行**（逐條問過
 /// nvim）。
 #[test]

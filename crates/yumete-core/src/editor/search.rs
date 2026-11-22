@@ -123,13 +123,14 @@ impl Editor {
     pub(super) fn search_hit_from(&mut self, forward: bool, from: usize, count: usize) -> Option<(usize, usize)> {
         let look = self.look_for_a_motion()?;
         let within = self.search_rows();
+        let end_is_last = self.keymap_rules().caret_off_newline;
         let rope = self.current_buffer().rope();
         let len = rope.len_chars();
         let mut at = from;
         let mut hit = None;
         for _ in 0..count.max(1) {
             hit = match forward {
-                true => search_forward(rope, &look, (at + 1).min(len), within.clone()),
+                true => search_forward(rope, &look, (at + 1).min(len), within.clone(), end_is_last),
                 false => search_backward(rope, &look, at, within.clone()),
             };
             let Some((start, _)) = hit else { break };
@@ -161,7 +162,7 @@ impl Editor {
             true => {
                 let mut from = motion::line_start(rope, at);
                 loop {
-                    match search_forward(rope, &look, from, within.clone()) {
+                    match search_forward(rope, &look, from, within.clone(), false) {
                         Some((start, end)) if start >= from && end.max(start + 1) <= at => from = start + 1,
                         other => break other,
                     }
@@ -172,7 +173,7 @@ impl Editor {
         for _ in 1..count.max(1) {
             let Some((start, _)) = hit else { break };
             hit = match forward {
-                true => search_forward(rope, &look, (start + 1).min(len), within.clone()),
+                true => search_forward(rope, &look, (start + 1).min(len), within.clone(), false),
                 false => search_backward(rope, &look, start, within.clone()),
             };
         }
@@ -239,6 +240,7 @@ impl Editor {
         // going round. The rows of the table are the whole document as far as
         // this search is concerned.
         let within = self.search_rows();
+        let end_is_last = self.keymap_rules().caret_off_newline;
         let scoped = within != (0..rope.len_lines());
         // Warning: **往回找要從這一處的開頭數起，不是從光標數起**。一次搜索落地之後光標停在匹配的**最後
         // 一個字**上，開頭在 `anchor`；而 `search_backward` 找的是「開頭在
@@ -248,7 +250,7 @@ impl Editor {
         // Warning: **匹配只有一個字的時候兩種問法一樣**——那時光標就在開頭上，所以
         // 拿一個字母去試看不出這個分別。
         let found = if forward {
-            search_forward(rope, &look, (self.sel.head() + 1).min(len), within.clone())
+            search_forward(rope, &look, (self.sel.head() + 1).min(len), within.clone(), end_is_last)
         } else {
             search_backward(rope, &look, self.sel.anchor().min(self.sel.head()), within.clone())
         };

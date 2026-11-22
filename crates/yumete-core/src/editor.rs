@@ -6051,11 +6051,16 @@ fn unescape_replacement(replacement: &str) -> String {
 /// rope's own line iterator costs one step per line instead of a fresh descent
 /// of the tree. Materialising the whole document instead would copy 800 KB
 /// for every press of `n`.
+///
+/// `end_is_last`: **a match at a line's end counts as on its last
+/// character** (vim's `searchit`), so from that character `/$` goes on to
+/// the next line's end instead of finding the one it stands before.
 fn search_forward(
     rope: &Rope,
     look: &find::Look,
     from: usize,
     within: std::ops::Range<usize>,
+    end_is_last: bool,
 ) -> Option<(usize, usize)> {
     // A pane can be handed no lines at all, and「the line the cursor is on」
     // is then not a line of it.
@@ -6069,8 +6074,8 @@ fn search_forward(
     // so the wrap covers the part of that line before the cursor too — where
     // 「the end」 and 「the top」 are the ends of `within`, which is the whole
     // buffer unless a table holds the pane (#354).
-    scan(rope, look, start_line, within.end, from).or_else(|| {
-        scan(rope, look, within.start, start_line + 1, rope.line_to_char(within.start))
+    scan(rope, look, start_line, within.end, from, end_is_last).or_else(|| {
+        scan(rope, look, within.start, start_line + 1, rope.line_to_char(within.start), end_is_last)
     })
 }
 
@@ -6119,6 +6124,7 @@ fn scan(
     from_line: usize,
     to_line: usize,
     from: usize,
+    end_is_last: bool,
 ) -> Option<(usize, usize)> {
     let mut at = rope.line_to_char(from_line);
     for slice in rope
@@ -6139,7 +6145,15 @@ fn scan(
         // 那一路；`Look::spans` 把字形折過的式子、模糊、拼音三路合在一起答，於是 `/`
         // 和面板用的是同一套判準而不是兩套。跨度是**這一行裏的字序號**。
         let want = from.saturating_sub(at);
-        if let Some(&(a, b)) = look.spans(text).iter().find(|&&(a, _)| a >= want) {
+        let end = match end_is_last && want > 0 {
+            true => text.chars().count(),
+            false => usize::MAX,
+        };
+        let stands_at = |a: usize| match a == end && a > 0 {
+            true => a - 1,
+            false => a,
+        };
+        if let Some(&(a, b)) = look.spans(text).iter().find(|&&(a, _)| stands_at(a) >= want) {
             return Some((at + a, at + b));
         }
         at += slice.len_chars();

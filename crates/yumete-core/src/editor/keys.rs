@@ -1424,6 +1424,20 @@ impl Editor {
     pub(super) fn vim_operator_to_match(&mut self, op: char, count: Option<usize>, forward: bool) {
         let here = self.sel.head();
         let Some((at, _)) = self.search_hit_from(forward, here, count.unwrap_or(1)) else { return };
+        // **A match at a line's end is reached on the line's last
+        // character**, where vim's cursor stands after the search: `d/$`
+        // keeps that character, as `d/$` in vim does.
+        let at = match self.keymap_rules().caret_off_newline {
+            true => {
+                let rope = self.current_buffer().rope();
+                let at = at.min(rope.len_chars());
+                match at == motion::line_end(rope, at) {
+                    true => motion::line_last(rope, at),
+                    false => at,
+                }
+            }
+            false => at,
+        };
         self.use_reg_one = true;
         self.vim_exclusive_to(op, at);
         self.use_reg_one = false;
