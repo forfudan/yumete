@@ -256,6 +256,17 @@ impl Editor {
         self.clamp_cursor();
     }
 
+    /// **After vim's `u` and `C-r` the column wanted is where the cursor
+    /// landed** (`w_set_curswant`): a column wanted past a line's end before
+    /// the step, as Insert `C-o` past the end leaves it, no longer takes the
+    /// cursor past the end of the line it lands on; only
+    /// [`Self::where_vim_lands`] puts it there.
+    fn forget_the_column_after_a_step(&mut self, as_vim: bool) {
+        if as_vim {
+            self.sel.set_goal(None);
+        }
+    }
+
     /// Whether a step of the history lands by vim's rule: the vim keymap,
     /// one cursor ([`Self::come_back_to`] puts several back as they were).
     fn lands_as_vim(&self, kept: &Option<crate::selection::Selections>) -> bool {
@@ -298,9 +309,23 @@ impl Editor {
         if from + 1 == line && line > 1 {
             line -= 1;
         }
-        match from == line {
+        let at = match from == line {
             true => self.column_on_line(line - 1, began.1),
             false => self.char_at_line_column(line - 1, want),
+        };
+        // **During Insert `C-o` the cursor may stand past the line's end**
+        // (vim's `check_cursor_col` and `coladvance` allow one more with
+        // `restart_edit` set): a column past the last character lands on the
+        // line break, and the Insert goes on after it.
+        let start = after.line_to_char(line - 1);
+        let end = motion::line_end(after, start);
+        let past = match from == line {
+            true => start + began.1 >= end,
+            false => want >= self.line_column(end),
+        };
+        match self.one_normal_key.is_some() && at < end && motion::next_grapheme(after, at) == end && past {
+            true => end,
+            false => at,
         }
     }
 
@@ -315,7 +340,8 @@ impl Editor {
         let want = self.column_wanted();
         match self.current_buffer_mut().undo_with(at, Some(every)) {
             Some((cursor, kept)) => {
-                let cursor = match self.lands_as_vim(&kept) {
+                let as_vim = self.lands_as_vim(&kept);
+                let cursor = match as_vim {
                     true => {
                         let began = line_and_column(self.current_buffer().rope(), cursor);
                         self.where_vim_lands(&before, began, want)
@@ -323,6 +349,7 @@ impl Editor {
                     false => cursor,
                 };
                 self.come_back_to(cursor, kept);
+                self.forget_the_column_after_a_step(as_vim);
                 // **A step back can move a record's boundary**:
                 // undoing the line break typed into a cell leaves the grid's
                 // record map claiming a record two lines long, and then the
@@ -423,11 +450,13 @@ impl Editor {
         let began = self.current_buffer().redo_began_at().map(|at| line_and_column(&before, at));
         match self.current_buffer_mut().redo_with(at, Some(every)) {
             Some((cursor, kept)) => {
-                let cursor = match (self.lands_as_vim(&kept), began) {
+                let as_vim = self.lands_as_vim(&kept);
+                let cursor = match (as_vim, began) {
                     (true, Some(began)) => self.where_vim_lands(&before, began, want),
                     _ => cursor,
                 };
                 self.come_back_to(cursor, kept);
+                self.forget_the_column_after_a_step(as_vim);
                 // The same reason as `undo`'s: a step either way can put a
                 // record's boundary back or take it away.
                 self.rescan_records();

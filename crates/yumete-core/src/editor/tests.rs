@@ -47915,3 +47915,22 @@ fn vims_insert_ctrl_o_past_the_end_keeps_the_column() {
     assert_eq!(ed.current_buffer().text(), "pencils\nab\npencilq\n");
 }
 
+
+/// **vim's `u` and `C-r` forget the column wanted** (`w_set_curswant`):
+/// after Insert `C-o` past a line's end, an undo landing on another line's
+/// last character comes back in front of it, not past it. Where the change
+/// began past a line's end, `C-o u` and `C-o C-r` come back past it.
+#[test]
+fn vims_undo_after_insert_ctrl_o_forgets_the_column() {
+    let mut ed = typed_vim("pen\nlarch\n");
+    feed_vim(&mut ed, "$xjAᵒuq⎋");
+    assert_eq!(ed.current_buffer().text(), "peqn\nlarch\n");
+    let mut ed = typed_vim("pen\nlarch\n");
+    feed_vim(&mut ed, "Ast⎋jAᵒuq⎋");
+    assert_eq!(ed.current_buffer().text(), "penq\nlarch\n");
+    let mut ed = typed_vim("pen\nlarch\n");
+    feed_vim(&mut ed, "$xuj$Aᵒ");
+    ed.on_key(Key::Ctrl('r'));
+    feed_vim(&mut ed, "q⎋");
+    assert_eq!(ed.current_buffer().text(), "peq\nlarch\n");
+}
