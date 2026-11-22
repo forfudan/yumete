@@ -380,10 +380,32 @@ impl Editor {
             // 兩頭都是半角：拉丁詞之間本來就要一個空格。
             _ => " ",
         };
+        // **The marks on the line joined go onto the joined line**, past the
+        // seam (vim's `do_join` moves them before it deletes the line), a
+        // line of nothing but blanks among them.
+        let carried: Vec<(char, crate::buffer::NamedMark)> = match self.as_vim() {
+            true => {
+                let below = rope.line_to_char(line + 1);
+                let taken = next - below;
+                let seam = end - head + glue.chars().count();
+                self.current_buffer()
+                    .named_marks()
+                    .filter(|(_, mark)| mark.place.0 == line + 1)
+                    .map(|(name, mark)| {
+                        let column = seam + mark.place.1.saturating_sub(taken);
+                        (name, crate::buffer::NamedMark { place: (line, column), ..mark })
+                    })
+                    .collect()
+            }
+            false => Vec::new(),
+        };
         self.snapshot();
         let done = self.current_buffer_mut().replace(end..next, glue);
         if !self.applied(done) {
             return;
+        }
+        for (name, mark) in carried {
+            self.current_buffer_mut().set_named_mark(name, Some(mark));
         }
         // **`A-J` 選中補出來的那一格**（helix 的 `join_selections_space`）。
         // 接縫是算出來的，所以人看不見補了没有——選中它就看得見了，而且要改成

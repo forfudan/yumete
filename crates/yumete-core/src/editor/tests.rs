@@ -46418,3 +46418,23 @@ fn a_visual_put_from_an_empty_register_takes_the_selection() {
         assert_eq!((ed.current_buffer().text().as_str(), vim_at(&ed)), (want, at), "{keys}");
     }
 }
+
+/// **vim's `J` keeps the marks of a line of blanks it joins** (measured in
+/// nvim): they go onto the joined line at the seam, a lowercase mark as
+/// well as an uppercase one, and `u` puts them back on their line.
+#[test]
+fn a_join_keeps_the_marks_of_a_line_of_blanks() {
+    let text = "sun a\n    \nfoo\n  bar baz\n";
+    let cases: &[(&str, &str)] = &[
+        ("0jmaggJ`aiX⎋", "sun Xa\nfoo\n  bar baz\n"),
+        ("0jmaggJ'aiX⎋", "Xsun a\nfoo\n  bar baz\n"),
+        ("0jlllmaggJ'aiX⎋", "Xsun a\nfoo\n  bar baz\n"),
+        ("0jmAggJ`AiX⎋", "sun Xa\nfoo\n  bar baz\n"),
+        ("0jmaggJu'aiX⎋", "sun a\n   X \nfoo\n  bar baz\n"),
+    ];
+    for &(keys, want) in cases {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        assert_eq!(ed.current_buffer().text(), want, "{keys}");
+    }
+}
