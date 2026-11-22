@@ -47019,6 +47019,33 @@ fn a_bar_in_a_substitution_line_is_read_as_vim_reads_it() {
     assert_eq!(ed.current_buffer().text(), "abc\nabc\n");
 }
 
+/// **A `c` walk holds the rest of its `|` line until it ends** (measured in
+/// nvim): the commands after it run on the text the answers left, and one
+/// `u` takes back the walk and them together.
+#[test]
+fn a_confirm_walk_runs_the_rest_of_its_line_when_it_ends() {
+    let run = |keys: &str| {
+        let mut ed = typed_vim("pq\npq\n");
+        feed_vim(&mut ed, keys);
+        ed
+    };
+    let mut ed = run(":%s/p/K/gc|%s/q/ZZ/g⏎yy");
+    assert_eq!(ed.current_buffer().text(), "KZZ\nKZZ\n");
+    feed_vim(&mut ed, "u");
+    assert_eq!(ed.current_buffer().text(), "pq\npq\n");
+    assert_eq!(run(":%s/p/K/gc|%s/q/ZZ/g⏎nn").current_buffer().text(), "pZZ\npZZ\n");
+    assert_eq!(run(":%s/p/K/gc|%s/q/ZZ/g⏎yq").current_buffer().text(), "KZZ\npZZ\n");
+    assert_eq!(run(":%s/p/K/gc|%s/q/ZZ/g⏎a").current_buffer().text(), "KZZ\nKZZ\n");
+    let mut ed = run(":%s/p/P/c|s/P/W/⏎yy");
+    assert_eq!(ed.current_buffer().text(), "Pq\nWq\n");
+    feed_vim(&mut ed, "u");
+    assert_eq!(ed.current_buffer().text(), "pq\npq\n");
+    let mut ed = run(":s/q/D/|%s/p/K/gc|%s/K/M/c⏎yyyy");
+    assert_eq!(ed.current_buffer().text(), "MD\nMq\n");
+    feed_vim(&mut ed, "u");
+    assert_eq!(ed.current_buffer().text(), "pq\npq\n");
+}
+
 /// **vim's `*` and `#` are jumps** (`:h jump-motions`): `C-o` comes back to
 /// where they were pressed.
 #[test]

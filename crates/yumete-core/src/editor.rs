@@ -5871,6 +5871,8 @@ struct Confirming {
     /// walk**, however many matches it changed — a writer who says 「算了」
     /// after twenty `y`s means all twenty.
     snapped: bool,
+    /// The rest of the `|` line the walk was typed on, run when it ends.
+    rest: Option<String>,
 }
 
 /// Whether a file is something a tool produced rather than something a writer

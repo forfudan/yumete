@@ -726,6 +726,7 @@ impl Editor {
             skipped: 0,
             all: false,
             snapped: false,
+            rest: None,
         });
     }
 
@@ -874,12 +875,41 @@ impl Editor {
         self.clamp_cursor();
         self.sel.set_anchor(self.sel.head());
         self.refresh_goal_column();
+        // A walk stopped by a refusal ends its line there, as a failing
+        // command does.
+        let rest = walk.rest.clone().filter(|_| why.is_none());
         self.status = match (why, walk.changed + walk.skipped) {
             (Some(why), _) => why,
             // Nothing matched at all: the ordinary answer, not 「0 換 0 跳」.
             (None, 0) => say!("find.substitute-changed", 0),
             (None, _) => say!("substitute.confirm-done", walk.changed, walk.skipped),
         };
+        if let Some(rest) = rest {
+            self.run_the_rest_of_the_line(&rest);
+        }
+    }
+
+    /// **Run what followed a `c` walk on its `|` line**, in the walk's undo
+    /// step: one `u` takes back the whole line, as in vim. A walk the rest
+    /// opens joins the same step.
+    fn run_the_rest_of_the_line(&mut self, rest: &str) {
+        let said = std::mem::take(&mut self.status);
+        let was = self.current_buffer_mut().begin_undo_group();
+        let id = self.current_buffer().id();
+        match self.execute(rest) {
+            Ok(CommandOutcome::Quit) => self.quit_from_binding = true,
+            Ok(CommandOutcome::Continue) => {}
+            Err(err) => self.status = err.to_string(),
+        }
+        if let Some(i) = self.buffer_with(id) {
+            self.with_buffer(i, |e| e.current_buffer_mut().end_undo_group(was));
+        }
+        if let Some(walk) = self.confirming.as_mut() {
+            walk.snapped = true;
+        }
+        if self.status.is_empty() {
+            self.status = said;
+        }
     }
 
     /// Answer the question a `:s …c` is asking (#415).

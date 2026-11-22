@@ -830,7 +830,15 @@ impl Editor {
                 let id = self.current_buffer().id();
                 let was = self.current_buffer_mut().begin_undo_group();
                 let mut outcome = self.execute_now(&first);
-                if matches!(outcome, Ok(CommandOutcome::Continue)) {
+                // **A `c` walk holds the rest of the line until it ends**, as
+                // vim's does: the walk's matches were found in the text as it
+                // stood, so nothing may write before its answers are in. The
+                // line's undo point is already announced, and the walk's
+                // writes and the rest join it.
+                if let Some(walk) = self.confirming.as_mut().filter(|_| matches!(outcome, Ok(CommandOutcome::Continue))) {
+                    walk.rest = Some(then);
+                    walk.snapped = true;
+                } else if matches!(outcome, Ok(CommandOutcome::Continue)) {
                     let said = std::mem::take(&mut self.status);
                     outcome = self.execute_now(&then);
                     if self.status.is_empty() {
