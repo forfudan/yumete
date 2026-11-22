@@ -284,7 +284,9 @@ impl Editor {
         let again = std::mem::take(&mut self.insert_again);
         let typed = std::mem::take(&mut self.insert_recording);
         self.last_inserted.clone_from(&typed);
-        if again > 0 && !typed.is_empty() {
+        // An opened line is part of what repeats, so `3o` with nothing
+        // typed still opens three.
+        if again > 0 && (!typed.is_empty() || self.insert_opened.is_some()) {
             // At every cursor, not at the primary alone.
             let opened = self.insert_opened;
             self.edit_each_from(false, |e| {

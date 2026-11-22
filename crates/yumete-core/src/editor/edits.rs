@@ -846,12 +846,12 @@ impl Editor {
                 }
                 // Warning: **`o`/`O` 這兩路要自己拼字串，不許叫 `add_blank_line`**。
                 // ① 那一支自己 `snapshot()`，叫了它「整段算一個命令」就是假的——`3o`
-                // 打完要按三下 `u` 纔回得去；② 它把光標跟着原來那段文字往下挪，`O`
-                // 那一路算出來的落點會是**已經有字的那一行**，三遍全寫在同一行上
-                // （`3O` 打 `hi` 會得 `\n\nhihihi\nX`，而 vim 給 `hi\nhi\nhi\nX`）。
-                // The line break first, then the text typed through the pairs,
-                // as `3A(x` is, so `3o(x` closes every copy, not only the first.
-                Some(true) => {
+                // 打完要按三下 `u` 纔回得去；② 它把光標跟着原來那段文字往下挪。
+                // **Each copy goes below the one before it, for `O` too**, as
+                // vim's `3O` writes them: the line break at the end of the copy
+                // the cursor is on, then the text typed through the pairs, so
+                // `3o(x` closes every copy and the cursor ends on the last.
+                Some(_) => {
                     let at = motion::line_end(self.current_buffer().rope(), self.sel.head());
                     if !self.edit_insert(at, &ending) {
                         return;
@@ -860,17 +860,6 @@ impl Editor {
                     self.type_through_pairs(typed);
                     let end = motion::line_end(self.current_buffer().rope(), self.sel.head());
                     self.set_cursor(end);
-                }
-                Some(false) => {
-                    let at = motion::line_start(self.current_buffer().rope(), self.sel.head());
-                    if !self.edit_insert(at, &ending) {
-                        return;
-                    }
-                    self.set_cursor(at);
-                    self.type_through_pairs(typed);
-                    // 光標留在剛插進去那一行的頭上，下一遍就插在它前面——三遍寫出
-                    // 來的是三行一樣的字，所以次序看不出來，而落點必須對。
-                    self.set_cursor(at);
                 }
             }
         }

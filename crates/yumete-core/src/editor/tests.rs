@@ -47091,3 +47091,23 @@ fn a_helix_substitution_takes_the_lines_of_every_selection() {
         assert_eq!(ed.current_buffer().text(), "a1 a\na2 a\nX3 X\nX4 X\nX5 X\n", "{command}");
     }
 }
+
+/// **vim's counted `o` and `O` open every line even with nothing typed**
+/// (measured in nvim): `3o` then Esc leaves three empty lines, the cursor
+/// on the last; and `3O` writes its copies one below the other, ending on
+/// the lowest, a copy of several lines kept whole.
+#[test]
+fn a_counted_open_line_opens_every_line() {
+    let mut ed = typed_vim("top\nend\n");
+    feed_vim(&mut ed, "3o⎋");
+    assert_eq!(ed.current_buffer().text(), "top\n\n\n\nend\n");
+    assert_eq!(vim_at(&ed), (4, 1));
+    let mut ed = typed_vim("top\nend\n");
+    feed_vim(&mut ed, "j2O⎋");
+    assert_eq!(ed.current_buffer().text(), "top\n\n\nend\n");
+    assert_eq!(vim_at(&ed), (3, 1));
+    let mut ed = typed_vim("top\n");
+    feed_vim(&mut ed, "2Ofig⏎leaf⎋");
+    assert_eq!(ed.current_buffer().text(), "fig\nleaf\nfig\nleaf\ntop\n");
+    assert_eq!(vim_at(&ed), (4, 4));
+}
