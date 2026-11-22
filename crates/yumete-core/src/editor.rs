@@ -6038,8 +6038,9 @@ fn replace_in_line(
     look: &find::Look,
     replacement: &str,
     global: bool,
+    vim: bool,
 ) -> (String, usize) {
-    let picks = picks_in_line(line, look, global);
+    let picks = picks_in_line(line, look, global, vim);
     if picks.is_empty() {
         return (line.to_string(), 0);
     }
@@ -6055,7 +6056,14 @@ fn replace_in_line(
 }
 
 /// The matches [`replace_in_line`] replaces in `line`, as byte spans.
-fn picks_in_line(line: &str, look: &find::Look, global: bool) -> Vec<(usize, usize)> {
+///
+/// `vim`: **vim's `:s` stops looking once it steps onto the line's end**
+/// (`do_sub`'s `lastone`). After an empty match it steps one character on
+/// before looking again, and after any other it does the same when the
+/// pattern matches empty right where that one ended; so `:s/z*/X/g` gives
+/// `XaXbXc`, not `XaXbXcX`, while `:s/$/!/` and `:s/a\|$/@/g` still write
+/// at the end.
+fn picks_in_line(line: &str, look: &find::Look, global: bool, vim: bool) -> Vec<(usize, usize)> {
     let spans = look.spans(line);
     if spans.is_empty() {
         return Vec::new();
@@ -6074,6 +6082,15 @@ fn picks_in_line(line: &str, look: &find::Look, global: bool) -> Vec<(usize, usi
     let mut picks: Vec<(usize, usize)> = Vec::with_capacity(chosen.len());
     for &(a, b) in chosen {
         let (Some(&b0), Some(&b1)) = (cuts.get(a), cuts.get(b)) else { continue };
+        if vim && b0 == line.len() && b1 == b0 {
+            if let Some(&(was0, was1)) = picks.last() {
+                let steps_on = was0 == was1 || look.find_from(line, was1).is_some_and(|(_, a, b)| a == was1 && b == was1);
+                let next = line[was1..].chars().next().map_or(was1, |c| was1 + c.len_utf8());
+                if steps_on && next >= line.len() {
+                    continue;
+                }
+            }
+        }
         if picks.last().is_none_or(|&(_, end)| b0 >= end) {
             picks.push((b0, b1));
         }
@@ -6085,7 +6102,7 @@ fn picks_in_line(line: &str, look: &find::Look, global: bool) -> Vec<(usize, usi
 /// become: the same matches [`replace_in_line`] replaces, in char indices
 /// of the text. `ending` is the break a last line with none gets when its
 /// replacement ends in one, as `:s` without `c` gives it.
-fn hits_in_lines(text: &str, look: &find::Look, replacement: &str, global: bool, chosen: &Chosen, ending: &str) -> Vec<Hit> {
+fn hits_in_lines(text: &str, look: &find::Look, replacement: &str, global: bool, chosen: &Chosen, ending: &str, vim: bool) -> Vec<Hit> {
     let mut hits = Vec::new();
     // Char index of the start of the line being looked at.
     let mut at = 0usize;
@@ -6093,7 +6110,7 @@ fn hits_in_lines(text: &str, look: &find::Look, replacement: &str, global: bool,
         if chosen.has(idx) {
             // 換行符不進正則，見 [`line_body`]。
             let (body, eol) = line_body(line);
-            let picks = picks_in_line(body, look, global);
+            let picks = picks_in_line(body, look, global, vim);
             let mut chars = find::CharCount::new(body);
             for (&(b0, b1), mut with) in picks.iter().zip(look.expand_each(body, &picks, replacement)) {
                 if eol.is_empty() && b1 == body.len() && with.ends_with('\n') {

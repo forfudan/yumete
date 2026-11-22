@@ -46929,8 +46929,9 @@ fn the_c_walk_asks_about_what_the_substitution_replaces() {
     assert_eq!(walk(text, "%s/\\n/ /gc", "yyyyyy"), ("red, green, blue  end, last \n".to_string(), false));
     assert_eq!(walk(text, "%s/\\n/ /gc", "yyyyyyu").0, text);
     assert_eq!(walk(text, "3-6s/\\n/_/gc", "yyyy"), ("red,\ngreen,\nblue__end,_last_\n".to_string(), false));
-    let all = substituted("pq\n", "%s/z*/X/g");
-    assert_eq!(walk("pq\n", "%s/z*/X/gc", "yyy"), (all, false));
+    let all = walk("pq\n", "%s/z*/X/g", "").0;
+    assert_eq!(all, "XpXq\n");
+    assert_eq!(walk("pq\n", "%s/z*/X/gc", "yy"), (all, false));
 }
 
 /// **A multi-line `:s` deletes the marks on the lines it joins**, as vim's
@@ -47562,4 +47563,22 @@ fn visual_paragraph_objects_grow_as_vim_does() {
         feed_vim(&mut ed, keys);
         assert_eq!(ed.current_buffer().text(), after, "{keys}");
     }
+}
+
+/// **vim's `:s` stops at a line's end once it steps onto it** (measured in
+/// nvim): an empty match after the last character is not replaced, unless
+/// it is the first on its line, and `c` answered `y` throughout writes the
+/// same; under helix's keys `:s` keeps its own reading.
+#[test]
+fn vim_substitute_skips_the_empty_match_at_a_line_end() {
+    let mut ed = typed_vim("cat\nmoss\nsip\n");
+    ed.execute(":%s/s*/-/g").unwrap();
+    assert_eq!(ed.current_buffer().text(), "-c-a-t\n-m-o-\n-i-p\n");
+    let mut ed = typed_vim("cat\nmoss\n\n");
+    ed.execute(":%s/s*/-/gc").unwrap();
+    feed_vim(&mut ed, "yyyyyyy");
+    assert_eq!(ed.current_buffer().text(), "-c-a-t\n-m-o-\n-\n");
+    let mut ed = typed("cat\n");
+    ed.execute(":%s/s*/-/g").unwrap();
+    assert_eq!(ed.current_buffer().text(), "-c-a-t-\n");
 }

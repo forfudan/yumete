@@ -514,7 +514,7 @@ impl Editor {
                     // 換行符不進正則，原樣寫回去（CRLF 也原樣）——見
                     // [`crate::editor::line_body`]。
                     let (body, eol) = crate::editor::line_body(line);
-                    let (new_line, n) = replace_in_line(body, &look, &replacement, global);
+                    let (new_line, n) = replace_in_line(body, &look, &replacement, global, self.as_vim());
                     count += n;
                     let breaks = new_line.matches('\n').count();
                     if n > 0 {
@@ -723,7 +723,7 @@ impl Editor {
         let ending = self.current_buffer().ending();
         let hits = match across {
             true => hits_across_lines(&text, &look, &replacement, global, &chosen),
-            false => hits_in_lines(&text, &look, &replacement, global, &chosen, ending),
+            false => hits_in_lines(&text, &look, &replacement, global, &chosen, ending, self.as_vim()),
         };
         self.command_failed = hits.is_empty();
         self.ask_or_finish(Confirming {
