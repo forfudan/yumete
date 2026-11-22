@@ -2063,7 +2063,8 @@ impl Editor {
                 //
                 // `d`, `>`, `<` and `=` still land in the column wanted before
                 // (they end in `coladvance(curswant)`), and after any of them
-                // the column wanted is where the cursor stands.
+                // the column wanted is where the cursor stands (see
+                // [`Self::want_the_column_after_an_operator`]).
                 if step.first_non_blank {
                     let writing = motion::line_first_non_blank(rope, rope.line_to_char(b));
                     let keeps = matches!(op, 'd' | '>' | '<' | '=');
@@ -2072,9 +2073,7 @@ impl Editor {
                         self.move_head(writing);
                     }
                     self.sel.set_goal(keeps.then_some(want));
-                    self.do_vim_lines(op, a.min(b), a.max(b));
-                    self.sel.set_goal(None);
-                    return;
+                    return self.do_vim_lines(op, a.min(b), a.max(b));
                 }
                 return self.do_vim_lines(op, a.min(b), a.max(b));
             }
@@ -2500,6 +2499,18 @@ impl Editor {
         self.do_vim_verb(op, span, shape, kept, lines_from);
         self.undo_lands_at = None;
         self.undo_lands_bytes = None;
+        self.want_the_column_after_an_operator(span);
+    }
+
+    /// **After vim's operator the column wanted is worked out again** from
+    /// where the cursor stands (`do_pending_operator` sets
+    /// `w_set_curswant`), so `$` stops being sticky: `$yj` then `j` keeps
+    /// the column `y` left.
+    fn want_the_column_after_an_operator(&mut self, span: motion::Span) {
+        if !self.as_vim() || matches!(span, motion::Span::Missed) {
+            return;
+        }
+        self.sel.set_goal(None);
     }
 
     /// The line below `lands` and the byte column `lands` has on its own

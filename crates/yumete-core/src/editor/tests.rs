@@ -48018,6 +48018,26 @@ fn vims_undo_after_an_operator_on_a_closed_fold_lands_in_column_one() {
     }
 }
 
+/// **After any vim operator the column wanted is where the cursor stands**
+/// (`w_set_curswant`), so `$` stops being sticky: `$yj` and then `j` keep
+/// the column `y` left, where `$` alone would go on to the line's end
+/// (measured in nvim).
+#[test]
+fn vims_column_wanted_is_worked_out_again_after_an_operator() {
+    for (keys, want) in [
+        ("2G$yjj", (3, 2)),
+        ("2G$yyj", (3, 2)),
+        ("2G$gUjj", (3, 2)),
+        ("3G$ykjj", (4, 2)),
+        ("2G$djj", (3, 7)),
+        ("2G$j", (3, 6)),
+    ] {
+        let mut ed = typed_vim("pq\nab\nabcdef\nghijklm\nnopqrstu\n");
+        feed_vim(&mut ed, keys);
+        assert_eq!(vim_at(&ed), want, "{keys}");
+    }
+}
+
 /// **vim's `-` and `+` under an operator land on the first non-blank**,
 /// and the operator begins at whichever of that and the cursor comes first
 /// (measured in nvim); `d` still lands in the column it wanted. `gUU`,
