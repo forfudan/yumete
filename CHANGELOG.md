@@ -82,6 +82,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **vim's `p` of a lone line break after the last line of a file with no final line break opens an empty line**, as in vim, instead of only adding the break the file lacked.
 - **A register named before vim's `v`, `V` or `C-v` is let go**, as in vim: `"av` then `y` yanks into the unnamed register only; a register named inside Visual mode still names where the yank goes.
 - **vim's `""p` puts the unnamed register**, as in vim, instead of nothing; `""y` and `""d` yank and delete into `"0` as well, which the unnamed register then holds.
+- **vim macros may play themselves**, as in vim: `qaq`, then a recording ending in `@a`, then `@a` runs until a motion in it fails, instead of stopping after one level; a macro that does nothing but play itself stops at the writing ceiling.
 
 ## 0.24.0 · 2026-11-17
 

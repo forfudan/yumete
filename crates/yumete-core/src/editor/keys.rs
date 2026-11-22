@@ -119,7 +119,8 @@ impl Editor {
         // prompt too — a macro that can only move is not much of one.
         // **The keys a `.` plays are not typed**: the `.` is in the
         // recording already, and played back it repeats the change once.
-        if self.recording.is_some() && !self.expanding_alias && !self.repeating_edit {
+        // Nor are a macro's: `@b` recorded into `a` plays `b` again.
+        if self.recording.is_some() && !self.expanding_alias && !self.repeating_edit && !self.replaying {
             // **Every key goes in, and stopping cuts back to where the keys
             // that stopped it began**, so a recording stopped by any key
             // (`"C-r" = "record_macro"`, or `Space q` bound to it) does not end

@@ -2898,6 +2898,13 @@ pub struct Editor {
     last_played: Option<char>,
     /// Whether a macro is being replayed, so it cannot record or replay itself.
     replaying: bool,
+    /// **The keys a macro playing has still to press**, as vim's typeahead
+    /// holds them: a macro played inside one (vim's recursive `@a`) puts
+    /// its keys in front of the rest instead of playing them on a deeper
+    /// call, so it runs until a motion fails, however deep it goes.
+    macro_queue: std::collections::VecDeque<crate::input::MacroStep>,
+    /// How many macros the one playing has played inside itself so far.
+    macro_nested: usize,
     /// **A motion failed while a vim macro played**: vim beeps and flushes
     /// what is left of the macro (`:h q`, `beep_flush`), so `10@a` whose `j`
     /// meets the last line stops there instead of writing on that line ten
@@ -4882,6 +4889,8 @@ impl Editor {
             last_recorded: None,
             last_played: None,
             replaying: false,
+            macro_queue: std::collections::VecDeque::new(),
+            macro_nested: 0,
             macro_failed: false,
             normal_depth: 0,
             plain_keys: false,

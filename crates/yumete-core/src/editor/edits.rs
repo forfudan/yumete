@@ -1639,7 +1639,7 @@ impl Editor {
     /// itself: `q` recorded into a macro would otherwise recurse until the
     /// stack ran out.
     pub(super) fn play_register(&mut self, register: char, count: usize) {
-        if self.replaying {
+        if self.replaying && !self.keymap_rules().vim_registers {
             return;
         }
         let text = match register {
@@ -1661,7 +1661,27 @@ impl Editor {
             }
         };
         self.last_played = Some(register);
+        // **Played inside a macro, as vim's recursive `@a`**: its keys go in
+        // front of the ones still to press, `count` times, and the macro
+        // playing presses them. A motion that fails ends them all, as it
+        // ends vim's; a macro that only ever plays itself stops at the
+        // writing ceiling.
+        if self.replaying {
+            self.macro_nested += 1;
+            if self.macro_nested > Self::WRITING_MAX {
+                self.macro_failed = true;
+                self.status = say!("count.writing-ceiling", Self::WRITING_MAX);
+                return;
+            }
+            for _ in 0..count.clamp(1, Self::WRITING_MAX) {
+                for step in steps.iter().rev() {
+                    self.macro_queue.push_front(step.clone());
+                }
+            }
+            return;
+        }
         self.replaying = true;
+        self.macro_nested = 0;
         // A macro may write, so it answers to the writing ceiling; and a round
         // that moved nothing and changed nothing will never move anything on
         // the next one either, so stop (#318). `revision`, not `char_count`:
@@ -1680,12 +1700,13 @@ impl Editor {
         let mut failed = false;
         'rounds: for _ in 0..clipped {
             let before = (self.current, self.sel.head(), self.sel.anchor(), self.current_buffer().revision());
-            for step in &steps {
+            self.macro_queue = steps.iter().cloned().collect();
+            while let Some(step) = self.macro_queue.pop_front() {
                 match step {
                     crate::input::MacroStep::Key(key) => {
-                        self.on_key(*key);
+                        self.on_key(key);
                     }
-                    crate::input::MacroStep::Commit(text) => self.insert_committed(text),
+                    crate::input::MacroStep::Commit(text) => self.insert_committed(&text),
                 }
                 // vim flushes the rest of the macro, every round still to
                 // come included, at the first motion that fails.
@@ -1708,6 +1729,7 @@ impl Editor {
             }
         }
         self.replaying = false;
+        self.macro_queue.clear();
         // A macro `:normal` plays fails its line's keys with it.
         self.macro_failed = failed && self.normal_depth > 0;
         if count > clipped {

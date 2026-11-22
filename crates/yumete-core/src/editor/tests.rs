@@ -46334,3 +46334,24 @@ fn the_unnamed_register_can_be_named() {
         assert_eq!((ed.current_buffer().text().as_str(), vim_at(&ed)), (want, at), "{keys}");
     }
 }
+
+/// **A vim macro may play itself** (measured in nvim): `qaq`, then a
+/// recording that ends in `@a`, runs down the lines until its `j` fails on
+/// the last one, and a count before it is spent the same way.
+#[test]
+fn a_vim_macro_plays_itself_until_a_motion_fails() {
+    let text = "a1\na2\na3\na4\n";
+    for keys in ["qaqqa0xj@aqk@a", "qaqqa0xj@aqk2@a"] {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        assert_eq!((ed.current_buffer().text().as_str(), vim_at(&ed)), ("\n2\n3\n4\n", (4, 1)), "{keys}");
+    }
+    // One that only ever plays itself stops.
+    let mut ed = typed_vim(text);
+    feed_vim(&mut ed, "qbqqb@bq@b");
+    assert_eq!(ed.current_buffer().text(), text);
+    // `@b` recorded into `a` is the two keys typed, not `b`'s keys as well.
+    let mut ed = typed_vim(text);
+    feed_vim(&mut ed, "qbxqqa@bq@a");
+    assert_eq!(ed.current_buffer().text(), "\na2\na3\na4\n");
+}
