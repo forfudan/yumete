@@ -75,6 +75,7 @@ pub mod units;
 pub mod usage;
 pub mod vcs;
 pub mod versions;
+pub mod whitespace;
 pub mod wiki;
 pub mod window;
 pub mod word;
