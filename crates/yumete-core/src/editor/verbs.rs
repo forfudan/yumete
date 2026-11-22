@@ -44,6 +44,7 @@ impl Editor {
         // 會把那個 5 記到下一次插入上——下一次打一個字就
         // 變成五個。進門清，比每一條出門的路都清一遍可靠。
         self.insert_again = 0;
+        self.opened_past_the_end = false;
         self.insert_opened = None;
         // 出門退不退那一格，由進門的那一個鍵說（`a` 說退）——所以進門先清。
         self.restore_caret = false;

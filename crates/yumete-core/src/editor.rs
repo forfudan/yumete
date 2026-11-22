@@ -3059,6 +3059,10 @@ pub struct Editor {
     /// The words were read during this stay in Insert mode: they are read
     /// once per stay, not on every key, and read again after `Esc`.
     words_read_in_insert: bool,
+    /// This Insert put a line break after a last line that had none, so
+    /// the line it opened is the empty line after the file's last break
+    /// until something is typed on it (see [`Editor::leave_insert`]).
+    opened_past_the_end: bool,
     /// The words of every line read so far, by the line's hash.
     line_words: HashMap<u64, suggest::LineWords>,
     /// Each open buffer's text as one string, at the revision it was read,
@@ -4948,6 +4952,7 @@ impl Editor {
             word_completion: 7,
             word_index: HashMap::new(),
             words_read_in_insert: false,
+            opened_past_the_end: false,
             redraw: false,
             line_words: HashMap::new(),
             run_texts: HashMap::new(),

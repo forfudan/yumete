@@ -337,9 +337,11 @@ impl Editor {
             }
             self.overwritten.extend(gone);
         }
+        let past_the_end = self.unterminated_end(at) && text.contains('\n');
         if !self.edit_insert(at, text) {
             return;
         }
+        self.opened_past_the_end |= past_the_end;
         let n = text.chars().count();
         // `i`'s selection is ahead of the caret, and moves with the text.
         let tail = self.sel.anchor();
@@ -562,6 +564,31 @@ impl Editor {
         }
     }
 
+    /// Whether `at` is the end of a file whose last line has no line break.
+    fn unterminated_end(&self, at: usize) -> bool {
+        let rope = self.current_buffer().rope();
+        at == rope.len_chars() && at > 0 && rope.char(at - 1) != '\n'
+    }
+
+    /// **An empty line opened after a last line with no break is kept**
+    /// when Insert ends with nothing typed on it, as vim keeps it: the
+    /// buffer's text would read that line as the break the file lacks, so
+    /// one more break holds it, as the break vim adds on writing would.
+    pub(super) fn keep_the_line_opened_past_the_end(&mut self) {
+        if !std::mem::take(&mut self.opened_past_the_end) || !self.keymap_rules().vim_registers {
+            return;
+        }
+        let rope = self.current_buffer().rope();
+        let len = rope.len_chars();
+        if self.sel.head() != len || len == 0 || rope.char(len - 1) != '\n' {
+            return;
+        }
+        let ending = self.current_buffer().ending().to_string();
+        if self.edit_insert(len, &ending) {
+            self.set_cursor(len);
+        }
+    }
+
     pub(super) fn open_line_below(&mut self) {
         if self.refuse_readonly() {
             return;
@@ -598,6 +625,7 @@ impl Editor {
         let indent = self.indent_for_a_line_after(self.cursor_line(), None, end);
         // **The file's own line ending** (#309), not a literal `\n`.
         let ending = self.current_buffer().ending();
+        let past_the_end = self.unterminated_end(end);
         let done = self.without_cell_guard(|e| {
             e.current_buffer_mut().insert(end, &format!("{ending}{indent}{row}"))
         });
@@ -608,6 +636,7 @@ impl Editor {
         self.sel.set_anchor(self.sel.head());
         self.insert_begins_the_change();
         self.enter_insert();
+        self.opened_past_the_end = past_the_end;
         self.note_fresh_indent(indent.chars().count(), false);
     }
 

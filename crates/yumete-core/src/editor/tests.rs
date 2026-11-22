@@ -46743,3 +46743,21 @@ fn the_previous_context_mark_after_jumping_back_is_where_the_walk_began() {
         assert_eq!(vim_at(&ed).0, line, "{keys:?}");
     }
 }
+
+/// **An empty line opened after a last line with no break is kept** (as
+/// nvim keeps it): `o` or `A` Enter, then Esc with nothing typed, leaves an
+/// empty last line, which a file with no final break could not hold.
+#[test]
+fn an_empty_line_opened_after_an_unterminated_last_line_is_kept() {
+    for (keys, want, at) in [
+        ("jo⎋", "sea\nsky\n\n", (3, 1)),
+        ("jA⏎⎋", "sea\nsky\n\n", (3, 1)),
+        ("jo⏎⎋", "sea\nsky\n\n\n", (4, 1)),
+        ("jox⎋", "sea\nsky\nx", (3, 1)),
+        ("jo⎋u", "sea\nsky", (2, 1)),
+    ] {
+        let mut ed = typed_vim("sea\nsky");
+        feed_vim(&mut ed, keys);
+        assert_eq!((ed.current_buffer().text().as_str(), vim_at(&ed)), (want, at), "{keys}");
+    }
+}
