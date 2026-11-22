@@ -115,6 +115,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **vim's `` `[ `` after Insert `C-u` or `C-w` is where the cursor stood as the key was pressed**, as in vim, whose Insert starts over there, instead of where the Insert first began.
 - **vim's `v`, `V` and `C-v` inside Visual mode switch to their kind of Visual**, as in vim: `Vjv` selects characters from where `V` was pressed, `Vj` `C-v` a block between the two ends, and `v` or `V` in a block characters or lines over its corners, instead of leaving Visual mode or starting again at the cursor; `V` under `V` leaves Visual mode.
 - **vim's `/` in Visual mode puts the cursor on the first character of the match**, as in vim and as in Normal mode, instead of its last, so `v/ow` then `d` keeps the `w`.
+- **vim's `*` and `#` go to a word or a Visual selection found only once**, as in vim: the cursor goes to its start and Visual mode ends, instead of staying where it was, still selecting.
 
 ## 0.24.0 · 2026-11-17
 

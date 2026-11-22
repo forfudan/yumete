@@ -47513,3 +47513,17 @@ fn a_visual_search_lands_on_the_match_start() {
     feed_vim(&mut ed, "wV/at⏎");
     assert_eq!(vim_at(&ed), (3, 7));
 }
+
+/// **vim's `*` goes to the only match there is** (measured in nvim): the
+/// search wraps round to it, so the cursor lands on the word's start, and
+/// from Visual mode on the selection's start with Visual mode ended.
+#[test]
+fn star_goes_to_the_only_match() {
+    let mut ed = typed_vim("red fox jumps\nblue owl sings\ngrey cat naps\n");
+    feed_vim(&mut ed, "wwll*");
+    assert_eq!(vim_at(&ed), (1, 9));
+    let mut ed = typed_vim("red fox jumps\nblue owl sings\ngrey cat naps\n");
+    feed_vim(&mut ed, "wwlvl*d⎋");
+    assert_eq!(ed.current_buffer().text(), "red fox jumps\nblue owl sings\ngrey cat naps\n");
+    assert_eq!(vim_at(&ed), (1, 10));
+}

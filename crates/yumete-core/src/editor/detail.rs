@@ -413,7 +413,10 @@ impl Editor {
         }
         let Some((pattern, needle, begins)) = self.what_to_look_for(whole, false) else { return };
         let spans = self.every_match(&pattern);
-        if spans.len() <= 1 {
+        // **vim's goes there even when it is the only one**: the search
+        // wraps round to it, so the cursor lands on its start and Visual
+        // mode ends, as with any other match.
+        if spans.is_empty() || (spans.len() == 1 && !self.as_vim()) {
             self.status = say!("find.only-here", needle);
             self.hits = None;
             return;
