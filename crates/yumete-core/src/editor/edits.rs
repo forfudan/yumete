@@ -329,8 +329,8 @@ impl Editor {
             let room = motion::line_end(rope, at).saturating_sub(at);
             let want = text.chars().count();
             let take = want.min(room);
-            let gone: Vec<Option<char>> = (0..want)
-                .map(|n| (n < take).then(|| rope.char(at + n)))
+            let gone: Vec<Overwrote> = (0..want)
+                .map(|n| Overwrote::Char((n < take).then(|| rope.char(at + n))))
                 .collect();
             if take > 0 && !self.edit_remove(at..at + take) {
                 return;
@@ -856,6 +856,20 @@ impl Editor {
             }
         }
         self.refresh_goal_column();
+    }
+
+    /// Backspace over a line break Replace mode's Enter made: the break
+    /// goes, and the blanks it took down come back after the caret.
+    pub(super) fn join_the_break_back(&mut self, dropped: &str) {
+        let at = self.sel.head();
+        let back = motion::prev_grapheme(self.current_buffer().rope(), at);
+        if back >= at || !self.edit_remove(back..at) {
+            return;
+        }
+        if !dropped.is_empty() && !self.edit_insert(back, dropped) {
+            return;
+        }
+        self.set_cursor(back);
     }
 
     /// 覆寫模式下退格：往回一格，把 `was` 放回去（`None` 是那裏本來就没有字）。

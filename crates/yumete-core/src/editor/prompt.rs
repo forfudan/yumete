@@ -335,10 +335,32 @@ impl Editor {
     }
 
     /// A line break, carrying the indent, a list's marker or a pair's inside.
+    ///
+    /// **In Replace mode it replaces nothing**, as vim's does: it splits the
+    /// line as Insert's Enter does, and Backspace takes back what it put on
+    /// the new line, then joins the line again with the blanks it took down
+    /// put back.
     pub(super) fn insert_newline(&mut self) {
+        if !self.overwriting {
+            self.break_the_line();
+            return;
+        }
+        self.overwriting = false;
+        let dropped = self.break_the_line();
+        self.overwriting = true;
+        let rope = self.current_buffer().rope();
+        let head = self.sel.head();
+        let put = head - motion::line_start(rope, head);
+        self.overwritten.push(Overwrote::Break(dropped));
+        self.overwritten.extend((0..put).map(|_| Overwrote::Char(None)));
+    }
+
+    /// [`Self::insert_newline`] as Insert types it; answers the blanks after
+    /// the caret it dropped.
+    fn break_the_line(&mut self) -> String {
         // A list carries itself down, and an empty item ends (#418).
         if self.continue_the_list() {
-            return;
+            return String::new();
         }
         // The file's own line ending, so that one keystroke does not
         // leave a CRLF manuscript with two kinds of line in it (#309).
@@ -347,7 +369,7 @@ impl Editor {
         let base = self.indent_of_line(line, Some(column));
         if let Some(typed) = self.open_the_pair(&ending, &base) {
             self.insert_recording.push_str(&typed);
-            return;
+            return String::new();
         }
         // **縮進跟着下來**，同 vim 的 `autoindent`、helix 的 `insert_newline`：
         // 不然代碼檔裏每按一次 Enter 光標就回到第 0 列。
@@ -362,11 +384,13 @@ impl Editor {
         // the new line has its indent already, so Enter in a line's indent
         // moves the line down by what stood before the caret, and `cw` then
         // Enter leaves no blank in front of the text carried down.
+        let mut dropped = String::new();
         if self.writes_code() && self.keymap_rules().vim_indent_keys {
             let head = self.sel.head();
-            let blanks = self.current_buffer().rope().chars_at(head).take_while(|c| matches!(c, ' ' | '\t')).count();
+            dropped = self.current_buffer().rope().chars_at(head).take_while(|c| matches!(c, ' ' | '\t')).collect();
+            let blanks = dropped.chars().count();
             if blanks > 0 && !self.edit_remove(head..head + blanks) {
-                return;
+                return String::new();
             }
         }
         // 重放（`3i…`、`.`）是把記下來的字串原樣插進去的，所以縮進要記在
@@ -377,6 +401,7 @@ impl Editor {
         self.insert_str(&format!("{ending}{indent}"));
         self.current_buffer_mut().split_lines(false);
         self.note_fresh_indent(indent.chars().count(), true);
+        dropped
     }
 
         // **`C-h` is Backspace** and **`C-j` is Enter** — the two the
@@ -389,8 +414,37 @@ impl Editor {
         // **覆寫模式的退格是「還回去」**，同 vim：往回走一格，把那個位置
         // 上原來的字放回來。蓋到行尾外面去的那幾個没有原文，就只是刪掉。
         if self.overwriting {
-            if let Some(was) = self.overwritten.pop() {
-                return self.put_back_what_was_overwritten(was);
+            match self.overwritten.pop() {
+                Some(Overwrote::Break(dropped)) => return self.join_the_break_back(&dropped),
+                // What Enter put on the new line goes as Insert's
+                // Backspace takes an indent back.
+                Some(Overwrote::Char(None))
+                    if self.keymap_rules().vim_indent_keys
+                        && self.caret_in_the_indent().is_some_and(|(start, _)| self.sel.head() > start) =>
+                {
+                    let before = self.sel.head();
+                    self.vim_backspace_in_the_indent();
+                    for _ in 1..before.saturating_sub(self.sel.head()) {
+                        match self.overwritten.last() {
+                            Some(Overwrote::Char(None)) => self.overwritten.pop(),
+                            _ => break,
+                        };
+                    }
+                    return;
+                }
+                Some(Overwrote::Char(was)) => return self.put_back_what_was_overwritten(was),
+                // Before where the Replace began nothing was typed over, and
+                // Backspace only moves back, over a line's start too, as
+                // vim's does.
+                None => {
+                    let at = self.sel.head();
+                    let floor = self.insert_bounds().map_or(0, |(start, _)| start);
+                    let back = motion::prev_grapheme(self.current_buffer().rope(), at).max(floor);
+                    if back < at {
+                        self.set_cursor(back);
+                    }
+                    return;
+                }
             }
         }
         let before = self.sel.head();

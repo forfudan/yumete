@@ -46973,3 +46973,28 @@ fn a_vim_put_into_a_file_of_mixed_line_breaks_keeps_its_breaks() {
         assert_eq!(ed.current_buffer().text(), want, "{text:?} {keys}");
     }
 }
+
+/// **vim's Enter in Replace mode replaces nothing** (`:h Replace`, measured
+/// in nvim): it splits the line as Insert's Enter does, and Backspace takes
+/// back the indent, then the break, with the blanks it took down put back.
+/// Before where the Replace began, Backspace only moves back.
+#[test]
+fn vims_enter_in_replace_mode_splits_the_line_and_backspace_joins_it() {
+    let text = "fn main() {\n    let x = a +   b;\n}\n";
+    let run = |keys: &str, backs: usize, then: &str| {
+        let mut ed = typed_vim(text);
+        ed.execute(":syntax rust").unwrap();
+        feed_vim(&mut ed, keys);
+        for _ in 0..backs {
+            ed.on_key(Key::Backspace);
+        }
+        feed_vim(&mut ed, &format!("{then}⎋"));
+        ed.current_buffer().text()
+    };
+    assert_eq!(run("jwR⏎", 0, ""), "fn main() {\n    \n    let x = a +   b;\n}\n");
+    assert_eq!(run("jwR⏎", 1, ""), "fn main() {\n    \nlet x = a +   b;\n}\n");
+    assert_eq!(run("jwR⏎", 2, ""), text);
+    assert_eq!(run("jf+lR⏎", 0, ""), "fn main() {\n    let x = a +\n    b;\n}\n");
+    assert_eq!(run("jf+lR⏎", 2, ""), text);
+    assert_eq!(run("jjR", 2, "x"), "fn main() {\n    let x = a +   bx\n}\n");
+}

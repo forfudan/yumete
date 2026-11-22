@@ -3631,7 +3631,7 @@ pub struct Editor {
     overwriting: bool,
     /// 蓋掉的字，一個進去的字一格——原處没有字（蓋到行尾外面去了）就是 `None`。
     /// 退格照這張單子倒着還回去，同 vim。
-    overwritten: Vec<Option<char>>,
+    overwritten: Vec<Overwrote>,
     /// Whether the insert was opened with `o` (`Some(true)`) or `O`
     /// (`Some(false)`) — those repeat 「a new line, and this on it」, not just
     /// the text.
@@ -5811,6 +5811,15 @@ struct Substitution<'a> {
     /// The `j` flag: 簡繁異體 are one character — `书` replaces 書.
     glyphs: bool,
     rows: crate::command::Rows,
+}
+
+/// **What one key typed in Replace mode took**, for Backspace to give back.
+enum Overwrote {
+    /// The character it wrote over, or `None` past the line's end.
+    Char(Option<char>),
+    /// Nothing: it was Enter, which splits the line. These are the blanks
+    /// after the caret that the new line's indent took the place of.
+    Break(String),
 }
 
 /// The lines a `:s` will touch, already resolved to 0-based line numbers.
