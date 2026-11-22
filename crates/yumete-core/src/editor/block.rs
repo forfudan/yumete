@@ -390,10 +390,15 @@ impl super::Editor {
                 // vim-surround's `xmap S` holds in a block too.
                 Key::Char('S') if self.keymap_rules().vim_surround => return self.begin_block_surround(block),
                 // `R` and `S` change the block's whole lines (vim's
-                // `v_visop`), as `V` then `c` would.
+                // `v_visop`), as `V` then `c` would: `.` repeats it over as
+                // many lines and `u` comes back where it would after `V`.
                 Key::Char('R' | 'S') => {
                     self.block_to_visual(block, true);
-                    return self.vim_visual_key('s');
+                    self.edit_visual = self.visual_replay();
+                    self.undo_lands_at = self.vim_visual_start();
+                    self.vim_visual_key('s');
+                    self.undo_lands_at = None;
+                    return;
                 }
                 Key::Char('c' | 's' | 'C') => {
                     let block = match key {

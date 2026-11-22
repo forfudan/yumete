@@ -47865,3 +47865,17 @@ fn vims_undo_after_changing_lines_lands_on_the_second() {
         assert_eq!(vim_at(&ed), at, "{keys}");
     }
 }
+
+/// **`.` after vim's `R` in a block changes as many whole lines**, as
+/// after `V` then `c` (measured in nvim), and `u` comes back to the second
+/// line of the change, as after `V` then `c`.
+#[test]
+fn vims_block_r_repeats_over_whole_lines() {
+    let mut ed = typed_vim("ant\nbee\ncat\ndog\nelk\n");
+    feed_vim(&mut ed, "lᵛjRpq⎋j.");
+    assert_eq!(ed.current_buffer().text(), "pq\npq\nelk\n");
+    let mut ed = typed_vim("ant\nbee\ncat\ndog\nelk\n");
+    feed_vim(&mut ed, "lᵛjRpq⎋u");
+    assert_eq!(ed.current_buffer().text(), "ant\nbee\ncat\ndog\nelk\n");
+    assert_eq!(vim_at(&ed), (2, 1));
+}

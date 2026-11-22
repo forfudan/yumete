@@ -906,7 +906,7 @@ impl Editor {
     /// selection as many characters on one line, or on the last of several
     /// lines up to the same column; to each line's end after `$`. A block
     /// is repeated by [`Self::block_repeat`] instead.
-    fn visual_replay(&self) -> Option<Vec<Key>> {
+    pub(super) fn visual_replay(&self) -> Option<Vec<Key>> {
         if !self.as_vim() || !self.extend || self.block.is_some() {
             return None;
         }
