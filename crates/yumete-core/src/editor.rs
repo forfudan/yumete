@@ -2834,6 +2834,11 @@ pub struct Editor {
     /// Whether the next paste leaves the cursor just past what it put
     /// (vim's `gp` `gP`).
     paste_goes_past: bool,
+    /// **How Insert's `C-r` puts the register it waits for**: `C-r C-r`
+    /// (`'r'`) literally, as `C-r` already does; `C-r C-o` (`'o'`) and
+    /// `C-r C-p` (`'p'`) as `P` puts it, lines above the line and a block
+    /// as a block, `C-p` fixing the indent (`:h i_CTRL-R_CTRL-O`).
+    insert_register_how: Option<char>,
     /// Where this Insert began, for vim's `C-u` and `C-w`, which take back
     /// what was typed before going further (`:h i_CTRL-U`).
     insert_began: Option<usize>,
@@ -4858,6 +4863,7 @@ impl Editor {
             paste_copies: 1,
             paste_fixes_indent: false,
             paste_goes_past: false,
+            insert_register_how: None,
             insert_began: None,
             session_names: Vec::new(),
             vim_line_column: 0,

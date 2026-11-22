@@ -54,13 +54,26 @@ impl Editor {
         // `C-r` 在等寄存器的名字。Warning: 和 `Pending::UndoBreak` 一樣，這一格
         // 要在這裏吞：`Pending` 的分派只在 Normal 那一支跑。
         if self.pending == Pending::Register {
+            // vim's `C-r C-r`, `C-r C-o` and `C-r C-p` still wait for the name.
+            if let (Key::Ctrl(how @ ('r' | 'o' | 'p')), true, None) = (key, self.vim_keymap(), self.insert_register_how) {
+                self.insert_register_how = Some(how);
+                return;
+            }
             self.pending = Pending::None;
-            match key {
+            let how = self.insert_register_how.take();
+            let name = match key {
                 // `"` 是無名的那一個，同 vi。
-                Key::Char('"') => self.insert_register(None),
-                Key::Char(name) => self.insert_register(Some(name)),
+                Key::Char('"') => None,
+                Key::Char(name) => Some(name),
                 // 別的鍵當成「算了」，不往下走——不然 `C-r` 之後按 `Esc` 會退出插入。
-                _ => self.status = say!("edit.register-cancelled"),
+                _ => {
+                    self.status = say!("edit.register-cancelled");
+                    return;
+                }
+            };
+            match how {
+                Some(how @ ('o' | 'p')) => self.put_register_in_insert(name, how == 'p'),
+                _ => self.insert_register(name),
             }
             return;
         }

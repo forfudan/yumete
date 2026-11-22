@@ -45509,6 +45509,41 @@ fn a_vim_put_ends_its_last_mark_as_nvim_does() {
     }
 }
 
+/// **Insert's `C-r` puts a block register as nvim 0.12 does**: the unnamed
+/// one's pieces as lines (`C-r "`, `C-r C-r "`); a register named by its
+/// letter or number as a block from the cursor's column down, as
+/// `C-r C-o` puts any block, the cursor after its last piece. `C-r C-o`
+/// puts lines above the cursor's line, and the Insert is one undo step.
+#[test]
+fn insert_ctrl_r_puts_a_block_register_as_nvim_does() {
+    let text = "sun moon\nab\nred blue\nhot cold\nend\n";
+    let cases: &[(&str, &str, (usize, usize))] = &[
+        ("l^jlyjjjA®\"X\u{1b}", "sun moon\nab\nred blue\nhot coldun\nbX\nend\n", (5, 2)),
+        ("l^jlyjjjA®®\"X\u{1b}", "sun moon\nab\nred blue\nhot coldun\nbX\nend\n", (5, 2)),
+        ("l^jlyjjjA®0X\u{1b}", "sun moon\nab\nred blue\nhot coldun\nend     bX\n", (5, 10)),
+        ("l^jlyjjjwi®ø\"X\u{1b}", "sun moon\nab\nred blue\nhot uncold\nend bX\n", (5, 6)),
+        ("yjjjwi®ø\"X\u{1b}", "sun moon\nab\nsun moon\nab\nXred blue\nhot cold\nend\n", (5, 1)),
+        ("l^jlyjjjA®ø\"X\u{1b}u", text, (4, 8)),
+    ];
+    for &(keys, want, at) in cases {
+        let mut ed = typed_vim(text);
+        for c in keys.chars() {
+            ed.on_key(match c {
+                '^' => Key::Ctrl('v'),
+                '®' => Key::Ctrl('r'),
+                'ø' => Key::Ctrl('o'),
+                '\u{1b}' => Key::Esc,
+                c => Key::Char(c),
+            });
+        }
+        let rope = ed.current_buffer().rope().clone();
+        let head = ed.sel.head();
+        let line = rope.char_to_line(head);
+        let cursor = (line + 1, head - rope.line_to_char(line) + 1);
+        assert_eq!((ed.current_buffer().text().as_str(), cursor), (want, at), "{keys:?}");
+    }
+}
+
 /// **A linewise Visual `d`, `>` or `<` leaves the cursor in the column it
 /// wanted** (nvim's 'nostartofline', measured with `sw=4 et`): the one on
 /// the screen when `V` was pressed, a wide character counting two, `$`

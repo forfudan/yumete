@@ -952,8 +952,14 @@ impl Editor {
     /// 那一出一進白白多出一個撤銷點，一句話要按兩次 `u` 纔退得乾淨。
     pub(super) fn insert_register(&mut self, name: Option<char>) {
         // The registers `"ap` reads, the ones that answer (`%` `/` `.` `#`)
-        // too.
-        let text = self.register_text(name);
+        // too. A block named by its register goes in as a block, as
+        // `C-r C-o` puts it; the unnamed one's pieces go in as lines, a break
+        // between each and none after the last (measured in nvim 0.12).
+        let text = match (self.held_block(name), name) {
+            (Some(_), Some(named)) if named != '"' => return self.put_register_in_insert(name, false),
+            (Some((pieces, _)), _) => pieces.join(self.current_buffer().ending()),
+            (None, _) => self.register_text(name),
+        };
         if text.is_empty() {
             self.status = say!("edit.register-is-empty");
             return;
@@ -962,6 +968,46 @@ impl Editor {
         if self.edit_insert(at, &text) {
             self.set_cursor(at + text.chars().count());
         }
+    }
+
+    /// **vim's Insert `C-r C-o` and `C-r C-p`**: the register put as `P`
+    /// puts it, the cursor left just past it (vim's `do_put` with
+    /// `PUT_CURSEND`). A block goes in as a block from the cursor's column
+    /// down, the cursor after its last line's piece; lines go above the
+    /// cursor's line, the cursor at that line's start, and with `C-p` they
+    /// take its indent; text within lines goes in as `C-r` puts it.
+    pub(super) fn put_register_in_insert(&mut self, name: Option<char>, fix_indent: bool) {
+        if let Some((pieces, width)) = self.held_block(name) {
+            let grouping = self.current_buffer_mut().begin_undo_group();
+            let before = self.current_buffer().revision();
+            self.paste_goes_past = true;
+            self.paste_pieces(false, &pieces, width);
+            self.paste_goes_past = false;
+            self.current_buffer_mut().end_undo_group(grouping);
+            // The Insert goes on from there, and `` `] `` with it.
+            if let (true, Some((first, _))) = (self.current_buffer().revision() != before, self.current_buffer().change_span()) {
+                let past = self.sel.head();
+                self.current_buffer_mut().set_change_span(first, past);
+            }
+            return;
+        }
+        let text = self.register_text(name);
+        let kind = name.filter(|n| n.is_ascii_alphanumeric()).map_or('"', |n| n.to_ascii_lowercase());
+        if !text.ends_with('\n') || self.charwise_breaks.contains(&kind) {
+            return self.insert_register(name);
+        }
+        let rope = self.current_buffer().rope();
+        let line = rope.char_to_line(self.sel.head().min(rope.len_chars()));
+        let at = rope.line_to_char(line);
+        let want = fix_indent.then(|| self.indent_columns(line));
+        if !self.edit_insert(at, &text) {
+            return;
+        }
+        let mut len = text.chars().count();
+        if let Some(want) = want {
+            len = len.saturating_add_signed(self.fix_pasted_indent(line..line + text.matches('\n').count(), want));
+        }
+        self.set_cursor(at + len);
     }
 
     /// Where this Insert began, when vim's keys should stop there: under the
@@ -2461,6 +2507,10 @@ impl Editor {
         let line = rope.char_to_line(end);
         if line_wise {
             return rope.line_to_char(line.min(motion::last_line(rope)));
+        }
+        // Insert's cursor may stand past a line's last character.
+        if self.mode == Mode::Insert {
+            return end;
         }
         match rope.get_char(end) {
             Some('\n' | '\r') | None if end > rope.line_to_char(line) => motion::prev_grapheme(rope, end),
