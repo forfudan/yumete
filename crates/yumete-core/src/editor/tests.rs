@@ -46693,3 +46693,33 @@ fn a_charwise_put_from_the_first_column_keeps_the_marks_on_its_line() {
         assert_eq!(ed.current_buffer().text(), want, "{keys}");
     }
 }
+
+/// **vim's `` `] `` after Insert `C-r C-o` of lines** (measured in nvim):
+/// the lines go above, and `` `] `` ends where the Insert goes on, at the
+/// cursor's line's start, or past what is typed there.
+#[test]
+fn the_change_mark_after_insert_put_of_lines_ends_where_the_insert_goes_on() {
+    let text = "one fish
+two fish
+red fish
+";
+    let cases: &[(&str, &str)] = &[
+        ("\"ayyjA-ʳºa⎋`]iX⎋", "one fish\none fish\nXtwo fish-\nred fish\n"),
+        ("\"ayyjA-ʳºaZ⎋`]iX⎋", "one fish\none fish\nZXtwo fish-\nred fish\n"),
+    ];
+    for &(keys, want) in cases {
+        let mut ed = typed_vim(text);
+        for c in keys.chars() {
+            match c {
+                'ʳ' => {
+                    ed.on_key(Key::Ctrl('r'));
+                }
+                'º' => {
+                    ed.on_key(Key::Ctrl('o'));
+                }
+                c => feed_vim(&mut ed, &c.to_string()),
+            }
+        }
+        assert_eq!(ed.current_buffer().text(), want, "{keys}");
+    }
+}

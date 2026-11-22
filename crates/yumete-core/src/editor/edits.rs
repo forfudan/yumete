@@ -1039,6 +1039,11 @@ impl Editor {
             len = len.saturating_add_signed(self.fix_pasted_indent(line..line + text.matches('\n').count(), want));
         }
         self.set_cursor(at + len);
+        // The Insert goes on from the line's start, and `` `] `` with it,
+        // as vim's ends where the Insert ends.
+        if let Some((first, _)) = self.current_buffer().change_span() {
+            self.current_buffer_mut().set_change_span(first, at + len);
+        }
     }
 
     /// Where this Insert began, when vim's keys should stop there: under the
