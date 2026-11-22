@@ -440,16 +440,13 @@ impl Editor {
     /// empty last line is not joined to the next.
     ///
     /// **In code the first line's indent stays** (autoindent, as nvim does),
-    /// as `o` keeps it; not when that line is only blanks.
+    /// as `o` keeps it; a line of blanks keeps them all, and they go again
+    /// if nothing is typed after them.
     pub(super) fn change_whole_lines(&mut self, first: usize, last: usize, cut: bool) {
         let rope = self.current_buffer().rope();
         let start = rope.line_to_char(first);
         let end = motion::line_end(rope, rope.line_to_char(last)).max(start);
-        let blank = rope.slice(start..motion::line_end(rope, start)).chars().all(char::is_whitespace);
-        let indent = match blank {
-            true => String::new(),
-            false => self.indent_of_line(first, None),
-        };
+        let indent = self.indent_of_line(first, None);
         if end == start && cut {
             self.store("\n".to_string());
         }

@@ -39406,7 +39406,9 @@ fn vims_linewise_change_keeps_the_indent_in_code() {
     assert_eq!(vim("jo"), "fn main() {\n    let a = 1;\n\n      \n\n\tb();\n}\n", "o too");
     assert_eq!(vim("jO"), "fn main() {\n\n    let a = 1;\n      \n\n\tb();\n}\n", "O too");
     assert_eq!(vim("jccx«"), "fn main() {\n    \n      \n\n\tb();\n}\n", "a key typed keeps it");
-    assert_eq!(vim("2jccq"), "fn main() {\n    let a = 1;\nq\n\n\tb();\n}\n", "a line of blanks keeps none");
+    assert_eq!(vim("2jccq"), "fn main() {\n    let a = 1;\n      q\n\n\tb();\n}\n", "a line of blanks keeps them");
+    assert_eq!(vim("2jcjq"), "fn main() {\n    let a = 1;\n      q\n\tb();\n}\n");
+    assert_eq!(vim("2jcc"), "fn main() {\n    let a = 1;\n\n\n\tb();\n}\n", "and they go if nothing is typed");
     // An empty line changed is not joined to the next.
     assert_eq!(vim("3jccq"), "fn main() {\n    let a = 1;\n      \nq\n\tb();\n}\n");
     assert_eq!(vim("3jVcq"), "fn main() {\n    let a = 1;\n      \nq\n\tb();\n}\n");
