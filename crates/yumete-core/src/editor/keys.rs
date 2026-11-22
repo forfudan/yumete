@@ -1023,6 +1023,12 @@ impl Editor {
         self.clamp_cursor();
     }
 
+    /// Whether the register a Visual `p` names holds nothing to put.
+    fn visual_put_has_nothing(&self) -> bool {
+        let named = self.pending_register;
+        !matches!(named, Some('+' | '*')) && self.held_block(named).is_none() && self.register_text(named).is_empty()
+    }
+
     pub(super) fn vim_visual_key(&mut self, c: char) {
         // `x`/`s` 原樣轉交：`d`/`c` 那兩個 arm 自己管整行與計數。
         if matches!(c, 'x' | 's') {
@@ -1037,6 +1043,19 @@ impl Editor {
         // `o` 只換頭，不動手也不收工——選區還是整行，`vim_lines` 要留着。
         if c == 'o' {
             return self.flip_selection();
+        }
+        // **`p` from an empty register still takes the selection** (nvim's
+        // `nv_put` deletes before it puts, then finds nothing to put): into
+        // the unnamed register as `d` would, or into none for `P`.
+        if matches!(c, 'p' | 'P') && self.visual_put_has_nothing() {
+            let named = self.pending_register;
+            self.pending_register = (c == 'P').then_some('_');
+            self.on_normal_key(Key::Char('d'));
+            self.status = match named {
+                Some(name) => say!("register.empty", name),
+                None => say!("register.nothing-yanked"),
+            };
+            return;
         }
         let lines = self.vim_lines;
         if self.vim_lines {

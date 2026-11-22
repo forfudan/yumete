@@ -46396,3 +46396,25 @@ fn first_non_blank_on_a_line_of_blanks_is_its_last_blank() {
         assert_eq!((ed.current_buffer().text().as_str(), vim_at(&ed)), (want, at), "{keys}");
     }
 }
+
+/// **vim's Visual `p` from an empty register still takes the selection**
+/// (measured in nvim, which deletes before it finds nothing to put): into
+/// the unnamed register for `p`, as `d` would, and into none for `P`; a
+/// block goes the same way.
+#[test]
+fn a_visual_put_from_an_empty_register_takes_the_selection() {
+    let text = "sun moon\nsea sky\nend\n";
+    let cases: &[(&str, &str, (usize, usize))] = &[
+        ("0jviw\"bp", "sun moon\n sky\nend\n", (2, 1)),
+        ("0yiwjviw\"bpp", "sun moon\n seasky\nend\n", (2, 4)),
+        ("0yiwjviw\"bPp", "sun moon\n sunsky\nend\n", (2, 4)),
+        ("0yiwjV\"bpp", "sun moon\nend\nsea sky\n", (3, 1)),
+        ("0yiwjlᵛjl\"bpp", "sun moon\ns easky\ne nd\n", (2, 3)),
+        ("0yiwjlᵛjl\"bPp", "sun moon\ns sunsky\ne\n", (2, 5)),
+    ];
+    for &(keys, want, at) in cases {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        assert_eq!((ed.current_buffer().text().as_str(), vim_at(&ed)), (want, at), "{keys}");
+    }
+}

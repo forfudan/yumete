@@ -958,6 +958,18 @@ impl super::Editor {
                 let kind = named.filter(|n| n.is_ascii_alphanumeric()).map_or('"', |n| n.to_ascii_lowercase());
                 let text = self.recall();
                 if text.is_empty() {
+                    // Still takes the block, as Visual `p` from an empty
+                    // register takes a selection (`vim_visual_key`).
+                    if !matches!(named, Some('+' | '*')) && self.as_vim() {
+                        let (first, _, left, _) = self.block_shape(block);
+                        let top_left = at_column(self.current_buffer().rope(), self.tab_stop(), first, left);
+                        let size = self.block_size(block);
+                        self.pending_register = (key == 'P').then_some('_');
+                        self.block_yank(block, false);
+                        self.block_delete(block);
+                        self.remember_block(size, 'd', "");
+                        self.leave_block(top_left);
+                    }
                     self.status = match named {
                         Some(name) => say!("register.empty", name),
                         None => say!("register.nothing-yanked"),

@@ -85,6 +85,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **vim macros may play themselves**, as in vim: `qaq`, then a recording ending in `@a`, then `@a` runs until a motion in it fails, instead of stopping after one level; a macro that does nothing but play itself stops at the writing ceiling.
 - **A count before vim's `/` or `?` goes to that match**, as in vim: `3/bar` then Enter lands on the third `bar` from the cursor instead of the first.
 - **vim's `^`, `_` and `'a` on a line of nothing but blanks go to its last blank**, as in vim, instead of its first column; `d^` there takes the blanks before it.
+- **vim's Visual `p` from an empty register still deletes the selection**, as in vim, and says the register is empty: `p` puts what it took in the unnamed register as `d` would, `P` keeps no copy, and a `C-v` block goes the same way.
 
 ## 0.24.0 · 2026-11-17
 

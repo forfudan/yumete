@@ -2171,6 +2171,8 @@ impl Editor {
             // Warning: **只有一段的時候它是「1」**，不是空的：`"#p` 在一個光標上貼一個 1 是
             // 說得通的，而貼一個空字符串看起來像鍵没按上。
             Some('#') => (self.edit_nth.unwrap_or(0) + 1).to_string(),
+            // vim's `""` read is the unnamed register.
+            Some('"') if self.keymap_rules().vim_registers => self.register_text(None),
             // **The read-only registers** (`:h quote.`, helix's `%`, `:`
             // and `/`): the file's name, the last `:` line, the last search,
             // and under vim the last Insert's text.
