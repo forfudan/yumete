@@ -453,6 +453,14 @@ impl Editor {
         }
     }
 
+    /// **vim's `0`, `^` and `Home` stay before a line's end after
+    /// `C-o`** (`nv_beginline` and `nv_home` clear `ins_at_eol`), under an
+    /// operator too: on a line of one character `C-o 0` comes back in front
+    /// of it, where [`Self::back_past_the_line_end`] would put it after.
+    pub(super) fn begin_the_line(&mut self) {
+        self.one_normal_eol = None;
+    }
+
     /// **記下延伸關掉那一刻的那一段**，`gv` 拿它重選（vim）。
     ///
     /// 和 [`Self::hold_the_pane`] 同一個位置、同一條理由：這件事要在**每一鍵之後**
@@ -1702,6 +1710,9 @@ impl Editor {
     /// keys could never say.
     fn run_vim_step(&mut self, op: char, step: crate::vim::Step) {
         self.settle_alias_count();
+        if matches!(step.motion, motion::Motion::LineStart | motion::Motion::LineFirstNonBlank) {
+            self.begin_the_line();
+        }
         let given = self.count.take();
         let n = given.unwrap_or(1).max(1);
         let start = self.sel.head();

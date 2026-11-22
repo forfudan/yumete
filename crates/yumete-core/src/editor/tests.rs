@@ -47783,3 +47783,30 @@ fn vims_bare_range_before_a_bar_goes_to_the_line() {
     assert_eq!(ed.current_buffer().text(), "a\nd\nb\na\n");
     assert_eq!(vim_at(&ed), (2, 1));
 }
+
+
+/// **vim's `0`, `^` and `Home` after Insert `C-o` stay in front of a
+/// one-character line** (vim's `nv_beginline` forgets that `C-o` was
+/// pressed past the end, measured in nvim), under `d` too; `|` does not.
+#[test]
+fn vims_line_start_after_insert_ctrl_o_stays_in_front() {
+    for keys in ["Aᵒ0Q⎋", "Aᵒ^Q⎋"] {
+        let mut ed = typed_vim("z\n");
+        feed_vim(&mut ed, keys);
+        assert_eq!(ed.current_buffer().text(), "Qz\n", "{keys}");
+    }
+    let mut ed = typed_vim("z\n");
+    feed_vim(&mut ed, "Aᵒ");
+    ed.on_key(Key::Home);
+    feed_vim(&mut ed, "Q⎋");
+    assert_eq!(ed.current_buffer().text(), "Qz\n");
+    for keys in ["Aᵒd0Q⎋", "Aᵒd^Q⎋"] {
+        let mut ed = typed_vim("red fox jumps\n");
+        feed_vim(&mut ed, keys);
+        assert_eq!(ed.current_buffer().text(), "Qs\n", "{keys}");
+    }
+    let mut ed = typed_vim("z\n");
+    feed_vim(&mut ed, "Aᵒ|Q⎋");
+    assert_eq!(ed.current_buffer().text(), "zQ\n");
+}
+

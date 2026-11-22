@@ -37,7 +37,10 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     // vim's `ge` / `gE`: back to a word's end.
     (NormalCmd::JumpPrevWordEnd, |e, cx| e.jump_back_to_word_end(cx, false), Key::Char('e')),
     (NormalCmd::JumpPrevLongWordEnd, |e, cx| e.jump_back_to_word_end(cx, true), Key::Char('E')),
-    (NormalCmd::GotoFirstNonwhitespace, |e, _| e.goto_motion(motion::Motion::LineFirstNonBlank), Key::Char('s')),
+    (NormalCmd::GotoFirstNonwhitespace, |e, _| {
+        e.begin_the_line();
+        e.goto_motion(motion::Motion::LineFirstNonBlank);
+    }, Key::Char('s')),
     (NormalCmd::GotoFile, |e, _| e.goto_file_under_cursor(), Key::Char('f')),
     (NormalCmd::FollowLink, |e, _| e.follow_link(), Key::Char('L')),
     (NormalCmd::OpenLink, |e, _| e.open_link(), Key::Char('x')),

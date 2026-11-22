@@ -1166,6 +1166,7 @@ impl Editor {
             let pos = motion::line_start(self.current_buffer().rope(), self.sel.head());
             return self.set_cursor(pos);
         }
+        self.begin_the_line();
         self.goto_motion(motion::Motion::LineStart);
     }
 
