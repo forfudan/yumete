@@ -46562,3 +46562,23 @@ fn a_join_keeps_the_marks_of_a_line_of_blanks() {
         assert_eq!(ed.current_buffer().text(), want, "{keys}");
     }
 }
+
+/// **A macro played by a `:normal` inside a macro runs where `:normal`
+/// stands** (measured in nvim): its keys are not left for the macro outside
+/// to press after the `:normal` is done. The ceiling on macros played inside
+/// macros counts how deep they go, not how many play.
+#[test]
+fn a_macro_played_by_normal_inside_a_macro_runs_in_place() {
+    let mut ed = typed_vim("pen\ncup\nhat\n");
+    feed_vim(&mut ed, "qbxqu");
+    feed_vim(&mut ed, "qa:%norm @b⏎q");
+    feed_vim(&mut ed, "u@a");
+    assert_eq!(ed.current_buffer().text(), "en\nup\nat\n");
+    let mut ed = typed_vim("pen\n");
+    feed_vim(&mut ed, "qbAy⎋q");
+    feed_vim(&mut ed, "qa@b@bq");
+    let before = ed.current_buffer().text().matches('y').count();
+    feed_vim(&mut ed, "5001@a");
+    let after = ed.current_buffer().text().matches('y').count();
+    assert_eq!(after - before, 10_002, "every play plays");
+}

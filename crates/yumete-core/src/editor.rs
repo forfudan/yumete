@@ -2904,10 +2904,16 @@ pub struct Editor {
     /// **The keys a macro playing has still to press**, as vim's typeahead
     /// holds them: a macro played inside one (vim's recursive `@a`) puts
     /// its keys in front of the rest instead of playing them on a deeper
-    /// call, so it runs until a motion fails, however deep it goes.
-    macro_queue: std::collections::VecDeque<crate::input::MacroStep>,
-    /// How many macros the one playing has played inside itself so far.
-    macro_nested: usize,
+    /// call, so it runs until a motion fails, however deep it goes. Each
+    /// key carries how deep in macros played inside macros it was queued.
+    macro_queue: std::collections::VecDeque<(crate::input::MacroStep, usize)>,
+    /// How deep in macros played inside macros the key being pressed is.
+    macro_depth: usize,
+    /// **Where the queue is pressed from**: the `:normal` depth and alias
+    /// state of the player. A macro played from deeper — a `:normal @b` or
+    /// a binding the macro's keys run — plays where it stands, as vim's
+    /// typeahead runs it before the `:normal` or binding goes on.
+    macro_level: (usize, bool),
     /// **A motion failed while a vim macro played**: vim beeps and flushes
     /// what is left of the macro (`:h q`, `beep_flush`), so `10@a` whose `j`
     /// meets the last line stops there instead of writing on that line ten
@@ -4894,7 +4900,8 @@ impl Editor {
             last_played: None,
             replaying: false,
             macro_queue: std::collections::VecDeque::new(),
-            macro_nested: 0,
+            macro_depth: 0,
+            macro_level: (0, false),
             macro_failed: false,
             normal_depth: 0,
             plain_keys: false,

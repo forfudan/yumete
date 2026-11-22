@@ -84,7 +84,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **vim's `p` of a lone line break after the last line of a file with no final line break opens an empty line**, as in vim, instead of only adding the break the file lacked.
 - **A register named before vim's `v`, `V` or `C-v` is let go**, as in vim: `"av` then `y` yanks into the unnamed register only; a register named inside Visual mode still names where the yank goes.
 - **vim's `""p` puts the unnamed register**, as in vim, instead of nothing; `""y` and `""d` yank and delete into `"0` as well, which the unnamed register then holds.
-- **vim macros may play themselves**, as in vim: `qaq`, then a recording ending in `@a`, then `@a` runs until a motion in it fails, instead of stopping after one level; a macro that does nothing but play itself stops at the writing ceiling.
+- **vim macros may play themselves**, as in vim: `qaq`, then a recording ending in `@a`, then `@a` runs until a motion in it fails, instead of stopping after one level; a macro that does nothing but play itself stops at the writing ceiling. A macro played by `:normal` or a key binding inside a macro runs where it is played.
 - **A count before vim's `/` or `?` goes to that match**, as in vim: `3/bar` then Enter lands on the third `bar` from the cursor instead of the first.
 - **vim's `^`, `_` and `'a` on a line of nothing but blanks go to its last blank**, as in vim, instead of its first column; `d^` there takes the blanks before it.
 - **vim's Visual `p` from an empty register still deletes the selection**, as in vim, and says the register is empty: `p` puts what it took in the unnamed register as `d` would, `P` keeps no copy, and a `C-v` block goes the same way.

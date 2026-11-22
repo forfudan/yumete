@@ -1665,23 +1665,26 @@ impl Editor {
         // front of the ones still to press, `count` times, and the macro
         // playing presses them. A motion that fails ends them all, as it
         // ends vim's; a macro that only ever plays itself stops at the
-        // writing ceiling.
-        if self.replaying {
-            self.macro_nested += 1;
-            if self.macro_nested > Self::WRITING_MAX {
-                self.macro_failed = true;
-                self.status = say!("count.writing-ceiling", Self::WRITING_MAX);
-                return;
-            }
+        // writing ceiling, which counts how deep the plays go, not how many.
+        let depth = if self.replaying { self.macro_depth + 1 } else { 0 };
+        if depth > Self::WRITING_MAX {
+            self.macro_failed = true;
+            self.status = say!("count.writing-ceiling", Self::WRITING_MAX);
+            return;
+        }
+        if self.replaying && self.macro_level == (self.normal_depth, self.expanding_alias) {
             for _ in 0..count.clamp(1, Self::WRITING_MAX) {
                 for step in steps.iter().rev() {
-                    self.macro_queue.push_front(step.clone());
+                    self.macro_queue.push_front((step.clone(), depth));
                 }
             }
             return;
         }
+        // Played from the top, or from deeper than the queue is pressed:
+        // the queue of the macro outside waits until this one is done.
+        let outer = self.replaying.then(|| (std::mem::take(&mut self.macro_queue), self.macro_level, self.macro_depth));
         self.replaying = true;
-        self.macro_nested = 0;
+        self.macro_level = (self.normal_depth, self.expanding_alias);
         // A macro may write, so it answers to the writing ceiling; and a round
         // that moved nothing and changed nothing will never move anything on
         // the next one either, so stop (#318). `revision`, not `char_count`:
@@ -1700,8 +1703,9 @@ impl Editor {
         let mut failed = false;
         'rounds: for _ in 0..clipped {
             let before = (self.current, self.sel.head(), self.sel.anchor(), self.current_buffer().revision());
-            self.macro_queue = steps.iter().cloned().collect();
-            while let Some(step) = self.macro_queue.pop_front() {
+            self.macro_queue = steps.iter().map(|step| (step.clone(), depth)).collect();
+            while let Some((step, at)) = self.macro_queue.pop_front() {
+                self.macro_depth = at;
                 match step {
                     crate::input::MacroStep::Key(key) => {
                         self.on_key(key);
@@ -1728,10 +1732,21 @@ impl Editor {
                 self.with_buffer(i, |e| e.current_buffer_mut().end_undo_group(was));
             }
         }
-        self.replaying = false;
-        self.macro_queue.clear();
-        // A macro `:normal` plays fails its line's keys with it.
-        self.macro_failed = failed && self.normal_depth > 0;
+        match outer {
+            // A failure ends the keys of the `:normal` or binding that
+            // played this one.
+            Some((queue, level, at)) => {
+                (self.macro_queue, self.macro_level, self.macro_depth) = (queue, level, at);
+                self.macro_failed = failed;
+            }
+            None => {
+                self.replaying = false;
+                self.macro_queue.clear();
+                self.macro_depth = 0;
+                // A macro `:normal` plays fails its line's keys with it.
+                self.macro_failed = failed && self.normal_depth > 0;
+            }
+        }
         if count > clipped {
             self.status = say!("count.writing-ceiling", Self::WRITING_MAX);
         }
