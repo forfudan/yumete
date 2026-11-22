@@ -1774,6 +1774,13 @@ impl Editor {
         // the queue of the macro outside waits until this one is done.
         let outer = self.replaying.then(|| (std::mem::take(&mut self.macro_queue), self.macro_level, self.macro_depth));
         self.replaying = true;
+        // **A macro's keys are read as typed**, even when a key binding
+        // played it: vim's `x` in it is vim's, not the keys a binding's run
+        // is pressed as.
+        let expanding = self.expanding_alias;
+        if self.as_vim() {
+            self.expanding_alias = false;
+        }
         self.macro_level = (self.normal_depth, self.expanding_alias);
         // A macro may write, so it answers to the writing ceiling; and a round
         // that moved nothing and changed nothing will never move anything on
@@ -1822,6 +1829,7 @@ impl Editor {
                 self.with_buffer(i, |e| e.current_buffer_mut().end_undo_group(was));
             }
         }
+        self.expanding_alias = expanding;
         match outer {
             // A failure ends the keys of the `:normal` or binding that
             // played this one.

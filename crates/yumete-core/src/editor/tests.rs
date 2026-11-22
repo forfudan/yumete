@@ -47192,3 +47192,24 @@ fn playing_an_empty_register_ends_what_plays_it() {
     feed_vim(&mut ed, "\"a2yyjj@a");
     assert_eq!(ed.current_buffer().text(), ":normal @zAy\nAw\u{1b}\nreedw\n");
 }
+
+/// **A key binding whose keys play a macro, pressed while a macro
+/// replays, plays it in place and reads its keys as vim's** (measured in
+/// nvim with `nmap <C-q> @bj`): `b` deletes a character before the
+/// binding's `j`, as `x` in Normal mode does, on every line the outer macro
+/// reaches.
+#[test]
+fn a_binding_that_plays_a_macro_plays_it_in_place_inside_a_macro() {
+    let mut ed = typed_vim("pen\ncup\nhat\nmug\n");
+    let mut aliases = std::collections::HashMap::new();
+    aliases.insert("C-q".to_string(), "@@bj".to_string());
+    ed.set_key_aliases(aliases);
+    feed_vim(&mut ed, "Gqbxqgg");
+    feed_vim(&mut ed, "qaA1⎋");
+    ed.on_key(Key::Ctrl('q'));
+    feed_vim(&mut ed, "A2⎋q");
+    assert_eq!(ed.current_buffer().text(), "pen\ncup2\nhat\nug\n");
+    feed_vim(&mut ed, "j@a");
+    assert_eq!(ed.current_buffer().text(), "pen\ncup2\nhat\nug2\n");
+    assert_eq!(vim_at(&ed), (4, 3));
+}

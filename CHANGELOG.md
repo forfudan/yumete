@@ -107,6 +107,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **vim's `C-o` before any jump goes back to the first line of the file opened**, as in vim, whose jump list starts there, instead of doing nothing.
 - **vim's `` `[ `` after Insert `C-r C-o` of lines stays at the line and column the Insert began at**, as in vim, instead of the start of the lines put.
 - **vim's `@` of an empty register, `@@` with nothing played, `Q` with nothing recorded and `@` of a name no register has fail**, as in vim: they end the macro playing them and the rest of a `:normal` line, instead of letting the keys after them run.
+- **A macro played by a key binding under the vim keys reads its keys as vim's**, as in vim: `"C-q" = "@@bj"` with `x` recorded in `b` deletes a character, in a macro or out of one, instead of selecting the line.
 
 ## 0.24.0 · 2026-11-17
 
