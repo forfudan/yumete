@@ -991,7 +991,12 @@ impl Editor {
             return;
         }
         let at = self.sel.head();
-        if self.edit_insert(at, &text) {
+        // Its line breaks go in as typed ones, which split the line.
+        let splits = self.as_vim();
+        self.current_buffer_mut().split_lines(splits);
+        let put_in = self.edit_insert(at, &text);
+        self.current_buffer_mut().split_lines(false);
+        if put_in {
             self.set_cursor(at + text.chars().count());
         }
     }
@@ -2530,7 +2535,13 @@ impl Editor {
         let mut len = text.chars().count();
         // The cursor's line, for `]p`, read before the paste moves it.
         let indent_here = fix_indent.then(|| self.indent_columns(self.current_buffer().rope().char_to_line(self.sel.head())));
-        if !self.edit_insert(at, &put) {
+        // vim's charwise put splits the line it goes into, even from its
+        // first column: the marks on that line stay, only those below move.
+        let splits = !line_wise && self.as_vim();
+        self.current_buffer_mut().split_lines(splits);
+        let put_in = self.edit_insert(at, &put);
+        self.current_buffer_mut().split_lines(false);
+        if !put_in {
             return;
         }
         // vim's `]p` `[p`: the lines put in take the cursor line's indent

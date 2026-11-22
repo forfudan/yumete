@@ -46665,3 +46665,31 @@ fn a_rewrite_with_marks_set_costs_the_lines_it_touches() {
     assert_eq!(vim_at(&ed), (4, 6), "the mark moved down with its line");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// **vim's charwise put splits the line it goes into** (measured in nvim):
+/// text ending in a line break put at the first column, by `P`, `2P` or
+/// Insert `C-r`, leaves the marks on that line where they were; only the
+/// lines below move.
+#[test]
+fn a_charwise_put_from_the_first_column_keeps_the_marks_on_its_line() {
+    let text = "red green blue\nlight dark grey\nend\n";
+    let cases: &[(&str, &str)] = &[
+        ("jwmaggv$yj0P`aiX⎋", "red green blue\neen blXue\nlight dark grey\nend\n"),
+        ("jwmaggv$yj02P`aiX⎋", "red green blue\neen blXue\neen blue\nlight dark grey\nend\n"),
+        ("jwmaggv$yj0iʳ\"⎋`aiX⎋", "red green blue\neen blXue\nlight dark grey\nend\n"),
+        ("jwmaggyyj0P`aiX⎋", "red green blue\nred green blue\nlight Xdark grey\nend\n"),
+    ];
+    for &(keys, want) in cases {
+        let mut ed = typed_vim(text);
+        for piece in keys.split_inclusive('ʳ') {
+            match piece.strip_suffix('ʳ') {
+                Some(before) => {
+                    feed_vim(&mut ed, before);
+                    ed.on_key(Key::Ctrl('r'));
+                }
+                None => feed_vim(&mut ed, piece),
+            }
+        }
+        assert_eq!(ed.current_buffer().text(), want, "{keys}");
+    }
+}
