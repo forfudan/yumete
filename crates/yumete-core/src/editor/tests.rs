@@ -47658,3 +47658,17 @@ fn vims_visual_star_looks_for_one_selected_character() {
     feed_vim(&mut ed, "$v#");
     assert_eq!(vim_at(&ed), (1, 11));
 }
+
+/// **vim's `&`, `\0`, `\&` and `~` in a `:s` replacement** (measured in
+/// nvim): the whole match, the whole match, a plain `&`, and the previous
+/// replacement.
+#[test]
+fn vims_substitute_reads_ampersand_and_tilde() {
+    let mut ed = typed_vim("red fox red\n");
+    ed.execute(":s/red/<&>/").unwrap();
+    assert_eq!(ed.current_buffer().text(), "<red> fox red\n");
+    ed.execute(":s/red/~\\&/").unwrap();
+    assert_eq!(ed.current_buffer().text(), "<<red>&> fox red\n");
+    ed.execute(":s/fox/\\0\\0/").unwrap();
+    assert_eq!(ed.current_buffer().text(), "<<red>&> foxfox red\n");
+}

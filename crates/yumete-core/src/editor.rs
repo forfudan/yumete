@@ -3538,6 +3538,9 @@ pub struct Editor {
     /// so replaying the keys of an IME replace replays `r` and nothing else.
     /// The text is remembered here and [`Editor::repeat_edit`] finishes it.
     last_replacement: String,
+    /// The last `:s` replacement under the vim keymap, as written once its
+    /// own `~` was filled in: the next one's `~` stands for it.
+    last_vim_substitute: String,
     /// Places named by a letter, and reachable from any file (`M a`, `' a`).
     marks: HashMap<char, Spot>,
     /// Whether `.` is playing one back, so it cannot record itself.
@@ -5098,6 +5101,7 @@ impl Editor {
             edit_was_insert: false,
             last_insert_keys: Vec::new(),
             last_replacement: String::new(),
+            last_vim_substitute: String::new(),
             marks: HashMap::new(),
             repeating_edit: false,
             insert_recording: String::new(),
@@ -6169,6 +6173,54 @@ fn unescape_replacement(replacement: &str, ending: &str) -> String {
                 out.push(other);
             }
             None => out.push('\\'),
+        }
+    }
+    out
+}
+
+/// **vim's `~` in a replacement** (`:h s~`): the previous replacement in
+/// its place, before anything else is read; `\~` stays for
+/// [`vim_replacement`] to make a plain `~`.
+fn with_previous_replacement(replacement: &str, previous: &str) -> String {
+    let mut out = String::with_capacity(replacement.len());
+    let mut chars = replacement.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' => {
+                out.push(c);
+                out.extend(chars.next());
+            }
+            '~' => out.push_str(previous),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+/// **vim's specials in a replacement** (`:h sub-replace-special`) written
+/// as the regex crate's template: `&` and `\0` are the whole match, `\1`
+/// to `\9` the groups, and `\&` and `\~` the characters themselves. The
+/// other escapes are left for [`unescape_replacement`].
+fn vim_replacement(replacement: &str) -> String {
+    let mut out = String::with_capacity(replacement.len() + 8);
+    let mut chars = replacement.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '&' => out.push_str("${0}"),
+            '\\' => match chars.next() {
+                Some(d @ '0'..='9') => {
+                    out.push_str("${");
+                    out.push(d);
+                    out.push('}');
+                }
+                Some(d @ ('&' | '~')) => out.push(d),
+                Some(d) => {
+                    out.push('\\');
+                    out.push(d);
+                }
+                None => out.push('\\'),
+            },
+            c => out.push(c),
         }
     }
     out

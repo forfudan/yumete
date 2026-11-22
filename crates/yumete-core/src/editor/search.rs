@@ -462,9 +462,15 @@ impl Editor {
         // resolve, because Enter submits the prompt and there is no other way
         // to type them.
         let ending = self.current_buffer().ending();
-        let replacement = match literal {
-            true => unescape_replacement(replacement, ending).replace('$', "$$"),
-            false => unescape_replacement(replacement, ending),
+        let replacement = match (literal, self.as_vim()) {
+            (true, _) => unescape_replacement(replacement, ending).replace('$', "$$"),
+            (false, true) => {
+                let written = with_previous_replacement(replacement, &self.last_vim_substitute);
+                let template = unescape_replacement(&vim_replacement(&written), ending);
+                self.last_vim_substitute = written;
+                template
+            }
+            (false, false) => unescape_replacement(replacement, ending),
         };
 
         // 同 `/` 那一頭：一支匹配器，兩個旗標只改它怎麼造。
