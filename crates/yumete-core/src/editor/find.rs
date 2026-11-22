@@ -3285,18 +3285,38 @@ impl Look {
     /// replaces, so its groups are found again in the line, not in the
     /// matched text alone; `$0` is the text replaced, as vim's `&` is.
     pub(super) fn expand_in(&self, line: &str, from: usize, to: usize, with: &str) -> String {
+        self.expand_each(line, &[(from, to)], with).pop().unwrap_or_default()
+    }
+
+    /// **[`Self::expand_in`] for each match at byte spans `picks` of `line`**,
+    /// in order, walking the line once rather than once a match: on a long
+    /// line with many matches the walk is what costs.
+    pub(super) fn expand_each(&self, line: &str, picks: &[(usize, usize)], with: &str) -> Vec<String> {
         let (How::Pattern(re), Some(marks)) = (&self.how, &self.marks) else {
-            return self.expand(&line[from..to], with);
+            return picks.iter().map(|&(from, to)| self.expand(&line[from..to], with)).collect();
         };
-        let Some((caps, ..)) = marks.walk(re, line).into_iter().find(|&(_, a, b)| (a, b) == (from, to)) else {
-            return self.expand(&line[from..to], with);
-        };
-        let mut grown = String::new();
-        caps.expand(&marks.renumbered(with, &line[from..to]), &mut grown);
-        match self.keep_case {
-            true => follow_the_case_of(&line[from..to], &grown),
-            false => grown,
-        }
+        let walked = marks.walk(re, line);
+        let mut next = 0;
+        picks
+            .iter()
+            .map(|&(from, to)| {
+                // Both run in the order of the line, so the match a pick names
+                // is at or after the last one found.
+                let found = walked[next..].iter().position(|&(_, a, b)| (a, b) == (from, to));
+                let Some(caps) = found.map(|i| {
+                    next += i + 1;
+                    &walked[next - 1].0
+                }) else {
+                    return self.expand(&line[from..to], with);
+                };
+                let mut grown = String::new();
+                caps.expand(&marks.renumbered(with, &line[from..to]), &mut grown);
+                match self.keep_case {
+                    true => follow_the_case_of(&line[from..to], &grown),
+                    false => grown,
+                }
+            })
+            .collect()
     }
 
     /// `caps.expand` 没跑到的時候，自己把加倍的 `$` 還原回來。見 [`Look::doubled`]。
@@ -3312,16 +3332,14 @@ impl Look {
     /// Warning: **兩路合並之後要排序去重**：`excerpt` 按這個次序編號（`nth`），而讀者
     /// 看見的是一行一行往下走的單子。同一段被兩路都配上，只算一條。
     pub(super) fn spans(&self, text: &str) -> Vec<(usize, usize)> {
+        let mut chars = CharCount::new(text);
         let mut out = match (&self.how, &self.marks) {
             (How::Pattern(re), Some(marks)) => marks
                 .walk(re, text)
                 .into_iter()
-                .map(|(_, a, b)| (text[..a].chars().count(), text[..b].chars().count()))
+                .map(|(_, a, b)| (chars.at(a), chars.at(b)))
                 .collect(),
-            (How::Pattern(re), None) => re
-                .find_iter(text)
-                .map(|m| (text[..m.start()].chars().count(), text[..m.end()].chars().count()))
-                .collect(),
+            (How::Pattern(re), None) => re.find_iter(text).map(|m| (chars.at(m.start()), chars.at(m.end()))).collect(),
             (How::Nearby { needle, fold, shapes }, _) => {
                 let hay: Vec<char> = text.chars().collect();
                 crate::nearby::spans(&hay, needle, *fold, *shapes)
@@ -3499,6 +3517,31 @@ impl Marks {
         }
         out.push_str(rest);
         out
+    }
+}
+
+/// **Characters before a byte offset of one text**, counted on from the
+/// last offset asked, so the matches of a line, asked in order, cost the
+/// line once rather than once a match.
+struct CharCount<'t> {
+    text: &'t str,
+    byte: usize,
+    chars: usize,
+}
+
+impl<'t> CharCount<'t> {
+    fn new(text: &'t str) -> Self {
+        CharCount { text, byte: 0, chars: 0 }
+    }
+
+    /// The characters before byte `at`, a character boundary.
+    fn at(&mut self, at: usize) -> usize {
+        if at < self.byte {
+            (self.byte, self.chars) = (0, 0);
+        }
+        self.chars += self.text[self.byte..at].chars().count();
+        self.byte = at;
+        self.chars
     }
 }
 

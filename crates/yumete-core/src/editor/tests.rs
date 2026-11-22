@@ -45987,3 +45987,18 @@ fn a_failed_vim_search_says_not_found() {
     keyed(&mut ed, "n");
     assert_eq!(ed.status(), say!("find.not-found", "日月"));
 }
+
+/// **`:s` over a long line with many matches writes each one where it
+/// stands**, the groups of a pattern with `\zs` read for each match, and
+/// so does a `c` walk answered with `a`; the line is written out once.
+#[test]
+fn a_substitution_over_many_matches_on_one_line_writes_each() {
+    let line = "天ab地 ".repeat(3000);
+    let want = format!("{}\n", "天a[a]地 ".repeat(3000));
+    let mut ed = typed_vim(&format!("{line}\n"));
+    keyed(&mut ed, ":s/(a)\\zsb/[$1]/g⏎");
+    assert_eq!(ed.current_buffer().text(), want);
+    let mut ed = typed_vim(&format!("{line}\n"));
+    keyed(&mut ed, ":s/(a)\\zsb/[$1]/gc⏎a");
+    assert_eq!(ed.current_buffer().text(), want);
+}

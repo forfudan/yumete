@@ -5990,8 +5990,9 @@ fn is_ids_operator(c: char) -> bool {
 /// 匹配器是哪一種。通配兩個都不開的時候 `Look::plain` 走的仍是正則那一路，`$1`
 /// 照樣展得開（`Look::expand` 的 `How::Pattern` 那一臂）。
 ///
-/// **從後往前換**：換上去的那一段和換下來的那一段不一樣長，從頭往後走會把後面每
-/// 一處的位置都推着走。同 `find.rs` 的 `swap_all`。
+/// **The line is written out once, front to back**, from the text between
+/// the matches and what goes in for each, so a long line with many matches
+/// costs its length, not its length once a match.
 fn replace_in_line(
     line: &str,
     look: &find::Look,
@@ -6007,20 +6008,28 @@ fn replace_in_line(
         .map(|(b, _)| b)
         .chain(std::iter::once(line.len()))
         .collect();
-    let chosen: Vec<(usize, usize)> = match global {
-        true => spans,
-        false => vec![spans[0]],
+    let chosen = match global {
+        true => &spans[..],
+        false => &spans[..1],
     };
-    let mut out = line.to_string();
-    let mut count = 0usize;
-    for &(a, b) in chosen.iter().rev() {
-        let (Some(&b0), Some(&b1)) = (cuts.get(a), cuts.get(b)) else {
-            continue;
-        };
-        out.replace_range(b0..b1, &look.expand_in(line, b0, b1, replacement));
-        count += 1;
+    // Of two matches that overlap (one by the pattern, one by the reading),
+    // the first is the one replaced.
+    let mut picks: Vec<(usize, usize)> = Vec::with_capacity(chosen.len());
+    for &(a, b) in chosen {
+        let (Some(&b0), Some(&b1)) = (cuts.get(a), cuts.get(b)) else { continue };
+        if picks.last().is_none_or(|&(_, end)| b0 >= end) {
+            picks.push((b0, b1));
+        }
     }
-    (out, count)
+    let mut out = String::with_capacity(line.len());
+    let mut copied = 0;
+    for (&(b0, b1), with) in picks.iter().zip(look.expand_each(line, &picks, replacement)) {
+        out.push_str(&line[copied..b0]);
+        out.push_str(&with);
+        copied = b1;
+    }
+    out.push_str(&line[copied..]);
+    (out, picks.len())
 }
 
 /// A replacement string with its backslash escapes resolved.

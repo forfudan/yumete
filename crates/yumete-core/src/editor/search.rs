@@ -738,22 +738,20 @@ impl Editor {
                 .map(|(b, _)| b)
                 .chain(std::iter::once(body.len()))
                 .collect();
-            let mut copied = 0usize;
+            // The matches to replace, chosen first and expanded together, so
+            // the line is walked once for all of them.
+            let mut picks: Vec<(usize, usize)> = Vec::new();
             for (a, b) in walk.re.spans(body) {
                 let (Some(&b0), Some(&b1)) = (cuts.get(a), cuts.get(b)) else {
                     continue;
                 };
                 // 疊着的兩處（正則一處、讀音一處）只認頭一處：已經抄過去的那一段
                 // 不許再動。
-                if b0 < copied {
+                if picks.last().is_some_and(|&(_, end)| b0 < end) {
                     continue;
                 }
                 if at + a >= walk.from {
-                    rebuilt.push_str(&body[copied..b0]);
-                    // `$1` resolved for this match, as in `next_hit`.
-                    rebuilt.push_str(&walk.re.expand_in(body, b0, b1, &walk.replacement));
-                    copied = b1;
-                    changed += 1;
+                    picks.push((b0, b1));
                 }
                 // Without `g`, only the first match on a line was ever
                 // offered — and one already answered leaves the line alone.
@@ -761,6 +759,14 @@ impl Editor {
                     break;
                 }
             }
+            let mut copied = 0usize;
+            // `$1` resolved for each match, as in `next_hit`.
+            for (&(b0, b1), with) in picks.iter().zip(walk.re.expand_each(body, &picks, &walk.replacement)) {
+                rebuilt.push_str(&body[copied..b0]);
+                rebuilt.push_str(&with);
+                copied = b1;
+            }
+            changed += picks.len();
             rebuilt.push_str(&body[copied..]);
             rebuilt.push_str(eol);
             at += line.chars().count();
