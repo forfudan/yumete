@@ -46632,3 +46632,13 @@ fn a_counted_word_motion_stops_at_an_empty_last_line() {
         assert_eq!((ed.current_buffer().text().as_str(), vim_at(&ed)), (want, at), "{keys} on {text:?}");
     }
 }
+
+/// **Under helix, `'<,'>` names the lines of the selection**, which stands
+/// without a Visual mode to have ended.
+#[test]
+fn helix_range_marks_name_the_current_selection() {
+    let mut ed = typed("sun\nmoon\nstar\nsoon\n");
+    press(&mut ed, "xx");
+    ed.execute(":'<,'>s/o/0/g").unwrap();
+    assert_eq!(ed.current_buffer().text(), "sun\nm00n\nstar\nsoon\n");
+}

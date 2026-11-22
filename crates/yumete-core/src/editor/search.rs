@@ -647,8 +647,10 @@ impl Editor {
     /// **The line vim's `'<` or `'>` names in a range**: the first or last
     /// line of the selection up, when the line was given from Visual mode,
     /// else of the last Visual selection (`:h '<`), as vim reads them.
+    /// Under helix, where a selection stands without a mode, always of the
+    /// selection.
     pub(super) fn mark_line(&self, name: char) -> Result<usize, String> {
-        if self.extend || self.block.is_some() {
+        if self.extend || self.block.is_some() || !self.as_vim() {
             let (first, last) = self.selected_lines();
             return Ok(if name == '<' { first } else { last });
         }
