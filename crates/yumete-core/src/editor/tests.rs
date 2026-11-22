@@ -47293,6 +47293,36 @@ fn star_motions_and_their_g_forms() {
     assert_eq!(vim_at(&ed), (2, 1));
 }
 
+/// **vim's capital Visual operators take whole lines** (measured in nvim):
+/// `X`, `D`, `Y`, `C` and `R` under `v` act on the lines as under `V`; in a
+/// block `X` and `Y` are `d` and `y`, and `D` runs to the lines' ends.
+#[test]
+fn visual_capital_operators_take_whole_lines() {
+    let text = "plum tree here\nfig vine there\nlast\n";
+    let both = "plum tree here\nfig vine there\nlast\nplum tree here\nfig vine there\n";
+    for (keys, want, at) in [
+        ("wwVjX", "last\n", (1, 4)),
+        ("wvjX", "last\n", (1, 4)),
+        ("jwvkX", "last\n", (1, 4)),
+        ("wvjD", "last\n", (1, 4)),
+        ("wwVjD", "last\n", (1, 4)),
+        ("wvjYGp", both, (4, 1)),
+        ("wwVjYGp", both, (4, 1)),
+        ("wvjCx⎋", "x\nlast\n", (1, 1)),
+        ("wVjCx⎋", "x\nlast\n", (1, 1)),
+        ("wvjRx⎋", "x\nlast\n", (1, 1)),
+        ("wvjXu", text, (1, 1)),
+        ("wᵛjX", "plum ree here\nfig vne there\nlast\n", (1, 6)),
+        ("wᵛjYGp", "plum tree here\nfig vine there\nlastt\n    i\n", (3, 5)),
+        ("wᵛjD", "plum \nfig v\nlast\n", (1, 5)),
+    ] {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        assert_eq!(ed.current_buffer().text(), want, "{keys}");
+        assert_eq!(vim_at(&ed), at, "{keys}");
+    }
+}
+
 /// **vim's `C-o` in Insert drops the Insert's count** (measured in nvim):
 /// `3o` or `3O` then `C-o` opens one line, and `3i` types once.
 #[test]

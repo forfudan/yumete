@@ -181,7 +181,7 @@ impl KeyPreset {
     pub fn normal_only(self) -> &'static [&'static str] {
         match self {
             KeyPreset::Helix => &[],
-            KeyPreset::Vim => &["x", "s", "S"],
+            KeyPreset::Vim => &["x", "s", "S", "D", "C", "Y"],
         }
     }
 

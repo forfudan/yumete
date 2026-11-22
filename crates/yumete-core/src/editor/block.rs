@@ -337,9 +337,11 @@ impl super::Editor {
                     self.block = Some(Block { anchor, cursor, goal: None, ..block });
                     return self.show_block();
                 }
+                // `D` takes the block's lines to their ends, and `X` and `Y`
+                // are `d` and `y` here (vim's `v_visop`).
                 Key::Char('d' | 'x' | 'D' | 'X') => {
                     let block = match key {
-                        Key::Char('D' | 'X') => Block { to_line_end: true, ..block },
+                        Key::Char('D') => Block { to_line_end: true, ..block },
                         _ => block,
                     };
                     let size = self.block_size(block);
@@ -348,7 +350,7 @@ impl super::Editor {
                     self.remember_block(size, 'd', "");
                     return self.leave_block(top_left);
                 }
-                Key::Char('y') => {
+                Key::Char('y' | 'Y') => {
                     self.block_yank(block, true);
                     return self.leave_block(top_left);
                 }

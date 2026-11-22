@@ -157,8 +157,14 @@ pub(super) const NORMAL_COMMANDS: &[NormalCommand] = &[
     }, Key::Char('y')),
     (NormalCmd::OperatorIndent, |e, cx| e.cmd_vim_operator(cx.with_key(Key::Char('>'))), Key::Char('>')),
     (NormalCmd::OperatorUnindent, |e, cx| e.cmd_vim_operator(cx.with_key(Key::Char('<'))), Key::Char('<')),
-    (NormalCmd::DeleteSelection, |e, cx| e.cmd_delete_or_change(cx.with_key(Key::Char('d'))), Key::Char('d')),
-    (NormalCmd::ChangeSelection, |e, cx| e.cmd_delete_or_change(cx.with_key(Key::Char('c'))), Key::Char('c')),
+    (NormalCmd::DeleteSelection, |e, cx| {
+        e.visual_capital_takes_lines(cx.key);
+        e.cmd_delete_or_change(cx.with_key(Key::Char('d')))
+    }, Key::Char('d')),
+    (NormalCmd::ChangeSelection, |e, cx| {
+        e.visual_capital_takes_lines(cx.key);
+        e.cmd_delete_or_change(cx.with_key(Key::Char('c')))
+    }, Key::Char('c')),
     (NormalCmd::DeleteSelectionNoyank, |e, cx| e.cmd_delete_or_change(cx.with_key(Key::Alt('d'))), Key::Alt('d')),
     (NormalCmd::ChangeSelectionNoyank, |e, cx| e.cmd_delete_or_change(cx.with_key(Key::Alt('c'))), Key::Alt('c')),
     // `D` and `A-D` (the flavour's `d_to_line_end`): the rest of the line,
@@ -321,7 +327,10 @@ pub(super) const NORMAL_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::VimFlipSelections, |e, _| e.vim_visual_key('o'), Key::Char('o')),
     (NormalCmd::VimSwitchToLowercase, |e, _| e.vim_visual_key('u'), Key::Char('u')),
     (NormalCmd::VimSwitchToUppercase, |e, _| e.vim_visual_key('U'), Key::Char('U')),
-    (NormalCmd::VimYank, |e, _| e.vim_visual_key('y'), Key::Char('y')),
+    (NormalCmd::VimYank, |e, cx| {
+        e.visual_capital_takes_lines(cx.key);
+        e.vim_visual_key('y')
+    }, Key::Char('y')),
     (NormalCmd::VimVisualBlockMode, |e, _| e.toggle_block(), Key::Ctrl('v')),
     (NormalCmd::RepeatLastChange, |e, cx| e.acting(false, |e| e.cmd_repeat_last_change(cx)), Key::Char('.')),
     (NormalCmd::RepeatLastMotion, Editor::cmd_repeat_last_motion, Key::Alt('.')),
@@ -608,6 +617,12 @@ pub(super) const VIM_NORMAL: &[(Key, NormalCmd, Option<When>)] = &[
     (Key::Char('y'), NormalCmd::VimYank, Some(when::typed_extending)),
     (Key::Char('x'), NormalCmd::DeleteSelection, Some(when::typed_extending)),
     (Key::Char('s'), NormalCmd::ChangeSelection, Some(when::typed_extending)),
+    // The capitals take the selection's whole lines (vim's `v_visop`).
+    (Key::Char('Y'), NormalCmd::VimYank, Some(when::typed_extending)),
+    (Key::Char('X'), NormalCmd::DeleteSelection, Some(when::typed_extending)),
+    (Key::Char('D'), NormalCmd::DeleteSelection, Some(when::typed_extending)),
+    (Key::Char('C'), NormalCmd::ChangeSelection, Some(when::typed_extending)),
+    (Key::Char('R'), NormalCmd::ChangeSelection, Some(when::typed_extending)),
     // vim-surround's `xmap S`: the selection wrapped in the pair typed next.
     (Key::Char('S'), NormalCmd::SurroundAdd, Some(when::typed_extending)),
     (Key::Ctrl('v'), NormalCmd::VimVisualBlockMode, Some(when::typed)),
@@ -1544,6 +1559,26 @@ impl Editor {
         self.extend = true;
         self.vim_lines = true;
         self.drop_register_into_visual();
+    }
+
+    /// **vim's capital Visual operators take whole lines** (`v_X`, `v_D`,
+    /// `v_Y`, `v_C`, `v_R`; vim's `v_visop`): typed under `v`, the
+    /// selection becomes its lines, as `V` would make it, the cursor
+    /// keeping the column it stands in.
+    pub(super) fn visual_capital_takes_lines(&mut self, key: Key) {
+        let capital = matches!(key, Key::Char('X' | 'D' | 'Y' | 'C' | 'R'));
+        if !capital || !self.as_vim() || !self.extend || self.block.is_some() || self.expanding_alias || self.vim_lines {
+            return;
+        }
+        let want = self.column_wanted();
+        self.sel.set_goal(Some(want));
+        self.vim_lines = true;
+        // What the register takes, and where `u` comes back to, were read
+        // at the key's start.
+        self.lines_at_key = true;
+        if self.undo_lands_at.is_some() {
+            self.undo_lands_at = self.vim_visual_start();
+        }
     }
 
     #[allow(unused_variables)]

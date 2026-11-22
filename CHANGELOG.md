@@ -110,6 +110,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **vim's `@` of a register never set, `@@` with nothing played, `Q` with nothing recorded and `@` of a name no register has fail**, as in vim: they end the macro playing them and the rest of a `:normal` line, instead of letting the keys after them run. A register set to nothing, as `qaq` leaves it, plays nothing and the keys go on.
 - **A macro played by a key binding under the vim keys reads its keys as vim's**, as in vim: `"C-q" = "@@bj"` with `x` recorded in `b` deletes a character, in a macro or out of one, instead of selecting the line.
 - **vim's cursor keeps its own column under `V`**, as in vim, instead of jumping to the line's end: `l`, `f`, `e` and the rest move it from where it stood, Esc, `o`, `gv`, `<`, `>` and `d` leave it in the column it reached, `$` stands past the last character so `$h` comes back onto it, and `ip` ends at its last line's start; the selection still covers whole lines.
+- **vim's `X`, `D`, `Y`, `C` and `R` in Visual mode take the selection's whole lines**, as in vim: under `v` as under `V`, instead of deleting a character, cutting to the line's end or doing nothing; in a block `X` and `Y` take the block, as `d` and `y` do.
 
 ## 0.24.0 · 2026-11-17
 

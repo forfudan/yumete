@@ -826,15 +826,19 @@ impl Editor {
     }
 
     /// The vim preset's keys that play a run of other keys rather than one
-    /// command (`x` is `;` then `D`), as (key, run), internal spelling.
+    /// command (`x` is `;` then `D`), as (key, run), internal spelling. A
+    /// key Visual mode answers with a command of its own (`D`, `S`) still
+    /// plays its run in Normal mode, and is listed.
     pub fn vim_runs_for_docs() -> Vec<(String, String)> {
         let commands = Self::commands_for_docs();
+        let normal_only = yumete_cjk::KeyPreset::Vim.normal_only();
         yumete_cjk::KeyPreset::Vim
             .table()
             .iter()
-            .filter(|(key, _)| {
+            .filter(|(key, run)| {
+                let plays = run.starts_with(['@', ':']) && normal_only.contains(key);
                 let key = yumete_cjk::actions::written(key);
-                !commands.iter().any(|(_, _, _, vim, _)| vim.iter().any(|k| k.concat() == key))
+                plays || !commands.iter().any(|(_, _, _, vim, _)| vim.iter().any(|k| k.concat() == key))
             })
             .map(|(key, run)| (yumete_cjk::actions::written(key), run.to_string()))
             .collect()
