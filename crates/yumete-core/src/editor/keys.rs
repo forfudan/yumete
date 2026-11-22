@@ -260,10 +260,7 @@ impl Editor {
         // 這一鍵按下去之前的可視選區——`gv` 要的那一段就是它關掉的那一刻留下
         // 的（見 [`Self::keep_the_last_selection`]）。The buffer holds it while
         // the key runs, so the key's own edits move it.
-        let holding = self.visual_selection().map(|selection| {
-            self.current_buffer_mut().hold_selection(selection);
-            self.current_buffer().id()
-        });
+        let holding = self.hold_the_visual_selection();
         // Where the pane's window was pointed before this key — see
         // [`Self::hold_the_pane`].
         let held = self
@@ -443,7 +440,7 @@ impl Editor {
     /// `held` is the buffer that held the selection while the key ran, whose
     /// edits moved it as vim moves its marks; it is kept there, per buffer,
     /// when the key ended Visual mode.
-    fn keep_the_last_selection(&mut self, held: Option<u64>) {
+    pub(super) fn keep_the_last_selection(&mut self, held: Option<u64>) {
         let Some(i) = held.and_then(|id| self.buffer_with(id)) else {
             return;
         };
@@ -451,6 +448,16 @@ impl Editor {
         if self.block.is_none() && !self.extend && selection.is_some() {
             self.buffers[i].set_last_selection(selection);
         }
+    }
+
+    /// Hold the Visual selection up in its buffer while a key or a commit
+    /// runs, so its edits move it; the buffer's id, for
+    /// [`Self::keep_the_last_selection`].
+    pub(super) fn hold_the_visual_selection(&mut self) -> Option<u64> {
+        self.visual_selection().map(|selection| {
+            self.current_buffer_mut().hold_selection(selection);
+            self.current_buffer().id()
+        })
     }
 
     /// **The Visual selection up now**, as [`LastSelection`] keeps it: a

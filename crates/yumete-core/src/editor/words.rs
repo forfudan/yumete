@@ -883,7 +883,11 @@ impl Editor {
         } else {
             self.record_commit(text);
         }
+        // A commit that answers Visual `r` ends Visual mode as the key does,
+        // and `gv` reselects what it wrote over.
+        let holding = self.hold_the_visual_selection();
         self.insert_committed_now(text);
+        self.keep_the_last_selection(holding);
         // Where redo comes back to, as for a key — `r`, `ms` and Chinese typed
         // through the input method included.
         self.settle_the_change(was);

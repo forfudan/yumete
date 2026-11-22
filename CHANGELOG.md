@@ -44,6 +44,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **Under helix, a page with an even number of rows keeps one more row below the cursor than above**, as helix does: on ten rows with scrolloff 5, `50gg` shows line 46 at the top.
 - **vim's `p`, `P`, `gp` and `gP` on a block replace the block**, as in vim: a block taken goes in as a block, a word on every line of the block, lines below it; `vp` and `Vp` with a block taken put it as a block and as lines, and Visual `gP` puts what it replaced in the register, as `p` does.
 - **vim's `gv` selects the last block again**; it said nothing had been selected.
+- **vim's `gv` after Visual `r` selects what `r` wrote over**, as in vim; with the character typed through the IME, as it is in the terminal, it reselected an earlier selection or none.
 - **vim's `` `< ``, `` `> ``, `'<` and `'>` go to where the last selection began and ended**, and work after an operator (`` d`> ``).
 - **A `.` recorded in a vim macro repeats once when the macro plays**; `qadw.q` then `@a` deleted three words, because the keys the `.` played went into the recording too.
 - **vim's `C`, `cw`, `ciw` and `s` on an empty line open Insert there**, as in vim; they did nothing, or `cw` changed the next line's first word. `cw` takes the empty line into the register, as `cc` does.

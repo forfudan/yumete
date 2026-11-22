@@ -45940,3 +45940,16 @@ fn a_rewrite_of_lines_leaves_the_vim_marks_on_them() {
     keyed(&mut ed, "gvd");
     assert_eq!(ed.current_buffer().text(), "one two\nthree four\nnine ten\n");
 }
+
+/// **A Visual `r` answered by the input method leaves `gv` on what it
+/// wrote over**, as the key does: the commit ends Visual mode, and the
+/// selection it ended is the one `gv` and `` `> `` find.
+#[test]
+fn a_visual_r_answered_by_the_ime_keeps_the_last_selection() {
+    let mut ed = typed_vim("天地玄黄\n宇宙洪荒\n日月盈昃\n");
+    keyed(&mut ed, "jvlr");
+    ed.insert_committed("好");
+    assert_eq!(ed.current_buffer().text(), "天地玄黄\n好好洪荒\n日月盈昃\n");
+    keyed(&mut ed, "gvd");
+    assert_eq!(ed.current_buffer().text(), "天地玄黄\n洪荒\n日月盈昃\n");
+}
