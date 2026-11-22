@@ -238,6 +238,9 @@ pub enum Command {
     Convert(ConvertAsk),
     /// `:<n>` or `:goto <n>` — put the cursor on line `n`.
     GotoLine(usize),
+    /// `:s/a/b/ | …`: a substitution, then the command after the `|`, run
+    /// as one line (one undo step).
+    Then(String, String),
     /// `:earlier [n|span]` / `:later [n|span]` — helix's: so many undo steps,
     /// or to the change nearest a time span back or ahead.
     Earlier(UndoSpan),
@@ -7997,6 +8000,23 @@ fn split_escaped(body: &str, delim: char) -> Vec<String> {
     out
 }
 
+/// Where in a substitution's `body` (what follows the first delimiter) the
+/// `|` stands that ends it: the first one past the second delimiter that is
+/// not escaped.
+fn bar_after_the_flags(body: &str, delim: char) -> Option<usize> {
+    let (mut delims, mut escaped) = (0, false);
+    for (at, c) in body.char_indices() {
+        match c {
+            _ if escaped => escaped = false,
+            '\\' => escaped = true,
+            '|' if delims >= 2 => return Some(at),
+            c if c == delim => delims += 1,
+            _ => {}
+        }
+    }
+    None
+}
+
 /// Try to parse a substitution command.
 ///
 /// Returns `None` when the input is not a substitution, or `Some(Err(..))` when
@@ -8015,6 +8035,13 @@ fn parse_substitution(input: &str) -> Option<Result<Command, CommandError>> {
         return None;
     }
     let body = &rest[delim.len_utf8()..];
+    // **A `|` after the flags ends the command**, and the rest is the next
+    // one, as in vim (`:s/a/b/g | s/c/d/`): the two run as one line. In the
+    // pattern and the replacement a `|` is the text's own.
+    if let Some(bar) = bar_after_the_flags(body, delim) {
+        let (head, then) = input.split_at(input.len() - body.len() + bar);
+        return Some(Ok(Command::Then(head.trim_end().to_string(), then[1..].trim_start().to_string())));
+    }
     let fields = split_escaped(body, delim);
     if fields.len() < 2 || fields.len() > 3 {
         return Some(Err(CommandError::MissingArgument("substitute")));

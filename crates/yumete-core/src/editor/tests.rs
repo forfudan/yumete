@@ -46998,3 +46998,22 @@ fn vims_enter_in_replace_mode_splits_the_line_and_backspace_joins_it() {
     assert_eq!(run("jf+lR⏎", 2, ""), text);
     assert_eq!(run("jjR", 2, "x"), "fn main() {\n    let x = a +   bx\n}\n");
 }
+
+/// **`|` in a `:s` line is read as vim reads it** (measured in nvim): in the
+/// replacement it is a `|`; after the flags it ends the substitution, the
+/// rest run as the next command, the two one undo step.
+#[test]
+fn a_bar_in_a_substitution_line_is_read_as_vim_reads_it() {
+    let run = |command: &str| {
+        let mut ed = typed_vim("abc\nabc\n");
+        assert!(ed.execute(command).is_ok(), "{command}: {}", ed.status());
+        ed.current_buffer().text()
+    };
+    assert_eq!(run("s/a/x|y/"), "x|ybc\nabc\n");
+    assert_eq!(run("s/a/x/ | s/c/z/"), "xbz\nabc\n");
+    assert_eq!(run("s#a#x#g|s#b#y#"), "xyc\nabc\n");
+    let mut ed = typed_vim("abc\nabc\n");
+    assert!(ed.execute("s/a/x/|s/c/z/").is_ok(), "{}", ed.status());
+    feed_vim(&mut ed, "u");
+    assert_eq!(ed.current_buffer().text(), "abc\nabc\n");
+}

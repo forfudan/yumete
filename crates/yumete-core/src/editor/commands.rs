@@ -821,6 +821,23 @@ impl Editor {
                 }
                 Ok(CommandOutcome::Continue)
             }
+            Command::Then(first, then) => {
+                self.snapshot();
+                let id = self.current_buffer().id();
+                let was = self.current_buffer_mut().begin_undo_group();
+                let mut outcome = self.execute_now(&first);
+                if matches!(outcome, Ok(CommandOutcome::Continue)) {
+                    let said = std::mem::take(&mut self.status);
+                    outcome = self.execute_now(&then);
+                    if self.status.is_empty() {
+                        self.status = said;
+                    }
+                }
+                if let Some(i) = self.buffer_with(id) {
+                    self.with_buffer(i, |e| e.current_buffer_mut().end_undo_group(was));
+                }
+                outcome
+            }
             Command::Count => {
                 self.status = self.count_report();
                 Ok(CommandOutcome::Continue)
