@@ -39520,9 +39520,11 @@ fn j_and_k_onto_a_closed_fold_keep_the_column() {
     assert_eq!((ed.cursor_line(), ed.cursor_column()), (2, 3));
     press(&mut ed, "zox");
     assert!(ed.current_buffer().text().contains("\nw3_ w3_1"), "x takes the character under the cursor");
+    // After `zf` the column wanted is the closed fold's first (measured in
+    // nvim), so `k` and `j` come back in column 1.
     let mut ed = typed_vim(&lines);
     press(&mut ed, "3G5lzf2jkj");
-    assert_eq!((ed.cursor_line(), ed.cursor_column()), (2, 5));
+    assert_eq!((ed.cursor_line(), ed.cursor_column()), (2, 0));
 }
 
 /// **`:s` leaves the cursor on the last line substituted**, on its first
@@ -48033,6 +48035,30 @@ fn vims_column_wanted_is_worked_out_again_after_an_operator() {
         ("2G$j", (3, 6)),
     ] {
         let mut ed = typed_vim("pq\nab\nabcdef\nghijklm\nnopqrstu\n");
+        feed_vim(&mut ed, keys);
+        assert_eq!(vim_at(&ed), want, "{keys}");
+    }
+}
+
+/// **vim's operator on a closed fold lands in the fold's first column**,
+/// and after one the column wanted there is the first (`curs_columns`): `yy`,
+/// `yj`, `yw` and `gUU` on a fold, and `zfj` then `j`, `k` or `zo` `j`. `d`,
+/// `>` and `<` go on to the column wanted instead (measured in nvim).
+#[test]
+fn vims_operator_on_a_closed_fold_lands_in_column_one() {
+    for (keys, want) in [
+        ("2G4lzfjjkyy", (2, 1)),
+        ("2G4lzfjjkyj", (2, 1)),
+        ("2G4lzfjjkyw", (2, 1)),
+        ("2G4lzfjjkgUU", (2, 1)),
+        ("2G4lzfjzolzcyy", (2, 1)),
+        ("2G4lzfjjyyk", (2, 1)),
+        ("2G4lzfjj", (4, 1)),
+        ("2G4lzfjk", (1, 1)),
+        ("2G4lzfjzoj", (3, 1)),
+        ("2G4lzfjzolzcdd", (2, 6)),
+    ] {
+        let mut ed = typed_vim("pq\n  abcdef\n  ghijklm\nlonger line\nend\n");
         feed_vim(&mut ed, keys);
         assert_eq!(vim_at(&ed), want, "{keys}");
     }

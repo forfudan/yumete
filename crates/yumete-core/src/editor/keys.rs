@@ -2366,6 +2366,13 @@ impl Editor {
             }
             _ => None,
         };
+        // On a closed fold the operator begins in the first column, and a
+        // linewise one lands there (`yy`, `yw`, `gUU` on a fold, measured in
+        // nvim); `d`, `>` and `<` go on to the column wanted
+        // (`coladvance(curswant)`).
+        if folded.is_some() && !matches!(op, 'd' | '>' | '<') {
+            self.sel.set_goal(Some(0));
+        }
         // **An operator takes a closed fold whole** (`:h fold-behavior`: 「dl
         // deletes the whole closed fold under the cursor」, measured).
         let (span, shape) = match op {
@@ -2505,12 +2512,15 @@ impl Editor {
     /// **After vim's operator the column wanted is worked out again** from
     /// where the cursor stands (`do_pending_operator` sets
     /// `w_set_curswant`), so `$` stops being sticky: `$yj` then `j` keeps
-    /// the column `y` left.
+    /// the column `y` left. On a closed fold that is its first column
+    /// (`curs_columns`), worked out at once: `zfj` then `zo` and `j` lands
+    /// in column 1.
     fn want_the_column_after_an_operator(&mut self, span: motion::Span) {
         if !self.as_vim() || matches!(span, motion::Span::Missed) {
             return;
         }
-        self.sel.set_goal(None);
+        let shut = self.shut_around(self.cursor_line()).is_some();
+        self.sel.set_goal(shut.then_some(0));
     }
 
     /// The line below `lands` and the byte column `lands` has on its own
