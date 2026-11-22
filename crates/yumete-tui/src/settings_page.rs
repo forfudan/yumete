@@ -3196,6 +3196,31 @@ mod tests {
         assert_eq!(seat.session_toml(), "", "refused: {}", ed.status());
     }
 
+    /// **`[editor] whitespace` takes the core's five words and no other**,
+    /// and its glyphs one character one cell wide.
+    #[test]
+    fn set_reaches_the_whitespace_marks() {
+        assert_eq!(yumete_config::WHITESPACE_WORDS, yumete_core::whitespace::Show::NAMES);
+        let mut ed = Editor::new();
+        let mut seat = Seat::default();
+        ed.execute(":set whitespace boundary").unwrap();
+        seat.settle(&mut ed);
+        assert_eq!(seat.session_toml(), "[editor]\nwhitespace = \"boundary\"\n");
+        let mut ed = Editor::new();
+        let mut seat = Seat::default();
+        ed.execute(":set whitespace none").unwrap();
+        seat.settle(&mut ed);
+        assert_eq!(seat.session_toml(), "", "refused: {}", ed.status());
+        let mut ed = Editor::new();
+        let mut seat = Seat::default();
+        ed.execute(":set whitespace_tab_character ab").unwrap();
+        seat.settle(&mut ed);
+        assert_eq!(seat.session_toml(), "", "refused: {}", ed.status());
+        ed.execute(":set whitespace_tab_character >").unwrap();
+        seat.settle(&mut ed);
+        assert_eq!(seat.session_toml(), "[editor]\nwhitespace_tab_character = \">\"\n");
+    }
+
     /// **A bare `:set` on an on/off setting flips it** for the run, from
     /// what the run reads now, and opens nothing; any other setting's name
     /// alone opens the panel on its row, as before.

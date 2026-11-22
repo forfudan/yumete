@@ -376,6 +376,14 @@ const SELECTION_HIGHLIGHT_CASE_WAYS: &[Choice] = &[
     Choice { word: "by_place", label: "settings.pick.selection-highlight-case.by-place" },
 ];
 
+const WHITESPACE_WAYS: &[Choice] = &[
+    Choice { word: "off", label: "settings.pick.whitespace.off" },
+    Choice { word: "boundary", label: "settings.pick.whitespace.boundary" },
+    Choice { word: "selection", label: "settings.pick.whitespace.selection" },
+    Choice { word: "trailing", label: "settings.pick.whitespace.trailing" },
+    Choice { word: "all", label: "settings.pick.whitespace.all" },
+];
+
 const EOL_DIAGNOSTIC_WAYS: &[Choice] = &[
     Choice { word: "off", label: "settings.pick.eol-diagnostics.off" },
     Choice { word: "basic", label: "settings.pick.eol-diagnostics.basic" },
@@ -789,6 +797,33 @@ pub const SETTINGS: &[Setting] = &[
         label: "settings.editor.unicode-alarm",
         hint: "settings.editor.unicode-alarm.hint",
         factory: "true",
+    },
+    Setting {
+        table: "editor",
+        key: "whitespace",
+        group: Group::Marks,
+        kind: Kind::Pick(WHITESPACE_WAYS),
+        label: "settings.editor.whitespace",
+        hint: "settings.editor.whitespace.hint",
+        factory: r#""off""#,
+    },
+    Setting {
+        table: "editor",
+        key: "whitespace_space_character",
+        group: Group::Marks,
+        kind: Kind::Text,
+        label: "settings.editor.whitespace-space-character",
+        hint: "settings.editor.whitespace-space-character.hint",
+        factory: "\"\u{22c5}\"",
+    },
+    Setting {
+        table: "editor",
+        key: "whitespace_tab_character",
+        group: Group::Marks,
+        kind: Kind::Text,
+        label: "settings.editor.whitespace-tab-character",
+        hint: "settings.editor.whitespace-tab-character.hint",
+        factory: "\"\u{21e5}\"",
     },
     Setting {
         table: "editor",

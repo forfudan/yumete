@@ -487,6 +487,19 @@ pub struct EditorConfig {
     /// **The Unicode alarm** (#252): tint the cells where a
     /// zero-width or bidi control hides, and spaces that are not U+0020.
     pub unicode_alarm: bool,
+    /// **Whitespace marks** (VS Code's `renderWhitespace`): a faint glyph in
+    /// the cell of a space or a tab. `"off"` (the default), `"boundary"`
+    /// (leading and trailing blanks, every tab, and a space next to another
+    /// blank — not the one space between two words), `"selection"` (blanks
+    /// inside a selection), `"trailing"` (blanks after a line's last other
+    /// character), or `"all"`. Only U+0020 and U+0009; the other spaces are
+    /// the Unicode alarm's.
+    pub whitespace: String,
+    /// The mark in a space's cell, one character one cell wide.
+    pub whitespace_space_character: String,
+    /// The mark in a tab's first cell, one character one cell wide; the
+    /// rest of the tab stays blank.
+    pub whitespace_tab_character: String,
     /// Whether a search pattern with no capital in it ignores case (#301).
     ///
     /// On: a manuscript is 漢字, which has no case, so nearly every search
@@ -685,6 +698,9 @@ impl Default for EditorConfig {
             status_count: "text".to_string(),
             inactive_status: "line".to_string(),
             unicode_alarm: true,
+            whitespace: "off".to_string(),
+            whitespace_space_character: "\u{22c5}".to_string(),
+            whitespace_tab_character: "\u{21e5}".to_string(),
             command_line: true,
             signature: true,
             sidebar_buttons: true,
@@ -3400,6 +3416,9 @@ const TAB_INSERTS_NAMES: &[&str] = &["spaces", "tab"];
 /// `[ime] system`.
 const SYSTEM_IME_NAMES: &[&str] = &["auto", "keep"];
 
+/// The words `[editor] whitespace` takes.
+pub const WHITESPACE_WORDS: &[&str] = &["off", "boundary", "selection", "trailing", "all"];
+
 /// The words `[editor] selection_highlight_case` takes.
 pub const SELECTION_HIGHLIGHT_CASE_WORDS: &[&str] = &["respect", "ignore", "by_place"];
 
@@ -4258,6 +4277,12 @@ impl Config {
         }
     }
 
+    if let Some(word) = raw.editor.whitespace.as_deref() {
+        if !WHITESPACE_WORDS.contains(&word) {
+            problems.push(one_of("[editor] whitespace", word, WHITESPACE_WORDS));
+        }
+    }
+
     if let Some(word) = raw.editor.selection_highlight_case.as_deref() {
         if !SELECTION_HIGHLIGHT_CASE_WORDS.contains(&word) {
             problems.push(one_of("[editor] selection_highlight_case", word, SELECTION_HIGHLIGHT_CASE_WORDS));
@@ -5080,6 +5105,9 @@ struct RawEditor {
     status_count: Option<String>,
     inactive_status: Option<String>,
     unicode_alarm: Option<bool>,
+    whitespace: Option<String>,
+    whitespace_space_character: Option<String>,
+    whitespace_tab_character: Option<String>,
     command_line: Option<bool>,
     signature: Option<bool>,
     sidebar_buttons: Option<bool>,
@@ -5435,6 +5463,15 @@ impl RawConfig {
         }
         if other.editor.unicode_alarm.is_some() {
             self.editor.unicode_alarm = other.editor.unicode_alarm;
+        }
+        if other.editor.whitespace.is_some() {
+            self.editor.whitespace = other.editor.whitespace.clone();
+        }
+        if other.editor.whitespace_space_character.is_some() {
+            self.editor.whitespace_space_character = other.editor.whitespace_space_character.clone();
+        }
+        if other.editor.whitespace_tab_character.is_some() {
+            self.editor.whitespace_tab_character = other.editor.whitespace_tab_character.clone();
         }
         if other.editor.signature.is_some() {
             self.editor.signature = other.editor.signature;
@@ -6032,6 +6069,27 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.unicode_alarm {
             config.editor.unicode_alarm = on;
+        }
+        if let Some(word) = self.editor.whitespace.as_deref() {
+            if WHITESPACE_WORDS.contains(&word) {
+                config.editor.whitespace = word.to_string();
+            }
+        }
+        // **One character, one cell wide**, as the indent guide's: anything
+        // else keeps the factory's.
+        for (key, written, kept) in [
+            ("whitespace_space_character", self.editor.whitespace_space_character, &mut config.editor.whitespace_space_character),
+            ("whitespace_tab_character", self.editor.whitespace_tab_character, &mut config.editor.whitespace_tab_character),
+        ] {
+            let Some(character) = written else { continue };
+            match one_character(&character, true) {
+                true => *kept = character,
+                false => problems.push(said(
+                    format!("[editor] {key} = \"{character}\"：只能是一个半角字符"),
+                    format!("[editor] {key} = \"{character}\"：只能是一個半角字符"),
+                    format!("[editor] {key} = \"{character}\": one character, one cell wide"),
+                )),
+            }
         }
         if let Some(on) = self.editor.signature {
             config.editor.signature = on;
@@ -7193,6 +7251,39 @@ mod tests {
         Config::complain_about(&raw, &mut said);
         assert_eq!(said.len(), 1, "{said:?}");
         assert_eq!(Config::from_toml(text).editor.selection_highlight_case, "respect");
+    }
+
+    /// **Whitespace marks**: off, `⋅` and `⇥` unless written otherwise; its
+    /// five words and no other; each glyph one character one cell wide, as
+    /// the indent guide's, anything else said and the factory's kept.
+    #[test]
+    fn whitespace_marks_read_their_mode_and_two_glyphs() {
+        let factory = Config::from_toml("");
+        assert_eq!(factory.editor.whitespace, "off");
+        assert_eq!(factory.editor.whitespace_space_character, "\u{22c5}");
+        assert_eq!(factory.editor.whitespace_tab_character, "\u{21e5}");
+        for word in WHITESPACE_WORDS {
+            let c = Config::from_toml(&format!("[editor]\nwhitespace = \"{word}\"\n"));
+            assert_eq!(c.editor.whitespace, *word);
+        }
+        let text = "[editor]\nwhitespace = \"none\"\n";
+        let raw: RawConfig = toml::from_str(text).unwrap();
+        let mut said = Vec::new();
+        Config::complain_about(&raw, &mut said);
+        assert_eq!(said.len(), 1, "{said:?}");
+        assert_eq!(Config::from_toml(text).editor.whitespace, "off");
+        let (c, said) = Config::from_toml_saying("[editor]\nwhitespace_space_character = \".\"\nwhitespace_tab_character = \">\"\n");
+        assert!(said.is_empty(), "{said:?}");
+        assert_eq!((c.editor.whitespace_space_character.as_str(), c.editor.whitespace_tab_character.as_str()), (".", ">"));
+        // Two characters, none, and one two cells wide are each refused.
+        for bad in ["..", "", "\u{6c34}"] {
+            let (c, said) = Config::from_toml_saying(&format!(
+                "[editor]\nwhitespace_space_character = \"{bad}\"\nwhitespace_tab_character = \"{bad}\"\n"
+            ));
+            assert_eq!(said.len(), 2, "{bad:?}: {said:?}");
+            assert_eq!(c.editor.whitespace_space_character, "\u{22c5}", "{bad:?}");
+            assert_eq!(c.editor.whitespace_tab_character, "\u{21e5}", "{bad:?}");
+        }
     }
 
     /// End-of-line diagnostics: off unless asked; three words, helix's five

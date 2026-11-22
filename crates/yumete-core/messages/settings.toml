@@ -1025,6 +1025,42 @@ zhs = "哪些键可以跨越行尾(vim 键位)。只能是 b h l < > ~"
 en = "which keys cross a line end (vim keymap): b h l < > ~"
 
 [[message]]
+# 設置：空白記號（草稿）
+key = "settings.editor.whitespace"
+zhs = "空白记号"
+en = "whitespace marks"
+
+[[message]]
+# 設置：空格的記號（草稿）
+key = "settings.editor.whitespace-space-character"
+zhs = "空格记号"
+en = "space mark"
+
+[[message]]
+# 設置：空格的記號——一句話（草稿）
+key = "settings.editor.whitespace-space-character.hint"
+zhs = "标空格用的字符，要占一格"
+en = "the character a space is marked with, one cell wide"
+
+[[message]]
+# 設置：製表符的記號（草稿）
+key = "settings.editor.whitespace-tab-character"
+zhs = "制表符记号"
+en = "tab mark"
+
+[[message]]
+# 設置：製表符的記號——一句話（草稿）
+key = "settings.editor.whitespace-tab-character.hint"
+zhs = "标制表符用的字符，画在它的第一格，要占一格"
+en = "the character in a tab's first cell, one cell wide"
+
+[[message]]
+# 設置：空白記號——一句話（草稿）
+key = "settings.editor.whitespace.hint"
+zhs = "在空格和制表符的格子里画一个淡色记号；“边界”不标词与词之间的单个空格"
+en = "a faint mark in the cells of spaces and tabs; boundary leaves out the single space between words"
+
+[[message]]
 # 設置面板：編輯一組，[editor] word_completion
 key = "settings.editor.word-completion"
 zhs = "词语补全"
@@ -2169,6 +2205,36 @@ en = "as JLREQ and clreq"
 key = "settings.pick.vertical-latin.turn"
 zhs = "一律转向"
 en = "all turned"
+
+[[message]]
+# 設置面板：空白記號——全部（草稿）
+key = "settings.pick.whitespace.all"
+zhs = "全部"
+en = "all"
+
+[[message]]
+# 設置面板：空白記號——行首行尾、製表符、連着的空格（草稿）
+key = "settings.pick.whitespace.boundary"
+zhs = "边界：行首行尾、制表符、连着的空格"
+en = "boundary: leading and trailing, tabs, runs of spaces"
+
+[[message]]
+# 設置面板：空白記號——都不畫（草稿）
+key = "settings.pick.whitespace.off"
+zhs = "关闭"
+en = "off"
+
+[[message]]
+# 設置面板：空白記號——選區裏的（草稿）
+key = "settings.pick.whitespace.selection"
+zhs = "选区内"
+en = "inside selections"
+
+[[message]]
+# 設置面板：空白記號——行尾的（草稿）
+key = "settings.pick.whitespace.trailing"
+zhs = "行尾"
+en = "trailing"
 
 [[message]]
 # 設置：分词松紧——适中
