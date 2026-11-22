@@ -75,6 +75,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **A count before vim's `gU`, `gu`, `g~`, `gq`, `gw`, `gc` and `zf` counts**, as in vim: `2gUU` uppercases two lines and `3gUw` three words, instead of one.
 - **vim's `2p` over a `v` or `V` selection puts the register twice**, as in vim, instead of once.
 - **vim's `ggVGgp` leaves the cursor at the end of the last line**, as in vim, instead of the first line's start: `gp` and `gP` over the whole file have no line after the put to go to.
+- **After vim's `o` and `O`, `` `[ `` and `` `] `` name what was typed on the new line**, as in vim: `Go…Esc` then `` `[ `` goes to the new line's start, not the end of the line above, and after `O` `` `] `` ends on the last character typed.
 
 ## 0.24.0 · 2026-11-17
 

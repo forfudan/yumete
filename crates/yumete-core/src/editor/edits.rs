@@ -606,8 +606,19 @@ impl Editor {
         }
         self.sel.set_head(end + ending.chars().count() + indent.chars().count());
         self.sel.set_anchor(self.sel.head());
+        self.insert_begins_the_change();
         self.enter_insert();
         self.note_fresh_indent(indent.chars().count(), false);
+    }
+
+    /// **vim's `` `[ `` and `` `] `` after `o` and `O` name what is typed
+    /// on the new line** (Insert's start, `Insstart`), not the line break
+    /// that opened it: `Go…Esc` then `` `[ `` is on the new line.
+    fn insert_begins_the_change(&mut self) {
+        if self.as_vim() {
+            let at = self.sel.head();
+            self.current_buffer_mut().set_change_span(at, at);
+        }
     }
 
     /// **`o`/`O` inside a `|` table open a *row*, the way `t r` does.**
@@ -666,6 +677,7 @@ impl Editor {
         }
         self.sel.set_head(start + indent.chars().count());
         self.sel.set_anchor(self.sel.head());
+        self.insert_begins_the_change();
         self.enter_insert();
         self.note_fresh_indent(indent.chars().count(), false);
     }

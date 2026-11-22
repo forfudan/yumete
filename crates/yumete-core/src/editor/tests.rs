@@ -46185,3 +46185,23 @@ fn a_visual_gp_over_the_whole_file_ends_on_the_last_line() {
         assert_eq!((ed.current_buffer().text().as_str(), vim_at(&ed)), (want, at), "{keys}");
     }
 }
+
+/// **vim's `` `[ `` and `` `] `` after `o` and `O` name what was typed on
+/// the new line** (measured in nvim), not the line break that opened it:
+/// `` `[ `` is the new line's start, `` `] `` the end of the typing.
+#[test]
+fn the_change_marks_after_an_opened_line_are_on_it() {
+    let text = "天地\nsea sky\n";
+    let cases: &[(&str, &str, (usize, usize))] = &[
+        ("Gonew⎋`[x", "天地\nsea sky\new\n", (3, 1)),
+        ("G2onew⎋`[x", "天地\nsea sky\new\nnew\n", (3, 1)),
+        ("ggOnew⎋`]x", "ne\n天地\nsea sky\n", (1, 2)),
+        ("Go⎋`[iX⎋", "天地\nsea sky\nX\n", (3, 1)),
+        ("GOab⏎cd⎋`[x", "天地\nb\ncd\nsea sky\n", (2, 1)),
+    ];
+    for &(keys, want, at) in cases {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        assert_eq!((ed.current_buffer().text().as_str(), vim_at(&ed)), (want, at), "{keys}");
+    }
+}
