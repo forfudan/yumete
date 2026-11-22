@@ -899,14 +899,16 @@ impl Editor {
             }
             // Before a `|` past the last line is no line either (vim's
             // E16), and the rest of the line does not run.
-            Command::RangeThen { line: address, then, typed } => {
+            Command::RangeThen { first, line: address, then, typed } => {
                 if !self.as_vim() {
                     return Err(EditorError::Command(CommandError::Unknown(typed)));
                 }
                 let last = motion::last_line(self.current_buffer().rope());
                 let line = self.address_line(&address);
-                if line < 0 || line > last as isize + 1 {
-                    self.status = say!("find.no-such-line", line, last + 1);
+                // Either end of `:99,3|` past the file is no line.
+                let mut ends = first.iter().map(|one| self.address_line(one)).chain([line]);
+                if let Some(wrong) = ends.find(|&at| at < 0 || at > last as isize + 1) {
+                    self.status = say!("find.no-such-line", wrong, last + 1);
                     self.command_failed = true;
                     return Ok(CommandOutcome::Continue);
                 }

@@ -47879,3 +47879,15 @@ fn vims_block_r_repeats_over_whole_lines() {
     assert_eq!(ed.current_buffer().text(), "ant\nbee\ncat\ndog\nelk\n");
     assert_eq!(vim_at(&ed), (2, 1));
 }
+
+/// **Either end of vim's range before a `|` past the last line is an
+/// error** (vim's `E16`), and nothing after it runs.
+#[test]
+fn vims_range_before_a_bar_checks_both_ends() {
+    let mut ed = typed_vim("a\na\na\na\n");
+    ed.execute(":99,3|s/a/b/").unwrap();
+    assert_eq!(ed.current_buffer().text(), "a\na\na\na\n");
+    assert_eq!(vim_at(&ed), (1, 1));
+    ed.execute(":2,3|s/a/b/").unwrap();
+    assert_eq!(ed.current_buffer().text(), "a\na\nb\na\n");
+}

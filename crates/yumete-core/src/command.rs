@@ -245,10 +245,11 @@ pub enum Command {
     /// names: a line, the cursor's or the last, moved by the offset.
     GotoAddress(LineAddress),
     /// vim's `:3|…` and `:2,5|…`: a bare range before a `|` puts the cursor
-    /// on its last line, then the command after the `|` runs; past the last
-    /// line the range is an error and nothing more runs. `typed` is the
-    /// whole line, for the keymap that does not read it.
-    RangeThen { line: LineAddress, then: String, typed: String },
+    /// on its last line, then the command after the `|` runs; either end
+    /// past the last line is an error and nothing more runs. `first` is the
+    /// range's other end, when it has two; `typed` is the whole line, for
+    /// the keymap that does not read it.
+    RangeThen { first: Option<LineAddress>, line: LineAddress, then: String, typed: String },
     /// `:earlier [n|span]` / `:later [n|span]` — helix's: so many undo steps,
     /// or to the change nearest a time span back or ahead.
     Earlier(UndoSpan),
@@ -7890,6 +7891,10 @@ fn parse_range_then(input: &str) -> Option<Command> {
         return None;
     }
     Some(Command::RangeThen {
+        first: match parts.len() {
+            2 => Some(address(parts[0])?),
+            _ => None,
+        },
         line: address(parts[parts.len() - 1])?,
         then: input[bar + 1..].trim_start().to_string(),
         typed: input.to_string(),
