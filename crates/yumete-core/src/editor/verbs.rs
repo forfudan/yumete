@@ -806,7 +806,7 @@ impl Editor {
             .map(f)
             .collect();
         self.snapshot();
-        if !self.overwrite(start, end, &text) {
+        if !self.overwrite_in_place(start, end, &text) {
             return;
         }
         // …so the selection is measured off what was written, not off what
@@ -930,7 +930,7 @@ impl Editor {
             })
             .collect();
         self.snapshot();
-        if !self.overwrite(start, end, &text) {
+        if !self.overwrite_in_place(start, end, &text) {
             return;
         }
         // The selection is what it was: `r` writes over the text without moving

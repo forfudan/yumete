@@ -5403,7 +5403,7 @@ impl Editor {
         let at = self.sel.head();
         self.snapshot();
         let len = self.current_buffer().char_count();
-        let done = self.without_cell_guard(|e| e.current_buffer_mut().replace(0..len, text));
+        let done = self.without_cell_guard(|e| e.current_buffer_mut().rewrite(0..len, text));
         if !self.applied(done) {
             return false;
         }

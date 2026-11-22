@@ -182,6 +182,17 @@ impl Editor {
     /// Both halves are checked *before* either runs, so a refusal leaves the
     /// buffer exactly as it was rather than half-edited.
     pub(super) fn overwrite(&mut self, start: usize, end: usize, text: &str) -> bool {
+        self.write_over(start, end, text, false)
+    }
+
+    /// [`Self::overwrite`] for text written over in place, as `~` and `r`
+    /// write it: the marks keep their lines and columns
+    /// ([`crate::buffer::Buffer::rewrite`]).
+    pub(super) fn overwrite_in_place(&mut self, start: usize, end: usize, text: &str) -> bool {
+        self.write_over(start, end, text, true)
+    }
+
+    fn write_over(&mut self, start: usize, end: usize, text: &str, in_place: bool) -> bool {
         if let Some(why) = self
             .cell_refuses_cut(start..end)
             .or_else(|| self.cell_refuses_text(text))
@@ -193,7 +204,10 @@ impl Editor {
         // callers reach it, and the ones that did not refuse first wrote
         // nothing and then moved the cursor over it. It asks the buffer now,
         // and the buffer answers.
-        let done = self.current_buffer_mut().replace(start..end, text);
+        let done = match in_place {
+            true => self.current_buffer_mut().rewrite(start..end, text),
+            false => self.current_buffer_mut().replace(start..end, text),
+        };
         self.applied(done)
     }
 

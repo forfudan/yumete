@@ -1499,7 +1499,7 @@ impl Editor {
         self.current_buffer_mut().mark_modified();
         self.snapshot();
         let len = self.current_buffer().char_count();
-        let done = self.current_buffer_mut().replace(0..len, &draft);
+        let done = self.current_buffer_mut().rewrite(0..len, &draft);
         if !self.applied(done) {
             return;
         }

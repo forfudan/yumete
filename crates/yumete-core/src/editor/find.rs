@@ -2123,7 +2123,7 @@ impl Editor {
         // back — not one match at a time.
         self.snapshot();
         let len = self.current_buffer().char_count();
-        let done = self.without_cell_guard(|e| e.current_buffer_mut().replace(0..len, &rebuilt));
+        let done = self.without_cell_guard(|e| e.current_buffer_mut().rewrite(0..len, &rebuilt));
         if !self.applied(done) {
             return false;
         }

@@ -48,7 +48,7 @@ impl Editor {
         }
         self.snapshot();
         let len = self.current_buffer().char_count();
-        let done = self.without_cell_guard(|e| e.current_buffer_mut().replace(0..len, output));
+        let done = self.without_cell_guard(|e| e.current_buffer_mut().rewrite(0..len, output));
         if !self.applied(done) {
             return;
         }

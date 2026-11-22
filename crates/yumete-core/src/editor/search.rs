@@ -458,8 +458,11 @@ impl Editor {
         let mut rebuilt = String::with_capacity(text.len());
         // The last line substituted, counted in the new text.
         let (mut row, mut last_hit) = (0usize, None);
+        // The line each line now begins on, for the marks.
+        let mut rows = Vec::new();
 
         for (idx, line) in text.split_inclusive('\n').enumerate() {
+            rows.push(row);
             if chosen.has(idx) {
                 // 換行符不進正則，原樣寫回去（CRLF 也原樣）——見
                 // [`crate::editor::line_body`]。
@@ -500,7 +503,7 @@ impl Editor {
         if count > 0 && rebuilt != text {
             self.snapshot();
             let len = self.current_buffer().char_count();
-            let done = self.without_cell_guard(|e| e.current_buffer_mut().replace(0..len, &rebuilt));
+            let done = self.without_cell_guard(|e| e.current_buffer_mut().rewrite_rows(0..len, &rebuilt, &rows));
             if !self.applied(done) {
                 return;
             }
@@ -750,7 +753,7 @@ impl Editor {
             walk.snapped = true;
         }
         let len = self.current_buffer().char_count();
-        let done = self.without_cell_guard(|e| e.current_buffer_mut().replace(0..len, &rebuilt));
+        let done = self.without_cell_guard(|e| e.current_buffer_mut().rewrite(0..len, &rebuilt));
         if !self.applied(done) {
             return Some(self.status.clone());
         }

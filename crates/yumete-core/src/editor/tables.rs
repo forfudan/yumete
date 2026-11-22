@@ -3257,7 +3257,7 @@ impl Editor {
             }
             None => {
                 let len = self.current_buffer().char_count();
-                self.without_cell_guard(|e| e.current_buffer_mut().replace(0..len, &rebuilt))
+                self.without_cell_guard(|e| e.current_buffer_mut().rewrite(0..len, &rebuilt))
             }
         };
         if !self.applied(done) {

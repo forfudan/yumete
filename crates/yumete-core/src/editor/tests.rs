@@ -45907,3 +45907,36 @@ fn a_change_on_an_empty_line_writes_there() {
     assert_eq!(run("jC⎋Gp"), "first\n\nnext word here\nlast\n");
     assert_eq!(run("j2cwX⎋"), "first\nXword here\nlast\n");
 }
+
+/// **`:s`, `~`, `U`, `u` and Visual `r` over several lines leave `gv` and
+/// the marks on their lines and columns** (measured in nvim 0.12): vim
+/// moves its marks through a rewrite only by the lines it adds, so a mark
+/// stays on the first of the lines `:s` made of its line, and the lines
+/// below move down by the rest.
+#[test]
+fn a_rewrite_of_lines_leaves_the_vim_marks_on_them() {
+    let text = "one two\nthree four\nfive six\nseven eight\nnine ten\n";
+    let cases: &[(&str, &str, (usize, usize))] = &[
+        ("jVj⎋:%s/e/E/⏎gvd", "onE two\nsEven eight\nninE ten\n", (2, 1)),
+        ("jjvj~gvd", "one two\nthree four\neven eight\nnine ten\n", (3, 1)),
+        ("jjvjlr.gvd", "one two\nthree four\nven eight\nnine ten\n", (3, 1)),
+        ("jjjmaggVGu'ax", "one two\nthree four\nfive six\neven eight\nnine ten\n", (4, 1)),
+        ("jjjma:%s/ /\\n/⏎'ax", "one\ntwo\nthree\nfour\nfive\nsix\neven\neight\nnine\nten\n", (7, 1)),
+        ("jjjVj⎋:2s/ /\\n/⏎gvd", "one two\nthree\nfour\nfive six\n", (4, 1)),
+        ("jjllmA:%s/o/OO/g⏎`Ax", "OOne twOO\nthree fOOur\nfie six\nseven eight\nnine ten\n", (3, 3)),
+    ];
+    for &(keys, want, at) in cases {
+        let mut ed = typed_vim(text);
+        keyed(&mut ed, keys);
+        let rope = ed.current_buffer().rope().clone();
+        let line = rope.char_to_line(ed.sel.head());
+        let cursor = (line + 1, ed.sel.head() - rope.line_to_char(line) + 1);
+        assert_eq!((ed.current_buffer().text().as_str(), cursor), (want, at), "{keys:?}");
+    }
+    // A redo brings the rewrite back without moving them either.
+    let mut ed = typed_vim(text);
+    keyed(&mut ed, "jjVjUu");
+    ed.on_key(Key::Ctrl('r'));
+    keyed(&mut ed, "gvd");
+    assert_eq!(ed.current_buffer().text(), "one two\nthree four\nnine ten\n");
+}

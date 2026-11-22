@@ -138,7 +138,7 @@ impl Editor {
         }
         self.snapshot();
         let len = self.current_buffer().char_count();
-        let done = self.current_buffer_mut().replace(0..len, &rebuilt);
+        let done = self.current_buffer_mut().rewrite(0..len, &rebuilt);
         if !self.applied(done) {
             return;
         }
@@ -191,7 +191,7 @@ impl Editor {
         }
         self.snapshot();
         let len = self.current_buffer().char_count();
-        let done = self.current_buffer_mut().replace(0..len, &formatted);
+        let done = self.current_buffer_mut().rewrite(0..len, &formatted);
         if !self.applied(done) {
             return;
         }

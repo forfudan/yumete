@@ -537,6 +537,16 @@ pub struct NamedMark {
     pub goes_with_line: bool,
 }
 
+/// How an edit moves the kept selections and marks.
+#[derive(Clone, Copy)]
+enum Carry<'a> {
+    /// As a cut and a put ([`carry_place`]).
+    Cut,
+    /// As a rewrite of the lines it covers ([`Buffer::rewrite`]), with where
+    /// each line went when the caller knows.
+    Lines(Option<&'a [usize]>),
+}
+
 /// **What an edit took, as vim's marks see it**: where it began, how many
 /// line breaks it took and the column it ended at on its last line, and
 /// whether it ran to that line's end.
@@ -1545,6 +1555,35 @@ impl Buffer {
     /// places in the editor were that pair; they are this now.
     #[must_use = "a read-only buffer refuses the edit; the caller has to say so"]
     pub fn replace(&mut self, range: Range<usize>, text: &str) -> Edit {
+        self.write_over(range, text, Carry::Cut)
+    }
+
+    /// **Write `text` over `range` as a rewrite of the lines it covers**, the
+    /// way `:s`, `~` and `r` rewrite them, rather than as a cut and a put.
+    ///
+    /// vim moves its marks through those by the lines they add or take and
+    /// never by column (`mark_adjust`; `op_tilde` and `op_replace` move none):
+    /// a place keeps its line and column while its line is still there, and
+    /// the lines below move by the lines added or taken. The lines the text
+    /// left alone at either end are found by comparing them, so a rewrite of
+    /// the whole buffer moves only what lies past the lines it changed; a
+    /// line it took goes with the marks that go with their line, and the
+    /// rest land on its first line, as vim's filter leaves them.
+    #[must_use = "a read-only buffer refuses the edit; the caller has to say so"]
+    pub fn rewrite(&mut self, range: Range<usize>, text: &str) -> Edit {
+        self.write_over(range, text, Carry::Lines(None))
+    }
+
+    /// [`Self::rewrite`], told where each line went: `rows[i]` is the line
+    /// the `i`th line from the range's first now begins on, as `:s` knows
+    /// when its replacement puts line breaks (vim keeps a mark on the first
+    /// of the lines its line became).
+    #[must_use = "a read-only buffer refuses the edit; the caller has to say so"]
+    pub fn rewrite_rows(&mut self, range: Range<usize>, text: &str, rows: &[usize]) -> Edit {
+        self.write_over(range, text, Carry::Lines(Some(rows)))
+    }
+
+    fn write_over(&mut self, range: Range<usize>, text: &str, carry: Carry) -> Edit {
         if self.readonly {
             return Err(ReadOnly);
         }
@@ -1552,10 +1591,18 @@ impl Buffer {
         let taken = range.end - range.start;
         self.earn_snapshot();
         self.shift_folds(start, taken, text);
-        let cut = self.cut_of(start, taken);
+        let first = self.rope.char_to_line(start);
+        let (cut, before) = match carry {
+            Carry::Cut => (self.cut_of(start, taken), None),
+            Carry::Lines(_) => (None, self.keeps_places().then(|| self.rope.clone())),
+        };
         self.rope.remove(range);
         self.rope.insert(start, text);
-        self.carry_selections(cut, start + text.chars().count());
+        match (carry, before) {
+            (Carry::Cut, _) => self.carry_selections(cut, start + text.chars().count()),
+            (Carry::Lines(rows), Some(before)) => self.carry_lines(&before, first, rows),
+            (Carry::Lines(_), None) => {}
+        }
         self.edited = next_edit();
         self.revision += 1;
         self.edit = Some((start, text.chars().count() as isize - taken as isize));
@@ -1719,7 +1766,7 @@ impl Buffer {
     /// What an edit taking `taken` characters at `at` takes, read before it
     /// does; `None` when nothing is kept to move.
     fn cut_of(&self, at: usize, taken: usize) -> Option<Cut> {
-        if self.last_selection.is_none() && self.held_selections.is_empty() && self.named_marks.is_empty() {
+        if !self.keeps_places() {
             return None;
         }
         let rope = &self.rope;
@@ -1737,6 +1784,40 @@ impl Buffer {
             blank_tail: rope.slice(last_start.max(at)..end).chars().all(|c| c == ' ' || c == '\t'),
             splits: false,
         })
+    }
+
+    /// Whether a selection or a mark is kept here for an edit to move.
+    fn keeps_places(&self) -> bool {
+        self.last_selection.is_some() || !self.held_selections.is_empty() || !self.named_marks.is_empty()
+    }
+
+    /// Move the kept selections through a rewrite of the lines from `first`
+    /// (see [`Self::rewrite`]), the text having been `before`.
+    fn carry_lines(&mut self, before: &Rope, first: usize, rows: Option<&[usize]>) {
+        let (was, now) = (before.len_lines(), self.rope.len_lines());
+        let (head, tail) = match rows {
+            Some(_) => (0, 0),
+            None => {
+                let head = first + (first..was.min(now)).take_while(|&i| before.line(i) == self.rope.line(i)).count();
+                let most = was.min(now) - head;
+                let tail = (1..=most).take_while(|&i| before.line(was - i) == self.rope.line(now - i)).count();
+                (head, tail)
+            }
+        };
+        let to = |line: usize| -> Option<usize> {
+            match rows {
+                _ if line < first => Some(line),
+                Some(rows) => match rows.get(line - first) {
+                    Some(&row) => Some(row),
+                    None => Some((line + now).saturating_sub(was)),
+                },
+                None if line < head => Some(line),
+                None if line >= was - tail => Some(line + now - was),
+                None => (line < now - tail).then_some(line),
+            }
+        };
+        self.named_marks.retain(|_, mark| !(mark.goes_with_line && to(mark.place.0).is_none()));
+        self.move_selections(|(line, column)| (to(line).unwrap_or(first), column));
     }
 
     /// Move the kept selections through the edit that took `cut` and put
