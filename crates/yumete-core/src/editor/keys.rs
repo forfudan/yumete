@@ -1864,6 +1864,16 @@ impl Editor {
             _ => 1,
         };
         let hops = (n / nth.max(1)).max(1);
+        // **A count of paragraphs is all or nothing**, by vim's own count
+        // (`findpar`): one that runs past the file takes nothing, and a last
+        // hop that only reaches the file's end still counts.
+        if let motion::Motion::Paragraph { forward } = step.motion {
+            if motion::vim_paragraphs(self.current_buffer().rope(), start, forward, hops).is_none() {
+                self.count = None;
+                self.alias_count = None;
+                return;
+            }
+        }
         for i in 0..hops {
             let what = match i + 1 == hops {
                 true => finally.unwrap_or(step.motion),
@@ -1902,14 +1912,10 @@ impl Editor {
             // and `dt,` still takes that character — stopping here made `dt,`
             // do nothing at all.
             if i > 0 && head == self.sel.head() {
-                // Warning: **數目走不完，段落和句子就整個不做**（拿 nvim 量過）。
-                // 只有一個空行的時候 `d3}` 在 nvim 裏一個字都不刪，而留着已經走成的
-                // 那幾跳會讓它刪到檔尾（`d2{` 在第一行上同理）。`f`/`t` 的數目不走這條路，它們一次問完
+                // Warning: **數目走不完，句子就整個不做**（拿 nvim 量過），段落在上面
+                // 已經照 vim 的數法數過一遍：留着已經走成的那幾跳會讓 `d3)` 刪到檔尾。`f`/`t` 的數目不走這條路，它們一次問完
                 // （上面那個 `nth`），而 `w` 在檔尾是 vim 自己開的特例。
-                if matches!(
-                    step.motion,
-                    motion::Motion::Paragraph { .. } | motion::Motion::Sentence { .. }
-                ) {
+                if matches!(step.motion, motion::Motion::Sentence { .. }) {
                     target = None;
                 }
                 break;

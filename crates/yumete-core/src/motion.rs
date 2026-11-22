@@ -1421,33 +1421,51 @@ fn empty(rope: &Rope, line: usize) -> bool {
 /// `findpar`), so from among empty lines it crosses them and the paragraph
 /// after them.
 pub fn vim_next_paragraph(rope: &Rope, pos: usize) -> usize {
-    let last = last_line(rope);
-    let mut line = line_of(rope, pos);
-    let mut crossed_text = !empty(rope, line);
-    while line < last {
-        line += 1;
-        match empty(rope, line) {
-            true if crossed_text => return rope.line_to_char(line),
-            true => {}
-            false => crossed_text = true,
-        }
-    }
-    document_end(rope)
+    vim_paragraph_hop(rope, pos, true).0
 }
 
 /// **vim's `{`** — the previous empty line, [`vim_next_paragraph`] backwards.
 pub fn vim_prev_paragraph(rope: &Rope, pos: usize) -> usize {
+    vim_paragraph_hop(rope, pos, false).0
+}
+
+/// One vim paragraph hop from `pos`, and whether it ran off the file's
+/// end (or start) instead of stopping at an empty line.
+fn vim_paragraph_hop(rope: &Rope, pos: usize, forward: bool) -> (usize, bool) {
+    let last = last_line(rope);
     let mut line = line_of(rope, pos);
     let mut crossed_text = !empty(rope, line);
-    while line > 0 {
-        line -= 1;
+    while (forward && line < last) || (!forward && line > 0) {
+        line = match forward {
+            true => line + 1,
+            false => line - 1,
+        };
         match empty(rope, line) {
-            true if crossed_text => return rope.line_to_char(line),
+            true if crossed_text => return (rope.line_to_char(line), false),
             true => {}
             false => crossed_text = true,
         }
     }
-    0
+    match forward {
+        true => (document_end(rope), true),
+        false => (0, true),
+    }
+}
+
+/// **vim's `}` or `{` taken `count` times** (`findpar`): where the last hop
+/// lands, or `None` when a hop runs off the file with hops still to go, as
+/// vim's fails without moving (`5}` past the last paragraph). The last hop
+/// may run off: it lands on the file's end.
+pub fn vim_paragraphs(rope: &Rope, pos: usize, forward: bool, count: usize) -> Option<usize> {
+    let mut at = pos;
+    for left in (0..count.max(1)).rev() {
+        let (to, ran_off) = vim_paragraph_hop(rope, at, forward);
+        if ran_off && left > 0 {
+            return None;
+        }
+        at = to;
+    }
+    Some(at)
 }
 
 /// Whether the character at `i` closes a sentence.

@@ -70,10 +70,16 @@ pub(super) const NORMAL_COMMANDS: &[NormalCommand] = &[
     // vim's `{` `}` `(` `)` are jumps (`:h jump-motions`), noted without
     // moving the page, as vim's.
     (NormalCmd::JumpNextParagraph, |e, cx| {
+        if e.paragraphs_run_out(true, cx.count) {
+            return;
+        }
         e.note_where_we_came_from();
         e.cmd_jump_by_word(cx.with_key(Key::Char('}')))
     }, Key::Char('}')),
     (NormalCmd::JumpPrevParagraph, |e, cx| {
+        if e.paragraphs_run_out(false, cx.count) {
+            return;
+        }
         e.note_where_we_came_from();
         e.cmd_jump_by_word(cx.with_key(Key::Char('{')))
     }, Key::Char('{')),
@@ -1231,6 +1237,18 @@ impl Editor {
             };
             e.jump_to(span);
         });
+    }
+
+    /// **A count of vim paragraphs that runs past the file** (`5}` with
+    /// two paragraphs left) moves nothing and fails as vim's does, ending a
+    /// macro playing it.
+    pub(super) fn paragraphs_run_out(&mut self, forward: bool, count: usize) -> bool {
+        let rope = self.current_buffer().rope();
+        let out = motion::vim_paragraphs(rope, self.sel.head(), forward, count).is_none();
+        if out {
+            self.fail_the_motion();
+        }
+        out
     }
 
     // Word motions (Helix `w`/`b`/`e`, and WORD `W`/`B`/`E`).

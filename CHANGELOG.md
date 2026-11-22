@@ -103,6 +103,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **vim's `*` and `#` are jumps, and `:$`, `:+3` and `:-3` go to their line**, as in vim: `C-o` comes back to where `*` was pressed, `:40` and the others keep the cursor's column, and `dw`, `D` or `cc` that empties a last line with no final line break leaves that line, empty.
 - **Under helix, `:s` and `:'<,'>s` with several selections change the lines of every selection**, as the commands that act on each selection do, instead of only the primary's.
 - **vim's `3o` and `3O` open three lines even with nothing typed**, as in vim, instead of one; `3O` writes its copies one below the other and ends on the last, so a copy of several lines stays whole.
+- **A count of vim's `}` or `{` that runs past the end of the file moves nothing**, as in vim, instead of going to the end; `d2}` whose last hop only reaches the end still takes everything up to it.
 
 ## 0.24.0 · 2026-11-17
 

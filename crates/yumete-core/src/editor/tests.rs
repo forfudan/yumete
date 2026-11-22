@@ -47111,3 +47111,23 @@ fn a_counted_open_line_opens_every_line() {
     assert_eq!(ed.current_buffer().text(), "fig\nleaf\nfig\nleaf\ntop\n");
     assert_eq!(vim_at(&ed), (4, 4));
 }
+
+/// **A count of vim paragraphs is all or nothing** (measured in nvim): a
+/// count that runs past the file's end moves nothing, bare or after an
+/// operator, while a last hop that only reaches the end still counts, so
+/// `d2}` from a paragraph before a closing empty line takes everything.
+#[test]
+fn a_paragraph_count_past_the_end_moves_nothing() {
+    let mut ed = typed_vim("oak\nelm\n\nfir\n");
+    feed_vim(&mut ed, "5}");
+    assert_eq!(vim_at(&ed), (1, 1));
+    feed_vim(&mut ed, "d5}");
+    assert_eq!(ed.current_buffer().text(), "oak\nelm\n\nfir\n");
+    feed_vim(&mut ed, "2}");
+    assert_eq!(vim_at(&ed), (4, 3));
+    feed_vim(&mut ed, "3{");
+    assert_eq!(vim_at(&ed), (4, 3));
+    let mut ed = typed_vim("oak\nelm\n\n");
+    feed_vim(&mut ed, "d2}");
+    assert_eq!(ed.current_buffer().text(), "\n");
+}
