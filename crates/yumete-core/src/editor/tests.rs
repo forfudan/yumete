@@ -48272,3 +48272,22 @@ fn vims_paragraph_objects_take_a_count() {
         assert_eq!(ed.current_buffer().rope().to_string(), text, "{keys}");
     }
 }
+
+/// **vim's text objects in Visual mode take their count** (measured in
+/// nvim): `v2iw` two words, the blank between them one, `v2i(` the second
+/// pair out, `v2ap` two paragraphs.
+#[test]
+fn vims_visual_objects_take_a_count() {
+    for (text, keys, after) in [
+        ("abc def ghi\n", "v2iwd", "def ghi\n"),
+        ("abc def ghi\n", "v3awd", "\n"),
+        ("a (b (c d) e) f\n", "6lv2i(d", "a () f\n"),
+        ("a (b (c d) e) f\n", "6lv2a(d", "a  f\n"),
+        ("aa\nbb\n\ncc\ndd\n\nee\n", "v2apd", "ee\n"),
+        ("aa\nbb\n\ncc\ndd\n\nee\n", "v2ipd", "cc\ndd\n\nee\n"),
+    ] {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        assert_eq!(ed.current_buffer().rope().to_string(), after, "{keys}");
+    }
+}

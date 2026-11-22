@@ -2108,6 +2108,9 @@ impl Editor {
         let Cx { key, count, operator_count, continuing_zong } = cx;
         let Key::Char(key) = key else { return };
         self.pending = Pending::MatchPair { around: key == 'a' };
+        // The count is the object's: `v2ap` is two paragraphs, `v2i(` the
+        // second pair out.
+        self.operator_count = operator_count;
     }
 
     #[allow(unused_variables)]
