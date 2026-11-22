@@ -20859,6 +20859,44 @@ fn a_substitution_breaks_the_line_at_backslash_r() {
     assert_eq!(ed.current_buffer().text(), "red\r\ngreen\r\nblue\r\n");
 }
 
+/// **`\n` in a `:s` pattern matches a line break** (measured in nvim): the
+/// lines are searched as one text, a match starts on a line of the range and
+/// may run on past it, the last line keeps its break, and `:s/\n//` leaves
+/// the cursor where the last line was joined on, as vim's join does.
+#[test]
+fn a_substitution_pattern_matches_a_line_break() {
+    let text = "red,\ngreen,\nblue\n\nend\n";
+    let run = |command: &str| {
+        let mut ed = typed(text);
+        assert!(ed.execute(command).is_ok(), "{}", ed.status());
+        (ed.current_buffer().text(), vim_at(&ed))
+    };
+    let want = |text: &str, at| (text.to_string(), at);
+    assert_eq!(run("%s/,\\n/, /"), want("red, green, blue\n\nend\n", (1, 1)));
+    assert_eq!(run("%s/\\n//"), want("red,green,blueend\n", (1, 15)));
+    assert_eq!(run("2,3s/\\n/+/"), want("red,\ngreen,+blue+\nend\n", (2, 1)));
+    assert_eq!(run("%s/\\n\\n/\\r/"), want("red,\ngreen,\nblue\nend\n", (4, 1)));
+    assert_eq!(run("%s/(\\w+),\\n/$1 /g"), want("red green blue\n\nend\n", (1, 1)));
+    // `c` walks the same matches, and one `u` undoes them all.
+    let mut ed = typed(text);
+    assert!(ed.execute("%s/,\\n/ /gc").is_ok(), "{}", ed.status());
+    ed.on_key(Key::Char('n'));
+    ed.on_key(Key::Char('y'));
+    assert_eq!(ed.current_buffer().text(), "red,\ngreen blue\n\nend\n");
+    ed.on_key(Key::Char('u'));
+    assert_eq!(ed.current_buffer().text(), text);
+    // The last line ends in a break even where the file does not, and a
+    // CRLF break is one break.
+    let mut ed = Editor::new();
+    ed.add_buffer(crate::Buffer::from_text("one\ntwo"));
+    assert!(ed.execute("%s/\\n/+/").is_ok(), "{}", ed.status());
+    assert_eq!(ed.current_buffer().text(), "one+two+");
+    let mut ed = Editor::new();
+    ed.add_buffer(crate::Buffer::from_text("one,\r\ntwo\r\n"));
+    assert!(ed.execute("%s/,\\n/ /").is_ok(), "{}", ed.status());
+    assert_eq!(ed.current_buffer().text(), "one two\r\n");
+}
+
 /// **`c` — 逐處確認**: 「防止一下子全部都替换了」 (#415).
 ///
 /// The flag exists so that a substitution across a whole book is judged one

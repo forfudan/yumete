@@ -431,6 +431,14 @@ impl Editor {
             true => format!("(?i){wanted}"),
             false => wanted,
         };
+        // `\n` matches a line break (vim's `:%s/,\n/, /` joins lines), and
+        // only then are the lines read as one text: every other pattern goes
+        // line by line, which keeps a long line's substitution to its length.
+        let across = !literal && breaks_lines(pattern);
+        let cased = match across {
+            true => across_lines(&cased),
+            false => cased,
+        };
         // **替換不走智能大小寫**（見 [`Self::compile_exactly`]）：`i` 旗標是放寬那
         // 一次的唯一辦法，而 `cased` 上面已經按它寫好了。
         let re = match self.compile_exactly(&cased) {
@@ -473,7 +481,7 @@ impl Editor {
         // when both were written: it says change nothing, which is the safer
         // of the two readings of a line that asks for both.
         if confirm && !count_only {
-            self.start_confirming(look, replacement, global, chosen, reshape);
+            self.start_confirming(look, replacement, global, chosen, reshape, across);
             return;
         }
         let mut count = 0usize;
@@ -482,26 +490,37 @@ impl Editor {
         let (mut row, mut last_hit) = (0usize, None);
         // The line each line now begins on, for the marks.
         let mut rows = Vec::new();
+        // vim reads `:s/\n//` as a join (`ex_join`), which leaves the cursor
+        // where the last line was joined on.
+        let mut joined_at = None;
 
-        for (idx, line) in text.split_inclusive('\n').enumerate() {
-            rows.push(row);
-            if chosen.has(idx) {
-                // 換行符不進正則，原樣寫回去（CRLF 也原樣）——見
-                // [`crate::editor::line_body`]。
-                let (body, eol) = crate::editor::line_body(line);
-                let (new_line, n) = replace_in_line(body, &look, &replacement, global);
-                count += n;
-                let breaks = new_line.matches('\n').count();
-                if n > 0 {
-                    last_hit = Some(row + breaks);
-                }
-                row += breaks;
-                rebuilt.push_str(&new_line);
-                rebuilt.push_str(eol);
-            } else {
-                rebuilt.push_str(line);
+        if across {
+            let done = replace_across_lines(&text, &look, &replacement, global, &chosen, 0);
+            (rebuilt, count, rows, last_hit) = (done.text, done.count, done.rows, done.last_row);
+            if pattern == "\\n" && replacement.is_empty() && !ignore_case && !reshape && !pinyin && !glyphs {
+                joined_at = done.last_join;
             }
-            row += usize::from(line.ends_with('\n'));
+        } else {
+            for (idx, line) in text.split_inclusive('\n').enumerate() {
+                rows.push(row);
+                if chosen.has(idx) {
+                    // 換行符不進正則，原樣寫回去（CRLF 也原樣）——見
+                    // [`crate::editor::line_body`]。
+                    let (body, eol) = crate::editor::line_body(line);
+                    let (new_line, n) = replace_in_line(body, &look, &replacement, global);
+                    count += n;
+                    let breaks = new_line.matches('\n').count();
+                    if n > 0 {
+                        last_hit = Some(row + breaks);
+                    }
+                    row += breaks;
+                    rebuilt.push_str(&new_line);
+                    rebuilt.push_str(eol);
+                } else {
+                    rebuilt.push_str(line);
+                }
+                row += usize::from(line.ends_with('\n'));
+            }
         }
 
         // A substitution rewrites whole lines, so the cell guard cannot judge it
@@ -536,7 +555,9 @@ impl Editor {
         // **The cursor goes to the last line substituted**, on its first
         // non-blank, even when the text came out the same (vim's `:h :s`,
         // as nvim does).
-        if let Some(line) = last_hit {
+        if let Some(at) = joined_at {
+            self.set_cursor(at);
+        } else if let Some(line) = last_hit {
             let rope = self.current_buffer().rope();
             let line = line.min(motion::last_line(rope));
             let at = motion::line_first_non_blank(rope, rope.line_to_char(line));
@@ -645,6 +666,7 @@ impl Editor {
         global: bool,
         chosen: Chosen,
         reshape: bool,
+        across: bool,
     ) {
         self.ask_or_finish(Confirming {
             re,
@@ -652,6 +674,7 @@ impl Editor {
             global,
             chosen,
             reshape,
+            across,
             from: 0,
             changed: 0,
             skipped: 0,
@@ -667,6 +690,23 @@ impl Editor {
     /// walk that writes is a walk that writes in the wrong place.
     fn next_hit(&self, walk: &Confirming) -> Option<Hit> {
         let text = self.current_buffer().text();
+        if walk.across {
+            let (hay, _) = with_a_last_break(&text);
+            let pick = picks_across_lines(&hay, &walk.re, walk.global, &walk.chosen, walk.from).into_iter().next()?;
+            let ((b0, b1), (a, b)) = (pick.bytes, pick.chars);
+            // The last line's break stays (see `last_body_end`).
+            let body_end = last_body_end(&hay);
+            let end = match b1 > body_end {
+                true => a + hay[b0..body_end].chars().count(),
+                false => b,
+            };
+            return Some(Hit {
+                start: a,
+                end,
+                found: hay[b0..b1].to_string(),
+                text: walk.re.expand_in(&hay, b0, b1, &walk.replacement),
+            });
+        }
         // Char index of the start of the line being looked at.
         let mut at = 0usize;
         for (idx, line) in text.split_inclusive('\n').enumerate() {
@@ -728,6 +768,10 @@ impl Editor {
     /// [`substitute`]: Self::substitute
     fn finish_all(&mut self, walk: &mut Confirming) -> Option<String> {
         let text = self.current_buffer().text();
+        if walk.across {
+            let done = replace_across_lines(&text, &walk.re, &walk.replacement, walk.global, &walk.chosen, walk.from);
+            return self.write_the_rest(walk, &done.text, done.count);
+        }
         let mut rebuilt = String::with_capacity(text.len());
         // Char index of the start of the line being looked at, the way
         // `next_hit` counts it.
@@ -784,6 +828,12 @@ impl Editor {
             rebuilt.push_str(eol);
             at += line.chars().count();
         }
+        self.write_the_rest(walk, &rebuilt, changed)
+    }
+
+    /// The end of [`Self::finish_all`]: write `rebuilt`, which changed
+    /// `changed` matches, as one step.
+    fn write_the_rest(&mut self, walk: &mut Confirming, rebuilt: &str, changed: usize) -> Option<String> {
         if changed == 0 {
             return None;
         }
@@ -791,7 +841,7 @@ impl Editor {
         // Refusing the batch is the honest answer: every `y` already given is
         // in the buffer and stays there, and the walk closes saying why.
         if !walk.reshape {
-            if let Some(why) = self.substitution_breaks_the_grid(&rebuilt) {
+            if let Some(why) = self.substitution_breaks_the_grid(rebuilt) {
                 return Some(why);
             }
         }
@@ -801,7 +851,7 @@ impl Editor {
             walk.snapped = true;
         }
         let len = self.current_buffer().char_count();
-        let done = self.without_cell_guard(|e| e.current_buffer_mut().rewrite(0..len, &rebuilt));
+        let done = self.without_cell_guard(|e| e.current_buffer_mut().rewrite(0..len, rebuilt));
         if !self.applied(done) {
             return Some(self.status.clone());
         }
