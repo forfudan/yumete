@@ -47481,6 +47481,29 @@ fn the_change_start_after_insert_ctrl_u_is_where_it_was_pressed() {
     assert_eq!(vim_at(&ed), (2, 7));
 }
 
+/// **vim's `.` and Insert `C-o` leave `` `[ `` where the Insert began
+/// after `C-u` or `C-w`** (measured in nvim): `.` plays the keys back
+/// without the mappings that start the Insert over, and the Insert after
+/// `C-o` is a new one.
+#[test]
+fn the_change_start_after_a_repeat_or_ctrl_o_is_where_the_insert_began() {
+    for (erase, after) in [('u', "cold teaxy\n  warm milkxy\n"), ('w', "cold tea xy\n  warm milk xy\n")] {
+        let mut ed = typed_vim("cold tea\n  warm milk\n");
+        feed_vim(&mut ed, "A ab");
+        ed.on_key(Key::Ctrl(erase));
+        feed_vim(&mut ed, "xy⎋j.`[");
+        assert_eq!(ed.current_buffer().text(), after, "C-{erase}");
+        assert_eq!(vim_at(&ed), (2, 12), "C-{erase}");
+    }
+    for erase in ['u', 'w'] {
+        let mut ed = typed_vim("cold tea\n  warm milk\n");
+        feed_vim(&mut ed, "jA ab");
+        ed.on_key(Key::Ctrl(erase));
+        feed_vim(&mut ed, "ᵒkz⎋`[");
+        assert_eq!(vim_at(&ed), (1, 9), "C-{erase}");
+    }
+}
+
 /// **vim's `v`, `V` and `C-v` switch Visual mode's kind, keeping both
 /// ends, and the one already up leaves it** (measured in nvim): `Vjv`
 /// deletes characters from where `V` was pressed, `VV` selects nothing,

@@ -1129,9 +1129,11 @@ impl Editor {
 
     /// **vim's Insert starts over at `C-u` and `C-w`** (nvim maps each to
     /// `<C-G>u` first): `` `[ `` then names where the cursor stood as the key
-    /// was pressed ([`Self::mark_where_the_insert_started_over`]).
+    /// was pressed ([`Self::mark_where_the_insert_started_over`]). `.`
+    /// plays the keys back without the mappings, so its Insert never starts
+    /// over and `` `[ `` stays where it began.
     fn start_the_insert_over(&mut self, at: usize) {
-        if self.as_vim() && self.mode == Mode::Insert {
+        if self.as_vim() && self.mode == Mode::Insert && !self.repeating_edit {
             let rope = self.current_buffer().rope();
             let line = rope.char_to_line(at.min(rope.len_chars()));
             self.insert_restart = Some((line, at - rope.line_to_char(line)));

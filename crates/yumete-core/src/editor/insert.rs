@@ -78,12 +78,15 @@ pub(super) const INSERT_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::VimKillToLineEnd, |e, _| e.acting(true, |e| e.delete_to_line_end()), Key::Ctrl('k')),
     (NormalCmd::InsertRegister, |e, _| e.pending = Pending::Register, Key::Ctrl('r')),
     // vim's `i_CTRL-O`: one Normal-mode command, then back. The Insert's
-    // count goes, as vim's does: `3o` then `C-o` opens one line.
+    // count goes, as vim's does: `3o` then `C-o` opens one line. The
+    // Insert after it is a new one for `` `[ ``, which no longer starts over
+    // where an earlier `C-u` or `C-w` stood.
     (NormalCmd::RunOneNormalCommand, |e, _| {
         e.insert_again = 0;
         let rope = e.current_buffer().rope();
         let head = e.sel.head().min(rope.len_chars());
         e.one_normal_eol = (head == motion::line_end(rope, head)).then(|| rope.char_to_line(head));
+        e.insert_restart = None;
         e.one_normal_key = Some(Mode::Insert);
         e.mode = Mode::Normal;
     }, Key::Ctrl('o')),
