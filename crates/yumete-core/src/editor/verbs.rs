@@ -1095,6 +1095,7 @@ impl Editor {
         // line left behind is an empty last line, which only a break after
         // it keeps (as `p` after such a line does).
         let unterminated_end = end == rope.len_chars() && !took_break;
+        let whole_file = start == 0 && end >= rope.len_chars();
         let new = match (lines, line_wise) {
             (true, false) if took_break => format!("{text}{ending}"),
             // The last line of a file with no final break stays without
@@ -1120,6 +1121,13 @@ impl Editor {
             self.current_buffer_mut().set_change_span(first, last);
         }
         if self.paste_goes_past {
+            // **Lines put over the whole file leave `gp`'s cursor at the
+            // end of the last line** (vim's `nv_put`): the empty line the
+            // delete left behind goes, and the cursor past the put with it.
+            if whole_file && (line_wise || lines) {
+                let rope = self.current_buffer().rope();
+                return Some(motion::line_last(rope, rope.line_to_char(motion::last_line(rope))));
+            }
             return Some(self.just_past_the_put(start + new.chars().count(), line_wise || lines));
         }
         let rope = self.current_buffer().rope();

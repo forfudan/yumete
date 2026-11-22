@@ -46164,3 +46164,24 @@ fn a_counted_visual_put_puts_that_many_copies() {
         assert_eq!((ed.current_buffer().text().as_str(), vim_at(&ed)), (want, at), "{keys}");
     }
 }
+
+/// **vim's `gp` over the whole file leaves the cursor at the end of the
+/// last line** (measured in nvim): the empty line the delete left behind
+/// goes, and the cursor past the put goes with it.
+#[test]
+fn a_visual_gp_over_the_whole_file_ends_on_the_last_line() {
+    let text = "wind\nsea sky\n";
+    let cases: &[(&str, &str, (usize, usize))] = &[
+        ("yyggVGgp", "wind\n", (1, 4)),
+        ("yyggVGgP", "wind\n", (1, 4)),
+        ("yiwggVGgp", "wind\n", (1, 4)),
+        ("jyyggVGgp", "sea sky\n", (1, 7)),
+        ("yyggVG2gp", "wind\nwind\n", (2, 4)),
+        ("yyGVgp", "wind\nwind\n", (2, 1)),
+    ];
+    for &(keys, want, at) in cases {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        assert_eq!((ed.current_buffer().text().as_str(), vim_at(&ed)), (want, at), "{keys}");
+    }
+}
