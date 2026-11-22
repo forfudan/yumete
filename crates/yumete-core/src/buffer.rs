@@ -428,6 +428,9 @@ pub struct Buffer {
     /// of a long manuscript costs milliseconds. Cleared whenever `pristine` is
     /// taken again, since the same revision then has another answer.
     clean_at: std::cell::Cell<Option<(u64, bool)>>,
+    /// The last answer to [`Buffer::uniform_ending`], with the revision it is
+    /// for: a put asks it, and it reads the whole text.
+    uniform_at: std::cell::Cell<Option<(u64, Option<&'static str>)>>,
     /// **這一份的字不是從盤上那一份來的**。
     ///
     /// 救回來的草稿就是這一種：`adopt_draft` 把草稿檔刪了，於是在存檔之前它是
@@ -793,6 +796,7 @@ impl Buffer {
             seen: None,
             read_as: None,
             clean_at: std::cell::Cell::new(None),
+            uniform_at: std::cell::Cell::new(None),
             beyond_the_file: false,
             scratch_swap: None,
             copies_dir: None,
@@ -868,6 +872,7 @@ impl Buffer {
             seen: None,
             read_as: None,
             clean_at: std::cell::Cell::new(None),
+            uniform_at: std::cell::Cell::new(None),
             beyond_the_file: false,
             scratch_swap: None,
             copies_dir: None,
@@ -1053,6 +1058,7 @@ impl Buffer {
             seen,
             read_as,
             clean_at: std::cell::Cell::new(None),
+            uniform_at: std::cell::Cell::new(None),
             beyond_the_file: false,
             scratch_swap: None,
             copies_dir: None,
@@ -2688,6 +2694,37 @@ impl Buffer {
     /// was already in the file is never rewritten: the rope holds the bytes
     /// that were read, mixed endings and all, and that is what makes reading
     /// and writing a file back an exact round trip.
+    /// **The one line ending every break here has**, or `None` when it has
+    /// both, as vim reads a file: `dos` when every line ends in CRLF, else
+    /// `unix`, the carriage returns then part of the lines. A text with no
+    /// break counts as LF.
+    pub fn uniform_ending(&self) -> Option<&'static str> {
+        if let Some((revision, answer)) = self.uniform_at.get() {
+            if revision == self.revision {
+                return answer;
+            }
+        }
+        let (mut crlf, mut lf, mut last) = (false, false, 0u8);
+        for chunk in self.rope.chunks() {
+            for &b in chunk.as_bytes() {
+                if b == b'\n' {
+                    match last == b'\r' {
+                        true => crlf = true,
+                        false => lf = true,
+                    }
+                }
+                last = b;
+            }
+        }
+        let answer = match (crlf, lf) {
+            (true, true) => None,
+            (true, false) => Some("\r\n"),
+            (false, _) => Some("\n"),
+        };
+        self.uniform_at.set(Some((self.revision, answer)));
+        answer
+    }
+
     /// **這個檔是帶 BOM 來的嗎** —— `:export` 問它。
     ///
     /// 散文裏那三個字節没人在意，`.csv` 裏它是下一個程序判定 UTF-8 的依據。

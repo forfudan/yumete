@@ -46954,3 +46954,22 @@ fn a_break_put_at_the_end_of_an_unterminated_file_makes_a_line() {
     }
     assert_eq!(substituted("ink\r\npaper", "%s/\\n/\\r/g"), "ink\r\npaper\r\n\r\n");
 }
+
+/// **A vim put into a file with both kinds of line break keeps the
+/// register's breaks** (nvim reads such a file as `unix`, the `\r` part of
+/// its lines): a put changes them only between a CRLF and a LF file.
+#[test]
+fn a_vim_put_into_a_file_of_mixed_line_breaks_keeps_its_breaks() {
+    for (text, keys, want) in [
+        ("oak\r\nelm\r\nash\n", "Gyyp", "oak\r\nelm\r\nash\nash\n"),
+        ("oak\nelm\nash\r\n", "Gyyp", "oak\nelm\nash\r\nash\r\n"),
+        ("oak\r\nelm\nash\r\nfir\n", "Vjdp", "ash\r\noak\r\nelm\nfir\n"),
+        ("oak\r\nelm\nash\r\nfir\n", "yjGp", "oak\r\nelm\nash\r\nfir\noak\r\nelm\n"),
+    ] {
+        let mut ed = Editor::new();
+        ed.add_buffer(crate::Buffer::from_text(text));
+        ed.execute(":keymap vim").unwrap();
+        feed_vim(&mut ed, &format!("gg{keys}"));
+        assert_eq!(ed.current_buffer().text(), want, "{text:?} {keys}");
+    }
+}

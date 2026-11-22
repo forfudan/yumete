@@ -2483,14 +2483,23 @@ impl Editor {
     /// **Register text with this buffer's line breaks**: vim's registers
     /// hold lines, and a put writes them with the file's own ending, so a
     /// line yanked in a LF file goes into a CRLF one as CRLF and back.
+    ///
+    /// Only between those two: vim reads a file with both kinds as `unix`,
+    /// its carriage returns part of the lines, so text put into one, or
+    /// taken from one with both kinds in it, keeps its breaks as they are.
     pub(super) fn in_the_buffer_ending(&self, text: String) -> String {
         if !self.keymap_rules().vim_registers || !text.contains('\n') {
             return text;
         }
-        let lf = text.replace("\r\n", "\n");
-        match self.current_buffer().ending() {
-            "\n" => lf,
-            ending => lf.replace('\n', ending),
+        let theirs = match (text.matches("\r\n").count(), text.matches('\n').count()) {
+            (0, _) => "\n",
+            (crlf, breaks) if crlf == breaks => "\r\n",
+            _ => return text,
+        };
+        match self.current_buffer().uniform_ending() {
+            Some("\n") if theirs == "\r\n" => text.replace("\r\n", "\n"),
+            Some("\r\n") if theirs == "\n" => text.replace('\n', "\r\n"),
+            _ => text,
         }
     }
 
