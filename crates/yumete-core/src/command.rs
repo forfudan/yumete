@@ -7875,17 +7875,36 @@ fn parse_line_address(input: &str) -> Option<LineAddress> {
 }
 
 /// [`Command::RangeThen`] from `input`: one or two addresses, a `|`, and
-/// what follows it.
+/// what follows it. An address is a line number, `.`, `$` or a mark (`'a`,
+/// `'<`), with any `+N` and `-N`; `%` is the first line to the last.
 fn parse_range_then(input: &str) -> Option<Command> {
     let bar = input.find('|')?;
     let head = input[..bar].trim_end();
     let address = |part: &str| -> Option<LineAddress> {
         let part = part.trim();
+        if let Some(named) = part.strip_prefix('\'') {
+            let name = named.chars().next().filter(|c| c.is_ascii_alphabetic() || matches!(c, '<' | '>'))?;
+            let tail = &named[name.len_utf8()..];
+            let offset = match tail.is_empty() {
+                true => 0,
+                false => parse_line_address(&format!(".{tail}"))?.offset,
+            };
+            return Some(LineAddress { from: Bound::Mark(name), offset, typed: part.to_string() });
+        }
         match !part.is_empty() && part.chars().all(|c| c.is_ascii_digit()) {
             true => Some(LineAddress { from: Bound::Line(part.parse().ok()?), offset: 0, typed: part.to_string() }),
             false => parse_line_address(part),
         }
     };
+    if head.trim() == "%" {
+        let whole = |from| LineAddress { from, offset: 0, typed: "%".to_string() };
+        return Some(Command::RangeThen {
+            first: Some(whole(Bound::Line(1))),
+            line: whole(Bound::Last),
+            then: input[bar + 1..].trim_start().to_string(),
+            typed: input.to_string(),
+        });
+    }
     let parts: Vec<&str> = head.split(',').collect();
     if parts.len() > 2 || parts.iter().any(|part| address(part).is_none()) {
         return None;

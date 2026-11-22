@@ -48020,3 +48020,24 @@ fn vims_hash_makes_n_search_backward() {
         assert_eq!(vim_at(&ed), want, "{keys}");
     }
 }
+
+/// **vim's `%` and marks before a `|`** (measured in nvim): `:%|…` goes
+/// to the last line and runs the rest there, `:'m,3|…` to line 3, `:'m+2|…`
+/// two lines below the mark, and a mark not set runs nothing.
+#[test]
+fn vims_percent_and_marks_before_a_bar() {
+    let mut ed = typed_vim("o\no\no\no\n");
+    ed.execute(":%|s/o/e/").unwrap();
+    assert_eq!(ed.current_buffer().text(), "o\no\no\ne\n");
+    let mut ed = typed_vim("o\no\no\no\n");
+    feed_vim(&mut ed, "2Gmmgg");
+    ed.execute(":'m,3|s/o/e/").unwrap();
+    assert_eq!(ed.current_buffer().text(), "o\no\ne\no\n");
+    ed.execute(":'m+2|s/o/u/").unwrap();
+    assert_eq!(ed.current_buffer().text(), "o\no\ne\nu\n");
+    feed_vim(&mut ed, "gg");
+    ed.execute(":'q|s/o/u/").unwrap();
+    assert_eq!(ed.current_buffer().text(), "o\no\ne\nu\n");
+    assert_eq!(vim_at(&ed), (1, 1));
+}
+

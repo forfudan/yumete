@@ -134,6 +134,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **vim's Insert `C-o` pressed past a line's end keeps the column past it**, as in vim: `j`, `k`, `gg` or `dd` onto a longer line types in that column, so `A`, `C-o j`, `X` on `abc` over `abcdef` writes `abcXdef`, not `abXcdef`.
 - **vim's `-`, `+` and Enter under an operator begin at the first non-blank**, as in vim: `y-` leaves the cursor on the first non-blank of the line above, and `u` after `d-` comes back there; `gUU`, `guu`, `g~~` and `zf_` on an indented line leave the cursor on its first non-blank, instead of at the line's start or in the column it stood in.
 - **vim's `n` after `#` and `g#` searches backward and `N` forward**, as in vim, in Normal and Visual mode, instead of the other way round; `*` and `g*` turn it forward again.
+- **vim's `%` and marks in a range before a `|` go to their line**, as in vim: `:%|s/a/b/` substitutes on the last line and `:'a,3|…` goes to line 3; a mark not set is an error and the rest of the line does not run.
 
 ## 0.24.0 · 2026-11-17
 

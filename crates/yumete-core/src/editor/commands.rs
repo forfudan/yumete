@@ -904,10 +904,23 @@ impl Editor {
                     return Err(EditorError::Command(CommandError::Unknown(typed)));
                 }
                 let last = motion::last_line(self.current_buffer().rope());
-                let line = self.address_line(&address);
+                // A mark not set is no line either (vim's E20).
+                let marked = |e: &Self, one: &crate::command::LineAddress| match one.from {
+                    crate::command::Bound::Mark(name) => e.mark_line(name).map(|at| at as isize + 1 + one.offset),
+                    _ => Ok(e.address_line(one)),
+                };
+                let ends: Result<Vec<isize>, String> = first.iter().chain([&address]).map(|one| marked(self, one)).collect();
+                let ends = match ends {
+                    Ok(ends) => ends,
+                    Err(why) => {
+                        self.status = why;
+                        self.command_failed = true;
+                        return Ok(CommandOutcome::Continue);
+                    }
+                };
+                let line = ends[ends.len() - 1];
                 // Either end of `:99,3|` past the file is no line.
-                let mut ends = first.iter().map(|one| self.address_line(one)).chain([line]);
-                if let Some(wrong) = ends.find(|&at| at < 0 || at > last as isize + 1) {
+                if let Some(&wrong) = ends.iter().find(|&&at| at < 0 || at > last as isize + 1) {
                     self.status = say!("find.no-such-line", wrong, last + 1);
                     self.command_failed = true;
                     return Ok(CommandOutcome::Continue);
