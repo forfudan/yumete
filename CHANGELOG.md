@@ -140,6 +140,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **vim's `n` after `#` and `g#` searches backward and `N` forward**, as in vim, in Normal and Visual mode, instead of the other way round; `*` and `g*` turn it forward again.
 - **vim's `n` and `N` after `*` and `#` search from the cursor**, as in vim: after `*` then `gg`, `n` goes to the first match below the top instead of the one after the match `*` found, and each is a jump `''` comes back from.
 - **vim's Visual `n` and `N` after `*` and `#` grow the selection to the match**, as after `/`, instead of selecting the match alone.
+- **vim's `gU`, `gu` and `g~` over characters leave the cursor where the text they changed begins**, as in vim, instead of on its last character: `gUiw` then `x` takes the word's first letter, and Insert `C-o gUw` goes on typing in front of the word.
 - **vim's `%` and marks in a range before a `|` go to their line**, as in vim: `:%|s/a/b/` substitutes on the last line and `:'a,3|…` goes to line 3; a mark not set is an error and the rest of the line does not run.
 - **vim's Insert `C-o` comes back to Insert after `f`, `t`, `F`, `T` and `r`**, as in vim, also when the character comes from the input method or the find fails, and after a register named first, as in `C-o "ayy`, instead of staying in Normal mode or typing the command's keys.
 - **vim's `ap` on blank lines at the end of the file takes nothing**, as in vim: with no paragraph after them, `cap`, `dap` and `yap` change nothing, instead of taking the blank lines and the paragraph above.

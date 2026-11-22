@@ -48229,3 +48229,24 @@ fn vims_visual_n_after_star_grows_the_selection() {
         assert_eq!((vim_at(&ed), ed.current_buffer().rope().to_string().as_str()), (want, text), "{keys}");
     }
 }
+
+/// **vim's charwise `gU`, `gu` and `g~` leave the cursor where the text
+/// they changed begins** (`op_tilde`), as one cursor, not a selection
+/// running to the last character changed: `l`, `x`, `a` and `j` go on from
+/// there, and Insert `C-o` comes back there (measured in nvim).
+#[test]
+fn vims_case_operators_leave_the_cursor_at_the_start() {
+    for (keys, want, text) in [
+        ("wgUiwx", (1, 5), "abc EF ghi\nsecond line\n"),
+        ("wgUiwl", (1, 6), "abc DEF ghi\nsecond line\n"),
+        ("wgUiwj", (2, 5), "abc DEF ghi\nsecond line\n"),
+        ("wgUbx", (1, 1), "BC def ghi\nsecond line\n"),
+        ("$gu0x", (1, 1), "bc def ghi\nsecond line\n"),
+        ("wg~iwaX⎋", (1, 6), "abc DXEF ghi\nsecond line\n"),
+        ("wiᵒgUwX⎋", (1, 5), "abc XDEF ghi\nsecond line\n"),
+    ] {
+        let mut ed = typed_vim("abc def ghi\nsecond line\n");
+        feed_vim(&mut ed, keys);
+        assert_eq!((vim_at(&ed), ed.current_buffer().rope().to_string().as_str()), (want, text), "{keys}");
+    }
+}

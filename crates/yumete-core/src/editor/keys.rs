@@ -2692,10 +2692,22 @@ impl Editor {
                     'U' => self.map_selection(|one| one.to_uppercase().collect()),
                     _ => self.map_selection(crate::editor::switch_case),
                 }
-                if let Some((top, want)) = kept {
-                    self.extend = false;
-                    self.sel.set_anchor(self.sel.head());
-                    self.land_at_column(top, want);
+                self.extend = false;
+                match kept {
+                    Some((top, want)) => {
+                        self.sel.set_anchor(self.sel.head());
+                        self.land_at_column(top, want);
+                    }
+                    // **A charwise `gU` leaves the cursor where the text it
+                    // changed begins** (vim's `op_tilde` puts it at
+                    // `oap->start`), not on its last character: `gUiw` then
+                    // `x` takes the word's first letter.
+                    None => {
+                        let start = self.selection().0;
+                        self.sel.set_anchor(start);
+                        self.sel.set_head(start);
+                        self.refresh_goal_column();
+                    }
                 }
             }
             // **`y` leaves the cursor at the head of what it took** — vim's
