@@ -1242,6 +1242,7 @@ impl Editor {
             return;
         }
         self.buffers[i].clear_swap();
+        self.keep_marks_of(i);
         self.buffers.remove(i);
         if self.current > i {
             self.current -= 1;
@@ -1287,6 +1288,7 @@ impl Editor {
         }
         self.current_buffer_mut().clear_swap();
         if self.buffers.len() == 1 {
+            self.keep_marks_of(0);
             self.buffers[0] = Buffer::scratch();
             self.set_cursor(0);
             self.forget_the_document();
@@ -1302,6 +1304,7 @@ impl Editor {
         // `docs_access_history`); with none left in its history, to the tab
         // beside it in the list, a text rather than a preview where there is one.
         let closing = self.buffers[self.current].id();
+        self.keep_marks_of(self.current);
         let closed = self.buffers.remove(self.current).display_name();
         let back = self.seen_here.iter().rev().copied().find(|&b| b != closing).and_then(|b| self.buffer_with(b));
         let beside = self.current.min(self.buffers.len() - 1);
@@ -1344,6 +1347,7 @@ impl Editor {
                 continue;
             }
             self.buffers[i].clear_swap();
+            self.keep_marks_of(i);
             self.buffers.remove(i);
             if self.current > i {
                 self.current -= 1;

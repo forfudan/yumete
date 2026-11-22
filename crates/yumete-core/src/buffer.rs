@@ -350,6 +350,11 @@ pub struct Buffer {
     /// selection an operator ends before the operator changes the text, and
     /// moves it with the change (`Vjd` leaves `gv` on the line after).
     held_selections: Vec<LastSelection>,
+    /// **The marks named by a letter that stand here** (`ma`), moved by
+    /// every edit as the last selection is; see [`NamedMark`].
+    named_marks: std::collections::BTreeMap<char, NamedMark>,
+    /// Whether edits now split their line; see [`Self::split_lines`].
+    splitting: bool,
     /// **Each window's folds in this buffer**, moved by every
     /// edit and kept in the undo points; see [`crate::fold`].
     folds: crate::fold::FoldMap,
@@ -521,6 +526,17 @@ impl LastSelection {
     }
 }
 
+/// **A mark named by a letter** (`ma`): its line and the character on it,
+/// moved as vim's `mark_adjust` moves its marks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NamedMark {
+    pub place: Place,
+    /// **Whether it goes when its line is deleted**, as vim's lowercase
+    /// marks do (`:h E20`); one that stays moves to the line after, as
+    /// vim's file marks do.
+    pub goes_with_line: bool,
+}
+
 /// **What an edit took, as vim's marks see it**: where it began, how many
 /// line breaks it took and the column it ended at on its last line, and
 /// whether it ran to that line's end.
@@ -531,6 +547,31 @@ struct Cut {
     lines: usize,
     end_column: usize,
     to_line_end: bool,
+    /// Whether it began at its first line's end.
+    from_line_end: bool,
+    /// Whether what it took of its last line is blank, as a `J` takes.
+    blank_tail: bool,
+    /// Whether the line break it puts splits the line, as Insert's Enter
+    /// does, rather than opening a line above it, as `O` does.
+    splits: bool,
+}
+
+impl Cut {
+    /// **The lines it took whole**, as vim's `del_lines` deletes them: the
+    /// lines from the first to the last's start when it took whole lines,
+    /// the ones below the first when it ran from the first's start or end
+    /// to the last's end (a linewise `c`, the last lines of a file), else
+    /// the ones between its first and last, which join.
+    fn lines_gone(&self) -> Range<usize> {
+        let last = self.line + self.lines;
+        match (self.lines, self.column, self.end_column) {
+            (0, ..) => 0..0,
+            (_, 0, 0) => self.line..last,
+            (_, 0, _) if self.to_line_end => self.line + 1..last + 1,
+            (_, _, 1..) if self.from_line_end && self.to_line_end => self.line + 1..last + 1,
+            _ => self.line + 1..last,
+        }
+    }
 }
 
 /// **A place moved through an edit** that took `cut` and put text
@@ -540,7 +581,10 @@ struct Cut {
 ///
 /// - An edit that neither takes nor puts a line break moves nothing.
 /// - Before the edit, a place stays; after it, its line moves by the lines
-///   taken and put, and on the line the edit ended on its column moves too.
+///   taken and put, and on the line the edit ended on its column moves
+///   with a join. Text put into a line leaves what stood after it on that
+///   line and column, as vim splits a line under a mark (`i` Enter, `p`
+///   of text over lines); whole lines put before a line take it down.
 /// - Inside what was taken it stays on its column (vim keeps the column of
 ///   a mark whose line goes): on the edit's first line when that line is
 ///   kept or whole lines went (vim's `ONE_ADJUST_NODEL` puts it on the first
@@ -558,14 +602,30 @@ fn carry_place((line, column): Place, cut: Cut, put_lines: usize, put_column: us
     }
     let last = cut.line + cut.lines;
     let whole = cut.lines > 0 && cut.column == 0 && cut.end_column == 0;
+    // The joined line's columns count from the join: less the blanks a `J`
+    // took, but not the text a delete took from the line's start, which vim
+    // takes before it joins (`del_bytes`, then `do_join`).
+    let taken_here = match cut.blank_tail {
+        true => cut.end_column,
+        false => 0,
+    };
     let (line, column) = match (line, column) >= (last, cut.end_column) {
-        true if line == last => (cut.line, cut.column + (column - cut.end_column)),
+        // Text taken within a line moves no column.
+        _ if cut.lines == 0 => (line, column),
+        true if line == last => (cut.line, cut.column + column - taken_here),
         true => (line - cut.lines, column),
         false if line == cut.line || whole => (cut.line, column),
         false if cut.column == 0 && cut.to_line_end => (cut.line + 1, column),
-        false => (cut.line, cut.column + column.saturating_sub(cut.end_column)),
+        // The last lines of the file taken: onto the line left last.
+        false if cut.from_line_end && cut.to_line_end && cut.end_column > 0 => (cut.line, column),
+        false => (cut.line, cut.column + column.saturating_sub(taken_here)),
     };
+    let took_here = cut.lines > 0 || cut.end_column > cut.column;
     match (line, column) >= start {
+        // Text over lines put into a line splits it, and what stood after
+        // stays on its line and column (vim moves only the lines below),
+        // unless whole lines went in before it.
+        true if line == cut.line && put_lines > 0 && (cut.column > 0 || put_column > 0 || took_here || cut.splits) => (line, column),
         true if line == cut.line => (line + put_lines, column - cut.column + put_column),
         true => (line + put_lines, column),
         false => (line, column),
@@ -602,6 +662,10 @@ struct EditSnapshot {
     /// a redo brings back as vim's does (`uh_visual`): `u` after `Vjd`
     /// leaves `gv` on the lines that came back.
     visual: Option<LastSelection>,
+    /// **The marks that go with their line, when the step was taken**,
+    /// which an undo or a redo brings back as vim's does (`uh_namedm`): `u`
+    /// after `dd` gives back the mark on the line.
+    marks: std::collections::BTreeMap<char, NamedMark>,
 }
 
 /// **One state on the line `u` and redo walk**, as `:history` lists it.
@@ -697,6 +761,8 @@ impl Buffer {
             change_span_open: false,
             last_selection: None,
             held_selections: Vec::new(),
+            named_marks: std::collections::BTreeMap::new(),
+            splitting: false,
             folds: crate::fold::FoldMap::new(),
             line_edits: Vec::new(),
             local: Local::default(),
@@ -771,6 +837,8 @@ impl Buffer {
             change_span_open: false,
             last_selection: None,
             held_selections: Vec::new(),
+            named_marks: std::collections::BTreeMap::new(),
+            splitting: false,
             folds: crate::fold::FoldMap::new(),
             line_edits: Vec::new(),
             local: Local::default(),
@@ -954,6 +1022,8 @@ impl Buffer {
             change_span_open: false,
             last_selection: None,
             held_selections: Vec::new(),
+            named_marks: std::collections::BTreeMap::new(),
+            splitting: false,
             folds: crate::fold::FoldMap::new(),
             line_edits: Vec::new(),
             local: Local::default(),
@@ -1603,6 +1673,9 @@ impl Buffer {
         // moves with the lines.
         let (old_end, new_end) = (was - tail, now - tail);
         if old_end != new_end {
+            // The marks that go with their line go with those (an undo point
+            // brings back the ones it kept).
+            self.drop_marks_on(head..old_end);
             self.move_selections(|(line, column)| match line {
                 line if line < head => (line, column),
                 line if line >= old_end => (line - old_end + new_end, column),
@@ -1646,7 +1719,7 @@ impl Buffer {
     /// What an edit taking `taken` characters at `at` takes, read before it
     /// does; `None` when nothing is kept to move.
     fn cut_of(&self, at: usize, taken: usize) -> Option<Cut> {
-        if self.last_selection.is_none() && self.held_selections.is_empty() {
+        if self.last_selection.is_none() && self.held_selections.is_empty() && self.named_marks.is_empty() {
             return None;
         }
         let rope = &self.rope;
@@ -1660,6 +1733,9 @@ impl Buffer {
             lines: last - line,
             end_column: end - last_start,
             to_line_end: end == crate::motion::line_end(rope, last_start),
+            from_line_end: at == crate::motion::line_end(rope, at),
+            blank_tail: rope.slice(last_start.max(at)..end).chars().all(|c| c == ' ' || c == '\t'),
+            splits: false,
         })
     }
 
@@ -1667,9 +1743,15 @@ impl Buffer {
     /// text ending at `put_end`.
     fn carry_selections(&mut self, cut: Option<Cut>, put_end: usize) {
         let Some(cut) = cut else { return };
+        let cut = Cut { splits: self.splitting, ..cut };
         let put_line = self.rope.char_to_line(put_end);
         let put_lines = put_line - cut.line;
         let put_column = put_end - self.rope.line_to_char(put_line);
+        // Lines taken and none put in their place are deleted, and the marks
+        // that go with their line go with them (vim's `del_lines`).
+        if put_lines == 0 {
+            self.drop_marks_on(cut.lines_gone());
+        }
         self.move_selections(|place| carry_place(place, cut, put_lines, put_column));
     }
 
@@ -1678,6 +1760,39 @@ impl Buffer {
         for one in &mut self.held_selections {
             *one = one.moved(&by);
         }
+        for mark in self.named_marks.values_mut() {
+            mark.place = by(mark.place);
+        }
+    }
+
+    /// Say that the edits until this is said again split their line, as
+    /// Insert's Enter does: the marks after it stay on that line (see
+    /// [`Cut::splits`]).
+    pub fn split_lines(&mut self, on: bool) {
+        self.splitting = on;
+    }
+
+    /// Forget the marks on `lines` that go with their line.
+    fn drop_marks_on(&mut self, lines: Range<usize>) {
+        self.named_marks.retain(|_, mark| !(mark.goes_with_line && lines.contains(&mark.place.0)));
+    }
+
+    /// The mark `name` here, if it stands here.
+    pub fn named_mark(&self, name: char) -> Option<NamedMark> {
+        self.named_marks.get(&name).copied()
+    }
+
+    /// Every mark that stands here, by name.
+    pub fn named_marks(&self) -> impl Iterator<Item = (char, NamedMark)> + '_ {
+        self.named_marks.iter().map(|(&name, &mark)| (name, mark))
+    }
+
+    /// Set mark `name` here, or forget it with `None`.
+    pub fn set_named_mark(&mut self, name: char, mark: Option<NamedMark>) {
+        match mark {
+            Some(mark) => self.named_marks.insert(name, mark),
+            None => self.named_marks.remove(&name),
+        };
     }
 
     fn note_lines_changed(&mut self, before: &Rope) {
@@ -2550,6 +2665,7 @@ impl Buffer {
             at: SystemTime::now(),
             saves: self.saves,
             visual: self.visual_now(),
+            marks: self.marks_now(),
         });
     }
 
@@ -2670,6 +2786,7 @@ impl Buffer {
         if prev.visual.is_some() {
             self.last_selection = prev.visual;
         }
+        self.named_marks.extend(prev.marks);
         Some((prev.cursor.min(self.rope.len_chars()), prev.selections))
     }
 
@@ -2711,6 +2828,7 @@ impl Buffer {
         if next.visual.is_some() {
             self.last_selection = next.visual;
         }
+        self.named_marks.extend(next.marks);
         Some((next.cursor.min(self.rope.len_chars()), next.selections))
     }
 
@@ -2725,7 +2843,14 @@ impl Buffer {
             at: SystemTime::now(),
             saves: self.saves,
             visual: self.visual_now(),
+            marks: self.marks_now(),
         }
+    }
+
+    /// The marks an undo point keeps: those that go with their line, as
+    /// vim's undo keeps its lowercase marks.
+    fn marks_now(&self) -> std::collections::BTreeMap<char, NamedMark> {
+        self.named_marks.iter().filter(|(_, mark)| mark.goes_with_line).map(|(&name, &mark)| (name, mark)).collect()
     }
 
     /// The Visual selection as an undo point keeps it: the one a running

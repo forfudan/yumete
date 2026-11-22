@@ -583,13 +583,12 @@ impl Editor {
             // 框（`panel.rs` 直接回 `None`），而按了 `'` 屏幕上什麽都不出，讀起來
             // 就是「這個鍵壞了」。
             Pending::Recall => {
-                let mut named: Vec<(&char, &Spot)> = self.marks.iter().collect();
-                named.sort_by_key(|(name, _)| **name);
+                let named = self.every_mark();
                 let rows: KeyRows = match named.is_empty() {
                     true => vec![("".into(), say!("hint.mark.none-yet"))],
                     false => named
                         .into_iter()
-                        .map(|(name, spot)| (name.to_string().into(), self.mark_place(spot)))
+                        .map(|(name, spot)| (name.to_string().into(), self.mark_place(&spot)))
                         .collect(),
                 };
                 (say!("hint.mark.go-back"), rows)

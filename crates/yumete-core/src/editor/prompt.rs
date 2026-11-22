@@ -361,7 +361,9 @@ impl Editor {
         // 裏面——不記，`.` 重放出來的那幾行就貼着左邊。
         self.insert_recording.push_str(&ending);
         self.insert_recording.push_str(&indent);
+        self.current_buffer_mut().split_lines(true);
         self.insert_str(&format!("{ending}{indent}"));
+        self.current_buffer_mut().split_lines(false);
         self.note_fresh_indent(indent.chars().count(), true);
     }
 

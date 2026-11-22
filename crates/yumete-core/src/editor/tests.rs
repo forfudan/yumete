@@ -45509,6 +45509,44 @@ fn a_vim_put_ends_its_last_mark_as_nvim_does() {
     }
 }
 
+/// **A vim mark moves with the lines added or taken above it**, as vim's
+/// `mark_adjust` moves it (measured in nvim 0.12): `ma` then a line opened
+/// above, deleted above or joined; a lowercase mark on a deleted line is
+/// gone (`` `a `` stays put) and `u` brings it back, an uppercase one goes
+/// to the line after; a line split before it leaves it on that line.
+#[test]
+fn a_vim_mark_moves_with_the_lines() {
+    let text = "sun moon\nred blue\nhot cold\nup down\nend\n";
+    let cases: &[(&str, &str, (usize, usize))] = &[
+        ("jjllmaggOnew\u{1b}`ax", "new\nsun moon\nred blue\nho cold\nup down\nend\n", (4, 3)),
+        ("jjllmakdd`ax", "sun moon\nho cold\nup down\nend\n", (2, 3)),
+        ("jjllmadd`ax", "sun moon\nred blue\nupdown\nend\n", (3, 3)),
+        ("jjllmaddu`ax", "sun moon\nred blue\nho cold\nup down\nend\n", (3, 3)),
+        ("jjllmakJ`ax", "sun moon\nred blue ho cold\nup down\nend\n", (2, 12)),
+        ("jjllmAdd`Ax", "sun moon\nred blue\nupdown\nend\n", (3, 3)),
+        ("jjllmahi\n\u{1b}`ax", "sun moon\nred blue\n\not cold\nup down\nend\n", (3, 1)),
+        ("jjllmakvjd`ax", "sun moon\nre cld\nup down\nend\n", (2, 5)),
+        ("jjllmaggVjjjdu®`ax", "nd\n", (1, 1)),
+        ("GllmAkdG`Ax", "sun moon\nred blue\nho cold\n", (3, 3)),
+    ];
+    for &(keys, want, at) in cases {
+        let mut ed = typed_vim(text);
+        for c in keys.chars() {
+            ed.on_key(match c {
+                '®' => Key::Ctrl('r'),
+                '\n' => Key::Enter,
+                '\u{1b}' => Key::Esc,
+                c => Key::Char(c),
+            });
+        }
+        let rope = ed.current_buffer().rope().clone();
+        let head = ed.sel.head();
+        let line = rope.char_to_line(head);
+        let cursor = (line + 1, head - rope.line_to_char(line) + 1);
+        assert_eq!((ed.current_buffer().text().as_str(), cursor), (want, at), "{keys:?}");
+    }
+}
+
 /// **``` `` ``` and `''` before any jump go to the first line's start**, as
 /// vim's `'` mark stands there (measured in nvim): pressed again they come
 /// back, and an operator takes them as its motion.

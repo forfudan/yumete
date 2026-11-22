@@ -17,13 +17,73 @@ impl Editor {
             return;
         }
         let rope = self.current_buffer().rope();
-        let line = rope.char_to_line(self.sel.head().min(rope.len_chars()));
-        let spot = match self.current_buffer().path() {
-            Some(path) => Spot::InFile(path.to_path_buf(), line, self.sel.head() - rope.line_to_char(line)),
-            None => Spot::InBuffer(self.current_buffer().id(), self.sel.head()),
-        };
-        self.marks.insert(name, spot);
+        let head = self.sel.head().min(rope.len_chars());
+        let line = rope.char_to_line(head);
+        let place = (line, head - rope.line_to_char(line));
+        // **The buffer keeps it**, and moves it with every edit as vim
+        // moves its marks; vim's lowercase marks go with a deleted line.
+        let goes_with_line = self.as_vim() && name.is_ascii_lowercase();
+        self.marks.remove(&name);
+        for buffer in &mut self.buffers {
+            buffer.set_named_mark(name, None);
+        }
+        self.current_buffer_mut().set_named_mark(name, Some(crate::buffer::NamedMark { place, goes_with_line }));
         self.status = say!("goto.mark-set", name, self.current_buffer().display_name(), line + 1);
+    }
+
+    /// **Mark `name` where an open buffer keeps it**, this one's first: in
+    /// a file by its line and column, in a buffer with no file by the place.
+    fn mark_in_a_buffer(&self, name: char) -> Option<Spot> {
+        let order = std::iter::once(self.current).chain((0..self.buffers.len()).filter(|&i| i != self.current));
+        order.filter_map(|i| self.buffers.get(i)).find_map(|buffer| {
+            let (line, column) = buffer.named_mark(name)?.place;
+            Some(match buffer.path() {
+                Some(path) => Spot::InFile(path.to_path_buf(), line, column),
+                None => {
+                    let rope = buffer.rope();
+                    let line = line.min(crate::motion::last_line(rope));
+                    let width = crate::motion::line_text(rope, line).chars().count();
+                    Spot::InBuffer(buffer.id(), rope.line_to_char(line) + column.min(width))
+                }
+            })
+        })
+    }
+
+    /// Every mark set, by name, for the panel that lists them.
+    pub(super) fn every_mark(&self) -> Vec<(char, Spot)> {
+        let held: std::collections::BTreeSet<char> = self.buffers.iter().flat_map(|buffer| buffer.named_marks().map(|(name, _)| name)).collect();
+        let mut all: Vec<(char, Spot)> = held.into_iter().filter_map(|name| Some((name, self.mark_in_a_buffer(name)?))).collect();
+        all.extend(self.marks.iter().map(|(&name, spot)| (name, spot.clone())));
+        all.sort_by_key(|(name, _)| *name);
+        all.dedup_by_key(|(name, _)| *name);
+        all
+    }
+
+    /// **The marks of buffer `i`, kept by the editor as it closes**: by
+    /// file and line, for `'a` to open the file again. A buffer with no file
+    /// takes its marks with it.
+    pub(super) fn keep_marks_of(&mut self, i: usize) {
+        let Some(path) = self.buffers[i].path().map(Path::to_path_buf) else { return };
+        let marks: Vec<(char, crate::buffer::NamedMark)> = self.buffers[i].named_marks().collect();
+        for (name, mark) in marks {
+            let elsewhere = self.buffers.iter().enumerate().any(|(j, buffer)| j != i && buffer.named_mark(name).is_some());
+            if !elsewhere {
+                self.marks.insert(name, Spot::InFile(path.clone(), mark.place.0, mark.place.1));
+            }
+        }
+    }
+
+    /// **The marks kept for the file buffer `i` has opened**, handed to it,
+    /// so its edits move them again.
+    pub(super) fn hand_marks_to(&mut self, i: usize) {
+        let Some(path) = self.buffers[i].path().map(Path::to_path_buf) else { return };
+        let names: Vec<char> = self.marks.iter().filter(|(_, spot)| matches!(spot, Spot::InFile(p, ..) if *p == path)).map(|(&name, _)| name).collect();
+        for name in names {
+            if let Some(Spot::InFile(_, line, column)) = self.marks.remove(&name) {
+                let goes_with_line = self.as_vim() && name.is_ascii_lowercase();
+                self.buffers[i].set_named_mark(name, Some(crate::buffer::NamedMark { place: (line, column), goes_with_line }));
+            }
+        }
     }
 
     /// **Where mark `name` stands in this buffer**, if it was set here: the
@@ -32,7 +92,7 @@ impl Editor {
         let rope = self.current_buffer().rope();
         match &self.mark_named(name)? {
             Spot::InFile(path, line, column) if self.current_buffer().path() == Some(path.as_path()) => {
-                let line = (*line).min(rope.len_lines().saturating_sub(1));
+                let line = (*line).min(crate::motion::last_line(rope));
                 let width = crate::motion::line_text(rope, line).chars().count();
                 Some(rope.line_to_char(line) + (*column).min(width))
             }
@@ -151,7 +211,7 @@ impl Editor {
                 };
                 Some(Spot::InBuffer(self.current_buffer().id(), pos))
             }
-            _ => self.marks.get(&name).cloned(),
+            _ => self.mark_in_a_buffer(name).or_else(|| self.marks.get(&name).cloned()),
         }
     }
 

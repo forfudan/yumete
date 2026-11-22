@@ -2667,6 +2667,7 @@ impl Editor {
             self.current = self.buffers.len() - 1;
             self.last_file = Some(leaving);
         }
+        self.hand_marks_to(self.current);
         self.just_switched = !pristine;
         // What this file held when the session first saw it, so that a day
         // whose row is opened at four in the afternoon counts from the morning
