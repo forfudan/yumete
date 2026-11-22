@@ -149,6 +149,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **After a vim operator `j` and `k` keep the column the cursor stands in**, as in vim: `$` then `yj` and `j` stays under where `y` left the cursor, instead of going on to the line's end.
 - **A vim operator on a closed fold leaves the cursor in the fold's first column**, as in vim: after `yy`, `yj`, `yw` or `gUU` on a fold, and after `zf` made one, `j` and `k` go on from column 1; `d`, `>` and `<` still land in the column wanted.
 - **vim's `zF` leaves the cursor on the first non-blank**, as `zfzf` does in vim, instead of in column 1.
+- **vim's `u` after a change that changed nothing comes back to where it was typed**, as in vim: `guj` on lines already lowercase, then `u`, no longer puts the cursor on the file's last line.
 
 ## 0.24.0 · 2026-11-17
 

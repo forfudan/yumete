@@ -300,8 +300,13 @@ impl Editor {
             same_behind += 1;
         }
         // vim's numbers, from 1: `top` is the line above what changed, and
-        // `size` how many lines the step put there.
-        let (top, size) = (same_ahead, na - same_ahead - same_behind);
+        // `size` how many lines the step put there. A step that changed
+        // nothing (`gu` on text already lowercase) still put back the line
+        // it began on, so it lands where it began.
+        let (top, size) = match same_ahead == na && na == nb {
+            true => (began.0, 1),
+            false => (same_ahead, na - same_ahead - same_behind),
+        };
         let from = began.0 + 1;
         let mut line = match from >= top && from <= top + size + 1 {
             true => from,

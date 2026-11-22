@@ -48291,3 +48291,15 @@ fn vims_visual_objects_take_a_count() {
         assert_eq!(ed.current_buffer().rope().to_string(), after, "{keys}");
     }
 }
+
+/// **vim's `u` after a change that changed nothing lands where it began**
+/// (measured in nvim): `guj` on lowercase lines is still a step, and `u`
+/// comes back to the cursor it was typed at, not to the file's last line.
+#[test]
+fn vims_undo_of_a_change_that_changed_nothing_lands_where_it_began() {
+    for (keys, want) in [("2G4lguju", (2, 5)), ("2G4lguuu", (2, 3)), ("3G6lguku", (2, 7)), ("x2G4lguju", (2, 5)), ("x2G4lgujuu", (1, 1))] {
+        let mut ed = typed_vim("pq\n  abcdef\n    ghijklm\nlonger line\n  end\n");
+        feed_vim(&mut ed, keys);
+        assert_eq!(vim_at(&ed), want, "{keys}");
+    }
+}
