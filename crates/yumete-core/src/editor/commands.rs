@@ -873,7 +873,16 @@ impl Editor {
                     Bound::Last => last,
                     _ => self.cursor_line(),
                 };
-                let line = base.saturating_add_signed(address.offset).min(last);
+                // **Before line 0 is no line** (vim's E16), and the cursor
+                // stays; line 0 is the first, and past the last is the last,
+                // as in vim.
+                let typed = base as isize + 1 + address.offset;
+                if typed < 0 {
+                    self.status = say!("find.no-such-line", typed, last + 1);
+                    self.command_failed = true;
+                    return Ok(CommandOutcome::Continue);
+                }
+                let line = (typed.max(1) as usize - 1).min(last);
                 self.fold_stays_closed = true;
                 self.jumped = true;
                 match self.line_jump_keeps() {
