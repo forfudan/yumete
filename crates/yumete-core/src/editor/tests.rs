@@ -46250,3 +46250,28 @@ fn esc_after_a_linewise_visual_keeps_the_screen_column() {
     feed_vim(&mut ed, "0GkVjjd");
     assert_eq!(ed.current_buffer().text(), "天地玄黄\nab\n宇宙洪荒x\n");
 }
+
+/// **After a linewise delete the column the cursor wants is where it
+/// lands** (measured in nvim): onto a tab-indented line that is the tab's
+/// end, so `.` or `j` next goes under it; onto a short line, its last
+/// character, not the column the cursor had before.
+#[test]
+fn a_linewise_delete_wants_the_column_it_lands_in() {
+    let text = "天地玄黄\nab\n宇宙洪荒x\n\tabcdefgh\nlast line\n";
+    let cases: &[(&str, &str, (usize, usize))] = &[
+        ("03GVdjx", "天地玄黄\nab\n\tabcdefgh\nlast lie\n", (4, 8)),
+        ("03Gddjx", "天地玄黄\nab\n\tabcdefgh\nlast lie\n", (4, 8)),
+        ("03GVd.", "天地玄黄\nab\nlast line\n", (3, 8)),
+    ];
+    for &(keys, want, at) in cases {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        assert_eq!((ed.current_buffer().text().as_str(), vim_at(&ed)), (want, at), "{keys}");
+    }
+    let short = "abcdef\nabcdef\nxy\nabcdef\nabcdef\n";
+    for keys in ["04ljddjx", "0$jddjx", "04ljVdjx"] {
+        let mut ed = typed_vim(short);
+        feed_vim(&mut ed, keys);
+        assert_eq!(ed.current_buffer().text(), "abcdef\nxy\nacdef\nabcdef\n", "{keys}");
+    }
+}

@@ -1907,6 +1907,9 @@ impl Editor {
         self.apply(op, motion::Span::Over { anchor, head });
         if whole_lines && self.as_vim() && self.current_buffer().revision() != revision {
             self.land_at_column(self.cursor_line(), want);
+            // Then the column it wants is the one it stands at (see
+            // `do_vim_verb`'s `d`).
+            self.sel.set_goal(None);
         }
     }
 

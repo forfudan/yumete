@@ -2334,6 +2334,12 @@ impl Editor {
                 self.apply(motion::Operator::Cut, span);
                 if let Some((_, want)) = kept {
                     self.land_at_column(self.cursor_line(), want);
+                    // **Then the column it wants is the one it stands at**
+                    // (vim's `op_delete` leaves 'curswant' to be worked out
+                    // again): on a tab that is the tab's end, so `j` after
+                    // `dd` onto a tab-indented line goes under it, and on a
+                    // line too short for the column, its last character.
+                    self.sel.set_goal(None);
                 }
             }
             'c' => match (shape, span) {
