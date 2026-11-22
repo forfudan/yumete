@@ -1941,6 +1941,8 @@ impl Editor {
         }
         if self.as_vim() && self.extend && !self.expanding_alias {
             if let Key::Char(c @ ('p' | 'P')) = key {
+                // `2p` over a selection puts the register twice in its place.
+                self.paste_copies = count.clamp(1, Self::WRITING_MAX);
                 return self.vim_visual_key(c);
             }
         }

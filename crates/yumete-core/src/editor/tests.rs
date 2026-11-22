@@ -46145,3 +46145,22 @@ fn a_count_before_a_g_operator_counts() {
         assert_eq!(ed.current_buffer().text(), want, "{keys}");
     }
 }
+
+/// **A count before vim's Visual `p` puts the register that many times**
+/// in the selection's place (measured in nvim), words and lines alike.
+#[test]
+fn a_counted_visual_put_puts_that_many_copies() {
+    let text = "sun moon\nsea sky\n天地\n";
+    let cases: &[(&str, &str, (usize, usize))] = &[
+        ("yiwjviw2p", "sun moon\nsunsun sky\n天地\n", (2, 6)),
+        ("yiwjjv3p", "sun moon\nsea sky\nsunsunsun地\n", (3, 9)),
+        ("yyjV2p", "sun moon\nsun moon\nsun moon\n天地\n", (2, 1)),
+        ("yiwjV2p", "sun moon\nsun\nsun\n天地\n", (2, 1)),
+        ("yyjviw2P", "sun moon\n\nsun moon\nsun moon\n sky\n天地\n", (3, 1)),
+    ];
+    for &(keys, want, at) in cases {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        assert_eq!((ed.current_buffer().text().as_str(), vim_at(&ed)), (want, at), "{keys}");
+    }
+}

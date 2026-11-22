@@ -1075,7 +1075,11 @@ impl Editor {
                 (text, line_wise)
             }
         };
-        let text = text.repeat(copies);
+        // Text put over lines is a line, and each copy one of its own.
+        let text = match (lines, line_wise) {
+            (true, false) if !text.is_empty() => vec![text; copies].join(ending.as_str()),
+            _ => text.repeat(copies),
+        };
         if text.is_empty() {
             self.status = match named {
                 Some(name) => say!("register.empty", name),

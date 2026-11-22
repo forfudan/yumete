@@ -73,6 +73,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **vim's `d{`, `db`, `dB` and `d(` from a line's first column take whole lines when they land in an indent**, as vim's exclusive motions do and as `d}` and `d/` already did: `d{` from the start of a paragraph's line takes the lines up to the blank line, `db` onto a line's only word takes that line, and `y{` yanks lines.
 - **vim's `d2w`, `y2w` and other counted word motions after an operator count an empty line as a word**, as `w` alone does and as in vim: `d2w` from a line's last word over an empty line takes that word and its line break, not the next line's first word too.
 - **A count before vim's `gU`, `gu`, `g~`, `gq`, `gw`, `gc` and `zf` counts**, as in vim: `2gUU` uppercases two lines and `3gUw` three words, instead of one.
+- **vim's `2p` over a `v` or `V` selection puts the register twice**, as in vim, instead of once.
 
 ## 0.24.0 · 2026-11-17
 
