@@ -442,12 +442,13 @@ impl Editor {
         };
         // The right-hand side goes literal too: with the pattern escaped there
         // are no groups for a `$1` to name, so a `$` can only be the writer's
-        // own — a price, a shell line, a LaTeX formula. `\n` and `\t` still
+        // own — a price, a shell line, a LaTeX formula. `\r` and `\t` still
         // resolve, because Enter submits the prompt and there is no other way
         // to type them.
+        let ending = self.current_buffer().ending();
         let replacement = match literal {
-            true => unescape_replacement(replacement).replace('$', "$$"),
-            false => unescape_replacement(replacement),
+            true => unescape_replacement(replacement, ending).replace('$', "$$"),
+            false => unescape_replacement(replacement, ending),
         };
 
         // 同 `/` 那一頭：一支匹配器，兩個旗標只改它怎麼造。

@@ -12518,7 +12518,7 @@ fn no_route_at_all_changes_a_rows_shape() {
     assert!(ed.execute("s/⿰/a,b/").is_ok());
     assert_eq!(shape(&ed), was, "substituted");
     assert!(ed.status().contains("格"), "and it says why: {}", ed.status());
-    assert!(ed.execute("s/⿰/a\\nb/").is_ok());
+    assert!(ed.execute("s/⿰/a\\rb/").is_ok());
     assert_eq!(shape(&ed), was, "substituted with a line break");
 
     // 9. Deleting the delimiter itself. An empty cell sits exactly on one,
@@ -20653,7 +20653,7 @@ fn patterns_are_regular_expressions() {
 
     // 「每個。後面斷行」 — the batch edit a Chinese draft needs most.
     let mut ed = typed("甲。乙。丙。");
-    ed.execute(r":%s/。/。\n/g").unwrap();
+    ed.execute(r":%s/。/。\r/g").unwrap();
     assert_eq!(ed.current_buffer().text(), "甲。\n乙。\n丙。\n");
 
     // Capture groups.
@@ -20830,16 +20830,33 @@ fn the_f_flag_takes_the_pattern_as_the_characters_it_is() {
     assert!(ed.execute("%s/$5.00/$6.00/f").is_ok(), "{}", ed.status());
     assert_eq!(ed.current_buffer().text(), "花了 $6.00\n");
 
-    // …but `\n` still opens a line: Enter submits the prompt, so there is no
+    // …but `\r` still opens a line: Enter submits the prompt, so there is no
     // other way to type one.
     let mut ed = typed("甲。乙。\n");
-    assert!(ed.execute("%s/。/。\\n/gf").is_ok(), "{}", ed.status());
+    assert!(ed.execute("%s/。/。\\r/gf").is_ok(), "{}", ed.status());
     assert_eq!(ed.current_buffer().text(), "甲。\n乙。\n\n");
 
     // `f` and `i` are two questions, and both are answerable at once.
     let mut ed = typed("A.b\n");
     assert!(ed.execute("%s/a.B/甲/fi").is_ok(), "{}", ed.status());
     assert_eq!(ed.current_buffer().text(), "甲\n");
+}
+
+/// **In a `:s` replacement `\r` breaks the line and `\n` puts a NUL**, as
+/// in vim (`:h sub-replace-special`).
+#[test]
+fn a_substitution_breaks_the_line_at_backslash_r() {
+    let mut ed = typed("red,green,blue\n");
+    assert!(ed.execute("s/,/\\r/g").is_ok(), "{}", ed.status());
+    assert_eq!(ed.current_buffer().text(), "red\ngreen\nblue\n");
+    let mut ed = typed("red,green\n");
+    assert!(ed.execute("s/,/\\n/").is_ok(), "{}", ed.status());
+    assert_eq!(ed.current_buffer().text(), "red\0green\n");
+    // A CRLF file gets its own line break.
+    let mut ed = Editor::new();
+    ed.add_buffer(crate::Buffer::from_text("red,green\r\nblue\r\n"));
+    assert!(ed.execute("s/,/\\r/").is_ok(), "{}", ed.status());
+    assert_eq!(ed.current_buffer().text(), "red\r\ngreen\r\nblue\r\n");
 }
 
 /// **`c` — 逐處確認**: 「防止一下子全部都替换了」 (#415).
@@ -45921,8 +45938,8 @@ fn a_rewrite_of_lines_leaves_the_vim_marks_on_them() {
         ("jjvj~gvd", "one two\nthree four\neven eight\nnine ten\n", (3, 1)),
         ("jjvjlr.gvd", "one two\nthree four\nven eight\nnine ten\n", (3, 1)),
         ("jjjmaggVGu'ax", "one two\nthree four\nfive six\neven eight\nnine ten\n", (4, 1)),
-        ("jjjma:%s/ /\\n/⏎'ax", "one\ntwo\nthree\nfour\nfive\nsix\neven\neight\nnine\nten\n", (7, 1)),
-        ("jjjVj⎋:2s/ /\\n/⏎gvd", "one two\nthree\nfour\nfive six\n", (4, 1)),
+        ("jjjma:%s/ /\\r/⏎'ax", "one\ntwo\nthree\nfour\nfive\nsix\neven\neight\nnine\nten\n", (7, 1)),
+        ("jjjVj⎋:2s/ /\\r/⏎gvd", "one two\nthree\nfour\nfive six\n", (4, 1)),
         ("jjllmA:%s/o/OO/g⏎`Ax", "OOne twOO\nthree fOOur\nfie six\nseven eight\nnine ten\n", (3, 3)),
     ];
     for &(keys, want, at) in cases {

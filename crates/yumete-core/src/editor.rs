@@ -6047,11 +6047,15 @@ fn replace_in_line(
 
 /// A replacement string with its backslash escapes resolved.
 ///
-/// `\n` and `\t` are what a writer reaches for — 「每個。後面斷行」 is
-/// `:%s/。/。\n/g` — and the regex crate leaves them alone, because to it a
-/// replacement is a template of `$1` references, not a pattern. `$1` still
-/// means the first capture; `$$` is a literal dollar.
-fn unescape_replacement(replacement: &str) -> String {
+/// The escapes are vim's (`:h sub-replace-special`): `\r` breaks the line —
+/// 「每個。後面斷行」 is `:%s/。/。\r/g` — `\n` puts a NUL, and `\t` a tab.
+/// The regex crate leaves them alone, because to it a replacement is a
+/// template of `$1` references, not a pattern. `$1` still means the first
+/// capture; `$$` is a literal dollar.
+///
+/// The line break is `ending`, the file's own, so a CRLF file keeps one kind
+/// of line.
+fn unescape_replacement(replacement: &str, ending: &str) -> String {
     let mut out = String::with_capacity(replacement.len());
     let mut chars = replacement.chars();
     while let Some(c) = chars.next() {
@@ -6060,9 +6064,9 @@ fn unescape_replacement(replacement: &str) -> String {
             continue;
         }
         match chars.next() {
-            Some('n') => out.push('\n'),
+            Some('r') => out.push_str(ending),
+            Some('n') => out.push('\0'),
             Some('t') => out.push('\t'),
-            Some('r') => out.push('\r'),
             Some('\\') => out.push('\\'),
             // An unknown escape keeps both characters, so a stray backslash in
             // the text being written survives rather than vanishing.

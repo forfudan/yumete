@@ -3057,7 +3057,7 @@ KEYS (Normal mode, Helix-style):
                               for, and what each one holds
               :ruby       edit the reading at the cursor, or annotate the
                           selection — opens Ruby mode in the status line
-              :s/re/new/[ginfc]  regex; $1 captures, \\n a newline. The delimiter
+              :s/re/new/[ginfc]  regex; $1 captures, \\r a line break. The delimiter
                           is whatever follows the s (:s#a/b#c#); ranges are
                           :%s :1-40s :1,5,9s :.-$s; flags g i, f is literal,
                           c asks at each match, and n counts only
