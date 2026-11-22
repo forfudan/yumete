@@ -392,9 +392,15 @@ impl super::Editor {
                 }
                 // vim-surround's `xmap S` holds in a block too.
                 Key::Char('S') if self.keymap_rules().vim_surround => return self.begin_block_surround(block),
-                Key::Char('c' | 's' | 'C' | 'S') => {
+                // `R` and `S` change the block's whole lines (vim's
+                // `v_visop`), as `V` then `c` would.
+                Key::Char('R' | 'S') => {
+                    self.block_to_visual(block, true);
+                    return self.vim_visual_key('s');
+                }
+                Key::Char('c' | 's' | 'C') => {
                     let block = match key {
-                        Key::Char('C' | 'S') => Block { to_line_end: true, ..block },
+                        Key::Char('C') => Block { to_line_end: true, ..block },
                         _ => block,
                     };
                     // Measured before the cut: the corners are positions, and

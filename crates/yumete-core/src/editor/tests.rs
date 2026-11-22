@@ -47672,3 +47672,13 @@ fn vims_substitute_reads_ampersand_and_tilde() {
     ed.execute(":s/fox/\\0\\0/").unwrap();
     assert_eq!(ed.current_buffer().text(), "<<red>&> foxfox red\n");
 }
+
+/// **vim's `R` in a block changes the block's whole lines** (measured in
+/// nvim), as `V` then `c` would.
+#[test]
+fn vims_block_r_changes_whole_lines() {
+    let mut ed = typed_vim("abcd\nefgh\nijkl\n");
+    feed_vim(&mut ed, "lᵛjlRXY⎋");
+    assert_eq!(ed.current_buffer().text(), "XY\nijkl\n");
+    assert_eq!(vim_at(&ed), (1, 2));
+}
