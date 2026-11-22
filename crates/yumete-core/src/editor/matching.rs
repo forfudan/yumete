@@ -3429,10 +3429,12 @@ impl Editor {
             // Warning: **退不動就是整個動作失敗**（拿 nvim 量過）：第 1 欄
             // 按 `dge`，nvim 什麼都不做。`ge` 是**包含**的，所以光靠文法那條
             // 「排他的落在原處就是零寬」攔不住它——要動作自己說没動到。
+            // An empty line is a word to vim here too: `ge` from below one
+            // stops on it.
             motion::Motion::WordEndBack(grain) => {
                 let here = self.sel.head();
                 match motion::prev_word_end(rope, here, grain, seg) {
-                    back if back < here => at(back),
+                    back if back < here => self.stop_on_an_empty_line(at(back), false),
                     _ => motion::Span::Missed,
                 }
             }

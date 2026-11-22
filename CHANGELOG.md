@@ -88,6 +88,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **vim's `^`, `_` and `'a` on a line of nothing but blanks go to its last blank**, as in vim, instead of its first column; `d^` there takes the blanks before it.
 - **vim's Visual `p` from an empty register still deletes the selection**, as in vim, and says the register is empty: `p` puts what it took in the unnamed register as `d` would, `P` keeps no copy, and a `C-v` block goes the same way.
 - **vim's `J` onto a line of nothing but blanks keeps the marks on it**, as in vim: they go onto the joined line at the seam instead of being dropped, or, for an uppercase mark, sent to its first column.
+- **vim's `ge` and `gE` from below an empty line stop on it**, as in vim, as `b` does: `dge` there deletes to the empty line.
 
 ## 0.24.0 · 2026-11-17
 

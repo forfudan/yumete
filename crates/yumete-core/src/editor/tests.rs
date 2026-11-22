@@ -46143,6 +46143,27 @@ fn a_counted_word_motion_counts_an_empty_line() {
     }
 }
 
+/// **`ge` from below an empty line stops on it** (measured in nvim), as
+/// `b` does: an empty line is a word, and a line of blanks is not.
+#[test]
+fn ge_stops_on_an_empty_line() {
+    let text = "red fox\n\nblue sky\n\n\ngreen\n  \nend\n";
+    let cases: &[(&str, &str, (usize, usize))] = &[
+        ("jjge", text, (2, 1)),
+        ("jjgE", text, (2, 1)),
+        ("5j2ge", text, (4, 1)),
+        ("5j3ge", text, (3, 8)),
+        ("7jge", text, (6, 5)),
+        ("jjdge", "red fox\nlue sky\n\n\ngreen\n  \nend\n", (2, 1)),
+        ("5jd3ge", "red fox\n\nblue skreen\n  \nend\n", (3, 8)),
+    ];
+    for &(keys, want, at) in cases {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        assert_eq!((ed.current_buffer().text().as_str(), vim_at(&ed)), (want, at), "{keys}");
+    }
+}
+
 /// **The count before a `g` operator goes with it** (measured in nvim):
 /// `2gUU` and `2g~~` take two lines, `2gUw` two words, and `2gUU` on the
 /// last line does nothing, as `2dd` there does.
