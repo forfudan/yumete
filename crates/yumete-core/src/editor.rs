@@ -215,6 +215,8 @@ struct Hits {
     revision: u64,
     spans: Vec<(usize, usize)>,
     at: usize,
+    /// Whether `n` walks them backward: vim's `#` made them.
+    backward: bool,
 }
 
 /// Which lines are off the page, against the buffer and revision they were

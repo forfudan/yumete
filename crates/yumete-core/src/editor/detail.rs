@@ -422,6 +422,12 @@ impl Editor {
             return;
         }
         self.last_search = pattern;
+        // **vim's `#` searches backward from then on**: `n` after it goes
+        // back and `N` on, as after `?`, over the matches found here and
+        // past them.
+        if self.as_vim() {
+            self.search_forward = !back;
+        }
         // The first one *after* where you are standing: the useful answer to
         // 「還在哪裏」 is the next place, not the first page of the book.
         let here = self.sel.head();
@@ -457,6 +463,10 @@ impl Editor {
             self.vim_leave_visual();
         }
         self.remember_hits(spans, at);
+        let backward = back && self.as_vim();
+        if let Some(hits) = self.hits.as_mut() {
+            hits.backward = backward;
+        }
         self.show_table_hit();
     }
 

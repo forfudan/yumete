@@ -48009,3 +48009,14 @@ fn vims_minus_and_plus_under_an_operator_go_to_the_first_non_blank() {
     feed_vim(&mut ed, "$y+j");
     assert_eq!(vim_at(&ed), (2, 2));
 }
+
+/// **vim's `#` and `g#` make the search go backward** (measured in nvim):
+/// `n` after them goes back and `N` on, and `*` forward again.
+#[test]
+fn vims_hash_makes_n_search_backward() {
+    for (keys, want) in [("3G#N", (3, 1)), ("3G#n", (1, 1)), ("3GV#N", (3, 1)), ("3Gg#n", (1, 1)), ("3G#*N", (2, 1)), ("2G*n", (1, 1))] {
+        let mut ed = typed_vim("mint\nmint\nmint\nzz\n");
+        feed_vim(&mut ed, keys);
+        assert_eq!(vim_at(&ed), want, "{keys}");
+    }
+}

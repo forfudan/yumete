@@ -6906,6 +6906,7 @@ impl Editor {
             revision: buffer.revision(),
             spans,
             at,
+            backward: false,
         });
     }
 
@@ -6936,7 +6937,7 @@ impl Editor {
         if n == 0 {
             return false;
         }
-        let at = match forward {
+        let at = match forward != hits.backward {
             true => (hits.at + 1) % n,
             false => (hits.at + n - 1) % n,
         };
