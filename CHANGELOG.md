@@ -92,6 +92,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **vim's `ge` and `gE` from below an empty line stop on it**, as in vim, as `b` does: `dge` there deletes to the empty line.
 - **A digit after vim's `g` drops the `g`**, as in vim, and the keys after it start afresh: `g2UU` changes nothing instead of uppercasing the line, and `g2~~` switches two characters.
 - **vim's Enter in a code file drops the blanks after the cursor**, as vim's autoindent does: Enter at the start of an indented line moves the line down without its indent, and `cw` then Enter leaves no blank in front of the text carried down. Prose is as before.
+- **vim's `''` after `C-o` goes back to where `C-o` first jumped from**, as in vim, instead of the first line.
 
 ## 0.24.0 · 2026-11-17
 

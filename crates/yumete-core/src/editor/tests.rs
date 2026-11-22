@@ -46723,3 +46723,23 @@ red fish
         assert_eq!(ed.current_buffer().text(), want, "{keys}");
     }
 }
+
+/// **vim's `''` after `C-o` goes back to where the walk began** (measured
+/// in nvim): `C-o` marks the place it first leaves, and further `C-o` and
+/// `C-i` leave that mark alone.
+#[test]
+fn the_previous_context_mark_after_jumping_back_is_where_the_walk_began() {
+    let text: String = (1..=9).map(|n| format!("row {n}\n")).collect();
+    for (keys, line) in [("3G5G\u{f}''", 5), ("3G5G\u{f}\u{f}''", 5), ("3G5G7G\u{f}\u{f}''", 7), ("3G5G\u{f}''''", 3)] {
+        let mut ed = typed_vim(&text);
+        for c in keys.chars() {
+            match c {
+                '\u{f}' => {
+                    ed.on_key(Key::Ctrl('o'));
+                }
+                c => feed_vim(&mut ed, &c.to_string()),
+            }
+        }
+        assert_eq!(vim_at(&ed).0, line, "{keys:?}");
+    }
+}

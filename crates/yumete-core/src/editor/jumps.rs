@@ -184,9 +184,12 @@ impl Editor {
     /// **Where the last jump came from**, vim's `'` mark: its buffer's
     /// index and the place there. With no jump made yet it is the start of
     /// this buffer, as vim's is the first line's start; `None` when the
-    /// buffer it was in is closed.
+    /// buffer it was in is closed. While `C-o` walks the list back it is
+    /// the place the walk began, the newest in the list, which vim marks
+    /// once as it leaves it.
     fn came_from(&self) -> Option<(usize, usize)> {
-        match self.jump_at.checked_sub(1).and_then(|at| self.jumps.get(at)) {
+        let newest = self.jump_at.max(self.jumps.len());
+        match newest.checked_sub(1).and_then(|at| self.jumps.get(at)) {
             Some(jump) => self.jump_place(jump),
             None => Some((self.current, 0)),
         }
