@@ -1485,9 +1485,6 @@ impl Editor {
     pub(super) fn cmd_select_line_mode(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
         self.vim_line_want = self.column_wanted();
-        // `j` and `k` under `V` aim at that column, not at the line's end
-        // where the selection's head stands.
-        self.sel.set_goal(Some(self.vim_line_want));
         self.vim_line_column = {
             let rope = self.current_buffer().rope();
             let head = self.sel.head().min(rope.len_chars());
@@ -1506,6 +1503,9 @@ impl Editor {
             }
             false => self.select_line(),
         }
+        // `j` and `k` under `V` aim at that column, not at the line's end
+        // where the selection's head stands.
+        self.sel.set_goal(Some(self.vim_line_want));
         self.extend = true;
         self.vim_lines = true;
         self.drop_register_into_visual();
@@ -1586,7 +1586,7 @@ impl Editor {
                 true => {
                     let rope = self.current_buffer().rope();
                     let line = rope.char_to_line(self.sel.head().min(rope.len_chars()));
-                    self.char_at_line_column(line, self.sel.goal().unwrap_or(self.vim_line_want))
+                    self.char_at_line_column(line, self.column_wanted())
                 }
                 false => self.sel.head(),
             };
@@ -1848,11 +1848,9 @@ impl Editor {
         // stopped (B3).
         let whole_lines = self.vim_lines;
         // **Whole lines deleted keep the column the cursor wanted** (vim's
-        // 'nostartofline'): `V`'s, or the cursor's on a closed fold.
-        let want = match self.extend {
-            true => self.vim_line_want,
-            false => self.column_wanted(),
-        };
+        // 'nostartofline'): under `V` the one `V` was pressed in until a
+        // motion inside `V` moves it, or the cursor's on a closed fold.
+        let want = self.column_wanted();
         if self.vim_lines {
             self.extend_to_line_bounds();
             self.vim_lines = false;

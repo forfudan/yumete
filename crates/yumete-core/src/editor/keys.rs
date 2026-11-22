@@ -977,11 +977,9 @@ impl Editor {
             }
         };
         // `>` and `<` put it back in the column it wanted, on the screen
-        // (vim's 'curswant'), as `>>` does.
-        let want = match self.vim_lines {
-            true => self.vim_line_want,
-            false => self.column_wanted(),
-        };
+        // (vim's 'curswant'), as `>>` does: under `V` the one `V` was
+        // pressed in until a motion inside `V` moves it.
+        let want = self.column_wanted();
         if self.vim_lines {
             self.extend_to_line_bounds();
             self.vim_lines = false;
@@ -1041,8 +1039,15 @@ impl Editor {
         self.count = None;
         self.alias_count = None;
         // `o` 只換頭，不動手也不收工——選區還是整行，`vim_lines` 要留着。
+        // Under `V` the cursor wants the column `V` was pressed in, and the
+        // other end keeps the one the cursor left, for the next `o`.
         if c == 'o' {
-            return self.flip_selection();
+            let left = self.column_wanted();
+            self.flip_selection();
+            if self.vim_lines {
+                self.sel.set_goal(Some(std::mem::replace(&mut self.vim_line_want, left)));
+            }
+            return;
         }
         // **`p` from an empty register still takes the selection** (nvim's
         // `nv_put` deletes before it puts, then finds nothing to put): into

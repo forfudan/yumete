@@ -92,6 +92,11 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
         e.vim_lines = lines;
         e.clamp_cursor();
         e.refresh_goal_column();
+        // Lines kept by their numbers alone: the cursor wants the column
+        // the last `V` was pressed in.
+        if lines {
+            e.sel.set_goal(Some(e.vim_line_want));
+        }
     }, Key::Char('v')),
     (NormalCmd::InsertAtLastInsert, |e, _| {
         if let Some(at) = e.current_buffer().insert_stop() {

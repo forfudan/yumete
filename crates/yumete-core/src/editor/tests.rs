@@ -46582,3 +46582,32 @@ fn a_macro_played_by_normal_inside_a_macro_runs_in_place() {
     let after = ed.current_buffer().text().matches('y').count();
     assert_eq!(after - before, 10_002, "every play plays");
 }
+
+/// **A motion inside vim's `V` moves the column the cursor wants** (measured
+/// in nvim): `Vd`, `V>` and Esc put the cursor in the column the last motion
+/// left it wanting, not the one `V` was pressed in; `o` swaps the two.
+#[test]
+fn a_motion_inside_linewise_visual_moves_the_wanted_column() {
+    let text = "monday\ntuesday\nwednesday\nthursday\n";
+    let cases: &[(&str, (usize, usize))] = &[
+        ("llVj0d", (1, 1)),
+        ("llVjwd", (1, 1)),
+        ("llVjhd", (1, 2)),
+        ("llVjld", (1, 4)),
+        ("llVj$d", (1, 9)),
+        ("llVj0>", (1, 1)),
+        ("llVj0⎋", (2, 1)),
+        ("llVjll⎋", (2, 5)),
+        ("llVjloo⎋", (2, 4)),
+        ("llVo⎋", (1, 3)),
+        ("jlvjl⎋ggV'>d", (1, 1)),
+        ("llvjVd", (1, 3)),
+        ("llVj⎋gvd", (1, 3)),
+        ("llVj⎋gv⎋", (2, 3)),
+    ];
+    for &(keys, at) in cases {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        assert_eq!(vim_at(&ed), at, "{keys}");
+    }
+}
