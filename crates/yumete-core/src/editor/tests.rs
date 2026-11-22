@@ -48250,3 +48250,25 @@ fn vims_case_operators_leave_the_cursor_at_the_start() {
         assert_eq!((vim_at(&ed), ed.current_buffer().rope().to_string().as_str()), (want, text), "{keys}");
     }
 }
+
+/// **vim's `ap` and `ip` after an operator take their count** (`current_par`,
+/// measured in nvim): `2dap` takes two paragraphs and the blank lines after
+/// each, `d3ip` three runs counting the blank ones, and a count that runs
+/// off the file takes nothing.
+#[test]
+fn vims_paragraph_objects_take_a_count() {
+    for (keys, text) in [
+        ("2dap", "ee\n"),
+        ("3dap", ""),
+        ("4dap", "aa\nbb\n\ncc\ndd\n\nee\n"),
+        ("G2dap", "aa\nbb\n\ncc\ndd\n\nee\n"),
+        ("4G2dap", "aa\nbb\n"),
+        ("d3ip", "\nee\n"),
+        ("d5ip", ""),
+        ("d6ip", "aa\nbb\n\ncc\ndd\n\nee\n"),
+    ] {
+        let mut ed = typed_vim("aa\nbb\n\ncc\ndd\n\nee\n");
+        feed_vim(&mut ed, keys);
+        assert_eq!(ed.current_buffer().rope().to_string(), text, "{keys}");
+    }
+}

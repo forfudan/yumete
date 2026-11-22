@@ -260,42 +260,10 @@ impl Editor {
         let mut start = cursor;
         let mut grow = start != visual;
         if !grow {
-            let white_in_front = white(start);
-            while start > 0 && white(start - 1) == white_in_front {
-                start -= 1;
-            }
-            let mut end = start;
-            while end <= last && white(end) {
-                end += 1;
-            }
-            end -= 1;
-            let mut left = count - usize::from(!around && white_in_front);
-            while left > 0 {
-                left -= 1;
-                if end == last {
-                    return self.fail_the_motion();
-                }
-                let do_white = !around && white(end + 1);
-                if around || !do_white {
-                    end += 1;
-                    while end < last && !white(end + 1) {
-                        end += 1;
-                    }
-                }
-                if left == 0 && white_in_front && around {
-                    break;
-                }
-                if around || do_white {
-                    while end < last && white(end + 1) {
-                        end += 1;
-                    }
-                }
-            }
-            if !white_in_front && !white(end) && around {
-                while start > 0 && white(start - 1) {
-                    start -= 1;
-                }
-            }
+            let Some((from, end)) = vim_paragraph_lines(&rope, cursor, around, count) else {
+                return self.fail_the_motion();
+            };
+            start = from;
             grow = self.vim_lines && start == cursor;
             if !grow {
                 if start != visual {
@@ -1932,10 +1900,6 @@ impl Editor {
             }
             match after > end {
                 true => end = after,
-                // **vim's `ap` on blank lines takes the paragraph after
-                // them or nothing** (`current_par` fails): at the file's
-                // end there is none to take.
-                false if same && self.keymap_rules().vim_text_objects => return motion::Span::Missed,
                 false => {
                     while first > 0 && blank(first - 1) != same {
                         first -= 1;
@@ -1945,6 +1909,24 @@ impl Editor {
         }
         // 末一行的換行本身；没有換行（檔尾没有空行結尾）就退到最後一個字。
         let tail = match end < last {
+            true => rope.line_to_char(end + 1).saturating_sub(1),
+            false => motion::line_last(rope, rope.line_to_char(end)),
+        };
+        motion::Span::Over { anchor: rope.line_to_char(first), head: tail }
+    }
+
+    /// **vim's `ip` and `ap` after an operator** (`current_par`), `count`
+    /// of them ([`vim_paragraph_lines`]): whole lines, the last one's break
+    /// in it. Missed when the count runs off the file: `2dap` on the last
+    /// paragraph, or `dap` on the blank lines that end it, takes nothing.
+    fn vim_paragraph_span(&self, around: bool, count: usize) -> motion::Span {
+        let rope = self.current_buffer().rope();
+        let here = rope.char_to_line(self.sel.head().min(rope.len_chars()));
+        let Some((first, end)) = vim_paragraph_lines(rope, here as isize, around, count) else {
+            return motion::Span::Missed;
+        };
+        let (first, end) = (first as usize, end as usize);
+        let tail = match end < motion::last_line(rope) {
             true => rope.line_to_char(end + 1).saturating_sub(1),
             false => motion::line_last(rope, rope.line_to_char(end)),
         };
@@ -3721,8 +3703,11 @@ impl Editor {
                     (_, None) => motion::Span::Missed,
                 }
             }
-            motion::Motion::Object { what: motion::Object::Paragraph, around, .. } => {
-                self.paragraph_span(around)
+            motion::Motion::Object { what: motion::Object::Paragraph, around, count } => {
+                match self.keymap_rules().vim_text_objects {
+                    true => self.vim_paragraph_span(around, count),
+                    false => self.paragraph_span(around),
+                }
             }
         }
     }
@@ -4026,6 +4011,55 @@ fn last_row(rope: &ropey::Rope, m: crate::wrap::Measure) -> crate::wrap::Anchor 
     crate::wrap::Anchor { line, index_in_line: crate::wrap::row_count_in_line(rope, line, m).saturating_sub(1) }
 }
 
+/// **vim's `current_par`** over `count` paragraphs from line `cursor`: the
+/// paragraph or the blank lines the cursor is in and as many more as the
+/// count asks, `ap` taking the blank lines after each (or, with none after
+/// the last, those before the first), as the first and last line. `None`
+/// when the count runs off the file, which vim's motion fails on.
+fn vim_paragraph_lines(rope: &ropey::Rope, cursor: isize, around: bool, count: usize) -> Option<(isize, isize)> {
+    let last = motion::last_line(rope) as isize;
+    let white = |line: isize| rope.line(line as usize).to_string().trim().is_empty();
+    let count = count.max(1);
+    let mut start = cursor;
+    let white_in_front = white(start);
+    while start > 0 && white(start - 1) == white_in_front {
+        start -= 1;
+    }
+    let mut end = start;
+    while end <= last && white(end) {
+        end += 1;
+    }
+    end -= 1;
+    let mut left = count - usize::from(!around && white_in_front);
+    while left > 0 {
+        left -= 1;
+        if end == last {
+            return None;
+        }
+        let do_white = !around && white(end + 1);
+        if around || !do_white {
+            end += 1;
+            while end < last && !white(end + 1) {
+                end += 1;
+            }
+        }
+        if left == 0 && white_in_front && around {
+            break;
+        }
+        if around || do_white {
+            while end < last && white(end + 1) {
+                end += 1;
+            }
+        }
+    }
+    if !white_in_front && !white(end) && around {
+        while start > 0 && white(start - 1) {
+            start -= 1;
+        }
+    }
+    Some((start, end))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4097,4 +4131,3 @@ mod tests {
         println!("四十萬字掃到底：{took:?}");
     }
 }
-

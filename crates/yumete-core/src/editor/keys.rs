@@ -1802,6 +1802,7 @@ impl Editor {
                         motion::Object::Word { .. }
                             | motion::Object::Pair { .. }
                             | motion::Object::NearestPair
+                            | motion::Object::Paragraph
                     ) =>
                 {
                     crate::vim::Step {
