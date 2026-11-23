@@ -384,8 +384,10 @@ impl Editor {
         // **helix's Enter after nothing but blanks breaks the line at its
         // start** (`insert_newline`): the line above is left empty and the
         // line moves down whole, its blanks with it, the caret in its column.
+        // In prose too, where no indent is carried: the blanks are the
+        // line's own.
         let vim = self.keymap_rules().vim_indent_keys;
-        if !vim && !base.is_empty() && base.chars().count() == column {
+        if !vim && column > 0 && self.leading_blanks(line).chars().count() >= column {
             self.fresh_indent = None;
             let rope = self.current_buffer().rope();
             let start = rope.line_to_char(line);

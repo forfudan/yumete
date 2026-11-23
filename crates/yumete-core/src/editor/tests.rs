@@ -20,7 +20,9 @@ use yumete_cjk::{CategorySegmenter, DictionarySegmenter};
 /// same document except while it is being written: `Enter` carries a list
 /// marker down in Markdown (#418), so a fixture whose lines open with `- `
 /// would come back with markers this helper wrote rather than the ones it was
-/// given. A fixture must be the text it was handed.
+/// given. A fixture must be the text it was handed. For the same reason a
+/// line break goes in as a character, not as `Enter`, which under helix
+/// breaks a line of blanks at its start.
 fn typed(text: &str) -> Editor {
     let mut ed = Editor::new();
     ed.current_buffer_mut().set_syntax_by_hand(crate::syntax::Syntax::Text);
@@ -28,7 +30,7 @@ fn typed(text: &str) -> Editor {
     ed.set_auto_pairs(crate::editor::AutoPairs::Off);
     ed.on_key(Key::Char('i'));
     for c in text.chars() {
-        ed.on_key(if c == '\n' { Key::Enter } else { Key::Char(c) });
+        ed.on_key(Key::Char(c));
     }
     ed.on_key(Key::Esc);
     ed.set_auto_pairs(crate::editor::AutoPairs::default());
@@ -39896,6 +39898,26 @@ fn a_files_own_indentation_sets_the_indent_unit() {
 /// `Esc` when the line break was all the Insert wrote, and Enter after
 /// nothing but blanks breaks the line at its start. Blanks typed by hand
 /// stay.
+/// **helix's Enter after nothing but blanks breaks the line at its start
+/// in prose too** (measured in hx on `.md` and `.txt`): the line moves down
+/// whole, the caret in its column.
+#[test]
+fn helixs_enter_in_the_blanks_of_prose_breaks_at_the_line_start() {
+    for syntax in [":syntax markdown", ":syntax text"] {
+        for (keys, want) in [("lllli", "\n    Qabc\n"), ("lli", "\n  Q  abc\n"), ("i", "\nQ    abc\n")] {
+            let mut ed = typed("    abc\n");
+            ed.execute(syntax).unwrap();
+            ed.execute(":keymap helix").unwrap();
+            press(&mut ed, "gg");
+            press(&mut ed, keys);
+            ed.on_key(Key::Enter);
+            press(&mut ed, "Q");
+            ed.on_key(Key::Esc);
+            assert_eq!(ed.current_buffer().text(), want, "{syntax} {keys}");
+        }
+    }
+}
+
 #[test]
 fn an_autoindent_left_untyped_goes() {
     let code = "fn main() {\n    let a = 1;\n    b();\n}\n";
