@@ -5952,7 +5952,7 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "decimo",
-        aliases: &[],
+        aliases: &["dm"],
         help: "cmd.commands.decimo",
         needs: &[],
         params: &[Param::Free("cmd.arg.expression")],
@@ -10152,6 +10152,7 @@ mod tests {
                     "md" => ":md footnote".to_string(),
                     "insert-output" | "append-output" | "sh" | "run-shell-command" => format!(":{alias} date"),
                     "norm" => ":norm x".to_string(),
+                    "dm" => ":dm 1+1".to_string(),
                     alias => format!(":{alias}"),
                 };
                 assert!(parse(&line).is_ok(), "alias {alias} does not parse");
