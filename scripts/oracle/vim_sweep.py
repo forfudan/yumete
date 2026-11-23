@@ -7,6 +7,7 @@
 
     python3 scripts/oracle/vim_sweep.py            # 跑全套，只印不一樣的
     python3 scripts/oracle/vim_sweep.py dw d2b     # 只跑這幾式
+    python3 scripts/oracle/vim_sweep.py +visual    # one family: motions objects registers visual
 
 **剩下那一百八十幾格是有意的，不是紅的**（2026-10-12 逐格核過）：全是中文那一族，
 兩種——`（）` 這一族全形括號 nvim 根本不認，而 `你也是人類` 在 nvim 眼裏是**一個**
@@ -46,7 +47,11 @@ def nvim(text, keys, work):
     open(ks, "w", encoding="utf-8").write(keys + f"\x1b:w! {out}\r:qa!\r")
     if os.path.exists(out):
         os.remove(out)
-    subprocess.run([NVIM, "--clean", "--headless", "-s", ks, src],
+    # `>` and `<` by four spaces, as yumete shifts a file with no indent unit
+    # of its own (`[editor] indent_width`); `--clean` would shift by a TAB of 8.
+    # Warning: a fixture indented by some other unit is shifted by that unit in
+    # yumete (it guesses the file's own), and by four in nvim.
+    subprocess.run([NVIM, "--clean", "--headless", "--cmd", "set sw=4 sts=4 et", "-s", ks, src],
                    capture_output=True, text=True, timeout=20)
     return open(out, encoding="utf-8").read() if os.path.exists(out) else "<no output>"
 
@@ -58,9 +63,46 @@ def yumete(text, keys, work):
     # 格就往使用者真的 `~/.local/share/yumete` 裏寫一份 session——六千格六千次，
     # 而且和同時在跑的 `cargo test` 搶同一批檔。
     env = dict(os.environ, XDG_CONFIG_HOME=CFG, XDG_DATA_HOME=os.path.join(WORK, "data"))
-    subprocess.run([YUMETE, src, "--lang=en", "--shot=78x16", f"--keys={keys}:w\\n"],
+    # `\\e` before `:w`, as nvim's side has: a case that ends in Insert (a
+    # macro that opens a line) would otherwise type the `:w` into the text.
+    subprocess.run([YUMETE, src, "--lang=en", "--shot=78x16", f"--keys={keys}\\e:w\\n"],
                    cwd=ROOT, env=env, capture_output=True, text=True, timeout=20)
     return open(src, encoding="utf-8").read()
+
+
+# **Where a reader would have stopped typing.** nvim's `-s` reads the whole
+# script as one stream, so every change before a `u` is one undo step and `u`
+# takes them all back (`ddddu` restores both lines); typed by hand, each command
+# is its own step. A case puts `BREAK` where the hands pause: nvim gets
+# `:let &ul=&ul` there, which closes the undo step (`:h undo-break`), and
+# yumete, whose steps are its commands, gets nothing.
+BREAK = "\ue000"
+NVIM_BREAK = ":let &ul=&ul\r"
+
+
+def spell(keys):
+    """The same keys as `--keys` writes them: nvim takes the raw bytes.
+
+    `\\x1b` is `\\e`, `\\r` Enter, a control byte `\\^x` (`\\x16` is `C-v`), and a
+    backslash doubled.
+    """
+    out = []
+    for c in keys:
+        if c == BREAK:
+            continue
+        if c == "\\":
+            out.append("\\\\")
+        elif c == "\x1b":
+            out.append("\\e")
+        elif c == "\r":
+            out.append("\\n")
+        elif c == "\t":
+            out.append("\\t")
+        elif ord(c) < 32:
+            out.append("\\^" + chr(ord(c) + 96))
+        else:
+            out.append(c)
+    return "".join(out)
 
 
 def one(job):
@@ -73,8 +115,8 @@ def one(job):
     work = tempfile.mkdtemp(prefix="oracle-", dir=WORK)
     try:
         lead = "gg0" + "l" * pos
-        n = nvim(text, lead + case, work)
-        y = yumete(text, lead + case.replace("\x1b", "\\e"), work)
+        n = nvim(text, (lead + case).replace(BREAK, NVIM_BREAK), work)
+        y = yumete(text, lead + spell(case), work)
         return case, pos, text, n, y
     finally:
         shutil.rmtree(work, ignore_errors=True)
@@ -148,6 +190,97 @@ OBJECT_CASES = [
 ]
 
 
+# ── Registers and macros ─────────────────────────────────────────────
+#
+# `|` in a case is `BREAK`, the reader's pause between two commands (none of
+# these cases uses vim's `|`).
+#
+# A register is seen in the file only when it is put, so each case ends with a
+# put (`"ap`, `"1p`) or plays it (`@a`). Started at a few columns, not every
+# one: what a register holds does not depend on where the cursor began, and
+# the family is long.
+#
+# Warning: **no case leans on an error.** An empty register's `p` beeps, and a
+# beep in nvim flushes what is still to be typed — the rest of the case and the
+# `:w` with it — so such a case says nothing about either side. Every register
+# a case reads is filled first.
+REGISTER_FIXTURES = [
+    "one two three\nfour five six seven\nlast\n\ntail 段\n",
+    "  x = 1;\ny\n  zz = 22;\nlong line at the end\n\ntail 段\n",
+]
+REGISTER_POSITIONS = [0, 4, 9]
+
+REGISTER_CASES = [
+    # named: lowercase replaces, uppercase appends, the type follows
+    '"ayyj"ap', '"ayyj"aP', '"ayy"byyj"ap"bp', '"ayw"Aywj"ap',
+    '"ayyj"Ayy"ap', '"ayw"Ayyj"ap', '"ayy"Aywj"ap', '"ayyj"Ap',
+    '"a2yyG"ap', '"ayyj3"ap', '"ayyj"a3p', '"ayiw$"ap', '"ayiw$"aP',
+    # the unnamed register follows the last one written
+    '"byyjp', '"bywj$p', 'yy"bywjp',
+    # "_ leaves every register as it was
+    'yiww"_dwP', 'yy"_ddp', 'yiw"_dd"0p', 'yyj"_x"0p',
+    # "0 is the last yank, and only an unnamed one
+    'yyjdd"0p', 'yyj"ayy"0p', 'yiwwdw"0P', 'yyjyy"0p',
+    # "1-"9 shift on each delete of a line or more; small deletes go to "-
+    'dddd"1p', 'dddd"2p', 'dddddd"3p', 'ddyy"1p', 'dddw"1p', 'dwdd"-p',
+    'dw"-p', 'x"-p', 'dddd"1p.', 'dddddd"1p..',
+    "dd|dd|dd|\"1p|u.", "dd|dd|\"2p|u.", "dd|dd|dd|\"1p|u|.|u.",
+    'd}"1p', 'dj"1p', 'cwX\x1b"1p', 'cwX\x1b"-p', 'ccX\x1b"1p',
+    # the read-only ones
+    'iab\x1b".p', 'Acd ef\x1bj".p', 'iab\x1b".P', 'oxy\x1bj"3.p',
+    ':s/o/0/\r":p', ':2\r":P',
+    # macros
+    'qaA!\x1bjq@a', 'qaxq2@a', 'qaxjq@a@@', 'qaxjq3@a', 'qaxq@a.',
+    "qaxjq|@a|u", "qaxq|u|@a", 'qaA!\x1bq"ap', 'qaxqqAjq@a', 'qaqqaA.\x1bj@aq@a',
+    'qadwq"ap', 'qa0iZ \x1bjq2@a', 'qbxqj@b@@@@', 'qaxq"byy@b',
+    'qa:s/e/E/\rjq@a', ':s/e/E/\rj@:', ':s/e/E/\rj2@:', ':s/e/E/\rj@:j@@',
+    'qaixy\x1bq"aP', 'qayyq@ap', 'q1xq@1', '"ayy@a', '"ayy"Ayy@a',
+]
+REGISTER_CASES = [c.replace("|", BREAK) for c in REGISTER_CASES]
+
+
+# ── Visual mode ──────────────────────────────────────────────────────
+#
+# `v`, `V` and `C-v` (`\x16`) with each operator, `o`/`O`, `gv`, counts and
+# the Visual text objects. The second line is shorter than the first and the
+# fourth is one letter, so a block runs over short lines and past their ends.
+VISUAL_FIXTURES = [
+    "alpha beta, gamma delta\nxx yy\n    indented line here\nq\nlast words of it\n\ntail 段\n",
+    'say "one two" (and three) ok\nfour\nfive six\n\nmore here. And more.\n',
+]
+VISUAL_POSITIONS = [0, 2, 6, 11, 18]
+
+VISUAL_CASES = [
+    # characterwise
+    "vd", "vld", "v3ld", "vwd", "ved", "v2wd", "vjd", "vjjd", "v$d", "vj$d",
+    "vbd", "vhd", "vGd", "vggd", "v0d", "vf,d", "vt,d", "3vd", "9vd", "3vjd", "vjy$p",
+    "vec\x1b", "vecZ\x1b", "v~", "vwUwvu", "vwU", "vwrx", "vjrx", "vwJ", "vjJ",
+    "vjgJ", "vj>", "jjvj<", "$vld", "$vjd", "$vy$p", "vey$p", "veyP", "yiwwvep", "yiwwveP", "yiwwvepp",
+    "yyjvep", "veyjVp", "vlllohd", "vjjokd", "vlll\x1bwgvd", "vey\x1bjgvd",
+    "vwy\x1bgvd", "vjoy$p", "v3ed",
+    # linewise
+    "Vd", "Vjd", "V2jd", "Vkd", "Vy$p", "VyP", "Vjyp", "VjJ", "VjjJ", "VjgJ",
+    "V>", "Vj>", "jjVj<", "V2>", "V~", "VjUVu", "VU", "Vrx", "Vc\x1b", "VcZ\x1b",
+    "VjcZ\x1b", "yyjVp", "yiwjVp", "yyjjVjp", "VjoD", "VjokD", "Vjx", "VX",
+    "VY$p", "VjC\x1b", "Vj\x1bgvd", "vVd", "Vvd", "3Vd", "2Vjd", "Vj3>",
+    # blockwise
+    "\x16jld", "\x16jjlld", "\x16j$d", "\x16jIxx\x1b", "\x16jAxx\x1b",
+    "\x16j$Axx\x1b", "\x16jlcZ\x1b", "\x16jlrx", "\x16jl~", "\x16jlU",
+    "\x16jly$p", "\x16jlyP", "\x16jjjd", "\x16jjjIZ\x1b", "\x16jjjAZ\x1b",
+    "\x16jjj$AZ\x1b", "\x16jj>", "\x16jj<", "\x16jlJ", "\x16jlOd", "\x16jlod",
+    "\x16jlOhd", "\x16jlohd", "\x16ex", "\x16jeD", "\x16jlC\x1b", "\x16jlCZ\x1b",
+    "\x16jlX", "\x16jlY$p", "\x16jl\x1bgvd", "\x16jlyjjp", "yiw\x16jlp",
+    "\x16jjlly0P", "\x16jlsZ\x1b", "\x16jjj$d", "\x163jd",
+    # Visual text objects, with counts and extending
+    "viwd", "vawd", "v2iwd", "v3iwd", "vawawd", "viwiwd", "viWd", "vaWd",
+    "vipd", "vapd", "vi(d", "va(d", "v2i(d", 'vi"d', 'va"d', "vi'd", "vasd",
+    "visd", "vi[d", "vawy$p", "Vawd", "Vipd", "\x16iwd", "vjiwd",
+    "veawd", "vi(i(d", "va(a(d", "vhiwd", "vhawd", "vbiwd", "vbawd", "v2hiwd",
+    "vjawd", "vkiwd", "v$iwd", "v$awd", "vliw2iwd", "vjaWd", "vjiWd", "vlawy$p",
+    "\x16jiwd", "\x16lawd", "vjVawd",
+]
+
+
 # ── 有意不同的那幾格 ────────────────────────────────────────────────
 #
 # **不是待辦，是答案。** 這一支每跑一次就把它們印一遍，而印出來的東西看上去都像
@@ -164,15 +297,54 @@ KNOWN: dict = {
     # 跑的時候 `dw` 只跑它自己那一套，於是那五格根本不存在（全量下 `dw`/`db` 一格
     # 不差）。**上名單之前要拿全量的輸出對一次**，底下那句「這一趟没跑到」就是為
     # 這個而寫的，它當場抓到了第一版。
+    ("vhawd", "alpha beta, gamma delta", 6):
+        "on the file's first word nvim's backward `aw` stops one character in"
+        " (`bckend_word` finds no word before it and `incl` steps on); yumete takes the word",
 }
+
+# **A whole case on a fixture** (`None`: on every fixture), for differences
+# that hold wherever the case starts. Same rules as `KNOWN`.
+KNOWN_CASES: dict = {
+    ('qaA!\x1bq"ap', None):
+        "a recorded macro is kept as helix writes one, `<esc>` for Esc (`macro_text`),"
+        " so `\"ap` shows it readably and an edited line yanked back still plays",
+    ('qaixy\x1bq"aP', None): "the same: `<esc>` in a macro's text, not the ESC byte",
+    ('"ayy@a', "  x = 1;"): "the line played as keys begins with Space, yumete's own key",
+    ('"ayy"Ayy@a', "  x = 1;"): "the same: Space is yumete's own key",
+    ('qaxq"byy@b', "  x = 1;"): "the same: Space is yumete's own key",
+    ('oxy\x1bj"3.p', "  x = 1;"):
+        "`o` carries a line's indent down in code only; a text file gets none (`indent_of_line`)",
+}
+
+
+def known_reason(case, first, pos):
+    """The reason this cell may differ, or `None`; and the key it is listed by."""
+    for key, table in (((case, first, pos), KNOWN), ((case, first), KNOWN_CASES), ((case, None), KNOWN_CASES)):
+        if key in table:
+            return key, table[key]
+    return None, None
 
 
 def main(only):
     setup()
-    bad = total = 0
+    bad = total = known = 0
     seen_known: set = set()
     stale: list = []
-    sweeps = [(FIXTURES, only or CASES), (OBJECT_FIXTURES, only or OBJECT_CASES)]
+    # A family's columns: every one on the first line unless it names a few.
+    families = {
+        "motions": (FIXTURES, CASES, None),
+        "objects": (OBJECT_FIXTURES, OBJECT_CASES, None),
+        "registers": (REGISTER_FIXTURES, REGISTER_CASES, REGISTER_POSITIONS),
+        "visual": (VISUAL_FIXTURES, VISUAL_CASES, VISUAL_POSITIONS),
+    }
+    # `+visual` runs one family whole; other words are cases, run in every one.
+    picked = [a[1:] for a in only if a.startswith("+")]
+    only = [a for a in only if not a.startswith("+")]
+    sweeps = [
+        (fx, only or cases, cols)
+        for name, (fx, cases, cols) in families.items()
+        if not picked or name in picked
+    ]
     # ⚠ **每一式都要記下它咬着沒有。** 兩邊都原封不動的那一格證明不了任何事，
     # 全綠可以是一格都沒驗。末尾印出「在每一張
     # 固定裝置的每一個起點上都沒咬着」的那幾式。
@@ -182,11 +354,13 @@ def main(only):
     # 每一格自己一個工作目錄（見 `one`），機器有幾個核就開幾個。
     jobs = [
         (text, c, pos)
-        for fixtures, cases in sweeps
+        for fixtures, cases, columns in sweeps
         for text in fixtures
         for c in cases
-        for pos in range(0, len(text.split("\n")[0]) + 2)
+        for pos in (columns or range(0, len(text.split("\n")[0]) + 2))
     ]
+    # Filtered, a case runs in every family; once is enough.
+    jobs = list(dict.fromkeys(jobs))
     total = len(jobs)
     workers = min(12, (os.cpu_count() or 4) * 2)
     with cf.ThreadPoolExecutor(max_workers=workers) as pool:
@@ -194,25 +368,28 @@ def main(only):
             bit.setdefault(c, False)
             if n != text or y != text:
                 bit[c] = True
-            key = (c, text.splitlines()[0], pos)
+            key, why = known_reason(c, text.splitlines()[0], pos)
             if n != y:
-                if key in KNOWN:
+                if key:
                     seen_known.add(key)
+                    known += 1
                     continue
                 bad += 1
                 print(f"DIFF {c!r} at {pos} in {text.splitlines()[0]!r}")
                 print(f"  nvim   {n!r}")
                 print(f"  yumete {y!r}")
-            elif key in KNOWN:
+            elif key:
                 # ⚠ **名單也會過期。** 一格上了名單又自己好了，名單就在替一個不存在
                 # 的分歧作證——下一次真的分歧出現在這一格上時它會被默默吃掉。
-                stale.append(key)
-    for key in stale:
-        print(f"已經不一樣了的那一格現在一樣了，把它從 KNOWN 裏刪掉：{key} — {KNOWN[key]}")
-    missing = sorted(set(KNOWN) - seen_known - set(stale))
-    if missing and not only:
+                # A whole case is stale only when none of its cells differ.
+                stale.append((key, why))
+    stale = list(dict.fromkeys(item for item in stale if item[0] not in seen_known))
+    for key, why in stale:
+        print(f"已經不一樣了的那一格現在一樣了，把它從 KNOWN 裏刪掉：{key} — {why}")
+    listed = set(KNOWN) | set(KNOWN_CASES)
+    missing = sorted(listed - seen_known - {key for key, _ in stale}, key=repr)
+    if missing and not only and not picked:
         print(f"KNOWN 裏這幾格這一趟没跑到：{missing}")
-    known = len(seen_known)
     print(f"{total} cases, {bad} differ" + (f", {known} known" if known else ""))
     idle = sorted(c for c, hit in bit.items() if not hit)
     if idle:
