@@ -75,6 +75,12 @@ zhs = "只有这一处：{0}"
 en = "only one match: {0}"
 
 [[message]]
+# vim 鍵位下 :7,3|… 的範圍兩頭寫反了：不問，`|` 後面的不跑（草稿）
+key = "find.range-backwards-before-bar"
+zhs = "范围是反向的：第 {0} 行到第 {1} 行，什么都没执行"
+en = "the range runs backwards: line {0} to {1}; nothing ran"
+
+[[message]]
 # :s 的範圍兩頭寫反了(照 vim，問一句再改)
 key = "find.range-runs-backwards"
 zhs = "范围是反向的：第 {0} 行到第 {1} 行。y 对调后执行，n 取消"

@@ -942,14 +942,17 @@ impl Editor {
                         return Ok(CommandOutcome::Continue);
                     }
                 };
-                // **Written backwards, it asks first**, as `:s` does; `y`
-                // swaps, so the cursor goes to the larger end.
-                if let [first, second] = ends[..] {
-                    if self.asks_to_swap(first, second, line) {
+                // **Written backwards, nothing asks**, as in vim: alone it
+                // goes to its last end as written; before a `|` it is an
+                // invalid range (vim's E16) and nothing after it runs.
+                if let ([first, second], Some(_)) = (&ends[..], &then) {
+                    if first > second {
+                        self.status = say!("find.range-backwards-before-bar", first, second);
+                        self.command_failed = true;
                         return Ok(CommandOutcome::Continue);
                     }
                 }
-                let line = ends.iter().copied().max().unwrap_or(1);
+                let line = ends[ends.len() - 1];
                 // Either end of `:99,3|` past the file is no line; `:3,99`
                 // alone goes to the last line, as vim's does.
                 let wrong = match &then {

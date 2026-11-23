@@ -32285,11 +32285,12 @@ fn a_backwards_range_is_asked_about_before_it_is_swapped() {
     assert_eq!(ed.current_buffer().rope().to_string(), "X1\nX2\nX3\n", "正向直接做");
 }
 
-/// **Every range written backwards asks before it runs**, as `:s` does: a
-/// bare range, one before a `|`, `:sort`, `:normal` and `:read`. `y` swaps,
-/// so a bare range goes to its larger end; any other key runs nothing.
+/// **A range written backwards asks before it runs**, as `:s` does:
+/// `:sort`, `:normal` and `:read`; `y` swaps, any other key runs nothing.
+/// Under vim a bare one asks nothing and goes to its last end as written,
+/// and one before a `|` is refused and nothing after it runs, as in vim.
 #[test]
-fn every_backwards_range_asks_before_it_swaps() {
+fn a_backwards_range_asks_unless_it_is_bare() {
     let text = "e\nd\nc\nb\na\nf\ng\n";
     let run = |keys: &str, line: &str, answer: Option<char>| {
         let mut ed = typed_vim(text);
@@ -32303,15 +32304,13 @@ fn every_backwards_range_asks_before_it_swaps() {
     };
     let same = text.to_string();
     assert_eq!(run("", ":3,6", None), (false, same.clone(), (6, 1)), "forwards: no question");
-    assert_eq!(run("", ":6,3", None), (true, same.clone(), (1, 1)));
-    assert_eq!(run("", ":6,3", Some('y')), (true, same.clone(), (6, 1)), "swapped, to its last line");
-    assert_eq!(run("", ":6,3", Some('n')), (true, same.clone(), (1, 1)));
+    assert_eq!(run("", ":6,3", None), (false, same.clone(), (3, 1)), "bare: to its last end, unasked");
     assert_eq!(run("", ":3,99", None), (false, same.clone(), (7, 1)), "past the end is the last line");
-    assert_eq!(run("", ":99,3", Some('y')), (true, same.clone(), (7, 1)));
-    assert_eq!(run("", ":6,3|s/$/X/", Some('y')).1, "e\nd\nc\nb\na\nfX\ng\n");
-    assert_eq!(run("", ":6,3|s/$/X/", Some('n')).1, same);
+    assert_eq!(run("", ":99,3", None), (false, same.clone(), (3, 1)));
+    assert_eq!(run("4Gmagg", ":'a,2", None), (false, same.clone(), (2, 1)));
+    assert_eq!(run("", ":6,3|s/$/X/", None), (false, same.clone(), (1, 1)), "before a `|`: refused");
     assert_eq!(run("", ":3,99|s/$/X/", None), (false, same.clone(), (1, 1)), "past the end before a `|` runs nothing");
-    assert_eq!(run("4Gmagg", ":'a,2|s/$/X/", Some('y')).1, "e\nd\nc\nbX\na\nf\ng\n");
+    assert_eq!(run("4Gmagg", ":'a,2|s/$/X/", None), (false, same.clone(), (1, 1)));
     assert_eq!(run("", ":4,2sort", Some('y')).1, "e\nb\nc\nd\na\nf\ng\n");
     assert_eq!(run("", ":4,2sort", Some('n')).1, same);
     assert_eq!(run("", ":3,1norm Ax", Some('y')).1, "ex\ndx\ncx\nb\na\nf\ng\n");
