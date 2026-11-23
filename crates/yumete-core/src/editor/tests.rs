@@ -32325,6 +32325,100 @@ fn a_backwards_range_asks_unless_it_is_bare() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// **vim's `:delete [x] [count]`**, every row measured in nvim 0.12
+/// `--clean`: the lines into the register as `dd` takes them, `"1` moving
+/// down, a count from the range's last line, the cursor on the first
+/// non-blank of the line that comes up, and `u` back where it was.
+#[test]
+fn ex_delete_takes_lines_into_a_register() {
+    let text = "a1\nb2\nc3\nd4\ne5\n";
+    let run = |keys: &str, line: &str| {
+        let mut ed = typed_vim(text);
+        press(&mut ed, keys);
+        let _ = ed.execute(line);
+        (ed.current_buffer().text(), vim_at(&ed), ed.register_text(None))
+    };
+    assert_eq!(run("jll", ":d"), ("a1\nc3\nd4\ne5\n".into(), (2, 1), "b2\n".into()));
+    assert_eq!(run("", ":d 3"), ("d4\ne5\n".into(), (1, 1), "a1\nb2\nc3\n".into()));
+    assert_eq!(run("", ":2d 2"), ("a1\nd4\ne5\n".into(), (2, 1), "b2\nc3\n".into()));
+    assert_eq!(run("", ":2,3d 2"), ("a1\nb2\ne5\n".into(), (3, 1), "c3\nd4\n".into()), "counted from the range's last line");
+    assert_eq!(run("", ":5d"), ("a1\nb2\nc3\nd4\n".into(), (4, 1), "e5\n".into()));
+    assert_eq!(run("", ":4d 9"), ("a1\nb2\nc3\n".into(), (3, 1), "d4\ne5\n".into()));
+    assert_eq!(run("", ":%d").1, (1, 1));
+    assert_eq!(run("", ":%d").2, text);
+    assert_eq!(run("yl", ":d 0"), (text.into(), (1, 1), "a".into()), "a count of 0 is refused");
+    let mut ed = typed_vim(text);
+    ed.execute(":3,5d a").unwrap();
+    assert_eq!((ed.current_buffer().text(), vim_at(&ed)), ("a1\nb2\n".into(), (2, 1)));
+    assert_eq!((ed.register_text(Some('a')), ed.register_text(None), ed.register_text(Some('1'))), ("c3\nd4\ne5\n".into(), "c3\nd4\ne5\n".into(), "c3\nd4\ne5\n".into()));
+    let mut ed = typed_vim(text);
+    ed.execute(":2d a 2").unwrap();
+    assert_eq!((ed.current_buffer().text(), ed.register_text(Some('a'))), ("a1\nd4\ne5\n".into(), "b2\nc3\n".into()));
+    let mut ed = typed_vim(text);
+    press(&mut ed, "yl");
+    ed.execute(":2,3d _").unwrap();
+    assert_eq!((ed.current_buffer().text(), ed.register_text(None)), ("a1\nd4\ne5\n".into(), "a".into()), "`_` keeps nothing");
+    // The first non-blank, and the numbered registers moving down.
+    let mut ed = typed_vim("abcdef\nb2\n   c3x\nd4\n");
+    press(&mut ed, "jll");
+    ed.execute(":d").unwrap();
+    assert_eq!(vim_at(&ed), (2, 4));
+    let mut ed = typed_vim("abcdef\nb2\n   c3x\nd4\n");
+    ed.execute(":1,2d").unwrap();
+    ed.execute(":d").unwrap();
+    assert_eq!((ed.register_text(Some('1')), ed.register_text(Some('2'))), ("   c3x\n".into(), "abcdef\nb2\n".into()));
+    // One step back, to where the cursor was.
+    let mut ed = typed_vim(text);
+    press(&mut ed, "jl");
+    ed.execute(":d").unwrap();
+    press(&mut ed, "u");
+    assert_eq!((ed.current_buffer().text(), vim_at(&ed)), (text.into(), (2, 2)));
+    // Backwards, it asks, as `:s` does.
+    let mut ed = typed_vim(text);
+    ed.execute(":4,2d").unwrap();
+    assert!(ed.pending == Pending::SwapRange);
+    ed.on_key(Key::Char('y'));
+    assert_eq!(ed.current_buffer().text(), "a1\ne5\n");
+    // helix's keymap takes the selection's lines.
+    let mut ed = typed(text);
+    press(&mut ed, "jx");
+    ed.execute(":d").unwrap();
+    assert_eq!(ed.current_buffer().text(), "a1\nc3\nd4\ne5\n");
+}
+
+/// **vim's `:put [x]` and `:put! [x]`**, measured in nvim 0.12 `--clean`:
+/// whatever the register holds goes in as whole lines below the line (`:0put`
+/// above the first, `:put!` above), the cursor on the first non-blank of the
+/// last line put; `"_` puts an empty line and an empty register nothing.
+#[test]
+fn ex_put_puts_a_register_on_lines_of_its_own() {
+    let text = "abc\n  def\nghi\n";
+    let run = |keys: &str, line: &str| {
+        let mut ed = typed_vim(text);
+        press(&mut ed, keys);
+        let _ = ed.execute(line);
+        (ed.current_buffer().text(), vim_at(&ed))
+    };
+    assert_eq!(run("yl", ":put"), ("abc\na\n  def\nghi\n".into(), (2, 1)));
+    assert_eq!(run("jyy", ":put"), ("abc\n  def\n  def\nghi\n".into(), (3, 3)));
+    assert_eq!(run("yiw", ":put!"), ("abc\nabc\n  def\nghi\n".into(), (1, 1)));
+    assert_eq!(run("\"ayiw", ":3put a"), ("abc\n  def\nghi\nabc\n".into(), (4, 1)));
+    assert_eq!(run("\"ayiw", ":0put a"), ("abc\nabc\n  def\nghi\n".into(), (1, 1)));
+    assert_eq!(run("\"ayiw", ":$put a"), ("abc\n  def\nghi\nabc\n".into(), (4, 1)));
+    assert_eq!(run("yiwj", ":2pu"), ("abc\n  def\nabc\nghi\n".into(), (3, 1)));
+    assert_eq!(run("yl", ":2,3put"), ("abc\n  def\nghi\na\n".into(), (4, 1)), "below the range's last line");
+    assert_eq!(run("yj", ":$put"), ("abc\n  def\nghi\nabc\n  def\n".into(), (5, 3)));
+    assert_eq!(run("yj", ":0put"), ("abc\n  def\nabc\n  def\nghi\n".into(), (2, 3)));
+    assert_eq!(run("jyj", ":1put!"), ("  def\nghi\nabc\n  def\nghi\n".into(), (2, 1)));
+    assert_eq!(run("", ":pu _"), ("abc\n\n  def\nghi\n".into(), (2, 1)));
+    assert_eq!(run("", ":pu z"), (text.into(), (1, 1)));
+    let mut ed = typed_vim(text);
+    press(&mut ed, "\"ayiw");
+    ed.execute(":pu a").unwrap();
+    press(&mut ed, "u");
+    assert_eq!(ed.current_buffer().text(), text, "one step");
+}
+
 /// **没有的那一行不許悄悄夾到末行**。
 ///
 /// 三行的檔上 `:99s/a/X/` 不許改**第三行**還報「換了 1 處」——`:9s` 打成 `:91s`

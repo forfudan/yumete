@@ -2375,7 +2375,7 @@ impl Editor {
     }
 
     /// Whole lines, for a linewise motion (`dj`, `dG`).
-    fn do_vim_lines(&mut self, op: char, first: usize, last: usize) {
+    pub(super) fn do_vim_lines(&mut self, op: char, first: usize, last: usize) {
         let span = self.line_span(first, last, op == 'c');
         self.do_vim_span(op, span, Shape::Lines);
     }

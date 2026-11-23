@@ -422,6 +422,15 @@ pub enum Command {
     /// when a range stands in front (`:0read` above the first line, `:$read`
     /// after the last).
     Read { what: String, shell: bool, after: Option<Rows> },
+    /// vim's `:put [x]`: register `x`, the unnamed one when none is named,
+    /// on lines of its own below the cursor's line, or below the last line
+    /// of `at` (`:0put` above the first); `above` is `:put!`, above that
+    /// line. Whatever the register holds goes in as whole lines.
+    Put { register: Option<char>, above: bool, at: Option<Rows> },
+    /// vim's `:delete [x] [count]`: the lines of `rows`, the cursor's when
+    /// none is written, into register `x`; with `count`, that many lines
+    /// from the range's last.
+    Delete { register: Option<char>, count: Option<usize>, rows: Option<Rows> },
     /// `:wheel <n>` — how far one notch of the mouse wheel moves, in whichever
     /// unit the page is set in; `None` only reports (Feature #222).
     SetWheelStep(Option<usize>),
@@ -1287,6 +1296,11 @@ fn parse_ranged(line: &str) -> Option<Result<Command, CommandError>> {
         Ok(Command::Read { what, shell, after: None }) if rows != Rows::Selection => {
             Some(Ok(Command::Read { what, shell, after: Some(rows) }))
         }
+        Ok(Command::Put { register, above, at: None }) if rows != Rows::Selection => {
+            Some(Ok(Command::Put { register, above, at: Some(rows) }))
+        }
+        Ok(Command::Delete { register, count, rows: None }) => Some(Ok(Command::Delete { register, count, rows: Some(rows) })),
+        Err(e) if matches!(&e, CommandError::Wants { command: "delete", .. }) => Some(Err(e)),
         Err(e) if matches!(&e, CommandError::Wants { command: "sort", .. }) => Some(Err(e)),
         _ => None,
     }
@@ -2274,6 +2288,8 @@ const FORCEABLE: &[&str] = &[
     "normal!",
     // vim's `:read! cmd`, a command's output read in.
     "read!",
+    // vim's `:put!`, above the line.
+    "put!",
     "write!",
     // helix's `write-all!` (`:wa!`): `:w!` for every changed buffer.
     "write-all!",
@@ -5847,6 +5863,53 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|p| match p.arg(0) {
             None => Err(CommandError::MissingArgument("read")),
             Some(path) => Ok(Command::Read { what: path.to_string(), shell: false, after: None }),
+        }),
+    },
+    // vim's `:put` and `:delete`, the register named as vim names it.
+    Entry {
+        name: "put",
+        aliases: &["pu"],
+        help: "cmd.commands.put",
+        needs: &[],
+        params: &[Param::Free("cmd.arg.register")],
+        build: Some(|p| {
+            let register = match p.arg(0).map(str::trim) {
+                None | Some("") => None,
+                Some(name) => match name.chars().collect::<Vec<_>>()[..] {
+                    [one] => Some(one),
+                    _ => {
+                        return Err(CommandError::Wants { command: "put", value: name.to_string(), wants: Wants::Said("cmd.takes.register") })
+                    }
+                },
+            };
+            Ok(Command::Put { register, above: p.force, at: None })
+        }),
+    },
+    Entry {
+        name: "delete",
+        aliases: &["d", "de", "del"],
+        help: "cmd.commands.delete",
+        needs: &[],
+        params: &[Param::Free("cmd.arg.register-count")],
+        build: Some(|p| {
+            let words: Vec<&str> = p.arg(0).unwrap_or("").split_whitespace().collect();
+            let wrong = |value: &str| CommandError::Wants { command: "delete", value: value.to_string(), wants: Wants::Said("cmd.takes.register-count") };
+            // A register is any one character but a digit, which starts the
+            // count (vim's `:d 3`).
+            let (register, rest) = match words.first() {
+                Some(word) if word.chars().count() == 1 && !word.starts_with(|c: char| c.is_ascii_digit()) => (word.chars().next(), &words[1..]),
+                _ => (None, &words[..]),
+            };
+            let count = match rest {
+                [] => None,
+                [n] => match n.parse::<usize>() {
+                    Ok(0) => return Err(CommandError::Wants { command: "delete", value: n.to_string(), wants: Wants::AtLeast(1) }),
+                    Ok(n) => Some(n),
+                    Err(_) => return Err(wrong(n)),
+                },
+                [_, more, ..] => return Err(wrong(more)),
+            };
+            Ok(Command::Delete { register, count, rows: None })
         }),
     },
     Entry {

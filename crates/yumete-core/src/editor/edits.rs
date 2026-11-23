@@ -176,6 +176,113 @@ impl Editor {
         }
     }
 
+    /// vim's `:put [x]` and `:put! [x]`: the register on lines of its own
+    /// below the last line `at` names, or the cursor's (`:0put` above the
+    /// first; a closed fold counts as its last line, or its first for
+    /// `:put!`), the cursor at the first non-blank of the last line put.
+    /// Text that is not whole lines goes in as whole lines; `"_` puts an
+    /// empty line.
+    pub(super) fn put_lines_command(&mut self, register: Option<char>, above: bool, at: Option<crate::command::Rows>) {
+        use crate::command::{Bound, Rows};
+        self.command_failed = true;
+        if self.refuse_readonly() {
+            return;
+        }
+        let rope = self.current_buffer().rope();
+        let lines = motion::last_line(rope) + 1;
+        // The line it goes against, counted from 1, `0` above the first.
+        let named = |e: &Self, end: Bound| match end {
+            Bound::Cursor => Ok(e.cursor_line() + 1),
+            Bound::Last => Ok(lines),
+            Bound::Mark(name) => e.mark_line(name).map(|line| line + 1),
+            Bound::Line(n) if n <= lines => Ok(n),
+            Bound::Line(n) => Err(say!("find.no-such-line", n, lines)),
+        };
+        let line = match at {
+            None | Some(Rows::Selection) => Ok(self.cursor_line() + 1),
+            Some(Rows::All) => Ok(lines),
+            Some(Rows::Span(a, b)) => named(self, a).and_then(|a| Ok(a.max(named(self, b)?))),
+        };
+        let line = match line {
+            Ok(line) => line,
+            Err(why) => {
+                self.status = why;
+                return;
+            }
+        };
+        let line = match (line, self.shut_around(line.saturating_sub(1))) {
+            (0, _) | (_, None) => line,
+            (_, Some((first, last))) => match above {
+                true => first + 1,
+                false => last + 1,
+            },
+        };
+        let below = match above {
+            true => line.saturating_sub(1),
+            false => line,
+        };
+        let text = match register {
+            Some('_') => String::new(),
+            name => self.register_text(name),
+        };
+        if text.is_empty() && register != Some('_') {
+            self.status = match register {
+                Some(name) => say!("register.empty", name),
+                None => say!("register.nothing-yanked"),
+            };
+            return;
+        }
+        let text = match text.ends_with('\n') {
+            true => text,
+            false => text + "\n",
+        };
+        let text = self.in_the_buffer_ending(text);
+        self.extend = false;
+        self.read_in(&text, below, true);
+        self.command_failed = false;
+    }
+
+    /// vim's `:delete [x] [count]`: the lines `rows` names, or the cursor's,
+    /// into register `x` as `dd` takes them (`"1` and the rest move down);
+    /// with `count`, that many lines from the range's last. The cursor goes
+    /// to the first non-blank of the line that comes up.
+    pub(super) fn delete_lines_command(&mut self, register: Option<char>, count: Option<usize>, rows: Option<crate::command::Rows>) {
+        self.command_failed = true;
+        let (first, last) = match rows {
+            None => self.selected_lines(),
+            Some(rows) => match self.substitution_rows(rows) {
+                Ok(super::Chosen::Span(first, last)) => (first, last),
+                // Under helix a range naming several selections takes the
+                // primary's lines.
+                Ok(super::Chosen::These(_)) => self.selected_lines(),
+                Err(why) => {
+                    self.status = why;
+                    return;
+                }
+            },
+        };
+        let end = motion::last_line(self.current_buffer().rope());
+        let (first, last) = match count {
+            Some(n) => (last, last.saturating_add(n - 1).min(end)),
+            None => (first, last.min(end)),
+        };
+        let revision = self.current_buffer().revision();
+        self.extend = false;
+        self.pending_register = register;
+        self.count = None;
+        self.do_vim_lines('d', first, last);
+        self.pending_register = None;
+        if self.current_buffer().revision() == revision {
+            return;
+        }
+        let rope = self.current_buffer().rope();
+        let line = rope.char_to_line(self.sel.head().min(rope.len_chars()));
+        let at = motion::line_first_non_blank(rope, rope.line_to_char(line));
+        self.set_cursor(at);
+        self.refresh_goal_column();
+        self.command_failed = false;
+    }
+
     /// Write `text` over `start..end`, unless a grid says either half must not
     /// happen.
     ///

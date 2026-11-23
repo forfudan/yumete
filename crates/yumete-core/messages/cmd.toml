@@ -217,6 +217,18 @@ zhs = "<N>｜<M-N>"
 en = "<N>｜<M-N>"
 
 [[message]]
+# 命令參數的佔位：一個寄存器（:put）（草稿）
+key = "cmd.arg.register"
+zhs = "<寄存器>"
+en = "<register>"
+
+[[message]]
+# 命令參數的佔位：一個寄存器和行數（:delete）（草稿）
+key = "cmd.arg.register-count"
+zhs = "<寄存器> <行数>"
+en = "<register> <count>"
+
+[[message]]
 # 命令參數的佔位：表格一行的名字（:table-jump）（草稿）
 key = "cmd.arg.row-name"
 zhs = "<行名>"
@@ -522,6 +534,13 @@ key = "cmd.commands.decimo-replace"
 zhs = "用 decimo 计算选中的文字，结果替换它"
 en = "evaluate the selected text with decimo and replace it with the result"
 find = "計算 计算 精度 數學 数学 decimo calculate precision replace"
+
+[[message]]
+# : 命令選單：:delete（草稿）
+key = "cmd.commands.delete"
+zhs = "删除光标所在行或范围里的行，存进寄存器；可带行数"
+en = "delete the cursor's line or the range's lines into a register, or a count of lines"
+find = "删除 刪除 删行 刪行 寄存器 delete lines register"
 
 [[message]]
 # : 命令選單裏 diff 那一項的説明(commands 組)
@@ -959,6 +978,13 @@ key = "cmd.commands.pipe-to"
 zhs = "把选区交给终端命令，不收回输出"
 en = "pipe the selection to a shell command, ignoring the output"
 find = "管道 外部命令 shell 送出"
+
+[[message]]
+# : 命令選單：:put（草稿）
+key = "cmd.commands.put"
+zhs = "把寄存器的内容整行放到光标所在行下方，:put! 放到上方"
+en = "put a register's text on lines of its own below the cursor's line, :put! above it"
+find = "放 粘贴 貼上 寄存器 put paste register"
 
 [[message]]
 # : 命令選單裏 pwd 那一項的説明
@@ -2574,6 +2600,18 @@ en = "a whole number from {0} to {1}"
 key = "cmd.takes.ranks"
 zhs = "名次 N，或 M-N（1 ≤ M ≤ N）"
 en = "a rank N, or ranks M-N with 1 ≤ M ≤ N"
+
+[[message]]
+# :put 後面寫的不是一個寄存器時，說它要什麼（草稿）
+key = "cmd.takes.register"
+zhs = "一个寄存器名"
+en = "one register name"
+
+[[message]]
+# :delete 後面寫的不是寄存器加行數時，說它要什麼（草稿）
+key = "cmd.takes.register-count"
+zhs = "一个寄存器名，后面可跟行数"
+en = "a register name, then a count"
 
 [[message]]
 # :rulers 收的參數（草稿）

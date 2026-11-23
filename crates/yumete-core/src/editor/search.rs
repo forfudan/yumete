@@ -688,7 +688,7 @@ impl Editor {
     }
 
     /// The first and last line the selection covers.
-    fn selected_lines(&self) -> (usize, usize) {
+    pub(super) fn selected_lines(&self) -> (usize, usize) {
         let rope = self.current_buffer().rope();
         let (start, end) = self.selection();
         let first = rope.char_to_line(start);

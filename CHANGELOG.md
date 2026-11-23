@@ -6,7 +6,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Added
 
-
+- **vim's `:put` and `:delete`**: `:put [x]` (`:pu`) puts a register on lines of its own below the cursor's line or a range's last, `:put!` above, `:0put` above the first, and `"_` an empty line; `:delete [x] [count]` (`:d`) takes the cursor's line, a range's lines (`:3,5d a`) or a count of them (`:d 3`) into a register as `dd` does. `:de` is `:delete` now, as in vim, and no longer `:decimo`.
 
 ### Changed
 

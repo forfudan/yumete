@@ -1740,6 +1740,20 @@ impl Editor {
                 self.read_in(&text, below, false);
                 Ok(CommandOutcome::Continue)
             }
+            Command::Put { register, above, at } => {
+                if self.asks_to_swap_rows(at.as_ref(), line) {
+                    return Ok(CommandOutcome::Continue);
+                }
+                self.put_lines_command(register, above, at);
+                Ok(CommandOutcome::Continue)
+            }
+            Command::Delete { register, count, rows } => {
+                if self.asks_to_swap_rows(rows.as_ref(), line) {
+                    return Ok(CommandOutcome::Continue);
+                }
+                self.delete_lines_command(register, count, rows);
+                Ok(CommandOutcome::Continue)
+            }
             Command::Convert(ask) => {
                 self.convert(ask);
                 Ok(CommandOutcome::Continue)
