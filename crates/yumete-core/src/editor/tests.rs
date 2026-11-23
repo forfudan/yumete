@@ -21044,11 +21044,11 @@ fn a_substitution_reads_a_comma_and_a_dash_as_a_span() {
         assert_eq!(ed.current_buffer().text(), "a\nb\nb\nb\nb\n", "{range}");
     }
 
-    // More than two ends is refused, and the refusal says what a range is.
-    for range in ["5,1,4", "1-3,5"] {
+    // Of more than two ends the last two count, as in vim.
+    for range in ["5,1,3", "1-1,3"] {
         let mut ed = five();
-        assert!(ed.execute(&format!("{range}s/a/b/")).is_err(), "{range}");
-        assert_eq!(ed.current_buffer().text(), "a\na\na\na\na\n");
+        assert!(ed.execute(&format!("{range}s/a/b/")).is_ok(), "{range}");
+        assert_eq!(ed.current_buffer().text(), "b\nb\nb\na\na\n", "{range}");
     }
 }
 
@@ -32343,6 +32343,42 @@ fn the_answer_to_a_backwards_range_is_not_also_a_normal_key() {
     assert_eq!(run("Aᵒ:3,1s/a/X/⏎yQ⎋").0, "b\nQX\nc\nab\n");
 }
 
+/// **A range reads as vim reads it**, each row measured in nvim 0.12
+/// `--clean`: marks on both ends (`:'a,'bs`, `:'a,'bsort`), blanks around
+/// the `,`, an end left out being the cursor's line, line 0 the first, and
+/// of more than two ends the last two.
+#[test]
+fn a_range_reads_marks_blanks_and_a_missing_end_as_vim_does() {
+    let text = "a\nb\na\nb\n";
+    let run = |keys: &str, line: &str| {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        let _ = ed.execute(line);
+        ed.current_buffer().text()
+    };
+    assert_eq!(run("3Gmajmbgg", ":'a,'bs/^/X/"), "a\nb\nXa\nXb\n");
+    assert_eq!(run("4Gmagg", ":'a,2sort"), text, "backwards, it asks");
+    let mut ed = typed_vim(text);
+    feed_vim(&mut ed, "4Gmagg:'a,2sort⏎y");
+    assert_eq!(ed.current_buffer().text(), "a\na\nb\nb\n");
+    assert_eq!(run("", ":1, 2s/^/X/"), "Xa\nXb\na\nb\n");
+    assert_eq!(run("", ":1 , 2 s/^/X/"), "Xa\nXb\na\nb\n");
+    assert_eq!(run("G", ":2,s/^/X/"), "a\nXb\nXa\nXb\n", "`2,` is `2,.`");
+    assert_eq!(run("", ":,3s/^/X/"), "Xa\nXb\nXa\nb\n", "`,3` is `.,3`");
+    assert_eq!(run("", ":0,2s/^/X/"), "Xa\nXb\na\nb\n");
+    assert_eq!(run("", ":1,3,4s/^/X/"), "a\nb\nXa\nXb\n", "the last two ends");
+    assert_eq!(run("", ":1,2,3d"), "a\nb\n");
+    let mut ed = typed_vim(text);
+    feed_vim(&mut ed, "j:3,⏎");
+    assert_eq!(vim_at(&ed), (2, 1), "bare `3,` goes to the cursor's line");
+    let mut ed = typed_vim(text);
+    ed.execute(":,3").unwrap();
+    assert_eq!(vim_at(&ed), (3, 1));
+    let mut ed = typed_vim(text);
+    ed.execute(":3,7").unwrap();
+    assert_eq!(vim_at(&ed), (4, 1), "past the end alone is the last line, as nvim goes");
+}
+
 /// **vim's `:delete [x] [count]`**, every row measured in nvim 0.12
 /// `--clean`: the lines into the register as `dd` takes them, `"1` moving
 /// down, a count from the range's last line, the cursor on the first
@@ -32449,7 +32485,8 @@ fn a_substitution_refuses_a_line_the_file_does_not_have() {
         ed.current_buffer().rope().to_string()
     };
     assert_eq!(after(":99s/a/X/"), "a1\na2\na3\n", "第 99 行不存在");
-    assert_eq!(after(":0s/a/X/"), "a1\na2\na3\n", "没有第 0 行");
+    assert_eq!(after(":0s/a/X/"), "X1\na2\na3\n", "line 0 is the first, as in vim");
+    assert_eq!(after(":0,2s/a/X/"), "X1\nX2\na3\n");
     assert_eq!(after(":1,5s/a/X/"), "a1\na2\na3\n", "一頭不存在就整個不做");
     // 存在的照舊。
     assert_eq!(after(":3s/a/X/"), "a1\na2\nX3\n");

@@ -623,10 +623,11 @@ impl Editor {
         // Warning: **没有的那一行不許悄悄夾到末行**。寫成
         // `n.saturating_sub(1).min(last_line)` 的話，三行的檔上 `:99s/a/X/` 改的是**第
         // 三行**，還報「換了 1 處」——把 `:9s` 打成 `:91s` 就會改掉一章的結尾。
-        // `:0s` 同理，它改的是第一行。vim 兩種都報 `E16: Invalid range`，一個字不動。
+        // vim 報 `E16: Invalid range`，一個字不動。Line 0 is the first line,
+        // as in vim (`:0s`, `:0,2s`).
         let resolve = |b: Bound| -> Result<usize, String> {
             match b {
-                Bound::Line(0) => Err(say!("find.no-such-line", 0, last_line + 1)),
+                Bound::Line(0) => Ok(0),
                 Bound::Line(n) if n > last_line + 1 => {
                     Err(say!("find.no-such-line", n, last_line + 1))
                 }
@@ -705,7 +706,7 @@ impl Editor {
     /// Under helix, where a selection stands without a mode, always of the
     /// selection.
     pub(super) fn mark_line(&self, name: char) -> Result<usize, String> {
-        if self.extend || self.block.is_some() || !self.as_vim() {
+        if matches!(name, '<' | '>') && (self.extend || self.block.is_some() || !self.as_vim()) {
             let (first, last) = self.selected_lines();
             return Ok(if name == '<' { first } else { last });
         }

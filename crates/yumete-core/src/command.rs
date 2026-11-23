@@ -1289,7 +1289,6 @@ fn parse_ranged(line: &str) -> Option<Result<Command, CommandError>> {
     if rest.len() == line.len() || rest.trim().is_empty() {
         return None;
     }
-    let rows = rows.ok()?;
     match parse(rest) {
         Ok(Command::Sort { how, rows: None }) => Some(Ok(Command::Sort { how, rows: Some(rows) })),
         // **The lines go after the range's last line**, as vim's `:r`.
@@ -1326,11 +1325,7 @@ fn parse_normal(line: &str) -> Option<Result<Command, CommandError>> {
     if keys.is_empty() {
         return Some(Err(CommandError::MissingArgument("normal")));
     }
-    let rows = match (ranged, rows) {
-        (false, _) => None,
-        (true, Ok(rows)) => Some(rows),
-        (true, Err(BadRange)) => return Some(Err(CommandError::InvalidArgument { command: "normal", value: line[..line.len() - rest.len()].to_string() })),
-    };
+    let rows = ranged.then_some(rows);
     Some(Ok(Command::Normal { keys: keys.to_string(), plain, rows }))
 }
 
@@ -7974,6 +7969,8 @@ fn parse_range_then(input: &str) -> Option<Command> {
         }
         match !part.is_empty() && part.chars().all(|c| c.is_ascii_digit()) {
             true => Some(LineAddress { from: Bound::Line(part.parse().ok()?), offset: 0, typed: part.to_string() }),
+            // An end left out is the cursor's line (vim's `:3,` and `:,3`).
+            false if part.is_empty() => Some(LineAddress { from: Bound::Cursor, offset: 0, typed: String::new() }),
             false => parse_line_address(part),
         }
     };
@@ -7987,15 +7984,12 @@ fn parse_range_then(input: &str) -> Option<Command> {
         });
     }
     let parts: Vec<&str> = head.split(',').collect();
-    // One address alone is a line ([`Command::GotoAddress`]).
-    let most = match then {
-        Some(_) => 2,
-        None if parts.len() == 2 => 2,
-        None => return None,
-    };
-    if parts.len() > most || parts.iter().any(|part| address(part).is_none()) {
+    // One address alone is a line ([`Command::GotoAddress`]); of more than
+    // two, the last two count, as in vim.
+    if (then.is_none() && parts.len() < 2) || parts.iter().any(|part| address(part).is_none()) {
         return None;
     }
+    let parts = &parts[parts.len().saturating_sub(2)..];
     Some(Command::RangeThen {
         first: match parts.len() {
             2 => Some(address(parts[0])?),
@@ -8029,7 +8023,7 @@ fn parse_bound(input: &str) -> Option<(Bound, usize)> {
         (_, '.') => Some((Bound::Cursor, 1)),
         (_, '$') => Some((Bound::Last, 1)),
         (_, '\'') => match chars.next()? {
-            (_, c @ ('<' | '>')) => Some((Bound::Mark(c), 2)),
+            (_, c) if c.is_ascii_alphabetic() || matches!(c, '<' | '>') => Some((Bound::Mark(c), 2)),
             _ => None,
         },
         (_, c) if c.is_ascii_digit() => {
@@ -8042,20 +8036,13 @@ fn parse_bound(input: &str) -> Option<(Bound, usize)> {
     }
 }
 
-/// A range of more than two ends — `1,5,9`, `1-5-9`, `1-5,9`. A span has
-/// two, and quietly dropping a line the reader wrote is not reading it.
-///
-/// The whole sequence is eaten either way, so the caller can go on parsing and
-/// decide whether this input was even meant to be a `:s`.
-pub struct BadRange;
-
 /// **打到一半的 `:%s/` 裏，範圍佔了幾個字節**。
 ///
 /// `None` ＝ 前面那一段不是範圍，或者後面接的不是一個替換。只給選單用：真正
 /// 執行走的是 [`parse_substitution`]，它自己會再剝一次。
 fn rows_before_a_substitution(line: &str) -> Option<usize> {
-    let (rows, rest) = parse_rows(line);
-    if rows.is_err() || std::ptr::eq(rest, line) || rest.len() == line.len() {
+    let (_, rest) = parse_rows(line);
+    if std::ptr::eq(rest, line) || rest.len() == line.len() {
         return None;
     }
     // 剝完之後要真的是一個替換：`s` 加一個不是字母數字空白的分隔符。
@@ -8067,36 +8054,49 @@ fn rows_before_a_substitution(line: &str) -> Option<usize> {
     }
 }
 
-fn parse_rows(input: &str) -> (Result<Rows, BadRange>, &str) {
+fn parse_rows(input: &str) -> (Rows, &str) {
     if let Some(rest) = input.strip_prefix('%') {
-        return (Ok(Rows::All), rest);
+        return (Rows::All, rest.trim_start());
     }
-    // vim's `'<,'>`, what its `:` writes in from Visual mode: the lines of
-    // the selection, the one up or the last one, from the first to the last.
-    if let Some(rest) = input.strip_prefix("'<,'>") {
-        return (Ok(Rows::Span(Bound::Mark('<'), Bound::Mark('>'))), rest);
-    }
-    let Some((first, took)) = parse_bound(input) else {
-        return (Ok(Rows::Selection), input);
+    // **A range is read as vim reads it**: `'a` and `'<` are marks, blanks
+    // may stand around a `,`, an end left out of one is the cursor's line
+    // (`:,3`, `:2,`), and of more than two ends the last two count
+    // (`:1,5,9s` is `:5,9s`).
+    let (first, took) = match parse_bound(input) {
+        Some(found) => found,
+        None if input.starts_with(',') => (Bound::Cursor, 0),
+        None => return (Rows::Selection, input),
     };
     let mut bounds = vec![first];
     let mut rest = &input[took..];
-    // Every `-` or `,` that is followed by another bound belongs to the range;
-    // the first one that is not ends it (`:1s-a-b-` — a `-` delimiter).
-    while rest.starts_with(['-', ',']) {
-        let Some((bound, n)) = parse_bound(&rest[1..]) else {
-            break;
-        };
-        bounds.push(bound);
-        rest = &rest[1 + n..];
+    loop {
+        // Every `-` that is followed by another bound belongs to the range;
+        // the first one that is not ends it (`:1s-a-b-` — a `-` delimiter).
+        if let Some((bound, n)) = rest.strip_prefix('-').and_then(parse_bound) {
+            bounds.push(bound);
+            rest = &rest[1 + n..];
+            continue;
+        }
+        let Some(after) = rest.trim_start().strip_prefix(',') else { break };
+        let after = after.trim_start();
+        match parse_bound(after) {
+            Some((bound, n)) => {
+                bounds.push(bound);
+                rest = &after[n..];
+            }
+            None => {
+                bounds.push(Bound::Cursor);
+                rest = after;
+            }
+        }
     }
     let rows = match bounds[..] {
         // A bare number is one line, the way `:40s` reads in vi.
         [one] => Rows::Span(one, one),
-        [a, b] => Rows::Span(a, b),
-        _ => return (Err(BadRange), rest),
+        [.., a, b] => Rows::Span(a, b),
+        [] => Rows::Selection,
     };
-    (Ok(rows), rest)
+    (rows, rest.trim_start())
 }
 
 /// Split `body` on unescaped `delim`.
@@ -8246,14 +8246,6 @@ fn parse_substitution(input: &str) -> Option<Result<Command, CommandError>> {
             wants: Wants::Said("cmd.takes.substitute-flags"),
         }));
     }
-    // Only now — once this is certainly a substitution and not `:set` or a
-    // line number — is a range worth complaining about.
-    let Ok(rows) = rows else {
-        return Some(Err(CommandError::InvalidArgument {
-            command: "substitute",
-            value: say!("substitute.range-two-ends"),
-        }));
-    };
     Some(Ok(Command::Substitute {
         pattern: fields[0].clone(),
         replacement: fields[1].clone(),
@@ -8941,17 +8933,16 @@ mod tests {
         assert_eq!(span(":1,40s/a/b/"), (Bound::Line(1), Bound::Line(40)));
         assert_eq!(span(":.,$s/a/b/"), (Bound::Cursor, Bound::Last));
         assert_eq!(span(":9,3s/a/b/"), (Bound::Line(9), Bound::Line(3)), "the question is the editor's");
-        // More than two ends: refused, not guessed at.
-        assert!(parse(":1,5,9s/a/b/").is_err());
-        assert!(parse(":1-5,9s/a/b/").is_err());
-        assert!(parse(":1,5-9s/a/b/").is_err());
-        assert!(parse(":1-5-9s/a/b/").is_err());
-        // …and a range is only worth complaining about once the line really
-        // is a substitution. `:1-5,9` alone is some other unknown command.
-        assert!(!matches!(
-            parse(":1-5,9"),
-            Err(CommandError::InvalidArgument { command: "substitute", .. })
-        ));
+        // More than two ends: the last two, as in vim.
+        assert_eq!(span(":1,5,9s/a/b/"), (Bound::Line(5), Bound::Line(9)));
+        assert_eq!(span(":1-5,9s/a/b/"), (Bound::Line(5), Bound::Line(9)));
+        assert_eq!(span(":9,1,2s/a/b/"), (Bound::Line(1), Bound::Line(2)));
+        // Marks, blanks around a `,`, and an end left out, as vim reads them.
+        assert_eq!(span(":'a,'bs/a/b/"), (Bound::Mark('a'), Bound::Mark('b')));
+        assert_eq!(span(":1 , 2 s/a/b/"), (Bound::Line(1), Bound::Line(2)));
+        assert_eq!(span(":2,s/a/b/"), (Bound::Line(2), Bound::Cursor));
+        assert_eq!(span(":,3s/a/b/"), (Bound::Cursor, Bound::Line(3)));
+        assert!(matches!(parse(":'a,'bsort"), Ok(Command::Sort { rows: Some(Rows::Span(Bound::Mark('a'), Bound::Mark('b'))), .. })));
     }
 
     /// 主題與深淺是兩條命令，不是一條命令的兩個位置（#449）。

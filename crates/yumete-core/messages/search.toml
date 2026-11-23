@@ -724,11 +724,5 @@ key = "substitute.confirm-this-one"
 zhs = "「{0}」→「{1}」？y 替换、n 跳过、a 替换其余、q 停止、l 替换后停止"
 en = "'{0}' → '{1}'? y replace  n skip  a all the rest  q stop  l this one then stop"
 
-[[message]]
-# :s 的行號範圍寫了兩頭以上（草稿）
-key = "substitute.range-two-ends"
-zhs = "范围只有两头：1,40 或 1-40"
-en = "a range has two ends: 1,40 or 1-40"
-
 
 # ── table ─────────────────────────────────────────────────────────────
