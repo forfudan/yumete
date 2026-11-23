@@ -20,6 +20,7 @@ Written for people who use it to write, not for the commit log: each line says w
 ### Fixed
 
 - **Under vim, `o` on a last line with no line break, then an arrow up, keeps the new line**, as vim does; it used to be taken back.
+- **The exports read reference links as the preview does**: `[text][label]` is a link to the label's address and the `[label]: address` line is no longer printed; on a web page (`:export html`, `:export-as-preview html`) a bare URL is a link too, and `<name@host>` a mail link.
 - **`whitespace = "selection"` marks a space selected alone**: `v` on one blank shows its glyph, as a longer selection does.
 
 ## 0.25.0 · 2026-11-23

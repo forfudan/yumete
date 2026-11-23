@@ -367,151 +367,18 @@ fn note_opening(line: &str) -> Option<(&str, &str)> {
     (!name.is_empty() && !name.contains(char::is_whitespace)).then(|| (name, rest[close + 2..].trim()))
 }
 
-/// `[name]: target`: a link reference definition, which is not shown.
-fn is_link_definition(body: &str) -> bool {
-    let Some(rest) = body.strip_prefix('[') else { return false };
-    if rest.starts_with('^') {
-        return false;
-    }
-    rest.find("]:").is_some_and(|close| close > 0 && !rest[close + 2..].trim().is_empty())
-}
-
-/// A link label as CommonMark matches it: case and runs of spaces folded.
-fn fold_label(label: &str) -> String {
-    label.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase()
-}
-
 /// **The link reference definitions** `[label]: address "title"` of a file.
 fn link_definitions(lines: &[Line]) -> std::collections::BTreeMap<String, String> {
     let mut refs = std::collections::BTreeMap::new();
     for (_, line) in lines {
-        let body = line.trim_start();
-        if lead(line) >= 4 || !is_link_definition(body) {
+        if lead(line) >= 4 {
             continue;
         }
-        let close = body.find("]:").unwrap_or(0);
-        let label = fold_label(&body[1..close]);
-        let rest = body[close + 2..].trim();
-        let address = match rest.strip_prefix('<') {
-            Some(r) => r.split('>').next().unwrap_or_default(),
-            None => rest.split_whitespace().next().unwrap_or_default(),
-        };
-        refs.entry(label).or_insert_with(|| address.to_string());
+        if let Some((label, address)) = markdown::link_definition(line.trim_start()) {
+            refs.entry(label).or_insert(address);
+        }
     }
     refs
-}
-
-/// **Reference links written out as inline ones**: `[text][label]`,
-/// `[label][]` and `[label]`, with an image's `!` before any of them, become
-/// `[text](address)` when `label` is defined, so the one inline reader reads
-/// them. Code spans, wiki links and footnotes are left alone.
-///
-/// With the text, where each of its characters stands in `line`: an address
-/// written in counts from the label it replaces.
-fn resolve_references(line: &str, refs: &std::collections::BTreeMap<String, String>) -> (String, Vec<usize>) {
-    if refs.is_empty() || !line.contains('[') {
-        return (line.to_string(), (0..line.chars().count()).collect());
-    }
-    let chars: Vec<char> = line.chars().collect();
-    let close_of = |from: usize| -> Option<usize> {
-        let mut depth = 0;
-        for (k, &c) in chars.iter().enumerate().skip(from) {
-            match c {
-                '[' => depth += 1,
-                ']' if depth == 0 => return Some(k),
-                ']' => depth -= 1,
-                '`' => return None,
-                _ => {}
-            }
-        }
-        None
-    };
-    let address = |label: &str| -> Option<String> {
-        let a = refs.get(&fold_label(label))?;
-        Some(match a.contains([' ', '(', ')']) {
-            true => format!("<{a}>"),
-            false => a.clone(),
-        })
-    };
-    let mut out = String::with_capacity(line.len() + 16);
-    let mut at: Vec<usize> = Vec::with_capacity(chars.len() + 16);
-    // Characters `from..to` of the line, copied as they stand.
-    let copy = |out: &mut String, at: &mut Vec<usize>, from: usize, to: usize| {
-        out.extend(&chars[from..to]);
-        at.extend(from..to);
-    };
-    // `[text](address)` for `[text]` at `open..=close`, its address counted
-    // from `close + 1`.
-    let link = |out: &mut String, at: &mut Vec<usize>, open: usize, close: usize, a: &str| {
-        let text = chars[open + 1..close].len();
-        let written = format!("[{}]({a})", chars[open + 1..close].iter().collect::<String>());
-        let k = written.chars().count();
-        out.push_str(&written);
-        at.extend(open..=close);
-        at.extend((0..k - text - 2).map(|n| close + 1 + n));
-    };
-    let mut i = 0;
-    while i < chars.len() {
-        let c = chars[i];
-        // A code span is copied as it stands.
-        if c == '`' {
-            let ticks = chars[i..].iter().take_while(|&&t| t == '`').count();
-            let shut = (i + ticks..chars.len()).find(|&k| chars[k..].iter().take_while(|&&t| t == '`').count() == ticks && (k == 0 || chars[k - 1] != '`'));
-            let end = shut.map_or(i + ticks, |k| k + ticks);
-            copy(&mut out, &mut at, i, end);
-            i = end;
-            continue;
-        }
-        let escaped = i > 0 && chars[i - 1] == '\\';
-        if c != '[' || escaped || chars.get(i + 1).is_some_and(|&n| n == '[' || n == '^') {
-            // `[[wiki]]` is skipped whole, so its inner `[` is not read.
-            if c == '[' && chars.get(i + 1) == Some(&'[') {
-                if let Some(end) = (i + 2..chars.len().saturating_sub(1)).find(|&k| chars[k] == ']' && chars[k + 1] == ']') {
-                    copy(&mut out, &mut at, i, end + 2);
-                    i = end + 2;
-                    continue;
-                }
-            }
-            copy(&mut out, &mut at, i, i + 1);
-            i += 1;
-            continue;
-        }
-        let Some(close) = close_of(i + 1) else {
-            copy(&mut out, &mut at, i, i + 1);
-            i += 1;
-            continue;
-        };
-        let text: String = chars[i + 1..close].iter().collect();
-        match chars.get(close + 1) {
-            Some('(') | Some(':') => {
-                copy(&mut out, &mut at, i, close + 1);
-                i = close + 1;
-            }
-            Some('[') => match close_of(close + 2) {
-                Some(end) => {
-                    let label: String = chars[close + 2..end].iter().collect();
-                    let label = if label.trim().is_empty() { text.clone() } else { label };
-                    match address(&label) {
-                        Some(a) => link(&mut out, &mut at, i, close, &a),
-                        None => copy(&mut out, &mut at, i, end + 1),
-                    }
-                    i = end + 1;
-                }
-                None => {
-                    copy(&mut out, &mut at, i, close + 1);
-                    i = close + 1;
-                }
-            },
-            _ => {
-                match address(&text) {
-                    Some(a) => link(&mut out, &mut at, i, close, &a),
-                    None => copy(&mut out, &mut at, i, close + 1),
-                }
-                i = close + 1;
-            }
-        }
-    }
-    (out, at)
 }
 
 /// Where a list item's marker is and what it says.
@@ -832,7 +699,7 @@ impl Reader<'_> {
                     self.notes.push(Note { number: 0, name: name.to_string(), lines: (no, last), body });
                     continue;
                 }
-                if is_link_definition(body) {
+                if markdown::link_definition(body).is_some() {
                     let taken = std::mem::take(&mut para);
                     self.paragraph(&taken, &mut out);
                     i += 1;
@@ -1071,11 +938,6 @@ impl Reader<'_> {
         let mut out = vec![0; chars.len() + 1];
         for s in spans.iter().filter(|s| s.kind == SpanKind::Link) {
             let Some(target) = yumete_core::export::link_target(chars, s.start, s.end) else { continue };
-            let angled = s.start > 0 && chars[s.start - 1] == '<';
-            let target = match angled && !target.contains(':') && target.contains('@') {
-                true => format!("mailto:{target}"),
-                false => target,
-            };
             let href = self.href_of(&target);
             for slot in &mut out[s.start..s.end.min(chars.len())] {
                 *slot = href;
@@ -1158,7 +1020,7 @@ impl Reader<'_> {
         for (k, (no, raw)) in lines.iter().enumerate() {
             let hard = raw.ends_with("  ") || raw.trim_end().ends_with('\\');
             let lead = raw.chars().take_while(|c| c.is_whitespace()).count() + cols.get(k).copied().unwrap_or(0);
-            let (mut body, mut at) = resolve_references(raw.trim(), &self.refs);
+            let (mut body, mut at) = markdown::resolve_references(raw.trim(), &self.refs);
             if body.ends_with('\\') && k + 1 < lines.len() {
                 body.pop();
                 body.truncate(body.trim_end().len());
@@ -1198,7 +1060,7 @@ impl Reader<'_> {
                 }
             }
         }
-        let urls = bare_urls(&chars, &covered);
+        let urls = markdown::bare_urls(&chars, &covered);
         let hrefs = self.hrefs(&chars, &spans, &urls);
         let marks_at = |i: usize, html: Marks, url: bool| -> Marks {
             let mut m = span_marks[i];
@@ -1438,38 +1300,6 @@ fn image_source(closing: &str) -> String {
         Some(rest) => rest.split('>').next().unwrap_or_default().to_string(),
         None => inside.split_whitespace().next().unwrap_or_default().to_string(),
     }
-}
-
-/// **Bare URLs** (GFM's extended autolinks): `https://…`, `http://…` and
-/// `www.…` outside any markup, to the first space or 漢字, without the
-/// punctuation that ends a sentence.
-fn bare_urls(chars: &[char], covered: &[bool]) -> Vec<bool> {
-    let mut out = vec![false; chars.len() + 1];
-    let covered = |i: usize| covered[i];
-    let starts_with = |i: usize, s: &str| s.chars().enumerate().all(|(k, c)| chars.get(i + k) == Some(&c));
-    let mut i = 0;
-    while i < chars.len() {
-        let word_start = i == 0 || !chars[i - 1].is_ascii_alphanumeric();
-        if word_start && !covered(i) && (starts_with(i, "https://") || starts_with(i, "http://") || starts_with(i, "www.")) {
-            let mut end = i;
-            while end < chars.len() && !chars[end].is_whitespace() && yumete_cjk::char_width(chars[end]) == 1 && chars[end] != '<' && !covered(end) {
-                end += 1;
-            }
-            while end > i && matches!(chars[end - 1], '.' | ',' | ':' | ';' | '!' | '?' | '\'' | '"' | ')') {
-                if chars[end - 1] == ')' && chars[i..end].iter().filter(|&&c| c == '(').count() >= chars[i..end].iter().filter(|&&c| c == ')').count() {
-                    break;
-                }
-                end -= 1;
-            }
-            for flag in &mut out[i..end] {
-                *flag = true;
-            }
-            i = end.max(i + 1);
-            continue;
-        }
-        i += 1;
-    }
-    out
 }
 
 /// The `[!NOTE]` an alert opens with: its kind, its word, and the title after

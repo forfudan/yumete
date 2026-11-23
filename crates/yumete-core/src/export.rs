@@ -770,11 +770,54 @@ pub(crate) fn blocks(text: &str, source: crate::syntax::Syntax, yfm: bool) -> (V
             lines.drain(..=end + 1);
         }
     }
+    if markdown {
+        resolve_the_references(&mut lines);
+    }
     let mut out = parse(&lines, source, &mut notes, yfm);
     if let Some(front) = front {
         out.insert(0, Block::FrontMatter(front));
     }
     (out, notes)
+}
+
+/// **Reference links read as inline ones**, as the Markdown preview reads
+/// them: `[text][label]`, `[label][]` and `[label]` become `[text](address)`
+/// where `label` is defined ([`crate::markdown::resolve_references`]), and
+/// the definitions themselves are not shown, an empty line in their place.
+/// A fenced code block is left as it is, and a definition indented as code
+/// is none.
+fn resolve_the_references(lines: &mut [String]) {
+    let mut code = vec![false; lines.len()];
+    let mut fence: Option<(char, usize)> = None;
+    for (k, line) in lines.iter().enumerate() {
+        code[k] = fence.is_some();
+        match fence {
+            Some((mark, run)) if closes_fence(line, mark, run) => fence = None,
+            Some(_) => {}
+            None => {
+                fence = fence_of(line.trim_start());
+                code[k] |= fence.is_some();
+            }
+        }
+    }
+    let mut refs = std::collections::BTreeMap::new();
+    let mut defined = vec![false; lines.len()];
+    for (k, line) in lines.iter().enumerate().filter(|(k, line)| !code[*k] && lead(line) < 4) {
+        if let Some((label, address)) = crate::markdown::link_definition(line.trim_start()) {
+            refs.entry(label).or_insert(address);
+            defined[k] = true;
+        }
+    }
+    if refs.is_empty() {
+        return;
+    }
+    for (k, line) in lines.iter_mut().enumerate().filter(|(k, _)| !code[*k]) {
+        match defined[k] {
+            true => line.clear(),
+            false if line.contains('[') => *line = crate::markdown::resolve_references(line, &refs).0,
+            false => {}
+        }
+    }
 }
 
 /// Split `lines` into blocks.
@@ -1308,13 +1351,49 @@ fn line_into(
     };
     // Warning: **讀的是源檔的語法，不是要寫成的格式**。寫死 `markdown::spans` 的話，
     // 一份 Typst 稿子導出去，`*粗*` 是四個字符、`$a+b$` 被轉義成 `\$a + b\$`。
-    let marks = match source {
+    let mut marks = match source {
         Syntax::Typst => crate::markdown::typst::spans(line),
         Syntax::Text => Vec::new(),
         _ if paint.is_some() => crate::markdown::spans(line),
         _ => without_maths(crate::markdown::spans(line)),
     };
+    if dialect == Dialect::Html && source == Syntax::Markdown {
+        with_bare_urls(&chars, &mut marks);
+    }
     render(&chars, &groups, &marks, None, 0, chars.len(), dialect, escape, paint)
+}
+
+/// **A bare URL is a link on a web page** (GFM's extended autolinks), as
+/// the Markdown preview draws it: each one in the text no markup covers
+/// is a link span of its own among `marks`, kept in their order.
+fn with_bare_urls(chars: &[char], marks: &mut Vec<crate::markdown::Span>) {
+    let mut covered = vec![false; chars.len() + 1];
+    for s in marks.iter() {
+        covered[s.start..s.end.min(chars.len())].iter_mut().for_each(|c| *c = true);
+    }
+    let urls = crate::markdown::bare_urls(chars, &covered);
+    let mut construct = marks.iter().map(|s| s.construct + 1).max().unwrap_or(0);
+    let mut i = 0;
+    while i < chars.len() {
+        if !urls[i] {
+            i += 1;
+            continue;
+        }
+        let end = (i..chars.len()).find(|&k| !urls[k]).unwrap_or(chars.len());
+        marks.push(crate::markdown::Span { start: i, end, kind: crate::markdown::Kind::Link, construct, depth: 0 });
+        construct += 1;
+        i = end;
+    }
+    marks.sort_by_key(|s| (s.start, std::cmp::Reverse(s.end)));
+}
+
+/// The address a bare URL `chars` opens, `www.` read as `http://www.`.
+fn bare_url(chars: &[char]) -> Option<String> {
+    let url: String = chars.iter().collect();
+    match url.starts_with("www.") {
+        true => Some(format!("http://{url}")),
+        false => (url.starts_with("https://") || url.starts_with("http://")).then_some(url),
+    }
 }
 
 /// One run of `chars`, with whatever is marked **inside** it marked too.
@@ -1450,7 +1529,7 @@ fn render(
                 // Typst the target is the manuscript's scaffolding and only
                 // the words go over.
                 let target = match (span.kind, dialect) {
-                    (Kind::Link, Dialect::Html) => link_target(chars, span.start, span.end),
+                    (Kind::Link, Dialect::Html) => link_target(chars, span.start, span.end).or_else(|| bare_url(&chars[span.start..span.end])),
                     _ => None,
                 };
                 // **A picture in a line is a picture**, as the
@@ -1479,10 +1558,15 @@ fn render(
 }
 
 /// **Where the link whose words are `chars[start..end]` goes**: the target
-/// of `[words](target "title")`, or the address of `<address>`.
+/// of `[words](target "title")`, or the address of `<address>`, a
+/// `<name@host>` written to as `mailto:`.
 pub fn link_target(chars: &[char], start: usize, end: usize) -> Option<String> {
     if start > 0 && chars[start - 1] == '<' && chars.get(end) == Some(&'>') {
-        return Some(chars[start..end].iter().collect());
+        let address: String = chars[start..end].iter().collect();
+        return Some(match !address.contains(':') && address.contains('@') {
+            true => format!("mailto:{address}"),
+            false => address,
+        });
     }
     if chars.get(end) != Some(&']') || chars.get(end + 1) != Some(&'(') {
         return None;

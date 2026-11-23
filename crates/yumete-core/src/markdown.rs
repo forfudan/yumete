@@ -1179,6 +1179,182 @@ pub fn link_at(line: &str, at: usize) -> Option<Link> {
     })
 }
 
+/// `[name]: target`: a link reference definition, which is not shown.
+fn is_link_definition(body: &str) -> bool {
+    let Some(rest) = body.strip_prefix('[') else { return false };
+    if rest.starts_with('^') {
+        return false;
+    }
+    rest.find("]:").is_some_and(|close| close > 0 && !rest[close + 2..].trim().is_empty())
+}
+
+/// A link label as CommonMark matches it: case and runs of spaces folded.
+pub fn fold_label(label: &str) -> String {
+    label.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase()
+}
+
+/// **A link reference definition** `[label]: address "title"`, which is
+/// not shown: its label folded ([`fold_label`]) and its address, the
+/// title left out. `None` for any other line, a footnote's included.
+pub fn link_definition(body: &str) -> Option<(String, String)> {
+    if !is_link_definition(body) {
+        return None;
+    }
+    let close = body.find("]:")?;
+    let label = fold_label(&body[1..close]);
+    let rest = body[close + 2..].trim();
+    let address = match rest.strip_prefix('<') {
+        Some(r) => r.split('>').next().unwrap_or_default(),
+        None => rest.split_whitespace().next().unwrap_or_default(),
+    };
+    Some((label, address.to_string()))
+}
+
+/// **Reference links written out as inline ones**: `[text][label]`,
+/// `[label][]` and `[label]`, with an image's `!` before any of them, become
+/// `[text](address)` when `label` is defined, so the one inline reader reads
+/// them. Code spans, wiki links and footnotes are left alone.
+///
+/// With the text, where each of its characters stands in `line`: an address
+/// written in counts from the label it replaces.
+pub fn resolve_references(line: &str, refs: &std::collections::BTreeMap<String, String>) -> (String, Vec<usize>) {
+    if refs.is_empty() || !line.contains('[') {
+        return (line.to_string(), (0..line.chars().count()).collect());
+    }
+    let chars: Vec<char> = line.chars().collect();
+    let close_of = |from: usize| -> Option<usize> {
+        let mut depth = 0;
+        for (k, &c) in chars.iter().enumerate().skip(from) {
+            match c {
+                '[' => depth += 1,
+                ']' if depth == 0 => return Some(k),
+                ']' => depth -= 1,
+                '`' => return None,
+                _ => {}
+            }
+        }
+        None
+    };
+    let address = |label: &str| -> Option<String> {
+        let a = refs.get(&fold_label(label))?;
+        Some(match a.contains([' ', '(', ')']) {
+            true => format!("<{a}>"),
+            false => a.clone(),
+        })
+    };
+    let mut out = String::with_capacity(line.len() + 16);
+    let mut at: Vec<usize> = Vec::with_capacity(chars.len() + 16);
+    // Characters `from..to` of the line, copied as they stand.
+    let copy = |out: &mut String, at: &mut Vec<usize>, from: usize, to: usize| {
+        out.extend(&chars[from..to]);
+        at.extend(from..to);
+    };
+    // `[text](address)` for `[text]` at `open..=close`, its address counted
+    // from `close + 1`.
+    let link = |out: &mut String, at: &mut Vec<usize>, open: usize, close: usize, a: &str| {
+        let text = chars[open + 1..close].len();
+        let written = format!("[{}]({a})", chars[open + 1..close].iter().collect::<String>());
+        let k = written.chars().count();
+        out.push_str(&written);
+        at.extend(open..=close);
+        at.extend((0..k - text - 2).map(|n| close + 1 + n));
+    };
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        // A code span is copied as it stands.
+        if c == '`' {
+            let ticks = chars[i..].iter().take_while(|&&t| t == '`').count();
+            let shut = (i + ticks..chars.len()).find(|&k| chars[k..].iter().take_while(|&&t| t == '`').count() == ticks && (k == 0 || chars[k - 1] != '`'));
+            let end = shut.map_or(i + ticks, |k| k + ticks);
+            copy(&mut out, &mut at, i, end);
+            i = end;
+            continue;
+        }
+        let escaped = i > 0 && chars[i - 1] == '\\';
+        if c != '[' || escaped || chars.get(i + 1).is_some_and(|&n| n == '[' || n == '^') {
+            // `[[wiki]]` is skipped whole, so its inner `[` is not read.
+            if c == '[' && chars.get(i + 1) == Some(&'[') {
+                if let Some(end) = (i + 2..chars.len().saturating_sub(1)).find(|&k| chars[k] == ']' && chars[k + 1] == ']') {
+                    copy(&mut out, &mut at, i, end + 2);
+                    i = end + 2;
+                    continue;
+                }
+            }
+            copy(&mut out, &mut at, i, i + 1);
+            i += 1;
+            continue;
+        }
+        let Some(close) = close_of(i + 1) else {
+            copy(&mut out, &mut at, i, i + 1);
+            i += 1;
+            continue;
+        };
+        let text: String = chars[i + 1..close].iter().collect();
+        match chars.get(close + 1) {
+            Some('(') | Some(':') => {
+                copy(&mut out, &mut at, i, close + 1);
+                i = close + 1;
+            }
+            Some('[') => match close_of(close + 2) {
+                Some(end) => {
+                    let label: String = chars[close + 2..end].iter().collect();
+                    let label = if label.trim().is_empty() { text.clone() } else { label };
+                    match address(&label) {
+                        Some(a) => link(&mut out, &mut at, i, close, &a),
+                        None => copy(&mut out, &mut at, i, end + 1),
+                    }
+                    i = end + 1;
+                }
+                None => {
+                    copy(&mut out, &mut at, i, close + 1);
+                    i = close + 1;
+                }
+            },
+            _ => {
+                match address(&text) {
+                    Some(a) => link(&mut out, &mut at, i, close, &a),
+                    None => copy(&mut out, &mut at, i, close + 1),
+                }
+                i = close + 1;
+            }
+        }
+    }
+    (out, at)
+}
+
+/// **Bare URLs** (GFM's extended autolinks): `https://…`, `http://…` and
+/// `www.…` outside any markup, to the first space or 漢字, without the
+/// punctuation that ends a sentence.
+pub fn bare_urls(chars: &[char], covered: &[bool]) -> Vec<bool> {
+    let mut out = vec![false; chars.len() + 1];
+    let covered = |i: usize| covered[i];
+    let starts_with = |i: usize, s: &str| s.chars().enumerate().all(|(k, c)| chars.get(i + k) == Some(&c));
+    let mut i = 0;
+    while i < chars.len() {
+        let word_start = i == 0 || !chars[i - 1].is_ascii_alphanumeric();
+        if word_start && !covered(i) && (starts_with(i, "https://") || starts_with(i, "http://") || starts_with(i, "www.")) {
+            let mut end = i;
+            while end < chars.len() && !chars[end].is_whitespace() && yumete_cjk::char_width(chars[end]) == 1 && chars[end] != '<' && !covered(end) {
+                end += 1;
+            }
+            while end > i && matches!(chars[end - 1], '.' | ',' | ':' | ';' | '!' | '?' | '\'' | '"' | ')') {
+                if chars[end - 1] == ')' && chars[i..end].iter().filter(|&&c| c == '(').count() >= chars[i..end].iter().filter(|&&c| c == ')').count() {
+                    break;
+                }
+                end -= 1;
+            }
+            for flag in &mut out[i..end] {
+                *flag = true;
+            }
+            i = end.max(i + 1);
+            continue;
+        }
+        i += 1;
+    }
+    out
+}
+
 /// `%20` and the other `%XX` escapes read back as the characters they stand
 /// for; the text as it was when they do not spell UTF-8.
 pub fn percent_decoded(text: &str) -> String {

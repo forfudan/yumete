@@ -799,6 +799,29 @@ mod tests {
         assert!(out.contains(&format!("line-height: {COLUMN_PITCH}")), "{out}");
     }
 
+    /// **Every link the preview draws is a link on the page**: an
+    /// address in angle brackets (a mail address as `mailto:`), a reference
+    /// link, its definition not shown, and a bare URL; inside code, nothing.
+    #[test]
+    fn reference_links_bare_urls_and_mail_addresses_are_links() {
+        let text = "# 開頭\n\n寫給 <someone@example.org>、看 <https://example.com/auto>、[參考][ref]、[ref]、https://example.net/x 與 www.example.org，[跳](#開頭)。\n\n```\n[ref] https://example.net/code\n```\n\n[ref]: https://example.org/ref \"題\"\n";
+        let out = html(text, &style(false));
+        for found in [
+            "<a href=\"mailto:someone@example.org\">someone@example.org</a>",
+            "<a href=\"https://example.com/auto\">https://example.com/auto</a>",
+            "<a href=\"https://example.org/ref\">參考</a>",
+            "<a href=\"https://example.org/ref\">ref</a>",
+            "<a href=\"https://example.net/x\">https://example.net/x</a>",
+            "<a href=\"http://www.example.org\">www.example.org</a>",
+            "<a href=\"#開頭\">跳</a>",
+            "<h1 id=\"開頭\">",
+        ] {
+            assert!(out.contains(found), "{found} in {out}");
+        }
+        assert!(!out.contains("[ref]:"), "the definition is not shown: {out}");
+        assert!(out.contains("[ref] https://example.net/code"), "code is code: {out}");
+    }
+
     /// **`:export html` has the same structure**: callouts,
     /// front matter, code in colour, links and task boxes, in GitHub's light
     /// colours and the export's own fonts and sizes; only the look differs.
