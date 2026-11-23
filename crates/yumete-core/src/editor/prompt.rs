@@ -276,7 +276,7 @@ impl Editor {
     /// `jk`).
     pub(super) fn leave_insert(&mut self) {
         self.words_read_in_insert = false;
-        self.take_back_fresh_indent();
+        let took_the_indent = self.take_back_fresh_indent();
         self.keep_the_line_opened_past_the_end();
         // **`5ix` spends its count here**: what repeats is
         // the whole typing session, and nobody knows what that is until
@@ -301,7 +301,13 @@ impl Editor {
         self.mark_where_the_insert_started_over();
         self.mode = Mode::Normal;
         let caret = self.sel.head();
+        let goal = self.sel.goal();
         self.step_back_out_of_insert();
+        // The caret on the emptied line has nowhere to step back to, and
+        // keeps the column the indent gave it (see `take_back_fresh_indent`).
+        if took_the_indent && self.sel.head() == caret && !self.sel.is_plural() {
+            self.sel.set_goal(goal);
+        }
         // A block's `I`, `A` or `c`: copy it down now.
         self.finish_block_insert(caret);
         // 那一則簽名是打字當口的東西，出了插入態就不是答案了。

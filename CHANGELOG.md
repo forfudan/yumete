@@ -24,7 +24,6 @@ Written for people who use it to write, not for the commit log: each line says w
 - **`:preview-browser` shows the same preview in the browser**: it follows you and `:preview-lock` holds it; the page already open follows to the next document by itself, and from another document `:preview-browser` moves the browser there instead of showing the old page again. **A Markdown file's browser preview is live**: the page is written again a moment after you stop typing and reloads itself.
 - **Under vim, `cc`, `S` and a linewise `c` keep the line's leading blanks in prose too**, as nvim's autoindent does in a text file, and add none; with nothing typed they go again on `Esc`.
 
-- **The indent Enter, `o` or `O` carried down goes again when you leave the line without typing**: under vim on Enter, `Esc`, `C-o` or an arrow to another line, as vim does; under helix on `Esc` when that line break was all the Insert wrote, and Enter with only blanks before the cursor breaks the line at its start, as helix does. Blanks you typed yourself stay.
 
 ## 0.25.0 · 2026-11-23
 

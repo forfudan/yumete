@@ -39923,6 +39923,9 @@ fn an_autoindent_left_untyped_goes() {
     assert_eq!(vim("jA⏎↑x"), "fn main() {\n    xlet a = 1;\n\n    b();\n}\n");
     assert_eq!(vim("jA⏎ᵒ:⎋x"), "fn main() {\n    let a = 1;\nx\n    b();\n}\n", "C-o");
     assert_eq!(vim("jO↓x"), "fn main() {\n\n    xlet a = 1;\n    b();\n}\n");
+    assert_eq!(vim("joᵒkx"), "fn main() {\n    xlet a = 1;\n\n    b();\n}\n", "C-o keeps the column");
+    assert_eq!(vim("joᵒjx"), "fn main() {\n    let a = 1;\n\n    xb();\n}\n", "C-o keeps the column");
+    assert_eq!(vim("jo⎋kx"), "fn main() {\n    et a = 1;\n\n    b();\n}\n", "Esc keeps the column");
     assert_eq!(vim("jA⏎←"), "fn main() {\n    let a = 1;\n    \n    b();\n}\n", "still on the line");
     assert_eq!(vim("3jA⏎  ↑"), "fn main() {\n    let a = 1;\n    b();\n}\n  \n", "typed by hand");
     let helix = |keys: &str| run("helix", code, keys);

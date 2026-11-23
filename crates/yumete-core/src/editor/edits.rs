@@ -651,9 +651,11 @@ impl Editor {
 
     /// **vim drops an autoindent nothing was typed after** (`:h autoindent`),
     /// and so does helix on `Esc`: a line that is only that indent, the caret
-    /// at its end, goes back to empty.
-    pub(super) fn take_back_fresh_indent(&mut self) {
-        let Some((id, revision, at, len, recorded)) = self.fresh_indent.take() else { return };
+    /// at its end, goes back to empty. Under vim the column the caret stood
+    /// in stays the one `j` and `k` want, as vim's `curswant` does: `o`, then
+    /// `Esc` or `C-o`, then `k` lands in the indented column above.
+    pub(super) fn take_back_fresh_indent(&mut self) -> bool {
+        let Some((id, revision, at, len, recorded)) = self.fresh_indent.take() else { return false };
         let buffer = self.current_buffer();
         let rope = buffer.rope();
         let fresh = buffer.id() == id
@@ -662,14 +664,22 @@ impl Editor {
             && at >= len
             && at == motion::line_end(rope, at)
             && rope.line_to_char(rope.char_to_line(at)) == at - len;
-        if !fresh || !self.edit_remove(at - len..at) {
-            return;
+        if !fresh {
+            return false;
+        }
+        let column = self.line_column(at);
+        if !self.edit_remove(at - len..at) {
+            return false;
         }
         self.set_cursor(at - len);
+        if self.keymap_rules().vim_indent_keys {
+            self.sel.set_goal(Some(column));
+        }
         if recorded {
             let keep = self.insert_recording.chars().count().saturating_sub(len);
             self.insert_recording = self.insert_recording.chars().take(keep).collect();
         }
+        true
     }
 
     /// 眼下這一行要帶下去的那一段縮進（Enter 用的，截到光標為止）。
