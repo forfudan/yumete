@@ -461,10 +461,10 @@ zhs = "缩进宽度"
 en = "indent width"
 
 [[message]]
-# 設置：缩进几列——一句話
+# 設置：缩进几列——一句話；文件自己看得出缩进单位時用文件的（草稿）
 key = "settings.editor.indent-width.hint"
-zhs = "`>`/`<` 增减的列数，也是 Tab 输入的空格数"
-en = "how many columns > adds and < takes away, and how many spaces Tab types"
+zhs = "`>`/`<` 增减的列数，也是 Tab 输入的空格数；文件自己看得出缩进单位时，用文件的"
+en = "how many columns > adds and < takes away, and how many spaces Tab types, when the file shows no indent unit of its own"
 
 [[message]]
 # 設置：首行縮進——一句話
