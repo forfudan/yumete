@@ -3549,6 +3549,9 @@ pub struct Editor {
     /// The last `:s` replacement under the vim keymap, as written once its
     /// own `~` was filled in: the next one's `~` stands for it.
     last_vim_substitute: String,
+    /// The last `:s` as written: its pattern, its replacement and its
+    /// flags, for vim's `:&`, `&` and `g&` to run again.
+    last_substitution: Option<(String, String, String)>,
     /// Places named by a letter, and reachable from any file (`M a`, `' a`).
     marks: HashMap<char, Spot>,
     /// Whether `.` is playing one back, so it cannot record itself.
@@ -5127,6 +5130,7 @@ impl Editor {
             last_insert_keys: Vec::new(),
             last_replacement: String::new(),
             last_vim_substitute: String::new(),
+            last_substitution: None,
             marks: HashMap::new(),
             repeating_edit: false,
             insert_recording: String::new(),

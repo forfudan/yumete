@@ -285,6 +285,13 @@ pub(super) const NORMAL_COMMANDS: &[NormalCommand] = &[
         e.goto_line(line + 1);
         e.goto_motion(motion::Motion::LineFirstNonBlank);
     }, Key::Char('_')),
+    // nvim's `&` (`:&&`): the last `:s` with its flags, on this line or on
+    // `count` lines from it.
+    (NormalCmd::VimSubstituteAgain, |e, cx| {
+        let line = e.cursor_line() + 1;
+        let rows = crate::command::Rows::Span(crate::command::Bound::Line(line), crate::command::Bound::Line(line + cx.count.max(1) - 1));
+        e.substitute_again(true, "", rows, false);
+    }, Key::Char('&')),
     (NormalCmd::WindowMode, Editor::cmd_window_mode, Key::Ctrl('w')),
     (NormalCmd::PageDown, Editor::cmd_page_down, Key::Ctrl('f')),
     (NormalCmd::PageUp, Editor::cmd_page_up, Key::Ctrl('b')),
@@ -554,7 +561,7 @@ pub(super) const VIM_NORMAL: &[(Key, NormalCmd, Option<When>)] = &[
     (Key::Ctrl('n'), NormalCmd::MoveLineDown, None),
     (Key::Ctrl('p'), NormalCmd::MoveLineUp, None),
     (Key::Char('_'), NormalCmd::VimGotoFirstNonwhitespace, None),
-    (Key::Char('&'), NormalCmd::NoOp, None),
+    (Key::Char('&'), NormalCmd::VimSubstituteAgain, None),
     // vim's `=` re-indents over a motion, which yumete does not have; helix's
     // formats through the server.
     (Key::Char('='), NormalCmd::NoOp, None),

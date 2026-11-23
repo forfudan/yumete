@@ -420,6 +420,28 @@ impl Editor {
                 if self.asks_to_swap_rows(Some(&rows), line) {
                     return Ok(CommandOutcome::Continue);
                 }
+                // **An empty pattern is the last one searched for**, as in
+                // vim (`:s//X/`); under vim a pattern written here is the
+                // one `n` and `:s//` take next.
+                let pattern = match pattern.is_empty() {
+                    true => self.last_search.clone(),
+                    false => pattern,
+                };
+                if pattern.is_empty() {
+                    self.status = say!("find.nothing-searched-yet");
+                    self.command_failed = true;
+                    return Ok(CommandOutcome::Continue);
+                }
+                if self.as_vim() && !literal && !pinyin && !glyphs && self.last_search != pattern {
+                    self.last_search = pattern.clone();
+                    self.hits = None;
+                }
+                let flags: String = [(global, 'g'), (ignore_case, 'i'), (literal, 'f'), (confirm, 'c'), (count_only, 'n'), (reshape, 't'), (pinyin, 'y'), (glyphs, 'j')]
+                    .iter()
+                    .filter(|(on, _)| *on)
+                    .map(|(_, c)| *c)
+                    .collect();
+                self.last_substitution = Some((pattern.clone(), replacement.clone(), flags));
                 self.substitute(Substitution {
                     pattern: &pattern,
                     replacement: &replacement,
@@ -1738,6 +1760,17 @@ impl Editor {
                     _ => text.replace('\n', ending),
                 };
                 self.read_in(&text, below, false);
+                Ok(CommandOutcome::Continue)
+            }
+            Command::SubstituteAgain { bare: true, rows: None, .. } if !self.as_vim() => {
+                self.execute_now("search")
+            }
+            Command::SubstituteAgain { bare: true, .. } if !self.as_vim() => Err(EditorError::Command(CommandError::Unknown(line.trim().trim_start_matches(':').to_string()))),
+            Command::SubstituteAgain { keep_flags, flags, rows, .. } => {
+                if self.asks_to_swap_rows(rows.as_ref(), line) {
+                    return Ok(CommandOutcome::Continue);
+                }
+                self.substitute_again(keep_flags, &flags, rows.unwrap_or(command::Rows::Selection), false);
                 Ok(CommandOutcome::Continue)
             }
             Command::Put { register, above, at } => {

@@ -946,6 +946,7 @@ pub(super) static GOTO: Group = Group {
         ch('v', NormalCmd::ReselectLastSelection, "hint.goto.reselect").when(Only::Vim),
         ch('i', NormalCmd::InsertAtLastInsert, "hint.goto.insert-again").when(Only::Vim),
         ch(';', NormalCmd::GotoOlderChange, "hint.goto.walk-changes").when(Only::Vim),
+        ch('&', NormalCmd::VimSubstituteAgainEverywhere, "action.vim-substitute-again-everywhere").when(Only::Vim),
         ch(',', NormalCmd::GotoNewerChange, "hint.goto.walk-changes").when(Only::Vim),
         ch('u', NormalCmd::OperatorLowercase, "hint.goto.case-operators").when(Only::Vim),
         ch('U', NormalCmd::OperatorUppercase, "hint.goto.case-operators").when(Only::Vim),

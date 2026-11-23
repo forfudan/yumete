@@ -69,6 +69,12 @@ zhs = "还没有搜索过：用 / 搜索，或选中内容后按 g/"
 en = "no search yet: / searches, or select text and press g/"
 
 [[message]]
+# vim 的 :&、& 與 g&：這一次還没執行過 :s（草稿）
+key = "find.nothing-substituted-yet"
+zhs = "还没有执行过 :s"
+en = "no :s run yet"
+
+[[message]]
 # 在本頁找，只有光標這一處
 key = "find.only-here"
 zhs = "只有这一处：{0}"

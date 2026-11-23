@@ -45518,6 +45518,41 @@ fn vims_ctrl_r_ctrl_w_puts_the_word_under_the_cursor_on_the_line() {
     assert_eq!(run("j", ':', 'l'), "  zz");
 }
 
+/// **vim's `:&`, `:&&`, `:s` alone, `:s//`, nvim's `&` and `g&`**, every
+/// row measured in nvim 0.12 `--clean`: `:&` and `:s` run the last `:s`
+/// without its flags, `:&&` and `&` (nvim's `:&&`) with them, a count on
+/// `&` taking that many lines; `g&` is the last search's pattern over every
+/// line with the flags; an empty pattern is the last one searched for.
+#[test]
+fn vims_substitute_again_takes_the_last_one() {
+    let text = "a a\nb a\na b a\nc\n";
+    let run = |keys: &str| {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        (ed.current_buffer().text(), vim_at(&ed))
+    };
+    assert_eq!(run(":s/a/X/⏎j&"), ("X a\nb X\na b a\nc\n".into(), (2, 1)));
+    assert_eq!(run(":s/a/X/g⏎jj&"), ("X X\nb a\nX b X\nc\n".into(), (3, 1)), "nvim's `&` keeps the flags");
+    assert_eq!(run(":s/a/X/g⏎jj:&&⏎").0, "X X\nb a\nX b X\nc\n");
+    assert_eq!(run(":s/a/X/g⏎jj:&⏎").0, "X X\nb a\nX b a\nc\n", "`:&` drops them");
+    assert_eq!(run(":s/a/X/g⏎jj:s⏎").0, "X X\nb a\nX b a\nc\n");
+    assert_eq!(run(":s/a/X/g⏎jj:&g⏎").0, "X X\nb a\nX b X\nc\n");
+    assert_eq!(run(":s/a/X/⏎g&"), ("X X\nb X\nX b a\nc\n".into(), (3, 1)));
+    assert_eq!(run(":s/a/X/⏎/b⏎g&"), ("X a\nX a\na X a\nc\n".into(), (3, 1)), "`g&` takes the last search");
+    assert_eq!(run(":s/a/X/⏎/b⏎:s⏎"), ("X a\nb X\na b a\nc\n".into(), (2, 1)), "`:s` the last substitute's");
+    assert_eq!(run("/b⏎:s//Y/⏎"), ("a a\nY a\na b a\nc\n".into(), (2, 1)));
+    assert_eq!(run(":s/a/X/⏎j2&"), ("X a\nb X\nX b a\nc\n".into(), (3, 1)));
+    assert_eq!(run(":s/a/X/⏎:%&&⏎"), ("X X\nb X\nX b a\nc\n".into(), (3, 1)));
+    assert_eq!(run(":s/a/X/⏎j&u").0, "X a\nb a\na b a\nc\n");
+    assert_eq!(run("&").0, text);
+    assert_eq!(run(":s/a/X/⏎n").1, (1, 3), "`:s` sets what `n` looks for");
+    assert_eq!(run(":s/b/X/⏎n").1, (2, 1), "even when it finds nothing");
+    // helix's `:s` alone still opens the search panel.
+    let mut ed = typed(text);
+    assert!(ed.execute(":s").is_ok());
+    assert_eq!(ed.current_buffer().text(), text);
+}
+
 /// **vim's `gp` and `gP` leave the cursor just past what they put**
 /// (`:h gp`), every row measured in nvim 0.12 `--clean`: after the last
 /// character of text, on the line's last when nothing follows; at the

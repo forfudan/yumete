@@ -593,6 +593,39 @@ impl Editor {
         self.status = say!("find.substitute-changed", count);
     }
 
+    /// **The last `:s` again** (vim's `:&`, `&`, `g&`): its pattern, or the
+    /// last one searched for when `searched`, and its replacement, with its
+    /// flags when `keep_flags` and `flags` added, over `rows`.
+    pub(super) fn substitute_again(&mut self, keep_flags: bool, flags: &str, rows: crate::command::Rows, searched: bool) {
+        let Some((pattern, replacement, kept)) = self.last_substitution.clone() else {
+            self.status = say!("find.nothing-substituted-yet");
+            self.command_failed = true;
+            return;
+        };
+        let pattern = match searched && !self.last_search.is_empty() {
+            true => self.last_search.clone(),
+            false => pattern,
+        };
+        let flags = match keep_flags {
+            true => format!("{kept}{flags}"),
+            false => flags.to_string(),
+        };
+        let on = |c: char| flags.contains(c);
+        self.substitute(Substitution {
+            pattern: &pattern,
+            replacement: &replacement,
+            global: on('g'),
+            ignore_case: on('i'),
+            literal: on('f'),
+            confirm: on('c'),
+            count_only: on('n'),
+            reshape: on('t'),
+            pinyin: on('y'),
+            glyphs: on('j'),
+            rows,
+        });
+    }
+
     /// **這個範圍是反的嗎** —— 是就交寫的那兩個行號。
     ///
     /// 只有 `Rows::Span` 可能反。交的是 **讀者寫的那兩個數**，所以 `:$-1s` 在三行的檔上報的是「第 3 行到第 1 行」，

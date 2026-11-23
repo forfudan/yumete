@@ -427,6 +427,11 @@ pub enum Command {
     /// of `at` (`:0put` above the first); `above` is `:put!`, above that
     /// line. Whatever the register holds goes in as whole lines.
     Put { register: Option<char>, above: bool, at: Option<Rows> },
+    /// vim's `:&` and `:&&`: the last `:s` again, its pattern and
+    /// replacement, over `rows` or the selection's lines; `keep_flags` is
+    /// `&&`, and `flags` are added. `bare` is `:s` alone, which under vim
+    /// is `:&` and under helix opens the search panel.
+    SubstituteAgain { keep_flags: bool, flags: String, rows: Option<Rows>, bare: bool },
     /// vim's `:delete [x] [count]`: the lines of `rows`, the cursor's when
     /// none is written, into register `x`; with `count`, that many lines
     /// from the range's last.
@@ -1206,6 +1211,9 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
         return cmd;
     }
 
+    if let Some(again) = parse_substitute_again(trimmed) {
+        return again;
+    }
     if let Some(ranged) = parse_range_then(trimmed) {
         return Ok(ranged);
     }
@@ -8204,6 +8212,26 @@ fn bar_after_the_flags(body: &str, delim: char) -> Option<usize> {
     None
 }
 
+/// **vim's `:&`, `:&&` and `:s` alone** ([`Command::SubstituteAgain`]), a
+/// range and flags allowed: `:%&&`, `:&g`.
+fn parse_substitute_again(input: &str) -> Option<Result<Command, CommandError>> {
+    let (rows, rest) = parse_rows(input);
+    let rows = (rest.len() != input.len()).then_some(rows);
+    let (bare, after) = match rest.strip_prefix('&') {
+        Some(after) => (false, after),
+        None if rest == "s" => (true, ""),
+        None => return None,
+    };
+    let (keep_flags, flags) = match after.strip_prefix('&') {
+        Some(flags) => (true, flags.trim()),
+        None => (false, after.trim()),
+    };
+    if let Some(bad) = flags.chars().find(|c| !"ginctfyj".contains(*c)) {
+        return Some(Err(CommandError::Wants { command: "substitute", value: bad.to_string(), wants: Wants::Said("cmd.takes.substitute-flags") }));
+    }
+    Some(Ok(Command::SubstituteAgain { keep_flags, flags: flags.to_string(), rows, bare }))
+}
+
 /// Try to parse a substitution command.
 ///
 /// Returns `None` when the input is not a substitution, or `Some(Err(..))` when
@@ -8231,9 +8259,6 @@ fn parse_substitution(input: &str) -> Option<Result<Command, CommandError>> {
     }
     let fields = split_escaped(body, delim);
     if fields.len() < 2 || fields.len() > 3 {
-        return Some(Err(CommandError::MissingArgument("substitute")));
-    }
-    if fields[0].is_empty() {
         return Some(Err(CommandError::MissingArgument("substitute")));
     }
     let flags = fields.get(2).cloned().unwrap_or_default();
@@ -8826,8 +8851,8 @@ mod tests {
         );
         // Empty replacement (a deletion) is allowed.
         assert_eq!(parse(":s/foo//"), Ok(plain("foo", "")));
-        // Empty pattern is rejected.
-        assert!(parse(":s//bar/").is_err());
+        // An empty pattern is the last one searched for, the editor's to fill.
+        assert_eq!(parse(":s//bar/"), Ok(plain("", "bar")));
     }
 
     #[test]
@@ -9520,7 +9545,8 @@ mod tests {
         // Warning: **`s` 從歧義變成了一個聲明過的簡寫**：光禿禿的
         // `:s` 開高級搜索那扇面板。`s` 本來夾在 `search`/`set`/`shot`… 中間，
         // 哪個都不算——而聲明出來的簡寫壓過前綴規則，同 `w` 之於 `write`。
-        assert_eq!(parse(":s"), Ok(Command::OpenSearch(crate::search_panel::Where::Buffer)));
+        // Under helix it still does; under vim it is `:&` ([`Command::SubstituteAgain`]).
+        assert_eq!(parse(":s"), Ok(Command::SubstituteAgain { keep_flags: false, flags: String::new(), rows: None, bare: true }));
         assert_eq!(
             parse(":r"),
             Ok(Command::OpenReplace { scope: crate::search_panel::Where::Buffer, reshape: false })

@@ -120,6 +120,8 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
         e.enter_insert();
     }, Key::Char('i')),
     (NormalCmd::GotoOlderChange, |e, _| e.walk_changes(true), Key::Char(';')),
+    // vim's `g&`: `:%s//~/&`, the last search's pattern over every line.
+    (NormalCmd::VimSubstituteAgainEverywhere, |e, _| e.substitute_again(true, "", crate::command::Rows::All, true), Key::Char('&')),
     (NormalCmd::GotoNewerChange, |e, _| e.walk_changes(false), Key::Char(',')),
     // vim's `g` operators, each waiting for a motion.
     (NormalCmd::OperatorLowercase, |e, cx| e.g_operator('u', cx.operator_count), Key::Char('u')),

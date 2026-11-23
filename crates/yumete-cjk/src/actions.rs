@@ -889,6 +889,8 @@ normal_commands! {
     VimRecordMacro = "vim_record_macro",
     VimReplayMacro = "vim_replay_macro",
     VimGotoFirstNonwhitespace = "vim_goto_first_nonwhitespace",
+    VimSubstituteAgain = "vim_substitute_again",
+    VimSubstituteAgainEverywhere = "vim_substitute_again_everywhere",
 }
 
 const fn command(name: &'static str, help: &'static str, c: &'static str) -> Action {
@@ -1505,6 +1507,8 @@ pub const ALL: &[Action] = &[
     normal("action.vim-replay-macro", NormalCmd::VimReplayMacro),
     normal("action.vim-replay-last-macro", NormalCmd::VimReplayLastMacro),
     normal("action.vim-goto-first-nonwhitespace", NormalCmd::VimGotoFirstNonwhitespace),
+    normal("action.vim-substitute-again", NormalCmd::VimSubstituteAgain),
+    normal("action.vim-substitute-again-everywhere", NormalCmd::VimSubstituteAgainEverywhere),
 ];
 
 /// **The places that take keys and are not modes of the text** (step 9 of

@@ -2567,6 +2567,20 @@ zhs = "选中这一处或上一处匹配(vim 的 gN)"
 en = "select this or the previous match (vim's gN)"
 
 [[message]]
+# 命令說明：vim_substitute_again（草稿）
+key = "action.vim-substitute-again"
+zhs = "在这一行(带数字时往下几行)重复上一次 :s，带它的旗标(nvim 的 &)"
+en = "the last :s again on this line, or a count of lines, with its flags (nvim's &)"
+find = "重复替换 重複替換 替換 替换 substitute repeat &"
+
+[[message]]
+# 命令說明：vim_substitute_again_everywhere（草稿）
+key = "action.vim-substitute-again-everywhere"
+zhs = "用上一次搜索的式子在全文重复上一次 :s，带它的旗标(vim 的 g&)"
+en = "the last :s again over every line, with the last search's pattern and its flags (vim's g&)"
+find = "重复替换 重複替換 全文 替換 替换 substitute repeat g&"
+
+[[message]]
 # 命令說明：vim_switch_case
 key = "action.vim-switch-case"
 zhs = "切换大小写并后移(vim 的 ~)"

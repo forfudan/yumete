@@ -10,6 +10,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **vim's `.` mark**: `` `. `` goes to where the last change was made and `'.` to that line, as jumps, so ``` `` ``` comes back; `` d`. `` and the like reach it as any mark.
 - **vim's `@:`** runs the last `:` line again, with a count that many times, and `@@` after it runs it again.
 - **vim's `C-r C-w`, `C-r C-a` and `C-r C-l` on the `:` and `/` lines** put the word, the WORD or the line under the cursor there.
+- **vim's `:&`, `:&&`, `&` and `g&`**: `:&` (and under vim `:s` alone) runs the last `:s` again without its flags and `:&&` with them, over a range too (`:%&&`); `&` is nvim's `:&&` on this line, a count taking that many lines; `g&` runs it over every line with the last search's pattern. **`:s//X/` takes the last pattern searched for**, and under vim a `:s` pattern is what `n` looks for next.
 
 ### Changed
 
