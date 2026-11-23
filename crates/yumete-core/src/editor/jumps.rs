@@ -213,6 +213,8 @@ impl Editor {
                 };
                 Some(Spot::InBuffer(self.current_buffer().id(), pos))
             }
+            // Where the last change was made (`:h '.`).
+            '.' => Some(Spot::InBuffer(self.current_buffer().id(), self.current_buffer().last_change_start()?)),
             // Where the last Visual selection began and ended (`:h '<`).
             '<' | '>' => {
                 let (start, end) = self.last_selection_ends()?;

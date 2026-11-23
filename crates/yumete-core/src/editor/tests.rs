@@ -45447,6 +45447,33 @@ fn vim_at(ed: &Editor) -> (usize, usize) {
     (line + 1, ed.sel.head() - rope.line_to_char(line) + 1)
 }
 
+/// **vim's `.` mark is where the last change began** (`:h '.`), every row
+/// measured in nvim 0.12 `--clean` with the keys typed one at a time: after
+/// typing, the last character typed; after a delete, where the text was;
+/// after a linewise put, the first line put. `'.` goes to that line's first
+/// non-blank, and it is a jump, so ``` `` ``` comes back.
+#[test]
+fn vims_dot_mark_is_where_the_last_change_began() {
+    let text = "one two\nthree four\nfive six\nseven\n";
+    let run = |keys: &str| {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        vim_at(&ed)
+    };
+    assert_eq!(run("wiXY⎋gg`."), (1, 6));
+    assert_eq!(run("wiXY⎋G'."), (1, 1));
+    assert_eq!(run("jwdwgg`."), (2, 6), "past the line's end, on its last character");
+    assert_eq!(run("jwcwABC⎋gg`."), (2, 9));
+    assert_eq!(run("jddgg`."), (2, 1));
+    assert_eq!(run("jwxgg`."), (2, 7));
+    assert_eq!(run("jjAxyz⎋gg`."), (3, 11));
+    assert_eq!(run("jyypgg`."), (3, 1));
+    assert_eq!(run("jwiab⎋gg`.``"), (1, 7));
+    let mut ed = typed_vim(text);
+    feed_vim(&mut ed, "jwia⎋ggd`.");
+    assert_eq!(ed.current_buffer().text(), "one twafour\nfive six\nseven\n");
+}
+
 /// **vim's `gp` and `gP` leave the cursor just past what they put**
 /// (`:h gp`), every row measured in nvim 0.12 `--clean`: after the last
 /// character of text, on the line's last when nothing follows; at the

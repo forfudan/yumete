@@ -421,6 +421,10 @@ pub struct Buffer {
     /// 也就是改**之前**；`g.` 要的是改**之後**落在哪。兩者在 `ciw` 這種先刪後寫的動作
     /// 上差得很遠。
     last_edit: Option<usize>,
+    /// **Where the last change began** (vim's `'.` mark): the start of the
+    /// last text put in or taken out, so after typing it is the last
+    /// character typed. `None` until something changed.
+    dot: Option<usize>,
     /// **改動表**（vim 的 `g;`/`g,`）：改過的地方，舊的在前。
     ///
     /// 一行只記一條——vim 也是這樣（`:h changelist`：「only one position is
@@ -887,6 +891,7 @@ impl Buffer {
             journal: None,
             edit_log: std::collections::VecDeque::new(),
             last_edit: None,
+            dot: None,
             changes: Vec::new(),
             changes_at: 0,
             insert_stop: None,
@@ -965,6 +970,7 @@ impl Buffer {
             journal: None,
             edit_log: std::collections::VecDeque::new(),
             last_edit: None,
+            dot: None,
             changes: Vec::new(),
             changes_at: 0,
             insert_stop: None,
@@ -1155,6 +1161,7 @@ impl Buffer {
             journal: None,
             edit_log: std::collections::VecDeque::new(),
             last_edit: None,
+            dot: None,
             changes: Vec::new(),
             changes_at: 0,
             insert_stop: None,
@@ -1563,6 +1570,11 @@ impl Buffer {
         self.last_edit
     }
 
+    /// Where the last change began (vim's `'.`), within the text.
+    pub fn last_change_start(&self) -> Option<usize> {
+        self.dot.map(|at| at.min(self.rope.len_chars()))
+    }
+
     /// 只給測試：假裝這一份還没改過。Warning: 鋪固定裝置要往 rope 裏寫字，而那一下就把
     /// 「最後改在哪」記上了，於是「還没改過」這個狀態在測試裏造不出來。
     #[cfg(test)]
@@ -1667,6 +1679,7 @@ impl Buffer {
         // **最後改動在哪**（`g.`，#405 之外）。插入記的是**寫完之後的那一
         // 頭**，和 vi 的 `'.` 一樣：剛打完一段話按 `g.` 回來，要回到的是話的末尾。
         self.last_edit = Some(char_idx + text.chars().count());
+        self.dot = Some(char_idx);
         self.note_change(char_idx + text.chars().count());
         self.shift_insert_stop(char_idx, 0, text.chars().count());
         Ok(())
@@ -1696,6 +1709,7 @@ impl Buffer {
         self.log_edit(at, taken, 0);
         // 刪掉的那一段没有「末尾」可回，回到它原來的起點。
         self.last_edit = Some(at);
+        self.dot = Some(at);
         self.note_change(at);
         self.shift_insert_stop(at, taken, 0);
         Ok(())
@@ -1774,6 +1788,7 @@ impl Buffer {
         }
         self.log_edit(start, taken, text.chars().count());
         self.last_edit = Some(start + text.chars().count());
+        self.dot = Some(start);
         self.shift_insert_stop(start, taken, text.chars().count());
         Ok(())
     }
