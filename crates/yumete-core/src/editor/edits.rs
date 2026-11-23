@@ -502,18 +502,49 @@ impl Editor {
         }
     }
 
-    /// Mark the `len` characters before the caret as vim's autoindent, so
-    /// `Esc` or Enter with nothing typed takes them back.
+    /// Mark the `len` characters before the caret as autoindent, so `Esc`
+    /// or Enter with nothing typed takes them back.
     pub(super) fn note_fresh_indent(&mut self, len: usize, recorded: bool) {
-        self.fresh_indent = (len > 0 && self.keymap_rules().vim_indent_keys).then(|| {
+        self.fresh_indent = (len > 0).then(|| {
             let buffer = self.current_buffer();
             (buffer.id(), buffer.revision(), self.sel.head(), len, recorded)
         });
     }
 
-    /// **vim drops an autoindent nothing was typed after** (`:h autoindent`):
-    /// on `Esc` or Enter, a line that is only that indent, the caret at its
-    /// end, goes back to empty.
+    /// Whether this Insert has changed nothing yet, and the command that
+    /// began it changed nothing first.
+    pub(super) fn insert_untouched(&self) -> bool {
+        let buffer = self.current_buffer();
+        self.insert_untouched == Some((buffer.id(), buffer.revision()))
+    }
+
+    /// **vim drops an autoindent the caret leaves** (`:h autoindent`): moved
+    /// to another line with nothing typed, as `Esc` takes it. The caret keeps
+    /// its column. helix keeps it.
+    pub(super) fn drop_the_indent_left_behind(&mut self) {
+        let Some((id, revision, at, len, _)) = self.fresh_indent else { return };
+        if !self.keymap_rules().vim_indent_keys || self.mode != Mode::Insert {
+            return;
+        }
+        let buffer = self.current_buffer();
+        let rope = buffer.rope();
+        let head = self.sel.head().min(rope.len_chars());
+        if buffer.id() != id || buffer.revision() != revision || at > rope.len_chars() {
+            return;
+        }
+        if rope.char_to_line(head) == rope.char_to_line(at) {
+            return;
+        }
+        let blank = at >= len && at == motion::line_end(rope, at) && rope.line_to_char(rope.char_to_line(at)) == at - len;
+        self.fresh_indent = None;
+        if blank && self.edit_remove(at - len..at) && head > at {
+            self.set_cursor(head - len);
+        }
+    }
+
+    /// **vim drops an autoindent nothing was typed after** (`:h autoindent`),
+    /// and so does helix on `Esc`: a line that is only that indent, the caret
+    /// at its end, goes back to empty.
     pub(super) fn take_back_fresh_indent(&mut self) {
         let Some((id, revision, at, len, recorded)) = self.fresh_indent.take() else { return };
         let buffer = self.current_buffer();
@@ -660,6 +691,8 @@ impl Editor {
         }
         self.sel.set_head(end + ending.chars().count() + indent.chars().count());
         self.sel.set_anchor(self.sel.head());
+        // The column wanted is the new line's, so an arrow goes on from it.
+        self.sel.set_goal(None);
         self.insert_begins_the_change();
         self.enter_insert();
         self.opened_past_the_end = past_the_end;
@@ -722,7 +755,8 @@ impl Editor {
         };
         let row = self.blank_row();
         // 同 `o`：縮進照這一行的來。
-        let indent = self.indent_of_line(self.cursor_line(), None);
+        let line = self.cursor_line();
+        let indent = self.indent_of_line(line, None);
         let ending = self.current_buffer().ending();
         let done = self.without_cell_guard(|e| {
             e.current_buffer_mut().insert(start, &format!("{indent}{row}{ending}"))
@@ -732,9 +766,15 @@ impl Editor {
         }
         self.sel.set_head(start + indent.chars().count());
         self.sel.set_anchor(self.sel.head());
+        // The column wanted is the new line's, so an arrow goes on from it.
+        self.sel.set_goal(None);
         self.insert_begins_the_change();
         self.enter_insert();
-        self.note_fresh_indent(indent.chars().count(), false);
+        // helix's `O` breaks the line above, so on the first line, where it
+        // writes the indent ahead of the break, the indent stays.
+        if self.keymap_rules().vim_indent_keys || line > 0 {
+            self.note_fresh_indent(indent.chars().count(), false);
+        }
     }
 
     /// **A blank line, and stay where you are** — helix's `]空格` / `[空格`

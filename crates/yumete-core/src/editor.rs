@@ -3558,11 +3558,16 @@ pub struct Editor {
     insert_recording: String,
     /// **What the last Insert session typed**, vim's read-only `".`.
     last_inserted: String,
-    /// **The indent vim's autoindent wrote and nothing typed after it**
-    /// (`:h autoindent`): `Esc` or Enter on such a line takes it back out.
+    /// **The indent autoindent wrote and nothing typed after it** (vim's
+    /// `:h autoindent`, helix's `try_restore_indent`): `Esc` or Enter on such
+    /// a line takes it back out, and under vim so does leaving the line.
     /// The buffer, its revision once written, where the caret stood, how many
     /// characters, and whether `insert_recording` ends with them.
     fresh_indent: Option<(u64, u64, usize, usize, bool)>,
+    /// The buffer and its revision when this Insert began, when the command
+    /// that began it changed nothing first: helix takes an indent back only
+    /// when the line break that wrote it is all the Insert has done.
+    insert_untouched: Option<(u64, u64)>,
     /// **`5ix` 要五個 `x`** — how many *more* times the text typed in this
     /// insert session goes in when it ends (0 = once, the usual).
     ///
@@ -5127,6 +5132,7 @@ impl Editor {
             insert_recording: String::new(),
             last_inserted: String::new(),
             fresh_indent: None,
+            insert_untouched: None,
             insert_again: 0,
             searching: None,
             filling: None,

@@ -31355,13 +31355,13 @@ fn enter_and_o_carry_the_indent_down_in_code() {
     ed.on_key(Key::Enter);
     assert_eq!(ed.current_buffer().text(), "func f() {\n\n\treturn 1\n}\n");
 
-    // **停在縮進裏面，只帶光標前面那一截**——`goto_line` 落在第一個非空白上，所以
-    // 這裏光標前面正好一個 tab：上一行留一個，新的一行帶一個，同 vim。
+    // **helix 停在縮進裏面按 Enter，是在行首斷行**（`insert_newline`，實測 hx）：
+    // 上一行空着，這一行連同它的縮進整個推下去。
     let mut ed = code("func f() {\n\treturn 1\n}\n");
     ed.goto_line(2);
     press(&mut ed, "i");
     ed.on_key(Key::Enter);
-    assert_eq!(ed.current_buffer().text(), "func f() {\n\t\n\treturn 1\n}\n");
+    assert_eq!(ed.current_buffer().text(), "func f() {\n\n\treturn 1\n}\n");
 
     // **散文不帶**：小說的首行縮進是畫出來的，檔案裏没有空白——自動加一截就是
     // 替寫的人寫字。
@@ -39567,6 +39567,52 @@ fn vims_linewise_change_keeps_the_indent_in_code() {
     assert_eq!(prose("a\n    b\n", "jcc"), "a\n\n");
     assert_eq!(prose("a\nb\n", "jccq"), "a\nq\n", "none added");
     assert_eq!(prose("a\n    b\n", "jo"), "a\n    b\n\n", "o still adds none");
+}
+
+/// **An autoindent nothing was typed after goes when the line is left**
+/// (measured in nvim and in hx). Under vim: on Enter, `Esc`, `C-o`, or an
+/// arrow to another line, the caret keeping its column. Under helix: on
+/// `Esc` when the line break was all the Insert wrote, and Enter after
+/// nothing but blanks breaks the line at its start. Blanks typed by hand
+/// stay.
+#[test]
+fn an_autoindent_left_untyped_goes() {
+    let code = "fn main() {\n    let a = 1;\n    b();\n}\n";
+    let run = |keymap: &str, text: &str, keys: &str| {
+        let mut ed = typed(text);
+        ed.execute(":syntax rust").unwrap();
+        ed.execute(&format!(":keymap {keymap}")).unwrap();
+        press(&mut ed, "gg");
+        for c in keys.chars() {
+            ed.on_key(match c {
+                '⎋' => Key::Esc,
+                '⏎' => Key::Enter,
+                'ᵒ' => Key::Ctrl('o'),
+                '↑' => Key::Up,
+                '↓' => Key::Down,
+                '←' => Key::Left,
+                c => Key::Char(c),
+            });
+        }
+        ed.on_key(Key::Esc);
+        ed.current_buffer().text()
+    };
+    let vim = |keys: &str| run("vim", code, keys);
+    assert_eq!(vim("jA⏎↓x"), "fn main() {\n    let a = 1;\n\n    xb();\n}\n");
+    assert_eq!(vim("jA⏎↑x"), "fn main() {\n    xlet a = 1;\n\n    b();\n}\n");
+    assert_eq!(vim("jA⏎ᵒ:⎋x"), "fn main() {\n    let a = 1;\nx\n    b();\n}\n", "C-o");
+    assert_eq!(vim("jO↓x"), "fn main() {\n\n    xlet a = 1;\n    b();\n}\n");
+    assert_eq!(vim("jA⏎←"), "fn main() {\n    let a = 1;\n    \n    b();\n}\n", "still on the line");
+    assert_eq!(vim("3jA⏎  ↑"), "fn main() {\n    let a = 1;\n    b();\n}\n  \n", "typed by hand");
+    let helix = |keys: &str| run("helix", code, keys);
+    assert_eq!(helix("jA⏎"), "fn main() {\n    let a = 1;\n\n    b();\n}\n");
+    assert_eq!(helix("jA;⏎"), "fn main() {\n    let a = 1;;\n    \n    b();\n}\n", "not all the Insert wrote");
+    assert_eq!(helix("jA⏎⏎"), "fn main() {\n    let a = 1;\n\n    \n    b();\n}\n");
+    assert_eq!(helix("jo"), "fn main() {\n    let a = 1;\n\n    b();\n}\n");
+    assert_eq!(helix("jO"), "fn main() {\n\n    let a = 1;\n    b();\n}\n");
+    assert_eq!(run("helix", "    a\n", "O"), "    \n    a\n", "helix's `O` on the first line");
+    assert_eq!(helix("jA⏎↓q"), "fn main() {\n    let a = 1;\n    \n    qb();\n}\n", "an arrow keeps it");
+    assert_eq!(helix("jlli⏎"), "fn main() {\n\n    let a = 1;\n    b();\n}\n", "Enter in the blanks");
 }
 
 /// **`j`/`k` onto a closed fold keep the column wanted** (nvim): not the end

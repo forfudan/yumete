@@ -393,6 +393,7 @@ impl Editor {
         self.keep_the_last_selection(holding);
         self.go_back_after_one_key(borrowed, naming);
         self.go_back_after_the_line();
+        self.drop_the_indent_left_behind();
         self.keep_off_the_newline();
         self.find_the_table_here();
         outcome

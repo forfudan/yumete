@@ -86,6 +86,8 @@ pub(super) const INSERT_COMMANDS: &[NormalCommand] = &[
     // line, as vim's `curswant` does, and a column wanted further right
     // from an earlier `j` is kept.
     (NormalCmd::RunOneNormalCommand, |e, _| {
+        // An autoindent nothing was typed after goes, as on `Esc` (vim).
+        e.take_back_fresh_indent();
         e.insert_again = 0;
         let rope = e.current_buffer().rope();
         let head = e.sel.head().min(rope.len_chars());

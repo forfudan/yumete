@@ -18,6 +18,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **`,` in a range is a span, as in vim**: `:1,40s` and `:1,40sort` take the forty lines from 1 to 40, as `1-40` still does. The list form (`:1,5,9s`) is gone, and a range of more than two ends is refused.
 - **Every range written backwards asks before it runs**, as `:s` did: `:4,2sort`, `:normal`, `:read`, and under vim `:7,3` and `:'a,3|…`; `y` swaps the ends, `n` runs nothing. Under vim a bare range of two ends (`:3,7`) goes to its last line.
 - **Insert `C-o` then `:`, `/` or `?` comes back to Insert when that line ends**, by Enter or `Esc`, as vim does; a command that opens a picker leaves you there.
+- **The indent Enter, `o` or `O` carried down goes again when you leave the line without typing**: under vim on Enter, `Esc`, `C-o` or an arrow to another line, as vim does; under helix on `Esc` when that line break was all the Insert wrote, and Enter with only blanks before the cursor breaks the line at its start, as helix does. Blanks you typed yourself stay.
 
 ## 0.25.0 · 2026-11-23
 

@@ -39,6 +39,8 @@ impl Editor {
         self.edit_was_insert = true;
         self.insert_recording.clear();
         self.fresh_indent = None;
+        let here = (self.current_buffer().id(), self.current_buffer().revision());
+        self.insert_untouched = (here == self.edit_revision).then_some(here);
         // Warning: **没花掉的插入計數在這裏清**。回 Normal 的路不止 `Esc` 那一條
         // （`show_buffer` 就是一條），只在 `Esc` 那一臂清的話，一個没走完的 `5i`
         // 會把那個 5 記到下一次插入上——下一次打一個字就

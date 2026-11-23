@@ -369,9 +369,25 @@ impl Editor {
         // leave a CRLF manuscript with two kinds of line in it (#309).
         let ending = self.current_buffer().ending().to_string();
         let (line, column) = self.caret_in_line();
+        let untouched = self.insert_untouched();
         let base = self.indent_of_line(line, Some(column));
         if let Some(typed) = self.open_the_pair(&ending, &base) {
             self.insert_recording.push_str(&typed);
+            return String::new();
+        }
+        // **helix's Enter after nothing but blanks breaks the line at its
+        // start** (`insert_newline`): the line above is left empty and the
+        // line moves down whole, its blanks with it, the caret in its column.
+        let vim = self.keymap_rules().vim_indent_keys;
+        if !vim && !base.is_empty() && base.chars().count() == column {
+            self.fresh_indent = None;
+            let rope = self.current_buffer().rope();
+            let start = rope.line_to_char(line);
+            let head = self.sel.head();
+            self.insert_recording.push_str(&ending);
+            if self.edit_insert(start, &ending) {
+                self.set_cursor(head + ending.chars().count());
+            }
             return String::new();
         }
         // **縮進跟着下來**，同 vim 的 `autoindent`、helix 的 `insert_newline`：
@@ -403,7 +419,11 @@ impl Editor {
         self.current_buffer_mut().split_lines(true);
         self.insert_str(&format!("{ending}{indent}"));
         self.current_buffer_mut().split_lines(false);
-        self.note_fresh_indent(indent.chars().count(), true);
+        // helix takes the indent back only when this break is all the
+        // Insert has written.
+        if vim || untouched {
+            self.note_fresh_indent(indent.chars().count(), true);
+        }
         dropped
     }
 
