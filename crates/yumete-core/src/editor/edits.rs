@@ -1906,6 +1906,37 @@ impl Editor {
     /// A macro cannot start while one is playing, and cannot play inside
     /// itself: `q` recorded into a macro would otherwise recurse until the
     /// stack ran out.
+    /// **vim's `@:`**: the last `:` line run again, `count` times, each
+    /// its own command; `@@` after it runs it again. With none run yet it
+    /// fails as an empty register does (vim's E30).
+    pub(super) fn run_the_last_command_line(&mut self, count: usize) {
+        let Some(line) = self.last_command_here.clone() else {
+            self.status = say!("macro.no-command-line-yet");
+            self.fail_the_motion();
+            return;
+        };
+        self.last_played = Some(':');
+        for _ in 0..count.clamp(1, Self::WRITING_MAX) {
+            self.command_failed = false;
+            match self.execute(&line) {
+                Ok(crate::editor::CommandOutcome::Quit) => {
+                    self.quit_from_binding = true;
+                    return;
+                }
+                Ok(crate::editor::CommandOutcome::Continue) => {}
+                Err(err) => {
+                    self.status = err.to_string();
+                    self.fail_the_motion();
+                    return;
+                }
+            }
+            if self.command_failed {
+                self.fail_the_motion();
+                return;
+            }
+        }
+    }
+
     pub(super) fn play_register(&mut self, register: char, count: usize) {
         if self.replaying && !self.keymap_rules().vim_registers {
             return;

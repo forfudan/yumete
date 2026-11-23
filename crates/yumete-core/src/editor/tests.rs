@@ -45474,6 +45474,26 @@ fn vims_dot_mark_is_where_the_last_change_began() {
     assert_eq!(ed.current_buffer().text(), "one twafour\nfive six\nseven\n");
 }
 
+/// **vim's `@:` runs the last `:` line again** (`:h @:`), measured in nvim
+/// 0.12 `--clean`: with a count that many times, each its own undo step,
+/// and `@@` after it runs it again; with none run yet nothing happens.
+#[test]
+fn vims_at_colon_runs_the_last_command_line_again() {
+    let text = "a\nb\nc\nd\ne\nf\n";
+    let run = |keys: &str| {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        (ed.current_buffer().text(), vim_at(&ed))
+    };
+    assert_eq!(run(":s/$/X/⏎j@:"), ("aX\nbX\nc\nd\ne\nf\n".into(), (2, 1)));
+    assert_eq!(run(":s/$/X/⏎j@:j@@"), ("aX\nbX\ncX\nd\ne\nf\n".into(), (3, 1)));
+    assert_eq!(run(":s/$/X/⏎j3@:"), ("aX\nbXXX\nc\nd\ne\nf\n".into(), (2, 1)));
+    assert_eq!(run(":d⏎2@:"), ("d\ne\nf\n".into(), (1, 1)));
+    assert_eq!(run(":d⏎@:u"), ("b\nc\nd\ne\nf\n".into(), (1, 1)), "one step each");
+    assert_eq!(run(":norm Ay⏎j@:").0, "ay\nby\nc\nd\ne\nf\n");
+    assert_eq!(run("@:"), (text.into(), (1, 1)));
+}
+
 /// **vim's `gp` and `gP` leave the cursor just past what they put**
 /// (`:h gp`), every row measured in nvim 0.12 `--clean`: after the last
 /// character of text, on the line's last when nothing follows; at the

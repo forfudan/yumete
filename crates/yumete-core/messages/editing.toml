@@ -636,6 +636,12 @@ zhs = "寄存器 {0} 中的 {1} 不是有效按键"
 en = "register {0}: {1} is not a valid key"
 
 [[message]]
+# vim 的 @:：這一次還没執行過命令行（草稿）
+key = "macro.no-command-line-yet"
+zhs = "还没有执行过命令行"
+en = "no command line run yet"
+
+[[message]]
 # vim 的 @@：還没有播放過宏
 key = "macro.nothing-played"
 zhs = "还没有播放过宏"

@@ -3213,6 +3213,7 @@ impl Editor {
                 match (record, key) {
                     (true, Key::Char(c)) if c.is_ascii_alphanumeric() => self.start_recording(c),
                     (false, Key::Char('@')) => match self.last_played {
+                        Some(':') => self.run_the_last_command_line(count),
                         Some(name) => self.play_register(name, count),
                         None => {
                             self.status = say!("macro.nothing-played");
@@ -3222,6 +3223,7 @@ impl Editor {
                     (false, Key::Char(c)) if c.is_ascii_alphanumeric() || c == '"' => {
                         self.play_register(c.to_ascii_lowercase(), count)
                     }
+                    (false, Key::Char(':')) => self.run_the_last_command_line(count),
                     // A name no register has fails as an empty one does
                     // (vim's `valid_yank_reg`); the ones vim has and this
                     // editor does not play are let go.
