@@ -33447,6 +33447,39 @@ fn vims_search_offsets_land_where_they_say() {
     assert_eq!(ed.current_buffer().text(), "aa fZ bb\n   cc foo dd\nee ff\n");
 }
 
+/// **vim's forced motions** (`:h o_v`, `:h o_V`), every row measured in
+/// nvim 0.12 `--clean`: `v` makes a linewise motion charwise and exclusive
+/// and turns inclusive and exclusive about, `V` makes a charwise motion
+/// linewise; a count goes on either side, every operator takes it, and the
+/// column-1 rules of an exclusive motion still hold.
+#[test]
+fn vims_forced_motions_change_what_an_operator_takes() {
+    let text = "foo bar baz\nqux quux\nend\n";
+    let run = |keys: &str| {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        (ed.current_buffer().text(), vim_at(&ed), ed.register_text(None))
+    };
+    assert_eq!(run("dvw"), ("ar baz\nqux quux\nend\n".into(), (1, 1), "foo b".into()));
+    assert_eq!(run("dve"), ("o bar baz\nqux quux\nend\n".into(), (1, 1), "fo".into()));
+    assert_eq!(run("ldvj"), ("fux quux\nend\n".into(), (1, 2), "oo bar baz\nq".into()));
+    assert_eq!(run("jldvk"), ("fux quux\nend\n".into(), (1, 2), "oo bar baz\nq".into()));
+    assert_eq!(run("dVw"), ("qux quux\nend\n".into(), (1, 1), "foo bar baz\n".into()));
+    assert_eq!(run("dv$").0, "z\nqux quux\nend\n");
+    assert_eq!(run("wdvh").0, "fooar baz\nqux quux\nend\n");
+    assert_eq!(run("wdvb").0, "ar baz\nqux quux\nend\n");
+    assert_eq!(run("dv2w").0, "az\nqux quux\nend\n");
+    assert_eq!(run("2dvw").0, "az\nqux quux\nend\n");
+    assert_eq!(run("cvwX⎋").0, "Xo bar baz\nqux quux\nend\n");
+    assert_eq!(run("lyvj"), (text.into(), (1, 2), "oo bar baz\nq".into()));
+    assert_eq!(run("wdVe").0, "qux quux\nend\n");
+    assert_eq!(run("wdvl").0, "foo r baz\nqux quux\nend\n");
+    assert_eq!(run("wdvfz").0, "foo z\nqux quux\nend\n");
+    assert_eq!(run("wdvtz").0, "foo az\nqux quux\nend\n");
+    assert_eq!(run("jdvgg").0, "qux quux\nend\n", "an exclusive end in column 1 still makes lines");
+    assert_eq!(run("ldvjp").0, "fuoo bar baz\nqx quux\nend\n", "what it took is charwise");
+}
+
 /// **`R` 之後選區正好是換上去的那一段**。
 ///
 /// helix 鍵位下按 `R`，選中的字換成寄存器裏的那一段，選區不往後**延伸**到下一個

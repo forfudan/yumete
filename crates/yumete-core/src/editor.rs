@@ -3555,6 +3555,9 @@ pub struct Editor {
     /// vim's offset of the last `/` or `?` line (`/pat/e`), which `n` and
     /// `N` keep.
     search_offset: search::SearchOffset,
+    /// vim's `v` or `V` typed between an operator and its motion (`dvj`,
+    /// `dVw`), which the motion takes.
+    forced_motion: Option<char>,
     /// Places named by a letter, and reachable from any file (`M a`, `' a`).
     marks: HashMap<char, Spot>,
     /// Whether `.` is playing one back, so it cannot record itself.
@@ -5135,6 +5138,7 @@ impl Editor {
             last_vim_substitute: String::new(),
             last_substitution: None,
             search_offset: search::SearchOffset::None,
+            forced_motion: None,
             marks: HashMap::new(),
             repeating_edit: false,
             insert_recording: String::new(),

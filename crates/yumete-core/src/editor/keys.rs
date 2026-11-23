@@ -1232,6 +1232,10 @@ impl Editor {
         };
         self.vim_operator_key_now(op, first, key);
         self.use_reg_one = false;
+        // A forced motion lasts as long as its operator waits.
+        if !matches!(self.pending, Pending::VimOperator { .. }) {
+            self.forced_motion = None;
+        }
     }
 
     fn vim_operator_key_now(&mut self, op: char, first: Option<char>, key: Key) {
@@ -1253,6 +1257,13 @@ impl Editor {
                 self.pending = Pending::VimOperator { op, first };
                 return;
             }
+        }
+        // **`v` and `V` force the motion** (`:h o_v`, `:h o_V`): `dvj` is
+        // charwise, `dvw` inclusive, `dve` exclusive, `dVw` whole lines.
+        if let (None, Key::Char(c @ ('v' | 'V'))) = (first, key) {
+            self.forced_motion = Some(c);
+            self.pending = Pending::VimOperator { op, first };
+            return;
         }
         // `d<Enter>` is `d+` (`:h <CR>`): the next line, linewise.
         let key = match (key, first) {
@@ -1853,6 +1864,23 @@ impl Editor {
             }
             _ => (step, None),
         };
+        // **A forced motion** (`:h o_v`): `v` makes a linewise motion
+        // exclusive and turns an inclusive one exclusive or the other way,
+        // `V` makes a charwise one linewise. The rules for an exclusive end
+        // in column 1 still hold, as in vim.
+        let lines_made_charwise = step.reach == crate::vim::Reach::Linewise && self.forced_motion == Some('v');
+        let lands_on_writing = step.first_non_blank;
+        let step = {
+            use crate::vim::Reach;
+            let reach = match (self.forced_motion.take(), step.reach) {
+                (Some('v'), Reach::Linewise | Reach::Inclusive) => Reach::Exclusive,
+                (Some('v'), Reach::Exclusive) => Reach::Inclusive,
+                (Some('V'), Reach::Exclusive | Reach::Inclusive) => Reach::Linewise,
+                (_, reach) => reach,
+            };
+            let first_non_blank = step.first_non_blank && reach == Reach::Linewise;
+            crate::vim::Step { reach, first_non_blank, ..step }
+        };
         // **An object is already both ends**; everything else is walked to.
         if step.reach == crate::vim::Reach::Object {
             // **數目交給對象**，括號引號也交。`vim::object` 造動作的時候數不到
@@ -2096,6 +2124,19 @@ impl Editor {
                 self.fail_the_motion();
             }
             return;
+        };
+        // A line motion made charwise ends where its caret would: in the
+        // column wanted (`dvj`), or on the first non-blank (`dv+`).
+        let target = match lines_made_charwise {
+            true => {
+                let rope = self.current_buffer().rope();
+                let line = rope.char_to_line(target.min(rope.len_chars()));
+                match lands_on_writing {
+                    true => motion::line_first_non_blank(rope, rope.line_to_char(line)),
+                    false => self.char_at_line_column(line, self.column_wanted()),
+                }
+            }
+            false => target,
         };
         let rope = self.current_buffer().rope();
         // Warning: **動不了算不算數，問的是動作的類，不是動作本身**（拿 nvim 逐欄
