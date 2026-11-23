@@ -25,6 +25,10 @@ Written for people who use it to write, not for the commit log: each line says w
 - **Under vim, `cc`, `S` and a linewise `c` keep the line's leading blanks in prose too**, as nvim's autoindent does in a text file, and add none; with nothing typed they go again on `Esc`.
 
 
+### Fixed
+
+- **`whitespace = "selection"` marks a space selected alone**: `v` on one blank shows its glyph, as a longer selection does.
+
 ## 0.25.0 · 2026-11-23
 
 ### Added

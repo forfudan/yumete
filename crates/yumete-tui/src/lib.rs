@@ -11451,6 +11451,16 @@ impl BlankMarks {
         }
     }
 
+    /// **The selections the `selection` mode marks inside**: the primary
+    /// when it is grown or while `v` is on, where a selection of one
+    /// character is still one the reader made, and the secondaries. A bare
+    /// cursor outside `v` marks nothing. A peek marks no blanks at all
+    /// ([`Self::of`]).
+    pub(crate) fn selections(editor: &Editor, has_selection: bool, primary: (usize, usize), secondary: &[(usize, usize)]) -> Vec<(usize, usize)> {
+        let chosen = has_selection || (editor.is_extending() && editor.mode() == Mode::Normal);
+        chosen.then_some(primary).into_iter().chain(secondary.iter().copied()).collect()
+    }
+
     /// The blanks of `from..to` on `line` to mark, as rope indices.
     pub(crate) fn on(&self, rope: &yumete_core::Rope, line: usize, from: usize, to: usize) -> Vec<usize> {
         yumete_core::whitespace::marks(rope, line, from, to, self.show, &self.selected)
@@ -15015,7 +15025,7 @@ fn draw_horizontal(
     let blank_marks = BlankMarks::of(
         config,
         peek.is_some(),
-        has_selection.then_some((sel_start, sel_end)).into_iter().chain(secondary.iter().copied()).collect(),
+        BlankMarks::selections(editor, has_selection, (sel_start, sel_end), &secondary),
     );
     // Where the next page of a chain starts: the row after this page's last.
     // `None` once the text has run out, so a page past the end stays blank.
@@ -25487,6 +25497,17 @@ fn squeezed(text: &str) -> String {
         assert_eq!(row_with_blanks(&editor, "boundary", 0), format!("ab{tab}c d\u{22c5}\u{22c5}e\u{22c5}"));
         assert_eq!(row_with_blanks(&editor, "trailing", 0), format!("ab{}c d  e\u{22c5}", " ".repeat(room)));
         assert_eq!(row_with_blanks(&editor, "selection", 0), format!("ab{}c d  e", " ".repeat(room)), "a bare cursor");
+        // `v` on one space: a selection of one character, marked.
+        for keymap in ["helix", "vim"] {
+            let mut one = editor_with("ab\tc d  e \n");
+            one.execute(&format!(":keymap {keymap}")).unwrap();
+            for c in "0llllv".chars() {
+                one.on_key(Key::Char(c));
+            }
+            assert_eq!(row_with_blanks(&one, "selection", 0), format!("ab{}c\u{22c5}d  e", " ".repeat(room)), "{keymap}: v on a space");
+            one.on_key(Key::Esc);
+            assert_eq!(row_with_blanks(&one, "selection", 0), format!("ab{}c d  e", " ".repeat(room)), "{keymap}: a bare cursor on a space");
+        }
         for c in "vllll".chars() {
             editor.on_key(Key::Char(c));
         }

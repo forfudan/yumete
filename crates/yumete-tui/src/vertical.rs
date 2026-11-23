@@ -1164,7 +1164,7 @@ pub fn draw(
     let blank_marks = crate::BlankMarks::of(
         config,
         peek.is_some(),
-        has_selection.then_some((sel_start, sel_end)).into_iter().chain(secondary.iter().copied()).collect(),
+        crate::BlankMarks::selections(editor, has_selection, (sel_start, sel_end), &secondary),
     );
     // **光標停在括號上的時候，另一半那一格塗成金的**——竪排這一頁
     // 也有，理由與規矩全在 `lib.rs` 的 `partner` 那一段：只畫遠那一半，金，不換
