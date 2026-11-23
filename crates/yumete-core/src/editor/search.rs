@@ -277,11 +277,31 @@ impl Editor {
             true => self.sel.head(),
             false => self.sel.anchor().min(self.sel.head()),
         };
-        let found = if forward {
-            search_forward(rope, &look, (self.sel.head() + 1).min(len), within.clone(), end_is_last)
-        } else {
-            search_backward(rope, &look, back_from, within.clone())
+        // **vim's offset** (`/pat/e`): the search starts where the cursor
+        // would be without it, and lands where it says.
+        let offset = match vim {
+            true => self.search_offset,
+            false => SearchOffset::None,
         };
+        let from = offset.undone(rope, self.sel.head());
+        let back_from = match vim {
+            true => from,
+            false => back_from,
+        };
+        let found = if forward {
+            search_forward(rope, &look, (from + 1).min(len), within.clone(), end_is_last)
+        } else {
+            let hit = search_backward(rope, &look, back_from, within.clone());
+            // Counted from its end, the match the cursor stands at the end
+            // of is not the one before it.
+            match (offset, hit) {
+                (SearchOffset::End(_), Some((pos, end))) if motion::prev_grapheme(rope, end).max(pos) >= from => {
+                    search_backward(rope, &look, pos, within.clone())
+                }
+                _ => hit,
+            }
+        };
+        let landing = found.map_or(0, |(pos, end)| offset.applied(rope, pos, end.min(len)));
         let counted = found.map(|(pos, _)| super::count_matches(rope, &look, within, pos));
         let (counted, hit_lines) = match counted {
             Some((nth, total, lines)) => (Some((nth, total)), lines),
@@ -335,12 +355,12 @@ impl Editor {
                     }
                     // vim's Visual cursor goes to the match's first
                     // character either way, as Normal mode's does.
-                    (true, true) => self.sel.set_head(pos),
+                    (true, true) => self.sel.set_head(landing),
                     // vim's cursor goes to the match's first character
                     // (on the last, `/bar` then `x` would take the `r`).
                     (false, true) => {
-                        self.sel.set_anchor(pos);
-                        self.sel.set_head(pos);
+                        self.sel.set_anchor(landing);
+                        self.sel.set_head(landing);
                         let merged = self.sel.normalize();
                         self.say_the_merge(merged);
                     }
@@ -1048,4 +1068,116 @@ fn join_shifts(text: &str, joined: &[usize]) -> Vec<usize> {
 /// 人回去找自己哪裏打錯了。
 fn as_typed(pattern: &str) -> &str {
     pattern.strip_prefix("(?i)").unwrap_or(pattern)
+}
+
+/// **vim's search offset** (`:h search-offset`), what follows the closing
+/// `/` of a `/` line (`?` of a `?` one): kept with the pattern, so `n` and
+/// `N` go where the search went.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) enum SearchOffset {
+    #[default]
+    None,
+    /// `/pat/+2`, `/pat/-`: lines from the match's, at the line's start; an
+    /// operator takes whole lines.
+    Lines(isize),
+    /// `/pat/s-1`, `/pat/b+2`: characters from the match's first.
+    Start(isize),
+    /// `/pat/e`, `/pat/e+1`: characters from the match's last; an operator
+    /// takes the character it lands on.
+    End(isize),
+}
+
+impl SearchOffset {
+    /// The offset `text` spells; anything after it is let go, as vim does
+    /// (`/and/or` looks for `and`).
+    pub(super) fn read(text: &str) -> Self {
+        let number = |s: &str| -> isize {
+            let (sign, rest) = match s.strip_prefix('-') {
+                Some(rest) => (-1, rest),
+                None => (1, s.strip_prefix('+').unwrap_or(s)),
+            };
+            let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+            match digits.parse::<isize>() {
+                Ok(n) => sign * n,
+                Err(_) if s.starts_with(['+', '-']) => sign,
+                Err(_) => 0,
+            }
+        };
+        match text.chars().next() {
+            Some('e') => Self::End(number(&text[1..])),
+            Some('s' | 'b') => Self::Start(number(&text[1..])),
+            Some(c) if c.is_ascii_digit() || c == '+' || c == '-' => Self::Lines(number(text)),
+            _ => Self::None,
+        }
+    }
+
+    /// Where a match from `start` to `end` (one past its last character)
+    /// puts the cursor.
+    pub(super) fn applied(self, rope: &ropey::Rope, start: usize, end: usize) -> usize {
+        match self {
+            Self::None => start,
+            Self::Start(n) => step_past_breaks(rope, start, n),
+            Self::End(n) => step_past_breaks(rope, motion::prev_grapheme(rope, end).max(start), n),
+            Self::Lines(n) => {
+                let line = (rope.char_to_line(start.min(rope.len_chars())) as isize + n).clamp(0, motion::last_line(rope) as isize);
+                rope.line_to_char(line as usize)
+            }
+        }
+    }
+
+    /// Where the next search starts from `at`, the offset taken back, so a
+    /// search does not stand still on its own offset (`/pat/s-2` then `n`).
+    pub(super) fn undone(self, rope: &ropey::Rope, at: usize) -> usize {
+        match self {
+            Self::Start(n) | Self::End(n) => step_past_breaks(rope, at, -n),
+            _ => at,
+        }
+    }
+}
+
+/// `n` characters on from `at` (back when negative), as vim's `incl` and
+/// `decl` count them: a non-empty line's break is no place to stand.
+fn step_past_breaks(rope: &ropey::Rope, mut at: usize, n: isize) -> usize {
+    let len = rope.len_chars();
+    let breaks = |c: char| c == '\n' || c == '\r';
+    for _ in 0..n.unsigned_abs() {
+        if n > 0 {
+            let next = motion::next_grapheme(rope, at);
+            if next >= len {
+                break;
+            }
+            let line = rope.char_to_line(next);
+            at = match breaks(rope.char(next)) && next > rope.line_to_char(line) {
+                true if line + 1 < rope.len_lines() && rope.line_to_char(line + 1) < len => rope.line_to_char(line + 1),
+                true => break,
+                false => next,
+            };
+        } else {
+            if at == 0 {
+                break;
+            }
+            let line = rope.char_to_line(at);
+            let prev = motion::prev_grapheme(rope, at);
+            at = match at == rope.line_to_char(line) && line > 0 && rope.line_to_char(line - 1) < prev {
+                true => motion::prev_grapheme(rope, prev),
+                false => prev,
+            };
+        }
+    }
+    at
+}
+
+/// A `/` line split where vim splits it: the pattern, and what follows its
+/// first unescaped `delim`, when there is one.
+pub(super) fn split_search_offset(line: &str, delim: char) -> Option<(&str, &str)> {
+    let mut escaped = false;
+    for (at, c) in line.char_indices() {
+        match c {
+            _ if escaped => escaped = false,
+            '\\' => escaped = true,
+            c if c == delim => return Some((&line[..at], &line[at + c.len_utf8()..])),
+            _ => {}
+        }
+    }
+    None
 }

@@ -1491,6 +1491,7 @@ impl Editor {
                 return;
             };
             self.last_search = pattern;
+            self.search_offset = super::search::SearchOffset::None;
             self.search_forward = c == '*';
             self.hits = None;
             return self.vim_operator_to_match_from(op, count, c == '*', begins);
@@ -1587,7 +1588,31 @@ impl Editor {
 
     /// The same, the matches counted from `from` rather than the cursor.
     fn vim_operator_to_match_from(&mut self, op: char, count: Option<usize>, forward: bool, from: usize) {
-        let Some((at, _)) = self.search_hit_from(forward, from, count.unwrap_or(1)) else { return };
+        let offset = self.search_offset;
+        let from = offset.undone(self.current_buffer().rope(), from);
+        let Some((at, end)) = self.search_hit_from(forward, from, count.unwrap_or(1)) else { return };
+        // **An offset changes the motion** (`:h search-offset`): `e` takes
+        // the character it lands on, a line offset whole lines.
+        let here = self.sel.head();
+        let rope = self.current_buffer().rope();
+        let to = offset.applied(rope, at, end);
+        match offset {
+            super::search::SearchOffset::End(_) => {
+                self.use_reg_one = true;
+                self.do_vim(op, motion::Span::Over { anchor: here.min(to), head: here.max(to) });
+                self.use_reg_one = false;
+                return;
+            }
+            super::search::SearchOffset::Lines(_) => {
+                let (a, b) = (rope.char_to_line(here), rope.char_to_line(to));
+                self.use_reg_one = true;
+                self.do_vim_lines(op, a.min(b), a.max(b));
+                self.use_reg_one = false;
+                return;
+            }
+            _ => {}
+        }
+        let at = to;
         // **A match at a line's end is reached on the line's last
         // character**, where vim's cursor stands after the search: `d/$`
         // keeps that character, as `d/$` in vim does.

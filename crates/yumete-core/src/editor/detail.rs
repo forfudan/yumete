@@ -384,6 +384,7 @@ impl Editor {
         );
         let found = self.every_match(&pattern).len();
         self.last_search = pattern;
+        self.search_offset = super::search::SearchOffset::None;
         // 這一趟不是走到某一處，所以上一張命中名單作廢——`n` 從現在的地方數起。
         self.hits = None;
         self.status = say!("search.hits", found);
@@ -422,6 +423,7 @@ impl Editor {
             return;
         }
         self.last_search = pattern;
+        self.search_offset = super::search::SearchOffset::None;
         // **vim's `#` searches backward from then on**: `n` after it goes
         // back and `N` on, as after `?`, over the matches found here and
         // past them.
@@ -479,6 +481,7 @@ impl Editor {
             return self.fail_the_motion();
         };
         self.last_search = pattern;
+        self.search_offset = super::search::SearchOffset::None;
         self.search_forward = !back;
         self.hits = None;
         let Some((at, _)) = self.search_hit_from(!back, begins, count) else {

@@ -3552,6 +3552,9 @@ pub struct Editor {
     /// The last `:s` as written: its pattern, its replacement and its
     /// flags, for vim's `:&`, `&` and `g&` to run again.
     last_substitution: Option<(String, String, String)>,
+    /// vim's offset of the last `/` or `?` line (`/pat/e`), which `n` and
+    /// `N` keep.
+    search_offset: search::SearchOffset,
     /// Places named by a letter, and reachable from any file (`M a`, `' a`).
     marks: HashMap<char, Spot>,
     /// Whether `.` is playing one back, so it cannot record itself.
@@ -5131,6 +5134,7 @@ impl Editor {
             last_replacement: String::new(),
             last_vim_substitute: String::new(),
             last_substitution: None,
+            search_offset: search::SearchOffset::None,
             marks: HashMap::new(),
             repeating_edit: false,
             insert_recording: String::new(),

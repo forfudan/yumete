@@ -12,6 +12,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **vim's `C-r C-w`, `C-r C-a` and `C-r C-l` on the `:` and `/` lines** put the word, the WORD or the line under the cursor there.
 - **vim's `:&`, `:&&`, `&` and `g&`**: `:&` (and under vim `:s` alone) runs the last `:s` again without its flags and `:&&` with them, over a range too (`:%&&`); `&` is nvim's `:&&` on this line, a count taking that many lines; `g&` runs it over every line with the last search's pattern. **`:s//X/` takes the last pattern searched for**, and under vim a `:s` pattern is what `n` looks for next.
 - **vim's `g0`, `g^`, `gm` and `g$` go by the screen row** of a wrapped line: its start, its first non-blank, half the text's width into it, and its end (`3g$` two rows down first); after an operator `g$` is inclusive and the rest exclusive.
+- **vim's search offsets**: `/pat/e`, `/pat/e+1`, `/pat/s-1`, `/pat/b+2`, `/pat/+2` and `?pat?e` land where vim lands, a line's break not counted; `n` and `N` keep the offset, an empty `/` line keeps it, and `//`, a pattern alone or `*` drop it. After an operator `e` takes the character it lands on and a line offset whole lines (`d/pat/e`, `d/pat/+1`). A `/` in a vim pattern is written `\/`.
 
 ### Changed
 

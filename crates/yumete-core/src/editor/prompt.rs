@@ -1220,6 +1220,24 @@ impl Editor {
                 if remember_line(&mut self.search_history, &pattern) {
                     self.keep_in_the_history('/', &pattern);
                 }
+                // **vim's `/pat/offset`** (`?pat?offset`): an empty line keeps
+                // the pattern and the offset, a pattern alone has none.
+                let pattern = match (self.as_vim() && self.sift.is_none(), pattern.is_empty()) {
+                    (true, false) => {
+                        let delim = if self.search_forward { '/' } else { '?' };
+                        match super::search::split_search_offset(&pattern, delim) {
+                            Some((head, offset)) => {
+                                self.search_offset = super::search::SearchOffset::read(offset);
+                                head.to_string()
+                            }
+                            None => {
+                                self.search_offset = super::search::SearchOffset::None;
+                                pattern
+                            }
+                        }
+                    }
+                    _ => pattern,
+                };
                 if !pattern.is_empty() {
                     self.last_search = pattern;
                 }

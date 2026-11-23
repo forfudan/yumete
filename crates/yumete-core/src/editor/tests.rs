@@ -33403,6 +33403,50 @@ fn vims_g0_and_g_dollar_go_by_the_screen_row() {
     assert_eq!(run("15ldg$"), ("一二三四五六七八九十甲乙丙丁戊子丑寅卯辰\n  xy\n".into(), (1, 16)));
 }
 
+/// **vim's search offsets** (`:h search-offset`), every row measured in nvim
+/// 0.12 `--clean`: `e`, `s` and `b` count characters from the match's end or
+/// start, a line's break not counted; a number alone counts lines, to the
+/// line's start. `n` and `N` keep the offset, `//` and a pattern alone drop
+/// it, an empty line keeps it, and `*` drops it. After an operator `e` is
+/// inclusive, a line offset linewise, and `s` exclusive.
+#[test]
+fn vims_search_offsets_land_where_they_say() {
+    let text = "aa foo bb\ncc foo dd\nee ff\ngg foo hh\nii\n";
+    let run = |keys: &str| {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        (ed.current_buffer().text(), vim_at(&ed))
+    };
+    assert_eq!(run("/foo/e⏎").1, (1, 6));
+    assert_eq!(run("/foo/e+1⏎").1, (1, 7));
+    assert_eq!(run("/foo/e-1⏎").1, (1, 5));
+    assert_eq!(run("/foo/s-1⏎").1, (1, 3));
+    assert_eq!(run("/foo/b+2⏎").1, (1, 6));
+    assert_eq!(run("/foo/+1⏎").1, (2, 1));
+    assert_eq!(run("/foo/-1⏎").1, (1, 1));
+    assert_eq!(run("/foo/+9⏎").1, (5, 1));
+    assert_eq!(run("/foo/e+9⏎").1, (2, 6), "a line's break is not counted");
+    assert_eq!(run("/foo/e⏎n").1, (2, 6));
+    assert_eq!(run("/foo/e⏎N").1, (4, 6));
+    assert_eq!(run("/foo/s-1⏎n").1, (2, 3));
+    assert_eq!(run("G?foo?e⏎").1, (4, 6));
+    assert_eq!(run("G?foo?e⏎n").1, (2, 6));
+    assert_eq!(run("/foo/e⏎//⏎").1, (2, 4));
+    assert_eq!(run("/foo/e⏎/foo⏎").1, (2, 4));
+    assert_eq!(run("/foo/e⏎/⏎").1, (2, 6), "an empty line keeps it");
+    assert_eq!(run("/foo/e⏎*").1, (2, 4));
+    assert_eq!(run("d/foo/e⏎"), (" bb\ncc foo dd\nee ff\ngg foo hh\nii\n".into(), (1, 1)));
+    assert_eq!(run("d/foo/+1⏎"), ("ee ff\ngg foo hh\nii\n".into(), (1, 1)));
+    assert_eq!(run("wd/foo/s-1⏎"), ("aa  foo dd\nee ff\ngg foo hh\nii\n".into(), (1, 4)));
+    assert_eq!(run("y/foo/e⏎").1, (1, 1));
+    let mut ed = typed_vim("x and/or y and z\nand q\n");
+    feed_vim(&mut ed, "/and/or⏎");
+    assert_eq!(vim_at(&ed), (1, 3), "what follows is let go");
+    let mut ed = typed_vim("aa foo bb\n   cc foo dd\nee ff\n");
+    feed_vim(&mut ed, "/o/e⏎cnZ⎋");
+    assert_eq!(ed.current_buffer().text(), "aa fZ bb\n   cc foo dd\nee ff\n");
+}
+
 /// **`R` 之後選區正好是換上去的那一段**。
 ///
 /// helix 鍵位下按 `R`，選中的字換成寄存器裏的那一段，選區不往後**延伸**到下一個
