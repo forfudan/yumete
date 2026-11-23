@@ -45494,6 +45494,30 @@ fn vims_at_colon_runs_the_last_command_line_again() {
     assert_eq!(run("@:"), (text.into(), (1, 1)));
 }
 
+/// **vim's `C-r C-w`, `C-r C-a` and `C-r C-l` on the `:` and `/` lines**,
+/// measured in nvim 0.12 `--clean`: the word under the cursor or the first
+/// after it on the line, the WORD likewise, and the whole line.
+#[test]
+fn vims_ctrl_r_ctrl_w_puts_the_word_under_the_cursor_on_the_line() {
+    let text = "foo.bar baz-qux\n  zz\n";
+    let run = |keys: &str, opener: char, what: char| {
+        let mut ed = typed_vim(text);
+        press(&mut ed, keys);
+        ed.on_key(Key::Char(opener));
+        ed.on_key(Key::Ctrl('r'));
+        ed.on_key(Key::Ctrl(what));
+        ed.command_line.clone()
+    };
+    assert_eq!(run("", ':', 'w'), "foo");
+    assert_eq!(run("w", ':', 'w'), "bar", "on the `.`, the word after it");
+    assert_eq!(run("w", ':', 'a'), "foo.bar");
+    assert_eq!(run("", ':', 'l'), "foo.bar baz-qux");
+    assert_eq!(run("3l", '/', 'w'), "bar");
+    assert_eq!(run("fz", ':', 'w'), "baz");
+    assert_eq!(run("j", ':', 'w'), "zz");
+    assert_eq!(run("j", ':', 'l'), "  zz");
+}
+
 /// **vim's `gp` and `gP` leave the cursor just past what they put**
 /// (`:h gp`), every row measured in nvim 0.12 `--clean`: after the last
 /// character of text, on the line's last when nothing follows; at the

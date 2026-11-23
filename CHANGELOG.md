@@ -9,6 +9,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **vim's `:put` and `:delete`**: `:put [x]` (`:pu`) puts a register on lines of its own below the cursor's line or a range's last, `:put!` above, `:0put` above the first, and `"_` an empty line; `:delete [x] [count]` (`:d`) takes the cursor's line, a range's lines (`:3,5d a`) or a count of them (`:d 3`) into a register as `dd` does. `:de` is `:delete` now, as in vim, and no longer `:decimo`.
 - **vim's `.` mark**: `` `. `` goes to where the last change was made and `'.` to that line, as jumps, so ``` `` ``` comes back; `` d`. `` and the like reach it as any mark.
 - **vim's `@:`** runs the last `:` line again, with a count that many times, and `@@` after it runs it again.
+- **vim's `C-r C-w`, `C-r C-a` and `C-r C-l` on the `:` and `/` lines** put the word, the WORD or the line under the cursor there.
 
 ### Changed
 

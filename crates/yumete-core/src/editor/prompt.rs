@@ -1029,6 +1029,17 @@ impl Editor {
             return false;
         }
         self.pending = Pending::None;
+        // **vim's `C-r C-w`, `C-r C-a` and `C-r C-l`** on the `:` and `/`
+        // lines: the word, the WORD or the line under the cursor.
+        if let (true, Mode::Command | Mode::Search, Key::Ctrl(what @ ('w' | 'a' | 'l'))) = (self.as_vim(), self.mode, key) {
+            for c in self.text_under_the_cursor(what).chars() {
+                self.type_into_prompt(c);
+            }
+            if self.mode == Mode::Command {
+                self.ask_for_a_trial();
+            }
+            return true;
+        }
         let Key::Char(name) = key else { return false };
         let held = match name {
             '"' => self.register_text(None),
@@ -1049,6 +1060,47 @@ impl Editor {
             }
         }
         true
+    }
+
+    /// What vim's `C-r C-w` (`what` is `w`), `C-r C-a` (`a`) and `C-r C-l`
+    /// (`l`) put on the line: the word under the cursor or the first one
+    /// after it on its line, the run of non-blanks likewise, or the line.
+    fn text_under_the_cursor(&self, what: char) -> String {
+        let rope = self.current_buffer().rope();
+        let here = self.sel.head().min(rope.len_chars());
+        let line = rope.char_to_line(here);
+        let start = rope.line_to_char(line);
+        let text = motion::line_text(rope, line);
+        let spans: Vec<(usize, usize)> = match what {
+            'l' => return text,
+            'w' => motion::line_words(rope, line, self.word_grain(), self.segmenter.as_ref())
+                .into_iter()
+                .filter(|&(a, _)| rope.get_char(a).is_some_and(|c| c.is_alphanumeric() || c == '_'))
+                .collect(),
+            _ => {
+                let mut spans = Vec::new();
+                let mut open = None;
+                for (i, c) in text.chars().enumerate() {
+                    match (c.is_whitespace(), open) {
+                        (false, None) => open = Some(start + i),
+                        (true, Some(a)) => {
+                            spans.push((a, start + i));
+                            open = None;
+                        }
+                        _ => {}
+                    }
+                }
+                if let Some(a) = open {
+                    spans.push((a, start + text.chars().count()));
+                }
+                spans
+            }
+        };
+        spans
+            .into_iter()
+            .find(|&(_, b)| b > here)
+            .map(|(a, b)| rope.slice(a..b).to_string())
+            .unwrap_or_default()
     }
 
     /// A character typed into a prompt, at the caret.
