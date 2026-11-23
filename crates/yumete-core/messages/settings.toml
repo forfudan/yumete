@@ -749,13 +749,13 @@ zhs = "关闭后不再记录或读取：各文件上次的位置、最近的文�
 en = "when off, none of this is saved or read: the line each file was left on, recent files and projects, the last session"
 
 [[message]]
-# 設置：在哪幾欄鋪一道底紋（草稿）
+# 設置：在哪幾欄鋪一道底紋
 key = "settings.editor.rulers"
-zhs = "竖线"
+zhs = "列标尺"
 en = "rulers"
 
 [[message]]
-# 設置：在哪幾欄鋪一道底紋——一句話（草稿）
+# 設置：在哪幾欄鋪一道底紋——一句話
 key = "settings.editor.rulers.hint"
 zhs = "在这几列各铺一道底纹，如 80 100"
 en = "a faint stripe down each of these columns, such as 80 100"
@@ -785,37 +785,37 @@ zhs = "光标与边缘之间至少保留几行(竖排为几纵)"
 en = "how many lines (columns, on a vertical page) to keep between the cursor and the edge"
 
 [[message]]
-# 設置：選區高亮（草稿）
+# 設置：選區高亮
 key = "settings.editor.selection-highlight"
 zhs = "选区高亮"
 en = "selection highlight"
 
 [[message]]
-# 設置：選區高亮是否區分大小寫（草稿）
+# 設置：選區高亮是否區分大小寫
 key = "settings.editor.selection-highlight-case"
 zhs = "选区高亮的大小写"
 en = "selection highlight case"
 
 [[message]]
-# 設置：選區高亮是否區分大小寫——一句話（草稿）
+# 設置：選區高亮是否區分大小寫——一句話
 key = "settings.editor.selection-highlight-case.hint"
 zhs = "选区高亮比较拉丁字母时是否区分大小写"
 en = "whether the copies lit must match the selection's case"
 
 [[message]]
-# 設置：選區高亮也認繁簡（草稿）
+# 設置：選區高亮也認繁簡
 key = "settings.editor.selection-highlight-glyphs"
-zhs = "选区高亮认繁简"
+zhs = "选区高亮匹配繁简"
 en = "selection highlight variants"
 
 [[message]]
-# 設置：選區高亮也認繁簡——一句話（草稿）
+# 設置：選區高亮也認繁簡——一句話
 key = "settings.editor.selection-highlight-glyphs.hint"
 zhs = "选区高亮把繁体字和简体字当作同一个字（选「書」也标出「书」），与搜索面板的开关无关"
 en = "light simplified and traditional forms as one character (書 lights 书), apart from the search panel's switch"
 
 [[message]]
-# 設置：選區高亮——一句話（草稿）
+# 設置：選區高亮——一句話
 key = "settings.editor.selection-highlight.hint"
 zhs = "有选区时，屏幕上同样的文字都标出淡底色；多个选区时按主选区"
 en = "light every other copy of the selected text on the screen; with several selections, the primary one's"
@@ -977,13 +977,13 @@ zhs = "竖排时一格内横排几个半角字符，年份、页码就不会一�
 en = "half-width characters set across inside one cell, so a year is not one digit to a row"
 
 [[message]]
-# 設置：想寫多長，超出的部分換底色（草稿）
+# 設置：想寫多長，超出的部分換底色
 key = "settings.editor.tint-past"
 zhs = "超出变色"
 en = "tint past"
 
 [[message]]
-# 設置：想寫多長，超出的部分換底色——一句話（草稿）
+# 設置：想寫多長，超出的部分換底色——一句話
 key = "settings.editor.tint-past.hint"
 zhs = "只作提示：超出此列的部分换底色，不换行"
 en = "a guide, not a break: everything past this column is tinted"
@@ -1049,37 +1049,37 @@ zhs = "哪些键可以跨越行尾(vim 键位)。只能是 b h l < > ~"
 en = "which keys cross a line end (vim keymap): b h l < > ~"
 
 [[message]]
-# 設置：空白記號（草稿）
+# 設置：空白記號
 key = "settings.editor.whitespace"
-zhs = "空白记号"
+zhs = "空白字符标记"
 en = "whitespace marks"
 
 [[message]]
-# 設置：空格的記號（草稿）
+# 設置：空格的記號
 key = "settings.editor.whitespace-space-character"
 zhs = "空格记号"
 en = "space mark"
 
 [[message]]
-# 設置：空格的記號——一句話（草稿）
+# 設置：空格的記號——一句話
 key = "settings.editor.whitespace-space-character.hint"
 zhs = "标空格用的字符，要占一格"
 en = "the character a space is marked with, one cell wide"
 
 [[message]]
-# 設置：製表符的記號（草稿）
+# 設置：製表符的記號
 key = "settings.editor.whitespace-tab-character"
 zhs = "制表符记号"
 en = "tab mark"
 
 [[message]]
-# 設置：製表符的記號——一句話（草稿）
+# 設置：製表符的記號——一句話
 key = "settings.editor.whitespace-tab-character.hint"
 zhs = "标制表符用的字符，画在它的第一格，要占一格"
 en = "the character in a tab's first cell, one cell wide"
 
 [[message]]
-# 設置：空白記號——一句話（草稿）
+# 設置：空白記號——一句話
 key = "settings.editor.whitespace.hint"
 zhs = "在空格和制表符的格子里画一个淡色记号；“边界”不标词与词之间的单个空格"
 en = "a faint mark in the cells of spaces and tabs; boundary leaves out the single space between words"
@@ -2075,19 +2075,19 @@ zhs = "页宽"
 en = "width"
 
 [[message]]
-# 設置面板：選區高亮的大小寫——代碼裏區分、正文與註釋裏不區分，按每一處自己的位置（草稿）
+# 設置面板：選區高亮的大小寫——代碼裏區分、正文與註釋裏不區分，按每一處自己的位置
 key = "settings.pick.selection-highlight-case.by-place"
 zhs = "代码里区分，正文和注释里不区分"
 en = "respected in code, ignored in prose and comments"
 
 [[message]]
-# 設置面板：選區高亮的大小寫——不區分（草稿）
+# 設置面板：選區高亮的大小寫——不區分
 key = "settings.pick.selection-highlight-case.ignore"
 zhs = "不区分"
 en = "ignore"
 
 [[message]]
-# 設置面板：選區高亮的大小寫——區分（草稿）
+# 設置面板：選區高亮的大小寫——區分
 key = "settings.pick.selection-highlight-case.respect"
 zhs = "区分"
 en = "respect"
@@ -2231,31 +2231,31 @@ zhs = "一律转向"
 en = "all turned"
 
 [[message]]
-# 設置面板：空白記號——全部（草稿）
+# 設置面板：空白記號——全部
 key = "settings.pick.whitespace.all"
 zhs = "全部"
 en = "all"
 
 [[message]]
-# 設置面板：空白記號——行首行尾、製表符、連着的空格（草稿）
+# 設置面板：空白記號——行首行尾、製表符、連着的空格
 key = "settings.pick.whitespace.boundary"
 zhs = "边界：行首行尾、制表符、连着的空格"
 en = "boundary: leading and trailing, tabs, runs of spaces"
 
 [[message]]
-# 設置面板：空白記號——都不畫（草稿）
+# 設置面板：空白記號——都不畫
 key = "settings.pick.whitespace.off"
 zhs = "关闭"
 en = "off"
 
 [[message]]
-# 設置面板：空白記號——選區裏的（草稿）
+# 設置面板：空白記號——選區裏的
 key = "settings.pick.whitespace.selection"
 zhs = "选区内"
 en = "inside selections"
 
 [[message]]
-# 設置面板：空白記號——行尾的（草稿）
+# 設置面板：空白記號——行尾的
 key = "settings.pick.whitespace.trailing"
 zhs = "行尾"
 en = "trailing"
@@ -2545,7 +2545,7 @@ zhs = "0 = 不缩进"
 en = "0 = no indent"
 
 [[message]]
-# 設置：0 的意思——不換底色（草稿）
+# 設置：0 的意思——不換底色
 key = "settings.zero.no-tint"
 zhs = "0 = 不变色"
 en = "0 = no tint"
