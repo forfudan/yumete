@@ -48149,6 +48149,30 @@ fn vims_range_before_a_bar_checks_both_ends() {
     assert_eq!(ed.current_buffer().text(), "a\na\nb\na\n");
 }
 
+/// **vim's Insert `C-o` then `:`, `/` or `?` comes back to Insert when the
+/// line ends** (measured in nvim), by Enter or by `Esc`, and after the
+/// question the line asked.
+#[test]
+fn vims_insert_ctrl_o_comes_back_after_a_command_line() {
+    let text = "abc\nfoo\n";
+    for (keys, want) in [
+        ("iᵒ:⎋Q⎋", "Qabc\nfoo\n"),
+        ("iᵒ:2⏎Q⎋", "abc\nQfoo\n"),
+        ("iᵒ/foo⏎Q⎋", "abc\nQfoo\n"),
+        ("iᵒ/foo⎋Q⎋", "Qabc\nfoo\n"),
+        ("jiᵒ?abc⏎Q⎋", "Qabc\nfoo\n"),
+        ("jiᵒ?abc⎋Q⎋", "abc\nQfoo\n"),
+        ("Aᵒ:⎋Q⎋", "abcQ\nfoo\n"),
+        ("Aᵒ/o⏎Q⎋", "abc\nfQoo\n"),
+        ("iᵒ:s/b/X/c⏎yQ⎋", "QaXc\nfoo\n"),
+    ] {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        assert_eq!(ed.current_buffer().text(), want, "{keys}");
+        assert_eq!(ed.mode, Mode::Normal, "{keys}");
+    }
+}
+
 /// **vim's Insert `C-o` pressed past a line's end wants the column past
 /// it** (vim's `curswant`, measured in nvim): a line moved to that is
 /// longer gets the typing in that column, not one before it.

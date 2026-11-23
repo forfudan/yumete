@@ -3645,6 +3645,9 @@ pub struct Editor {
     /// 記的是「回哪一個模式」，不是一個布爾——將來若有第二種進得去的模式，這一格
     /// 不用改。按下去先回 Normal；那一鍵走完，`on_key` 的出口把模式放回來。
     one_normal_key: Option<crate::input::Mode>,
+    /// The mode a `:`, `/` or `?` line begun by Insert's `C-o` goes back to
+    /// when it ends ([`Self::go_back_after_the_line`]).
+    back_after_the_line: Option<crate::input::Mode>,
     /// The line `C-o` was pressed on when the cursor stood past its last
     /// character (vim's `ins_at_eol`): coming back on that line's last
     /// character puts the cursor past it again.
@@ -5131,6 +5134,7 @@ impl Editor {
             search_generation: 0,
             search_progress: std::sync::Arc::default(),
             one_normal_key: None,
+            back_after_the_line: None,
             one_normal_eol: None,
             overwriting: false,
             overwritten: Vec::new(),

@@ -17,6 +17,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **Under vim, `cc`, `S` and a linewise `c` keep the line's leading blanks in prose too**, as nvim's autoindent does in a text file, and add none; with nothing typed they go again on `Esc`.
 - **`,` in a range is a span, as in vim**: `:1,40s` and `:1,40sort` take the forty lines from 1 to 40, as `1-40` still does. The list form (`:1,5,9s`) is gone, and a range of more than two ends is refused.
 - **Every range written backwards asks before it runs**, as `:s` did: `:4,2sort`, `:normal`, `:read`, and under vim `:7,3` and `:'a,3|…`; `y` swaps the ends, `n` runs nothing. Under vim a bare range of two ends (`:3,7`) goes to its last line.
+- **Insert `C-o` then `:`, `/` or `?` comes back to Insert when that line ends**, by Enter or `Esc`, as vim does; a command that opens a picker leaves you there.
 
 ## 0.25.0 · 2026-11-23
 

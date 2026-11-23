@@ -392,6 +392,7 @@ impl Editor {
         self.forget_a_guessed_table();
         self.keep_the_last_selection(holding);
         self.go_back_after_one_key(borrowed, naming);
+        self.go_back_after_the_line();
         self.keep_off_the_newline();
         self.find_the_table_here();
         outcome
@@ -402,8 +403,10 @@ impl Editor {
     /// `borrowed` 是**這一鍵開始之前**那一格的值：`C-o` 自己那一下會把它設上，
     /// 而那一下不該算成借走的那一鍵。所以問的是進門時的快照，不是現在的。
     ///
-    /// Warning: **進了別的模式就不放**：`C-o` 之後按 `:`、`/`、`i` 都是人自己要去的
-    /// 地方，把他拽回插入態是搶鍵。只有還站在 Normal 上才回去。
+    /// **A `:`, `/` or `?` line is that one command** (vim): it comes back
+    /// when the line ends, by Enter or `Esc` ([`Self::go_back_after_the_line`]).
+    /// Any other mode the key went to (`v`, a picker) is where the reader
+    /// asked to be, and it stays.
     ///
     /// `naming` says the key named a register (`"a`), which the command
     /// after it takes: the command is not over yet.
@@ -429,10 +432,35 @@ impl Editor {
             return;
         }
         self.one_normal_key = None;
-        if self.mode == Mode::Normal {
-            self.mode = back;
-            self.back_past_the_line_end();
+        match self.mode {
+            Mode::Normal => {
+                self.mode = back;
+                self.back_past_the_line_end();
+            }
+            Mode::Command | Mode::Search | Mode::Lookfor => self.back_after_the_line = Some(back),
+            _ => {}
         }
+    }
+
+    /// **The `:`, `/` or `?` line Insert's `C-o` began has ended**: back to
+    /// Insert, as vim does on Enter and on `Esc` alike. A question the line
+    /// asked (`:s///c`, a range written backwards) is still the line's, and
+    /// is waited for. A line whose command went to another mode (`:open`'s
+    /// picker) leaves the reader there.
+    fn go_back_after_the_line(&mut self) {
+        let Some(back) = self.back_after_the_line else {
+            return;
+        };
+        match self.mode {
+            Mode::Command | Mode::Search | Mode::Lookfor => return,
+            Mode::Normal if self.pending != Pending::None => return,
+            Mode::Normal => {
+                self.mode = back;
+                self.back_past_the_line_end();
+            }
+            _ => {}
+        }
+        self.back_after_the_line = None;
     }
 
     /// **vim's way back into Insert after `C-o`**: a cursor on its line's
