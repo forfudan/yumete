@@ -529,6 +529,57 @@ mod tests {
         assert!(glued.is_empty(), "a label run into its value:\n{}", glued.join("\n"));
     }
 
+    /// Messages whose two scripts are allowed to say it in different words:
+    /// the regional ones only, where Taiwan and the Mainland name the same
+    /// thing differently (檔案/文件, 選單/菜单). Everything else converts both
+    /// ways.
+    const REGIONAL: &[&str] = &[
+        // to check: the `zhs` shows 書 and 书 side by side, and the made `zht`
+        // turns both into 書.
+        "settings.editor.selection-highlight-glyphs.hint",
+    ];
+
+    #[test]
+    fn the_traditional_converts_back_into_the_simplified() {
+        // `zht` is made from `zhs` by s2t and the 通規 glyph table, or written
+        // by hand where that gets it wrong; either way 通規繁體 back to 簡體
+        // has to give the `zhs` beside it, or the two say different things.
+        // A message that shows character forms side by side says so in its
+        // file (`# tc on purpose`).
+        let on_purpose: std::collections::HashSet<String> = std::fs::read_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/messages"))
+            .expect("messages/ is there")
+            .filter_map(|e| e.ok().map(|e| e.path()))
+            .filter(|p| p.extension().is_some_and(|x| x == "toml"))
+            .flat_map(|p| {
+                let text = std::fs::read_to_string(&p).expect("a message file reads");
+                let mut keys = Vec::new();
+                let mut marked = false;
+                for line in text.lines().map(str::trim) {
+                    if line == "[[message]]" {
+                        marked = false;
+                    } else if line.starts_with("# tc on purpose") {
+                        marked = true;
+                    } else if let Some(key) = line.strip_prefix("key = ").filter(|_| marked) {
+                        keys.push(key.trim_matches('"').to_string());
+                    }
+                }
+                keys
+            })
+            .collect();
+        assert!(!on_purpose.is_empty(), "the files mark some messages `# tc on purpose`");
+        let back = crate::convert::plan(crate::convert::Side::C, crate::convert::Side::S, false).expect("c to s is a route");
+        let mut wrong: Vec<String> = super::table()
+            .iter()
+            .filter(|(key, entry)| !entry.zhs.is_empty() && !on_purpose.contains(**key) && !REGIONAL.contains(key))
+            .filter_map(|(key, entry)| {
+                let made = crate::convert::apply(&back, entry.zht).expect("t2s is built in");
+                (made != entry.zhs).then(|| format!("{key}: zht 「{}」 gives 「{made}」, zhs 「{}」", entry.zht, entry.zhs))
+            })
+            .collect();
+        wrong.sort();
+        assert!(wrong.is_empty(), "{} messages say different things in the two scripts:\n{}", wrong.len(), wrong.join("\n"));
+    }
+
     #[test]
     fn the_language_is_read_from_a_word() {
         assert_eq!(Language::parse("zh"), Some(Language::Traditional));

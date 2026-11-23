@@ -8,17 +8,17 @@
 //! walked one character at a time, then the few words s2t gets wrong in this
 //! text (`src/terms_c.txt`: 碼錶 for 碼表, 隻讀 for 只讀).
 //!
-//! A hand-written `zht` is checked the other way: back through the glyph
-//! table, then `t2s`. Traditional to Simplified has no ambiguity worth the
-//! name, so when the result is not the `zhs` beside it, one of the two was
-//! edited without the other, and the build says which message. A message
-//! whose `zht` differs on purpose says so with a `# tc on purpose` comment.
+//! Every `zht`, made or written, is checked the other way by a test in
+//! `src/messages.rs`: back through the glyph table, then `t2s`. Traditional to
+//! Simplified has no ambiguity worth the name, so when the result is not the
+//! `zhs` beside it, the two say different things. A message whose `zht`
+//! differs on purpose says so with a `# tc on purpose` comment.
 //!
 //! What comes out is a copy of each file in `OUT_DIR`, every alias spelled
 //! `zhs`/`zht` and every message carrying a `zht`; `src/messages.rs` reads
 //! those copies. Nothing generated is written back into the source tree.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use ferrous_opencc::config::BuiltinConfig;
@@ -36,7 +36,6 @@ fn main() {
     println!("cargo:rerun-if-changed=messages");
 
     let s2t = OpenCC::from_config(BuiltinConfig::S2t).expect("s2t is built in");
-    let t2s = OpenCC::from_config(BuiltinConfig::T2s).expect("t2s is built in");
     let glyphs = Glyphs::parse(&std::fs::read_to_string(&glyphs_path).expect("glyphs_c.txt is there"));
 
     let mut files: Vec<PathBuf> = std::fs::read_dir(root.join("messages"))
@@ -49,9 +48,7 @@ fn main() {
         println!("cargo:rerun-if-changed={}", path.display());
         let text = std::fs::read_to_string(&path).expect("a message file reads");
         let name = path.file_name().expect("a file name").to_string_lossy().to_string();
-        let made = process(&name, &text, &|zhs| fix_terms(&glyphs.forward(&s2t.convert(zhs)), &terms), &|zht| {
-            t2s.convert(&glyphs.back(zht))
-        });
+        let made = process(&text, &|zhs| fix_terms(&glyphs.forward(&s2t.convert(zhs)), &terms));
         write_if_changed(&out.join(&name), &made);
     }
 
@@ -76,9 +73,8 @@ fn main() {
     }
 }
 
-/// One file: aliases spelled out, a `zht` made where none was written, and a
-/// warning for every written `zht` that does not come back as its `zhs`.
-fn process(name: &str, text: &str, to_trad: &dyn Fn(&str) -> String, to_simp: &dyn Fn(&str) -> String) -> String {
+/// One file: aliases spelled out, and a `zht` made where none was written.
+fn process(text: &str, to_trad: &dyn Fn(&str) -> String) -> String {
     let mut out = String::with_capacity(text.len() * 2);
     let mut block: Vec<String> = Vec::new();
     let flush = |block: &mut Vec<String>, out: &mut String| {
@@ -89,29 +85,11 @@ fn process(name: &str, text: &str, to_trad: &dyn Fn(&str) -> String, to_simp: &d
             let prefix = format!("{name} = ");
             b.iter().find_map(|l| l.trim().strip_prefix(&prefix).and_then(unquote))
         };
-        let key = field(block, "key").unwrap_or_default();
         let zhs = field(block, "zhs");
-        let zht = field(block, "zht");
-        match (&zhs, &zht) {
-            (Some(zhs), None) if !zhs.is_empty() => {
-                let made = to_trad(zhs);
-                let at = block.iter().position(|l| l.trim().starts_with("zhs = ")).unwrap_or(block.len() - 1);
-                block.insert(at + 1, format!("zht = \"{made}\""));
-            }
-            // `# tc on purpose` above the key: a written `zht` that differs on
-            // purpose (it shows character forms side by side, or names the
-            // scripts), checked once by hand.
-            (Some(zhs), Some(zht))
-                if !zhs.is_empty() && !zht.is_empty() && !block.iter().any(|l| l.trim().starts_with("# tc on purpose")) =>
-            {
-                let back = to_simp(zht);
-                if &back != zhs {
-                    println!(
-                        "cargo:warning=messages/{name}: {key}: the written tc does not convert back to the sc: tc \u{300c}{zht}\u{300d} gives \u{300c}{back}\u{300d}, sc is \u{300c}{zhs}\u{300d}"
-                    );
-                }
-            }
-            _ => {}
+        if let (Some(zhs), None) = (zhs.filter(|z| !z.is_empty()), field(block, "zht")) {
+            let made = to_trad(&zhs);
+            let at = block.iter().position(|l| l.trim().starts_with("zhs = ")).unwrap_or(block.len() - 1);
+            block.insert(at + 1, format!("zht = \"{made}\""));
         }
         for line in block.drain(..) {
             out.push_str(&line);
@@ -173,11 +151,11 @@ fn write_if_changed(path: &Path, text: &str) {
 }
 
 /// The 大陸通規 glyph table, read as `src/convert.rs` reads it: `舊<TAB>新` a
-/// row (the first candidate wins), a one-field row a glyph the standard merged
-/// two characters into, which goes forward only.
+/// row (the first candidate wins). Only the forward direction is needed here;
+/// a one-field row names a glyph the standard merged, which matters only on
+/// the way back.
 struct Glyphs {
     forward: HashMap<char, char>,
-    back: HashMap<char, char>,
 }
 
 impl Glyphs {
@@ -188,42 +166,22 @@ impl Glyphs {
             chars.next().is_none().then_some(first)
         };
         let mut forward = HashMap::new();
-        let mut rows: Vec<(char, char)> = Vec::new();
-        let mut merged: HashSet<char> = HashSet::new();
         for line in text.lines() {
             let line = line.trim_end_matches('\r').trim();
             if line.is_empty() || line.starts_with('#') {
                 continue;
             }
             let mut parts = line.split('\t');
-            let Some(from) = parts.next() else { continue };
-            let Some(to) = parts.next() else {
-                if let Some(c) = one(from.trim()) {
-                    merged.insert(c);
-                }
-                continue;
-            };
-            let Some(from) = one(from) else { continue };
-            let Some(to) = to.split_whitespace().next().and_then(one) else { continue };
+            let Some(from) = parts.next().and_then(one) else { continue };
+            let Some(to) = parts.next().and_then(|to| to.split_whitespace().next()).and_then(one) else { continue };
             if from != to {
                 forward.insert(from, to);
-                rows.push((from, to));
             }
         }
-        let mut back = HashMap::new();
-        for (from, to) in rows {
-            if !merged.contains(&to) {
-                back.insert(to, from);
-            }
-        }
-        Glyphs { forward, back }
+        Glyphs { forward }
     }
 
     fn forward(&self, text: &str) -> String {
         text.chars().map(|c| *self.forward.get(&c).unwrap_or(&c)).collect()
-    }
-
-    fn back(&self, text: &str) -> String {
-        text.chars().map(|c| *self.back.get(&c).unwrap_or(&c)).collect()
     }
 }
