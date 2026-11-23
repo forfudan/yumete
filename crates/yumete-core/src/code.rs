@@ -901,6 +901,14 @@ impl Language {
         }
     }
 
+    /// Whether vim's `=` can work out a line's indent from the tree: the
+    /// languages whose levels are brackets and blocks. Where indentation is
+    /// the syntax (Python, Mojo) the tree is read from the indentation, so
+    /// it cannot say what the indentation should be.
+    pub fn reindents(self) -> bool {
+        !matches!(self, Language::Python | Language::Mojo) && self.indent_query().is_some()
+    }
+
     /// 編譯過的那一份，和 [`Language::query`] 同一套緩存。
     fn indent_query(self) -> Option<&'static Query> {
         static CELLS: [OnceLock<Option<Query>>; Language::ALL.len()] = [const { OnceLock::new() }; Language::ALL.len()];

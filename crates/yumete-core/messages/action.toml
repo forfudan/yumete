@@ -1528,6 +1528,13 @@ zhs = "转小写(再按一个动作)"
 en = "to lowercase (then a motion)"
 
 [[message]]
+# 命令說明：operator_reindent（草稿）
+key = "action.operator-reindent"
+zhs = "按语法树重新缩进(再按一个动作，vim 的 =)"
+en = "re-indent by the syntax tree (then a motion; vim's =)"
+find = "重新縮進 重新缩进 縮進 缩进 reindent indent ="
+
+[[message]]
 # 命令說明：operator_switch_case
 key = "action.operator-switch-case"
 zhs = "大小写互换(再按一个动作)"
@@ -3203,6 +3210,18 @@ en = "keymap: helix (default)"
 key = "keys.preset-vim"
 zhs = "键位：vim(x X 剪切字符、s 改一个字、V 选行、dd yy cc dw cw、^ $ 0)"
 en = "keymap: vim — x X cut a character, s changes one, V selects the line, dd yy cc dw cw, ^ $ 0"
+
+[[message]]
+# vim 鍵位下按 = 而這種檔案没有縮進規則（散文、Python 等），一行不改（草稿）
+key = "keys.reindent-no-rules"
+zhs = "这种文件没有缩进规则，= 不改动任何一行"
+en = "no indent rules for this kind of file; = changes nothing"
+
+[[message]]
+# vim 鍵位下 = 重新縮進了三行以上，報行數（草稿）
+key = "keys.reindented"
+zhs = "重新缩进了 {0} 行"
+en = "{0|line|lines} indented"
 
 [[message]]
 # :keymap-actions 規則那一節：caret_off_newline 這條規則說什麽（草稿）

@@ -156,6 +156,20 @@ pub(super) const NORMAL_COMMANDS: &[NormalCommand] = &[
         None => e.cmd_vim_operator(cx.with_key(Key::Char('y'))),
     }, Key::Char('y')),
     (NormalCmd::OperatorIndent, |e, cx| e.cmd_vim_operator(cx.with_key(Key::Char('>'))), Key::Char('>')),
+    // vim's `=`, waiting for a motion; in Visual mode the selected lines.
+    (NormalCmd::OperatorReindent, |e, cx| {
+        if e.extend {
+            let (first, last) = e.selected_lines();
+            let want = e.column_wanted();
+            e.extend = false;
+            e.vim_lines = false;
+            e.snapshot();
+            e.reindent_lines(first, last);
+            e.land_at_column(first, want);
+            return;
+        }
+        e.cmd_vim_operator(cx.with_key(Key::Char('=')));
+    }, Key::Char('=')),
     (NormalCmd::OperatorUnindent, |e, cx| e.cmd_vim_operator(cx.with_key(Key::Char('<'))), Key::Char('<')),
     (NormalCmd::DeleteSelection, |e, cx| {
         e.visual_capital_takes_lines(cx.key);
@@ -562,9 +576,9 @@ pub(super) const VIM_NORMAL: &[(Key, NormalCmd, Option<When>)] = &[
     (Key::Ctrl('p'), NormalCmd::MoveLineUp, None),
     (Key::Char('_'), NormalCmd::VimGotoFirstNonwhitespace, None),
     (Key::Char('&'), NormalCmd::VimSubstituteAgain, None),
-    // vim's `=` re-indents over a motion, which yumete does not have; helix's
-    // formats through the server.
-    (Key::Char('='), NormalCmd::NoOp, None),
+    // vim's `=` re-indents over a motion; helix's formats through the
+    // server.
+    (Key::Char('='), NormalCmd::OperatorReindent, None),
     (Key::Char('!'), NormalCmd::NoOp, None),
     (Key::Char('q'), NormalCmd::VimRecordMacro, None),
     (Key::Char('@'), NormalCmd::VimReplayMacro, None),

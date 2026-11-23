@@ -2701,6 +2701,19 @@ impl Editor {
             // `>` and `<` want the selection, because indenting is a
             // line-shaped edit the editor already knows how to do.
             // The cursor keeps its column (nvim's `nostartofline`, measured).
+            // vim's `=`: the lines re-indented, the cursor on the first in
+            // the column it wanted (nvim's 'nostartofline').
+            '=' => {
+                if let motion::Span::Over { anchor, head } = span {
+                    let rope = self.current_buffer().rope();
+                    let (a, b) = (anchor.min(head).min(rope.len_chars()), anchor.max(head).min(rope.len_chars()));
+                    let (first, last) = (rope.char_to_line(a), rope.char_to_line(b));
+                    let want = kept.map_or_else(|| self.column_wanted(), |(_, want)| want);
+                    self.extend = false;
+                    self.reindent_lines(first, last);
+                    self.land_at_column(first, want);
+                }
+            }
             '>' | '<' => {
                 let (line, column) = {
                     let rope = self.current_buffer().rope();

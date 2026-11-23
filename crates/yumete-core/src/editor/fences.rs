@@ -769,6 +769,67 @@ impl Editor {
         here as isize - base as isize
     }
 
+    /// **vim's `=`** over lines `first` to `last`: each line's leading blanks
+    /// become the levels the syntax tree opens before it, in the file's
+    /// indent unit, a closing bracket a level back, as Enter works them
+    /// out; empty lines stay empty. Where the tree says nothing about
+    /// indents (prose, Python, a language with no rules) nothing changes and
+    /// the status line says so.
+    pub(super) fn reindent_lines(&mut self, first: usize, last: usize) {
+        let language = match self.current_buffer().syntax() {
+            crate::syntax::Syntax::Code(language) if language.reindents() => language,
+            _ => {
+                self.status = say!("keys.reindent-no-rules");
+                return;
+            }
+        };
+        if self.refuse_readonly() {
+            return;
+        }
+        self.hold_the_tree(language);
+        let unit = self.indent_unit("");
+        let rope = self.current_buffer().rope().clone();
+        let last = last.min(motion::last_line(&rope));
+        let levels: Option<Vec<Option<usize>>> = {
+            let cache = self.code_cache.borrow();
+            cache.whole.as_ref().filter(|h| h.buffer == self.current_buffer().id() && h.language == language).map(|held| {
+                (first..=last)
+                    .map(|line| {
+                        let text = motion::line_text(&rope, line);
+                        let lead = text.chars().take_while(|c| matches!(c, ' ' | '\t' | '\u{3000}')).count();
+                        let closing = text.chars().nth(lead)?;
+                        let byte = rope.char_to_byte(rope.line_to_char(line) + lead).min(held.source.len());
+                        Some(crate::code::open_levels(language, &held.source, &held.tree, byte, line, Some(closing)))
+                    })
+                    .collect()
+            })
+        };
+        let Some(levels) = levels else {
+            self.status = say!("keys.reindent-no-rules");
+            return;
+        };
+        let ending = self.current_buffer().ending().to_string();
+        let lines: Vec<String> = (first..=last)
+            .zip(&levels)
+            .map(|(line, level)| {
+                let text = motion::line_text(&rope, line);
+                match level {
+                    Some(level) => format!("{}{}", unit.repeat(*level), text.trim_start_matches([' ', '\t', '\u{3000}'])),
+                    None => String::new(),
+                }
+            })
+            .collect();
+        let start = rope.line_to_char(first);
+        let end = rope.line_to_char(last) + motion::line_text(&rope, last).chars().count();
+        let new = lines.join(&ending);
+        if rope.slice(start..end) != new.as_str() {
+            self.overwrite(start, end, &new);
+        }
+        if last - first + 1 > 2 {
+            self.status = say!("keys.reindented", last - first + 1);
+        }
+    }
+
     /// **把這一版的樹備好**——已經是這一版就什麽都不做。
     ///
     /// Warning: **改過就走增量。** 上一版的正文還在手上，掐頭去尾就看得出改了

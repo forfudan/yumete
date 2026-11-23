@@ -33480,6 +33480,37 @@ fn vims_forced_motions_change_what_an_operator_takes() {
     assert_eq!(run("ldvjp").0, "fuoo bar baz\nqx quux\nend\n", "what it took is charwise");
 }
 
+/// **vim's `=` re-indents by the syntax tree**, the levels Enter opens:
+/// `gg=G` on this Rust file gives what nvim 0.12 `--clean` gives with its
+/// Rust indent script, and `==`, `=ip`, a count and Visual `=` take their
+/// lines, one undo step, the cursor on the first line in the column it
+/// wanted. Prose has no indent rules, and `=` there changes nothing.
+#[test]
+fn vims_equals_reindents_code_by_the_syntax_tree() {
+    let text = "fn main() {\nlet x = 1;\n        if x {\nfoo(1,\n2);\n}\n}\n";
+    let run = |keys: &str| {
+        let mut ed = typed(text);
+        ed.current_buffer_mut().set_syntax_by_hand(crate::syntax::Syntax::Code(crate::code::Language::Rust));
+        ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
+        ed.execute("set et sw=4").unwrap();
+        ed.execute("goto 1").unwrap();
+        feed_vim(&mut ed, keys);
+        (ed.current_buffer().text(), vim_at(&ed))
+    };
+    let all = "fn main() {\n    let x = 1;\n    if x {\n        foo(1,\n            2);\n    }\n}\n";
+    assert_eq!(run("gg=G"), (all.into(), (1, 1)));
+    assert_eq!(run("j=ip"), (all.into(), (1, 1)));
+    assert_eq!(run("j=="), ("fn main() {\n    let x = 1;\n        if x {\nfoo(1,\n2);\n}\n}\n".into(), (2, 1)));
+    assert_eq!(run("jjjl=="), ("fn main() {\nlet x = 1;\n        if x {\n        foo(1,\n2);\n}\n}\n".into(), (4, 2)));
+    assert_eq!(run("jj3==").0, "fn main() {\nlet x = 1;\n    if x {\n        foo(1,\n            2);\n}\n}\n");
+    assert_eq!(run("jVj=").0, "fn main() {\n    let x = 1;\n    if x {\nfoo(1,\n2);\n}\n}\n");
+    assert_eq!(run("gg=Gu").0, text, "one step");
+    let mut ed = typed_vim("  one\n    two\n");
+    feed_vim(&mut ed, "==");
+    assert_eq!(ed.current_buffer().text(), "  one\n    two\n");
+    assert_eq!(ed.status(), say!("keys.reindent-no-rules"));
+}
+
 /// **`R` 之後選區正好是換上去的那一段**。
 ///
 /// helix 鍵位下按 `R`，選中的字換成寄存器裏的那一段，選區不往後**延伸**到下一個

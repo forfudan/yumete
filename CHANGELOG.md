@@ -14,6 +14,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **vim's `g0`, `g^`, `gm` and `g$` go by the screen row** of a wrapped line: its start, its first non-blank, half the text's width into it, and its end (`3g$` two rows down first); after an operator `g$` is inclusive and the rest exclusive.
 - **vim's search offsets**: `/pat/e`, `/pat/e+1`, `/pat/s-1`, `/pat/b+2`, `/pat/+2` and `?pat?e` land where vim lands, a line's break not counted; `n` and `N` keep the offset, an empty `/` line keeps it, and `//`, a pattern alone or `*` drop it. After an operator `e` takes the character it lands on and a line offset whole lines (`d/pat/e`, `d/pat/+1`). A `/` in a vim pattern is written `\/`.
 - **vim's forced motions `v` and `V`** between an operator and its motion: `dvj` takes characters to the same column below, `dvw` is inclusive and `dve` exclusive, `dVw` takes whole lines, for every operator (`cvw`, `yvj`). `d<C-v>` is not there yet.
+- **vim's `=` re-indents code by the syntax tree**, the levels Enter opens, in the file's indent unit: `==`, `=ip`, `=G`, a count and Visual `=`, one undo step. It is not vim's indent scripts, so a line can come out otherwise than in vim; in prose, Python, Mojo and languages with no indent rules it changes nothing and says so.
 
 ### Changed
 
