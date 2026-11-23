@@ -6,7 +6,18 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Added
 
-
+- **`:preview-lock` keeps a document's preview on it**: the preview stops following you, its tab reads "Preview main.typ (locked)", and the next document you go to gets the following preview. `:preview-lock off` makes it the following preview again, and the old one closes. A session keeps which previews are locked.
+- **A file's indent unit is guessed from its own lines when it is opened**, as helix does: two spaces in a Markdown list indented by two, a TAB in a TAB-indented file. `>`, `<`, Tab, Insert `C-t` / `C-d` and the indent Enter carries down use it, under both keymaps; a modeline, `:indent-width` and `:indent-tab` win over it, and a file that shows no clear unit keeps `[editor] indent_width` and `tab_spaces`. `:info` shows the unit and whether the file said so.
+- **vim's `:put` and `:delete`**: `:put [x]` (`:pu`) puts a register on lines of its own below the cursor's line or a range's last, `:put!` above, `:0put` above the first, and `"_` an empty line; `:delete [x] [count]` (`:d`) takes the cursor's line, a range's lines (`:3,5d a`) or a count of them (`:d 3`) into a register as `dd` does. `:de` is `:delete` now, as in vim; `:decimo`'s short name is `:dm`, as decimo's own.
+- **vim's `.` mark**: `` `. `` goes to where the last change was made and `'.` to that line, as jumps, so ``` `` ``` comes back; `` d`. `` and the like reach it as any mark.
+- **vim's `@:`** runs the last `:` line again, with a count that many times, and `@@` after it runs it again.
+- **vim's `C-r C-w`, `C-r C-a` and `C-r C-l` on the `:` and `/` lines** put the word, the WORD or the line under the cursor there.
+- **vim's `:&`, `:&&`, `&` and `g&`**: `:&` (and under vim `:s` alone) runs the last `:s` again without its flags and `:&&` with them, over a range too (`:%&&`); `&` is nvim's `:&&` on this line, a count taking that many lines; `g&` runs it over every line with the last search's pattern. **`:s//X/` takes the last pattern searched for**, and under vim a `:s` pattern is what `n` looks for next.
+- **vim's `g0`, `g^`, `gm` and `g$` go by the screen row** of a wrapped line: its start, its first non-blank, half the text's width into it, and its end (`3g$` two rows down first); after an operator `g$` is inclusive and the rest exclusive.
+- **vim's search offsets**: `/pat/e`, `/pat/e+1`, `/pat/s-1`, `/pat/b+2`, `/pat/+2` and `?pat?e` land where vim lands, a line's break not counted; `n` and `N` keep the offset, an empty `/` line keeps it, and `//`, a pattern alone or `*` drop it. After an operator `e` takes the character it lands on and a line offset whole lines (`d/pat/e`, `d/pat/+1`). A `/` in a vim pattern is written `\/`.
+- **vim's forced motions `v` and `V`** between an operator and its motion: `dvj` takes characters to the same column below, `dvw` is inclusive and `dve` exclusive, `dVw` takes whole lines, for every operator (`cvw`, `yvj`). `d<C-v>` is not there yet.
+- **vim's `=` re-indents code by the syntax tree**, the levels Enter opens, in the file's indent unit: `==`, `=ip`, `=G`, a count and Visual `=`, one undo step. It is not vim's indent scripts, so a line can come out otherwise than in vim; in prose, Python, Mojo and languages with no indent rules it changes nothing and says so.
+- **Links in a Markdown preview's PDF work**: in `:export-as-preview pdf` a web or mail address opens, a reference link and a bare URL too; `#heading` goes to that heading, every heading named as the HTML export names it so `book.pdf#heading` finds it from elsewhere; a link to a file opens that path, relative as written. A link that wraps can be clicked on each of its lines, across the page and down a vertical page.
 
 ### Changed
 
@@ -15,7 +26,12 @@ Written for people who use it to write, not for the commit log: each line says w
 - **A Typst chapter's preview finds its book on the disk**: the Typst files in the chapter's folder and the folders above it, up to the project root (the folder holding `.git` or `typst.toml`, never above home), are followed by their `#include` and `#import` up to the file nobody names, whether the book is open or not.
 - **`:preview-browser` shows the same preview in the browser**: it follows you and `:preview-lock` holds it; the page already open follows to the next document by itself, and from another document `:preview-browser` moves the browser there instead of showing the old page again. **A Markdown file's browser preview is live**: the page is written again a moment after you stop typing and reloads itself.
 - **Under vim, `cc`, `S` and a linewise `c` keep the line's leading blanks in prose too**, as nvim's autoindent does in a text file, and add none; with nothing typed they go again on `Esc`.
-
+- **`,` in a range is a span, as in vim**: `:1,40s` and `:1,40sort` take the forty lines from 1 to 40, as `1-40` still does. The list form is gone: of more than two ends the last two count (`:1,5,9s` is `:5,9s`), as in vim.
+- **A range reads as vim reads it**: marks at either end (`:'a,'bs`, `:'a,'bsort`), blanks around the `,` (`:1, 2s`), an end left out as the cursor's line (`:2,s`, `:,3s`), and line 0 as the first (`:0,2s`).
+- **A range written backwards asks before it runs**, as `:s` did: `:4,2sort`, `:normal`, `:read`; `y` swaps the ends, `n` runs nothing. Under vim a bare range of two ends goes to its last line as written (`:3,7` to 7, `:7,3` to 3) without asking, and one before a `|` (`:7,3|…`) is refused and nothing after it runs, as in vim.
+- **Insert `C-o` then `:`, `/` or `?` comes back to Insert when that line ends**, by Enter or `Esc`, as vim does, a `:normal` line too; a command that opens a picker leaves you there.
+- **The indent Enter, `o` or `O` carried down goes again when you leave the line without typing**: under vim on Enter, `Esc`, `C-o` or an arrow to another line, as vim does, and `j` or `k` after `Esc` or `C-o` keeps the column it stood in; under helix on `Esc` when that line break was all the Insert wrote, and Enter with only blanks before the cursor breaks the line at its start, in prose too, as helix does. Blanks you typed yourself stay.
+- **Keeping the previews where they belong costs nothing while you type**: with many files open, where each document's preview goes is worked out only when a file is opened, closed, saved or renamed, or the keys move to another; after a Typst save the open chapters' books are found with one search of the disk.
 
 ### Fixed
 
