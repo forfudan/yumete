@@ -3207,6 +3207,9 @@ mod tests {
     fn set_reaches_the_selection_highlight() {
         let mut ed = Editor::new();
         let mut seat = Seat::default();
+        // Off first, so the bare flip below is the same on any machine's config.
+        ed.execute(":set selection_highlight false").unwrap();
+        seat.settle(&mut ed);
         ed.execute(":set selection_highlight").unwrap();
         seat.settle(&mut ed);
         assert!(seat.panel.is_none());
