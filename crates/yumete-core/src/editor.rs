@@ -2833,6 +2833,9 @@ pub struct Editor {
     /// after it when the command comes: `2"a3p` puts six times, as `2d3w`
     /// takes six words.
     register_count: Option<usize>,
+    /// While every selection is edited in turn, whether all of them are
+    /// whole lines: helix's `c` keeps a line to write on only then.
+    every_selection_whole_lines: Option<bool>,
     /// How many copies the next paste puts in as one piece (`3p`), as helix
     /// and vim both do it: one block, not three pastes each after the last.
     paste_copies: usize,
@@ -4943,6 +4946,7 @@ impl Editor {
             yanks: Vec::new(),
             pending_register: None,
             register_count: None,
+            every_selection_whole_lines: None,
             paste_copies: 1,
             paste_fixes_indent: false,
             paste_goes_past: false,

@@ -299,6 +299,8 @@ impl super::Editor {
         // cursor types the same keys, so the primary's recording is kept.
         let recorded = self.insert_recording.clone();
         let mut kept_recording = None;
+        let whole = was.iter().all(|one| self.spans_whole_lines(one.anchor, one.head));
+        self.every_selection_whole_lines = Some(whole);
         self.edit_round += 1;
         let mut out: Vec<Range> = Vec::with_capacity(was.len());
         let mut which = 0;
@@ -365,6 +367,7 @@ impl super::Editor {
         // 收的時候是從後往前收的，擺回去。Warning: `which` 記的是**原來那一組**裏的下標，
         // 反過來之後纔對得上。
         out.reverse();
+        self.every_selection_whole_lines = None;
         if let Some(kept) = kept_recording {
             self.insert_recording = kept;
         }
@@ -691,8 +694,8 @@ impl super::Editor {
     /// **把每一段兩端的空白去掉**（`_`，helix 的 `trim_selections`）。
     ///
     /// Warning: **整段都是空白的那些會被丟掉。** `A-s` 按行切開之後空行就是這一種，而留着它們
-    /// 等於在空行上放一個光標——接着打字會在空行上寫東西。Warning: 全丟光了就什麼都不做：
-    /// 選區不能為空。
+    /// 等於在空行上放一個光標——接着打字會在空行上寫東西。全丟光了就只剩主選區的光標
+    /// 那一格（helix 的 `collapse_selection` 加 `keep_primary_selection`）：選區不能為空。
     pub(super) fn trim_selections(&mut self) {
         let rope = self.current_buffer().rope().clone();
         let mut out: Vec<Range> = Vec::new();
@@ -710,8 +713,10 @@ impl super::Editor {
             }
         }
         if out.is_empty() {
-            self.status = say!("selection.all-blank");
-            return;
+            let head = self.sel.head();
+            self.sel = crate::selection::Selections::one(Range::at(head));
+            self.clamp_cursor();
+            return self.refresh_goal_column();
         }
         let which = out
             .iter()
@@ -725,15 +730,18 @@ impl super::Editor {
         self.say_the_merge(merged);
     }
 
-    /// **把每一段選區的開頭對齊到同一列**（`&`，helix 的 `align_selections`）。
+    /// **把每一段選區對齊成一欄一欄**（`&`，helix 的 `align_selections`）。
     ///
-    /// 在最靠右的那一段之前的每一段前面補空格，補到大家的開頭在同一格上。
+    /// 同一行上的第 n 段歸第 n 欄。每一欄量的是選區的**頭**（往後選的那一段是它的末
+    /// 尾、往前選的是開頭）離上一欄的頭有多寬，取各行最寬的那一個；空格補在選區的開頭
+    /// 前面，補完每一欄的頭在同一格上。一行三段、一行兩段，就對齊頭兩欄，第三欄只有
+    /// 一段，它跟着前面挪。
     ///
     /// Warning: **算的是顯示寬度，不是字數。** 一個漢字兩格，所以「三個字」和「三個字母」
     /// 對不齊——這一族在中文稿子裏用不對齊就等於没用。
     ///
-    /// Warning: **一行只認一段。** 同一行上有兩段的時候，補在前一段前面的空格會把後一段推
-    /// 走，「對齊」就成了一句没有意義的話。helix 同樣只處理每行第一段。
+    /// Warning: **跨行的選區不對齊**，一處都不改（helix 同樣拒絕）：它的頭和尾不在同一行，
+    /// 說不出它屬於哪一欄。
     ///
     /// Warning: **從後往前插**，並且把已經處理過的那幾段跟着挪——同 [`Self::edit_each`]，
     /// 理由也一樣。一個撤銷點。
@@ -744,32 +752,68 @@ impl super::Editor {
         }
         let rope = self.current_buffer().rope().clone();
         let mut out: Vec<Range> = self.sel.iter().copied().collect();
-        let mut seen: Vec<usize> = Vec::new();
-        let mut want = 0usize;
-        // 每一段開頭在第幾格，以及要補幾格。
-        let mut pads: Vec<Option<usize>> = Vec::with_capacity(out.len());
+        let column_of = |at: usize| {
+            let line = rope.char_to_line(at);
+            (line, yumete_cjk::str_width(&rope.slice(rope.line_to_char(line)..at).to_string()))
+        };
+        // Each selection's line and the column of its head, as helix
+        // measures it: past the last character of a forward one.
+        let mut heads: Vec<(usize, usize)> = Vec::with_capacity(out.len());
         for one in &out {
-            let from = self.drawn(*one).0;
-            let line = rope.char_to_line(from);
-            if seen.contains(&line) {
-                pads.push(None);
-                continue;
+            let (from, to) = self.drawn(*one);
+            let head = match one.head >= one.anchor {
+                true => to,
+                false => from,
+            };
+            let tail = match one.head >= one.anchor {
+                true => from,
+                false => to,
+            };
+            let (line, column) = column_of(head);
+            if rope.char_to_line(tail) != line {
+                self.status = say!("selection.align-multi-line");
+                return;
             }
-            seen.push(line);
-            let head = rope.line_to_char(line);
-            let col = yumete_cjk::str_width(&rope.slice(head..from).to_string());
-            pads.push(Some(col));
-            want = want.max(col);
+            heads.push((line, column));
         }
-        if pads.iter().flatten().all(|&col| col == want) {
+        // How wide each column is: from the head before it on the line, the
+        // widest on any line.
+        let mut widths: Vec<usize> = Vec::new();
+        let mut row = usize::MAX;
+        let (mut nth, mut before) = (0usize, 0usize);
+        for &(line, column) in &heads {
+            if line != row {
+                (row, nth, before) = (line, 0, 0);
+            }
+            let width = column - before;
+            match widths.get_mut(nth) {
+                Some(w) => *w = (*w).max(width),
+                None => widths.push(width),
+            }
+            before = column;
+            nth += 1;
+        }
+        let ends: Vec<usize> = widths.iter().scan(0, |sum, w| { *sum += w; Some(*sum) }).collect();
+        let mut pads: Vec<usize> = Vec::with_capacity(heads.len());
+        row = usize::MAX;
+        let mut added = 0usize;
+        for &(line, column) in &heads {
+            if line != row {
+                (row, nth, added) = (line, 0, 0);
+            }
+            let pad = ends[nth] - column - added;
+            pads.push(pad);
+            added += pad;
+            nth += 1;
+        }
+        if pads.iter().all(|&pad| pad == 0) {
             self.status = say!("selection.already-aligned");
             return;
         }
         self.snapshot();
         let grouping = self.current_buffer_mut().begin_undo_group();
         for nth in (0..out.len()).rev() {
-            let Some(col) = pads[nth] else { continue };
-            let pad = want - col;
+            let pad = pads[nth];
             if pad == 0 {
                 continue;
             }

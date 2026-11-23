@@ -2050,14 +2050,48 @@ impl Editor {
             self.yank_whole_lines = false;
             return;
         }
+        // **helix's `c` over whole lines leaves a line to write on**
+        // (`delete_selection_impl`, then `open` above): `xc` takes the line,
+        // its break with it into the register, and opens an empty line in its
+        // place, so the next line is not joined on. In code that line takes
+        // the first one's indent, as `o` would. With several selections, only
+        // when every one of them is whole lines.
+        let reopen = !self.as_vim()
+            && matches!(op, motion::Operator::Change { .. })
+            && self.every_selection_whole_lines.unwrap_or_else(|| self.spans_whole_lines(anchor, head));
+        let indent = match reopen {
+            true => {
+                let rope = self.current_buffer().rope();
+                self.indent_of_line(rope.char_to_line(anchor.min(head)), None)
+            }
+            false => String::new(),
+        };
         let revision = self.current_buffer().revision();
         self.apply(op, motion::Span::Over { anchor, head });
+        if reopen && self.mode == Mode::Insert && self.current_buffer().revision() != revision {
+            let at = self.sel.head();
+            let ending = self.current_buffer().ending();
+            if self.edit_insert(at, &format!("{indent}{ending}")) {
+                self.set_cursor(at + indent.chars().count());
+            }
+        }
         if whole_lines && self.as_vim() && self.current_buffer().revision() != revision {
             self.land_at_column(self.cursor_line(), want);
             // Then the column it wants is the one it stands at (see
             // `do_vim_verb`'s `d`).
             self.sel.set_goal(None);
         }
+    }
+
+    /// Whether the span from `anchor` to `head` (both on characters, the
+    /// head's taken) is whole lines: from a line's start through a line's
+    /// break.
+    pub(super) fn spans_whole_lines(&self, anchor: usize, head: usize) -> bool {
+        let rope = self.current_buffer().rope();
+        let (from, last) = (anchor.min(head), anchor.max(head));
+        last < rope.len_chars()
+            && rope.char(last) == '\n'
+            && rope.line_to_char(rope.char_to_line(from)) == from
     }
 
     // Yank / paste (Helix `y` / `p` / `P`).

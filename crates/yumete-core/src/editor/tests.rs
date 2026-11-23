@@ -49168,3 +49168,50 @@ fn vim_visual_counts_and_the_block_corners() {
     }
 }
 
+/// helix's keys, typed: `⏎` Enter, `⎋` Esc, `;` and `,` as themselves.
+fn feed_helix(ed: &mut Editor, keys: &str) {
+    for c in keys.chars() {
+        ed.on_key(match c {
+            '⎋' => Key::Esc,
+            '⏎' => Key::Enter,
+            c => Key::Char(c),
+        });
+    }
+}
+
+/// **helix's `c` over whole lines leaves a line to write on**
+/// (`delete_selection_impl`, then `open` above), and only when every
+/// selection is whole lines; measured in hx 25.07.1.
+#[test]
+fn helix_change_over_whole_lines_keeps_a_line() {
+    for (keys, want) in [
+        ("xcZ⎋", "Z\nthree one four\nfive\n"),
+        ("xxcZ⎋", "Z\nfive\n"),
+        ("jjxcZ⎋", "one two one\nthree one four\nZ\n"),
+        ("%cZ⎋", "Z\n"),
+        ("xCcZ⎋", "Zur\nfive\n"),
+    ] {
+        let mut ed = typed("one two one\nthree one four\nfive\n");
+        press(&mut ed, "gg");
+        feed_helix(&mut ed, keys);
+        assert_eq!(ed.current_buffer().rope().to_string(), want, "{keys}");
+    }
+}
+
+/// **helix's `&` lines selections up in columns**, the nth on each line
+/// with the nth on the others, by where each one's head is; a selection
+/// over two lines refuses it. **`_` over nothing but blanks leaves the
+/// primary's cursor.** Each measured in hx 25.07.1.
+#[test]
+fn helix_align_and_trim_as_helix_does() {
+    let run = |text: &str, keys: &str| {
+        let mut ed = typed(text);
+        press(&mut ed, "gg");
+        feed_helix(&mut ed, keys);
+        ed.current_buffer().rope().to_string()
+    };
+    assert_eq!(run("one two one\nthree one four\nfive\n", "%so⏎&"), "      one two one\nthree one f our\nfive\n");
+    assert_eq!(run("one two one\nthree one four\nfive\n", "%sone⏎&"), "      one two one\nthree one four\nfive\n");
+    assert_eq!(run("ab cd\nefgh ij kl\nm\nnopq rs\n", "%S ⏎&"), "ab cd\nefgh ij kl\nm\nnopq rs\n");
+    assert_eq!(run("  alpha beta  \ngamma\n", "w_cZ⎋"), " Zalpha beta  \ngamma\n");
+}

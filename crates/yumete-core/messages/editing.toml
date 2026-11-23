@@ -795,13 +795,13 @@ en = "reading: {0}"
 # ── scheme ────────────────────────────────────────────────────────────
 
 [[message]]
-# 按 _ 去兩端空白，可是每一段都是純空白
-key = "selection.all-blank"
-zhs = "所有选区都是空白，未改动"
-en = "every selection is blank; nothing changed"
+# 按 & 想對齊，可是有一段選區跨了行，說不出它屬於哪一欄（草稿）
+key = "selection.align-multi-line"
+zhs = "跨行的选区无法对齐"
+en = "a selection over more than one line cannot be aligned"
 
 [[message]]
-# 按 & 想對齊，可是每一段的開頭本來就在同一格上
+# 按 & 想對齊，可是每一欄本來就在同一格上
 key = "selection.already-aligned"
 zhs = "已经对齐"
 en = "already aligned"
