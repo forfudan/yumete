@@ -47,7 +47,7 @@ use yumete_core::say;
 use yumete_core::Editor;
 use yumete_ime::ImeSession;
 
-use crate::put_text;
+use crate::{put_fit, put_text};
 use crate::theme::{Accent, Palette};
 
 /// Where the records are kept, in the editor's data directory.
@@ -1124,7 +1124,7 @@ pub fn draw(frame: &mut Frame, seat: &Seat, config: &Config, area: Rect) -> Opti
     draw_article(frame, page, ink, base, inner);
     let inner = ring(frame, pad_rect, format!("{} · {}", say!("genda.box.pad"), page.ime_label()));
     if page.all_done {
-        put_text(frame.buffer_mut(), inner.x + 1, inner.y, inner.x + inner.width, &say!("genda.all-done"), base.fg(ink.quiet()));
+        put_fit(frame.buffer_mut(), inner.x + 1, inner.y, inner.x + inner.width, &say!("genda.all-done"), base.fg(ink.quiet()));
         return None;
     }
     let pad = seat.pad.as_ref()?;
@@ -1244,7 +1244,7 @@ fn draw_results(frame: &mut Frame, page: &Page, ink: Palette, base: Style, inner
     };
     put_row(frame, inner.y, &heads, base.fg(ink.quiet()));
     if rows.is_empty() && room > 0 {
-        put_text(frame.buffer_mut(), inner.x + 1, inner.y + 1, end, &say!("genda.no-record"), base.fg(ink.quiet()));
+        put_fit(frame.buffer_mut(), inner.x + 1, inner.y + 1, end, &say!("genda.no-record"), base.fg(ink.quiet()));
     }
     for (n, (row, style)) in rows.iter().enumerate() {
         put_row(frame, inner.y + 1 + n as u16, row, *style);
@@ -1310,7 +1310,7 @@ fn draw_left(
                     inner.x + 1 + label_width + 1
                 }
             };
-            put_text(frame.buffer_mut(), x, row, end, value, base.fg(ink.text()));
+            put_fit(frame.buffer_mut(), x, row, end, value, base.fg(ink.text()));
         }
         y += height;
     }

@@ -39,7 +39,7 @@ use yumete_core::say;
 use yumete_core::Editor;
 use yumete_ime::{Deleted, Held, ImeSession, WordList, WordRow};
 
-use crate::put_text;
+use crate::{put_fit, put_text};
 
 /// Below this many columns the lists' column folds away.
 const LISTS_FROM: u16 = 60;
@@ -611,10 +611,10 @@ pub fn draw(frame: &mut Frame, seat: &Seat, ime: &ImeSession, config: &Config, a
     };
     let top = area.y + 2;
     let Some(list) = list else {
-        put_text(buf, from, top, right, &say!("yume.words.unread"), quiet);
+        put_fit(buf, from, top, right, &say!("yume.words.unread"), quiet);
         return None;
     };
-    put_text(buf, from.saturating_sub(1), top, right, &list_name(list), ground.fg(ink.text()).add_modifier(Modifier::BOLD));
+    put_fit(buf, from.saturating_sub(1), top, right, &list_name(list), ground.fg(ink.text()).add_modifier(Modifier::BOLD));
     let first_row = top + 1;
     if rows.is_empty() {
         let empty = match (page.search.is_empty(), page.all) {
@@ -622,7 +622,7 @@ pub fn draw(frame: &mut Frame, seat: &Seat, ime: &ImeSession, config: &Config, a
             (true, false) => say!("yume.words.empty"),
             (true, true) => say!("yume.words.empty-all"),
         };
-        put_text(buf, from, first_row, right, &empty, quiet);
+        put_fit(buf, from, first_row, right, &empty, quiet);
         return None;
     }
     let room = list_ends.saturating_sub(first_row) as usize;

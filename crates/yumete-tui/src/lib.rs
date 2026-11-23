@@ -8209,7 +8209,7 @@ fn draw_replacing(frame: &mut Frame, editor: &Editor, config: &Config, area: Rec
     let left = panel.x + 2;
     let room = (width as usize).saturating_sub(4);
     let buf = frame.buffer_mut();
-    put_text(buf, left, panel.y + 1, limit, &head, ground.fg(ink.text()));
+    put_fit(buf, left, panel.y + 1, limit, &head, ground.fg(ink.text()));
     // **槽畫成兩段同一個字符，分色**——不是 `█` 配 `░`：那兩個字在不同字體下
     // 寬窄不一樣，而這一條要和上下兩行逐格對齊。
     let filled = match total {
@@ -8226,8 +8226,9 @@ fn draw_replacing(frame: &mut Frame, editor: &Editor, config: &Config, area: Rec
         &"━".repeat(filled),
         ground.fg(ink.gold()),
     );
-    put_text(buf, left, panel.y + 3, limit, &name, ground.fg(ink.quiet()));
-    put_text(buf, left, panel.y + 5, limit, &foot, ground.fg(ink.quiet()));
+    // A file's name is its tail, so that is the half kept.
+    put_text(buf, left, panel.y + 3, limit, &elide_head(&name, limit.saturating_sub(left) as usize), ground.fg(ink.quiet()));
+    put_fit(buf, left, panel.y + 5, limit, &foot, ground.fg(ink.quiet()));
 }
 
 fn draw_query(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
@@ -8420,20 +8421,23 @@ const MENU_WIDTH: u16 = 56;
 /// that the eye still comes back to the left edge without hunting.
 const LOOKFOR_WIDTH: u16 = 78;
 
-/// Cut `line` to `width` cells, marking that something was cut.
+/// Cut `line` to `width` cells, marking that something was cut — **the one
+/// rule for text that does not fit: it ends with a `…`**, never stops dead at
+/// an edge, where it would read as the whole of it.
 ///
 /// By display width, not by `char`s — a Chinese sentence half-cut by a `char`
-/// count overruns the panel it was measured for. The mark is one cell, so what
-/// is kept is one cell less.
+/// count overruns the panel it was measured for. The mark is measured too:
+/// `…` is East Asian Ambiguous, one cell for most readers and two under
+/// `ambiguous_width = "wide"`, so what is kept is that much less.
 pub fn elide(line: &str, width: usize) -> String {
     if yumete_cjk::str_width(line) <= width {
         return line.to_string();
     }
-    let room = width.saturating_sub(1);
+    let room = width.saturating_sub(yumete_cjk::str_width("…"));
     let mut kept = String::new();
     let mut wide = 0;
     for g in yumete_cjk::graphemes(line) {
-        let w = yumete_cjk::grapheme_width(g);
+        let w = yumete_cjk::grapheme_width(g).max(1);
         if wide + w > room {
             break;
         }
@@ -8904,14 +8908,14 @@ fn draw_list(
                 }
             }
         }
-        let after = put_text(buf, x + 1, y, end, &items[i].text, style);
+        let after = put_fit(buf, x + 1, y, end, &items[i].text, style);
         // The note in the quiet ink — except on the inked row, where the whole
         // line is one ground and a second colour on it reads as a mistake.
         if let Some(note) = &items[i].note {
             let at = after + NOTE_GAP as u16;
             if at < end {
                 let note_style = if picked { style } else { quiet };
-                put_text(buf, at, y, end, note, note_style);
+                put_fit(buf, at, y, end, note, note_style);
             }
         }
     }
@@ -10054,6 +10058,25 @@ pub(crate) fn put_marked_text(
         at = put_text(buf, at, y, limit, "", base);
     }
     at
+}
+
+/// [`put_text`] for a text that is read as one piece — a title, a name, a
+/// sentence: what does not fit before `limit` ends with a `…` ([`elide`]).
+///
+/// `put_text` itself cuts at the edge, and has to: a line drawn as several
+/// runs in several inks (`put_marked_text`), a scrolled row of the page, a
+/// rule of box-drawing strokes are each cut by whoever knows where the piece
+/// ends. This is for everything else.
+pub(crate) fn put_fit(
+    buf: &mut ratatui::buffer::Buffer,
+    x: u16,
+    y: u16,
+    limit: u16,
+    text: &str,
+    style: Style,
+) -> u16 {
+    let fitted = elide(&drawable(text), limit.saturating_sub(x) as usize);
+    put_text(buf, x, y, limit, &fitted, style)
 }
 
 /// Returns the first cell it did **not** write, so a caller can put something
@@ -11974,7 +11997,7 @@ fn draw_sidebar(
     // 別的視圖沒有主語，什麼都不接。
     let subject = sidebar.subject();
     if !subject.is_empty() {
-        put_text(buf, shell.head_at + 2, area.y, to, &subject, shell.head);
+        put_fit(buf, shell.head_at + 2, area.y, to, &subject, shell.head);
     }
     // The tree, scrolled to keep the highlight on screen.
     let rows = sidebar.rows();
@@ -12917,7 +12940,7 @@ fn draw_search(
         // 整個**切掉，按 `4` 屏幕上什麼都不變。
         let line = format!("{label} {box_text}");
         let room = to.saturating_sub(left + 2) as usize;
-        put_text(buf, left + 2, y, to, &crate::panel::clip(&line, room), style);
+        put_text(buf, left + 2, y, to, &crate::elide(&line, room), style);
     };
     let y = y + 1;
     switch(buf, y, &format!("[{which}]"), &say!("search.case"), 1, text);
@@ -13439,11 +13462,11 @@ fn draw_dictionary(
                 // 這一行說的是「這一整行是刪掉的／新添的」。
                 let shown = match row.wash.is_some() {
                     true => {
-                        let cut = panel::clip(&row.name, room);
+                        let cut = elide(&row.name, room);
                         let wide = yumete_cjk::str_width(&cut);
                         format!("{cut}{}", " ".repeat(room.saturating_sub(wide)))
                     }
-                    false => panel::clip(&row.name, room),
+                    false => elide(&row.name, room),
                 };
                 put_text(buf, from + 1, y, to, &shown, style);
                 // **真改掉的那幾段再蓋一遍，底重一檔**——和浮窗
@@ -15965,7 +15988,7 @@ fn draw_horizontal(
                         yumete_core::problem::Severity::Note => ink.azure(),
                         yumete_core::problem::Severity::Hint => ink.furniture(),
                     };
-                    let said = format!("  {}", panel::clip(&message, room));
+                    let said = format!("  {}", elide(&message, room));
                     // **…and so has the message drawn after the line**, which
                     // is only the loudest, and cut at the edge.
                     let from = text_area.x + used.saturating_sub(left) as u16 + 2;
@@ -18674,10 +18697,10 @@ fn draw_panel_rows(
     // 而按 `3` 進稿子的是四個字。
     // **面板說要插什麼，和它真的插什麼，不是一回事**，而讀者是照着面板按的。
     //
-    // 省略號用的是 `chrome` 那一族的 [`crate::panel::clip`]，它還知道
-    // 「…」在 `ambiguous_width = "wide"` 底下佔兩格。
+    // 省略號用的是 [`elide`]，它還知道「…」在 `ambiguous_width = "wide"`
+    // 底下佔兩格。
     let room = panel_w.saturating_sub(2) as usize;
-    let mut head = head.map(|h| crate::panel::clip(&h, room));
+    let mut head = head.map(|h| crate::elide(&h, room));
     let mut rows: Vec<PanelRow> = rows
         .into_iter()
         .map(|r| PanelRow(crate::panel::clip_parts(r.0, room)))
@@ -36485,5 +36508,91 @@ mod shot_tests {
         assert!(shot_runs_a_program(&ShotJob::Screen));
         assert!(shot_runs_a_program(&ShotJob::Png { target: "a.png".into() }));
         assert!(!shot_runs_a_program(&ShotJob::Page { target: "a.html".into(), text: false }));
+    }
+}
+
+#[cfg(test)]
+mod fit_tests {
+    use super::*;
+
+    fn row(buf: &ratatui::buffer::Buffer, y: u16) -> String {
+        buffer_to_text(buf).lines().nth(y as usize).unwrap_or_default().trim_end().to_string()
+    }
+
+    /// **What does not fit ends with a `…`**, inside the room it was given.
+    #[test]
+    fn elide_ends_a_cut_with_the_mark_and_stays_inside_the_room() {
+        assert_eq!(elide("雪下得早", 8), "雪下得早", "it fits: nothing is cut, nothing is said");
+        for room in 3..12 {
+            let cut = elide("山路斷了，她在門口站着", room);
+            assert!(cut.ends_with('…'), "{room}: {cut:?}");
+            assert!(yumete_cjk::str_width(&cut) <= room, "{room}: {cut:?} runs past the room");
+        }
+        // A wide character that would straddle the edge goes whole, not half.
+        assert_eq!(elide("山路斷了", 6), "山路…");
+        assert_eq!(elide("a long row of words", 10), "a long ro…");
+    }
+
+    #[test]
+    fn put_fit_marks_the_cut_where_put_text_stops_dead() {
+        let text = "a sentence longer than its room";
+        let mut cut = ratatui::buffer::Buffer::empty(Rect::new(0, 0, 16, 1));
+        let mut fit = cut.clone();
+        put_text(&mut cut, 0, 0, 12, text, Style::default());
+        let after = put_fit(&mut fit, 0, 0, 12, text, Style::default());
+        assert_eq!(row(&cut, 0), "a sentence l", "put_text cuts at the edge, unmarked");
+        assert_eq!(row(&fit, 0), "a sentence …");
+        assert_eq!(after, 12, "and it hands back the cell after the mark");
+        // What fits is drawn exactly as put_text draws it.
+        let mut a = ratatui::buffer::Buffer::empty(Rect::new(0, 0, 16, 1));
+        let mut b = a.clone();
+        assert_eq!(put_text(&mut a, 2, 0, 12, "冬天", Style::default()), put_fit(&mut b, 2, 0, 12, "冬天", Style::default()));
+        assert_eq!(a, b);
+    }
+
+    /// A list row and its note, too long for the panel, say that they go on.
+    #[test]
+    fn a_list_row_too_long_for_its_panel_ends_with_the_mark() {
+        let config = Config::default();
+        crate::theme::settle(&config, None);
+        let ink = crate::theme::Palette::of(&config);
+        let items = [Row {
+            text: "a-command-whose-name-goes-on-and-on".to_string(),
+            note: Some("and a note that says much more than the panel holds".to_string()),
+            dim: false,
+        }];
+        let backend = ratatui::backend::TestBackend::new(30, 8);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        terminal
+            .draw(|frame| {
+                let area = frame.area();
+                draw_list(
+                    frame,
+                    ink,
+                    false,
+                    area,
+                    area.height,
+                    List {
+                        deep_as_the_page: true,
+                        about: &[],
+                        state: None,
+                        wide: true,
+                        over_status: false,
+                        items: &items,
+                        focus: 0,
+                        highlight: None,
+                        footer: "",
+                        columns: false,
+                        title: "list",
+                        cap: 30,
+                        whole: None,
+                    },
+                );
+            })
+            .unwrap();
+        let text = buffer_to_text(terminal.backend().buffer());
+        let line = text.lines().find(|l| l.contains("a-command")).unwrap_or_default();
+        assert!(line.contains('…'), "the cut is not marked:\n{text}");
+        assert!(!line.contains("on-and-on"), "{text}");
     }
 }

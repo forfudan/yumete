@@ -25,7 +25,7 @@ use yumete_core::say;
 use yumete_core::sidebar::Side;
 use yumete_core::table::Rules;
 
-use crate::{gutter_width, put_text};
+use crate::{gutter_width, put_fit, put_text};
 
 /// Where the grid is scrolled to.
 #[derive(Debug, Clone, Copy, Default)]
@@ -1653,7 +1653,7 @@ pub fn draw_detail(
     // Warning: **用 `shell.head`，別自己調一個**，不然標題裏的行號底色不對。有焦點的時候那一行
     // 整條是金底，而自己調的那一個帶着 CHROME 的底色——寫上去就是金條上一塊
     // 別的顏色。框交出 `head` 正是為了這件事，文件樹那一支用的也是它。
-    put_text(buf, shell.head_at + 2, area.y, right, &detail.title, shell.head);
+    put_fit(buf, shell.head_at + 2, area.y, right, &detail.title, shell.head);
     let mut y = area.y + 2;
     // The 部件 list first, because it is what the panel is *read for* — drawn
     // last, under twenty-eight mostly-blank fields, it would on any real
@@ -1777,7 +1777,7 @@ pub fn draw_detail(
             return;
         }
         let style = if *field == detail.here { here } else { name };
-        put_text(buf, left, y, right, field, style);
+        put_fit(buf, left, y, right, field, style);
         // **A field the row does not have**, said in 朱 and in words: a blank
         // here would mean either 「this cell is empty」 or 「this row is short
         // by twenty-four columns」, and telling those apart is most of what

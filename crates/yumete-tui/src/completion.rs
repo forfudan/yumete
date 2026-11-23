@@ -133,10 +133,10 @@ pub(crate) fn draw_rows_in(
         if row.deprecated {
             name = name.add_modifier(Modifier::CROSSED_OUT);
         }
-        let label = crate::panel::clip(&row.label, name_w);
+        let label = crate::elide(&row.label, name_w);
         crate::put_text(buf, rect.x + MARK, y, right, &label, name);
         if let Some(note) = row.note.as_deref().filter(|_| note_w > 0) {
-            let note = crate::panel::clip(note, note_w);
+            let note = crate::elide(note, note_w);
             let at = note_end.saturating_sub(wide(&note) as u16);
             crate::put_text(buf, at, y, note_end, &note, base.fg(ink.quiet()));
         }

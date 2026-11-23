@@ -366,7 +366,7 @@ pub(crate) fn key_columns(
     }
 }
 
-/// [`clip`] for a row drawn in several colours: the parts are cut where the
+/// [`crate::elide`] for a row drawn in several colours: the parts are cut where the
 /// whole row would be, and the `…` wears the colour of the part it cuts.
 pub(crate) fn clip_parts<S: Copy>(parts: Vec<(String, S)>, cells: usize) -> Vec<(String, S)> {
     let whole: usize = parts.iter().map(|(text, _)| yumete_cjk::str_width(text)).sum();
@@ -393,25 +393,6 @@ pub(crate) fn clip_parts<S: Copy>(parts: Vec<(String, S)>, cells: usize) -> Vec<
     if let Some((last, _)) = out.last_mut() {
         last.push('…');
     }
-    out
-}
-
-pub(crate) fn clip(text: &str, cells: usize) -> String {
-    if yumete_cjk::str_width(text) <= cells {
-        return text.to_string();
-    }
-    let budget = cells.saturating_sub(yumete_cjk::str_width("…"));
-    let mut out = String::new();
-    let mut used = 0;
-    for g in yumete_cjk::graphemes(text) {
-        let w = yumete_cjk::grapheme_width(g).max(1);
-        if used + w > budget {
-            break;
-        }
-        out.push_str(g);
-        used += w;
-    }
-    out.push('…');
     out
 }
 
@@ -1299,7 +1280,7 @@ pub fn draw(
                     true => one,
                     false => one.saturating_sub(key_w + 2),
                 };
-                put_text(buf, at, y, edge, &clip(&what, room), ground.fg(said));
+                put_text(buf, at, y, edge, &crate::elide(&what, room), ground.fg(said));
             }
         }
     }
@@ -1324,7 +1305,7 @@ pub fn draw(
         // `limit - w - 1` 起筆的話起點落在框外，畫出來是「y 複製先前版╯」：最後
         // 一個字被角吃掉，而讀者看不出那是被截的。兩頭各留一格空氣，同左端那個數字。
         let room = (width as usize).saturating_sub(3);
-        let tag = clip(&tag, room);
+        let tag = crate::elide(&tag, room);
         let w = yumete_cjk::str_width(&tag) as u16;
         put_text(buf, limit.saturating_sub(w + 1), floor, limit, &tag, ground.fg(ink.quiet()));
     }

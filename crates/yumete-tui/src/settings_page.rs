@@ -71,7 +71,7 @@ fn setting_named(typed: &str) -> Option<&str> {
     matches!(word, "settings" | "set" | "se").then(|| rest.trim())
 }
 
-use crate::put_text;
+use crate::{put_fit, put_text};
 
 /// 左邊那張組目録有多寬（全角格）。
 const GROUPS_WIDE: u16 = 14;
@@ -1508,7 +1508,7 @@ pub fn draw(
         return None;
     }
     if rows.is_empty() {
-        put_text(buf, from, top, right, &say!("settings.no-match", &panel.search), quiet);
+        put_fit(buf, from, top, right, &say!("settings.no-match", &panel.search), quiet);
     }
     // **One list, the groups its headings**, and under the
     // row the reason a value was refused, or the list a choice opened.
@@ -2123,7 +2123,7 @@ fn draw_flavor_page(
                             sum.push_str(&format!("，{}", say!("settings.flavor-items.named", named)));
                         }
                         let x = x + yumete_cjk::str_width(&value) as u16 + 3;
-                        put_text(buf, x, y, right, &sum, lit(quiet));
+                        put_fit(buf, x, y, right, &sum, lit(quiet));
                     }
                     FlavorRow::Item(item) => {
                         let (on, source) = panel.item_shown(*item);
@@ -2254,7 +2254,7 @@ fn draw_tick_layers(
             (true, _) => ground.fg(ink.azure()),
             (false, _) => ground.fg(ink.quiet()),
         };
-        put_text(buf, x, y, right, &line, style);
+        put_fit(buf, x, y, right, &line, style);
     }
 }
 
