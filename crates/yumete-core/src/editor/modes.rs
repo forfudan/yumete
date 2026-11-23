@@ -812,6 +812,18 @@ impl Editor {
     }
 
     pub fn grapheme_at_cursor(&self) -> Option<String> {
+        self.grapheme_here(true)
+    }
+
+    /// **The character the caret stands on, and only that**: `None` past the
+    /// line's last character, on its break, where [`Self::grapheme_at_cursor`]
+    /// answers the one before. What the block caret is as wide as: on a
+    /// line break it is one cell, whatever came before it.
+    pub fn grapheme_under_caret(&self) -> Option<String> {
+        self.grapheme_here(false)
+    }
+
+    fn grapheme_here(&self, or_the_one_before: bool) -> Option<String> {
         // **An empty cell holds no character to name**. In the grid the
         // caret's position in an empty cell is the delimiter's, which would
         // read 「this cell holds `,`」. The line's own rule
@@ -850,7 +862,7 @@ impl Editor {
             last = Some(g);
         }
         // 走到了行尾（或者空行）：答前面那一個，同 `char_at_cursor`。
-        last.map(str::to_string)
+        last.filter(|_| or_the_one_before).map(str::to_string)
     }
 }
 

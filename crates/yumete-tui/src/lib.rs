@@ -17906,7 +17906,7 @@ fn paint_the_caret_block(
     // block is standing *on*. One cell for both, which is what the terminal
     // drew for them.
     let wide = editor
-        .grapheme_at_cursor()
+        .grapheme_under_caret()
         .filter(|g| !matches!(g.as_str(), "\n" | "\r\n" | "\r" | "\t"))
         .map_or(1, |g| yumete_cjk::grapheme_width(&g).max(1)) as u16;
     let ink = crate::theme::Palette::of(config);
@@ -33252,6 +33252,21 @@ fn squeezed(text: &str) -> String {
         // **In Insert there is no block** — the bar is the terminal's, and it
         // paints nothing into the page.
         assert!(!under("那年", &[Key::Char('i')], 3), "a bar paints nothing");
+        // **On a line break it is one cell**, after a 漢字 as after a letter:
+        // the break is what it stands on, not the character before it.
+        let past_the_end = |text: &str, x: u16| {
+            let mut editor = editor_with(text);
+            editor.execute(":keymap helix").unwrap();
+            for key in [Key::Char('g'), Key::Char('l'), Key::Char('l')] {
+                editor.on_key(key);
+            }
+            let buffer = render(&editor, &config, 24, 4);
+            let cell = &buffer[(x, 0)];
+            cell.bg == block.bg.expect("a ground") && Some(cell.fg) == block.fg
+        };
+        assert!(past_the_end("那年\nab", 7), "the block is on the break");
+        assert!(!past_the_end("那年\nab", 8), "one cell, not 年's two");
+        assert!(past_the_end("ab\ncd", 5) && !past_the_end("ab\ncd", 6));
     }
 
     /// **A block cursor on a 字根 covers both of its cells**, in the horizontal
