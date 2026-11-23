@@ -3115,6 +3115,57 @@ impl Editor {
         f(rope, m)
     }
 
+    /// **Where vim's screen-line motions go** (`:h g0`): `0` the first
+    /// character of the row the cursor is on, `^` its first non-blank, `$`
+    /// its last, `m` the character half the text's width into it (or its
+    /// last when the row is shorter). A row is a line when nothing wraps.
+    pub(super) fn screen_row_target(&self, what: char) -> usize {
+        let width = self.wrap_width().unwrap_or(crate::wrap::NO_WRAP);
+        let half = self.wrap_width().or(self.wrap_width).unwrap_or(80) / 2;
+        let head = self.sel.head();
+        self.with_page_measure(width, |rope, m| {
+            let head = head.min(rope.len_chars());
+            let line = rope.char_to_line(head);
+            let start = rope.line_to_char(line);
+            let len = motion::line_text(rope, line).chars().count();
+            let rows = crate::wrap::rows_of_line(rope, line, m);
+            let col = head - start;
+            let i = rows.partition_point(|&(s, _)| s <= col).saturating_sub(1).min(rows.len().saturating_sub(1));
+            let (a, b) = rows.get(i).copied().unwrap_or((0, len));
+            let (a, b) = (start + a.min(len), start + b.min(len));
+            let last = b.saturating_sub(1).max(a);
+            let blank = |c: char| matches!(c, ' ' | '\t' | '\u{3000}');
+            match what {
+                '0' => a,
+                '^' => (a..b).find(|&at| !blank(rope.char(at))).unwrap_or(a),
+                '$' => last,
+                _ => {
+                    let mut seen = 0;
+                    (a..b)
+                        .find(|&at| {
+                            let here = seen;
+                            seen += yumete_cjk::char_width(rope.char(at));
+                            here >= half
+                        })
+                        .unwrap_or(last)
+                }
+            }
+        })
+    }
+
+    /// vim's `g0`, `g^`, `gm` and `g$` as motions: `g$` with a count goes
+    /// down that many screen rows less one first.
+    pub(super) fn goto_screen_row(&mut self, what: char, count: usize) {
+        if what == '$' {
+            for _ in 1..count.max(1) {
+                self.move_vertical(false);
+            }
+        }
+        let at = self.screen_row_target(what);
+        self.move_head(at);
+        self.refresh_goal_column();
+    }
+
     fn move_row(&mut self, up: bool, textual: bool) {
         // **In a grid, the column is the cell** (#357). The goal column is
         // worked out from the *document* — the text and the padding a `|`

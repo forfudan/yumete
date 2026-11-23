@@ -33374,6 +33374,35 @@ fn gj_walks_the_file_in_helix_and_the_screen_in_vim() {
     assert!(column > 0, "而且往後挪了：第 {column} 個字");
 }
 
+/// **vim's `g0`, `g^`, `gm` and `g$` go by the screen row** (`:h g0`),
+/// measured in nvim 0.12 `--clean` at 20 columns, ten wide characters to a
+/// row: the row's first character, its first non-blank, the one half the
+/// width into it (its last on a short row), and its last; `3g$` goes two
+/// rows down first. `dg0` is exclusive and `dg$` inclusive.
+#[test]
+fn vims_g0_and_g_dollar_go_by_the_screen_row() {
+    let text = "一二三四五六七八九十甲乙丙丁戊己庚辛壬癸子丑寅卯辰\n  xy\n";
+    let run = |keys: &str| {
+        let mut ed = typed(text);
+        ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
+        ed.set_wrap_width(20);
+        ed.execute("goto 1").unwrap();
+        press(&mut ed, keys);
+        (ed.current_buffer().text(), vim_at(&ed))
+    };
+    assert_eq!(run("15lg0").1, (1, 11));
+    assert_eq!(run("15lg^").1, (1, 11));
+    assert_eq!(run("15lgm").1, (1, 16));
+    assert_eq!(run("15lg$").1, (1, 20));
+    assert_eq!(run("g$").1, (1, 10));
+    assert_eq!(run("3g$").1, (1, 25));
+    assert_eq!(run("gm").1, (1, 6));
+    assert_eq!(run("22lgm").1, (1, 25), "a short row's last");
+    assert_eq!(run("jg^").1, (2, 3));
+    assert_eq!(run("15ldg0"), ("一二三四五六七八九十己庚辛壬癸子丑寅卯辰\n  xy\n".into(), (1, 11)));
+    assert_eq!(run("15ldg$"), ("一二三四五六七八九十甲乙丙丁戊子丑寅卯辰\n  xy\n".into(), (1, 16)));
+}
+
 /// **`R` 之後選區正好是換上去的那一段**。
 ///
 /// helix 鍵位下按 `R`，選中的字換成寄存器裏的那一段，選區不往後**延伸**到下一個

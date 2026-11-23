@@ -2393,6 +2393,34 @@ zhs = "行尾(vim 的 $：往下走也留在行尾)"
 en = "the end of the line (vim's $: moving down keeps to line ends)"
 
 [[message]]
+# 命令說明：vim_goto_screen_line_end（草稿）
+key = "action.vim-goto-screen-line-end"
+zhs = "屏幕上这一行的最后一个字符(带数字时往下几行，vim 的 g$)"
+en = "last character of the screen line, a count going rows down (vim's g$)"
+find = "屏幕行 折行 行尾 結尾 结尾 screen line end g$"
+
+[[message]]
+# 命令說明：vim_goto_screen_line_first_nonwhitespace（草稿）
+key = "action.vim-goto-screen-line-first-nonwhitespace"
+zhs = "屏幕上这一行的第一个非空白字符(vim 的 g^)"
+en = "first non-blank of the screen line (vim's g^)"
+find = "屏幕行 折行 非空白 screen line first non-blank g^"
+
+[[message]]
+# 命令說明：vim_goto_screen_line_middle（草稿）
+key = "action.vim-goto-screen-line-middle"
+zhs = "屏幕上这一行里正文宽度一半处(vim 的 gm)"
+en = "half the text's width into the screen line (vim's gm)"
+find = "屏幕行 折行 中間 中间 screen line middle gm"
+
+[[message]]
+# 命令說明：vim_goto_screen_line_start（草稿）
+key = "action.vim-goto-screen-line-start"
+zhs = "屏幕上这一行(折行后的一行)的开头(vim 的 g0)"
+en = "start of the screen line, as wrapped (vim's g0)"
+find = "屏幕行 折行 行首 開頭 开头 screen line start g0"
+
+[[message]]
 # 命令說明：vim_increment
 key = "action.vim-increment"
 zhs = "光标处或其后的数字加一(vim 的 C-a)"

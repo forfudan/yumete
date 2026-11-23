@@ -503,8 +503,8 @@ impl Editor {
         // **vim's `g` takes no count after it** (`nv_g_cmd`): `g2` names no
         // command, so it is dropped with a beep, and the keys after it start
         // afresh — `g2UU` is `UU`. The count before the `g` still goes with
-        // it (`2gUU`).
-        if group.pending == Pending::Goto && at.vim && matches!(key, Key::Char('0'..='9')) {
+        // it (`2gUU`). `g0` is a command of its own.
+        if group.pending == Pending::Goto && at.vim && matches!(key, Key::Char('1'..='9')) {
             self.pending = Pending::None;
             self.operator_count = None;
             self.sequence = None;
@@ -512,7 +512,9 @@ impl Editor {
             self.fail_the_motion();
             return;
         }
-        if let Some(before) = group.before {
+        // vim's `g0` is a command, not the start of a number.
+        let g0 = group.pending == Pending::Goto && at.vim && key == Key::Char('0');
+        if let Some(before) = group.before.filter(|_| !g0) {
             if before(self, key) {
                 return;
             }
@@ -947,6 +949,10 @@ pub(super) static GOTO: Group = Group {
         ch('i', NormalCmd::InsertAtLastInsert, "hint.goto.insert-again").when(Only::Vim),
         ch(';', NormalCmd::GotoOlderChange, "hint.goto.walk-changes").when(Only::Vim),
         ch('&', NormalCmd::VimSubstituteAgainEverywhere, "action.vim-substitute-again-everywhere").when(Only::Vim),
+        ch('0', NormalCmd::VimGotoScreenLineStart, "action.vim-goto-screen-line-start").when(Only::Vim),
+        ch('^', NormalCmd::VimGotoScreenLineFirstNonwhitespace, "action.vim-goto-screen-line-first-nonwhitespace").when(Only::Vim),
+        ch('m', NormalCmd::VimGotoScreenLineMiddle, "action.vim-goto-screen-line-middle").when(Only::Vim),
+        ch('$', NormalCmd::VimGotoScreenLineEnd, "action.vim-goto-screen-line-end").when(Only::Vim),
         ch(',', NormalCmd::GotoNewerChange, "hint.goto.walk-changes").when(Only::Vim),
         ch('u', NormalCmd::OperatorLowercase, "hint.goto.case-operators").when(Only::Vim),
         ch('U', NormalCmd::OperatorUppercase, "hint.goto.case-operators").when(Only::Vim),

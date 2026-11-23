@@ -891,6 +891,10 @@ normal_commands! {
     VimGotoFirstNonwhitespace = "vim_goto_first_nonwhitespace",
     VimSubstituteAgain = "vim_substitute_again",
     VimSubstituteAgainEverywhere = "vim_substitute_again_everywhere",
+    VimGotoScreenLineStart = "vim_goto_screen_line_start",
+    VimGotoScreenLineFirstNonwhitespace = "vim_goto_screen_line_first_nonwhitespace",
+    VimGotoScreenLineMiddle = "vim_goto_screen_line_middle",
+    VimGotoScreenLineEnd = "vim_goto_screen_line_end",
 }
 
 const fn command(name: &'static str, help: &'static str, c: &'static str) -> Action {
@@ -1509,6 +1513,10 @@ pub const ALL: &[Action] = &[
     normal("action.vim-goto-first-nonwhitespace", NormalCmd::VimGotoFirstNonwhitespace),
     normal("action.vim-substitute-again", NormalCmd::VimSubstituteAgain),
     normal("action.vim-substitute-again-everywhere", NormalCmd::VimSubstituteAgainEverywhere),
+    normal("action.vim-goto-screen-line-start", NormalCmd::VimGotoScreenLineStart),
+    normal("action.vim-goto-screen-line-first-nonwhitespace", NormalCmd::VimGotoScreenLineFirstNonwhitespace),
+    normal("action.vim-goto-screen-line-middle", NormalCmd::VimGotoScreenLineMiddle),
+    normal("action.vim-goto-screen-line-end", NormalCmd::VimGotoScreenLineEnd),
 ];
 
 /// **The places that take keys and are not modes of the text** (step 9 of

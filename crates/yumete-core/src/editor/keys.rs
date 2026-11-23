@@ -1513,6 +1513,18 @@ impl Editor {
             self.take_the_break = false;
             return;
         }
+        // **vim's screen-line motions** (`:h g0`): `dg0`, `dg^` and `dgm`
+        // are exclusive, `dg$` inclusive.
+        if first == Some('g') && matches!(c, '0' | '^' | '$' | 'm') {
+            self.count = None;
+            self.alias_count = None;
+            let at = self.screen_row_target(c);
+            let here = self.sel.head();
+            return match c {
+                '$' => self.do_vim(op, motion::Span::Over { anchor: here.min(at), head: here.max(at) }),
+                _ => self.vim_exclusive_to(op, at),
+            };
+        }
         // A motion still owed a character (`df,`, `di(`) takes this one.
         if let Some(f) = first {
             if let Some(step) = crate::vim::step_for(&f.to_string(), grain, Some(c)) {

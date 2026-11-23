@@ -121,6 +121,11 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     }, Key::Char('i')),
     (NormalCmd::GotoOlderChange, |e, _| e.walk_changes(true), Key::Char(';')),
     // vim's `g&`: `:%s//~/&`, the last search's pattern over every line.
+    // vim's screen-line motions.
+    (NormalCmd::VimGotoScreenLineStart, |e, cx| e.goto_screen_row('0', cx.count), Key::Char('0')),
+    (NormalCmd::VimGotoScreenLineFirstNonwhitespace, |e, cx| e.goto_screen_row('^', cx.count), Key::Char('^')),
+    (NormalCmd::VimGotoScreenLineMiddle, |e, cx| e.goto_screen_row('m', cx.count), Key::Char('m')),
+    (NormalCmd::VimGotoScreenLineEnd, |e, cx| e.goto_screen_row('$', cx.count), Key::Char('$')),
     (NormalCmd::VimSubstituteAgainEverywhere, |e, _| e.substitute_again(true, "", crate::command::Rows::All, true), Key::Char('&')),
     (NormalCmd::GotoNewerChange, |e, _| e.walk_changes(false), Key::Char(',')),
     // vim's `g` operators, each waiting for a motion.

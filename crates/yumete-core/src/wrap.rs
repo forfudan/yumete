@@ -918,7 +918,7 @@ pub fn rows_of_line_for_test(rope: &Rope, line: usize, m: Measure) -> Vec<(usize
     rows_of_line(rope, line, m)
 }
 
-fn rows_of_line(rope: &Rope, line: usize, m: Measure) -> Vec<(usize, usize)> {
+pub(crate) fn rows_of_line(rope: &Rope, line: usize, m: Measure) -> Vec<(usize, usize)> {
     // **A table row is one row** (#275), so there is nothing to measure and
     // nothing to remember: the whole line, whatever the measure is. Ahead of
     // the cache, because the answer does not depend on the width and caching
