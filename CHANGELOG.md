@@ -27,6 +27,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Fixed
 
+- **Under vim, `o` on a last line with no line break, then an arrow up, keeps the new line**, as vim does; it used to be taken back.
 - **`whitespace = "selection"` marks a space selected alone**: `v` on one blank shows its glyph, as a longer selection does.
 
 ## 0.25.0 · 2026-11-23

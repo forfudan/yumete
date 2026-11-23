@@ -45597,6 +45597,8 @@ fn feed_vim(ed: &mut Editor, keys: &str) {
             'ᵗ' => Key::Ctrl('t'),
             'ᵈ' => Key::Ctrl('d'),
             'ᵒ' => Key::Ctrl('o'),
+            '↑' => Key::Up,
+            '↓' => Key::Down,
             c => Key::Char(c),
         });
     }
@@ -47471,7 +47473,8 @@ fn the_previous_context_mark_after_jumping_back_is_where_the_walk_began() {
 
 /// **An empty line opened after a last line with no break is kept** (as
 /// nvim keeps it): `o` or `A` Enter, then Esc with nothing typed, leaves an
-/// empty last line, which a file with no final break could not hold.
+/// empty last line, which a file with no final break could not hold. Left
+/// by an arrow first, it stays as well.
 #[test]
 fn an_empty_line_opened_after_an_unterminated_last_line_is_kept() {
     for (keys, want, at) in [
@@ -47480,6 +47483,10 @@ fn an_empty_line_opened_after_an_unterminated_last_line_is_kept() {
         ("jo⏎⎋", "sea\nsky\n\n\n", (4, 1)),
         ("jox⎋", "sea\nsky\nx", (3, 1)),
         ("jo⎋u", "sea\nsky", (2, 1)),
+        ("jo↑x⎋", "sea\nxsky\n\n", (2, 1)),
+        ("jo↑⎋", "sea\nsky\n\n", (2, 1)),
+        ("jox⏎↑⎋", "sea\nsky\nx\n\n", (3, 1)),
+        ("jo↑↓⎋", "sea\nsky\n\n", (3, 1)),
     ] {
         let mut ed = typed_vim("sea\nsky");
         feed_vim(&mut ed, keys);
