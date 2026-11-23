@@ -246,10 +246,11 @@ pub enum Command {
     GotoAddress(LineAddress),
     /// vim's `:3|…` and `:2,5|…`: a bare range before a `|` puts the cursor
     /// on its last line, then the command after the `|` runs; either end
-    /// past the last line is an error and nothing more runs. `first` is the
-    /// range's other end, when it has two; `typed` is the whole line, for
-    /// the keymap that does not read it.
-    RangeThen { first: Option<LineAddress>, line: LineAddress, then: String, typed: String },
+    /// past the last line is an error and nothing more runs. `:2,5` alone
+    /// (`then` is `None`) goes to its last line, held within the file.
+    /// `first` is the range's other end, when it has two; `typed` is the
+    /// whole line, for the keymap that does not read it.
+    RangeThen { first: Option<LineAddress>, line: LineAddress, then: Option<String>, typed: String },
     /// `:earlier [n|span]` / `:later [n|span]` — helix's: so many undo steps,
     /// or to the change nearest a time span back or ahead.
     Earlier(UndoSpan),
@@ -417,10 +418,10 @@ pub enum Command {
     Fold,
     /// `:read <file>` — a file's contents into this buffer, as vim's `:r` and
     /// helix's `:read`; `:read !cmd` the command's output, as vim's. The
-    /// lines go below the cursor's line, or below line `after` when a range
-    /// stands in front (`:0read` above the first line, `:$read` after the
-    /// last).
-    Read { what: String, shell: bool, after: Option<Bound> },
+    /// lines go below the cursor's line, or below the last line of `after`
+    /// when a range stands in front (`:0read` above the first line, `:$read`
+    /// after the last).
+    Read { what: String, shell: bool, after: Option<Rows> },
     /// `:wheel <n>` — how far one notch of the mouse wheel moves, in whichever
     /// unit the page is set in; `None` only reports (Feature #222).
     SetWheelStep(Option<usize>),
@@ -1283,13 +1284,8 @@ fn parse_ranged(line: &str) -> Option<Result<Command, CommandError>> {
     match parse(rest) {
         Ok(Command::Sort { how, rows: None }) => Some(Ok(Command::Sort { how, rows: Some(rows) })),
         // **The lines go after the range's last line**, as vim's `:r`.
-        Ok(Command::Read { what, shell, after: None }) => {
-            let after = match rows {
-                Rows::All => Bound::Last,
-                Rows::Span(_, last) => last,
-                Rows::Selection => return None,
-            };
-            Some(Ok(Command::Read { what, shell, after: Some(after) }))
+        Ok(Command::Read { what, shell, after: None }) if rows != Rows::Selection => {
+            Some(Ok(Command::Read { what, shell, after: Some(rows) }))
         }
         Err(e) if matches!(&e, CommandError::Wants { command: "sort", .. }) => Some(Err(e)),
         _ => None,
@@ -7894,11 +7890,14 @@ fn parse_line_address(input: &str) -> Option<LineAddress> {
 }
 
 /// [`Command::RangeThen`] from `input`: one or two addresses, a `|`, and
-/// what follows it. An address is a line number, `.`, `$` or a mark (`'a`,
-/// `'<`), with any `+N` and `-N`; `%` is the first line to the last.
+/// what follows it, or two addresses alone. An address is a line number,
+/// `.`, `$` or a mark (`'a`, `'<`), with any `+N` and `-N`; `%` is the first
+/// line to the last.
 fn parse_range_then(input: &str) -> Option<Command> {
-    let bar = input.find('|')?;
-    let head = input[..bar].trim_end();
+    let (head, then) = match input.find('|') {
+        Some(bar) => (input[..bar].trim_end(), Some(input[bar + 1..].trim_start().to_string())),
+        None => (input, None),
+    };
     let address = |part: &str| -> Option<LineAddress> {
         let part = part.trim();
         if let Some(named) = part.strip_prefix('\'') {
@@ -7920,12 +7919,18 @@ fn parse_range_then(input: &str) -> Option<Command> {
         return Some(Command::RangeThen {
             first: Some(whole(Bound::Line(1))),
             line: whole(Bound::Last),
-            then: input[bar + 1..].trim_start().to_string(),
+            then: Some(then?),
             typed: input.to_string(),
         });
     }
     let parts: Vec<&str> = head.split(',').collect();
-    if parts.len() > 2 || parts.iter().any(|part| address(part).is_none()) {
+    // One address alone is a line ([`Command::GotoAddress`]).
+    let most = match then {
+        Some(_) => 2,
+        None if parts.len() == 2 => 2,
+        None => return None,
+    };
+    if parts.len() > most || parts.iter().any(|part| address(part).is_none()) {
         return None;
     }
     Some(Command::RangeThen {
@@ -7934,7 +7939,7 @@ fn parse_range_then(input: &str) -> Option<Command> {
             _ => None,
         },
         line: address(parts[parts.len() - 1])?,
-        then: input[bar + 1..].trim_start().to_string(),
+        then,
         typed: input.to_string(),
     })
 }
@@ -9411,8 +9416,11 @@ mod tests {
         assert_eq!(parse(":read !printf 'a\\nb'"), shell("printf 'a\\nb'", None));
         assert_eq!(parse(":read! ls -l"), shell("ls -l", None));
         assert_eq!(parse(":read!ls"), shell("ls", None));
-        assert_eq!(parse(":0read !date"), shell("date", Some(Bound::Line(0))));
-        assert_eq!(parse(":$read notes.md"), Ok(Command::Read { what: "notes.md".into(), shell: false, after: Some(Bound::Last) }));
+        assert_eq!(parse(":0read !date"), shell("date", Some(Rows::Span(Bound::Line(0), Bound::Line(0)))));
+        assert_eq!(
+            parse(":$read notes.md"),
+            Ok(Command::Read { what: "notes.md".into(), shell: false, after: Some(Rows::Span(Bound::Last, Bound::Last)) })
+        );
         assert_eq!(parse(":read notes.md"), Ok(Command::Read { what: "notes.md".into(), shell: false, after: None }));
         assert_eq!(parse(":read !"), Err(CommandError::MissingArgument("read")));
         assert!(!matches!(parse(":r !ls"), Ok(Command::Read { .. })), "`:r` stays `:replace`");

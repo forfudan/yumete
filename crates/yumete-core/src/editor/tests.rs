@@ -32285,6 +32285,47 @@ fn a_backwards_range_is_asked_about_before_it_is_swapped() {
     assert_eq!(ed.current_buffer().rope().to_string(), "X1\nX2\nX3\n", "正向直接做");
 }
 
+/// **Every range written backwards asks before it runs**, as `:s` does: a
+/// bare range, one before a `|`, `:sort`, `:normal` and `:read`. `y` swaps,
+/// so a bare range goes to its larger end; any other key runs nothing.
+#[test]
+fn every_backwards_range_asks_before_it_swaps() {
+    let text = "e\nd\nc\nb\na\nf\ng\n";
+    let run = |keys: &str, line: &str, answer: Option<char>| {
+        let mut ed = typed_vim(text);
+        press(&mut ed, keys);
+        ed.execute(line).unwrap();
+        let asked = ed.pending == Pending::SwapRange;
+        if let Some(c) = answer {
+            ed.on_key(Key::Char(c));
+        }
+        (asked, ed.current_buffer().text(), vim_at(&ed))
+    };
+    let same = text.to_string();
+    assert_eq!(run("", ":3,6", None), (false, same.clone(), (6, 1)), "forwards: no question");
+    assert_eq!(run("", ":6,3", None), (true, same.clone(), (1, 1)));
+    assert_eq!(run("", ":6,3", Some('y')), (true, same.clone(), (6, 1)), "swapped, to its last line");
+    assert_eq!(run("", ":6,3", Some('n')), (true, same.clone(), (1, 1)));
+    assert_eq!(run("", ":3,99", None), (false, same.clone(), (7, 1)), "past the end is the last line");
+    assert_eq!(run("", ":99,3", Some('y')), (true, same.clone(), (7, 1)));
+    assert_eq!(run("", ":6,3|s/$/X/", Some('y')).1, "e\nd\nc\nb\na\nfX\ng\n");
+    assert_eq!(run("", ":6,3|s/$/X/", Some('n')).1, same);
+    assert_eq!(run("", ":3,99|s/$/X/", None), (false, same.clone(), (1, 1)), "past the end before a `|` runs nothing");
+    assert_eq!(run("4Gmagg", ":'a,2|s/$/X/", Some('y')).1, "e\nd\nc\nbX\na\nf\ng\n");
+    assert_eq!(run("", ":4,2sort", Some('y')).1, "e\nb\nc\nd\na\nf\ng\n");
+    assert_eq!(run("", ":4,2sort", Some('n')).1, same);
+    assert_eq!(run("", ":3,1norm Ax", Some('y')).1, "ex\ndx\ncx\nb\na\nf\ng\n");
+    assert_eq!(run("", ":3,1s/$/X/", Some('y')).1, "eX\ndX\ncX\nb\na\nf\ng\n", "`,` is a span");
+    let dir = std::env::temp_dir().join(format!("yumete-read-backwards-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("r.txt");
+    std::fs::write(&file, "r\n").unwrap();
+    let read = format!(":4,2read {}", file.to_string_lossy());
+    assert_eq!(run("", &read, Some('y')).1, "e\nd\nc\nb\nr\na\nf\ng\n", "below the larger end");
+    assert_eq!(run("", &read, Some('n')).1, same);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// **没有的那一行不許悄悄夾到末行**。
 ///
 /// 三行的檔上 `:99s/a/X/` 不許改**第三行**還報「換了 1 處」——`:9s` 打成 `:91s`

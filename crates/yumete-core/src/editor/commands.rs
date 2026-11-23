@@ -53,6 +53,33 @@ impl Editor {
         base as isize + 1 + address.offset
     }
 
+    /// **A range written backwards asks before it runs** (vim's 「Backwards
+    /// range given, OK to swap」): `first` and `second` are the line numbers
+    /// as written. Answers whether it asked; `y` runs `line` again with the
+    /// question answered, and the range consumer then takes its ends in order.
+    ///
+    /// 不許默默 `a.min(b)..a.max(b)` 就做：「我寫反了」和「我故意寫反」在屏幕上
+    /// 長得一樣。
+    pub(super) fn asks_to_swap(&mut self, first: isize, second: isize, line: &str) -> bool {
+        if first <= second || std::mem::take(&mut self.swapping_is_fine) {
+            return false;
+        }
+        self.swap_asked = Some(line.to_string());
+        self.pending = Pending::SwapRange;
+        self.status = say!("find.range-runs-backwards", first, second);
+        // The rest of the line does not run past the question.
+        self.command_failed = true;
+        true
+    }
+
+    /// [`Self::asks_to_swap`] for a range of [`crate::command::Rows`].
+    fn asks_to_swap_rows(&mut self, rows: Option<&crate::command::Rows>, line: &str) -> bool {
+        let Some((first, second)) = rows.and_then(|rows| self.a_backwards_range(rows)) else {
+            return false;
+        };
+        self.asks_to_swap(first as isize, second as isize, line)
+    }
+
     fn execute_now(&mut self, line: &str) -> Result<CommandOutcome, EditorError> {
         // **The line belongs to this command.** A command that fails says so
         // through its error, and the status is where the *last* command's
@@ -390,20 +417,8 @@ impl Editor {
                 glyphs,
                 rows,
             } => {
-                // **範圍寫反了就問一句**（照 vim）。
-                //
-                // `substitution_rows` 不許默默 `a.min(b)..a.max(b)` 就改：「我寫
-                // 反了」和「我故意寫反」在屏幕上長得一樣。對調過的那一條存起來，`y`
-                // 再跑——它走的是正向那一枝，不會問第二次。
-                if let Some((first, second)) = self.a_backwards_range(&rows) {
-                    if !std::mem::take(&mut self.swapping_is_fine) {
-                        self.swap_asked = Some(line.to_string());
-                        self.pending = Pending::SwapRange;
-                        self.status = say!("find.range-runs-backwards", first, second);
-                        // The rest of the line does not run past the question.
-                        self.command_failed = true;
-                        return Ok(CommandOutcome::Continue);
-                    }
+                if self.asks_to_swap_rows(Some(&rows), line) {
+                    return Ok(CommandOutcome::Continue);
                 }
                 self.substitute(Substitution {
                     pattern: &pattern,
@@ -799,10 +814,16 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::Sort { how, rows } => {
+                if self.asks_to_swap_rows(rows.as_ref(), line) {
+                    return Ok(CommandOutcome::Continue);
+                }
                 self.sort(how, rows);
                 Ok(CommandOutcome::Continue)
             }
             Command::Normal { keys, plain, rows } => {
+                if self.asks_to_swap_rows(rows.as_ref(), line) {
+                    return Ok(CommandOutcome::Continue);
+                }
                 if let Err(said) = self.run_normal_command(&keys, plain, rows) {
                     self.status = said;
                 }
@@ -918,9 +939,21 @@ impl Editor {
                         return Ok(CommandOutcome::Continue);
                     }
                 };
-                let line = ends[ends.len() - 1];
-                // Either end of `:99,3|` past the file is no line.
-                if let Some(&wrong) = ends.iter().find(|&&at| at < 0 || at > last as isize + 1) {
+                // **Written backwards, it asks first**, as `:s` does; `y`
+                // swaps, so the cursor goes to the larger end.
+                if let [first, second] = ends[..] {
+                    if self.asks_to_swap(first, second, line) {
+                        return Ok(CommandOutcome::Continue);
+                    }
+                }
+                let line = ends.iter().copied().max().unwrap_or(1);
+                // Either end of `:99,3|` past the file is no line; `:3,99`
+                // alone goes to the last line, as vim's does.
+                let wrong = match &then {
+                    Some(_) => ends.iter().find(|&&at| at < 0 || at > last as isize + 1),
+                    None => ends.iter().find(|&&at| at < 0),
+                };
+                if let Some(&wrong) = wrong {
                     self.status = say!("find.no-such-line", wrong, last + 1);
                     self.command_failed = true;
                     return Ok(CommandOutcome::Continue);
@@ -932,9 +965,9 @@ impl Editor {
                     Some(want) => self.land_at_column(line, want),
                     None => self.move_to_line(line + 1),
                 }
-                match then.is_empty() {
-                    true => Ok(CommandOutcome::Continue),
-                    false => self.execute_now(&then),
+                match then {
+                    Some(then) if !then.is_empty() => self.execute_now(&then),
+                    _ => Ok(CommandOutcome::Continue),
                 }
             }
             Command::Count => {
@@ -1644,23 +1677,31 @@ impl Editor {
                     self.status = say!("readonly.refused");
                     return Ok(CommandOutcome::Continue);
                 }
-                // **Below which line**: the cursor's, or the one a range
-                // named, `0` being above the first (vim's `:0r`).
+                if self.asks_to_swap_rows(after.as_ref(), line) {
+                    return Ok(CommandOutcome::Continue);
+                }
+                // **Below which line**: the cursor's, or the last one a range
+                // named, `0` being above the first (vim's `:0r`). A range
+                // written backwards was asked about and swapped, so its last
+                // line is its larger end.
                 let rope = self.current_buffer().rope();
                 let lines = motion::last_line(rope) + 1;
+                let below_end = |e: &Self, end: command::Bound| match end {
+                    command::Bound::Cursor => Ok(e.cursor_line() + 1),
+                    command::Bound::Last => Ok(lines),
+                    command::Bound::Mark(name) => e.mark_line(name).map(|line| line + 1),
+                    command::Bound::Line(n) if n <= lines => Ok(n),
+                    command::Bound::Line(n) => Err(say!("find.no-such-line", n, lines)),
+                };
                 let below = match after {
-                    None | Some(command::Bound::Cursor) => self.cursor_line() + 1,
-                    Some(command::Bound::Last) => lines,
-                    Some(command::Bound::Mark(name)) => match self.mark_line(name) {
-                        Ok(line) => line + 1,
-                        Err(why) => {
-                            self.status = why;
-                            return Ok(CommandOutcome::Continue);
-                        }
-                    },
-                    Some(command::Bound::Line(n)) if n <= lines => n,
-                    Some(command::Bound::Line(n)) => {
-                        self.status = say!("find.no-such-line", n, lines);
+                    None | Some(command::Rows::Selection) => Ok(self.cursor_line() + 1),
+                    Some(command::Rows::All) => Ok(lines),
+                    Some(command::Rows::Span(a, b)) => below_end(self, a).and_then(|a| Ok(a.max(below_end(self, b)?))),
+                };
+                let below = match below {
+                    Ok(below) => below,
+                    Err(why) => {
+                        self.status = why;
                         return Ok(CommandOutcome::Continue);
                     }
                 };

@@ -16,6 +16,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **`:preview-browser` shows the same preview in the browser**: it follows you and `:preview-lock` holds it; the page already open follows to the next document by itself, and from another document `:preview-browser` moves the browser there instead of showing the old page again. **A Markdown file's browser preview is live**: the page is written again a moment after you stop typing and reloads itself.
 - **Under vim, `cc`, `S` and a linewise `c` keep the line's leading blanks in prose too**, as nvim's autoindent does in a text file, and add none; with nothing typed they go again on `Esc`.
 - **`,` in a range is a span, as in vim**: `:1,40s` and `:1,40sort` take the forty lines from 1 to 40, as `1-40` still does. The list form (`:1,5,9s`) is gone, and a range of more than two ends is refused.
+- **Every range written backwards asks before it runs**, as `:s` did: `:4,2sort`, `:normal`, `:read`, and under vim `:7,3` and `:'a,3|…`; `y` swaps the ends, `n` runs nothing. Under vim a bare range of two ends (`:3,7`) goes to its last line.
 
 ## 0.25.0 · 2026-11-23
 
