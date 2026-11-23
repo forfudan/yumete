@@ -39489,8 +39489,8 @@ fn vims_enter_in_code_drops_the_blanks_after_the_caret() {
 
 /// **vim's `cc`, `S` and linewise `c` keep the first line's indent in code**
 /// (autoindent, measured in nvim), and the indent goes again when nothing is
-/// typed after it, after `o`, `O` and Enter too. Not in a text file: no
-/// autoindent in prose.
+/// typed after it, after `o`, `O` and Enter too. A text file keeps the
+/// line's own leading blanks and adds none.
 #[test]
 fn vims_linewise_change_keeps_the_indent_in_code() {
     let code = "fn main() {\n    let a = 1;\n      \n\n\tb();\n}\n";
@@ -39522,10 +39522,20 @@ fn vims_linewise_change_keeps_the_indent_in_code() {
     assert_eq!(vim("3jVd"), "fn main() {\n    let a = 1;\n      \n\tb();\n}\n", "V on an empty line is that line");
     // Enter on a line of autoindent alone empties it; the next keeps it.
     assert_eq!(vim("jA⏎⏎x"), "fn main() {\n    let a = 1;\n\n    x\n      \n\n\tb();\n}\n");
-    // Prose has no autoindent.
-    let mut ed = typed_vim("a\n    b\n");
-    keyed(&mut ed, "jccq⎋");
-    assert_eq!(ed.current_buffer().text(), "a\nq\n");
+    // Prose keeps the line's own blanks, and they go with nothing typed.
+    let prose = |text: &str, keys: &str| {
+        let mut ed = typed_vim(text);
+        keyed(&mut ed, keys);
+        ed.on_key(Key::Esc);
+        ed.current_buffer().text()
+    };
+    assert_eq!(prose("a\n    b\n", "jccq"), "a\n    q\n");
+    assert_eq!(prose("a\n\t b\n", "jSq"), "a\n\t q\n");
+    assert_eq!(prose("a\n  b\n    c\n", "jcjq"), "a\n  q\n");
+    assert_eq!(prose("a\n  b\n    c\n", "jVjcq"), "a\n  q\n");
+    assert_eq!(prose("a\n    b\n", "jcc"), "a\n\n");
+    assert_eq!(prose("a\nb\n", "jccq"), "a\nq\n", "none added");
+    assert_eq!(prose("a\n    b\n", "jo"), "a\n    b\n\n", "o still adds none");
 }
 
 /// **`j`/`k` onto a closed fold keep the column wanted** (nvim): not the end

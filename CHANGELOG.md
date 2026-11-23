@@ -14,6 +14,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **A file renamed with `:file-rename` or saved with `:write-as` takes its preview along**, locked or following, its name in the tab line with it.
 - **A Typst chapter's preview finds its book on the disk**: the Typst files in the chapter's folder and the folders above it, up to the project root (the folder holding `.git` or `typst.toml`, never above home), are followed by their `#include` and `#import` up to the file nobody names, whether the book is open or not.
 - **`:preview-browser` shows the same preview in the browser**: it follows you and `:preview-lock` holds it; the page already open follows to the next document by itself, and from another document `:preview-browser` moves the browser there instead of showing the old page again. **A Markdown file's browser preview is live**: the page is written again a moment after you stop typing and reloads itself.
+- **Under vim, `cc`, `S` and a linewise `c` keep the line's leading blanks in prose too**, as nvim's autoindent does in a text file, and add none; with nothing typed they go again on `Esc`.
 
 ## 0.25.0 · 2026-11-23
 

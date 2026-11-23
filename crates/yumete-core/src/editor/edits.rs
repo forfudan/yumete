@@ -450,26 +450,33 @@ impl Editor {
         if !self.writes_code() {
             return String::new();
         }
-        let text = self.line_text(line).unwrap_or_default();
-        let indent: String = text.chars().take_while(|c| *c == ' ' || *c == '\t' || *c == '\u{3000}').collect();
+        let indent = self.leading_blanks(line);
         match upto {
             Some(n) => indent.chars().take(n).collect(),
             None => indent,
         }
     }
 
+    /// The blanks a line starts with (spaces, TABs, U+3000), whatever the
+    /// file is written in.
+    pub(super) fn leading_blanks(&self, line: usize) -> String {
+        let text = self.line_text(line).unwrap_or_default();
+        text.chars().take_while(|c| *c == ' ' || *c == '\t' || *c == '\u{3000}').collect()
+    }
+
     /// **vim's linewise `c`** (`cc`, `S`, `cj`, Visual `V` `c`): the lines'
     /// text goes, the last one's break stays, and Insert starts there. An
     /// empty last line is not joined to the next.
     ///
-    /// **In code the first line's indent stays** (autoindent, as nvim does),
-    /// as `o` keeps it; a line of blanks keeps them all, and they go again
-    /// if nothing is typed after them.
+    /// **The first line's leading blanks stay** (autoindent, as nvim does),
+    /// as `o` keeps them in code; a line of blanks keeps them all, and they
+    /// go again if nothing is typed after them. In prose too: the blanks are
+    /// the writer's own, already in the file, and none are added.
     pub(super) fn change_whole_lines(&mut self, first: usize, last: usize, cut: bool) {
         let rope = self.current_buffer().rope();
         let start = rope.line_to_char(first);
         let end = motion::line_end(rope, rope.line_to_char(last)).max(start);
-        let indent = self.indent_of_line(first, None);
+        let indent = self.leading_blanks(first);
         if end == start && cut {
             self.store("\n".to_string());
         }
