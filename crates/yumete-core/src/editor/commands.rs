@@ -697,9 +697,11 @@ impl Editor {
             Command::SetTabInserts(want) => {
                 if let Some(spaces) = want {
                     // A typed setting is this buffer's too: a modeline's
-                    // `et` gives way to it.
+                    // `et`, and what the file's indentation showed, give way
+                    // to it.
                     self.set_tab_spaces(spaces);
                     self.current_buffer_mut().local_mut().tab_spaces = None;
+                    self.current_buffer_mut().guessed_mut().tab_spaces = None;
                 }
                 self.status = match self.tab_spaces() {
                     true => say!("layout.tab-spaces", self.indent_width()),
@@ -711,6 +713,7 @@ impl Editor {
                 if let Some(width) = want {
                     self.set_indent_width(width);
                     self.current_buffer_mut().local_mut().indent_width = None;
+                    self.current_buffer_mut().guessed_mut().indent_width = None;
                 }
                 self.status = say!("layout.indent-width", self.indent_width());
                 Ok(CommandOutcome::Continue)

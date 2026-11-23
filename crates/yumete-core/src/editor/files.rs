@@ -210,6 +210,24 @@ impl Editor {
         }
     }
 
+    /// **The indent `>`, Tab and Enter write**, for `:info`: so many spaces
+    /// or a TAB, and whether the file's own indentation said so.
+    fn indent_unit_report(&self) -> String {
+        let width = self.indent_width();
+        let unit = match self.tab_spaces() {
+            true => say!("file.indent-spaces", width),
+            false => say!("file.indent-tab", width),
+        };
+        let local = self.current_buffer().local();
+        let guessed = self.current_buffer().guessed();
+        let from_the_text = (local.indent_width.is_none() && guessed.indent_width.is_some())
+            || (local.tab_spaces.is_none() && guessed.tab_spaces.is_some());
+        match from_the_text {
+            true => say!("file.indent-guessed", unit),
+            false => unit,
+        }
+    }
+
     pub fn file_report(&self, servers: Option<String>, checking: bool) -> String {
         let buffer = self.current_buffer();
         let facts = self.file_facts();
@@ -246,6 +264,7 @@ impl Editor {
         if let Some(said) = &buffer.local().said {
             row(say!("file.modeline"), format!("`{said}`"));
         }
+        row(say!("file.indent-unit"), self.indent_unit_report());
         if let Some(when) = facts.modified {
             row(say!("file.modified-at"), when);
         }

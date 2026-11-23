@@ -237,11 +237,14 @@ impl Editor {
         self.indent_width_global = width.max(1);
     }
 
-    /// How many columns `>` adds and `<` removes, this buffer's own first.
+    /// How many columns `>` adds and `<` removes: this buffer's modeline,
+    /// then what its own indentation shows, then the editor's.
     ///
-    /// A modeline's `sw=0` follows the tab stop.
+    /// A modeline's `sw=0` follows the tab stop, and so does a file indented
+    /// with TABs.
     pub fn indent_width(&self) -> usize {
-        match self.current_buffer().local().indent_width {
+        let buffer = self.current_buffer();
+        match buffer.local().indent_width.or(buffer.guessed().indent_width) {
             Some(0) => self.tab_stop(),
             Some(width) => width,
             None => self.indent_width_global,
@@ -254,9 +257,11 @@ impl Editor {
         self.tab_spaces_global = spaces;
     }
 
-    /// The same question asked: this buffer's own answer first.
+    /// The same question asked: this buffer's own answer first, as for
+    /// [`Self::indent_width`].
     pub fn tab_spaces(&self) -> bool {
-        self.current_buffer().local().tab_spaces.unwrap_or(self.tab_spaces_global)
+        let buffer = self.current_buffer();
+        buffer.local().tab_spaces.or(buffer.guessed().tab_spaces).unwrap_or(self.tab_spaces_global)
     }
 
     /// The count typed so far (`3` of a pending `3w`), for the status line.

@@ -6,7 +6,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Added
 
-- **`:preview-lock` keeps a document's preview on it**: the preview stops following you, its tab reads "Preview main.typ (locked)", and the next document you go to gets the following preview. `:preview-lock off` makes it the following preview again, and the old one closes. A session keeps which previews are locked.
+
 
 ### Changed
 

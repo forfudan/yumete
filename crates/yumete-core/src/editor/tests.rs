@@ -39569,6 +39569,42 @@ fn vims_linewise_change_keeps_the_indent_in_code() {
     assert_eq!(prose("a\n    b\n", "jo"), "a\n    b\n\n", "o still adds none");
 }
 
+/// **A file's own indentation sets the indent unit when it is opened**
+/// (helix's `auto_detect_indent_style`), under either keymap: `>` and Tab
+/// write it, a modeline and a typed setting win over it, a file that shows
+/// none keeps the settings, and `:info` says where it came from.
+#[test]
+fn a_files_own_indentation_sets_the_indent_unit() {
+    let dir = std::env::temp_dir().join(format!("yumete-guess-indent-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let open = |name: &str, text: &str, keymap: &str| {
+        let path = dir.join(name);
+        std::fs::write(&path, text).unwrap();
+        let mut ed = Editor::new();
+        ed.execute(&format!(":keymap {keymap}")).unwrap();
+        ed.execute(&format!(":open {}", path.display())).unwrap();
+        ed
+    };
+    let mut ed = open("list.md", "- a\n  - b\n    - c\n- d\n", "vim");
+    assert_eq!((ed.indent_width(), ed.tab_spaces()), (2, true));
+    press(&mut ed, "G>>");
+    assert_eq!(ed.current_buffer().text(), "- a\n  - b\n    - c\n  - d\n");
+    let guessed = say!("file.indent-guessed", say!("file.indent-spaces", 2));
+    assert!(ed.file_report(None, false).contains(&guessed), "{}", ed.file_report(None, false));
+    ed.execute(":indent-width 3").unwrap();
+    assert_eq!((ed.indent_width(), ed.tab_spaces()), (3, true), "a typed setting wins");
+    let mut ed = open("tabs.rs", "fn a() {\n\tb();\n}\n", "helix");
+    assert_eq!((ed.indent_width(), ed.tab_spaces()), (ed.tab_stop(), false));
+    press(&mut ed, "j>");
+    assert_eq!(ed.current_buffer().text(), "fn a() {\n\t\tb();\n}\n");
+    let ed = open("modeline.py", "if a:\n    b\n# vim: set sw=3:\n", "vim");
+    assert_eq!((ed.indent_width(), ed.tab_spaces()), (3, true), "the modeline wins");
+    let ed = open("prose.txt", "one line\n\nanother\n", "vim");
+    assert_eq!((ed.indent_width(), ed.tab_spaces()), (4, true), "the settings");
+    assert!(!ed.file_report(None, false).contains(&say!("file.indent-guessed", say!("file.indent-spaces", 4))));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// **An autoindent nothing was typed after goes when the line is left**
 /// (measured in nvim and in hx). Under vim: on Enter, `Esc`, `C-o`, or an
 /// arrow to another line, the caret keeping its column. Under helix: on

@@ -520,6 +520,30 @@ zhs = "汉字"
 en = "han"
 
 [[message]]
+# `:info` 縮進那一欄：這是從文件自己的縮進看出來的，{0} 是上面兩種之一（草稿）
+key = "file.indent-guessed"
+zhs = "{0}，按文件里已有的缩进"
+en = "{0}, from the file's own indentation"
+
+[[message]]
+# `:info` 縮進那一欄：用空格縮進，{0} 是幾個（草稿）
+key = "file.indent-spaces"
+zhs = "{0} 个空格"
+en = "{0} spaces"
+
+[[message]]
+# `:info` 縮進那一欄：用制表符縮進，{0} 是縮進寬度（草稿）
+key = "file.indent-tab"
+zhs = "制表符(宽 {0})"
+en = "tab (width {0})"
+
+[[message]]
+# `:info` 那一欄：`>`、Tab 和回車寫的那一級縮進（草稿）
+key = "file.indent-unit"
+zhs = "缩进单位"
+en = "indent unit"
+
+[[message]]
 # :info：語言
 key = "file.language"
 zhs = "语言"

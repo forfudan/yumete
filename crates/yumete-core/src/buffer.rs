@@ -168,6 +168,104 @@ pub struct Local {
     pub said: Option<String>,
 }
 
+/// **The indent unit a file's own lines show**: [`guess_indent`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IndentUnit {
+    Tab,
+    Spaces(usize),
+}
+
+/// **What a file's own indentation says**, under a modeline ([`Local`]) and
+/// over the editor's settings: read from the text when the file is read
+/// ([`guess_indent`]). Each half goes when its setting is typed.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Guessed {
+    /// How many columns `>` adds; `0` is the tab stop.
+    pub indent_width: Option<usize>,
+    /// Whether Tab types spaces.
+    pub tab_spaces: Option<bool>,
+}
+
+impl From<Option<IndentUnit>> for Guessed {
+    fn from(unit: Option<IndentUnit>) -> Self {
+        match unit {
+            Some(IndentUnit::Tab) => Guessed { indent_width: Some(0), tab_spaces: Some(false) },
+            Some(IndentUnit::Spaces(n)) => Guessed { indent_width: Some(n), tab_spaces: Some(true) },
+            None => Guessed::default(),
+        }
+    }
+}
+
+/// **Guess a file's indent unit from its first thousand lines**, as helix
+/// does on opening a file (helix-core `indent.rs`,
+/// `auto_detect_indent_style`), step for step. Each line indented further
+/// than the line before it adds one to a histogram: a TAB-indented line
+/// to the tab column, a space-indented one to the column of the increase
+/// (1 to 16 spaces). Blank lines are passed over, and a line that does not
+/// start with a blank resets the count. Tabs then weigh double, one space
+/// weighs half when it is seen more than once, and the most frequent unit
+/// is the answer only when the next one is under 66% of it: `None`, and
+/// the settings decide, in a file of mixed or no indentation — a page of
+/// prose, or one with a stray indented line of each width.
+pub fn guess_indent(rope: &Rope) -> Option<IndentUnit> {
+    const MAX_INDENT: usize = 16;
+    // helix's `char_is_whitespace` and `char_is_line_ending`.
+    let blank = |c: char| {
+        matches!(c, '\t' | ' ' | '\u{a0}' | '\u{180e}' | '\u{202f}' | '\u{205f}' | '\u{3000}' | '\u{feff}' | '\u{2000}'..='\u{200b}')
+    };
+    let ending = |c: char| matches!(c, '\n' | '\r' | '\u{b}' | '\u{c}' | '\u{85}' | '\u{2028}' | '\u{2029}');
+    let mut histogram = [0usize; MAX_INDENT + 1];
+    let mut prev_tabs = false;
+    let mut prev_count = 0usize;
+    'lines: for line in rope.lines().take(1000) {
+        let mut chars = line.chars();
+        let tabs = match chars.next() {
+            Some('\t') => true,
+            Some(' ') => false,
+            Some(c) if ending(c) => continue,
+            _ => {
+                prev_tabs = false;
+                prev_count = 0;
+                continue;
+            }
+        };
+        let mut count = 1;
+        let mut done = false;
+        for c in chars {
+            match c {
+                '\t' if tabs && !done => count += 1,
+                ' ' if !tabs && !done => count += 1,
+                // Other blanks end the count, and the line may still be blank.
+                c if blank(c) => done = true,
+                c if ending(c) => continue 'lines,
+                _ => break,
+            }
+            if count > 256 {
+                continue 'lines;
+            }
+        }
+        if (prev_tabs == tabs || prev_count == 0) && prev_count < count {
+            match tabs {
+                true => histogram[0] += 1,
+                false if count - prev_count <= MAX_INDENT => histogram[count - prev_count] += 1,
+                false => {}
+            }
+        }
+        prev_tabs = tabs;
+        prev_count = count;
+    }
+    histogram[0] *= 2;
+    if histogram[1] > 1 {
+        histogram[1] /= 2;
+    }
+    let (unit, &most) = histogram.iter().enumerate().max_by_key(|(_, n)| **n)?;
+    let next = histogram.iter().enumerate().filter(|(i, _)| *i != unit).map(|(_, n)| *n).max().unwrap_or(0);
+    (most >= 1 && (next as f64 / most as f64) < 0.66).then_some(match unit {
+        0 => IndentUnit::Tab,
+        n => IndentUnit::Spaces(n),
+    })
+}
+
 pub struct Buffer {
     /// Which buffer this is, for as long as the session lasts.
     ///
@@ -364,6 +462,8 @@ pub struct Buffer {
     line_edits: Vec<(usize, usize, usize, bool)>,
     /// Settings of its own, over the editor's ([`Local`]).
     local: Local,
+    /// What its own indentation says, under [`Self::local`] ([`Guessed`]).
+    guessed: Guessed,
     /// This buffer's own edit history.
     ///
     /// Per buffer, not per editor: a single shared stack means `u` in one file
@@ -799,6 +899,7 @@ impl Buffer {
             folds: crate::fold::FoldMap::new(),
             line_edits: Vec::new(),
             local: Local::default(),
+            guessed: Guessed::default(),
             // Nothing in it yet says anything (see `syntax::sniff`).
             syntax: crate::syntax::Syntax::Text,
             syntax_guessed: true,
@@ -876,6 +977,7 @@ impl Buffer {
             folds: crate::fold::FoldMap::new(),
             line_edits: Vec::new(),
             local: Local::default(),
+            guessed: Guessed::default(),
             syntax: crate::syntax::Syntax::default(),
             syntax_guessed: true,
             syntax_by_hand: false,
@@ -1031,6 +1133,9 @@ impl Buffer {
         // **A file read is vim's first change**: `` `[ `` on its first line
         // and `` `] `` on the last line read, both at the line's start.
         let read_span = (rope.len_chars() > 0).then(|| (0, rope.line_to_char(crate::motion::last_line(&rope))));
+        // **Its own indentation says how it indents** (helix's
+        // `auto_detect_indent_style`), under a modeline read after this.
+        let guessed = guess_indent(&rope).into();
         let mut buffer = Buffer {
             id: next_id(),
             ending: dominant_ending(&rope),
@@ -1062,6 +1167,7 @@ impl Buffer {
             folds: crate::fold::FoldMap::new(),
             line_edits: Vec::new(),
             local: Local::default(),
+            guessed,
             pending_draft,
             pending_swap,
             wrote_at: None,
@@ -1298,6 +1404,7 @@ impl Buffer {
         // A fresh read is a fresh start: the undo stack described a document
         // that is not here.
         self.history = History::default();
+        self.guessed = guess_indent(&self.rope).into();
         Ok(())
     }
 
@@ -2728,6 +2835,15 @@ impl Buffer {
         &self.local
     }
 
+    /// What its own indentation says ([`Guessed`]).
+    pub fn guessed(&self) -> Guessed {
+        self.guessed
+    }
+
+    pub fn guessed_mut(&mut self) -> &mut Guessed {
+        &mut self.guessed
+    }
+
     pub fn local_mut(&mut self) -> &mut Local {
         &mut self.local
     }
@@ -3961,6 +4077,25 @@ fn lines_changed(was: &str, now: &str) -> Option<(usize, usize, usize)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// **A file's indent unit is guessed as helix guesses it**
+    /// (`auto_detect_indent_style`): from the increases, tabs weighing
+    /// double, and `None` when no unit stands out.
+    #[test]
+    fn the_indent_unit_is_guessed_from_the_increases() {
+        let guess = |text: &str| guess_indent(&Rope::from_str(text));
+        assert_eq!(guess("fn a() {\n    if b {\n        c();\n    }\n}\n"), Some(IndentUnit::Spaces(4)));
+        assert_eq!(guess("fn a() {\n\tif b {\n\t\tc();\n\t}\n}\n"), Some(IndentUnit::Tab));
+        assert_eq!(guess("- a\n  - b\n    - c\n- d\n  - e\n"), Some(IndentUnit::Spaces(2)), "a Markdown list");
+        assert_eq!(guess("one line\n\nanother line\n"), None, "prose");
+        assert_eq!(guess("prose\n    four\nprose\n  two\nprose\n"), None, "one stray line of each width");
+        assert_eq!(guess("a\n    b\nc\n    d\nc\n    d\ne\n  f\n"), Some(IndentUnit::Spaces(4)), "under 66% for the next");
+        assert_eq!(guess("a\n\n    b\n      \n        c\n"), Some(IndentUnit::Spaces(4)), "blank lines passed over");
+        assert_eq!(guess("\u{3000}\u{3000}段落\n\u{3000}\u{3000}段落\n"), None, "an ideographic space is not an indent");
+        assert_eq!(guess(""), None);
+        let late = format!("{}a\n    b\n", "x\n".repeat(1000));
+        assert_eq!(guess(&late), None, "the first thousand lines");
+    }
 
     /// A rewrite the clock cannot see is still a rewrite.
     ///
