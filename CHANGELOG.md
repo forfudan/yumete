@@ -23,10 +23,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **A Typst chapter's preview finds its book on the disk**: the Typst files in the chapter's folder and the folders above it, up to the project root (the folder holding `.git` or `typst.toml`, never above home), are followed by their `#include` and `#import` up to the file nobody names, whether the book is open or not.
 - **`:preview-browser` shows the same preview in the browser**: it follows you and `:preview-lock` holds it; the page already open follows to the next document by itself, and from another document `:preview-browser` moves the browser there instead of showing the old page again. **A Markdown file's browser preview is live**: the page is written again a moment after you stop typing and reloads itself.
 - **Under vim, `cc`, `S` and a linewise `c` keep the line's leading blanks in prose too**, as nvim's autoindent does in a text file, and add none; with nothing typed they go again on `Esc`.
-- **`,` in a range is a span, as in vim**: `:1,40s` and `:1,40sort` take the forty lines from 1 to 40, as `1-40` still does. The list form is gone: of more than two ends the last two count (`:1,5,9s` is `:5,9s`), as in vim.
-- **A range reads as vim reads it**: marks at either end (`:'a,'bs`, `:'a,'bsort`), blanks around the `,` (`:1, 2s`), an end left out as the cursor's line (`:2,s`, `:,3s`), and line 0 as the first (`:0,2s`).
-- **A range written backwards asks before it runs**, as `:s` did: `:4,2sort`, `:normal`, `:read`; `y` swaps the ends, `n` runs nothing. Under vim a bare range of two ends goes to its last line as written (`:3,7` to 7, `:7,3` to 3) without asking, and one before a `|` (`:7,3|…`) is refused and nothing after it runs, as in vim.
-- **Insert `C-o` then `:`, `/` or `?` comes back to Insert when that line ends**, by Enter or `Esc`, as vim does; a command that opens a picker leaves you there.
+
 - **The indent Enter, `o` or `O` carried down goes again when you leave the line without typing**: under vim on Enter, `Esc`, `C-o` or an arrow to another line, as vim does; under helix on `Esc` when that line break was all the Insert wrote, and Enter with only blanks before the cursor breaks the line at its start, as helix does. Blanks you typed yourself stay.
 
 ## 0.25.0 · 2026-11-23

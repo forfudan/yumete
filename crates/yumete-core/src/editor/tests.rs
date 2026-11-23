@@ -48638,6 +48638,9 @@ fn vims_insert_ctrl_o_comes_back_after_a_command_line() {
         ("Aᵒ:⎋Q⎋", "abcQ\nfoo\n"),
         ("Aᵒ/o⏎Q⎋", "abc\nfQoo\n"),
         ("iᵒ:s/b/X/c⏎yQ⎋", "QaXc\nfoo\n"),
+        ("Aᵒ:normal x⏎Q⎋", "abQ\nfoo\n"),
+        ("iᵒ:normal ix⏎Q⎋", "Qxabc\nfoo\n"),
+        ("iᵒ:2normal x⏎Q⎋", "abc\nQoo\n"),
     ] {
         let mut ed = typed_vim(text);
         feed_vim(&mut ed, keys);

@@ -448,10 +448,17 @@ impl Editor {
     /// asked (`:s///c`, a range written backwards) is still the line's, and
     /// is waited for. A line whose command went to another mode (`:open`'s
     /// picker) leaves the reader there.
+    ///
+    /// The keys `:normal` presses are the line's command, not the end of
+    /// it: they run in Normal mode, and the way back waits for the line
+    /// that runs them.
     fn go_back_after_the_line(&mut self) {
         let Some(back) = self.back_after_the_line else {
             return;
         };
+        if self.normal_depth > 0 {
+            return;
+        }
         match self.mode {
             Mode::Command | Mode::Search | Mode::Lookfor => return,
             Mode::Normal if self.pending != Pending::None => return,
