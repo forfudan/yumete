@@ -2463,6 +2463,11 @@ impl Editor {
     pub(super) fn cmd_select_register(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
         self.pending = Pending::Register;
+        // **vim's count may come before the name as well as after it**:
+        // `3"ap` is `"a3p` (`:h quote`), so the count waits for the command,
+        // and one typed after the name multiplies it. helix lets a count
+        // before `"` go.
+        self.register_count = operator_count.filter(|_| self.keymap_rules().vim_registers);
     }
 
     // Record a macro, and play the last one back.

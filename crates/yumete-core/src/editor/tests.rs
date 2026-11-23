@@ -49106,3 +49106,25 @@ fn vims_undo_of_a_change_that_changed_nothing_lands_where_it_began() {
         assert_eq!(vim_at(&ed), want, "{keys}");
     }
 }
+
+/// **vim's count may come before a register's name**: `3"ap` is `"a3p`,
+/// and counts on both sides multiply (`2"a3p` puts six), each measured in
+/// nvim `--clean`. helix lets a count before `"` go.
+#[test]
+fn vim_a_count_before_the_register_name_counts() {
+    for (keys, want) in [
+        ("\"ayyj3\"ap", "ab\ncd\nab\nab\nab\n"),
+        ("\"ayyj\"a3p", "ab\ncd\nab\nab\nab\n"),
+        ("\"ayyj2\"a3p", "ab\ncd\nab\nab\nab\nab\nab\nab\n"),
+        ("2\"ayyj\"ap", "ab\ncd\nab\ncd\n"),
+    ] {
+        let mut ed = typed_vim("ab\ncd\n");
+        feed_vim(&mut ed, keys);
+        assert_eq!(ed.current_buffer().rope().to_string(), want, "{keys}");
+    }
+    let mut ed = typed("ab\ncd\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "x\"ay3\"ap");
+    assert_eq!(ed.current_buffer().rope().to_string(), "ab\nab\ncd\n", "helix");
+}
+

@@ -3555,6 +3555,9 @@ impl Editor {
                 }
             }
         }
+        if let Some(before) = self.register_count.take() {
+            self.count = Some(before.saturating_mul(self.count.unwrap_or(1)).min(1_000_000));
+        }
         let operator_count = self.count;
         let count = self.take_count();
 

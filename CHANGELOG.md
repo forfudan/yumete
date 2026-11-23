@@ -36,6 +36,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Fixed
 
+- **Under vim, a count before a register's name counts**: `3"ap` puts three times, as `"a3p` does, and counts on both sides multiply (`2"a3p` puts six), as in vim.
 - **The block cursor on a line break is one cell wide**, after a Chinese character as after a letter: it took the width of the character before it.
 - **Under vim, `o` on a last line with no line break, then an arrow up, keeps the new line**, as vim does; it used to be taken back.
 - **The exports read reference links as the preview does**: `[text][label]` is a link to the label's address and the `[label]: address` line is no longer printed; on a web page (`:export html`, `:export-as-preview html`) a bare URL is a link too, and `<name@host>` a mail link.
