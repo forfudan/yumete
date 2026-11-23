@@ -21024,42 +21024,32 @@ fn answering_a_replaces_the_rest_in_one_pass() {
     assert_eq!(ed.current_buffer().text().matches("看不見").count(), 4_000);
 }
 
-/// **`-` is a span, `,` is a list** — in `:s` too (§5.7).
+/// **`,` is a span in `:s`, as in vim, and `-` spells one too.**
 #[test]
-fn a_substitution_reads_a_dash_as_a_span_and_a_comma_as_a_list() {
+fn a_substitution_reads_a_comma_and_a_dash_as_a_span() {
     let five = || typed("a\na\na\na\na\n");
 
-    // `1-3` is three lines: the two ends and the one between them.
-    let mut ed = five();
-    assert!(ed.execute("1-3s/a/b/").is_ok(), "{}", ed.status());
-    assert_eq!(ed.current_buffer().text(), "b\nb\nb\na\na\n");
+    // `1-3` and `1,3` are three lines: the two ends and the one between them.
+    for range in ["1-3", "1,3"] {
+        let mut ed = five();
+        assert!(ed.execute(&format!("{range}s/a/b/")).is_ok(), "{}", ed.status());
+        assert_eq!(ed.current_buffer().text(), "b\nb\nb\na\na\n", "{range}");
+    }
 
-    // `1,3` is **two** lines — in vi it was three. Line 2 is not named and
-    // is not touched.
-    let mut ed = five();
-    assert!(ed.execute("1,3s/a/b/").is_ok(), "{}", ed.status());
-    assert_eq!(ed.current_buffer().text(), "b\na\nb\na\na\n");
+    // `.` and `$` are bounds like any other, with either spelling.
+    for range in [".-$", ".,$"] {
+        let mut ed = five();
+        ed.goto_line(2);
+        assert!(ed.execute(&format!("{range}s/a/b/")).is_ok(), "{}", ed.status());
+        assert_eq!(ed.current_buffer().text(), "a\nb\nb\nb\nb\n", "{range}");
+    }
 
-    // A list of any length, in any order.
-    let mut ed = five();
-    assert!(ed.execute("5,1,4s/a/b/").is_ok(), "{}", ed.status());
-    assert_eq!(ed.current_buffer().text(), "b\na\na\nb\nb\n");
-
-    // `.` and `$` are bounds like any other, on either joint.
-    let mut ed = five();
-    ed.goto_line(2);
-    assert!(ed.execute(".-$s/a/b/").is_ok(), "{}", ed.status());
-    assert_eq!(ed.current_buffer().text(), "a\nb\nb\nb\nb\n");
-    let mut ed = five();
-    ed.goto_line(2);
-    assert!(ed.execute(".,$s/a/b/").is_ok(), "{}", ed.status());
-    assert_eq!(ed.current_buffer().text(), "a\nb\na\na\nb\n");
-
-    // Mixing them is refused, and the refusal says what the two spellings
-    // are — a wall with no door was what made the old `,` guessable at all.
-    let mut ed = five();
-    assert!(ed.execute("1-3,5s/a/b/").is_err());
-    assert_eq!(ed.current_buffer().text(), "a\na\na\na\na\n");
+    // More than two ends is refused, and the refusal says what a range is.
+    for range in ["5,1,4", "1-3,5"] {
+        let mut ed = five();
+        assert!(ed.execute(&format!("{range}s/a/b/")).is_err(), "{range}");
+        assert_eq!(ed.current_buffer().text(), "a\na\na\na\na\n");
+    }
 }
 
 // ── #216 · 文中的表格區塊 ────────────────────────────────────────────
@@ -32308,10 +32298,10 @@ fn a_substitution_refuses_a_line_the_file_does_not_have() {
     };
     assert_eq!(after(":99s/a/X/"), "a1\na2\na3\n", "第 99 行不存在");
     assert_eq!(after(":0s/a/X/"), "a1\na2\na3\n", "没有第 0 行");
-    assert_eq!(after(":1,5s/a/X/"), "a1\na2\na3\n", "一組裏有一個不存在就整個不做");
+    assert_eq!(after(":1,5s/a/X/"), "a1\na2\na3\n", "一頭不存在就整個不做");
     // 存在的照舊。
     assert_eq!(after(":3s/a/X/"), "a1\na2\nX3\n");
-    assert_eq!(after(":1,3s/a/X/"), "X1\na2\nX3\n");
+    assert_eq!(after(":1,3s/a/X/"), "X1\nX2\nX3\n", "`,` is a span, as in vim");
     assert_eq!(after(":1-3s/a/X/"), "X1\nX2\nX3\n");
 }
 
@@ -43595,7 +43585,7 @@ fn vims_sort_takes_numbers_unique_and_a_range() {
     assert_eq!(sorted("c\na\nb\na\n", ":%sort"), "a\na\nb\nc\n");
     assert_eq!(sorted("d\nc\nb\na\n", ":2,3sort"), "d\nb\nc\na\n");
     assert_eq!(sorted("d\nc\nb\na\n", ":2-4sort"), "d\na\nb\nc\n");
-    assert_eq!(sorted("d\nc\nb\na\n", ":1,4sort"), "a\nc\nb\nd\n", "a list sorts its own lines among their places");
+    assert_eq!(sorted("d\nc\nb\na\n", ":1,4sort"), "a\nb\nc\nd\n", "`,` is a span, as in vim");
     assert_eq!(sorted("d\nc\nb\nc\nb\n", ":2-$sort u"), "d\nb\nc\n");
     assert_eq!(sorted("d\nc10\nb9\na\n", "jVj:sort n"), "d\nb9\nc10\na\n");
     assert_eq!(sorted("b\na\n", ":9sort"), "b\na\n", "no such line sorts nothing");

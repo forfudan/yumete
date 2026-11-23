@@ -719,10 +719,10 @@ zhs = "「{0}」→「{1}」？y 替换、n 跳过、a 替换其余、q 停止�
 en = "'{0}' → '{1}'? y replace  n skip  a all the rest  q stop  l this one then stop"
 
 [[message]]
-# :s 的行號範圍把兩種寫法混在了一起
-key = "substitute.range-not-one-thing"
-zhs = "范围只能是一段(1-40)或几行(1,5,9)，不能混用"
-en = "a range is one span (1-40) or one list (1,5,9), not a mixture"
+# :s 的行號範圍寫了兩頭以上（草稿）
+key = "substitute.range-two-ends"
+zhs = "范围只有两头：1,40 或 1-40"
+en = "a range has two ends: 1,40 or 1-40"
 
 
 # ── table ─────────────────────────────────────────────────────────────

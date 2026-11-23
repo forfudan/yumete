@@ -1272,7 +1272,7 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
 
 /// **A range in front of a command that takes one**: vim's `:%sort`,
 /// `:2,3sort`, `:0read file`, written as this editor writes a range
-/// ([`Rows`]: `-` a span, `,` a list). `None` when there is no range, or
+/// ([`Rows`]: `,` or `-` between the ends). `None` when there is no range, or
 /// the command after it takes none.
 fn parse_ranged(line: &str) -> Option<Result<Command, CommandError>> {
     let (rows, rest) = parse_rows(line);
@@ -1287,7 +1287,7 @@ fn parse_ranged(line: &str) -> Option<Result<Command, CommandError>> {
             let after = match rows {
                 Rows::All => Bound::Last,
                 Rows::Span(_, last) => last,
-                Rows::Selection | Rows::List(_) => return None,
+                Rows::Selection => return None,
             };
             Some(Ok(Command::Read { what, shell, after: Some(after) }))
         }
@@ -7179,7 +7179,7 @@ fn complete_within_stripped(line: &str, folding: bool) -> (usize, Vec<Choice>) {
     //
     // 替換那一條在表上叫 `s/pat/rep/`，而選單是拿打出來的那個詞去比前綴的——
     // 不去掉範圍的話，`%s/` 比不上 `s/pat/rep/`，整扇面板空着。範圍是 `:%s`、`:1-40s`、
-    // `:1,5,9s` 這幾種寫法，它們說的是「改哪幾行」，不是命令叫什麼。
+    // `:1,40s` 這幾種寫法，它們說的是「改哪幾行」，不是命令叫什麼。
     //
     // Warning: **只在前綴真的是一個範圍的時候剝**：`:set` 的 `s` 後面没有分隔符，
     // 被 [`parse_substitution`] 擋在外面，這裏同理只認「範圍 ＋ `s` ＋ 分隔符」。
@@ -7827,20 +7827,17 @@ pub enum Axis {
 
 /// Which lines a `:s` touches.
 ///
-/// **`-` is a span, `,` is a list** — the one range convention this editor has
-/// (§5.7), which `t2-10/` and `t1,5,9s` spell too. Were `,` a span in `:s`, a
-/// reader who had learnt the one would have learnt the wrong thing about the
-/// other.
+/// **`,` joins the two ends of a span**, as vim's ranges do, and so does
+/// `-`: `1,40` and `1-40` are the same forty lines.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Rows {
     /// No range written: the lines the **selection** covers.
     Selection,
     /// `%` — every line.
     All,
-    /// `1-40`, `.-$`, and a bare `5` — the two ends and everything between.
+    /// `1,40`, `1-40`, `.,$`, and a bare `5` — the two ends and everything
+    /// between.
     Span(Bound, Bound),
-    /// `1,5,9` — these lines and no others.
-    List(Vec<Bound>),
 }
 
 /// **A line as vim's bare range names one** (`:h :range`): a number, `.`
@@ -7977,18 +7974,13 @@ fn parse_bound(input: &str) -> Option<(Bound, usize)> {
     }
 }
 
-/// A range that is neither one span nor one list — `1-5,9` mixes the joints,
-/// `1-5-9` puts a line inside a span. Nobody has said what either means.
+/// A range of more than two ends — `1,5,9`, `1-5-9`, `1-5,9`. A span has
+/// two, and quietly dropping a line the reader wrote is not reading it.
 ///
 /// The whole sequence is eaten either way, so the caller can go on parsing and
 /// decide whether this input was even meant to be a `:s`.
 pub struct BadRange;
 
-/// Split the leading range off a `:s` line.
-///
-/// **The two joints do not mix.** `1-40` is a span and `1,5,9` is a list, and
-/// one range is one of them or the other — `1-5,9` is refused rather than
-/// guessed at, exactly as a `t`/`g` sequence refuses it.
 /// **打到一半的 `:%s/` 裏，範圍佔了幾個字節**。
 ///
 /// `None` ＝ 前面那一段不是範圍，或者後面接的不是一個替換。只給選單用：真正
@@ -8021,30 +8013,20 @@ fn parse_rows(input: &str) -> (Result<Rows, BadRange>, &str) {
     };
     let mut bounds = vec![first];
     let mut rest = &input[took..];
-    let mut joint: Option<char> = None;
-    let mut mixed = false;
     // Every `-` or `,` that is followed by another bound belongs to the range;
     // the first one that is not ends it (`:1s-a-b-` — a `-` delimiter).
-    while let Some(next) = rest.chars().next().filter(|c| *c == '-' || *c == ',') {
+    while rest.starts_with(['-', ',']) {
         let Some((bound, n)) = parse_bound(&rest[1..]) else {
             break;
         };
-        mixed |= joint.is_some_and(|first| first != next);
-        joint.get_or_insert(next);
         bounds.push(bound);
         rest = &rest[1 + n..];
     }
-    if mixed {
-        return (Err(BadRange), rest);
-    }
-    let rows = match (joint, bounds.len()) {
+    let rows = match bounds[..] {
         // A bare number is one line, the way `:40s` reads in vi.
-        (None, _) => Rows::Span(first, first),
-        (Some('-'), 2) => Rows::Span(bounds[0], bounds[1]),
-        // `1-5-9` is a span with a middle, which is nothing: refuse it the way
-        // a mixture is refused rather than quietly dropping the `5`.
-        (Some('-'), _) => return (Err(BadRange), rest),
-        (Some(_), _) => Rows::List(bounds),
+        [one] => Rows::Span(one, one),
+        [a, b] => Rows::Span(a, b),
+        _ => return (Err(BadRange), rest),
     };
     (Ok(rows), rest)
 }
@@ -8201,7 +8183,7 @@ fn parse_substitution(input: &str) -> Option<Result<Command, CommandError>> {
     let Ok(rows) = rows else {
         return Some(Err(CommandError::InvalidArgument {
             command: "substitute",
-            value: say!("substitute.range-not-one-thing"),
+            value: say!("substitute.range-two-ends"),
         }));
     };
     Some(Ok(Command::Substitute {
@@ -8858,11 +8840,8 @@ mod tests {
         assert!(parse(":%s/a/b/z").is_err());
     }
 
-    /// **`-` is a span, `,` is a list** — everywhere, `:s` included (§5.7).
-    ///
-    /// `:1,40s` is the two lines 1 and 40, not vi's span. The editor teaches
-    /// `t2-10/` and `t1,5,9s`; leaving `:s` on vi's reading would make the one
-    /// convention true in three places out of four.
+    /// **`,` is a span, as in vim, and `-` spells one too**: `:1,40s` is
+    /// forty lines.
     #[test]
     fn a_substitution_takes_a_line_range() {
         assert!(matches!(
@@ -8887,20 +8866,15 @@ mod tests {
                 ..
             })
         ));
-        // `,` names the lines it lists — three of them here, not thirty-two.
-        let list = |input: &str| match parse(input) {
-            Ok(Command::Substitute { rows: Rows::List(bounds), .. }) => bounds,
-            other => panic!("{input} is not a list: {other:?}"),
+        let span = |input: &str| match parse(input) {
+            Ok(Command::Substitute { rows: Rows::Span(a, b), .. }) => (a, b),
+            other => panic!("{input} is not a span: {other:?}"),
         };
-        assert_eq!(list(":1,5,9s/a/b/"), vec![
-            Bound::Line(1),
-            Bound::Line(5),
-            Bound::Line(9)
-        ]);
-        // **`:1,40s` is two lines**, where in vi it is forty.
-        assert_eq!(list(":1,40s/a/b/"), vec![Bound::Line(1), Bound::Line(40)]);
-        assert_eq!(list(":.,$s/a/b/"), vec![Bound::Cursor, Bound::Last]);
-        // Neither one span nor one list: refused, not guessed at.
+        assert_eq!(span(":1,40s/a/b/"), (Bound::Line(1), Bound::Line(40)));
+        assert_eq!(span(":.,$s/a/b/"), (Bound::Cursor, Bound::Last));
+        assert_eq!(span(":9,3s/a/b/"), (Bound::Line(9), Bound::Line(3)), "the question is the editor's");
+        // More than two ends: refused, not guessed at.
+        assert!(parse(":1,5,9s/a/b/").is_err());
         assert!(parse(":1-5,9s/a/b/").is_err());
         assert!(parse(":1,5-9s/a/b/").is_err());
         assert!(parse(":1-5-9s/a/b/").is_err());
@@ -9420,7 +9394,7 @@ mod tests {
         assert_eq!(parse(":%sort n"), Ok(Command::Sort { how: how(true, false), rows: Some(Rows::All) }));
         assert_eq!(
             parse(":2,3sort"),
-            Ok(Command::Sort { how: how(false, false), rows: Some(Rows::List(vec![Bound::Line(2), Bound::Line(3)])) })
+            Ok(Command::Sort { how: how(false, false), rows: Some(Rows::Span(Bound::Line(2), Bound::Line(3))) })
         );
         assert_eq!(
             parse(":.-$sort!"),

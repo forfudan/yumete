@@ -1196,10 +1196,10 @@ find = "拆开 合并 拆分 括号 參數 参数 split join splitjoin arguments
 
 
 [[message]]
-# : 命令選單裏 s/pat/rep/ 那一項的説明(commands 組)
+# : 命令選單裏 s/pat/rep/ 那一項的説明(commands 組)（草稿）
 key = "cmd.commands.substitute"
-zhs = "替换：默认在选区内；`%s` 全文、`1-40s` 指定范围、`1,5,9s` 指定行；标志 g i f c n t y j；分隔符可换"
-en = "substitute in the selection; `%s` the file, `1-40s` a range, `1,5,9s` listed lines; flags g i f c n t y j"
+zhs = "替换：默认在选区内；`%s` 全文、`1,40s` 或 `1-40s` 指定范围；标志 g i f c n t y j；分隔符可换"
+en = "substitute in the selection; `%s` the file, `1,40s` or `1-40s` a range; flags g i f c n t y j"
 find = "替換 替换 取代 正則 正则 sed regex"
 
 [[message]]

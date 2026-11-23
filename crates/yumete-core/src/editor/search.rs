@@ -595,8 +595,7 @@ impl Editor {
 
     /// **這個範圍是反的嗎** —— 是就交寫的那兩個行號。
     ///
-    /// 只有 `Rows::Span` 可能反（`,` 那一種是一張單子，順序不說明什麽）。交的是
-    /// **讀者寫的那兩個數**，所以 `:$-1s` 在三行的檔上報的是「第 3 行到第 1 行」，
+    /// 只有 `Rows::Span` 可能反。交的是 **讀者寫的那兩個數**，所以 `:$-1s` 在三行的檔上報的是「第 3 行到第 1 行」，
     /// 而不是 `$`。對調本身照舊由 [`Self::substitution_rows`] 做。
     ///
     /// 行號越界的那一種不在這裏答——那一支是 [`Self::substitution_rows`]，它報
@@ -649,11 +648,6 @@ impl Editor {
                 let (a, b) = (resolve(a)?, resolve(b)?);
                 Chosen::Span(a.min(b), a.max(b))
             }
-            // `1,5,9` — these and no others. Written in any order, and a line
-            // named twice is still one line.
-            Rows::List(bounds) => Chosen::These(
-                bounds.into_iter().map(resolve).collect::<Result<Vec<_>, _>>()?,
-            ),
             // No range written: the lines the *selection* covers. Reading the
             // cursor's line instead meant that after `x` — which leaves the
             // cursor on the line below the one it selected — `:s` edited a
