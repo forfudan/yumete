@@ -371,6 +371,13 @@ impl Seat {
         let (key, value) = text.trim().split_once(char::is_whitespace)?;
         let value = value.trim();
         let ours = page.go_to(key, |s| every_name(s.label)).then(|| page.here()).flatten();
+        // An on/off setting takes yumete's own `on`/`off` as well as the
+        // config file's `true`/`false`.
+        let value = match (ours.map(|s| matches!(s.kind, Kind::Tick)), value) {
+            (Some(true), "on") => "true",
+            (Some(true), "off") => "false",
+            _ => value,
+        };
         let checked = ours.map(|setting| page.check(setting, value));
         let lines: Vec<(String, String, String)> = match (ours, checked) {
             (Some(setting), Some(Ok(change))) => {
@@ -3208,6 +3215,12 @@ mod tests {
         let mut ed = Editor::new();
         let mut seat = Seat::default();
         // Off first, so the bare flip below is the same on any machine's config.
+        ed.execute(":set selection_highlight off").unwrap();
+        seat.settle(&mut ed);
+        assert_eq!(seat.session_toml(), "[editor]\nselection_highlight = false\n", "off is false");
+        ed.execute(":set selection_highlight on").unwrap();
+        seat.settle(&mut ed);
+        assert_eq!(seat.session_toml(), "[editor]\nselection_highlight = true\n", "on is true");
         ed.execute(":set selection_highlight false").unwrap();
         seat.settle(&mut ed);
         ed.execute(":set selection_highlight").unwrap();
