@@ -32325,6 +32325,24 @@ fn a_backwards_range_asks_unless_it_is_bare() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// **The key that answers 「范围是反向的」 is the answer and nothing else**,
+/// through the real key path, as nvim takes it: `y` sorts and waits for no
+/// motion, `n` cancels and does not search, `x` deletes nothing, and from
+/// Insert `C-o` the key after `y` is typed.
+#[test]
+fn the_answer_to_a_backwards_range_is_not_also_a_normal_key() {
+    let text = "b\na\nc\nab\n";
+    let run = |keys: &str| {
+        let mut ed = typed_vim(text);
+        feed_vim(&mut ed, keys);
+        (ed.current_buffer().text(), vim_at(&ed), ed.mode)
+    };
+    assert_eq!(run(":3,1sort⏎yj"), ("a\nb\nc\nab\n".into(), (2, 1), Mode::Normal), "`y` is no operator");
+    assert_eq!(run("/ab⏎gg:3,1sort⏎n"), (text.into(), (1, 1), Mode::Normal), "`n` does not search");
+    assert_eq!(run(":3,1sort⏎x"), (text.into(), (1, 1), Mode::Normal));
+    assert_eq!(run("Aᵒ:3,1s/a/X/⏎yQ⎋").0, "b\nQX\nc\nab\n");
+}
+
 /// **vim's `:delete [x] [count]`**, every row measured in nvim 0.12
 /// `--clean`: the lines into the register as `dd` takes them, `"1` moving
 /// down, a count from the range's last line, the cursor on the first

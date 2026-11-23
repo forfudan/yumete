@@ -3251,6 +3251,8 @@ impl Editor {
                 } else {
                     self.status = String::new();
                 }
+                // The key was the answer and nothing else.
+                return;
             }
             // **A vim operator, waiting for its motion** (#429).
             Pending::VimOperator { op, first } => {
