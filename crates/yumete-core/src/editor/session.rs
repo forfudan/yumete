@@ -830,11 +830,16 @@ impl Editor {
             let Some(path) = buffer.path() else { continue };
             out.push_str(&format!("{}\n", path.display()));
         }
-        // **The preview tabs**, by the file each typesets: the
-        // page is made again when one is shown.
+        // **The preview tabs**, by the document each shows and whether it
+        // is locked to it or follows: the page is made again when one is
+        // shown.
         for buffer in &self.buffers {
             if let (Some(kind), Some(main)) = (buffer.preview_kind(), buffer.preview_main()) {
-                out.push_str(&format!("preview\t{}\t{}\n", kind.name(), main.display()));
+                let how = match buffer.preview_locked() {
+                    true => "locked",
+                    false => "following",
+                };
+                out.push_str(&format!("preview\t{}\t{how}\t{}\n", kind.name(), main.display()));
             }
         }
         // **No file open, so the last session stays**: a run that only typed
@@ -1263,10 +1268,11 @@ impl Editor {
         // The preview tabs after the files, so the empty buffer the editor
         // starts with is the first file's to take.
         for line in text.lines().filter_map(|line| line.strip_prefix("preview\t")) {
-            let Some((kind, main)) = line.split_once('\t') else { continue };
+            let mut parts = line.splitn(3, '\t');
+            let (Some(kind), Some(how), Some(main)) = (parts.next(), parts.next(), parts.next()) else { continue };
             let main = PathBuf::from(main);
             if let Some(kind) = crate::buffer::PreviewKind::parse(kind).filter(|_| main.is_file()) {
-                self.add_preview_tab_of(main, kind);
+                self.add_preview_tab_of(main, kind, how == "locked");
             }
         }
         if let Some(i) = first {

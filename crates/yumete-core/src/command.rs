@@ -635,6 +635,9 @@ pub enum Command {
     PreviewWindow(Switch),
     /// `:preview-browser [on|off]` — the page in the browser.
     PreviewBrowser(Switch),
+    /// `:preview-lock [on|off]` — this document's preview locked to it, or
+    /// following the focus.
+    PreviewLock(Switch),
     /// `:preview-fit width|page` — how big the page window draws the
     /// page; bare, which it is.
     PreviewFit(Option<crate::editor::PreviewFit>),
@@ -5365,6 +5368,14 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[Param::Words { of: SWITCH, default: None }],
         build: Some(|p| Ok(Command::PreviewBrowser(switched(p)))),
+    },
+    Entry {
+        name: "preview-lock",
+        aliases: &[],
+        help: "cmd.view.preview-lock",
+        needs: &[],
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::PreviewLock(switched(p)))),
     },
     Entry {
         name: "preview-fit",

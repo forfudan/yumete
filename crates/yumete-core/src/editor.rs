@@ -1019,23 +1019,21 @@ pub struct LanguageRun {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Preview {
-    Start {
-        path: PathBuf,
-        syntax: crate::syntax::Syntax,
-    },
-    /// A typesetter is already running: open its page again rather than start a
-    /// second one. Starting another would kill the server and compile the
-    /// whole book afresh to answer 「where was that page again?」.
+    /// The browser already shows this preview: open its page again rather
+    /// than start the typesetter afresh. Starting another would compile the
+    /// whole book again to answer 「where was that page again?」.
     Show,
-    Stop,
-    /// **The page beside the text** (`:preview`, `:preview-window`): a window drawn by tinymist, opened by the front end, which
-    /// knows whether this terminal draws pictures and how old the tinymist is.
-    /// With `fallback`, a window that cannot be drawn becomes the browser's
-    /// preview ([`Preview::Start`]) instead.
+    /// **The page beside the text** (`:preview`, `:preview-window`,
+    /// `:preview-lock`): the preview of the document `path`, following the
+    /// focus or `locked` to it, in a window opened by the front end, which
+    /// knows whether this terminal draws pictures and how old the tinymist
+    /// is. With `fallback`, a window that cannot be drawn shows the preview
+    /// in the browser instead.
     Window {
         path: PathBuf,
         syntax: crate::syntax::Syntax,
         fallback: bool,
+        locked: bool,
     },
 }
 
@@ -3819,6 +3817,13 @@ pub struct Editor {
     /// there so it can say so on the status bar, hand the address back when
     /// asked, and refuse to start a second one.
     preview_at: Option<String>,
+    /// **The preview the browser shows**, by its tab's id: the same
+    /// following or locked preview a window shows, drawn by the typesetter's
+    /// own page in the browser. The front end starts, moves and stops what
+    /// serves it to match.
+    browser: Option<u64>,
+    /// **The Typst books worked out so far** — see [`books`].
+    books: RefCell<books::Books>,
     /// **What draws a TeX formula for `:export html`**, handed
     /// over by the front end, where RaTeX lives. `None` leaves `$…$` as
     /// written.
@@ -5189,6 +5194,8 @@ impl Editor {
             preview_request: None,
             open_request: None,
             preview_at: None,
+            browser: None,
+            books: RefCell::new(books::Books::default()),
             formula_painter: None,
             preview_look: None,
             preview_pdf: None,
@@ -7264,8 +7271,9 @@ mod normal;
 pub(crate) use normal::default_key_written;
 mod page;
 pub use page::DrawnWindow;
+mod books;
 mod page_preview;
-pub use page_preview::{in_the_book, PageStep, PageTarget, PageWindow, PreviewFit};
+pub use page_preview::{in_the_book, PageStep, PageTarget, PageWindow, PreviewFit, PreviewState};
 mod pairing;
 mod places;
 pub use pairing::AutoPairs;

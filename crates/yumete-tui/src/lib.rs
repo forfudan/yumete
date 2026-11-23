@@ -1066,6 +1066,12 @@ pub fn run(
     // behind by a session that ended badly, which is stopped before this one
     // can start another.
     let mut job: Option<Job> = None;
+    // **The browser's Markdown preview**, when the browser shows one: the
+    // export, written again as the document changes.
+    let mut md_page: Option<MdPage> = None;
+    // Why a window could not be drawn, said once the browser shows the
+    // preview in its place.
+    let mut browser_why: Option<String> = None;
     // **那扇設置面板**（`:settings`），開着的時候鍵歸它。它住在前端而不是核心，
     // 因為它讀 `yumete_config::settings_ui` 那張表，而核心不依賴 `yumete-config`。
     // Warning: 開、收鍵、存、關那一整圈在 `settings_page::Seat` 裏，**`--keys` 走的是
@@ -1695,6 +1701,10 @@ pub fn run(
         // **The page window**: after `collect`, where tinymist's
         // answers land. A window that cannot be drawn after all, opened by
         // `:preview`, becomes the browser's preview.
+        // The previews moved to where they belong first: the following
+        // ones to the document the keys are in, those of a document closed
+        // to another, or closed.
+        editor.steer_previews();
         if markdown.follow(editor, config) {
             server_said_something = true;
         }
@@ -1702,8 +1712,10 @@ pub fn run(
             crate::page_window::Outcome::Nothing => {}
             crate::page_window::Outcome::Redraw => server_said_something = true,
             crate::page_window::Outcome::Browser { preview, path, why } => {
+                let locked = editor.preview_is_locked(preview);
                 editor.close_preview(preview);
-                instead_in_the_browser(editor, config, &mut job, &path, yumete_core::syntax::Syntax::Typst, Some(why));
+                editor.show_in_the_browser(path, yumete_core::buffer::PreviewKind::Typst, locked);
+                browser_why = Some(why);
                 server_said_something = true;
             }
         }
@@ -1796,6 +1808,8 @@ pub fn run(
                 pages.due_in(),
                 // The Markdown preview: the typing still long enough.
                 markdown.due_in(),
+                // The browser's Markdown page, likewise.
+                md_page.as_ref().and_then(MdPage::due_in),
                 // A scrollbar over a very long book, counted again once the
                 // typing has been still.
                 viewport.rows.due_in(),
@@ -2124,79 +2138,61 @@ pub fn run(
                 }
                 if let Some(want) = editor.take_preview_request() {
                     use yumete_core::editor::Preview;
-                    // **The page window**: opened when this
-                    // terminal draws pictures and tinymist is new enough;
-                    // otherwise said why, or, from `:preview`, the
-                    // browser's preview instead.
-                    let (want, why) = match want {
-                        Preview::Window { path, syntax, fallback } => {
-                            // A Markdown file's own preview:
-                            // drawn here, so only the terminal can refuse it.
+                    match want {
+                        // **The page window**: opened when this terminal
+                        // draws pictures and tinymist is new enough;
+                        // otherwise said why, or, from `:preview`, the
+                        // preview shown in the browser instead.
+                        Preview::Window { path, syntax, fallback, locked } => {
+                            // A Markdown file's own preview: drawn here, so
+                            // only the terminal can refuse it.
                             let markdown = syntax == yumete_core::syntax::Syntax::Markdown;
                             let why = match markdown {
                                 true => crate::md_window::why_not(),
                                 false => crate::page_window::why_not(syntax, &servers, config, editor),
                             };
+                            let main = crate::page_window::absolute(&path);
+                            let kind = yumete_core::buffer::PreviewKind::for_syntax(syntax);
                             match why {
                                 None => {
-                                    let main = crate::page_window::absolute(&path);
-                                    let kind = yumete_core::buffer::PreviewKind::for_syntax(syntax);
-                                    if editor.open_page_window_of(main.clone(), kind).is_some() && !markdown {
+                                    if editor.open_page_window_of(main.clone(), kind, locked).is_some() && !markdown {
                                         if let Some(id) = editor.preview_of(&main) {
                                             pages.opened(id, fallback);
                                         }
                                     }
-                                    continue;
                                 }
                                 Some(why) if fallback => {
-                                    let said = matches!(syntax, yumete_core::syntax::Syntax::Typst | yumete_core::syntax::Syntax::Markdown);
-                                    (Preview::Start { path, syntax }, said.then_some(why))
+                                    editor.show_in_the_browser(main, kind, locked);
+                                    browser_why = Some(why);
                                 }
-                                Some(why) => {
-                                    editor.set_status(say!("preview.or-the-browser", why));
-                                    continue;
-                                }
+                                Some(why) => editor.set_status(say!("preview.or-the-browser", why)),
                             }
                         }
-                        other => (other, None),
-                    };
-                    // Already running: hand back the address and open the page
-                    // again. Killing it and starting another is a fresh compile
-                    // of the whole book to answer 「where was that page?」.
-                    if let Preview::Show = want {
-                        if let Some(url) = editor.preview_at().map(str::to_string) {
-                            show(&url);
-                            editor.set_status(say!("preview.running", url));
+                        // Already in the browser: hand back the address and
+                        // open the page again. Starting it afresh is a fresh
+                        // compile of the whole book to answer 「where was that
+                        // page?」.
+                        Preview::Show => {
+                            if let Some(url) = editor.preview_at().map(str::to_string) {
+                                show(&url);
+                                editor.set_status(say!("preview.running", url));
+                            }
                         }
-                        continue;
-                    }
-                    if let Some(mut running) = job.take() {
-                        let _ = running.child.kill();
-                        let _ = running.child.wait();
-                        forget_the_server();
-                        editor.set_preview_at(None);
-                        editor.set_status(say!("preview.stopped", running.what));
-                    }
-                    if let Preview::Start { path, syntax } = want {
-                        instead_in_the_browser(editor, config, &mut job, &path, syntax, why);
                     }
                 }
-                // **關掉那個檔案，預覽也跟着停。** 判準是「這個檔案
-                // 不再開着」，不是「不在眼前」——切走多半還會切回來，而起一次要
-                // 幾秒。
-                if job.as_ref().is_some_and(|running| !editor.holds_file(&running.file)) {
-                    if let Some(mut running) = job.take() {
-                        let _ = running.child.kill();
-                        let _ = running.child.wait();
-                        forget_the_server();
-                        editor.set_preview_at(None);
-                        editor.set_status(say!("preview.stopped", running.what));
-                    }
-                }
+                // **The browser shows what the editor says it shows**: the
+                // following preview moved, another preview put there, or
+                // none — what serves it is started, moved or stopped to match.
+                follow_in_the_browser(editor, config, &mut job, &mut md_page, &mut browser_why);
                 if let Some(running) = job.as_mut() {
                     if let Ok(said) = running.said.try_recv() {
                         if let Some(url) = said.page {
-                            show(&url);
+                            // A page already open at this address
+                            // reconnects by itself: tinymist's page dials
+                            // its server again every second.
+                            if running.shown.as_deref() != Some(url.as_str()) {
+                                show(&url);
+                            }
                             // Remembered, not just said: a line on the status
                             // bar is gone by the next keystroke, and the
                             // address is what a writer comes back to ask for.
@@ -2440,6 +2436,9 @@ pub fn run(
     if let Some(mut running) = job.take() {
         let _ = running.child.kill();
         let _ = running.child.wait();
+    }
+    if let Some(page) = md_page.take() {
+        page.remove();
     }
     forget_the_server();
     // **語言服務器也不活過這一場**（#53/#54）：`shutdown`/`exit` 先說，說不動
@@ -4015,16 +4014,16 @@ struct Job {
     child: std::process::Child,
     /// The addresses it printed, once it has printed them.
     said: std::sync::mpsc::Receiver<Addresses>,
-    /// **The file it is previewing**, so that closing that file
-    /// stops it.
-    ///
-    /// 同一次會話裏攢不起來——起一個新的先殺掉舊的，這裏只有一個位子——但
-    /// **關掉那個檔案之後它不許照樣活着**：屏幕上再没有任何東西提起它，預覽可以
-    /// 開了很多而沒人意識到。
-    ///
-    /// Warning: **切走不停。** 去隔壁一章改一句話再切回來是常事，而預覽服務器起一次
-    /// 要幾秒；停的判準是「這個檔案不再開着」，不是「不在眼前」。
+    /// **The document it is previewing**: when the preview shown in the
+    /// browser moves to another document, or closes with its last buffer,
+    /// this one is stopped and, for the next, another started.
     file: std::path::PathBuf,
+    /// The preview it shows, by its tab's id.
+    preview: u64,
+    /// The address the browser already had open when this one started in
+    /// place of another: the page there reconnects by itself, and is not
+    /// opened a second time.
+    shown: Option<String>,
     /// **The socket the buffer goes down** — see [`yumete_core::preview`].
     ///
     /// `None` until the server has printed its control address and the dial
@@ -4217,6 +4216,8 @@ impl Job {
             child,
             said,
             file: file.to_path_buf(),
+            preview: 0,
+            shown: None,
             control: None,
             control_at: None,
             redial: None,
@@ -4612,37 +4613,105 @@ fn run_program(
     })
 }
 
-/// **The browser's preview of `path` in place of the page window**, when
-/// `why` says why the window cannot be drawn. That is said only when the
-/// browser's preview starts, or is running already: the browser's preview
-/// of a Typst file is tinymist too, so where it cannot start, what stopped
-/// it is what the status line says.
-fn instead_in_the_browser(
+/// **What the browser shows now**: the preview, by its tab's id, and its
+/// document — of the typesetter running, or of the Markdown page written.
+fn in_the_browser(job: &Option<Job>, md_page: &Option<MdPage>) -> Option<(u64, std::path::PathBuf)> {
+    job.as_ref()
+        .map(|running| (running.preview, running.file.clone()))
+        .or_else(|| md_page.as_ref().map(|page| (page.preview, page.main.clone())))
+}
+
+/// **Make the browser show what the editor says it shows**
+/// (`:preview-browser`, and a window that could not be drawn): start what
+/// serves the preview, start it again on the new document when the
+/// following preview moved, stop it when the browser is to show nothing.
+/// The Markdown page is written again as its document changes. `why`, when
+/// a window could not be drawn, is said once the browser shows the preview
+/// in its place.
+fn follow_in_the_browser(
     editor: &mut Editor,
     config: &Config,
     job: &mut Option<Job>,
-    path: &std::path::Path,
-    syntax: yumete_core::syntax::Syntax,
-    why: Option<String>,
+    md_page: &mut Option<MdPage>,
+    why: &mut Option<String>,
 ) {
-    let started = job.is_some() || start_the_browser_preview(editor, config, job, path, syntax);
-    if let Some(why) = why.filter(|_| started) {
-        editor.set_status(say!("preview.in-the-browser", why));
+    let want = editor.browser_preview();
+    if want.as_ref().map(|(id, _, main)| (*id, main.clone())) != in_the_browser(job, md_page) {
+        // The page open in the browser, which follows to the next document
+        // by itself when that is served at the same address.
+        let shown = editor.preview_at().map(str::to_string);
+        let stopped = stop_the_browser_preview(editor, job, md_page);
+        match want {
+            Some((id, kind, main)) => {
+                let target = BrowserTarget { preview: id, path: &main, syntax: kind.syntax(), shown };
+                match start_the_browser_preview(editor, config, job, md_page, target) {
+                    true => {
+                        if let Some(why) = why.take() {
+                            editor.set_status(say!("preview.in-the-browser", why));
+                        }
+                    }
+                    false => {
+                        editor.stop_the_browser();
+                        // A preview opened only to be shown in the browser
+                        // goes with it.
+                        if why.take().is_some() && !editor.preview_on_screen(id) {
+                            editor.close_preview(id);
+                        }
+                    }
+                }
+            }
+            None => {
+                if let Some(what) = stopped {
+                    editor.set_status(say!("preview.stopped", what));
+                }
+            }
+        }
+    }
+    if let Some(page) = md_page.as_mut() {
+        page.follow(editor);
     }
 }
 
-/// **The browser's preview of `path`** (`:preview-browser`, and
-/// `:preview` where the page window cannot be drawn): the typesetter in
-/// the background for Typst, its address arriving on a later turn of the
-/// loop; the export, made once and handed to the browser, for Markdown.
-/// Whether it started; the status line says what happened either way.
+/// Stop what serves the browser's preview; the typesetter's name, when one
+/// was running.
+fn stop_the_browser_preview(editor: &mut Editor, job: &mut Option<Job>, md_page: &mut Option<MdPage>) -> Option<&'static str> {
+    let mut stopped = None;
+    if let Some(mut running) = job.take() {
+        let _ = running.child.kill();
+        let _ = running.child.wait();
+        forget_the_server();
+        stopped = Some(running.what);
+    }
+    if let Some(page) = md_page.take() {
+        page.remove();
+    }
+    editor.set_preview_at(None);
+    stopped
+}
+
+/// **What the browser is to show**: a preview, by its tab's id, its
+/// document and the document's syntax, and the address the browser has
+/// open already, if any.
+struct BrowserTarget<'a> {
+    preview: u64,
+    path: &'a std::path::Path,
+    syntax: yumete_core::syntax::Syntax,
+    shown: Option<String>,
+}
+
+/// **The browser's preview of `target`**: the typesetter in the background
+/// for Typst, its address arriving on a later turn of the loop; for
+/// Markdown, the export written to a page the browser reloads by itself
+/// ([`MdPage`]). Whether it started; the status line says what happened
+/// either way.
 fn start_the_browser_preview(
     editor: &mut Editor,
     config: &Config,
     job: &mut Option<Job>,
-    path: &std::path::Path,
-    syntax: yumete_core::syntax::Syntax,
+    md_page: &mut Option<MdPage>,
+    target: BrowserTarget,
 ) -> bool {
+    let BrowserTarget { preview, path, syntax, shown } = target;
     // **What the config says, if it says anything.** The
     // typesetter for a language is a fact about the
     // reader's machine, not about the editor — see
@@ -4657,8 +4726,10 @@ fn start_the_browser_preview(
         let file = path.display().to_string();
         match runner.argv(&file).and_then(|argv| argv.split_first().map(|(p, a)| (p.clone(), a.to_vec()))) {
             Some((program, args)) => match Job::server(&program, &args, path) {
-                Ok(started) => {
+                Ok(mut started) => {
                     editor.set_status(say!("preview.starting", program));
+                    started.preview = preview;
+                    started.shown = shown;
                     *job = Some(started);
                     return true;
                 }
@@ -4670,8 +4741,10 @@ fn start_the_browser_preview(
     }
     match syntax {
         yumete_core::syntax::Syntax::Typst => match Job::typst(path) {
-            Ok(started) => {
+            Ok(mut started) => {
                 editor.set_status(say!("preview.typst-starting"));
+                started.preview = preview;
+                started.shown = shown;
                 *job = Some(started);
                 true
             }
@@ -4680,30 +4753,25 @@ fn start_the_browser_preview(
                 false
             }
         },
-        // Markdown has no server to run: the export *is*
-        // the preview, made once and handed to the browser.
-        yumete_core::syntax::Syntax::Markdown => {
-            let out = std::env::temp_dir().join("yumete-preview.html");
-            // `export!`, not `export`: the plain form
-            // refuses to overwrite a file that is already
-            // there, which is right for a manuscript and
-            // wrong for the scratch page this rewrites
-            // every time. Without the `!` the *second*
-            // `:preview` of a Markdown file failed, and
-            // said so in the language of a command the
-            // reader had not typed.
-            match editor.execute(&format!("export! html {}", out.display())) {
-                Ok(_) => {
-                    show(&out.to_string_lossy());
-                    editor.set_status(say!("preview.made", out.display()));
-                    true
+        // Markdown has no server to run: the export *is* the
+        // preview, written again as the document changes.
+        yumete_core::syntax::Syntax::Markdown => match MdPage::start(editor, preview, path) {
+            Ok(page) => {
+                let url = page.page.display().to_string();
+                // The page open already reloads itself onto the next document.
+                if shown.as_deref() != Some(url.as_str()) {
+                    show(&url);
                 }
-                Err(err) => {
-                    editor.set_status(say!("preview.failed", err));
-                    false
-                }
+                editor.set_preview_at(Some(url.clone()));
+                editor.set_status(say!("preview.made", url));
+                *md_page = Some(page);
+                true
             }
-        }
+            Err(err) => {
+                editor.set_status(say!("preview.failed", err));
+                false
+            }
+        },
         // Nothing to typeset: a file with no markup is
         // already what it is going to look like, and a
         // `:diff` listing is a report about two of them.
@@ -4711,6 +4779,113 @@ fn start_the_browser_preview(
             editor.set_status(say!("preview.nothing-to-preview"));
             false
         }
+    }
+}
+
+/// How long the typing has to be still before the browser's Markdown page
+/// is written again.
+const MD_PAGE_SETTLE: std::time::Duration = std::time::Duration::from_millis(300);
+
+/// **The browser's Markdown preview.**
+///
+/// The document's HTML export, as `:export html` makes it, written to a
+/// page of its own in the temporary folder, and written again once the
+/// typing has been still and whenever the following preview moves to
+/// another document. **No server**: the browser reads the files. A short
+/// script in the page loads a stamp file beside it every 700 ms and reloads
+/// the page when the stamp is no longer the one it was written with — a
+/// script element, since a page opened from a file may load a script from
+/// beside it but may not fetch one.
+struct MdPage {
+    /// The preview it shows, by its tab's id.
+    preview: u64,
+    /// The document.
+    main: std::path::PathBuf,
+    /// The page, and the stamp file its script loads.
+    page: std::path::PathBuf,
+    stamp: std::path::PathBuf,
+    /// Which revision of which buffer was written last.
+    written: Option<(u64, u64)>,
+    /// When a newer one was first seen.
+    changed: Option<std::time::Instant>,
+    /// How many times the page was written: the stamp.
+    count: u64,
+}
+
+impl MdPage {
+    /// Write the page of `main` for the first time.
+    fn start(editor: &Editor, preview: u64, main: &std::path::Path) -> Result<MdPage, String> {
+        let dir = std::env::temp_dir();
+        let pid = std::process::id();
+        let mut page = MdPage {
+            preview,
+            main: main.to_path_buf(),
+            page: dir.join(format!("yumete-preview-{pid}.html")),
+            stamp: dir.join(format!("yumete-preview-{pid}.js")),
+            written: None,
+            changed: None,
+            count: 0,
+        };
+        page.write(editor)?;
+        Ok(page)
+    }
+
+    /// Write the page, and the stamp that tells the open page to reload.
+    fn write(&mut self, editor: &Editor) -> Result<(), String> {
+        self.count += 1;
+        let stamp = format!("{}-{}", std::process::id(), self.count);
+        let html = editor.html_of(&self.main).map_err(|e| e.to_string())?;
+        let html = String::from_utf8_lossy(&html);
+        let name = self.stamp.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let html = with_reload(&html, &name, &stamp);
+        std::fs::write(&self.page, html).map_err(|e| e.to_string())?;
+        std::fs::write(&self.stamp, format!("window.yumeteStamp = \"{stamp}\";\n")).map_err(|e| e.to_string())?;
+        self.written = editor.revision_of(&self.main);
+        Ok(())
+    }
+
+    /// **One turn**: the page written again once the document's buffer has
+    /// changed and the typing has been still.
+    fn follow(&mut self, editor: &mut Editor) {
+        let now = editor.revision_of(&self.main);
+        if now == self.written {
+            self.changed = None;
+            return;
+        }
+        let since = *self.changed.get_or_insert_with(std::time::Instant::now);
+        if since.elapsed() >= MD_PAGE_SETTLE {
+            self.changed = None;
+            if let Err(why) = self.write(editor) {
+                editor.set_status(say!("preview.failed", why));
+                self.written = now;
+            }
+        }
+    }
+
+    /// How long the loop may sleep before the page is due to be written.
+    fn due_in(&self) -> Option<std::time::Duration> {
+        self.changed.map(|since| MD_PAGE_SETTLE.saturating_sub(since.elapsed()).max(std::time::Duration::from_millis(1)))
+    }
+
+    /// Take the page and its stamp away.
+    fn remove(self) {
+        let _ = std::fs::remove_file(&self.page);
+        let _ = std::fs::remove_file(&self.stamp);
+    }
+}
+
+/// **`html` with the script that reloads it** when the stamp file `stamp`
+/// beside it says anything but `seen`: before `</body>`, or at the end.
+fn with_reload(html: &str, stamp: &str, seen: &str) -> String {
+    let script = format!(
+        "<script>(function () {{ var seen = \"{seen}\"; setInterval(function () {{ \
+         var s = document.createElement('script'); s.src = '{stamp}?' + Date.now(); \
+         s.onload = function () {{ s.remove(); if (window.yumeteStamp && window.yumeteStamp !== seen) location.reload(); }}; \
+         s.onerror = function () {{ s.remove(); }}; document.head.appendChild(s); }}, 700); }})();</script>\n"
+    );
+    match html.rfind("</body>") {
+        Some(at) => format!("{}{script}{}", &html[..at], &html[at..]),
+        None => format!("{html}{script}"),
     }
 }
 
@@ -18574,6 +18749,8 @@ mod preview_wire {
             child: std::process::Command::new("true").spawn().expect("`true` 跑得起來"),
             said: rx,
             file: std::path::PathBuf::from("/nowhere/a.typ"),
+            preview: 0,
+            shown: None,
             named: std::path::PathBuf::from("/nowhere/a.typ"),
             control: None,
             control_at: None,
@@ -18885,20 +19062,62 @@ fn squeezed(text: &str) -> String {
     /// 沒了——`yume.md` 裏的「宇夢」掃多少遍都不著色。
     /// **The browser's preview is said only when it starts**: where the
     /// typesetter cannot be started, the status line says why, not that the
-    /// page is in the browser.
+    /// page is in the browser; the browser shows nothing, and the preview
+    /// opened only to be shown there goes.
     #[test]
     fn a_browser_preview_that_cannot_start_is_not_said_to_be_open() {
         let mut config = Config::default();
         let runner = yumete_config::Runner { run: "/nonexistent/yumete-no-typesetter {file}".to_string(), kind: yumete_config::RunKind::Server };
         config.language.insert("typst".to_string(), [("preview".to_string(), runner)].into_iter().collect());
         let mut editor = yumete_core::Editor::new();
-        let mut job = None;
-        let path = std::path::Path::new("book.typ");
+        editor.show_in_the_browser(std::path::PathBuf::from("/nowhere/book.typ"), yumete_core::buffer::PreviewKind::Typst, false);
+        let (mut job, mut md_page) = (None, None);
         let why = "the terminal draws no pictures".to_string();
-        instead_in_the_browser(&mut editor, &config, &mut job, path, yumete_core::syntax::Syntax::Typst, Some(why.clone()));
+        let mut owed = Some(why.clone());
+        follow_in_the_browser(&mut editor, &config, &mut job, &mut md_page, &mut owed);
         assert!(job.is_none());
         assert_ne!(editor.status(), say!("preview.in-the-browser", why));
         assert!(editor.status().contains("yumete-no-typesetter"), "{}", editor.status());
+        assert_eq!(editor.browser_preview(), None, "the browser shows nothing");
+        assert!(editor.previews().is_empty(), "the preview opened for it went with it");
+    }
+
+    /// **The browser's Markdown page is written again as the document
+    /// changes**: once the typing has been still, with a new stamp the
+    /// script in the open page sees and reloads for; taken away with the
+    /// preview.
+    #[test]
+    fn the_browser_s_markdown_page_is_written_again() {
+        let dir = std::env::temp_dir().join(format!("yumete-md-page-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let note = dir.join("note.md");
+        std::fs::write(&note, "# 甲\n").unwrap();
+        let mut editor = yumete_core::Editor::new();
+        editor.open_file(&note).unwrap();
+        let id = editor.show_in_the_browser(note.clone(), yumete_core::buffer::PreviewKind::Markdown, false);
+        let mut page = MdPage::start(&editor, id, &note).unwrap();
+        let html = std::fs::read_to_string(&page.page).unwrap();
+        let first = format!("{}-1", std::process::id());
+        assert!(html.contains("甲") && html.contains(&format!("var seen = \"{first}\"")), "{html}");
+        assert!(html.contains("location.reload()"));
+        assert!(std::fs::read_to_string(&page.stamp).unwrap().contains(&first));
+        // An edit: written once the typing has been still.
+        editor.on_key(yumete_core::input::Key::Char('i'));
+        editor.on_key(yumete_core::input::Key::Char('乙'));
+        page.follow(&mut editor);
+        assert!(page.due_in().is_some(), "waiting for the typing to settle");
+        assert!(!std::fs::read_to_string(&page.page).unwrap().contains("乙"));
+        page.changed = Some(std::time::Instant::now() - std::time::Duration::from_secs(1));
+        page.follow(&mut editor);
+        let second = format!("{}-2", std::process::id());
+        assert!(std::fs::read_to_string(&page.page).unwrap().contains("乙"));
+        assert!(std::fs::read_to_string(&page.stamp).unwrap().contains(&second));
+        assert_eq!(page.due_in(), None);
+        let (html, stamp) = (page.page.clone(), page.stamp.clone());
+        page.remove();
+        assert!(!html.exists() && !stamp.exists());
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

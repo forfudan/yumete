@@ -391,7 +391,15 @@ impl MdPreviews {
         for (id, main) in previews {
             let shown = editor.preview_on_screen(id);
             let tab = self.tabs.entry(id).or_insert_with(|| Tab::start(main.clone()));
-            tab.main = main;
+            // **Moved to another document**: its text read afresh, from its
+            // top.
+            if tab.main != main {
+                tab.main = main;
+                tab.source = None;
+                tab.changed = None;
+                tab.sent = None;
+                tab.top = 0.0;
+            }
             while let Ok(shot) = tab.shots.try_recv() {
                 // The latest request's place stands unless a key moved it
                 // since; the page's height is the picture's.

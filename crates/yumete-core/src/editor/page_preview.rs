@@ -3,12 +3,19 @@
 //! tab of its own.
 //!
 //! A preview is a tab like an open file — in the tab line, `:b`, the buffer
-//! picker, `gn` and `gp` — whose buffer holds no text: it names the Typst
-//! file it typesets (its *main* file), and a window showing it draws that
-//! file's page (`yumete_tui::page_window`). It is **bound to that file**: it
-//! follows the cursor while the keys are in a window on that file or on a
-//! chapter of its book (a Typst file under the main file's folder), and
-//! otherwise keeps its place. Several may be open, one a document.
+//! picker, `gn` and `gp` — whose buffer holds no text: it names the
+//! document it shows (its *main* file: a Markdown file, or the main file of
+//! a Typst book), and a window showing it draws that document's page
+//! (`yumete_tui::page_window`, `yumete_tui::md_window`).
+//!
+//! **Each document has at most one preview, following or locked.** The
+//! following preview — at most one of each kind — shows the document the
+//! keys are in, and keeps the last one while they are in a file of another
+//! kind, in a file with nothing to preview, or in a document with a locked
+//! preview of its own: no document is shown twice. A locked preview stays
+//! on its document (`:preview-lock`). When a document's last buffer
+//! closes, its locked preview closes with it and the following preview
+//! moves to another open document of its kind, or closes.
 //!
 //! `:bc` on it, and `:preview off`, close it; `:q` in a window showing
 //! it closes the window and leaves the tab. **Windows showing a preview do
@@ -34,6 +41,21 @@ pub fn in_the_book(main: &Path, path: &Path, syntax: crate::syntax::Syntax) -> b
     let book = crate::buffer::PreviewKind::for_path(main) == crate::buffer::PreviewKind::Typst;
     path == main || (book && syntax == crate::syntax::Syntax::Typst && main.parent().is_some_and(|book| path.starts_with(book)))
 }
+
+/// **Which preview a document has**, as the preview commands read it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PreviewState {
+    /// No preview shows it.
+    None,
+    /// The following preview of its kind shows it.
+    Following,
+    /// It has a preview locked to it.
+    Locked,
+}
+
+/// A document: what one preview shows — its kind, and its main file as the
+/// disk spells it.
+pub type Document = (crate::buffer::PreviewKind, PathBuf);
 
 /// **How big the page is drawn** (`:preview-fit`, `[editor] preview_fit`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -229,6 +251,36 @@ impl Editor {
         })
     }
 
+    /// Whether preview `id` is locked to its document.
+    pub fn preview_is_locked(&self, id: u64) -> bool {
+        self.buffer_with(id).is_some_and(|i| self.buffers[i].preview_locked())
+    }
+
+    /// **The HTML export of the Markdown file `path`**, as `:export html`
+    /// writes it: the open buffer's text, unsaved edits and all, else the
+    /// disk's. The browser's Markdown preview shows it.
+    pub fn html_of(&self, path: &Path) -> std::io::Result<Vec<u8>> {
+        let (text, title, source) = match self.buffer_of_file(path) {
+            Some(i) => {
+                let b = &self.buffers[i];
+                (b.text().to_string(), b.display_name(), b.syntax())
+            }
+            None => {
+                let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                (std::fs::read_to_string(path)?, name, crate::syntax::Syntax::Markdown)
+            }
+        };
+        let style = crate::export::Style {
+            settings: self.export.clone(),
+            title,
+            source,
+            base: path.parent().map(Path::to_path_buf),
+            painter: self.formula_painter,
+            look: None,
+        };
+        Ok(crate::export::export_file(&text, crate::export::Format::Html, &style))
+    }
+
     /// What kind of preview tab `id` is.
     pub fn preview_kind_of(&self, id: u64) -> Option<crate::buffer::PreviewKind> {
         self.buffer_with(id).and_then(|i| self.buffers[i].preview_kind())
@@ -240,21 +292,27 @@ impl Editor {
         self.real_path(path).unwrap_or_else(|| absolute(path))
     }
 
-    /// The name a preview of `main` goes by in the tab line.
-    fn preview_label(main: &Path) -> String {
+    /// The name a preview of `main` goes by in the tab line: the file's
+    /// name, and whether it is locked to it.
+    fn preview_label(main: &Path, locked: bool) -> String {
         let name = main.file_name().map_or_else(|| main.display().to_string(), |n| n.to_string_lossy().into_owned());
-        say!("preview.tab", name)
+        match locked {
+            true => say!("preview.tab-locked", name),
+            false => say!("preview.tab", name),
+        }
     }
 
-    /// **Open the preview tab of `main`** without showing it, or find the
-    /// one open. Its id.
+    /// **Open the following preview of `main`** without showing it, or find
+    /// the preview it has. Its id.
     pub(super) fn add_preview_tab(&mut self, main: PathBuf) -> u64 {
         let kind = crate::buffer::PreviewKind::for_path(&main);
-        self.add_preview_tab_of(main, kind)
+        self.add_preview_tab_of(main, kind, false)
     }
 
-    /// [`Self::add_preview_tab`], of `kind`.
-    pub(super) fn add_preview_tab_of(&mut self, main: PathBuf, kind: crate::buffer::PreviewKind) -> u64 {
+    /// **The preview of `main`**, of `kind`, without showing it: the one it
+    /// has; else, unless `locked`, the following preview of its kind moved
+    /// to it; else a new tab. Its id.
+    pub(super) fn add_preview_tab_of(&mut self, main: PathBuf, kind: crate::buffer::PreviewKind, locked: bool) -> u64 {
         if let Some(id) = self.preview_of(&main) {
             return id;
         }
@@ -262,66 +320,196 @@ impl Editor {
         // and so how tinymist is told where the cursor is: a task started on
         // `/var/…` finds nothing at `/private/var/…`.
         let main = self.real(&main);
-        let label = Self::preview_label(&main);
-        let buffer = Buffer::preview_of(kind, main, &label);
+        if let Some(i) = self.following(kind).filter(|_| !locked) {
+            self.repoint(i, main, false);
+            return self.buffers[i].id();
+        }
+        let label = Self::preview_label(&main, locked);
+        let buffer = Buffer::preview_of(kind, main, locked, &label);
         let id = buffer.id();
         self.buffers.push(buffer);
         self.refresh_sidebar();
         id
     }
 
-    /// **The preview of the document the keys are in**, by its index: the
-    /// preview itself when the keys are in one; else the one typesetting
-    /// this file, or, failing that, the book it is a chapter of.
-    fn preview_here(&self) -> Option<usize> {
-        let here = &self.buffers[self.current];
-        if here.is_preview() {
-            return Some(self.current);
+    /// **Point preview `i` at the document `main`**, locked to it or
+    /// following: its name in the tab line and in the windows showing it
+    /// goes with it.
+    fn repoint(&mut self, i: usize, main: PathBuf, locked: bool) {
+        let label = Self::preview_label(&main, locked);
+        self.buffers[i].repoint_preview(main, locked, &label);
+        let id = self.buffers[i].id();
+        for pane in self.panes.values_mut().filter(|pane| pane.buffer == id) {
+            pane.caption = label.clone();
         }
-        let path = self.real(here.path()?);
-        let syntax = here.syntax();
-        let mains: Vec<(usize, PathBuf)> =
-            self.buffers.iter().enumerate().filter_map(|(i, b)| Some((i, self.real(b.preview_main()?)))).collect();
-        mains.iter().find(|(_, main)| *main == path).map(|(i, _)| *i).or_else(|| {
-            mains
-                .iter()
-                .filter(|(_, main)| in_the_book(main, &path, syntax))
-                .max_by_key(|(_, main)| main.components().count())
-                .map(|(i, _)| *i)
+        self.refresh_sidebar();
+    }
+
+    /// The following preview of `kind`, by its index.
+    fn following(&self, kind: crate::buffer::PreviewKind) -> Option<usize> {
+        self.buffers.iter().position(|b| b.preview_kind() == Some(kind) && !b.preview_locked())
+    }
+
+    /// The preview locked to the document `main`, by its index.
+    fn locked_to(&self, kind: crate::buffer::PreviewKind, main: &Path) -> Option<usize> {
+        self.buffers.iter().position(|b| {
+            b.preview_kind() == Some(kind) && b.preview_locked() && b.preview_main().is_some_and(|m| self.real(m) == main)
         })
     }
 
-    /// **The open Typst file that pulls this one in**, by
-    /// `#include` or `#import`: a chapter typeset on its own lacks what its
-    /// book sets up, so the book is what a chapter's new preview typesets.
-    /// Only open files are read, and only one step up; `None` when no open
-    /// file names this one.
-    fn includer_of_here(&self) -> Option<PathBuf> {
-        let here = &self.buffers[self.current];
-        if here.syntax() != crate::syntax::Syntax::Typst {
-            return None;
+    /// **Which preview the document `main` has**, and that preview's index.
+    pub(super) fn preview_state(&self, kind: crate::buffer::PreviewKind, main: &Path) -> (PreviewState, Option<usize>) {
+        if let Some(i) = self.locked_to(kind, main) {
+            return (PreviewState::Locked, Some(i));
         }
-        let me = self.real(here.path()?);
-        self.buffers.iter().enumerate().filter(|(i, _)| *i != self.current).find_map(|(_, b)| {
-            let path = b.path().filter(|_| b.syntax() == crate::syntax::Syntax::Typst)?;
-            let dir = path.parent()?;
-            let names = b.rope().lines().filter_map(|line| quoted_path(&line.to_string()));
-            names.into_iter().any(|name| self.real(&dir.join(name)) == me).then(|| path.to_path_buf())
-        })
+        match self.following(kind).filter(|&i| self.buffers[i].preview_main().is_some_and(|m| self.real(m) == main)) {
+            Some(i) => (PreviewState::Following, Some(i)),
+            None => (PreviewState::None, None),
+        }
     }
 
-    /// **The Typst file the preview of this document typesets**, for `:export-as-preview`: the main file of the preview
-    /// tab that typesets this file or the book it is a chapter of; else the
-    /// open file that includes this one, as a new preview would take it;
-    /// else this file. `None` for a buffer never saved.
-    pub(super) fn typst_main_here(&self) -> Option<PathBuf> {
-        if let Some(i) = self.preview_here() {
-            let b = &self.buffers[i];
-            if b.preview_kind() == Some(crate::buffer::PreviewKind::Typst) {
-                return b.preview_main().map(Path::to_path_buf);
+    /// **What the open Typst buffers are**: their files and the stamps
+    /// their files had when last read or written. A save, or a file opened,
+    /// changes it, and with it the books worked out.
+    fn note_books(&self) {
+        let mut hasher = DefaultHasher::new();
+        for b in self.buffers.iter().filter(|b| !b.is_preview() && b.syntax() == crate::syntax::Syntax::Typst) {
+            b.path().hash(&mut hasher);
+            b.disk_stamp().hash(&mut hasher);
+        }
+        self.books.borrow_mut().note(hasher.finish());
+    }
+
+    /// The open Typst buffers, for the book search.
+    fn open_typst(&self) -> Vec<super::books::Open> {
+        self.buffers
+            .iter()
+            .filter(|b| !b.is_preview() && b.syntax() == crate::syntax::Syntax::Typst)
+            .filter_map(|b| Some(super::books::Open { path: self.real(b.path()?), text: b.rope().to_string() }))
+            .collect()
+    }
+
+    /// **The book the Typst file `path` belongs to**, its main file: the
+    /// document of an existing preview whose book holds it; else the file
+    /// nobody names above it, the open buffers and the disk read (see
+    /// [`super::books`]). [`Self::note_books`] first.
+    fn book_of(&self, path: &Path) -> PathBuf {
+        let mains: Vec<PathBuf> = self
+            .buffers
+            .iter()
+            .filter(|b| b.preview_kind() == Some(crate::buffer::PreviewKind::Typst))
+            .filter_map(|b| b.preview_main().map(|m| self.real(m)))
+            .collect();
+        if let Some(main) = mains.iter().find(|m| m.as_path() == path) {
+            return main.clone();
+        }
+        let mut open = None;
+        let mut books = self.books.borrow_mut();
+        for main in &mains {
+            if !books.has_within(main) {
+                books.within(main, open.get_or_insert_with(|| self.open_typst()));
+            }
+            if books.kept_within(main, path) {
+                return main.clone();
             }
         }
-        self.includer_of_here().or_else(|| self.current_buffer().path().map(|p| self.real(p)))
+        if let Some(top) = books.kept_top(path) {
+            return top;
+        }
+        let home = Self::home_dir().map(|h| self.real(&h));
+        books.top_of(path, open.get_or_insert_with(|| self.open_typst()), home.as_deref())
+    }
+
+    /// **The document buffer `i` is in**: the preview's own for a preview;
+    /// the file for a Markdown file; the book for a Typst file. `None` for a
+    /// buffer never saved and for a file with nothing to preview.
+    fn document_of(&self, i: usize) -> Option<Document> {
+        use crate::buffer::PreviewKind;
+        let b = &self.buffers[i];
+        if let (Some(kind), Some(main)) = (b.preview_kind(), b.preview_main()) {
+            return Some((kind, main.to_path_buf()));
+        }
+        let path = self.real(b.path()?);
+        match b.syntax() {
+            crate::syntax::Syntax::Markdown => Some((PreviewKind::Markdown, path)),
+            crate::syntax::Syntax::Typst => Some((PreviewKind::Typst, self.book_of(&path))),
+            _ => None,
+        }
+    }
+
+    /// **The document the keys are in** — see [`Self::document_of`].
+    pub fn document_here(&self) -> Option<Document> {
+        self.note_books();
+        self.document_of(self.current)
+    }
+
+    /// **Move the previews to where they belong**, once a turn: the
+    /// following preview to the document the keys are in, unless that
+    /// document has a locked preview; and the previews of a document whose
+    /// last buffer closed — the locked one closed, the following one moved
+    /// to another open document of its kind, or closed when there is none.
+    pub fn steer_previews(&mut self) {
+        self.note_books();
+        if !self.buffers[self.current].is_preview() {
+            if let Some((kind, main)) = self.document_of(self.current) {
+                if self.locked_to(kind, &main).is_none() {
+                    if let Some(i) = self.following(kind) {
+                        if self.buffers[i].preview_main() != Some(main.as_path()) {
+                            self.repoint(i, main, false);
+                        }
+                    }
+                }
+            }
+        }
+        let previews: Vec<(u64, crate::buffer::PreviewKind, PathBuf, bool)> = self
+            .buffers
+            .iter()
+            .filter_map(|b| Some((b.id(), b.preview_kind()?, b.preview_main()?.to_path_buf(), b.preview_locked())))
+            .collect();
+        for (id, kind, main, locked) in previews {
+            if self.document_is_open(kind, &main) {
+                continue;
+            }
+            let next = match locked {
+                true => None,
+                false => self.another_document(kind),
+            };
+            match (next, self.buffer_with(id)) {
+                (Some(main), Some(i)) => self.repoint(i, main, false),
+                _ => {
+                    self.close_preview(id);
+                }
+            }
+        }
+    }
+
+    /// Whether a buffer is open on the document `main`.
+    fn document_is_open(&self, kind: crate::buffer::PreviewKind, main: &Path) -> bool {
+        (0..self.buffers.len())
+            .filter(|&i| !self.buffers[i].is_preview())
+            .any(|i| self.document_of(i).is_some_and(|(k, m)| k == kind && m == main))
+    }
+
+    /// **An open document of `kind` without a locked preview**, for the
+    /// following preview to move to: the one the keys are in first, then in
+    /// tab order.
+    fn another_document(&self, kind: crate::buffer::PreviewKind) -> Option<PathBuf> {
+        std::iter::once(self.current)
+            .chain(0..self.buffers.len())
+            .filter(|&i| !self.buffers[i].is_preview())
+            .filter_map(|i| self.document_of(i))
+            .find(|(k, main)| *k == kind && self.locked_to(kind, main).is_none())
+            .map(|(_, main)| main)
+    }
+
+    /// **The Typst file the preview of this document typesets**, for
+    /// `:export-as-preview`: the book this file belongs to, or the one the
+    /// preview the keys are in shows. `None` for a buffer never saved.
+    pub(super) fn typst_main_here(&self) -> Option<PathBuf> {
+        match self.document_here() {
+            Some((crate::buffer::PreviewKind::Typst, main)) => Some(main),
+            _ => self.current_buffer().path().map(|p| self.real(p)),
+        }
     }
 
     /// **The open files of the book `main` typesets with unsaved changes**:
@@ -334,32 +522,29 @@ impl Editor {
             .count()
     }
 
-    /// Whether the preview of this document is on the screen.
-    pub(super) fn preview_here_on_screen(&self) -> bool {
-        self.preview_here().is_some_and(|i| self.preview_on_screen(self.buffers[i].id()))
-    }
-
-    /// **Open the preview of `main` beside the live window**, to its right,
-    /// opening its tab first if need be; the keys stay where they are, as a
-    /// preview opened to the side leaves them in VS Code. A preview already
-    /// on the screen is said to be open instead. The window, or `None` when
-    /// there is no room.
     /// Whether `:redraw` asked for the whole terminal to be drawn again
     /// since the front end last asked; asking takes the request.
     pub fn take_redraw(&mut self) -> bool {
         std::mem::take(&mut self.redraw)
     }
 
+    /// **Open the following preview of `main` beside the live window** —
+    /// see [`Self::open_page_window_of`].
     pub fn open_page_window(&mut self, main: PathBuf) -> Option<WindowId> {
         let kind = crate::buffer::PreviewKind::for_path(&main);
-        self.open_page_window_of(main, kind)
+        self.open_page_window_of(main, kind, false)
     }
 
-    /// [`Self::open_page_window`], a preview of `kind`: Markdown's own for a
-    /// Markdown file, the typeset page for a Typst one.
-    pub fn open_page_window_of(&mut self, main: PathBuf, kind: crate::buffer::PreviewKind) -> Option<WindowId> {
-        let fresh_tab = self.preview_of(&main).is_none();
-        let preview = self.add_preview_tab_of(main, kind);
+    /// **Open the preview of `main` beside the live window**, to its right:
+    /// the preview it has, else one of `kind`, following or `locked` (see
+    /// [`Self::add_preview_tab_of`]). The keys stay where they are, as a
+    /// preview opened to the side leaves them in VS Code. A preview already
+    /// on the screen is said to be open instead. The window, or `None` when
+    /// there is no room.
+    pub fn open_page_window_of(&mut self, main: PathBuf, kind: crate::buffer::PreviewKind, locked: bool) -> Option<WindowId> {
+        let tabs = self.buffers.len();
+        let preview = self.add_preview_tab_of(main, kind, locked);
+        let fresh_tab = self.buffers.len() > tabs;
         if let Some((id, _)) = self.page_windows().into_iter().find(|(_, page)| page.preview == preview) {
             self.status = say!("preview.window-open");
             return Some(id);
@@ -410,47 +595,149 @@ impl Editor {
         Some(fresh)
     }
 
-    /// **Hand the front end a preview to open** for this document: the
-    /// window (with the browser's as the `fallback` when the window cannot
-    /// be drawn), or the browser's. The window of a document with a preview
-    /// tab is that tab's; a buffer never saved has no file to typeset.
-    pub(super) fn ask_for_a_preview(&mut self, window: bool, fallback: bool) {
-        let tab = self.preview_here().and_then(|i| {
-            let b = &self.buffers[i];
-            Some((b.preview_main()?.to_path_buf(), b.preview_kind()?.syntax()))
-        });
-        let (path, syntax) = match (tab, self.current_buffer().path()) {
-            (Some((main, syntax)), _) if window || self.buffers[self.current].is_preview() => (main, syntax),
-            (_, Some(path)) => match self.includer_of_here().filter(|_| window) {
-                Some(book) => (book, crate::syntax::Syntax::Typst),
-                None => (path.to_path_buf(), self.current_buffer().syntax()),
-            },
-            _ => {
-                self.status = say!("preview.save-first");
-                return;
-            }
+    /// **The document a preview command is about**: the one the keys are
+    /// in. `None`, and said why, for a buffer never saved or a file with
+    /// nothing to preview.
+    fn preview_document_here(&mut self) -> Option<Document> {
+        let found = self.document_here();
+        if found.is_none() {
+            self.status = match self.current_buffer().path() {
+                None => say!("preview.save-first"),
+                Some(_) => say!("preview.nothing-to-preview"),
+            };
+        }
+        found
+    }
+
+    /// **`:preview` and `:preview-window`**, by the state of this
+    /// document's preview: on, a following preview opened beside the text,
+    /// or the one it has brought up; off, its preview closed — a locked one
+    /// hands the document to the following preview of its kind. Bare is on
+    /// when it has none. `fallback`: the browser when a window cannot be
+    /// drawn.
+    pub(super) fn preview_switch(&mut self, how: crate::command::Switch, fallback: bool) {
+        self.steer_previews();
+        let Some((kind, main)) = self.preview_document_here() else { return };
+        let (state, at) = self.preview_state(kind, &main);
+        let on = match how {
+            crate::command::Switch::Flip => state == PreviewState::None,
+            crate::command::Switch::To(on) => on,
         };
-        self.preview_request = Some(match window {
-            true => Preview::Window { path, syntax, fallback },
-            false => Preview::Start { path, syntax },
-        });
+        let id = at.map(|i| self.buffers[i].id());
+        match (on, id) {
+            (true, Some(id)) if self.preview_on_screen(id) => self.status = say!("preview.window-open"),
+            (true, _) => {
+                let locked = state == PreviewState::Locked;
+                self.preview_request = Some(Preview::Window { path: main, syntax: kind.syntax(), fallback, locked });
+            }
+            (false, None) => self.status = say!("preview.not-open"),
+            (false, Some(id)) => {
+                self.close_preview(id);
+                if state == PreviewState::Locked {
+                    if let Some(i) = self.following(kind) {
+                        self.repoint(i, main, false);
+                    }
+                }
+                self.status = say!("preview.window-closed");
+            }
+        }
+    }
+
+    /// **`:preview-lock`**, by the state of this document's preview: on, a
+    /// locked preview opened beside the text, or the following one locked
+    /// where it stands; off, the locked one following again, in place of
+    /// the following preview of its kind, which closes. Bare is off when it
+    /// is locked.
+    pub(super) fn preview_lock(&mut self, how: crate::command::Switch) {
+        self.steer_previews();
+        let Some((kind, main)) = self.preview_document_here() else { return };
+        let (state, at) = self.preview_state(kind, &main);
+        let id = at.map(|i| self.buffers[i].id());
+        match (how.over(state == PreviewState::Locked), state, at) {
+            (true, PreviewState::None, _) => {
+                self.preview_request = Some(Preview::Window { path: main, syntax: kind.syntax(), fallback: true, locked: true });
+            }
+            (true, PreviewState::Following, Some(i)) => {
+                self.repoint(i, main, true);
+                self.status = say!("preview.locked");
+            }
+            (true, _, _) => self.status = say!("preview.already-locked"),
+            (false, PreviewState::Locked, Some(_)) => {
+                if let Some(old) = self.following(kind).map(|i| self.buffers[i].id()) {
+                    self.close_preview(old);
+                }
+                if let Some(i) = id.and_then(|id| self.buffer_with(id)) {
+                    self.repoint(i, main, false);
+                }
+                self.status = say!("preview.unlocked");
+            }
+            (false, _, _) => self.status = say!("preview.not-locked"),
+        }
+    }
+
+    /// **`:preview-browser`**: this document's preview shown in the
+    /// browser — the preview it has, or a following one opened for it. The
+    /// browser shows one preview: on moves it here; off stops it, whatever
+    /// it shows. Bare is on unless it shows this document's.
+    pub(super) fn preview_browser(&mut self, how: crate::command::Switch) {
+        self.steer_previews();
+        let Some((kind, main)) = self.preview_document_here() else { return };
+        let (_, at) = self.preview_state(kind, &main);
+        let id = at.map(|i| self.buffers[i].id());
+        let shown = id.is_some() && self.browser == id;
+        match how.over(shown) {
+            true if shown => self.preview_request = Some(Preview::Show),
+            true => {
+                let id = match id {
+                    Some(id) => id,
+                    None => self.add_preview_tab_of(main, kind, false),
+                };
+                self.browser = Some(id);
+            }
+            false => self.browser = None,
+        }
+    }
+
+    /// **Show the preview of `main` in the browser** in place of a window
+    /// that cannot be drawn: the preview it has, else one of `kind`,
+    /// following or `locked`, opened without a window. Its id.
+    pub fn show_in_the_browser(&mut self, main: PathBuf, kind: crate::buffer::PreviewKind, locked: bool) -> u64 {
+        let id = self.add_preview_tab_of(main, kind, locked);
+        self.browser = Some(id);
+        id
+    }
+
+    /// **What the browser is to show**: the preview's id, its kind and its
+    /// document; `None` when it shows nothing.
+    pub fn browser_preview(&self) -> Option<(u64, crate::buffer::PreviewKind, PathBuf)> {
+        let b = &self.buffers[self.buffer_with(self.browser?)?];
+        Some((b.id(), b.preview_kind()?, b.preview_main()?.to_path_buf()))
+    }
+
+    /// The browser shows nothing any more: what served it could not start.
+    pub fn stop_the_browser(&mut self) {
+        self.browser = None;
+    }
+
+    /// Whether the preview of the document the keys are in is the one the
+    /// browser shows.
+    pub(super) fn browser_shows_here(&self) -> bool {
+        let Some((kind, main)) = self.document_here() else { return false };
+        let (_, at) = self.preview_state(kind, &main);
+        at.is_some_and(|i| self.browser == Some(self.buffers[i].id()))
+    }
+
+    /// The state of the preview of the document the keys are in.
+    pub(super) fn preview_state_here(&self) -> PreviewState {
+        match self.document_here() {
+            Some((kind, main)) => self.preview_state(kind, &main).0,
+            None => PreviewState::None,
+        }
     }
 
     /// Whether any preview is on the screen.
     pub fn has_a_page_window(&self) -> bool {
         !self.page_windows().is_empty()
-    }
-
-    /// **Close the preview of this document**: its tab, and every window
-    /// that showed nothing else. `false` when there was none.
-    pub(super) fn close_preview_here(&mut self) -> bool {
-        match self.preview_here() {
-            Some(i) => {
-                let id = self.buffers[i].id();
-                self.close_preview(id)
-            }
-            None => false,
-        }
     }
 
     /// **Close preview `id`** — its tab, as `:bc` closes a file's. A window
@@ -502,6 +789,9 @@ impl Editor {
         }
         if self.last_file == Some(id) {
             self.last_file = None;
+        }
+        if self.browser == Some(id) {
+            self.browser = None;
         }
         self.forget_the_document();
         self.refresh_sidebar();

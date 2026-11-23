@@ -412,7 +412,7 @@ pub struct Buffer {
     /// drawn by the front end as the page instead of as text. The path is
     /// absolute, as the typesetter knows it. A preview holds no text, is
     /// locked for good and is never written.
-    preview: Option<(PreviewKind, PathBuf)>,
+    preview: Option<PreviewTab>,
     /// …and a hash of the text that was there.
     ///
     /// The stamp above is the fast question — "might this have changed?" — and
@@ -438,6 +438,15 @@ pub struct Buffer {
     /// 對它恆答「改過」，正文走回哪一步都一樣——撤到棧底，棧底正是那段救回來的字。
     beyond_the_file: bool,
 
+}
+
+/// **What a preview tab shows, and whether it moves**: the document's main
+/// file, and whether the preview is locked to it or follows the focus.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PreviewTab {
+    kind: PreviewKind,
+    main: PathBuf,
+    locked: bool,
 }
 
 /// **What a preview tab shows**.
@@ -1106,31 +1115,53 @@ impl Buffer {
         self.computed = on;
     }
 
-    /// **A preview tab of `main`**, of `kind`, under `label`:
-    /// no text, no file, locked, computed.
-    pub fn preview_of(kind: PreviewKind, main: PathBuf, label: &str) -> Self {
+    /// **A preview tab of `main`**, of `kind`, locked to it or following
+    /// the focus, under `label`: no text, no file, read-only, computed.
+    pub fn preview_of(kind: PreviewKind, main: PathBuf, locked: bool, label: &str) -> Self {
         let mut buffer = Buffer::from_text("");
         buffer.label = Some(label.to_string());
         buffer.readonly = true;
         buffer.computed = true;
         buffer.from_nothing = false;
-        buffer.preview = Some((kind, main));
+        buffer.preview = Some(PreviewTab { kind, main, locked });
         buffer
     }
 
     /// The file this tab shows the page of, when it is a preview.
     pub fn preview_main(&self) -> Option<&Path> {
-        self.preview.as_ref().map(|(_, main)| main.as_path())
+        self.preview.as_ref().map(|tab| tab.main.as_path())
     }
 
     /// What kind of preview this tab is, when it is one.
     pub fn preview_kind(&self) -> Option<PreviewKind> {
-        self.preview.as_ref().map(|(kind, _)| *kind)
+        self.preview.as_ref().map(|tab| tab.kind)
+    }
+
+    /// Whether this tab is a preview locked to its document, rather than
+    /// one following the focus.
+    pub fn preview_locked(&self) -> bool {
+        self.preview.as_ref().is_some_and(|tab| tab.locked)
+    }
+
+    /// **Point this preview at `main`**, locked or following, under
+    /// `label`. Nothing for a tab that is not a preview.
+    pub fn repoint_preview(&mut self, main: PathBuf, locked: bool, label: &str) {
+        if let Some(tab) = self.preview.as_mut() {
+            tab.main = main;
+            tab.locked = locked;
+            self.label = Some(label.to_string());
+        }
     }
 
     /// Whether this tab is a preview rather than text.
     pub fn is_preview(&self) -> bool {
         self.preview.is_some()
+    }
+
+    /// The size and time the file had when this buffer last read or wrote
+    /// it: a save changes it.
+    pub fn disk_stamp(&self) -> Option<(u64, std::time::SystemTime)> {
+        self.seen
     }
 
     /// Lock the buffer against editing, or unlock it.

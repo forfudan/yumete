@@ -17487,36 +17487,57 @@ fn the_help_teaches_no_command_the_parser_refuses() {
     }
 }
 
+/// **The browser shows this document's preview**: the one it has, or a
+/// following one opened for it without a window; `on` again asks where the
+/// page is; it moves with the following preview and onto another
+/// document's when asked there; `off` stops it and leaves the tab; closing
+/// the preview stops it too.
 #[test]
-fn a_second_preview_asks_where_the_first_one_is() {
+fn the_browser_shows_this_document_s_preview() {
     let dir = tmp().join(format!("yumete-prev-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    let book = dir.join("book.typ");
-    std::fs::write(&book, "= 第一章\n").unwrap();
+    std::fs::create_dir_all(dir.join("a")).unwrap();
+    std::fs::create_dir_all(dir.join("b")).unwrap();
+    let a = dir.join("a/book.typ");
+    let b = dir.join("b/book.typ");
+    std::fs::write(&a, "= 甲\n").unwrap();
+    std::fs::write(&b, "= 乙\n").unwrap();
 
     let mut ed = Editor::new();
-    ed.open_file(&book).unwrap();
-    // **A switch**: bare starts it when none runs.
-    ed.execute(":preview").unwrap();
-    // The page window, with the browser's preview behind it when the window
-    // cannot be drawn.
-    assert!(
-        matches!(ed.take_preview_request(), Some(Preview::Window { fallback: true, .. })),
-        "the first one starts a typesetter"
-    );
+    ed.open_file(&a).unwrap();
+    ed.execute(":preview-browser").unwrap();
+    assert_eq!(ed.take_preview_request(), None, "nothing for the front end to open");
+    let id = ed.preview_of(&a).expect("a following preview, opened for the browser");
+    assert!(!ed.preview_is_locked(id));
+    assert!(!ed.has_a_page_window(), "and no window");
+    assert_eq!(ed.browser_preview(), Some((id, crate::buffer::PreviewKind::Typst, a.clone())));
+    assert_eq!(ed.switch_state(":preview-browser"), Some(true));
     // The front end says where it put the page.
     ed.set_preview_at(Some("http://127.0.0.1:23625".to_string()));
-    assert_eq!(ed.preview_at(), Some("http://127.0.0.1:23625"));
-
-    ed.execute(":preview on").unwrap();
-    assert!(
-        matches!(ed.take_preview_request(), Some(Preview::Show)),
-        "`on` while it runs asks for the address, not for another server"
-    );
-
-    ed.execute(":preview").unwrap();
-    assert!(matches!(ed.take_preview_request(), Some(Preview::Stop)), "bare turns it off");
+    ed.execute(":preview-browser on").unwrap();
+    assert_eq!(ed.take_preview_request(), Some(Preview::Show), "`on` again asks for the address");
+    // The following preview moves to the other book, and the browser with it.
+    ed.open_file(&b).unwrap();
+    ed.steer_previews();
+    assert_eq!(ed.browser_preview(), Some((id, crate::buffer::PreviewKind::Typst, b.clone())));
+    // Locked there, the browser stays on it from the first book, which has
+    // no preview of its own until asked.
+    ed.execute(":preview-lock on").unwrap();
+    ed.execute(&format!(":open {}", a.display())).unwrap();
+    ed.steer_previews();
+    assert_eq!(ed.switch_state(":preview-browser"), Some(false));
+    ed.execute(":preview-browser").unwrap();
+    let here = ed.preview_of(&a).expect("a new following preview");
+    assert_ne!(here, id);
+    assert_eq!(ed.browser_preview().map(|(i, ..)| i), Some(here), "bare moves the browser here");
+    // `off` stops it and leaves the tabs.
+    ed.execute(":preview-browser off").unwrap();
+    assert_eq!(ed.browser_preview(), None);
+    assert_eq!(ed.previews().len(), 2);
+    // Closing the preview stops it too.
+    ed.execute(":preview-browser on").unwrap();
+    assert!(ed.close_preview(here));
+    assert_eq!(ed.browser_preview(), None);
     std::fs::remove_dir_all(&dir).ok();
 }
 
@@ -39960,76 +39981,123 @@ fn a_typst_book(name: &str) -> (Editor, std::path::PathBuf) {
     (ed, dir)
 }
 
-/// **`:preview` and its two siblings are switches**: `:preview` asks for this document's
-/// preview beside the text with the browser as the fallback, `-window` for
-/// the preview alone, `-browser` for the browser. `on` while this document's
-/// preview is on the screen says so; `off` closes its tab; bare is `on`
-/// unless it is on the screen.
+/// **The preview commands by the state of the document's preview** — none
+/// (无), the following preview showing it (跟), or a preview locked to it
+/// (锁): every cell of `:preview` and `:preview-lock`, on, off and bare.
 #[test]
-fn the_preview_commands_ask_for_the_window_or_the_browser() {
+fn the_preview_commands_go_by_the_document_s_preview() {
+    use crate::buffer::PreviewKind::Typst;
     let (mut ed, dir) = a_typst_book("commands");
     let main = dir.join("main.typ");
-    let window = |path: &std::path::Path, fallback: bool| {
-        Some(Preview::Window { path: path.to_path_buf(), syntax: crate::syntax::Syntax::Typst, fallback })
+    let (_, dir_b) = a_typst_book("commands-b");
+    let b = dir_b.join("main.typ");
+    let window = |path: &std::path::Path, fallback: bool, locked: bool| {
+        Some(Preview::Window { path: path.to_path_buf(), syntax: crate::syntax::Syntax::Typst, fallback, locked })
     };
-    ed.execute(":preview").unwrap();
-    assert_eq!(ed.take_preview_request(), window(&main, true));
+    let state = |ed: &Editor| ed.switch_state(":preview").zip(ed.switch_state(":preview-lock"));
+    // 无: `on` opens a following preview; `off` and unlocking do nothing.
+    assert_eq!(state(&ed), Some((false, false)));
+    ed.execute(":preview off").unwrap();
+    assert_eq!(ed.take_preview_request(), None);
+    assert_eq!(ed.status(), say!("preview.not-open"));
+    ed.execute(":preview-lock off").unwrap();
+    assert_eq!(ed.take_preview_request(), None);
+    assert_eq!(ed.status(), say!("preview.not-locked"));
+    ed.execute(":preview on").unwrap();
+    assert_eq!(ed.take_preview_request(), window(&main, true, false));
     ed.execute(":preview-window on").unwrap();
-    assert_eq!(ed.take_preview_request(), window(&main, false));
-    ed.execute(":preview-browser").unwrap();
-    assert_eq!(ed.take_preview_request(), Some(Preview::Start { path: main.clone(), syntax: crate::syntax::Syntax::Typst }));
-    // The front end opened it: `on` says it is open…
-    assert!(ed.open_page_window(main.clone()).is_some());
+    assert_eq!(ed.take_preview_request(), window(&main, false, false), "`-window`: no browser behind it");
+    ed.execute(":preview").unwrap();
+    assert_eq!(ed.take_preview_request(), window(&main, true, false), "bare is on");
+    // The front end opened it: 跟.
+    ed.open_page_window(main.clone()).unwrap();
+    let id = ed.preview_of(&main).unwrap();
+    assert_eq!(state(&ed), Some((true, false)));
+    // 跟: `on` brings it up — on the screen, it says so; unlocking does
+    // nothing.
     for asked in [":preview on", ":preview-window on"] {
         ed.execute(asked).unwrap();
         assert_eq!(ed.take_preview_request(), None, "{asked}");
         assert_eq!(ed.status(), say!("preview.window-open"), "{asked}");
     }
+    ed.execute(":preview-lock off").unwrap();
+    assert_eq!(ed.status(), say!("preview.not-locked"));
     // …from a chapter of the book too, whose preview it is.
-    ed.execute(&format!(":e {}", dir.join("two.typ").display())).unwrap();
+    ed.execute(&format!(":open {}", dir.join("two.typ").display())).unwrap();
     ed.execute(":preview on").unwrap();
     assert_eq!(ed.take_preview_request(), None);
     assert_eq!(ed.status(), say!("preview.window-open"));
-    ed.show_buffer_at(0);
-    // A bare `-window` closes the tab: off the screen and out of the list.
-    ed.execute(":preview-window").unwrap();
+    // 跟: locking locks it in place — the same tab, no new window, nothing
+    // asked of the front end.
+    ed.execute(":preview-lock").unwrap();
     assert_eq!(ed.take_preview_request(), None);
-    assert_eq!(ed.status(), say!("preview.window-closed"));
-    assert!(!ed.has_a_page_window());
-    assert!(ed.previews().is_empty());
-    assert_eq!(ed.windows().len(), 1);
-    // **A tab off the screen**: bare shows it again (it is the same tab),
-    // and `off` closes it all the same.
-    ed.open_page_window(main.clone()).unwrap();
-    ed.on_key(Key::Ctrl('w'));
-    ed.on_key(Key::Char('w'));
-    assert!(ed.page_window_has_the_keys());
+    assert_eq!(ed.status(), say!("preview.locked"));
+    assert_eq!(ed.previews(), vec![(id, main.clone())]);
+    assert!(ed.preview_is_locked(id));
+    assert_eq!(ed.page_windows().len(), 1);
+    assert_eq!(ed.buffers[ed.buffer_with(id).unwrap()].display_name(), say!("preview.tab-locked", "main.typ"));
+    assert_eq!(state(&ed), Some((true, true)));
+    // 锁: locking again does nothing; `on` brings it up.
+    ed.execute(":preview-lock on").unwrap();
+    assert_eq!(ed.status(), say!("preview.already-locked"));
+    ed.execute(":preview on").unwrap();
+    assert_eq!(ed.take_preview_request(), None);
+    assert_eq!(ed.status(), say!("preview.window-open"));
+    // Off the screen, `on` asks for its window, locked still.
+    let page = ed.page_windows()[0].0;
+    assert!(ed.switch_to(page));
     ed.execute(":q").unwrap();
+    assert!(!ed.has_a_page_window());
     assert_eq!(ed.previews().len(), 1, "`:q` closed the window, not the tab");
-    assert!(!ed.has_a_page_window());
+    ed.execute(":preview on").unwrap();
+    assert_eq!(ed.take_preview_request(), window(&main, true, true));
+    // A following preview of another book; back here, it stays there.
+    ed.execute(&format!(":open {}", b.display())).unwrap();
     ed.execute(":preview").unwrap();
-    assert_eq!(ed.take_preview_request(), window(&main, true), "bare is `on` while it is off the screen");
+    assert_eq!(ed.take_preview_request(), window(&b, true, false));
+    ed.open_page_window(b.clone()).unwrap();
+    let following = ed.preview_of(&b).unwrap();
+    ed.execute(&format!(":open {}", main.display())).unwrap();
+    ed.steer_previews();
+    assert_eq!(ed.previews(), vec![(id, main.clone()), (following, b.clone())], "no document shown twice");
+    // 锁: `off` closes it, and the following preview comes here (跟).
     ed.execute(":preview off").unwrap();
-    assert!(ed.previews().is_empty(), "`off` closes a tab off the screen too");
-    // `:preview off` closes the tab and stops the browser's too.
-    assert!(ed.open_page_window(main.clone()).is_some());
-    ed.set_preview_at(Some("http://127.0.0.1:23625".to_string()));
-    ed.execute(":preview off").unwrap();
-    assert_eq!(ed.take_preview_request(), Some(Preview::Stop), "the browser's goes too");
-    assert!(!ed.has_a_page_window());
+    assert_eq!(ed.status(), say!("preview.window-closed"));
+    assert_eq!(ed.previews(), vec![(following, main.clone())]);
+    assert_eq!(state(&ed), Some((true, false)));
+    // 跟: bare closes it (无).
+    ed.execute(":preview").unwrap();
+    assert_eq!(ed.status(), say!("preview.window-closed"));
     assert!(ed.previews().is_empty());
     assert_eq!(ed.windows().len(), 1);
-    // `-browser off` stops only the browser's; with none running it is quiet.
-    ed.execute(":preview-browser off").unwrap();
-    assert_eq!(ed.take_preview_request(), Some(Preview::Stop));
-    ed.set_preview_at(None);
-    ed.execute(":preview-browser off").unwrap();
-    assert_eq!(ed.take_preview_request(), None);
-    // A buffer never saved has nothing to typeset.
+    // 无: bare `-lock` opens a locked preview.
+    ed.execute(":preview-lock").unwrap();
+    assert_eq!(ed.take_preview_request(), window(&main, true, true));
+    ed.open_page_window_of(main.clone(), Typst, true).unwrap();
+    let locked = ed.preview_of(&main).unwrap();
+    assert!(ed.preview_is_locked(locked));
+    // 锁: unlocking makes it the following preview, and the old following
+    // preview closes.
+    ed.execute(&format!(":open {}", b.display())).unwrap();
+    ed.open_page_window(b.clone()).unwrap();
+    let old = ed.preview_of(&b).unwrap();
+    ed.execute(&format!(":open {}", main.display())).unwrap();
+    ed.execute(":preview-lock").unwrap();
+    assert_eq!(ed.status(), say!("preview.unlocked"));
+    assert_eq!(ed.previews(), vec![(locked, main.clone())]);
+    assert!(!ed.preview_is_locked(locked));
+    assert!(ed.buffer_with(old).is_none());
+    assert_eq!(ed.buffers[ed.buffer_with(locked).unwrap()].display_name(), say!("preview.tab", "main.typ"));
+    // A buffer never saved has nothing to typeset; a plain file nothing to
+    // preview.
     let mut scratch = Editor::new();
     scratch.execute(":preview-window").unwrap();
     assert_eq!(scratch.take_preview_request(), None);
     assert_eq!(scratch.status(), say!("preview.save-first"));
+    std::fs::write(dir.join("notes.txt"), "字\n").unwrap();
+    ed.execute(&format!(":open {}", dir.join("notes.txt").display())).unwrap();
+    ed.execute(":preview-lock").unwrap();
+    assert_eq!(ed.status(), say!("preview.nothing-to-preview"));
     // The fit: bare says, a word sets.
     ed.execute(":preview-fit").unwrap();
     assert_eq!(ed.status(), say!("preview.fit-width"));
@@ -40038,6 +40106,7 @@ fn the_preview_commands_ask_for_the_window_or_the_browser() {
     assert_eq!(ed.status(), say!("preview.fit-page"));
     assert!(ed.execute(":preview-fit tall").is_err());
     std::fs::remove_dir_all(&dir).ok();
+    std::fs::remove_dir_all(&dir_b).ok();
 }
 
 /// **A preview is a tab**: opened beside the text with the keys left there,
@@ -40397,11 +40466,11 @@ fn a_file_opened_in_a_preview_window_shows_there() {
     // `C-o` goes on out of it to the file before.
     ed.on_key(Key::Ctrl('i'));
     assert_eq!(ed.current_buffer().path(), Some(two.as_path()), "C-i forward again");
-    // `:preview` shows it beside, being off the screen.
-    ed.execute(":preview").unwrap();
+    // `:preview on` shows it beside, being off the screen.
+    ed.execute(":preview on").unwrap();
     assert_eq!(
         ed.take_preview_request(),
-        Some(Preview::Window { path: main.clone(), syntax: crate::syntax::Syntax::Typst, fallback: true })
+        Some(Preview::Window { path: main.clone(), syntax: crate::syntax::Syntax::Typst, fallback: true, locked: false })
     );
     ed.open_page_window(main.clone()).unwrap();
     assert!(ed.has_a_page_window());
@@ -40514,20 +40583,23 @@ fn a_preview_follows_its_own_book_only() {
     std::fs::remove_dir_all(&elsewhere).ok();
 }
 
-/// **Two previews at once**, one a document, each a tab of its own with a
-/// task of its own in tinymist.
+/// **Two previews at once**: a locked one and the following one, each a
+/// tab of its own with a task of its own in tinymist; `off` from one leaves
+/// the other.
 #[test]
-fn two_documents_have_two_previews() {
+fn a_locked_preview_and_the_following_one_are_two() {
     let (mut ed, dir) = a_typst_book("two-a");
     let a = dir.join("main.typ");
     let (_, dir_b) = a_typst_book("two-b");
     let b = dir_b.join("main.typ");
     ed.open_page_window(a.clone()).unwrap();
+    ed.execute(":preview-lock").unwrap();
     ed.execute(&format!(":open {}", b.display())).unwrap();
+    ed.steer_previews();
     ed.execute(":preview").unwrap();
     assert_eq!(
         ed.take_preview_request(),
-        Some(Preview::Window { path: b.clone(), syntax: crate::syntax::Syntax::Typst, fallback: true }),
+        Some(Preview::Window { path: b.clone(), syntax: crate::syntax::Syntax::Typst, fallback: true, locked: false }),
         "the other document's own, though one is on the screen"
     );
     ed.open_page_window(b.clone()).unwrap();
@@ -40543,32 +40615,106 @@ fn two_documents_have_two_previews() {
     std::fs::remove_dir_all(&dir_b).ok();
 }
 
-/// **A chapter's new preview typesets its book**: from a chapter, the open
-/// file that `#include`s it is the preview's main file, since a chapter alone
-/// lacks what its book sets up. With no such file open it is the chapter.
+/// **The following preview follows the focus**: to another document of its
+/// kind, its name with it; not into a file of another kind or one with
+/// nothing to preview; not onto a document with a locked preview, which is
+/// never shown twice. **A document's last buffer closed**: the following
+/// preview moves to another open document of its kind, or closes when
+/// there is none; a locked preview closes with its document.
 #[test]
-fn a_chapter_s_preview_typesets_the_book_that_includes_it() {
+fn the_following_preview_follows_the_focus() {
+    use crate::buffer::PreviewKind::Markdown;
+    let dir = tmp().join(format!("yumete-follow-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let [one, two, three] = ["one.md", "two.md", "three.md"].map(|n| dir.join(n));
+    for (path, text) in [(&one, "# 一\n"), (&two, "# 二\n"), (&three, "# 三\n")] {
+        std::fs::write(path, text).unwrap();
+    }
+    std::fs::write(dir.join("page.typ"), "= 頁\n").unwrap();
+    std::fs::write(dir.join("plain.txt"), "字\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&one).unwrap();
+    let page = ed.open_page_window_of(one.clone(), Markdown, false).unwrap();
+    let id = ed.preview_in(page).unwrap();
+    let go = |ed: &mut Editor, path: &std::path::Path| {
+        ed.execute(&format!(":open {}", path.display())).unwrap();
+        ed.steer_previews();
+    };
+    go(&mut ed, &two);
+    assert_eq!(ed.previews(), vec![(id, two.clone())], "to another document");
+    assert_eq!(ed.buffers[ed.buffer_with(id).unwrap()].display_name(), say!("preview.tab", "two.md"));
+    assert_eq!(ed.panes[&page].caption, say!("preview.tab", "two.md"), "the window's name too");
+    go(&mut ed, &dir.join("page.typ"));
+    assert_eq!(ed.previews(), vec![(id, two.clone())], "a file of another kind: it keeps its document");
+    go(&mut ed, &dir.join("plain.txt"));
+    assert_eq!(ed.previews(), vec![(id, two.clone())], "nothing to preview: likewise");
+    // One locked to its document; the following preview stays off it.
+    go(&mut ed, &one);
+    ed.execute(":preview-lock").unwrap();
+    go(&mut ed, &two);
+    ed.execute(":preview").unwrap();
+    ed.open_page_window_of(two.clone(), Markdown, false).unwrap();
+    let following = ed.preview_of(&two).unwrap();
+    go(&mut ed, &one);
+    assert_eq!(ed.previews(), vec![(id, one.clone()), (following, two.clone())], "no document shown twice");
+    // Its last buffer closed: the following preview moves to another open
+    // document without a lock of its own…
+    go(&mut ed, &three);
+    go(&mut ed, &two);
+    ed.execute(":bc").unwrap();
+    go(&mut ed, &dir.join("plain.txt"));
+    assert_eq!(ed.previews(), vec![(id, one.clone()), (following, three.clone())]);
+    // …or closes, when there is none.
+    go(&mut ed, &three);
+    ed.execute(":bc").unwrap();
+    ed.steer_previews();
+    assert_eq!(ed.previews(), vec![(id, one.clone())]);
+    // The locked one closes with its document.
+    go(&mut ed, &one);
+    ed.execute(":bc").unwrap();
+    ed.steer_previews();
+    assert!(ed.previews().is_empty());
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **A chapter's preview typesets its book**: the file nobody names above
+/// it, found among the open files and on the disk alike; a file beside the
+/// book that nobody names is a document of its own; a file saved with a new
+/// `#include` changes the answer.
+#[test]
+fn a_chapter_s_preview_typesets_its_book() {
     let (mut ed, dir) = a_typst_book("chapter");
     let main = dir.join("main.typ");
     let two = dir.join("two.typ");
+    let letter = dir.join("letter.typ");
+    std::fs::write(&letter, "= 信\n").unwrap();
+    let window = |path: &std::path::Path, fallback: bool| {
+        Some(Preview::Window { path: path.to_path_buf(), syntax: crate::syntax::Syntax::Typst, fallback, locked: false })
+    };
     ed.execute(&format!(":open {}", two.display())).unwrap();
     ed.execute(":preview").unwrap();
-    assert_eq!(
-        ed.take_preview_request(),
-        Some(Preview::Window { path: main.clone(), syntax: crate::syntax::Syntax::Typst, fallback: true }),
-        "the book that includes it"
-    );
-    // The browser's preview is still of the file itself.
-    ed.execute(":preview-browser").unwrap();
-    assert_eq!(ed.take_preview_request(), Some(Preview::Start { path: two.clone(), syntax: crate::syntax::Syntax::Typst }));
-    // The book not open: the chapter.
+    assert_eq!(ed.take_preview_request(), window(&main, true), "the book that includes it");
+    // The book not open: found on the disk.
     let mut alone = Editor::new();
     alone.open_file(&two).unwrap();
     alone.execute(":preview-window").unwrap();
-    assert_eq!(
-        alone.take_preview_request(),
-        Some(Preview::Window { path: two.clone(), syntax: crate::syntax::Syntax::Typst, fallback: false })
-    );
+    assert_eq!(alone.take_preview_request(), window(&main, false));
+    // A file beside the book that nobody names is its own document, though
+    // the book's preview is open.
+    alone.open_page_window(main.clone()).unwrap();
+    alone.open_file(&letter).unwrap();
+    assert_eq!(alone.document_here(), Some((crate::buffer::PreviewKind::Typst, letter.clone())));
+    // The book saved naming it: its book now.
+    alone.execute(&format!(":open {}", main.display())).unwrap();
+    alone.set_auto_pairs(crate::editor::AutoPairs::Off);
+    alone.on_key(Key::Char('i'));
+    press(&mut alone, "#include \"letter.typ\"");
+    alone.on_key(Key::Enter);
+    alone.on_key(Key::Esc);
+    alone.execute(":w").unwrap();
+    alone.execute(&format!(":open {}", letter.display())).unwrap();
+    assert_eq!(alone.document_here(), Some((crate::buffer::PreviewKind::Typst, main.clone())));
     std::fs::remove_dir_all(&dir).ok();
 }
 
@@ -40744,16 +40890,16 @@ fn a_markdown_file_has_a_preview_tab_of_its_own() {
     ed.execute(":preview").unwrap();
     assert_eq!(
         ed.take_preview_request(),
-        Some(Preview::Window { path: main.clone(), syntax: crate::syntax::Syntax::Markdown, fallback: true })
+        Some(Preview::Window { path: main.clone(), syntax: crate::syntax::Syntax::Markdown, fallback: true, locked: false })
     );
     ed.execute(":preview-window").unwrap();
     assert_eq!(
         ed.take_preview_request(),
-        Some(Preview::Window { path: main.clone(), syntax: crate::syntax::Syntax::Markdown, fallback: false })
+        Some(Preview::Window { path: main.clone(), syntax: crate::syntax::Syntax::Markdown, fallback: false, locked: false })
     );
     // The front end opened it.
     let text = ed.live_window();
-    let page = ed.open_page_window_of(main.clone(), crate::buffer::PreviewKind::Markdown).expect("room");
+    let page = ed.open_page_window_of(main.clone(), crate::buffer::PreviewKind::Markdown, false).expect("room");
     let id = ed.preview_in(page).unwrap();
     assert_eq!(ed.preview_kind_of(id), Some(crate::buffer::PreviewKind::Markdown));
     assert_eq!(ed.live_window(), text, "the keys stay in the text");
@@ -40771,16 +40917,16 @@ fn a_markdown_file_has_a_preview_tab_of_its_own() {
     ed.execute(":q").unwrap();
     assert_eq!(ed.previews().len(), 1);
     assert!(!ed.has_a_page_window());
-    // Bare shows it again; `off` closes the tab.
-    ed.execute(":preview").unwrap();
-    assert!(ed.take_preview_request().is_some(), "bare is `on` while it is off the screen");
-    ed.open_page_window_of(main.clone(), crate::buffer::PreviewKind::Markdown).unwrap();
+    // `on` shows it again; `off` closes the tab.
+    ed.execute(":preview on").unwrap();
+    assert!(ed.take_preview_request().is_some(), "`on` brings up a tab off the screen");
+    ed.open_page_window_of(main.clone(), crate::buffer::PreviewKind::Markdown, false).unwrap();
     assert_eq!(ed.previews().len(), 1, "the same tab");
     ed.execute(":preview off").unwrap();
     assert!(ed.previews().is_empty());
     assert_eq!(ed.status(), say!("preview.window-closed"));
     // `:bc` in it closes it too, and the picker says what it is.
-    ed.open_page_window_of(main.clone(), crate::buffer::PreviewKind::Markdown).unwrap();
+    ed.open_page_window_of(main.clone(), crate::buffer::PreviewKind::Markdown, false).unwrap();
     ed.execute(":buffer").unwrap();
     ed.on_key(Key::Down);
     let (name, lines) = ed.picker_preview(10).expect("a preview pane");
@@ -40802,7 +40948,7 @@ fn a_markdown_file_has_a_preview_tab_of_its_own() {
 fn a_markdown_preview_s_keys_scroll_and_nothing_is_text() {
     let (mut ed, dir) = a_markdown_note("keys");
     let main = dir.join("notes.md");
-    ed.open_page_window_of(main.clone(), crate::buffer::PreviewKind::Markdown).unwrap();
+    ed.open_page_window_of(main.clone(), crate::buffer::PreviewKind::Markdown, false).unwrap();
     ed.on_key(Key::Ctrl('w'));
     ed.on_key(Key::Char('w'));
     press(&mut ed, "jk");
@@ -40870,7 +41016,8 @@ fn a_typst_preview_and_a_markdown_one_side_by_side() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// **A session keeps a Markdown preview**, by its kind, tab and window alike.
+/// **A session keeps a Markdown preview**, by its kind, tab and window
+/// alike, and whether it is locked or follows.
 #[test]
 fn a_session_keeps_a_markdown_preview() {
     let (mut ed, dir) = a_markdown_note("session");
@@ -40879,7 +41026,8 @@ fn a_session_keeps_a_markdown_preview() {
     std::fs::create_dir_all(&data).unwrap();
     ed.knows_its_paths(dir.join("config"), data.clone());
     ed.keep_session_in(data.join("sessions"), &dir);
-    ed.open_page_window_of(main.clone(), crate::buffer::PreviewKind::Markdown).unwrap();
+    ed.open_page_window_of(main.clone(), crate::buffer::PreviewKind::Markdown, false).unwrap();
+    ed.execute(":preview-lock").unwrap();
     let kept = ed.windows_to_keep();
     assert!(kept.contains(&format!("window\t{}\t0\t0\tpreview:markdown", main.display())), "{kept:?}");
     ed.save_session();
@@ -40891,7 +41039,16 @@ fn a_session_keeps_a_markdown_preview() {
     assert_eq!(back.previews().len(), 1);
     let id = back.previews()[0].0;
     assert_eq!(back.preview_kind_of(id), Some(crate::buffer::PreviewKind::Markdown));
+    assert!(back.preview_is_locked(id), "locked still");
     assert!(back.has_a_page_window());
+    // Following again, it is kept following.
+    back.execute(":preview-lock off").unwrap();
+    back.save_session();
+    let mut again = Editor::new();
+    again.knows_its_paths(dir.join("config"), data.clone());
+    again.keep_session_in(data.join("sessions"), &dir);
+    again.restore_session();
+    assert!(!again.preview_is_locked(again.previews()[0].0));
     std::fs::remove_dir_all(&dir).ok();
 }
 
@@ -40977,7 +41134,7 @@ fn switching_the_layout_moves_no_window() {
     let (mut ed, dir) = a_markdown_note("sides");
     let main = dir.join("notes.md");
     let text = ed.live_window();
-    let page = ed.open_page_window_of(main.clone(), crate::buffer::PreviewKind::Markdown).expect("room");
+    let page = ed.open_page_window_of(main.clone(), crate::buffer::PreviewKind::Markdown, false).expect("room");
     assert_eq!(window_columns(&ed), [(text, 0), (page, 41)], "the preview on the right");
     ed.execute(":vertical").unwrap();
     assert_eq!(ed.layout(), crate::zong::Layout::Vertical);
@@ -40989,7 +41146,7 @@ fn switching_the_layout_moves_no_window() {
     ed.execute(":vertical").unwrap();
     ed.execute(":preview-window").unwrap();
     assert_eq!(ed.windows().len(), 1);
-    let page = ed.open_page_window_of(main.clone(), crate::buffer::PreviewKind::Markdown).expect("room");
+    let page = ed.open_page_window_of(main.clone(), crate::buffer::PreviewKind::Markdown, false).expect("room");
     assert_eq!(window_columns(&ed), [(text, 0), (page, 0)], "a preview opens below a 縱書 page");
     let (placed, _) = ed.windows().place(crate::window::Area::new(0, 0, 81, 20));
     assert!(placed[1].area.y > placed[0].area.y, "below, not above");
@@ -41928,7 +42085,7 @@ fn o_in_a_python_block_keeps_its_indent() {
 fn esc_in_a_preview_asks_the_system_input_method_aside() {
     let (mut ed, dir) = a_markdown_note("esc-ime");
     let main = dir.join("notes.md");
-    let page = ed.open_page_window_of(main, crate::buffer::PreviewKind::Markdown).expect("room");
+    let page = ed.open_page_window_of(main, crate::buffer::PreviewKind::Markdown, false).expect("room");
     ed.focus_window(page);
     assert_eq!(ed.live_window(), page);
     let _ = ed.take_say_it_again();

@@ -1239,6 +1239,12 @@ zhs = "窗口太矮，无法打开选择器"
 en = "the window is too short for the picker"
 
 [[message]]
+# :preview-lock on，而这份文稿的预览已经锁定了（草稿）
+key = "preview.already-locked"
+zhs = "预览已锁定(`:preview-lock` 解锁)"
+en = "the preview is locked (`:preview-lock` unlocks it)"
+
+[[message]]
 # :preview 做不出那一頁
 key = "preview.failed"
 zhs = "预览：{0}"
@@ -1263,6 +1269,12 @@ zhs = "{0}；已改在浏览器中预览"
 en = "{0}; previewing in a browser instead"
 
 [[message]]
+# :preview-lock 把跟随焦点的预览锁定在这份文稿上了（草稿）
+key = "preview.locked"
+zhs = "已锁定预览，不再跟随焦点"
+en = "locked the preview: it no longer follows the focus"
+
+[[message]]
 # :preview 一份 Markdown 稿子，導出的那一頁交給瀏覽器了
 key = "preview.made"
 zhs = "预览：{0}"
@@ -1279,6 +1291,18 @@ en = "this terminal cannot draw pictures (Ghostty and kitty can)"
 key = "preview.no-tinymist"
 zhs = "页面窗口需要 tinymist，但没有找到"
 en = "the page window needs tinymist, which is not installed"
+
+[[message]]
+# :preview-lock off，而这份文稿的预览没有锁定（草稿）
+key = "preview.not-locked"
+zhs = "这份文稿的预览没有锁定"
+en = "this document's preview is not locked"
+
+[[message]]
+# :preview off，而这份文稿没有预览（草稿）
+key = "preview.not-open"
+zhs = "这份文稿没有预览"
+en = "this document has no preview"
 
 [[message]]
 # :preview 用在没有標記語法的檔案上
@@ -1353,6 +1377,12 @@ zhs = "预览 {0}"
 en = "Preview {0}"
 
 [[message]]
+# 锁定的预览标签在标签栏、:b 和缓冲区挑选器里的名字。{0} 是它显示的文稿的文件名，如 main.typ（草稿）
+key = "preview.tab-locked"
+zhs = "预览 {0}（锁定）"
+en = "Preview {0} (locked)"
+
+[[message]]
 # :preview-theme 关闭之后：预览页面按印刷原样（草稿）
 key = "preview.theme-off"
 zhs = "页面窗口：按印刷原样"
@@ -1390,6 +1420,12 @@ en = "preview: tinymist starting…"
 
 
 # ── problem ──────────────────────────────────────────
+
+[[message]]
+# :preview-lock off：锁定的预览恢复跟随焦点（草稿）
+key = "preview.unlocked"
+zhs = "预览已解锁，跟随焦点"
+en = "unlocked the preview: it follows the focus"
 
 [[message]]
 # :preview-vertical 关闭之后：Markdown 预览总是横排（草稿）

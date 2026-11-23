@@ -118,7 +118,9 @@ fn the_page_is_drawn_beside_the_text_and_uploaded_once() {
     let window = editor.open_page_window(main.clone()).expect("room");
     let one = editor.preview_in(window).unwrap();
     editor.open_file(other.join("note.typ")).unwrap();
-    let window = editor.open_page_window(other.join("note.typ")).expect("room");
+    let window = editor
+        .open_page_window_of(other.join("note.typ"), yumete_core::buffer::PreviewKind::Typst, true)
+        .expect("room");
     let two = editor.preview_in(window).unwrap();
     assert_ne!(one, two);
     assert_eq!(editor.page_windows().len(), 2, "both on the screen");

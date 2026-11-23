@@ -2828,6 +2828,13 @@ en = "how big the page window draws the page: as wide as the window, or whole"
 find = "預覽 预览 頁寬 页宽 整頁 整页 fit width page"
 
 [[message]]
+# : 命令菜单里 preview-lock 那一项的说明（草稿）
+key = "cmd.view.preview-lock"
+zhs = "把这份文稿的预览锁定在它上面，不再跟随焦点；关闭则恢复跟随"
+en = "lock this document's preview to it, so it stops following the focus; off, it follows again"
+find = "預覽 预览 鎖定 锁定 跟隨 跟随 固定 preview lock pin follow"
+
+[[message]]
 # : 命令菜单里 preview-theme 那一项的说明（草稿）
 key = "cmd.view.preview-theme"
 zhs = "用主题配色显示预览页面：纸为背景色，黑字为文字色；关闭则按印刷原样"

@@ -4,6 +4,16 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ## Unreleased
 
+### Added
+
+- **`:preview-lock` keeps a document's preview on it**: the preview stops following you, its tab reads "Preview main.typ (locked)", and the next document you go to gets the following preview. `:preview-lock off` makes it the following preview again, and the old one closes. A session keeps which previews are locked.
+
+### Changed
+
+- **Each document has one preview, and the preview follows you**: one Markdown and one Typst preview move with the keys to the document they are in, a Markdown file or a Typst book, and keep the last one while you are in a file of the other kind, in a file with nothing to preview, or in a document whose preview is locked, so no document is shown twice. `:preview on` opens it or brings it up, `:preview off` closes it, and bare `:preview` turns it on only when the document has none. When a document's last file closes, the following preview moves to another open document of its kind, or closes.
+- **A Typst chapter's preview finds its book on the disk**: the Typst files in the chapter's folder and the folders above it, up to the project root (the folder holding `.git` or `typst.toml`, never above home), are followed by their `#include` and `#import` up to the file nobody names, whether the book is open or not.
+- **`:preview-browser` shows the same preview in the browser**: it follows you and `:preview-lock` holds it; the page already open follows to the next document by itself, and from another document `:preview-browser` moves the browser there instead of showing the old page again. **A Markdown file's browser preview is live**: the page is written again a moment after you stop typing and reloads itself.
+
 ## 0.25.0 · 2026-11-23
 
 ### Added

@@ -304,8 +304,12 @@ pub struct PagePreview {
 /// **One preview's conversation with tinymist.**
 #[derive(Default)]
 struct Talk {
-    /// The task's name in tinymist ([`preview::task_id`]).
+    /// The task's name in tinymist ([`preview::task_id`], and how many
+    /// times the preview moved to another book).
     task_id: String,
+    /// How many times the preview moved to another book: each move is a
+    /// task of its own, so the one killed is never the one started.
+    moves: u32,
     /// The file it typesets.
     main: PathBuf,
     /// Whether it was opened by `:preview`, which goes to the browser
@@ -389,6 +393,24 @@ impl PagePreview {
             let talk = self.talks.entry(id).or_default();
             if talk.task_id.is_empty() {
                 talk.task_id = preview::task_id(id);
+            }
+            // **Moved to another book**: the language server stays, the old
+            // book's task is killed and the new one's started, and the page
+            // starts again from nothing.
+            if talk.main != main && !talk.main.as_os_str().is_empty() {
+                talk.stop_the_task(servers);
+                let moves = talk.moves + 1;
+                *talk = Talk {
+                    task_id: format!("{}-{moves}", preview::task_id(id)),
+                    moves,
+                    fallback: talk.fallback,
+                    ..Talk::default()
+                };
+                crate::graphics::drop_pages_of(id);
+                if let Some(all) = boards().as_mut() {
+                    all.remove(&id);
+                }
+                redraw = true;
             }
             talk.main = main;
             talk.shown = shown;
@@ -1101,7 +1123,9 @@ mod tests {
         }
         editor.on_key(yumete_core::input::Key::Esc);
         assert!(editor.current_buffer().is_modified());
-        let window = editor.open_page_window(main.clone()).expect("a page window");
+        let window = editor
+            .open_page_window_of(main.clone(), yumete_core::buffer::PreviewKind::Typst, true)
+            .expect("a page window");
         let first = editor.preview_in(window).expect("a preview tab");
         pages.opened(first, false);
         with_board(first, |b| b.cells = Some((60, 30)));
@@ -1130,7 +1154,7 @@ mod tests {
             }
         }
         // **A second document, a second preview and a second task**: the
-        // first keeps its page, the cursor being in another book now.
+        // first, locked, keeps its page, the cursor being in another book now.
         editor.open_file(&other).unwrap();
         let window = editor.open_page_window(other.clone()).expect("a second page window");
         let second = editor.preview_in(window).expect("a second preview tab");
@@ -1151,6 +1175,22 @@ mod tests {
         turn(&mut editor, &mut servers, &mut pages);
         assert!(!has_a_board(first));
         assert_eq!(pages.tasks(), vec![preview::task_id(second)]);
+        // **The following preview moved to another book**: the same tab, the
+        // language server kept, the old task killed and a new one started,
+        // the page made afresh.
+        editor.execute(&format!(":open {}", main.display())).unwrap();
+        editor.steer_previews();
+        assert_eq!(editor.previews(), vec![(second, main.clone())]);
+        let moved = format!("{}-1", preview::task_id(second));
+        loop {
+            assert!(Instant::now() < deadline, "the moved preview drew no page: {:?}", with_board(second, |b| b.note.clone()));
+            turn(&mut editor, &mut servers, &mut pages);
+            with_board(second, |b| b.cells = Some((60, 30)));
+            let two_pages = with_board(second, |b| b.page.as_ref().is_some_and(|p| p.total.is_some_and(|t| t >= 2)));
+            if two_pages && pages.tasks() == vec![moved.clone()] {
+                break;
+            }
+        }
         servers.stop();
         std::fs::remove_dir_all(&dir).ok();
         std::fs::remove_dir_all(&elsewhere).ok();

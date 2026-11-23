@@ -1697,53 +1697,25 @@ impl Editor {
                 self.convert(ask);
                 Ok(CommandOutcome::Continue)
             }
-            // **Three switches**: `:preview` is either
-            // preview, the tab beside the text or the browser's; turned on it
-            // shows this document's tab beside the text, falling back to the
-            // browser when a picture cannot be drawn, and turned off it closes
-            // the tab and stops the browser's. Bare is `on` unless this
-            // document's preview is on the screen.
+            // **The preview switches**, read by the state of this
+            // document's preview (`page_preview.rs`): `:preview` beside the
+            // text with the browser behind it, `-window` without the
+            // browser, `-lock` locked or following, `-browser` in the
+            // browser.
             Command::Preview(how) => {
-                let window = self.preview_here_on_screen();
-                let running = self.preview_at.is_some();
-                match how.over(window || running) {
-                    // Already up: `on` is 「where is it?」, and the address
-                    // was said once and lost.
-                    true if window => self.status = say!("preview.window-open"),
-                    true if running => self.preview_request = Some(Preview::Show),
-                    true => self.ask_for_a_preview(true, true),
-                    false => {
-                        if self.close_preview_here() {
-                            self.status = say!("preview.window-closed");
-                        }
-                        if running {
-                            self.preview_request = Some(Preview::Stop);
-                        }
-                    }
-                }
+                self.preview_switch(how, true);
                 Ok(CommandOutcome::Continue)
             }
             Command::PreviewWindow(how) => {
-                let window = self.preview_here_on_screen();
-                match how.over(window) {
-                    true if window => self.status = say!("preview.window-open"),
-                    true => self.ask_for_a_preview(true, false),
-                    false => {
-                        if self.close_preview_here() {
-                            self.status = say!("preview.window-closed");
-                        }
-                    }
-                }
+                self.preview_switch(how, false);
+                Ok(CommandOutcome::Continue)
+            }
+            Command::PreviewLock(how) => {
+                self.preview_lock(how);
                 Ok(CommandOutcome::Continue)
             }
             Command::PreviewBrowser(how) => {
-                let running = self.preview_at.is_some();
-                match how.over(running) {
-                    true if running => self.preview_request = Some(Preview::Show),
-                    true => self.ask_for_a_preview(false, false),
-                    false if running => self.preview_request = Some(Preview::Stop),
-                    false => {}
-                }
+                self.preview_browser(how);
                 Ok(CommandOutcome::Continue)
             }
             Command::Redraw => {
@@ -2754,9 +2726,9 @@ impl Editor {
             Command::SetNumberFill(_) => self.number_fill,
             Command::SetDiffGutter(_) => self.diff_gutter,
             Command::SetHanging(_) => self.hanging,
-            Command::Preview(_) => self.preview_here_on_screen() || self.preview_at.is_some(),
-            Command::PreviewWindow(_) => self.preview_here_on_screen(),
-            Command::PreviewBrowser(_) => self.preview_at.is_some(),
+            Command::Preview(_) | Command::PreviewWindow(_) => self.preview_state_here() != PreviewState::None,
+            Command::PreviewLock(_) => self.preview_state_here() == PreviewState::Locked,
+            Command::PreviewBrowser(_) => self.browser_shows_here(),
             Command::PreviewVertical(_) => self.preview_vertical,
             Command::PreviewTheme(_) => self.preview_theme,
             Command::SetSentences(_) => self.sentences(),

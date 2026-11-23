@@ -65,7 +65,7 @@ fn a_markdown_preview_is_drawn_and_follows_the_cursor() {
     let config = Config::default();
     let mut md = MdPreviews::default();
     let text = editor.live_window();
-    let page = editor.open_page_window_of(main.clone(), PreviewKind::Markdown).expect("room");
+    let page = editor.open_page_window_of(main.clone(), PreviewKind::Markdown, false).expect("room");
     let preview = editor.preview_in(page).unwrap();
 
     // **No pictures here**: said in words; `:preview` would go to the
@@ -270,7 +270,7 @@ fn a_vertical_text_has_a_vertical_preview() {
     editor.open_file(&main).unwrap();
     let config = Config::default();
     let mut md = MdPreviews::default();
-    let page = editor.open_page_window_of(main.clone(), PreviewKind::Markdown).expect("room");
+    let page = editor.open_page_window_of(main.clone(), PreviewKind::Markdown, false).expect("room");
     let preview = editor.preview_in(page).unwrap();
     graphics::set_support(Support::Kitty);
     until(&mut editor, &config, &mut md, |_| md_window::shot_of(preview).is_some());
@@ -332,7 +332,7 @@ fn the_preview_is_set_in_the_preview_fonts_or_the_export_s() {
     );
     yumete_tui::settings::apply(&config, &mut editor, None, None);
     let mut md = MdPreviews::default();
-    let page = editor.open_page_window_of(main.clone(), PreviewKind::Markdown).expect("room");
+    let page = editor.open_page_window_of(main.clone(), PreviewKind::Markdown, false).expect("room");
     let preview = editor.preview_in(page).unwrap();
     graphics::set_support(Support::Kitty);
     until(&mut editor, &config, &mut md, |m| m.sent(preview).is_some());
@@ -364,7 +364,7 @@ fn a_preview_moved_below_is_drawn_at_its_new_size() {
     let config = Config::default();
     let mut md = MdPreviews::default();
     editor.execute(":vertical").unwrap();
-    let page = editor.open_page_window_of(main.clone(), PreviewKind::Markdown).expect("room");
+    let page = editor.open_page_window_of(main.clone(), PreviewKind::Markdown, false).expect("room");
     let preview = editor.preview_in(page).unwrap();
     graphics::set_support(Support::Kitty);
     until(&mut editor, &config, &mut md, |_| md_window::shot_of(preview).is_some_and(|s| s.vertical));
@@ -399,7 +399,7 @@ fn a_redraw_sends_the_picture_again_once() {
     editor.open_file(&main).unwrap();
     let config = Config::default();
     let mut md = MdPreviews::default();
-    let page = editor.open_page_window_of(main.clone(), PreviewKind::Markdown).expect("room");
+    let page = editor.open_page_window_of(main.clone(), PreviewKind::Markdown, false).expect("room");
     let preview = editor.preview_in(page).unwrap();
     graphics::set_support(Support::Kitty);
     until(&mut editor, &config, &mut md, |_| md_window::shot_of(preview).is_some());
