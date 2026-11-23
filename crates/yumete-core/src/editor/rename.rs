@@ -81,6 +81,7 @@ impl Editor {
             known.remove(&old);
             known.remove(&target);
         }
+        self.forget_missing_paths();
         self.current_buffer_mut().moved_to(target.clone());
         self.carry_remembered(&old, &target);
         self.carry_previews(&old_real, &target);

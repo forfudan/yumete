@@ -41111,6 +41111,60 @@ fn the_following_preview_follows_the_focus() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **Steering the previews works nothing out while nothing it reads
+/// changed**, however many files are open; after a change, each open file's
+/// document once, and once more after the preview moved.
+#[test]
+fn steering_the_previews_works_each_document_out_once() {
+    use crate::buffer::PreviewKind::Markdown;
+    let dir = tmp().join(format!("yumete-steer-cost-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let files: Vec<std::path::PathBuf> = (0..40).map(|n| dir.join(format!("{n}.md"))).collect();
+    for path in &files {
+        std::fs::write(path, "# 題\n").unwrap();
+    }
+    let mut ed = Editor::new();
+    for path in &files {
+        ed.open_file(path).unwrap();
+    }
+    ed.open_page_window_of(files[39].clone(), Markdown, false).unwrap();
+    ed.steer_previews();
+    ed.documents_asked.set(0);
+    for _ in 0..10 {
+        ed.steer_previews();
+    }
+    assert_eq!(ed.documents_asked.get(), 0, "unchanged turns");
+    ed.execute(&format!(":open {}", files[3].display())).unwrap();
+    ed.documents_asked.set(0);
+    ed.steer_previews();
+    assert_eq!(ed.previews().into_iter().map(|(_, m)| m).collect::<Vec<_>>(), vec![ed.real(&files[3])]);
+    let open = ed.buffers.iter().filter(|b| !b.is_preview()).count();
+    assert!(ed.documents_asked.get() <= 2 * open, "{} for {open} files", ed.documents_asked.get());
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **A path found missing is not asked about again at once**, until a save
+/// or a rename may have made it, or a moment has passed.
+#[test]
+fn a_missing_path_is_remembered_until_a_save() {
+    let dir = tmp().join(format!("yumete-missing-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("new.md");
+    let mut ed = Editor::new();
+    assert_eq!(ed.real_path(&path), None);
+    std::fs::write(&path, "x").unwrap();
+    assert_eq!(ed.real_path(&path), None, "remembered missing");
+    ed.forget_missing_paths();
+    assert!(ed.real_path(&path).is_some(), "asked again");
+    let other = dir.join("other.md");
+    assert_eq!(ed.real_path(&other), None);
+    ed.execute(&format!(":w {}", other.display())).unwrap();
+    assert!(ed.real_path(&other).is_some(), "a save forgets it");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **A chapter's preview typesets its book**: the file nobody names above
 /// it, found among the open files and on the disk alike; a file beside the
 /// book that nobody names is a document of its own; a file saved with a new

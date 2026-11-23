@@ -2527,6 +2527,7 @@ impl Editor {
             return Err(EditorError::Io(err));
         }
         // The preview of the file goes with it to its new name.
+        self.forget_missing_paths();
         if let Some(before) = before {
             self.carry_previews(&before, &target);
         }
@@ -2648,6 +2649,7 @@ impl Editor {
                     }
                     return Err(EditorError::Io(err));
                 }
+                self.forget_missing_paths();
                 if let Some(before) = before {
                     self.carry_previews(&before, &target);
                 }
@@ -2776,6 +2778,7 @@ impl Editor {
         // its example of the command row all along.
         // 寫作進度 is kept from the save, not from the keystroke: what a day
         // holds is what the writer committed to disk that day (Feature #244).
+        self.forget_missing_paths();
         let word_list = matches!(saved, Ok(Wrote::Saved)) && self.note_word_list_saved();
         if matches!(saved, Ok(Wrote::Saved)) {
             self.encoding_saved();

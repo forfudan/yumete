@@ -380,32 +380,37 @@ impl Editor {
         self.books.borrow_mut().note(hasher.finish());
     }
 
-    /// The open Typst buffers, for the book search.
+    /// The open Typst buffers, for the book search: their texts shared,
+    /// not copied.
     fn open_typst(&self) -> Vec<super::books::Open> {
         self.buffers
             .iter()
             .filter(|b| !b.is_preview() && b.syntax() == crate::syntax::Syntax::Typst)
-            .filter_map(|b| Some(super::books::Open { path: self.real(b.path()?), text: b.rope().to_string() }))
+            .filter_map(|b| Some(super::books::Open { path: self.real(b.path()?), text: b.rope().clone() }))
+            .collect()
+    }
+
+    /// The main files the Typst previews show, which a chapter's book is
+    /// looked for among first ([`Self::book_with`]).
+    fn typst_mains(&self) -> Vec<PathBuf> {
+        self.buffers
+            .iter()
+            .filter(|b| b.preview_kind() == Some(crate::buffer::PreviewKind::Typst))
+            .filter_map(|b| b.preview_main().map(|m| self.real(m)))
             .collect()
     }
 
     /// **The book the Typst file `path` belongs to**, its main file: the
-    /// document of an existing preview whose book holds it; else the file
-    /// nobody names above it, the open buffers and the disk read (see
-    /// [`super::books`]). [`Self::note_books`] first.
-    fn book_of(&self, path: &Path) -> PathBuf {
-        let mains: Vec<PathBuf> = self
-            .buffers
-            .iter()
-            .filter(|b| b.preview_kind() == Some(crate::buffer::PreviewKind::Typst))
-            .filter_map(|b| b.preview_main().map(|m| self.real(m)))
-            .collect();
+    /// document of an existing preview whose book holds it (`mains`); else
+    /// the file nobody names above it, the open buffers (`open`, read once
+    /// when first wanted) and the disk read (see [`super::books`]).
+    /// [`Self::note_books`] first.
+    fn book_with(&self, path: &Path, mains: &[PathBuf], open: &mut Option<Vec<super::books::Open>>) -> PathBuf {
         if let Some(main) = mains.iter().find(|m| m.as_path() == path) {
             return main.clone();
         }
-        let mut open = None;
         let mut books = self.books.borrow_mut();
-        for main in &mains {
+        for main in mains {
             if !books.has_within(main) {
                 books.within(main, open.get_or_insert_with(|| self.open_typst()));
             }
@@ -424,7 +429,15 @@ impl Editor {
     /// the file for a Markdown file; the book for a Typst file. `None` for a
     /// buffer never saved and for a file with nothing to preview.
     fn document_of(&self, i: usize) -> Option<Document> {
+        self.document_with(i, &self.typst_mains(), &mut None)
+    }
+
+    /// [`Self::document_of`], with the previews' main files and the open
+    /// Typst buffers worked out once for every buffer asked about.
+    fn document_with(&self, i: usize, mains: &[PathBuf], open: &mut Option<Vec<super::books::Open>>) -> Option<Document> {
         use crate::buffer::PreviewKind;
+        #[cfg(test)]
+        self.documents_asked.set(self.documents_asked.get() + 1);
         let b = &self.buffers[i];
         if let (Some(kind), Some(main)) = (b.preview_kind(), b.preview_main()) {
             return Some((kind, main.to_path_buf()));
@@ -432,9 +445,20 @@ impl Editor {
         let path = self.real(b.path()?);
         match b.syntax() {
             crate::syntax::Syntax::Markdown => Some((PreviewKind::Markdown, path)),
-            crate::syntax::Syntax::Typst => Some((PreviewKind::Typst, self.book_of(&path))),
+            crate::syntax::Syntax::Typst => Some((PreviewKind::Typst, self.book_with(&path, mains, open))),
             _ => None,
         }
+    }
+
+    /// **The documents the open files are in**, each file's once: buffer
+    /// and document, the previews left out.
+    fn open_documents(&self) -> Vec<(usize, Document)> {
+        let mains = self.typst_mains();
+        let mut open = None;
+        (0..self.buffers.len())
+            .filter(|&i| !self.buffers[i].is_preview())
+            .filter_map(|i| Some((i, self.document_with(i, &mains, &mut open)?)))
+            .collect()
     }
 
     /// **The document the keys are in** — see [`Self::document_of`].
@@ -443,19 +467,49 @@ impl Editor {
         self.document_of(self.current)
     }
 
+    /// **What steering reads**, in one number: the buffer the keys are in,
+    /// and each buffer's file, kind, preview and the stamp its file had when
+    /// last read or written. The same number as the last turn's means the
+    /// previews already stand where they belong.
+    fn steering_key(&self) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        self.current.hash(&mut hasher);
+        for b in &self.buffers {
+            b.id().hash(&mut hasher);
+            b.path().hash(&mut hasher);
+            std::mem::discriminant(&b.syntax()).hash(&mut hasher);
+            b.disk_stamp().hash(&mut hasher);
+            b.preview_kind().map(|k| k as u8).hash(&mut hasher);
+            b.preview_main().hash(&mut hasher);
+            b.preview_locked().hash(&mut hasher);
+        }
+        hasher.finish()
+    }
+
     /// **Move the previews to where they belong**, once a turn: the
     /// following preview to the document the keys are in, unless that
     /// document has a locked preview; and the previews of a document whose
     /// last buffer closed — the locked one closed, the following one moved
     /// to another open document of its kind, or closed when there is none.
+    ///
+    /// Nothing is worked out while nothing it reads changed
+    /// ([`Self::steering_key`]); when something did, each open file's
+    /// document is worked out once, and again only after a preview moved.
     pub fn steer_previews(&mut self) {
         self.note_books();
+        let key = self.steering_key();
+        if self.steered == Some(key) {
+            return;
+        }
+        let mut documents = self.open_documents();
         if !self.buffers[self.current].is_preview() {
-            if let Some((kind, main)) = self.document_of(self.current) {
+            let here = documents.iter().find(|(i, _)| *i == self.current).map(|(_, d)| d.clone());
+            if let Some((kind, main)) = here {
                 if self.locked_to(kind, &main).is_none() {
                     if let Some(i) = self.following(kind) {
                         if self.buffers[i].preview_main() != Some(main.as_path()) {
                             self.repoint(i, main, false);
+                            documents = self.open_documents();
                         }
                     }
                 }
@@ -467,12 +521,12 @@ impl Editor {
             .filter_map(|b| Some((b.id(), b.preview_kind()?, b.preview_main()?.to_path_buf(), b.preview_locked())))
             .collect();
         for (id, kind, main, locked) in previews {
-            if self.document_is_open(kind, &main) {
+            if documents.iter().any(|(_, (k, m))| *k == kind && *m == main) {
                 continue;
             }
             let next = match locked {
                 true => None,
-                false => self.another_document(kind),
+                false => self.another_document(kind, &documents),
             };
             match (next, self.buffer_with(id)) {
                 (Some(main), Some(i)) => self.repoint(i, main, false),
@@ -480,26 +534,20 @@ impl Editor {
                     self.close_preview(id);
                 }
             }
+            documents = self.open_documents();
         }
-    }
-
-    /// Whether a buffer is open on the document `main`.
-    fn document_is_open(&self, kind: crate::buffer::PreviewKind, main: &Path) -> bool {
-        (0..self.buffers.len())
-            .filter(|&i| !self.buffers[i].is_preview())
-            .any(|i| self.document_of(i).is_some_and(|(k, m)| k == kind && m == main))
+        self.steered = Some(self.steering_key());
     }
 
     /// **An open document of `kind` without a locked preview**, for the
     /// following preview to move to: the one the keys are in first, then in
     /// tab order.
-    fn another_document(&self, kind: crate::buffer::PreviewKind) -> Option<PathBuf> {
-        std::iter::once(self.current)
-            .chain(0..self.buffers.len())
-            .filter(|&i| !self.buffers[i].is_preview())
-            .filter_map(|i| self.document_of(i))
+    fn another_document(&self, kind: crate::buffer::PreviewKind, documents: &[(usize, Document)]) -> Option<PathBuf> {
+        let here = documents.iter().filter(|(i, _)| *i == self.current);
+        here.chain(documents.iter())
+            .map(|(_, d)| d)
             .find(|(k, main)| *k == kind && self.locked_to(kind, main).is_none())
-            .map(|(_, main)| main)
+            .map(|(_, main)| main.clone())
     }
 
     /// **The Typst file the preview of this document typesets**, for

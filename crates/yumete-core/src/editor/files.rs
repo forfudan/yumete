@@ -1215,17 +1215,35 @@ impl Editor {
         Ok(())
     }
 
+    /// How long a path found missing is taken as missing without asking the
+    /// disk again ([`Editor::canonical_missing`]).
+    pub(super) const MISSING_FOR: std::time::Duration = std::time::Duration::from_secs(1);
+
     /// **一個路徑的真名**，問過一次就記住——見 [`Editor::canonical`]。
     ///
-    /// Warning: **問不出來就回 `None`，而且不記。** 盤上還没有那個檔是常事
-    /// （`:w` 寫一個新檔），記下來就永遠當它没有。
+    /// Warning: **問不出來就回 `None`，只記一會兒。** 盤上還没有那個檔是常事
+    /// （`:w` 寫一個新檔），永遠記下來就永遠當它没有；所以只記
+    /// [`Self::MISSING_FOR`] 那麼久，存檔或改名就忘掉（[`Self::forget_missing_paths`]）。
     pub(super) fn real_path(&self, path: &Path) -> Option<std::path::PathBuf> {
         if let Some(found) = self.canonical.borrow().get(path) {
             return Some(found.clone());
         }
-        let real = std::fs::canonicalize(path).ok()?;
+        if self.canonical_missing.borrow().get(path).is_some_and(|at| at.elapsed() < Self::MISSING_FOR) {
+            return None;
+        }
+        let Ok(real) = std::fs::canonicalize(path) else {
+            self.canonical_missing.borrow_mut().insert(path.to_path_buf(), std::time::Instant::now());
+            return None;
+        };
+        self.canonical_missing.borrow_mut().remove(path);
         self.canonical.borrow_mut().insert(path.to_path_buf(), real.clone());
         Some(real)
+    }
+
+    /// **Ask the disk again about every path found missing**: a save or a
+    /// rename may have made it.
+    pub(super) fn forget_missing_paths(&self) {
+        self.canonical_missing.borrow_mut().clear();
     }
 
     /// **這個文件開着没有**，按真實路徑比，不按拼法。

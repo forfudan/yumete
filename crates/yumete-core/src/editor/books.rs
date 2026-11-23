@@ -8,8 +8,11 @@
 //! the file nobody names. The open buffers are read as they stand.
 //!
 //! The answers are kept until a Typst file is saved or opened: working them
-//! out reads the disk, and the focus moves every turn.
+//! out reads the disk, and the focus moves every turn. Until then each
+//! folder is listed, and each file read, once, so the books of several open
+//! files worked out after one save share one search.
 
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
@@ -36,12 +39,20 @@ pub(crate) struct Books {
     /// What each file read from the disk names, kept across fingerprints:
     /// read again only when its size or time changes.
     named: HashMap<PathBuf, Named>,
+    /// What each file names, as read under this fingerprint: neither the
+    /// buffer nor the disk is asked twice.
+    read: HashMap<PathBuf, Vec<PathBuf>>,
+    /// The Typst files of each folder listed under this fingerprint.
+    listed: HashMap<PathBuf, Vec<PathBuf>>,
+    /// The folders climbed from each folder under this fingerprint.
+    climbed: HashMap<PathBuf, Vec<PathBuf>>,
 }
 
-/// An open Typst buffer: its file, as the disk spells it, and its text.
+/// An open Typst buffer: its file, as the disk spells it, and its text,
+/// shared with the buffer.
 pub(crate) struct Open {
     pub path: PathBuf,
-    pub text: String,
+    pub text: ropey::Rope,
 }
 
 impl Books {
@@ -52,6 +63,9 @@ impl Books {
             self.fingerprint = fingerprint;
             self.top.clear();
             self.within.clear();
+            self.read.clear();
+            self.listed.clear();
+            self.climbed.clear();
         }
     }
 
@@ -78,8 +92,11 @@ impl Books {
             return top.clone();
         }
         let mut candidates: Vec<PathBuf> = Vec::new();
-        for folder in folders_up(file, home) {
-            candidates.extend(typst_files_in(&folder));
+        let here = file.parent().unwrap_or(Path::new("")).to_path_buf();
+        let folders = self.climbed.entry(here).or_insert_with(|| folders_up(file, home)).clone();
+        for folder in folders {
+            let files = self.listed.entry(folder).or_insert_with_key(|folder| typst_files_in(folder));
+            candidates.extend(files.iter().cloned());
         }
         candidates.extend(open.iter().map(|o| o.path.clone()));
         candidates.sort();
@@ -120,11 +137,21 @@ impl Books {
     }
 
     /// What `file` names: the open buffer's text when it is open, else the
-    /// disk's, read again only when the file changed.
+    /// disk's, read again only when the file changed; once a fingerprint.
     fn names_of(&mut self, file: &Path, open: &[Open]) -> Vec<PathBuf> {
+        if let Some(names) = self.read.get(file) {
+            return names.clone();
+        }
+        let names = self.names_read(file, open);
+        self.read.insert(file.to_path_buf(), names.clone());
+        names
+    }
+
+    /// [`Self::names_of`], asked of the buffer or the disk.
+    fn names_read(&mut self, file: &Path, open: &[Open]) -> Vec<PathBuf> {
         let dir = file.parent().unwrap_or(Path::new(""));
         if let Some(o) = open.iter().find(|o| o.path == file) {
-            return named_in(&o.text, dir);
+            return named_on(o.text.lines().map(Cow::from), dir);
         }
         let Ok(meta) = std::fs::metadata(file) else { return Vec::new() };
         let stamp = meta.modified().ok().map(|t| (meta.len(), t));
@@ -175,8 +202,13 @@ fn typst_files_in(folder: &Path) -> Vec<PathBuf> {
 /// **The files a Typst text names** with `#include` or `#import`, read from
 /// `dir`, as the disk spells them; a name that is no file is left out.
 pub(crate) fn named_in(text: &str, dir: &Path) -> Vec<PathBuf> {
-    text.lines()
-        .filter_map(super::quoted_path)
+    named_on(text.lines().map(Cow::Borrowed), dir)
+}
+
+/// [`named_in`], of a text's lines.
+fn named_on<'a>(lines: impl Iterator<Item = Cow<'a, str>>, dir: &Path) -> Vec<PathBuf> {
+    lines
+        .filter_map(|line| super::quoted_path(&line))
         .filter_map(|name| std::fs::canonicalize(dir.join(name)).ok())
         .collect()
 }
@@ -230,7 +262,7 @@ mod tests {
         let mut books = Books::default();
         books.note(1);
         assert_eq!(books.top_of(&dir.join("ch.typ"), &[], None), dir.join("ch.typ"));
-        let open = [Open { path: dir.join("main.typ"), text: "#include \"ch.typ\"\n".to_string() }];
+        let open = [Open { path: dir.join("main.typ"), text: ropey::Rope::from_str("#include \"ch.typ\"\n") }];
         assert_eq!(books.top_of(&dir.join("ch.typ"), &open, None), dir.join("ch.typ"), "kept");
         books.note(2);
         assert_eq!(books.top_of(&dir.join("ch.typ"), &open, None), dir.join("main.typ"), "worked out again");

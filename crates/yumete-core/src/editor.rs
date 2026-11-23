@@ -3463,9 +3463,14 @@ pub struct Editor {
     /// 檔。可是那個比法對**每一個**已開的緩衝都問一次文件系統，而 `R` 又對每一個
     /// 要改的檔問一次「開着没有」：三千個檔就是四百五十萬次 `realpath`。
     ///
-    /// Warning: **問不出來的不記。** 盤上還没有那個檔的時候 `canonicalize` 會失敗，
+    /// Warning: **問不出來的不記在這裏。** 盤上還没有那個檔的時候 `canonicalize` 會失敗，
     /// 而它待會兒可能就有了（`:w` 寫一個新檔）——記下來就永遠當它没有。
     canonical: RefCell<HashMap<std::path::PathBuf, std::path::PathBuf>>,
+    /// **The paths found missing just now**, and when: asked again only
+    /// after [`Editor::MISSING_FOR`], or at once after a save or a rename,
+    /// which may have made them. A buffer never saved is looked up every
+    /// turn, and the disk is not asked every turn.
+    canonical_missing: RefCell<HashMap<std::path::PathBuf, std::time::Instant>>,
     /// 語言服務器說了什麽不對（#53/#54），按**路徑**存。
     ///
     /// Warning: **鍵是路徑，不是 buffer id。** 服務器說的是一個檔，而它說的時候那個檔
@@ -3841,6 +3846,13 @@ pub struct Editor {
     browser: Option<u64>,
     /// **The Typst books worked out so far** — see [`books`].
     books: RefCell<books::Books>,
+    /// **What the previews were last steered by** ([`Self::steer_previews`]):
+    /// while it is the same, they stand where they belong.
+    steered: Option<u64>,
+    /// How many times a buffer's document was worked out, for the tests
+    /// that count it.
+    #[cfg(test)]
+    documents_asked: std::cell::Cell<usize>,
     /// **What draws a TeX formula for `:export html`**, handed
     /// over by the front end, where RaTeX lives. `None` leaves `$…$` as
     /// written.
@@ -5113,6 +5125,7 @@ impl Editor {
             vcs_asked: HashMap::new(),
             vcs_head: HashMap::new(),
             canonical: RefCell::new(HashMap::new()),
+            canonical_missing: RefCell::new(HashMap::new()),
             problems: crate::problem::Problems::default(),
             object_missed: false,
             indent_hint: crate::zong::IndentHint::default(),
@@ -5218,6 +5231,9 @@ impl Editor {
             preview_at: None,
             browser: None,
             books: RefCell::new(books::Books::default()),
+            steered: None,
+            #[cfg(test)]
+            documents_asked: std::cell::Cell::new(0),
             formula_painter: None,
             preview_look: None,
             preview_pdf: None,
