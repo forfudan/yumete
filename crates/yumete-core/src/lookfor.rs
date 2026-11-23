@@ -704,6 +704,25 @@ mod tests {
 }
 
 #[cfg(test)]
+mod keywords_reach_their_commands {
+    /// A word that is only in a command's `find` line, never in its name or
+    /// description, still puts that command near the top.
+    #[test]
+    fn a_keyword_of_a_command_described_by_another_tag_finds_it() {
+        for (query, want) in [
+            ("文件树", "sidebar-explorer"),
+            ("backlinks", "sidebar-links"),
+            ("跨行", "which-wrap"),
+            ("每列", "view-wrap-height"),
+        ] {
+            let hits = super::look(query);
+            let at = hits.iter().position(|h| h.written() == want);
+            assert!(at.is_some_and(|n| n < 5), "{query} → {want}: {:?}", hits.iter().take(5).map(|h| h.written()).collect::<Vec<_>>());
+        }
+    }
+}
+
+#[cfg(test)]
 mod how_many_does_it_find {
     #[test]
     #[ignore = "量數用的，不是斷言"]

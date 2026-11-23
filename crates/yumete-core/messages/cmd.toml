@@ -1719,6 +1719,7 @@ find = "摺疊 折疊 折叠 收起 選中 选中 fold zf selection"
 key = "cmd.footnote-kinds.inline"
 zhs = "行内注 ^[…]，不放到文末"
 en = "an inline note ^[…], kept in place"
+find = "腳注 脚注 腳註 註釋 注释 行內 行内 內聯 内联 footnote inline"
 
 [[message]]
 # : 命令選單裏 genda-goal 與它各條件的 off 那一項的説明(genda-goal 組)（草稿）
@@ -1852,6 +1853,7 @@ find = "風味 风味 鍵位 键位 寄存器 剪 剪切 删 删除 yank registe
 key = "cmd.keymap.actions"
 zhs = "列出所有可绑定的动作名"
 en = "list every action a key can be bound to"
+find = "動作 动作 綁定 绑定 鍵位 键位 快捷鍵 快捷键 列表 actions bind keymap list"
 
 [[message]]
 # : 命令選單裏 helix 那一項的説明(keymap 組)
@@ -2086,6 +2088,7 @@ find = "重載 重载 自動重讀 自动重读 auto watch"
 key = "cmd.reload.config"
 zhs = "重新载入 config.toml，无需重启"
 en = "reload config.toml without restarting"
+find = "配置 設置 设置 重載 重载 重讀 重读 刷新 config settings reload"
 
 [[message]]
 # : 命令選單裏 basic 那一項的説明(render 組)
@@ -2314,30 +2317,35 @@ find = "txt 純文字 纯文字 文本"
 key = "cmd.sidebar.buffers"
 zhs = "打开或关闭左侧栏的缓冲区列表，打开时光标移过去"
 en = "show or hide the open files in the left sidebar; the cursor goes into it"
+find = "側欄 侧栏 邊欄 边栏 緩衝區 缓冲区 打開的文件 打开的文件 buffers open files sidebar"
 
 [[message]]
 # : 命令選單裏 sidebar-explorer 那一項的説明（草稿）
 key = "cmd.sidebar.explorer"
 zhs = "打开或关闭左侧栏的文件树，打开时光标移过去"
 en = "show or hide the file tree in the left sidebar; the cursor goes into it"
+find = "側欄 侧栏 邊欄 边栏 文件樹 文件树 資源管理器 资源管理器 檔案 explorer file tree sidebar"
 
 [[message]]
 # : 命令選單裏 sidebar-info 那一項的説明（草稿）
 key = "cmd.sidebar.info"
 zhs = "打开或关闭右侧栏的信息面板，光标留在正文"
 en = "show or hide the info panel in the right sidebar; the cursor stays in the text"
+find = "側欄 侧栏 邊欄 边栏 右側 右侧 信息 資訊 面板 info panel sidebar"
 
 [[message]]
 # : 命令選單裏 sidebar-links 那一項的説明（草稿）
 key = "cmd.sidebar.links"
 zhs = "打开或关闭左侧栏的链接，打开时光标移过去"
 en = "show or hide the links in the left sidebar; the cursor goes into it"
+find = "側欄 侧栏 邊欄 边栏 鏈接 链接 連結 反向鏈接 反向链接 links backlinks sidebar"
 
 [[message]]
 # : 命令選單裏 sidebar-outline 那一項的説明（草稿）
 key = "cmd.sidebar.outline"
 zhs = "打开或关闭左侧栏的大纲，打开时光标移过去"
 en = "show or hide the outline in the left sidebar; the cursor goes into it"
+find = "側欄 侧栏 邊欄 边栏 大綱 大纲 目錄 目录 標題 标题 outline headings sidebar"
 
 [[message]]
 # : 命令選單裏 sidebar-outline-level 那一項的説明（草稿）
@@ -2351,6 +2359,7 @@ find = "目錄 目录 標題 标题 大綱 大纲 級別 级别 toc headings lev
 key = "cmd.sidebar.search"
 zhs = "打开或关闭左侧栏的搜索，打开时光标移过去"
 en = "show or hide search in the left sidebar; the cursor goes into it"
+find = "側欄 侧栏 邊欄 边栏 搜索 查找 尋找 寻找 search find sidebar"
 
 [[message]]
 # : 命令選單裏 dash 那一項的説明(strokes 組)
@@ -2947,6 +2956,7 @@ find = "折行 換行 换行 自動換行 自动换行 寬度 宽度 wrap width"
 key = "cmd.view.wrap-height"
 zhs = "竖排每列字数；`:view-wrap-height 30` 设长度，`0` 跟随窗口"
 en = "characters per vertical column; `0` follows the window"
+find = "竪排 竖排 縱 纵 列長 列长 每列 字數 字数 高度 vertical column length height"
 
 [[message]]
 # 命令：:view-wrap-width —— 橫排一行寫幾欄（草稿）

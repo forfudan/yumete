@@ -1047,6 +1047,7 @@ en = "keys that cross lines"
 key = "settings.editor.which-wrap.hint"
 zhs = "哪些键可以跨越行尾(vim 键位)。只能是 b h l < > ~"
 en = "which keys cross a line end (vim keymap): b h l < > ~"
+find = "跨行 換行 换行 行尾 行首 折回 whichwrap wrap line end"
 
 [[message]]
 # 設置：空白記號

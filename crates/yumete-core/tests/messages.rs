@@ -412,12 +412,21 @@ fn every_command_can_be_looked_up_by_a_word_it_is_not_named_with() {
     // description, so that 折行 finds `:view-wrap` and 竖排 finds `:layout
     // vertical` — neither word appears in either description, and a reader
     // who knows only one script would otherwise search and be told nothing.
+    //
+    // Every command, by the tag its entry points at — not only the ones whose
+    // tag is spelt `cmd.commands.`: a command described by a word list's tag
+    // (`cmd.wikis.edit`, `cmd.sidebar.outline`) is a row of the `::` menu too.
     let table = table();
+    let commands: BTreeSet<&str> = yumete_core::command::COMMANDS.iter().map(|c| c.help).collect();
     let bare: Vec<&String> = table
         .iter()
-        .filter(|(k, e)| k.starts_with("cmd.commands.") && e.find.is_empty())
+        .filter(|(k, e)| (k.starts_with("cmd.commands.") || commands.contains(k.as_str())) && e.find.is_empty())
         .map(|(k, _)| k)
         .collect();
+    assert!(
+        commands.iter().all(|c| table.contains_key(*c)),
+        "a command's description is not in the table"
+    );
     assert!(
         bare.is_empty(),
         "a command with no `find` line can only be found by its own name:\n{}",
@@ -430,12 +439,13 @@ fn every_command_can_be_looked_up_by_a_word_it_is_not_named_with() {
     // A `find` line anywhere else is never read.
     //
     // Warning: **`action.` and `cmd.`**, because `::` looks for shortcuts as
-    // well as commands. Everything else is dead weight: a
+    // well as commands, and the few commands described by another tag (a
+    // setting's hint) for the same reason. Everything else is dead weight: a
     // `find` line on a status message is words nobody can ever type at.
     let stray: Vec<&String> = table
         .iter()
         .filter(|(k, e)| {
-            !k.starts_with("cmd.") && !k.starts_with("action.") && !e.find.is_empty()
+            !k.starts_with("cmd.") && !k.starts_with("action.") && !commands.contains(k.as_str()) && !e.find.is_empty()
         })
         .map(|(k, _)| k)
         .collect();
