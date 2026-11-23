@@ -40718,6 +40718,25 @@ fn a_chapter_s_preview_typesets_its_book() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **A file renamed or saved under another name takes its preview along**,
+/// locked or following, its name with it.
+#[test]
+fn a_renamed_file_takes_its_preview_along() {
+    let (mut ed, dir) = a_markdown_note("rename");
+    let main = dir.join("notes.md");
+    let page = ed.open_page_window_of(main.clone(), crate::buffer::PreviewKind::Markdown, false).unwrap();
+    let id = ed.preview_in(page).unwrap();
+    ed.execute(":file-rename moved.md").unwrap();
+    assert_eq!(ed.previews(), vec![(id, dir.join("moved.md"))]);
+    assert_eq!(ed.buffers[ed.buffer_with(id).unwrap()].display_name(), say!("preview.tab", "moved.md"));
+    ed.execute(":preview-lock").unwrap();
+    ed.execute(&format!(":write-as {}", dir.join("saved.md").display())).unwrap();
+    assert_eq!(ed.previews(), vec![(id, dir.join("saved.md"))]);
+    assert!(ed.preview_is_locked(id));
+    assert_eq!(ed.buffers[ed.buffer_with(id).unwrap()].display_name(), say!("preview.tab-locked", "saved.md"));
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **Saving and leaving from a preview**: `:w`, `:wq`, `:up` and `:write-as`
 /// write nothing and say why; `:x` and vim's `ZZ` are `:q`, closing the
 /// window or, from the last one, leaving. A preview tab off the screen

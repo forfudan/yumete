@@ -288,7 +288,7 @@ impl Editor {
 
     /// A path as the disk spells it, for telling two spellings of one file
     /// apart from two files: `/var/…` and `/private/var/…` on macOS.
-    fn real(&self, path: &Path) -> PathBuf {
+    pub(super) fn real(&self, path: &Path) -> PathBuf {
         self.real_path(path).unwrap_or_else(|| absolute(path))
     }
 
@@ -732,6 +732,19 @@ impl Editor {
         match self.document_here() {
             Some((kind, main)) => self.preview_state(kind, &main).0,
             None => PreviewState::None,
+        }
+    }
+
+    /// **Carry the previews of `from` to `to`**: a file renamed or saved
+    /// under another name takes the preview it is the document of along.
+    /// `from` as the disk spelt it before.
+    pub(super) fn carry_previews(&mut self, from: &Path, to: &Path) {
+        let to = self.real(to);
+        for i in 0..self.buffers.len() {
+            if self.buffers[i].preview_main() == Some(from) {
+                let locked = self.buffers[i].preview_locked();
+                self.repoint(i, to.clone(), locked);
+            }
         }
     }
 

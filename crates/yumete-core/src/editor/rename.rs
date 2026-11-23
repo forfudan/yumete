@@ -62,6 +62,7 @@ impl Editor {
         }
         // Asked before the move: the history's place is worked out from the
         // file's real path, which the old name no longer has afterwards.
+        let old_real = self.real(&old);
         let shelf_from = self.history_refused().is_none().then(|| self.history_place(&old)).flatten();
         let moved = target
             .parent()
@@ -82,6 +83,7 @@ impl Editor {
         }
         self.current_buffer_mut().moved_to(target.clone());
         self.carry_remembered(&old, &target);
+        self.carry_previews(&old_real, &target);
         self.refresh_vcs(true);
         self.refresh_sidebar();
         self.status = say!("file.renamed", shown);

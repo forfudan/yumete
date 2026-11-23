@@ -2425,11 +2425,16 @@ impl Editor {
             }
         }
         let self_finish = self.insert_final_newline();
-        if let Err(err) = self.current_buffer_mut().save_as(target, force, self_finish) {
+        let before = self.current_buffer().path().map(|p| self.real(p));
+        if let Err(err) = self.current_buffer_mut().save_as(target.clone(), force, self_finish) {
             if self.asked_about_encoding(&err, Saving::As(path.to_string()), force) {
                 return Ok(CommandOutcome::Continue);
             }
             return Err(EditorError::Io(err));
+        }
+        // The preview of the file goes with it to its new name.
+        if let Some(before) = before {
+            self.carry_previews(&before, &target);
         }
         // 改了名就是換了一份磁碟上的東西，改動條要重問一次（#55）。
         self.refresh_vcs(true);
@@ -2541,12 +2546,16 @@ impl Editor {
                     }
                 }
                 let self_finish = self.insert_final_newline();
-                if let Err(err) = self.current_buffer_mut().save_as(target, force, self_finish) {
+                let before = self.current_buffer().path().map(|p| self.real(p));
+                if let Err(err) = self.current_buffer_mut().save_as(target.clone(), force, self_finish) {
                     if self.asked_about_encoding(&err, Saving::As(path.to_string()), force) {
                         self.then_after_the_answer(Then::Quit(force));
                         return Ok(CommandOutcome::Continue);
                     }
                     return Err(EditorError::Io(err));
+                }
+                if let Some(before) = before {
+                    self.carry_previews(&before, &target);
                 }
                 self.status = say!("buffer.saved", self.current_buffer().display_name());
             }
