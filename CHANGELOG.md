@@ -6,15 +6,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Added
 
-- **vim's `:put` and `:delete`**: `:put [x]` (`:pu`) puts a register on lines of its own below the cursor's line or a range's last, `:put!` above, `:0put` above the first, and `"_` an empty line; `:delete [x] [count]` (`:d`) takes the cursor's line, a range's lines (`:3,5d a`) or a count of them (`:d 3`) into a register as `dd` does. `:de` is `:delete` now, as in vim, and no longer `:decimo`.
-- **vim's `.` mark**: `` `. `` goes to where the last change was made and `'.` to that line, as jumps, so ``` `` ``` comes back; `` d`. `` and the like reach it as any mark.
-- **vim's `@:`** runs the last `:` line again, with a count that many times, and `@@` after it runs it again.
-- **vim's `C-r C-w`, `C-r C-a` and `C-r C-l` on the `:` and `/` lines** put the word, the WORD or the line under the cursor there.
-- **vim's `:&`, `:&&`, `&` and `g&`**: `:&` (and under vim `:s` alone) runs the last `:s` again without its flags and `:&&` with them, over a range too (`:%&&`); `&` is nvim's `:&&` on this line, a count taking that many lines; `g&` runs it over every line with the last search's pattern. **`:s//X/` takes the last pattern searched for**, and under vim a `:s` pattern is what `n` looks for next.
-- **vim's `g0`, `g^`, `gm` and `g$` go by the screen row** of a wrapped line: its start, its first non-blank, half the text's width into it, and its end (`3g$` two rows down first); after an operator `g$` is inclusive and the rest exclusive.
-- **vim's search offsets**: `/pat/e`, `/pat/e+1`, `/pat/s-1`, `/pat/b+2`, `/pat/+2` and `?pat?e` land where vim lands, a line's break not counted; `n` and `N` keep the offset, an empty `/` line keeps it, and `//`, a pattern alone or `*` drop it. After an operator `e` takes the character it lands on and a line offset whole lines (`d/pat/e`, `d/pat/+1`). A `/` in a vim pattern is written `\/`.
-- **vim's forced motions `v` and `V`** between an operator and its motion: `dvj` takes characters to the same column below, `dvw` is inclusive and `dve` exclusive, `dVw` takes whole lines, for every operator (`cvw`, `yvj`). `d<C-v>` is not there yet.
-- **vim's `=` re-indents code by the syntax tree**, the levels Enter opens, in the file's indent unit: `==`, `=ip`, `=G`, a count and Visual `=`, one undo step. It is not vim's indent scripts, so a line can come out otherwise than in vim; in prose, Python, Mojo and languages with no indent rules it changes nothing and says so.
+
 
 ### Changed
 

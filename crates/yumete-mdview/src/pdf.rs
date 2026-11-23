@@ -14,12 +14,21 @@
 //!   too long, and only at the limit itself when not even a line fits.
 //! - **Down a vertical page** the same, turned: a page as tall as the
 //!   preview's columns, as wide as the document, cut between blocks.
+//! - **Links are links**: over a link's words, one box a line they fill, a
+//!   link annotation. A web or mail address opens; `#heading` goes to that
+//!   heading in the PDF, by the name the HTML export gives it; a file named
+//!   by its path opens as a URI of that path, a relative one as written,
+//!   so beside the source it finds the same file the source names. krilla
+//!   writes only URI and go-to actions, no launch action.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::ops::Range;
 use std::sync::Arc;
 
+use krilla::action::{Action, LinkAction};
+use krilla::annotation::{Annotation, LinkAnnotation, Target};
 use krilla::color::rgb;
+use krilla::destination::{Destination, NamedDestination, XyzDestination};
 use krilla::geom::{Path, PathBuilder, Point, Size, Transform};
 use krilla::num::NormalizedF32;
 use krilla::paint::{Fill, FillRule, LineCap, LineJoin, Stroke};
@@ -29,6 +38,7 @@ use parley::{Layout, PositionedLayoutItem};
 use vello_cpu::kurbo::{Affine, BezPath, PathEl, Rect, RoundedRect, Shape, Vec2};
 
 use crate::layout::{Attach, Ink, Item, Laid, Pix, Run};
+use crate::parse::{Block, BlockKind, InlineKind};
 use crate::theme::Rgba;
 use crate::Preview;
 
@@ -149,6 +159,12 @@ impl Preview {
         let mut doc = krilla::Document::new();
         doc.set_metadata(krilla::metadata::Metadata::new().title(title.to_string()));
         let mut store = Store::default();
+        // Every heading is a named destination, linked to or not, so a link
+        // from elsewhere (`book.pdf#第二節`) finds it too.
+        let headings = self.heading_places(&pages, across, k);
+        for (name, &(page, at)) in &headings {
+            let _ = doc.register_named_destination(NamedDestination::new(name.clone(), XyzDestination::new(page, at)));
+        }
         for slice in &pages {
             let along = slice.len();
             let (w, h) = if vertical { (along, across) } else { (across, along) };
@@ -167,22 +183,87 @@ impl Preview {
             if let Some(clip) = &clip {
                 surface.push_clip_path(clip, &FillRule::NonZero);
             }
+            let mut links: Vec<(Rect, u64)> = Vec::new();
             for p in self.placed.iter().filter(|p| p.y < slice.to && p.y + p.laid.height > slice.from) {
                 let at = slice.before + p.y - slice.from;
                 let off = match vertical {
                     true => Vec2::new((along - at) as f64, 0.0),
                     false => Vec2::new(0.0, at as f64),
                 };
-                draw_laid(&mut surface, &mut store, &p.laid, off, shown);
+                draw_laid(&mut surface, &mut store, &p.laid, off, shown, &mut links);
             }
             if clip.is_some() {
                 surface.pop();
             }
             surface.pop();
             surface.finish();
+            for (r, href) in links {
+                let r = r.intersect(shown);
+                if r.area() <= 0.0 {
+                    continue;
+                }
+                let Some(written) = self.parse_cache.target(href) else { continue };
+                let (Some(target), Some(box_)) = (self.link_target(written, &headings), krilla::geom::Rect::from_ltrb(r.x0 as f32 * k, r.y0 as f32 * k, r.x1 as f32 * k, r.y1 as f32 * k)) else { continue };
+                page.add_annotation(Annotation::new_link(LinkAnnotation::new(box_, target), Some(written.to_string())));
+            }
             page.finish();
         }
         doc.finish().map_err(|e| format!("{e:?}"))
+    }
+
+    /// **Where a link written `written` goes**: a URI for an address or a
+    /// file, the heading's place for `#heading`; `None` for a heading the
+    /// document does not have.
+    fn link_target(&self, written: &str, headings: &BTreeMap<String, (usize, Point)>) -> Option<Target> {
+        if let Some(name) = written.strip_prefix('#') {
+            let name = yumete_core::markdown::percent_decoded(name);
+            let (name, &(page, at)) = headings.get_key_value(&name).or_else(|| headings.get_key_value(&name.to_lowercase()))?;
+            let place = NamedDestination::new(name.clone(), XyzDestination::new(page, at));
+            return Some(Target::Destination(Destination::Named(place)));
+        }
+        Some(Target::Action(Action::Link(LinkAction::new(uri_of(written)))))
+    }
+
+    /// **Each heading's name and place**: the name the HTML export gives it
+    /// (GitHub's, a second heading of the same words taking `-1`), the page
+    /// it is on and the top of its line there, in points. Down a vertical
+    /// page the place is a page's height to the left of its column, so the
+    /// column stands at the right of what a reader is taken to.
+    fn heading_places(&self, pages: &[Slice], across: f32, k: f32) -> BTreeMap<String, (usize, Point)> {
+        let mut found: Vec<(usize, String)> = Vec::new();
+        headings_in(&self.blocks, &mut found);
+        let mut first_y: HashMap<usize, f32> = HashMap::new();
+        for &(y, line) in &self.marks {
+            first_y.entry(line).and_modify(|kept| *kept = kept.min(y)).or_insert(y);
+        }
+        let mut out = BTreeMap::new();
+        let mut next: HashMap<String, usize> = HashMap::new();
+        for (line, words) in found {
+            let base = match yumete_core::export::slug(&words) {
+                slug if slug.is_empty() => "heading".to_string(),
+                slug => slug,
+            };
+            let mut n = next.get(&base).copied().unwrap_or(0);
+            let mut name = match n {
+                0 => base.clone(),
+                n => format!("{base}-{n}"),
+            };
+            while out.contains_key(&name) {
+                n += 1;
+                name = format!("{base}-{n}");
+            }
+            next.insert(base, n + 1);
+            let y = first_y.get(&line).copied().unwrap_or_else(|| self.y_for_line(line));
+            let Some(page) = pages.iter().rposition(|p| p.from <= y).or((!pages.is_empty()).then_some(0)) else { continue };
+            let slice = pages[page];
+            let at = slice.before + (y - slice.from).max(0.0);
+            let point = match self.vertical() {
+                true => Point::from_xy((slice.len() - at - across).max(0.0) * k, 0.0),
+                false => Point::from_xy(0.0, at * k),
+            };
+            out.insert(name, (page, point));
+        }
+        out
     }
 
     /// The top margin and the bottom margin of a page across.
@@ -190,6 +271,59 @@ impl Preview {
         let (_, top, bottom) = self.padding();
         (top, bottom)
     }
+}
+
+/// **The headings of `blocks`**, in order, inside quotes, callouts and
+/// lists too: each one's source line and its words, a ruby's base without
+/// its reading and a note's number left out, as the HTML export reads them.
+fn headings_in(blocks: &[Block], out: &mut Vec<(usize, String)>) {
+    for block in blocks {
+        match &block.kind {
+            BlockKind::Heading { text, .. } => {
+                let words: String = text
+                    .iter()
+                    .filter_map(|run| match &run.kind {
+                        InlineKind::Text { text, .. } => Some(text.as_str()),
+                        InlineKind::Ruby { base, .. } => Some(base.as_str()),
+                        _ => None,
+                    })
+                    .collect();
+                out.push((block.lines.0, words));
+            }
+            BlockKind::Quote(body) | BlockKind::Callout { body, .. } => headings_in(body, out),
+            BlockKind::List { items, .. } => items.iter().for_each(|item| headings_in(&item.body, out)),
+            _ => {}
+        }
+    }
+}
+
+/// **A link's target as a PDF's URI**: an address with a scheme
+/// (`https:`, `mailto:`) as written; a file's path with its `%` escapes
+/// read and written again, an absolute one as a `file://` URI. Spaces and
+/// what is not ASCII are escaped, which a PDF's URI must be.
+fn uri_of(written: &str) -> String {
+    let scheme = written.split_once(':').is_some_and(|(s, _)| s.len() > 1 && s.starts_with(|c: char| c.is_ascii_alphabetic()) && s.chars().all(|c| c.is_ascii_alphanumeric() || "+-.".contains(c)));
+    let escape = |text: &str, keep: &dyn Fn(u8) -> bool| -> String {
+        text.bytes().map(|b| if keep(b) { (b as char).to_string() } else { format!("%{b:02X}") }).collect()
+    };
+    if scheme {
+        return escape(written, &|b| b.is_ascii_graphic());
+    }
+    let (path, fragment) = match written.split_once('#') {
+        Some((path, fragment)) => (path, Some(fragment)),
+        None => (written, None),
+    };
+    let path = yumete_core::markdown::percent_decoded(path);
+    let kept = |b: u8| b.is_ascii_alphanumeric() || b"-._~/!$&'()*+,;=:@".contains(&b);
+    let mut uri = match std::path::Path::new(&path).is_absolute() {
+        true => format!("file://{}", escape(&path, &kept)),
+        false => escape(&path, &kept),
+    };
+    if let Some(fragment) = fragment {
+        uri.push('#');
+        uri.push_str(&escape(fragment, &|b| b.is_ascii_graphic()));
+    }
+    uri
 }
 
 fn colour(c: Rgba) -> (rgb::Color, NormalizedF32) {
@@ -266,8 +400,9 @@ fn ours(r: Rect, band: Rect) -> bool {
 const EVERYWHERE: Rect = Rect::new(f64::MIN / 4.0, f64::MIN / 4.0, f64::MAX / 4.0, f64::MAX / 4.0);
 
 /// **Draw a block** moved by `off`, its lines of text only where they
-/// belong to `band` ([`ours`]); the rest is clipped to the page.
-fn draw_laid(surface: &mut Surface, store: &mut Store, laid: &Laid, off: Vec2, band: Rect) {
+/// belong to `band` ([`ours`]); the rest is clipped to the page. Where a
+/// link's words stand goes into `links`.
+fn draw_laid(surface: &mut Surface, store: &mut Store, laid: &Laid, off: Vec2, band: Rect, links: &mut Vec<(Rect, u64)>) {
     for item in &laid.items {
         match item {
             Item::Rect { r, fill: c, radius } => fill(surface, &rect_path(*r + off, *radius as f64), *c),
@@ -298,9 +433,14 @@ fn draw_laid(surface: &mut Surface, store: &mut Store, laid: &Laid, off: Vec2, b
                 }
                 stroke(surface, &path_of(&path), *color, *width, true);
             }
-            Item::Glyphs(run) if ours(run.bounds + off, band) => draw_run(surface, store, run, off),
+            Item::Glyphs(run) if ours(run.bounds + off, band) => {
+                draw_run(surface, store, run, off);
+                if run.link != 0 {
+                    links.push((run.bounds + off, run.link));
+                }
+            }
             Item::Glyphs(_) => {}
-            Item::Text { x, y, text } => draw_layout(surface, store, &text.layout, &text.string, &text.attach, off.x + *x as f64, off.y + *y as f64, band),
+            Item::Text { x, y, text } => draw_layout(surface, store, &text.layout, &text.string, &text.attach, (off.x + *x as f64, off.y + *y as f64), band, links),
         }
     }
 }
@@ -369,8 +509,11 @@ fn clusters_of(g: &parley::GlyphRun<'_, Ink>, count: usize, taken: &mut HashMap<
     ranges
 }
 
+/// **A laid-out text drawn** at `(ox, oy)`, its lines only where they
+/// belong to `band`; each line's stretch of a link's words, one box a line,
+/// goes into `links`.
 #[allow(clippy::too_many_arguments)]
-fn draw_layout(surface: &mut Surface, store: &mut Store, layout: &Layout<Ink>, text: &str, attach: &[Attach], ox: f64, oy: f64, band: Rect) {
+fn draw_layout(surface: &mut Surface, store: &mut Store, layout: &Layout<Ink>, text: &str, attach: &[Attach], (ox, oy): (f64, f64), band: Rect, links: &mut Vec<(Rect, u64)>) {
     for line in layout.lines() {
         let m = line.metrics();
         let reach = Rect::new(ox, oy + m.block_min_coord as f64, ox + layout.width().max(1.0) as f64, oy + m.block_max_coord as f64);
@@ -422,6 +565,13 @@ fn draw_layout(surface: &mut Surface, store: &mut Store, layout: &Layout<Ink>, t
                         glyphs(surface, font, size, ink.color, &placed, text, base);
                         surface.pop();
                     }
+                    if ink.link != 0 {
+                        let r = Rect::new(x0, oy + m.block_min_coord as f64, x1, oy + m.block_max_coord as f64);
+                        match links.last_mut() {
+                            Some((last, href)) if *href == ink.link && last.y0 == r.y0 && (last.x1 - r.x0).abs() < 1.0 => *last = last.union(r),
+                            _ => links.push((r, ink.link)),
+                        }
+                    }
                     let size = size as f64;
                     let base = oy + base as f64;
                     if ink.underline {
@@ -444,13 +594,13 @@ fn draw_layout(surface: &mut Surface, store: &mut Store, layout: &Layout<Ink>, t
                         let bxx = ox + bx.x as f64;
                         let bxy = oy + bx.y as f64;
                         let w = bx.width as f64;
-                        draw_layout(surface, store, &base.layout, &base.string, &[], bxx + (w - base.layout.width() as f64) / 2.0, bxy, EVERYWHERE);
+                        draw_layout(surface, store, &base.layout, &base.string, &[], (bxx + (w - base.layout.width() as f64) / 2.0, bxy), EVERYWHERE, links);
                         // The reading sits just over the base's ink.
                         let size = base.layout.lines().next().and_then(|l| l.runs().next().map(|r| r.font_size())).unwrap_or(16.0) as f64;
                         let base_line = base.layout.first_baseline().unwrap_or(0.0) as f64;
                         let reading_base = reading.layout.first_baseline().unwrap_or(0.0) as f64;
                         let target = bxy + base_line - 0.92 * size - 0.08 * size;
-                        draw_layout(surface, store, &reading.layout, &reading.string, &[], bxx + (w - reading.layout.width() as f64) / 2.0, target - reading_base, EVERYWHERE);
+                        draw_layout(surface, store, &reading.layout, &reading.string, &[], (bxx + (w - reading.layout.width() as f64) / 2.0, target - reading_base), EVERYWHERE, links);
                     }
                     None => {}
                 },
@@ -580,6 +730,130 @@ mod tests {
         assert_eq!(heights(&doc), vec![900.0 * PT_PER_PX / 2.0]);
         let text: String = doc.extract_text(&[1]).expect("text").chars().filter(|c| !c.is_whitespace()).collect();
         assert!(text.contains("春天的早晨，河边的柳树发了新芽。"), "{text:?}");
+    }
+
+    /// Where a link annotation goes.
+    #[derive(Debug, PartialEq)]
+    enum Goes {
+        Uri(String),
+        Dest(String),
+    }
+
+    /// Every link annotation on page `n` (from 1): its box, in the PDF's
+    /// coordinates, and where it goes.
+    fn links_on(doc: &lopdf::Document, n: u32) -> Vec<([f32; 4], Goes)> {
+        let id = doc.get_pages()[&n];
+        let page = doc.get_object(id).and_then(|o| o.as_dict()).expect("a page");
+        let Ok(annots) = page.get(b"Annots") else { return Vec::new() };
+        let annots = doc.dereference(annots).expect("annotations").1.as_array().expect("an array").clone();
+        let num = |o: &lopdf::Object| o.as_float().or_else(|_| o.as_i64().map(|i| i as f32)).unwrap_or(f32::NAN);
+        annots
+            .iter()
+            .filter_map(|a| {
+                let a = doc.dereference(a).ok()?.1.as_dict().ok()?;
+                (a.get(b"Subtype").ok()?.as_name().ok()? == b"Link").then_some(())?;
+                let r = a.get(b"Rect").ok()?.as_array().ok()?;
+                let rect = [num(&r[0]), num(&r[1]), num(&r[2]), num(&r[3])];
+                let goes = match a.get(b"Dest") {
+                    Ok(dest) => Goes::Dest(String::from_utf8(dest.as_str().ok()?.to_vec()).ok()?),
+                    Err(_) => {
+                        let action = doc.dereference(a.get(b"A").ok()?).ok()?.1.as_dict().ok()?;
+                        Goes::Uri(String::from_utf8(action.get(b"URI").ok()?.as_str().ok()?.to_vec()).ok()?)
+                    }
+                };
+                Some((rect, goes))
+            })
+            .collect()
+    }
+
+    /// The page (from 1) the named destination `name` is on.
+    fn page_of_dest(doc: &lopdf::Document, name: &str) -> Option<u32> {
+        let root = doc.trailer.get(b"Root").ok()?;
+        let catalog = doc.dereference(root).ok()?.1.as_dict().ok()?;
+        let names = doc.dereference(catalog.get(b"Names").ok()?).ok()?.1.as_dict().ok()?;
+        let dests = doc.dereference(names.get(b"Dests").ok()?).ok()?.1.as_dict().ok()?;
+        let list = dests.get(b"Names").ok()?.as_array().ok()?;
+        let at = list.chunks(2).find(|pair| pair[0].as_str().ok() == Some(name.as_bytes()))?;
+        let dest = doc.dereference(&at[1]).ok()?.1.as_array().ok()?;
+        let page = dest[0].as_reference().ok()?;
+        doc.get_pages().into_iter().find(|(_, id)| *id == page).map(|(n, _)| n)
+    }
+
+    /// Whether `r` is a box of some size within page `n`'s media box.
+    fn sane(doc: &lopdf::Document, n: u32, r: [f32; 4]) -> bool {
+        let id = doc.get_pages()[&n];
+        let page = doc.get_object(id).and_then(|o| o.as_dict()).expect("a page");
+        let m = page.get(b"MediaBox").and_then(|o| o.as_array()).expect("a media box");
+        let num = |o: &lopdf::Object| o.as_float().or_else(|_| o.as_i64().map(|i| i as f32)).unwrap_or(f32::NAN);
+        let (w, h) = (num(&m[2]), num(&m[3]));
+        r[0] < r[2] && r[1] < r[3] && r[0] >= -0.01 && r[1] >= -0.01 && r[2] <= w + 0.01 && r[3] <= h + 0.01
+    }
+
+    /// **A link in the PDF is a link**: a web address, a mail address, a
+    /// reference link and a bare URL open their URI; a relative file its
+    /// path, escaped; `#heading` goes to the heading by the HTML export's
+    /// name for it; a link that wraps has a box on each of its lines.
+    #[test]
+    fn links_become_link_annotations() {
+        let long = "the words of a link long enough to wrap onto a second line of this page ".repeat(3);
+        let text = format!(
+            "# 開頭\n\n看[網站](https://example.com/a)、<someone@example.org>、[信](mailto:a@example.org)、[參考][ref]、https://example.net/x 與[筆記](<notes/a b.md>)。\n\n[{long}](https://example.com/long)\n\n[跳到第二節](#第二節)，[跳到同名](#同名-1)，[沒有](#沒有這節)。\n\n## 第二節\n\n## 同名\n\n## 同名\n\n[ref]: https://example.org/ref\n"
+        );
+        let doc = pdf_of(&text);
+        let links = links_on(&doc, 1);
+        let to = |goes: Goes| links.iter().filter(|(_, g)| *g == goes).map(|(r, _)| *r).collect::<Vec<_>>();
+        for uri in ["https://example.com/a", "mailto:someone@example.org", "mailto:a@example.org", "https://example.org/ref", "https://example.net/x", "notes/a%20b.md"] {
+            let boxes = to(Goes::Uri(uri.to_string()));
+            assert_eq!(boxes.len(), 1, "{uri} in {links:?}");
+            assert!(sane(&doc, 1, boxes[0]), "{uri}: {boxes:?}");
+        }
+        let long = to(Goes::Uri("https://example.com/long".to_string()));
+        assert!(long.len() >= 2, "a box a line: {long:?}");
+        assert!(long.iter().all(|&r| sane(&doc, 1, r)) && long[0][1] != long[1][1], "{long:?}");
+        for name in ["第二節", "同名-1"] {
+            assert_eq!(to(Goes::Dest(name.to_string())).len(), 1, "{name} in {links:?}");
+            assert_eq!(page_of_dest(&doc, name), Some(1), "{name}");
+        }
+        assert!(!links.iter().any(|(_, g)| *g == Goes::Dest("沒有這節".to_string())), "a heading the document lacks");
+    }
+
+    /// **Across the cuts of a long document** a link goes to the page its
+    /// heading is on, and a link's box is on the page its words are.
+    #[test]
+    fn a_link_finds_its_heading_on_another_page() {
+        let text = format!("[到最後](#part-899)\n\n{}", sample(900));
+        let doc = pdf_of(&text);
+        let pages = doc.get_pages().len() as u32;
+        assert!(pages >= 2);
+        let links = links_on(&doc, 1);
+        assert!(links.iter().any(|(r, g)| *g == Goes::Dest("part-899".to_string()) && sane(&doc, 1, *r)), "{links:?}");
+        assert_eq!(page_of_dest(&doc, "part-899"), Some(pages));
+        assert_eq!(page_of_dest(&doc, "part-0"), Some(1));
+    }
+
+    /// **Down a vertical page** a link's box stands over its column.
+    #[test]
+    fn a_link_down_a_vertical_page_has_its_box() {
+        let mut p = Preview::new(crate::Options { width: 1400, scale: 2.0, theme: crate::Theme::light(), base_dir: ".".into() }, Box::new(crate::NoFormulas));
+        p.set_height(900);
+        p.set_vertical(Some(crate::Vertical { latin: yumete_core::export::Latin::Turn, hanging: false }));
+        p.set_text("# 春\n\n春天的早晨，[河邊的柳樹](https://example.com/willow)發了新芽。[回到開頭](#春)\n");
+        let doc = lopdf::Document::load_mem(&p.pdf("vertical").expect("a PDF")).expect("a PDF that reads back");
+        let links = links_on(&doc, 1);
+        let willow: Vec<[f32; 4]> = links.iter().filter(|(_, g)| *g == Goes::Uri("https://example.com/willow".to_string())).map(|(r, _)| *r).collect();
+        assert!(!willow.is_empty(), "{links:?}");
+        assert!(willow.iter().all(|&r| sane(&doc, 1, r) && r[3] - r[1] > r[2] - r[0]), "down the column: {willow:?}");
+        assert!(links.iter().any(|(_, g)| *g == Goes::Dest("春".to_string())), "{links:?}");
+        assert_eq!(page_of_dest(&doc, "春"), Some(1));
+    }
+
+    #[test]
+    fn a_link_target_is_a_uri() {
+        assert_eq!(uri_of("https://example.com/a?b=c#d"), "https://example.com/a?b=c#d");
+        assert_eq!(uri_of("https://例子.cn/路"), "https://%E4%BE%8B%E5%AD%90.cn/%E8%B7%AF");
+        assert_eq!(uri_of("notes/my%20file.md#part"), "notes/my%20file.md#part");
+        assert_eq!(uri_of("../第一章.md"), "../%E7%AC%AC%E4%B8%80%E7%AB%A0.md");
+        assert_eq!(uri_of("/tmp/a b.md"), "file:///tmp/a%20b.md");
     }
 
     #[test]

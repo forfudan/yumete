@@ -1480,7 +1480,7 @@ fn render(
 
 /// **Where the link whose words are `chars[start..end]` goes**: the target
 /// of `[words](target "title")`, or the address of `<address>`.
-pub(crate) fn link_target(chars: &[char], start: usize, end: usize) -> Option<String> {
+pub fn link_target(chars: &[char], start: usize, end: usize) -> Option<String> {
     if start > 0 && chars[start - 1] == '<' && chars.get(end) == Some(&'>') {
         return Some(chars[start..end].iter().collect());
     }
@@ -2414,7 +2414,7 @@ fn without_note_marks(markup: &str) -> String {
 /// **GitHub's anchor for a heading's words** (github-slugger): in small
 /// letters, each space a `-`, and only letters, digits, the marks that go
 /// with a letter, `-` and `_` kept.
-pub(crate) fn slug(words: &str) -> String {
+pub fn slug(words: &str) -> String {
     let combining = |c: char| matches!(c as u32, 0x300..=0x36F | 0x1AB0..=0x1AFF | 0x1DC0..=0x1DFF | 0x20D0..=0x20FF | 0xFE20..=0xFE2F);
     words
         .trim()

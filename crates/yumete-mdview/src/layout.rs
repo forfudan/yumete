@@ -39,6 +39,9 @@ pub struct Ink {
     pub strike: bool,
     /// Set in the monospace face: its ground is padded as code's is.
     pub mono: bool,
+    /// Where the link it is in goes ([`crate::parse::Marks::href`]); 0
+    /// outside a link. Only a PDF of the page reads it.
+    pub link: u64,
 }
 
 /// What an inline box holds.
@@ -99,6 +102,8 @@ pub(crate) struct Run {
     /// selected and searched.
     pub text: String,
     pub spans: Vec<std::ops::Range<usize>>,
+    /// Where the link they are in goes ([`Ink::link`]).
+    pub link: u64,
 }
 
 /// **A top-level block, laid out**: what it draws, how tall it is, the
@@ -1182,6 +1187,7 @@ pub(crate) fn ink_of(theme: &Theme, marks: &Marks, color: Rgba, mono: bool) -> I
     ink.underline = marks.underline || marks.wiki;
     ink.strike = marks.strike;
     ink.mono = (marks.code || marks.kbd) && !mono;
+    ink.link = marks.href;
     ink
 }
 

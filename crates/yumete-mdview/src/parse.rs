@@ -180,6 +180,11 @@ pub struct Marks {
     /// A `<span lang="…">` over it: 0 for the document's own, else 1 more
     /// than [`crate::fonts::Han`]'s index.
     pub lang: u8,
+    /// **Where the link it is in goes**, as a number [`Cache::target`]
+    /// reads back; 0 outside a link. A number, so the marks stay a value
+    /// two runs are compared by, and two links to different places are two
+    /// runs.
+    pub href: u64,
 }
 
 /// **Read `text`** into blocks. The footnotes, if any, come last, as one
@@ -197,9 +202,18 @@ pub struct Cache {
     runs: std::collections::HashMap<u64, Vec<Inline>>,
     /// The ruby spellings read, or `None` for all three.
     ruby: Option<yumete_core::ruby::Dialects>,
+    /// Every link target read, by its [`Marks::href`]: a run kept from an
+    /// earlier parse still names its target here.
+    targets: std::collections::HashMap<u64, std::sync::Arc<str>>,
 }
 
 impl Cache {
+    /// **Where a link goes**, as written (`https://…`, `#heading`,
+    /// `notes.md`), by its [`Marks::href`].
+    pub fn target(&self, href: u64) -> Option<&str> {
+        self.targets.get(&href).map(|t| &**t)
+    }
+
     /// **Which ruby spellings are read**: `[export] ruby_html`,
     /// `ruby_typst` and `ruby_markdown`, the preview being publication as an
     /// export is. A change reads every paragraph again.
@@ -223,7 +237,14 @@ pub fn parse_with(text: &str, cache: &mut Cache) -> Vec<Block> {
     let lines = prepare(text);
     let ruby = cache.ruby.unwrap_or_else(every_ruby);
     let all: Vec<&str> = text.lines().collect();
-    let mut reader = Reader { old: std::mem::take(&mut cache.runs), refs: link_definitions(&lines), ruby, source: all.clone(), ..Reader::default() };
+    let mut reader = Reader {
+        old: std::mem::take(&mut cache.runs),
+        targets: std::mem::take(&mut cache.targets),
+        refs: link_definitions(&lines),
+        ruby,
+        source: all.clone(),
+        ..Reader::default()
+    };
     let mut blocks = Vec::new();
     // Front matter: `---` on the first line, `key: value` under it, to a `---`.
     let mut from = 0;
@@ -256,6 +277,7 @@ pub fn parse_with(text: &str, cache: &mut Cache) -> Vec<Block> {
         blocks.push(Block { lines: (first, last), kind: BlockKind::Footnotes(notes) });
     }
     cache.runs = reader.new;
+    cache.targets = reader.targets;
     blocks
 }
 
@@ -589,6 +611,8 @@ struct Reader<'a> {
     /// How many quotes, lists, containers and notes the lines being read
     /// are inside.
     depth: usize,
+    /// See [`Cache::target`].
+    targets: std::collections::HashMap<u64, std::sync::Arc<str>>,
 }
 
 impl Reader<'_> {
@@ -1038,6 +1062,56 @@ impl Reader<'_> {
         mdtable::cells(row).into_iter().map(|(a, b)| self.inlines_at(&[(no, chars[a..b].iter().collect())], &[from + a])).collect()
     }
 
+    /// **Where each character's link goes** ([`Marks::href`]): a link's
+    /// words and an autolink's address take its target as written (an
+    /// e-mail address as `mailto:`), a bare URL itself (`www.` read as
+    /// `http://www.`). A wiki link names a page of the manuscript, not a
+    /// place a reader can open, and takes none.
+    fn hrefs(&mut self, chars: &[char], spans: &[markdown::Span], urls: &[bool]) -> Vec<u64> {
+        let mut out = vec![0; chars.len() + 1];
+        for s in spans.iter().filter(|s| s.kind == SpanKind::Link) {
+            let Some(target) = yumete_core::export::link_target(chars, s.start, s.end) else { continue };
+            let angled = s.start > 0 && chars[s.start - 1] == '<';
+            let target = match angled && !target.contains(':') && target.contains('@') {
+                true => format!("mailto:{target}"),
+                false => target,
+            };
+            let href = self.href_of(&target);
+            for slot in &mut out[s.start..s.end.min(chars.len())] {
+                *slot = href;
+            }
+        }
+        let mut i = 0;
+        while i < chars.len() {
+            if !urls[i] {
+                i += 1;
+                continue;
+            }
+            let end = (i..chars.len()).find(|&k| !urls[k]).unwrap_or(chars.len());
+            let url: String = chars[i..end].iter().collect();
+            let url = match url.starts_with("www.") {
+                true => format!("http://{url}"),
+                false => url,
+            };
+            let href = self.href_of(&url);
+            for slot in &mut out[i..end] {
+                *slot = href;
+            }
+            i = end;
+        }
+        out
+    }
+
+    /// The number `target` goes by ([`Marks::href`]), kept with it.
+    fn href_of(&mut self, target: &str) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        target.hash(&mut h);
+        let href = h.finish().max(1);
+        self.targets.entry(href).or_insert_with(|| target.into());
+        href
+    }
+
     /// [`Self::inlines`], each line's text beginning at source column
     /// `cols[k]`.
     fn inlines_at(&mut self, lines: &[Line], cols: &[usize]) -> Vec<Inline> {
@@ -1125,6 +1199,7 @@ impl Reader<'_> {
             }
         }
         let urls = bare_urls(&chars, &covered);
+        let hrefs = self.hrefs(&chars, &spans, &urls);
         let marks_at = |i: usize, html: Marks, url: bool| -> Marks {
             let mut m = span_marks[i];
             for (on, html_on) in [
@@ -1142,6 +1217,7 @@ impl Reader<'_> {
             }
             m.lang = html.lang;
             m.link |= url;
+            m.href = hrefs[i];
             m
         };
         // **Each construct's formula and closing marker, and the next ruby

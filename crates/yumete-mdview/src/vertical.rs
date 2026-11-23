@@ -928,10 +928,10 @@ impl Engine {
                     let lift = if u.lead { u.em / 2.0 } else { 0.0 };
                     let glyph = vello_cpu::Glyph { id: *gid, x: axis + dx, y: y + dy - lift };
                     let cell = rect(axis - size / 2.0, y - lift, *size, u.adv);
-                    let same = batch.as_ref().is_some_and(|b| b.font == *font && b.size == *size && b.color == u.ink.color && b.coords == *coords);
+                    let same = batch.as_ref().is_some_and(|b| b.font == *font && b.size == *size && b.color == u.ink.color && b.coords == *coords && b.link == u.ink.link);
                     if !same {
                         flush(&mut batch, out);
-                        batch = Some(Run { font: font.clone(), size: *size, coords: coords.clone(), color: u.ink.color, transform: Affine::IDENTITY, glyphs: Vec::new(), bounds: cell, text: String::new(), spans: Vec::new() });
+                        batch = Some(Run { font: font.clone(), size: *size, coords: coords.clone(), color: u.ink.color, transform: Affine::IDENTITY, glyphs: Vec::new(), bounds: cell, text: String::new(), spans: Vec::new(), link: u.ink.link });
                     }
                     if let Some(b) = batch.as_mut() {
                         b.glyphs.push(glyph);
@@ -947,7 +947,7 @@ impl Engine {
                     let glyphs: Vec<vello_cpu::Glyph> = glyphs.iter().map(|&(id, x, gy)| vello_cpu::Glyph { id, x, y: gy }).collect();
                     let bounds = rect(axis - u.thick / 2.0 - size * 0.2, y, u.thick + size * 0.4, u.adv);
                     let (text, spans) = whole(words(u), glyphs.len());
-                    out.items.push(Item::Glyphs(Box::new(Run { font: font.clone(), size: *size, coords: coords.clone(), color: u.ink.color, transform, glyphs, bounds, text, spans })));
+                    out.items.push(Item::Glyphs(Box::new(Run { font: font.clone(), size: *size, coords: coords.clone(), color: u.ink.color, transform, glyphs, bounds, text, spans, link: u.ink.link })));
                 }
                 Look::Across { font, coords, size, glyphs, width, room, base, shift } => {
                     flush(&mut batch, out);
@@ -957,7 +957,7 @@ impl Engine {
                     let glyphs: Vec<vello_cpu::Glyph> = glyphs.iter().map(|&(id, x, gy)| vello_cpu::Glyph { id, x, y: gy }).collect();
                     let bounds = rect(x0 - size * 0.2, y, width * sx + size * 0.4, u.adv.max(*size));
                     let (text, spans) = whole(words(u), glyphs.len());
-                    out.items.push(Item::Glyphs(Box::new(Run { font: font.clone(), size: *size, coords: coords.clone(), color: u.ink.color, transform, glyphs, bounds, text, spans })));
+                    out.items.push(Item::Glyphs(Box::new(Run { font: font.clone(), size: *size, coords: coords.clone(), color: u.ink.color, transform, glyphs, bounds, text, spans, link: u.ink.link })));
                 }
                 Look::Pic { pix, w, h, turned } => {
                     flush(&mut batch, out);
@@ -1588,7 +1588,7 @@ impl Engine {
                 let same = batch.as_ref().is_some_and(|b| b.font == c.font && b.size == c.size && b.color == c.color && b.coords == c.coords);
                 if !same {
                     flush(&mut batch, out);
-                    batch = Some(Run { font: c.font.clone(), size: c.size, coords: c.coords.clone(), color: c.color, transform: turn, glyphs: Vec::new(), bounds: rect(right - y0 - lh, top + x, lh, 0.0), text: String::new(), spans: Vec::new() });
+                    batch = Some(Run { font: c.font.clone(), size: c.size, coords: c.coords.clone(), color: c.color, transform: turn, glyphs: Vec::new(), bounds: rect(right - y0 - lh, top + x, lh, 0.0), text: String::new(), spans: Vec::new(), link: 0 });
                 }
                 if let Some(b) = batch.as_mut() {
                     b.glyphs.extend(c.glyphs.iter().map(|&(id, gx, gy)| vello_cpu::Glyph { id, x: x + gx, y: y0 + base + gy }));
