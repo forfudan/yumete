@@ -1180,7 +1180,7 @@ mod tests {
         // the page made afresh.
         editor.execute(&format!(":open {}", main.display())).unwrap();
         editor.steer_previews();
-        assert_eq!(editor.previews(), vec![(second, main.clone())]);
+        assert_eq!(editor.previews(), vec![(second, main.canonicalize().unwrap())]);
         let moved = format!("{}-1", preview::task_id(second));
         loop {
             assert!(Instant::now() < deadline, "the moved preview drew no page: {:?}", with_board(second, |b| b.note.clone()));
