@@ -1042,7 +1042,7 @@ impl Editor {
     /// back in its column for the others; `.` repeats them as the
     /// Normal-mode command they were. Run by `vim_join_selections`,
     /// `vim_indent` and `vim_unindent` while extending.
-    pub(super) fn vim_visual_lines(&mut self, key: Key, c: char) {
+    pub(super) fn vim_visual_lines(&mut self, key: Key, c: char, times: usize) {
         // The cursor's own column, read before a linewise
         // selection is widened to whole lines (nvim keeps it).
         let column = {
@@ -1066,17 +1066,18 @@ impl Editor {
         };
         let revision = self.current_buffer().revision();
         let was = std::mem::replace(&mut self.expanding_alias, true);
+        self.count = (times > 1).then_some(times);
         self.on_normal_key(key);
         self.expanding_alias = was;
         // **`.` repeats it as the Normal-mode command it was**: `3>>`
-        // for three lines indented, `3J` for three joined. Recorded as
-        // the bare `>` it would be a waiting operator that eats the
-        // next keys.
-        let mut again: Vec<Key> = lines.to_string().chars().map(Key::Char).collect();
-        match c {
-            'J' => again.push(Key::Char('J')),
-            _ => again.extend([Key::Char(c), Key::Char(c)]),
-        }
+        // for three lines indented, `3J` for three joined, `3>>3>>` for
+        // `V2>` over three. Recorded as the bare `>` it would be a waiting
+        // operator that eats the next keys.
+        let once: Vec<Key> = lines.to_string().chars().map(Key::Char).collect();
+        let again: Vec<Key> = match c {
+            'J' => once.into_iter().chain([Key::Char('J')]).collect(),
+            _ => (0..times.max(1)).flat_map(|_| once.iter().copied().chain([Key::Char(c), Key::Char(c)])).collect(),
+        };
         self.block_repeat = Some(again);
         self.extend = false;
         let to = match c {

@@ -36,6 +36,8 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Fixed
 
+- **Under vim, `iw` and `aw` grow a Visual selection of more than one character** from the cursor's end, as vim does (`vjiw`, `viwiw`, `vawaw`); after `V` they take a word charwise, and `C-v iw` takes a word, keeping a block of several lines a block, instead of starting Insert.
+- **Under vim, `3v` selects three characters, `3V` three lines, and `V2>` shifts the lines twice**, as vim does; `O` in a block whose cursor's line is too short for the other column leaves both corners where they are.
 - **Under vim, a count before a register's name counts**: `3"ap` puts three times, as `"a3p` does, and counts on both sides multiply (`2"a3p` puts six), as in vim.
 - **The block cursor on a line break is one cell wide**, after a Chinese character as after a letter: it took the width of the character before it.
 - **Under vim, `o` on a last line with no line break, then an arrow up, keeps the new line**, as vim does; it used to be taken back.

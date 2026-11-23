@@ -223,6 +223,14 @@ impl Editor {
         if what == motion::Object::Paragraph && self.extend && self.as_vim() {
             return self.vim_visual_paragraph(around, count);
         }
+        // `V` is a line, not a word: the selection a word takes is charwise
+        // (vim's `current_word`).
+        if matches!(what, motion::Object::Word { .. }) && self.extend && self.as_vim() {
+            self.vim_lines = false;
+            if self.sel.anchor() != self.sel.head() {
+                return self.vim_visual_words(what, around, count);
+            }
+        }
         let span = self.run_motion(motion::Motion::Object { what, around, count });
         if span == motion::Span::Missed {
             self.status = match what {
@@ -300,6 +308,92 @@ impl Editor {
             }
         }
         self.sel.set_head(rope.line_to_char(start as usize));
+        self.refresh_goal_column();
+        if failed {
+            self.fail_the_motion();
+        }
+    }
+
+    /// **vim's `iw` and `aw` on a Visual selection of more than one
+    /// character** (`current_word`): it grows from the cursor's end by
+    /// `count` more, away from the anchor. Each step past the cursor takes
+    /// the word or the run of blanks there (`iw`), or that and the next one
+    /// when they are a word and blanks (`aw`: a word and the blanks after
+    /// it, or blanks and the word after them). A line's break is stepped
+    /// over, and a step off the file fails, as a motion does.
+    fn vim_visual_words(&mut self, what: motion::Object, around: bool, count: usize) {
+        let back = self.sel.head() < self.sel.anchor();
+        let was = self.sel.clone();
+        let rope = self.current_buffer().rope().clone();
+        let len = rope.len_chars();
+        let blank = |at: usize| matches!(rope.get_char(at), Some(' ' | '\t' | '\u{3000}'));
+        let breaks = |at: usize| matches!(rope.get_char(at), Some('\n') | None);
+        // One unit, `iw`'s, at `at`: its first and last character.
+        let unit = |ed: &mut Self, at: usize| -> Option<(usize, usize)> {
+            ed.sel = crate::selection::Selections::one(crate::selection::Range::at(at));
+            let span = ed.run_motion(motion::Motion::Object { what, around: false, count: 1 });
+            match span {
+                motion::Span::Over { anchor, head } => Some((anchor.min(head), anchor.max(head))),
+                _ => None,
+            }
+        };
+        let mut at = was.head();
+        let mut failed = false;
+        for _ in 0..count.max(1) {
+            // The character after the cursor's (before it, going back), over
+            // the break of a line that has text.
+            let probe = match back {
+                false => {
+                    let next = motion::next_grapheme(&rope, at);
+                    match next < len && breaks(next) && next > 0 && !breaks(next - 1) {
+                        true => next + 1,
+                        false => next,
+                    }
+                }
+                true => match at.checked_sub(1) {
+                    Some(prev) if breaks(prev) && prev > 0 && !breaks(prev - 1) => prev - 1,
+                    Some(_) => motion::prev_grapheme(&rope, at),
+                    None => usize::MAX,
+                },
+            };
+            if probe >= len {
+                failed = true;
+                break;
+            }
+            // An empty line is blanks up to the next word: `iw` stops at that
+            // word's first character, `aw` takes the word too.
+            if !back && breaks(probe) {
+                if probe + 1 >= len {
+                    failed = true;
+                    break;
+                }
+                at = match around {
+                    false => probe + 1,
+                    true => unit(self, probe + 1).map_or(probe + 1, |(_, last)| last),
+                };
+                continue;
+            }
+            let Some((first, last)) = unit(self, probe) else {
+                failed = true;
+                break;
+            };
+            let on_blank = blank(probe);
+            at = match back { false => last, true => first };
+            if around {
+                // The second unit of `aw`: blanks after a word, a word after blanks.
+                let next = match back {
+                    false => (last + 1 < len).then(|| motion::next_grapheme(&rope, last)),
+                    true => first.checked_sub(1),
+                };
+                if let Some(next) = next.filter(|&n| !breaks(n) && blank(n) != on_blank) {
+                    if let Some((first, last)) = unit(self, next) {
+                        at = match back { false => last, true => first };
+                    }
+                }
+            }
+        }
+        self.sel = was;
+        self.sel.set_head(at);
         self.refresh_goal_column();
         if failed {
             self.fail_the_motion();

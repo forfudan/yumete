@@ -1572,9 +1572,13 @@ impl Editor {
             // end, before Visual reads it at the tab's start.
             let want = self.column_wanted();
             self.sel.set_goal(Some(want));
+            let entering = !self.extend;
             self.extend = true;
             self.vim_lines = true;
             self.drop_register_into_visual();
+            if entering {
+                self.select_counted(operator_count, 'j');
+            }
             return;
         }
         let want = self.column_wanted();
@@ -1632,6 +1636,19 @@ impl Editor {
         self.vim_lines = false;
         if self.extend {
             self.drop_register_into_visual();
+            if self.as_vim() {
+                self.select_counted(operator_count, 'l');
+            }
+        }
+    }
+
+    /// **vim's `3v` and `3V` select three characters or three lines**
+    /// (`nv_visual`), by `l` or `j` from the cursor. vim's other reading of
+    /// the count, the size of the last Visual operation again, is not here.
+    fn select_counted(&mut self, count: Option<usize>, step: char) {
+        if let Some(n) = count.filter(|&n| n > 1) {
+            self.count = Some(n - 1);
+            self.on_normal_key(Key::Char(step));
         }
     }
 
@@ -2636,7 +2653,7 @@ impl Editor {
     pub(super) fn cmd_join_selections(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
         if self.as_vim() && self.extend && !self.expanding_alias {
-            return self.vim_visual_lines(key, 'J');
+            return self.vim_visual_lines(key, 'J', 1);
         }
         if self.joining_welds_a_grid() {
             self.status = say!("table.join-would-change-columns");
@@ -2901,7 +2918,8 @@ impl Editor {
         let Cx { key, count, operator_count, continuing_zong } = cx;
         if let Key::Char(c @ ('>' | '<')) = key {
             if self.as_vim() && self.extend && !self.expanding_alias {
-                return self.vim_visual_lines(key, c);
+                // `V3>` shifts the lines three times (`:h v_>`).
+                return self.vim_visual_lines(key, c, count);
             }
         }
         let Key::Char(c) = key else { return };

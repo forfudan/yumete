@@ -360,13 +360,19 @@ impl super::Editor {
                     self.block = Some(Block { anchor: block.cursor, cursor: block.anchor, goal: None, ..block });
                     return self.show_block();
                 }
-                // The other corner on the same line: the columns trade places.
+                // The other corner on the same line: the columns trade places
+                // (vim's `v_swap_corners`). A cursor whose line is too short
+                // to reach the other column stays, and so does the anchor.
                 Key::Char('O') => {
                     let rope = self.current_buffer().rope();
-                    let (la, ca, _) = place(rope, self.tab_stop(), block.anchor);
-                    let (lc, cc, _) = place(rope, self.tab_stop(), block.cursor);
-                    let anchor = at_column(rope, self.tab_stop(), la, cc);
-                    let cursor = at_column(rope, self.tab_stop(), lc, ca);
+                    let tab = self.tab_stop();
+                    let (la, ca, _) = place(rope, tab, block.anchor);
+                    let (lc, cc, _) = place(rope, tab, block.cursor);
+                    let (left, right) = (ca.min(cc), ca.max(cc));
+                    let (mut anchor, mut cursor) = (at_column(rope, tab, la, left), at_column(rope, tab, lc, right));
+                    if cursor == block.cursor {
+                        (anchor, cursor) = (at_column(rope, tab, la, right), at_column(rope, tab, lc, left));
+                    }
                     self.block = Some(Block { anchor, cursor, goal: None, ..block });
                     return self.show_block();
                 }
@@ -428,6 +434,13 @@ impl super::Editor {
                     self.block_replace = true;
                     return;
                 }
+                // **`i` and `a` begin a text object**, as in any Visual mode
+                // (`I` and `A` are the block's Insert); the next key names it.
+                Key::Char(c @ ('i' | 'a')) => {
+                    self.pending = Pending::MatchPair { around: c == 'a' };
+                    self.operator_count = None;
+                    return;
+                }
                 Key::Char('~') => {
                     return self.block_change(block, Rewrite::Whole(|s| {
                         s.chars()
@@ -459,6 +472,37 @@ impl super::Editor {
                 }
                 _ => {}
             }
+        }
+        // **The object `i` or `a` named** (vim's `current_word`,
+        // `current_block`): a word grows the block's cursor corner as it grows
+        // a charwise selection, and the block stays; from a block of one
+        // character, and for any other object, the selection is charwise.
+        if let (Pending::MatchPair { .. }, Key::Char(c)) = (self.pending, key) {
+            if matches!(c, 'w' | 'W') && block.anchor != block.cursor {
+                self.sel = Selections::one(Range::new(block.anchor, block.cursor));
+                self.extend = true;
+                self.on_normal_key(key);
+                self.extend = false;
+                let cursor = self.sel.head();
+                if let Some(b) = self.block.as_mut() {
+                    b.cursor = cursor;
+                    b.goal = None;
+                    b.to_line_end = false;
+                }
+                return self.show_block();
+            }
+            // An object that is not there leaves the block as it was.
+            self.object_missed = false;
+            let was = self.sel.clone();
+            self.block_to_visual(block, false);
+            self.on_normal_key(key);
+            if std::mem::take(&mut self.object_missed) {
+                self.sel = was;
+                self.extend = false;
+                self.block = Some(block);
+                return self.show_block();
+            }
+            return;
         }
         // **The corner may stand just past a line's end**, as vim's Visual
         // cursor may (`nv_right`'s `past_line`, `coladvance` in Visual mode):

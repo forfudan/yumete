@@ -49128,3 +49128,43 @@ fn vim_a_count_before_the_register_name_counts() {
     assert_eq!(ed.current_buffer().rope().to_string(), "ab\nab\ncd\n", "helix");
 }
 
+/// **vim's `iw` and `aw` grow a Visual selection of more than one
+/// character** from the cursor's end (`current_word`); from one character
+/// they take the word, `V` turning charwise and `C-v` keeping its block.
+/// Each measured in nvim `--clean`.
+#[test]
+fn vim_visual_word_objects_grow_the_selection() {
+    for (keys, want) in [
+        ("vjiwd", " yy\nq\n"),
+        ("veawd", ", gamma\nxx yy\nq\n"),
+        ("vawawd", ", gamma\nxx yy\nq\n"),
+        ("viwiwd", "beta, gamma\nxx yy\nq\n"),
+        ("Vawd", "beta, gamma\nxx yy\nq\n"),
+        ("ᵛiwd", " beta, gamma\nxx yy\nq\n"),
+        ("ᵛjiwd", "pha beta, gamma\n yy\nq\n"),
+    ] {
+        let mut ed = typed_vim("alpha beta, gamma\nxx yy\nq\n");
+        feed_vim(&mut ed, keys);
+        assert_eq!(ed.current_buffer().rope().to_string(), want, "{keys}");
+    }
+}
+
+/// **vim's counts in Visual mode** (nvim `--clean`): `3v` selects three
+/// characters and `2V` two lines (`nv_visual`), and `V2>` shifts twice.
+/// **`O` in a block whose cursor's line is too short for the other column
+/// leaves both corners** (`v_swap_corners`).
+#[test]
+fn vim_visual_counts_and_the_block_corners() {
+    for (keys, want) in [
+        ("3vd", "ha beta, gamma\nxx yy\nq\n"),
+        ("2Vd", "q\n"),
+        ("V2>", "        alpha beta, gamma\nxx yy\nq\n"),
+        ("6lᵛjlOd", "alphaeta, gamma\nxx yy\nq\n"),
+        ("6lᵛjlOhd", "alpheta, gamma\nxx y\nq\n"),
+    ] {
+        let mut ed = typed_vim("alpha beta, gamma\nxx yy\nq\n");
+        feed_vim(&mut ed, keys);
+        assert_eq!(ed.current_buffer().rope().to_string(), want, "{keys}");
+    }
+}
+
