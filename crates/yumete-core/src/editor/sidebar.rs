@@ -2456,10 +2456,9 @@ impl Editor {
     /// Open a picker over the buffers already open (`Space b`).
     pub(super) fn open_buffer_picker(&mut self) {
         let items = self
-            .buffers
-            .iter()
-            .enumerate()
-            .map(|(i, b)| crate::picker::Item::Buffer(i, b.display_name()))
+            .listed()
+            .into_iter()
+            .map(|i| crate::picker::Item::Buffer(i, self.buffers[i].display_name()))
             .collect();
         self.show_the_picker(crate::picker::Picker::new(&say!("picker.buffers"), items));
     }

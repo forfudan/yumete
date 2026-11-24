@@ -815,7 +815,22 @@ impl Editor {
     /// How many buffers are open, and which one is showing (both 1-based, for
     /// the status line).
     pub fn buffer_position(&self) -> (usize, usize) {
-        (self.current + 1, self.buffers.len())
+        let listed = self.listed();
+        (self.listed_position(&listed) + 1, listed.len())
+    }
+
+    /// **The buffers a person sees and walks**, in order: all but the copy a
+    /// side-by-side diff made for its left column ([`Self::diff_copy`]).
+    pub(super) fn listed(&self) -> Vec<usize> {
+        let copy = self.diff_copy();
+        (0..self.buffers.len()).filter(|&i| Some(self.buffers[i].id()) != copy).collect()
+    }
+
+    /// Where the current buffer stands in `listed`, the copy counted as the
+    /// text it is compared with.
+    fn listed_position(&self, listed: &[usize]) -> usize {
+        let id = self.diff_stand_in(self.buffers[self.current].id());
+        listed.iter().position(|&i| self.buffers[i].id() == id).unwrap_or(0)
     }
 
     /// Show the next buffer, wrapping (Helix `gn`, `:buffer-next`).
@@ -823,14 +838,15 @@ impl Editor {
         if self.only_one_buffer() {
             return;
         }
-        let next = (self.current + 1) % self.buffers.len();
-        self.show_buffer(next);
+        let listed = self.listed();
+        let next = (self.listed_position(&listed) + 1) % listed.len();
+        self.show_buffer(listed[next]);
     }
 
     /// Say so when there is nowhere to switch to, rather than swallowing the
     /// key: a `gn` that does nothing silently reads as a broken keymap.
     fn only_one_buffer(&mut self) -> bool {
-        if self.buffers.len() == 1 {
+        if self.listed().len() <= 1 {
             self.status = say!("buffer.only-one-open");
             return true;
         }
@@ -875,9 +891,10 @@ impl Editor {
         if self.only_one_buffer() {
             return;
         }
-        let count = self.buffers.len();
-        let previous = (self.current + count - 1) % count;
-        self.show_buffer(previous);
+        let listed = self.listed();
+        let count = listed.len();
+        let previous = (self.listed_position(&listed) + count - 1) % count;
+        self.show_buffer(listed[previous]);
     }
 
     /// Switch to buffer `index`, putting the cursor back where it was left.
@@ -1023,15 +1040,15 @@ impl Editor {
 
     /// The number of open buffers.
     pub fn buffer_count(&self) -> usize {
-        self.buffers.len()
+        self.listed().len()
     }
 
     /// Every open buffer's name and whether it has unsaved changes — what the
     /// tab bar draws (Feature #95).
     pub fn buffer_tabs(&self) -> Vec<(String, bool)> {
-        self.buffers
-            .iter()
-            .map(|b| (b.display_name(), b.is_modified()))
+        self.listed()
+            .into_iter()
+            .map(|i| (self.buffers[i].display_name(), self.buffers[i].is_modified()))
             .collect()
     }
 
@@ -1039,13 +1056,15 @@ impl Editor {
     /// current (the live window's), visible (on screen in another window)
     /// or in the background, as bufferline.nvim and barbar draw them.
     pub fn tabs_shown_elsewhere(&self) -> Vec<bool> {
-        let mut shown = vec![false; self.buffers.len()];
+        let listed = self.listed();
+        let mut shown = vec![false; listed.len()];
         for window in self.windows.leaves() {
             if window == self.live {
                 continue;
             }
             let Some(pane) = self.panes.get(&window) else { continue };
-            if let Some(i) = self.buffers.iter().position(|b| b.id() == pane.buffer) {
+            let id = self.diff_stand_in(pane.buffer);
+            if let Some(i) = listed.iter().position(|&i| self.buffers[i].id() == id) {
                 shown[i] = true;
             }
         }
@@ -1063,9 +1082,11 @@ impl Editor {
         self.buffers.iter().filter_map(|b| b.path().map(Path::to_path_buf)).collect()
     }
 
-    /// Show the `index`th buffer, for a front end that can point at one.
+    /// Show the `index`th tab's buffer, for a front end that can point at one.
     pub fn show_buffer_at(&mut self, index: usize) {
-        self.show_buffer(index);
+        if let Some(&i) = self.listed().get(index) {
+            self.show_buffer(i);
+        }
     }
 
     /// Open `path` as a new buffer and make it active.

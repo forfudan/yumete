@@ -6942,6 +6942,28 @@ fn left_button(
                         pointer.text = Some(editor.live_window());
                     }
                 }
+            } else if let Some(left) = other_diff_column_at(editor, config, size, seats, mouse) {
+                // **A click in the column without the keys hands it the
+                // keys**, the caret where it landed, as a click in another
+                // window does. The page stays put: its top becomes the row
+                // beside the one it was, before the click is read.
+                let was = seats[editor.live_pane()].diff_side;
+                if editor.diff_to_column(left) {
+                    let width = editor.wrap_width().unwrap_or(usize::MAX / 2).max(1);
+                    let seat = &mut seats[editor.live_pane()];
+                    if let Some(was) = was {
+                        seat.top = editor.diff_twin_top(was, seat.top, width);
+                        seat.left = 0;
+                    }
+                    seat.diff_side = Some(match left {
+                        true => yumete_core::align::Side::Old,
+                        false => yumete_core::align::Side::New,
+                    });
+                    if let Some(at) = text_at(editor, config, size, seats, mouse) {
+                        editor.point_at(at);
+                    }
+                    pointer.text = Some(editor.live_window());
+                }
             } else if let Some(at) = text_at(editor, config, size, seats, mouse) {
                 let now = std::time::Instant::now();
                 let double = is_double_click(pointer.last_press, now, mouse.column, mouse.row);
@@ -10605,6 +10627,28 @@ fn text_at(
     mouse: ratatui::crossterm::event::MouseEvent,
 ) -> Option<usize> {
     text_at_under(editor, config, size, seats, mouse, None)
+}
+
+/// **Whether a click fell in a side-by-side diff's column without the
+/// keys** — `Some(true)` for the left one — by the rectangles the frame drew.
+fn other_diff_column_at(
+    editor: &Editor,
+    config: &Config,
+    size: Option<ratatui::layout::Size>,
+    seats: &Seats,
+    mouse: ratatui::crossterm::event::MouseEvent,
+) -> Option<bool> {
+    let columns = editor.diff_columns()?;
+    let size = size?;
+    let top = seats[editor.live_pane()].top.line;
+    let head_rows = 2 * u16::from(!editor.grid_has_the_pane() && editor.table_head_is_off_the_page(top));
+    let area = page_areas(editor, config, Rect::new(0, 0, size.width, size.height), head_rows).panes[editor.live_pane()];
+    if mouse.row < area.y || mouse.row >= area.y + area.height {
+        return None;
+    }
+    let strips = horizontal_pages(editor, config, area);
+    let other = *strips.get(usize::from(columns.keys_left))?;
+    (mouse.column >= other.x && mouse.column < other.x + other.width).then_some(!columns.keys_left)
 }
 
 /// [`text_at`], with the table head's rows the frame was drawn with when the

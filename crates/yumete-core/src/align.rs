@@ -183,11 +183,27 @@ impl Alignment {
     /// block (or its pair, in an unchanged block), plus the whole height of
     /// every following block this side has no lines in.
     pub fn pads_after(&self, side: Side, line: usize, rows: &dyn Fn(Side, usize) -> usize) -> usize {
+        self.pads(side, line, rows, true)
+    }
+
+    /// [`Self::pads_after`] less the levelling of unchanged pairs, for an
+    /// estimate of a column's rows: two unchanged lines differ in height
+    /// only where a caret shows one's markup, and measuring every line of
+    /// both texts to find that row or two would cost what the whole
+    /// estimate costs.
+    pub fn change_pads_after(&self, side: Side, line: usize, rows: &dyn Fn(Side, usize) -> usize) -> usize {
+        self.pads(side, line, rows, false)
+    }
+
+    fn pads(&self, side: Side, line: usize, rows: &dyn Fn(Side, usize) -> usize, unchanged: bool) -> usize {
         let Some(b) = self.block_of(side, line) else { return 0 };
         let block = &self.blocks[b];
         let mine = block.on(side);
         let ends = line + 1 == mine.end;
-        let own = self.own_pad(b, side, line, rows);
+        let own = match block.changed || unchanged {
+            true => self.own_pad(b, side, line, rows),
+            false => 0,
+        };
         let trailing = match ends {
             true => self.blocks[b + 1..]
                 .iter()

@@ -49,10 +49,11 @@ const SLOW: Duration = Duration::from_millis(5);
 const PAUSE: Duration = Duration::from_millis(300);
 
 /// What a table of rows is good for: the text, the width it was folded to,
-/// and whether blank lines leave the page.
+/// whether blank lines leave the page, and a side-by-side diff's filler rows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Key {
     revision: u64,
+    diff: Option<(u64, u64, bool)>,
     width: Option<usize>,
     blank_lines_fold: bool,
 }
@@ -81,14 +82,24 @@ impl Rows {
         let rope = editor.current_buffer().rope();
         let off = editor.blank_lines_off_the_page();
         let mut before = Vec::with_capacity(rope.len_lines() + 1);
-        before.push(0u32);
-        let mut total: u32 = 0;
+        // **A side-by-side diff's filler rows are rows too**: the thumb is
+        // the size of the column as it scrolls, pads and all.
+        let width = key.width.unwrap_or(usize::MAX / 2).max(1);
+        let lead = match key.diff {
+            Some(_) => editor.diff_lead(width) as u32,
+            None => 0,
+        };
+        before.push(lead);
+        let mut total: u32 = lead;
         let mut end_line = |cells: usize| {
             let n = before.len() - 1;
             let rows = match (off.as_deref().is_some_and(|off| off.get(n).copied().unwrap_or(false)), key.width) {
                 (true, _) => 0,
                 (false, None) => 1,
                 (false, Some(width)) => cells.div_ceil(width.max(1)).max(1),
+            } + match key.diff {
+                Some(_) => editor.diff_change_pads(width, n),
+                None => 0,
             };
             total = total.saturating_add(rows as u32);
             before.push(total);
@@ -155,6 +166,7 @@ impl Estimates {
             revision: buffer.revision(),
             width: editor.wrap_width(),
             blank_lines_fold: editor.blank_lines_off_the_page().is_some(),
+            diff: editor.diff_key(),
         };
         let id = (buffer.id(), key.width, key.blank_lines_fold);
         self.clock += 1;
@@ -551,7 +563,7 @@ mod tests {
     #[test]
     fn a_closed_fold_counts_its_one_row() {
         let rows = Rows {
-            key: Key { revision: 0, width: Some(10), blank_lines_fold: false },
+            key: Key { revision: 0, width: Some(10), blank_lines_fold: false, diff: None },
             // Five lines of 2, 1, 3, 1, 1 rows.
             before: vec![0, 2, 3, 6, 7, 8],
             used: 0,
@@ -589,7 +601,7 @@ mod tests {
     /// on, and past the blank lines that take no row.
     #[test]
     fn a_row_is_found_on_its_line() {
-        let rows = |before: Vec<u32>| Rows { key: Key { revision: 0, width: Some(10), blank_lines_fold: false }, before, used: 0, took: Duration::ZERO, seen: (0, Instant::now()) };
+        let rows = |before: Vec<u32>| Rows { key: Key { revision: 0, width: Some(10), blank_lines_fold: false, diff: None }, before, used: 0, took: Duration::ZERO, seen: (0, Instant::now()) };
         // Five lines of 2, 1, 3, 1, 1 rows.
         let five = rows(vec![0, 2, 3, 6, 7, 8]);
         let found: Vec<_> = (0..8).map(|row| line_at(&five, &[], row)).collect();
@@ -608,7 +620,7 @@ mod tests {
     #[test]
     fn a_line_falls_in_the_cell_its_rows_reach() {
         let rows = Rows {
-            key: Key { revision: 0, width: Some(10), blank_lines_fold: false },
+            key: Key { revision: 0, width: Some(10), blank_lines_fold: false, diff: None },
             // Ten lines of a row each, but line 2 of three.
             before: vec![0, 1, 2, 5, 6, 7, 8, 9, 10, 11, 12],
             used: 0,

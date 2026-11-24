@@ -113,6 +113,23 @@ impl Editor {
             .filter(|d| self.buffer_with(d.left).is_some() && self.buffer_with(d.right).is_some())
     }
 
+    /// **The copy the view made for its left column** — a revision or the
+    /// saved file — which lives only inside the view: no tab, no place in
+    /// `gn`/`gp` or the buffer picker; the column's title names it.
+    pub(super) fn diff_copy(&self) -> Option<u64> {
+        self.diff().filter(|d| d.copy).map(|d| d.left)
+    }
+
+    /// The buffer that stands for `id` among the listed ones: the copy is
+    /// counted as the text it is compared with, so with the keys in the left
+    /// column the tab lit is that text's.
+    pub(super) fn diff_stand_in(&self, id: u64) -> u64 {
+        match self.diff() {
+            Some(d) if d.copy && d.left == id => d.right,
+            _ => id,
+        }
+    }
+
     /// The buffer the view's window shows.
     fn diff_shown(&self, d: &DiffView) -> Option<u64> {
         match d.window == self.live {
@@ -339,6 +356,24 @@ impl Editor {
         let Some(side) = self.side_in_view() else { return 0 };
         let Some(al) = self.diff_alignment() else { return 0 };
         al.pads_after(side, line, &|s, l| self.diff_rows(s, l, width))
+    }
+
+    /// **What the filler rows depend on**, while a view is in the window:
+    /// both texts' revisions and which column has the keys. A table of rows
+    /// counted with the pads is good for as long as this is unchanged.
+    pub fn diff_key(&self) -> Option<(u64, u64, bool)> {
+        let side = self.side_in_view()?;
+        let d = self.diff()?;
+        let revision = |id: u64| self.buffer_with(id).map_or(0, |i| self.buffers[i].revision());
+        Some((revision(d.left), revision(d.right), side == Side::Old))
+    }
+
+    /// [`Self::diff_pads`] for an estimate: the pads that changes make,
+    /// without measuring every unchanged pair ([`Alignment::change_pads_after`]).
+    pub fn diff_change_pads(&self, width: usize, line: usize) -> usize {
+        let Some(side) = self.side_in_view() else { return 0 };
+        let Some(al) = self.diff_alignment() else { return 0 };
+        al.change_pads_after(side, line, &|s, l| self.diff_rows(s, l, width))
     }
 
     /// **Filler rows before the first line** of the side being drawn or keyed.
@@ -617,7 +652,7 @@ impl Editor {
 
     /// **`C-w h` `C-w l` `C-w w` in the view**: the keys to the other column.
     /// Answers whether they moved — never past the view's own edge.
-    pub(super) fn diff_to_column(&mut self, left: bool) -> bool {
+    pub fn diff_to_column(&mut self, left: bool) -> bool {
         let Some(side) = self.side_in_view() else { return false };
         if (side == Side::Old) == left {
             return false;

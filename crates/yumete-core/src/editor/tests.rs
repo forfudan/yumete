@@ -49263,9 +49263,17 @@ fn diff_opens_two_columns_and_closes_with_its_copy() {
     ed.execute(":diff").unwrap();
     assert!(ed.diff_in_view());
     assert_eq!(ed.status(), say!("diff.view-opened", 2));
-    assert_eq!(ed.buffer_tabs().len(), 2, "the saved copy beside the file");
+    assert_eq!(ed.buffer_tabs().len(), 1, "the saved copy lives only in the view: no tab of its own");
+    assert_eq!(ed.buffer_position(), (1, 1));
     let columns = ed.diff_columns().unwrap();
     assert_eq!((columns.left, columns.right.as_str(), columns.keys_left), (say!("diff.title-saved", "notes.md"), "notes.md", false));
+    // With the keys in the copy's column, the file's tab is the lit one,
+    // and `gn` has nowhere else to go.
+    assert!(ed.diff_to_column(true));
+    assert_eq!(ed.buffer_position(), (1, 1));
+    ed.next_buffer();
+    assert_eq!(ed.status(), say!("buffer.only-one-open"));
+    assert!(ed.diff_to_column(false));
     ed.execute(":diff").unwrap();
     assert!(!ed.diff_in_view());
     assert_eq!(ed.buffer_tabs().len(), 1, "the copy goes with the view");
