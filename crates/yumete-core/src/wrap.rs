@@ -150,6 +150,21 @@ pub struct Measure<'a> {
     /// 到一塊長，逐字素走至多 86 µs，而建索引要把那一行整個走一遍（1242 萬字是
     /// 190 ms）。量過：`gh` 之後不往右走，少了這一道就白付 192 ms。
     widths: &'a AskWidths<'a>,
+    /// **Filler rows after a line** (#518): rows of page with no text on them,
+    /// standing beside lines the other column of a side-by-side diff has and
+    /// this one does not.
+    ///
+    /// Part of the measure, not of the renderer, for the reason `drawn` is:
+    /// scrolling, `C-d`, `G`, the scrollbar and the mouse all count rows, and
+    /// a row only the renderer knew of would put each of them on a different
+    /// page. They come after a line's text rows, so an [`Anchor`] can stand
+    /// in them; the caret never does ([`position`], [`next_row`] and
+    /// [`prev_row`] see text rows only).
+    pads: &'a dyn Fn(usize) -> usize,
+    /// **Filler rows before the first line** — the same, for lines the other
+    /// column has above everything this one has. They are line 0's first
+    /// rows, so its text rows start at this index.
+    lead: usize,
 }
 
 /// A page with nothing hidden, for callers that show the source as it is.
@@ -158,6 +173,9 @@ const NOTHING_HIDDEN: &dyn Fn(usize) -> Vec<(usize, usize)> = &|_| Vec::new();
 /// A page with every line on it — and, read the other way, a page every line
 /// of which folds to the measure.
 const NOTHING_FOLDED: &dyn Fn(usize) -> bool = &|_| false;
+
+/// A page with no filler rows: every row holds text.
+const NO_PADS: &dyn Fn(usize) -> usize = &|_| 0;
 
 /// A page with nothing on it but the file's own characters.
 const NOTHING_DRAWN: &dyn Fn(usize) -> Vec<(usize, String)> = &|_| Vec::new();
@@ -189,6 +207,8 @@ impl<'a> Measure<'a> {
             version: None,
             edit: None,
             widths: NOTHING_INDEXED,
+            pads: NO_PADS,
+            lead: 0,
         }
     }
 
@@ -207,6 +227,8 @@ impl<'a> Measure<'a> {
             version: None,
             edit: None,
             widths: NOTHING_INDEXED,
+            pads: NO_PADS,
+            lead: 0,
         }
     }
 
@@ -287,6 +309,25 @@ impl<'a> Measure<'a> {
             Some(index) => index.width(rope, line, a, b, hidden),
             None => walk_width(rope, line, a, b, hidden),
         }
+    }
+
+    /// The same measure, with `pads` naming the filler rows after each line
+    /// and `lead` those before the first. See [`Measure::pads`].
+    pub fn with_pads(self, pads: &'a dyn Fn(usize) -> usize, lead: usize) -> Measure<'a> {
+        Measure { pads, lead, ..self }
+    }
+
+    /// The filler rows before `line`'s text: the lead, on line 0 only.
+    pub fn lead_on(self, line: usize) -> usize {
+        match line {
+            0 => self.lead,
+            _ => 0,
+        }
+    }
+
+    /// The filler rows after `line`'s text.
+    pub fn pads_on(self, line: usize) -> usize {
+        (self.pads)(line)
     }
 
     /// Whether `line` is one row however long it is.
@@ -410,12 +451,16 @@ pub struct Row {
     /// end is the paragraph's own end, and so the only one carrying the line
     /// break.
     pub ends_line: bool,
+    /// A filler row ([`Measure::pads`]): page, with no text on it.
+    pub filler: bool,
+    /// Whether this is the paragraph's first row of text.
+    pub first: bool,
 }
 
 impl Row {
     /// Whether this row starts a new paragraph rather than continuing one.
     pub fn starts_line(&self) -> bool {
-        self.index_in_line == 0
+        self.first
     }
 }
 
@@ -1444,9 +1489,10 @@ fn line_count(rope: &Rope) -> usize {
     rope.len_lines()
 }
 
-/// How many visual rows the logical `line` wraps into (always at least one).
+/// How many visual rows the logical `line` takes (always at least one): the
+/// rows it wraps into, and the filler rows around it.
 pub fn row_count_in_line(rope: &Rope, line: usize, m: Measure) -> usize {
-    rows_of_line(rope, line, m).len()
+    m.lead_on(line) + rows_of_line(rope, line, m).len() + m.pads_on(line)
 }
 
 /// Locate the char index `pos` in the wrapped grid.
@@ -1523,7 +1569,7 @@ pub fn position(rope: &Rope, pos: usize, m: Measure) -> Position {
     let column = column + m.indent_of(line, &line_head(rope, line), index_in_line);
     Position {
         line,
-        index_in_line,
+        index_in_line: index_in_line + m.lead_on(line),
         column,
     }
 }
@@ -1552,15 +1598,30 @@ pub fn rows_from(rope: &Rope, anchor: Anchor, m: Measure, n: usize) -> Vec<Row> 
         }
         let start = rope.line_to_char(line);
         let rows = rows_of_line(rope, line, m);
-        while index < rows.len() && out.len() < n {
-            let (s, e) = rows[index];
-            out.push(Row {
-                line,
-                index_in_line: index,
-                start: start + s,
-                end: start + e,
-                ends_line: index + 1 == rows.len(),
-            });
+        let lead = m.lead_on(line);
+        let count = lead + rows.len() + m.pads_on(line);
+        while index < count && out.len() < n {
+            // A filler row stands at the edge of the line it is beside, and
+            // holds none of it.
+            let row = match index.checked_sub(lead).and_then(|i| rows.get(i).map(|&r| (i, r))) {
+                Some((i, (s, e))) => Row {
+                    line,
+                    index_in_line: index,
+                    start: start + s,
+                    end: start + e,
+                    ends_line: i + 1 == rows.len(),
+                    filler: false,
+                    first: i == 0,
+                },
+                None => {
+                    let at = match index < lead {
+                        true => start,
+                        false => start + rows.last().map_or(0, |r| r.1),
+                    };
+                    Row { line, index_in_line: index, start: at, end: at, ends_line: false, filler: true, first: false }
+                }
+            };
+            out.push(row);
             index += 1;
         }
         line += 1;
@@ -1660,7 +1721,8 @@ fn char_at_column(
 ) -> usize {
     let start = rope.line_to_char(line);
     let rows = rows_of_line(rope, line, m);
-    let index_in_line = index_in_line.min(rows.len() - 1);
+    // Counted from the first text row: a filler row holds nothing to land on.
+    let index_in_line = index_in_line.saturating_sub(m.lead_on(line)).min(rows.len() - 1);
     let (s, e) = rows[index_in_line];
     // The caret may rest one past the last character of a paragraph, but not
     // one past a wrap point in the middle of one — there it would land on the
@@ -1732,9 +1794,11 @@ fn char_at_column(
 }
 
 /// The position one visual row below `pos`, keeping the display column `goal`.
+///
+/// Filler rows are passed over: the caret stands on text rows only.
 pub fn next_row(rope: &Rope, pos: usize, m: Measure, goal: usize) -> usize {
     let here = position(rope, pos, m);
-    let count = row_count_in_line(rope, here.line, m);
+    let count = m.lead_on(here.line) + rows_of_line(rope, here.line, m).len();
     let lines = line_count(rope);
     if here.index_in_line + 1 < count {
         char_at_column(rope, here.line, here.index_in_line + 1, m, goal)
@@ -1748,7 +1812,7 @@ pub fn next_row(rope: &Rope, pos: usize, m: Measure, goal: usize) -> usize {
 /// The position one visual row above `pos`, keeping the display column `goal`.
 pub fn prev_row(rope: &Rope, pos: usize, m: Measure, goal: usize) -> usize {
     let here = position(rope, pos, m);
-    if here.index_in_line > 0 {
+    if here.index_in_line > m.lead_on(here.line) {
         char_at_column(rope, here.line, here.index_in_line - 1, m, goal)
     } else if here.line > 0 {
         let mut above = here.line - 1;
@@ -1758,7 +1822,7 @@ pub fn prev_row(rope: &Rope, pos: usize, m: Measure, goal: usize) -> usize {
             }
             above -= 1;
         }
-        let last = row_count_in_line(rope, above, m) - 1;
+        let last = m.lead_on(above) + rows_of_line(rope, above, m).len() - 1;
         char_at_column(rope, above, last, m, goal)
     } else {
         pos
@@ -1768,6 +1832,55 @@ pub fn prev_row(rope: &Rope, pos: usize, m: Measure, goal: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// **Filler rows** (#518): a lead of one before line 0, two after it.
+    fn padded() -> (Rope, impl Fn(usize) -> usize) {
+        (Rope::from_str("ab\ncd\nef"), |line: usize| if line == 0 { 2 } else { 0 })
+    }
+
+    #[test]
+    fn filler_rows_are_rows_with_no_text() {
+        let (rope, pads) = padded();
+        let m = Measure::plain(10).with_pads(&pads, 1);
+        let rows = rows_from(&rope, Anchor::default(), m, 10);
+        let shape: Vec<(usize, usize, bool, bool)> = rows.iter().map(|r| (r.line, r.index_in_line, r.filler, r.first)).collect();
+        assert_eq!(
+            shape,
+            vec![(0, 0, true, false), (0, 1, false, true), (0, 2, true, false), (0, 3, true, false), (1, 0, false, true), (2, 0, false, true)]
+        );
+        // A filler row holds nothing, at the edge of the line it is beside.
+        assert_eq!((rows[0].start, rows[0].end), (0, 0));
+        assert_eq!((rows[2].start, rows[2].end), (2, 2));
+        assert_eq!(row_count_in_line(&rope, 0, m), 4);
+        assert_eq!(advance(&rope, Anchor::default(), m, 4), Anchor { line: 1, index_in_line: 0 });
+        assert_eq!(retreat(&rope, Anchor { line: 1, index_in_line: 0 }, m, 2), Anchor { line: 0, index_in_line: 2 });
+        assert_eq!(distance(&rope, Anchor::default(), Anchor { line: 2, index_in_line: 0 }, m, 10), Some(5));
+    }
+
+    #[test]
+    fn the_caret_never_stands_on_a_filler_row() {
+        let (rope, pads) = padded();
+        let m = Measure::plain(10).with_pads(&pads, 1);
+        // Line 0's text is its second row, after the lead.
+        assert_eq!(position(&rope, 1, m).index_in_line, 1);
+        // `j` passes over the two rows after line 0, `k` comes back.
+        assert_eq!(next_row(&rope, 1, m, 1), 4);
+        assert_eq!(prev_row(&rope, 4, m, 1), 1);
+        // …and `k` from line 0 has nowhere to go: the lead holds no text.
+        assert_eq!(prev_row(&rope, 1, m, 1), 1);
+    }
+
+    #[test]
+    fn no_filler_rows_change_nothing() {
+        let rope = Rope::from_str("春夏秋冬春夏秋冬\n短\n");
+        let none = |_: usize| 0;
+        let (plain, padded) = (Measure::plain(6), Measure::plain(6).with_pads(&none, 0));
+        assert_eq!(rows_from(&rope, Anchor::default(), plain, 20), rows_from(&rope, Anchor::default(), padded, 20));
+        for at in 0..rope.len_chars() {
+            assert_eq!(position(&rope, at, plain), position(&rope, at, padded));
+            assert_eq!(next_row(&rope, at, plain, 2), next_row(&rope, at, padded, 2));
+        }
+    }
 
     /// The rows of `text` as strings, which is what the reader actually sees.
     fn wrapped(text: &str, width: usize) -> Vec<String> {
