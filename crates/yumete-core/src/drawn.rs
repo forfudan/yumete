@@ -47,6 +47,10 @@ pub enum Ink {
     /// the rest of the line out of the grid, which is the mistake `●` made in
     /// the diagnostics column.
     Footnote,
+    /// **A line break a side-by-side diff found added or taken away**, `␊`
+    /// on the word marks' ground: where the break is, and where the cut
+    /// falls in the paragraph that has none.
+    DiffBreak,
     /// The editor saying something *about* the text beside it: a mark that
     /// should have been full-width, an ellipsis written with three dots.
     ///

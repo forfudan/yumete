@@ -15589,6 +15589,11 @@ fn draw_horizontal(
             // A tab is the one drawn thing with nothing written in it: what
             // shows it is the ground (#374).
             yumete_core::drawn::Ink::Tab => ground.bg(ink.at(yumete_config::rung::BAND)),
+            // On the word marks' ground: it is one of them.
+            yumete_core::drawn::Ink::DiffBreak => match &diff_ink {
+                Some(d) => ground.bg(ink.vcs(diff_wash(d))),
+                None => ground.fg(ink.quiet()),
+            },
             _ => ground.fg(ink.quiet()),
         };
         // **真表格顯示** (#275): 「完全画成表格」. The `|` the writer typed *is*

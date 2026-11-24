@@ -49521,6 +49521,17 @@ fn a_search_opens_a_folded_run_and_jumps_leave_one_closed() {
 }
 
 #[test]
+fn a_split_paragraph_draws_the_break_in_both_columns() {
+    let (mut ed, dir) = diffed("split", "他走了。她留下。\n", "他走了。\n她留下。\n");
+    ed.execute(":diff").unwrap();
+    let mark = crate::drawn::Run::new(4, "␊", crate::drawn::Ink::DiffBreak);
+    assert!(ed.drawn_runs_on_line(0).contains(&mark), "at the end of the line split off");
+    ed.walk_to_region(crate::window::Direction::Left);
+    assert!(ed.drawn_runs_on_line(0).contains(&mark), "where the cut falls in the old paragraph");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn a_moved_line_says_where_it_went() {
     let saved = "the gate creaked open\nwe walked to the well\nthe sun was low\nthe dog barked twice\nsupper was late\n";
     let now = "the gate creaked open\nthe sun was low\nthe dog barked twice\nwe walked to the well\nsupper was late\n";

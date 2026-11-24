@@ -717,6 +717,7 @@ impl Editor {
         runs.extend(self.tab_stops_on_line(line));
         runs.extend(self.notes_on_line(line));
         runs.extend(self.footnote_marks_on_line(line));
+        runs.extend(self.diff_breaks_on_line(line));
         crate::drawn::compose(runs)
     }
 

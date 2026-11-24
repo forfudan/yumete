@@ -74,7 +74,9 @@ pub enum LineState<'a> {
     Same,
     /// Part of a change; the char ranges within the line that changed, empty
     /// when the line is tinted whole (added, removed, or rewritten past
-    /// recognition).
+    /// recognition). **An empty range is a line break** added or taken away
+    /// there: at the end of the line that has it, and where the cut falls in
+    /// the line that has none.
     Changed(&'a [Range<usize>]),
 }
 
@@ -757,6 +759,10 @@ fn pair(
 
     // The word marks: the changed runs of the token diff, tidied.
     let runs = tidy(&ta, &tb, diff.hunks().map(|h| (h.before.start as usize..h.before.end as usize, h.after.start as usize..h.after.end as usize)).collect());
+    let mut breaks: Vec<((Side, usize), usize)> = Vec::new();
+    for (before, after) in &runs {
+        line_breaks(&ta, &tb, before.clone(), after.clone(), &mut breaks);
+    }
     for (before, after) in runs {
         let (before, after) = narrowed(&ta, &tb, before, after);
         for (ts, range, side) in [(&ta, before, Side::Old), (&tb, after, Side::New)] {
@@ -784,8 +790,45 @@ fn pair(
             }
         }
     }
+    // Added after the word marks, so none of them grows over a break.
+    for ((side, line), at) in breaks {
+        if marked[block_of(&cuts, line, side == Side::Old)] {
+            let line_marks = out.marks.entry((side, line)).or_default();
+            line_marks.push(at..at);
+            line_marks.sort_by_key(|r| (r.start, r.end));
+        }
+    }
     let matched: usize = matched_in.iter().map(|m| m.0).sum();
     (matched, total)
+}
+
+/// **A line break added or taken away** in one changed run of tokens: a
+/// paragraph split in two or two joined. Each break on the side that has
+/// them is marked at the end of its line, and the other side at the place
+/// the cut falls, where its run starts. Only a run of nothing but breaks
+/// and spaces is a cut: breaks that come with words are lines put in or
+/// reworked, and a word changed at a cut is marked where it stands already.
+fn line_breaks(ta: &[Token], tb: &[Token], before: Range<usize>, after: Range<usize>, out: &mut Vec<((Side, usize), usize)>) {
+    let count = |ts: &[Token], r: &Range<usize>| ts[r.clone()].iter().filter(|t| t.is_break()).count();
+    let (has, there, other, here, side) = match (count(ta, &before), count(tb, &after)) {
+        (0, 0) => return,
+        (_, 0) => (ta, before, tb, after, Side::Old),
+        (0, _) => (tb, after, ta, before, Side::New),
+        _ => return,
+    };
+    if !has[there.clone()].iter().all(|t| t.is_break() || t.text.trim().is_empty()) {
+        return;
+    }
+    // Where the other side's run starts: its first token, or past the last.
+    let cut = match (other.get(here.start), other.last()) {
+        (Some(t), _) => (t.line, t.from),
+        (None, Some(t)) => (t.line, t.to),
+        (None, None) => return,
+    };
+    for t in has[there].iter().filter(|t| t.is_break()) {
+        out.push(((side, t.line), t.from));
+        out.push(((side.other(), cut.0), cut.1));
+    }
 }
 
 /// **Join changed runs a short stretch apart**: two runs with at most two
@@ -936,6 +979,26 @@ mod tests {
         let old = "rain fell all night and the roads flooded by morning\nend\n";
         let new = "rain fell all night\nand the roads flooded by morning\nend\n";
         assert_eq!(blocks(old, new), vec![(0..1, 0..2, true), (1..3, 2..4, false)]);
+    }
+
+    #[test]
+    fn a_split_or_joined_paragraph_marks_the_break_on_both_sides() {
+        let old = "rain fell all night and the roads flooded by morning\nend\n";
+        let new = "rain fell all night\nand the roads flooded by morning\nend\n";
+        // The space the break took the place of is marked too.
+        let split = align(&lines(old), &lines(new), &words);
+        assert_eq!(split.line(Side::Old, 0), LineState::Changed(&[19..19, 19..20]));
+        assert_eq!(split.line(Side::New, 0), LineState::Changed(&one(19..19)));
+        assert_eq!(split.line(Side::New, 1), LineState::Changed(&[]));
+        let joined = align(&lines(new), &lines(old), &words);
+        assert_eq!(joined.line(Side::Old, 0), LineState::Changed(&one(19..19)));
+        assert_eq!(joined.line(Side::New, 0), LineState::Changed(&[19..19, 19..20]));
+        let cjk = align(&lines("他走了。她留下。\n"), &lines("他走了。\n她留下。\n"), &words);
+        assert_eq!(cjk.line(Side::Old, 0), LineState::Changed(&one(4..4)));
+        assert_eq!(cjk.line(Side::New, 0), LineState::Changed(&one(4..4)));
+        // A line put in beside an edit is no cut.
+        let put_in = align(&lines("the gate creaked\nend\n"), &lines("the gate groaned\na new line\nend\n"), &words);
+        assert!(!matches!(put_in.line(Side::Old, 0), LineState::Changed(m) if m.iter().any(|r| r.is_empty())));
     }
 
     #[test]

@@ -531,6 +531,14 @@ impl Editor {
         })
     }
 
+    /// **The `␊` a side-by-side diff draws in `line`**: one where a line break
+    /// was added or taken away (an empty word mark).
+    pub(super) fn diff_breaks_on_line(&self, line: usize) -> Vec<crate::drawn::Run> {
+        let Some(ink) = self.diff_ink(line) else { return Vec::new() };
+        let marks = ink.marks.iter().filter(|r| r.is_empty());
+        marks.map(|r| crate::drawn::Run::new(r.start, "␊", crate::drawn::Ink::DiffBreak)).collect()
+    }
+
     /// **「moved from line 12」**: where the line the caret is on went or
     /// came from, when it was moved.
     pub fn diff_moved(&self) -> Option<String> {
