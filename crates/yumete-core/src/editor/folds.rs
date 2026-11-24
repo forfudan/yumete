@@ -16,12 +16,15 @@
 use super::*;
 use crate::fold::FoldSet;
 
-/// What a fold is: one made with `zf`, or a heading's section.
+/// What a fold is: one made with `zf`, a heading's section, or a run of
+/// unchanged lines a side-by-side diff folds.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum FoldOf {
     Manual(u64),
     /// The heading's line.
     Heading(usize),
+    /// The run's first line in the old text.
+    Diff(usize),
 }
 
 /// One fold, as lines.
@@ -46,7 +49,7 @@ impl FoldSpan {
 pub(super) struct FoldView {
     /// The syntax too: `:syntax` changes which lines are headings without
     /// an edit.
-    key: (u64, u64, u64, u64, bool, crate::syntax::Syntax),
+    key: FoldKey,
     /// Outermost first: by first line, the longer of two that start on one
     /// line before the shorter.
     pub(super) spans: Vec<FoldSpan>,
@@ -54,20 +57,25 @@ pub(super) struct FoldView {
     shut: Vec<(usize, usize)>,
 }
 
+/// What the folds are worked out from: the buffer and its revision, the
+/// window, the folds opened and closed, whether headings fold, the syntax,
+/// and in a side-by-side diff both texts' revisions.
+type FoldKey = (u64, u64, u64, u64, bool, crate::syntax::Syntax, Option<DiffKey>);
+
 impl Editor {
     /// The folds this window has in this buffer, worked out when the buffer,
     /// the window or a fold changed.
     pub(super) fn fold_view(&self) -> std::cell::Ref<'_, FoldView> {
         let buffer = self.current_buffer();
         let headings = self.heading_folds && self.lists_here();
-        let key = (buffer.id(), buffer.revision(), self.folds_window(), self.fold_generation, headings, buffer.syntax());
+        let key = (buffer.id(), buffer.revision(), self.folds_window(), self.fold_generation, headings, buffer.syntax(), self.diff_key());
         // **The outline waits for Normal mode**: while typing, a view that
         // differs only by the edit stands, so a key typed does not rebuild the
         // book's outline. Not when a fold is closed: lines typed above it
         // would move what it hides.
         let stale = self.fold_view.borrow().as_ref().is_none_or(|view| {
             let only_typed = view.key.0 == key.0
-                && (view.key.2, view.key.3, view.key.4, view.key.5) == (key.2, key.3, key.4, key.5)
+                && (view.key.2, view.key.3, view.key.4, view.key.5, view.key.6) == (key.2, key.3, key.4, key.5, key.6)
                 && self.mode == crate::input::Mode::Insert
                 && view.shut.is_empty();
             view.key != key && !only_typed
@@ -85,7 +93,19 @@ impl Editor {
         self.viewing.get().map_or(self.live, |v| v.window)
     }
 
-    fn work_out_folds(&self, key: (u64, u64, u64, u64, bool, crate::syntax::Syntax), headings: bool) -> FoldView {
+    fn work_out_folds(&self, key: FoldKey, headings: bool) -> FoldView {
+        // **A side-by-side diff folds its unchanged runs and nothing else**:
+        // a fold on one side alone would take rows the other still has
+        // beside it.
+        if self.diff_in_view() {
+            let runs = self.diff_fold_runs().unwrap_or_default();
+            let spans = runs
+                .into_iter()
+                .map(|(first, last, closed, old)| FoldSpan { first, last, closed, of: FoldOf::Diff(old), depth: 1 })
+                .collect::<Vec<_>>();
+            let shut = spans.iter().filter(|s| s.closed).map(|s| (s.first, s.last)).collect();
+            return FoldView { key, spans, shut };
+        }
         let buffer = self.current_buffer();
         let rope = buffer.rope();
         let len = rope.len_chars();
@@ -135,11 +155,6 @@ impl Editor {
 
     /// The closed fold `line` is in, when one is: its first and last line.
     pub(super) fn shut_around(&self, line: usize) -> Option<(usize, usize)> {
-        // None in a side-by-side diff: a fold on one side would take rows the
-        // other side still has beside it.
-        if self.diff_in_view() {
-            return None;
-        }
         let view = self.fold_view();
         let at = view.shut.partition_point(|&(first, _)| first <= line);
         at.checked_sub(1).map(|i| view.shut[i]).filter(|&(_, last)| line <= last)
@@ -155,10 +170,6 @@ impl Editor {
     /// last line: in order, none inside another. A scrollbar counts each as
     /// the one row its first line is drawn on.
     pub fn closed_folds(&self) -> Vec<(usize, usize)> {
-        // None in a side-by-side diff, which draws every fold open.
-        if self.diff_in_view() {
-            return Vec::new();
-        }
         self.fold_view().shut.clone()
     }
 
@@ -192,6 +203,14 @@ impl Editor {
             .iter()
             .find(|s| (s.first, s.last) == (first, last))
             .map_or((1, false), |s| (s.depth, matches!(s.of, FoldOf::Heading(..))));
+        // **A diff's run says how many unchanged lines it hides**: what the
+        // lines say is the same on both sides, and not why they are folded.
+        if self.diff_in_view() {
+            let said = say!("diff.folded", last - first + 1);
+            let width = self.fold_width.get().max(8);
+            let room = width.saturating_sub(yumete_cjk::str_width(&said) + 1);
+            return Some(format!("{said} {}", "·".repeat(room)));
+        }
         let rope = self.current_buffer().rope();
         let text: String = rope
             .line(first)
@@ -267,7 +286,6 @@ impl Editor {
     /// opens it, unless the key was one of vim's jumps, which leave it
     /// closed and the cursor on its line (the place is kept for `zo`).
     pub(super) fn settle_folds(&mut self) {
-        self.settle_diff_folds();
         let keep_closed = std::mem::take(&mut self.fold_stays_closed);
         // A hidden place outlives no move off the fold's line.
         if self.fold_return.is_some() && self.hidden_place().is_none() {
@@ -447,6 +465,7 @@ impl Editor {
                     fold.closed = closed;
                 }
             }
+            FoldOf::Diff(old) => self.set_diff_fold_open(*old, !closed),
             FoldOf::Heading(line) => {
                 let rope = self.current_buffer().rope().clone();
                 let (at, text) = heading_place(&rope, *line);
@@ -579,6 +598,10 @@ impl Editor {
     }
 
     fn keep_fold_level(&mut self, level: usize) {
+        // A diff's runs are not the buffer's folds, nor their level.
+        if self.diff_in_view() {
+            return;
+        }
         let window = self.live;
         self.current_buffer_mut().folds_mut(window).level = Some(level);
     }

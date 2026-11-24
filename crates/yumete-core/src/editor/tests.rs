@@ -49433,69 +49433,85 @@ fn forty(more: bool) -> (String, String) {
 }
 
 #[test]
-fn diff_fold_folds_unchanged_runs_to_one_row_each() {
+fn diff_fold_closes_unchanged_runs_as_vim_closes_folds() {
     let (saved, now) = forty(false);
     let (mut ed, dir) = diffed("fold", &saved, &now);
+    ed.set_key_preset(crate::KeyPreset::Vim);
     ed.execute(":diff").unwrap();
     assert_eq!(ed.switch_state(":diff-fold"), Some(false));
     ed.execute(":diff-fold").unwrap();
     assert_eq!(ed.status(), say!("diff.fold-on"));
     assert_eq!(ed.switch_state(":diff-fold"), Some(true));
-    // The caret on line 21 (index 20), the change: lines 0..17 and 24..41
-    // folded, three lines kept either side.
+    // The change is line 21 (index 20): lines 0..=16 and 24..=40 are closed
+    // folds, three lines kept either side, each drawn as its first line.
     ed.goto_line(21);
-    assert!(ed.line_is_folded(0) && ed.line_is_folded(16));
+    assert_eq!(ed.closed_folds(), vec![(0, 16), (24, 40)]);
+    assert!(ed.fold_head(0) && !ed.line_is_folded(0) && ed.line_is_folded(16));
     assert!(!ed.line_is_folded(17) && !ed.line_is_folded(23));
-    assert!(ed.line_is_folded(24) && ed.line_is_folded(40));
-    // The run at the top is a row before the first line on the page; the
-    // one below is the filler row after the line above it.
-    assert_eq!(ed.diff_lead(80), crate::wrap::Lead { line: 17, rows: 1 });
-    assert_eq!(ed.diff_fold_row(17, 0, 80), Some(17));
-    assert_eq!(ed.diff_pads(80, 23), 1);
-    assert_eq!(ed.diff_fold_row(23, 1, 80), Some(17));
-    assert_eq!(ed.diff_fold_row(23, 0, 80), None, "the line's own row");
+    assert!(ed.fold_head(24) && ed.line_is_folded(40));
+    assert!(ed.fold_line(24).is_some_and(|l| l.starts_with(&say!("diff.folded", 17))));
+    // No filler row stands for a fold.
+    assert_eq!(ed.diff_lead(80), crate::wrap::Lead::top(0));
+    assert_eq!(ed.diff_pads(80, 23), 0);
     // The other column folds the same runs.
     ed.walk_to_region(crate::window::Direction::Left);
     assert_eq!(ed.cursor_line(), 20);
-    assert!(ed.line_is_folded(5) && ed.diff_pads(80, 23) == 1);
+    assert!(ed.fold_head(0) && ed.line_is_folded(5));
     ed.walk_to_region(crate::window::Direction::Right);
-    // `j` from the last line shown steps over nothing it can stand on, and
-    // stops; `k` from the first comes back no further.
+    // `j` and `k` take a closed run as one line, the caret on its row.
     ed.goto_line(24);
     press(&mut ed, "j");
-    assert_eq!(ed.cursor_line(), 23);
-    ed.goto_line(19);
-    press(&mut ed, "kkk");
-    assert_eq!(ed.cursor_line(), 17);
-    // Off again, everything is back.
+    assert_eq!(ed.cursor_line(), 24);
+    assert!(ed.line_is_folded(25), "standing on it leaves it closed");
+    press(&mut ed, "k");
+    ed.goto_line(18);
+    press(&mut ed, "k");
+    assert_eq!(ed.cursor_line(), 0);
+    // `zo` `zc` `za` open and close the run under the caret; `zR` `zM` all.
+    press(&mut ed, "zo");
+    assert!(!ed.line_is_folded(1) && ed.line_is_folded(25));
+    press(&mut ed, "zc");
+    assert!(ed.line_is_folded(1));
+    press(&mut ed, "za");
+    assert!(!ed.line_is_folded(1));
+    press(&mut ed, "zR");
+    assert!(ed.closed_folds().is_empty());
+    press(&mut ed, "zM");
+    assert_eq!(ed.closed_folds(), vec![(0, 16), (24, 40)]);
+    // A click on a closed run opens it.
+    let at = ed.current_buffer().rope().line_to_char(24);
+    ed.point_at(at);
+    assert!(!ed.line_is_folded(25) && ed.line_is_folded(1));
+    // Off again, everything is back; on again, every run starts closed.
     ed.execute(":diff-fold off").unwrap();
-    assert!(!ed.line_is_folded(0));
-    assert_eq!(ed.diff_pads(80, 23), 0);
+    assert!(ed.closed_folds().is_empty() && !ed.line_is_folded(1));
+    ed.execute(":diff-fold on").unwrap();
+    assert_eq!(ed.closed_folds(), vec![(0, 16), (24, 40)]);
     std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
-fn a_fold_opens_while_the_caret_is_in_it_and_jumps_stop_beside_it() {
+fn a_search_opens_a_folded_run_and_jumps_leave_one_closed() {
     let (saved, now) = forty(true);
     let (mut ed, dir) = diffed("fold-open", &saved, &now);
     ed.set_key_preset(crate::KeyPreset::Vim);
     ed.execute(":diff").unwrap();
     ed.execute(":diff-fold on").unwrap();
     ed.goto_line(21);
-    assert!(ed.line_is_folded(5));
-    // A search that lands in a folded run shows it, and it folds again once
-    // the caret has left.
+    // Three unchanged lines between the two changes are a run of their own.
+    assert_eq!(ed.closed_folds(), vec![(0, 16), (24, 26), (34, 40)]);
+    // A search that lands in a closed run opens it, and it stays open.
     press(&mut ed, "/entry 6 ");
     ed.on_key(Key::Enter);
     assert_eq!(ed.cursor_line(), 5);
-    assert!(!ed.line_is_folded(5) && !ed.line_is_folded(0));
+    assert!(!ed.line_is_folded(5));
     ed.goto_line(21);
-    assert!(ed.line_is_folded(5));
-    // `gg` and `G` stop at the lines beside the runs at either end.
-    press(&mut ed, "gg");
-    assert_eq!(ed.cursor_line(), 17);
+    assert!(!ed.line_is_folded(5));
+    // `gg` and `G` stop on the closed runs at either end, leaving them closed.
+    press(&mut ed, "zMgg");
+    assert!(ed.cursor_line() == 0 && ed.line_is_folded(5));
     press(&mut ed, "G");
-    assert_eq!(ed.cursor_line(), 33, "three lines below the last change");
+    assert!(ed.cursor_line() == 34 && ed.line_is_folded(40));
     // `]g` walks the changes, folded or not.
     press(&mut ed, "gg]g");
     assert_eq!(ed.cursor_line(), 20);

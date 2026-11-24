@@ -92,19 +92,11 @@ impl Rows {
             Some(_) => editor.diff_lead(width).rows as u32,
             None => 0,
         };
-        // The runs a side-by-side diff folds away, in order: the next one
-        // not yet passed is the only one asked about.
-        let folded = editor.diff_folded();
-        let mut fold = 0;
         before.push(lead);
         let mut total: u32 = lead;
         let mut end_line = |cells: usize| {
             let n = before.len() - 1;
-            while folded.get(fold).is_some_and(|run| run.end <= n) {
-                fold += 1;
-            }
-            let gone = folded.get(fold).is_some_and(|run| run.contains(&n));
-            let rows = match (gone || off.as_deref().is_some_and(|off| off.get(n).copied().unwrap_or(false)), key.width) {
+            let rows = match (off.as_deref().is_some_and(|off| off.get(n).copied().unwrap_or(false)), key.width) {
                 (true, _) => 0,
                 (false, None) => 1,
                 (false, Some(width)) => cells.div_ceil(width.max(1)).max(1),

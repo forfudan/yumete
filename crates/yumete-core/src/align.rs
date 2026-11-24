@@ -131,9 +131,9 @@ impl Run {
 /// above it and below it: enough to see where the change sits.
 const CONTEXT: usize = 3;
 
-/// **The fewest lines a fold hides**: a row saying 「3 lines」 in place of
-/// three lines saves too little to be worth the row.
-const FOLD_LEAST: usize = 4;
+/// **The fewest lines a fold hides**: a closed fold is a row of its own, and
+/// one in place of two lines saves too little to be worth it.
+const FOLD_LEAST: usize = 3;
 
 /// **The fewest characters a line needs to be found moved**: a short line
 /// (`}`, 「是。」, a blank one) turns up in many places and says nothing

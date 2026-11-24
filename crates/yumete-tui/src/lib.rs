@@ -15340,18 +15340,8 @@ fn draw_horizontal(
                 false => ink.page(),
             };
             let ground = Style::default().bg(ink.at(yumete_config::rung::BAND));
-            // The row a folded run of unchanged lines is drawn as says how
-            // many it hides, dim, where the text would start.
             let room = text_area.width as usize + left;
-            let said = editor
-                .diff_fold_row(row.line, row.index_in_line, width)
-                .map(|hidden| cut_to_width(&say!("diff.folded", hidden), room))
-                .unwrap_or_default();
-            let line = Line::from(vec![
-                Span::styled(" ".repeat(gutter), band),
-                Span::styled(said.clone(), ground.fg(ink.furniture())),
-                Span::styled(" ".repeat(room.saturating_sub(yumete_cjk::str_width(&said))), ground),
-            ]);
+            let line = Line::from(vec![Span::styled(" ".repeat(gutter), band), Span::styled(" ".repeat(room), ground)]);
             lines.push(scrolled(line, gutter, left));
             continue;
         }

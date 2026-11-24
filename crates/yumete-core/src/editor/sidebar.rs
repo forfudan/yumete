@@ -2959,6 +2959,7 @@ impl Editor {
         // to that row.
         self.aim = None;
         self.pane_aims.clear();
+        self.open_a_clicked_diff_fold();
     }
 
     /// Drag the selection's head to char index `pos`, keeping its anchor.

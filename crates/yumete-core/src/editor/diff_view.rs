@@ -17,15 +17,15 @@
 //! the keys between the columns: the place in the column left behind is that
 //! buffer's own remembered cursor, as when a tab is left.
 //!
-//! **`:diff-fold`** folds the long unchanged runs away, each drawn as one row
-//! in both columns that says how many lines it hides. That row is a filler
-//! row after the line above the run (before the first line on the page, for
-//! a run at the top), and the run's lines are off the page
-//! ([`Editor::line_is_folded`]), so the caret never stands on it and `j`
-//! steps over it. A run opens while the caret is in it — a search, a mark or
-//! `:N` that lands there shows it — and closes when the caret leaves;
-//! vim's jumps (`gg`, `G`, `:N`, `C-o`) that would land in one stop at the
-//! line beside it instead, as they leave a closed fold closed.
+//! **`:diff-fold`** closes the long unchanged runs as vim closes a fold, the
+//! same run on both sides, one row each that says how many lines it hides.
+//! They are the window's folds while the view is in it ([`FoldOf::Diff`]),
+//! so the caret stands on one, `j` takes it as a line, `zo` `zc` `za` `zR`
+//! `zM` open and close them, a search lands inside and opens one, and vim's
+//! jumps leave one closed. A click opens one too. A run is unchanged, the
+//! same lines on both sides, so a run closed on both takes one row on both.
+//!
+//! [`FoldOf::Diff`]: super::folds::FoldOf::Diff
 
 use std::cell::{Cell, RefCell};
 use std::collections::hash_map::DefaultHasher;
@@ -55,6 +55,9 @@ pub(crate) struct DiffView {
     copy: bool,
     /// The old text is drawn in the right column (`:diff-swap`).
     swapped: bool,
+    /// **The folded runs opened** (`zo`, a click), by their first line in the
+    /// old text; the others stay closed.
+    opened: std::collections::HashSet<usize>,
     aligned: RefCell<Option<Aligned>>,
     rows: RefCell<RowsMemo>,
     /// **The other column's colour tables**, swapped in while it is drawn:
@@ -115,8 +118,6 @@ pub struct DiffColumns {
 pub struct DiffKey {
     pub revisions: (u64, u64),
     pub side: Side,
-    /// With folding on, the fold the caret has open.
-    pub folds: Option<Option<usize>>,
 }
 
 /// Where the old text comes from.
@@ -401,10 +402,10 @@ impl Editor {
     pub fn diff_pads(&self, width: usize, line: usize) -> usize {
         let Some(side) = self.side_in_view() else { return 0 };
         let Some(al) = self.diff_alignment() else { return 0 };
-        if self.diff_hides(line) {
+        if self.fold_hides(line) {
             return 0;
         }
-        al.pads_after(side, line, &|s, l| self.diff_rows(s, l, width)) + self.diff_fold_after(line).map_or(0, |_| 1)
+        al.pads_after(side, line, &|s, l| self.diff_rows(s, l, width))
     }
 
     /// **What the filler rows depend on**, while a view is in the window:
@@ -414,11 +415,7 @@ impl Editor {
         let side = self.side_in_view()?;
         let d = self.diff()?;
         let revision = |id: u64| self.buffer_with(id).map_or(0, |i| self.buffers[i].revision());
-        let folds = match self.diff_fold {
-            true => Some(self.diff_alignment().and_then(|al| self.diff_open_fold(d, &al))),
-            false => None,
-        };
-        Some(DiffKey { revisions: (revision(d.old), revision(d.new)), side, folds })
+        Some(DiffKey { revisions: (revision(d.old), revision(d.new)), side })
     }
 
     /// [`Self::diff_pads`] for an estimate: the pads that changes make,
@@ -426,22 +423,18 @@ impl Editor {
     pub fn diff_change_pads(&self, width: usize, line: usize) -> usize {
         let Some(side) = self.side_in_view() else { return 0 };
         let Some(al) = self.diff_alignment() else { return 0 };
-        if self.diff_hides(line) {
+        if self.fold_hides(line) {
             return 0;
         }
-        al.change_pads_after(side, line, &|s, l| self.diff_rows(s, l, width)) + self.diff_fold_after(line).map_or(0, |_| 1)
+        al.change_pads_after(side, line, &|s, l| self.diff_rows(s, l, width))
     }
 
     /// **Filler rows before the first line on the page** of the side being
-    /// drawn or keyed: the lines the other side has above everything, or the
-    /// row a folded run at the top is drawn as.
+    /// drawn or keyed: the lines the other side has above everything.
     pub fn diff_lead(&self, width: usize) -> crate::wrap::Lead {
         let Some(side) = self.side_in_view() else { return crate::wrap::Lead::top(0) };
         let Some(al) = self.diff_alignment() else { return crate::wrap::Lead::top(0) };
-        match self.diff_fold_run(0) {
-            Some(run) => crate::wrap::Lead { line: run.end, rows: 1 },
-            None => crate::wrap::Lead::top(al.lead(side, &|s, l| self.diff_rows(s, l, width))),
-        }
+        crate::wrap::Lead::top(al.lead(side, &|s, l| self.diff_rows(s, l, width)))
     }
 
     // ---- Folds ------------------------------------------------------------
@@ -455,98 +448,53 @@ impl Editor {
         self.diff_fold = on;
     }
 
-    /// `:diff-fold [on|off]`, bare turning it round.
+    /// `:diff-fold [on|off]`, bare turning it round. Every run starts closed.
     pub(super) fn switch_diff_fold(&mut self, want: crate::command::Switch) {
         self.diff_fold = want.over(self.diff_fold);
+        if let Some(d) = self.diff_view.as_mut() {
+            d.opened.clear();
+        }
+        self.fold_generation += 1;
         self.status = match self.diff_fold {
             true => say!("diff.fold-on"),
             false => say!("diff.fold-off"),
         };
     }
 
-    /// **The fold the caret is in**, open while it is there.
-    fn diff_open_fold(&self, d: &DiffView, al: &Alignment) -> Option<usize> {
-        let id = self.diff_shown(d)?;
-        let side = match (id == d.old, id == d.new) {
-            (true, _) => Side::Old,
-            (_, true) => Side::New,
-            _ => return None,
-        };
-        let (index, at, _) = self.side_place(d, side)?;
-        al.fold_of(side, self.buffers[index].rope().char_to_line(at))
-    }
-
-    /// **The folded run holding `line`** of the side being drawn or keyed,
-    /// as that side's lines; `None` with folding off, and for the run the
-    /// caret is in.
-    fn diff_fold_run(&self, line: usize) -> Option<Range<usize>> {
+    /// **The folded runs of the side being drawn or keyed**, as its first
+    /// and last lines, whether closed, and the run's first line in the old
+    /// text; `None` outside a view or with folding off.
+    pub(super) fn diff_fold_runs(&self) -> Option<Vec<(usize, usize, bool, usize)>> {
         if !self.diff_fold {
             return None;
         }
-        let d = self.diff()?;
-        let side = self.side_in_view()?;
-        let al = self.diff_alignment()?;
-        let k = al.fold_of(side, line)?;
-        (self.diff_open_fold(d, &al) != Some(k)).then(|| al.folds()[k].on(side).clone())
+        let (d, side, al) = (self.diff()?, self.side_in_view()?, self.diff_alignment()?);
+        let runs = al.folds().iter().map(|run| {
+            let lines = run.on(side);
+            (lines.start, lines.end - 1, !d.opened.contains(&run.old.start), run.old.start)
+        });
+        Some(runs.collect())
     }
 
-    /// Whether `line` is folded away: off the page, in no row at all.
-    pub(super) fn diff_hides(&self, line: usize) -> bool {
-        self.diff_fold_run(line).is_some()
-    }
-
-    /// The lines a folded run right after `line` hides, when one does: its
-    /// row is the last filler row after `line`.
-    fn diff_fold_after(&self, line: usize) -> Option<usize> {
-        self.diff_fold_run(line + 1).filter(|run| run.start == line + 1).map(|run| run.len())
-    }
-
-    /// **The folded runs** of the side being drawn or keyed, in order: a
-    /// scrollbar counts their lines as no rows, their row as a filler row.
-    pub fn diff_folded(&self) -> Vec<Range<usize>> {
-        let (Some(d), Some(side), Some(al)) = (self.diff(), self.side_in_view(), self.diff_alignment()) else { return Vec::new() };
-        if !self.diff_fold {
-            return Vec::new();
-        }
-        let open = self.diff_open_fold(d, &al);
-        al.folds().iter().enumerate().filter(|&(k, _)| Some(k) != open).map(|(_, run)| run.on(side).clone()).collect()
-    }
-
-    /// **The row a folded run is drawn as**: how many lines it hides, when
-    /// row `index` of `line` is that row — what the front end writes on it.
-    pub fn diff_fold_row(&self, line: usize, index: usize, width: usize) -> Option<usize> {
-        let side = self.side_in_view()?;
-        let lead = self.diff_lead(width);
-        if lead.line > 0 && line == lead.line && index == 0 {
-            return Some(lead.line);
-        }
-        let hidden = self.diff_fold_after(line)?;
-        let before = match lead.line == line {
-            true => lead.rows,
-            false => 0,
+    /// **Open or close the folded run** that starts on `old` of the old text.
+    pub(super) fn set_diff_fold_open(&mut self, old: usize, open: bool) {
+        let Some(d) = self.diff_view.as_mut() else { return };
+        match open {
+            true => d.opened.insert(old),
+            false => d.opened.remove(&old),
         };
-        let rows = before + self.diff_rows(side, line, width) + self.diff_pads(width, line);
-        (index + 1 == rows).then_some(hidden)
     }
 
-    /// **After a jump**: one that would land in a folded run stops at the
-    /// line after it (before it, for a run at the end), as a jump leaves a
-    /// closed fold closed. Any other key that lands in one opens it.
-    pub(super) fn settle_diff_folds(&mut self) {
-        if !self.diff_fold || !self.fold_stays_closed {
+    /// **A click on a closed run opens it**: the row says how many lines it
+    /// hides, and a click asks to see them.
+    pub(super) fn open_a_clicked_diff_fold(&mut self) {
+        if !self.diff_in_view() {
             return;
         }
-        let (Some(side), Some(al)) = (self.side_in_view(), self.diff_alignment()) else { return };
-        let Some(k) = al.fold_of(side, self.cursor_line()) else { return };
-        let run = al.folds()[k].on(side).clone();
-        let rope = self.current_buffer().rope();
-        let to = match (run.end < rope.len_lines(), run.start) {
-            (true, _) => run.end,
-            (false, 0) => return,
-            (false, start) => start - 1,
-        };
-        let at = rope.line_to_char(to);
-        self.set_cursor(at);
+        let line = self.cursor_line();
+        if self.fold_head(line) {
+            self.open_folds_at(line, 1);
+        }
     }
 
     /// **The other column's first row**, beside `top` of the column being
@@ -641,6 +589,7 @@ impl Editor {
             titles,
             copy,
             swapped: false,
+            opened: Default::default(),
             aligned: RefCell::new(None),
             rows: RefCell::new(RowsMemo::default()),
             code: RefCell::default(),

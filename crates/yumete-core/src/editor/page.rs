@@ -414,10 +414,9 @@ impl Editor {
         if self.fold_hides(line) {
             return true;
         }
-        // A side-by-side diff keeps every line, as it keeps closed folds
-        // open, but the unchanged runs `:diff-fold` folds away.
+        // A side-by-side diff keeps every line but the closed runs above.
         if self.diff_in_view() {
-            return self.diff_hides(line);
+            return false;
         }
         // 中階 draws the indent and keeps the blank line: adding two squares
         // takes nothing away, folding a line does (#283).
