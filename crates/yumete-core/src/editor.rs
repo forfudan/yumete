@@ -4024,7 +4024,7 @@ pub struct Editor {
     /// The side-by-side view of two texts (#518), when one is open.
     diff_view: Option<diff_view::DiffView>,
     /// The file `:diff-mark` set aside to be compared with.
-    diff_marked: Option<u64>,
+    diff_marked: Option<diff_view::DiffMark>,
     /// `:diff-fold`: a side-by-side view folds its long unchanged runs away.
     diff_fold: bool,
     /// Where the cursor was before each far jump, and how far back we have

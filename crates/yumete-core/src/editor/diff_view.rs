@@ -120,6 +120,14 @@ pub struct DiffKey {
 }
 
 /// Where the old text comes from.
+/// **What `:diff-mark` set aside**: a file by its path, so the file tree can
+/// mark one that is not open; a buffer with no file by the buffer.
+#[derive(Debug, Clone)]
+pub(crate) enum DiffMark {
+    File(std::path::PathBuf),
+    Buffer(u64),
+}
+
 pub(super) enum Base {
     /// A text made for the view, read-only, under this name.
     Copy { text: String, name: String },
@@ -756,15 +764,46 @@ impl Editor {
     /// `:diff-mark` — **this file is the one to compare with** (VS Code's
     /// Select for Compare).
     pub(super) fn diff_mark(&mut self) {
-        self.diff_marked = Some(self.current_buffer().id());
-        self.status = say!("diff.marked", self.current_buffer().display_name());
+        let buffer = self.current_buffer();
+        let mark = match buffer.path() {
+            Some(path) => DiffMark::File(path.to_path_buf()),
+            None => DiffMark::Buffer(buffer.id()),
+        };
+        self.status = say!("diff.marked", buffer.display_name());
+        self.diff_marked = Some(mark);
+    }
+
+    /// `m` in the file tree: **the file under the highlight is the one to
+    /// compare with**, open or not.
+    pub(super) fn diff_mark_file(&mut self, path: std::path::PathBuf) {
+        let name = path.file_name().map_or_else(|| path.display().to_string(), |n| n.to_string_lossy().into_owned());
+        self.diff_marked = Some(DiffMark::File(path));
+        self.status = say!("diff.marked", name);
     }
 
     /// `:diff-marked` — **the marked file on the left, this one on the
     /// right** (VS Code's Compare with Selected). Both are files, so both
     /// columns can be edited.
     pub(super) fn diff_with_marked(&mut self) {
-        let Some(marked) = self.diff_marked.and_then(|id| self.buffer_with(id)) else {
+        let marked = match self.diff_marked.clone() {
+            Some(DiffMark::Buffer(id)) => self.buffer_with(id),
+            // A marked file is opened beside this one if it is not open
+            // yet; the keys stay here.
+            Some(DiffMark::File(path)) => {
+                let here = self.current_buffer().id();
+                if let Err(err) = self.open_file(&path) {
+                    self.status = say!("buffer.cannot-open", path.display(), err);
+                    return;
+                }
+                let marked = self.current_buffer().id();
+                if let Some(i) = self.buffer_with(here) {
+                    self.show_buffer(i);
+                }
+                self.buffer_with(marked)
+            }
+            None => None,
+        };
+        let Some(marked) = marked else {
             self.status = say!("diff.nothing-marked");
             return;
         };

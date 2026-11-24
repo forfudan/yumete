@@ -320,6 +320,13 @@ en = "{0}+ lines differ from '{1}' (first {0} listed); gf jumps there"
 # ── edit ──────────────────────────────────────────────────────────────
 
 [[message]]
+# 文件樹裏按 m 或 M 時，光標在文件夾上，不在檔上
+key = "diff.tree-not-a-file"
+zhs = "这一行是文件夹：m 和 M 要选文件"
+# 草稿
+en = "this row is a folder: m and M take a file"
+
+[[message]]
 # 在縱書頁上打開兩欄對照：{0} 是本來要說的話，頁面在對照期間改成橫排
 key = "diff.turned-horizontal"
 zhs = "{0}（对照期间改为横排）"

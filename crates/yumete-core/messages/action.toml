@@ -259,6 +259,20 @@ en = "character info: about the character under the cursor"
 find = "字符 信息 字典 拆分 部件 查字 碼位 码位 統一碼 统一码 character info unicode dictionary chaifen"
 
 [[message]]
+# 命令說明：diff_mark_entry（文件樹裏的 m）
+key = "action.diff-mark-entry"
+zhs = "文件树：标记这个文件，留作比较"
+# 草稿
+en = "file tree: mark this file to compare with"
+
+[[message]]
+# 命令說明：diff_marked_entry（文件樹裏的 M）
+key = "action.diff-marked-entry"
+zhs = "文件树：这个文件和标记的那个两栏对照"
+# 草稿
+en = "file tree: compare this file with the marked one, side by side"
+
+[[message]]
 # 命令說明：earlier
 key = "action.earlier"
 zhs = "撤销(同 u)"

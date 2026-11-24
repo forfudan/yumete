@@ -1411,6 +1411,13 @@ zhs = "切换区域"
 en = "switch region"
 
 [[message]]
+# 文件樹的提示行：m 標記、M 和標記的那個對照
+key = "hint.sidebar.compare"
+zhs = "标记/对照"
+# 草稿
+en = "mark / compare"
+
+[[message]]
 # 雙鏈面板的提示行：v 這個鍵
 key = "hint.sidebar.links-look"
 zhs = "列表/图"

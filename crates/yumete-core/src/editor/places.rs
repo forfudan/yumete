@@ -113,6 +113,9 @@ pub(super) const SIDEBAR_KEYS: &[(Key, PlaceCmd)] = &[
     (Key::Right, PlaceCmd::ExpandEntry),
     (Key::Enter, PlaceCmd::OpenEntry),
     (Key::Char('v'), PlaceCmd::ToggleLinksGraph),
+    // The file tree's half of `:diff-mark` / `:diff-marked`.
+    (Key::Char('m'), PlaceCmd::DiffMarkEntry),
+    (Key::Char('M'), PlaceCmd::DiffMarkedEntry),
     (Key::Char('u'), PlaceCmd::RestoreChange),
     (Key::Char('y'), PlaceCmd::YankOldText),
     (Key::Alt('j'), PlaceCmd::MoveSectionDown),

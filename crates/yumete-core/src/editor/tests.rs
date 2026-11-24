@@ -49554,3 +49554,43 @@ fn texts_that_differ_only_in_line_endings_say_so() {
     assert_eq!(ed.status(), say!("diff.view-same"));
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// **`m` and `M` in the file tree** are `:diff-mark` and `:diff-marked` on
+/// the file under the highlight: the marked one need not be open, and it
+/// goes on the left.
+#[test]
+fn the_file_tree_marks_a_file_and_compares_another_with_it() {
+    let dir = tmp().join(format!("yumete-tree-compare-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("drafts")).unwrap();
+    std::fs::write(dir.join("first.md"), "the kettle sang\nthe tea went cold\n").unwrap();
+    std::fs::write(dir.join("second.md"), "the kettle sang\nthe tea went quite cold\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_sidebar_showing(&dir, crate::sidebar::View::Explorer);
+    let under = |ed: &Editor| ed.panel(crate::sidebar::Side::Left).and_then(|p| p.file_under_highlight());
+    let walk_to = |ed: &mut Editor, name: &str| {
+        ed.on_key(Key::Char('g'));
+        for _ in 0..10 {
+            if under(ed).is_some_and(|p| p.ends_with(name)) {
+                return;
+            }
+            ed.on_key(Key::Char('j'));
+        }
+        panic!("{name} is not in the tree");
+    };
+    // Folders come first: the top row is not a file, and is not marked.
+    ed.on_key(Key::Char('g'));
+    assert!(under(&ed).is_none());
+    ed.on_key(Key::Char('m'));
+    assert_eq!(ed.status(), say!("diff.tree-not-a-file"));
+    walk_to(&mut ed, "first.md");
+    ed.on_key(Key::Char('m'));
+    assert_eq!(ed.status(), say!("diff.marked", "first.md"));
+    walk_to(&mut ed, "second.md");
+    ed.on_key(Key::Char('M'));
+    assert!(ed.diff_in_view(), "{}", ed.status());
+    let columns = ed.diff_columns().unwrap();
+    assert_eq!((columns.left.as_str(), columns.right.as_str()), ("first.md", "second.md"));
+    assert!(ed.current_buffer().path().is_some_and(|p| p.ends_with("second.md")), "the keys on the one compared");
+    std::fs::remove_dir_all(&dir).ok();
+}

@@ -298,6 +298,12 @@ impl Editor {
             if self.panel(side).map(|p| p.view()) == Some(crate::sidebar::View::Links) {
                 keys.extend(sidebar(&[(Key::Char('v'), PlaceCmd::ToggleLinksGraph)], say!("hint.sidebar.links-look")));
             }
+            if self.panel(side).map(|p| p.view()) == Some(crate::sidebar::View::Explorer) {
+                keys.extend(sidebar(
+                    &[(Key::Char('m'), PlaceCmd::DiffMarkEntry), (Key::Char('M'), PlaceCmd::DiffMarkedEntry)],
+                    say!("hint.sidebar.compare"),
+                ));
+            }
             keys.extend(
                 [
                     sidebar(&[(Key::Tab, PlaceCmd::NextSidebarView)], say!("hint.sidebar.other-view")),

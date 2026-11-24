@@ -1724,6 +1724,27 @@ impl Editor {
             PlaceCmd::GotoLastLine => sidebar.go_to_end(true),
             PlaceCmd::CollapseEntry => sidebar.collapse(),
             PlaceCmd::ExpandEntry | PlaceCmd::OpenEntry => self.open_the_entry(side),
+            // `m` marks the file under the highlight to be compared with;
+            // `M` opens the one under it and compares, the marked on the
+            // left — VS Code's Select for Compare and Compare with Selected.
+            PlaceCmd::DiffMarkEntry | PlaceCmd::DiffMarkedEntry if view == crate::sidebar::View::Explorer => {
+                let Some(path) = self.panel(side).and_then(|p| p.file_under_highlight()) else {
+                    self.status = say!("diff.tree-not-a-file");
+                    return;
+                };
+                match name {
+                    PlaceCmd::DiffMarkEntry => self.diff_mark_file(path),
+                    _ => {
+                        if let Err(err) = self.open_file(&path) {
+                            self.status = say!("buffer.cannot-open", path.display(), err);
+                            return;
+                        }
+                        self.panel_focus = None;
+                        self.diff_with_marked();
+                        self.refresh_sidebar();
+                    }
+                }
+            }
             // The outline's rows are the document's sections: `A-j`/`A-k`
             // move the highlighted one, as they do on its heading in the text.
             PlaceCmd::MoveSectionDown if view == crate::sidebar::View::Outline => {

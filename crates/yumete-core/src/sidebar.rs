@@ -569,6 +569,13 @@ impl Sidebar {
     ///
     /// In the tree a directory opens or closes and a file is handed back to be
     /// opened; in the other two views every row is a destination.
+    /// **The file under the highlight** in the file tree; none on a folder,
+    /// or in any other list.
+    pub fn file_under_highlight(&self) -> Option<std::path::PathBuf> {
+        let row = self.rows.get(self.selected())?;
+        (self.view == View::Explorer && !row.is_dir && !row.path.as_os_str().is_empty()).then(|| row.path.clone())
+    }
+
     pub fn activate(&mut self) -> Option<Chosen> {
         let row = self.rows.get(self.selected())?.clone();
         match self.view {
