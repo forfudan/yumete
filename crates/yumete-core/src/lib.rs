@@ -18,6 +18,7 @@
 //! (currently a [`ropey`] rope) can be swapped later without touching call sites.
 
 pub mod alarm;
+pub mod align;
 pub mod as_preview;
 pub mod buffer;
 pub mod cite;

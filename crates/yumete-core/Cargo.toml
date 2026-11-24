@@ -20,6 +20,10 @@ chardetng = "1.0.0"
 # which is the very same engine, and a grep here has to read unsaved buffers
 # anyway, which no external tool can see.
 ignore = "0.4"
+# **The side-by-side diff's line and word pass** (#518): Histogram, which never
+# gives up and prefers rare lines as anchors. Its two dependencies were
+# already in the lock file.
+imara-diff = { version = "0.2", default-features = false }
 regex = "1"
 # helix's `:reflow` is this crate's `refill`, and copying it means calling it
 # with helix's own options (helix-core/src/wrap.rs).
