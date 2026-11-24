@@ -555,6 +555,44 @@ fn pair(
     cuts.push((a.end, b.end));
     cuts.dedup();
 
+    // **A block starts at a line the other side really shares.** The token
+    // path takes the first `var` or `=` it can match, so a run of removed
+    // lines can open the block whose new line is really the old fourth one,
+    // and that new line stands beside the first. Leading lines with under
+    // [`PAIRED`] of their visible characters matched are cut off as a block
+    // of their own; a line nobody shares then has filler beside it, and the
+    // shared one stands beside its twin.
+    let shared = |ts: &[Token], gone: &[bool]| {
+        let mut lines: HashMap<usize, (usize, usize)> = HashMap::new();
+        for (k, t) in ts.iter().enumerate() {
+            if t.is_break() || t.text.trim().is_empty() {
+                continue;
+            }
+            let at = lines.entry(t.line).or_default();
+            at.1 += t.chars();
+            if !gone[k] {
+                at.0 += t.chars();
+            }
+        }
+        lines
+    };
+    let (shared_a, shared_b) = (shared(&ta, &gone), shared(&tb, &came));
+    let first_shared = |lines: &HashMap<usize, (usize, usize)>, range: Range<usize>| {
+        range.into_iter().find(|l| lines.get(l).is_some_and(|&(m, t)| m as f64 >= PAIRED * t as f64))
+    };
+    let mut refined: Vec<(usize, usize)> = Vec::with_capacity(cuts.len());
+    for w in cuts.windows(2) {
+        let (s, e) = (w[0], w[1]);
+        refined.push(s);
+        if let (Some(l), Some(m)) = (first_shared(&shared_a, s.0..e.0), first_shared(&shared_b, s.1..e.1)) {
+            if (l, m) != s {
+                refined.push((l, m));
+            }
+        }
+    }
+    refined.push((a.end, b.end));
+    let cuts = refined;
+
     // Characters matched in each block, for the rewrite test.
     let mut matched_in: Vec<(usize, usize)> = vec![(0, 0); cuts.len() - 1];
     let block_of = |cuts: &[(usize, usize)], line: usize, old_side: bool| -> usize {
@@ -790,7 +828,19 @@ mod tests {
         let old = "same\nvar k = width()  # how many columns to fill\n\n# split the grid into halves first\nvar result = lu(A)\nref L = result[0]\nref U = result[1]\nfor i in range(n):\n    total += i\nsame\n";
         let new = "same\nvar factors = lu(A)\nreturn solve(factors[0], factors[1])\nsame\n";
         let changed: Vec<_> = blocks(old, new).into_iter().filter(|b| b.2).collect();
-        assert_eq!(changed, vec![(1..9, 1..3, true)]);
+        // The edited `var … = lu(A)` beside its old self, the new `return`
+        // on the very next row: no filler rows between the two new lines.
+        assert_eq!(changed, vec![(1..4, 1..1, true), (4..5, 1..2, true), (5..9, 2..3, true)]);
+    }
+
+    #[test]
+    fn a_line_stands_beside_the_old_line_it_shares() {
+        // `var` and `=` in the first removed line must not pull the edited
+        // line up beside it: it stands beside the line it was.
+        let old = "same\nvar k = width()  # how many columns to fill\nvar zero = T.zero()\n\n# split the grid first\nvar result = core[big](A)\nsame\n";
+        let new = "same\nvar factors = core[big](A)\nsame\n";
+        let changed: Vec<_> = blocks(old, new).into_iter().filter(|b| b.2).collect();
+        assert_eq!(changed, vec![(1..5, 1..1, true), (5..6, 1..2, true)]);
     }
 
     #[test]
