@@ -7249,6 +7249,61 @@ fn keeps_a_bar(editor: &Editor, leaf: Option<yumete_core::window::WindowId>, pan
     editor.layout() == WritingLayout::Horizontal && !editor.grid_has_the_pane()
 }
 
+/// **The scrollbar of a horizontal pane**: its track, the thumb where the
+/// keyed page stands, and the marks — read off what was drawn in `which`.
+#[allow(clippy::too_many_arguments)]
+fn draw_the_scrollbar(
+    frame: &mut Frame,
+    editor: &Editor,
+    config: &Config,
+    viewport: &mut Seats,
+    which: usize,
+    live: usize,
+    caret: (u16, u16),
+    bar: Rect,
+    chain: usize,
+    peek: Option<&yumete_core::editor::Pane>,
+) {
+    let ink = crate::theme::Palette::of(config);
+    let ink = match peek {
+        None => ink,
+        Some(_) => ink.reading(editor.focus()),
+    };
+    let len = editor.current_buffer().rope().len_chars();
+    // Whether the file fits, and whether the page has reached
+    // its end, are read off what was drawn — exactly; how long
+    // the thumb is and where, off the estimated rows.
+    let (a, b) = viewport[which].drawn_span.unwrap_or((0, len));
+    let top = viewport[which].top;
+    // The marks are placed in the same rows, and only on a
+    // bar with a thumb: while the file fits there is
+    // nowhere else for a line to be.
+    let placed = (a > 0 || b < len).then(|| {
+        let folds = editor.closed_folds();
+        let rows = viewport.rows.rows(editor);
+        let (thumb, total) = scrollbar::place(rows, &folds, top, bar.height as usize, chain, b >= len);
+        let marks = thumb.map(|_| scrollbar::marks(editor, rows, &folds, total, bar.height as usize));
+        // **A mark under the pointer says what its cell holds**
+        // (`crate::hover`); an unmarked cell says nothing.
+        if let Some(marks) = &marks {
+            crate::hover::offer(bar, false, |(_, y)| {
+                let cell = y.saturating_sub(bar.y) as usize;
+                marks.get(cell).copied().flatten()?;
+                let covered = scrollbar::covered(editor, rows, &folds, total, bar.height as usize, cell);
+                crate::hover::scrollbar_words(&covered)
+            });
+        }
+        (thumb, marks)
+    });
+    let (thumb, marks) = placed.unwrap_or((None, None));
+    paint_the_track(frame.buffer_mut(), bar, ink.scrollbar_track());
+    tint_the_thumb(frame.buffer_mut(), bar, thumb, ink.scrollbar());
+    if let Some(marks) = marks {
+        let caret = (which == live).then_some(caret);
+        scrollbar::paint_marks(frame.buffer_mut(), bar, &marks, ink, caret);
+    }
+}
+
 /// **Paint a scrollbar's track** into the column `bar`: every cell of it
 /// takes `tint` as its ground, under whatever the column already holds, so
 /// a `␊` drawn there stays on top. Painted whether or not there is a thumb:
@@ -7446,7 +7501,11 @@ fn draw<'a>(
             }
             WritingLayout::Horizontal if editor.diff_in_view() => {
                 let bar = bars.get(which).copied().filter(|b| b.width > 0);
-                draw_diff(frame, editor, config, *rect, seat, peek, bar)
+                let caret = draw_diff(frame, editor, config, *rect, seat, peek, bar);
+                if let Some(bar) = bar {
+                    draw_the_scrollbar(frame, editor, config, viewport, which, live, caret, bar, 1, peek);
+                }
+                caret
             }
             WritingLayout::Horizontal => {
                 // **Pages side by side, the text running on**
@@ -7558,44 +7617,7 @@ fn draw<'a>(
                     next = after;
                 }
                 if let Some(bar) = bar {
-                    let ink = crate::theme::Palette::of(config);
-                    let ink = match peek {
-                        None => ink,
-                        Some(_) => ink.reading(editor.focus()),
-                    };
-                    let len = editor.current_buffer().rope().len_chars();
-                    // Whether the file fits, and whether the page has reached
-                    // its end, are read off what was drawn — exactly; how long
-                    // the thumb is and where, off the estimated rows.
-                    let (a, b) = viewport[which].drawn_span.unwrap_or((0, len));
-                    let top = viewport[which].top;
-                    // The marks are placed in the same rows, and only on a
-                    // bar with a thumb: while the file fits there is
-                    // nowhere else for a line to be.
-                    let placed = (a > 0 || b < len).then(|| {
-                        let folds = editor.closed_folds();
-                        let rows = viewport.rows.rows(editor);
-                        let (thumb, total) = scrollbar::place(rows, &folds, top, bar.height as usize, chain, b >= len);
-                        let marks = thumb.map(|_| scrollbar::marks(editor, rows, &folds, total, bar.height as usize));
-                        // **A mark under the pointer says what its cell holds**
-                        // (`crate::hover`); an unmarked cell says nothing.
-                        if let Some(marks) = &marks {
-                            crate::hover::offer(bar, false, |(_, y)| {
-                                let cell = y.saturating_sub(bar.y) as usize;
-                                marks.get(cell).copied().flatten()?;
-                                let covered = scrollbar::covered(editor, rows, &folds, total, bar.height as usize, cell);
-                                crate::hover::scrollbar_words(&covered)
-                            });
-                        }
-                        (thumb, marks)
-                    });
-                    let (thumb, marks) = placed.unwrap_or((None, None));
-                    paint_the_track(frame.buffer_mut(), bar, ink.scrollbar_track());
-                    tint_the_thumb(frame.buffer_mut(), bar, thumb, ink.scrollbar());
-                    if let Some(marks) = marks {
-                        let caret = (which == live).then_some(caret);
-                        scrollbar::paint_marks(frame.buffer_mut(), bar, &marks, ink, caret);
-                    }
+                    draw_the_scrollbar(frame, editor, config, viewport, which, live, caret, bar, chain, peek);
                 }
                 caret
             }
@@ -14564,9 +14586,14 @@ fn diff_columns(editor: &Editor, config: &Config, rect: Rect) -> Vec<Rect> {
         true => centred_margin(rect.width, used),
         false => 0,
     };
+    let right = x + width + PAGE_GAP;
     vec![
         Rect::new(x, rect.y, width, rect.height),
-        Rect::new(x + width + PAGE_GAP, rect.y, width, rect.height),
+        // The right column keeps the window's right edge, as the last page
+        // of a spread does: the cells past its measure are its own page, not
+        // a strip of margin tint between the text and the scrollbar. Both
+        // fold at the left column's width (`settle_the_pages`).
+        Rect::new(right, rect.y, (rect.x + rect.width).saturating_sub(right).max(width), rect.height),
     ]
 }
 
@@ -16004,7 +16031,9 @@ fn draw_horizontal(
         // The words a side-by-side diff marks go under them all: they are
         // the page's, and the reader's marks are laid over the page.
         if let Some(d) = &diff_ink {
-            let mark = Style::default().bg(ink.short_wash(diff_wash(d.side)));
+            // `vcs`, as the change popup's words: on a row already washed,
+            // `short_wash` is too near that ground to be told from it.
+            let mark = Style::default().bg(ink.vcs(diff_wash(d.side)));
             for range in &d.marks {
                 let a = range.start.saturating_sub(start_in_line).min(chars.len());
                 let b = range.end.saturating_sub(start_in_line).min(chars.len());
@@ -19480,9 +19509,9 @@ fn squeezed(text: &str) -> String {
         let gone = buf[(grey, gy)].style().bg;
         let gone_row = buf[(column_of(&rows[morning], "morning"), gy)].style().bg;
         let added = buf[(column_of(&rows[morning], "bright"), gy)].style().bg;
-        assert_eq!(gone, Some(ink.short_wash(crate::theme::Accent::Mark)));
+        assert_eq!(gone, Some(ink.vcs(crate::theme::Accent::Mark)));
         assert_eq!(gone_row, Some(ink.washed(crate::theme::Accent::Mark)));
-        assert_eq!(added, Some(ink.short_wash(crate::theme::Accent::Green)));
+        assert_eq!(added, Some(ink.vcs(crate::theme::Accent::Green)));
         // An unchanged line is on the page.
         let soup = buf[(column_of(&rows[morning + 1], "soup"), gy + 1)].style().bg;
         assert_eq!(soup, buf[(column_of(&rows[morning + 1], "lunch"), gy + 1)].style().bg);
