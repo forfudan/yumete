@@ -533,11 +533,7 @@ mod tests {
     /// the regional ones only, where Taiwan and the Mainland name the same
     /// thing differently (檔案/文件, 選單/菜单). Everything else converts both
     /// ways.
-    const REGIONAL: &[&str] = &[
-        // to check: the `zhs` shows 書 and 书 side by side, and the made `zht`
-        // turns both into 書.
-        "settings.editor.selection-highlight-glyphs.hint",
-    ];
+    const REGIONAL: &[&str] = &[];
 
     #[test]
     fn the_traditional_converts_back_into_the_simplified() {

@@ -810,7 +810,9 @@ en = "selection highlight variants"
 
 [[message]]
 # 設置：選區高亮也認繁簡——一句話
+# tc on purpose: it shows the character forms or names the scripts themselves
 key = "settings.editor.selection-highlight-glyphs.hint"
+zht = "選區高亮把繁體字和簡體字當作同一個字（選「書」也標出「书」），與搜索面板的開關無關"
 zhs = "选区高亮把繁体字和简体字当作同一个字（选「書」也标出「书」），与搜索面板的开关无关"
 en = "light simplified and traditional forms as one character (書 lights 书), apart from the search panel's switch"
 
