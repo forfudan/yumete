@@ -11,8 +11,11 @@
 //! Every `zht`, made or written, is checked the other way by a test in
 //! `src/messages.rs`: back through the glyph table, then `t2s`. Traditional to
 //! Simplified has no ambiguity worth the name, so when the result is not the
-//! `zhs` beside it, the two say different things. A message whose `zht`
-//! differs on purpose says so with a `# tc on purpose` comment.
+//! `zhs` beside it, the two say different things.
+//!
+//! What sits between `[=` and `=]` in a `zhs` is kept as written in the `zht`:
+//! a message that shows character forms side by side (選「書」也標出「书」)
+//! marks them so, and the marks are dropped from both scripts.
 //!
 //! What comes out is a copy of each file in `OUT_DIR`, every alias spelled
 //! `zhs`/`zht` and every message carrying a `zht`; `src/messages.rs` reads
@@ -87,9 +90,14 @@ fn process(text: &str, to_trad: &dyn Fn(&str) -> String) -> String {
         };
         let zhs = field(block, "zhs");
         if let (Some(zhs), None) = (zhs.filter(|z| !z.is_empty()), field(block, "zht")) {
-            let made = to_trad(&zhs);
+            let made: String = kept_runs(&zhs).into_iter().map(|(kept, run)| if kept { run.to_string() } else { to_trad(run) }).collect();
             let at = block.iter().position(|l| l.trim().starts_with("zhs = ")).unwrap_or(block.len() - 1);
             block.insert(at + 1, format!("zht = \"{made}\""));
+        }
+        for line in block.iter_mut() {
+            if line.contains("[=") {
+                *line = line.replace("[=", "").replace("=]", "");
+            }
         }
         for line in block.drain(..) {
             out.push_str(&line);
@@ -134,6 +142,21 @@ fn spell_out(line: &str) -> String {
         }
     }
     line.to_string()
+}
+
+/// A `zhs` cut into runs, each told whether it sat between `[=` and `=]`.
+fn kept_runs(text: &str) -> Vec<(bool, &str)> {
+    let mut runs = Vec::new();
+    let mut rest = text;
+    while let Some(open) = rest.find("[=") {
+        let close = rest[open..].find("=]").map(|c| open + c).unwrap_or_else(|| panic!("`[=` without `=]` in 「{text}」"));
+        runs.push((false, &rest[..open]));
+        runs.push((true, &rest[open + 2..close]));
+        rest = &rest[close + 2..];
+    }
+    assert!(!rest.contains("=]"), "`=]` without `[=` in 「{text}」");
+    runs.push((false, rest));
+    runs.into_iter().filter(|(_, run)| !run.is_empty()).collect()
 }
 
 /// The contents of a `"…"`: the messages hold no escapes.

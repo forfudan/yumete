@@ -261,10 +261,8 @@ en = "{0|character|characters} changed (u to undo)"
 
 [[message]]
 # :convert 的説明頁最後一行，解釋 force 是什麼
-# tc on purpose: it shows the character forms or names the scripts themselves
 key = "convert.force-means"
-zht = "加 `!` 會連詞語一起轉換(内存 → 記憶體)。字數會變，且無法還原，所以須明確指定。"
-zhs = "加 `!` 会连词语一起转换(内存 → 記憶體)。字数会变，且无法还原，所以须明确指定。"
+zhs = "加 `!` 会连词语一起转换([=内存 → 記憶體=])。字数会变，且无法还原，所以须明确指定。"
 en = "`!` converts words too (内存 → 記憶體); the length changes and cannot be reversed, so it must be asked for"
 
 [[message]]
@@ -311,66 +309,50 @@ en = "{0} and {1} are the same form; nothing to convert"
 
 [[message]]
 # :convert 的説明頁裏 c 那一行——這一邊叫什麼，長什麼樣
-# tc on purpose: it shows the character forms or names the scripts themselves
 key = "convert.side-c"
-zht = "  c   大陸通規繁體　説 爲 内 吴 裏 髮 臺"
-zhs = "  c   大陆通规繁体　説 爲 内 吴 裏 髮 臺"
+zhs = "  c   大陆通规繁体　[=説 爲 内 吴 裏 髮 臺=]"
 en = "  c   mainland trad.    説 爲 内 吴 裏 髮 臺"
 
 [[message]]
 # :convert 的説明頁裏 g 那一行——這一邊叫什麼，長什麼樣
-# tc on purpose: it shows the character forms or names the scripts themselves
 key = "convert.side-g"
-zht = "  g   古籍通規繁體　説 爲 内 吳 裏 髮 臺"
-zhs = "  g   古籍通规繁体　説 爲 内 吳 裏 髮 臺"
+zhs = "  g   古籍通规繁体　[=説 爲 内 吳 裏 髮 臺=]"
 en = "  g   classical trad.   説 爲 内 吳 裏 髮 臺"
 
 [[message]]
 # :convert 的説明頁裏 hk 那一行——這一邊叫什麼，長什麼樣
-# tc on purpose: it shows the character forms or names the scripts themselves
 key = "convert.side-hk"
-zht = "  hk  香港繁體　　　説 為 內 吳 裏 髮 台"
-zhs = "  hk  香港繁体　　　説 為 內 吳 裏 髮 台"
+zhs = "  hk  香港繁体　　　[=説 為 內 吳 裏 髮 台=]"
 en = "  hk  Hong Kong trad.   説 為 內 吳 裏 髮 台"
 
 [[message]]
 # :convert 的説明頁裏 jp 那一行——這一邊叫什麼，長什麼樣
-# tc on purpose: it shows the character forms or names the scripts themselves
 key = "convert.side-jp"
-zht = "  jp  日本新字体　　説 為 内 呉 裏 髪 台"
-zhs = "  jp  日本新字体　　説 為 内 呉 裏 髪 台"
+zhs = "  jp  [=日本新字体　　説 為 内 呉 裏 髪 台=]"
 en = "  jp  Japanese          説 為 内 呉 裏 髪 台"
 
 [[message]]
 # :convert 的説明頁裏 s 那一行——這一邊叫什麼，長什麼樣
-# tc on purpose: it shows the character forms or names the scripts themselves
 key = "convert.side-s"
-zht = "  s   簡體　　　　　说 为 内 吴 里 发 台"
-zhs = "  s   简体　　　　　说 为 内 吴 里 发 台"
+zhs = "  s   简体　　　　　[=说 为 内 吴 里 发 台=]"
 en = "  s   simplified        説 为 内 吴 里 发 台"
 
 [[message]]
 # :convert 的説明頁裏 t 那一行——這一邊叫什麼，長什麼樣
-# tc on purpose: it shows the character forms or names the scripts themselves
 key = "convert.side-t"
-zht = "  t   opencc 繁體　 説 爲 內 吳 裏 髮 臺"
-zhs = "  t   opencc 繁体　 説 爲 內 吳 裏 髮 臺"
+zhs = "  t   opencc 繁体　 [=説 爲 內 吳 裏 髮 臺=]"
 en = "  t   OpenCC trad.      説 爲 內 吳 裏 髮 臺"
 
 [[message]]
 # :convert 的説明頁裏 tw 那一行——這一邊叫什麼，長什麼樣
-# tc on purpose: it shows the character forms or names the scripts themselves
 key = "convert.side-tw"
-zht = "  tw  臺灣正體　　　説 為 內 吳 裡 髮 臺"
-zhs = "  tw  台湾正体　　　説 為 內 吳 裡 髮 臺"
+zhs = "  tw  台湾正体　　　[=説 為 內 吳 裡 髮 臺=]"
 en = "  tw  Taiwan trad.      説 為 內 吳 裡 髮 臺"
 
 [[message]]
 # :convert 的説明頁最後一行，説撤銷只有 u 這一條路
-# tc on purpose: it shows the character forms or names the scripts themselves
 key = "convert.undo-with-u"
-zht = "轉錯了請按 u 撤銷，不要反向再轉一次：s2tw 之後再 tw2s 回不到原文，裏和裡都會變成里。"
-zhs = "转错了请按 u 撤销，不要反向再转一次：s2tw 之后再 tw2s 回不到原文，裏和裡都会变成里。"
+zhs = "转错了请按 u 撤销，不要反向再转一次：s2tw 之后再 tw2s 回不到原文，[=裏和裡=]都会变成[=里=]。"
 en = "undo with u, not by converting back: `s2tw` then `tw2s` does not round-trip, and 裏 and 裡 both become 里."
 
 [[message]]
