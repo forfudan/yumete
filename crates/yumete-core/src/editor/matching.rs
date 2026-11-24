@@ -3183,6 +3183,16 @@ impl Editor {
     /// indented, as the renderer lays the rows out, so a key asking about
     /// rows and columns asks about the ones on the screen.
     pub(super) fn with_page_measure<R>(&self, width: usize, f: impl FnOnce(&ropey::Rope, crate::wrap::Measure) -> R) -> R {
+        // The filler rows of a side-by-side view are rows `j`, `C-d` and `G`
+        // walk past (#518); none outside one.
+        let pads = |line: usize| self.diff_pads(width, line);
+        let lead = self.diff_lead(width);
+        self.with_bare_measure(width, |rope, m| f(rope, m.with_pads(&pads, lead)))
+    }
+
+    /// [`Self::with_page_measure`] without the filler rows: each line's own
+    /// rows, which are what the filler rows are worked out from.
+    pub(super) fn with_bare_measure<R>(&self, width: usize, f: impl FnOnce(&ropey::Rope, crate::wrap::Measure) -> R) -> R {
         let hide = |line: usize| self.hidden_on_line(line);
         let fold = |line: usize| self.line_is_folded(line);
         let drawn = |line: usize| self.drawn_on_line(line);

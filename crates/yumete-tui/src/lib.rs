@@ -692,13 +692,18 @@ fn settle_the_wrap(editor: &mut Editor, config: &Config, page: Rect) {
 /// `:view-pages-horizontal` in it: one page's width, wrapping
 /// even with wrap off, and every page's rows for `C-f`/`C-d`.
 fn settle_the_pages(editor: &mut Editor, config: &Config, page: Rect) {
-    let lines = editor.current_buffer().line_count();
+    let lines = editor.gutter_lines();
     let strips = horizontal_pages(editor, config, page);
     let first = strips.first().copied().unwrap_or(page);
     let gutter = gutter_in(first.width as usize, lines, numbers(editor, config), editor.has_a_problem_lane());
-    editor.set_pages_on_screen(strips.len());
+    // The two columns of a side-by-side diff are one page: one list of rows.
+    let chain = match editor.diff_in_view() {
+        true => 1,
+        false => strips.len(),
+    };
+    editor.set_pages_on_screen(chain);
     editor.set_wrap_width((first.width as usize).saturating_sub(gutter));
-    editor.set_page(page.height as usize * strips.len(), first.width.max(1) as usize);
+    editor.set_page(first.height as usize * chain, first.width.max(1) as usize);
     // The columns `zl` `zL` `ze` count, known before the keys as the wrap is.
     editor.note_side_width((first.width as usize).saturating_sub(gutter).max(1), gutter);
 }
@@ -1777,6 +1782,8 @@ pub fn run(
             None => match [
                 editor.autosave_due_in(),
                 editor.vcs_due_in(),
+                // A side-by-side diff's whole-text pass, once the typing stops.
+                editor.diff_due_in(),
                 editor.status_due_in(),
                 // A lit yank goes out on time, with no key to wake the loop.
                 editor.yank_flash_due_in().filter(|_| config.editor.yank_flash),
@@ -1837,6 +1844,7 @@ pub fn run(
                     Ok(Arrival::HungUp) => break Ok(()),
                     Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                         editor.vcs_tick();
+                        editor.diff_tick();
                         editor.autosave_tick();
                         editor.status_tick();
                         editor.yank_flash_tick();
@@ -3142,6 +3150,9 @@ struct Viewport {
     /// `set_page_top`：到核心那裏的是上一幀的答案，而按 `gw` 的那一刻上一幀就是
     /// 眼前這一幀。
     drawn_span: Option<(usize, usize)>,
+    /// Which column of a side-by-side diff `top` is in, so that the keys
+    /// crossing to the other column keep the page where it was.
+    diff_side: Option<yumete_core::align::Side>,
 }
 
 /// Where each work area is scrolled to (Feature #176).
@@ -7010,7 +7021,10 @@ fn held_bar(
     if a == 0 && b >= len {
         return None;
     }
-    let chain = horizontal_pages(editor, config, page).len().max(1);
+    let chain = match editor.diff_in_view() {
+        true => 1,
+        false => horizontal_pages(editor, config, page).len().max(1),
+    };
     let folds = editor.closed_folds();
     let top = seats[live].top;
     let rows = seats.rows.rows(editor);
@@ -7297,6 +7311,8 @@ fn draw<'a>(
     pages: impl Into<Pages<'a>>,
 ) {
     let pages: Pages = pages.into();
+    // A side-by-side diff measures each line's rows afresh each frame.
+    editor.diff_new_frame();
     let settings = pages.settings;
     let genda = pages.genda.filter(|g| g.open());
     let words = pages.words.filter(|w| w.open());
@@ -7427,6 +7443,10 @@ fn draw<'a>(
             // the cursor landed in a cell.
             _ if editor.grid_has_the_pane() => {
                 table::draw(frame, editor, config, *rect, &mut seat.table, peek)
+            }
+            WritingLayout::Horizontal if editor.diff_in_view() => {
+                let bar = bars.get(which).copied().filter(|b| b.width > 0);
+                draw_diff(frame, editor, config, *rect, seat, peek, bar)
             }
             WritingLayout::Horizontal => {
                 // **Pages side by side, the text running on**
@@ -10617,6 +10637,18 @@ fn text_at_under(
             // that page is the area, and its first row is
             // where the pages before it ended.
             let strips = horizontal_pages(editor, config, area);
+            // In a side-by-side diff the column with the keys is the page; a
+            // click in the other column lands nowhere.
+            let strips = match editor.diff_columns() {
+                Some(columns) => {
+                    let keyed = strips[usize::from(!columns.keys_left).min(strips.len() - 1)];
+                    if mouse.column < keyed.x || mouse.column >= keyed.x + keyed.width {
+                        return None;
+                    }
+                    vec![keyed]
+                }
+                None => strips,
+            };
             // A click in a centred page's left margin is a click in its
             // gutter: the row's first character, as the page it stands
             // beside is the first.
@@ -10627,7 +10659,7 @@ fn text_at_under(
             let area = strips[page];
             let gutter = gutter_in(
                 area.width as usize,
-                buffer.line_count(),
+                editor.gutter_lines(),
                 numbers(editor, config),
                 editor.has_a_problem_lane(),
             );
@@ -10645,6 +10677,7 @@ fn text_at_under(
             let widths = |rope: &yumete_core::Rope, line: usize, span: usize| {
                 editor.line_widths(rope, line, span)
             };
+            let pads = |line: usize| editor.diff_pads(width, line);
             let measure = wrap::Measure::new(width, &hide)
                 .with_indent(editor.paragraph_indent())
                 .with_folds(&fold)
@@ -10655,7 +10688,8 @@ fn text_at_under(
                 .with_version(editor.current_buffer().id(), editor.current_buffer().revision())
                 .with_edit(editor.current_buffer().edit())
                 .with_open_line(editor.open_line())
-                .with_caret(editor.caret_for_the_wrap());
+                .with_caret(editor.caret_for_the_wrap())
+                .with_pads(&pads, editor.diff_lead(width));
             // The same walk the page was drawn with: a row with a reading
             // over it takes two screen rows, so counting rows from the top
             // would land a click one row low for every reading above it.
@@ -14432,6 +14466,9 @@ enum PastThePage {
 /// vertical pages fall back to fewer bands when a band cannot hold a 縱. The
 /// last page takes the cells the division leaves over.
 fn horizontal_pages(editor: &Editor, config: &Config, rect: Rect) -> Vec<Rect> {
+    if editor.diff_in_view() {
+        return diff_columns(editor, config, rect);
+    }
     let lines = editor.current_buffer().line_count();
     let mut n = editor.pages_horizontal().max(1);
     let wide = |n: usize| rect.width.saturating_sub(PAGE_GAP * (n as u16 - 1)) / n as u16;
@@ -14510,6 +14547,127 @@ fn centre_the_pages(editor: &Editor, config: &Config, rect: Rect, strips: Vec<Re
         .collect()
 }
 
+/// **The two columns of a side-by-side diff** (#518), under the row their
+/// titles stand in: each as wide as its gutter and the measure, or half the
+/// window when that is narrower, both the same width so a line the two texts
+/// share folds the same way on both; centred as one spread, as pages are.
+/// Never one column, however narrow the window.
+fn diff_columns(editor: &Editor, config: &Config, rect: Rect) -> Vec<Rect> {
+    let rect = diff_body(rect);
+    let lines = editor.gutter_lines();
+    let half = rect.width.saturating_sub(PAGE_GAP) / 2;
+    let gutter = gutter_in(half as usize, lines, numbers(editor, config), editor.has_a_problem_lane());
+    let text = editor.wrap_for((half as usize).saturating_sub(gutter));
+    let width = half.min(u16::try_from(gutter + text).unwrap_or(u16::MAX)).max(1);
+    let used = 2 * width + PAGE_GAP;
+    let x = rect.x + match editor.centre() {
+        true => centred_margin(rect.width, used),
+        false => 0,
+    };
+    vec![
+        Rect::new(x, rect.y, width, rect.height),
+        Rect::new(x + width + PAGE_GAP, rect.y, width, rect.height),
+    ]
+}
+
+/// A side-by-side diff's window less the row its titles stand in.
+fn diff_body(rect: Rect) -> Rect {
+    match rect.height > 1 {
+        true => Rect { y: rect.y + 1, height: rect.height - 1, ..rect },
+        false => rect,
+    }
+}
+
+/// **Draw a side-by-side diff** (#518): the column with the keys scrolls as
+/// any page does, and the other is drawn from the row beside its top — the
+/// alignment and the filler rows in both measures make the rows below line
+/// up by themselves. A dim title over each column names its text. Answers
+/// where the caret is.
+fn draw_diff(
+    frame: &mut Frame,
+    editor: &Editor,
+    config: &Config,
+    rect: Rect,
+    seat: &mut Viewport,
+    peek: Option<&yumete_core::editor::Pane>,
+    bar: Option<Rect>,
+) -> (u16, u16) {
+    let ink = match peek {
+        None => crate::theme::Palette::of(config),
+        Some(_) => crate::theme::Palette::of(config).reading(editor.focus()),
+    };
+    let strips = horizontal_pages(editor, config, rect);
+    let (Some(columns), &[left, right]) = (editor.diff_columns(), &strips[..]) else {
+        return (rect.x, rect.y);
+    };
+    // The page under everything; the margins either side of the spread in
+    // the tint past the measure, as pages have them.
+    frame.render_widget(Paragraph::new("").style(ink.page()), rect);
+    let margin = ink.page().bg(ink.at(yumete_config::rung::BAND));
+    let body = diff_body(rect);
+    let end = right.x + right.width;
+    for cells in [
+        Rect::new(rect.x, body.y, left.x - rect.x, body.height),
+        Rect::new(end, body.y, (rect.x + rect.width).saturating_sub(end), body.height),
+    ] {
+        if cells.width > 0 {
+            frame.render_widget(Paragraph::new("").style(margin), cells);
+        }
+    }
+    if body.y > rect.y {
+        let title = ink.page().fg(ink.furniture());
+        for (strip, name) in [(left, &columns.left), (right, &columns.right)] {
+            let head = Rect::new(strip.x, rect.y, strip.width, 1);
+            let text = cut_to_width(&format!(" {name}"), strip.width as usize);
+            frame.render_widget(Paragraph::new(text).style(title), head);
+        }
+    }
+    let (keyed, other) = match columns.keys_left {
+        true => (left, right),
+        false => (right, left),
+    };
+    let spill = |strip: Rect| match (strip == left, bar.is_some()) {
+        (true, _) => PastThePage::Gap,
+        (false, true) => PastThePage::Bar,
+        (false, false) => PastThePage::Nothing,
+    };
+    let width = editor.wrap_width().unwrap_or(usize::MAX / 2).max(1);
+    // The keys crossed to the other column: the page stays where it was, so
+    // its top is the row beside the old one.
+    let side = match columns.keys_left {
+        true => yumete_core::align::Side::Old,
+        false => yumete_core::align::Side::New,
+    };
+    if let Some(was) = seat.diff_side.filter(|&was| was != side) {
+        seat.top = editor.diff_twin_top(was, seat.top, width);
+        seat.left = 0;
+    }
+    seat.diff_side = Some(side);
+    let (caret, _) = draw_horizontal(
+        frame,
+        editor,
+        config,
+        keyed,
+        &mut seat.top,
+        &mut seat.left,
+        &mut seat.drawn_span,
+        peek,
+        None,
+        1,
+        true,
+        spill(keyed),
+    );
+    let mut top = editor.diff_other_top(seat.top, width);
+    if let Some((_viewing, pane)) = editor.view_diff_other(width) {
+        let (mut left, mut span) = (0, None);
+        draw_horizontal(frame, editor, config, other, &mut top, &mut left, &mut span, Some(&pane), None, 1, false, spill(other));
+    }
+    if let Some(bar) = bar {
+        frame.render_widget(Paragraph::new("").style(ink.page()), bar);
+    }
+    caret.unwrap_or((keyed.x, keyed.y))
+}
+
 /// **The left margin of a block `used` cells wide centred in `room`**: half
 /// the spare width, rounded down, so an odd cell goes to the right margin;
 /// none when the block does not fit.
@@ -14554,7 +14712,7 @@ fn draw_horizontal(
     past: PastThePage,
 ) -> (Option<(u16, u16)>, Option<WrapAnchor>) {
     let buffer = editor.current_buffer();
-    let total_lines = buffer.line_count();
+    let total_lines = editor.gutter_lines();
     let height = text_area.height as usize;
     // The height the scrolling rules measure: every page of the chain.
     let reach = height * chain.max(1);
@@ -14604,6 +14762,8 @@ fn draw_horizontal(
     // 不必每動一下就把前面那一整段逐字素走一遍。
     let widths =
         |rope: &yumete_core::Rope, line: usize, span: usize| editor.line_widths(rope, line, span);
+    // The filler rows of a side-by-side diff (#518): none outside one.
+    let pads = |line: usize| editor.diff_pads(width, line);
     let measure = wrap::Measure::new(width, &hide)
         .with_indent(editor.paragraph_indent())
         .with_folds(&fold)
@@ -14614,7 +14774,8 @@ fn draw_horizontal(
         .with_version(editor.current_buffer().id(), editor.current_buffer().revision())
         .with_edit(editor.current_buffer().edit())
         .with_open_line(editor.open_line())
-        .with_caret(editor.caret_for_the_wrap());
+        .with_caret(editor.caret_for_the_wrap())
+        .with_pads(&pads, editor.diff_lead(width));
 
     // A pane that is only being read has no cursor: it is drawn from the
     // place it was left at, and *that* is what the page is scrolled around.
@@ -15094,7 +15255,29 @@ fn draw_horizontal(
         true => maths_spots(editor, rope, measure, &on_screen),
         false => Vec::new(),
     };
+    // **A side-by-side diff's tints** (#518): the old text's changes washed
+    // with 朱, the new's with 綠, the words that changed a step louder.
+    let diff_wash = |side: yumete_core::align::Side| match side {
+        yumete_core::align::Side::Old => crate::theme::Accent::Mark,
+        yumete_core::align::Side::New => crate::theme::Accent::Green,
+    };
     for (row_y, row) in on_screen {
+        // **A filler row is page with nothing on it**: a faint ground beside
+        // the lines the other column has, no number and no text.
+        if row.filler {
+            let band = match editor.number_fill() {
+                true => ink.ground(yumete_config::rung::HEAD),
+                false => ink.page(),
+            };
+            let ground = Style::default().bg(ink.at(yumete_config::rung::BAND));
+            let line = Line::from(vec![
+                Span::styled(" ".repeat(gutter), band),
+                Span::styled(" ".repeat(text_area.width as usize + left), ground),
+            ]);
+            lines.push(scrolled(line, gutter, left));
+            continue;
+        }
+        let diff_ink = editor.diff_ink(row.line).filter(|d| d.changed);
         // The screen row it is drawn on, for a hover panel's places on it.
         let screen_y = text_area.y + row_y as u16;
         // Which palette this row is drawn off. Everything below asks `ink`, so
@@ -15171,14 +15354,15 @@ fn draw_horizontal(
             let head: String = label.chars().take(numbers - GUTTER_AIR + 1).collect();
             spans.push(Span::styled(head, band));
             // 貼着正文的那一格歸 git（改動條，#55/#298）。
-            match diff_mark(editor, &row) {
+            // Not in a side-by-side diff: the wash says it there.
+            match (!editor.diff_in_view()).then(|| diff_mark(editor, &row)).flatten() {
                 None => spans.push(Span::styled(" ", band)),
                 Some(change) => spans.push(diff_cell(change, ink, band)),
             }
         }
         // The paragraph opens two squares in, the way a Chinese paragraph is
         // marked — and the blank line it replaces costs a whole row.
-        let indent = measure.indent_of(row.line, &wrap::line_head(rope, row.line), row.index_in_line);
+        let indent = measure.indent_of(row.line, &wrap::line_head(rope, row.line), usize::from(!row.starts_line()));
         if indent > 0 {
             spans.push(indent_span(indent, editor, ink));
         }
@@ -15272,6 +15456,14 @@ fn draw_horizontal(
                 (ground.patch(band), fill.patch(band))
             }
             false => (ground, fill),
+        };
+        // A changed line of a side-by-side diff, washed across the row.
+        let (ground, fill) = match &diff_ink {
+            Some(d) => {
+                let wash = Style::default().bg(ink.washed(diff_wash(d.side)));
+                (ground.patch(wash), fill.patch(wash))
+            }
+            None => (ground, fill),
         };
         // 焦點模式 has to name its ink out loud on a page that has none of its
         // own. With `[theme] ground = "terminal"` the page's style is empty on
@@ -15808,6 +16000,19 @@ fn draw_horizontal(
         // The selection's copies wear the same ground: both say 「this too」.
         // None of them overlaps a selection, so this layer coming after the
         // selection's hides nothing.
+        //
+        // The words a side-by-side diff marks go under them all: they are
+        // the page's, and the reader's marks are laid over the page.
+        if let Some(d) = &diff_ink {
+            let mark = Style::default().bg(ink.short_wash(diff_wash(d.side)));
+            for range in &d.marks {
+                let a = range.start.saturating_sub(start_in_line).min(chars.len());
+                let b = range.end.saturating_sub(start_in_line).min(chars.len());
+                for style in styles.iter_mut().take(b).skip(a) {
+                    *style = style.patch(mark);
+                }
+            }
+        }
         for (from, to) in search_marks.iter().chain(&copies) {
             if *to > row.start && *from < row_end {
                 let a = from.saturating_sub(row.start).min(chars.len());
@@ -16615,9 +16820,11 @@ fn ordinary_status(
         .unwrap_or_default();
     // **`[3/17]`: which match the caret stands in** after `/`, `n` or `N`,
     // until it leaves the match (vim's `searchcount()`).
+    // …or, in a side-by-side diff, **which change of how many** (`]c`).
     let search = editor
         .search_index()
         .map(|(n, of)| format!("[{n}/{of}]"))
+        .or_else(|| editor.diff_counter().map(|(n, of)| say!("diff.counter", n, of)))
         .unwrap_or_default();
     // Warning: **Not `-- NORMAL --`.** Twelve cells for one word, on
     // the one line where everything else gives way when the window narrows.
@@ -17085,6 +17292,12 @@ fn draw_other_status(frame: &mut Frame, editor: &Editor, config: &Config, id: yu
 /// Whether `row` has any reading over it — which costs it a screen row.
 fn row_has_reading(editor: &Editor, rope: &yumete_core::Rope, row: &wrap::Row) -> bool {
     use yumete_cjk::Margin;
+    // **None in a side-by-side diff, and none on a filler row**: a row above a
+    // row is drawn by the renderer alone, and one column having it and the
+    // other not would put the two out of line (#518).
+    if row.filler || editor.diff_in_view() {
+        return false;
+    }
     // A table drawn among the prose (#275) takes one row above its first line
     // for its 列號標尺 — the same mechanism, and the reason this function is
     // the one that answers: the page already knows how to give a row two.
@@ -19183,7 +19396,7 @@ fn squeezed(text: &str) -> String {
 
         let mut editor = Editor::new();
         editor.open_file(&new).unwrap();
-        editor.execute(&format!(":diff {}", old.display())).unwrap();
+        editor.execute(&format!(":diff-report {}", old.display())).unwrap();
 
         let config = Config::default();
         let buf = render(&editor, &config, 60, 8);
@@ -19216,6 +19429,64 @@ fn squeezed(text: &str) -> String {
         assert_ne!(gone_row, added_row, "兩行的底分得開");
         assert_ne!(gone_row, gone, "行是淡的那一層，詞是響的那一層");
         assert_ne!(added_row, added);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// **The side-by-side diff** (#518): the two texts in two columns, a line
+    /// only one has beside a filler row (a faint ground, no number, no text),
+    /// changed lines washed and the changed words a step louder, a dim title
+    /// over each column.
+    #[test]
+    fn a_side_by_side_diff_lines_the_two_texts_up() {
+        let dir = std::env::temp_dir().join(format!("yumete-beside-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("notes.md");
+        std::fs::write(&file, "the morning was grey\nlunch was soup\nbed at ten\n").unwrap();
+        let mut editor = Editor::new();
+        editor.open_file(&file).unwrap();
+        editor.execute(":s/grey/bright/").unwrap();
+        editor.execute(":2").unwrap();
+        for key in "oa walk by the river".chars() {
+            editor.on_key(Key::Char(key));
+        }
+        editor.on_key(Key::Esc);
+        editor.execute(":diff").unwrap();
+
+        let config = Config::default();
+        let (w, h) = (100, 12);
+        let areas = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0);
+        let page = areas.panes[editor.live_pane()];
+        settle_the_pages(&mut editor, &config, page);
+        let buf = render(&editor, &config, w, h);
+        let rows: Vec<String> = (0..h).map(|y| row_text(&buf, y)).collect();
+        let ink = crate::theme::Palette::of(&config);
+
+        let morning = rows.iter().position(|r| r.contains("grey") && r.contains("bright")).expect("the edited pair on one row");
+        let title = &rows[morning - 1];
+        assert!(title.trim_start().starts_with(&say!("diff.title-saved", "notes.md")) && title.trim_end().ends_with("notes.md"), "{rows:#?}");
+        let river = rows.iter().position(|r| r.contains("river")).expect("the added line");
+        let bed = rows.iter().position(|r| r.matches("bed at ten").count() == 2).expect("the last pair on one row");
+        assert_eq!(bed, river + 1, "the pair below stays level: {rows:#?}");
+
+        // Beside the added line, the left column is a filler row.
+        let (gy, ry) = (morning as u16, river as u16);
+        let grey = column_of(&rows[morning], "grey");
+        let filler = buf[(grey, ry)].style().bg;
+        assert_eq!(filler, Some(ink.at(yumete_config::rung::BAND)), "{rows:#?}");
+        assert!(rows[river][..grey as usize].trim().is_empty(), "no number on a filler row: {rows:#?}");
+        // The changed words a step louder than their line.
+        let gone = buf[(grey, gy)].style().bg;
+        let gone_row = buf[(column_of(&rows[morning], "morning"), gy)].style().bg;
+        let added = buf[(column_of(&rows[morning], "bright"), gy)].style().bg;
+        assert_eq!(gone, Some(ink.short_wash(crate::theme::Accent::Mark)));
+        assert_eq!(gone_row, Some(ink.washed(crate::theme::Accent::Mark)));
+        assert_eq!(added, Some(ink.short_wash(crate::theme::Accent::Green)));
+        // An unchanged line is on the page.
+        let soup = buf[(column_of(&rows[morning + 1], "soup"), gy + 1)].style().bg;
+        assert_eq!(soup, buf[(column_of(&rows[morning + 1], "lunch"), gy + 1)].style().bg);
+        assert_ne!(soup, gone_row);
 
         std::fs::remove_dir_all(&dir).ok();
     }

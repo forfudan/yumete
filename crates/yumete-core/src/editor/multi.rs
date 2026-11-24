@@ -66,6 +66,7 @@ impl super::Editor {
             // 不必每動一下就把前面那一整段逐字素走一遍。
             let widths = |rope: &ropey::Rope, line: usize, span: usize| self.line_widths(rope, line, span);
             let width = self.wrap_width().unwrap_or(crate::wrap::NO_WRAP);
+            let pads = |line: usize| self.diff_pads(width, line);
             let m = crate::wrap::Measure::new(width, &hide)
                 .with_indent(self.paragraph_indent())
                 .with_folds(&fold)
@@ -76,7 +77,8 @@ impl super::Editor {
                 .with_version(self.current_buffer().id(), self.current_buffer().revision())
                 .with_edit(self.current_buffer().edit())
                 .with_open_line(self.open_line())
-                .with_caret(self.caret_for_the_wrap());
+                .with_caret(self.caret_for_the_wrap())
+                .with_pads(&pads, self.diff_lead(width));
             let rope = self.current_buffer().rope();
             let step = |pos: usize, goal: usize| match down {
                 true => crate::wrap::next_row(rope, pos, m, goal),

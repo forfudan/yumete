@@ -1285,6 +1285,16 @@ impl Editor {
             self.alias_count = None;
             return;
         };
+        // **vim's `do` and `dp`** (`:h do`): in a side-by-side view, take
+        // this change from the other column, or give it.
+        if op == 'd' && first.is_none() && matches!(c, 'o' | 'p') && self.diff_in_view() {
+            self.count = None;
+            self.alias_count = None;
+            return match c {
+                'o' => self.diff_get(),
+                _ => self.diff_put(),
+            };
+        }
         let grain = self.word_grain();
         // **The operator doubled is the line**: `dd`, `yy`, `cc`. `yss`, which
         // is vim-surround's 「wrap this line」, falls out of the same rule.

@@ -43,7 +43,7 @@ pub enum Syntax {
     /// self is not Markdown, and colouring it as Markdown makes the writer's
     /// own punctuation flicker at them. `:syntax text` says so.
     Text,
-    /// A `:diff` listing (#499). Not a file format and not something
+    /// A `:diff-report` listing (#499). Not a file format and not something
     /// [`parse`](Syntax::parse) will hand back — the listing buffer is given
     /// it, and nothing else ever is.
     ///

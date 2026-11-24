@@ -242,7 +242,7 @@ pub fn marked(row: &DraftRow) -> String {
     out
 }
 
-/// The coloured runs of one line of a `:diff` listing (#499).
+/// The coloured runs of one line of a `:diff-report` listing (#499).
 ///
 /// The listing is **text**, and stays text: `[-走了-]{+來了+}` is what the
 /// buffer holds, so it can be yanked, searched and read by anything that reads

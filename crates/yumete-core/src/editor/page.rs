@@ -29,8 +29,12 @@ impl Editor {
     /// that way」, and the second must not quietly answer the first. Open a
     /// program file in the middle of a novel and the novel is still 竪排 when
     /// you come back to it — [`Self::layout_wanted`] is what was asked for.
+    ///
+    /// **A side-by-side diff is across too** (#518): its two columns stand
+    /// row beside row, which 縱書 has no form for. The page turns while the
+    /// view is open and is back when it closes, with nothing to restore.
     pub fn layout(&self) -> Layout {
-        match self.writes_code() {
+        match self.writes_code() || self.diff_is_open() {
             true => Layout::Horizontal,
             false => self.layout_wanted,
         }
@@ -411,8 +415,9 @@ impl Editor {
             return true;
         }
         // 中階 draws the indent and keeps the blank line: adding two squares
-        // takes nothing away, folding a line does (#283).
-        if self.indent == 0 || !self.indent_folds {
+        // takes nothing away, folding a line does (#283). A side-by-side diff
+        // keeps every line, as it keeps closed folds open.
+        if self.indent == 0 || !self.indent_folds || self.diff_in_view() {
             return false;
         }
         if line == self.cursor_line() {
@@ -1465,6 +1470,7 @@ impl Editor {
         for buffer in &mut self.buffers {
             buffer.forget_folds(window);
         }
+        self.forget_a_closed_diff();
         true
     }
 
@@ -1912,12 +1918,20 @@ impl Editor {
     ///
     /// git diff 層就是行號右側那一格底色：`crate::vcs` 算，`diff_cell` 畫。
     pub(super) fn go_to_change(&mut self, forward: bool) {
+        // In a side-by-side view, its own changes: its left text need not be
+        // `HEAD`.
+        if self.diff_in_view() {
+            return self.diff_go(forward);
+        }
         let here = self.cursor_line();
         self.go_to_a_change(|changes| changes.hunk_from(here, forward));
     }
 
     /// helix's `]G` and `[G`: the last change in the file, or the first.
     pub(super) fn go_to_change_at_the_end(&mut self, last: bool) {
+        if self.diff_in_view() {
+            return self.diff_go_to_the_end(last);
+        }
         self.go_to_a_change(|changes| changes.hunk_at_the_end(last));
     }
 

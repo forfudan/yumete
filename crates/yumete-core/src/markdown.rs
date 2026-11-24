@@ -69,7 +69,7 @@ pub enum Kind {
     /// a marker is, but never hidden: `<br>` says something `**` does not.
     /// The text between two tags is prose.
     Html,
-    /// `[-什麼走了-]` in a `:diff` listing — the old draft's words.
+    /// `[-什麼走了-]` in a `:diff-report` listing — the old draft's words.
     ///
     /// Not Markdown; the listing has [`crate::syntax::Syntax::Diff`] and this
     /// is what that syntax produces. It lives in this enum because everything
@@ -77,9 +77,9 @@ pub enum Kind {
     /// the width — is written once against `Kind` and would have to be written
     /// again for a second one.
     Gone,
-    /// `{+什麼來了+}` in a `:diff` listing — the new draft's words.
+    /// `{+什麼來了+}` in a `:diff-report` listing — the new draft's words.
     Added,
-    /// **The whole of an old row in a `:diff` listing**.
+    /// **The whole of an old row in a `:diff-report` listing**.
     ///
     /// A changed line is drawn as two rows, the draft before and the draft
     /// after, and the row itself carries a faint ground so the pair reads as a

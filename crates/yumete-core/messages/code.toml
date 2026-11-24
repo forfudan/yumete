@@ -162,16 +162,72 @@ zhs = "{0} 行与《{1}》不同，gf 跳转"
 en = "{0|line differs|lines differ} from '{1}'; gf jumps there"
 
 [[message]]
+# 兩欄對照時狀態欄上那一格：光標在第 {0} 處改動上或之後，一共 {1} 處
+key = "diff.counter"
+zhs = "改动 {0}/{1}"
+# 草稿
+en = "change {0}/{1}"
+
+[[message]]
 # :git-diff 問不出答案：git 自己那一句話照搬
 key = "diff.git-said"
 zhs = "git 中没有 {0} 版本的此文件：{1}"
 en = "git has no version at {0}: {1}"
 
 [[message]]
+# :diff-mark 記下了 {0} 這個檔
+key = "diff.marked"
+zhs = "已标记《{0}》，到另一个文件里用 :diff-marked 对照"
+# 草稿
+en = "marked '{0}'; :diff-marked in another file compares with it"
+
+[[message]]
+# :diff-marked 而記下的就是眼前這個檔
+key = "diff.marked-is-this"
+zhs = "标记的就是这个文件，请到另一个文件里对照"
+# 草稿
+en = "the marked file is this one; compare from another file"
+
+[[message]]
+# 兩欄對照裏 ]c 而後面沒有改動了（不繞回開頭）
+key = "diff.no-change-after"
+zhs = "后面没有改动了"
+# 草稿
+en = "no change after this one"
+
+[[message]]
+# 兩欄對照裏 [c 而前面沒有改動了（不繞回結尾）
+key = "diff.no-change-before"
+zhs = "前面没有改动了"
+# 草稿
+en = "no change before this one"
+
+[[message]]
 # :diff 而這個緩衝區没有檔案，也没説要比誰
 key = "diff.no-file"
 zhs = "此缓冲区还没有文件，请指定比较对象：`:diff <文件名>`"
 en = "this buffer has no file yet; name one to compare with: `:diff <path>`"
+
+[[message]]
+# :diff-get、:diff-put 而眼前不是兩欄對照
+key = "diff.not-in-view"
+zhs = "不在对照中：先用 :diff 或 :git-diff"
+# 草稿
+en = "not in a side-by-side view: :diff or :git-diff opens one"
+
+[[message]]
+# :diff-marked 而還没有用 :diff-mark 記過檔
+key = "diff.nothing-marked"
+zhs = "还没有标记文件：先用 :diff-mark"
+# 草稿
+en = "no file marked yet: :diff-mark one first"
+
+[[message]]
+# :diff-put（dp）而另一欄是只讀的副本（git 的版本或存檔）
+key = "diff.other-read-only"
+zhs = "另一栏是只读的副本，不能改"
+# 草稿
+en = "the other column is a read-only copy"
 
 [[message]]
 # :diff 的結果那一份緩衝區的名字
@@ -184,6 +240,20 @@ en = "[changes {0} ↔ {1}]"
 key = "diff.same"
 zhs = "与《{0}》完全相同"
 en = "identical to '{0}'"
+
+[[message]]
+# 兩欄對照左欄頂上那一行：{1} 是檔名，{0} 是 git 的版本（HEAD 或提交）
+key = "diff.title-revision"
+zhs = "{1} @ {0}"
+# 草稿
+en = "{1} @ {0}"
+
+[[message]]
+# 兩欄對照左欄頂上那一行：{0} 是檔名，左欄是存在磁碟上的那一份
+key = "diff.title-saved"
+zhs = "{0}（已保存）"
+# 草稿
+en = "{0} (saved)"
 
 [[message]]
 # :diff 兩份差得太遠，逐詞列出來没有意義
@@ -199,6 +269,41 @@ en = "{0}+ lines differ from '{1}' (first {0} listed); gf jumps there"
 
 
 # ── edit ──────────────────────────────────────────────────────────────
+
+[[message]]
+# 在縱書頁上打開兩欄對照：{0} 是本來要說的話，頁面在對照期間改成橫排
+key = "diff.turned-horizontal"
+zhs = "{0}（对照期间改为横排）"
+# 草稿
+en = "{0} (the page is horizontal while the view is open)"
+
+[[message]]
+# 再打一次 :diff 或 :git-diff，關掉了兩欄對照
+key = "diff.view-closed"
+zhs = "已关闭对照"
+# 草稿
+en = "side-by-side view closed"
+
+[[message]]
+# :diff、:git-diff 打開了兩欄對照，兩份差得太遠，只並排、不標改動
+key = "diff.view-far"
+zhs = "两份差异太大，只并排显示，不标改动"
+# 草稿
+en = "too different to mark; shown side by side only"
+
+[[message]]
+# :diff、:git-diff 打開了兩欄對照，數到 {0} 處改動
+key = "diff.view-opened"
+zhs = "{0} 处改动"
+# 草稿
+en = "{0|change|changes}"
+
+[[message]]
+# :diff、:git-diff 打開了兩欄對照，兩邊一字不差
+key = "diff.view-same"
+zhs = "两栏完全相同"
+# 草稿
+en = "the two columns are the same"
 
 [[message]]
 # :git-show 之後狀態行的一句話

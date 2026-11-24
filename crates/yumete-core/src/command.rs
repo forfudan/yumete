@@ -868,12 +868,26 @@ pub enum Command {
     /// `:check-merge` — the merge conflicts in this file, as a results buffer
     /// (Feature #249).
     Conflicts,
-    /// `:diff [path]` — what changed, by 詞, against the file on disk or
-    /// against another draft (Feature #235).
+    /// `:diff [path]` — this draft beside the file on disk, or beside another
+    /// file, in two columns (#518); bare, in an open view, closes it.
     Diff(Option<String>),
-    /// `:git-diff [提交]` — the same, against what git has.
+    /// `:git-diff [提交]` — the same, beside what git has.
     /// `None` is `HEAD`.
     GitDiff(Option<String>),
+    /// `:diff-report [path]` — what changed, by 詞, against the file on disk
+    /// or against another draft, as a listing (Feature #235).
+    DiffReport(Option<String>),
+    /// `:git-diff-report [提交]` — the same listing, against what git has.
+    GitDiffReport(Option<String>),
+    /// `:diff-mark` — this file is the one to compare with.
+    DiffMark,
+    /// `:diff-marked` — the marked file beside this one.
+    DiffMarked,
+    /// `:diff-get` — the other column's version of this change (vim's `do`).
+    DiffGet,
+    /// `:diff-put` — this column's version of this change, into the other
+    /// (vim's `dp`).
+    DiffPut,
     /// `:git-show [commit]` — the committed draft, read-only, in the other
     /// work area (#518).
     GitShow(Option<String>),
@@ -1764,6 +1778,8 @@ pub const QUIET: &[&str] = &[
     "clipboard-paste-after",
     "clipboard-yank-join",
     "preview-redraw",
+    "select-for-compare",
+    "compare-with-selected",
 ];
 
 /// **Whether the words after `:settings` are vim's `:set` words** and not a
@@ -6784,6 +6800,48 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|p| Ok(Command::Diff(p.arg(0).map(|s| s.to_string())))),
     },
     Entry {
+        name: "diff-report",
+        aliases: &[],
+        help: "cmd.commands.diff-report",
+        needs: &[],
+        params: &[Param::Path],
+        build: Some(|p| Ok(Command::DiffReport(p.arg(0).map(|s| s.to_string())))),
+    },
+    // VS Code's 「Select for Compare」 and 「Compare with Selected」, by those
+    // names too.
+    Entry {
+        name: "diff-mark",
+        aliases: &["select-for-compare"],
+        help: "cmd.commands.diff-mark",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::DiffMark)),
+    },
+    Entry {
+        name: "diff-marked",
+        aliases: &["compare-with-selected"],
+        help: "cmd.commands.diff-marked",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::DiffMarked)),
+    },
+    Entry {
+        name: "diff-get",
+        aliases: &[],
+        help: "cmd.commands.diff-get",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::DiffGet)),
+    },
+    Entry {
+        name: "diff-put",
+        aliases: &[],
+        help: "cmd.commands.diff-put",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::DiffPut)),
+    },
+    Entry {
         name: "lsp-rename",
         aliases: &[],
         help: "cmd.commands.lsp-rename",
@@ -6806,6 +6864,14 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[Param::Free("cmd.arg.commit")],
         build: Some(|p| Ok(Command::GitDiff(p.arg(0).map(|s| s.to_string())))),
+    },
+    Entry {
+        name: "git-diff-report",
+        aliases: &[],
+        help: "cmd.commands.git-diff-report",
+        needs: &[],
+        params: &[Param::Free("cmd.arg.commit")],
+        build: Some(|p| Ok(Command::GitDiffReport(p.arg(0).map(|s| s.to_string())))),
     },
     Entry {
         name: "ruby",
@@ -9338,8 +9404,9 @@ mod tests {
         // 答的就是它們兩個，不往下挖參數——而深搜本來就是「頂層找不着纔往下挖」。
         assert_eq!(found("vert"), ["vertical", "vertical-keys"]);
         // …and a prefix that names something at the top level is answered
-        // about that, with nothing dredged up from below it.
-        assert_eq!(found("diff"), ["diff"]);
+        // with the commands it begins, nothing dredged up from below them
+        // (no `:git-diff`).
+        assert_eq!(found("diff"), ["diff", "diff-get", "diff-mark", "diff-marked", "diff-put", "diff-report"]);
     }
 
     /// Print the menu the way it is drawn, for looking at.

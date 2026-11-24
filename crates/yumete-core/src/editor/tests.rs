@@ -2619,7 +2619,7 @@ fn diff_reports_the_word_that_changed_and_gf_goes_to_it() {
     ed.open_file(&file).unwrap();
 
     // Nothing typed yet: the buffer and the file agree.
-    ed.execute(":diff").unwrap();
+    ed.execute(":diff-report").unwrap();
     assert!(ed.status().contains(&say!("diff.same", "ch01.txt")), "{}", ed.status());
     assert_eq!(ed.buffer_tabs().len(), 1, "no results buffer for no changes");
 
@@ -2627,7 +2627,7 @@ fn diff_reports_the_word_that_changed_and_gf_goes_to_it() {
     // changed.
     ed.goto_line(2);
     ed.execute(":s/很早/極早/").unwrap();
-    ed.execute(":diff").unwrap();
+    ed.execute(":diff-report").unwrap();
     let listing = ed.current_buffer().text();
     // **兩稿並排，一行一列**：號碼照它自己那一稿算，`-`/`+` 說哪一稿，兩個記號都
     // 畫不出來。檔名不在行上——整份報告說的就是這一個檔。
@@ -3470,7 +3470,7 @@ fn a_report_is_rendered_to_the_end_and_says_nothing_of_its_own() {
     let mut ed = Editor::new();
     ed.open_file(&file).unwrap();
     ed.execute(":s/很早/極早/").unwrap();
-    ed.execute(":diff").unwrap();
+    ed.execute(":diff-report").unwrap();
     assert!(ed.current_buffer().is_computed(), "算出來的");
     assert!(ed.current_buffer().is_readonly(), "改不了");
 
@@ -3533,7 +3533,7 @@ fn diff_can_be_told_which_draft_to_compare_with() {
     let mut ed = Editor::new();
     ed.open_file(dir.join("ch01.txt")).unwrap();
     // Relative to the file being read, not to wherever yumete was started.
-    ed.execute(":diff 昨天.txt").unwrap();
+    ed.execute(":diff-report 昨天.txt").unwrap();
     assert!(
         ed.current_buffer().text().contains("[-不-]"),
         "{}",
@@ -49235,4 +49235,179 @@ fn helix_align_and_trim_as_helix_does() {
     assert_eq!(run("one two one\nthree one four\nfive\n", "%sone⏎&"), "      one two one\nthree one four\nfive\n");
     assert_eq!(run("ab cd\nefgh ij kl\nm\nnopq rs\n", "%S ⏎&"), "ab cd\nefgh ij kl\nm\nnopq rs\n");
     assert_eq!(run("  alpha beta  \ngamma\n", "w_cZ⎋"), " Zalpha beta  \ngamma\n");
+}
+
+// ---- The side-by-side diff (#518) -----------------------------------------
+
+/// A file on disk with `saved` in it, opened, its buffer then made `now`.
+fn diffed(name: &str, saved: &str, now: &str) -> (Editor, std::path::PathBuf) {
+    let dir = tmp().join(format!("yumete-beside-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("notes.md");
+    std::fs::write(&file, saved).unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    let len = ed.current_buffer().char_count();
+    ed.snapshot();
+    let _ = ed.current_buffer_mut().replace(0..len, now);
+    (ed, dir)
+}
+
+const SAVED: &str = "the morning was grey\nlunch was soup\nthe bus came late\nbed at ten\n";
+const NOW: &str = "the morning was bright\nlunch was soup\na walk by the river\nthe bus came late\nbed at ten\n";
+
+#[test]
+fn diff_opens_two_columns_and_closes_with_its_copy() {
+    let (mut ed, dir) = diffed("open", SAVED, NOW);
+    ed.execute(":diff").unwrap();
+    assert!(ed.diff_in_view());
+    assert_eq!(ed.status(), say!("diff.view-opened", 2));
+    assert_eq!(ed.buffer_tabs().len(), 2, "the saved copy beside the file");
+    let columns = ed.diff_columns().unwrap();
+    assert_eq!((columns.left, columns.right.as_str(), columns.keys_left), (say!("diff.title-saved", "notes.md"), "notes.md", false));
+    ed.execute(":diff").unwrap();
+    assert!(!ed.diff_in_view());
+    assert_eq!(ed.buffer_tabs().len(), 1, "the copy goes with the view");
+    assert_eq!(ed.current_buffer().text(), NOW);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn the_report_is_diff_report_now() {
+    let (mut ed, dir) = diffed("report", SAVED, NOW);
+    ed.execute(":diff-report").unwrap();
+    assert!(!ed.diff_in_view());
+    assert!(ed.current_buffer().text().contains("{+bright+}"), "{}", ed.current_buffer().text());
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn next_change_stops_at_the_last_and_says_so() {
+    let (mut ed, dir) = diffed("walk", SAVED, NOW);
+    ed.execute(":diff").unwrap();
+    ed.goto_line(1);
+    assert_eq!(ed.diff_counter(), Some((1, 2)));
+    press(&mut ed, "]g");
+    assert_eq!(ed.cursor_line(), 2, "the added line");
+    assert_eq!(ed.diff_counter(), Some((2, 2)));
+    press(&mut ed, "]g");
+    assert_eq!(ed.cursor_line(), 2, "no going round");
+    assert_eq!(ed.status(), say!("diff.no-change-after"));
+    press(&mut ed, "[g");
+    assert_eq!(ed.cursor_line(), 0);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn filler_rows_stand_beside_lines_the_other_column_has() {
+    let (mut ed, dir) = diffed("pads", SAVED, NOW);
+    ed.execute(":diff").unwrap();
+    // The right column has 「a walk by the river」 on line 2, which the saved
+    // copy has not: one filler row after the left's line 1.
+    assert_eq!(ed.diff_pads(80, 1), 0, "the right column pads nothing");
+    ed.walk_to_region(crate::window::Direction::Left);
+    assert!(ed.diff_columns().unwrap().keys_left);
+    assert!(ed.current_buffer().is_readonly());
+    assert_eq!(ed.diff_pads(80, 1), 1);
+    assert_eq!(ed.diff_pads(80, 0), 0);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn the_keys_cross_to_the_line_beside() {
+    let (mut ed, dir) = diffed("cross", SAVED, NOW);
+    ed.execute(":diff").unwrap();
+    ed.goto_line(4);
+    ed.walk_to_region(crate::window::Direction::Left);
+    assert_eq!(ed.cursor_line(), 2, "「the bus came late」 on both sides");
+    ed.walk_to_region(crate::window::Direction::Left);
+    assert!(ed.diff_columns().unwrap().keys_left, "not past the view's edge");
+    ed.walk_to_region(crate::window::Direction::Right);
+    assert_eq!(ed.cursor_line(), 3);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn diff_get_takes_the_other_version_as_one_undo_step() {
+    let (mut ed, dir) = diffed("get", SAVED, NOW);
+    ed.execute(":diff").unwrap();
+    ed.goto_line(1);
+    ed.execute(":diff-get").unwrap();
+    assert_eq!(ed.current_buffer().text(), "the morning was grey\nlunch was soup\na walk by the river\nthe bus came late\nbed at ten\n");
+    ed.goto_line(3);
+    ed.execute(":diff-get").unwrap();
+    assert_eq!(ed.current_buffer().text(), SAVED);
+    assert_eq!(ed.diff_counter(), Some((0, 0)));
+    press(&mut ed, "u");
+    assert_eq!(ed.current_buffer().text(), "the morning was grey\nlunch was soup\na walk by the river\nthe bus came late\nbed at ten\n");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn diff_put_refuses_a_read_only_copy() {
+    let (mut ed, dir) = diffed("put", SAVED, NOW);
+    ed.execute(":diff").unwrap();
+    ed.goto_line(1);
+    ed.execute(":diff-put").unwrap();
+    assert_eq!(ed.status(), say!("diff.other-read-only"));
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn a_marked_file_goes_left_and_both_columns_can_be_edited() {
+    let (mut ed, dir) = diffed("marked", SAVED, SAVED);
+    ed.execute(":diff-marked").unwrap();
+    assert_eq!(ed.status(), say!("diff.nothing-marked"));
+    ed.execute(":select-for-compare").unwrap();
+    ed.execute(":diff-marked").unwrap();
+    assert_eq!(ed.status(), say!("diff.marked-is-this"));
+    let other = dir.join("draft.md");
+    std::fs::write(&other, NOW).unwrap();
+    ed.open_file(&other).unwrap();
+    ed.execute(":compare-with-selected").unwrap();
+    let columns = ed.diff_columns().unwrap();
+    assert_eq!((columns.left.as_str(), columns.right.as_str()), ("notes.md", "draft.md"));
+    // vim's `dp` on the first change sends 「bright」 to the left file.
+    ed.set_key_preset(crate::KeyPreset::Vim);
+    ed.goto_line(1);
+    press(&mut ed, "dp");
+    assert!(!ed.diff_columns().unwrap().keys_left, "the keys come back");
+    ed.walk_to_region(crate::window::Direction::Left);
+    assert!(ed.current_buffer().text().starts_with("the morning was bright\n"), "{}", ed.current_buffer().text());
+    assert!(!ed.current_buffer().is_readonly());
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn a_vertical_page_turns_across_while_the_view_is_open() {
+    let (mut ed, dir) = diffed("turn", SAVED, NOW);
+    ed.execute(":vertical on").unwrap();
+    assert_eq!(ed.layout(), crate::zong::Layout::Vertical);
+    ed.execute(":diff").unwrap();
+    assert_eq!(ed.layout(), crate::zong::Layout::Horizontal);
+    assert_eq!(ed.status(), say!("diff.turned-horizontal", say!("diff.view-opened", 2)));
+    ed.execute(":diff").unwrap();
+    assert_eq!(ed.layout(), crate::zong::Layout::Vertical);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn typing_re_aligns_at_once_and_the_whole_pass_agrees() {
+    let (mut ed, dir) = diffed("live", SAVED, NOW);
+    ed.execute(":diff").unwrap();
+    ed.goto_line(3);
+    press(&mut ed, "o");
+    for c in "a new line".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Esc);
+    let local = ed.diff_counter();
+    assert_eq!(local, Some((2, 2)), "the added lines are one change");
+    std::thread::sleep(std::time::Duration::from_millis(160));
+    assert_eq!(ed.diff_due_in(), Some(std::time::Duration::ZERO));
+    ed.diff_tick();
+    assert_eq!(ed.diff_due_in(), None);
+    assert_eq!(ed.diff_counter(), local);
+    std::fs::remove_dir_all(&dir).ok();
 }

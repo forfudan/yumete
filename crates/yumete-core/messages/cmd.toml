@@ -544,6 +544,46 @@ find = "删除 刪除 删行 刪行 寄存器 delete lines register"
 [[message]]
 # : 命令選單裏 diff 那一項的説明(commands 組)
 key = "cmd.commands.diff"
+zhs = "左右两栏对照：与已保存的文件或另一个文件并排比较；再输一次关闭"
+# 草稿
+en = "this draft beside the file as saved, or another file, in two columns; bare again closes"
+find = "比較 比较 差異 差异 改動 改动 對照 对照 並排 并排 兩欄 两栏 diff compare side"
+
+[[message]]
+# : 命令選單裏 diff-get 那一項的説明(commands 組)
+key = "cmd.commands.diff-get"
+zhs = "对照中：把另一栏的这一处改动取过来（vim 的 do）"
+# 草稿
+en = "in a side-by-side view: take this change from the other column (vim's do)"
+find = "取回 還原 还原 改動 改动 對照 对照 obtain get revert"
+
+[[message]]
+# : 命令選單裏 diff-mark 那一項的説明(commands 組)
+key = "cmd.commands.diff-mark"
+zhs = "标记当前文件，再到另一个文件用 :diff-marked 对照"
+# 草稿
+en = "mark this file; :diff-marked in another file puts the two side by side"
+find = "標記 标记 對照 对照 比較 比较 select compare mark"
+
+[[message]]
+# : 命令選單裏 diff-marked 那一項的説明(commands 組)
+key = "cmd.commands.diff-marked"
+zhs = "左栏放标记的文件，右栏放当前文件，并排对照"
+# 草稿
+en = "the marked file on the left, this one on the right, side by side"
+find = "標記 标记 對照 对照 比較 比较 並排 并排 compare selected marked"
+
+[[message]]
+# : 命令選單裏 diff-put 那一項的説明(commands 組)
+key = "cmd.commands.diff-put"
+zhs = "对照中：把这一栏的这一处改动送到另一栏（vim 的 dp）"
+# 草稿
+en = "in a side-by-side view: give this change to the other column (vim's dp)"
+find = "送出 改動 改动 對照 对照 put give"
+
+[[message]]
+# : 命令選單裏 diff-report 那一項的説明(commands 組)
+key = "cmd.commands.diff-report"
 zhs = "查看改动：按词比较，而非按行"
 en = "show changes, by word rather than by line"
 find = "比較 比较 差異 差异 改動 改动 對照 对照 diff compare changes"
@@ -781,8 +821,16 @@ en = "typing trainer: the whole article as one segment; on/off, bare flips; off 
 find = "跟打 全文 整篇 一段 段長 段长 whole article segment genda"
 
 [[message]]
-# 命令：:git-diff —— 跟 git 裏那一份比，逐詞
+# : 命令選單裏 git-diff 那一項的説明(commands 組)
 key = "cmd.commands.git-diff"
+zhs = "左右两栏对照 git 中的版本，默认 HEAD；再输一次关闭"
+# 草稿
+en = "this draft beside what git has, in two columns, HEAD unless a commit is named; bare again closes"
+find = "git diff 差異 差异 提交 改動 改动 版本 對照 对照 並排 并排 HEAD"
+
+[[message]]
+# 命令：:git-diff-report —— 跟 git 裏那一份比，逐詞
+key = "cmd.commands.git-diff-report"
 zhs = "与 git 中的版本逐词比较，默认比 HEAD"
 en = "compare with git word by word; HEAD unless a commit is named"
 find = "git diff 差異 差异 提交 改動 改动 版本"

@@ -4015,6 +4015,10 @@ pub struct Editor {
     session_view: Option<Vec<String>>,
     /// The layout a grid turned the page away from, so leaving gives it back.
     turned_for_table: Option<Layout>,
+    /// The side-by-side view of two texts (#518), when one is open.
+    diff_view: Option<diff_view::DiffView>,
+    /// The file `:diff-mark` set aside to be compared with.
+    diff_marked: Option<u64>,
     /// Where the cursor was before each far jump, and how far back we have
     /// walked through them.
     /// A gap between 縱 set at runtime, overriding the config's.
@@ -5282,6 +5286,8 @@ impl Editor {
             session_file: None,
             session_view: None,
             turned_for_table: None,
+            diff_view: None,
+            diff_marked: None,
             zong_gap: None,
             margin: yumete_cjk::Margin::default(),
             sentences: false,
@@ -7283,6 +7289,8 @@ mod copies;
 pub use copies::{CopyCase, CopyRule};
 mod convert;
 mod detail;
+mod diff_view;
+pub use diff_view::{DiffColumns, DiffInk};
 mod docs;
 mod edits;
 mod fences;

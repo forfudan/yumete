@@ -84,6 +84,7 @@ scenes() {
 折疊-標題|80x20|:open OUTLINE\n:keymap vim\nzMzr:sidebar-outline\n
 折疊-竪排|60x24|:open OUTLINE\n:keymap vim\n:vertical\nzMzr
 折疊-代碼|80x20|:open RUST\n:syntax rust\n:keymap vim\njzf2j
+兩欄對照|100x16|:open DIFF\n:git-diff\n
 SCENES
 }
 
@@ -98,6 +99,9 @@ fixture() {
         # 改動帶子那幾幀：這兩份是**改過之後**的樣子，改之前的由 `shoot` 提交進 git。
         GIT)   printf '一葉落知天下秋\n春風又綠江南岸\n明月幾時照我還\n京口瓜洲一水間\n' ;;
         GITBIG) seq 1 40 | sed 's/^/第/; s/$/行 改過的樣子/' ;;
+        # 兩欄對照那一幀：改過之後的樣子；改之前那一份是 DIFF-BASE，由 `shoot` 提交進 git。
+        DIFF)  printf '今天早上下了一場大雨，街上的人都撐着傘，公交車也比平時晚到了十分鐘。\n\n午飯吃的是麪條，湯有點鹹。\n\n傍晚在河邊散步，風很涼。\n\n下午去圖書館借了兩本書，還了一本。\n\n晚上看了一會兒電視就睡了。\n' ;;
+        DIFF-BASE) printf '今天早上下了一場小雨，街上的人都撐着傘，公交車也比平時晚到了五分鐘。\n\n午飯吃的是麪條，湯有點鹹。\n\n下午去圖書館借了兩本書。\n\n晚上看了一會兒電視就睡了。\n' ;;
         *)     printf '那年冬天，雪下得早。山路斷了、她在門口站了很久。\n霜花在窗上結成了葉子的樣子，後來又下了一場，比上次大。\n她伸手去碰，指尖一涼，那朵花就化了。\n\nIt was a dark and stormy night in the old house.\n\n- 買菜\n- 倒垃圾\n- 寫第三章\n' ;;
     esac
 }
@@ -125,6 +129,7 @@ shoot() {
             *RUST*) which=RUST ;;
             *MOJO*) which=MOJO ;;
             *CONFLICT*) which=CONFLICT ;;
+            *DIFF*) which=DIFF ;;
             *GITBIG*) which=GITBIG ;;
             *GIT*) which=GIT ;;
         esac
@@ -133,9 +138,11 @@ shoot() {
         # Warning: **身份要寫死在命令上**（`-c user.*`）：靠這臺機器的 `~/.gitconfig`
         # 的話，換一臺機器就提交不了，而底片要只跟代碼走。
         case "${which}" in
-            GIT|GITBIG)
-                fixture "${which}" | sed 's/改過的樣子/原來的樣子/; s/春風又綠/春風又到/; s/明月幾時/明月何時/' \
-                    > "${work}/文.md"
+            GIT|GITBIG|DIFF)
+                case "${which}" in
+                    DIFF) fixture DIFF-BASE ;;
+                    *) fixture "${which}" | sed 's/改過的樣子/原來的樣子/; s/春風又綠/春風又到/; s/明月幾時/明月何時/' ;;
+                esac > "${work}/文.md"
                 ( cd "${work}" \
                     && git init -q . \
                     && git add 文.md \
@@ -151,7 +158,7 @@ shoot() {
         # 場景裏寫的是 `:open TABLE`，那只是說「開哪一份稿子」——真正打開的是上面
         # 鋪好的那一個檔。
         local pressed="${keys}"
-        for tag in TABLE RUBY OUTLINE RUST MOJO CONFLICT GITBIG GIT; do
+        for tag in TABLE RUBY OUTLINE RUST MOJO CONFLICT DIFF GITBIG GIT; do
             pressed="${pressed//:open ${tag}\\n/}"
         done
         # Warning: **錯誤不許混進底片，退出碼不許吞掉**。從前這一行是

@@ -135,6 +135,11 @@ impl Editor {
 
     /// The closed fold `line` is in, when one is: its first and last line.
     pub(super) fn shut_around(&self, line: usize) -> Option<(usize, usize)> {
+        // None in a side-by-side diff: a fold on one side would take rows the
+        // other side still has beside it.
+        if self.diff_in_view() {
+            return None;
+        }
         let view = self.fold_view();
         let at = view.shut.partition_point(|&(first, _)| first <= line);
         at.checked_sub(1).map(|i| view.shut[i]).filter(|&(_, last)| line <= last)

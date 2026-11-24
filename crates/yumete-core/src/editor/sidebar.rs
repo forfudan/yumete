@@ -534,8 +534,14 @@ impl Editor {
 
     /// `C-w w`: the next open region, wrapping. One region has nowhere to go.
     pub(super) fn next_region(&mut self) {
+        // From the left column of a side-by-side view, the right one.
+        if self.diff_to_column(false) {
+            return;
+        }
         let open = self.regions_open();
         if open.len() < 2 {
+            // The view alone: round to its left column.
+            self.diff_to_column(true);
             return;
         }
         let here = self.which_region();
@@ -545,6 +551,9 @@ impl Editor {
 
     /// vim's `C-w W`: the open region before this one, wrapping.
     pub(super) fn previous_region(&mut self) {
+        if self.diff_to_column(true) {
+            return;
+        }
         let open = self.regions_open();
         if open.len() < 2 {
             return;
@@ -638,6 +647,15 @@ impl Editor {
     pub(super) fn walk_to_region(&mut self, direction: crate::window::Direction) {
         use crate::sidebar::Side;
         use crate::window::Direction;
+        // The two columns of a side-by-side view are crossed first.
+        let column = match direction {
+            Direction::Left => Some(true),
+            Direction::Right => Some(false),
+            _ => None,
+        };
+        if column.is_some_and(|left| self.diff_to_column(left)) {
+            return;
+        }
         let target = match self.which_region() {
             Region::Window(id) => match self.window_neighbour(id, direction) {
                 Some(next) => Some(Region::Window(next)),

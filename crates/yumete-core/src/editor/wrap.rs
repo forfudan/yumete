@@ -195,7 +195,7 @@ impl Editor {
         // **Pages side by side always wrap** — bands wrap inside each column
         // anyway: a line run past a page's edge would run into the next page,
         // and the text is meant to flow down them.
-        let paged = self.pages_on_screen > 1;
+        let paged = self.pages_on_screen > 1 || self.diff_in_view();
         if (self.soft_wrap || paged) && self.layout() == Layout::Horizontal {
             // A window being peeked at folds to its own width.
             self.viewing_wrap.get().or(self.wrap_width)

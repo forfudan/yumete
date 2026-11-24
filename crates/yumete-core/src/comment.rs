@@ -36,7 +36,7 @@ pub fn marks(syntax: Syntax) -> Marks {
     match syntax {
         Syntax::Markdown => Marks { line: None, block: Some(("<!--", "-->")) },
         Syntax::Typst => Marks { line: Some("//"), block: Some(("/*", "*/")) },
-        // A listing is not a file anybody comments — and a `:diff` listing is
+        // A listing is not a file anybody comments — and a `:diff-report` listing is
         // a report, not writing.
         Syntax::Text | Syntax::Diff => Marks { line: None, block: None },
         Syntax::Code(language) => {

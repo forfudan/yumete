@@ -1466,7 +1466,7 @@ impl Editor {
 
     /// **把草稿和眼前這一份逐詞比出來** — 第二問的「打開對比」。
     ///
-    /// 基準是草稿，比出來的是「我現在這一份跟它差在哪」，和 `:diff`、`:git-diff`
+    /// 基準是草稿，比出來的是「我現在這一份跟它差在哪」，和 `:diff-report`、`:git-diff-report`
     /// 同一個讀法。走 [`Self::show_word_diff`] 而不是 [`Self::diff_against`]：草
     /// 稿的**文字**在手上，而那個路徑 `write_swap` 隨時會覆蓋（`:diff` 因此從來
     /// 不收它當基準）。
@@ -1583,7 +1583,7 @@ impl Editor {
 
     // ---- What is on disk and what is here (Feature #211) ------------------
 
-    /// `:diff [檔名]` — what changed, by 詞 (Feature #235).
+    /// `:diff-report [檔名]` — what changed, by 詞 (Feature #235).
     ///
     /// **The grain is the point.** Every diff a writer can reach is a line
     /// diff, and a Chinese paragraph is one line: move one 的 in a 五百字 段落
@@ -1600,6 +1600,18 @@ impl Editor {
     /// overwrites one path with the text as it stands, so it is never a base
     /// to compare against.
     pub(super) fn diff_against(&mut self, other: Option<&str>) {
+        let Some((path, old)) = self.text_to_compare(other) else { return };
+        let against = path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| path.display().to_string());
+        self.show_word_diff(&old, &against);
+    }
+
+    /// **The text `:diff` and `:diff-report` compare with**: this file as it
+    /// is on disk, or the file `other` names (relative to this one's folder),
+    /// with its path. `None`, having said why, when there is none.
+    pub(super) fn text_to_compare(&mut self, other: Option<&str>) -> Option<(PathBuf, String)> {
         let here = self
             .current_buffer()
             .path()
@@ -1616,7 +1628,7 @@ impl Editor {
                 Some(path) => path,
                 None => {
                     self.status = say!("diff.no-file");
-                    return;
+                    return None;
                 }
             },
         };
@@ -1630,19 +1642,15 @@ impl Editor {
             Ok(text) => text.strip_prefix('\u{feff}').unwrap_or(&text).to_string(),
             Err(err) => {
                 self.status = say!("buffer.cannot-open", path.display(), err.to_string());
-                return;
+                return None;
             }
         };
-        let against = path
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_else(|| path.display().to_string());
-        self.show_word_diff(&old, &against);
+        Some((path, old))
     }
 
-    /// `:git-diff [提交]` — **這一份跟 git 裏那一份，逐詞**。
+    /// `:git-diff-report [提交]` — **這一份跟 git 裏那一份，逐詞**。
     ///
-    /// 和 `:diff` 是同
+    /// 和 `:diff-report` 是同
     /// 一支比較、同一種報告，只換了「跟誰比」：磁碟上那一份 → `git show
     /// <提交>:<檔>`。不帶參數就是 `HEAD`。
     ///
@@ -1797,7 +1805,7 @@ impl Editor {
     }
 }
 
-/// One row of a word-diff listing as `:diff` writes it: the line number
+/// One row of a word-diff listing as `:diff-report` writes it: the line number
 /// right-aligned to `digits`, `-` for the old draft or `+` for the new, then
 /// the text with its changed runs marked ([`crate::diff::marked`]).
 pub(super) fn diff_row(row: &crate::diff::DraftRow, digits: usize) -> String {

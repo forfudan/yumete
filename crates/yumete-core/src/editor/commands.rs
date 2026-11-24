@@ -1056,11 +1056,35 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::Diff(against) => {
-                self.diff_against(against.as_deref());
+                self.toggle_diff(against.as_deref());
                 Ok(CommandOutcome::Continue)
             }
             Command::GitDiff(commit) => {
+                self.toggle_git_diff(commit.as_deref());
+                Ok(CommandOutcome::Continue)
+            }
+            Command::DiffReport(against) => {
+                self.diff_against(against.as_deref());
+                Ok(CommandOutcome::Continue)
+            }
+            Command::GitDiffReport(commit) => {
                 self.git_diff_against(commit.as_deref());
+                Ok(CommandOutcome::Continue)
+            }
+            Command::DiffMark => {
+                self.diff_mark();
+                Ok(CommandOutcome::Continue)
+            }
+            Command::DiffMarked => {
+                self.diff_with_marked();
+                Ok(CommandOutcome::Continue)
+            }
+            Command::DiffGet => {
+                self.diff_get();
+                Ok(CommandOutcome::Continue)
+            }
+            Command::DiffPut => {
+                self.diff_put();
                 Ok(CommandOutcome::Continue)
             }
             Command::LspRename(name) => {
@@ -2393,7 +2417,7 @@ impl Editor {
                 // 檢視區別 **abandons the save**. Nothing is written, and the
                 // buffer is left exactly as it was — which is the point: the
                 // reader is going to look at what changed and decide again.
-                'd' => self.diff_against(None),
+                'd' => self.diff_with_file(None),
                 _ => self.status = say!("write.oversize-stopped"),
             },
             // **恢復分兩問**。第一問在開檔那一刻擺出來，

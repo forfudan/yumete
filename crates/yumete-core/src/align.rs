@@ -711,6 +711,11 @@ mod tests {
         out
     }
 
+    /// One marked range, as a line's marks.
+    fn one(range: Range<usize>) -> Vec<Range<usize>> {
+        vec![range]
+    }
+
     fn lines(text: &str) -> Vec<&str> {
         text.split('\n').collect()
     }
@@ -735,7 +740,7 @@ mod tests {
         let new = "the kettle sang\nthe tea went quite cold\nthe cat slept\n";
         assert_eq!(blocks(old, new), vec![(0..1, 0..1, false), (1..2, 1..2, true), (2..4, 2..4, false)]);
         let al = align(&lines(old), &lines(new), &words);
-        assert_eq!(al.line(Side::New, 1), LineState::Changed(&[13..19]), "only the added word is marked");
+        assert_eq!(al.line(Side::New, 1), LineState::Changed(&one(13..19)), "only the added word is marked");
         assert_eq!(al.line(Side::Old, 1), LineState::Changed(&[]));
         assert_eq!(al.line(Side::New, 0), LineState::Same);
     }
@@ -775,7 +780,7 @@ mod tests {
         let old = "x\nthe red cat sat on the mat today\n";
         let new = "x\nthe big dog sat on the mat today\n";
         let al = align(&lines(old), &lines(new), &words);
-        assert_eq!(al.line(Side::New, 1), LineState::Changed(&[4..11]), "「big dog」, not two marks");
+        assert_eq!(al.line(Side::New, 1), LineState::Changed(&one(4..11)), "「big dog」, not two marks");
     }
 
     #[test]
@@ -787,8 +792,8 @@ mod tests {
             "天色很好" => vec![(0, 2), (2, 4)],
             _ => words(l),
         });
-        assert_eq!(al.line(Side::Old, 1), LineState::Changed(&[1..2]));
-        assert_eq!(al.line(Side::New, 1), LineState::Changed(&[1..2]));
+        assert_eq!(al.line(Side::Old, 1), LineState::Changed(&one(1..2)));
+        assert_eq!(al.line(Side::New, 1), LineState::Changed(&one(1..2)));
     }
 
     #[test]
