@@ -156,6 +156,41 @@ zhs = "{0} 处合并冲突"
 en = "{0|merge conflict|merge conflicts}"
 
 [[message]]
+# :diff-align off
+key = "diff.align-cleared"
+zhs = "对齐点都清掉了"
+# 草稿
+en = "all alignment points cleared"
+
+[[message]]
+# :diff-align 這一對與已有的點交叉，没設
+key = "diff.align-crosses"
+zhs = "这一对跟已有的对齐点交叉了，没有设"
+# 草稿
+en = "this pair crosses a point already set; not set"
+
+[[message]]
+# :diff-align 配上了：舊稿第 {0} 行與新稿第 {1} 行對齊
+key = "diff.align-paired"
+zhs = "第 {0} 行与第 {1} 行对齐了"
+# 草稿
+en = "line {0} now stands beside line {1}"
+
+[[message]]
+# :diff-align 在已對齊的行上：去掉這一個點
+key = "diff.align-removed"
+zhs = "去掉了第 {0} 行的对齐点"
+# 草稿
+en = "the alignment point on line {0} is gone"
+
+[[message]]
+# :diff-align 第一次：這一行等着另一欄的一行來配
+key = "diff.align-waiting"
+zhs = "第 {0} 行等着配对，到另一栏的那一行上再执行一次"
+# 草稿
+en = "line {0} is waiting; run it again on its line in the other column"
+
+[[message]]
 # :diff 找到了改動
 key = "diff.changed"
 zhs = "{0} 行与《{1}》不同，gf 跳转"

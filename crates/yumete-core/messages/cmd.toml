@@ -550,6 +550,14 @@ en = "this draft beside the file as saved, or another file, in two columns; bare
 find = "比較 比较 差異 差异 改動 改动 對照 对照 並排 并排 兩欄 两栏 diff compare side"
 
 [[message]]
+# : 命令選單裏 diff-align 那一項的説明(commands 組)
+key = "cmd.commands.diff-align"
+zhs = "对照中：把光标所在行对齐到另一栏的一行；选区两端都设；off 全部清掉"
+# 草稿
+en = "in a side-by-side view: pin the caret's line beside a line of the other column; a selection pins both ends; off clears them"
+find = "對齊 对齐 配對 配对 同步點 同步点 錨點 锚点 對照 对照 align anchor sync"
+
+[[message]]
 # : 命令選單裏 diff-fold 那一項的説明(commands 組)
 key = "cmd.commands.diff-fold"
 zhs = "对照中：把未改动的长段各折成一行；再输一次展开"

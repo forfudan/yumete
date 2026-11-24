@@ -58,6 +58,12 @@ pub(crate) struct DiffView {
     /// **The folded runs opened** (`zo`, a click), by their first line in the
     /// old text; the others stay closed.
     opened: std::collections::HashSet<usize>,
+    /// **The lines pinned beside each other** (`:diff-align`), old line and
+    /// new, in order; they follow their lines as lines above are added or
+    /// taken away.
+    anchors: RefCell<Vec<(usize, usize)>>,
+    /// The lines of one column waiting for their partners in the other.
+    dangling: RefCell<Option<(Side, Vec<usize>)>>,
     aligned: RefCell<Option<Aligned>>,
     rows: RefCell<RowsMemo>,
     /// **The other column's colour tables**, swapped in while it is drawn:
@@ -134,6 +140,32 @@ pub(super) enum Base {
     Copy { text: String, name: String },
     /// Another open buffer.
     Buffer(u64),
+}
+
+/// **The points follow their lines** across an edit: a line below what
+/// changed moves by as many lines as were added or taken away, and one inside
+/// it stays where it was, as near as the text now allows.
+fn follow_the_edit(d: &DiffView, window: align::Window, now: (usize, usize)) {
+    let shift = |line: usize, was: usize, (head, tail): (usize, usize), now: usize| -> usize {
+        match line >= was.saturating_sub(tail) {
+            true => (line + now).saturating_sub(was),
+            false if line >= head => line.min(now.saturating_sub(tail + 1).max(head)),
+            false => line,
+        }
+    };
+    let old = |line: usize| shift(line, window.was.0, window.old, now.0);
+    let new = |line: usize| shift(line, window.was.1, window.new, now.1);
+    for pair in d.anchors.borrow_mut().iter_mut() {
+        *pair = (old(pair.0), new(pair.1));
+    }
+    if let Some((side, lines)) = d.dangling.borrow_mut().as_mut() {
+        for line in lines.iter_mut() {
+            *line = match side {
+                Side::Old => old(*line),
+                Side::New => new(*line),
+            };
+        }
+    }
 }
 
 fn line_hashes(text: &str) -> Vec<u64> {
@@ -325,9 +357,10 @@ impl Editor {
                     new: kept(&was.hashes.1, &hashes.1),
                 };
                 d.full_due.set(Some(Instant::now() + FULL_AFTER));
+                follow_the_edit(d, window, (old.len(), new.len()));
                 align::respliced(&was.alignment, &old, &new, window, &segment)
             }
-            None => align::align(&old, &new, &segment),
+            None => align::align_anchored(&old, &new, &d.anchors.borrow(), &segment),
         };
         let alignment = Rc::new(alignment);
         *d.aligned.borrow_mut() = Some(Aligned { revisions, hashes, alignment: alignment.clone() });
@@ -353,7 +386,7 @@ impl Editor {
         let (old_text, new_text) = (self.buffers[li].rope().to_string(), self.buffers[ri].rope().to_string());
         let (old, new): (Vec<&str>, Vec<&str>) = (old_text.split('\n').collect(), new_text.split('\n').collect());
         let segment = |line: &str| self.segmenter.segment(line);
-        let alignment = Rc::new(align::align(&old, &new, &segment));
+        let alignment = Rc::new(align::align_anchored(&old, &new, &d.anchors.borrow(), &segment));
         let now = (self.buffers[li].revision(), self.buffers[ri].revision());
         if now == revisions {
             let hashes = (line_hashes(&old_text), line_hashes(&new_text));
@@ -598,6 +631,8 @@ impl Editor {
             copy,
             swapped: false,
             opened: Default::default(),
+            anchors: RefCell::default(),
+            dangling: RefCell::default(),
             aligned: RefCell::new(None),
             rows: RefCell::new(RowsMemo::default()),
             code: RefCell::default(),
@@ -849,6 +884,94 @@ impl Editor {
             true => say!("diff.swapped-right"),
             false => say!("diff.swapped-left"),
         };
+    }
+
+    /// `:diff-align` — **pin the caret's line beside a line of the other
+    /// column**, as vim's `'diffanchors'` and Meld's synchronization points
+    /// do. The first waits; the same in the other column pairs them; on a
+    /// line already pinned it takes that point away. A selection over
+    /// several lines pins both its ends: its first line and the line after
+    /// its last. `off` clears them all.
+    pub(super) fn diff_align(&mut self, off: bool) {
+        if !self.diff_in_view() {
+            self.status = say!("diff.not-in-view");
+            return;
+        }
+        let (Some(d), Some(side)) = (self.diff(), self.side_in_view()) else { return };
+        if off {
+            d.anchors.borrow_mut().clear();
+            *d.dangling.borrow_mut() = None;
+            *d.aligned.borrow_mut() = None;
+            self.status = say!("diff.align-cleared");
+            return;
+        }
+        let rope = self.current_buffer().rope();
+        let (from, to) = self.selection();
+        let (first, last) = (rope.char_to_line(from), rope.char_to_line(to.saturating_sub(1).max(from)));
+        let lines: Vec<usize> = match last > first {
+            true => vec![first, (last + 1).min(rope.len_lines().saturating_sub(1))],
+            false => vec![first],
+        };
+        let at = |pair: &(usize, usize)| match side {
+            Side::Old => pair.0,
+            Side::New => pair.1,
+        };
+        // A line already pinned: that point goes.
+        let pinned = d.anchors.borrow().iter().position(|p| lines.len() == 1 && at(p) == first);
+        if let Some(k) = pinned {
+            d.anchors.borrow_mut().remove(k);
+            *d.aligned.borrow_mut() = None;
+            self.status = say!("diff.align-removed", first + 1);
+            return;
+        }
+        let waiting = d.dangling.borrow_mut().take();
+        let partners = match waiting {
+            Some((s, waiting)) if s != side => waiting,
+            // The same lines again: no longer waiting. Others: these wait.
+            Some((_, waiting)) if waiting == lines => {
+                self.status = say!("diff.align-removed", first + 1);
+                return;
+            }
+            _ => {
+                *d.dangling.borrow_mut() = Some((side, lines));
+                self.status = say!("diff.align-waiting", first + 1);
+                return;
+            }
+        };
+        let mut anchors = d.anchors.borrow().clone();
+        for (&mine, &theirs) in lines.iter().zip(&partners) {
+            let pair = match side {
+                Side::Old => (mine, theirs),
+                Side::New => (theirs, mine),
+            };
+            // Each pair stands in order with the others: one line above
+            // another on one side is above it on the other too.
+            if anchors.iter().any(|&(o, n)| (o < pair.0) != (n < pair.1) || (o == pair.0) != (n == pair.1)) {
+                self.status = say!("diff.align-crosses");
+                return;
+            }
+            anchors.push(pair);
+        }
+        anchors.sort_unstable();
+        anchors.dedup();
+        let (o, n) = match side {
+            Side::Old => (lines[0], partners[0]),
+            Side::New => (partners[0], lines[0]),
+        };
+        *d.anchors.borrow_mut() = anchors;
+        *d.aligned.borrow_mut() = None;
+        self.status = say!("diff.align-paired", o + 1, n + 1);
+    }
+
+    /// **Whether `line` of the side being drawn is pinned** (`:diff-align`):
+    /// `Some(true)` paired, `Some(false)` waiting for its partner.
+    pub fn diff_anchor_at(&self, line: usize) -> Option<bool> {
+        let (d, side) = (self.diff()?, self.side_in_view()?);
+        // The points follow an edit when the texts are aligned again.
+        self.diff_alignment()?;
+        let paired = d.anchors.borrow().iter().any(|&(o, n)| line == if side == Side::Old { o } else { n });
+        let waiting = d.dangling.borrow().as_ref().is_some_and(|(s, lines)| *s == side && lines.contains(&line));
+        (paired || waiting).then_some(paired)
     }
 
     /// The keys to the other text.

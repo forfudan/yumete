@@ -1095,6 +1095,10 @@ impl Editor {
                 self.diff_swap();
                 Ok(CommandOutcome::Continue)
             }
+            Command::DiffAlign(off) => {
+                self.diff_align(off);
+                Ok(CommandOutcome::Continue)
+            }
             Command::LspRename(name) => {
                 self.ask_rename(&name);
                 Ok(CommandOutcome::Continue)

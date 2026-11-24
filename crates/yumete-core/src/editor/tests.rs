@@ -49532,6 +49532,63 @@ fn a_split_paragraph_draws_the_break_in_both_columns() {
 }
 
 #[test]
+fn diff_align_pins_a_line_beside_one_in_the_other_column() {
+    let saved = "intro\nfn parse() {\n    read the input\n}\nmiddle part\nend\n";
+    let now = "intro\nmiddle part\nfn parse() {\n    read every input\n}\nend\n";
+    let (mut ed, dir) = diffed("align", saved, now);
+    ed.set_key_preset(crate::KeyPreset::Vim);
+    ed.execute(":diff").unwrap();
+    let level = |ed: &Editor, o: usize, n: usize| ed.diff_alignment().unwrap().blocks().iter().any(|b| b.old.start == o && b.new.start == n);
+    // The old `fn parse` first: it waits, underlined in the gutter.
+    ed.walk_to_region(crate::window::Direction::Left);
+    ed.goto_line(2);
+    ed.execute(":diff-align").unwrap();
+    assert_eq!(ed.status(), say!("diff.align-waiting", 2));
+    assert_eq!(ed.diff_anchor_at(1), Some(false));
+    // The new one pairs it: the two stand level.
+    ed.walk_to_region(crate::window::Direction::Right);
+    ed.goto_line(3);
+    ed.execute(":diff-align").unwrap();
+    assert_eq!(ed.status(), say!("diff.align-paired", 2, 3));
+    assert_eq!(ed.diff_anchor_at(2), Some(true));
+    assert!(level(&ed, 1, 2));
+    // A line put in above follows the point down.
+    press(&mut ed, "ggOtop");
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.diff_anchor_at(3), Some(true));
+    assert_eq!(ed.diff_anchor_at(2), None);
+    // Again on the pinned line takes the point away.
+    ed.goto_line(4);
+    ed.execute(":diff-align").unwrap();
+    assert_eq!(ed.status(), say!("diff.align-removed", 4));
+    assert_eq!(ed.diff_anchor_at(3), None);
+    // A selection pins both its ends: its first line and the one after.
+    ed.walk_to_region(crate::window::Direction::Left);
+    ed.goto_line(2);
+    press(&mut ed, "Vjj");
+    ed.execute(":diff-align").unwrap();
+    ed.on_key(Key::Esc);
+    assert!(ed.diff_anchor_at(1) == Some(false) && ed.diff_anchor_at(4) == Some(false));
+    ed.walk_to_region(crate::window::Direction::Right);
+    ed.goto_line(4);
+    press(&mut ed, "Vjj");
+    ed.execute(":diff-align").unwrap();
+    ed.on_key(Key::Esc);
+    assert!(level(&ed, 1, 3) && level(&ed, 4, 6));
+    // A pair out of order with those is refused.
+    ed.goto_line(1);
+    ed.execute(":diff-align").unwrap();
+    ed.walk_to_region(crate::window::Direction::Left);
+    ed.goto_line(6);
+    ed.execute(":diff-align").unwrap();
+    assert_eq!(ed.status(), say!("diff.align-crosses"));
+    ed.execute(":diff-align off").unwrap();
+    assert_eq!(ed.status(), say!("diff.align-cleared"));
+    assert_eq!(ed.diff_anchor_at(1), None);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn a_moved_line_says_where_it_went() {
     let saved = "the gate creaked open\nwe walked to the well\nthe sun was low\nthe dog barked twice\nsupper was late\n";
     let now = "the gate creaked open\nthe sun was low\nthe dog barked twice\nwe walked to the well\nsupper was late\n";

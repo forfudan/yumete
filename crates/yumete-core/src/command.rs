@@ -893,6 +893,9 @@ pub enum Command {
     DiffFold(Switch),
     /// `:diff-swap` — the old text into the other column.
     DiffSwap,
+    /// `:diff-align` — pin the caret's line beside a line of the other
+    /// column; `off` (true) clears every point.
+    DiffAlign(bool),
     /// `:git-show [commit]` — the committed draft, read-only, in the other
     /// work area (#518).
     GitShow(Option<String>),
@@ -3692,6 +3695,9 @@ const SWITCH: &[Word] = &[
         needs: &[],
     },
 ];
+
+/// `off`, alone: a command that has nothing to turn on.
+const OFF: &[Word] = &[Word { name: "off", help: "hint.close", needs: &[] }];
 
 /// The kinds of mark a scrollbar carries (`:view-scrollbar-marks`), in the
 /// order of `ScrollbarMarks::WORDS`.
@@ -6863,6 +6869,14 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|_| Ok(Command::DiffSwap)),
     },
     Entry {
+        name: "diff-align",
+        aliases: &[],
+        help: "cmd.commands.diff-align",
+        needs: &[],
+        params: &[Param::Words { of: OFF, default: None }],
+        build: Some(|p| Ok(Command::DiffAlign(p.arg(0).is_some()))),
+    },
+    Entry {
         name: "lsp-rename",
         aliases: &[],
         help: "cmd.commands.lsp-rename",
@@ -9427,7 +9441,7 @@ mod tests {
         // …and a prefix that names something at the top level is answered
         // with the commands it begins, nothing dredged up from below them
         // (no `:git-diff`).
-        assert_eq!(found("diff"), ["diff", "diff-fold", "diff-get", "diff-mark", "diff-marked", "diff-put", "diff-report", "diff-swap"]);
+        assert_eq!(found("diff"), ["diff", "diff-align", "diff-fold", "diff-get", "diff-mark", "diff-marked", "diff-put", "diff-report", "diff-swap"]);
     }
 
     /// Print the menu the way it is drawn, for looking at.

@@ -584,16 +584,71 @@ fn bare(line: &str) -> &str {
 
 /// **Align two texts**, given as their lines (split at `\n`).
 pub fn align(old: &[&str], new: &[&str], segment: &dyn Fn(&str) -> Vec<(usize, usize)>) -> Alignment {
+    align_anchored(old, new, &[], segment)
+}
+
+/// **Align two texts with lines pinned beside each other** (`:diff-align`):
+/// each pair of `anchors`, a line of the old text and one of the new, stands
+/// level, and the texts are cut there and each stretch between compared on
+/// its own, as vim's `'diffanchors'` cuts them. Pairs out of reach, or out of
+/// order with one before them, are passed over.
+pub fn align_anchored(old: &[&str], new: &[&str], anchors: &[(usize, usize)], segment: &dyn Fn(&str) -> Vec<(usize, usize)>) -> Alignment {
     let old: Vec<&str> = old.iter().map(|l| bare(l)).collect();
     let new: Vec<&str> = new.iter().map(|l| bare(l)).collect();
-    let mut input: InternedInput<&str> = InternedInput::default();
-    input.update_before(old.iter().copied());
-    input.update_after(new.iter().copied());
-    let mut diff = Diff::compute(Algorithm::Histogram, &input);
-    diff.postprocess_lines(&input);
     let mut out = Alignment::default();
     let (mut matched, mut total) = (0usize, 0usize);
-    let (mut o, mut n) = (0usize, 0usize);
+    // Each pair is a stretch of its own, one line a side, so nothing can
+    // stand between the two.
+    let mut cuts = vec![(0, 0)];
+    for &(a, b) in anchors {
+        let &(x, y) = cuts.last().expect("starts with one");
+        if a >= x && b >= y && a < old.len() && b < new.len() {
+            cuts.extend([(a, b), (a + 1, b + 1)]);
+        }
+    }
+    cuts.push((old.len(), new.len()));
+    for w in cuts.windows(2) {
+        stretch(&old, &new, w[0].0..w[1].0, w[0].1..w[1].1, segment, &mut out, &mut matched, &mut total);
+    }
+    // Two stretches unchanged where they meet are one block.
+    let mut merged: Vec<Block> = Vec::with_capacity(out.blocks.len());
+    for b in out.blocks.drain(..) {
+        match merged.last_mut() {
+            Some(last) if !last.changed && !b.changed && last.old.end == b.old.start && last.new.end == b.new.start => {
+                last.old.end = b.old.end;
+                last.new.end = b.new.end;
+            }
+            _ => merged.push(b),
+        }
+    }
+    out.blocks = merged;
+    out.far = total > 0 && (matched as f64) < FAR * total as f64;
+    if out.far {
+        out.marks.clear();
+    }
+    out.find_moves(&old, &new);
+    out
+}
+
+/// **Compare one stretch**, `a` of the old lines with `b` of the new, and
+/// push its blocks and marks.
+#[allow(clippy::too_many_arguments)]
+fn stretch(
+    old: &[&str],
+    new: &[&str],
+    a: Range<usize>,
+    b: Range<usize>,
+    segment: &dyn Fn(&str) -> Vec<(usize, usize)>,
+    out: &mut Alignment,
+    matched: &mut usize,
+    total: &mut usize,
+) {
+    let mut input: InternedInput<&str> = InternedInput::default();
+    input.update_before(old[a.clone()].iter().copied());
+    input.update_after(new[b.clone()].iter().copied());
+    let mut diff = Diff::compute(Algorithm::Histogram, &input);
+    diff.postprocess_lines(&input);
+    let (mut o, mut n) = (a.start, b.start);
     let same = |from: usize, to: usize, n: usize, out: &mut Alignment, matched: &mut usize, total: &mut usize| {
         if to > from {
             let chars: usize = old[from..to].iter().map(|l| l.chars().count()).sum();
@@ -603,21 +658,16 @@ pub fn align(old: &[&str], new: &[&str], segment: &dyn Fn(&str) -> Vec<(usize, u
         }
     };
     for hunk in diff.hunks() {
-        let (before, after) = (hunk.before.start as usize..hunk.before.end as usize, hunk.after.start as usize..hunk.after.end as usize);
-        same(o, before.start, n, &mut out, &mut matched, &mut total);
-        let (m, t) = pair(&old, &new, before.clone(), after.clone(), segment, &mut out);
-        matched += m;
-        total += t;
+        let before = a.start + hunk.before.start as usize..a.start + hunk.before.end as usize;
+        let after = b.start + hunk.after.start as usize..b.start + hunk.after.end as usize;
+        same(o, before.start, n, out, matched, total);
+        let (m, t) = pair(old, new, before.clone(), after.clone(), segment, out);
+        *matched += m;
+        *total += t;
         o = before.end;
         n = after.end;
     }
-    same(o, old.len(), n, &mut out, &mut matched, &mut total);
-    out.far = total > 0 && (matched as f64) < FAR * total as f64;
-    if out.far {
-        out.marks.clear();
-    }
-    out.find_moves(&old, &new);
-    out
+    same(o, a.end, n, out, matched, total);
 }
 
 /// **Pair the lines of one changed run**, push its blocks and marks, and
@@ -999,6 +1049,18 @@ mod tests {
         // A line put in beside an edit is no cut.
         let put_in = align(&lines("the gate creaked\nend\n"), &lines("the gate groaned\na new line\nend\n"), &words);
         assert!(!matches!(put_in.line(Side::Old, 0), LineState::Changed(m) if m.iter().any(|r| r.is_empty())));
+    }
+
+    #[test]
+    fn an_anchor_stands_its_two_lines_level() {
+        let old = lines("intro\nfn parse() {\n    read the input\n}\nmiddle part\nend\n");
+        let new = lines("intro\nmiddle part\nfn parse() {\n    read every input\n}\nend\n");
+        let al = align_anchored(&old, &new, &[(1, 2)], &words);
+        assert!(al.blocks().iter().any(|b| b.old.start == 1 && b.new.start == 2), "{:?}", al.blocks());
+        // Out of reach, or out of order with one before it: passed over.
+        let al = align_anchored(&old, &new, &[(1, 2), (0, 4), (99, 1)], &words);
+        assert!(al.blocks().iter().any(|b| b.old.start == 1 && b.new.start == 2));
+        assert_eq!(align_anchored(&old, &new, &[], &words).blocks(), align(&old, &new, &words).blocks());
     }
 
     #[test]

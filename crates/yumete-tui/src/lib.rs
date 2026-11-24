@@ -15394,7 +15394,12 @@ fn draw_horizontal(
             // is kept** — an arrow in its place would take away the one thing
             // the gutter is for, which is saying *which* line; a coloured
             // number says both at once and costs no column.
+            // A line pinned beside its partner (`:diff-align`) says so on its
+            // number, in the marker's ink; one still waiting is underlined.
+            let pinned = row.starts_line().then(|| editor.diff_anchor_at(row.line)).flatten();
             let band = match (hit_line == Some(row.line), lit(row.line)) {
+                _ if pinned == Some(true) => band.fg(ink.marker()).add_modifier(Modifier::BOLD),
+                _ if pinned == Some(false) => band.fg(ink.marker()).add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
                 (true, _) if row.starts_line() => band.fg(ink.mark()).add_modifier(Modifier::BOLD),
                 (_, true) => band.fg(ink.text()),
                 _ => band.fg(ink.furniture()),
