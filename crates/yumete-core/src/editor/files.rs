@@ -1019,7 +1019,7 @@ impl Editor {
                 .map_or(self.live, |(&id, _)| id);
             self.viewing.set(Some(Viewing { buffer, at, window }));
         }
-        Viewed { editor: self, previous, previous_wrap }
+        Viewed { editor: self, previous, previous_wrap, code: None }
     }
 
     /// Where the caret is for the purpose of *drawing* — the pane's own place

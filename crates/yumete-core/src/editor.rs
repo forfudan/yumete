@@ -196,12 +196,18 @@ pub struct Viewed<'a> {
     editor: &'a Editor,
     previous: Option<Viewing>,
     previous_wrap: Option<usize>,
+    /// The colour tables put aside while another text is drawn, swapped
+    /// back when it is done ([`Editor::view_diff_other`]).
+    code: Option<&'a RefCell<fences::CodeCache>>,
 }
 
 impl Drop for Viewed<'_> {
     fn drop(&mut self) {
         self.editor.viewing.set(self.previous);
         self.editor.viewing_wrap.set(self.previous_wrap);
+        if let Some(spare) = self.code {
+            self.editor.code_cache.swap(spare);
+        }
     }
 }
 

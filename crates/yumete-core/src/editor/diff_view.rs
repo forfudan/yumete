@@ -57,6 +57,10 @@ pub(crate) struct DiffView {
     swapped: bool,
     aligned: RefCell<Option<Aligned>>,
     rows: RefCell<RowsMemo>,
+    /// **The other column's colour tables**, swapped in while it is drawn:
+    /// one table holds one text's syntax tree, and two columns drawn in turn
+    /// from one table would parse both texts afresh on every frame.
+    code: RefCell<super::fences::CodeCache>,
     /// When the whole-text pass is owed, after the typing stops.
     full_due: Cell<Option<Instant>>,
 }
@@ -234,7 +238,8 @@ impl Editor {
         let d = self.diff()?;
         let other = self.side_in_view()?.other();
         let (buffer, at, _) = self.side_place(d, other)?;
-        let guard = Viewed { editor: self, previous: self.viewing.get(), previous_wrap: self.viewing_wrap.get() };
+        let guard = Viewed { editor: self, previous: self.viewing.get(), previous_wrap: self.viewing_wrap.get(), code: Some(&d.code) };
+        self.code_cache.swap(&d.code);
         self.viewing.set(Some(Viewing { buffer, at, window: d.window }));
         self.viewing_wrap.set(Some(self.wrap_for(available)));
         let pane = Pane {
@@ -630,6 +635,7 @@ impl Editor {
             swapped: false,
             aligned: RefCell::new(None),
             rows: RefCell::new(RowsMemo::default()),
+            code: RefCell::default(),
             full_due: Cell::new(None),
         });
         self.refresh_sidebar();
