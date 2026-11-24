@@ -19,7 +19,12 @@
 //! block on the same screen rows on both sides; the side that wraps to fewer
 //! rows gets filler rows after it ([`Alignment::pads_after`]). Heights are
 //! the caller's: this module knows lines, the measure knows rows.
+//!
+//! Two answers ride along: which changed lines were **moved** — taken out in
+//! one place and put in unchanged in another ([`Alignment::moved`]) — and
+//! which unchanged lines a folded view **hides** ([`Alignment::folds`]).
 
+use std::cell::OnceCell;
 use std::collections::HashMap;
 use std::ops::Range;
 
@@ -99,7 +104,41 @@ pub struct Alignment {
     /// The two texts still stand side by side, with no tint and no marks —
     /// confetti over two unrelated texts says nothing.
     far: bool,
+    /// Each moved line, and where it went or came from on the other side.
+    moved: HashMap<(Side, usize), usize>,
+    /// The runs a folded view hides, worked out when first asked.
+    folds: OnceCell<Vec<Run>>,
 }
+
+/// **A run of unchanged lines a folded view hides**: the same number of
+/// lines on each side, drawn as one row in both columns.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Run {
+    pub old: Range<usize>,
+    pub new: Range<usize>,
+}
+
+impl Run {
+    pub fn on(&self, side: Side) -> &Range<usize> {
+        match side {
+            Side::Old => &self.old,
+            Side::New => &self.new,
+        }
+    }
+}
+
+/// **The unchanged lines kept beside a change** when the rest are folded,
+/// above it and below it: enough to see where the change sits.
+const CONTEXT: usize = 3;
+
+/// **The fewest lines a fold hides**: a row saying 「3 lines」 in place of
+/// three lines saves too little to be worth the row.
+const FOLD_LEAST: usize = 4;
+
+/// **The fewest characters a line needs to be found moved**: a short line
+/// (`}`, 「是。」, a blank one) turns up in many places and says nothing
+/// about where a passage went.
+const MOVED_LEAST: usize = 6;
 
 /// Below this share of matched characters a block is a rewrite, not an
 /// edit: it keeps its rows side by side and is tinted whole, without word
@@ -128,6 +167,75 @@ impl Alignment {
     /// Whether the texts are too different to mark.
     pub fn is_far(&self) -> bool {
         self.far
+    }
+
+    /// **Where `line` of `side` was moved**: the line on the other side it
+    /// went to or came from, unchanged. Only a changed line is moved, and
+    /// only one whose text is found once among the changed lines of each
+    /// side.
+    pub fn moved(&self, side: Side, line: usize) -> Option<usize> {
+        self.moved.get(&(side, line)).copied()
+    }
+
+    /// **The unchanged runs a folded view hides**, in reading order: each
+    /// unchanged block less [`CONTEXT`] lines on each side a change stands,
+    /// when what is left is [`FOLD_LEAST`] lines or more.
+    pub fn folds(&self) -> &[Run] {
+        self.folds.get_or_init(|| {
+            let last = self.blocks.len().saturating_sub(1);
+            self.blocks
+                .iter()
+                .enumerate()
+                .filter(|(_, b)| !b.changed)
+                .filter_map(|(i, b)| {
+                    let from = if i > 0 { CONTEXT } else { 0 };
+                    let to = b.old.len().saturating_sub(if i < last { CONTEXT } else { 0 });
+                    (to >= from + FOLD_LEAST).then(|| Run { old: b.old.start + from..b.old.start + to, new: b.new.start + from..b.new.start + to })
+                })
+                .collect()
+        })
+    }
+
+    /// The fold holding `line` of `side`, as its place in [`Self::folds`].
+    pub fn fold_of(&self, side: Side, line: usize) -> Option<usize> {
+        let folds = self.folds();
+        let at = folds.partition_point(|r| r.on(side).end <= line);
+        (at < folds.len() && folds[at].on(side).contains(&line)).then_some(at)
+    }
+
+    /// **Find the moved lines**: a changed line of one side whose text is
+    /// found once among the changed lines of each side, in another block.
+    /// Exact text only, the line's own spaces at either end aside.
+    fn find_moves(&mut self, old: &[&str], new: &[&str]) {
+        self.moved.clear();
+        if self.far {
+            return;
+        }
+        // Each text: how many times among the changed lines, the last line
+        // it was on, and that line's block.
+        let mut seen: [HashMap<&str, (usize, usize, usize)>; 2] = [HashMap::new(), HashMap::new()];
+        for (k, block) in self.blocks.iter().enumerate().filter(|(_, b)| b.changed) {
+            for (side, lines, at) in [(0, old, &block.old), (1, new, &block.new)] {
+                for line in at.clone() {
+                    let text = lines.get(line).map_or("", |l| bare(l).trim());
+                    if text.chars().count() < MOVED_LEAST {
+                        continue;
+                    }
+                    let entry = seen[side].entry(text).or_insert((0, line, k));
+                    entry.0 += 1;
+                    (entry.1, entry.2) = (line, k);
+                }
+            }
+        }
+        let [gone, came] = seen;
+        for (text, (n, o, ko)) in gone {
+            if let Some(&(1, m, kn)) = came.get(text) {
+                if n == 1 && ko != kn {
+                    self.moved.insert((Side::Old, o), m);
+                    self.moved.insert((Side::New, m), o);
+                }
+            }
+        }
     }
 
     /// The block holding `line` of `side`, when there is one.
@@ -399,6 +507,7 @@ pub fn respliced(prev: &Alignment, old: &[&str], new: &[&str], window: Window, s
         }
     }
     out.blocks = merged;
+    out.find_moves(old, new);
     out
 }
 
@@ -505,6 +614,7 @@ pub fn align(old: &[&str], new: &[&str], segment: &dyn Fn(&str) -> Vec<(usize, u
     if out.far {
         out.marks.clear();
     }
+    out.find_moves(&old, &new);
     out
 }
 
@@ -963,6 +1073,37 @@ mod tests {
             assert_eq!(local.blocks(), whole.blocks(), "{after:?}");
             assert_eq!(local.marks, whole.marks, "{after:?}");
         }
+    }
+
+    #[test]
+    fn a_paragraph_taken_out_and_put_back_elsewhere_is_moved() {
+        let old = "the lamp was lit\nwe spoke of the harvest\nrain on the roof\nthe dog slept\nmorning came\n";
+        let new = "the lamp was lit\nrain on the roof\nthe dog slept\nwe spoke of the harvest\nmorning came\n";
+        let al = align(&lines(old), &lines(new), &words);
+        assert_eq!(al.moved(Side::Old, 1), Some(3));
+        assert_eq!(al.moved(Side::New, 3), Some(1));
+        assert_eq!(al.moved(Side::Old, 0), None, "an unchanged line is not moved");
+        // A short line is in too many places to say where it went.
+        let al = align(&lines("a\nok\nb\nc\nd\n"), &lines("a\nb\nc\nok\nd\n"), &words);
+        assert_eq!(al.moved(Side::New, 3), None);
+    }
+
+    #[test]
+    fn a_folded_view_hides_unchanged_runs_less_their_context() {
+        let old: Vec<String> = (0..30).map(|i| format!("line number {i}")).collect();
+        let mut new = old.clone();
+        new[15] = "line number fifteen".to_string();
+        let (old, new) = (old.join("\n"), new.join("\n"));
+        let al = align(&lines(&old), &lines(&new), &words);
+        // Three lines kept above and below the change at 15; none above the
+        // first line or below the last.
+        assert_eq!(al.folds(), &[Run { old: 0..12, new: 0..12 }, Run { old: 19..30, new: 19..30 }]);
+        assert_eq!(al.fold_of(Side::New, 11), Some(0));
+        assert_eq!(al.fold_of(Side::New, 12), None);
+        assert_eq!(al.fold_of(Side::Old, 25), Some(1));
+        // A run too short to be worth a row stays.
+        let al = align(&lines("a\nb\nc\nd\nx\ne"), &lines("a\nb\nc\nd\ny\ne"), &words);
+        assert_eq!(al.folds(), &[]);
     }
 
     #[test]
