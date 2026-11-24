@@ -13166,6 +13166,27 @@ fn the_wheel_step_can_be_said_and_asked_about() {
     assert!(ed.execute("wheel 三").is_err(), "a word is not a number");
 }
 
+/// A width or a column length past its bounds is set to the bound, and the
+/// status says that it was, rather than reading as if the number were taken.
+#[test]
+fn a_measure_past_its_bounds_says_it_was_held_to_them() {
+    let mut ed = typed("那年冬天，山下起了大雪。");
+    ed.execute("view-wrap-width 99999").unwrap();
+    assert_eq!(ed.measure(), Some(400));
+    assert_eq!(ed.status, say!("layout.measure-clamped", 400, 8, 400));
+    ed.execute("view-wrap-width 3").unwrap();
+    assert_eq!(ed.status, say!("layout.measure-clamped", 8, 8, 400));
+    ed.execute("view-wrap-width 60").unwrap();
+    assert_eq!(ed.status, say!("layout.measure-columns", 60), "a number inside says only the number");
+
+    ed.execute("vertical").unwrap();
+    ed.execute("view-wrap-height 500").unwrap();
+    assert_eq!(ed.zong_measure(), Some(64));
+    assert_eq!(ed.status, say!("layout.zong-measure-clamped", 64, 8, 64));
+    ed.execute("view-wrap-height 30").unwrap();
+    assert_eq!(ed.status, say!("layout.zong-measure", 30));
+}
+
 #[test]
 fn a_measure_is_a_width_to_write_to_and_a_column_has_its_own() {
     let mut ed = typed("那年冬天，山下起了大雪。");

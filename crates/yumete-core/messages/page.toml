@@ -226,6 +226,12 @@ zhs = "夹行：从不(不显示注音、旁置标点、着重号、平仄)"
 en = "margin: never (no readings, hanging marks, emphasis dots or 平仄)"
 
 [[message]]
+# :view-wrap-width 給的數超出上下限，定在了界上（草稿）
+key = "layout.measure-clamped"
+zhs = "正文宽度：{0} 列（只能是 {1}–{2} 列）"
+en = "text width: {0|column|columns} (it can only be {1}–{2})"
+
+[[message]]
 # :measure 定了欄寬
 key = "layout.measure-columns"
 zhs = "正文宽度：{0} 列"
@@ -359,6 +365,12 @@ en = "layout: vertical"
 key = "layout.zong-measure"
 zhs = "每纵 {0} 字"
 en = "{0|character|characters} per column"
+
+[[message]]
+# :view-wrap-height 給的數超出上下限，定在了界上（草稿）
+key = "layout.zong-measure-clamped"
+zhs = "每纵 {0} 字（只能是 {1}–{2} 字）"
+en = "{0|character|characters} per column (it can only be {1}–{2})"
 
 [[message]]
 # 竖排：一列跟着窗口

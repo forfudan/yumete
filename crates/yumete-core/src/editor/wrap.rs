@@ -153,11 +153,17 @@ impl Editor {
     ///
     /// Bounded below by the width a row can wrap at, since a measure narrower
     /// than that would fold a single wide character onto its own row forever.
+    ///
+    /// A number past either bound is set to the bound, **and the status says
+    /// so**: 「400 列」 alone after `:view-wrap-width 99999` reads as if the
+    /// number had been taken.
     pub fn set_measure(&mut self, measure: Option<usize>) {
-        self.measure = measure.map(|m| m.clamp(crate::wrap::MIN_WRAP_WIDTH, 400));
-        self.status = match self.measure {
-            Some(m) => say!("layout.measure-columns", m),
-            None => say!("layout.measure-window"),
+        let (low, high) = (crate::wrap::MIN_WRAP_WIDTH, 400);
+        self.measure = measure.map(|m| m.clamp(low, high));
+        self.status = match (self.measure, measure) {
+            (Some(m), Some(asked)) if m != asked => say!("layout.measure-clamped", m, low, high),
+            (Some(m), _) => say!("layout.measure-columns", m),
+            (None, _) => say!("layout.measure-window"),
         };
     }
 
@@ -171,11 +177,15 @@ impl Editor {
     /// Warning: **下界和橫排同一個數，而且是一條安全線不是口味**（`MIN_WRAP_WIDTH`，
     /// 8）：比它窄的時候一個全角字會被擠到自己那一行上，没完没了。上界 64 是設置
     /// 面板與手冊本來就寫着的那個數。
+    ///
+    /// Past a bound it is set to the bound and says so, as [`Self::set_measure`] does.
     pub fn set_zong_measure(&mut self, measure: Option<usize>) {
-        self.zong_measure = measure.map(|m| m.clamp(crate::wrap::MIN_WRAP_WIDTH, 64));
-        self.status = match self.zong_measure {
-            Some(m) => say!("layout.zong-measure", m),
-            None => say!("layout.zong-measure-window"),
+        let (low, high) = (crate::wrap::MIN_WRAP_WIDTH, 64);
+        self.zong_measure = measure.map(|m| m.clamp(low, high));
+        self.status = match (self.zong_measure, measure) {
+            (Some(m), Some(asked)) if m != asked => say!("layout.zong-measure-clamped", m, low, high),
+            (Some(m), _) => say!("layout.zong-measure", m),
+            (None, _) => say!("layout.zong-measure-window"),
         };
     }
 
