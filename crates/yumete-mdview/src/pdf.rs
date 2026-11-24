@@ -315,8 +315,17 @@ fn uri_of(written: &str) -> String {
     };
     let path = yumete_core::markdown::percent_decoded(path);
     let kept = |b: u8| b.is_ascii_alphanumeric() || b"-._~/!$&'()*+,;=:@".contains(&b);
-    let mut uri = match std::path::Path::new(&path).is_absolute() {
-        true => format!("file://{}", escape(&path, &kept)),
+    // **Absolute the same way on every system**: a link written `/tmp/a.md`
+    // is absolute in Markdown whatever the platform, and a Windows path
+    // `C:\a.md` is one too, written with `/` and an extra one before the
+    // drive (`file:///C:/a.md`), as a file URI spells it.
+    let rooted = path.starts_with('/');
+    let mut uri = match rooted || std::path::Path::new(&path).is_absolute() {
+        true => {
+            let path = path.replace('\\', "/");
+            let slash = if rooted { "" } else { "/" };
+            format!("file://{slash}{}", escape(&path, &kept))
+        }
         false => escape(&path, &kept),
     };
     if let Some(fragment) = fragment {
@@ -802,10 +811,12 @@ mod tests {
         let doc = pdf_of(&text);
         let links = links_on(&doc, 1);
         let to = |goes: Goes| links.iter().filter(|(_, g)| *g == goes).map(|(r, _)| *r).collect::<Vec<_>>();
+        // One box each, or one a line where the system's fonts set the line
+        // so that a link wraps.
         for uri in ["https://example.com/a", "mailto:someone@example.org", "mailto:a@example.org", "https://example.org/ref", "https://example.net/x", "notes/a%20b.md"] {
             let boxes = to(Goes::Uri(uri.to_string()));
-            assert_eq!(boxes.len(), 1, "{uri} in {links:?}");
-            assert!(sane(&doc, 1, boxes[0]), "{uri}: {boxes:?}");
+            assert!(!boxes.is_empty() && boxes.len() <= 2, "{uri} in {links:?}");
+            assert!(boxes.iter().all(|&r| sane(&doc, 1, r)), "{uri}: {boxes:?}");
         }
         let long = to(Goes::Uri("https://example.com/long".to_string()));
         assert!(long.len() >= 2, "a box a line: {long:?}");
@@ -854,6 +865,8 @@ mod tests {
         assert_eq!(uri_of("notes/my%20file.md#part"), "notes/my%20file.md#part");
         assert_eq!(uri_of("../第一章.md"), "../%E7%AC%AC%E4%B8%80%E7%AB%A0.md");
         assert_eq!(uri_of("/tmp/a b.md"), "file:///tmp/a%20b.md");
+        #[cfg(windows)]
+        assert_eq!(uri_of(r"C:\notes\a b.md"), "file:///C:/notes/a%20b.md");
     }
 
     #[test]
