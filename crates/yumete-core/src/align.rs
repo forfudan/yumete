@@ -579,6 +579,14 @@ fn pair(
         .iter()
         .map(|&(m, t)| t > 0 && m as f64 >= PAIRED * t as f64)
         .collect();
+    // **Rewrites side by side are one rewrite.** A cut between two blocks
+    // that are both under [`PAIRED`] was placed by a stray `=` or `[0]` the
+    // two texts happen to share, and it would part the new lines with filler
+    // rows; without it a rewritten passage's lines stay together, the shorter
+    // side padded after them.
+    let keep: Vec<bool> = (0..cuts.len()).map(|k| k == 0 || k + 1 == cuts.len() || marked[k - 1] || marked[k]).collect();
+    let marked: Vec<bool> = (0..marked.len()).filter(|&k| keep[k]).map(|k| marked[k]).collect();
+    let cuts: Vec<(usize, usize)> = cuts.iter().zip(&keep).filter(|(_, &k)| k).map(|(c, _)| *c).collect();
     for w in cuts.windows(2) {
         out.blocks.push(Block { old: w[0].0..w[1].0, new: w[0].1..w[1].1, changed: true });
     }
@@ -773,6 +781,16 @@ mod tests {
         let al = align(&lines(old), &lines(new), &words);
         assert_eq!(al.line(Side::Old, 1), LineState::Changed(&[]));
         assert_eq!(al.line(Side::New, 1), LineState::Changed(&[]));
+    }
+
+    #[test]
+    fn a_rewritten_passage_keeps_its_new_lines_together() {
+        // A few stray words in common (`var`, `=`, `lu(A)`, `[0]`) must not
+        // cut the rewrite in two and part the new lines with filler rows.
+        let old = "same\nvar k = width()  # how many columns to fill\n\n# split the grid into halves first\nvar result = lu(A)\nref L = result[0]\nref U = result[1]\nfor i in range(n):\n    total += i\nsame\n";
+        let new = "same\nvar factors = lu(A)\nreturn solve(factors[0], factors[1])\nsame\n";
+        let changed: Vec<_> = blocks(old, new).into_iter().filter(|b| b.2).collect();
+        assert_eq!(changed, vec![(1..9, 1..3, true)]);
     }
 
     #[test]
