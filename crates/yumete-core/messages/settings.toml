@@ -269,6 +269,20 @@ zhs = "单词、代码和终端命令的补全列表一次显示几条"
 en = "how many items the word, code and shell completion lists show at once"
 
 [[message]]
+# 設置：兩欄對照摺起没改的行
+key = "settings.editor.diff-fold"
+zhs = "对照时折叠未改动的行"
+# 草稿
+en = "fold unchanged lines in a diff"
+
+[[message]]
+# 設置：兩欄對照摺起没改的行——一句話
+key = "settings.editor.diff-fold.hint"
+zhs = "左右对照时，把未改动的长段各折成一行，只留改动前后各三行(:diff-fold)"
+# 草稿
+en = "in the side-by-side view, fold each long unchanged run to one row, keeping three lines either side of a change (:diff-fold)"
+
+[[message]]
 # 設置：改动条
 key = "settings.editor.diff-gutter"
 zhs = "改动条"

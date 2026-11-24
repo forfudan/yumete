@@ -665,6 +665,7 @@ fn apply_to_editor(config: &Config, editor: &mut Editor, layout: Option<yumete_c
     editor.set_scrollbar_marks(yumete_core::editor::ScrollbarMarks::from_words(&config.editor.scrollbar_marks));
     editor.set_rulers(config.editor.rulers.clone());
     editor.set_diff_gutter(config.editor.diff_gutter);
+    editor.set_diff_fold(config.editor.diff_fold);
     editor.set_modeline(config.editor.modeline);
     if let Some(level) = yumete_core::problem::level_from_word(&config.editor.end_of_line_diagnostics) {
         editor.set_end_of_line_diagnostics(level);

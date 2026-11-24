@@ -4019,6 +4019,8 @@ pub struct Editor {
     diff_view: Option<diff_view::DiffView>,
     /// The file `:diff-mark` set aside to be compared with.
     diff_marked: Option<u64>,
+    /// `:diff-fold`: a side-by-side view folds its long unchanged runs away.
+    diff_fold: bool,
     /// Where the cursor was before each far jump, and how far back we have
     /// walked through them.
     /// A gap between 縱 set at runtime, overriding the config's.
@@ -5288,6 +5290,7 @@ impl Editor {
             turned_for_table: None,
             diff_view: None,
             diff_marked: None,
+            diff_fold: false,
             zong_gap: None,
             margin: yumete_cjk::Margin::default(),
             sentences: false,
@@ -7290,7 +7293,7 @@ pub use copies::{CopyCase, CopyRule};
 mod convert;
 mod detail;
 mod diff_view;
-pub use diff_view::{DiffColumns, DiffInk};
+pub use diff_view::{DiffColumns, DiffInk, DiffKey};
 mod docs;
 mod edits;
 mod fences;

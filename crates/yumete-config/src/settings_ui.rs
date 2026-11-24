@@ -661,6 +661,15 @@ pub const SETTINGS: &[Setting] = &[
     },
     Setting {
         table: "editor",
+        key: "diff_fold",
+        group: Group::Marks,
+        kind: Kind::Tick,
+        label: "settings.editor.diff-fold",
+        hint: "settings.editor.diff-fold.hint",
+        factory: "false",
+    },
+    Setting {
+        table: "editor",
         key: "end_of_line_diagnostics",
         group: Group::Marks,
         kind: Kind::Pick(EOL_DIAGNOSTIC_WAYS),

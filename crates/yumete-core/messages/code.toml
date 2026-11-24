@@ -169,6 +169,27 @@ zhs = "改动 {0}/{1}"
 en = "change {0}/{1}"
 
 [[message]]
+# :diff-fold 之後：兩欄對照不再摺起没改的行
+key = "diff.fold-off"
+zhs = "对照中未改动的行全部显示"
+# 草稿
+en = "every unchanged line is shown in the side-by-side view"
+
+[[message]]
+# :diff-fold 之後：兩欄對照把長段没改的行摺起來
+key = "diff.fold-on"
+zhs = "对照中未改动的长段已折叠"
+# 草稿
+en = "long unchanged runs are folded in the side-by-side view"
+
+[[message]]
+# 兩欄對照裏摺起來的那一行（兩欄各一行）：摺起了 {0} 行没改的
+key = "diff.folded"
+zhs = "{0} 行未改动"
+# 草稿
+en = "{0|unchanged line|unchanged lines}"
+
+[[message]]
 # :git-diff 問不出答案：git 自己那一句話照搬
 key = "diff.git-said"
 zhs = "git 中没有 {0} 版本的此文件：{1}"
@@ -187,6 +208,20 @@ key = "diff.marked-is-this"
 zhs = "标记的就是这个文件，请到另一个文件里对照"
 # 草稿
 en = "the marked file is this one; compare from another file"
+
+[[message]]
+# 兩欄對照裏光標在新稿一行上，那一行是從舊稿第 {0} 行原樣搬過來的
+key = "diff.moved-from"
+zhs = "从第 {0} 行移来"
+# 草稿
+en = "moved from line {0}"
+
+[[message]]
+# 兩欄對照裏光標在舊稿一行上，那一行原樣搬到了新稿第 {0} 行
+key = "diff.moved-to"
+zhs = "移到了第 {0} 行"
+# 草稿
+en = "moved to line {0}"
 
 [[message]]
 # 兩欄對照裏 ]c 而後面沒有改動了（不繞回開頭）
@@ -242,6 +277,20 @@ zhs = "与《{0}》完全相同"
 en = "identical to '{0}'"
 
 [[message]]
+# :diff-swap 之後：舊稿回到左欄
+key = "diff.swapped-left"
+zhs = "旧稿回到左栏"
+# 草稿
+en = "the old text is on the left again"
+
+[[message]]
+# :diff-swap 之後：舊稿換到了右欄
+key = "diff.swapped-right"
+zhs = "旧稿换到了右栏"
+# 草稿
+en = "the old text is on the right now"
+
+[[message]]
 # 兩欄對照左欄頂上那一行：{1} 是檔名，{0} 是 git 的版本（HEAD 或提交）
 key = "diff.title-revision"
 zhs = "{1} @ {0}"
@@ -290,6 +339,13 @@ key = "diff.view-far"
 zhs = "两份差异太大，只并排显示，不标改动"
 # 草稿
 en = "too different to mark; shown side by side only"
+
+[[message]]
+# :diff、:git-diff 打開了兩欄對照，兩邊只差在換行符（CRLF 與 LF）
+key = "diff.view-line-endings"
+zhs = "两栏只有换行符不同（CRLF 与 LF）"
+# 草稿
+en = "the two columns differ only in their line endings (CRLF and LF)"
 
 [[message]]
 # :diff、:git-diff 打開了兩欄對照，數到 {0} 處改動

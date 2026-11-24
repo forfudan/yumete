@@ -155,6 +155,10 @@ impl Editor {
     /// last line: in order, none inside another. A scrollbar counts each as
     /// the one row its first line is drawn on.
     pub fn closed_folds(&self) -> Vec<(usize, usize)> {
+        // None in a side-by-side diff, which draws every fold open.
+        if self.diff_in_view() {
+            return Vec::new();
+        }
         self.fold_view().shut.clone()
     }
 
@@ -263,6 +267,7 @@ impl Editor {
     /// opens it, unless the key was one of vim's jumps, which leave it
     /// closed and the cursor on its line (the place is kept for `zo`).
     pub(super) fn settle_folds(&mut self) {
+        self.settle_diff_folds();
         let keep_closed = std::mem::take(&mut self.fold_stays_closed);
         // A hidden place outlives no move off the fold's line.
         if self.fold_return.is_some() && self.hidden_place().is_none() {

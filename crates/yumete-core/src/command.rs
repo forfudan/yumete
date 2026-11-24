@@ -888,6 +888,11 @@ pub enum Command {
     /// `:diff-put` — this column's version of this change, into the other
     /// (vim's `dp`).
     DiffPut,
+    /// `:diff-fold [on|off]` — the long unchanged runs of a side-by-side view
+    /// folded to one row each.
+    DiffFold(Switch),
+    /// `:diff-swap` — the old text into the other column.
+    DiffSwap,
     /// `:git-show [commit]` — the committed draft, read-only, in the other
     /// work area (#518).
     GitShow(Option<String>),
@@ -6842,6 +6847,22 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|_| Ok(Command::DiffPut)),
     },
     Entry {
+        name: "diff-fold",
+        aliases: &[],
+        help: "cmd.commands.diff-fold",
+        needs: &[],
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::DiffFold(switched(p)))),
+    },
+    Entry {
+        name: "diff-swap",
+        aliases: &[],
+        help: "cmd.commands.diff-swap",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::DiffSwap)),
+    },
+    Entry {
         name: "lsp-rename",
         aliases: &[],
         help: "cmd.commands.lsp-rename",
@@ -9406,7 +9427,7 @@ mod tests {
         // …and a prefix that names something at the top level is answered
         // with the commands it begins, nothing dredged up from below them
         // (no `:git-diff`).
-        assert_eq!(found("diff"), ["diff", "diff-get", "diff-mark", "diff-marked", "diff-put", "diff-report"]);
+        assert_eq!(found("diff"), ["diff", "diff-fold", "diff-get", "diff-mark", "diff-marked", "diff-put", "diff-report", "diff-swap"]);
     }
 
     /// Print the menu the way it is drawn, for looking at.

@@ -135,6 +135,10 @@ pub struct EditorConfig {
     ///
     /// 代價是開檔與存檔各多一個子進程；量過，見 `local/development.md`。
     pub diff_gutter: bool,
+    /// Whether the side-by-side diff folds each long unchanged run to one
+    /// row (`:diff-fold`). Off at first: the whole text is what a writer
+    /// comparing two drafts expects to see.
+    pub diff_fold: bool,
     /// End-of-line diagnostics: which of a language server's messages are
     /// drawn after their line — `"off"` (the default, as helix and Zed ship
     /// it: a grammar checker tags nearly every line of prose), `"basic"`
@@ -638,6 +642,7 @@ impl Default for EditorConfig {
             mouse_hover_delay: 500,
             line_number_fill: false,
             diff_gutter: true,
+            diff_fold: false,
             end_of_line_diagnostics: "off".to_string(),
             modeline: true,
             maths_preview: true,
@@ -5039,6 +5044,7 @@ struct RawEditor {
     mouse_hover_delay: Option<usize>,
     line_number_fill: Option<bool>,
     diff_gutter: Option<bool>,
+    diff_fold: Option<bool>,
     end_of_line_diagnostics: Option<String>,
     modeline: Option<bool>,
     maths_preview: Option<bool>,
@@ -5272,6 +5278,9 @@ impl RawConfig {
         }
         if other.editor.diff_gutter.is_some() {
             self.editor.diff_gutter = other.editor.diff_gutter;
+        }
+        if other.editor.diff_fold.is_some() {
+            self.editor.diff_fold = other.editor.diff_fold;
         }
         if other.editor.end_of_line_diagnostics.is_some() {
             self.editor.end_of_line_diagnostics = other.editor.end_of_line_diagnostics.clone();
@@ -5824,6 +5833,9 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.diff_gutter {
             config.editor.diff_gutter = on;
+        }
+        if let Some(on) = self.editor.diff_fold {
+            config.editor.diff_fold = on;
         }
         if let Some(word) = self.editor.end_of_line_diagnostics.as_deref().and_then(eol_diagnostics_word) {
             config.editor.end_of_line_diagnostics = word.to_string();

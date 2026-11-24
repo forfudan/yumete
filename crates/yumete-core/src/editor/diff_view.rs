@@ -10,12 +10,22 @@
 //! ([`crate::wrap::Measure::pads`]), so the caret, `j`, `C-d`, `G`, the mouse
 //! and the scrollbar all walk the rows that are drawn.
 //!
-//! The left column is the old text. A revision or the file as saved is a
-//! read-only copy made for the view, which goes when the view closes; a file
-//! marked with `:diff-mark` is that file's own buffer, editable like any
-//! other. `C-w h` and `C-w l` move the keys between the columns: the place in
-//! the column left behind is that buffer's own remembered cursor, as when a
-//! tab is left.
+//! The left column is the old text, unless `:diff-swap` has put it on the
+//! right. A revision or the file as saved is a read-only copy made for the
+//! view, which goes when the view closes; a file marked with `:diff-mark` is
+//! that file's own buffer, editable like any other. `C-w h` and `C-w l` move
+//! the keys between the columns: the place in the column left behind is that
+//! buffer's own remembered cursor, as when a tab is left.
+//!
+//! **`:diff-fold`** folds the long unchanged runs away, each drawn as one row
+//! in both columns that says how many lines it hides. That row is a filler
+//! row after the line above the run (before the first line on the page, for
+//! a run at the top), and the run's lines are off the page
+//! ([`Editor::line_is_folded`]), so the caret never stands on it and `j`
+//! steps over it. A run opens while the caret is in it — a search, a mark or
+//! `:N` that lands there shows it — and closes when the caret leaves;
+//! vim's jumps (`gg`, `G`, `:N`, `C-o`) that would land in one stop at the
+//! line beside it instead, as they leave a closed fold closed.
 
 use std::cell::{Cell, RefCell};
 use std::collections::hash_map::DefaultHasher;
@@ -35,12 +45,16 @@ use crate::wrap::Anchor;
 /// One side-by-side view: which window, and which two texts.
 pub(crate) struct DiffView {
     window: crate::window::WindowId,
-    left: u64,
-    right: u64,
+    /// The old text and the new, whichever column each is drawn in.
+    old: u64,
+    new: u64,
+    /// The two titles, the old text's first.
     titles: (String, String),
-    /// The left text was made for the view — a revision, the file as saved —
+    /// The old text was made for the view — a revision, the file as saved —
     /// and closes with it.
     copy: bool,
+    /// The old text is drawn in the right column (`:diff-swap`).
+    swapped: bool,
     aligned: RefCell<Option<Aligned>>,
     rows: RefCell<RowsMemo>,
     /// When the whole-text pass is owed, after the typing stops.
@@ -73,6 +87,9 @@ pub struct DiffInk {
     pub side: Side,
     /// Part of a change.
     pub changed: bool,
+    /// Taken out in one place and put in unchanged in another: tinted
+    /// quieter than a change, and never marked.
+    pub moved: bool,
     /// The char ranges within the line that changed; empty for a line tinted
     /// whole.
     pub marks: Vec<Range<usize>>,
@@ -85,9 +102,20 @@ pub struct DiffColumns {
     pub right: String,
     /// Which column has the keys.
     pub keys_left: bool,
+    /// Which text has the keys.
+    pub side: Side,
 }
 
-/// Where the left text comes from.
+/// **What the filler rows depend on** ([`Editor::diff_key`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DiffKey {
+    pub revisions: (u64, u64),
+    pub side: Side,
+    /// With folding on, the fold the caret has open.
+    pub folds: Option<Option<usize>>,
+}
+
+/// Where the old text comes from.
 pub(super) enum Base {
     /// A text made for the view, read-only, under this name.
     Copy { text: String, name: String },
@@ -110,14 +138,14 @@ impl Editor {
     fn diff(&self) -> Option<&DiffView> {
         self.diff_view
             .as_ref()
-            .filter(|d| self.buffer_with(d.left).is_some() && self.buffer_with(d.right).is_some())
+            .filter(|d| self.buffer_with(d.old).is_some() && self.buffer_with(d.new).is_some())
     }
 
-    /// **The copy the view made for its left column** — a revision or the
+    /// **The copy the view made for its old text** — a revision or the
     /// saved file — which lives only inside the view: no tab, no place in
     /// `gn`/`gp` or the buffer picker; the column's title names it.
     pub(super) fn diff_copy(&self) -> Option<u64> {
-        self.diff().filter(|d| d.copy).map(|d| d.left)
+        self.diff().filter(|d| d.copy).map(|d| d.old)
     }
 
     /// The buffer that stands for `id` among the listed ones: the copy is
@@ -125,7 +153,7 @@ impl Editor {
     /// column the tab lit is that text's.
     pub(super) fn diff_stand_in(&self, id: u64) -> u64 {
         match self.diff() {
-            Some(d) if d.copy && d.left == id => d.right,
+            Some(d) if d.copy && d.old == id => d.new,
             _ => id,
         }
     }
@@ -141,7 +169,7 @@ impl Editor {
     /// **Whether a side-by-side view is open**: its window shows one of its
     /// two texts. The page is horizontal while it is ([`Self::layout`]).
     pub fn diff_is_open(&self) -> bool {
-        self.diff().is_some_and(|d| self.diff_shown(d).is_some_and(|id| id == d.left || id == d.right))
+        self.diff().is_some_and(|d| self.diff_shown(d).is_some_and(|id| id == d.old || id == d.new))
     }
 
     /// Which side of the view is being drawn or has the keys, when what is
@@ -153,7 +181,7 @@ impl Editor {
             return None;
         }
         let id = self.current_buffer().id();
-        match (id == d.left, id == d.right) {
+        match (id == d.old, id == d.new) {
             (true, _) => Some(Side::Old),
             (_, true) => Some(Side::New),
             _ => None,
@@ -167,8 +195,8 @@ impl Editor {
 
     fn side_id(d: &DiffView, side: Side) -> u64 {
         match side {
-            Side::Old => d.left,
-            Side::New => d.right,
+            Side::Old => d.old,
+            Side::New => d.new,
         }
     }
 
@@ -232,7 +260,12 @@ impl Editor {
     pub fn diff_columns(&self) -> Option<DiffColumns> {
         let d = self.diff()?;
         let side = self.side_in_view()?;
-        Some(DiffColumns { left: d.titles.0.clone(), right: d.titles.1.clone(), keys_left: side == Side::Old })
+        let (old, new) = (d.titles.0.clone(), d.titles.1.clone());
+        let (left, right) = match d.swapped {
+            false => (old, new),
+            true => (new, old),
+        };
+        Some(DiffColumns { left, right, keys_left: (side == Side::Old) != d.swapped, side })
     }
 
     /// The lines the gutter numbers, in the view: the longer text's, so the
@@ -240,7 +273,7 @@ impl Editor {
     pub fn gutter_lines(&self) -> usize {
         let here = self.current_buffer().line_count();
         match self.diff().filter(|_| self.diff_in_view()) {
-            Some(d) => [d.left, d.right]
+            Some(d) => [d.old, d.new]
                 .iter()
                 .filter_map(|&id| self.buffer_with(id))
                 .map(|i| self.buffers[i].line_count())
@@ -255,7 +288,7 @@ impl Editor {
     /// typing stops ([`Self::diff_tick`]).
     pub(super) fn diff_alignment(&self) -> Option<Rc<Alignment>> {
         let d = self.diff()?;
-        let (l, r) = (&self.buffers[self.buffer_with(d.left)?], &self.buffers[self.buffer_with(d.right)?]);
+        let (l, r) = (&self.buffers[self.buffer_with(d.old)?], &self.buffers[self.buffer_with(d.new)?]);
         let revisions = (l.revision(), r.revision());
         if let Some(a) = d.aligned.borrow().as_ref().filter(|a| a.revisions == revisions) {
             return Some(a.alignment.clone());
@@ -301,7 +334,7 @@ impl Editor {
             return;
         }
         d.full_due.set(None);
-        let (Some(li), Some(ri)) = (self.buffer_with(d.left), self.buffer_with(d.right)) else { return };
+        let (Some(li), Some(ri)) = (self.buffer_with(d.old), self.buffer_with(d.new)) else { return };
         let revisions = (self.buffers[li].revision(), self.buffers[ri].revision());
         let (old_text, new_text) = (self.buffers[li].rope().to_string(), self.buffers[ri].rope().to_string());
         let (old, new): (Vec<&str>, Vec<&str>) = (old_text.split('\n').collect(), new_text.split('\n').collect());
@@ -319,7 +352,7 @@ impl Editor {
         let Some(d) = self.diff() else { return 1 };
         let place = |s: Side| self.side_place(d, s).map_or(0, |p| p.1);
         let revision = |id: u64| self.buffer_with(id).map_or(0, |i| self.buffers[i].revision());
-        let stamp = (revision(d.left), revision(d.right), width, place(Side::Old), place(Side::New));
+        let stamp = (revision(d.old), revision(d.new), width, place(Side::Old), place(Side::New));
         {
             let mut memo = d.rows.borrow_mut();
             if memo.stamp != Some(stamp) {
@@ -355,17 +388,24 @@ impl Editor {
     pub fn diff_pads(&self, width: usize, line: usize) -> usize {
         let Some(side) = self.side_in_view() else { return 0 };
         let Some(al) = self.diff_alignment() else { return 0 };
-        al.pads_after(side, line, &|s, l| self.diff_rows(s, l, width))
+        if self.diff_hides(line) {
+            return 0;
+        }
+        al.pads_after(side, line, &|s, l| self.diff_rows(s, l, width)) + self.diff_fold_after(line).map_or(0, |_| 1)
     }
 
     /// **What the filler rows depend on**, while a view is in the window:
     /// both texts' revisions and which column has the keys. A table of rows
     /// counted with the pads is good for as long as this is unchanged.
-    pub fn diff_key(&self) -> Option<(u64, u64, bool)> {
+    pub fn diff_key(&self) -> Option<DiffKey> {
         let side = self.side_in_view()?;
         let d = self.diff()?;
         let revision = |id: u64| self.buffer_with(id).map_or(0, |i| self.buffers[i].revision());
-        Some((revision(d.left), revision(d.right), side == Side::Old))
+        let folds = match self.diff_fold {
+            true => Some(self.diff_alignment().and_then(|al| self.diff_open_fold(d, &al))),
+            false => None,
+        };
+        Some(DiffKey { revisions: (revision(d.old), revision(d.new)), side, folds })
     }
 
     /// [`Self::diff_pads`] for an estimate: the pads that changes make,
@@ -373,14 +413,127 @@ impl Editor {
     pub fn diff_change_pads(&self, width: usize, line: usize) -> usize {
         let Some(side) = self.side_in_view() else { return 0 };
         let Some(al) = self.diff_alignment() else { return 0 };
-        al.change_pads_after(side, line, &|s, l| self.diff_rows(s, l, width))
+        if self.diff_hides(line) {
+            return 0;
+        }
+        al.change_pads_after(side, line, &|s, l| self.diff_rows(s, l, width)) + self.diff_fold_after(line).map_or(0, |_| 1)
     }
 
-    /// **Filler rows before the first line** of the side being drawn or keyed.
-    pub fn diff_lead(&self, width: usize) -> usize {
-        let Some(side) = self.side_in_view() else { return 0 };
-        let Some(al) = self.diff_alignment() else { return 0 };
-        al.lead(side, &|s, l| self.diff_rows(s, l, width))
+    /// **Filler rows before the first line on the page** of the side being
+    /// drawn or keyed: the lines the other side has above everything, or the
+    /// row a folded run at the top is drawn as.
+    pub fn diff_lead(&self, width: usize) -> crate::wrap::Lead {
+        let Some(side) = self.side_in_view() else { return crate::wrap::Lead::top(0) };
+        let Some(al) = self.diff_alignment() else { return crate::wrap::Lead::top(0) };
+        match self.diff_fold_run(0) {
+            Some(run) => crate::wrap::Lead { line: run.end, rows: 1 },
+            None => crate::wrap::Lead::top(al.lead(side, &|s, l| self.diff_rows(s, l, width))),
+        }
+    }
+
+    // ---- Folds ------------------------------------------------------------
+
+    /// `:diff-fold` — whether a view folds its long unchanged runs away.
+    pub fn diff_fold(&self) -> bool {
+        self.diff_fold
+    }
+
+    pub fn set_diff_fold(&mut self, on: bool) {
+        self.diff_fold = on;
+    }
+
+    /// `:diff-fold [on|off]`, bare turning it round.
+    pub(super) fn switch_diff_fold(&mut self, want: crate::command::Switch) {
+        self.diff_fold = want.over(self.diff_fold);
+        self.status = match self.diff_fold {
+            true => say!("diff.fold-on"),
+            false => say!("diff.fold-off"),
+        };
+    }
+
+    /// **The fold the caret is in**, open while it is there.
+    fn diff_open_fold(&self, d: &DiffView, al: &Alignment) -> Option<usize> {
+        let id = self.diff_shown(d)?;
+        let side = match (id == d.old, id == d.new) {
+            (true, _) => Side::Old,
+            (_, true) => Side::New,
+            _ => return None,
+        };
+        let (index, at, _) = self.side_place(d, side)?;
+        al.fold_of(side, self.buffers[index].rope().char_to_line(at))
+    }
+
+    /// **The folded run holding `line`** of the side being drawn or keyed,
+    /// as that side's lines; `None` with folding off, and for the run the
+    /// caret is in.
+    fn diff_fold_run(&self, line: usize) -> Option<Range<usize>> {
+        if !self.diff_fold {
+            return None;
+        }
+        let d = self.diff()?;
+        let side = self.side_in_view()?;
+        let al = self.diff_alignment()?;
+        let k = al.fold_of(side, line)?;
+        (self.diff_open_fold(d, &al) != Some(k)).then(|| al.folds()[k].on(side).clone())
+    }
+
+    /// Whether `line` is folded away: off the page, in no row at all.
+    pub(super) fn diff_hides(&self, line: usize) -> bool {
+        self.diff_fold_run(line).is_some()
+    }
+
+    /// The lines a folded run right after `line` hides, when one does: its
+    /// row is the last filler row after `line`.
+    fn diff_fold_after(&self, line: usize) -> Option<usize> {
+        self.diff_fold_run(line + 1).filter(|run| run.start == line + 1).map(|run| run.len())
+    }
+
+    /// **The folded runs** of the side being drawn or keyed, in order: a
+    /// scrollbar counts their lines as no rows, their row as a filler row.
+    pub fn diff_folded(&self) -> Vec<Range<usize>> {
+        let (Some(d), Some(side), Some(al)) = (self.diff(), self.side_in_view(), self.diff_alignment()) else { return Vec::new() };
+        if !self.diff_fold {
+            return Vec::new();
+        }
+        let open = self.diff_open_fold(d, &al);
+        al.folds().iter().enumerate().filter(|&(k, _)| Some(k) != open).map(|(_, run)| run.on(side).clone()).collect()
+    }
+
+    /// **The row a folded run is drawn as**: how many lines it hides, when
+    /// row `index` of `line` is that row — what the front end writes on it.
+    pub fn diff_fold_row(&self, line: usize, index: usize, width: usize) -> Option<usize> {
+        let side = self.side_in_view()?;
+        let lead = self.diff_lead(width);
+        if lead.line > 0 && line == lead.line && index == 0 {
+            return Some(lead.line);
+        }
+        let hidden = self.diff_fold_after(line)?;
+        let before = match lead.line == line {
+            true => lead.rows,
+            false => 0,
+        };
+        let rows = before + self.diff_rows(side, line, width) + self.diff_pads(width, line);
+        (index + 1 == rows).then_some(hidden)
+    }
+
+    /// **After a jump**: one that would land in a folded run stops at the
+    /// line after it (before it, for a run at the end), as a jump leaves a
+    /// closed fold closed. Any other key that lands in one opens it.
+    pub(super) fn settle_diff_folds(&mut self) {
+        if !self.diff_fold || !self.fold_stays_closed {
+            return;
+        }
+        let (Some(side), Some(al)) = (self.side_in_view(), self.diff_alignment()) else { return };
+        let Some(k) = al.fold_of(side, self.cursor_line()) else { return };
+        let run = al.folds()[k].on(side).clone();
+        let rope = self.current_buffer().rope();
+        let to = match (run.end < rope.len_lines(), run.start) {
+            (true, _) => run.end,
+            (false, 0) => return,
+            (false, start) => start - 1,
+        };
+        let at = rope.line_to_char(to);
+        self.set_cursor(at);
     }
 
     /// **The other column's first row**, beside `top` of the column being
@@ -410,9 +563,21 @@ impl Editor {
     pub fn diff_ink(&self, line: usize) -> Option<DiffInk> {
         let side = self.side_in_view()?;
         let al = self.diff_alignment()?;
-        Some(match al.line(side, line) {
-            LineState::Same => DiffInk { side, changed: false, marks: Vec::new() },
-            LineState::Changed(marks) => DiffInk { side, changed: true, marks: marks.to_vec() },
+        Some(match (al.line(side, line), al.moved(side, line)) {
+            (LineState::Same, _) => DiffInk { side, changed: false, moved: false, marks: Vec::new() },
+            (LineState::Changed(_), Some(_)) => DiffInk { side, changed: true, moved: true, marks: Vec::new() },
+            (LineState::Changed(marks), None) => DiffInk { side, changed: true, moved: false, marks: marks.to_vec() },
+        })
+    }
+
+    /// **「moved from line 12」**: where the line the caret is on went or
+    /// came from, when it was moved.
+    pub fn diff_moved(&self) -> Option<String> {
+        let side = self.side_in_view()?;
+        let to = self.diff_alignment()?.moved(side, self.cursor_line())? + 1;
+        Some(match side {
+            Side::Old => say!("diff.moved-to", to),
+            Side::New => say!("diff.moved-from", to),
         })
     }
 
@@ -437,9 +602,9 @@ impl Editor {
     /// with the keys on the right.
     pub(super) fn open_diff(&mut self, base: Base, titles: (String, String)) {
         self.close_diff_quietly();
-        let right = self.current_buffer().id();
+        let new = self.current_buffer().id();
         let line = self.cursor_line();
-        let (left, copy) = match base {
+        let (old, copy) = match base {
             Base::Buffer(id) => (id, false),
             Base::Copy { text, name } => {
                 let mut buffer = crate::Buffer::from_text(&text);
@@ -458,10 +623,11 @@ impl Editor {
         };
         self.diff_view = Some(DiffView {
             window: self.live,
-            left,
-            right,
+            old,
+            new,
             titles,
             copy,
+            swapped: false,
             aligned: RefCell::new(None),
             rows: RefCell::new(RowsMemo::default()),
             full_due: Cell::new(None),
@@ -469,7 +635,15 @@ impl Editor {
         self.refresh_sidebar();
         let changes = self.diff_alignment().map_or(0, |al| al.changes().len());
         let far = self.diff_alignment().is_some_and(|al| al.is_far());
+        // Lines are compared without their endings, so two texts that differ
+        // only there have no change to show; that is said, not hidden.
+        let endings = changes == 0
+            && self.diff().is_some_and(|d| match (self.buffer_with(d.old), self.buffer_with(d.new)) {
+                (Some(o), Some(n)) => self.buffers[o].rope() != self.buffers[n].rope(),
+                _ => false,
+            });
         let said = match (changes, far) {
+            (0, _) if endings => say!("diff.view-line-endings"),
             (0, _) => say!("diff.view-same"),
             (_, true) => say!("diff.view-far"),
             (n, false) => say!("diff.view-opened", n),
@@ -480,22 +654,22 @@ impl Editor {
         };
     }
 
-    /// Close the view, putting the keys in the right column and dropping a
-    /// copy made for it.
+    /// Close the view, putting the keys in the new text and dropping a copy
+    /// made for it.
     fn close_diff_quietly(&mut self) -> bool {
         let Some(d) = self.diff_view.take() else { return false };
-        if self.buffers[self.current].id() == d.left && d.window == self.live {
-            if let Some(i) = self.buffer_with(d.right) {
+        if self.buffers[self.current].id() == d.old && d.window == self.live {
+            if let Some(i) = self.buffer_with(d.new) {
                 self.show_buffer(i);
             }
         }
         if d.copy {
-            if let Some(i) = self.buffer_with(d.left).filter(|&i| i != self.current) {
+            if let Some(i) = self.buffer_with(d.old).filter(|&i| i != self.current) {
                 self.buffers.remove(i);
                 if i < self.current {
                     self.current -= 1;
                 }
-                self.drop_windows_showing(|b| b == d.left);
+                self.drop_windows_showing(|b| b == d.old);
             }
         }
         self.refresh_sidebar();
@@ -653,14 +827,30 @@ impl Editor {
     /// **`C-w h` `C-w l` `C-w w` in the view**: the keys to the other column.
     /// Answers whether they moved — never past the view's own edge.
     pub fn diff_to_column(&mut self, left: bool) -> bool {
-        let Some(side) = self.side_in_view() else { return false };
-        if (side == Side::Old) == left {
-            return false;
+        match self.diff_columns() {
+            Some(columns) if columns.keys_left != left => self.diff_cross(),
+            _ => false,
         }
-        self.diff_swap_columns()
     }
 
-    fn diff_swap_columns(&mut self) -> bool {
+    /// `:diff-swap` — **the old text into the other column**. What can be
+    /// edited goes with the text: a read-only copy is read-only on either
+    /// side.
+    pub(super) fn diff_swap(&mut self) {
+        if !self.diff_in_view() {
+            self.status = say!("diff.not-in-view");
+            return;
+        }
+        let Some(d) = self.diff_view.as_mut() else { return };
+        d.swapped = !d.swapped;
+        self.status = match d.swapped {
+            true => say!("diff.swapped-right"),
+            false => say!("diff.swapped-left"),
+        };
+    }
+
+    /// The keys to the other text.
+    fn diff_cross(&mut self) -> bool {
         let Some(d) = self.diff() else { return false };
         let Some(side) = self.side_in_view() else { return false };
         let Some(index) = self.buffer_with(Self::side_id(d, side.other())) else { return false };
@@ -713,11 +903,11 @@ impl Editor {
         }
         // Into the other column and back: an edit lands in the buffer with
         // the keys, and its undo step is that buffer's.
-        if !self.diff_swap_columns() {
+        if !self.diff_cross() {
             return;
         }
         self.take_change(&change, side.other());
-        self.diff_swap_columns();
+        self.diff_cross();
     }
 
     /// Replace `change`'s lines in the buffer with the keys (which is `into`)

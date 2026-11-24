@@ -414,10 +414,14 @@ impl Editor {
         if self.fold_hides(line) {
             return true;
         }
+        // A side-by-side diff keeps every line, as it keeps closed folds
+        // open, but the unchanged runs `:diff-fold` folds away.
+        if self.diff_in_view() {
+            return self.diff_hides(line);
+        }
         // 中階 draws the indent and keeps the blank line: adding two squares
-        // takes nothing away, folding a line does (#283). A side-by-side diff
-        // keeps every line, as it keeps closed folds open.
-        if self.indent == 0 || !self.indent_folds || self.diff_in_view() {
+        // takes nothing away, folding a line does (#283).
+        if self.indent == 0 || !self.indent_folds {
             return false;
         }
         if line == self.cursor_line() {
@@ -442,7 +446,7 @@ impl Editor {
     /// stays the same for as long as the text does. `None` when the indent
     /// folds nothing. A scrollbar estimating the page's rows reads this.
     pub fn blank_lines_off_the_page(&self) -> Option<std::cell::Ref<'_, [bool]>> {
-        if self.indent == 0 || !self.indent_folds {
+        if self.indent == 0 || !self.indent_folds || self.diff_in_view() {
             return None;
         }
         self.remember_folds();

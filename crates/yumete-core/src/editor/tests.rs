@@ -49419,3 +49419,138 @@ fn typing_re_aligns_at_once_and_the_whole_pass_agrees() {
     assert_eq!(ed.diff_counter(), local);
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// Forty numbered lines, and the same with line 21 (and with `more`, line 31
+/// too) reworded.
+fn forty(more: bool) -> (String, String) {
+    let old: Vec<String> = (1..=40).map(|i| format!("entry {i} of the list")).collect();
+    let mut new = old.clone();
+    new[20] = "entry twenty-one, reworded".to_string();
+    if more {
+        new[30] = "entry thirty-one, reworded".to_string();
+    }
+    (old.join("\n") + "\n", new.join("\n") + "\n")
+}
+
+#[test]
+fn diff_fold_folds_unchanged_runs_to_one_row_each() {
+    let (saved, now) = forty(false);
+    let (mut ed, dir) = diffed("fold", &saved, &now);
+    ed.execute(":diff").unwrap();
+    assert_eq!(ed.switch_state(":diff-fold"), Some(false));
+    ed.execute(":diff-fold").unwrap();
+    assert_eq!(ed.status(), say!("diff.fold-on"));
+    assert_eq!(ed.switch_state(":diff-fold"), Some(true));
+    // The caret on line 21 (index 20), the change: lines 0..17 and 24..41
+    // folded, three lines kept either side.
+    ed.goto_line(21);
+    assert!(ed.line_is_folded(0) && ed.line_is_folded(16));
+    assert!(!ed.line_is_folded(17) && !ed.line_is_folded(23));
+    assert!(ed.line_is_folded(24) && ed.line_is_folded(40));
+    // The run at the top is a row before the first line on the page; the
+    // one below is the filler row after the line above it.
+    assert_eq!(ed.diff_lead(80), crate::wrap::Lead { line: 17, rows: 1 });
+    assert_eq!(ed.diff_fold_row(17, 0, 80), Some(17));
+    assert_eq!(ed.diff_pads(80, 23), 1);
+    assert_eq!(ed.diff_fold_row(23, 1, 80), Some(17));
+    assert_eq!(ed.diff_fold_row(23, 0, 80), None, "the line's own row");
+    // The other column folds the same runs.
+    ed.walk_to_region(crate::window::Direction::Left);
+    assert_eq!(ed.cursor_line(), 20);
+    assert!(ed.line_is_folded(5) && ed.diff_pads(80, 23) == 1);
+    ed.walk_to_region(crate::window::Direction::Right);
+    // `j` from the last line shown steps over nothing it can stand on, and
+    // stops; `k` from the first comes back no further.
+    ed.goto_line(24);
+    press(&mut ed, "j");
+    assert_eq!(ed.cursor_line(), 23);
+    ed.goto_line(19);
+    press(&mut ed, "kkk");
+    assert_eq!(ed.cursor_line(), 17);
+    // Off again, everything is back.
+    ed.execute(":diff-fold off").unwrap();
+    assert!(!ed.line_is_folded(0));
+    assert_eq!(ed.diff_pads(80, 23), 0);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn a_fold_opens_while_the_caret_is_in_it_and_jumps_stop_beside_it() {
+    let (saved, now) = forty(true);
+    let (mut ed, dir) = diffed("fold-open", &saved, &now);
+    ed.set_key_preset(crate::KeyPreset::Vim);
+    ed.execute(":diff").unwrap();
+    ed.execute(":diff-fold on").unwrap();
+    ed.goto_line(21);
+    assert!(ed.line_is_folded(5));
+    // A search that lands in a folded run shows it, and it folds again once
+    // the caret has left.
+    press(&mut ed, "/entry 6 ");
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.cursor_line(), 5);
+    assert!(!ed.line_is_folded(5) && !ed.line_is_folded(0));
+    ed.goto_line(21);
+    assert!(ed.line_is_folded(5));
+    // `gg` and `G` stop at the lines beside the runs at either end.
+    press(&mut ed, "gg");
+    assert_eq!(ed.cursor_line(), 17);
+    press(&mut ed, "G");
+    assert_eq!(ed.cursor_line(), 33, "three lines below the last change");
+    // `]g` walks the changes, folded or not.
+    press(&mut ed, "gg]g");
+    assert_eq!(ed.cursor_line(), 20);
+    press(&mut ed, "]g");
+    assert_eq!(ed.cursor_line(), 30);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn a_moved_line_says_where_it_went() {
+    let saved = "the gate creaked open\nwe walked to the well\nthe sun was low\nthe dog barked twice\nsupper was late\n";
+    let now = "the gate creaked open\nthe sun was low\nthe dog barked twice\nwe walked to the well\nsupper was late\n";
+    let (mut ed, dir) = diffed("moved", saved, now);
+    ed.execute(":diff").unwrap();
+    ed.goto_line(4);
+    assert_eq!(ed.diff_moved(), Some(say!("diff.moved-from", 2)));
+    let ink = ed.diff_ink(3).unwrap();
+    assert!(ink.changed && ink.moved && ink.marks.is_empty());
+    ed.walk_to_region(crate::window::Direction::Left);
+    ed.goto_line(2);
+    assert_eq!(ed.diff_moved(), Some(say!("diff.moved-to", 4)));
+    ed.goto_line(1);
+    assert_eq!(ed.diff_moved(), None);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn diff_swap_puts_the_old_text_on_the_right_and_read_only_goes_with_it() {
+    let (mut ed, dir) = diffed("swap", SAVED, NOW);
+    ed.execute(":diff-swap").unwrap();
+    assert_eq!(ed.status(), say!("diff.not-in-view"));
+    ed.execute(":diff").unwrap();
+    ed.execute(":diff-swap").unwrap();
+    assert_eq!(ed.status(), say!("diff.swapped-right"));
+    let columns = ed.diff_columns().unwrap();
+    assert_eq!((columns.left.as_str(), columns.right, columns.keys_left), ("notes.md", say!("diff.title-saved", "notes.md"), true));
+    // The keys go right, to the old text, which is still the read-only copy.
+    assert!(!ed.diff_to_column(true), "already in the left column");
+    assert!(ed.diff_to_column(false));
+    assert!(ed.current_buffer().is_readonly());
+    assert_eq!(ed.diff_columns().unwrap().side, crate::align::Side::Old);
+    ed.execute(":diff-swap").unwrap();
+    assert_eq!(ed.status(), say!("diff.swapped-left"));
+    assert!(ed.diff_columns().unwrap().keys_left, "the copy is on the left again, the keys with it");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn texts_that_differ_only_in_line_endings_say_so() {
+    let (mut ed, dir) = diffed("endings", "one\r\ntwo\r\n", "one\ntwo\n");
+    ed.execute(":diff").unwrap();
+    assert_eq!(ed.status(), say!("diff.view-line-endings"));
+    std::fs::remove_dir_all(&dir).ok();
+    let (mut ed, dir) = diffed("same", "one\ntwo\n", "one\ntwo\n");
+    ed.execute(":diff").unwrap();
+    assert_eq!(ed.status(), say!("diff.view-same"));
+    std::fs::remove_dir_all(&dir).ok();
+}

@@ -17,7 +17,9 @@
 //! paragraph's head, markup the page hides, the wrap breaking early before a
 //! character that may not start a row, a table row that does not wrap. What
 //! it keeps: a blank line the paragraph indent takes off the page counts no
-//! row, and a closed fold counts the one row its first line is drawn on.
+//! row, a closed fold counts the one row its first line is drawn on, and a
+//! run a side-by-side diff folds away counts no row beside the filler row
+//! it is drawn as.
 //!
 //! **The thumb is dragged through the same rows, turned round**: a cell
 //! the thumb is put at is a row ([`row_at`]), the row a line and a row into
@@ -49,11 +51,12 @@ const SLOW: Duration = Duration::from_millis(5);
 const PAUSE: Duration = Duration::from_millis(300);
 
 /// What a table of rows is good for: the text, the width it was folded to,
-/// whether blank lines leave the page, and a side-by-side diff's filler rows.
+/// whether blank lines leave the page, and a side-by-side diff's filler rows
+/// and folds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Key {
     revision: u64,
-    diff: Option<(u64, u64, bool)>,
+    diff: Option<yumete_core::editor::DiffKey>,
     width: Option<usize>,
     blank_lines_fold: bool,
 }
@@ -86,14 +89,22 @@ impl Rows {
         // the size of the column as it scrolls, pads and all.
         let width = key.width.unwrap_or(usize::MAX / 2).max(1);
         let lead = match key.diff {
-            Some(_) => editor.diff_lead(width) as u32,
+            Some(_) => editor.diff_lead(width).rows as u32,
             None => 0,
         };
+        // The runs a side-by-side diff folds away, in order: the next one
+        // not yet passed is the only one asked about.
+        let folded = editor.diff_folded();
+        let mut fold = 0;
         before.push(lead);
         let mut total: u32 = lead;
         let mut end_line = |cells: usize| {
             let n = before.len() - 1;
-            let rows = match (off.as_deref().is_some_and(|off| off.get(n).copied().unwrap_or(false)), key.width) {
+            while folded.get(fold).is_some_and(|run| run.end <= n) {
+                fold += 1;
+            }
+            let gone = folded.get(fold).is_some_and(|run| run.contains(&n));
+            let rows = match (gone || off.as_deref().is_some_and(|off| off.get(n).copied().unwrap_or(false)), key.width) {
                 (true, _) => 0,
                 (false, None) => 1,
                 (false, Some(width)) => cells.div_ceil(width.max(1)).max(1),

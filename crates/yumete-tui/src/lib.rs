@@ -14705,10 +14705,7 @@ fn draw_diff(
     let width = editor.wrap_width().unwrap_or(usize::MAX / 2).max(1);
     // The keys crossed to the other column: the page stays where it was, so
     // its top is the row beside the old one.
-    let side = match columns.keys_left {
-        true => yumete_core::align::Side::Old,
-        false => yumete_core::align::Side::New,
-    };
+    let side = columns.side;
     if let Some(was) = seat.diff_side.filter(|&was| was != side) {
         seat.top = editor.diff_twin_top(was, seat.top, width);
         seat.left = 0;
@@ -15327,10 +15324,12 @@ fn draw_horizontal(
         false => Vec::new(),
     };
     // **A side-by-side diff's tints** (#518): the old text's changes washed
-    // with 朱, the new's with 綠, the words that changed a step louder.
-    let diff_wash = |side: yumete_core::align::Side| match side {
-        yumete_core::align::Side::Old => crate::theme::Accent::Mark,
-        yumete_core::align::Side::New => crate::theme::Accent::Green,
+    // with 朱, the new's with 綠, the words that changed a step louder; a
+    // line moved unchanged in the quieter 藍 on both sides.
+    let diff_wash = |d: &yumete_core::editor::DiffInk| match (d.moved, d.side) {
+        (true, _) => crate::theme::Accent::Azure,
+        (false, yumete_core::align::Side::Old) => crate::theme::Accent::Mark,
+        (false, yumete_core::align::Side::New) => crate::theme::Accent::Green,
     };
     for (row_y, row) in on_screen {
         // **A filler row is page with nothing on it**: a faint ground beside
@@ -15341,9 +15340,17 @@ fn draw_horizontal(
                 false => ink.page(),
             };
             let ground = Style::default().bg(ink.at(yumete_config::rung::BAND));
+            // The row a folded run of unchanged lines is drawn as says how
+            // many it hides, dim, where the text would start.
+            let room = text_area.width as usize + left;
+            let said = editor
+                .diff_fold_row(row.line, row.index_in_line, width)
+                .map(|hidden| cut_to_width(&say!("diff.folded", hidden), room))
+                .unwrap_or_default();
             let line = Line::from(vec![
                 Span::styled(" ".repeat(gutter), band),
-                Span::styled(" ".repeat(text_area.width as usize + left), ground),
+                Span::styled(said.clone(), ground.fg(ink.furniture())),
+                Span::styled(" ".repeat(room.saturating_sub(yumete_cjk::str_width(&said))), ground),
             ]);
             lines.push(scrolled(line, gutter, left));
             continue;
@@ -15531,7 +15538,7 @@ fn draw_horizontal(
         // A changed line of a side-by-side diff, washed across the row.
         let (ground, fill) = match &diff_ink {
             Some(d) => {
-                let wash = Style::default().bg(ink.washed(diff_wash(d.side)));
+                let wash = Style::default().bg(ink.washed(diff_wash(d)));
                 (ground.patch(wash), fill.patch(wash))
             }
             None => (ground, fill),
@@ -16077,7 +16084,7 @@ fn draw_horizontal(
         if let Some(d) = &diff_ink {
             // `vcs`, as the change popup's words: on a row already washed,
             // `short_wash` is too near that ground to be told from it.
-            let mark = Style::default().bg(ink.vcs(diff_wash(d.side)));
+            let mark = Style::default().bg(ink.vcs(diff_wash(d)));
             for range in &d.marks {
                 let a = range.start.saturating_sub(start_in_line).min(chars.len());
                 let b = range.end.saturating_sub(start_in_line).min(chars.len());
@@ -16897,6 +16904,8 @@ fn ordinary_status(
     let search = editor
         .search_index()
         .map(|(n, of)| format!("[{n}/{of}]"))
+        // A moved line says where it went or came from instead.
+        .or_else(|| editor.diff_moved())
         .or_else(|| editor.diff_counter().map(|(n, of)| say!("diff.counter", n, of)))
         .unwrap_or_default();
     // Warning: **Not `-- NORMAL --`.** Twelve cells for one word, on
@@ -19560,6 +19569,56 @@ fn squeezed(text: &str) -> String {
         let soup = buf[(column_of(&rows[morning + 1], "soup"), gy + 1)].style().bg;
         assert_eq!(soup, buf[(column_of(&rows[morning + 1], "lunch"), gy + 1)].style().bg);
         assert_ne!(soup, gone_row);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// **A folded side-by-side diff** (`:diff-fold`): each long unchanged run
+    /// is one row in both columns saying how many lines it hides, level on
+    /// both sides; a line moved unchanged is washed in its own quieter tint;
+    /// `:diff-swap` puts the old text's title over the right column.
+    #[test]
+    fn a_folded_side_by_side_diff_draws_one_row_a_run() {
+        let dir = std::env::temp_dir().join(format!("yumete-beside-fold-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("notes.md");
+        let old: Vec<String> = (1..=30).map(|i| format!("entry {i} of the list")).collect();
+        std::fs::write(&file, old.join("\n") + "\nthe moved line stays whole\n").unwrap();
+        let mut editor = Editor::new();
+        editor.open_file(&file).unwrap();
+        let mut new = old.clone();
+        new[14] = "entry fifteen, reworded".to_string();
+        new.insert(2, "the moved line stays whole".to_string());
+        let len = editor.current_buffer().char_count();
+        let _ = editor.current_buffer_mut().replace(0..len, &(new.join("\n") + "\n"));
+        editor.execute(":diff").unwrap();
+        editor.execute(":diff-fold on").unwrap();
+        editor.execute(":15").unwrap();
+
+        let config = Config::default();
+        let (w, h) = (100, 24);
+        let areas = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0);
+        let page = areas.panes[editor.live_pane()];
+        settle_the_pages(&mut editor, &config, page);
+        let buf = render(&editor, &config, w, h);
+        let rows: Vec<String> = (0..h).map(|y| row_text(&buf, y)).collect();
+        let ink = crate::theme::Palette::of(&config);
+
+        // Below the change, lines 20 to 28 of the new text are one row, and
+        // the same run of the old text beside it, a line higher.
+        let folded = say!("diff.folded", 9);
+        let run = rows.iter().position(|r| r.matches(folded.as_str()).count() == 2).unwrap_or_else(|| panic!("one row a run, in both columns: {rows:#?}"));
+        assert_eq!(rows[run - 1].matches("entry 18 of the list").count(), 2, "{rows:#?}");
+        assert!(!rows.iter().any(|r| r.contains("entry 20 of the list")), "the run is off the page: {rows:#?}");
+        let moved = rows.iter().position(|r| r.contains("the moved line")).expect("the moved line");
+        let wash = buf[(column_of(&rows[moved], "moved"), moved as u16)].style().bg;
+        assert_eq!(wash, Some(ink.washed(crate::theme::Accent::Azure)), "{rows:#?}");
+
+        editor.execute(":diff-swap").unwrap();
+        let buf = render(&editor, &config, w, h);
+        let title = row_text(&buf, page.y);
+        assert!(title.trim_start().starts_with("notes.md") && title.trim_end().ends_with(&say!("diff.title-saved", "notes.md")), "{title:?}");
 
         std::fs::remove_dir_all(&dir).ok();
     }

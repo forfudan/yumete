@@ -550,6 +550,14 @@ en = "this draft beside the file as saved, or another file, in two columns; bare
 find = "比較 比较 差異 差异 改動 改动 對照 对照 並排 并排 兩欄 两栏 diff compare side"
 
 [[message]]
+# : 命令選單裏 diff-fold 那一項的説明(commands 組)
+key = "cmd.commands.diff-fold"
+zhs = "对照中：把未改动的长段各折成一行；再输一次展开"
+# 草稿
+en = "in a side-by-side view: fold each long unchanged run to one row; bare again shows them"
+find = "折疊 折叠 摺疊 隱藏 隐藏 未改動 未改动 對照 对照 fold hide unchanged"
+
+[[message]]
 # : 命令選單裏 diff-get 那一項的説明(commands 組)
 key = "cmd.commands.diff-get"
 zhs = "对照中：把另一栏的这一处改动取过来（vim 的 do）"
@@ -587,6 +595,14 @@ key = "cmd.commands.diff-report"
 zhs = "查看改动：按词比较，而非按行"
 en = "show changes, by word rather than by line"
 find = "比較 比较 差異 差异 改動 改动 對照 对照 diff compare changes"
+
+[[message]]
+# : 命令選單裏 diff-swap 那一項的説明(commands 組)
+key = "cmd.commands.diff-swap"
+zhs = "对照中：左右两栏互换"
+# 草稿
+en = "in a side-by-side view: swap the two columns"
+find = "互換 互换 交換 交换 左右 對照 对照 swap sides"
 
 [[message]]
 # : 命令選單裏 earlier 那一項的説明(commands 組)

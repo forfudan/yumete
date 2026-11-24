@@ -161,10 +161,26 @@ pub struct Measure<'a> {
     /// in them; the caret never does ([`position`], [`next_row`] and
     /// [`prev_row`] see text rows only).
     pads: &'a dyn Fn(usize) -> usize,
-    /// **Filler rows before the first line** — the same, for lines the other
-    /// column has above everything this one has. They are line 0's first
+    /// **Filler rows before the first line on the page** — the same, for
+    /// lines the other column has above everything this one has, or for the
+    /// row a folded run at the top is drawn as. They are that line's first
     /// rows, so its text rows start at this index.
-    lead: usize,
+    lead: Lead,
+}
+
+/// **Filler rows before a line**: [`Measure::lead`], `rows` of them before
+/// `line`'s text — line 0, unless the lines above it are off the page.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Lead {
+    pub line: usize,
+    pub rows: usize,
+}
+
+impl Lead {
+    /// `rows` filler rows before line 0.
+    pub fn top(rows: usize) -> Lead {
+        Lead { line: 0, rows }
+    }
 }
 
 /// A page with nothing hidden, for callers that show the source as it is.
@@ -208,7 +224,7 @@ impl<'a> Measure<'a> {
             edit: None,
             widths: NOTHING_INDEXED,
             pads: NO_PADS,
-            lead: 0,
+            lead: Lead::top(0),
         }
     }
 
@@ -228,7 +244,7 @@ impl<'a> Measure<'a> {
             edit: None,
             widths: NOTHING_INDEXED,
             pads: NO_PADS,
-            lead: 0,
+            lead: Lead::top(0),
         }
     }
 
@@ -313,15 +329,15 @@ impl<'a> Measure<'a> {
 
     /// The same measure, with `pads` naming the filler rows after each line
     /// and `lead` those before the first. See [`Measure::pads`].
-    pub fn with_pads(self, pads: &'a dyn Fn(usize) -> usize, lead: usize) -> Measure<'a> {
+    pub fn with_pads(self, pads: &'a dyn Fn(usize) -> usize, lead: Lead) -> Measure<'a> {
         Measure { pads, lead, ..self }
     }
 
-    /// The filler rows before `line`'s text: the lead, on line 0 only.
+    /// The filler rows before `line`'s text: the lead, on its line only.
     pub fn lead_on(self, line: usize) -> usize {
-        match line {
-            0 => self.lead,
-            _ => 0,
+        match line == self.lead.line {
+            true => self.lead.rows,
+            false => 0,
         }
     }
 
@@ -1841,7 +1857,7 @@ mod tests {
     #[test]
     fn filler_rows_are_rows_with_no_text() {
         let (rope, pads) = padded();
-        let m = Measure::plain(10).with_pads(&pads, 1);
+        let m = Measure::plain(10).with_pads(&pads, Lead::top(1));
         let rows = rows_from(&rope, Anchor::default(), m, 10);
         let shape: Vec<(usize, usize, bool, bool)> = rows.iter().map(|r| (r.line, r.index_in_line, r.filler, r.first)).collect();
         assert_eq!(
@@ -1860,7 +1876,7 @@ mod tests {
     #[test]
     fn the_caret_never_stands_on_a_filler_row() {
         let (rope, pads) = padded();
-        let m = Measure::plain(10).with_pads(&pads, 1);
+        let m = Measure::plain(10).with_pads(&pads, Lead::top(1));
         // Line 0's text is its second row, after the lead.
         assert_eq!(position(&rope, 1, m).index_in_line, 1);
         // `j` passes over the two rows after line 0, `k` comes back.
@@ -1870,11 +1886,24 @@ mod tests {
         assert_eq!(prev_row(&rope, 1, m, 1), 1);
     }
 
+    /// **A lead before a line further down**: the lines above it folded
+    /// away, the row standing for them before its text.
+    #[test]
+    fn a_lead_stands_before_the_first_line_on_the_page() {
+        let (rope, none) = (Rope::from_str("ab\ncd\nef"), |_: usize| 0);
+        let folded = |line: usize| line == 0;
+        let m = Measure::plain(10).with_folds(&folded).with_pads(&none, Lead { line: 1, rows: 1 });
+        let shape: Vec<(usize, usize, bool)> = rows_from(&rope, Anchor::default(), m, 10).iter().map(|r| (r.line, r.index_in_line, r.filler)).collect();
+        assert_eq!(shape, vec![(1, 0, true), (1, 1, false), (2, 0, false)]);
+        assert_eq!(position(&rope, 3, m).index_in_line, 1);
+        assert_eq!(prev_row(&rope, 3, m, 0), 3, "nothing above to stand on");
+    }
+
     #[test]
     fn no_filler_rows_change_nothing() {
         let rope = Rope::from_str("春夏秋冬春夏秋冬\n短\n");
         let none = |_: usize| 0;
-        let (plain, padded) = (Measure::plain(6), Measure::plain(6).with_pads(&none, 0));
+        let (plain, padded) = (Measure::plain(6), Measure::plain(6).with_pads(&none, Lead::top(0)));
         assert_eq!(rows_from(&rope, Anchor::default(), plain, 20), rows_from(&rope, Anchor::default(), padded, 20));
         for at in 0..rope.len_chars() {
             assert_eq!(position(&rope, at, plain), position(&rope, at, padded));

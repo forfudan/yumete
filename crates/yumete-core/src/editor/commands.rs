@@ -1087,6 +1087,14 @@ impl Editor {
                 self.diff_put();
                 Ok(CommandOutcome::Continue)
             }
+            Command::DiffFold(want) => {
+                self.switch_diff_fold(want);
+                Ok(CommandOutcome::Continue)
+            }
+            Command::DiffSwap => {
+                self.diff_swap();
+                Ok(CommandOutcome::Continue)
+            }
             Command::LspRename(name) => {
                 self.ask_rename(&name);
                 Ok(CommandOutcome::Continue)
@@ -2855,6 +2863,7 @@ impl Editor {
             Command::RenderRuby { dialect, .. } => self.ruby_configured().contains(dialect),
             Command::SetNumberFill(_) => self.number_fill,
             Command::SetDiffGutter(_) => self.diff_gutter,
+            Command::DiffFold(_) => self.diff_fold,
             Command::SetHanging(_) => self.hanging,
             Command::Preview(_) | Command::PreviewWindow(_) => self.preview_state_here() != PreviewState::None,
             Command::PreviewLock(_) => self.preview_state_here() == PreviewState::Locked,
