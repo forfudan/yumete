@@ -1735,6 +1735,34 @@ zhs = "向上翻一屏"
 en = "a screen up"
 
 [[message]]
+# 命令說明：quick_pages_1
+key = "action.quick-pages-1"
+zhs = "不分栏"
+# 草稿
+en = "one page"
+
+[[message]]
+# 命令說明：quick_pages_2
+key = "action.quick-pages-2"
+zhs = "分成 2 栏"
+# 草稿
+en = "2 pages"
+
+[[message]]
+# 命令說明：quick_pages_3
+key = "action.quick-pages-3"
+zhs = "分成 3 栏"
+# 草稿
+en = "3 pages"
+
+[[message]]
+# 命令說明：quick_pages_4
+key = "action.quick-pages-4"
+zhs = "分成 4 栏"
+# 草稿
+en = "4 pages"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.quit"
 zhs = "关闭此区；最后一个窗口则退出编辑器"
@@ -3026,6 +3054,20 @@ en = "popups and their sidebars"
 key = "keys.flavor.item.popup-panel-pairs.hint"
 zhs = "开：空格 K 把说明放进侧栏；空格 l、x、i 在浮窗里看诊断、改动、表格记录，大写在侧栏里看。关：未绑定。"
 en = "On: Space K puts the hover in the sidebar; Space l, x and i show a diagnostic, a change or a table record in a popup, the capitals in the sidebar. Off: unbound."
+
+[[message]]
+# 風味層一項：空格 , 快速設置
+key = "keys.flavor.item.quick-settings"
+zhs = "快速设置"
+# 草稿
+en = "quick settings"
+
+[[message]]
+# 風味層一項的說明：空格 , 快速設置
+key = "keys.flavor.item.quick-settings.hint"
+zhs = "开：空格 , 打开快速设置。关：这些设置照常在设置页和命令里改。"
+# 草稿
+en = "On: Space , opens the quick settings. Off: they are still set on the settings page and by command."
 
 [[message]]
 # 風味的一項：設置面板上的名字

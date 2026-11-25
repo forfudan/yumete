@@ -431,6 +431,7 @@ fn offscreen_frame(
     ime: &ImeSession,
     pages: Pages,
 ) {
+    tell_the_menus(editor, config, ime);
     terminal
         .draw(|frame| draw(frame, editor, config, ime, seats, pages))
         .expect("one frame into a buffer");
@@ -1423,6 +1424,7 @@ pub fn run(
             viewport.hover.servers = viewport.hover.showing().and_then(|_| {
                 crate::hover::server_words(&servers.standing(editor, config), &servers.facts(editor), editor.problem_counts())
             });
+            tell_the_menus(editor, config, ime);
             let began = std::time::Instant::now();
             let completed = match terminal
                 .draw(|frame| draw(frame, editor, config, ime, &mut viewport, Pages { settings: settings.panel.as_ref(), genda: Some(&genda), words: Some(&words) }))
@@ -5242,6 +5244,37 @@ fn candidate_shape(editor: &Editor, ime: &ImeSession) -> PanelDisplay {
     }
 }
 
+/// **The values the key menus show that live here**, handed to the editor
+/// before a frame: the theme's mood and the input method's dials, each in
+/// the word its command takes, for `空格 ,` and `空格 z` to show beside their
+/// keys. Only while a menu is open: nothing else reads them.
+fn tell_the_menus(editor: &mut Editor, config: &Config, ime: &ImeSession) {
+    if editor.pending_menu().is_none() {
+        return;
+    }
+    let mood = crate::theme::chosen_mood().unwrap_or(match config.theme.mode {
+        yumete_config::Mode::Auto => "system",
+        yumete_config::Mode::Dark => "dark",
+        yumete_config::Mode::Light => "light",
+    });
+    editor.set_front_value("theme-mode", mood);
+    editor.set_front_value("commit", ime.commit_strategy().as_str());
+    editor.set_front_value("panel", ime.panel_display().tag());
+    editor.set_front_value("inline-preedit", ime.inline_preedit().tag());
+    editor.set_front_value("predict", match ime.prediction_enabled() {
+        true => "on",
+        false => "off",
+    });
+    editor.set_front_value("scheme", ime.scheme_name());
+    editor.set_front_value("menu", ime.page_size().to_string());
+    editor.set_front_value("charset", ime.charsets().filter.as_str());
+    editor.set_front_value("charset-sort", ime.charsets().sort.as_str());
+    editor.set_front_value("single-char", ime.active_single_char().as_str());
+    if let Some(first) = ime.charsets().lanes.first() {
+        editor.set_front_value("lanes", first.clone());
+    }
+}
+
 /// **The `:yume-…` requests that only move a dial on the session.**
 ///
 /// Two readers, one list. The interactive loop reads it through
@@ -6411,6 +6444,9 @@ const PROBLEM_GUTTER: usize = 2;
 /// the config.
 pub(crate) fn numbers(editor: &Editor, config: &Config) -> LineNumbers {
     use yumete_core::editor::LineNumbers as Mode;
+    if editor.zen() {
+        return LineNumbers::None;
+    }
     match editor.line_numbers_chosen() {
         Some(Mode::Absolute) => LineNumbers::Absolute,
         Some(Mode::Relative) => LineNumbers::Relative,
@@ -7160,7 +7196,7 @@ fn page_areas(editor: &Editor, config: &Config, area: Rect, head_rows: u16) -> A
     );
     // The tab bar takes the row off the top of what is left — when a row of
     // writing and the status line are still left under it.
-    let (tabs, page) = match config.editor.tabs.showing(editor.buffer_count()) && body.height > 2 {
+    let (tabs, page) = match config.editor.tabs.showing(editor.buffer_count()) && body.height > 2 && !editor.zen() {
         true => (
             Rect::new(body.x, body.y, body.width, 1),
             Rect::new(body.x, body.y + 1, body.width, body.height - 1),
@@ -7205,13 +7241,16 @@ fn page_areas(editor: &Editor, config: &Config, area: Rect, head_rows: u16) -> A
     // **The last row of every window is its status line**, and what is
     // above it is the writing — less the scrollbar's column at its right.
     let leaves = editor.windows().leaves();
+    // Zen draws no status line, while there is a command row to type a `:`
+    // on; with none, the status line is where it is typed, and stays.
+    let status_rows = u16::from(!editor.zen() || command_rows == 0);
     let (panes, lines): (Vec<Rect>, Vec<Rect>) = windows
         .iter()
         .map(|w| {
-            let writing = w.height.saturating_sub(1);
+            let writing = w.height.saturating_sub(status_rows);
             (
                 Rect::new(w.x, w.y, w.width, writing),
-                Rect::new(w.x, w.y + writing, w.width, w.height.min(1)),
+                Rect::new(w.x, w.y + writing, w.width, w.height.min(status_rows)),
             )
         })
         .unzip();
@@ -7680,6 +7719,16 @@ fn draw<'a>(
     }
     if command_row {
         draw_command(frame, editor, config, ime, command_area, crate::theme::Palette::of(config).page());
+    }
+    // **Zen has no status line, but a mode other than Normal still says
+    // itself**, at the right end of the command row: typing into the page in
+    // Normal by mistake, or the reverse, is what the word is there to stop.
+    if editor.zen() && command_row {
+        if let Some(word) = editor.mode_label().filter(|w| w != "NOR") {
+            let wide = yumete_cjk::str_width(&word) as u16;
+            let x = (command_area.x + command_area.width).saturating_sub(wide + 1).max(command_area.x);
+            frame.buffer_mut().set_string(x, command_area.y, &word, crate::theme::Palette::of(config).page());
+        }
     }
     // The floating panels stack upward from the floor: the bottom row of the
     // windows, where their status lines are, so a menu never covers a
@@ -11866,7 +11915,9 @@ fn sidebar_columns(editor: &Editor, total: u16) -> [u16; 2] {
     // **擺不下就一欄都不給**，和 `note_window` 那道閘同一個數：那邊
     // 把鍵還給正文、說「窗口過窄」，這邊若照樣畫一條四五欄寬的框，每一行只剩
     // 一個號和一個省略號——鍵已經不在它那裏了，它還佔着正文的地方。
-    if !editor.room_for_a_panel() {
+    // **Zen keeps a sidebar only while it has the keys**: the explorer
+    // opened from a zen page shows, and goes when the keys leave it.
+    if !editor.room_for_a_panel() || editor.zen() && editor.panel_focus().is_none() {
         return [0, 0];
     }
     columns_for(total, Side::BOTH.map(|side| editor.panel(side).is_some().then(|| editor.width_of(side))))
@@ -19937,6 +19988,34 @@ fn squeezed(text: &str) -> String {
         assert!(line.contains("NOR") && line.contains("縱 1"), "{line:?}");
         assert!(line.contains('│'), "the rule runs through it: {line:?}");
         assert_eq!(line.matches("[scratch]").count(), 2, "a name on each: {line:?}");
+    }
+
+    /// **Zen leaves the page alone**: no sidebar, tab bar, status line or
+    /// line numbers, the page centred at the writing width; a mode other
+    /// than Normal still says itself on the command row.
+    #[test]
+    fn zen_leaves_the_page_alone_and_says_a_mode_other_than_normal() {
+        let mut editor = editor_with("那年冬天\n");
+        let config = Config::default();
+        assert!(config.editor.command_line, "the command row is where the mode goes");
+        editor.toggle_sidebar(Side::Left);
+        editor.execute(":view-zen").unwrap();
+        let areas = page_areas(&editor, &config, Rect::new(0, 0, 120, 12), 0);
+        assert_eq!(areas.panels.map(|p| p.width), [0, 0], "no sidebar");
+        assert_eq!(areas.tabs.height, 0, "no tab bar");
+        assert_eq!(areas.lines[0].height, 0, "no status line");
+        assert_eq!(areas.panes[0].height, 11, "the page down to the command row");
+        assert_eq!(numbers(&editor, &config), LineNumbers::None, "no line numbers");
+        assert_eq!((editor.measure(), editor.centre()), (Some(yumete_core::editor::ZEN_MEASURE), true));
+        let buffer = render(&editor, &config, 120, 12);
+        assert!(!(0..12).any(|y| row_text(&buffer, y).contains("NOR")), "Normal says nothing");
+        editor.on_key(Key::Char('i'));
+        let buffer = render(&editor, &config, 120, 12);
+        assert!(row_text(&buffer, 11).contains("INS"), "{:?}", row_text(&buffer, 11));
+        editor.on_key(Key::Esc);
+        editor.execute(":view-zen off").unwrap();
+        let buffer = render(&editor, &config, 120, 12);
+        assert!(status_line(&buffer).contains("NOR"), "the status line is back");
     }
 
     /// **A sidebar keeps its frame and gets no line**: its box reaches the

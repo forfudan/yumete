@@ -576,6 +576,23 @@ impl Editor {
         self.status = self.pages_vertical_report();
     }
 
+    /// Cut the page in use into `n` pages: the vertical one on a vertical
+    /// page, the horizontal one otherwise (`空格 , 1`–`4`).
+    pub(super) fn set_pages_here(&mut self, n: usize) {
+        match self.layout() == Layout::Vertical {
+            true => self.set_pages_vertical(n),
+            false => self.set_pages_horizontal(n),
+        }
+    }
+
+    /// How many pages the page in use is cut into.
+    pub(super) fn pages_here(&self) -> usize {
+        match self.layout() == Layout::Vertical {
+            true => self.pages_vertical(),
+            false => self.pages_horizontal(),
+        }
+    }
+
     /// What a bare `:view-pages-vertical` answers.
     pub(super) fn pages_vertical_report(&self) -> String {
         match self.pages_vertical {
@@ -1687,7 +1704,13 @@ impl Editor {
     /// (`:view-centre`). Only the switch: whether there is anything to centre
     /// is the front end's question, since only it knows the window.
     pub fn centre(&self) -> bool {
-        self.centre
+        self.centre || self.zen
+    }
+
+    /// **Whether the page is alone** (`:view-zen`): the front end draws no
+    /// status line, tab bar, sidebar or line numbers.
+    pub fn zen(&self) -> bool {
+        self.zen
     }
 
     /// Centre a page written to a measure, or keep it against the left edge.

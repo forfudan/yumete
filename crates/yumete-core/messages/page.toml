@@ -361,6 +361,20 @@ en = "layout: vertical"
 # ── lookfor ───────────────────────────────────────────────────────────
 
 [[message]]
+# 禪模式關掉了
+key = "layout.zen-off"
+zhs = "禅模式：关"
+# 草稿
+en = "zen: off"
+
+[[message]]
+# 禪模式打開了：只剩正文
+key = "layout.zen-on"
+zhs = "禅模式：开，只留正文"
+# 草稿
+en = "zen: on, the page alone"
+
+[[message]]
 # 竖排：定了一列幾個字
 key = "layout.zong-measure"
 zhs = "每纵 {0} 字"

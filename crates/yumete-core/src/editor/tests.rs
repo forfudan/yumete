@@ -49678,3 +49678,32 @@ fn the_file_tree_marks_a_file_and_compares_another_with_it() {
     assert!(ed.current_buffer().path().is_some_and(|p| p.ends_with("second.md")), "the keys on the one compared");
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// **`空格 ,` flips the settings of the page, and its menu says where each
+/// stands**: a switch says on or off, a setting with values names the one in
+/// force, and in its values the one in force is ticked.
+#[test]
+fn space_comma_flips_settings_and_shows_their_values() {
+    let mut ed = typed("one\n");
+    let row = |ed: &Editor, key: &str| -> String {
+        let Hint::Keys(_, rows) = ed.hint() else { panic!("no key list: {:?}", ed.hint()) };
+        rows.into_iter().find(|(k, _)| k == key).unwrap_or_else(|| panic!("no row {key}")).1
+    };
+    let value = |said: String| said.split_once(crate::editor::MENU_VALUE).map(|(_, v)| v.to_string());
+    press(&mut ed, " ,");
+    assert_eq!(value(row(&ed, "f")), Some(say!("label.off")), "focus is off");
+    assert_eq!(value(row(&ed, "l")), Some(say!("label.line-numbers.absolute")));
+    assert_eq!(value(row(&ed, "1-4")), Some("1".into()), "one page");
+    assert_eq!(value(row(&ed, ",")), None, "the settings page has no value");
+    press(&mut ed, "f");
+    assert_eq!(ed.switch_state(":view-focus"), Some(true), "f flips focus");
+    press(&mut ed, " ,");
+    assert_eq!(value(row(&ed, "f")), Some(say!("label.on")));
+    press(&mut ed, "l");
+    assert_eq!(value(row(&ed, "a")), Some("✓".into()), "the value in force is ticked");
+    assert_eq!(value(row(&ed, "r")), None);
+    press(&mut ed, "r");
+    assert_eq!(ed.line_numbers(), crate::editor::LineNumbers::Relative);
+    press(&mut ed, " ,3");
+    assert_eq!(ed.pages_horizontal(), 3, "a digit cuts the page in use");
+}

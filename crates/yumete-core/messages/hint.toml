@@ -1110,6 +1110,104 @@ zhs = "不搜忽略"
 en = "skip ignored"
 
 [[message]]
+# 空格 , f：專注開關
+key = "hint.quick.focus"
+zhs = "专注"
+# 草稿
+en = "focus"
+
+[[message]]
+# 空格 , l：行號，打開三個值
+key = "hint.quick.line-numbers"
+zhs = "行号"
+# 草稿
+en = "line numbers"
+
+[[message]]
+# 空格 , m：深淺色，打開三個值
+key = "hint.quick.mood"
+zhs = "深浅色"
+# 草稿
+en = "light or dark"
+
+[[message]]
+# 空格 , 1–4：這一頁分幾欄
+key = "hint.quick.pages"
+zhs = "分栏"
+# 草稿
+en = "pages"
+
+[[message]]
+# 空格 , r：渲染，打開三檔
+key = "hint.quick.render"
+zhs = "渲染"
+# 草稿
+en = "rendering"
+
+[[message]]
+# 空格 , r b：基本（:render basic）
+key = "hint.quick.render-basic"
+zhs = "基本"
+# 草稿
+en = "basic"
+
+[[message]]
+# 空格 , r f：完整（:render full）
+key = "hint.quick.render-full"
+zhs = "完整"
+# 草稿
+en = "full"
+
+[[message]]
+# 空格 , r o：原文，不著色（:render off）
+key = "hint.quick.render-off"
+zhs = "源码"
+# 草稿
+en = "source"
+
+[[message]]
+# 空格 , ,：打開設置頁
+key = "hint.quick.settings"
+zhs = "设置页"
+# 草稿
+en = "settings page"
+
+[[message]]
+# 空格 , 那一組的標題
+key = "hint.quick.title"
+zhs = "快速设置"
+# 草稿
+en = "quick settings"
+
+[[message]]
+# 空格 , t：打字機開關
+key = "hint.quick.typewriter"
+zhs = "打字机"
+# 草稿
+en = "typewriter"
+
+[[message]]
+# 空格 , v：竪排開關
+key = "hint.quick.vertical"
+zhs = "竖排"
+# 草稿
+en = "vertical"
+
+[[message]]
+# 空格 , w：自動換行開關
+key = "hint.quick.wrap"
+zhs = "自动换行"
+# 草稿
+en = "soft wrap"
+
+[[message]]
+# 空格 , z：禪模式開關
+key = "hint.quick.zen"
+zhs = "禅模式"
+# 草稿
+en = "zen"
+
+[[message]]
 # 提示：注音
 key = "hint.reading"
 zhs = "注音"
@@ -1671,6 +1769,13 @@ en = "project diagnostics"
 key = "hint.space.project-symbols"
 zhs = "项目符号选择器"
 en = "project symbol picker"
+
+[[message]]
+# 空格菜單裏 空格 , 那一行
+key = "hint.space.quick"
+zhs = "快速设置"
+# 草稿
+en = "quick settings"
 
 [[message]]
 # 空格選單：這一行攤開，浮窗

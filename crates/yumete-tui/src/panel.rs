@@ -325,6 +325,23 @@ pub(crate) struct KeyColumns {
     pub cut: usize,
 }
 
+/// **A key row's meaning, and the value it shows beside it** when it has
+/// one (`MENU_VALUE`): the setting the key changes, where it stands now.
+pub(crate) fn meaning_and_value(what: &str) -> (&str, Option<&str>) {
+    match what.split_once(yumete_core::editor::MENU_VALUE) {
+        Some((meaning, value)) => (meaning, Some(value)),
+        None => (what, None),
+    }
+}
+
+/// The cells a meaning takes, its value and the gap before it included.
+fn meaning_width(what: &str) -> usize {
+    match meaning_and_value(what) {
+        (meaning, Some(value)) => yumete_cjk::str_width(meaning) + 2 + yumete_cjk::str_width(value),
+        (meaning, None) => yumete_cjk::str_width(meaning),
+    }
+}
+
 pub(crate) fn key_columns(
     keys: &[(String, String)],
     key_w: usize,
@@ -348,7 +365,7 @@ pub(crate) fn key_columns(
                 .max(key_w);
             column
                 .iter()
-                .map(|(_, what)| keys_w + 2 + yumete_cjk::str_width(what))
+                .map(|(_, what)| keys_w + 2 + meaning_width(what))
                 .collect()
         })
         .collect();
@@ -1280,7 +1297,20 @@ pub fn draw(
                     true => one,
                     false => one.saturating_sub(key_w + 2),
                 };
-                put_text(buf, at, y, edge, &crate::elide(&what, room), ground.fg(said));
+                // **The value stands at the column's right edge**, so the
+                // values of a column line up as one; the meaning gives way
+                // to it.
+                let (what, value) = meaning_and_value(&what);
+                let room = match value {
+                    Some(value) => {
+                        let wide = yumete_cjk::str_width(value);
+                        let from = (x + one as u16).saturating_sub(wide as u16).max(at);
+                        put_text(buf, from, y, edge, value, ground.fg(ink.quiet()));
+                        room.saturating_sub(wide + 2)
+                    }
+                    None => room,
+                };
+                put_text(buf, at, y, edge, &crate::elide(what, room), ground.fg(said));
             }
         }
     }

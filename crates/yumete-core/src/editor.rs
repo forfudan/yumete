@@ -466,6 +466,11 @@ enum Pending {
     /// `空格 z` 底下那個字母按完了，等着它的值——`m` 上屏方式、`p` 候選欄、
     /// `e` 預編輯，三樣各有三四個值。
     YumeValue(char),
+    /// `空格 ,` — the settings a writer flips while writing, a key each.
+    Quick,
+    /// A letter of `空格 ,` that has values, waiting for one: `l` line
+    /// numbers, `r` rendering, `m` light or dark.
+    QuickValue(char),
     /// `M` awaiting the letter to name this place by.
     Mark,
     /// `'` awaiting the letter of a place to go back to.
@@ -545,6 +550,8 @@ impl Pending {
             | Pending::Goto
             | Pending::Yume
             | Pending::YumeValue(_)
+            | Pending::Quick
+            | Pending::QuickValue(_)
             | Pending::Open
             | Pending::Space
             | Pending::Register
@@ -846,10 +853,17 @@ pub enum Hint {
     /// menu's keys are **read off the document**: the register panel lists the
     /// letters that actually hold something, and which letters those are is
     /// only known at the moment the panel is drawn.
+    ///
+    /// A meaning may end in a tab and a value ([`MENU_VALUE`]): the setting
+    /// the key changes, where it stands now. The panel draws it as a column
+    /// of its own.
     Keys(String, KeyRows),
 }
 
 /// One menu's worth of rows: the key to press, and what it does or holds.
+/// What parts a key row's meaning from the value it shows beside it.
+pub const MENU_VALUE: char = '\t';
+
 pub type KeyRows = Vec<(std::borrow::Cow<'static, str>, String)>;
 
 /// **What a binding's right side is handed in as**: one command (`String`),
@@ -3437,6 +3451,8 @@ pub struct Editor {
     /// Whether a page written to a measure stands in the middle of its window
     /// (`:view-centre`).
     centre: bool,
+    /// `:view-zen`: the page alone, centred at the writing width.
+    zen: bool,
     /// Whether every text window keeps its rightmost column for a scrollbar
     /// (`:view-scrollbar`).
     scrollbar: bool,
@@ -3749,6 +3765,9 @@ pub struct Editor {
     quiet_view: bool,
     /// A pending `:theme`, waiting for the front end that owns the palette.
     theme_request: Option<(Option<String>, Option<crate::command::Mood>)>,
+    /// The values now of the settings the front end holds, for the key
+    /// menus to show (`menu_values.rs`).
+    front_values: HashMap<&'static str, String>,
     /// The theme and fill requests standing came from a replayed session, so
     /// the front end answers them without a word of its own: the status line
     /// is the resume's, not the theme's name.
@@ -5137,6 +5156,7 @@ impl Editor {
             number_fill: false,
             line_breaks: false,
             centre: true,
+            zen: false,
             scrollbar: true,
             scrollbar_marks: ScrollbarMarks::default(),
             cell_past_the_row: std::cell::Cell::new(false),
@@ -5224,6 +5244,7 @@ impl Editor {
             signature_triggers: HashMap::new(),
             quiet_view: false,
             theme_request: None,
+            front_values: HashMap::new(),
             theme_replayed: false,
             trial: None,
             previewing: false,
@@ -7310,6 +7331,7 @@ mod files;
 pub use files::FileFacts;
 mod group_commands;
 mod groups;
+mod menu_values;
 mod insert;
 mod help;
 pub use docs::{DocKey, DocKeyMenu, DocKeymap};
@@ -7341,6 +7363,7 @@ pub use page_preview::{in_the_book, PageStep, PageTarget, PageWindow, PreviewFit
 mod pairing;
 mod places;
 pub use pairing::AutoPairs;
+pub use wrap::ZEN_MEASURE;
 mod prompt;
 pub(crate) use prompt::{word_cut, word_step};
 mod render;

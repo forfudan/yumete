@@ -2,6 +2,10 @@
 
 use super::*;
 
+/// The width a zen page is written to when the writer has set none: forty
+/// 漢字, a line a reader takes in without turning the head.
+pub const ZEN_MEASURE: usize = 80;
+
 impl Editor {
     // ---- Soft wrap (Feature #77) ------------------------------------------
 
@@ -76,7 +80,7 @@ impl Editor {
     /// The width text folds to in `available` cells: the measure when one is
     /// set and fits, never under the floor.
     pub fn wrap_for(&self, available: usize) -> usize {
-        let width = self.measure.map_or(available, |m| m.min(available));
+        let width = self.measure().map_or(available, |m| m.min(available));
         let floor = crate::wrap::MIN_WRAP_WIDTH.min(available.max(1));
         width.max(floor)
     }
@@ -144,9 +148,10 @@ impl Editor {
         self.sentences
     }
 
-    /// The measure the writer set, if any.
+    /// The measure the page is written to, if any: the writer's, else, in
+    /// zen, [`ZEN_MEASURE`].
     pub fn measure(&self) -> Option<usize> {
-        self.measure
+        self.measure.or(self.zen.then_some(ZEN_MEASURE))
     }
 
     /// Set the measure — `None` for "as wide as the window".
@@ -450,6 +455,8 @@ impl Editor {
             Pending::Open => "␣o",
             Pending::Yume => "␣z",
             Pending::YumeValue(_) => "␣z…",
+            Pending::Quick => "␣,",
+            Pending::QuickValue(_) => "␣,…",
             // 區域那一組：光標旁邊那個牌子寫 `C-w`（它有兩扇門，這一個短）。
             Pending::Region => "C-w",
             Pending::RegionNew => "C-w n",
@@ -491,7 +498,7 @@ impl Editor {
         // `` g` ``. The table menu is under Space, so its sign is not a bare `t`.
         let space = self.space_sign();
         let word: String = match self.pending {
-            Pending::Space | Pending::Open | Pending::Yume | Pending::YumeValue(_) | Pending::Conflict => {
+            Pending::Space | Pending::Open | Pending::Yume | Pending::YumeValue(_) | Pending::Quick | Pending::QuickValue(_) | Pending::Conflict => {
                 word.replacen('␣', &space, 1)
             }
             Pending::Surround | Pending::SurroundOff | Pending::SurroundFrom | Pending::SurroundTo(_)

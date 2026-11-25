@@ -3021,6 +3021,14 @@ en = "text width in columns; `0` follows the window"
 find = "寬度 宽度 欄寬 栏宽 行寬 行宽 width measure"
 
 [[message]]
+# 命令說明：:view-zen
+key = "cmd.view.zen"
+zhs = "禅模式：不显示状态栏、标签栏、侧栏和行号，正文居中"
+# 草稿
+en = "zen: no status line, tab bar, sidebars or line numbers, the page centred"
+find = "禪 禅 禪模式 禅模式 沉浸 專注 专注 全屏 zen distraction free"
+
+[[message]]
 # 命令少了參數；{1} 説後面該寫什麼（草稿）
 key = "cmd.wants-after-it"
 zhs = "{0} 后面要写 {1}"

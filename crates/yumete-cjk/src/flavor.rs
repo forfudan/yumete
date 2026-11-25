@@ -171,6 +171,17 @@ flavor_items! {
         label: "keys.flavor.item.input-method-menu",
         hint: "keys.flavor.item.input-method-menu.hint",
     },
+    /// `Space ,`, the settings flipped while writing.
+    QuickSettings => ItemInfo {
+        id: "quick_settings",
+        level: FlavorLevel::Basic,
+        keymaps: &[KeyPreset::Helix, KeyPreset::Vim],
+        keys: &[" ,"],
+        vim_keys: None,
+        insert: false,
+        label: "keys.flavor.item.quick-settings",
+        hint: "keys.flavor.item.quick-settings.hint",
+    },
     /// `Space o`, recent files and projects.
     RecentFiles => ItemInfo {
         id: "recent_files",

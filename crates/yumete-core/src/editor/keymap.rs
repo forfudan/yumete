@@ -1046,19 +1046,19 @@ impl Editor {
     /// keys.
     fn menu_of(&self, group: Option<&'static Group>, node: Option<&Node>, memo: &Memo) -> (String, KeyRows) {
         let mine = node.map(|node| self.mine_rows(node, memo)).unwrap_or_default();
-        let mut rows: Vec<(Vec<String>, Said, bool)> = Vec::new();
+        let mut rows: Vec<(Vec<String>, Said, bool, Option<String>)> = Vec::new();
         let mut placed: HashSet<String> = HashSet::new();
         if let Some(group) = group.filter(|_| node.is_none_or(|node| node.inherit)) {
             for (bind, name, says) in group.listed(&self.context_in(group)) {
                 let Some(bind) = bind else {
-                    rows.push((vec![name], Said::Msg(says), false));
+                    rows.push((vec![name], Said::Msg(says), false, None));
                     continue;
                 };
                 let key = key_internal(bind.key);
                 if let Some((_, text, _)) = mine.iter().find(|(k, _, _)| *k == key) {
                     if placed.insert(key) {
                         if let Some(text) = text {
-                            rows.push((vec![name], Said::Text(text.clone()), false));
+                            rows.push((vec![name], Said::Text(text.clone()), false, None));
                         }
                     }
                     continue;
@@ -1071,11 +1071,11 @@ impl Editor {
                         let tree = self.tree();
                         let label = tree.node_of(sub).and_then(|n| tree.nodes[n].label.clone());
                         let label = label.unwrap_or_else(|| crate::messages::say(says, &[]));
-                        rows.push((vec![name], Said::Text(format!("+{label}")), false));
+                        rows.push((vec![name], Said::Text(format!("+{label}")), false, self.menu_value(bind.run)));
                     }
                     None => match rows.last_mut() {
-                        Some((keys, Said::Msg(said), true)) if *said == says => keys.push(name),
-                        _ => rows.push((vec![name], Said::Msg(says), true)),
+                        Some((keys, Said::Msg(said), true, _)) if *said == says => keys.push(name),
+                        _ => rows.push((vec![name], Said::Msg(says), true, self.menu_value(bind.run))),
                     },
                 }
             }
@@ -1084,15 +1084,19 @@ impl Editor {
         rest.sort_by(|a, b| (a.2, &a.0).cmp(&(b.2, &b.0)));
         for (key, text, _) in rest {
             if let Some(text) = text {
-                rows.push((vec![key_label(key_of(key))], Said::Text(text.clone()), false));
+                rows.push((vec![key_label(key_of(key))], Said::Text(text.clone()), false, None));
             }
         }
         let rows: KeyRows = rows
             .into_iter()
-            .map(|(keys, said, _)| {
+            .map(|(keys, said, _, value)| {
                 let said = match said {
                     Said::Msg(id) => crate::messages::say(id, &[]),
                     Said::Text(text) => text,
+                };
+                let said = match value {
+                    Some(value) => format!("{said}{}{value}", super::MENU_VALUE),
+                    None => said,
                 };
                 (keys_label(&keys).into(), said)
             })

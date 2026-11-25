@@ -661,6 +661,18 @@ impl Editor {
                 };
                 Ok(CommandOutcome::Continue)
             }
+            Command::SetZen(on) => {
+                self.zen = on.over(self.zen);
+                // The keys come back to the page, which is all there is.
+                if self.zen {
+                    self.panel_focus = None;
+                }
+                self.status = match self.zen {
+                    true => say!("layout.zen-on"),
+                    false => say!("layout.zen-off"),
+                };
+                Ok(CommandOutcome::Continue)
+            }
             Command::SetCentre(on) => {
                 self.centre = on.over(self.centre);
                 self.status = match (self.centre, self.measure.is_some()) {
@@ -2887,6 +2899,7 @@ impl Editor {
             Command::SetCode(_) => self.code_colours,
             Command::SetLineBreaks(_) => self.line_breaks,
             Command::SetCentre(_) => self.centre,
+            Command::SetZen(_) => self.zen,
             Command::SetScrollbar(_) => self.scrollbar,
             // The switch is a kind's, so the kind is read too: with none
             // typed yet there is nothing to say.

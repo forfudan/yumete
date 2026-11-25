@@ -477,6 +477,9 @@ pub enum Command {
     /// `:view-centre` — a page written to a measure stands in the middle of
     /// its window, margins left and right.
     SetCentre(Switch),
+    /// `:view-zen` — the page alone: no status line, tab bar, sidebars or
+    /// line numbers, centred at the writing width.
+    SetZen(Switch),
     /// `:view-scrollbar` — every text window keeps its rightmost column for
     /// a bar saying where the page is in the file.
     SetScrollbar(Switch),
@@ -5162,6 +5165,17 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|p| Ok(Command::SetCentre(switched(p)))),
     },
     Entry {
+        // **The page alone**, as the zen modes of VS Code, Sublime and
+        // JetBrains have it. Focus and typewriter stay switches of their
+        // own: a writer may want either without the other.
+        name: "view-zen",
+        aliases: &[],
+        help: "cmd.view.zen",
+        needs: &[],
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::SetZen(switched(p)))),
+    },
+    Entry {
         // vim and helix have no scrollbar, so no name of theirs to take;
         // the family is the view one, beside the other switches of the page.
         name: "view-scrollbar",
@@ -9380,7 +9394,7 @@ mod tests {
         // A family with no head of its own keeps the hyphen, which is what
         // says it is a family and not a command, and nothing else: `view-w` is
         // `view-wrap`'s spelling, not the thirteen's.
-        assert_eq!(row("", "view-"), ":view- +23");
+        assert_eq!(row("", "view-"), ":view- +24");
         assert_eq!(row("", "check-"), ":check- +7");
         // …and a stem is a stem however many are under it.
         assert_eq!(row("", "markdown-"), ":markdown- +2");

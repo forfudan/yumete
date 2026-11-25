@@ -415,6 +415,10 @@ impl Pending {
             Pending::YumeValue('g') => &YUME_LANES,
             Pending::YumeValue('b') => &YUME_BUILTIN,
             Pending::YumeValue(_) => &YUME_PREEDIT,
+            Pending::Quick => &QUICK,
+            Pending::QuickValue('l') => &QUICK_LINE_NUMBERS,
+            Pending::QuickValue('r') => &QUICK_RENDER,
+            Pending::QuickValue(_) => &QUICK_MOOD,
             Pending::Table => &TABLE,
             Pending::TableConvert => &TABLE_CONVERT,
             _ => return None,
@@ -453,6 +457,10 @@ pub(super) const GROUPS: &[&Group] = &[
     &YUME_SORT,
     &YUME_LANES,
     &YUME_BUILTIN,
+    &QUICK,
+    &QUICK_LINE_NUMBERS,
+    &QUICK_RENDER,
+    &QUICK_MOOD,
 ];
 
 impl Editor {
@@ -1026,6 +1034,7 @@ pub(super) static SPACE: Group = Group {
         ch('m', NormalCmd::ConflictMode, "hint.conflict.title").flavor(FlavorItem::MergeConflicts),
         ch('o', NormalCmd::OpenRecentMode, "hint.space.open-recent").flavor(FlavorItem::RecentFiles),
         ch('z', NormalCmd::YumeMode, "hint.space.yume").flavor(FlavorItem::InputMethodMenu),
+        ch(',', NormalCmd::QuickSettingsMode, "hint.space.quick").flavor(FlavorItem::QuickSettings),
         ch('/', NormalCmd::GlobalSearch, "hint.space.advanced-search"),
         ch('?', NormalCmd::CommandPalette, "hint.space.all-commands"),
         ch(' ', NormalCmd::PageDown, "hint.space.page-down").flavor(FlavorItem::SpacePaging),
@@ -1469,6 +1478,90 @@ pub(super) static YUME: Group = Group {
         ch('u', NormalCmd::YumeWords, "hint.yume.words"),
     ],
     unknown: Unknown::SayKeys("hint.yume.after-z"),
+    sticky: false,
+    ctrl_is_plain: false,
+    before: None,
+    after: None,
+};
+
+/// **`空格 ,` — the settings a writer flips while writing**, a key each,
+/// after the `Cmd-,` that opens the settings in VS Code and Zed; `,` again
+/// is the whole settings page. A switch flips; a setting with three values
+/// opens them, a letter of each, as `空格 z m` does. The menu shows each
+/// one's value now (`menu_value`).
+pub(super) static QUICK: Group = Group {
+    name: "quick",
+    pending: Pending::Quick,
+    title: "hint.quick.title",
+    opener: NormalCmd::QuickSettingsMode,
+    rows: &[
+        ch('v', NormalCmd::QuickVertical, "hint.quick.vertical"),
+        ch('f', NormalCmd::QuickFocus, "hint.quick.focus"),
+        ch('t', NormalCmd::QuickTypewriter, "hint.quick.typewriter"),
+        ch('w', NormalCmd::QuickWrap, "hint.quick.wrap"),
+        ch('l', NormalCmd::QuickLineNumbersMode, "hint.quick.line-numbers"),
+        ch('r', NormalCmd::QuickRenderMode, "hint.quick.render"),
+        ch('m', NormalCmd::QuickMoodMode, "hint.quick.mood"),
+        ch('1', NormalCmd::QuickPages1, "hint.quick.pages"),
+        ch('2', NormalCmd::QuickPages2, "hint.quick.pages"),
+        ch('3', NormalCmd::QuickPages3, "hint.quick.pages"),
+        ch('4', NormalCmd::QuickPages4, "hint.quick.pages"),
+        ch('z', NormalCmd::QuickZen, "hint.quick.zen"),
+        ch(',', NormalCmd::QuickSettingsPage, "hint.quick.settings"),
+    ],
+    unknown: Unknown::NoSuchCombination,
+    sticky: false,
+    ctrl_is_plain: false,
+    before: None,
+    after: None,
+};
+
+pub(super) static QUICK_LINE_NUMBERS: Group = Group {
+    name: "quick_line_numbers",
+    pending: Pending::QuickValue('l'),
+    title: "hint.quick.line-numbers",
+    opener: NormalCmd::QuickLineNumbersMode,
+    rows: &[
+        ch('a', NormalCmd::QuickLineNumbersAbsolute, "label.line-numbers.absolute"),
+        ch('r', NormalCmd::QuickLineNumbersRelative, "label.line-numbers.relative"),
+        ch('n', NormalCmd::QuickLineNumbersNone, "label.line-numbers.none"),
+    ],
+    unknown: Unknown::NoSuchCombination,
+    sticky: false,
+    ctrl_is_plain: false,
+    before: None,
+    after: None,
+};
+
+/// The three levels by their `空格 t o|b|f` letters.
+pub(super) static QUICK_RENDER: Group = Group {
+    name: "quick_render",
+    pending: Pending::QuickValue('r'),
+    title: "hint.quick.render",
+    opener: NormalCmd::QuickRenderMode,
+    rows: &[
+        ch('o', NormalCmd::QuickRenderOff, "hint.quick.render-off"),
+        ch('b', NormalCmd::QuickRenderBasic, "hint.quick.render-basic"),
+        ch('f', NormalCmd::QuickRenderFull, "hint.quick.render-full"),
+    ],
+    unknown: Unknown::NoSuchCombination,
+    sticky: false,
+    ctrl_is_plain: false,
+    before: None,
+    after: None,
+};
+
+pub(super) static QUICK_MOOD: Group = Group {
+    name: "quick_mood",
+    pending: Pending::QuickValue('m'),
+    title: "hint.quick.mood",
+    opener: NormalCmd::QuickMoodMode,
+    rows: &[
+        ch('s', NormalCmd::QuickMoodSystem, "cmd.moods.system"),
+        ch('d', NormalCmd::QuickMoodDark, "cmd.moods.dark"),
+        ch('l', NormalCmd::QuickMoodLight, "cmd.moods.light"),
+    ],
+    unknown: Unknown::NoSuchCombination,
     sticky: false,
     ctrl_is_plain: false,
     before: None,
