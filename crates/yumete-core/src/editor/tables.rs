@@ -238,7 +238,9 @@ impl Editor {
     /// Whether `line` is a row of a `|` table, counting a row written without
     /// its outer pipes when the rule row under the header says so.
     pub(super) fn md_row_at(&self, line: usize) -> bool {
-        crate::mdtable::region(|i| self.line_text(i), line).is_some_and(|r| r.holds(line))
+        // Remembered, not walked: a 竪排 page asks this of every row it lays
+        // out, and a walk is the length of the table.
+        self.pipe_region(line).is_some_and(|r| r.holds(line))
     }
 
     pub fn grid_is_drawn(&self) -> bool {
@@ -1346,11 +1348,11 @@ impl Editor {
     /// **Whether `line` is a row of a `|` table** — asked by the 竪排 renderer,
     /// which turns the grid a quarter turn.
     ///
-    /// The turn is the whole of it: a row is one 縱 (`zong::lay_out` refuses to
-    /// wrap one), so a column becomes a band down that 縱 and every character
-    /// still stands for itself. What the renderer needs this for is the walls —
-    /// a `|` between two columns is a band **across** the 縱, and the `---`
-    /// under the header is a wall **down** it.
+    /// The turn is the whole of it: a row is a 縱 — more than one when a cell
+    /// wraps inside its band (`zong::turned_row`) — so a column becomes a band
+    /// down it and every character still stands for itself. What the renderer
+    /// needs this for is the walls — a `|` between two columns is a band
+    /// **across** the 縱, and the `---` under the header is a wall **down** it.
     pub fn line_is_table_row(&self, line: usize) -> bool {
         // Warning: **Three questions, not one.** 「Does this line open
         // with a `|`」 is `mdtable::is_row`, and on its own it would turn tables
@@ -1368,6 +1370,18 @@ impl Editor {
         // being squared up as a row right now. Everything downstream — the
         // turned glyphs, the slack that comes off the page, and 「a row is one
         // 縱」 — follows this one answer.
+        //
+        // A closed fold's first line is the fold's line, drawn as the fold
+        // says — it has no cells to lay out.
+        self.line_turns(line) && !self.fold_head(line)
+    }
+
+    /// **Whether `line` is a row of a table this page turns**, folded or not.
+    ///
+    /// What the table is measured over (`Editor::turned_bands`) and what
+    /// keeps the caret's markup closed: which lines fold is the window's, and
+    /// a table's bands must be the same in every window it is drawn in.
+    pub(super) fn line_turns(&self, line: usize) -> bool {
         self.layout() == crate::zong::Layout::Vertical
             && self.table_padding_on()
             && self.wall_here(line).is_some()

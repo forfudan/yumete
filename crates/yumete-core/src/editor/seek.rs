@@ -137,22 +137,29 @@ impl Editor {
         self.seeking = None;
     }
 
-    /// **這一屏畫出來的那一段字**——配得上誰是拿它問的。
-    fn page_text(&self) -> (usize, String) {
+    /// **這一屏畫出來的那一段字**——配得上誰是拿它問的——和其中真在屏幕上的那
+    /// 幾段（[`Self::page_drawn`]）。
+    fn page_text(&self) -> (usize, String, Vec<(usize, usize)>) {
         let rope = self.current_buffer().rope();
-        let (from, to) = self.page_span;
-        let to = to.min(rope.len_chars());
-        match from >= to {
-            true => (0, String::new()),
-            false => (from, rope.slice(from..to).to_string()),
+        let drawn = self.page_drawn();
+        match (drawn.first(), drawn.iter().map(|&(_, b)| b).max()) {
+            (Some(&(from, _)), Some(to)) => (from, rope.slice(from..to).to_string(), drawn),
+            _ => (0, String::new(), drawn),
         }
     }
 
     /// 重新問一遍這一屏上誰配得上。
     fn look_again_for_targets(&mut self) {
-        let (from, text) = self.page_text();
+        let (from, text, drawn) = self.page_text();
         let Some(seeking) = self.seeking.as_ref() else { return };
         let mut found = crate::written::targets(&text, &seeking.typed);
+        // 那一段裏不在屏幕上的字不算：折成幾縱的表格行被頁邊切開的時候有這種字。
+        let shown = |at: usize| drawn.iter().any(|&(a, b)| a <= from + at && from + at < b);
+        found.latin.retain(|&at| shown(at));
+        for (_, at) in &mut found.han {
+            at.retain(|&one| shown(one));
+        }
+        found.han.retain(|(_, at)| !at.is_empty());
         // **一個鍵一種文字。** `gu` 扔掉西文，`go` 扔掉漢字——見 `Seeking::reading`
         // 上面那條為什麼。
         match seeking.reading {

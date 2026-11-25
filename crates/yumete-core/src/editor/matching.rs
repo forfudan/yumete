@@ -889,10 +889,12 @@ impl Editor {
                 return false;
             }
             let anchor = |z: &zong::Zong| zong::Anchor { line: z.line, index_in_line: z.index_in_line };
-            let was = zong::Anchor::from(zong::position(rope, from, grid));
-            // The 縱 drawn: up to the one the span ends in.
-            let shown = zong::zongs_from(rope, was, grid, self.page_columns.max(1));
-            let height = shown.iter().position(|z| z.end >= to).map_or(shown.len(), |i| i + 1).max(1);
+            // The 縱 drawn, found by which 縱 the span ends with rather than
+            // how far each reaches: a wrapped table row's first 縱 spans the
+            // whole row ([`zong::page_of`]).
+            let shown = zong::page_of(rope, (from, to), grid, self.page_columns.max(1));
+            let was = shown.first().map_or_else(|| zong::Anchor::from(zong::position(rope, from, grid)), anchor);
+            let height = shown.len().max(1);
             let (above, below) = match vim {
                 true => self.vim_margins(height),
                 false => {
@@ -930,7 +932,7 @@ impl Editor {
                 }
                 let at = zong::Anchor::from(zong::position(rope, to, grid));
                 let row = zong::distance(rope, top, at, grid, height + 1).unwrap_or(0);
-                let span = (page.first().map_or(0, |z| z.start), page.last().map_or(0, |z| z.end));
+                let span = zong::span_of(&page).unwrap_or((0, 0));
                 Some((to, row, span))
             }
         };

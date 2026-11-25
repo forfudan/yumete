@@ -50,7 +50,7 @@ use std::collections::HashMap;
 use crate::table::{Column, Kind, Schema};
 
 /// Which way a column's cells are set, from the rule row's colons.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum Align {
     /// `---` — no colon at all. Renders like [`Left`](Align::Left) and is kept
     /// separate from it so reformatting never writes a colon nobody asked for.
@@ -1025,8 +1025,7 @@ pub fn measured_window(
     let a = top.max(first).min(last);
     let b = top.saturating_add(page).min(last).max(a);
     // Warning: **A window holding one row is no window**. When the table
-    // sits *below* `top + page` — a chapter of prose above it, and in 竪排 the
-    // screenful is counted in 縱 while `top` is a line — this clips to
+    // sits *below* `top + page` — a chapter of prose above it — this clips to
     // `[first, first]`, and the one row it holds is the header. The header was
     // then squared up **against itself** while every row under it was squared
     // up against the others: 「表頭和表身對不上」, and only on a table far down
@@ -1138,7 +1137,6 @@ pub fn padding(
     aligns: &[Align],
     marks: &[Vec<(usize, usize)>],
     shown: &[Vec<(usize, usize)>],
-    measure: Measure,
 ) -> Vec<Vec<(usize, String)>> {
     let chars: Vec<Vec<char>> = rows
         .iter()
@@ -1175,7 +1173,7 @@ pub fn padding(
                         .sum()
                 })
                 .unwrap_or(0);
-            widths.push(visible_width(&chars[i], (start, end), &rows[i].1, measure) + lead + trail + drawn);
+            widths.push(visible_width(&chars[i], (start, end), &rows[i].1) + lead + trail + drawn);
         }
         room.push(widths);
     }
@@ -1215,7 +1213,7 @@ pub fn padding(
                                 .sum()
                         })
                         .unwrap_or(0);
-                    visible_width(&chars[i], (start, end), hidden, measure) + lead + trail + drawn
+                    visible_width(&chars[i], (start, end), hidden) + lead + trail + drawn
                 })
                 .collect(),
         })
@@ -1232,13 +1230,7 @@ pub fn padding(
     }
     // **No narrower than its own alignment marker**, where there is one to
     // write — see [`Wall::ruled`].
-    //
-    // Warning: **Only where the rule row is written out as characters**.
-    // 竪排 draws that row as the wall running down the 縱 — one glyph, and the
-    // `:` are off the page entirely — so there is nothing for this floor to
-    // protect, and it was making every band in a `:-:` table **three slots
-    // deep** where a `---` table's is one. `Measure::Slots` is that page.
-    if wall.ruled() && measure == Measure::Cells {
+    if wall.ruled() {
         for (c, width) in target.iter_mut().enumerate() {
             *width = (*width).max(aligns.get(c).copied().unwrap_or_default().min() + 2);
         }
@@ -1329,42 +1321,10 @@ fn push_run(runs: &mut Vec<(usize, String)>, at: usize, text: String) {
 /// with. Per *character* it disagreed with the page over anything the two
 /// count differently: a tab, a control character or a lone combining mark is
 /// nought here and one cell there, and the table stood one cell out for good.
-/// **How a cell is measured: in cells, or in 縱 slots**.
 ///
-/// 橫排 counts the cells a glyph covers — a 漢字 is two. 竪排 stands every
-/// grapheme in a slot of its own, so there a 漢字 is **one** and so is a space.
-/// The padding this module draws has to be counted in the same unit the page
-/// lays out in, or the columns of a turned table come out ragged: six cells
-/// holds three 漢字 (three slots) or two 漢字 and two spaces (four slots), and
-/// a table padded in cells stacks those two against each other.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Measure {
-    /// 橫排: the cells a glyph covers.
-    Cells,
-    /// 竪排: the slots a cell takes down the 縱 — one per grapheme, except
-    /// that a run of up to `packed` half-width alphanumerics shares one
-    /// (緃中横), exactly as the page packs it. Counted per grapheme it
-    /// disagreed with the page by the length of every Latin word, and the
-    /// rules of a turned table landed at different depths in each 縱.
-    Slots { packed: usize },
-}
-
-impl Measure {
-    /// How many units `text` takes, with what is hidden already taken out.
-    fn of_text(self, text: &str) -> usize {
-        match self {
-            Measure::Cells => yumete_cjk::graphemes(text).map(yumete_cjk::grapheme_width).sum(),
-            Measure::Slots { packed } => crate::zong::slot_count(text, packed),
-        }
-    }
-}
-
-fn visible_width(
-    chars: &[char],
-    (start, end): (usize, usize),
-    hidden: &[(usize, usize)],
-    measure: Measure,
-) -> usize {
+/// Cells, because only the flat page is padded: a turned table's bands are
+/// counted in the slots the page lays out ([`band_depths`]).
+fn visible_width(chars: &[char], (start, end): (usize, usize), hidden: &[(usize, usize)]) -> usize {
     let end = end.min(chars.len());
     let start = start.min(end);
     let text: String = chars[start..end].iter().collect();
@@ -1376,7 +1336,7 @@ fn visible_width(
         }
         at += g.chars().count();
     }
-    measure.of_text(&shown)
+    yumete_cjk::graphemes(&shown).map(yumete_cjk::grapheme_width).sum()
 }
 
 /// A rule row for a table this wide, for a header that has not got one yet.
@@ -1732,7 +1692,7 @@ mod tests {
             })
             .collect();
         let rule = rows.get(1).and_then(|l| rule_of(l)).map(|_| 1);
-        padding(&with, Wall::Pipe, rule, &aligns_of(&with, rule), &[], &[], Measure::Cells)
+        padding(&with, Wall::Pipe, rule, &aligns_of(&with, rule), &[], &[])
             .iter()
             .enumerate()
             .map(|(i, runs)| drawn(&rows[i], with[i].1.as_slice(), runs))
@@ -1752,10 +1712,10 @@ mod tests {
             .map(|l| (l, Vec::new()))
             .collect();
         let aligns = aligns_of(&rows, Some(1));
-        let bare = padding(&rows, Wall::Pipe, Some(1), &aligns, &[], &[], Measure::Cells);
+        let bare = padding(&rows, Wall::Pipe, Some(1), &aligns, &[], &[]);
         // Three cells are drawn inside the first column of the last row.
         let marks = vec![Vec::new(), Vec::new(), vec![(3, 3)]];
-        let told = padding(&rows, Wall::Pipe, Some(1), &aligns, &marks, &[], Measure::Cells);
+        let told = padding(&rows, Wall::Pipe, Some(1), &aligns, &marks, &[]);
         assert_ne!(bare, told, "the column heard about the mark");
         let width = |runs: &[Vec<(usize, String)>]| {
             runs.iter()
@@ -1808,7 +1768,7 @@ mod tests {
         let with: Vec<(String, Vec<(usize, usize)>)> =
             lines(text).into_iter().map(|l| (l, Vec::new())).collect();
         assert!(
-            padding(&with, Wall::Pipe, Some(1), &aligns_of(&with, Some(1)), &[], &[], Measure::Cells).iter().all(|r| r.is_empty()),
+            padding(&with, Wall::Pipe, Some(1), &aligns_of(&with, Some(1)), &[], &[]).iter().all(|r| r.is_empty()),
             "nothing to draw, so nothing is drawn"
         );
     }

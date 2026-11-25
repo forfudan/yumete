@@ -1324,10 +1324,6 @@ struct PadKey {
     /// and its kin change the separator without touching a byte of the file,
     /// and a table squared up on commas is not squared up on tabs.
     wall: crate::mdtable::Wall,
-    /// **Cells or 縱 slots**. `:layout` changes the unit the
-    /// padding is counted in without touching a byte of the file, and a table
-    /// squared up in cells is ragged when it is stood on end.
-    measure: crate::mdtable::Measure,
 }
 
 impl PadKey {
@@ -1345,7 +1341,6 @@ impl PadKey {
             && self.render == other.render
             && self.ruby == other.ruby
             && self.syntax == other.syntax
-            && self.measure == other.measure
     }
 }
 
@@ -4312,7 +4307,10 @@ pub struct Editor {
     /// window rather than once per key — but a window is fifty rows and the
     /// walk is the whole table, so on a ten-thousand-row one that was a 5 ms
     /// hitch every time the page slid off the remembered rows (#320).
-    pipe_region: RefCell<Option<(u64, u64, crate::mdtable::Region)>>,
+    pipe_region: memo::Recent<(u64, u64, crate::mdtable::Region)>,
+    /// **How deep the bands of each turned table on the page are**, against
+    /// a hash of everything they were measured from ([`Editor::turned_bands`]).
+    band_cache: memo::Recent<(u64, std::rc::Rc<crate::zong::TableBands>)>,
     /// The last shell line completed and its answer, so a frame drawn without
     /// a key between does not read the folder again.
     shell_memo: RefCell<Option<(String, std::path::PathBuf, ShellChoices)>>,
@@ -5383,7 +5381,8 @@ impl Editor {
             served: Default::default(),
             pad_cache: RefCell::new(None),
             md_cache: RefCell::new(None),
-            pipe_region: RefCell::new(None),
+            pipe_region: memo::Recent::new(render::REMEMBERED_TABLES),
+            band_cache: memo::Recent::new(render::REMEMBERED_TABLES),
             shell_memo: RefCell::new(None),
             md_tables: RefCell::new(None),
             candidate: Vec::new(),

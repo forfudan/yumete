@@ -120,19 +120,45 @@ impl Editor {
         self.page_span = (from.min(to), to);
     }
 
-    /// 屏幕上的落腳點，按檔裏的次序。
-    fn jump_spots(&self) -> Vec<usize> {
+    /// **這一頁真畫出來的那些字**，按檔裏的次序，一段一段。
+    ///
+    /// 橫排就是 `page_span` 那一整段。竪排多數時候也是；可一條折成幾縱的表格行
+    /// 被頁邊切開的時候，它頭一縱的範圍蓋着整行，而後面那幾縱的字有的在頁外——
+    /// 那些字落在 `page_span` 裏，卻不在屏幕上，標籤和 seek 不能給它們。所以竪排
+    /// 照畫的那一方的規矩（[`crate::zong::page_of`]）把這一頁的縱找回來，再問每一縱
+    /// 真畫了哪些字。
+    pub(super) fn page_drawn(&self) -> Vec<(usize, usize)> {
         let rope = self.current_buffer().rope();
         let (from, to) = self.page_span;
         let to = to.min(rope.len_chars());
         if from >= to {
             return Vec::new();
         }
+        if self.layout() != crate::zong::Layout::Vertical {
+            return vec![(from, to)];
+        }
+        let hidden = |line: usize| self.markup_hidden_on_line(line);
+        let folded = |line: usize| self.line_is_folded(line);
+        let drawn = |line: usize| self.drawn_runs_on_line(line);
+        let turned = |line: usize| self.line_is_table_row(line);
+        let grid = self.grid_with(&hidden, &folded, &drawn, &turned);
+        let page = crate::zong::page_of(rope, (from, to), grid, self.page_columns.max(1));
+        crate::zong::chars_drawn(rope, &page, grid)
+    }
+
+    /// 屏幕上的落腳點，按檔裏的次序。
+    fn jump_spots(&self) -> Vec<usize> {
+        let rope = self.current_buffer().rope();
+        let drawn = self.page_drawn();
+        let (Some(&(from, _)), Some(to)) = (drawn.first(), drawn.iter().map(|&(_, b)| b).max()) else {
+            return Vec::new();
+        };
+        let on_the_page = |at: usize| drawn.iter().any(|&(a, b)| a <= at && at < b);
         let seg = self.segmenter.as_ref();
         let mut out = Vec::new();
         for line in rope.char_to_line(from)..=rope.char_to_line(to.saturating_sub(1)) {
             for (a, b) in motion::line_words(rope, line, motion::Grain::Coarse, seg) {
-                if a < from || a >= to {
+                if !on_the_page(a) {
                     continue;
                 }
                 // **標點自成一段的不給標籤。** 一個字母數字都没有就是那一種——

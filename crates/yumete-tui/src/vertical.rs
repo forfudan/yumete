@@ -318,13 +318,11 @@ pub fn char_at(
         .iter()
         .filter(|p| mouse.column >= left(p) && mouse.row >= p.top)
         .min_by_key(|p| (mouse.row - p.top, mouse.column - left(p)))?;
+    // Past the end of that 縱 the caret sits after its last character; on a
+    // wrapped table row a click on padding or a wall goes where a motion to
+    // that row would.
     let slot = (mouse.row - placed.top) as usize;
-    let start = buffer.rope().line_to_char(placed.zong.line);
-    match placed.slots.get(slot) {
-        Some(row) => Some(start + row.start),
-        // Past the end of that 縱: the caret sits after its last character.
-        None => Some(start + placed.slots.last().map_or(0, |row| row.end)),
-    }
+    Some(zong::char_in(buffer.rope(), &placed.zong, slot, grid))
 }
 
 /// One 縱 as it was placed on the page.
@@ -484,7 +482,11 @@ fn layout_page(
         .map(|(z, rows)| {
             let own = rows.iter().any(|r| r.ruby.is_some() || r.mark.is_some());
             let base = rope.line_to_char(z.line);
-            let own_dot = dotted(z.line, z.start - base, z.end - base);
+            // The characters this 縱 draws, not its range: a wrapped table
+            // row's first 縱 spans the whole row.
+            let own_dot = zong::chars_drawn(rope, std::slice::from_ref(z), grid)
+                .into_iter()
+                .any(|(from, to)| dotted(z.line, from - base, to - base));
             match mode {
                 yumete_cjk::Margin::Never => Margin::default(),
                 yumete_cjk::Margin::Dense => Margin {
@@ -1146,14 +1148,8 @@ pub fn draw(
     // them: looked for in the 縱 drawn, each line's 縱 as one span.
     let copies = match peek.is_none() && config.editor.selection_highlight {
         true => {
-            let mut spans: Vec<(usize, usize)> = Vec::new();
-            for placed in &page {
-                let (from, to) = (placed.zong.start, placed.zong.end);
-                match spans.last_mut() {
-                    Some(last) if last.1 == from => last.1 = to,
-                    _ => spans.push((from, to)),
-                }
-            }
+            let zongs: Vec<zong::Zong> = page.iter().map(|p| p.zong).collect();
+            let spans = zong::chars_drawn(rope, &zongs, grid);
             editor.selection_copies(&spans, crate::copy_rule(config))
         }
         false => Vec::new(),
@@ -1243,8 +1239,16 @@ pub fn draw(
 
 
     let buf = frame.buffer_mut();
-    for placed in page.iter() {
+    for (i, placed) in page.iter().enumerate() {
         let (zong, slots, x) = (&placed.zong, &placed.slots, placed.x);
+        // **Where the 縱 drawn just before this one stands, when it is the
+        // same table row's**: a wrapped row's rules run on through the cells
+        // between its 縱 — a reading's lane, a hung mark's, the gap — or the
+        // one row reads as two.
+        let wrapped_from = match i.checked_sub(1).map(|j| &page[j]) {
+            Some(right) if zong.index_in_line > 0 && right.zong.line == zong.line && right.top == placed.top => Some(right.x),
+            _ => None,
+        };
         // Which palette this 縱 is drawn off. Everything below asks `ink`, so
         // 焦點模式 is one decision here rather than six dimmings further down.
         // The number *band* is not one of them: it is the page's furniture and
@@ -1506,8 +1510,8 @@ pub fn draw(
                 yumete_cjk::show_orphan_marks(&mut chars);
                 chars.into_iter().collect()
             };
-            // **A table's walls turn with it**. A row is one
-            // 縱 (the core refuses to wrap one), so the grid is the page's own
+            // **A table's walls turn with it**. A row is laid out in its bands
+            // (`zong::turned_row`), so the grid is the page's own
             // grid turned a quarter turn — and the walls have to turn too or
             // the reader is handed a column of loose pipes. A `|` between two
             // columns is a band **across** the 縱, two cells wide so it reaches
@@ -1523,6 +1527,10 @@ pub fn draw(
             // cushion in front of a `|` is off the page, and the slot that
             // draws the pipe begins at the cushion.
             let is_wall = walls.iter().any(|&w| w >= row.start && w < row.end.max(row.start + 1));
+            // **A wall in a wrapped row's later 縱 is the row's own `|`,
+            // drawn again**, and painted as that pipe is, so the rule does not
+            // change colour where the row wraps.
+            let drawn_wall = row.ink == Some(yumete_core::drawn::Ink::Wall);
             let symbol = match table_row && (symbol != "|" || is_wall) {
                 true => match (symbol.as_str(), table_rule) {
                     // Two cells: the cross, and the rule carrying on to the
@@ -1578,7 +1586,7 @@ pub fn draw(
             // marker's colour, a candidate or a table's padding in the quiet
             // one — and none of the layers below, every one of which describes
             // characters the file actually holds.
-            if let Some(kind) = row.ink {
+            if let Some(kind) = row.ink.filter(|_| !drawn_wall) {
                 // Warning: **Virtual text takes the block's ground, not the page's.**
                 // A table's rows are banded, and what squares a row up is
                 // *padding* — virtual text. Painting it on the page's own
@@ -1779,6 +1787,13 @@ pub fn draw(
                 true => put_slot(buf, x, y, &symbol, style),
                 false => put_slot_wide(buf, x, y, &symbol, style),
             }
+            if let (Some(right), true) = (wrapped_from, table_row && is_wall) {
+                for cell in x + SLOT_WIDTH..right {
+                    if let Some(c) = buf.cell_mut((cell, y)) {
+                        c.set_symbol("─").set_style(style);
+                    }
+                }
+            }
         }
         // **A cursor on the line break is drawn there**, one
         // slot past the 縱's last character, as the horizontal page draws it
@@ -1820,10 +1835,7 @@ pub fn draw(
 
     // **這一趟畫了哪一段**，交給核心去算 `gw` 的落腳點（#406）。同橫排那一支：
     // 落腳點只算屏幕上的，而哪一段在屏幕上只有畫的這一方知道。
-    *span = match (page.first(), page.last()) {
-        (Some(a), Some(b)) => Some((a.zong.start, b.zong.end)),
-        _ => None,
-    };
+    *span = zong::span_of(&page.iter().map(|p| p.zong).collect::<Vec<_>>());
 
     // **`gw` 的標籤，蓋在它那個字所在的那一格上**（#406）。
     //
@@ -1835,15 +1847,17 @@ pub fn draw(
         // 金，同橫排那一頭——理由見 `lib.rs` 畫標籤那一段。
         let mark = ink.page().fg(ink.paper()).bg(ink.gold()).add_modifier(Modifier::BOLD);
         for (at, label) in editor.labels_on_the_page() {
-            let Some(placed) = page.iter().find(|p| at >= p.zong.start && at < p.zong.end) else {
-                continue;
-            };
-            let line_start = rope.line_to_char(placed.zong.line);
-            let Some(slot) = placed
-                .slots
-                .iter()
-                .position(|r| line_start + r.start <= at && at < line_start + r.end.max(r.start + 1))
-            else {
+            // The 縱 whose rows hold it, not the first whose range does: the
+            // 縱 of a wrapped table row overlap, and the first of them spans
+            // the whole row without holding all of it.
+            let found = page.iter().filter(|p| at >= p.zong.start && at < p.zong.end).find_map(|p| {
+                let line_start = rope.line_to_char(p.zong.line);
+                p.slots
+                    .iter()
+                    .position(|r| !r.is_drawn() && line_start + r.start <= at && at < line_start + r.end)
+                    .map(|slot| (p, slot))
+            });
+            let Some((placed, slot)) = found else {
                 continue;
             };
             let y = placed.top + slot as u16;

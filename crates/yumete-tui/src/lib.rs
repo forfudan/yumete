@@ -35039,10 +35039,8 @@ fn squeezed(text: &str) -> String {
     /// **`:-:` turns into the same wall `---` does**.
     ///
     /// The alignment markers are written on the rule row, and turned, that row
-    /// *is* the wall down the 縱 — so they have nowhere to go and are hidden.
-    /// Two things would keep them on the page: the slack list keeping the `:`,
-    /// and `padding`'s 「no column narrower than its own alignment marker」
-    /// floor, which is about characters on a line, which 竪排 does not write.
+    /// *is* the wall down the 縱 — so they have nowhere to go and are hidden,
+    /// and a band is as deep as its cells, not as wide as a marker.
     #[test]
     fn a_centred_column_turns_like_any_other() {
         let shoot = |rule: &str| {
@@ -35055,6 +35053,433 @@ fn squeezed(text: &str) -> String {
         let centred = shoot(":-:");
         assert!(!centred.contains(':'), "the markers are off the page: {centred}");
         assert_eq!(centred, shoot("---"), "and the bands are the same depth");
+    }
+
+    /// A 縱書 page of 年表: one taller than the screen whose long cells wrap,
+    /// then a dozen short ones — more tables than the editor keeps answers
+    /// for, so walking there and back measures the first one again.
+    fn chronicle() -> String {
+        // First a short table whose cells carry what is drawn but not
+        // written — a tab's advance, a footnote's mark, a reading — and whose
+        // longest cell is the one with the tabs.
+        let mut text = String::from(
+            "前言一段，說明下面幾張年表從何而來。\n\n| 名 | 說明 |\n| --- | --- |\n| 甲 | 注[^1] |\n| 乙 | 長\t\t\t\t\t長 |\n| 丙 | <ruby>漢<rt>ㄏㄢˋ</rt></ruby> |\n\n| 年 | 事 | 地 |\n| --- | --- | --- |\n",
+        );
+        let events = [
+            ("一九一一", "辛亥革命爆發於武昌，各省相繼響應，清帝退位詔書次年頒布。", "武昌"),
+            ("一九一二", "民國成立", "南京"),
+            ("一九一五", "**護國**運動起於雲南，討袁之聲遍及西南。", "昆明"),
+            ("一九一九", "五四運動，學生上街，要求外爭主權、內除國賊。", "北京"),
+            ("一九二一", "會議", "上海"),
+        ];
+        for round in 0..6 {
+            for (year, what, place) in events {
+                text.push_str(&format!("| {year} | {what}{} | {place} |\n", "又".repeat(round)));
+            }
+        }
+        for n in 0..12 {
+            text.push_str(&format!(
+                "\n第{n}張表之前的一段話。\n\n| 名 | 說明 |\n| --- | --- |\n| 甲{n} | 第一條，寫得很長很長，長到一縱放不下纔好。 |\n| 乙 | 短 |\n"
+            ));
+        }
+        text.push_str("\n後記一段。\n\n[^1]: 注文一句。\n");
+        text
+    }
+
+    /// What has been done to an editor that a fresh one has to do too, to be
+    /// in the same state.
+    #[derive(Clone)]
+    enum Step {
+        Say(&'static str),
+        /// A fold closed over this line and the next.
+        Fold(usize),
+        Unfold,
+        Candidate(usize, usize),
+    }
+
+    impl Step {
+        fn take(&self, editor: &mut Editor) {
+            match *self {
+                Step::Say(command) => {
+                    editor.execute(command).unwrap();
+                }
+                Step::Fold(line) => {
+                    let rope = editor.current_buffer().rope();
+                    let (from, to) = (rope.line_to_char(line), rope.line_to_char(line + 1) + 1);
+                    editor.point_at(from);
+                    editor.drag_to(to);
+                    editor.execute(":view-fold").unwrap();
+                }
+                Step::Unfold => {
+                    editor.on_key(Key::Char('z'));
+                    editor.on_key(Key::Char('R'));
+                }
+                Step::Candidate(line, column) => editor.set_candidate(vec![(line, column, "候".into())]),
+            }
+        }
+    }
+
+    /// A 縱書 editor over `text`, the caret at its start.
+    fn turned_editor(text: &str) -> Editor {
+        let mut editor = Editor::new();
+        editor.execute(":syntax markdown").unwrap();
+        editor.paste_text(text);
+        assert_eq!(editor.current_buffer().text(), text);
+        editor.set_layout(WritingLayout::Vertical);
+        editor.point_at(0);
+        editor
+    }
+
+    /// **Every turned table on the page has its walls at the same depths in
+    /// every 縱, and no 縱 deeper than the page's** — asked of the layout the
+    /// frame was drawn from. Hands back each table row's walls, against the
+    /// room they were laid out in.
+    fn tables_line_up(editor: &Editor, config: &Config, (w, h): (u16, u16), seats: &Seats) -> Vec<((usize, usize), Vec<usize>)> {
+        let rope = editor.current_buffer().rope();
+        let lines = editor.current_buffer().line_count();
+        let look = vertical::Look::of(editor, config);
+        let page = page_areas(editor, config, Rect::new(0, 0, w, h), 0).panes[editor.live_pane()];
+        let room = vertical::zong_length_for(config, page.height, lines, look);
+        let hidden = |l: usize| editor.markup_hidden_on_line(l);
+        let folded = |l: usize| editor.line_is_folded(l);
+        let drawn = |l: usize| editor.drawn_runs_on_line(l);
+        let turned = |l: usize| editor.line_is_table_row(l);
+        let grid = editor.grid_with(&hidden, &folded, &drawn, &turned).with_zong_len(room);
+        let (a, b) = seats[editor.live_pane()].drawn_span.expect("a frame");
+        let mut table: Option<Vec<usize>> = None;
+        let mut rows = Vec::new();
+        for line in rope.char_to_line(a)..=rope.char_to_line(b.min(rope.len_chars())) {
+            // A line inside a closed fold is not on the page at all.
+            if editor.line_is_folded(line) {
+                continue;
+            }
+            if !editor.line_is_table_row(line) {
+                table = None;
+                continue;
+            }
+            let count = yumete_core::zong::zong_count_in_line(rope, line, grid);
+            for z in yumete_core::zong::zongs_from(rope, yumete_core::zong::Anchor { line, index_in_line: 0 }, grid, count) {
+                let slots = yumete_core::zong::zong_slots(rope, &z, grid);
+                assert!(slots.len() <= room, "line {line}: {} slots in a 縱 of {room}", slots.len());
+                let walls: Vec<usize> = slots.iter().enumerate().filter(|(_, s)| s.text == "|").map(|(i, _)| i).collect();
+                // The rule row is the wall down the 縱: its walls are where
+                // the bands cross it, the same depths as everyone else's.
+                match &table {
+                    Some(first) => assert_eq!(&walls, first, "line {line} 縱 {}", z.index_in_line),
+                    None => table = Some(walls.clone()),
+                }
+                if z.index_in_line == 0 {
+                    rows.push(((line, room), walls));
+                }
+            }
+        }
+        rows
+    }
+
+    /// The page and the status line of a frame; not the message row under
+    /// them, which says what the last command did.
+    fn the_page(frame: &ratatui::buffer::Buffer) -> String {
+        let text = buffer_to_text(frame);
+        let rows: Vec<&str> = text.lines().collect();
+        rows[..rows.len() - 1].join("\n")
+    }
+
+    /// **A turned table never flickers.** After every key that moves across
+    /// it — `h`/`l` from 縱 to 縱, `j`/`k` down a cell, a page either way, a
+    /// click on a wrapped row's padding, a resize — and after every switch
+    /// that changes the page — the render level, a fold, a second window, a
+    /// candidate standing in a row — the frame drawn twice with nothing in
+    /// between is the same, it is the frame a fresh editor in the same state
+    /// draws, every table on it is lined up and no deeper than the page, and
+    /// no row's walls have moved since they were first drawn at that room.
+    ///
+    /// Drawn the way the loop draws between keys ([`Offscreen::between_keys`]).
+    /// A band whose depth hung on the caret, the viewport, the window, the
+    /// order rows were asked in or which tables were still remembered would
+    /// show here.
+    #[test]
+    fn a_turned_table_draws_the_same_frame_however_it_was_reached() {
+        let text = chronicle();
+        let config = vertical_config();
+        crate::theme::settle(&config, None);
+        let mut ime = ImeSession::empty(Scheme::LINGMING);
+        let mut said: Vec<Step> = vec![Step::Say(":render full")];
+        let fresh_like = |said: &[Step], cursor: usize| {
+            let mut fresh = turned_editor(&text);
+            for step in said {
+                step.take(&mut fresh);
+            }
+            fresh.point_at(cursor);
+            fresh
+        };
+        let mut editor = fresh_like(&said, 0);
+        let mut size = (60u16, 20u16);
+        let mut screen = Offscreen::new(size.0, size.1);
+        let seen: std::cell::RefCell<std::collections::HashMap<(usize, usize), Vec<usize>>> = Default::default();
+        let mut frames = 0;
+        let mut check = |editor: &mut Editor, screen: &mut Offscreen, said: &[Step], size: (u16, u16), alone: bool, what: &str| {
+            screen.between_keys(editor, &config, &mut ime, Pages::default());
+            let once = screen.terminal.backend().buffer().clone();
+            screen.between_keys(editor, &config, &mut ime, Pages::default());
+            let twice = screen.terminal.backend().buffer().clone();
+            assert_eq!(once, twice, "{what}: a second frame unlike the first\n{}", buffer_to_text(&twice));
+            for (row, walls) in tables_line_up(editor, &config, size, &screen.seats) {
+                let mut seen = seen.borrow_mut();
+                let had = seen.entry(row).or_insert_with(|| walls.clone());
+                assert_eq!(*had, walls, "{what}: line {} moved its walls", row.0);
+            }
+            // A fresh editor, the same text and switches, the caret in the
+            // same place and the page scrolled to the same 縱.
+            if alone {
+                let mut fresh = fresh_like(said, editor.cursor());
+                let mut other = Offscreen::new(size.0, size.1);
+                other.seats.owners = fresh.windows().leaves();
+                other.seats[0].zong = screen.seats[0].zong;
+                other.between_keys(&mut fresh, &config, &mut ime, Pages::default());
+                let theirs = other.terminal.backend().buffer().clone();
+                assert_eq!(the_page(&theirs), the_page(&twice), "{what}: a fresh editor draws another page");
+            }
+            frames += 1;
+            twice
+        };
+        check(&mut editor, &mut screen, &said, size, true, "the first frame");
+        let mut last = editor.zong_position();
+        for step in 0..40 {
+            editor.on_key(Key::Char('h'));
+            check(&mut editor, &mut screen, &said, size, true, &format!("h ×{}", step + 1));
+            let now = editor.zong_position();
+            assert_ne!((now.line, now.index_in_line), (last.line, last.index_in_line), "h ×{} stalled at {now:?}", step + 1);
+            last = now;
+            // Down into the cells of a wrapped row's later 縱, and of the row
+            // whose `**` a caret would open were it allowed to.
+            let marked = editor.current_buffer().rope().line(now.line).to_string().contains("**");
+            if editor.line_is_table_row(now.line) && (now.index_in_line > 0 || marked) {
+                let keys = match marked {
+                    true => "jjjkkkkkkkkkkkkkkj",
+                    false => "jjjk",
+                };
+                for key in keys.chars() {
+                    let (was, from) = (editor.zong_position(), editor.cursor());
+                    editor.on_key(Key::Char(key));
+                    check(&mut editor, &mut screen, &said, size, true, &format!("{key} in a wrapped row"));
+                    let here = editor.zong_position();
+                    if here.line != was.line {
+                        break;
+                    }
+                    // No step the reader cannot see: a caret that moved in the
+                    // file moved on the page.
+                    if editor.cursor() != from {
+                        assert_ne!((here.index_in_line, here.slot), (was.index_in_line, was.slot), "{key} moved off the page");
+                    }
+                }
+                last = editor.zong_position();
+            }
+        }
+        for step in 0..12 {
+            editor.on_key(Key::Char('l'));
+            check(&mut editor, &mut screen, &said, size, true, &format!("l ×{}", step + 1));
+        }
+        // **A click on a wrapped row's padding**: the year band of the 縱
+        // holding 「詔」 is blank there, and a click on it lands on a character
+        // of that same 縱.
+        let frame = screen.terminal.backend().buffer().clone();
+        let area = frame.area;
+        let at = (area.y..area.y + area.height)
+            .flat_map(|y| (area.x..area.x + area.width).map(move |x| (x, y)))
+            .find(|&(x, y)| frame[(x, y)].symbol() == "詔")
+            .expect("a wrapped row's later 縱 on the page");
+        let rule = |y: u16| frame[(at.0, y)].symbol().contains('─') || frame[(at.0 + 1, y)].symbol().contains('─');
+        let top = (area.y..at.1).find(|&y| rule(y)).expect("the head wall above");
+        let padding = top + 1;
+        assert_eq!(frame[(at.0, padding)].symbol().trim(), "", "the year band is blank in this 縱");
+        let click = ratatui::crossterm::event::MouseEvent {
+            kind: MouseEventKind::Down(ratatui::crossterm::event::MouseButton::Left),
+            column: at.0,
+            row: padding,
+            modifiers: KeyModifiers::NONE,
+        };
+        let hit = text_at(&editor, &config, Some(ratatui::layout::Size::new(size.0, size.1)), &screen.seats, click).expect("a click on the text");
+        editor.point_at(hit);
+        let drawn = check(&mut editor, &mut screen, &said, size, true, "a click on padding");
+        let landed = editor.current_buffer().rope().char(hit).to_string();
+        assert!(editor.zong_position().index_in_line > 0, "{:?}", editor.zong_position());
+        assert!(
+            (padding..area.y + area.height).any(|y| drawn[(at.0, y)].symbol() == landed),
+            "the click landed on 「{landed}」, which is not in the clicked 縱"
+        );
+        // Pages on through the dozen small tables, and back: the first table,
+        // long forgotten by the editor, comes back as it was.
+        for key in [Key::Ctrl('f'); 8].into_iter().chain([Key::Ctrl('b'); 8]) {
+            editor.on_key(key);
+            check(&mut editor, &mut screen, &said, size, true, &format!("{key:?}"));
+        }
+        // A candidate standing in a row, as the input method puts one: the
+        // writer's, not the table's.
+        let rope = editor.current_buffer().rope();
+        let row = (0..rope.len_lines()).find(|&l| editor.line_is_table_row(l) && rope.line(l).to_string().contains("一九一一")).unwrap();
+        let col = rope.line(row).to_string().find('一').map(|b| rope.line(row).to_string()[..b].chars().count()).unwrap();
+        said.push(Step::Candidate(row, col));
+        said.last().unwrap().clone().take(&mut editor);
+        check(&mut editor, &mut screen, &said, size, true, "a candidate in a row");
+        said.pop();
+        editor.set_candidate(Vec::new());
+        check(&mut editor, &mut screen, &said, size, true, "the candidate gone");
+        // The render level: the page changes, and settles at once.
+        for level in [":render basic", ":render full"] {
+            said.push(Step::Say(level));
+            editor.execute(level).unwrap();
+            seen.borrow_mut().clear();
+            check(&mut editor, &mut screen, &said, size, true, level);
+        }
+        // A fold closed on the row with the tabs: that row is the fold's line
+        // now and every other row is where it was — measured again while it
+        // is closed, under another render level and back — and opened again,
+        // the table is a fresh editor's.
+        editor.point_at(0);
+        let rope = editor.current_buffer().rope();
+        let tabbed = (0..rope.len_lines()).find(|&l| rope.line(l).to_string().contains('\t')).unwrap();
+        for step in [Step::Fold(tabbed), Step::Say(":render basic"), Step::Say(":render full"), Step::Unfold] {
+            if matches!(step, Step::Say(_)) {
+                seen.borrow_mut().clear();
+            }
+            step.take(&mut editor);
+            said.push(step);
+            editor.point_at(0);
+            check(&mut editor, &mut screen, &said, size, true, "a fold on a row, and open again");
+        }
+        assert!(editor.line_is_table_row(tabbed), "the row is a row again");
+        // A second window on the same file, and back to one.
+        editor.execute(":vsplit").unwrap();
+        check(&mut editor, &mut screen, &said, size, false, "two windows");
+        editor.execute(":close").unwrap();
+        check(&mut editor, &mut screen, &said, size, true, "one window again");
+        // The window made shorter and narrower, and back.
+        for to in [(52u16, 16u16), (60, 20)] {
+            size = to;
+            let seats = std::mem::take(&mut screen.seats);
+            screen = Offscreen::new(size.0, size.1);
+            screen.seats = seats;
+            check(&mut editor, &mut screen, &said, size, true, &format!("resized to {to:?}"));
+        }
+        assert!(frames > 60, "{frames} frames");
+    }
+
+    /// **A wrapped row's rules run on through the lanes between its 縱.**
+    /// With 句讀 hung in the margin, one of a row's 縱 buys a cell to its
+    /// right and its neighbour does not; the rule crosses that cell, or the
+    /// one row reads as two.
+    #[test]
+    fn a_wrapped_row_s_rules_cross_the_margin_between_its_zong() {
+        let mut editor = turned_editor("前言一段。\n\n|年|事|\n|-|-|\n|一九一一|辛亥革命爆發於武昌，清朝覆亡。|\n|一九一二|民國|\n|甲乙丙丁戊己庚辛壬癸|子丑寅卯辰巳午未申酉戌亥|\n\n後記一段。\n");
+        editor.execute(":view-hanging on").unwrap();
+        let config = vertical_config();
+        crate::theme::settle(&config, None);
+        let mut ime = ImeSession::empty(Scheme::LINGMING);
+        let mut screen = Offscreen::new(40, 14);
+        screen.between_keys(&mut editor, &config, &mut ime, Pages::default());
+        let shot = buffer_to_text(screen.terminal.backend().buffer());
+        let rules: Vec<&str> = shot.lines().filter(|row| row.contains('┼')).collect();
+        assert!(rules.len() >= 3, "{shot}");
+        for row in rules {
+            let rule = &row[row.find('─').unwrap()..row.find('┼').unwrap()];
+            assert!(rule.chars().all(|c| c == '─'), "a gap in the rule `{row}`\n{shot}");
+        }
+    }
+
+    /// **The wheel over a wrapped row the page's edge cuts**: the page the
+    /// last frame drew is read back by which 縱 it ended with, so a row
+    /// whose first 縱 spans the whole row is not taken for the page's end —
+    /// and a cursor the wheel pushes keeps its scrolloff on a full page.
+    #[test]
+    fn the_wheel_counts_a_page_cut_inside_a_wrapped_row() {
+        let cell: String = "天地玄黃宇宙洪荒日月盈昃辰宿列張寒來暑往秋收冬藏".repeat(8);
+        let text = format!("前言一段。\n\n| 名 | 說明 |\n| --- | --- |\n| 甲 | {cell} |\n| 乙 | 短 |\n\n後記一段。\n");
+        let mut editor = turned_editor(&text);
+        let mut config = vertical_config();
+        config.editor.scrolloff = 3;
+        crate::theme::settle(&config, None);
+        let mut ime = ImeSession::empty(Scheme::LINGMING);
+        let mut screen = Offscreen::new(40, 12);
+        screen.between_keys(&mut editor, &config, &mut ime, Pages::default());
+        let drawn = |editor: &Editor, screen: &Offscreen| {
+            let hidden = |l: usize| editor.markup_hidden_on_line(l);
+            let folded = |l: usize| editor.line_is_folded(l);
+            let drawn = |l: usize| editor.drawn_runs_on_line(l);
+            let turned = |l: usize| editor.line_is_table_row(l);
+            let grid = editor.grid_with(&hidden, &folded, &drawn, &turned);
+            let span = screen.seats[editor.live_pane()].drawn_span.expect("a frame");
+            yumete_core::zong::page_of(editor.current_buffer().rope(), span, grid, 64)
+        };
+        let index = |editor: &Editor, z: &yumete_core::zong::Zong| {
+            let hidden = |l: usize| editor.markup_hidden_on_line(l);
+            let folded = |l: usize| editor.line_is_folded(l);
+            let drawn = |l: usize| editor.drawn_runs_on_line(l);
+            let turned = |l: usize| editor.line_is_table_row(l);
+            let grid = editor.grid_with(&hidden, &folded, &drawn, &turned);
+            let all = yumete_core::zong::zongs_from(editor.current_buffer().rope(), Default::default(), grid, 256);
+            all.iter().position(|a| (a.line, a.index_in_line) == (z.line, z.index_in_line)).unwrap()
+        };
+        let mut top = index(&editor, &drawn(&editor, &screen)[0]);
+        for notch in 0..6 {
+            editor.scroll(3, false);
+            screen.between_keys(&mut editor, &config, &mut ime, Pages::default());
+            let once = screen.terminal.backend().buffer().clone();
+            screen.between_keys(&mut editor, &config, &mut ime, Pages::default());
+            assert_eq!(&once, screen.terminal.backend().buffer(), "notch {notch}: the page settles at once");
+            let page = drawn(&editor, &screen);
+            assert!(page.iter().any(|z| z.line == 4 && z.index_in_line > 0), "notch {notch}: the wide row is on the page");
+            // A notch is three 縱, and the frame after it does not take any
+            // of them back.
+            let now = index(&editor, &page[0]);
+            assert_eq!(now, top + 3, "notch {notch}");
+            top = now;
+            let here = editor.zong_position();
+            let at = page
+                .iter()
+                .position(|z| (z.line, z.index_in_line) == (here.line, here.index_in_line))
+                .unwrap_or_else(|| panic!("notch {notch}: the cursor is on the page"));
+            let so = config.editor.scrolloff.min((page.len() - 1) / 2);
+            assert!(at >= so.min(page.len() - 1 - so), "notch {notch}: the cursor at 縱 {at} of {}", page.len());
+        }
+    }
+
+    /// **`h` through a wrapped table and out the other side, and `l` back**,
+    /// one 縱 a press: every 縱 of every row is stood in once each way.
+    #[test]
+    fn the_keys_walk_a_wrapped_table_zong_by_zong() {
+        let mut editor = turned_editor("前。\n\n| 名 | 說明 |\n| --- | --- |\n| 甲 | 第一條，寫得很長很長，長到一縱放不下纔好，還要再長一些。 |\n| 乙 | 短 |\n\n後。\n");
+        let config = vertical_config();
+        crate::theme::settle(&config, None);
+        let mut ime = ImeSession::empty(Scheme::LINGMING);
+        let mut screen = Offscreen::new(60, 16);
+        let mut frame = |editor: &mut Editor| screen.between_keys(editor, &config, &mut ime, Pages::default());
+        frame(&mut editor);
+        let mut onward = vec![editor.zong_position()];
+        loop {
+            editor.on_key(Key::Char('h'));
+            frame(&mut editor);
+            let p = editor.zong_position();
+            if (p.line, p.index_in_line) == (onward.last().unwrap().line, onward.last().unwrap().index_in_line) {
+                break;
+            }
+            onward.push(p);
+        }
+        let wide = onward.iter().filter(|p| p.line == 4).count();
+        assert!(wide >= 3, "the long row is several 縱: {onward:?}");
+        assert!(onward.last().unwrap().line >= 7, "out the other side: {onward:?}");
+        let mut back = vec![*onward.last().unwrap()];
+        loop {
+            editor.on_key(Key::Char('l'));
+            frame(&mut editor);
+            let p = editor.zong_position();
+            if (p.line, p.index_in_line) == (back.last().unwrap().line, back.last().unwrap().index_in_line) {
+                break;
+            }
+            back.push(p);
+        }
+        let key = |p: &yumete_core::zong::Position| (p.line, p.index_in_line);
+        let back: Vec<_> = back.iter().rev().map(key).collect();
+        assert_eq!(back, onward.iter().map(key).collect::<Vec<_>>(), "the same 縱 back");
     }
 
     /// **A block's ground is a rectangle, not a staircase**.

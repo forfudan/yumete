@@ -68,6 +68,11 @@ pub enum Ink {
     /// **A closed fold's line**: what the fold holds, said in
     /// place of its first line's text.
     Fold,
+    /// **A turned table row's wall, drawn again** in the 縱 after the row's
+    /// first (`zong::turned_row`): it stands over the row's own `|` and is
+    /// painted as that `|` is, so a rule runs on unbroken where the row wraps.
+    /// The 縱 lays it out; no line's runs carry it.
+    Wall,
 }
 
 /// One run of text on the page that the file does not contain.

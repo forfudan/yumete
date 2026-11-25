@@ -114,9 +114,18 @@ pub struct Grid<'a> {
     /// Handed in rather than worked out here, for the same reason `hidden` is:
     /// the answer needs the page's layout, the table level and whether the line
     /// is inside a fence, and a second copy of that reasoning would be a second
-    /// answer. A row that is drawn turned does not wrap — a 縱 *is* the row —
-    /// and at 源碼, or inside a fence, no row is.
+    /// answer. A row that is drawn turned is not wrapped as prose is — it is
+    /// laid out in its bands ([`turned_row`]) — and at 源碼, or inside a
+    /// fence, no row is.
     table: &'a dyn Fn(usize) -> bool,
+    /// **How deep each band of a turned row is**, decided for the whole table
+    /// at once — see [`Bands`].
+    ///
+    /// A row cannot answer this about itself: a band is as deep as the
+    /// fullest cell in that column, in every row of the table, and a band
+    /// that ran deeper in one row than in the next would break the grid that
+    /// turning the table was meant to keep.
+    bands: &'a dyn Bands,
     /// The paragraph shown as the file has it: no indent, and its blank line
     /// back. `usize::MAX` for none.
     pub open_line: usize,
@@ -170,6 +179,17 @@ const NOTHING_HIDDEN: &dyn Fn(usize) -> Vec<(usize, usize)> = &|_| Vec::new();
 const NOTHING_FOLDED: &dyn Fn(usize) -> bool = &|_| false;
 const NOTHING_TURNED: &dyn Fn(usize) -> bool = &|_| false;
 
+/// No table measured: a turned row is then laid out as one 縱, unbroken.
+struct Unmeasured;
+
+impl Bands for Unmeasured {
+    fn bands(&self, _line: usize, _room: usize) -> Option<std::rc::Rc<TableBands>> {
+        None
+    }
+}
+
+const NOTHING_MEASURED: &dyn Bands = &Unmeasured;
+
 /// A page holding nothing but the file's own characters.
 const NOTHING_DRAWN: &dyn Fn(usize) -> Vec<crate::drawn::Run> = &|_| Vec::new();
 
@@ -194,6 +214,33 @@ impl<'a> Grid<'a> {
     /// Which lines are drawn as rows of a turned table — see the field.
     pub fn with_turned_tables(self, table: &'a dyn Fn(usize) -> bool) -> Grid<'a> {
         Grid { table, ..self }
+    }
+
+    /// The same grid, told how deep the bands of a turned table are.
+    pub fn with_bands(self, bands: &'a dyn Bands) -> Grid<'a> {
+        Grid { bands, ..self }
+    }
+
+    /// The same grid with **no table measured** — what a table is measured
+    /// through, so that measuring one can never ask for its own answer.
+    pub fn without_bands(self) -> Grid<'a> {
+        Grid { bands: NOTHING_MEASURED, ..self }
+    }
+
+    /// **Everything about the grid that changes how a line is laid out**, save
+    /// the wrap length and what the closures answer — hashed by the layout's
+    /// memo and by a turned table's, so the two cannot keep different lists.
+    pub fn layout_key(&self, hasher: &mut impl Hasher) {
+        (
+            self.indent,
+            self.hanging,
+            self.sentences,
+            self.tatechuyoko,
+            self.ruby.bits(),
+            self.readings,
+            self.forms,
+        )
+            .hash(hasher);
     }
 
     pub fn with_folds(self, folded: &'a dyn Fn(usize) -> bool) -> Grid<'a> {
@@ -231,6 +278,7 @@ impl<'a> Grid<'a> {
             hidden: NOTHING_HIDDEN,
             folded: NOTHING_FOLDED,
             table: NOTHING_TURNED,
+            bands: NOTHING_MEASURED,
             indent: 0,
             open_line: usize::MAX,
             drawn: NOTHING_DRAWN,
@@ -311,6 +359,122 @@ impl Default for Grid<'static> {
     }
 }
 
+/// **A turned table, as one of its rows is laid out against it**: how deep
+/// each band is, and which way each band's cells are set.
+///
+/// Indexed by **stretch** — the runs of a row between its walls, counted from
+/// before the first wall to after the last, so a row with `n` walls has
+/// `n + 1` of them and the first and last are usually empty. Counted on the
+/// row as it is laid out, not on its source, so a cell's depth is the slots
+/// the page really gives it: hung 句讀, a reading, a drawn footnote mark and a
+/// 緃中横 group all count the way they are drawn.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
+pub struct TableBands {
+    /// How many slots each stretch takes down the 縱.
+    pub depths: Vec<usize>,
+    /// Which way each stretch's cell is set within its band.
+    pub aligns: Vec<crate::mdtable::Align>,
+}
+
+/// A band this deep or shallower keeps its depth when a turned table is too
+/// long for its 縱 — see [`band_depths`].
+pub const SHORT_BAND: usize = 6;
+
+/// The least a long band is given when it has to share, while there is room.
+pub const LONG_BAND_FLOOR: usize = 3;
+
+/// **How deep each band of a turned table is drawn**, in 縱 slots, for 縱
+/// that hold `room` slots. One entry per stretch ([`TableBands`]); the walls
+/// between them take a slot each, and are counted in the room.
+///
+/// `natural` is how deep each band would have to be to hold its fullest cell
+/// whole, and `least` the longest run in it that cannot be parted (a
+/// character and the drawn slots that stand with it, [`units`]). The answer
+/// is the one the preview gives its 年表 (`vtable` in `yumete-mdview`),
+/// counted in whole slots:
+///
+/// - **When the table fits, every band is as deep as it wants.**
+/// - Otherwise **a short band keeps its depth** (no more than
+///   [`SHORT_BAND`]) — a column of years or names wrapped would read worse
+///   than anything it saves — and **the long ones share what is left** in
+///   proportion to what each wanted, none below [`LONG_BAND_FLOOR`]. A long
+///   cell then wraps inside its band.
+/// - **Still too long** — many columns, or a short room — every band deeper
+///   than it must be gives way toward its least, in proportion, so no cell
+///   runs past the foot of the page.
+/// - If even that does not fit, the row runs long: there is no smaller table
+///   to draw.
+///
+/// Spare slots left over by the rounding go to the bands that gave most, so
+/// the table fills its 縱 as nearly as it can.
+pub fn band_depths(natural: &[usize], least: &[usize], room: usize) -> Vec<usize> {
+    let room = room.saturating_sub(natural.len().saturating_sub(1));
+    let total: usize = natural.iter().sum();
+    if total <= room {
+        return natural.to_vec();
+    }
+    let floor = |i: usize| match natural[i] {
+        0 => 0,
+        n => least.get(i).copied().unwrap_or(1).clamp(1, n),
+    };
+    let short = |n: usize| n <= SHORT_BAND;
+    let kept: usize = natural.iter().copied().filter(|&n| short(n)).sum();
+    let long: usize = natural.iter().copied().filter(|&n| !short(n)).sum();
+    let left = room.saturating_sub(kept);
+    let mut bands: Vec<usize> = natural
+        .iter()
+        .enumerate()
+        .map(|(i, &n)| match short(n) {
+            true => n,
+            false => (n * left / long.max(1)).clamp(LONG_BAND_FLOOR.max(floor(i)), n),
+        })
+        .collect();
+    fill_up(&mut bands, natural, room, |i| !short(natural[i]));
+    let given: usize = bands.iter().sum();
+    let floors: usize = (0..bands.len()).map(floor).sum();
+    if given > room && given > floors {
+        let spare = room.saturating_sub(floors);
+        let over = given - floors;
+        let wanted = bands.clone();
+        for (i, b) in bands.iter_mut().enumerate() {
+            let lo = floor(i);
+            *b = lo + (*b - lo) * spare / over;
+        }
+        fill_up(&mut bands, &wanted, room, |i| wanted[i] > floor(i));
+    }
+    bands
+}
+
+/// Hand the slots rounding left over, one at a time, to the bands that `may`
+/// take one and are furthest short of what they `wanted` — the earlier band
+/// first between two equally short, so the answer never depends on anything
+/// but its arguments.
+fn fill_up(bands: &mut [usize], wanted: &[usize], room: usize, may: impl Fn(usize) -> bool) {
+    while bands.iter().sum::<usize>() < room {
+        let next = (0..bands.len())
+            .filter(|&i| may(i) && bands[i] < wanted[i])
+            .max_by_key(|&i| (wanted[i] - bands[i], std::cmp::Reverse(i)));
+        match next {
+            Some(i) => bands[i] += 1,
+            None => break,
+        }
+    }
+}
+
+/// **The one place the bands of a turned table are decided** — handed to the
+/// grid, as `hidden` and `table` are, because the answer needs every row of
+/// the table and this module only ever sees one.
+///
+/// Warning: **A pure function of the table and the room.** The answer must not
+/// move with the caret, the viewport, or the order rows are asked in: a band
+/// that deepened as the cursor crossed the table would redraw the whole table
+/// under the reader on a key that changed nothing in it.
+pub trait Bands {
+    /// The bands of the turned row on `line`, for 縱 that hold `room` slots,
+    /// or `None` when there is no table measured for it.
+    fn bands(&self, line: usize, room: usize) -> Option<std::rc::Rc<TableBands>>;
+}
+
 /// One 縱: a single vertical run of text on screen.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Zong {
@@ -319,6 +483,13 @@ pub struct Zong {
     /// Which piece of that line it is (`0` for the first).
     pub index_in_line: usize,
     /// Char index of the first character in the 縱.
+    ///
+    /// A turned table row wrapped into several 縱 holds its characters out of
+    /// file order — each of its 縱 has a piece of every band — so there this
+    /// is the *earliest* character the 縱 holds and [`end`](Self::end) one
+    /// past the latest: the ranges of such a row's 縱 overlap, and the first
+    /// of them spans the whole row. Every character in the range need not be
+    /// in this 縱; every character in this 縱 is in the range.
     pub start: usize,
     /// Char index one past the last character in the 縱.
     pub end: usize,
@@ -976,7 +1147,7 @@ fn push_ruby(
 
 /// **Which characters take their vertical presentation form** — decided by the
 /// `:render` level.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum Forms {
     /// `:render off`: the file's own characters, 。 and 「 as typed.
     Source,
@@ -1209,7 +1380,205 @@ fn zong_breaks(
 type RememberedZongs = (u64, Laid);
 
 /// A paragraph's rows and 縱 boundaries, shared rather than copied.
-type Laid = (std::rc::Rc<Vec<Slot>>, std::rc::Rc<Vec<usize>>);
+#[derive(Clone)]
+struct Laid {
+    slots: std::rc::Rc<Vec<Slot>>,
+    breaks: std::rc::Rc<Vec<usize>>,
+    /// Set for a turned table row laid out in its bands — see [`turned_row`].
+    turned: Option<std::rc::Rc<Turned>>,
+}
+
+/// What a turned row needs remembered beside its rows: laid in several 縱
+/// they are in display order, not file order, so nothing can be found in
+/// them by position alone; and its markup never opens under the caret, so a
+/// caret is put on what each slot shows, not on what it swallowed.
+struct Turned {
+    /// Which stretch of the row each slot stands in ([`TableBands`]), or
+    /// [`WALL`] for a wall.
+    stretch: Vec<usize>,
+    /// Where a caret given each slot stands: its first character that is on
+    /// the page. A slot swallows the markup and the cushion hidden before it,
+    /// and a caret put on those would stand on a character it cannot see —
+    /// the next step would move it in the file and not on the page.
+    landing: Vec<usize>,
+    /// The 縱 holding the row's last character — where the end-of-line caret
+    /// stands, on the spare row past it.
+    tail: usize,
+    /// One past the row's last character, as a column of the line.
+    end: usize,
+}
+
+/// The stretch a wall belongs to, which is none.
+const WALL: usize = usize::MAX;
+
+/// Whether `slot` holds a character of the file — the only kind of slot a
+/// caret can be given as a place to stand.
+fn holds_text(slot: &Slot) -> bool {
+    !slot.is_drawn() && slot.end > slot.start
+}
+
+impl Laid {
+    /// Where the `index`-th 縱 begins and ends, as slots of the line.
+    fn span(&self, index: usize) -> (usize, usize) {
+        zong_span(&self.breaks, self.slots.len(), index)
+    }
+
+    /// Where the `index`-th 縱 begins and ends, as columns of the line.
+    fn range(&self, index: usize) -> (usize, usize) {
+        let (first, last) = self.span(index);
+        if self.turned.is_some() {
+            let held = self.slots[first..last].iter().filter(|s| holds_text(s));
+            let start = held.clone().map(|s| s.start).min().unwrap_or(0);
+            let end = held.map(|s| s.end).max().unwrap_or(start);
+            return (start, end);
+        }
+        (
+            self.slots.get(first).map_or(0, |s| s.start),
+            last.checked_sub(1).and_then(|i| self.slots.get(i)).map_or(0, |s| s.end),
+        )
+    }
+
+    /// The `index`-th 縱 of the line as a [`Zong`], the line opening at
+    /// `start`.
+    fn zong(&self, line: usize, start: usize, index: usize) -> Zong {
+        let (first, last) = self.span(index);
+        let (from, to) = self.range(index);
+        Zong {
+            line,
+            index_in_line: index,
+            start: start + from,
+            end: start + to,
+            slots: last - first,
+        }
+    }
+
+    /// Where the character at column `col` stands — or, past the last one,
+    /// the end-of-line caret.
+    fn position(&self, line: usize, col: usize) -> Position {
+        let (slots, breaks) = (&self.slots, &self.breaks);
+        let total = slots.len();
+        let (g, index_in_line) = match &self.turned {
+            // Out of file order, so the slot is looked for rather than
+            // searched for by halves; past the row's last character is the
+            // spare row of the 縱 holding it, not after the last slot laid.
+            Some(turned) => match col >= turned.end {
+                true => (self.span(turned.tail).1, turned.tail),
+                false => {
+                    let g = slots
+                        .iter()
+                        .position(|s| holds_text(s) && s.start <= col && col < s.end)
+                        .or_else(|| {
+                            slots
+                                .iter()
+                                .enumerate()
+                                .filter(|(_, s)| holds_text(s) && s.start <= col)
+                                .max_by_key(|(_, s)| s.start)
+                                .map(|(i, _)| i)
+                        })
+                        .unwrap_or(0);
+                    (g, breaks.partition_point(|&b| b <= g).saturating_sub(1))
+                }
+            },
+            None => {
+                // Which slot the cursor sits in (or `total`, past the last
+                // one). A slot may span several characters — a 緃中横 pair, or
+                // a whole ruby group's markup — so this is the last one that
+                // *starts* at or before the cursor, not the first one that
+                // reaches it.
+                let g = match slots.last().is_some_and(|s| col >= s.end) {
+                    true => total,
+                    false => slots.partition_point(|s| s.start <= col).saturating_sub(1),
+                };
+                // Which 縱 holds it: the last one that starts at or before
+                // this slot. A paragraph whose length is an exact multiple of
+                // the wrap length has no further 縱 to hold the
+                // end-of-paragraph caret, and this puts it on the spare row
+                // under the last full one rather than opening a phantom column.
+                (g, breaks.partition_point(|&b| b <= g).saturating_sub(1))
+            }
+        };
+        let first = breaks.get(index_in_line).copied().unwrap_or(0);
+        Position {
+            line,
+            index_in_line,
+            slot: g - first,
+            slot_in_line: g,
+        }
+    }
+
+    /// The largest slot the caret may occupy in the `index`-th 縱: the spare
+    /// row for the end-of-line caret in the 縱 that holds the line's last
+    /// character, the last row in every other.
+    fn max_slot(&self, index: usize) -> usize {
+        let (first, last) = self.span(index);
+        let ends_the_line = match &self.turned {
+            Some(turned) => index == turned.tail,
+            None => index + 1 >= self.breaks.len(),
+        };
+        match (ends_the_line, &self.turned) {
+            (true, Some(_)) => last - first,
+            (true, None) => self.slots.len().saturating_sub(first),
+            (false, _) => (last - first).saturating_sub(1),
+        }
+    }
+
+    /// The column a caret wanting row `slot` of the `index`-th 縱 lands on.
+    ///
+    /// Warning: **On a turned row, never a character of another 縱.** A
+    /// padding slot or a wall copy stands for no character, and the column it
+    /// is anchored at belongs to a slot that may be in another 縱 of the row —
+    /// a motion that went there would land in a 縱 it did not ask for, and the
+    /// next step from there would ask again from the wrong place and stall.
+    /// So it lands on the nearest character in this same 縱: in the same band
+    /// first, above and then below, and anywhere in the 縱 after that. Every
+    /// 縱 of the row holds one ([`turned_row`] keeps it so).
+    fn char_at(&self, index: usize, slot: usize) -> usize {
+        let slots = &self.slots;
+        let (first, last) = self.span(index);
+        let Some(turned) = &self.turned else {
+            return match slots.get(first + slot) {
+                Some(row) => row.start,
+                // Past the last slot: the end-of-paragraph caret.
+                None => slots.last().map_or(0, |s| s.end),
+            };
+        };
+        if first + slot >= last && index == turned.tail {
+            return turned.end;
+        }
+        let g = (first + slot).min(last.saturating_sub(1)).max(first);
+        let Some(here) = slots.get(g) else { return 0 };
+        let land = |i: usize| turned.landing.get(i).copied().unwrap_or(slots[i].start);
+        if holds_text(here) {
+            return land(g);
+        }
+        let band = turned.stretch.get(g).copied().unwrap_or(WALL);
+        let same = |i: &usize| band != WALL && turned.stretch.get(*i) == Some(&band);
+        let text = |i: &usize| holds_text(&slots[*i]);
+        (first..g)
+            .rev()
+            .take_while(same)
+            .find(text)
+            .or_else(|| (g + 1..last).take_while(same).find(text))
+            .or_else(|| (first..g).rev().find(text))
+            .or_else(|| (g + 1..last).find(text))
+            .map_or(here.start, land)
+    }
+
+    /// The column a click on row `slot` of the `index`-th 縱 lands on: what
+    /// was drawn there, or after the 縱's last character below it — and on a
+    /// turned row laid out of order, where a motion to that row would go.
+    fn click(&self, index: usize, slot: usize) -> usize {
+        if self.turned.is_some() {
+            return self.char_at(index, slot.min(self.max_slot(index)));
+        }
+        let (first, last) = self.span(index);
+        let own = &self.slots[first..last];
+        match own.get(slot) {
+            Some(row) => row.start,
+            None => own.last().map_or(0, |row| row.end),
+        }
+    }
+}
 
 /// How many paragraphs' worth of 縱 are kept.
 ///
@@ -1261,18 +1630,8 @@ fn line_zongs(rope: &Rope, line: usize, grid: Grid) -> Laid {
     // costs a Markdown scan of the paragraph, and asking it before the cache
     // was consulted put that scan back on every one of a page's forty 縱 —
     // which was the whole cost the memo had just removed.
-    (grid.stamp, line).hash(&mut hasher);
-    (
-        grid.zong_len,
-        grid.indent,
-        grid.hanging,
-        grid.sentences,
-        grid.tatechuyoko,
-        grid.ruby.bits(),
-        grid.readings,
-        grid.open_line == line,
-    )
-        .hash(&mut hasher);
+    (grid.stamp, line, grid.zong_len, grid.open_line == line).hash(&mut hasher);
+    grid.layout_key(&mut hasher);
     // **What is drawn is not part of that version.** The stamp names the
     // buffer and its revision, which is why what is hidden need not be hashed;
     // a candidate changes on every keystroke while the buffer does not move at
@@ -1280,10 +1639,19 @@ fn line_zongs(rope: &Rope, line: usize, grid: Grid) -> Laid {
     // for it is a filter over a handful of runs, not a Markdown scan, so it can
     // be asked before the cache is consulted.
     grid.drawn_on(line).hash(&mut hasher);
+    // **Nor is how deep a turned row's bands are**: that is the whole table's
+    // answer, and the stamp names this line's version only. Asked here, then,
+    // and hashed — a row of a table whose depths moved is a different row.
+    let turned = (grid.table)(line);
+    let bands = match turned {
+        true => grid.bands.bands(line, grid.zong_len),
+        false => None,
+    };
+    (turned, bands.as_deref()).hash(&mut hasher);
     let hash = hasher.finish();
     if grid.stamp == 0 {
         let hidden = (grid.hidden)(line);
-        return lay_out(rope, line, grid, &hidden);
+        return lay_out(rope, line, grid, &hidden, turned, bands.as_deref());
     }
     if let Some(answer) = ZONGS.with(|cache| {
         let mut cache = cache.borrow_mut();
@@ -1296,7 +1664,7 @@ fn line_zongs(rope: &Rope, line: usize, grid: Grid) -> Laid {
         return answer;
     }
     let hidden = (grid.hidden)(line);
-    let laid = lay_out(rope, line, grid, &hidden);
+    let laid = lay_out(rope, line, grid, &hidden, turned, bands.as_deref());
     ZONGS.with(|cache| {
         let mut cache = cache.borrow_mut();
         cache.insert(0, (hash, laid.clone()));
@@ -1305,32 +1673,364 @@ fn line_zongs(rope: &Rope, line: usize, grid: Grid) -> Laid {
     laid
 }
 
+/// Where the walls of a turned row stand: each as the slot that draws it, and
+/// the column of its `|` in the line.
+///
+/// The walls `mdtable` reads — so `\|` is a character of its cell — and only
+/// where the page really draws that pipe: a slot swallows the markup hidden
+/// before it, so the pipe is looked for anywhere in the slot, and the slot
+/// must show it.
+fn walls_of(text: &str, slots: &[Slot], forms: Forms) -> Vec<(usize, usize)> {
+    let bar = rotate("|", forms);
+    let mut walls: Vec<(usize, usize)> = crate::mdtable::pipes_from(text, false)
+        .into_iter()
+        .filter_map(|col| {
+            let at = slots.iter().position(|s| !s.is_drawn() && s.start <= col && col < s.end)?;
+            (slots[at].text == bar).then_some((at, col))
+        })
+        .collect();
+    walls.dedup_by_key(|&mut (at, _)| at);
+    walls
+}
+
+/// The stretches of a row between its walls, as slot ranges: before the first
+/// wall, between each two, and after the last.
+///
+/// A row is only turned when it opens with a wall
+/// (`Editor::line_is_table_row`), so the first stretch never holds a cell
+/// and the `n`-th column is always stretch `n + 1`.
+fn stretches(walls: &[(usize, usize)], total: usize) -> Vec<std::ops::Range<usize>> {
+    let mut out = Vec::with_capacity(walls.len() + 1);
+    let mut from = 0;
+    for &(at, _) in walls {
+        out.push(from..at);
+        from = at + 1;
+    }
+    out.push(from..total);
+    out
+}
+
+/// **The runs of a stretch that are never parted**: each character of the
+/// file with whatever stands for no character beside it — a drawn footnote
+/// mark, the space a tab opens, a reading's padding rows — gathered onto the
+/// character after it, or onto the last one when nothing follows.
+///
+/// A band breaks only between these, so every piece of it holds a character:
+/// a 縱 of nothing but drawn slots would be one the caret could never stand
+/// in, and the keys would stall on the 縱 beside it. A stretch with no
+/// character at all is one run.
+///
+/// What the writer is typing and what a diff marks stand alone, one slot to
+/// a run: they come and go without the table changing, so no band is made
+/// deep enough to keep them with a character, and while one stands in a row
+/// it may have a 縱 of its own.
+fn units(run: &[Slot]) -> Vec<std::ops::Range<usize>> {
+    let mut out: Vec<std::ops::Range<usize>> = Vec::new();
+    let mut from = 0;
+    for (i, slot) in run.iter().enumerate() {
+        // What does not count toward a band's depth is not the table's to
+        // keep with a character: grouped, it could make a run longer than
+        // the band, and a piece deeper than its band drops its 縱's walls.
+        if !counts_toward_depth(slot) {
+            if from < i {
+                match out.last_mut() {
+                    Some(last) if last.end == from => last.end = i,
+                    _ => out.push(from..i),
+                }
+            }
+            out.push(i..i + 1);
+            from = i + 1;
+            continue;
+        }
+        if holds_text(slot) {
+            out.push(from..i + 1);
+            from = i + 1;
+        }
+    }
+    if from < run.len() {
+        match out.last_mut() {
+            Some(last) => last.end = run.len(),
+            None => out.push(from..run.len()),
+        }
+    }
+    out
+}
+
+/// Whether a slot counts toward how deep its band is: everything the page
+/// draws as the table's own, and not what the writer is typing or what a
+/// diff marks — those come and go without the table changing, and a band
+/// that deepened under them would redraw every row of it.
+fn counts_toward_depth(slot: &Slot) -> bool {
+    !matches!(slot.ink, Some(crate::drawn::Ink::Typed | crate::drawn::Ink::DiffBreak))
+}
+
+/// One row's stretches as the page lays them out: how many slots each takes,
+/// and the longest run in each that cannot be parted ([`units`]).
+fn row_bands(rope: &Rope, line: usize, grid: Grid) -> (Vec<usize>, Vec<usize>) {
+    let hidden = (grid.hidden)(line);
+    let slots = line_grid_in(rope, line, grid, &hidden);
+    let text = line_text(rope, line);
+    let walls = walls_of(&text, &slots, grid.forms);
+    stretches(&walls, slots.len())
+        .into_iter()
+        .map(|r| {
+            let run = &slots[r];
+            let count = |s: &[Slot]| s.iter().filter(|s| counts_toward_depth(s)).count();
+            let least = units(run).into_iter().map(|u| count(&run[u])).max().unwrap_or(0);
+            (count(run), least)
+        })
+        .unzip()
+}
+
+/// **The bands of a turned table**, measured from its `rows` for 縱 of `room`
+/// slots — the one place they are worked out.
+///
+/// Each band's natural depth is the most slots any row's cell in that column
+/// takes as the page lays it out: a hung 句讀 shares its character's slot, a
+/// reading may open more, a drawn footnote mark takes the slots it is drawn
+/// in. Counted any other way the bands come out deeper or shallower than the
+/// rows they were measured for. [`band_depths`] then shares the room out.
+/// `aligns` are the table's columns, from its rule row.
+pub fn table_bands(
+    rope: &Rope,
+    rows: impl Iterator<Item = usize>,
+    grid: Grid,
+    room: usize,
+    aligns: &[crate::mdtable::Align],
+) -> TableBands {
+    let mut natural: Vec<usize> = Vec::new();
+    let mut least: Vec<usize> = Vec::new();
+    for row in rows {
+        let (lengths, parts) = row_bands(rope, row, grid);
+        if natural.len() < lengths.len() {
+            natural.resize(lengths.len(), 0);
+            least.resize(lengths.len(), 0);
+        }
+        for (i, (n, l)) in lengths.into_iter().zip(parts).enumerate() {
+            natural[i] = natural[i].max(n);
+            least[i] = least[i].max(l);
+        }
+    }
+    let depths = band_depths(&natural, &least, room);
+    // The stretch before a row's first wall has no column ([`stretches`]).
+    let aligns = std::iter::once(crate::mdtable::Align::Plain)
+        .chain(aligns.iter().copied())
+        .chain(std::iter::repeat(crate::mdtable::Align::Plain))
+        .take(depths.len())
+        .collect();
+    TableBands { depths, aligns }
+}
+
+/// Break one stretch of a turned row into the pieces its band holds, `depth`
+/// slots at most: the page's own breaker (禁則 and all) says where, and the
+/// break is then moved back to the nearest place between two [`units`].
+///
+/// A run longer than the band is kept whole, the one way a piece is deeper
+/// than its band — [`band_depths`] gives no band less than its longest run
+/// while the room allows.
+fn pieces(
+    chars: &[char],
+    run: &[Slot],
+    depth: usize,
+    groups: &[crate::ruby::Ruby],
+    hidden: &[(usize, usize)],
+) -> Vec<std::ops::Range<usize>> {
+    let between: Vec<usize> = units(run).iter().map(|u| u.end).collect();
+    let mut out = Vec::new();
+    let mut at = 0;
+    while at < run.len() {
+        if at + depth >= run.len() {
+            out.push(at..run.len());
+            break;
+        }
+        // One step of the breaker, from here: it looks no further than the
+        // band and the slot after it.
+        let window = &run[at..at + depth + 1];
+        let cut = at + zong_breaks(chars, window, depth, groups, hidden, false).get(1).copied().unwrap_or(depth);
+        let to = between
+            .iter()
+            .rev()
+            .copied()
+            .find(|&b| b <= cut && b > at)
+            .or_else(|| between.iter().copied().find(|&b| b > at))
+            .unwrap_or(run.len());
+        out.push(at..to);
+        at = to;
+    }
+    out
+}
+
 /// Lay one paragraph out: its rows, and where its 縱 begin.
-fn lay_out(rope: &Rope, line: usize, grid: Grid, hidden: &[(usize, usize)]) -> Laid {
+fn lay_out(
+    rope: &Rope,
+    line: usize,
+    grid: Grid,
+    hidden: &[(usize, usize)],
+    turned: bool,
+    bands: Option<&TableBands>,
+) -> Laid {
     LAID_OUT.with(|n| n.set(n.get() + 1));
     let slots = line_grid_in(rope, line, grid, hidden);
     let text = line_text(rope, line);
     let chars: Vec<char> = text.chars().collect();
     let groups = crate::ruby::groups(&chars, grid.ruby);
-    // **A table row is one 縱, however long**: a table does not wrap in
-    // 竪排 either.
-    //
-    // Turning a grid a quarter turn is the whole of what 竪排 does to a table
-    // — a row becomes a 縱, a column becomes a band down it, and every
-    // character still stands where its own character stood. **Wrapping breaks
-    // exactly that**: the tail of a row lands in a 縱 of its own, beside the
-    // next row, and the grid is gone. The cells are already squared up by the
-    // padding `mdtable` puts in, so a row is as deep as the table is wide and
-    // that is the honest size of it.
+    // **A table row is never wrapped as prose is**: the tail of a row would
+    // land in a 縱 of its own, beside the next row, and the grid would be
+    // gone. Its bands are laid out instead — see [`turned_row`].
+    if let (true, Some(bands)) = (turned, bands) {
+        return turned_row(&text, &chars, slots, bands, grid, &groups, hidden);
+    }
+    // A turned row with no table measured for it is one 縱, however long.
     //
     // Warning: The length is the whole row, not `usize::MAX`: the breaker asks
     // `at + zong_len >= total`, and that overflows.
-    let zong_len = match (grid.table)(line) {
+    let zong_len = match turned {
         true => slots.len().max(1),
         false => grid.zong_len.max(1),
     };
     let breaks = zong_breaks(&chars, &slots, zong_len, &groups, hidden, grid.sentences);
-    (std::rc::Rc::new(slots), std::rc::Rc::new(breaks))
+    Laid {
+        slots: std::rc::Rc::new(slots),
+        breaks: std::rc::Rc::new(breaks),
+        turned: None,
+    }
+}
+
+/// **A turned table row, laid out in its bands** — the one function that
+/// decides where each slot of such a row stands.
+///
+/// Turning a table a quarter turn is the whole of what 竪排 does to it: a row
+/// becomes a 縱, a column becomes a band down it, and the walls turn with
+/// them. Each band is as deep as [`TableBands`] says, the same in every row,
+/// so the walls line up across the table.
+///
+/// **A cell longer than its band wraps inside it** ([`pieces`]), and piece `j`
+/// of every band goes in the row's `j`-th 縱. Every one of those 縱 carries
+/// every wall, at the same depth, so a row two 縱 wide is still one row of
+/// the grid: its bands are as deep as the next row's, and its walls run on
+/// into the 縱 beside it. Each such 縱 is an ordinary 縱 of the page —
+/// placed, scrolled and counted as any other — and each holds at least one
+/// character: the first holds the walls, and a later one exists only because
+/// some band has a piece in it, and every piece has a character.
+///
+/// A band is filled out to its depth with padding the row lays out itself —
+/// blank, or the wall's own dash on the rule row — set where the column's
+/// alignment says. In the 縱 after the first, a wall is a copy of the row's
+/// own `|` ([`crate::drawn::Ink::Wall`]).
+///
+/// Laid in several 縱 the row's slots are in display order, and [`Turned`]
+/// is kept beside them so a character can still be found.
+fn turned_row(
+    text: &str,
+    chars: &[char],
+    slots: Vec<Slot>,
+    bands: &TableBands,
+    grid: Grid,
+    groups: &[crate::ruby::Ruby],
+    hidden: &[(usize, usize)],
+) -> Laid {
+    let walls = walls_of(text, &slots, grid.forms);
+    let stretches = stretches(&walls, slots.len());
+    let depth = |s: usize| bands.depths.get(s).copied().unwrap_or(0);
+    let cuts: Vec<Vec<std::ops::Range<usize>>> = stretches
+        .iter()
+        .enumerate()
+        .map(|(s, r)| {
+            let run = &slots[r.clone()];
+            if run.is_empty() {
+                return Vec::new();
+            }
+            // A band measured at nothing that holds something anyway — what
+            // the writer is typing — is not broken at all.
+            let measure = match depth(s) {
+                0 => run.len(),
+                d => d,
+            };
+            pieces(chars, run, measure, groups, hidden)
+                .into_iter()
+                .map(|p| r.start + p.start..r.start + p.end)
+                .collect()
+        })
+        .collect();
+    let wide = cuts.iter().map(Vec::len).max().unwrap_or(1).max(1);
+    let fill = rotate(
+        match crate::mdtable::rule_of(text).is_some() {
+            true => "-",
+            false => " ",
+        },
+        grid.forms,
+    );
+    let pad = |at: usize| Slot {
+        start: at,
+        end: at,
+        text: fill.clone(),
+        ruby: None,
+        mark: None,
+        ink: Some(crate::drawn::Ink::Padding),
+    };
+    let mut laid: Vec<Slot> = Vec::with_capacity(slots.len() + wide * (walls.len() + bands.depths.iter().sum::<usize>()));
+    let mut stretch: Vec<usize> = Vec::with_capacity(laid.capacity());
+    let mut breaks = Vec::with_capacity(wide);
+    for j in 0..wide {
+        breaks.push(laid.len());
+        for (s, r) in stretches.iter().enumerate() {
+            let piece = cuts[s].get(j).cloned().unwrap_or(r.end..r.end);
+            let wall = walls.get(s);
+            // A stretch with no wall after it is padded against nothing: the
+            // last cell of a row written without its closing pipe.
+            let short = match wall {
+                Some(_) => depth(s).saturating_sub(piece.len()),
+                None => 0,
+            };
+            let (before, after) = match bands.aligns.get(s).copied().unwrap_or_default() {
+                crate::mdtable::Align::Right => (short, 0),
+                crate::mdtable::Align::Center => (short / 2, short - short / 2),
+                _ => (0, short),
+            };
+            // Anchored where the file has the characters each run of padding
+            // stands between, so a row laid in one 縱 stays in file order.
+            let opens = slots.get(piece.start).filter(|_| !piece.is_empty());
+            let closes = wall.map(|&(at, _)| slots[at].start);
+            let lead = opens.map(|s| s.start).or(closes).unwrap_or(0);
+            let tail = closes.unwrap_or(lead);
+            for _ in 0..before {
+                laid.push(pad(lead));
+                stretch.push(s);
+            }
+            laid.extend(slots[piece.clone()].iter().cloned());
+            stretch.extend(std::iter::repeat_n(s, piece.len()));
+            for _ in 0..after {
+                laid.push(pad(tail));
+                stretch.push(s);
+            }
+            // The wall itself; in the 縱 after the first, a copy standing
+            // over the row's own `|`, so it is painted as that `|` is.
+            if let Some(&(at, col)) = wall {
+                laid.push(match j {
+                    0 => slots[at].clone(),
+                    _ => Slot {
+                        start: col,
+                        end: col + 1,
+                        text: slots[at].text.clone(),
+                        ruby: None,
+                        mark: None,
+                        ink: Some(crate::drawn::Ink::Wall),
+                    },
+                });
+                stretch.push(WALL);
+            }
+        }
+    }
+    let end = slots.iter().filter(|s| holds_text(s)).map(|s| s.end).max().unwrap_or(0);
+    let last = laid.iter().position(|s| holds_text(s) && s.end == end).unwrap_or(0);
+    let tail = breaks.partition_point(|&b| b <= last).saturating_sub(1);
+    let off = |at: usize| hidden.iter().any(|&(a, b)| a <= at && at < b);
+    let landing = laid.iter().map(|s| (s.start..s.end).find(|&at| !off(at)).unwrap_or(s.start)).collect();
+    Laid {
+        slots: std::rc::Rc::new(laid),
+        breaks: std::rc::Rc::new(breaks),
+        turned: Some(std::rc::Rc::new(Turned { stretch, landing, tail, end })),
+    }
 }
 
 /// Where the `index`-th 縱 of a line begins and ends, in slots.
@@ -1368,7 +2068,7 @@ pub fn zong_rows(text: &str, zong_len: usize) -> Vec<String> {
 /// How many 縱 the logical `line` wraps into (always at least one, so an empty
 /// paragraph still occupies a column).
 pub fn zong_count_in_line(rope: &Rope, line: usize, grid: Grid) -> usize {
-    line_zongs(rope, line, grid).1.len()
+    line_zongs(rope, line, grid).breaks.len()
 }
 
 /// The rows `line` draws as, under `grid`.
@@ -1394,33 +2094,7 @@ fn line_grid_in(rope: &Rope, line: usize, grid: Grid, hidden: &[(usize, usize)])
 pub fn position(rope: &Rope, pos: usize, grid: Grid) -> Position {
     let line = rope.char_to_line(pos.min(rope.len_chars()));
     let start = rope.line_to_char(line);
-    let (slots, breaks) = line_zongs(rope, line, grid);
-    let total = slots.len();
-
-    // Which slot the cursor sits in (or `total`, past the last one). A slot may
-    // span several characters — a 緃中横 pair, or a whole ruby group's markup —
-    // so this is the last one that *starts* at or before the cursor, not the
-    // first one that reaches it.
-    let col = pos.saturating_sub(start);
-    let g = if slots.last().is_some_and(|s| col >= s.end) {
-        total
-    } else {
-        slots.partition_point(|s| s.start <= col).saturating_sub(1)
-    };
-
-    // Which 縱 holds it: the last one that starts at or before this slot. A
-    // paragraph whose length is an exact multiple of the wrap length has no
-    // further 縱 to hold the end-of-paragraph caret, and this puts it on the
-    // spare row under the last full one rather than opening a phantom column.
-    let index_in_line = breaks.partition_point(|&b| b <= g).saturating_sub(1);
-    let first = breaks.get(index_in_line).copied().unwrap_or(0);
-    let slot = g - first;
-    Position {
-        line,
-        index_in_line,
-        slot,
-        slot_in_line: g,
-    }
+    line_zongs(rope, line, grid).position(line, pos.saturating_sub(start))
 }
 
 /// The slot the cursor occupies within its 縱 — the "goal slot" preserved when
@@ -1432,26 +2106,22 @@ pub fn slot_of(rope: &Rope, pos: usize, grid: Grid) -> usize {
 /// The largest slot the caret may occupy in a given 縱. The last 縱 of a
 /// paragraph has one extra slot for the end-of-paragraph caret.
 fn max_slot(rope: &Rope, line: usize, index_in_line: usize, grid: Grid) -> usize {
-    let (slots, breaks) = line_zongs(rope, line, grid);
-    let total = slots.len();
-    let (first, last) = zong_span(&breaks, total, index_in_line);
-    if index_in_line + 1 >= breaks.len() {
-        total.saturating_sub(first)
-    } else {
-        (last - first).saturating_sub(1)
-    }
+    line_zongs(rope, line, grid).max_slot(index_in_line)
 }
 
 /// The char index of `slot` in the `index_in_line`-th 縱 of `line`.
 fn char_at(rope: &Rope, line: usize, index_in_line: usize, slot: usize, grid: Grid) -> usize {
-    let start = rope.line_to_char(line);
-    let (slots, breaks) = line_zongs(rope, line, grid);
-    let g = breaks.get(index_in_line).copied().unwrap_or(slots.len()) + slot;
-    match slots.get(g) {
-        Some(slot) => start + slot.start,
-        // Past the last slot: the end-of-paragraph caret.
-        None => start + slots.last().map_or(0, |s| s.end),
-    }
+    rope.line_to_char(line) + line_zongs(rope, line, grid).char_at(index_in_line, slot)
+}
+
+/// **The character a click on row `slot` of `zong` lands on.**
+///
+/// Past the 縱's last row the caret sits after its last character. On a
+/// turned row laid out of file order, a click on padding or a wall copy goes
+/// where a motion to that row would go, so the mouse and the keys cannot
+/// disagree about which character a row stands for.
+pub fn char_in(rope: &Rope, zong: &Zong, slot: usize, grid: Grid) -> usize {
+    rope.line_to_char(zong.line) + line_zongs(rope, zong.line, grid).click(zong.index_in_line, slot)
 }
 
 /// The char index of `slot` in the 縱 at `at`, or of its last slot when
@@ -1602,21 +2272,9 @@ pub fn zongs_from(rope: &Rope, anchor: Anchor, grid: Grid, n: usize) -> Vec<Zong
             continue;
         }
         let start = rope.line_to_char(line);
-        let (slots, breaks) = line_zongs(rope, line, grid);
-        let total = slots.len();
-        while index < breaks.len() && zongs.len() < n {
-            let (first, last) = zong_span(&breaks, total, index);
-            zongs.push(Zong {
-                line,
-                index_in_line: index,
-                start: start + slots.get(first).map_or(0, |s| s.start),
-                end: start
-                    + last
-                        .checked_sub(1)
-                        .and_then(|i| slots.get(i))
-                        .map_or(0, |s| s.end),
-                slots: last - first,
-            });
+        let laid = line_zongs(rope, line, grid);
+        while index < laid.breaks.len() && zongs.len() < n {
+            zongs.push(laid.zong(line, start, index));
             index += 1;
         }
         line += 1;
@@ -1691,21 +2349,9 @@ pub fn layout(rope: &Rope, grid: Grid) -> Vec<Zong> {
     let mut zongs = Vec::new();
     for line in 0..line_count(rope) {
         let start = rope.line_to_char(line);
-        let (slots, breaks) = line_zongs(rope, line, grid);
-        let total = slots.len();
-        for index_in_line in 0..breaks.len() {
-            let (first, last) = zong_span(&breaks, total, index_in_line);
-            zongs.push(Zong {
-                line,
-                index_in_line,
-                start: start + slots.get(first).map_or(0, |s| s.start),
-                end: start
-                    + last
-                        .checked_sub(1)
-                        .and_then(|i| slots.get(i))
-                        .map_or(0, |s| s.end),
-                slots: last - first,
-            });
+        let laid = line_zongs(rope, line, grid);
+        for index_in_line in 0..laid.breaks.len() {
+            zongs.push(laid.zong(line, start, index_in_line));
         }
     }
     zongs
@@ -1717,26 +2363,82 @@ pub fn layout(rope: &Rope, grid: Grid) -> Vec<Zong> {
 /// because a ruby group must not be re-parsed from a slice that might cut it in
 /// half at a 縱 boundary.
 pub fn zong_slots(rope: &Rope, zong: &Zong, grid: Grid) -> Vec<Slot> {
-    let (slots, breaks) = line_zongs(rope, zong.line, grid);
-    let (first, last) = zong_span(&breaks, slots.len(), zong.index_in_line);
+    let laid = line_zongs(rope, zong.line, grid);
+    let (first, last) = laid.span(zong.index_in_line);
     if first >= last {
         return Vec::new();
     }
     // One 縱's worth, not the paragraph's: what the caller draws is a column,
     // and the paragraph behind it stays shared.
-    slots[first..last].to_vec()
+    laid.slots[first..last].to_vec()
 }
 
-/// The index into [`layout`] of the 縱 holding char index `pos`.
+/// **What a page of `zongs` spans**: from the first one's start to the last
+/// one's end — the range a frame hands the editor as the page it drew.
 ///
-/// A cursor resting on a line break belongs to the last 縱 of the line it ends,
-/// which is what "the last 縱 that starts at or before `pos`" gives.
-pub fn zong_index(zongs: &[Zong], pos: usize) -> usize {
-    match zongs.binary_search_by(|z| z.start.cmp(&pos)) {
-        Ok(i) => i,
-        Err(0) => 0,
-        Err(i) => i - 1,
+/// The last 縱's own end, not the furthest any reaches: the 縱 of a wrapped
+/// table row overlap, and a row cut by the page's edge reaches past it. Each
+/// 縱 of a line ends at a different character, so this end names the page's
+/// last 縱 — which is what [`page_of`] reads it back as.
+pub fn span_of(zongs: &[Zong]) -> Option<(usize, usize)> {
+    Some((zongs.first()?.start, zongs.last()?.end))
+}
+
+/// **The 縱 a page spanning `span` holds**, at most `limit` of them — the
+/// inverse of [`span_of`].
+///
+/// From the 縱 holding the span's first character to the one ending where
+/// the span ends: counted by which 縱 they are, not by how far each reaches,
+/// so a wrapped table row — whose first 縱 spans the whole row — is not taken
+/// for the end of the page.
+pub fn page_of(rope: &Rope, (from, to): (usize, usize), grid: Grid, limit: usize) -> Vec<Zong> {
+    let first = Anchor::from(position(rope, from, grid));
+    let mut page = zongs_from(rope, first, grid, limit);
+    let last = page
+        .iter()
+        .position(|z| z.end == to)
+        .or_else(|| page.iter().position(|z| z.end >= to));
+    if let Some(last) = last {
+        page.truncate(last + 1);
     }
+    page
+}
+
+/// **The characters `zongs` really draw**, as ranges in file order.
+///
+/// A 縱's range is all of it for prose; for a turned table row laid in
+/// several 縱 it is not — such a 縱 holds a piece of every band, and the
+/// characters between are in its neighbours — so there each character's own
+/// slot is asked. What reads a page for its words (`gw`, the seek, the
+/// selection's copies) reads it through this, or it would reach characters
+/// that are not on the screen.
+pub fn chars_drawn(rope: &Rope, zongs: &[Zong], grid: Grid) -> Vec<(usize, usize)> {
+    let mut out: Vec<(usize, usize)> = Vec::new();
+    for z in zongs {
+        let laid = line_zongs(rope, z.line, grid);
+        match laid.turned.is_some() {
+            false => out.push((z.start, z.end)),
+            true => {
+                let start = rope.line_to_char(z.line);
+                let (first, last) = laid.span(z.index_in_line);
+                out.extend(
+                    laid.slots[first..last]
+                        .iter()
+                        .filter(|s| holds_text(s))
+                        .map(|s| (start + s.start, start + s.end)),
+                );
+            }
+        }
+    }
+    out.sort_unstable();
+    let mut merged: Vec<(usize, usize)> = Vec::with_capacity(out.len());
+    for (a, b) in out {
+        match merged.last_mut() {
+            Some(last) if a <= last.1 => last.1 = last.1.max(b),
+            _ => merged.push((a, b)),
+        }
+    }
+    merged
 }
 
 /// Split `text` into what each slot draws, punctuation already rotated.
@@ -1900,7 +2602,7 @@ mod tests {
     /// Readings written in HTML, the dialect the Yuhao documents use.
     const HTML_ONLY: Dialects = Dialects(1 << (crate::ruby::Dialect::Html as u8));
 
-    const G: Grid = Grid {
+    pub(super) const G: Grid = Grid {
         // No stamp: a grid built by hand remembers nothing, because without one
         // two different documents look the same to the memo's key.
         stamp: 0,
@@ -1914,25 +2616,26 @@ mod tests {
         hidden: NOTHING_HIDDEN,
         folded: NOTHING_FOLDED,
         table: NOTHING_TURNED,
+        bands: NOTHING_MEASURED,
         drawn: NOTHING_DRAWN,
         indent: 0,
         open_line: usize::MAX,
     };
 
     /// Readings laid out, so the ruby tests exercise the layout.
-    const RUBY: Grid = Grid {
+    pub(super) const RUBY: Grid = Grid {
         ruby: HTML_ONLY,
         ..G
     };
 
     /// Half-width pairs packed at the classic setting, for the 緃中横 tests.
-    const PACKED: Grid = Grid {
+    pub(super) const PACKED: Grid = Grid {
         tatechuyoko: TATECHUYOKO_CLASSIC,
         ..G
     };
 
     /// Packed as far as yumete will go, where a group hangs into the 行間.
-    const PACKED_LONG: Grid = Grid {
+    pub(super) const PACKED_LONG: Grid = Grid {
         tatechuyoko: TATECHUYOKO_MAX,
         ..G
     };
@@ -2223,7 +2926,6 @@ mod tests {
         assert_eq!(zongs[1].slots, 0);
 
         let end = r.len_chars();
-        assert_eq!(zong_index(&zongs, end), 1);
         let p = position(&r, end, G);
         assert_eq!((p.line, p.index_in_line, p.slot), (1, 0, 0));
 
@@ -2358,18 +3060,6 @@ mod tests {
             );
             assert_eq!(retreat(&r, anchor, G, skip), Anchor::default());
         }
-    }
-
-    #[test]
-    fn zong_index_finds_the_column_holding_a_position() {
-        let r = rope(&format!("{}\n{}", "字".repeat(70), "文".repeat(5)));
-        let zongs = layout(&r, G);
-        assert_eq!(zong_index(&zongs, 0), 0);
-        assert_eq!(zong_index(&zongs, 35), 1);
-        assert_eq!(zong_index(&zongs, 65), 2);
-        // The line break at char 70 belongs to the paragraph it ends.
-        assert_eq!(zong_index(&zongs, 70), 2);
-        assert_eq!(zong_index(&zongs, 71), 3);
     }
 
     #[test]
@@ -3332,5 +4022,391 @@ mod forms_tests {
         assert_eq!(texts(Forms::Source), ["他", "说", "：", "“", "走", "。", "”"]);
         assert_eq!(texts(Forms::Marks), ["他", "说", "︓", "“", "走", "︒", "”"]);
         assert_eq!(texts(Forms::Quotes), ["他", "说", "︓", "﹃", "走", "︒", "﹄"]);
+    }
+}
+
+#[cfg(test)]
+mod turned_tables {
+    use super::tests::{G, PACKED, PACKED_LONG, RUBY};
+    use super::*;
+    use crate::drawn::{Ink, Run};
+    use crate::mdtable::Align;
+    use std::rc::Rc;
+
+    /// One table's bands, handed to every row that asks.
+    struct Measured(Rc<TableBands>);
+
+    impl Bands for Measured {
+        fn bands(&self, _line: usize, _room: usize) -> Option<Rc<TableBands>> {
+            Some(self.0.clone())
+        }
+    }
+
+    fn is_row(rope: &Rope, line: usize) -> bool {
+        crate::mdtable::is_row(&line_text(rope, line))
+    }
+
+    /// Lay `text` out as a turned table at `room` slots, every row of it
+    /// measured as one table with these column `aligns`, and hand the grid to
+    /// `f`. The source is written without cushions: nothing is hidden unless
+    /// `base` says so.
+    fn with_table<T>(text: &str, base: Grid, room: usize, aligns: &[Align], f: impl FnOnce(&Rope, Grid) -> T) -> T {
+        let rope = Rope::from_str(text);
+        let rows = |line: usize| is_row(&rope, line);
+        let bands = table_bands(&rope, (0..rope.len_lines()).filter(|&l| is_row(&rope, l)), base, room, aligns);
+        let measured = Measured(Rc::new(bands));
+        let grid = base.with_zong_len(room).with_turned_tables(&rows).with_bands(&measured);
+        f(&rope, grid)
+    }
+
+    /// Each row's 縱, each written as its slots: a wall `|`, blank padding
+    /// `·`, everything else as drawn.
+    fn picture(text: &str, base: Grid, room: usize, aligns: &[Align]) -> Vec<Vec<String>> {
+        with_table(text, base, room, aligns, |rope, grid| {
+            (0..rope.len_lines())
+                .filter(|&line| is_row(rope, line))
+                .map(|line| {
+                    let count = zong_count_in_line(rope, line, grid);
+                    zongs_from(rope, Anchor { line, index_in_line: 0 }, grid, count)
+                        .iter()
+                        .map(|z| {
+                            zong_slots(rope, z, grid)
+                                .iter()
+                                .map(|s| match (s.ink, s.text.as_str()) {
+                                    (Some(Ink::Padding), " ") => "·".to_string(),
+                                    (_, t) => t.to_string(),
+                                })
+                                .collect()
+                        })
+                        .collect()
+                })
+                .collect()
+        })
+    }
+
+    /// Where the walls stand in every 縱 of every row.
+    fn walls(picture: &[Vec<String>]) -> Vec<Vec<usize>> {
+        picture
+            .iter()
+            .flatten()
+            .map(|z| z.chars().enumerate().filter(|&(_, c)| c == '|').map(|(i, _)| i).collect())
+            .collect()
+    }
+
+    /// **A row that fits is one 縱**, each band filled out to the depth of
+    /// the fullest cell in that column, the rule row with its own dash.
+    #[test]
+    fn a_row_that_fits_is_one_zong_padded_to_its_bands() {
+        let table = "|甲|乙乙乙|\n|-|-|\n|一二三|四|\n";
+        assert_eq!(
+            picture(table, G, 32, &[]),
+            [vec!["|甲··|乙乙乙|"], vec!["|---|---|"], vec!["|一二三|四··|"]]
+        );
+    }
+
+    /// **A long cell wraps inside its band**, and its row takes as many 縱
+    /// as its band has pieces. Every one of them carries every wall at the
+    /// same depth, so the walls of the whole table line up and no 縱 is
+    /// deeper than the room.
+    #[test]
+    fn a_long_cell_wraps_inside_its_band() {
+        let table = "|年|事|\n|-|-|\n|一九一一|辛亥革命爆發於武昌|\n";
+        let page = picture(table, G, 10, &[]);
+        assert_eq!(
+            page,
+            [
+                vec!["|年···|事··|"],
+                vec!["|----|---|"],
+                vec!["|一九一一|辛亥革|", "|····|命爆發|", "|····|於武昌|"],
+            ]
+        );
+        let walls = walls(&page);
+        assert!(walls.iter().all(|w| *w == walls[0]), "{walls:?}");
+        assert!(page.iter().flatten().all(|z| z.chars().count() <= 10));
+    }
+
+    /// Two long bands share the room in proportion and wrap into different
+    /// numbers of pieces; a band with nothing left for a 縱 is blank there.
+    #[test]
+    fn bands_wrap_into_as_many_pieces_as_each_needs() {
+        let page = picture("|甲乙丙丁戊己庚|子丑寅卯辰巳午未申酉|\n", G, 12, &[]);
+        assert_eq!(page, [vec!["|甲乙丙|子丑寅卯辰巳|", "|丁戊己|午未申酉··|", "|庚··|······|"]]);
+    }
+
+    /// **A column's alignment holds inside a band that wraps**: each piece
+    /// is set at the band's head, middle or foot, so a right-aligned column's
+    /// short last piece sits at the foot and an empty one is all padding.
+    #[test]
+    fn a_wrapped_band_keeps_its_column_s_alignment() {
+        let table = "|年|事|\n|-|-|\n|一九一一|辛亥革命爆發於武|\n|甲|乙|\n";
+        let page = picture(table, G, 10, &[Align::Right, Align::Center]);
+        assert_eq!(
+            page,
+            [
+                vec!["|···年|·事·|"],
+                vec!["|----|---|"],
+                vec!["|一九一一|辛亥革|", "|····|命爆發|", "|····|於武·|"],
+                vec!["|···甲|·乙·|"],
+            ]
+        );
+        let page = picture(table, G, 10, &[Align::Right, Align::Right]);
+        assert_eq!(page[2][2], "|····|·於武|");
+    }
+
+    /// **A band is counted as the page lays it**: a hung 句讀 shares its
+    /// character's slot, so a cell of four 字 and two marks is four deep.
+    #[test]
+    fn hung_marks_do_not_deepen_a_band() {
+        let rope = Rope::from_str("|春|花開，鳥鳴。|\n");
+        assert_eq!(row_bands(&rope, 0, G.with_hanging(true)).0, [0, 1, 4, 0]);
+        assert_eq!(row_bands(&rope, 0, G).0, [0, 1, 6, 0]);
+        let page = picture("|春|花開，鳥鳴。|\n|夏|蟬|\n", G.with_hanging(true), 32, &[]);
+        assert_eq!(page, [vec!["|春|花開鳥鳴|"], vec!["|夏|蟬···|"]]);
+    }
+
+    /// …and so is a 緃中横 group: one slot when it is packed, a slot each
+    /// when it is too long to be.
+    #[test]
+    fn a_packed_number_is_one_slot_of_its_band() {
+        let rope = Rope::from_str("|1911|辛亥|\n");
+        assert_eq!(row_bands(&rope, 0, PACKED_LONG).0, [0, 1, 2, 0]);
+        assert_eq!(row_bands(&rope, 0, PACKED).0, [0, 4, 2, 0]);
+    }
+
+    /// A drawn footnote mark takes the slots it is drawn in and is never
+    /// parted from its character; what the writer is typing and what a diff
+    /// marks are not the table's and do not count.
+    #[test]
+    fn a_footnote_mark_counts_and_a_candidate_does_not() {
+        let rope = Rope::from_str("|春|夏|\n");
+        let runs = |_: usize| {
+            vec![
+                Run::new(1, "候", Ink::Typed),
+                Run::new(3, "⁽¹⁾", Ink::Footnote),
+                Run::new(4, "␊", Ink::DiffBreak),
+            ]
+        };
+        assert_eq!(row_bands(&rope, 0, G.with_drawn(&runs)), (vec![0, 1, 4, 0], vec![0, 1, 4, 0]));
+    }
+
+    /// **What the writer is typing never deepens a band, and never makes a
+    /// piece longer than one**: it takes a slot of its own, beside the
+    /// character it stands before rather than with it, so a squeezed band
+    /// still holds every one of its 縱 to its depth and the walls stay put.
+    #[test]
+    fn a_candidate_in_a_squeezed_band_keeps_the_walls_where_they_are() {
+        let table = "|年|事|\n|-|-|\n|一九一一|辛亥革命爆發於武昌|\n";
+        let typed = |line: usize| match line {
+            2 => vec![Run::new(7, "候補", Ink::Typed), Run::new(10, "⁽¹⁾", Ink::Footnote)],
+            _ => Vec::new(),
+        };
+        let mark = |line: usize| match line {
+            2 => vec![Run::new(10, "⁽¹⁾", Ink::Footnote)],
+            _ => Vec::new(),
+        };
+        let without = picture(table, G.with_drawn(&mark), 12, &[]);
+        let with = picture(table, G.with_drawn(&typed), 12, &[]);
+        let room = |page: &[Vec<String>]| page.iter().flatten().all(|z| z.chars().count() <= 12);
+        assert!(room(&with), "{with:?}");
+        let walls = walls(&with);
+        assert!(walls.iter().all(|w| *w == walls[0]), "{with:?}");
+        assert_eq!(walls[0], self::walls(&without)[0], "the candidate moved no wall");
+    }
+
+    /// The bands' depths, as the room is shared out.
+    #[test]
+    fn short_bands_keep_their_depth_and_long_ones_share_the_rest() {
+        let ones = [0, 1, 1, 0];
+        assert_eq!(band_depths(&[0, 4, 3, 0], &ones, 20), [0, 4, 3, 0]);
+        assert_eq!(band_depths(&[0, 4, 3, 0], &ones, 10), [0, 4, 3, 0], "walls and all, exactly the room");
+        assert_eq!(band_depths(&[0, 4, 9, 0], &ones, 10), [0, 4, 3, 0]);
+        assert_eq!(band_depths(&[0, 6, 30, 0], &ones, 20), [0, 6, 11, 0]);
+        // In proportion, and what the rounding leaves goes to the band that
+        // gave most.
+        assert_eq!(band_depths(&[0, 7, 10, 0], &ones, 12), [0, 3, 6, 0]);
+        // Still too long: every band gives way toward one slot, and below
+        // that the row runs long.
+        assert_eq!(band_depths(&[0, 20, 3, 3, 3, 0], &[0, 1, 1, 1, 1, 0], 13), [0, 2, 2, 2, 2, 0]);
+        assert_eq!(band_depths(&[0, 5, 5, 5, 0], &[0, 1, 1, 1, 0], 6), [0, 1, 1, 1, 0]);
+    }
+
+    /// No band gives way below the longest run it cannot part.
+    #[test]
+    fn a_band_keeps_room_for_its_longest_run() {
+        assert_eq!(band_depths(&[0, 6, 6, 0], &[0, 1, 4, 0], 10), [0, 3, 4, 0]);
+        assert_eq!(band_depths(&[0, 6, 6, 0], &[0, 1, 4, 0], 6), [0, 1, 4, 0], "and runs long when even that does not fit");
+    }
+
+    /// The promise, over many shapes: never deeper than wanted nor shallower
+    /// than its longest run, an empty band stays empty, and the table fits
+    /// its 縱 whenever its least does.
+    #[test]
+    fn the_bands_fit_the_room_whenever_they_can() {
+        let mut seed = 7u64;
+        let mut next = |most: u64| {
+            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            ((seed >> 33) % most) as usize
+        };
+        for _ in 0..2000 {
+            let n = 1 + next(6);
+            let natural: Vec<usize> = (0..n + 2).map(|i| if i == 0 || i == n + 1 { 0 } else { next(40) }).collect();
+            let least: Vec<usize> = natural.iter().map(|&w| if w == 0 { 0 } else { 1 + next(w as u64) }).collect();
+            let room = next(60);
+            let depths = band_depths(&natural, &least, room);
+            assert_eq!(depths.len(), natural.len());
+            for ((d, n), l) in depths.iter().zip(&natural).zip(&least) {
+                assert!(d <= n && d >= l, "{natural:?} {least:?} {room}: {depths:?}");
+            }
+            let walls = natural.len() - 1;
+            if least.iter().sum::<usize>() + walls <= room {
+                assert!(depths.iter().sum::<usize>() + walls <= room, "{natural:?} {least:?} {room}: {depths:?}");
+            }
+        }
+    }
+
+    /// **The cursor can neither get lost in a wrapped row nor stall in it.**
+    ///
+    /// Every character is found in a 縱 that holds it, inside that 縱's range;
+    /// every 縱 holds a character; every row of every 縱 a motion can ask for
+    /// lands in that same 縱 — padding and wall copies included — and
+    /// `next_zong`/`prev_zong` walk the row's 縱 one by one, whatever slot
+    /// they aim for.
+    fn walkable(text: &str, base: Grid, room: usize) {
+        with_table(text, base, room, &[], |rope, grid| {
+            let mut every = Vec::new();
+            for line in 0..rope.len_lines() {
+                let start = rope.line_to_char(line);
+                let count = zong_count_in_line(rope, line, grid);
+                let zongs = zongs_from(rope, Anchor { line, index_in_line: 0 }, grid, count);
+                for col in 0..line_text(rope, line).chars().count() {
+                    let p = position(rope, start + col, grid);
+                    assert_eq!(p.line, line);
+                    let z = zongs[p.index_in_line];
+                    let row = &zong_slots(rope, &z, grid)[p.slot];
+                    assert!(!row.is_drawn() && row.start <= col && col < row.end, "{text:?} line {line} col {col}: {row:?}");
+                    assert!(z.start <= start + col && start + col < z.end, "{text:?} line {line} col {col}: {z:?}");
+                }
+                for (j, z) in zongs.iter().enumerate() {
+                    every.push((line, j));
+                    if line + 1 < rope.len_lines() {
+                        assert!(z.start < z.end, "{text:?} line {line} 縱 {j} holds no character");
+                    }
+                    assert_eq!(position(rope, z.start, grid).index_in_line, j, "{text:?} line {line}: {z:?}");
+                    for slot in 0..=z.slots {
+                        let at = at_slot(rope, Anchor { line, index_in_line: j }, slot, grid);
+                        assert_eq!(position(rope, at, grid).index_in_line, j, "{text:?} line {line} 縱 {j} slot {slot}");
+                    }
+                }
+            }
+            for goal in [0, 2, 5, 9] {
+                let mut at = 0;
+                let mut walked = vec![(0, 0)];
+                loop {
+                    let next = next_zong(rope, at, grid, goal);
+                    if next == at {
+                        break;
+                    }
+                    at = next;
+                    let p = position(rope, at, grid);
+                    walked.push((p.line, p.index_in_line));
+                }
+                assert_eq!(walked, every, "{text:?} onward, aiming at slot {goal}");
+                let mut back = vec![*walked.last().unwrap()];
+                loop {
+                    let next = prev_zong(rope, at, grid, goal);
+                    if next == at {
+                        break;
+                    }
+                    at = next;
+                    let p = position(rope, at, grid);
+                    back.push((p.line, p.index_in_line));
+                }
+                back.reverse();
+                assert_eq!(back, every, "{text:?} back, aiming at slot {goal}");
+            }
+        });
+    }
+
+    #[test]
+    fn the_cursor_finds_every_character_and_never_stalls() {
+        walkable("|年|事|\n|-|-|\n|一九一一|辛亥革命爆發於武昌|\n|一九一二|民國|\n|甲乙丙丁戊己庚|子丑寅卯辰巳午未申酉|\n", G, 10);
+        // The end-of-line caret sits on the spare row past the closing wall,
+        // in the row's first 縱.
+        with_table("|一九一一|辛亥革命爆發於武昌|\n", G, 8, &[], |rope, grid| {
+            let end = position(rope, line_text(rope, 0).chars().count(), grid);
+            let first = zongs_from(rope, Anchor { line: 0, index_in_line: 0 }, grid, 1)[0];
+            assert_eq!((end.index_in_line, end.slot), (0, first.slots));
+        });
+    }
+
+    /// **Nothing that stands for no character is parted from one**, so no 縱
+    /// of a wrapped row is drawn slots alone: the space a tab opens, a drawn
+    /// footnote mark and a reading's padding rows each stay with their
+    /// character, and every 縱 still has somewhere for the caret to stand.
+    #[test]
+    fn a_tab_a_footnote_mark_and_a_reading_stay_with_their_characters() {
+        let tabs = |_: usize| vec![Run::new(8, "   ", Ink::Tab), Run::new(9, "   ", Ink::Tab)];
+        walkable("|甲|乙|丙|丁|\n|-|-|-|-|\n|天|洪|辰|暑\t\t往|\n", G.with_drawn(&tabs), 12);
+        let hidden = |line: usize| match line {
+            2 => vec![(11, 15)],
+            _ => Vec::new(),
+        };
+        let mark = |line: usize| match line {
+            2 => vec![Run::new(11, "⁽¹⁾", Ink::Footnote)],
+            _ => Vec::new(),
+        };
+        walkable("|甲|乙|丙|丁|\n|-|-|-|-|\n|天|洪|辰|暑往秋冬[^1]|\n", G.with_hidden(&hidden).with_drawn(&mark), 12);
+        walkable("|年|事|\n|-|-|\n|甲|說<ruby>漢<rt>ㄏㄢˋ</rt></ruby>字的讀音|\n", RUBY, 9);
+    }
+
+    /// **A page's span names its 縱**: cut a run of 縱 anywhere — inside a
+    /// wrapped row too, whose first 縱 spans the whole row — and the span of
+    /// the cut reads back as exactly those 縱, and the characters they draw
+    /// are those of their own slots and no others.
+    #[test]
+    fn a_page_cut_inside_a_wrapped_row_reads_back_as_itself() {
+        let table = "前言。\n|年|事|\n|-|-|\n|甲|子丑寅卯辰巳午未申酉戌亥天地玄黃宇宙洪荒|\n|乙|短|\n後記。\n";
+        with_table(table, G, 8, &[], |rope, grid| {
+            let all = zongs_from(rope, Anchor::default(), grid, 64);
+            assert!(all.iter().filter(|z| z.line == 3).count() >= 4, "{all:?}");
+            for from in 0..all.len() {
+                for to in from + 1..=all.len() {
+                    let page = &all[from..to];
+                    let span = span_of(page).unwrap();
+                    assert_eq!(page_of(rope, span, grid, 64), page, "{from}..{to}");
+                    let drawn = chars_drawn(rope, page, grid);
+                    for z in page {
+                        for s in zong_slots(rope, z, grid).iter().filter(|s| holds_text(s)) {
+                            let at = rope.line_to_char(z.line) + s.start;
+                            assert!(drawn.iter().any(|&(a, b)| a <= at && at < b), "{from}..{to}: {at} is drawn");
+                        }
+                    }
+                    let off: Vec<&Zong> = all.iter().filter(|z| !page.contains(z)).collect();
+                    for z in off {
+                        for s in zong_slots(rope, z, grid).iter().filter(|s| holds_text(s)) {
+                            let at = rope.line_to_char(z.line) + s.start;
+                            assert!(!drawn.iter().any(|&(a, b)| a <= at && at < b), "{from}..{to}: {at} is not drawn");
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    /// A click on padding or a wall copy lands where a motion to that row
+    /// would — a character of the same 縱, in the same band when it has one.
+    #[test]
+    fn a_click_on_padding_lands_in_the_same_band() {
+        let table = "|年|事|\n|-|-|\n|一九一一|辛亥革命爆發於武昌|\n";
+        with_table(table, G, 10, &[], |rope, grid| {
+            let row = zongs_from(rope, Anchor { line: 2, index_in_line: 1 }, grid, 1)[0];
+            let start = rope.line_to_char(2);
+            let line: Vec<char> = line_text(rope, 2).chars().collect();
+            let hit = |slot: usize| line[char_in(rope, &row, slot, grid) - start];
+            // `|····|命爆發|`: the year band holds nothing in this 縱, so its
+            // padding (slot 2) and the wall copy (slot 5) go to the nearest
+            // character, 命 below them.
+            assert_eq!([hit(2), hit(5), hit(6), hit(8)], ['命', '命', '命', '發']);
+        });
     }
 }

@@ -259,7 +259,7 @@ impl Editor {
     /// passed in by the caller exactly as [`crate::wrap::Measure`]'s are,
     /// because a borrow cannot outlive the call that made it.
     pub fn grid_with<'a>(
-        &self,
+        &'a self,
         hidden: &'a dyn Fn(usize) -> Vec<(usize, usize)>,
         folded: &'a dyn Fn(usize) -> bool,
         drawn: &'a dyn Fn(usize) -> Vec<crate::drawn::Run>,
@@ -302,6 +302,10 @@ impl Editor {
             .with_sentences(self.sentences)
             .with_drawn(drawn)
             .with_turned_tables(turned)
+            // How deep a turned table's bands are is the editor's answer
+            // too, for every grid built here — the page, the caret, the
+            // mouse and the scroll all lay a table out alike.
+            .with_bands(self)
     }
 
     /// The markup that is off the page on `line`, as columns within it.
@@ -314,6 +318,12 @@ impl Editor {
         if let Some(all) = self.fold_head_hides(line) {
             return all;
         }
+        self.markup_hidden_unfolded(line)
+    }
+
+    /// The markup off the page on `line` as though no fold were closed on it
+    /// — what a turned table is measured from (`Editor::turned_bands`).
+    pub(super) fn markup_hidden_unfolded(&self, line: usize) -> Vec<(usize, usize)> {
         let mut hidden = match self.wysiwyg() {
             false => Vec::new(),
             true => {
@@ -344,15 +354,17 @@ impl Editor {
     ///   wrong one. It only shows on a file that has been squared up — a
     ///   hand-typed table looks fine.
     ///
-    /// What replaces both is the padding this page works out for itself, in
-    /// slots ([`crate::mdtable::Measure`]). The `|` stays: it is the character
-    /// the band rule is drawn from.
+    /// What replaces both is the padding the row's own bands lay out, in
+    /// slots (`zong::turned_row`). The `|` stays: it is the character the band
+    /// rule is drawn from.
     ///
     /// The rule row keeps **one** dash (and its `:` markers) for the same
     /// reason: its dashes are counted in cells too, and the wall is re-filled
     /// to the band's depth by the same padding as everything else.
     pub(super) fn table_slack_off_the_page(&self, line: usize) -> Vec<(usize, usize)> {
-        if !self.line_is_table_row(line) {
+        // Folded or not: a turned table is measured from its rows as their
+        // text has them (`Editor::turned_bands`).
+        if !self.line_turns(line) {
             return Vec::new();
         }
         let Some(text) = self.line_text(line) else {
@@ -380,8 +392,9 @@ impl Editor {
                 // stray colons with the wall between them — and because that
                 // cell would keep three characters where `---` keeps one,
                 // **every band in the table would go three slots deep**.
-                // Alignment is not drawn on the turned page in any case: the
-                // cells are bands, and a band has no left or right.
+                // The alignment itself still holds — a band sets its cells at
+                // its head, middle or foot as the column says
+                // (`zong::turned_row`) — only its markers have nowhere to go.
                 let keep = (from..to).find(|&i| chars.get(i) == Some(&'-')).unwrap_or(from);
                 if from < keep {
                     off.push((from, keep));

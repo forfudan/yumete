@@ -9341,64 +9341,127 @@ fn a_quoted_table_is_not_padded() {
     }
 }
 
-/// A table forty lines down a 竪排 page is squared up against a window that
-/// is not measured in **rows**: a screenful of 縱 is not a screenful of rows
-/// — the 縱 run across the page, so there are far more lines on a 竪排 screen
-/// than it is tall. Measured in rows, the whole table would be on the screen
-/// and all but its header outside the window, so only the header would be
-/// padded and it would stand beside a body squared up to nothing — misaligned
-/// until the table reached the right side of the page.
+/// **Where the walls of each 縱 of a turned row stand**, as slot indices —
+/// the page the editor itself lays out, at a room of `room` slots.
+fn turned_walls(ed: &Editor, line: usize, room: usize) -> Vec<Vec<usize>> {
+    let hidden = |l: usize| ed.markup_hidden_on_line(l);
+    let folded = |l: usize| ed.line_is_folded(l);
+    let drawn = |l: usize| ed.drawn_runs_on_line(l);
+    let turned = |l: usize| ed.line_is_table_row(l);
+    let grid = ed.grid_with(&hidden, &folded, &drawn, &turned).with_zong_len(room);
+    let rope = ed.current_buffer().rope();
+    let count = crate::zong::zong_count_in_line(rope, line, grid);
+    crate::zong::zongs_from(rope, crate::zong::Anchor { line, index_in_line: 0 }, grid, count)
+        .iter()
+        .map(|z| {
+            let slots = crate::zong::zong_slots(rope, z, grid);
+            slots.iter().enumerate().filter(|(_, s)| s.text == "|").map(|(i, _)| i).collect()
+        })
+        .collect()
+}
+
+/// Each 縱 of a turned row as the slots it draws — what the page shows of it.
+fn turned_picture(ed: &Editor, line: usize, room: usize) -> Vec<String> {
+    let hidden = |l: usize| ed.markup_hidden_on_line(l);
+    let folded = |l: usize| ed.line_is_folded(l);
+    let drawn = |l: usize| ed.drawn_runs_on_line(l);
+    let turned = |l: usize| ed.line_is_table_row(l);
+    let grid = ed.grid_with(&hidden, &folded, &drawn, &turned).with_zong_len(room);
+    let rope = ed.current_buffer().rope();
+    let count = crate::zong::zong_count_in_line(rope, line, grid);
+    crate::zong::zongs_from(rope, crate::zong::Anchor { line, index_in_line: 0 }, grid, count)
+        .iter()
+        .map(|z| crate::zong::zong_slots(rope, z, grid).iter().map(|s| s.text.clone()).collect())
+        .collect()
+}
+
+/// **A turned table is measured whole**, wherever the page is: a 竪排 screen
+/// holds far more lines than it is tall, and a window of rows counted from
+/// the top of the page would measure a table forty lines down by its header
+/// alone. The bands are the table's, so the page's place does not enter
+/// into them.
 #[test]
-fn a_vertical_table_is_measured_against_the_zong_on_the_screen() {
+fn a_vertical_table_is_measured_whole_wherever_the_page_is() {
     let mut text = String::new();
     for i in 0..40 {
         text.push_str(&format!("第{i}段閒話，把表格推到頁面左邊去。\n"));
-    }
-    let table = "|甲|乙|\n|---|---|\n|一二三|四|\n|五|六七八|\n";
-    text.push_str(table);
-    let mut ed = Editor::new();
-    ed.add_buffer(crate::Buffer::from_text(&text));
-    ed.current_buffer_mut().set_syntax(crate::syntax::Syntax::Markdown);
-    ed.set_layout(Layout::Vertical);
-    // A page 24 rows tall with 60 縱 across it: the table's rows are lines
-    // 40–43, well past the 24 the height would allow and well inside the 60
-    // the page really shows.
-    ed.set_page(24, 60);
-    ed.set_page_top(0);
-
-    let depth = |line: usize| {
-        ed.line_text(line).unwrap_or_default().trim_end().chars().count()
-            + ed.drawn_on_line(line).iter().map(|(_, text)| text.chars().count()).sum::<usize>()
-    };
-    assert_eq!(depth(40), depth(42), "header {:?} vs row {:?}", ed.drawn_on_line(40), ed.drawn_on_line(42));
-    assert_eq!(depth(42), depth(43), "the rows agree with each other too");
-}
-
-/// 同一族的第二個：**窗口不許塌成一行**。`measured_window` 的第一支算的是
-/// `[top, top + 一屏]`，表格在 `top + 一屏` **下面**的時候，那一段與表格的交集只剩
-/// `first` 一行——偏偏被問到的就是 `first`（表頭）那一行，它若被拿自己量一遍、自己
-/// 跟自己對齊，而它下面每一行跟彼此對齊，畫出來就是「表頭和表身對不上」。
-#[test]
-fn a_table_below_the_window_is_not_measured_against_itself_alone() {
-    let mut text = String::new();
-    for i in 0..40 {
-        text.push_str(&format!("第{i}段閒話。\n"));
     }
     text.push_str("|甲|乙|\n|---|---|\n|一二三|四|\n|五|六七八|\n");
     let mut ed = Editor::new();
     ed.add_buffer(crate::Buffer::from_text(&text));
     ed.current_buffer_mut().set_syntax(crate::syntax::Syntax::Markdown);
     ed.set_layout(Layout::Vertical);
-    // 一屏 30 縱，表格在第 40 行起——`0 + 30` 夠不到它。
-    ed.set_page(24, 30);
+    ed.set_page(24, 60);
+    let page = |ed: &Editor| (40..44).map(|line| turned_walls(ed, line, 24)).collect::<Vec<_>>();
     ed.set_page_top(0);
+    let from_the_top = page(&ed);
+    assert_eq!(from_the_top[0], vec![vec![0, 4, 8]], "甲 padded to 一二三's three");
+    assert!(from_the_top.iter().all(|row| *row == from_the_top[0]), "{from_the_top:?}");
+    ed.set_page_top(41);
+    assert_eq!(page(&ed), from_the_top, "the page's place is not in it");
+}
 
-    let depth = |line: usize| {
-        ed.line_text(line).unwrap_or_default().trim_end().chars().count()
-            + ed.drawn_on_line(line).iter().map(|(_, text)| text.chars().count()).sum::<usize>()
+/// **A turned table does not move with the caret.** It is read-only, so no
+/// markup opens under the caret there: were a cell's `**` to come back as
+/// the caret stood on it, its band would deepen by four and every row of the
+/// table would be redrawn on a key that changed nothing in it.
+#[test]
+fn a_turned_table_does_not_move_with_the_caret() {
+    let mut ed = Editor::new();
+    ed.add_buffer(crate::Buffer::from_text("| 名 | 說明 |\n| --- | --- |\n| 甲 | **重要**的事 |\n| 乙 | 平常 |\n"));
+    ed.current_buffer_mut().set_syntax(crate::syntax::Syntax::Markdown);
+    ed.set_layout(Layout::Vertical);
+    ed.execute("render full").unwrap();
+    let table = |ed: &Editor| (0..4).map(|line| turned_walls(ed, line, 24)).collect::<Vec<_>>();
+    let away = table(&ed);
+    let rope = ed.current_buffer().rope();
+    let star = rope.line_to_char(2) + rope.line(2).to_string().find('*').map(|b| rope.line(2).to_string()[..b].chars().count()).unwrap();
+    ed.sel.set_head(star);
+    ed.sel.set_anchor(star);
+    assert!(!ed.markup_hidden_on_line(2).is_empty(), "the `**` stays off the page under the caret");
+    assert_eq!(table(&ed), away, "and the bands stay where they were");
+}
+
+/// **A turned table measured once answers afterwards as a fresh editor
+/// does**, whatever is switched in between: each setting that lays a row out
+/// differently is part of what the bands are remembered against, and what
+/// is only the window's — a fold, a second window — is not part of them at
+/// all.
+#[test]
+fn a_turned_table_after_a_switch_is_the_table_a_fresh_editor_draws() {
+    let text = "前。\n\n| 年 | 事 |\n| --- | --- |\n| 1911 | **辛亥**革命，爆發於武昌。 |\n| 1912 | 民國成立。 |\n\n後。\n";
+    let make = |switch: &dyn Fn(&mut Editor)| {
+        let mut ed = Editor::new();
+        ed.add_buffer(crate::Buffer::from_text(text));
+        ed.current_buffer_mut().set_syntax(crate::syntax::Syntax::Markdown);
+        ed.set_layout(Layout::Vertical);
+        switch(&mut ed);
+        ed
     };
-    assert_eq!(depth(40), depth(42), "表頭 {:?} 對表身 {:?}", ed.drawn_on_line(40), ed.drawn_on_line(42));
-    assert_eq!(depth(42), depth(43));
+    let table = |ed: &Editor, rows: std::ops::Range<usize>| rows.map(|line| turned_picture(ed, line, 10)).collect::<Vec<_>>();
+    type Switch<'a> = (&'a str, &'a dyn Fn(&mut Editor));
+    let switches: [Switch; 3] = [
+        ("hanging", &|ed| { ed.execute("view-hanging on").unwrap(); }),
+        ("render full", &|ed| { ed.execute("render full").unwrap(); }),
+        ("緃中横", &|ed| ed.set_tatechuyoko(4)),
+    ];
+    let plain = table(&make(&|_| {}), 2..6);
+    for (name, switch) in switches {
+        let mut ed = make(&|_| {});
+        assert_eq!(table(&ed, 2..6), plain);
+        switch(&mut ed);
+        let after = table(&ed, 2..6);
+        assert_eq!(after, table(&make(switch), 2..6), "{name}");
+        assert_ne!(after, plain, "{name} lays the table out differently, or the test proves nothing");
+    }
+    // A fold closed on the longest row, and a second window on the file:
+    // the other rows stay exactly where they were.
+    let mut ed = make(&|_| {});
+    ed.fold_lines(4, 5);
+    assert!(!ed.line_is_table_row(4), "the fold's line is the fold's");
+    assert_eq!(table(&ed, 2..4), plain[..2]);
+    ed.execute("vsplit").unwrap();
+    assert_eq!(table(&ed, 2..4), plain[..2]);
 }
 
 /// #212: the two settings that mean "draw me the file".
@@ -9420,15 +9483,12 @@ fn the_padding_goes_away_when_the_page_is_the_file() {
     // against 一二三 (three) is ragged without it, though in *cells* the two
     // are 2 and 6.
     ed.set_layout(Layout::Vertical);
-    assert!(!ed.drawn_on_line(0).is_empty(), "{:?}", ed.drawn_on_line(0));
-    // …and it is the **slot** count that decides. What that buys is the only
-    // thing worth asserting: every row of a turned table is the same depth,
-    // so the bands line up across the 縱.
-    let depth = |line: usize| {
-        ed.line_text(line).unwrap_or_default().trim_end().chars().count()
-            + ed.drawn_on_line(line).iter().map(|(_, text)| text.chars().count()).sum::<usize>()
-    };
-    assert_eq!(depth(0), depth(2), "甲 row {:?} vs 一二三 row {:?}", ed.drawn_on_line(0), ed.drawn_on_line(2));
+    // …by the 縱 it is laid out in, not by anything drawn: its bands are
+    // counted in slots, and every row of a turned table is the same depth, so
+    // the bands line up across the 縱.
+    assert!(ed.drawn_on_line(0).is_empty(), "{:?}", ed.drawn_on_line(0));
+    assert_eq!(turned_walls(&ed, 0, 24), turned_walls(&ed, 2, 24));
+    assert_eq!(turned_walls(&ed, 0, 24), vec![vec![0, 4, 6]], "甲 padded to 一二三's three");
 
     // Neither is a candidate: `has_candidate` answers only for what the
     // writer typed, and the padding is derived.

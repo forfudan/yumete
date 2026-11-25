@@ -6,6 +6,14 @@
 
 use super::*;
 
+/// How many tables' answers a page keeps at hand: the regions it walked and
+/// the bands it measured. A page shows a few tables at most.
+pub(super) const REMEMBERED_TABLES: usize = 8;
+
+/// How many rows of a turned table are measured together — see
+/// [`Editor::turned_bands`].
+const BAND_CHUNK: usize = 2000;
+
 /// 一行上的若干段，每段是一對字符下標 `(起, 止)`。
 ///
 /// 藏起來的標記、摺掉的格子尾巴、留白——都是這個形狀，而且都排過序。
@@ -489,6 +497,14 @@ impl Editor {
         if let Some(all) = self.fold_head_hides(line) {
             return all.into_iter().collect();
         }
+        self.hidden_unfolded(line)
+    }
+
+    /// [`Self::hidden_on_line`] as though no fold were closed on `line` —
+    /// what anything worked out for a line's own text is worked out from.
+    /// Which lines fold is the window's; a tab's advance or a table's bands
+    /// are the text's.
+    fn hidden_unfolded(&self, line: usize) -> Spans {
         // **太長的一行也不藏記號**（`:view-long-line`）。
         //
         // 和 [`Self::markup_runs`] 同一條門槛，因為是同一筆賬：這一支走
@@ -620,7 +636,10 @@ impl Editor {
         // ⚠ **這一支不走長行門槛**：製表符的格寬是**量出來的位置**，不是裝飾——
         // 不畫它光標就停在一個那一頁没有的列上。一行很長的 TSV 正是這種檔。
         let stop = self.tab_stop();
-        let hidden = self.hidden_on_line(line);
+        // A closed fold's first line draws the fold and none of this, so the
+        // fold is not asked: these runs are the line's, and a turned table is
+        // measured from them whatever this window has folded.
+        let hidden = self.hidden_unfolded(line);
         // A tab a table has taken over as its separator is not indentation
         // (see [`Self::wall_columns`]) — it keeps its own single cell, exactly
         // as a `|` or a `,` does, and nothing is drawn beside it.
@@ -704,6 +723,14 @@ impl Editor {
             let end = crate::zong::line_chars(self.current_buffer().rope(), line).len();
             return vec![Run::new(end, text, Ink::Fold)];
         }
+        self.drawn_runs_unfolded(line)
+    }
+
+    /// What is drawn on `line` as though no fold were closed on it — what a
+    /// turned table is measured from ([`Self::turned_bands`]), since which
+    /// lines fold is this window's and the table's bands are not.
+    pub(super) fn drawn_runs_unfolded(&self, line: usize) -> Vec<crate::drawn::Run> {
+        use crate::drawn::{Ink, Run};
         let mut runs: Vec<Run> = self
             .typed_on_line(line)
             .into_iter()
@@ -893,11 +920,10 @@ impl Editor {
     /// question is the *level* and not [`Editor::table`] — the level is the
     /// file's, and holds in the paragraph between two tables.
     ///
-    /// **竪排 squares tables up too.** A row is one 縱 (`zong::lay_out`) and
-    /// the walls turn with it, so the grid is the page's
-    /// own grid a quarter turn round, and it wants squaring up exactly as the
-    /// horizontal one does — counted in slots rather than cells
-    /// ([`crate::mdtable::Measure`]).
+    /// **竪排 squares tables up too**, by another road: a row is laid out in
+    /// its bands (`zong::turned_row`), each as deep as the table's fullest
+    /// cell in that column, counted in slots ([`Self::turned_bands`]). This
+    /// is the switch for both.
     pub(super) fn table_padding_on(&self) -> bool {
         self.table_level != TableLevel::Off
     }
@@ -1003,24 +1029,25 @@ impl Editor {
         self.cell_width_now() == CellWidth::Wrap
     }
 
-    /// What a table keeps off `line` and **will not give back for the caret**
-    /// (#379).
+    /// What is off the page on `line` and **will not come back for the
+    /// caret** (#379): a motion steps over it rather than through it, one
+    /// unseen character at a time. That is #212's own law read from the
+    /// other end: if the caret may never stand in a column the page does not
+    /// have, then a motion may not leave it there either.
     ///
-    /// The other half of [`Self::hidden_on_line`] — the markup — comes back
-    /// the moment the caret is in it, which is what 所見即所得 means, so the
-    /// caret is welcome to walk into it. This half does not: padding the page
-    /// does not show is jumped over, not walked through one unseen space at a
-    /// time. That is #212's own law read from the other end: if the caret may never stand in a column the
-    /// page does not have, then a motion may not leave it there either.
-    ///
-    /// Warning: **What a turned table keeps off the page is kept off motion too.**
-    /// Without it the caret walks the cushions and the file's own alignment
-    /// spaces in a 竪排 table: six presses of `j`, six file positions, and the
-    /// caret sits on the same slot the whole time.
+    /// - **On a turned row, all of it**: the cell's own spaces and the markup
+    ///   alike. The row is read-only and nothing on it opens under the caret
+    ///   ([`Self::selected_columns`]), so walking it a character at a time
+    ///   would stand on one unseen space or asterisk after another while the
+    ///   page did not move.
+    /// - **Elsewhere, only a table's slack.** The markup comes back the
+    ///   moment the caret is in it — that is what 所見即所得 means — so the
+    ///   caret is welcome to walk into it.
     pub fn cell_hidden_on_line(&self, line: usize) -> Vec<(usize, usize)> {
-        let mut out = self.table_slack_off_the_page(line);
-        out.sort_unstable();
-        out
+        match self.line_is_table_row(line) {
+            true => self.markup_hidden_on_line(line),
+            false => self.table_slack_off_the_page(line),
+        }
     }
 
     /// Which punctuation the table on `line` is told apart by, if there is a
@@ -1061,18 +1088,25 @@ impl Editor {
     /// Every line in a region walks out to the same two ends, so one walk
     /// answers for all of them — and a `None` is never kept, because it says
     /// nothing about any line but the one asked.
-    fn pipe_region(&self, line: usize) -> Option<crate::mdtable::Region> {
+    ///
+    /// **A few tables, not one**: a 竪排 page asks every row it lays out which
+    /// table it is in, and two tables on one page asked in turn would walk
+    /// each of them again on every ask.
+    pub(super) fn pipe_region(&self, line: usize) -> Option<crate::mdtable::Region> {
         let (id, revision) = {
             let buffer = self.current_buffer();
             (buffer.id(), buffer.revision())
         };
-        if let Some((had, was, region)) = self.pipe_region.borrow().as_ref() {
-            if (*had, *was) == (id, revision) && region.holds(line) {
-                return Some(region.clone());
-            }
+        if let Some((_, _, region)) = self
+            .pipe_region
+            .find(|(had, was, region)| (*had, *was) == (id, revision) && region.holds(line))
+        {
+            return Some(region);
         }
         let region = crate::mdtable::region(|i| self.line_text(i), line)?;
-        *self.pipe_region.borrow_mut() = Some((id, revision, region.clone()));
+        // Another revision of this buffer is stale; another buffer's tables
+        // are a split's, still on the screen.
+        self.pipe_region.keep((id, revision, region.clone()), |(had, was, _)| *had == id && *was != revision);
         Some(region)
     }
 
@@ -1097,23 +1131,10 @@ impl Editor {
         // **Only what is on screen is measured** (#378) — the same window for
         // either punctuation, because both are only separators. The alignments
         // travel with the region rather than with the rows, so a table scrolled
-        // past its own rule row keeps them.
-        // Warning: **「一屏幾行」竪排要問別的數.** The window is `[page_top, page_top + a screenful]`
-        // *in lines*, and 橫排 a screenful of lines is the terminal's height.
-        // 竪排 a line is a 縱 and the 縱 run **across** the page, so a screenful
-        // is how many of them fit side by side — `page_columns`. Measured by
-        // the height instead, a table forty lines down the file falls clean
-        // outside the window with every row of it plainly on the screen: only
-        // the header is measured, so only the header is padded, and it stands
-        // beside a body squared up to nothing. Scroll until the table reaches
-        // the right edge and it snaps into line — which is exactly what the
-        // window sliding over it looks like.
-        let screenful = match self.layout() {
-            Layout::Vertical => self.page_columns,
-            _ => self.page_lines,
-        };
+        // past its own rule row keeps them. Flat pages only, so a screenful
+        // is the terminal's height.
         let (first, last) =
-            crate::mdtable::measured_window(region.first, region.last, line, self.page_top, screenful);
+            crate::mdtable::measured_window(region.first, region.last, line, self.page_top, self.page_lines);
         region.first = first;
         region.last = last;
         Some(region)
@@ -1132,18 +1153,19 @@ impl Editor {
     /// the padding that squares the *page* up is drawn rather than written,
     /// and an unformatted `|a|b|` lines up too, with the file left as it was
     /// typed.
+    ///
+    /// **The flat page only.** A turned table is squared up by the 縱 it is
+    /// laid out in — its bands are as deep as [`Self::turned_bands`] says, and
+    /// `zong::turned_row` fills each one out — so padding drawn here as well
+    /// would be counted twice.
     fn table_padding_on_line(&self, line: usize) -> Vec<(usize, String)> {
-        if !self.table_padding_on() {
+        if !self.table_padding_on() || self.layout() == Layout::Vertical {
             return Vec::new();
         }
         let Some(wall) = self.wall_here(line) else {
             return Vec::new();
         };
         let buffer = self.current_buffer();
-        let measure = match self.layout() {
-            crate::zong::Layout::Vertical => crate::mdtable::Measure::Slots { packed: self.tatechuyoko },
-            _ => crate::mdtable::Measure::Cells,
-        };
         let key = |first, last| PadKey {
             buffer: buffer.id(),
             revision: buffer.revision(),
@@ -1154,7 +1176,6 @@ impl Editor {
             ruby: self.ruby(),
             syntax: buffer.syntax(),
             wall,
-            measure,
         };
         // **The memo answers before the region is worked out.** Finding where
         // the table starts and ends is a walk to both ends of it, and this is
@@ -1240,14 +1261,59 @@ impl Editor {
             &region.aligns,
             &marks,
             &shown,
-            // **The unit is the page's own**: 竪排 stands every
-            // grapheme in a slot, so a table padded in cells comes out ragged
-            // there — see [`crate::mdtable::Measure`].
-            measure,
         );
         let answer = runs.get(line - region.first).cloned().unwrap_or_default();
         *self.pad_cache.borrow_mut() = Some((key, PadWork { rows, marks, cols, runs }));
         answer
+    }
+
+    /// **How deep each band of the turned table on `line` is**, for 縱 of
+    /// `room` slots — what [`crate::zong::Bands`] asks the editor. The
+    /// measuring is [`crate::zong::table_bands`]; this keeps the answer and
+    /// says which rows it is asked over.
+    ///
+    /// Warning: **Nothing about the caret, the viewport or the window is in
+    /// it**, and nothing in what it reads moves with them: a turned row shows
+    /// no markup under the caret ([`Self::selected_columns`]), the room comes
+    /// from the grid being laid out, and a row is measured as its text has it
+    /// whether or not this window has folded it. So the same table at the same
+    /// room has the same bands whatever is asked first and wherever it is
+    /// drawn, and moving across it never redraws it.
+    ///
+    /// **A long table is measured in fixed pieces** of [`BAND_CHUNK`] rows
+    /// counted from its first, so the answer for a row is still a function
+    /// of the row alone, and a table of fifty thousand rows is not walked
+    /// whole on a frame. Two pieces may disagree at their edge.
+    pub(super) fn turned_bands(&self, line: usize, room: usize) -> Option<std::rc::Rc<crate::zong::TableBands>> {
+        let region = self.pipe_region(line)?;
+        let first = region.first + (line.checked_sub(region.first)? / BAND_CHUNK) * BAND_CHUNK;
+        let last = first.saturating_add(BAND_CHUNK - 1).min(region.last);
+        let buffer = self.current_buffer();
+        let hidden = |l: usize| self.markup_hidden_unfolded(l);
+        let folded = |_: usize| false;
+        let drawn = |l: usize| self.drawn_runs_unfolded(l);
+        let turned = |l: usize| self.line_turns(l);
+        let grid = self.grid_with(&hidden, &folded, &drawn, &turned).without_bands();
+        // **What the rows are laid out from**: the grid's own key — the list
+        // the layout's memo keeps too — and what decides what its closures
+        // answer, which the grid cannot see.
+        let mut hasher = DefaultHasher::new();
+        grid.layout_key(&mut hasher);
+        (
+            (buffer.id(), buffer.revision(), buffer.syntax().tag()),
+            (first, last, room),
+            (self.render as u8, self.table_padding_on(), self.notes),
+            (self.long_line, self.tab_stop()),
+        )
+            .hash(&mut hasher);
+        let key = hasher.finish();
+        if let Some((_, bands)) = self.band_cache.find(|(had, _)| *had == key) {
+            return Some(bands);
+        }
+        let rows = (first..=last).filter(|&row| self.line_turns(row));
+        let bands = std::rc::Rc::new(crate::zong::table_bands(buffer.rope(), rows, grid, room, &region.aligns));
+        self.band_cache.keep((key, bands.clone()), |_| false);
+        Some(bands)
     }
 
     /// Whether an inline candidate is standing on the page.
@@ -1355,6 +1421,12 @@ impl Editor {
         // 這一格是**整個「藏什麼／露什麼」那一族共用的那一問**，所以堵在這裏，
         // 一處管住折行、註號、衝突記號和 `:diff` 的標記。
         if self.current_buffer().is_computed() {
+            return None;
+        }
+        // **轉過來的表格也一樣**：竪排的表格是唯讀的（要改得 `t t` 把頁面轉平），
+        // 光標站上去沒有東西要露。露了反而壞事——一格裏露出 `**`，那一條帶就
+        // 深兩格，整張表跟着光標一走一動。
+        if self.line_turns(line) {
             return None;
         }
         let rope = self.current_buffer().rope();
@@ -2214,4 +2286,10 @@ pub(super) fn opens_a_block_comment(text: ropey::RopeSlice) -> bool {
         slash = c == '/';
         opens
     })
+}
+
+impl crate::zong::Bands for Editor {
+    fn bands(&self, line: usize, room: usize) -> Option<std::rc::Rc<crate::zong::TableBands>> {
+        self.turned_bands(line, room)
+    }
 }

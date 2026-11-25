@@ -101,3 +101,37 @@ impl<T: Clone> LineMemo<T> {
         self.answers.borrow().len()
     }
 }
+
+/// **A few answers, the most recently asked first** — for what is kept per
+/// table rather than per line: a page shows a handful, and the one asked
+/// last is the likeliest to be asked next.
+#[derive(Debug)]
+pub(crate) struct Recent<T> {
+    kept: RefCell<Vec<T>>,
+    size: usize,
+}
+
+impl<T: Clone> Recent<T> {
+    /// Room for `size` answers.
+    pub(crate) fn new(size: usize) -> Self {
+        Self { kept: RefCell::new(Vec::new()), size }
+    }
+
+    /// The first answer kept that `matches`, moved to the front.
+    pub(crate) fn find(&self, matches: impl Fn(&T) -> bool) -> Option<T> {
+        let mut kept = self.kept.borrow_mut();
+        let at = kept.iter().position(matches)?;
+        let entry = kept.remove(at);
+        kept.insert(0, entry.clone());
+        Some(entry)
+    }
+
+    /// Keep `entry` in front, once what `stale` says no longer holds is gone;
+    /// the oldest falls off the end.
+    pub(crate) fn keep(&self, entry: T, stale: impl Fn(&T) -> bool) {
+        let mut kept = self.kept.borrow_mut();
+        kept.retain(|had| !stale(had));
+        kept.insert(0, entry);
+        kept.truncate(self.size);
+    }
+}
