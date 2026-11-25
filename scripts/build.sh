@@ -130,9 +130,9 @@ install_ime_data() {
   # Clear the tables we manage — including the names from older layouts, so a
   # data directory built by a previous yumete is not left with files the current
   # yume-core can no longer parse. User files (segmentation.txt) are preserved.
-  rm -f "$dest"/{ling,xing,qing,riyue,symbols}.ytab \
+  rm -f "$dest"/{ling,xing,qing,lingming,xingchen,qingyun,riyue,symbols}.ytab \
         "$dest"/pinyin.yflb "$dest"/lang.{ywtb,ywl,ygram} \
-        "$dest"/chaifen.ydiv "$dest"/zigen_{ling,xing,qing,riyue}.yzg \
+        "$dest"/chaifen.ydiv "$dest"/zigen_{ling,xing,qing,lingming,xingchen,qingyun,riyue}.yzg \
         "$dest"/words_yuling.ywrd "$dest"/simptrad.txt \
         "$dest"/pinyin.ywtb "$dest"/chaifen{,_xing,_qing,_riyue}.yann
   rm -rf "$dest/charsets" "$dest/fonts" "$dest/data" "$dest/schemes"
@@ -148,9 +148,11 @@ install_ime_data() {
     fi
   done
 
-  # 碼表 and the shared 符號表 extracted from it.
-  "$compiler" "$d/ling.txt" "$schemes/ling.ytab"
-  "$compiler" --symbols "$schemes/ling.ytab" "$shared/symbols.ytab"
+  # 碼表 and the shared 符號表 extracted from it. A compiled table is named after
+  # its scheme (`lingming.ytab`), as yume-core's manifest asks for it; the
+  # sources in yume's data/ keep their short names.
+  "$compiler" "$d/ling.txt" "$schemes/lingming.ytab"
+  "$compiler" --symbols "$schemes/lingming.ytab" "$shared/symbols.ytab"
 
   # Multi-character words come from every code table on hand: a word is a fact
   # about the language, not about one 方案.
@@ -192,14 +194,14 @@ install_ime_data() {
 
   # 字根表: one per scheme, ~1KB each, and each must be compiled against the very
   # .ydiv above — it indexes into that file's root order.
-  "$compiler" --zigen lingming "$d/zigen_ling.txt" "$shared/chaifen.ydiv" "$schemes/zigen_ling.yzg"
+  "$compiler" --zigen lingming "$d/zigen_ling.txt" "$shared/chaifen.ydiv" "$schemes/zigen_lingming.yzg"
 
   # Optional sibling schemes (星陳 / 卿雲 / 日月).
   compile_scheme() {
     local id="$1" scheme="$2"
-    [[ -f "$d/$id.txt" ]] && "$compiler" "$d/$id.txt" "$schemes/$id.ytab"
+    [[ -f "$d/$id.txt" ]] && "$compiler" "$d/$id.txt" "$schemes/$scheme.ytab"
     [[ -f "$d/zigen_$id.txt" ]] && "$compiler" --zigen "$scheme" "$d/zigen_$id.txt" \
-      "$shared/chaifen.ydiv" "$schemes/zigen_$id.yzg"
+      "$shared/chaifen.ydiv" "$schemes/zigen_$scheme.yzg"
     return 0
   }
   compile_scheme xing xingchen
@@ -225,9 +227,9 @@ install_ime_data() {
     cp "$from/$name" "$schemes/$name"
   }
   if [[ -d "$from" ]]; then
-    copy_scheme_file ling.ytab lingming.toml
-    copy_scheme_file xing.ytab xingchen.toml
-    copy_scheme_file qing.ytab qingyun.toml
+    copy_scheme_file lingming.ytab lingming.toml
+    copy_scheme_file xingchen.ytab xingchen.toml
+    copy_scheme_file qingyun.ytab qingyun.toml
     copy_scheme_file riyue.ytab riyue.toml
     # 拼音 has no `.ytab` of its own — its table is the shared `pinyin.yflb`,
     # so it is gated on that instead.

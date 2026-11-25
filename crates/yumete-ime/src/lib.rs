@@ -2151,7 +2151,7 @@ fn find_file(dirs: &[PathBuf], relative: &str) -> Option<PathBuf> {
     // because that is how yume's own bundle is arranged — but a writer who
     // unzipped a release into one folder, or a build script older than the
     // split, has every one of them side by side, and the names are distinctive
-    // enough (`chaifen.ydiv`, `lang.ywl`, `ling.ytab`) that the basename is a
+    // enough (`chaifen.ydiv`, `lang.ywl`, `lingming.ytab`) that the basename is a
     // safe second question. Nested wins, so a directory holding both is read
     // the way it was arranged.
     let name = relative.rsplit('/').next()?;
@@ -2423,7 +2423,7 @@ pub struct MagicMismatch {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DataProblem {
     /// The manifest-relative name, which is what a writer will recognise —
-    /// `chaifen.ydiv`, `schemes/ling.ytab`.
+    /// `chaifen.ydiv`, `schemes/lingming.ytab`.
     pub file: String,
     /// Which door of the engine it would have gone through.
     pub kind: DataKind,
