@@ -296,6 +296,10 @@ pub fn complaints(config: &Config) -> Vec<String> {
     if !word.is_empty() && !matches!(word, "line" | "rule") {
         said.push(only("[editor] inactive_status", word, &["line", "rule"]));
     }
+    let word = config.editor.table_cell.trim();
+    if !word.is_empty() && !matches!(word, "wash" | "fill") {
+        said.push(only("[editor] table_cell", word, &["wash", "fill"]));
+    }
     let word = config.editor.preview_fit.trim();
     if !word.is_empty() && yumete_core::editor::PreviewFit::parse(word).is_none() {
         said.push(only("[editor] preview_fit", word, &["width", "page"]));

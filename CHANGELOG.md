@@ -8,6 +8,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 - **A long cell of a table on a vertical page wraps inside its band** (#1005), so the table no longer runs past the foot of the page: short bands keep their depth, the long ones share what is left, and a row whose cell wraps takes several 縱 side by side. `h`/`l` step through them one 縱 at a time.
 - **Resting the mouse on the status line's input-method cell names the scheme**, with its series and author when the scheme file gives them, and **resting it on a change bar in the gutter shows what those lines said before the change**.
+- **`[editor] table_cell = "fill"` marks the cell under the cursor with a gold ground**, in a table and on the settings page alike, its text and rules in an ink that reads on it; the default `"wash"` keeps the faint ground with two gold rules.
 
 ### Changed
 

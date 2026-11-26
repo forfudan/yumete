@@ -1564,12 +1564,11 @@ pub fn draw(
                     // thing. 1.35:1 is a ground a reader feels rather than
                     // reads, and it is the one the callouts' faint half uses.
                     //
-                    // **Laid down before the rules are**, so that `wall`'s
-                    // `fg` patch keeps it: a rule drawn first and tinted
-                    // after would have its own glyph painted over.
-                    if view.layer.the_cell_is_the_unit(editor.mode()) {
-                        tint_the_cell(buf, &ink, x.saturating_sub(1), (x + w + 1).min(right), y);
-                    }
+                    // **Laid down after the rules are**: the wash is a ground
+                    // only and leaves their 金 alone, and the fill
+                    // (`table_cell = "fill"`) is a 金 ground that has to
+                    // re-ink them to keep them visible.
+                    let unit = view.layer.the_cell_is_the_unit(editor.mode());
                     // **The seam keeps its own glyph and turns 金** — the #407
                     // rule, the same in CEL mode as in NOR (dashed and golden),
                     // not a plain line. Inside a cell this is an ordinary
@@ -1590,6 +1589,9 @@ pub fn draw(
                     }
                     if x + w < right {
                         wall(x + w, yumete_core::table::layer::EDGE_AFTER);
+                    }
+                    if unit {
+                        tint_the_cell(buf, &ink, config, x.saturating_sub(1), (x + w + 1).min(right), y);
                     }
                 }
                 // A hidden column takes no gap either — a column of
@@ -1952,20 +1954,88 @@ fn caret_in(parts: &[String], into: usize) -> (usize, usize) {
 }
 
 /// **The cell under the cursor at the top layer**, `from..upto` on row `y`,
-/// edges included: the faint wash that says the whole cell is the unit.
-/// One look for every grid, the text's tables and the settings panel's, so
-/// a change here changes both.
-pub(crate) fn tint_the_cell(buf: &mut ratatui::buffer::Buffer, ink: &crate::theme::Palette, from: u16, upto: u16, y: u16) {
+/// edges included: what says the whole cell is the unit. One look for every
+/// grid, the text's tables and the settings panel's, so a change here changes
+/// both.
+///
+/// `[editor] table_cell` picks it. `"wash"`: the faint wash, a ground only,
+/// so the 金 the caller gave the two rules stays theirs. `"fill"`: a 金
+/// ground, and every glyph on it — the text and the rules — in the ink that
+/// reads on 金 ([`crate::theme::Palette::on_gold`]); 金 rules on a 金 ground
+/// would be no rules at all. Called after the rules are drawn, so the fill
+/// has the last word on them.
+pub(crate) fn tint_the_cell(
+    buf: &mut ratatui::buffer::Buffer,
+    ink: &crate::theme::Palette,
+    config: &Config,
+    from: u16,
+    upto: u16,
+    y: u16,
+) {
+    let style = match config.editor.table_cell.trim() == "fill" {
+        true => ratatui::style::Style::default().bg(ink.gold()).fg(ink.on_gold()),
+        false => ratatui::style::Style::default().bg(ink.faint_wash()),
+    };
     for cx in from..upto {
         if let Some(cell) = buf.cell_mut((cx, y)) {
-            cell.set_style(cell.style().bg(ink.faint_wash()));
+            cell.set_style(cell.style().patch(style));
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{share_spare, GAP, MAX_COLUMN};
+    use super::{share_spare, tint_the_cell, GAP, MAX_COLUMN};
+    use yumete_config::Config;
+
+    const THEMES: &[&str] =
+        &["ink", "bw", "morandi", "one-dark", "github", "monokai", "dracula", "tokyo-night", "catppuccin", "gruvbox"];
+
+    /// **The current cell, either way it is marked**: `"wash"` grounds the
+    /// cell and leaves the rules their 金; `"fill"` grounds it in 金 and
+    /// re-inks the text and the rules so both read on it, in every theme and
+    /// both moods.
+    #[test]
+    fn the_current_cell_is_washed_or_filled_and_stays_readable() {
+        use ratatui::buffer::Buffer;
+        use ratatui::layout::Rect;
+        use ratatui::style::Style;
+        for theme in THEMES {
+            for dark in [true, false] {
+                let mut config = Config { theme: yumete_config::ThemeConfig::named(theme).expect(theme), ..Config::default() };
+                let ink = crate::theme::Palette::in_mood(&config, dark);
+                // `┆甲乙┆`: two rules in 金 around the cell's text.
+                let drawn = || {
+                    let mut buf = Buffer::empty(Rect::new(0, 0, 8, 1));
+                    buf.set_string(0, 0, "┆", Style::default().fg(ink.gold()));
+                    buf.set_string(1, 0, "甲乙", Style::default().fg(ink.text()));
+                    buf.set_string(5, 0, "┆", Style::default().fg(ink.gold()));
+                    buf
+                };
+                let mut washed = drawn();
+                tint_the_cell(&mut washed, &ink, &config, 0, 6, 0);
+                for x in 0..6 {
+                    assert_eq!(washed[(x, 0)].bg, ink.faint_wash(), "{theme} {dark}: washed at {x}");
+                }
+                assert_eq!((washed[(0, 0)].fg, washed[(5, 0)].fg), (ink.gold(), ink.gold()), "{theme} {dark}: rules keep 金");
+                assert_eq!(washed[(1, 0)].fg, ink.text());
+
+                config.editor.table_cell = "fill".to_string();
+                let mut filled = drawn();
+                tint_the_cell(&mut filled, &ink, &config, 0, 6, 0);
+                for x in 0..6 {
+                    let cell = &filled[(x, 0)];
+                    assert_eq!((cell.bg, cell.fg), (ink.gold(), ink.on_gold()), "{theme} {dark}: filled at {x}");
+                }
+                assert_eq!(filled[(6, 0)].bg, Buffer::empty(Rect::new(0, 0, 1, 1))[(0, 0)].bg, "past the cell");
+                let apart = crate::theme::contrast(ink.on_gold(), ink.gold());
+                // 3:1, WCAG's floor for large text and marks: the light
+                // catppuccin and gruvbox put 金 in the middle of the ladder,
+                // where neither end of it reaches 4.5.
+                assert!(apart >= 3.0, "{theme} {dark}: text on the 金 fill is {apart:.2}:1");
+            }
+        }
+    }
 
     /// What a row of columns takes on the window, walls included.
     fn used(widths: &[usize]) -> usize {

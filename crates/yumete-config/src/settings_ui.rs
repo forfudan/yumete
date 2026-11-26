@@ -266,6 +266,11 @@ const EDITOR_INACTIVE_STATUS_WAYS: &[Choice] = &[
     Choice { word: "rule", label: "settings.pick.inactive-status.rule" },
 ];
 
+const EDITOR_TABLE_CELL_WAYS: &[Choice] = &[
+    Choice { word: "wash", label: "settings.pick.table-cell.wash" },
+    Choice { word: "fill", label: "settings.pick.table-cell.fill" },
+];
+
 const EDITOR_INDENT_HINT_WAYS: &[Choice] = &[
     Choice { word: "none", label: "settings.pick.indent-hint.none" },
     Choice { word: "symbol", label: "settings.pick.indent-hint.symbol" },
@@ -820,6 +825,15 @@ pub const SETTINGS: &[Setting] = &[
         label: "settings.editor.table-rules",
         hint: "settings.editor.table-rules.hint",
         factory: r#""line dash""#,
+    },
+    Setting {
+        table: "editor",
+        key: "table_cell",
+        group: Group::Marks,
+        kind: Kind::Pick(EDITOR_TABLE_CELL_WAYS),
+        label: "settings.editor.table-cell",
+        hint: "settings.editor.table-cell.hint",
+        factory: r#""wash""#,
     },
     Setting {
         table: "editor",

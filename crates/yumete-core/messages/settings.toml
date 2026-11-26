@@ -955,6 +955,18 @@ zhs = "制表符对齐到此数的倍数，码表靠它对齐"
 en = "a tab reaches the next multiple of this; code tables line up by it"
 
 [[message]]
+# 設置：表格与设置页里光标所在那一格怎么标（草稿）
+key = "settings.editor.table-cell"
+zhs = "当前格"
+en = "current cell"
+
+[[message]]
+# 設置：表格与设置页里光标所在那一格怎么标——一句話（草稿）
+key = "settings.editor.table-cell.hint"
+zhs = "表格与设置页里光标所在那一格：淡底加两条金线，或整格金底"
+en = "the cell under the cursor in a table and the settings page: a faint ground with two gold rules, or a gold ground"
+
+[[message]]
 # 設置：表格的栏线
 key = "settings.editor.table-rules"
 zhs = "表格竖线"
@@ -2160,6 +2172,18 @@ en = "spaces"
 key = "settings.pick.tab-inserts.tab"
 zhs = "制表符"
 en = "tab"
+
+[[message]]
+# 設置：当前格——整格金底（草稿）
+key = "settings.pick.table-cell.fill"
+zhs = "金底"
+en = "gold fill"
+
+[[message]]
+# 設置：当前格——淡底加两条金线（草稿）
+key = "settings.pick.table-cell.wash"
+zhs = "淡底金线"
+en = "wash and gold rules"
 
 [[message]]
 # 設置：表格的栏线——靠颜色分

@@ -910,6 +910,17 @@ impl Palette {
         self.accent(self.gold)
     }
 
+    /// **The ink a glyph on a 金 ground is drawn in**: of the paper and the
+    /// writing, whichever stands further from 金, so the answer holds in a
+    /// theme whose 金 is light and in one whose 金 is dark.
+    pub fn on_gold(self) -> Color {
+        let gold = self.gold();
+        match contrast(self.paper(), gold) >= contrast(self.text(), gold) {
+            true => self.paper(),
+            false => self.text(),
+        }
+    }
+
     /// A colour the theme copied from elsewhere, in this pane's weight — `None`
     /// for a theme of this editor's own.
     pub fn pinned(self, pick: impl Fn(&yumete_config::Pinned) -> (u8, u8, u8)) -> Option<Color> {

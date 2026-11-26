@@ -1588,7 +1588,7 @@ pub fn draw(
                 let setting = rows[*i];
                 let here = *i == panel.row;
                 hit(y, from, right, Hit::Row(*i));
-                if let Some(at) = draw_row(buf, panel, setting, here, (&ink, ground), &col, y) {
+                if let Some(at) = draw_row(buf, panel, config, setting, here, (&ink, ground), &col, y) {
                     caret = Some(at);
                 }
             }
@@ -1674,9 +1674,11 @@ fn draw_status_line(buf: &mut ratatui::buffer::Buffer, panel: &Panel, config: &C
 
 /// One row: the mark of a row set in the file switched to, the name, the
 /// value, and where the value comes from.
+#[allow(clippy::too_many_arguments)]
 fn draw_row(
     buf: &mut ratatui::buffer::Buffer,
     panel: &Panel,
+    config: &Config,
     setting: &Setting,
     here: bool,
     (ink, ground): (&crate::theme::Palette, ratatui::style::Style),
@@ -1731,10 +1733,10 @@ fn draw_row(
         }
     };
     // **The cell under the cursor, as a table's at its top layer**: the
-    // whole cell washed, rule to rule, the one look every grid has
+    // whole cell marked, rule to rule, the one look every grid has
     // ([`crate::table::tint_the_cell`]). In the cell, the caret says it.
     if here && panel.cell.is_none() {
-        crate::table::tint_the_cell(buf, ink, col.value.saturating_sub(1), (col.source + 1).min(right), y);
+        crate::table::tint_the_cell(buf, ink, config, col.value.saturating_sub(1), (col.source + 1).min(right), y);
     }
     if source_at > col.value + 2 {
         let style = match shown.from {
