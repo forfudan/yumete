@@ -706,9 +706,10 @@ pub fn draw(
             true => yumete_cjk::str_width(&paged),
             false => 0,
         });
-    // The ring costs two cells across and two rows down; the bottom edge has
-    // to hold the tag as well as a corner.
-    let widest = (area.width as usize).saturating_sub(2);
+    // The ring costs two walls across (`chrome::wall` cells each) and two
+    // rows down; the bottom edge has to hold the tag as well as a corner.
+    let wall = crate::chrome::wall() as usize;
+    let widest = (area.width as usize).saturating_sub(2 * wall);
     if widest == 0 {
         return None;
     }
@@ -784,7 +785,7 @@ pub fn draw(
             //
             // 不畫省略號，同橫排那一條：還有多少由底邊那個數字說。
             let box_w = (room_w as usize).max(24).min(area.width as usize);
-            let fits = box_w.saturating_sub(2 + pad * 2) / 2;
+            let fits = box_w.saturating_sub(2 * wall + pad * 2) / 2;
             if fits > 0 && zong.len() > fits {
                 let all = zong.len();
                 let from = panel.scroll.min(all - fits);
@@ -810,7 +811,7 @@ pub fn draw(
             // it leaves every line two cells too long, and `put_text` stops at
             // the border — so the last 漢字 of each row is eaten: 「百廢具興」
             // and no 「。」.
-            let budget = (room_w as usize).saturating_sub(2 + pad * 2);
+            let budget = (room_w as usize).saturating_sub(2 * wall + pad * 2);
             let want = widest.saturating_sub(2).min(budget.max(8));
             // 章節行在最上面，灰的，底下空一行；正文每段縮進一格。橫排的標題
             // 畫在框線上（它本來就在那兒），所以這裏没有「標題後空一行」——框
@@ -891,7 +892,7 @@ pub fn draw(
             let widest = (room_w as usize)
                 .max(24)
                 .min(area.width as usize)
-                .saturating_sub(2 + pad * 2)
+                .saturating_sub(2 * wall + pad * 2)
                 .max(1);
             // Within the room, too deep is answered by going **wider**: as many columns
             // as the depth asks for. A short wide menu is still a menu, and a
@@ -981,7 +982,7 @@ pub fn draw(
                 .map(|row| yumete_cjk::str_width(&row.text))
                 .max()
                 .unwrap_or(1)
-                .min(room_w.saturating_sub(2 + pad as u16 * 2) as usize)
+                .min(room_w.saturating_sub((2 * wall + pad * 2) as u16) as usize)
                 .max(1);
             let tall = bottom.saturating_sub(area.y).min(area.height);
             let deep_max = cap.min((tall.saturating_sub(2) as usize).max(1));
@@ -1054,18 +1055,21 @@ pub fn draw(
         false => read.map_or(0, |(at, all)| yumete_cjk::str_width(&format!("{at}/{all}"))),
     };
     let deep = count.div_ceil(columns);
-    let width = (inner + 2 + pad * 2)
-        .max(title_w + 4)
-        .max(tag_w + 4)
+    // With two-cell walls the box is kept an even number of cells wide, so
+    // the rules meet the corners.
+    let width = (inner + 2 * wall + pad * 2)
+        .max(title_w + 2 * wall + 2)
+        .max(tag_w + 2 * wall + 2)
         // 底邊兩頭各站一個，中間至少留一格橫線。
-        .max(read_w + tag_w + 7)
+        .max(read_w + tag_w + 2 * wall + 5)
         // `chrome::place` takes no box under eight cells, and a menu of one
         // short row (`j  :w`) is seven: it would draw nothing.
-        .max(8)
-        // Every float keeps to its room (above); which room that is was
-        // settled once, by what the float is for.
-        .min((room_w as usize).max(24))
-        .min(area.width as usize) as u16;
+        .max(8);
+    let width = width + width % wall;
+    // Every float keeps to its room (above); which room that is was
+    // settled once, by what the float is for.
+    let width = width.min((room_w as usize).max(24)).min(area.width as usize);
+    let width = (width - width % wall) as u16;
     // **帶子吃滿整個編輯區**：它要和正文逐格對齊，所以寬度不由內容
     // 說了算。`place` 的 `Anchor::Band` 也從 `area.x` 起畫，兩邊是同一個意思。
     let width = match (&panel.stand, vertical) {
@@ -1090,7 +1094,7 @@ pub fn draw(
         },
     };
     let rect = crate::chrome::place(area, (width, height), stand)?;
-    crate::chrome::draw(frame, rect, &crate::chrome::Ring {
+    let inside = crate::chrome::draw(frame, rect, &crate::chrome::Ring {
         foot: None,
         rounded: config.panel.rounded,
         open_sides: matches!(panel.stand, Stand::Band) && !vertical,
@@ -1124,17 +1128,16 @@ pub fn draw(
     };
     // **帶子沒有右牆，所以最後那一格也歸它**：留一格空邊，
     // 底色就比正文短一格，而正文那邊沒有這一格——對齊當場差掉。
-    let limit = match matches!(panel.stand, Stand::Band) && !vertical {
-        true => rect.x + width,
-        false => rect.x + width - 1,
-    };
+    // The inside `chrome::draw` hands back says so: a band's runs from edge
+    // to edge, a box's stops at its right wall.
+    let limit = inside.x + inside.width;
     let buf = frame.buffer_mut();
     match &panel.body {
         // 竪書：第一縱貼右邊，往左排；每個字取它的竪排字形。
         Body::Prose(_) if panel.vertical_text => {
             for (n, zong) in lines.iter().enumerate() {
-                let x = match (rect.x + width).checked_sub(2 + 1 + n as u16 * 2) {
-                    Some(x) if x > rect.x => x,
+                let x = match limit.checked_sub(2 + n as u16 * 2) {
+                    Some(x) if x >= inside.x => x,
                     _ => break,
                 };
                 for (i, ch) in zong.chars().enumerate() {
@@ -1160,7 +1163,7 @@ pub fn draw(
             let accent = panel.accent.filter(|_| !panel.marked && !text.contains('\n'));
             let mut seen = 0usize;
             for (i, line) in lines.iter().enumerate() {
-                let x = rect.x + 1 + pad as u16;
+                let x = inside.x + pad as u16;
                 let y = rect.y + 1 + i as u16;
                 let plain = ground.fg(ink_of(i));
                 let here = seen;
@@ -1205,8 +1208,8 @@ pub fn draw(
             let from = panel.scroll.min(rows.len().saturating_sub(count));
             for (i, row) in rows.iter().skip(from).take(count).enumerate() {
                 let x = match band {
-                    true => rect.x,
-                    false => rect.x + 1 + pad as u16,
+                    true => inside.x,
+                    false => inside.x + pad as u16,
                 };
                 let y = rect.y + 1 + i as u16;
                 let style = match row.wash {
@@ -1255,7 +1258,7 @@ pub fn draw(
                 let (column, row) = (i / deep, i % deep);
                 let key_w = column_key_w(column);
                 // Each column starts where the ones before it end.
-                let x = rect.x + 1 + key_widths[..column].iter().map(|w| w + 2).sum::<usize>() as u16;
+                let x = inside.x + key_widths[..column].iter().map(|w| w + 2).sum::<usize>() as u16;
                 let one = key_widths[column];
                 let y = rect.y + 1 + row as u16;
                 // The last cell counts what did not fit rather than letting the
@@ -1334,10 +1337,13 @@ pub fn draw(
         // 和 `area.width` 夾過兩道——夾完之後這一句話可能比底邊還長。照
         // `limit - w - 1` 起筆的話起點落在框外，畫出來是「y 複製先前版╯」：最後
         // 一個字被角吃掉，而讀者看不出那是被截的。兩頭各留一格空氣，同左端那個數字。
-        let room = (width as usize).saturating_sub(3);
+        let room = (width as usize).saturating_sub(3 * wall);
         let tag = crate::elide(&tag, room);
         let w = yumete_cjk::str_width(&tag) as u16;
-        put_text(buf, limit.saturating_sub(w + 1), floor, limit, &tag, ground.fg(ink.quiet()));
+        // A stroke of rule before the corner, and started on a stroke, not on
+        // the blank after one.
+        let at = crate::chrome::on_the_rule(rect, limit.saturating_sub(w + wall as u16));
+        put_text(buf, at, floor, limit, &tag, ground.fg(ink.quiet()));
     }
     // **讀到第幾行，貼底邊左端**（和右端那句各佔一頭：兩類不同的信息，邊框有
     // 兩頭）。
@@ -1375,7 +1381,7 @@ pub fn draw(
             }
             false => {
                 let said = format!(" {at}/{all} ");
-                put_text(buf, rect.x + 1, floor, limit, &said, ground.fg(ink.quiet()));
+                put_text(buf, rect.x + wall as u16, floor, limit, &said, ground.fg(ink.quiet()));
             }
         }
     }

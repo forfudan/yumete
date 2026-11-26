@@ -1076,7 +1076,9 @@ pub fn draw(frame: &mut Frame, seat: &Seat, config: &Config, area: Rect) -> Opti
         true => {
             // As wide as its labels and values want, never under 26 cells
             // nor over a third of the page.
-            let w = left_width(&boxes).max(26).min(body.width / 3);
+            // Even when the walls take two cells, so the rules meet the corners.
+            let w = left_width(&boxes).max(26);
+            let w = (w + w % crate::chrome::wall()).min(body.width / 3);
             (Some(Rect { width: w, ..body }), Rect { x: body.x + w, width: body.width - w, ..body })
         }
         false => (None, body),
@@ -1260,7 +1262,7 @@ fn hours(millis: u64) -> String {
 /// The left column's three boxes, each a title and its label–value rows.
 type LeftBoxes = [(String, Vec<(String, String)>); 3];
 
-/// **The cells the left column wants**: its borders and a cell of padding
+/// **The cells the left column wants**: its borders (`chrome::wall` each) and a cell of padding
 /// each side, the widest label, a cell between label and value, and the
 /// widest value — so no label runs into its value and no value meets the
 /// border, in either language.
@@ -1268,7 +1270,7 @@ fn left_width(boxes: &LeftBoxes) -> u16 {
     let rows = || boxes.iter().flat_map(|(_, rows)| rows.iter());
     let label = rows().map(|(l, _)| yumete_cjk::str_width(l)).max().unwrap_or(0);
     let value = rows().map(|(_, v)| yumete_cjk::str_width(v)).max().unwrap_or(0);
-    (2 + 1 + label + 1 + value + 1) as u16
+    (2 * crate::chrome::wall() as usize + 1 + label + 1 + value + 1) as u16
 }
 
 /// The widest label in the left column, which puts every value in one

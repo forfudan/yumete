@@ -1704,7 +1704,7 @@ pub fn draw_detail(
     let buf = frame.buffer_mut();
     // 兩邊都是「離窗口邊 2 格」：左邊那一堵牆在 `area.x`，右邊那一堵在對面，
     // 而牆與字之間留一格空氣。
-    let left = area.x + 2;
+    let left = (area.x + 2).max(shell.from + 1);
     // **標題由框畫，這裏只接自己那一句**（同文件樹接根目錄名）：那張表叫什麼。
     //
     // Warning: **用 `shell.head`，別自己調一個**，不然標題裏的行號底色不對。有焦點的時候那一行

@@ -2196,8 +2196,11 @@ pub(crate) fn draw_candidate_columns(
     let count = columns.len();
     // The header column is only ever a slot wide, whatever the candidates need.
     let inner_w = SLOT_WIDTH + (count as u16).saturating_sub(1) * pitch;
-    // Each wall takes the cells its stroke is counted (`chrome::wall`).
-    let panel_w = (inner_w + 2 * crate::chrome::wall()).min(area.width.max(1));
+    // Each wall takes the cells its stroke is counted (`chrome::wall`); with
+    // two, an even inside lets the top and bottom rules meet the corners.
+    let wall = crate::chrome::wall();
+    let inner_w = inner_w + inner_w % wall;
+    let panel_w = (inner_w + 2 * wall).min(area.width.max(1));
     let panel_h = (depth as u16 + 2).min(area.height.max(1));
 
     // The text reads leftward, so the panel opens to the left of the cursor's
@@ -2214,7 +2217,7 @@ pub(crate) fn draw_candidate_columns(
     let ground = Style::default().bg(skin.paper()).fg(skin.text());
     // The candidate list's ring is the editor's ring with the IME's own
     // colours in it — one shape, two palettes (`chrome`).
-    let inner = crate::chrome::draw_in_editor_cells(frame, panel, &crate::chrome::Ring {
+    let inner = crate::chrome::draw(frame, panel, &crate::chrome::Ring {
         foot: None,
         rounded: config.panel.rounded,
         open_sides: false,

@@ -8296,7 +8296,10 @@ fn draw_replacing(frame: &mut Frame, editor: &Editor, config: &Config, area: Rec
         .max()
         .unwrap_or(0)
         .max(30);
-    let width = (inner + 4).min(area.width as usize) as u16;
+    // A cell of air inside each wall; the walls take `chrome::wall` cells each.
+    let wall = crate::chrome::wall() as usize;
+    let inner = inner + inner % wall;
+    let width = (inner + 2 + 2 * wall).min(area.width as usize) as u16;
     // 三行正文（數字、槽、檔名）＋ 一行空＋ 一行鍵提示 ＋ 上下兩道牆。
     let height = 7u16;
     if width < 16 || height + 2 > area.height {
@@ -8306,7 +8309,7 @@ fn draw_replacing(frame: &mut Frame, editor: &Editor, config: &Config, area: Rec
     else {
         return;
     };
-    crate::chrome::draw(frame, panel, &crate::chrome::Ring {
+    let inside = crate::chrome::draw(frame, panel, &crate::chrome::Ring {
         foot: None,
         rounded: config.panel.rounded,
         open_sides: false,
@@ -8318,13 +8321,17 @@ fn draw_replacing(frame: &mut Frame, editor: &Editor, config: &Config, area: Rec
         )),
     });
     let ground = Style::default();
-    let limit = panel.x + width - 1;
-    let left = panel.x + 2;
-    let room = (width as usize).saturating_sub(4);
+    let limit = inside.x + inside.width;
+    let left = inside.x + 1;
+    let room = (inside.width as usize).saturating_sub(2);
     let buf = frame.buffer_mut();
     put_fit(buf, left, panel.y + 1, limit, &head, ground.fg(ink.text()));
     // **槽畫成兩段同一個字符，分色**——不是 `█` 配 `░`：那兩個字在不同字體下
     // 寬窄不一樣，而這一條要和上下兩行逐格對齊。
+    //
+    // Counted in strokes, not cells: under `ambiguous_width = "wide"` each
+    // stroke takes two, and a bar counted in cells fills at half way.
+    let room = room / yumete_cjk::str_width("─").max(1);
     let filled = match total {
         0 => 0,
         _ => room * done / total,
@@ -8349,7 +8356,7 @@ fn draw_query(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
     let ink = crate::theme::Palette::of(config);
     // Wide enough to read a sentence on, narrow enough to read as a panel: the
     // body is the only thing here that wraps, so it decides the width.
-    let want = 56usize.min(area.width.saturating_sub(6) as usize);
+    let want = 56usize.min(area.width.saturating_sub(4 + 2 * crate::chrome::wall()) as usize);
     let body = wrap_to(&asked.body, want.max(16));
     let keys: Vec<String> = asked
         .choices
@@ -8363,7 +8370,10 @@ fn draw_query(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
         .max()
         .unwrap_or(0)
         .max(yumete_cjk::str_width(&asked.title) + 2);
-    let width = (inner + 4).min(area.width as usize) as u16;
+    // A cell of air inside each wall; the walls take `chrome::wall` cells each.
+    let wall = crate::chrome::wall() as usize;
+    let inner = inner + inner % wall;
+    let width = (inner + 2 + 2 * wall).min(area.width as usize) as u16;
     let height = (body.len() + keys.len() + 3) as u16;
     // Nowhere to put it is not a reason to answer for the writer: the question
     // stays open and the status line still carries the command that asked it.
@@ -8374,7 +8384,7 @@ fn draw_query(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
     else {
         return;
     };
-    crate::chrome::draw(frame, panel, &crate::chrome::Ring {
+    let inside = crate::chrome::draw(frame, panel, &crate::chrome::Ring {
         foot: None,
         rounded: config.panel.rounded,
         open_sides: false,
@@ -8392,21 +8402,22 @@ fn draw_query(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
     // ground moves. `Cell::set_style` patches, so a style with no `bg` keeps
     // whatever is under it.
     let ground = Style::default();
-    let limit = panel.x + width - 1;
+    let limit = inside.x + inside.width;
+    let left = inside.x + 1;
     let buf = frame.buffer_mut();
     let mut y = panel.y + 1;
     for line in &body {
-        put_text(buf, panel.x + 2, y, limit, line, ground.fg(ink.text()));
+        put_text(buf, left, y, limit, line, ground.fg(ink.text()));
         y += 1;
     }
     y += 1;
     for (a, row) in asked.choices.iter().zip(&keys) {
         // The key is gold and what it does is text: the same two rungs the
         // which-key panel uses, so one glance reads the same way in both.
-        put_text(buf, panel.x + 2, y, limit, &a.key.to_string(), ground.fg(ink.gold()));
+        put_text(buf, left, y, limit, &a.key.to_string(), ground.fg(ink.gold()));
         put_text(
             buf,
-            panel.x + 5,
+            left + 3,
             y,
             limit,
             row.split_at(3).1,
@@ -8764,7 +8775,11 @@ fn draw_list(
     // entry anywhere in the list. Otherwise one long entry widens the six
     // columns beside it by two cells each and costs the list a whole column
     // — the seventh, the one it needs to be shown whole.
-    let room = (area.width as usize).saturating_sub(4);
+    //
+    // The walls take `chrome::wall` cells each, and the list keeps a cell of
+    // air inside each.
+    let wall = crate::chrome::wall() as usize;
+    let room = (area.width as usize).saturating_sub(2 + 2 * wall);
     let lay = |deep: usize, from: usize| -> Vec<usize> {
         let mut widths = Vec::new();
         let mut used = 0;
@@ -8890,15 +8905,16 @@ fn draw_list(
         .sum::<usize>()
         .max(yumete_cjk::str_width(footer) + 2)
         .max(yumete_cjk::str_width(title) + 2);
+    let inner = inner + inner % wall;
     // **撑滿終端**：右邊那片空白不是浪費，是說明塊的地方。
     let width = match wide {
-        true => area.width,
-        false => (inner + 2).min(area.width as usize) as u16,
+        true => area.width - area.width % wall as u16,
+        false => (inner + 2 * wall).min(area.width as usize) as u16,
     };
     // 說明折到框裏那麼寬，一段一段地折。
     let mut said: Vec<String> = about
         .iter()
-        .flat_map(|p| fold_to_width(p, width.saturating_sub(3) as usize))
+        .flat_map(|p| fold_to_width(p, width.saturating_sub(1 + 2 * wall as u16) as usize))
         .collect();
     // 「現在：」 and the word apart, so that only the word takes the colour.
     let now = state.map(|on| {
@@ -8937,7 +8953,7 @@ fn draw_list(
     // The same ring, at the same rung, with its name in the same corner as the
     // which-key panel's: two panels that open in the same place and do the
     // same kind of thing should not look like two different programs.
-    crate::chrome::draw(frame, menu, &crate::chrome::Ring {
+    let inside = crate::chrome::draw(frame, menu, &crate::chrome::Ring {
         open_sides: false,
         // 計數寫在下邊框上，省一行——標題寫在上邊框上，同一個辦法。
         foot: match footer.is_empty() {
@@ -8968,6 +8984,7 @@ fn draw_list(
     let on = Style::default().bg(ink.text()).fg(crate::chrome::panel_ground(ink));
 
     let buf = frame.buffer_mut();
+    let limit = inside.x + inside.width;
     // **說明塊，然後一道橫線。** 說明在上、單子在下，中間隔開——
     // 一句話讀得完整，而單子還是一眼掃得過去的那張單子。
     if !said.is_empty() {
@@ -8976,15 +8993,15 @@ fn draw_list(
             let y = menu.y + 1 + n as u16;
             match &now {
                 Some((head, word, on)) if n + 1 == said.len() => {
-                    let x = put_text(buf, menu.x + 2, y, menu.x + width - 1, head, text);
+                    let x = put_text(buf, inside.x + 1, y, limit, head, text);
                     let lit = match on {
                         true => ground.fg(ink.gold()),
                         false => quiet,
                     };
-                    put_text(buf, x, y, menu.x + width - 1, word, lit);
+                    put_text(buf, x, y, limit, word, lit);
                 }
                 _ => {
-                    put_text(buf, menu.x + 2, y, menu.x + width - 1, line, text);
+                    put_text(buf, inside.x + 1, y, limit, line, text);
                 }
             }
         }
@@ -8992,11 +9009,7 @@ fn draw_list(
             let y = menu.y + 1 + said.len() as u16;
             let rule = Style::default().fg(ink.rule()).bg(crate::chrome::panel_ground(ink));
             // 圓角方角共用這一對：圓的只圓在四個角上。
-            put_text(buf, menu.x, y, menu.x + width, "├", rule);
-            for x in menu.x + 1..menu.x + width - 1 {
-                put_text(buf, x, y, menu.x + width, "─", rule);
-            }
-            put_text(buf, menu.x + width - 1, y, menu.x + width, "┤", rule);
+            crate::chrome::cross_rule(buf, menu, y, rule);
         }
     }
     for slot in 0..visible {
@@ -9005,8 +9018,8 @@ fn draw_list(
             break;
         }
         let (column, row) = (slot / deep, slot % deep);
-        let x = menu.x + 1 + widths[..column].iter().sum::<usize>() as u16;
-        let end = (x + widths[column] as u16).min(menu.x + width - 1);
+        let x = inside.x + widths[..column].iter().sum::<usize>() as u16;
+        let end = (x + widths[column] as u16).min(limit);
         let y = menu.y + 1 + block as u16 + row as u16;
         let picked = highlight == Some(i);
         let style = match (picked, items[i].dim) {
@@ -9095,10 +9108,12 @@ fn draw_hud(
     }
     // A 藥丸, not a thread (#284): the corner still points back at the caret,
     // and a cell of ground closes the other end, so what is drawn reads as one
-    // small object rather than as a line trailing off the writing. Every mark
-    // is one cell wide, so the width does not depend on which corner the
-    // placement ends up choosing.
-    let width = yumete_cjk::str_width(&typed) as u16 + 3;
+    // small object rather than as a line trailing off the writing. Every
+    // corner is as wide as the others (two cells under
+    // `ambiguous_width = "wide"`), so the width does not depend on which
+    // corner the placement ends up choosing.
+    let corner_w = yumete_cjk::str_width("╰") as u16;
+    let width = yumete_cjk::str_width(&typed) as u16 + 2 + corner_w;
     if width >= page.width {
         return;
     }
@@ -9210,7 +9225,7 @@ fn draw_hud(
                 // the left. A corner pointing away from the caret is worse than
                 // no corner at all.
                 let leftward = x + width <= caret_x;
-                let near = if leftward { x + width - 1 } else { x };
+                let near = if leftward { x + width - corner_w } else { x };
                 let score = near.abs_diff(caret_x) as u32 + step.unsigned_abs() * 8;
                 let corner = match (step.signum(), leftward) {
                     (1, false) => '╰',
@@ -9274,7 +9289,10 @@ fn draw_hud_panel(
         return;
     }
     let (caret_x, caret_y) = caret.at;
-    let width = yumete_cjk::str_width(typed) as u16 + 2;
+    // The walls take `chrome::wall` cells each.
+    let wall = crate::chrome::wall();
+    let typed_w = yumete_cjk::str_width(typed) as u16;
+    let width = typed_w + typed_w % wall + 2 * wall;
     if width > page.width || page.height < 3 {
         return;
     }
@@ -9303,7 +9321,7 @@ fn draw_hud_panel(
         return;
     };
     let panel = Rect::new(x, y, width, 3);
-    crate::chrome::draw(frame, panel, &crate::chrome::Ring {
+    let inside = crate::chrome::draw(frame, panel, &crate::chrome::Ring {
         foot: None,
         rounded: config.panel.rounded,
         open_sides: false,
@@ -9318,9 +9336,9 @@ fn draw_hud_panel(
     });
     put_text(
         frame.buffer_mut(),
-        panel.x + 1,
-        panel.y + 1,
-        panel.x + width - 1,
+        inside.x,
+        inside.y,
+        inside.x + inside.width,
         typed,
         Style::default().bg(ink.paper()).fg(ink.gold()),
     );
@@ -12333,13 +12351,20 @@ pub(crate) fn sidebar_shell(
 ) -> Shell {
     // **裏面那一堵在朝着正文的那一邊**，所以邊欄自己的欄目總是貼着正文，
     // 外面那一堵就落在窗口的邊上。
+    //
+    // Each wall takes the cells its stroke is counted (`chrome::wall`). With
+    // two, the walls stand an even number of cells apart so the rules meet
+    // the corners, and an odd width leaves its spare cell at the window's
+    // edge, keeping the inner wall where a drag finds it.
+    let step = crate::chrome::wall();
+    let spare = area.width % step;
     let (inside, outside) = match side {
-        Side::Left => (area.x + area.width - 1, area.x),
-        Side::Right => (area.x, area.x + area.width - 1),
+        Side::Left => (area.x + area.width - step, area.x + spare),
+        Side::Right => (area.x, area.x + area.width - step - spare),
     };
     let (from, to) = match side {
-        Side::Left => (area.x, inside),
-        Side::Right => (area.x + 1, area.x + area.width - 1),
+        Side::Left => (outside + step - 1, inside),
+        Side::Right => (inside + 1, outside),
     };
     let focused = editor.panel_focus() == Some(side);
     // **有焦點：同一個框，換成雙線、金色。** 整圈刷成金底實心條太刺眼；雙線一樣
@@ -12365,17 +12390,13 @@ pub(crate) fn sidebar_shell(
             }
         }
         for wall in [inside, outside] {
-            if let Some(cell) = buf.cell_mut((wall, y)) {
-                cell.set_symbol(bar).set_style(line);
-            }
+            put_text(buf, wall, y, wall + step, bar, line);
         }
     }
     // **上邊就是標題那一行**：這裏只鋪底，字由各個面板自己寫（它們的標題各不
     // 相同），寫的時候用回報的 `head`。
-    for x in wall_a + 1..wall_b {
-        if let Some(cell) = buf.cell_mut((x, area.y)) {
-            cell.set_symbol(rule).set_style(line);
-        }
+    for x in (wall_a + step..wall_b).step_by(step as usize) {
+        put_text(buf, x, area.y, wall_b, rule, line);
     }
     if let Some(cell) = buf.cell_mut((outside, area.y)) {
         cell.set_symbol(corner(side, true, false, focused)).set_style(line);
@@ -12397,10 +12418,8 @@ pub(crate) fn sidebar_shell(
         false => ground.fg(ink.quiet()),
     };
     if let Some(y) = floor {
-        for x in wall_a + 1..wall_b {
-            if let Some(cell) = buf.cell_mut((x, y)) {
-                cell.set_symbol(rule).set_style(line);
-            }
+        for x in (wall_a + step..wall_b).step_by(step as usize) {
+            put_text(buf, x, y, wall_b, rule, line);
         }
         if let Some(cell) = buf.cell_mut((outside, y)) {
             cell.set_symbol(corner(side, false, false, focused)).set_style(line);
@@ -12427,8 +12446,15 @@ pub(crate) fn sidebar_shell(
                     // **分隔符不留空**，緊湊一些：` > ` 三格一個、三個就是九格，
                     // 而這一行本來就裝不下；`>` 一格，整行 29 → 23。
                     let says = format!("Tab {}", names.join(">"));
-                    let room = to.saturating_sub(at) as usize;
-                    put_text(buf, at, y, to, &elide(&says, room), line);
+                    // With two-cell strokes one stroke of rule is kept before
+                    // the corner: words ending on a stroke's blank would
+                    // leave the rule short of it.
+                    let end = match step {
+                        1 => to,
+                        _ => to.saturating_sub(step),
+                    };
+                    let room = end.saturating_sub(at) as usize;
+                    put_text(buf, at, y, end, &elide(&says, room), line);
                 }
             }
         }
@@ -12440,8 +12466,10 @@ pub(crate) fn sidebar_shell(
     }
     put_text(buf, from + 1, area.y, to, name, head);
     let head_at = from + 1 + yumete_cjk::str_width(name) as u16;
+    // On a stroke, so what a panel adds two cells on starts on one too.
+    let head_at = head_at + head_at.saturating_sub(wall_a) % step;
     let floor_ink = line;
-    Shell { from, to, head, head_at, area: room, floor, floor_ink }
+    Shell { from, to, head, head_at, area: room, floor, floor_ink, walls: (wall_a, wall_b), step }
 }
 
 /// **How close two presses must be to be one double click.** Terminals
@@ -12504,6 +12532,33 @@ pub(crate) struct Shell {
     floor: Option<u16>,
     /// 底邊那一行的墨：有焦點是金底，沒有是淡的橫線。
     floor_ink: Style,
+    /// The two walls' columns, left one first.
+    walls: (u16, u16),
+    /// **How many cells one stroke of the frame takes** (`chrome::wall`): a
+    /// stroke and the blank after it when ambiguous characters are wide.
+    step: u16,
+}
+
+impl Shell {
+    /// **Where words written over the top or bottom rule may start**: `x`,
+    /// or the cell before it when that is where a stroke stands, so the words
+    /// cover whole strokes (`chrome::on_the_rule`).
+    fn on_the_rule(&self, x: u16) -> u16 {
+        x - x.saturating_sub(self.walls.0) % self.step
+    }
+
+    /// **A rule from wall to wall on row `y`**, a tee at each end, its strokes
+    /// on the same cells as the top rule's.
+    fn rule_across(&self, buf: &mut ratatui::buffer::Buffer, y: u16, tee: (&str, &str), stroke: &str, style: Style) {
+        let (a, b) = self.walls;
+        put_text(buf, a, y, a + self.step, tee.0, style);
+        let mut x = a + self.step;
+        while x < b {
+            put_text(buf, x, y, b, stroke, style);
+            x += self.step;
+        }
+        put_text(buf, b, y, b + self.step, tee.1, style);
+    }
 }
 
 /// **邊欄底邊：左端「讀到第幾行 / 共幾行」，右端「怎麽翻」。**
@@ -12522,8 +12577,8 @@ fn count_on_the_floor(frame: &mut Frame, shell: &Shell, at: usize, all: usize) {
     let paged = say!("info.page-it");
     let w = yumete_cjk::str_width(&paged) as u16;
     // 離角留一格，同浮窗那一份（`panel.rs` 的 `limit - w - 1`）。
-    if shell.to > shell.from + 3 + w {
-        put_text(buf, shell.to - w - 1, y, shell.to, &paged, shell.floor_ink);
+    if shell.to > shell.from + 2 + shell.step + w {
+        put_text(buf, shell.on_the_rule(shell.to - w - shell.step), y, shell.to, &paged, shell.floor_ink);
     }
 }
 
@@ -12888,7 +12943,7 @@ fn draw_search(
             }
             false => style,
         };
-        put_text(buf, to.saturating_sub(w + 1), area.y, to, &tally, style);
+        put_text(buf, shell.on_the_rule(to.saturating_sub(w + shell.step)), area.y, to, &tally, style);
     }
 
     // The boxes. A caret where the keys are, and the whole of one inked when
@@ -13185,25 +13240,20 @@ fn draw_search(
     // **橫筆也跟着**：沒焦點時是單線，當且僅當這一區有焦點時纔是金色雙線。
     // 「單豎、雙橫」（`╞═╡`）的話，一道雙橫線在一圈單線框裏，看着還是在喊人。
     let rule = shell.floor_ink;
-    let (wall_a, wall_b) = (whole.x, whole.x + whole.width.saturating_sub(1));
     let (tee, stroke) = match editor.panel_focus() == Some(side) {
         true => (("╠", "╣"), "═"),
         false => (("├", "┤"), "─"),
     };
-    let rule_across = |buf: &mut ratatui::buffer::Buffer, y: u16, from: u16| {
+    let rule_across = |buf: &mut ratatui::buffer::Buffer, y: u16| {
         // Warning: **擋在內容區的邊上，不是整扇面板的邊上。** `area` 已經減掉了底邊
         // 那一行，而底邊上寫着 `Tab 文件>…`——拿整扇面板的高度當閘，14 行的窗口
         // 裏這一道線就畫到那一行上，把它整條蓋掉。同 `draw_box`。
         if y >= area.y + area.height {
             return;
         }
-        put_text(buf, wall_a, y, wall_a + 1, tee.0, rule);
-        if wall_b > from {
-            put_text(buf, from, y, wall_b, &stroke.repeat((wall_b - from) as usize), rule);
-        }
-        put_text(buf, wall_b, y, wall_b + 1, tee.1, rule);
+        shell.rule_across(buf, y, tee, stroke, rule);
     };
-    rule_across(buf, y + 1, wall_a + 1);
+    rule_across(buf, y + 1);
     // What it found. Quiet when the pattern is broken: these are the answer to
     // what the box held a keystroke ago, not to what it holds now.
     let top = y + 2;
@@ -13349,7 +13399,7 @@ fn draw_search(
             let head = area.y + area.height - (after_rows + going_rows) as u16;
             let name = say!("search.after");
             // 線先鋪滿、名字再壓上去，兩頭的丁字和上面那一道同一支。
-            rule_across(buf, head, wall_a + 1);
+            rule_across(buf, head);
             put_text(buf, left, head, to, &name, quiet);
             let gone = ground.fg(ink.mark()).add_modifier(Modifier::CROSSED_OUT);
             let come = ground.fg(ink.green());
@@ -13377,7 +13427,7 @@ fn draw_search(
     if going_rows > 0 {
         if let Some((looked, at)) = &going {
             let head = area.y + area.height - going_rows as u16;
-            rule_across(buf, head, wall_a + 1);
+            rule_across(buf, head);
             let counted = looked.to_string();
             // 留給路徑的寬度：整行減掉文案裏除路徑以外的那些字。
             let bare = say!("search.progress", counted, "");
@@ -13890,7 +13940,7 @@ fn draw_picker(
     // page on one that is not. Every panel passes `panel_ground` (#387), and
     // `every_cell_of_the_frame_is_painted` sweeps with a picker open.
     let ground = Style::default().bg(crate::chrome::panel_ground(ink));
-    crate::chrome::draw(frame, left, &crate::chrome::Ring {
+    let inside = crate::chrome::draw(frame, left, &crate::chrome::Ring {
         foot: None,
         rounded: config.panel.rounded,
         open_sides: false,
@@ -13943,10 +13993,10 @@ fn draw_picker(
     // 說不出「鍵在這兒」，它只剩一個意思：選中的是這一條。沒有第二個地方可誤解，
     // 就沒有要靠「淡一檔」去避的誤解，所以用正常的選中色。
     let on = Style::default().bg(ink.at(yumete_config::rung::SELECTION)).fg(ink.text());
-    let limit = left.x + names - 1;
+    let limit = inside.x + inside.width;
     // Warning: **沒有 `+ 1`**：冒號和搜索框之間一格就夠。`search.label.query` 這則本身
     // 就帶一個尾空格（`"搜: "`/`"Search: "`），再加一格就是兩格。
-    let tag_at = left.x + 1;
+    let tag_at = inside.x;
     let box_at = tag_at + yumete_cjk::str_width(&say!("search.label.query")) as u16;
     // **框裝得下的那一段，按格數裁**（和搜索面板那三格同一支 [`window_on`]）。
     //
@@ -13966,10 +14016,10 @@ fn draw_picker(
             // 那條虛線：整列一道 `┄`，和別的框綫同一支墨，所以讀起來是「這裏分了
             // 一下」而不是「這是另一塊區域」——a soft division。
             let Some(which) = item_of(row) else {
-                let wide = limit.saturating_sub(left.x + 1) as usize;
+                let wide = limit.saturating_sub(inside.x) as usize / yumete_cjk::str_width("┄").max(1);
                 put_text(
                     buf,
-                    left.x + 1,
+                    inside.x,
                     y,
                     limit,
                     &"┄".repeat(wide),
@@ -13986,7 +14036,7 @@ fn draw_picker(
                 false => ground.fg(ink.text()),
             };
             if picked {
-                for x in left.x + 1..limit {
+                for x in inside.x..limit {
                     if let Some(cell) = buf.cell_mut((x, y)) {
                         cell.set_symbol(" ").set_style(style);
                     }
@@ -14031,7 +14081,7 @@ fn draw_picker(
                     .rposition(|&(_, g)| g == "/" || g == "\\")
                     .map_or(0, |i| i + 1),
             };
-            let mut x = left.x + 1;
+            let mut x = inside.x;
             if mark_wide > 0 {
                 let under = match picked {
                     true => on,
@@ -14125,17 +14175,13 @@ fn draw_picker(
         if ruled {
             let rule = ground.fg(ink.rule());
             // 圓角方角共用這一對：圓的只圓在四個角上。
-            put_text(buf, left.x, left.y + 2, limit + 1, "├", rule);
-            for x in left.x + 1..limit {
-                put_text(buf, x, left.y + 2, limit, "─", rule);
-            }
-            put_text(buf, limit, left.y + 2, limit + 1, "┤", rule);
+            crate::chrome::cross_rule(buf, left, left.y + 2, rule);
         }
         // Nothing matched is something to say, not an empty box to puzzle over.
         if items.is_empty() {
             put_text(
                 buf,
-                left.x + 1,
+                inside.x,
                 list_at,
                 limit,
                 &say!("picker.nothing-matched"),
@@ -14145,7 +14191,7 @@ fn draw_picker(
         if footed {
             put_text(
                 buf,
-                left.x + 1,
+                inside.x,
                 left.y + rows - 2,
                 limit,
                 &footer,
@@ -14195,7 +14241,7 @@ fn draw_preview(
     let (name, lines) = editor
         .picker_preview(area.height.saturating_sub(2) as usize)
         .unwrap_or_default();
-    crate::chrome::draw(frame, area, &crate::chrome::Ring {
+    let inside = crate::chrome::draw(frame, area, &crate::chrome::Ring {
         foot: None,
         rounded: config.panel.rounded,
         open_sides: false,
@@ -14208,14 +14254,14 @@ fn draw_preview(
     // the `[-` `{+` scaffolding left off the page.
     if editor.picker_preview_is_diff() {
         let buf = frame.buffer_mut();
-        let limit = area.x + area.width - 1;
+        let limit = inside.x + inside.width;
         for (i, line) in lines.iter().enumerate() {
             let y = area.y + 1 + i as u16;
             if y + 1 >= area.y + area.height {
                 break;
             }
             let spans = yumete_core::diff::spans(line);
-            let mut x = area.x + 1;
+            let mut x = inside.x;
             for (at, c) in line.chars().enumerate() {
                 let kind = spans.iter().rev().find(|s| (s.start..s.end).contains(&at)).map(|s| s.kind);
                 let style = match kind {
@@ -14240,7 +14286,7 @@ fn draw_preview(
     );
     let coloured = language.map(|language| yumete_core::code::highlight(language, &lines));
     let buf = frame.buffer_mut();
-    let limit = area.x + area.width - 1;
+    let limit = inside.x + inside.width;
     for (i, line) in lines.iter().enumerate() {
         let y = area.y + 1 + i as u16;
         if y + 1 >= area.y + area.height {
@@ -14248,7 +14294,7 @@ fn draw_preview(
         }
         match coloured.as_ref().and_then(|all| all.get(i)) {
             Some(spans) if !spans.is_empty() => {
-                let mut x = area.x + 1;
+                let mut x = inside.x;
                 for span in spans {
                     let text: String = line
                         .chars()
@@ -14274,7 +14320,7 @@ fn draw_preview(
                         false => ground.fg(ink.text()),
                     },
                 };
-                put_text(buf, area.x + 1, y, limit, line, style);
+                put_text(buf, inside.x, y, limit, line, style);
             }
         }
     }
@@ -19133,7 +19179,7 @@ fn draw_panel_rows(
         lines.push(line);
     }
 
-    let inner = crate::chrome::draw_in_editor_cells(frame, panel, &crate::chrome::Ring {
+    let inner = crate::chrome::draw(frame, panel, &crate::chrome::Ring {
         foot: None,
         rounded: config.panel.rounded,
         open_sides: false,

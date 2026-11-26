@@ -22,6 +22,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 - **A wrapped table column the right edge cuts wraps at the edge**, so the last characters of each of its lines are no longer off the page while the cursor is in another column.
 - **With `ambiguous_width = "wide"` the input method's candidate box stays a rectangle**: each stroke of its frame gets the second cell a CJK terminal draws it in, as the candidates' own `…` and `○` do.
+- **With `ambiguous_width = "wide"` every other frame stays a rectangle too**: the key menus, the command menu, floats, the question in the middle, the pickers and their preview, the HUD panel, the typing trainer's boxes and the sidebars give each stroke its second cell, and what they hold stays inside their walls.
 - On a vertical page a table's rules line up with `:view-hanging on` and under `:render full`.
 - Moving through a long table on a vertical page no longer slows down with its length.
 - **Under vim, `o` on a last line with no line break, then `C-o k`, goes to the line above the new one**, as vim does; it went one line higher.

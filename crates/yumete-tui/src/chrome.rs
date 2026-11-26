@@ -48,9 +48,88 @@ pub struct Ring {
 
 /// Clear `rect`, draw the ring on it, and hand back the inside.
 ///
-/// The returned rectangle is the block's own `inner` — one cell in on every
-/// side — so a caller never works the border's width out for itself.
+/// **Every stroke is given the second cell this editor counts for it**
+/// ([`yumete_cjk::needs_a_second_cell`]), as the text inside a ring is given
+/// its own. The box-drawing block is East Asian Ambiguous: under
+/// `ambiguous_width = "wide"` a CJK terminal draws `│` `─` `╭` two cells
+/// wide, and drawn one to a cell each stroke paints over the next one — the
+/// top rule comes out twice as long as the walls are apart and every wall
+/// pushes its row a cell right. So there each stroke stands on a cell with a
+/// blank after it, the walls take [`wall`] cells each, and the inside handed
+/// back is narrower by both. With the strokes one cell wide (the default)
+/// this is ratatui's own bordered block, one cell in on every side.
+///
+/// A caller lays its contents into the rectangle handed back and nowhere
+/// else, so it never works the walls' width out for itself; one that sizes a
+/// ring from its contents adds `2 * wall()` for the walls.
+///
+/// With two-cell strokes the rules fill the space between the corners only
+/// when the ring is an even number of cells wide, so an odd `rect` keeps its
+/// last column as ground outside the right wall. A caller sizing a ring from
+/// its contents keeps the inside even (`inner + inner % wall()`) and loses
+/// nothing to that.
 pub fn draw(frame: &mut Frame, rect: Rect, ring: &Ring) -> Rect {
+    if stroke_cells(rect) == 1 {
+        return draw_narrow(frame, rect, ring);
+    }
+    frame.render_widget(Clear, rect);
+    crate::vertical::clear_wide_left_edge(frame.buffer_mut(), rect);
+    let set = match ring.rounded {
+        true => ratatui::symbols::border::ROUNDED,
+        false => ratatui::symbols::border::PLAIN,
+    };
+    let buf = frame.buffer_mut();
+    for y in rect.y..rect.y + rect.height {
+        for x in rect.x..rect.x + rect.width {
+            if let Some(cell) = buf.cell_mut((x, y)) {
+                cell.set_symbol(" ").set_style(ring.ground);
+            }
+        }
+    }
+    let shape = ring_shape(rect, ring.open_sides);
+    let (left, end) = (shape.x, shape.x + shape.width);
+    let (top, bottom) = (shape.y, shape.y + shape.height - 1);
+    let corner = end - 2;
+    let (from, to) = match ring.open_sides {
+        true => (left, end),
+        false => (left + 2, corner),
+    };
+    for (y, rule) in [(top, set.horizontal_top), (bottom, set.horizontal_bottom)] {
+        for x in (from..to).step_by(2) {
+            stroke(buf, x, y, rule, to, ring.border);
+        }
+    }
+    if !ring.open_sides {
+        stroke(buf, left, top, set.top_left, end, ring.border);
+        stroke(buf, corner, top, set.top_right, end, ring.border);
+        stroke(buf, left, bottom, set.bottom_left, end, ring.border);
+        stroke(buf, corner, bottom, set.bottom_right, end, ring.border);
+        for y in top + 1..bottom {
+            stroke(buf, left, y, set.vertical_left, end, ring.border);
+            stroke(buf, corner, y, set.vertical_right, end, ring.border);
+        }
+    }
+    // The title and the foot start on the first stroke past the corner, one
+    // cell of air before their first character, so each covers whole strokes
+    // and none is left with its second cell written over. What does not fit
+    // before the right corner loses its last characters.
+    let words = [
+        (top, ring.title.as_ref().map(|(t, s)| (format!(" {t}"), *s))),
+        (bottom, ring.foot.as_ref().map(|(t, s)| (format!(" {t} "), *s))),
+    ];
+    for (y, said) in words {
+        if let Some((text, style)) = said {
+            crate::put_text(buf, left + 2, y, corner, &text, style);
+        }
+    }
+    match ring.open_sides {
+        true => Rect::new(left, top + 1, shape.width, shape.height - 2),
+        false => Rect::new(left + 2, top + 1, shape.width - 4, shape.height - 2),
+    }
+}
+
+/// [`draw`] with every stroke one cell wide: ratatui's bordered block.
+fn draw_narrow(frame: &mut Frame, rect: Rect, ring: &Ring) -> Rect {
     frame.render_widget(Clear, rect);
     // **A 漢字 cannot be covered by halves** (#286). It owns two cells, and the
     // renderer skips whatever a wide glyph covers — so a border written into
@@ -102,6 +181,40 @@ pub fn draw(frame: &mut Frame, rect: Rect, ring: &Ring) -> Rect {
     inner
 }
 
+/// A stroke and the blank it paints over, or nothing where the pair would
+/// not fit before `limit`.
+fn stroke(buf: &mut ratatui::buffer::Buffer, x: u16, y: u16, symbol: &str, limit: u16, style: Style) {
+    if x + 1 >= limit {
+        return;
+    }
+    if let Some(cell) = buf.cell_mut((x, y)) {
+        cell.set_symbol(symbol).set_style(style);
+    }
+    if let Some(cell) = buf.cell_mut((x + 1, y)) {
+        cell.set_symbol(" ").set_style(style);
+    }
+}
+
+/// **How many cells one stroke of a ring on `rect` takes**: [`wall`], except
+/// on a ring too small to hold two-cell corners, which [`draw`] draws one to
+/// a cell.
+fn stroke_cells(rect: Rect) -> u16 {
+    match wall() == 1 || rect.width < 4 || rect.height < 2 {
+        true => 1,
+        false => 2,
+    }
+}
+
+/// **The cells the ring itself stands on**: all of `rect`, but with two-cell
+/// strokes a closed ring an even number of cells wide, so its rules meet its
+/// corners.
+fn ring_shape(rect: Rect, open_sides: bool) -> Rect {
+    match stroke_cells(rect) == 2 && !open_sides {
+        true => Rect { width: rect.width - rect.width % 2, ..rect },
+        false => rect,
+    }
+}
+
 /// **How many cells one side wall of a ring takes**: `1`, or `2` when the
 /// ring's strokes are counted two cells wide.
 ///
@@ -116,94 +229,31 @@ pub fn wall() -> u16 {
     }
 }
 
-/// [`draw`], with **every stroke given the second cell this editor counts
-/// for it** ([`yumete_cjk::needs_a_second_cell`]), as the text inside a ring
-/// is given its own (`crate::with_room_for_wide_glyphs`).
+/// **Where text written over a ring's top or bottom rule may start**: `x`, or
+/// the cell before it when that is where a stroke stands.
 ///
-/// Drawn one to a cell, a wide stroke paints over the next cell's stroke:
-/// the top rule comes out twice as long as the walls are apart, and each wall
-/// pushes its row a cell right, so the ring is no longer a rectangle. Here
-/// each stroke stands on a cell with a blank after it, the walls take
-/// [`wall`] cells each, and the inside handed back is narrower by both.
-///
-/// For a ring whose caller lays its contents into the rectangle handed back
-/// (the candidate list's two). A caller that places its contents by the
-/// one-cell walls itself would write into the strokes' second cells.
-///
-/// The top and bottom rules fill the space between the corners exactly when
-/// `rect.width` is even; an odd width leaves one cell of ground before the
-/// right corner.
-pub fn draw_in_editor_cells(frame: &mut Frame, rect: Rect, ring: &Ring) -> Rect {
-    if wall() == 1 || rect.width < 4 || rect.height < 2 {
-        return draw(frame, rect, ring);
+/// With two-cell strokes, text starting on a stroke's blank leaves the stroke
+/// to paint over the text's first character; starting on the stroke itself, it
+/// covers the stroke whole.
+pub fn on_the_rule(rect: Rect, x: u16) -> u16 {
+    x - x.saturating_sub(rect.x) % stroke_cells(rect)
+}
+
+/// **A rule across the inside of a ring**, joined to both walls: `├───┤` on
+/// row `y` of the ring [`draw`] drew on `rect`, its strokes on the same cells
+/// as the top rule's.
+pub fn cross_rule(buf: &mut ratatui::buffer::Buffer, rect: Rect, y: u16, style: Style) {
+    let step = stroke_cells(rect);
+    let shape = ring_shape(rect, false);
+    let end = shape.x + shape.width;
+    let corner = end.saturating_sub(step);
+    crate::put_text(buf, shape.x, y, end, "├", style);
+    let mut x = shape.x + step;
+    while x < corner {
+        crate::put_text(buf, x, y, corner, "─", style);
+        x += step;
     }
-    frame.render_widget(Clear, rect);
-    crate::vertical::clear_wide_left_edge(frame.buffer_mut(), rect);
-    let set = match ring.rounded {
-        true => ratatui::symbols::border::ROUNDED,
-        false => ratatui::symbols::border::PLAIN,
-    };
-    let (left, end) = (rect.x, rect.x + rect.width);
-    let (top, bottom) = (rect.y, rect.y + rect.height - 1);
-    let buf = frame.buffer_mut();
-    for y in top..=bottom {
-        for x in left..end {
-            if let Some(cell) = buf.cell_mut((x, y)) {
-                cell.set_symbol(" ").set_style(ring.ground);
-            }
-        }
-    }
-    // A stroke and the blank it paints over, or nothing where the pair would
-    // not fit before `limit`.
-    let mut stroke = |x: u16, y: u16, symbol: &str, limit: u16| {
-        if x + 1 >= limit {
-            return;
-        }
-        if let Some(cell) = buf.cell_mut((x, y)) {
-            cell.set_symbol(symbol).set_style(ring.border);
-        }
-        if let Some(cell) = buf.cell_mut((x + 1, y)) {
-            cell.set_symbol(" ").set_style(ring.border);
-        }
-    };
-    let corner = end - 2;
-    let (from, to) = match ring.open_sides {
-        true => (left, end),
-        false => (left + 2, corner),
-    };
-    for (y, rule) in [(top, set.horizontal_top), (bottom, set.horizontal_bottom)] {
-        for x in (from..to).step_by(2) {
-            stroke(x, y, rule, to);
-        }
-    }
-    if !ring.open_sides {
-        stroke(left, top, set.top_left, end);
-        stroke(corner, top, set.top_right, end);
-        stroke(left, bottom, set.bottom_left, end);
-        stroke(corner, bottom, set.bottom_right, end);
-        for y in top + 1..bottom {
-            stroke(left, y, set.vertical_left, end);
-            stroke(corner, y, set.vertical_right, end);
-        }
-    }
-    // The title and the foot sit where they sit in `draw`, one cell of air
-    // past the corner's two, and their own ambiguous characters get their
-    // second cells too.
-    let words = [
-        (top, ring.title.as_ref().map(|(t, s)| (format!(" {t}"), *s))),
-        (bottom, ring.foot.as_ref().map(|(t, s)| (format!(" {t} "), *s))),
-    ];
-    for (y, said) in words {
-        if let Some((text, style)) = said {
-            let line = crate::room_for_wide_glyphs(ratatui::text::Line::from(Span::styled(text, style)));
-            let room = Rect::new(left + 2, y, rect.width - 4, 1);
-            frame.render_widget(ratatui::widgets::Paragraph::new(line), room);
-        }
-    }
-    match ring.open_sides {
-        true => Rect::new(left, top + 1, rect.width, rect.height - 2),
-        false => Rect::new(left + 2, top + 1, rect.width - 4, rect.height - 2),
-    }
+    crate::put_text(buf, corner, y, end, "┤", style);
 }
 
 /// **Where a floating thing stands.**

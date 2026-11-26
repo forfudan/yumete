@@ -763,12 +763,15 @@ fn draw_picture(
     // air.
     let (room_w, room_h) = crate::chrome::room(area, vertical, crate::chrome::Use::Read);
     let tall = bottom.saturating_sub(area.y).min(area.height);
+    // The walls take `chrome::wall` cells each, and a cell of air is left
+    // inside each.
+    let wall = crate::chrome::wall();
     let room = (
-        room_w.max(24).min(area.width).saturating_sub(4),
+        room_w.max(24).min(area.width).saturating_sub(2 + 2 * wall),
         room_h.max(3).min(tall).saturating_sub(2),
     );
     let (columns, rows) = cells_for((picture.width, picture.height), cell, room);
-    let width = (columns + 4).max(8);
+    let width = (columns + columns % wall + 2 + 2 * wall).max(8);
     let height = rows + 2;
     let anchor = match vertical {
         false => crate::chrome::Anchor::UnderCaret { at: caret.at, bottom },
