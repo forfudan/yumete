@@ -26569,17 +26569,27 @@ fn squeezed(text: &str) -> String {
 
     /// The screen after the pointer has rested on `at`, and whether a hover
     /// panel was drawn.
-    fn rested_on(editor: &Editor, ime: &ImeSession, (w, h): (u16, u16), at: (u16, u16)) -> (bool, String) {
+    fn rested_on(editor: &Editor, ime: &ImeSession, size: (u16, u16), at: (u16, u16)) -> (bool, String) {
+        rested_on_with(editor, &Config::default(), ime, size, at)
+    }
+
+    /// [`rested_on`] under `config`.
+    fn rested_on_with(
+        editor: &Editor,
+        config: &Config,
+        ime: &ImeSession,
+        (w, h): (u16, u16),
+        at: (u16, u16),
+    ) -> (bool, String) {
         use ratatui::{backend::TestBackend, Terminal};
-        let config = Config::default();
-        ink(&config);
+        ink(config);
         let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
         let mut seats = Seats::default();
         let t = std::time::Instant::now();
         seats.hover.configure(true, std::time::Duration::from_millis(500));
         seats.hover.moved(Some(at), t);
         seats.hover.tick(t + std::time::Duration::from_millis(500));
-        terminal.draw(|frame| draw(frame, editor, &config, ime, &mut seats, None)).unwrap();
+        terminal.draw(|frame| draw(frame, editor, config, ime, &mut seats, None)).unwrap();
         (seats.hover.on_screen(), buffer_to_text(terminal.backend().buffer()))
     }
 
@@ -26599,6 +26609,32 @@ fn squeezed(text: &str) -> String {
         assert!(!shown, "an added line has no old text:\n{screen}");
         let (shown, _) = rested_on(&editor, no_ime(), (60, 12), (bar, 0));
         assert!(!shown, "an unchanged line has no bar");
+    }
+
+    /// **Resting on a vertical page's change bar brings up the same panel**:
+    /// the bar is the row under the numbers, across both cells of the 縱.
+    #[test]
+    fn resting_on_a_vertical_change_bar_shows_the_text_before_it() {
+        let mut editor = editor_with("春江\n潮水\n明月");
+        let mut config = vertical_config();
+        config.editor.line_numbers = LineNumbers::Absolute;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::Absolute);
+        with_diff(&mut editor, "@@ -2 +2 @@\n-an older second line\n+潮水\n@@ -3,0 +3,1 @@\n+明月\n");
+        let (w, h) = (30u16, 12u16);
+        let buffer = render_vertical(&mut editor, &config, w, h);
+        let lane = vertical::number_rows(LineNumbers::Absolute, 3);
+        let azure = Some(ink(&config).vcs(crate::theme::Accent::Azure));
+        assert_eq!(buffer[(26, lane)].style().bg, azure, "the second 縱's bar");
+        for x in [26, 27] {
+            let (shown, screen) = rested_on_with(&editor, &config, no_ime(), (w, h), (x, lane));
+            assert!(shown, "a panel on the changed 縱's bar at {x}:\n{screen}");
+            assert!(screen.contains("an older second line"), "{screen}");
+            assert!(screen.contains(&yumete_core::say!("hover.change-was")), "{screen}");
+        }
+        let (shown, screen) = rested_on_with(&editor, &config, no_ime(), (w, h), (24, lane));
+        assert!(!shown, "an added 縱 has no old text:\n{screen}");
+        let (shown, _) = rested_on_with(&editor, &config, no_ime(), (w, h), (28, lane));
+        assert!(!shown, "an unchanged 縱 has no bar");
     }
 
     /// **Resting on the status line's input-method cell names the scheme**

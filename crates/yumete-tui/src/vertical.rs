@@ -1357,6 +1357,11 @@ pub fn draw(
                             c.set_symbol(" ").set_bg(ground);
                         }
                     }
+                    // **The bar has the text from before the change** in a
+                    // hover panel, as the horizontal page's bar does.
+                    crate::hover::offer(Rect::new(from, y, x + SLOT_WIDTH - from, 1), false, |_| {
+                        crate::hover::change_words(editor.change_on(zong.line).map_or(&[], |run| run.was.as_slice()))
+                    });
                 }
             }
         }
