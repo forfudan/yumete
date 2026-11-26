@@ -214,6 +214,11 @@ impl Columns {
         let source_wide = widest(&mut rows.iter().map(|s| source_of(panel, s))).max(4) + 2;
         Columns { name, value, right, source: right.saturating_sub(source_wide).max(value + 1) }
     }
+    /// How wide the value is drawn while it is typed: from the value's rule to
+    /// the source's, a cell short of it.
+    fn cell_room(&self) -> usize {
+        self.source.saturating_sub(1).saturating_sub(self.value) as usize
+    }
 }
 
 /// How much of a row's right end the source of its value may take.
@@ -1291,6 +1296,8 @@ fn item_keys(keys: &[&str]) -> String {
 enum Line {
     Heading(usize),
     Row(usize),
+    /// A further line of the value being typed, the `k`th of its cell.
+    More(usize, usize),
     Refused(String),
     Choice(usize),
 }
@@ -1525,6 +1532,11 @@ pub fn draw(
         }
         lines.push(Line::Row(i));
         if i == panel.row {
+            if let Some(cell) = &panel.cell {
+                for k in 1..cell_shape(cell, col.cell_room()).1.len() {
+                    lines.push(Line::More(i, k));
+                }
+            }
             if let (true, Some(why)) = (panel.cell.is_some(), &panel.refusal) {
                 lines.push(Line::Refused(refusal_said(why)));
             }
@@ -1589,6 +1601,12 @@ pub fn draw(
                 let here = *i == panel.row;
                 hit(y, from, right, Hit::Row(*i));
                 if let Some(at) = draw_row(buf, panel, config, setting, here, (&ink, ground), &col, y) {
+                    caret = Some(at);
+                }
+            }
+            Line::More(i, k) => {
+                hit(y, from, right, Hit::Row(*i));
+                if let Some(at) = draw_more(buf, panel, &ink, &col, y, *k) {
                     caret = Some(at);
                 }
             }
@@ -1726,7 +1744,7 @@ fn draw_row(
         _ => band.fg(ink.azure()),
     };
     let caret = match panel.cell.as_ref().filter(|_| here) {
-        Some(cell) => draw_cell(buf, cell, (ink, band), col.value, col.source.saturating_sub(1), y),
+        Some(cell) => draw_cell(buf, cell, (ink, band), col.value, col.source.saturating_sub(1), y, 0),
         None => {
             put_text(buf, col.value, y, col.source, &crate::elide(&value, room), value_style);
             None
@@ -1748,10 +1766,70 @@ fn draw_row(
     caret
 }
 
-/// **The value in its cell, being edited**: as its editor has it, the
-/// selection on its ground, the caret a block in Normal and the terminal's
-/// bar in Insert (given back for the loop to place). A value longer than the
-/// cell slides so the caret stays in sight.
+/// **A further line of the row being typed in**: the band and the gold rules
+/// carried down, the name and source columns empty, and the `k`th line of
+/// the value in its cell.
+fn draw_more(
+    buf: &mut ratatui::buffer::Buffer,
+    panel: &Panel,
+    ink: &crate::theme::Palette,
+    col: &Columns,
+    y: u16,
+    k: usize,
+) -> Option<ratatui::layout::Position> {
+    let cell = panel.cell.as_ref()?;
+    let band = ink.ground(yumete_config::rung::HEAD);
+    for x in col.name..col.right {
+        if let Some(c) = buf.cell_mut((x, y)) {
+            c.set_symbol(" ").set_style(band);
+        }
+    }
+    let rule = band.fg(ink.gold());
+    put_text(buf, col.value.saturating_sub(1), y, col.right, "┆", rule);
+    put_text(buf, col.source, y, col.right, "┆", rule);
+    draw_cell(buf, cell, (ink, band), col.value, col.source.saturating_sub(1), y, k)
+}
+
+/// Most lines a value being typed takes; a longer one slides by whole lines
+/// so the caret's line stays in sight.
+const CELL_LINES: usize = 8;
+
+/// **A value in its cell, cut into the lines the cell is drawn on** (`room`
+/// cells wide): a long value — a list of fonts — is read whole while it is
+/// typed, rather than sliding past the caret on one line. The caret after the
+/// last character needs a cell of its own, and gets a line if the last one is
+/// full. Gives the characters (a line break drawn as one mark: a value is one
+/// line), the lines drawn — at most [`CELL_LINES`], those around the caret —
+/// and which of them the caret is on.
+fn cell_shape(cell: &CellView, room: usize) -> (Vec<char>, Vec<(usize, usize)>, usize) {
+    let chars: Vec<char> = cell.text.chars().map(|c| if c == '\n' { '↵' } else { c }).collect();
+    let room = room.max(2);
+    // The grid's own breaker, so a value breaks where a table's cell would.
+    let text: String = chars.iter().collect();
+    let mut lines = yumete_core::mdtable::cell_drawn_rows(&text, room, true);
+    if lines.is_empty() {
+        lines.push((0, 0));
+    }
+    // The breaker leaves trailing blanks undrawn; here they are being typed,
+    // and the caret goes after them.
+    if let Some(last) = lines.last_mut() {
+        last.1 = chars.len();
+    }
+    let last = lines.last().copied().unwrap_or((0, 0));
+    let used: usize = chars[last.0.min(chars.len())..last.1.min(chars.len())].iter().map(|&c| yumete_cjk::char_width(c).max(1)).sum();
+    if used + 1 > room && last.1 >= chars.len() && !chars.is_empty() {
+        lines.push((chars.len(), chars.len()));
+    }
+    let caret = cell.caret.min(chars.len());
+    let on = lines.iter().rposition(|&(s, _)| s <= caret).unwrap_or(0);
+    let first = (on + 1).saturating_sub(CELL_LINES).min(lines.len().saturating_sub(CELL_LINES));
+    let shown: Vec<(usize, usize)> = lines.into_iter().skip(first).take(CELL_LINES).collect();
+    (chars, shown, on - first)
+}
+
+/// **The value in its cell, being edited**, its `k`th drawn line: as its
+/// editor has it, the selection on its ground, the caret a block in Normal
+/// and the terminal's bar in Insert (given back for the loop to place).
 fn draw_cell(
     buf: &mut ratatui::buffer::Buffer,
     cell: &CellView,
@@ -1759,24 +1837,20 @@ fn draw_cell(
     x: u16,
     end: u16,
     y: u16,
+    k: usize,
 ) -> Option<ratatui::layout::Position> {
     let room = end.saturating_sub(x) as usize;
     if room == 0 {
         return None;
     }
-    // A line break is one mark: a value is one line.
-    let chars: Vec<char> = cell.text.chars().map(|c| if c == '\n' { '↵' } else { c }).collect();
-    let wide = |c: char| yumete_cjk::char_width(c).max(1);
+    let (chars, lines, on) = cell_shape(cell, room);
+    let &(from, to) = lines.get(k)?;
     let caret = cell.caret.min(chars.len());
-    let mut first = 0;
-    while first < caret && chars[first..caret].iter().map(|&c| wide(c)).sum::<usize>() + 2 > room {
-        first += 1;
-    }
     let text = band.fg(ink.text());
     let mut at = x;
     let mut shown = None;
-    for (i, &c) in chars.iter().enumerate().skip(first) {
-        let w = wide(c) as u16;
+    for (i, &c) in chars.iter().enumerate().take(to).skip(from) {
+        let w = yumete_cjk::char_width(c).max(1) as u16;
         if at + w > end {
             break;
         }
@@ -1793,7 +1867,7 @@ fn draw_cell(
         put_text(buf, at, y, end, &c.to_string(), style);
         at += w;
     }
-    if caret >= chars.len() && at < end {
+    if k == on && caret >= chars.len() && at < end {
         if !cell.bar {
             put_text(buf, at, y, end, " ", text.add_modifier(Modifier::REVERSED));
         }
@@ -2588,6 +2662,33 @@ mod tests {
         // Everything done in the cell is one `u`.
         keys(&mut seat, &mut ed, &[Key::Char('u')]);
         assert!(file(&dir).contains("pages_vertical = 3"), "{}", file(&dir));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// **A long value is typed whole in its cell**: past the cell's width it
+    /// takes further lines, the band and the gold rules carried down, every
+    /// character on the page and the caret after the last one; the rows
+    /// under it move down rather than being drawn over.
+    #[test]
+    fn a_long_value_takes_more_lines_in_its_cell() {
+        let dir = scratch("long-value");
+        let (mut ed, mut seat) = seated(&dir, "", "editor.preview_font_family");
+        keys(&mut seat, &mut ed, &[Key::Char('c')]);
+        let long = "Alpha Sans, Beta Serif, Gamma Mono, Delta Display, Epsilon Text, Zeta Round";
+        keys(&mut seat, &mut ed, &chars(long));
+        let drawn = shot(page(&seat), 110, 34);
+        let read: String = drawn.lines().flat_map(|l| l.split('┆').nth(1)).collect::<Vec<_>>().join("");
+        let squeezed: String = read.chars().filter(|c| !c.is_whitespace()).collect();
+        let want: String = long.chars().filter(|c| !c.is_whitespace()).collect();
+        assert!(squeezed.contains(&want), "the whole value is in its cell:\n{drawn}");
+        let (_, row) = find_on(&drawn, &say!("settings.editor.preview-font-family"));
+        let (_, last) = find_on(&drawn, "Round");
+        assert!(last > row, "it took more lines than one:\n{drawn}");
+        // The row under it starts below the value's last line.
+        let next = drawn.lines().enumerate().skip(row as usize + 1).find(|(_, l)| {
+            l.split('┆').nth(1).is_some_and(|v| !v.trim().is_empty()) && !l.contains("Round") && l.split('┆').next().is_some_and(|n| !n.trim().is_empty())
+        });
+        assert!(next.is_some_and(|(y, _)| y as u16 > last), "the next row is under it:\n{drawn}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

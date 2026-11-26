@@ -10,6 +10,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **Resting the mouse on the status line's input-method cell names the scheme**, with its series and author when the scheme file gives them, and **resting it on a change bar in the gutter shows what those lines said before the change**.
 - **`[editor] table_cell = "fill"` marks the cell under the cursor with a gold ground**, in a table and on the settings page alike, its text and rules in an ink that reads on it; the default `"wash"` keeps the faint ground with two gold rules.
 - **`[editor] table_row_lines = N` caps how tall a row of a table is drawn** (#1028): a cell of more lines keeps N, the last ending in `…`, and the row under the cursor opens to its whole height. The default `0` sets no cap.
+- **A long value on the settings page is typed whole in its cell** (#1029): past the cell's width it takes further lines, broken where a table's cell would break, instead of sliding sideways past the caret.
 
 ### Changed
 
