@@ -1816,7 +1816,7 @@ fn cell_shape(cell: &CellView, room: usize) -> (Vec<char>, Vec<(usize, usize)>, 
         last.1 = chars.len();
     }
     let last = lines.last().copied().unwrap_or((0, 0));
-    let used: usize = chars[last.0.min(chars.len())..last.1.min(chars.len())].iter().map(|&c| yumete_cjk::char_width(c).max(1)).sum();
+    let used = drawn_width(&chars[last.0.min(chars.len())..last.1.min(chars.len())]);
     if used + 1 > room && last.1 >= chars.len() && !chars.is_empty() {
         lines.push((chars.len(), chars.len()));
     }
@@ -1825,6 +1825,20 @@ fn cell_shape(cell: &CellView, room: usize) -> (Vec<char>, Vec<(usize, usize)>, 
     let first = (on + 1).saturating_sub(CELL_LINES).min(lines.len().saturating_sub(CELL_LINES));
     let shown: Vec<(usize, usize)> = lines.into_iter().skip(first).take(CELL_LINES).collect();
     (chars, shown, on - first)
+}
+
+/// **Cells a line of the value takes**: a mark that combines (width 0) rides
+/// on the character before it, as the breaker counts a grapheme, and takes a
+/// cell only at the start of a line.
+fn drawn_width(chars: &[char]) -> usize {
+    chars.iter().enumerate().map(|(i, &c)| cell_width(c, i == 0)).sum()
+}
+
+fn cell_width(c: char, first: bool) -> usize {
+    match yumete_cjk::char_width(c) {
+        0 if first => 1,
+        w => w,
+    }
 }
 
 /// **The value in its cell, being edited**, its `k`th drawn line: as its
@@ -1849,11 +1863,20 @@ fn draw_cell(
     let text = band.fg(ink.text());
     let mut at = x;
     let mut shown = None;
+    let mut before: Option<u16> = None;
     for (i, &c) in chars.iter().enumerate().take(to).skip(from) {
-        let w = yumete_cjk::char_width(c).max(1) as u16;
+        let w = cell_width(c, i == from) as u16;
+        if w == 0 {
+            if let Some(cell) = before.and_then(|b| buf.cell_mut((b, y))) {
+                let joined = format!("{}{c}", cell.symbol());
+                cell.set_symbol(&joined);
+            }
+            continue;
+        }
         if at + w > end {
             break;
         }
+        before = Some(at);
         let mut style = text;
         if i >= cell.selection.0 && i < cell.selection.1 {
             style = style.bg(ink.selection());
@@ -2689,6 +2712,21 @@ mod tests {
             l.split('┆').nth(1).is_some_and(|v| !v.trim().is_empty()) && !l.contains("Round") && l.split('┆').next().is_some_and(|n| !n.trim().is_empty())
         });
         assert!(next.is_some_and(|(y, _)| y as u16 > last), "the next row is under it:\n{drawn}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// **A combining mark rides on its letter in a wrapped value**: the lines
+    /// are broken by grapheme, so each accent is drawn, none past the cell.
+    #[test]
+    fn a_long_value_with_combining_marks_keeps_every_mark() {
+        let dir = scratch("long-combining");
+        let (mut ed, mut seat) = seated(&dir, "", "editor.preview_font_family");
+        keys(&mut seat, &mut ed, &[Key::Char('c')]);
+        let long: String = "e\u{301}".repeat(40) + "X";
+        keys(&mut seat, &mut ed, &chars(&long));
+        let drawn = shot(page(&seat), 70, 24);
+        assert_eq!(drawn.matches('\u{301}').count(), 40, "every accent is drawn:\n{drawn}");
+        assert!(drawn.contains('X'), "the last letter is drawn:\n{drawn}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
