@@ -1,10 +1,10 @@
 //! **The pointer resting on the interface brings up what its cell cannot
 //! fit** (`[editor] mouse_hover`).
 //!
-//! Six places answer: the status line's language-server cell, its file
-//! name and a message it had to cut, a sidebar row cut with `…`, the
-//! gutter's problem sign with the diagnostic drawn after a line's end, and
-//! the scrollbar's marks. Never the text itself: a panel over the words
+//! Eight places answer: the status line's language-server cell, its
+//! input-method cell, its file name and a message it had to cut, a sidebar
+//! row cut with `…`, the gutter's problem sign with the diagnostic drawn
+//! after a line's end, its change bar, and the scrollbar's marks. Never the text itself: a panel over the words
 //! being read would be in the way of the one thing on the screen that is
 //! not chrome.
 //!
@@ -324,6 +324,31 @@ pub fn file_words(facts: &yumete_core::editor::FileFacts) -> Said {
     Said::new(say!("file.title"), rows.join("\n"))
 }
 
+/// **The status line's input-method cell**: the scheme by name, with its
+/// 系列 and author when its scheme file gives them. `shown` says the cell
+/// already names the scheme, as it does until a narrow window takes the
+/// name away; then a scheme with neither has nothing more to say.
+pub fn scheme_words(name: &str, series: &str, author: &str, shown: bool) -> Option<Said> {
+    if name.is_empty() || (shown && series.is_empty() && author.is_empty()) {
+        return None;
+    }
+    let mut rows = vec![field(say!("hover.scheme"), name)];
+    if !series.is_empty() {
+        rows.push(field(say!("hover.scheme-series"), series));
+    }
+    if !author.is_empty() {
+        rows.push(field(say!("hover.scheme-author"), author));
+    }
+    Some(Said::new(say!("hover.ime"), rows.join("\n")))
+}
+
+/// **A change bar**: what the lines it marks said before the change. Nothing
+/// for lines that were added, which had nothing before them; the bar's
+/// colour already says so.
+pub fn change_words(was: &[String]) -> Option<Said> {
+    (!was.is_empty()).then(|| Said::new(say!("hover.change-was"), was.join("\n")))
+}
+
 /// **The language-server cell**: each server watching the file — what it
 /// said it is and whether it is running, the program started and the
 /// environment it runs in — or why none is, then the file's problems by
@@ -442,6 +467,31 @@ mod tests {
         let mut h = Hover::default();
         h.configure(true, ms(500));
         (h, Instant::now())
+    }
+
+    /// **The input-method cell names the scheme in full**: its 系列 and
+    /// author when the scheme file gives them, the name alone once a narrow
+    /// window has cut it from the cell, and nothing that only repeats it.
+    #[test]
+    fn the_input_method_cell_says_what_its_tag_leaves_out() {
+        let said = scheme_words("甲乙", "丙", "丁戊", true).expect("series and author");
+        assert!(said.body.contains("甲乙") && said.body.contains("丙") && said.body.contains("丁戊"), "{said:?}");
+        assert_eq!(said.body.lines().count(), 3);
+        assert_eq!(scheme_words("甲乙", "", "", true), None, "the cell already says it");
+        let cut = scheme_words("甲乙", "", "", false).expect("the name the cell lost");
+        assert_eq!(cut.body.lines().count(), 1);
+        assert!(cut.body.contains("甲乙"));
+        assert_eq!(scheme_words("", "丙", "", false), None, "no scheme");
+    }
+
+    /// **A change bar says what its lines said before**, line for line; an
+    /// added run had nothing.
+    #[test]
+    fn a_change_bar_says_the_text_before_the_change() {
+        let was = vec!["first draft".to_string(), "second line".to_string()];
+        let said = change_words(&was).expect("old text");
+        assert_eq!(said.body, "first draft\nsecond line");
+        assert_eq!(change_words(&[]), None);
     }
 
     /// **The panel comes up after the pointer has rested the delay on one

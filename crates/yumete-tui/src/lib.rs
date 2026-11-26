@@ -15481,7 +15481,14 @@ fn draw_horizontal(
             // Not in a side-by-side diff: the wash says it there.
             match (!editor.diff_in_view()).then(|| diff_mark(editor, &row)).flatten() {
                 None => spans.push(Span::styled(" ", band)),
-                Some(change) => spans.push(diff_cell(change, ink, band)),
+                Some(change) => {
+                    spans.push(diff_cell(change, ink, band));
+                    // **The bar has the text from before the change** in a
+                    // hover panel; the cell has room for its colour.
+                    crate::hover::offer(Rect::new(text_area.x + gutter as u16 - 1, screen_y, 1, 1), false, |_| {
+                        crate::hover::change_words(editor.change_on(row.line).map_or(&[], |run| run.was.as_slice()))
+                    });
+                }
             }
         }
         // The paragraph opens two squares in, the way a Chinese paragraph is
@@ -16668,8 +16675,9 @@ fn draw_status(
     // byte length is its width and the cut is always on a boundary.
     let cut = mode.len().min(status.len());
     let (word, rest) = status.split_at(cut);
-    // **The hover panel's three places on this line** (`crate::hover`): the
-    // language-server cell, the file name and a message cut short. The line
+    // **The hover panel's four places on this line** (`crate::hover`): the
+    // language-server cell, the input method's, the file name and a message
+    // cut short. The line
     // is drawn a cell in, with the server's cell set in after the mode word,
     // so a cell `c` of the line built stands at `c + 2`.
     if crate::hover::wanted() {
@@ -16677,6 +16685,12 @@ fn draw_status(
         let modes = yumete_cjk::str_width(word) as u16 + u16::from(!mode.is_empty());
         crate::hover::offer(Rect::new(status_area.x + 1 + modes, y, 1, 1), true, |_| crate::hover::servers());
         let at = |(from, to): (usize, usize)| Rect::new(status_area.x + 2 + from as u16, y, to.saturating_sub(from) as u16, 1);
+        if let Some(span) = spans.ime {
+            crate::hover::offer(at(span), true, |_| {
+                let (series, author) = ime.scheme_credits();
+                crate::hover::scheme_words(ime.scheme_name(), &series, &author, spans.scheme_shown)
+            });
+        }
         if let Some(span) = spans.name {
             crate::hover::offer(at(span), true, |_| Some(crate::hover::file_words(&editor.file_facts())));
         }
@@ -17009,9 +17023,14 @@ fn ordinary_status(
         };
         let mut left = String::new();
         left.push_str(&mode_field);
-        if k.ime {
-            left.push_str(if k.scheme { &ime_tag } else { &ime_bare });
-        }
+        let ime_from = yumete_cjk::str_width(&left);
+        let ime_cell = match (k.ime, k.scheme) {
+            (false, _) => "",
+            (true, true) => ime_tag.as_str(),
+            (true, false) => ime_bare.as_str(),
+        };
+        left.push_str(ime_cell);
+        let ime_to = ime_from + yumete_cjk::str_width(ime_cell.trim_end());
         let name_from = yumete_cjk::str_width(&left);
         left.push_str(&name);
         let name_to = yumete_cjk::str_width(&left);
@@ -17064,6 +17083,8 @@ fn ordinary_status(
         let line = format!("{left}{lead}{message}{gap}{readout}").trim_end().to_string();
         let drawn = yumete_cjk::str_width(&line);
         let spans = StatusSpans {
+            ime: (ime_to > ime_from).then_some((ime_from, ime_to.min(drawn))),
+            scheme_shown: k.scheme && ime_tag != ime_bare,
             name: (name_to > name_from).then_some((name_from, name_to.min(drawn))),
             message: (!message.is_empty())
                 .then(|| (message_from, (message_from + yumete_cjk::str_width(&message)).min(drawn))),
@@ -17183,6 +17204,11 @@ fn ordinary_status(
 /// panel's places on it.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct StatusSpans {
+    /// The input method's `[中 靈明]`.
+    ime: Option<(usize, usize)>,
+    /// That cell names the scheme: a narrow window has not taken it away,
+    /// and the input method is set to Chinese.
+    scheme_shown: bool,
     name: Option<(usize, usize)>,
     message: Option<(usize, usize)>,
     /// The message as drawn, cut to fit or whole.
@@ -26464,6 +26490,68 @@ fn squeezed(text: &str) -> String {
         let page = ink(&config).page().bg;
         assert_eq!(buffer[(bar, 0)].style().bg, page);
         assert_eq!(buffer[(bar, 1)].style().bg, page);
+    }
+
+    /// The screen after the pointer has rested on `at`, and whether a hover
+    /// panel was drawn.
+    fn rested_on(editor: &Editor, ime: &ImeSession, (w, h): (u16, u16), at: (u16, u16)) -> (bool, String) {
+        use ratatui::{backend::TestBackend, Terminal};
+        let config = Config::default();
+        ink(&config);
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+        let mut seats = Seats::default();
+        let t = std::time::Instant::now();
+        seats.hover.configure(true, std::time::Duration::from_millis(500));
+        seats.hover.moved(Some(at), t);
+        seats.hover.tick(t + std::time::Duration::from_millis(500));
+        terminal.draw(|frame| draw(frame, editor, &config, ime, &mut seats, None)).unwrap();
+        (seats.hover.on_screen(), buffer_to_text(terminal.backend().buffer()))
+    }
+
+    /// **Resting on a change bar brings up what its lines said before the
+    /// change**; an added line had nothing before it, and says nothing.
+    #[test]
+    fn resting_on_a_change_bar_shows_the_text_before_it() {
+        let mut editor = editor_with("one\ntwo\nthree\nfour");
+        editor.on_key(Key::Esc);
+        with_diff(&mut editor, "@@ -1,0 +2,1 @@\n+two\n@@ -3 +3 @@\n-the old third line\n+three\n");
+        let bar = bar_column(&editor, &Config::default());
+        let (shown, screen) = rested_on(&editor, no_ime(), (60, 12), (bar, 2));
+        assert!(shown, "a panel on the changed line's bar:\n{screen}");
+        assert!(screen.contains("the old third line"), "{screen}");
+        assert!(screen.contains(&yumete_core::say!("hover.change-was")), "{screen}");
+        let (shown, screen) = rested_on(&editor, no_ime(), (60, 12), (bar, 1));
+        assert!(!shown, "an added line has no old text:\n{screen}");
+        let (shown, _) = rested_on(&editor, no_ime(), (60, 12), (bar, 0));
+        assert!(!shown, "an unchanged line has no bar");
+    }
+
+    /// **Resting on the status line's input-method cell names the scheme**
+    /// when the window was too narrow for the cell to.
+    #[test]
+    fn resting_on_the_input_method_cell_names_the_scheme() {
+        let mut editor = editor_with("one");
+        editor.on_key(Key::Esc);
+        let ime = ImeSession::from_table_text(Scheme::LINGMING, "a 甲\n");
+        let name = ime.scheme_name().to_string();
+        let bare = yumete_core::say!("ime.chinese-tag-bare");
+        let h = 8u16;
+        // The widest window whose status line has had to drop the name.
+        let (w, y, x) = (16u16..80)
+            .rev()
+            .find_map(|w| {
+                let (_, screen) = rested_on(&editor, &ime, (w, h), (0, 0));
+                screen.lines().enumerate().find_map(|(y, row)| {
+                    let at = row.find(&bare)?;
+                    (!row.contains(&name)).then(|| (w, y as u16, yumete_cjk::str_width(&row[..at]) as u16))
+                })
+            })
+            .expect("a width that cuts the scheme's name");
+        let (shown, screen) = rested_on(&editor, &ime, (w, h), (x + 1, y));
+        assert!(shown, "a panel over the cell:\n{screen}");
+        assert!(screen.contains(&name), "the scheme's name:\n{screen}");
+        let (shown, _) = rested_on(&editor, &ime, (w, h), (0, 0));
+        assert!(!shown, "the text has no panel");
     }
 
     #[test]

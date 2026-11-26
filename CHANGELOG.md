@@ -7,6 +7,7 @@ Written for people who use it to write, not for the commit log: each line says w
 ### Added
 
 - **A long cell of a table on a vertical page wraps inside its band** (#1005), so the table no longer runs past the foot of the page: short bands keep their depth, the long ones share what is left, and a row whose cell wraps takes several 縱 side by side. `h`/`l` step through them one 縱 at a time.
+- **Resting the mouse on the status line's input-method cell names the scheme**, with its series and author when the scheme file gives them, and **resting it on a change bar in the gutter shows what those lines said before the change**.
 
 ### Changed
 
@@ -17,6 +18,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 - On a vertical page a table's rules line up with `:view-hanging on` and under `:render full`.
 - Moving through a long table on a vertical page no longer slows down with its length.
+- **Under vim, `o` on a last line with no line break, then `C-o k`, goes to the line above the new one**, as vim does; it went one line higher.
 
 ## 0.26.0 · 2026-11-25
 

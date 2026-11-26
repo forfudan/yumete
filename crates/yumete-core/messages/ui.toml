@@ -732,6 +732,12 @@ zhs = "全文"
 en = "whole"
 
 [[message]]
+# 鼠标悬停在行号旁的改动条上：面板的名字，下面是这一块改之前的原文（草稿）
+key = "hover.change-was"
+zhs = "改之前"
+en = "before the change"
+
+[[message]]
 # 鼠标悬停在状态栏的语言服务器那一格：服务器那个可执行文件的位置（草稿）
 key = "hover.command"
 zhs = "路径"
@@ -744,10 +750,34 @@ zhs = "{0}：{1}"
 en = "{0}: {1}"
 
 [[message]]
+# 鼠标悬停在状态栏的输入法那一格：面板的名字（草稿）
+key = "hover.ime"
+zhs = "输入法"
+en = "input method"
+
+[[message]]
 # 鼠标悬停在状态栏的语言服务器那一格：服务器所在的 pixi 环境的名字（草稿）
 key = "hover.pixi-environment"
 zhs = "pixi 环境"
 en = "pixi environment"
+
+[[message]]
+# 鼠标悬停在状态栏的输入法那一格：方案的名字（草稿）
+key = "hover.scheme"
+zhs = "方案"
+en = "scheme"
+
+[[message]]
+# 鼠标悬停在状态栏的输入法那一格：方案文件 author 一栏写的名字，写了才有（草稿）
+key = "hover.scheme-author"
+zhs = "作者"
+en = "author"
+
+[[message]]
+# 鼠标悬停在状态栏的输入法那一格：方案所属的系列，如「宇浩」，方案文件写了才有（草稿）
+key = "hover.scheme-series"
+zhs = "系列"
+en = "series"
 
 [[message]]
 # 鼠标悬停在滚动条的标记上：面板的名字（草稿）

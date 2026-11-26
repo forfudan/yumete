@@ -1199,6 +1199,13 @@ impl ImeSession {
         }
     }
 
+    /// **The scheme's 系列 and author**, as its scheme file gives them;
+    /// each empty when it gives none.
+    pub fn scheme_credits(&self) -> (String, String) {
+        let tag = self.scheme.tag();
+        (data_manifest::factory_scheme_series(tag), data_manifest::factory_scheme_author(tag))
+    }
+
     /// **Another scheme's word lists, read from where this session reads
     /// its own**: a session for `scheme` from the same folders, the same
     /// word roots and the same `learn`, that nothing types into — so the

@@ -1833,8 +1833,15 @@ impl Editor {
     /// Warning: **不問 `diff_gutter`。** 那一格管的是「行號槽畫不畫」，而按鍵問的
     /// 是「這裏改了什麼」——關掉行號槽的人照樣問得出這一句。
     pub fn change_here(&self) -> Option<&crate::vcs::Run> {
+        self.change_on(self.cursor_line())
+    }
+
+    /// **The change line `line` (from 0) belongs to**, with what it said
+    /// before: [`Self::change_here`] for any line, which a pointer resting
+    /// on a change bar asks of the line it is on.
+    pub fn change_on(&self, line: usize) -> Option<&crate::vcs::Run> {
         let (_, changes) = self.vcs.get(&self.current_buffer().id())?;
-        changes.run_at(self.cursor_line())
+        changes.run_at(line)
     }
 
     /// **這一塊裏真正改掉的是哪幾個字**——帶子逐字上色用的。
