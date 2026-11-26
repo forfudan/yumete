@@ -476,9 +476,16 @@ impl Editor {
     /// that same line, or when the column it wants lies further right
     /// (after `$`, or a `j` from a longer line). Normal mode had to stand it
     /// on that character; Insert can stand after it.
+    ///
+    /// A line opened past an unterminated end that `C-o` lent to Normal mode
+    /// is taken back first ([`Self::take_back_the_lent_line`]).
     fn back_past_the_line_end(&mut self) {
         let eol_line = self.one_normal_eol.take();
-        if self.mode != Mode::Insert || self.extend {
+        if self.mode != Mode::Insert {
+            return;
+        }
+        self.take_back_the_lent_line();
+        if self.extend {
             return;
         }
         let rope = self.current_buffer().rope();

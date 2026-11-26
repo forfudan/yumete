@@ -749,20 +749,60 @@ impl Editor {
     /// buffer's text would read that line as the break the file lacks, so
     /// one more break holds it, as the break vim adds on writing would.
     /// Wherever the caret is: an arrow that left the line left it standing
-    /// too.
-    pub(super) fn keep_the_line_opened_past_the_end(&mut self) {
+    /// too. Says whether it put the break in.
+    pub(super) fn keep_the_line_opened_past_the_end(&mut self) -> bool {
         if !std::mem::take(&mut self.opened_past_the_end) || !self.keymap_rules().vim_registers {
-            return;
+            return false;
         }
         let rope = self.current_buffer().rope();
         let len = rope.len_chars();
         if len == 0 || rope.char(len - 1) != '\n' {
-            return;
+            return false;
         }
         let ending = self.current_buffer().ending().to_string();
         let at_the_end = self.sel.head() == len;
-        if self.edit_insert(len, &ending) && at_the_end {
+        if !self.edit_insert(len, &ending) {
+            return false;
+        }
+        if at_the_end {
             self.set_cursor(len);
+        }
+        true
+    }
+
+    /// **Insert's `C-o` makes that line a real one for its Normal command**,
+    /// as vim's buffer already has it: Normal mode cannot stand past the
+    /// last break, so the caret on the opened line would be clamped onto
+    /// the line above before the command ran, and `k` would land a line
+    /// too high.
+    pub(super) fn lend_the_line_opened_past_the_end(&mut self) {
+        self.lent_past_the_end = None;
+        if self.keep_the_line_opened_past_the_end() {
+            let buffer = self.current_buffer();
+            self.lent_past_the_end = Some((buffer.id(), buffer.revision()));
+        }
+    }
+
+    /// **Back in Insert, the lent break goes again** if the command left the
+    /// buffer as it was lent, as an autoindent nothing was typed after goes:
+    /// the line is once more the one after the file's last break, so text
+    /// typed on it ends the file without one (vim: `o`, `C-o 0`, `x` writes
+    /// no final break) and `Esc` with nothing typed keeps it as before. A
+    /// command that edited has made the line part of the file.
+    pub(super) fn take_back_the_lent_line(&mut self) {
+        let Some((id, revision)) = self.lent_past_the_end.take() else { return };
+        let buffer = self.current_buffer();
+        if buffer.id() != id || buffer.revision() != revision {
+            return;
+        }
+        let ending = buffer.ending().chars().count();
+        let len = buffer.rope().len_chars();
+        let head = self.sel.head();
+        if len >= ending && self.edit_remove(len - ending..len) {
+            self.opened_past_the_end = true;
+            if head > len - ending {
+                self.set_cursor(len - ending);
+            }
         }
     }
 

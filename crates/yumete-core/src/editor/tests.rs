@@ -47629,6 +47629,26 @@ fn an_empty_line_opened_after_an_unterminated_last_line_is_kept() {
     }
 }
 
+/// **Insert's `C-o` sees a line opened past an unterminated end** (measured
+/// in nvim): `k` from it lands on the last line of the file, not the one
+/// above; back in Insert, text typed on it still ends the file without a
+/// break, and `Esc` with nothing typed keeps it as before.
+#[test]
+fn insert_ctrl_o_sees_a_line_opened_after_an_unterminated_last_line() {
+    for (keys, want, at) in [
+        ("joᵒkx⎋", "sea\nxsky\n\n", (2, 1)),
+        ("joᵒk⎋", "sea\nsky\n\n", (2, 1)),
+        ("joᵒj⎋", "sea\nsky\n\n", (3, 1)),
+        ("joᵒ0x⎋", "sea\nsky\nx", (3, 1)),
+        ("joᵒ0⎋", "sea\nsky\n\n", (3, 1)),
+        ("joᵒk⎋u", "sea\nsky", (2, 1)),
+    ] {
+        let mut ed = typed_vim("sea\nsky");
+        feed_vim(&mut ed, keys);
+        assert_eq!((ed.current_buffer().text().as_str(), vim_at(&ed)), (want, at), "{keys}");
+    }
+}
+
 /// **vim's `}` and `{` from among empty lines cross them** (measured in
 /// nvim): the empty line they stop on comes after a line with text, so `}`
 /// on an empty line followed by another goes past the paragraph after them,

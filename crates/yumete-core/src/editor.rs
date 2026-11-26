@@ -3095,6 +3095,11 @@ pub struct Editor {
     /// the line it opened is the empty line after the file's last break
     /// until something is typed on it (see [`Editor::leave_insert`]).
     opened_past_the_end: bool,
+    /// Insert's `C-o` made that line a real one for its Normal command:
+    /// the buffer and its revision right after, so the way back to Insert
+    /// can tell whether the command left the break as it was put (see
+    /// [`Editor::lend_the_line_opened_past_the_end`]).
+    lent_past_the_end: Option<(u64, u64)>,
     /// The words of every line read so far, by the line's hash.
     line_words: HashMap<u64, suggest::LineWords>,
     /// Each open buffer's text as one string, at the revision it was read,
@@ -5050,6 +5055,7 @@ impl Editor {
             word_index: HashMap::new(),
             words_read_in_insert: false,
             opened_past_the_end: false,
+            lent_past_the_end: None,
             redraw: false,
             line_words: HashMap::new(),
             run_texts: HashMap::new(),
