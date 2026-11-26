@@ -102,6 +102,110 @@ pub fn draw(frame: &mut Frame, rect: Rect, ring: &Ring) -> Rect {
     inner
 }
 
+/// **How many cells one side wall of a ring takes**: `1`, or `2` when the
+/// ring's strokes are counted two cells wide.
+///
+/// The box-drawing block is East Asian Ambiguous, so under
+/// `ambiguous_width = "wide"` this editor counts `│` `─` `╭` two cells, the
+/// way it counts `…` — and a CJK terminal draws them that wide. One stroke
+/// answers for the whole ring: the block is Ambiguous throughout.
+pub fn wall() -> u16 {
+    match yumete_cjk::needs_a_second_cell('│') {
+        true => 2,
+        false => 1,
+    }
+}
+
+/// [`draw`], with **every stroke given the second cell this editor counts
+/// for it** ([`yumete_cjk::needs_a_second_cell`]), as the text inside a ring
+/// is given its own (`crate::with_room_for_wide_glyphs`).
+///
+/// Drawn one to a cell, a wide stroke paints over the next cell's stroke:
+/// the top rule comes out twice as long as the walls are apart, and each wall
+/// pushes its row a cell right, so the ring is no longer a rectangle. Here
+/// each stroke stands on a cell with a blank after it, the walls take
+/// [`wall`] cells each, and the inside handed back is narrower by both.
+///
+/// For a ring whose caller lays its contents into the rectangle handed back
+/// (the candidate list's two). A caller that places its contents by the
+/// one-cell walls itself would write into the strokes' second cells.
+///
+/// The top and bottom rules fill the space between the corners exactly when
+/// `rect.width` is even; an odd width leaves one cell of ground before the
+/// right corner.
+pub fn draw_in_editor_cells(frame: &mut Frame, rect: Rect, ring: &Ring) -> Rect {
+    if wall() == 1 || rect.width < 4 || rect.height < 2 {
+        return draw(frame, rect, ring);
+    }
+    frame.render_widget(Clear, rect);
+    crate::vertical::clear_wide_left_edge(frame.buffer_mut(), rect);
+    let set = match ring.rounded {
+        true => ratatui::symbols::border::ROUNDED,
+        false => ratatui::symbols::border::PLAIN,
+    };
+    let (left, end) = (rect.x, rect.x + rect.width);
+    let (top, bottom) = (rect.y, rect.y + rect.height - 1);
+    let buf = frame.buffer_mut();
+    for y in top..=bottom {
+        for x in left..end {
+            if let Some(cell) = buf.cell_mut((x, y)) {
+                cell.set_symbol(" ").set_style(ring.ground);
+            }
+        }
+    }
+    // A stroke and the blank it paints over, or nothing where the pair would
+    // not fit before `limit`.
+    let mut stroke = |x: u16, y: u16, symbol: &str, limit: u16| {
+        if x + 1 >= limit {
+            return;
+        }
+        if let Some(cell) = buf.cell_mut((x, y)) {
+            cell.set_symbol(symbol).set_style(ring.border);
+        }
+        if let Some(cell) = buf.cell_mut((x + 1, y)) {
+            cell.set_symbol(" ").set_style(ring.border);
+        }
+    };
+    let corner = end - 2;
+    let (from, to) = match ring.open_sides {
+        true => (left, end),
+        false => (left + 2, corner),
+    };
+    for (y, rule) in [(top, set.horizontal_top), (bottom, set.horizontal_bottom)] {
+        for x in (from..to).step_by(2) {
+            stroke(x, y, rule, to);
+        }
+    }
+    if !ring.open_sides {
+        stroke(left, top, set.top_left, end);
+        stroke(corner, top, set.top_right, end);
+        stroke(left, bottom, set.bottom_left, end);
+        stroke(corner, bottom, set.bottom_right, end);
+        for y in top + 1..bottom {
+            stroke(left, y, set.vertical_left, end);
+            stroke(corner, y, set.vertical_right, end);
+        }
+    }
+    // The title and the foot sit where they sit in `draw`, one cell of air
+    // past the corner's two, and their own ambiguous characters get their
+    // second cells too.
+    let words = [
+        (top, ring.title.as_ref().map(|(t, s)| (format!(" {t}"), *s))),
+        (bottom, ring.foot.as_ref().map(|(t, s)| (format!(" {t} "), *s))),
+    ];
+    for (y, said) in words {
+        if let Some((text, style)) = said {
+            let line = crate::room_for_wide_glyphs(ratatui::text::Line::from(Span::styled(text, style)));
+            let room = Rect::new(left + 2, y, rect.width - 4, 1);
+            frame.render_widget(ratatui::widgets::Paragraph::new(line), room);
+        }
+    }
+    match ring.open_sides {
+        true => Rect::new(left, top + 1, rect.width, rect.height - 2),
+        false => Rect::new(left + 2, top + 1, rect.width - 4, rect.height - 2),
+    }
+}
+
 /// **Where a floating thing stands.**
 ///
 /// Two answers, and the difference is whether the reader is still writing:

@@ -18998,8 +18998,12 @@ fn draw_panel_rows(
         .chain(head.as_deref().map(yumete_cjk::str_width))
         .max()
         .unwrap_or(0) as u16;
+    // Each wall takes the cells its stroke is counted (`chrome::wall`); with
+    // two, an even inside lets the top and bottom rules meet the corners.
+    let wall = crate::chrome::wall();
     let inner_w = content_w.max(4);
-    let panel_w = (inner_w + 2).min(area.width.max(1));
+    let inner_w = inner_w + inner_w % wall;
+    let panel_w = (inner_w + 2 * wall).min(area.width.max(1));
     let lines = rows.len() + usize::from(head.is_some());
     let panel_h = (lines as u16 + 2).min(area.height.max(1));
 
@@ -19071,7 +19075,7 @@ fn draw_panel_rows(
     //
     // 省略號用的是 [`elide`]，它還知道「…」在 `ambiguous_width = "wide"`
     // 底下佔兩格。
-    let room = panel_w.saturating_sub(2) as usize;
+    let room = panel_w.saturating_sub(2 * wall) as usize;
     let mut head = head.map(|h| crate::elide(&h, room));
     let mut rows: Vec<PanelRow> = rows
         .into_iter()
@@ -19129,7 +19133,7 @@ fn draw_panel_rows(
         lines.push(line);
     }
 
-    let inner = crate::chrome::draw(frame, panel, &crate::chrome::Ring {
+    let inner = crate::chrome::draw_in_editor_cells(frame, panel, &crate::chrome::Ring {
         foot: None,
         rounded: config.panel.rounded,
         open_sides: false,
