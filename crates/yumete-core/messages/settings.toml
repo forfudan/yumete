@@ -975,8 +975,8 @@ en = "row height cap"
 [[message]]
 # 設置：表格一行最多占几行——一句話（草稿）
 key = "settings.editor.table-row-lines.hint"
-zhs = "表格一行最多占几行，超出的截掉、末行以 … 结尾；光标所在那一行照常整行展开"
-en = "how many lines a table row may take; the rest is cut and the last line ends in …, while the row under the cursor opens whole"
+zhs = "表格窗口视图里一行最多占几行，超出的截掉、末行以 … 结尾；光标所在那一行照常整行展开"
+en = "how many lines a row of a table in its window view may take; the rest is cut and the last line ends in …, while the row under the cursor opens whole"
 
 [[message]]
 # 設置：表格的栏线

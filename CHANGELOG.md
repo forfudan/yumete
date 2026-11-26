@@ -7,22 +7,21 @@ Written for people who use it to write, not for the commit log: each line says w
 ### Added
 
 - **A long cell of a table on a vertical page wraps inside its band** (#1005), so the table no longer runs past the foot of the page: short bands keep their depth, the long ones share what is left, and a row whose cell wraps takes several 縱 side by side. `h`/`l` step through them one 縱 at a time.
-- **Resting the mouse on the status line's input-method cell names the scheme**, with its series and author when the scheme file gives them, and **resting it on a change bar in the gutter shows what those lines said before the change**.
-- **Resting the mouse on a vertical page's change bar shows what those lines said before the change**, as the gutter's bar does on a horizontal page.
+- **Resting the mouse on the status line's input-method cell names the scheme**, with its series and author when the scheme file gives them.
+- **Resting the mouse on a change bar shows what those lines said before the change**, in the gutter of a horizontal page and beside the text of a vertical one.
 - **`[editor] table_cell = "fill"` marks the cell under the cursor with a gold ground**, in a table and on the settings page alike, its text and rules in an ink that reads on it; the default `"wash"` keeps the faint ground with two gold rules.
-- **`[editor] table_row_lines = N` caps how tall a row of a table is drawn** (#1028): a cell of more lines keeps N, the last ending in `…`, and the row under the cursor opens to its whole height. The default `0` sets no cap.
-- **A long value on the settings page is typed whole in its cell** (#1029): past the cell's width it takes further lines, broken where a table's cell would break, instead of sliding sideways past the caret.
+- **`[editor] table_row_lines = N` caps how tall a row of a table's window view (`Space t t`) is drawn** (#1028): a cell of more lines keeps N, the last ending in `…`, and the row under the cursor opens to its whole height. The default `0` sets no cap.
+- **A long value on the settings page is typed in its cell on as many lines as it needs, up to eight** (#1029): past the cell's width it takes further lines, broken where a table's cell would break, instead of sliding sideways past the caret; a longer one moves by whole lines to keep the caret's line in sight.
 
 ### Changed
 
-- On a vertical page a table is measured whole, so its bands no longer change depth as the cursor moves or the page scrolls, and markup in a cell stays hidden under the cursor (the table is read-only there; `Space t t` edits it).
+- On a vertical page a table is measured whole, so its bands no longer change depth as the cursor moves or the page scrolls, and markup in a cell stays hidden under the cursor.
 - On a vertical page a cell typed without spaces (`|甲|乙|`) gets no blank row at either end.
 
 ### Fixed
 
 - **A wrapped table column the right edge cuts wraps at the edge**, so the last characters of each of its lines are no longer off the page while the cursor is in another column.
-- **With `ambiguous_width = "wide"` the input method's candidate box stays a rectangle**: each stroke of its frame gets the second cell a CJK terminal draws it in, as the candidates' own `…` and `○` do.
-- **With `ambiguous_width = "wide"` every other frame stays a rectangle too**: the key menus, the command menu, floats, the question in the middle, the pickers and their preview, the HUD panel, the typing trainer's boxes and the sidebars give each stroke its second cell, and what they hold stays inside their walls.
+- **With `ambiguous_width = "wide"` every frame stays a rectangle**: each stroke gets the second cell a CJK terminal draws it in, and what a frame holds stays inside its walls. This covers the input method's candidate box, the key menus, the command menu, floats, the question in the middle, the pickers and their preview, the HUD panel, the typing trainer's boxes and the sidebars.
 - On a vertical page a table's rules line up with `:view-hanging on` and under `:render full`.
 - Moving through a long table on a vertical page no longer slows down with its length.
 - **Under vim, `o` on a last line with no line break, then `C-o k`, goes to the line above the new one**, as vim does; it went one line higher.
