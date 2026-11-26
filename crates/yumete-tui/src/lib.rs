@@ -21810,6 +21810,35 @@ fn squeezed(text: &str) -> String {
         );
     }
 
+    /// **The column the right edge cuts wraps at the edge** under 折行: with
+    /// the caret in the first column, a long second column wider than what
+    /// is left of the window still has every character on the page.
+    #[test]
+    fn a_wrapped_column_the_edge_cuts_keeps_every_character_on_the_page() {
+        let config = Config::default();
+        let _ = ink(&config);
+        let long = "子丑寅卯辰巳午未申酉戌亥".repeat(3) + "金木水火土";
+        let mut editor = editor_with(&format!("| 名 | 說明 |\n| --- | --- |\n| A | 短 |\n| B | {long} |\n"));
+        let mut seats = Seats::default();
+        let (w, h) = (36u16, 12u16);
+        for key in [' ', 't', 't'] {
+            editor.on_key(Key::Char(key));
+        }
+        assert!(editor.cell_wrap(), "the pane opens on 軟折行: {}", editor.status());
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+        terminal
+            .draw(|frame| draw(frame, &editor, &config, no_ime(), &mut seats, None))
+            .unwrap();
+        let page: String = (0..h - 2)
+            .map(|y| (0..w).map(|x| terminal.backend().buffer()[(x, y)].symbol()).collect::<String>())
+            .collect::<Vec<_>>()
+            .join("\n");
+        // Read back in order: a character the edge swallowed leaves a gap
+        // that a per-character search would not see, since each one recurs.
+        let read: String = page.chars().filter(|c| long.contains(*c)).collect();
+        assert_eq!(read, long, "the cell reads back whole:\n{page}");
+    }
+
     /// **`table_row_lines` cuts a tall row and opens the cursor's.** A row
     /// past the cap keeps that many lines, the last ending in `…`; the row
     /// under the cursor is drawn whole; and the row after the cut one is

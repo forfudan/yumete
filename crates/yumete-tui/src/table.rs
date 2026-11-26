@@ -130,6 +130,9 @@ fn layout(
             false => capped.clone(),
         };
         scroll_columns(&widths, room, caret.1, left);
+        if editor.cell_wrap() {
+            wrap_at_the_edge(&mut widths, room, *left);
+        }
         if (widths.clone(), *left) != before {
             for (l, tall) in drawn.iter_mut() {
                 *tall = row_height(editor, *l, caret.0, &widths, *left, room);
@@ -461,6 +464,30 @@ fn row_cell_lines(editor: &Editor, line: usize, open: usize, shown: &str, width:
 
 /// What ends the last line kept of a cell `table_row_lines` cut.
 const ROW_CUT: char = '…';
+
+/// **Under 折行, the column the right edge cuts wraps at the edge.** A table
+/// wider than the window scrolls by whole columns, so the last one on screen
+/// is often only partly there; folded, its cut is marked, but wrapped at its
+/// own width its lines would run on past the edge and the end of every one of
+/// them would be on no page at all. Drawn as wide as what is left of the
+/// window, every character of it is on the page — unless what is left is
+/// narrower than any column is drawn, which is a sliver, not a column.
+fn wrap_at_the_edge(widths: &mut [usize], room: usize, left: usize) {
+    let mut x = 0;
+    for w in widths.iter_mut().skip(left) {
+        if *w == 0 {
+            continue;
+        }
+        if x + *w > room {
+            let rest = room.saturating_sub(x);
+            if rest >= MIN_COLUMN {
+                *w = rest;
+            }
+            return;
+        }
+        x += *w + GAP;
+    }
+}
 
 /// Scroll the columns just enough to keep the cursor's cell whole on screen.
 fn scroll_columns(widths: &[usize], room: usize, cell: usize, left: &mut usize) {

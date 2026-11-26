@@ -18,6 +18,7 @@ Written for people who use it to write, not for the commit log: each line says w
 
 ### Fixed
 
+- **A wrapped table column the right edge cuts wraps at the edge**, so the last characters of each of its lines are no longer off the page while the cursor is in another column.
 - On a vertical page a table's rules line up with `:view-hanging on` and under `:render full`.
 - Moving through a long table on a vertical page no longer slows down with its length.
 - **Under vim, `o` on a last line with no line break, then `C-o k`, goes to the line above the new one**, as vim does; it went one line higher.
