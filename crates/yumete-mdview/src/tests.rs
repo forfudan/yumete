@@ -490,7 +490,9 @@ fn a_long_paragraph_with_readings_is_laid_out_in_one_pass() {
             assert!(shown.contains("那年冬天") && shown.contains("很小"), "{}", &shown[..200.min(shown.len())]);
             took
         };
-        let (short, long) = (time(1000), time(3000));
+        // The faster of two runs each: a shared machine that stalls once
+        // slows one run, not the shape of the curve.
+        let (short, long) = (time(1000).min(time(1000)), time(3000).min(time(3000)));
         eprintln!("vertical {vertical}: 1000 lines {short:?}, 3000 lines {long:?}");
         assert!(long < short * 6, "vertical {vertical}: 1000 lines {short:?}, 3000 lines {long:?}");
     }

@@ -1096,7 +1096,9 @@ mod tests {
                 roxmltree::Document::parse(&part(&bytes, name)).unwrap_or_else(|e| panic!("{name}: {e}"));
             }
         }
-        assert_eq!(document("# 一\n", &style()), document("# 一\n", &style()).clone(), "the same text, the same bytes");
+        // Both dates are given, so no part of the package reads the clock.
+        let dated = "---\ncreated: 2024-03-01\nmodified: 2024-03-02\n---\n# 一\n";
+        assert_eq!(document(dated, &style()), document(dated, &style()), "the same text, the same bytes");
     }
 
     #[test]
