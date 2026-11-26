@@ -659,6 +659,7 @@ fn apply_to_editor(config: &Config, editor: &mut Editor, layout: Option<yumete_c
     if let Some(rules) = yumete_core::table::Rules::parse(&config.editor.table_rules) {
         editor.set_table_rules(rules);
     }
+    editor.set_table_row_lines(config.editor.table_row_lines);
     editor.set_number_fill(config.editor.line_number_fill);
     editor.set_line_breaks(config.editor.show_line_breaks);
     editor.set_centre(config.editor.centre_measure);

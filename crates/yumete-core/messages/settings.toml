@@ -967,6 +967,18 @@ zhs = "表格与设置页里光标所在那一格：淡底加两条金线，或�
 en = "the cell under the cursor in a table and the settings page: a faint ground with two gold rules, or a gold ground"
 
 [[message]]
+# 設置：表格一行最多占几行（草稿）
+key = "settings.editor.table-row-lines"
+zhs = "行高上限"
+en = "row height cap"
+
+[[message]]
+# 設置：表格一行最多占几行——一句話（草稿）
+key = "settings.editor.table-row-lines.hint"
+zhs = "表格一行最多占几行，超出的截掉、末行以 … 结尾；光标所在那一行照常整行展开"
+en = "how many lines a table row may take; the rest is cut and the last line ends in …, while the row under the cursor opens whole"
+
+[[message]]
 # 設置：表格的栏线
 key = "settings.editor.table-rules"
 zhs = "表格竖线"
@@ -2576,6 +2588,12 @@ en = "0 = as wide as the window"
 key = "settings.zero.hard-wrap-unset"
 zhs = "0 = 未设置"
 en = "0 = unset"
+
+[[message]]
+# 設置：0 的意思——不設上限（草稿）
+key = "settings.zero.no-cap"
+zhs = "0 = 不设上限"
+en = "0 = no cap"
 
 [[message]]
 # 設置：0 的意思——不縮進

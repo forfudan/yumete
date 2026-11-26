@@ -274,6 +274,10 @@ pub struct EditorConfig {
     /// a faint ground with the cell's two rules in 金, or `"fill"` a 金
     /// ground with the text and the rules in the ink that reads on it.
     pub table_cell: String,
+    /// **How many lines a row of a table may take** before its tall cells are
+    /// cut, the last line kept ending in `…`. `0` (default) sets no cap. The
+    /// row under the cursor is never cut: it opens to its whole height.
+    pub table_row_lines: usize,
     /// The key that stands in for a lone-Shift tap when the terminal cannot
     /// report one (#339).
     ///
@@ -673,6 +677,7 @@ impl Default for EditorConfig {
             indent_symbol: "↵".to_string(),
             table_rules: "line dash".to_string(),
             table_cell: "wash".to_string(),
+            table_row_lines: 0,
             language_key: "C-\\".to_string(),
             show_segmentation: true,
             word_level: yumete_cjk::WordLevel::default(),
@@ -5076,6 +5081,7 @@ struct RawEditor {
     indent_symbol: Option<String>,
     table_rules: Option<String>,
     table_cell: Option<String>,
+    table_row_lines: Option<usize>,
     language_key: Option<String>,
     show_segmentation: Option<bool>,
     word_level: Option<String>,
@@ -5279,6 +5285,9 @@ impl RawConfig {
         }
         if other.editor.table_cell.is_some() {
             self.editor.table_cell = other.editor.table_cell.clone();
+        }
+        if other.editor.table_row_lines.is_some() {
+            self.editor.table_row_lines = other.editor.table_row_lines;
         }
         if other.editor.language_key.is_some() {
             self.editor.language_key = other.editor.language_key.clone();
@@ -5824,6 +5833,9 @@ impl RawConfig {
         }
         if let Some(look) = self.editor.table_cell {
             config.editor.table_cell = look;
+        }
+        if let Some(lines) = self.editor.table_row_lines {
+            config.editor.table_row_lines = as_declared(problems, "editor", "table_row_lines", lines, lines);
         }
         if let Some(key) = self.editor.language_key {
             match LanguageKey::parse(&key) {

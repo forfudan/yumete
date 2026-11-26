@@ -701,6 +701,16 @@ impl Editor {
         self.table_rules = rules;
     }
 
+    /// How many lines a row of the grid may take before its tall cells are
+    /// cut, or `0` for no cap.
+    pub fn table_row_lines(&self) -> usize {
+        self.table_row_lines
+    }
+
+    pub fn set_table_row_lines(&mut self, lines: usize) {
+        self.table_row_lines = lines;
+    }
+
     pub fn set_segmentation_visible(&mut self, on: bool) {
         self.show_segmentation = on;
     }

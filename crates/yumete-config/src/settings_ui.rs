@@ -837,6 +837,15 @@ pub const SETTINGS: &[Setting] = &[
     },
     Setting {
         table: "editor",
+        key: "table_row_lines",
+        group: Group::Marks,
+        kind: Kind::Count { low: 1, high: 99, zero: Some("settings.zero.no-cap") },
+        label: "settings.editor.table-row-lines",
+        hint: "settings.editor.table-row-lines.hint",
+        factory: "0",
+    },
+    Setting {
+        table: "editor",
         key: "unicode_alarm",
         group: Group::Marks,
         kind: Kind::Tick,

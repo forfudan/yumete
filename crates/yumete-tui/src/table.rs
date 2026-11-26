@@ -132,10 +132,10 @@ fn layout(
         scroll_columns(&widths, room, caret.1, left);
         if (widths.clone(), *left) != before {
             for (l, tall) in drawn.iter_mut() {
-                *tall = row_height(editor, *l, &widths, *left, room);
+                *tall = row_height(editor, *l, caret.0, &widths, *left, room);
             }
         }
-        drawn.push((line, row_height(editor, line, &widths, *left, room)));
+        drawn.push((line, row_height(editor, line, caret.0, &widths, *left, room)));
         let used: usize = drawn.iter().map(|&(_, tall)| tall).sum();
         if used >= rows {
             break;
@@ -287,7 +287,7 @@ fn vote(
 /// The same rule as `tall_of` in the click map: a hard break counts whether
 /// `t a` is on or not, so the two surfaces agree about how many rows a record
 /// takes.
-fn row_height(editor: &Editor, line: usize, widths: &[usize], left: usize, room: usize) -> usize {
+fn row_height(editor: &Editor, line: usize, open: usize, widths: &[usize], left: usize, room: usize) -> usize {
     let source = editor.row_source(line);
     let wrap = editor.cell_wrap();
     let mut x = 0;
@@ -297,7 +297,7 @@ fn row_height(editor: &Editor, line: usize, widths: &[usize], left: usize, room:
             break;
         }
         let w = widths.get(i).copied().unwrap_or(MIN_COLUMN);
-        tall = tall.max(cell_lines(&editor.cell_shown(&source, *span), w, wrap).len());
+        tall = tall.max(row_cell_lines(editor, line, open, &editor.cell_shown(&source, *span), w, wrap).len());
         x += w + if w == 0 { 0 } else { GAP };
     }
     tall
@@ -323,7 +323,7 @@ fn screen_distance(
     let mut used = 0usize;
     let mut line = from;
     while line < to {
-        used += row_height(editor, line, widths, left, room);
+        used += row_height(editor, line, cursor_row, widths, left, room);
         // Further than a page above, or two below, is not a step.
         if used > rows * if cursor_row < top { 1 } else { 2 } {
             return None;
@@ -353,7 +353,7 @@ fn top_for(
             break;
         }
         let previous = editor.table_row_start(top - 1);
-        let tall = row_height(editor, previous, widths, left, room);
+        let tall = row_height(editor, previous, cursor_row, widths, left, room);
         if !up && above + tall > inset {
             break;
         }
@@ -381,7 +381,7 @@ fn cell_fits(
     let mut used = 0usize;
     let mut line = top;
     while line < cursor_row {
-        used += row_height(editor, line, widths, left, room);
+        used += row_height(editor, line, cursor_row, widths, left, room);
         if used >= rows {
             return false;
         }
@@ -399,10 +399,10 @@ fn cell_fits(
         .max(1);
     // What is under the cell: the rest of its own record first, then the
     // records after it, counted only as far as `scrolloff` asks.
-    let mut under = row_height(editor, cursor_row, widths, left, room).saturating_sub(cell);
+    let mut under = row_height(editor, cursor_row, cursor_row, widths, left, room).saturating_sub(cell);
     let mut next = cursor_row + editor.record_height(cursor_row).max(1);
     while under < scrolloff && next <= last {
-        under += row_height(editor, next, widths, left, room);
+        under += row_height(editor, next, cursor_row, widths, left, room);
         next += editor.record_height(next).max(1);
     }
     used + cell + under.min(scrolloff) <= rows
@@ -434,6 +434,33 @@ fn cell_lines(shown: &str, width: usize, wrap: bool) -> Vec<String> {
         })
         .collect()
 }
+
+/// **A cell's drawn lines in a row of the grid**, held to
+/// `[editor] table_row_lines`: past the cap the lines are cut and the last one
+/// kept ends in `…`, so one cell of forty lines does not take the window. The
+/// row `open` — the cursor's — is drawn whole: the caret walks every line of
+/// its cell, and a line it could stand on must be on the page.
+fn row_cell_lines(editor: &Editor, line: usize, open: usize, shown: &str, width: usize, wrap: bool) -> Vec<String> {
+    let mut lines = cell_lines(shown, width, wrap);
+    let cap = editor.table_row_lines();
+    if cap == 0 || line == open || lines.len() <= cap {
+        return lines;
+    }
+    lines.truncate(cap);
+    if let Some(last) = lines.last_mut() {
+        let mark = yumete_cjk::char_width(ROW_CUT).max(1);
+        let kept = last.trim_end().to_string();
+        let mut chars: Vec<char> = kept.chars().collect();
+        while !chars.is_empty() && yumete_cjk::str_width(&chars.iter().collect::<String>()) + mark > width.max(mark) {
+            chars.pop();
+        }
+        *last = chars.into_iter().chain([ROW_CUT]).collect();
+    }
+    lines
+}
+
+/// What ends the last line kept of a cell `table_row_lines` cut.
+const ROW_CUT: char = '…';
 
 /// Scroll the columns just enough to keep the cursor's cell whole on screen.
 fn scroll_columns(widths: &[usize], room: usize, cell: usize, left: &mut usize) {
@@ -500,6 +527,7 @@ pub fn char_at(
     // …and the same rows: `layout` measures what `draw` drew, from the top
     // `draw` settled, so the columns start where they were drawn.
     let (row, cell) = editor.cell_position().unwrap_or((0, 0));
+    let open = editor.table_row_start(row);
     let mut left = viewport.left;
     let widths = layout(
         editor,
@@ -508,7 +536,7 @@ pub fn char_at(
         rows,
         bottom,
         room,
-        (editor.table_row_start(row), cell),
+        (open, cell),
         &mut left,
     );
     let right = area.x + area.width;
@@ -526,7 +554,7 @@ pub fn char_at(
             .enumerate()
             .map(|(i, span)| {
                 let w = widths.get(i).copied().unwrap_or(MIN_COLUMN);
-                cell_lines(&editor.cell_shown(&source, *span), w, wrap)
+                row_cell_lines(editor, line, open, &editor.cell_shown(&source, *span), w, wrap)
             })
             .collect()
     };
@@ -1164,7 +1192,7 @@ pub fn draw(
                 // padding, so `短` plus thirty spaces is thirty-three cells
                 // wide and wrapped to a second line holding nothing. Handled
                 // inside `cell_lines`, per line the writer wrote.
-                cell_lines(&editor.cell_shown(&source, *span), w, wrap)
+                row_cell_lines(editor, line, cursor_row, &editor.cell_shown(&source, *span), w, wrap)
             })
             .collect();
         (cells, parts)

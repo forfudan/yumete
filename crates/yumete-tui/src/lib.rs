@@ -21810,6 +21810,52 @@ fn squeezed(text: &str) -> String {
         );
     }
 
+    /// **`table_row_lines` cuts a tall row and opens the cursor's.** A row
+    /// past the cap keeps that many lines, the last ending in `…`; the row
+    /// under the cursor is drawn whole; and the row after the cut one is
+    /// still on the page.
+    #[test]
+    fn a_row_past_the_cap_is_cut_and_the_cursors_row_opens_whole() {
+        let config = Config::default();
+        let _ = ink(&config);
+        let long = "子丑寅卯辰巳午未申酉戌亥".repeat(6) + "金木水火土";
+        let mut editor = editor_with(&format!("| 名 | 說明 |\n| --- | --- |\n| A | 短 |\n| B | {long} |\n| C | 尾 |\n"));
+        editor.set_table_row_lines(2);
+        let mut seats = Seats::default();
+        let (w, h) = (60u16, 12u16);
+        for key in [' ', 't', 't'] {
+            editor.on_key(Key::Char(key));
+        }
+        assert!(editor.cell_wrap(), "the pane opens on 軟折行: {}", editor.status());
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+        let mut page = |editor: &Editor| -> String {
+            terminal
+                .draw(|frame| draw(frame, editor, &config, no_ime(), &mut seats, None))
+                .unwrap();
+            // The grid only: the status line cuts a long file name with `…`.
+            (0..h - 2)
+                .map(|y| (0..w).map(|x| terminal.backend().buffer()[(x, y)].symbol()).collect::<String>())
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+        let cut = page(&editor);
+        assert_eq!(editor.cell_position().map(|(row, _)| editor.table_row_start(row)), Some(2), "on A:\n{cut}");
+        assert!(cut.contains('…'), "B is cut:\n{cut}");
+        assert!(!cut.contains('土'), "B's last line is not drawn:\n{cut}");
+        assert!(cut.contains('尾'), "C is still on the page:\n{cut}");
+        editor.on_key(Key::Char('j'));
+        let open = page(&editor);
+        assert!(!open.contains('…'), "the cursor's row is not cut:\n{open}");
+        for c in long.chars() {
+            assert!(open.contains(c), "{c} is on the page:\n{open}");
+        }
+        assert!(open.contains('尾'), "C follows it:\n{open}");
+        editor.set_table_row_lines(0);
+        editor.on_key(Key::Char('k'));
+        let whole = page(&editor);
+        assert!(whole.contains('土') && !whole.contains('…'), "no cap, nothing cut:\n{whole}");
+    }
+
     /// Type `text` into a fresh editor and return to Normal mode.
     ///
     /// As Markdown, said up front: a scratch is plain text until its writing

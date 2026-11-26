@@ -3181,6 +3181,9 @@ pub struct Editor {
     words_request: bool,
     /// How a table's columns are told apart (Feature #157).
     table_rules: crate::table::Rules,
+    /// `[editor] table_row_lines`: how many lines a row of the grid may take,
+    /// `0` for no cap.
+    table_row_lines: usize,
     /// **Typewriter mode** (Feature #166): the row being written stays in the
     /// middle of the screen and the paper moves under it, the way a typewriter
     /// works and the way every focus mode since has.
@@ -5084,6 +5087,7 @@ impl Editor {
             word_level: yumete_cjk::WordLevel::default(),
             words_request: false,
             table_rules: crate::table::Rules::default(),
+            table_row_lines: 0,
             table_numbers: true,
             outline_levels: None,
             typewriter: false,
