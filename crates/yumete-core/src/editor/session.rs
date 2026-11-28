@@ -310,6 +310,7 @@ impl Editor {
         self.forget_the_document();
         // 磁碟上那一份換了人——改動條記的是跟它比出來的，也得重問（#55）。
         self.refresh_vcs(true);
+        self.refresh_blame(true);
         Ok(())
     }
 

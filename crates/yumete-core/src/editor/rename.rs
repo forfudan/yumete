@@ -86,6 +86,7 @@ impl Editor {
         self.carry_remembered(&old, &target);
         self.carry_previews(&old_real, &target);
         self.refresh_vcs(true);
+        self.refresh_blame(true);
         self.refresh_sidebar();
         self.status = say!("file.renamed", shown);
         // The file is renamed either way; a history left behind is said

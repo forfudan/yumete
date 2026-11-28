@@ -2001,18 +2001,20 @@ impl Editor {
     pub const VCS_IDLE: std::time::Duration = std::time::Duration::from_millis(300);
 
     /// 還欠一次重算嗎？欠就回「等這麽久」，循環拿它當這一輪的期限。
+    ///
+    /// The blame is owed once a buffer, for the one the switch finds without
+    /// an answer (a buffer switched to since it was turned on).
     pub fn vcs_due_in(&self) -> Option<std::time::Duration> {
-        if !self.diff_gutter {
-            return None;
-        }
         let buffer = self.current_buffer();
-        let asked = self.vcs_asked.get(&buffer.id()).copied();
-        (asked != Some(buffer.revision())).then_some(Self::VCS_IDLE)
+        let diff = self.diff_gutter && self.vcs_asked.get(&buffer.id()).copied() != Some(buffer.revision());
+        let blame = self.blame_on && !self.blame.contains_key(&buffer.id());
+        (diff || blame).then_some(Self::VCS_IDLE)
     }
 
     /// 鐘響了：把欠的那一次算掉。
     pub fn vcs_tick(&mut self) {
         self.refresh_vcs(false);
+        self.refresh_blame(false);
     }
 
     /// 重算現在這個 buffer 的 git 逐行差。
@@ -2082,6 +2084,87 @@ impl Editor {
             None => {
                 self.vcs.remove(&id);
             }
+        }
+    }
+
+    // ---- inline blame (`:view-blame`) ------------------------------------
+
+    /// Whether the cursor's line says who last committed it.
+    pub fn blame_on(&self) -> bool {
+        self.blame_on
+    }
+
+    /// Turn `:view-blame` on or off. On asks git at once, and stays off when
+    /// git has nothing to say about this file: a switch that is on and shows
+    /// nothing reads as broken. Answers whether it is on.
+    pub fn set_blame(&mut self, on: bool) -> bool {
+        self.blame_on = on;
+        self.blame.clear();
+        if on {
+            self.refresh_blame(true);
+            let id = self.current_buffer().id();
+            if !matches!(self.blame.get(&id), Some(Some(_))) {
+                self.blame_on = false;
+                self.blame.clear();
+            }
+        }
+        self.blame_on
+    }
+
+    /// Ask git for this buffer's blame: always when `force` (the switch
+    /// turned on, the file opened, read again or saved), otherwise only for a
+    /// buffer not asked about yet. Nothing while the switch is off.
+    pub fn refresh_blame(&mut self, force: bool) {
+        if !self.blame_on {
+            return;
+        }
+        let id = self.current_buffer().id();
+        if !force && self.blame.contains_key(&id) {
+            return;
+        }
+        // Edits made before this answer move the old one, never the new:
+        // the text it is asked with already holds them.
+        self.move_the_problems();
+        let buffer = self.current_buffer();
+        let Some(path) = buffer.path().map(Path::to_path_buf) else {
+            self.blame.insert(id, None);
+            return;
+        };
+        let text = buffer.text();
+        // The bytes as `:w` would write them, so git compares like with like.
+        let encoding = buffer.encoding_on_disk();
+        let bytes = match encoding == crate::encoding::UTF_8 {
+            true => {
+                let bom = if buffer.marked() { "\u{feff}" } else { "" };
+                [bom.as_bytes(), text.as_bytes()].concat()
+            }
+            false => crate::encoding::encode(encoding, &text),
+        };
+        let answer = crate::blame::Blame::read(&path, &bytes, &text);
+        self.blame.insert(id, answer);
+    }
+
+    /// **What is said after the end of `line`**: who committed it, or that
+    /// nobody has. Only on the cursor's line in the window with the keys,
+    /// not while typing in Insert (the line is half written, and the words
+    /// would sit where the next character goes), and not on an empty line
+    /// nobody committed. Looks the answer up; never asks git.
+    pub fn blame_at_end_of(&self, line: usize) -> Option<crate::blame::Said<'_>> {
+        if !self.blame_on
+            || self.mode == Mode::Insert
+            || self.viewing.get().is_some_and(|v| v.window != self.live)
+            || line != self.cursor_line()
+        {
+            return None;
+        }
+        let blame = self.blame.get(&self.current_buffer().id())?.as_ref()?;
+        let rope = self.current_buffer().rope();
+        let now = rope.get_line(line)?.to_string();
+        let said = blame.at(line, &now)?;
+        let empty = now.trim_end_matches(['\n', '\r']).is_empty();
+        match said {
+            crate::blame::Said::NotCommitted if empty => None,
+            said => Some(said),
         }
     }
 
@@ -2156,6 +2239,11 @@ impl Editor {
     pub fn move_the_problems(&mut self) {
         for buffer in &mut self.buffers {
             let edits = buffer.take_line_edits();
+            if let Some(Some(blame)) = self.blame.get_mut(&buffer.id()) {
+                for &(line, taken, put, at_start) in &edits {
+                    blame.shift(line, taken, put, at_start);
+                }
+            }
             let Some(path) = buffer.path().filter(|_| !edits.is_empty()) else { continue };
             for (line, taken, put, at_start) in edits {
                 self.problems.shift(path, line, taken, put, at_start);

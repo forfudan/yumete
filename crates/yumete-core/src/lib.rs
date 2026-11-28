@@ -20,6 +20,7 @@
 pub mod alarm;
 pub mod align;
 pub mod as_preview;
+pub mod blame;
 pub mod buffer;
 pub mod cite;
 pub mod clock;

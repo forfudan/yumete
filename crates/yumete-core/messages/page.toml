@@ -1,6 +1,96 @@
-# prefixes: layout vertical-keys wrap hard-wrap rulers page view sentence level wheel md render
+# prefixes: layout vertical-keys wrap hard-wrap rulers page view sentence level wheel md render blame
 #
 # What the editor says, one block per tag; see README.md beside this file.
+
+[[message]]
+# 鼠标停在 :view-blame 画的那一句上，浮窗里提交人那一栏的名字（草稿）
+key = "blame.author"
+zhs = "作者"
+en = "author"
+
+[[message]]
+# 鼠标停在 :view-blame 画的那一句上，浮窗的标题：{0} 是提交号的前八位（草稿）
+key = "blame.commit"
+zhs = "提交 {0}"
+en = "commit {0}"
+
+[[message]]
+# 鼠标停在 :view-blame 画的那一句上，浮窗里提交时间那一栏的名字（草稿）
+key = "blame.date"
+zhs = "时间"
+en = "date"
+
+[[message]]
+# :view-blame 行末那一句里的时间：几天前提交的（草稿）
+key = "blame.days-ago"
+zhs = "{0} 天前"
+en = "{0|day|days} ago"
+
+[[message]]
+# :view-blame 行末那一句里的时间：几小时前提交的（草稿）
+key = "blame.hours-ago"
+zhs = "{0} 小时前"
+en = "{0|hour|hours} ago"
+
+[[message]]
+# :view-blame 行末那一句里的时间：一分钟以内提交的（草稿）
+key = "blame.just-now"
+zhs = "刚刚"
+en = "just now"
+
+[[message]]
+# :view-blame 画在光标所在行末尾的一句：{0} 提交人，{1} 多久以前（blame.just-now 等），{2} 提交说明的第一行（草稿）
+key = "blame.line"
+zhs = "{0}，{1} • {2}"
+en = "{0}, {1} • {2}"
+
+[[message]]
+# :view-blame 行末那一句里的时间：几分钟前提交的（草稿）
+key = "blame.minutes-ago"
+zhs = "{0} 分钟前"
+en = "{0|minute|minutes} ago"
+
+[[message]]
+# :view-blame 行末那一句里的时间：几个月前提交的，一个月按三十天算（草稿）
+key = "blame.months-ago"
+zhs = "{0} 个月前"
+en = "{0|month|months} ago"
+
+[[message]]
+# :view-blame 开着，光标所在行还没提交过，或者打开后改过，画在行末（草稿）
+key = "blame.not-committed"
+zhs = "尚未提交"
+en = "not committed yet"
+
+[[message]]
+# :view-blame on，可是 git 答不出这个文件：不在 git 仓里、没有提交过、仓里还没有第一个提交，或者机器上没有 git——开关保持关着（草稿）
+key = "blame.not-in-git"
+zhs = "行末提交信息：关(此文件不在 git 中)"
+en = "inline blame: off (file not in git)"
+
+[[message]]
+# :view-blame off（草稿）
+key = "blame.off"
+zhs = "行末提交信息：关"
+en = "inline blame: off"
+
+[[message]]
+# :view-blame on——光标所在行的末尾开始显示最后提交它的人、时间和说明（草稿）
+key = "blame.on"
+zhs = "行末提交信息：开"
+en = "inline blame: on"
+
+[[message]]
+# 鼠标停在 :view-blame 画的那一句上，浮窗里提交说明那一栏的名字（草稿）
+key = "blame.summary"
+zhs = "说明"
+en = "summary"
+
+[[message]]
+# :view-blame 行末那一句里的时间：几年前提交的（草稿）
+key = "blame.years-ago"
+zhs = "{0} 年前"
+en = "{0|year|years} ago"
 
 [[message]]
 # :hard-wrap 做完了：幾行變幾行，寬多少

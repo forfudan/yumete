@@ -16458,6 +16458,7 @@ fn draw_horizontal(
         // of the line, two cells after its last row, in the lane's ink, cut
         // with `…` at the edge. Drawn, never measured: the caret, `j` and the
         // mouse never meet it. Not on a closed fold's line, nor in a table.
+        let mut said_after_the_line = false;
         if ends_line && !row_is_a_table && !editor.fold_head(row.line) {
             if let Some((severity, message)) = editor.problem_at_end_of(row.line) {
                 let used: usize = spans.iter().map(|s| yumete_cjk::str_width(&s.content)).sum();
@@ -16480,6 +16481,40 @@ fn draw_horizontal(
                     });
                     // On the row's own ground, or a banded row has a hole.
                     spans.push(Span::styled(said, fill.fg(colour)));
+                    said_after_the_line = true;
+                }
+            }
+        }
+        // **The cursor line's blame** (`:view-blame`): who last committed
+        // the line, when and why, in the furniture's ink, two cells after its
+        // last row. Whole, or cut inside the summary, or not at all: it never
+        // takes a row of its own and never covers a character. A diagnostic
+        // on the line speaks first.
+        if ends_line && !said_after_the_line && !row_is_a_table && !editor.fold_head(row.line) {
+            if let Some(blamed) = editor.blame_at_end_of(row.line) {
+                let used: usize = spans.iter().map(|s| yumete_cjk::str_width(&s.content)).sum();
+                let room = (text_area.width as usize + left).saturating_sub(used + 2);
+                let now = yumete_core::blame::now();
+                let whole = yumete_core::blame::words(blamed, now);
+                // The name and the date are the least worth drawing.
+                let least = match blamed {
+                    yumete_core::blame::Said::Committed(c) => yumete_cjk::str_width(&yumete_core::say!(
+                        "blame.line",
+                        c.author,
+                        yumete_core::blame::ago(c.time, now),
+                        "…"
+                    )),
+                    yumete_core::blame::Said::NotCommitted => yumete_cjk::str_width(&whole),
+                };
+                if room >= least {
+                    let said = format!("  {}", elide(&whole, room));
+                    let from = text_area.x + used.saturating_sub(left) as u16 + 2;
+                    let wide = yumete_cjk::str_width(&said).saturating_sub(2) as u16;
+                    let to = (from + wide).min(text_area.x + text_area.width);
+                    crate::hover::offer(Rect::new(from, screen_y, to.saturating_sub(from), 1), false, |_| {
+                        crate::hover::blame_words(blamed)
+                    });
+                    spans.push(Span::styled(said, fill.fg(ink.furniture())));
                 }
             }
         }
@@ -25979,6 +26014,45 @@ fn squeezed(text: &str) -> String {
         // 不說那句話的服務器沒有控制面板，那就沒有，功能缺席而不是壞掉。
         let plain = super::server_addresses(other.lines().map(str::to_string));
         assert_eq!(plain.control, None);
+    }
+
+    /// **`:view-blame`** writes who committed the cursor's line after it, on
+    /// that line only; cuts the summary at the edge, and draws nothing when
+    /// even the name and the date have no room.
+    #[test]
+    fn the_cursor_line_says_who_committed_it() {
+        let dir = std::env::temp_dir().join(format!("yumete-blame-draw-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let git = |args: &[&str]| {
+            std::process::Command::new("git")
+                .args(args)
+                .current_dir(&dir)
+                .env("GIT_AUTHOR_NAME", "Lin Qiu")
+                .env("GIT_AUTHOR_EMAIL", "qiu@example.org")
+                .env("GIT_COMMITTER_NAME", "Lin Qiu")
+                .env("GIT_COMMITTER_EMAIL", "qiu@example.org")
+                .output()
+                .expect("git")
+        };
+        git(&["init", "-q", "."]);
+        std::fs::write(dir.join("orchard.md"), "apples\npears\n").unwrap();
+        git(&["add", "-A"]);
+        git(&["commit", "-qm", "Plant the orchard by the old stone wall"]);
+        let mut editor = Editor::new();
+        editor.open_file(dir.join("orchard.md")).unwrap();
+        editor.execute("view-blame on").unwrap();
+        let config = Config::default();
+        let buffer = render(&editor, &config, 80, 6);
+        let first = row_text(&buffer, 0);
+        assert!(first.contains("apples  Lin Qiu"), "{first:?}");
+        assert!(first.contains("Plant the orchard by the old stone wall"), "{first:?}");
+        assert!(!row_text(&buffer, 1).contains("Lin Qiu"), "only the cursor's line");
+        let narrow = row_text(&render(&editor, &config, 40, 6), 0);
+        assert!(narrow.contains("Lin Qiu") && narrow.trim_end().ends_with('…'), "{narrow:?}");
+        let tight = row_text(&render(&editor, &config, 20, 6), 0);
+        assert!(!tight.contains("Lin"), "no room for the name and the date: {tight:?}");
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     /// **End-of-line diagnostics**: off out of the factory; `basic` writes

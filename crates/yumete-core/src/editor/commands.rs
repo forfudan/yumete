@@ -728,6 +728,15 @@ impl Editor {
                 };
                 Ok(CommandOutcome::Continue)
             }
+            Command::SetBlame(on) => {
+                let want = on.over(self.blame_on);
+                self.status = match (want, self.set_blame(want)) {
+                    (false, _) => say!("blame.off"),
+                    (true, true) => say!("blame.on"),
+                    (true, false) => say!("blame.not-in-git"),
+                };
+                Ok(CommandOutcome::Continue)
+            }
             Command::SetTabInserts(want) => {
                 if let Some(spaces) = want {
                     // A typed setting is this buffer's too: a modeline's
@@ -2592,6 +2601,7 @@ impl Editor {
         }
         // 改了名就是換了一份磁碟上的東西，改動條要重問一次（#55）。
         self.refresh_vcs(true);
+        self.refresh_blame(true);
         self.status = say!("buffer.saved", self.current_buffer().display_name());
         Ok(CommandOutcome::Continue)
     }
@@ -2844,6 +2854,7 @@ impl Editor {
             // 改動條：存檔是喊 git 的三個時刻之一（#55）。`force`，因為變的是
             // **磁碟上那一份**而 revision 没動——存檔不是一次編輯。
             self.refresh_vcs(true);
+            self.refresh_blame(true);
             self.note_progress();
             // 雙鏈: this file's links read again from the text in memory.
             self.links_note_saved();
@@ -2890,6 +2901,7 @@ impl Editor {
             Command::RenderRuby { dialect, .. } => self.ruby_configured().contains(dialect),
             Command::SetNumberFill(_) => self.number_fill,
             Command::SetDiffGutter(_) => self.diff_gutter,
+            Command::SetBlame(_) => self.blame_on,
             Command::DiffFold(_) => self.diff_fold,
             Command::SetHanging(_) => self.hanging,
             Command::Preview(_) | Command::PreviewWindow(_) => self.preview_state_here() != PreviewState::None,

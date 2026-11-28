@@ -2844,6 +2844,13 @@ en = "each key moves the way it points"
 
 
 [[message]]
+# : 命令選單裏 blame 那一項的説明(view 組)（草稿）
+key = "cmd.view.blame"
+zhs = "行末提交信息：光标所在行的末尾显示最后提交它的作者、时间和说明"
+en = "inline blame: after the cursor's line, who last committed it, when, and why"
+find = "追溯 提交 作者 注解 版本 git blame annotate"
+
+[[message]]
 # : 命令菜单里 centre 那一项的说明(view 组)：定了正文宽度时正文居中（草稿）
 key = "cmd.view.centre"
 zhs = "正文居中：定了正文宽度时，正文立在窗口中间，左右留出一样宽的边"

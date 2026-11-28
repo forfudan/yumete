@@ -35,6 +35,13 @@ pub fn when(at: std::time::SystemTime) -> String {
     format!("{mo:02}-{d:02} {h:02}:{mi:02}")
 }
 
+/// **A moment as a date and a time**, `YYYY-MM-DD HH:MM`, local: a commit's
+/// date in the blame's detail, where a year can be anything.
+pub fn date_time(seconds: i64) -> String {
+    let (y, mo, d, h, mi, _) = broken_down(seconds);
+    format!("{y:04}-{mo:02}-{d:02} {h:02}:{mi:02}")
+}
+
 /// **The local calendar day a second falls on**, as a day number
 /// ([`crate::genda::day_number`]): what 跟打's daily figures count by, so a
 /// day ends at the reader's midnight and not at UTC's.

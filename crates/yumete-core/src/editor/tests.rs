@@ -49945,3 +49945,68 @@ fn sort_sections_by_number_reads_dotted_numbers_and_keeps_unnumbered_last() {
     ed.execute(":sort-sections -k number -r").unwrap();
     assert_eq!(ed.current_buffer().text(), "## 1.10. j\n## 1.3. c\n## 1.2. b\n## 序\n");
 }
+
+/// **`:view-blame` names the commit of the cursor's line**, follows the lines
+/// as they move, calls a line typed into not committed, and stays off for a
+/// file git does not know.
+#[test]
+fn blame_follows_the_cursor_line_and_the_edits() {
+    use crate::blame::Said;
+    let dir = tmp().join(format!("yumete-blame-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let git = |args: &[&str]| {
+        std::process::Command::new("git")
+            .args(args)
+            .current_dir(&dir)
+            .env("GIT_AUTHOR_NAME", "Lin Qiu")
+            .env("GIT_AUTHOR_EMAIL", "qiu@example.org")
+            .env("GIT_COMMITTER_NAME", "Lin Qiu")
+            .env("GIT_COMMITTER_EMAIL", "qiu@example.org")
+            .output()
+            .expect("git")
+    };
+    git(&["init", "-q", "."]);
+    let file = dir.join("orchard.md");
+    std::fs::write(&file, "apples by the wall\n\npears in the shade\n").unwrap();
+    git(&["add", "-A"]);
+    git(&["commit", "-qm", "Plant the orchard"]);
+
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    assert!(ed.blame_at_end_of(0).is_none(), "off by default");
+    ed.execute("view-blame").unwrap();
+    assert!(ed.blame_on(), "{}", ed.status());
+    let committed = |ed: &Editor, line: usize| match ed.blame_at_end_of(line) {
+        Some(Said::Committed(c)) => Some((c.author.clone(), c.summary.clone())),
+        _ => None,
+    };
+    let planted = Some(("Lin Qiu".to_string(), "Plant the orchard".to_string()));
+    assert_eq!(committed(&ed, 0), planted);
+    // Only the cursor's line says it.
+    assert!(ed.blame_at_end_of(2).is_none());
+
+    // A line opened above the pears is new; the pears keep their commit.
+    ed.goto_line(3);
+    press(&mut ed, "Oplums");
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.blame_at_end_of(2), Some(Said::NotCommitted));
+    ed.goto_line(4);
+    assert_eq!(committed(&ed, 3), planted);
+    // Typed into, the line is not committed; while typing, nothing is said.
+    press(&mut ed, "A ripe");
+    assert!(ed.blame_at_end_of(3).is_none(), "nothing while typing in Insert");
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.blame_at_end_of(3), Some(Said::NotCommitted));
+
+    // A file git does not track: the switch says so and stays off.
+    let loose = dir.join("loose.md");
+    std::fs::write(&loose, "a seed\n").unwrap();
+    ed.open_file(&loose).unwrap();
+    ed.execute("view-blame off").unwrap();
+    ed.execute("view-blame on").unwrap();
+    assert!(!ed.blame_on());
+    assert_eq!(ed.status(), say!("blame.not-in-git"));
+
+    std::fs::remove_dir_all(&dir).ok();
+}

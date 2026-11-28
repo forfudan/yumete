@@ -587,6 +587,9 @@ pub enum Command {
     /// `:view-diff` — whether the cell beside the line numbers shows git's
     /// changes (#55).
     SetDiffGutter(Switch),
+    /// `:view-blame` — whether the cursor's line says, after its end, who
+    /// last committed it.
+    SetBlame(Switch),
     /// `:view-diagnostics off|basic|full` — end-of-line diagnostics. `None`
     /// asks, the way bare `:render` and `:view-hud` report their level.
     SetEolDiagnostics(Option<String>),
@@ -5344,6 +5347,15 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|p| Ok(Command::SetDiffGutter(switched(p)))),
     },
     Entry {
+        // Beside `:view-diff`: both say what git knows about the lines.
+        name: "view-blame",
+        aliases: &[],
+        help: "cmd.view.blame",
+        needs: &[],
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::SetBlame(switched(p)))),
+    },
+    Entry {
         name: "view-typewriter",
         aliases: &[],
         help: "cmd.view.typewriter",
@@ -9499,7 +9511,7 @@ mod tests {
         // A family with no head of its own keeps the hyphen, which is what
         // says it is a family and not a command, and nothing else: `view-w` is
         // `view-wrap`'s spelling, not the thirteen's.
-        assert_eq!(row("", "view-"), ":view- +24");
+        assert_eq!(row("", "view-"), ":view- +25");
         assert_eq!(row("", "check-"), ":check- +7");
         // …and a stem is a stem however many are under it.
         assert_eq!(row("", "markdown-"), ":markdown- +2");

@@ -3489,6 +3489,12 @@ pub struct Editor {
     /// 提交之後檔案没變、`revision` 也没變，所以光看它們永遠不會重算——而改動條
     /// 說的正是「跟 `HEAD` 比」。見 [`crate::vcs::Changes::head_mark`]。
     vcs_head: HashMap<u64, String>,
+    /// `:view-blame`: whether the cursor's line says who last committed it.
+    blame_on: bool,
+    /// Each buffer's blame by its id, once asked: `None` when git had nothing
+    /// to say, kept so a file outside git is not asked about again until it
+    /// is opened or saved.
+    blame: HashMap<u64, Option<crate::blame::Blame>>,
     /// **每個路徑的真名**，問過一次就記住。
     ///
     /// 「這個檔開着没有」是按真名比的，不按拼法——`./甲.md` 與 `甲.md` 是同一個
@@ -5173,6 +5179,8 @@ impl Editor {
             vcs_base: HashMap::new(),
             vcs_asked: HashMap::new(),
             vcs_head: HashMap::new(),
+            blame_on: false,
+            blame: HashMap::new(),
             canonical: RefCell::new(HashMap::new()),
             canonical_missing: RefCell::new(HashMap::new()),
             problems: crate::problem::Problems::default(),
