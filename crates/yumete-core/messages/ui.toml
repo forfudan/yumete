@@ -1199,6 +1199,12 @@ zhs = "无匹配项"
 en = "nothing matched"
 
 [[message]]
+# :changed-files <提交>：自那個提交以來一個檔都沒改，也沒有沒存的（草稿）
+key = "picker.nothing-since"
+zhs = "自 {0} 以来没有改动"
+en = "nothing has changed since {0}"
+
+[[message]]
 # 空格 " 開的貼上單，標題
 key = "picker.paste"
 zhs = "寄存器·剪贴板"

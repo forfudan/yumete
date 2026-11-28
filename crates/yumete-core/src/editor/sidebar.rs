@@ -2568,7 +2568,11 @@ impl Editor {
         let items = files
             .into_iter()
             .map(|f| crate::picker::Item::Changed(f.path, Some((f.letter, f.staging))))
-            .collect();
+            .collect::<Vec<_>>();
+        if items.is_empty() && self.buffers.iter().all(|b| !b.is_modified()) {
+            self.status = say!("picker.nothing-since", commit);
+            return;
+        }
         let since = crate::picker::Since { commit: commit.to_string(), renamed };
         self.show_changed_picker(say!("picker.changed-since", commit), root, items, Some(since));
     }

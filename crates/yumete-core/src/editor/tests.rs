@@ -16011,6 +16011,13 @@ fn changed_files_since_a_commit_lists_and_compares_against_it() {
     assert!(ed.picker().is_none(), "a range is not one commit");
     assert!(ed.status().contains("single revision"), "{}", ed.status());
 
+    // Nothing changed since the commit: said, and no empty picker.
+    git(&["add", "-A"]);
+    git(&["commit", "-qm", "three"]);
+    ed.execute("changed-files HEAD").unwrap();
+    assert!(ed.picker().is_none(), "no empty picker");
+    assert_eq!(ed.status(), crate::say!("picker.nothing-since", "HEAD"));
+
     std::fs::remove_dir_all(&dir).ok();
 }
 
