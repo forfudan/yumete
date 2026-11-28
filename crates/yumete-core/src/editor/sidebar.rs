@@ -2058,7 +2058,7 @@ impl Editor {
                 if let (Some(since), Some(root)) = (since, &root) {
                     if Path::new(&path).is_relative() {
                         let encoding = self.current_buffer().encoding_on_disk();
-                        let text = crate::vcs::Changes::text_in(root, since.name_then(&path), &since.commit, encoding);
+                        let text = crate::vcs::Changes::text_in(root, since.name_then(&path), &since.base, encoding);
                         self.show_git_diff(&since.commit, text);
                     }
                 }
@@ -2554,7 +2554,7 @@ impl Editor {
     /// git cannot answer — no such commit, a range, no repository — its own
     /// words are said and no picker opens.
     pub(super) fn open_changed_since(&mut self, commit: &str) {
-        let (root, files) = match crate::vcs::changed_since(&self.working_dir(), commit) {
+        let (root, base, files) = match crate::vcs::changed_since(&self.working_dir(), commit) {
             Ok(found) => found,
             Err(why) => {
                 self.status = say!("diff.git-said", commit, why);
@@ -2573,7 +2573,7 @@ impl Editor {
             self.status = say!("picker.nothing-since", commit);
             return;
         }
-        let since = crate::picker::Since { commit: commit.to_string(), renamed };
+        let since = crate::picker::Since { commit: commit.to_string(), base, renamed };
         self.show_changed_picker(say!("picker.changed-since", commit), root, items, Some(since));
     }
 

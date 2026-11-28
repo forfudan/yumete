@@ -10,7 +10,7 @@ Written for people who use it to write, not for the commit log: each line says w
 - **`:heading-numbering` numbers a Markdown file's headings by the patterns the file names** (#1069), in its front matter or a comment: `heading-numbering: ["-", "第一章 ", "1. ", "1.1. "]`. Running it again brings the numbers up to date, `:heading-numbering-off` takes them off, and a heading marked `<!-- omit from toc -->` is skipped.
 - **A vertical page has a scrollbar along its foot** (#1046), running right to left from the start of the file: the same marks and hovers as the horizontal bar, and dragging the thumb turns the page. With a language server, a row above the paragraph numbers holds each paragraph's problem sign, and resting the mouse on it shows that paragraph's problems.
 - **`:view-blame` shows who last committed the cursor's line** (inline blame): author, how long ago and the commit's summary, dim after the end of the line, with the whole commit on hover. Git is asked when it is turned on and when the file is opened, reloaded or saved, never while typing; lines written since show nothing. Off by default.
-- **`:changed-files <commit>` lists every file changed since a commit**, tag or branch: committed, not yet committed or untracked, with renames and deletions. Choosing one opens it beside its version at that commit, as `:git-diff <commit>` does.
+- **`:changed-files <commit>` lists every file changed since a commit**, tag or branch: committed, not yet committed or untracked, with renames and deletions. Choosing one opens it beside its version at that commit, as `:git-diff <commit>` does. `:changed-files main...` counts from where this branch left main.
 
 ### Changed
 

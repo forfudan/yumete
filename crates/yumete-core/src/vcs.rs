@@ -534,7 +534,7 @@ pub fn parse_status(raw: &[u8]) -> Vec<FileStatus> {
 /// never shows. `commit` goes to git as typed and must name one commit: a
 /// range is refused in git's own words, as are a commit that does not exist
 /// and a directory outside a repository.
-pub fn changed_since(dir: &Path, commit: &str) -> Result<(PathBuf, Vec<FileStatus>), String> {
+pub fn changed_since(dir: &Path, commit: &str) -> Result<(PathBuf, String, Vec<FileStatus>), String> {
     let run = |at: &Path, args: &[&str]| -> Result<Vec<u8>, String> {
         let out = std::process::Command::new("git")
             .arg("--no-optional-locks")
@@ -550,6 +550,17 @@ pub fn changed_since(dir: &Path, commit: &str) -> Result<(PathBuf, Vec<FileStatu
     };
     let top = run(dir, &["rev-parse", "--show-toplevel"])?;
     let top = PathBuf::from(String::from_utf8_lossy(&top).trim());
+    // `main...` is git's own spelling for **since this branch left main**:
+    // the commit both share, so what main did after the split is not counted
+    // as this branch's change. The working tree is still the other side.
+    let base = match commit.strip_suffix("...").filter(|name| !name.is_empty() && !name.contains("..")) {
+        Some(name) => {
+            let shared = run(&top, &["merge-base", "--end-of-options", name, "HEAD"])?;
+            String::from_utf8_lossy(&shared).trim().to_string()
+        }
+        None => commit.to_string(),
+    };
+    let commit = base.as_str();
     let raw = run(&top, &["diff", "--name-status", "-z", "--find-renames", "--end-of-options", commit, "--"])?;
     // `a..b` is a range to `git diff`; asked for one commit, git says it is
     // not one.
@@ -562,7 +573,7 @@ pub fn changed_since(dir: &Path, commit: &str) -> Result<(PathBuf, Vec<FileStatu
             files.push(FileStatus { path, letter: 'U', staging: Staging::Unstaged, was: None });
         }
     }
-    Ok((top, files))
+    Ok((top, base, files))
 }
 
 /// `git diff --name-status -z`, read: `X\0path\0`, or `R100\0old\0new\0`

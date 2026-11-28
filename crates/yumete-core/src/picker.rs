@@ -190,11 +190,13 @@ pub struct Picker {
 }
 
 /// **What `:changed-files <commit>` compares against**: the commit as typed,
-/// and the names renamed files had there, new name to old, both from the
-/// repository's top.
+/// the commit git reads the old texts from (the same, but for `main...`,
+/// where it is the commit the branch left main at), and the names renamed
+/// files had there, new name to old, both from the repository's top.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Since {
     pub commit: String,
+    pub base: String,
     pub renamed: Vec<(String, String)>,
 }
 

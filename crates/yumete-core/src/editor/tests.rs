@@ -16021,6 +16021,61 @@ fn changed_files_since_a_commit_lists_and_compares_against_it() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **`:changed-files base...` counts from where this branch left `base`**:
+/// what `base` did after the split is not listed as this branch's change,
+/// while bare `base` compares with its tip and lists it.
+#[test]
+fn changed_files_since_a_branch_split_leaves_out_what_the_branch_did_later() {
+    let dir = tmp().join(format!("yumete-changed-split-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let git = |args: &[&str]| {
+        let ok = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&dir)
+            .args(["-c", "user.name=t", "-c", "user.email=t@t"])
+            .args(args)
+            .output()
+            .is_ok_and(|o| o.status.success());
+        assert!(ok, "git {args:?}");
+    };
+    std::fs::write(dir.join("mine.md"), "the first draft\n").unwrap();
+    git(&["init", "-q"]);
+    git(&["add", "."]);
+    git(&["commit", "-qm", "one"]);
+    git(&["branch", "base"]);
+    std::fs::write(dir.join("mine.md"), "the second draft\n").unwrap();
+    git(&["commit", "-qam", "mine"]);
+    git(&["checkout", "-q", "base"]);
+    std::fs::write(dir.join("theirs.md"), "written on base later\n").unwrap();
+    git(&["add", "."]);
+    git(&["commit", "-qm", "theirs"]);
+    git(&["checkout", "-q", "-"]);
+
+    let mut ed = Editor::new();
+    assert!(ed.set_working_dir(&dir));
+    let listed = |ed: &mut Editor, base: &str| {
+        ed.execute(&format!("changed-files {base}")).unwrap();
+        let picker = ed.picker().expect("a picker");
+        let mut rows: Vec<String> = picker.items().iter().map(|i| i.label().to_string()).collect();
+        rows.sort();
+        ed.on_key(Key::Esc);
+        rows
+    };
+    assert_eq!(listed(&mut ed, "base"), ["mine.md", "theirs.md"], "the tip of base");
+    assert_eq!(listed(&mut ed, "base..."), ["mine.md"], "since the split");
+
+    // Chosen, the file opens beside its text at the split.
+    ed.execute("changed-files base...").unwrap();
+    ed.on_key(Key::Enter);
+    assert!(ed.diff_in_view(), "the comparison is open: {}", ed.status());
+    assert!(ed.diff_columns().is_some_and(|c| c.left.contains("base...")), "titled by the base as typed");
+    assert!(ed.diff_to_column(true), "the keys go to the old text");
+    assert_eq!(ed.current_buffer().text(), "the first draft\n");
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **`x` 在行尾只選這一行**（照 helix）。
 ///
 /// 在行尾按 `x` 不連下一行一起選；helix 只選這一行。
