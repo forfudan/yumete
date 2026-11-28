@@ -114,6 +114,14 @@ pub struct Metrics {
     /// 綠上，而朱色那一行的號碼乾脆變成朱底朱字。#298 當初說的也正是「號碼帶
     /// **旁邊**的一條橫帶」。一列的代價是縱短一個字，而且只在開着的時候付。
     pub diff_row: u16,
+    /// **The diagnostics row**, `1` or `0`: the horizontal gutter's sign
+    /// column turned the quarter turn, at the **top** of the number band —
+    /// the outer edge, as the sign is the gutter's outer cell — so the band
+    /// reads sign, number, change bar down to the 縱 as the gutter reads
+    /// across to the row. There when the gutter has a lane for diagnostics
+    /// and the numbers are shown, and gone with them, as the lane goes with
+    /// the gutter.
+    pub problem_row: u16,
     /// Cells between one 縱 and the next, from the config.
     pub gap: u16,
     /// Whether readings are being laid out at all.
@@ -163,13 +171,15 @@ impl Metrics {
             bands,
             diff,
             metered,
+            problems,
         } = look;
         let numbers = number_rows(numbers, total_lines);
         // 改動條跟着行號走：號碼帶沒有，那一條也沒有。兩邊同一條規矩——橫排那
         // 一格本來就是行號後面那兩格空氣裏的一格，`:view-numbers none` 一關，
         // 整個 gutter 都不在了。
         let diff_row = u16::from(diff && numbers > 0);
-        let head_rows = numbers + diff_row;
+        let problem_row = u16::from(problems && numbers > 0);
+        let head_rows = problem_row + numbers + diff_row;
         // …and never taller than the page it sits on. A novel of ten thousand
         // paragraphs spends five rows on numbers, and on a seven-row page the
         // writing was then laid out *below* the page — over the command row and
@@ -178,6 +188,8 @@ impl Metrics {
         let head_rows = head_rows.min(height.saturating_sub(1));
         // 矮到連號碼都擺不下的頁面上，這一列跟着一起沒有。
         let diff_row = diff_row.min(head_rows);
+        // …and the diagnostics row goes before the numbers do.
+        let problem_row = problem_row.min(head_rows - diff_row);
         // Bands are equal by construction: the page is divided, not packed, so
         // the second band can never be a row shorter than the first.
         let bands = bands.clamp(1, 4);
@@ -203,6 +215,7 @@ impl Metrics {
             pitch: SLOT_WIDTH + gap,
             head_rows,
             diff_row,
+            problem_row,
             gap,
             ruby,
             hanging,
@@ -714,6 +727,10 @@ pub struct Look {
     /// 和 `ruby`、`hanging` 同一族：它們說的都是「這一頁要不要那條邊欄」，所以它
     /// 在這裏，不是 `layout_page` 的一個參數一路從畫面頂上傳到邊欄那三支 `match`。
     pub metered: bool,
+    /// Whether the gutter has a lane for diagnostics
+    /// ([`Editor::has_a_problem_lane`]): the band then opens with a row for
+    /// their signs.
+    pub problems: bool,
 }
 
 impl Look {
@@ -731,6 +748,7 @@ impl Look {
             bands: editor.pages_vertical(),
             diff: editor.diff_gutter(),
             metered: editor.meter_drawn(),
+            problems: editor.has_a_problem_lane(),
         }
     }
 }
@@ -926,7 +944,8 @@ fn put_number(buf: &mut Buffer, x: u16, top: u16, rows: u16, digits: &str, style
 /// The caller does not place a terminal cursor over this: a hardware cursor is
 /// one cell wide and would sit inside a two-cell slot, so the cursor is drawn
 /// here as a block covering the whole slot.
-pub fn draw(
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn draw(
     frame: &mut Frame,
     editor: &Editor,
     config: &Config,
@@ -934,6 +953,7 @@ pub fn draw(
     viewport: &mut Anchor,
     span: &mut Option<(usize, usize)>,
     peek: Option<&yumete_core::editor::Pane>,
+    bar: Option<Bar<'_>>,
 ) -> (u16, u16) {
     let buffer = editor.current_buffer();
     let total_lines = buffer.line_count();
@@ -1325,9 +1345,33 @@ pub fn draw(
             // Above its own band, not above the page — and **above the 改動條's
             // own row**, which is the bottom of the header and not the numbers'
             // to write in.
-            let band_top = text_top.saturating_sub(metrics.head_rows);
-            let rows = metrics.head_rows - metrics.diff_row;
+            let band_top = text_top.saturating_sub(metrics.head_rows) + metrics.problem_row;
+            let rows = metrics.head_rows - metrics.diff_row - metrics.problem_row;
             put_number(buf, x, band_top, rows, &n, style);
+        }
+
+        // **The diagnostics sign, turned**: the gutter's outer cell, in the
+        // band's top row over the 縱, the glyph hung right as a half-width
+        // character is in its slot. Over a paragraph's first 縱 alone — it
+        // speaks of the line, and a 縱 the wrap made starts none.
+        if metrics.problem_row > 0 && zong.starts_line() {
+            if let Some(severity) = editor.problem_on_line(zong.line) {
+                let y = text_top.saturating_sub(metrics.head_rows);
+                let sign = crate::problem_cell(severity, band_ink, band_ground);
+                for cell_x in x..x + SLOT_WIDTH {
+                    if let Some(c) = buf.cell_mut((cell_x, y)) {
+                        c.set_symbol(" ").set_style(sign.style);
+                    }
+                }
+                if let Some(c) = buf.cell_mut((x + SLOT_WIDTH - 1, y)) {
+                    c.set_symbol(&sign.content);
+                }
+                // **The sign has every diagnostic of its line** in a hover
+                // panel, as the horizontal gutter's does.
+                crate::hover::offer(Rect::new(x, y, SLOT_WIDTH, 1), false, |_| {
+                    crate::hover::problem_words(editor.problems_here().iter().filter(|p| p.line == zong.line))
+                });
+            }
         }
 
         // **改動條，轉過九十度**（#55/#298）。橫排那一條是行號後面、貼着正文
@@ -1842,6 +1886,13 @@ pub fn draw(
     // 落腳點只算屏幕上的，而哪一段在屏幕上只有畫的這一方知道。
     *span = zong::span_of(&page.iter().map(|p| p.zong).collect::<Vec<_>>());
 
+    // **The scrollbar**, under the labels and the caret, which are drawn
+    // over it where they fall in its row.
+    if let Some(bar) = bar {
+        *bar.held = holds.max(1);
+        draw_the_bar(buf, editor, bar.rect, bar.rows, *viewport, holds.max(1), *span, metrics.zong_len, ink);
+    }
+
     // **`gw` 的標籤，蓋在它那個字所在的那一格上**（#406）。
     //
     // Warning: **一個縱正好兩格，而一個標籤永遠是兩個字母**，所以並排填滿——就是縱中橫，
@@ -2020,6 +2071,93 @@ pub fn draw(
         }
     }
     (cursor_x, caret_y)
+}
+
+/// **What a vertical page's scrollbar is drawn from**: the row it lies in,
+/// the tables of 縱 it is measured in, and where the page leaves how many
+/// 縱 it held, which a drag of the thumb measures against.
+///
+/// **The row is the page's foot.** A 縱 is read downward and ends at the
+/// foot, as a row ends at the right, so the foot is the edge the horizontal
+/// bar's column is turned to; the page scrolls sideways, so the bar runs
+/// sideways, its first cell — the document's start — at the right where the
+/// text begins, the thumb moving left as the page reads on. The foot row is
+/// the spare one the page keeps below a full 縱 for the caret
+/// ([`Metrics::new`]), so the bar takes nothing from the writing: no 縱
+/// gets shorter, and the caret after a full 縱 stands in the bar's row, as
+/// the caret after a full row stands in the bar's column.
+pub(crate) struct Bar<'a> {
+    pub rect: Rect,
+    pub rows: &'a mut crate::scrollbar::Estimates,
+    pub held: &'a mut usize,
+}
+
+/// **The cell of a bar along the foot that its `n`th cell is drawn in**:
+/// the first at the right.
+pub(crate) fn along_x(bar: Rect, n: usize) -> u16 {
+    (bar.x + bar.width).saturating_sub(1 + n as u16).max(bar.x)
+}
+
+/// **Which cell of a bar along the foot column `x` is**, counted from the
+/// right: what [`along_x`] places, turned round.
+pub(crate) fn along_nth(bar: Rect, x: u16) -> usize {
+    (bar.x + bar.width).saturating_sub(1).saturating_sub(x) as usize
+}
+
+/// **Draw the scrollbar along the page's foot**: the track, the thumb where
+/// the page stands, `held` 縱 of the document's, and the marks, each as the
+/// horizontal bar draws them, laid right to left. While the whole document
+/// is on the page the track alone. Measured in the estimated 縱 of
+/// [`crate::scrollbar::Estimates::zongs`], built once for each text and 縱
+/// length, so a frame pays a lookup and the bar's own cells.
+#[allow(clippy::too_many_arguments)]
+fn draw_the_bar(
+    buf: &mut Buffer,
+    editor: &Editor,
+    rect: Rect,
+    estimates: &mut crate::scrollbar::Estimates,
+    top: Anchor,
+    held: usize,
+    span: Option<(usize, usize)>,
+    zong_len: usize,
+    ink: crate::theme::Palette,
+) {
+    use crate::scrollbar;
+    let length = rect.width as usize;
+    crate::paint_the_track(buf, rect, ink.scrollbar_track());
+    let len = editor.current_buffer().rope().len_chars();
+    let (a, b) = span.unwrap_or((0, len));
+    if length == 0 || (a == 0 && b >= len) {
+        return;
+    }
+    let folds = editor.closed_folds();
+    let rows = estimates.zongs(editor, zong_len);
+    let top = yumete_core::wrap::Anchor { line: top.line, index_in_line: top.index_in_line };
+    let (above, total) = scrollbar::rows_above_and_total(rows, &folds, top);
+    let Some((at, cells)) = scrollbar::thumb(length, held, above, total, b >= len) else { return };
+    for n in at..(at + cells).min(length) {
+        if let Some(cell) = buf.cell_mut((along_x(rect, n), rect.y)) {
+            cell.set_bg(ink.scrollbar());
+        }
+    }
+    // The column bar's own glyph: a lower half block, the half turned, is
+    // East Asian ambiguous and two cells wide in a CJK terminal, where the
+    // right half is one in every terminal — and across a track that runs
+    // sideways it reads as a tick.
+    let marks = scrollbar::marks(editor, rows, &folds, total, length);
+    for (n, mark) in marks.iter().enumerate() {
+        let Some(mark) = *mark else { continue };
+        if let Some(cell) = buf.cell_mut((along_x(rect, n), rect.y)).filter(|cell| cell.symbol() == " ") {
+            cell.set_symbol(scrollbar::MARK).set_fg(scrollbar::colour(mark, ink));
+        }
+    }
+    // **A mark under the pointer says what its cell holds**; an unmarked
+    // cell says nothing.
+    crate::hover::offer(rect, false, |(x, _)| {
+        let cell = along_nth(rect, x);
+        marks.get(cell).copied().flatten()?;
+        crate::hover::scrollbar_words(&scrollbar::covered(editor, rows, &folds, total, length, cell))
+    });
 }
 
 /// **The candidate panel's colours, taken from the theme**, so the candidate

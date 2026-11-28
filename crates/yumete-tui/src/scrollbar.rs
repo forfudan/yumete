@@ -26,6 +26,12 @@
 //! it found in the running totals ([`line_at`]), and the page is put there.
 //! The foot of the bar is the document's end, which the page finds, not the
 //! estimate.
+//!
+//! **A 縱書 page counts 縱 the same way**: a line's 縱 are its characters
+//! over the 縱 length, rounded up ([`Estimates::zongs`]) — a character a
+//! slot, as the vertical page stacks a Latin letter as it stacks a 漢字 —
+//! and the bar lies along the page's foot, its first cell at the right where
+//! the text begins.
 
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -51,14 +57,16 @@ const SLOW: Duration = Duration::from_millis(5);
 const PAUSE: Duration = Duration::from_millis(300);
 
 /// What a table of rows is good for: the text, the width it was folded to,
-/// whether blank lines leave the page, and a side-by-side diff's filler rows
-/// and folds.
+/// whether blank lines leave the page, a side-by-side diff's filler rows
+/// and folds, and whether it counts a vertical page's 縱, where the width is
+/// the 縱 length and a character is a slot.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Key {
     revision: u64,
     diff: Option<yumete_core::editor::DiffKey>,
     width: Option<usize>,
     blank_lines_fold: bool,
+    vertical: bool,
 }
 
 /// **One buffer's rows, estimated**: how many rows come before each line.
@@ -108,10 +116,12 @@ impl Rows {
             before.push(total);
         };
         // ASCII is a cell a byte, near enough for an estimate; the width is
-        // asked only of a run that is not.
-        let cells_of = |run: &str| match run.is_ascii() {
-            true => run.len(),
-            false => yumete_cjk::width::str_width(run),
+        // asked only of a run that is not. A 縱 holds characters, not cells.
+        let vertical = key.vertical;
+        let cells_of = |run: &str| match (run.is_ascii(), vertical) {
+            (true, _) => run.len(),
+            (false, true) => run.chars().count(),
+            (false, false) => yumete_cjk::width::str_width(run),
         };
         // One pass over the text's chunks, a line ended at each `\n`: no
         // line is looked up, which on a long file of short lines is most of
@@ -152,7 +162,7 @@ impl Rows {
 /// each asked for in turn on every frame.
 #[derive(Debug, Default)]
 pub(crate) struct Estimates {
-    tables: HashMap<(u64, Option<usize>, bool), Rows>,
+    tables: HashMap<(u64, Option<usize>, bool, bool), Rows>,
     /// A clock for [`Rows::used`].
     clock: u64,
     /// How many tables have been built: the test that a scroll builds none.
@@ -164,14 +174,34 @@ impl Estimates {
     /// when the text, the width or the blank-line folding has changed since
     /// the table was made.
     pub(crate) fn rows(&mut self, editor: &Editor) -> &Rows {
-        let buffer = editor.current_buffer();
         let key = Key {
-            revision: buffer.revision(),
+            revision: editor.current_buffer().revision(),
             width: editor.wrap_width(),
             blank_lines_fold: editor.blank_lines_off_the_page().is_some(),
             diff: editor.diff_key(),
+            vertical: false,
         };
-        let id = (buffer.id(), key.width, key.blank_lines_fold);
+        self.table(editor, key)
+    }
+
+    /// **The current buffer's 縱 on a vertical page `zong_len` long**, kept
+    /// and built again as [`Self::rows`] keeps its rows.
+    pub(crate) fn zongs(&mut self, editor: &Editor, zong_len: usize) -> &Rows {
+        let key = Key {
+            revision: editor.current_buffer().revision(),
+            width: Some(zong_len.max(1)),
+            blank_lines_fold: editor.blank_lines_off_the_page().is_some(),
+            diff: None,
+            vertical: true,
+        };
+        self.table(editor, key)
+    }
+
+    /// The table for `key`, built only when the one kept is for an older
+    /// text — and a slow one only once the typing has paused.
+    fn table(&mut self, editor: &Editor, key: Key) -> &Rows {
+        let buffer = editor.current_buffer();
+        let id = (buffer.id(), key.width, key.blank_lines_fold, key.vertical);
         self.clock += 1;
         let now = Instant::now();
         let stale = match self.tables.get_mut(&id) {
@@ -566,7 +596,7 @@ mod tests {
     #[test]
     fn a_closed_fold_counts_its_one_row() {
         let rows = Rows {
-            key: Key { revision: 0, width: Some(10), blank_lines_fold: false, diff: None },
+            key: Key { revision: 0, width: Some(10), blank_lines_fold: false, diff: None, vertical: false },
             // Five lines of 2, 1, 3, 1, 1 rows.
             before: vec![0, 2, 3, 6, 7, 8],
             used: 0,
@@ -604,7 +634,7 @@ mod tests {
     /// on, and past the blank lines that take no row.
     #[test]
     fn a_row_is_found_on_its_line() {
-        let rows = |before: Vec<u32>| Rows { key: Key { revision: 0, width: Some(10), blank_lines_fold: false, diff: None }, before, used: 0, took: Duration::ZERO, seen: (0, Instant::now()) };
+        let rows = |before: Vec<u32>| Rows { key: Key { revision: 0, width: Some(10), blank_lines_fold: false, diff: None, vertical: false }, before, used: 0, took: Duration::ZERO, seen: (0, Instant::now()) };
         // Five lines of 2, 1, 3, 1, 1 rows.
         let five = rows(vec![0, 2, 3, 6, 7, 8]);
         let found: Vec<_> = (0..8).map(|row| line_at(&five, &[], row)).collect();
@@ -623,7 +653,7 @@ mod tests {
     #[test]
     fn a_line_falls_in_the_cell_its_rows_reach() {
         let rows = Rows {
-            key: Key { revision: 0, width: Some(10), blank_lines_fold: false, diff: None },
+            key: Key { revision: 0, width: Some(10), blank_lines_fold: false, diff: None, vertical: false },
             // Ten lines of a row each, but line 2 of three.
             before: vec![0, 1, 2, 5, 6, 7, 8, 9, 10, 11, 12],
             used: 0,

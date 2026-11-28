@@ -950,6 +950,100 @@ impl Editor {
         true
     }
 
+    /// **The 縱書 page's first 縱 put at 縱 `zongs_in` of line `line`** — a
+    /// vertical page's scrollbar thumb dragged — and the cursor kept as the
+    /// wheel keeps it: where it is while that stays on the page, pushed in to
+    /// scrolloff from whichever edge it fell past otherwise. A line off the
+    /// page stands for the next one on it; a 縱 past the line's last is its
+    /// last. [`Self::scroll_the_page_to`] counted in 縱.
+    pub fn scroll_the_zongs_to(&mut self, line: usize, zongs_in: usize) -> bool {
+        self.jump_the_zongs(|rope, grid, _| {
+            let lines = rope.len_lines();
+            let mut line = line.min(lines.saturating_sub(1));
+            while grid.folded(line) && line + 1 < lines {
+                line += 1;
+            }
+            while grid.folded(line) && line > 0 {
+                line -= 1;
+            }
+            let count = zong::zong_count_in_line(rope, line, grid);
+            zong::Anchor { line, index_in_line: zongs_in.min(count.saturating_sub(1)) }
+        })
+    }
+
+    /// **The 縱書 page's last 縱 put on the document's last** — the thumb
+    /// dragged to the end of its bar — the cursor kept as
+    /// [`Self::scroll_the_zongs_to`] keeps it.
+    pub fn scroll_the_zongs_to_end(&mut self) -> bool {
+        self.jump_the_zongs(|rope, grid, height| {
+            let end = zong::Anchor::from(zong::position(rope, rope.len_chars(), grid));
+            zong::retreat(rope, end, grid, height.saturating_sub(1))
+        })
+    }
+
+    /// The jump itself, to the first 縱 `top_of` answers from the page's
+    /// size in 縱, as the last frame drew it: the cursor pushed in from the
+    /// edge it fell past, the span the page will show written back as a
+    /// guess, and where the cursor stands on it aimed at. `false` before a
+    /// page has been drawn.
+    fn jump_the_zongs(&mut self, top_of: impl FnOnce(&ropey::Rope, zong::Grid, usize) -> zong::Anchor) -> bool {
+        let (from, to) = self.page_span;
+        let vim = self.keymap_rules().vim_scrolling;
+        let head = self.sel.head();
+        let moved = {
+            let hidden = |line: usize| self.markup_hidden_on_line(line);
+            let folded = |line: usize| self.line_is_folded(line);
+            let drawn = |line: usize| self.drawn_runs_on_line(line);
+            let turned = |line: usize| self.line_is_table_row(line);
+            let grid = self.grid_with(&hidden, &folded, &drawn, &turned);
+            let rope = self.current_buffer().rope();
+            if to <= from || from > rope.len_chars() {
+                return false;
+            }
+            let anchor = |z: &zong::Zong| zong::Anchor { line: z.line, index_in_line: z.index_in_line };
+            let height = zong::page_of(rope, (from, to), grid, self.page_columns.max(1)).len().max(1);
+            let (above, below) = match vim {
+                true => self.vim_margins(height),
+                false => {
+                    let so = self.scrolloff_seen.get().min(height.saturating_sub(1) / 2);
+                    (so, so)
+                }
+            };
+            let top = top_of(rope, grid, height);
+            let page = zong::zongs_from(rope, top, grid, height);
+            let first = page.get(above).or(page.last());
+            let last = page.get(height.saturating_sub(1 + below)).or(page.last());
+            let here = zong::Anchor::from(zong::position(rope, head, grid));
+            let edge = match (first, last) {
+                (Some(edge), _) if here < anchor(edge) => Some(edge),
+                (_, Some(edge)) if here > anchor(edge) => Some(edge),
+                _ => None,
+            };
+            let to = match edge {
+                None => head,
+                Some(edge) if vim => {
+                    let slot = self.sel.goal_slot().unwrap_or_else(|| zong::slot_of(rope, head, grid));
+                    zong::at_slot(rope, anchor(edge), slot, grid)
+                }
+                Some(edge) => edge.start,
+            };
+            let at = zong::Anchor::from(zong::position(rope, to, grid));
+            let row = zong::distance(rope, top, at, grid, height + 1).unwrap_or(0);
+            (to, row, zong::span_of(&page).unwrap_or((0, 0)))
+        };
+        let (to, row, span) = moved;
+        if to != head {
+            let slot = self.sel.goal_slot();
+            self.move_head(to);
+            if vim {
+                self.sel.set_goal_slot(slot);
+            }
+        }
+        self.page_span = span;
+        self.aim = Some(crate::editor::Aim::Row(row));
+        true
+    }
+
     /// The rows the window holds: its height, which is more than the page
     /// drew when the file ends inside it.
     fn window_rows(&self, drawn: usize) -> usize {

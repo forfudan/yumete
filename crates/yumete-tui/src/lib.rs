@@ -3143,6 +3143,9 @@ struct Viewport {
     /// The paragraph and piece the rightmost visible 縱 sits at, in vertical
     /// layout. An anchor rather than a 縱 number: see `vertical::draw`.
     zong: Anchor,
+    /// **How many 縱 the vertical page held**, as last drawn: the window its
+    /// scrollbar's thumb is measured against, and a drag of it.
+    held: usize,
     /// Where the grid is scrolled to, when the file is read as one.
     table: table::Viewport,
     /// **上一幀真畫了哪一段**（字符下標），`gw` 的落腳點從這裏來（#406）。
@@ -6677,11 +6680,12 @@ struct Areas {
     /// an index into this, and it is a different question on purpose:
     /// splitting must not make a window change its place under its viewport.
     panes: Vec<Rect>,
-    /// **Each window's scrollbar column**, in the same order as `panes`: the
-    /// cell column right of the writing, taken off the window's width when
-    /// it is laid out ([`keeps_a_bar`]), so the wrap, the drawing, a click
-    /// and the grid all count from the narrower `panes`. Zero wide in a window
-    /// that keeps none. Still the window's for [`window_at`].
+    /// **Each window's scrollbar**, in the same order as `panes`: the cell
+    /// column right of the writing, taken off the window's width when it is
+    /// laid out ([`keeps_a_bar`]), so the wrap, the drawing, a click and the
+    /// grid all count from the narrower `panes` — or on a vertical page the
+    /// row along its foot, inside the pane ([`vertical::Bar`]). Zero wide in
+    /// a window that keeps none. Still the window's for [`window_at`].
     bars: Vec<Rect>,
     /// **Each window's own status line**, the row under its writing, in the
     /// same order as `panes`. In a stack the upper window's line is the
@@ -6729,7 +6733,16 @@ impl Areas {
     /// stand, after a row that fills the page.
     fn with_bar(&self, i: usize) -> Rect {
         let pane = self.panes.get(i).copied().unwrap_or(self.panes[0]);
-        Rect { width: pane.width + self.bars.get(i).map_or(0, |b| b.width), ..pane }
+        Rect { width: pane.width + self.bars.get(i).map_or(0, |&b| beside(pane, b)), ..pane }
+    }
+}
+
+/// **How many columns a window's bar adds to its right**: a column bar's
+/// one, a vertical page's row bar none, since it lies inside the pane.
+fn beside(pane: Rect, bar: Rect) -> u16 {
+    match bar.x >= pane.x + pane.width {
+        true => bar.width,
+        false => 0,
     }
 }
 
@@ -6752,7 +6765,7 @@ fn window_at(
     // …and so is its scrollbar's column.
     areas.panes.iter().enumerate().find_map(|(i, a)| {
         let bottom = areas.lines.get(i).map_or(a.y + a.height, |l| l.y + l.height);
-        let right = a.x + a.width + areas.bars.get(i).map_or(0, |b| b.width);
+        let right = a.x + a.width + areas.bars.get(i).map_or(0, |&b| beside(*a, b));
         let inside = mouse.column >= a.x && mouse.column < right && mouse.row >= a.y && mouse.row < bottom;
         inside.then(|| leaves.get(i).copied()).flatten()
     })
@@ -6915,9 +6928,9 @@ fn left_button(
         }
         MouseEventKind::Drag(_) => match pointer.bar {
             Some((window, grab)) if window == editor.live_window() => {
-                if let Some((bar, (_, cells), rows)) = held_bar(editor, config, size, seats) {
-                    let y = (mouse.row as usize).saturating_sub(bar.y as usize).saturating_sub(grab);
-                    scroll_by_the_bar(editor, seats, bar, cells, rows, y);
+                if let Some(held) = held_bar(editor, config, size, seats) {
+                    let y = held.cell_of(mouse).saturating_sub(grab);
+                    scroll_by_the_bar(editor, seats, &held, y);
                 }
             }
             Some(_) => pointer.bar = None,
@@ -6951,16 +6964,17 @@ fn left_button(
                 if window != editor.live_window() || editor.panel_focus().is_some() {
                     editor.focus_window(window);
                 }
-                if let Some((bar, (at, cells), rows)) = held_bar(editor, config, size, seats) {
-                    let y = (mouse.row as usize).saturating_sub(bar.y as usize);
+                if let Some(held) = held_bar(editor, config, size, seats) {
+                    let (at, cells) = held.thumb;
+                    let y = held.cell_of(mouse);
                     let grab = match y >= at && y < at + cells {
                         true => y - at,
                         // Off the thumb: it jumps to stand centred on the
                         // press, and is held there.
                         false => {
-                            let to = y.saturating_sub(cells / 2).min((bar.height as usize).saturating_sub(cells));
-                            scroll_by_the_bar(editor, seats, bar, cells, rows, to);
-                            y - to
+                            let to = y.saturating_sub(cells / 2).min(held.length().saturating_sub(cells));
+                            scroll_by_the_bar(editor, seats, &held, to);
+                            y.saturating_sub(to)
                         }
                     };
                     pointer.bar = Some((window, grab));
@@ -7049,11 +7063,36 @@ fn drawn_areas(editor: &Editor, config: &Config, size: ratatui::layout::Size, se
     page_areas(editor, config, Rect::new(0, 0, size.width, size.height), head_rows)
 }
 
-/// What a dragged thumb is measured against: the live window's bar and
-/// what the document's rows come to over the spread.
-struct BarRows {
+/// **The live window's bar as the last frame drew it**: where it is, its
+/// thumb as `(first cell, cells)`, and what a dragged thumb is measured
+/// against — the window and the document in rows over the spread, or in 縱
+/// on a vertical page, whose bar lies along its foot.
+struct Held {
+    bar: Rect,
+    thumb: (usize, usize),
     window: usize,
     total: usize,
+    /// The 縱 length a vertical page's bar counts in; `None` for rows.
+    zongs: Option<usize>,
+}
+
+impl Held {
+    /// The bar's cells, along whichever way it lies.
+    fn length(&self) -> usize {
+        match self.zongs {
+            Some(_) => self.bar.width as usize,
+            None => self.bar.height as usize,
+        }
+    }
+
+    /// Which cell of the bar the pointer is level with: rows down a column
+    /// bar, columns leftward along a vertical page's.
+    fn cell_of(&self, mouse: ratatui::crossterm::event::MouseEvent) -> usize {
+        match self.zongs {
+            Some(_) => vertical::along_nth(self.bar, mouse.column),
+            None => (mouse.row as usize).saturating_sub(self.bar.y as usize),
+        }
+    }
 }
 
 /// **The live window's bar, its thumb as the last frame drew it, and the
@@ -7066,16 +7105,34 @@ fn held_bar(
     config: &Config,
     size: Option<ratatui::layout::Size>,
     seats: &mut Seats,
-) -> Option<(Rect, (usize, usize), BarRows)> {
+) -> Option<Held> {
     let areas = drawn_areas(editor, config, size?, seats);
     let live = editor.live_pane();
-    let bar = areas.bars.get(live).copied().filter(|b| b.width > 0)?;
+    let bar = areas.bars.get(live).copied().filter(|b| b.width > 0 && b.height > 0)?;
     let page = areas.panes[live];
     editor.set_page_top(seats[live].top.line);
     let (a, b) = seats[live].drawn_span?;
     editor.set_page_span(a, b);
-    settle_the_pages(editor, config, page);
     let len = editor.current_buffer().rope().len_chars();
+    if editor.layout() == WritingLayout::Vertical {
+        let lines = editor.current_buffer().line_count();
+        let look = vertical::Look::of(editor, config);
+        let zong_len = vertical::zong_length_for(config, page.height, lines, look);
+        editor.set_zong_length(zong_len);
+        editor.set_page(page.height as usize, vertical::Metrics::new(config, page.height, lines, look).capacity(page.width));
+        if a == 0 && b >= len {
+            return None;
+        }
+        let window = seats[live].held.max(1);
+        let folds = editor.closed_folds();
+        let top = seats[live].zong;
+        let top = WrapAnchor { line: top.line, index_in_line: top.index_in_line };
+        let rows = seats.rows.zongs(editor, zong_len);
+        let (above, total) = scrollbar::rows_above_and_total(rows, &folds, top);
+        let thumb = scrollbar::thumb(bar.width as usize, window, above, total, b >= len)?;
+        return Some(Held { bar, thumb, window, total, zongs: Some(zong_len) });
+    }
+    settle_the_pages(editor, config, page);
     if a == 0 && b >= len {
         return None;
     }
@@ -7087,20 +7144,29 @@ fn held_bar(
     let top = seats[live].top;
     let rows = seats.rows.rows(editor);
     let (thumb, total) = scrollbar::place(rows, &folds, top, bar.height as usize, chain, b >= len);
-    Some((bar, thumb?, BarRows { window: bar.height as usize * chain, total }))
+    Some(Held { bar, thumb: thumb?, window: bar.height as usize * chain, total, zongs: None })
 }
 
 /// **Scroll the live window so its thumb's first cell is `at`**: the cell
 /// turned into a row, the row into a line and a row in it, and the page
 /// put there as `C-e` puts it — the caret stays while it is on the page
 /// and is pushed in from the edge it fell past otherwise. The foot of the
-/// bar is the document's end, as `G` shows it.
-fn scroll_by_the_bar(editor: &mut Editor, seats: &mut Seats, bar: Rect, cells: usize, rows: BarRows, at: usize) {
-    let at = at.min((bar.height as usize).saturating_sub(cells));
-    match scrollbar::row_at(bar.height as usize, rows.window, rows.total, at) {
-        None => editor.scroll_the_page_to_end(),
-        Some(row) => {
-            let folds = editor.closed_folds();
+/// bar is the document's end, as `G` shows it. On a vertical page the same
+/// in 縱, as the wheel turns it.
+fn scroll_by_the_bar(editor: &mut Editor, seats: &mut Seats, held: &Held, at: usize) {
+    let length = held.length();
+    let at = at.min(length.saturating_sub(held.thumb.1));
+    let folds = editor.closed_folds();
+    match (scrollbar::row_at(length, held.window, held.total, at), held.zongs) {
+        (None, Some(_)) => {
+            editor.scroll_the_zongs_to_end();
+        }
+        (None, None) => editor.scroll_the_page_to_end(),
+        (Some(row), Some(zong_len)) => {
+            let (line, zongs_in) = scrollbar::line_at(seats.rows.zongs(editor, zong_len), &folds, row);
+            editor.scroll_the_zongs_to(line, zongs_in);
+        }
+        (Some(row), None) => {
             let (line, rows_in) = scrollbar::line_at(seats.rows.rows(editor), &folds, row);
             editor.scroll_the_page_to(line, rows_in);
         }
@@ -7258,16 +7324,18 @@ fn page_areas(editor: &Editor, config: &Config, area: Rect, head_rows: u16) -> A
         .iter()
         .enumerate()
         .map(|(i, &pane)| match keeps_a_bar(editor, leaves.get(i).copied(), pane) {
-            true => (
+            Some(BarLies::Down) => (
                 Rect { width: pane.width - 1, ..pane },
                 Rect { x: pane.x + pane.width - 1, width: 1, ..pane },
             ),
-            false => (pane, Rect { x: pane.x + pane.width, width: 0, ..pane }),
+            Some(BarLies::Along) => (pane, Rect { y: pane.y + pane.height - 1, height: 1, ..pane }),
+            None => (pane, Rect { x: pane.x + pane.width, width: 0, ..pane }),
         })
         .unzip();
     // The caret after a full row stands in that column, so the rows `j`
     // walks must know it is there before the keys run.
-    editor.note_cell_past_the_row(bars.get(editor.live_pane()).is_some_and(|b| b.width > 0));
+    let live = editor.live_pane();
+    editor.note_cell_past_the_row(bars.get(live).zip(panes.get(live)).is_some_and(|(&b, &p)| beside(p, b) > 0));
     let dividers: Vec<Rect> = rules.iter().map(|r| rect(r.area)).collect();
     let status = lines.get(editor.live_pane()).copied().unwrap_or(lines[0]);
     let floor = match command_rows {
@@ -7290,24 +7358,43 @@ fn page_areas(editor: &Editor, config: &Config, area: Rect, head_rows: u16) -> A
     }
 }
 
-/// **Whether a window keeps its rightmost column for the scrollbar**
-/// (`:view-scrollbar`, on by default): every window of text across the
-/// page, the switch on and the window wide enough to keep two columns of
-/// text. Reserved whether or not the file fits, so the text never folds
-/// again when it grows past a page: while it fits the column is a margin.
+/// Which way a window's scrollbar lies.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BarLies {
+    /// Down the window's rightmost column, taken off the writing.
+    Down,
+    /// Along a vertical page's foot row, the spare one below a full 縱
+    /// ([`vertical::Bar`]).
+    Along,
+}
+
+/// **Whether a window keeps a scrollbar, and which way it lies**
+/// (`:view-scrollbar`, on by default): every window of text, the switch on
+/// and the window big enough. Across the page the rightmost column, kept
+/// while the window keeps two columns of text, and reserved whether or not
+/// the file fits, so the text never folds again when it grows past a page:
+/// while it fits the column is a margin. On a 竪排 page, which scrolls
+/// sideways, the foot row, kept while the page has a row below a 縱 to
+/// spare.
 ///
 /// Not a preview, which draws its bar on its own frame and keeps its picture
-/// the size it was made for; not 竪排, whose page runs the other way; not a
-/// grid, which scrolls by its own rows and columns.
-fn keeps_a_bar(editor: &Editor, leaf: Option<yumete_core::window::WindowId>, pane: Rect) -> bool {
+/// the size it was made for; not a grid, which scrolls by its own rows and
+/// columns.
+fn keeps_a_bar(editor: &Editor, leaf: Option<yumete_core::window::WindowId>, pane: Rect) -> Option<BarLies> {
     if !editor.scrollbar() || pane.width < 3 {
-        return false;
+        return None;
     }
     if leaf.is_some_and(|id| editor.is_page_window(id)) {
-        return false;
+        return None;
     }
     let _viewing = leaf.and_then(|id| editor.pane_of(id)).map(|p| editor.view_pane(p));
-    editor.layout() == WritingLayout::Horizontal && !editor.grid_has_the_pane()
+    if editor.grid_has_the_pane() {
+        return None;
+    }
+    match editor.layout() {
+        WritingLayout::Horizontal => Some(BarLies::Down),
+        WritingLayout::Vertical => (pane.height >= 4).then_some(BarLies::Along),
+    }
 }
 
 /// **The scrollbar of a horizontal pane**: its track, the thumb where the
@@ -7683,7 +7770,12 @@ fn draw<'a>(
                 caret
             }
             WritingLayout::Vertical => {
-                vertical::draw(frame, editor, config, *rect, &mut seat.zong, &mut seat.drawn_span, peek)
+                let bar = bars.get(which).copied().filter(|b| b.width > 0 && b.height > 0);
+                let _ = &mut viewport[which];
+                let Seats { panes: seats, rows, .. } = &mut *viewport;
+                let seat = &mut seats[which];
+                let bar = bar.map(|rect| vertical::Bar { rect, rows, held: &mut seat.held });
+                vertical::draw(frame, editor, config, *rect, &mut seat.zong, &mut seat.drawn_span, peek, bar)
             }
         };
         if which == live {
@@ -23878,11 +23970,13 @@ fn squeezed(text: &str) -> String {
         assert_eq!((areas.panes[0].width, areas.bars[0].width), (30, 0), "off: the whole width");
         settle_the_pages(&mut editor, &config, areas.panes[0]);
         assert_eq!(editor.wrap_width(), Some(30));
-        // 竪排 keeps no column.
+        // 竪排 keeps no column: its bar lies along the page's foot.
         editor.execute(":view-scrollbar on").unwrap();
         editor.execute(":vertical").unwrap();
         let areas = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0);
-        assert_eq!((areas.panes[0].width, areas.bars[0].width), (30, 0), "vertical: unchanged");
+        let pane = areas.panes[0];
+        assert_eq!(pane.width, 30, "vertical: the whole width");
+        assert_eq!(areas.bars[0], Rect::new(0, pane.y + pane.height - 1, 30, 1), "vertical: the foot row");
     }
 
     /// **The thumb says where the page is in the file**, by rows: at
@@ -26685,6 +26779,200 @@ fn squeezed(text: &str) -> String {
         assert!(!shown, "an added 縱 has no old text:\n{screen}");
         let (shown, _) = rested_on_with(&editor, &config, no_ime(), (w, h), (28, lane));
         assert!(!shown, "an unchanged 縱 has no bar");
+    }
+
+    /// A vertical frame, the 縱 length and the page settled first and the
+    /// span drawn told after, as the loop does around a frame.
+    fn vertical_frame(editor: &mut Editor, config: &Config, w: u16, h: u16, seats: &mut Seats) -> ratatui::buffer::Buffer {
+        crate::theme::settle(config, None);
+        editor.set_layout(WritingLayout::Vertical);
+        editor.set_ruby(yumete_core::ruby::Dialects::NONE);
+        let page = page_areas(editor, config, Rect::new(0, 0, w, h), 0).panes[editor.live_pane()];
+        let lines = editor.current_buffer().line_count();
+        let look = vertical::Look::of(editor, config);
+        editor.set_zong_length(vertical::zong_length_for(config, page.height, lines, look));
+        editor.set_page(page.height as usize, vertical::Metrics::new(config, page.height, lines, look).capacity(page.width));
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+        terminal.draw(|frame| draw(frame, editor, config, no_ime(), seats, None)).unwrap();
+        if let Some((a, b)) = seats[editor.live_pane()].drawn_span {
+            editor.set_page_span(a, b);
+        }
+        terminal.backend().buffer().clone()
+    }
+
+    /// A vertical page's bar read from its first cell, the right, to its
+    /// last: `#` the thumb, `.` the track, ` ` neither.
+    fn along_cells(buffer: &ratatui::buffer::Buffer, config: &Config, bar: Rect) -> String {
+        let palette = ink(config);
+        (0..bar.width as usize)
+            .map(|n| match buffer[(vertical::along_x(bar, n), bar.y)].bg {
+                bg if bg == palette.scrollbar() => '#',
+                bg if bg == palette.scrollbar_track() => '.',
+                _ => ' ',
+            })
+            .collect()
+    }
+
+    /// Paragraphs enough to fill several vertical pages.
+    fn long_vertical_text() -> String {
+        (1..=60).map(|n| format!("第{n}段寫在這裏，長短不一。\n")).collect()
+    }
+
+    /// **A vertical page keeps its scrollbar along its foot**: the pane's
+    /// last row, the spare one below a full 縱, so no 縱 is shortened; the
+    /// thumb starts at the right, where the text begins, and stands at the
+    /// left once the page has reached the end; a document on one page has
+    /// the track alone; `:view-scrollbar off` gives the row back to nothing.
+    #[test]
+    fn a_vertical_page_keeps_its_scrollbar_along_its_foot() {
+        let config = vertical_config();
+        let (w, h) = (40u16, 14u16);
+        let mut editor = editor_with(&long_vertical_text());
+        editor.set_layout(WritingLayout::Vertical);
+        let areas = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0);
+        let (pane, bar) = (areas.panes[0], areas.bars[0]);
+        assert_eq!(bar, Rect::new(pane.x, pane.y + pane.height - 1, pane.width, 1), "the foot row, inside the pane");
+        assert_eq!(areas.with_bar(0), pane, "nothing beside it");
+        let lines = editor.current_buffer().line_count();
+        let look = vertical::Look::of(&editor, &config);
+        let rows = vertical::Metrics::new(&config, pane.height, lines, look).zong_len;
+        assert_eq!(rows, pane.height as usize - 1, "the 縱 as long as before: the bar takes the spare row");
+
+        let mut seats = Seats::default();
+        editor.on_key(Key::Esc);
+        vertical_frame(&mut editor, &config, w, h, &mut seats);
+        let buffer = vertical_frame(&mut editor, &config, w, h, &mut seats);
+        let at_start = along_cells(&buffer, &config, bar);
+        assert!(at_start.starts_with('#') && at_start.ends_with('.'), "{at_start}\n{}", buffer_to_text(&buffer));
+        assert!(seats[0].held > 1, "the page says how many 縱 it held");
+        editor.on_key(Key::Char('G'));
+        vertical_frame(&mut editor, &config, w, h, &mut seats);
+        let buffer = vertical_frame(&mut editor, &config, w, h, &mut seats);
+        let at_end = along_cells(&buffer, &config, bar);
+        assert!(at_end.ends_with('#') && at_end.starts_with('.'), "{at_end}\n{}", buffer_to_text(&buffer));
+
+        let mut short = editor_with("短短一段。");
+        let buffer = vertical_frame(&mut short, &config, w, h, &mut Seats::default());
+        assert_eq!(along_cells(&buffer, &config, bar), ".".repeat(bar.width as usize), "fits: the track alone");
+
+        short.execute(":view-scrollbar off").unwrap();
+        let areas = page_areas(&short, &config, Rect::new(0, 0, w, h), 0);
+        assert_eq!(areas.bars[0].width, 0, "off: no bar");
+    }
+
+    /// **A search's hits mark a vertical page's bar**, placed as its thumb
+    /// is, and resting on a mark says what its cell holds.
+    #[test]
+    fn search_hits_mark_a_vertical_pages_bar_and_say_so() {
+        let config = vertical_config();
+        let (w, h) = (40u16, 14u16);
+        let text: String = (1..=60)
+            .map(|n| match n {
+                45 => "這一段藏着燈塔兩個字。\n".to_string(),
+                _ => format!("第{n}段寫在這裏，長短不一。\n"),
+            })
+            .collect();
+        let mut editor = editor_with(&text);
+        editor.on_key(Key::Esc);
+        let mut seats = Seats::default();
+        vertical_frame(&mut editor, &config, w, h, &mut seats);
+        search_for(&mut editor, "燈塔");
+        vertical_frame(&mut editor, &config, w, h, &mut seats);
+        let buffer = vertical_frame(&mut editor, &config, w, h, &mut seats);
+        let bar = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0).bars[0];
+        let marked: Vec<usize> = (0..bar.width as usize)
+            .filter(|&n| buffer[(vertical::along_x(bar, n), bar.y)].symbol() == scrollbar::MARK)
+            .collect();
+        assert_eq!(marked.len(), 1, "one hit, one mark\n{}", buffer_to_text(&buffer));
+        let n = marked[0];
+        assert!(n > bar.width as usize / 2, "line 45 of 60, past the middle from the right: {n}");
+        let (shown, screen) = rested_on_with(&editor, &config, no_ime(), (w, h), (vertical::along_x(bar, n), bar.y));
+        assert!(shown, "a panel on the mark:\n{screen}");
+        assert!(screen.contains(&yumete_core::say!("hover.scrollbar")), "{screen}");
+        let (shown, _) = rested_on_with(&editor, &config, no_ime(), (w, h), (vertical::along_x(bar, 0), bar.y));
+        assert!(!shown, "an unmarked cell says nothing");
+    }
+
+    /// **A press at the left end of a vertical page's bar turns the page to
+    /// the document's end**, the caret pushed onto the page, and dragging
+    /// the thumb back to the right turns it back to the start.
+    #[test]
+    fn a_vertical_pages_bar_turns_the_page() {
+        let config = vertical_config();
+        let (w, h) = (40u16, 14u16);
+        let size = Some(ratatui::layout::Size::new(w, h));
+        let mut editor = editor_with(&long_vertical_text());
+        editor.on_key(Key::Esc);
+        editor.on_key(Key::Char('g'));
+        editor.on_key(Key::Char('g'));
+        let mut seats = Seats::default();
+        let mut pointer = Pointer::default();
+        vertical_frame(&mut editor, &config, w, h, &mut seats);
+        vertical_frame(&mut editor, &config, w, h, &mut seats);
+        let bar = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0).bars[0];
+        left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("down", bar.x, bar.y));
+        left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("up", bar.x, bar.y));
+        vertical_frame(&mut editor, &config, w, h, &mut seats);
+        let buffer = vertical_frame(&mut editor, &config, w, h, &mut seats);
+        let len = editor.current_buffer().rope().len_chars();
+        let (a, b) = seats[0].drawn_span.expect("a frame");
+        assert!(a > 0 && b >= len, "the page shows the end: {a}..{b} of {len}\n{}", buffer_to_text(&buffer));
+        assert!((a..=b).contains(&editor.cursor()), "the caret is on the page");
+        assert!(along_cells(&buffer, &config, bar).ends_with('#'));
+
+        let right = bar.x + bar.width - 1;
+        let (at, _) = held_bar(&mut editor, &config, size, &mut seats).map(|held| held.thumb).expect("a thumb");
+        let x = vertical::along_x(bar, at);
+        left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("down", x, bar.y));
+        left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("drag", right, bar.y));
+        left_button(&mut editor, &config, size, &mut seats, &mut pointer, button("up", right, bar.y));
+        vertical_frame(&mut editor, &config, w, h, &mut seats);
+        let buffer = vertical_frame(&mut editor, &config, w, h, &mut seats);
+        assert_eq!(seats[0].drawn_span.map(|(a, _)| a), Some(0), "back at the start\n{}", buffer_to_text(&buffer));
+        assert!(along_cells(&buffer, &config, bar).starts_with('#'));
+    }
+
+    /// **A vertical page opens its number band with a row for diagnostics**
+    /// when the gutter has a lane for them and the numbers are shown — the
+    /// row costs the 縱 a character — and the sign over a paragraph's first
+    /// 縱 has every diagnostic of the line in a hover panel.
+    #[test]
+    fn a_vertical_page_signs_its_diagnostics_above_the_numbers() {
+        use yumete_core::problem::Severity;
+        let mut config = vertical_config();
+        config.editor.line_numbers = LineNumbers::Absolute;
+        let (mut editor, path) = editor_on_disk("vertical-signs.md", "第一段。\n第二段。\n第三段。\n");
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::Absolute);
+        let look = vertical::Look::of(&editor, &config);
+        let off = vertical::Metrics::new(&config, 12, 3, look);
+        editor.mark_served(path.clone());
+        assert!(editor.has_a_problem_lane());
+        let look = vertical::Look::of(&editor, &config);
+        let on = vertical::Metrics::new(&config, 12, 3, look);
+        assert_eq!((off.problem_row, on.problem_row), (0, 1));
+        assert_eq!(on.head_rows, off.head_rows + 1);
+        assert_eq!(on.zong_len, off.zong_len - 1);
+
+        editor.set_problems(path, "test".into(), vec![said(1, Severity::Error)]);
+        let (w, h) = (30u16, 12u16);
+        let mut seats = Seats::default();
+        let buffer = vertical_frame(&mut editor, &config, w, h, &mut seats);
+        let palette = ink(&config);
+        // Right to left, two cells a 縱: the second paragraph's at 26.
+        assert_eq!(buffer[(26, 0)].bg, palette.mark(), "the error's sign over the second 縱\n{}", buffer_to_text(&buffer));
+        assert_eq!(buffer[(27, 0)].bg, palette.mark());
+        assert_ne!(buffer[(28, 0)].bg, palette.mark(), "the first paragraph has none");
+        assert_eq!(at(&buffer, 27, 1), "2", "the number under the sign");
+        let (shown, screen) = rested_on_with(&editor, &config, no_ime(), (w, h), (27, 0));
+        assert!(shown, "a panel on the sign:\n{screen}");
+        assert!(screen.contains("說不通"), "{screen}");
+        let (shown, _) = rested_on_with(&editor, &config, no_ime(), (w, h), (28, 0));
+        assert!(!shown, "no sign, no panel");
+
+        config.editor.line_numbers = LineNumbers::None;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
+        let look = vertical::Look::of(&editor, &config);
+        assert_eq!(vertical::Metrics::new(&config, 12, 3, look).problem_row, 0, "gone with the numbers");
     }
 
     /// **Resting on the status line's input-method cell names the scheme**
