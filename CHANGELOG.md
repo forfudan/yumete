@@ -8,6 +8,11 @@ Written for people who use it to write, not for the commit log: each line says w
 
 - **`:sort-sections` puts sibling sections in order by their headings** (#1068), in Markdown and Typst: each section moves with its text and its own sections. By toned pinyin read word by word (the default), by code point (`-k unicode`) or by the number in the title (`-k number`, 第十二章 included); `-l 2-3` sorts only some levels, `-r` reverses, `--under` sorts only the sections under the cursor's. One `u` undoes it.
 - **`:heading-numbering` numbers a Markdown file's headings by the patterns the file names** (#1069), in its front matter or a comment: `heading-numbering: ["-", "第一章 ", "1. ", "1.1. "]`. Running it again brings the numbers up to date, `:heading-numbering-off` takes them off, and a heading marked `<!-- omit from toc -->` is skipped.
+- **A vertical page has a scrollbar along its foot** (#1046), running right to left from the start of the file: the same marks and hovers as the horizontal bar, and dragging the thumb turns the page. With a language server, a row above the paragraph numbers holds each paragraph's problem sign, and resting the mouse on it shows that paragraph's problems.
+
+### Changed
+
+- **`ye --import` opens the imported config instead of writing it** (#1021): it comes up as the file it would be written to, changed and unsaved, with the config check marking it line by line and the import's report beside it; `:w` writes it.
 
 ## 0.27.0 · 2026-11-26
 
