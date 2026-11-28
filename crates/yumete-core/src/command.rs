@@ -270,6 +270,14 @@ pub enum Command {
     /// `rows` is a range written in front (`:%sort`, `:2,3sort`), which
     /// takes the place of the selection.
     Sort { how: SortHow, rows: Option<Rows> },
+    /// `:sort-sections` — sibling sections ordered by their headings, each
+    /// with its body and its own sections (Markdown and Typst). `rows` is a
+    /// range written in front, as `:sort`'s.
+    SortSections { order: SectionOrder, rows: Option<Rows> },
+    /// `:heading-numbering` (`on`) and `:heading-numbering-off`: a Markdown
+    /// file's headings numbered by the patterns its front matter or a
+    /// comment names, or the numbers taken off.
+    HeadingNumbering { on: bool },
     /// `:[range]normal[!] {keys}` (vim's `:normal`): the keys run as though
     /// typed in Normal mode, once where the cursor is, or from the start of
     /// each line of `rows` (of the selected lines when the line is given
@@ -994,6 +1002,31 @@ impl UndoSpan {
     }
 }
 
+/// What `:sort-sections` orders by (`-k`, `--key`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum SectionSort {
+    /// Toned pinyin, syllable by syllable.
+    #[default]
+    Pinyin,
+    /// Code point.
+    Unicode,
+    /// The first number in the title, `12` or 第十二章.
+    Number,
+}
+
+/// How `:sort-sections` orders: `-k`/`--key`, `-l`/`--levels`,
+/// `-r`/`--reverse` and `--under`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct SectionOrder {
+    pub key: SectionSort,
+    /// The levels whose sections are reordered, both ends included; every
+    /// level when `None`.
+    pub levels: Option<(usize, usize)>,
+    pub reverse: bool,
+    /// Only the sections under the one the cursor is in.
+    pub under: bool,
+}
+
 /// How `:sort` orders the lines: vim's `!` `i` `n` `u`, helix's `-r` `-i`.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct SortHow {
@@ -1324,6 +1357,7 @@ fn parse_ranged(line: &str) -> Option<Result<Command, CommandError>> {
     }
     match parse(rest) {
         Ok(Command::Sort { how, rows: None }) => Some(Ok(Command::Sort { how, rows: Some(rows) })),
+        Ok(Command::SortSections { order, rows: None }) => Some(Ok(Command::SortSections { order, rows: Some(rows) })),
         // **The lines go after the range's last line**, as vim's `:r`.
         Ok(Command::Read { what, shell, after: None }) if rows != Rows::Selection => {
             Some(Ok(Command::Read { what, shell, after: Some(rows) }))
@@ -1334,6 +1368,7 @@ fn parse_ranged(line: &str) -> Option<Result<Command, CommandError>> {
         Ok(Command::Delete { register, count, rows: None }) => Some(Ok(Command::Delete { register, count, rows: Some(rows) })),
         Err(e) if matches!(&e, CommandError::Wants { command: "delete", .. }) => Some(Err(e)),
         Err(e) if matches!(&e, CommandError::Wants { command: "sort", .. }) => Some(Err(e)),
+        Err(e) if matches!(&e, CommandError::Wants { command: "sort-sections", .. }) => Some(Err(e)),
         _ => None,
     }
 }
@@ -5608,6 +5643,56 @@ pub const COMMANDS: &[Entry] = &[
             Ok(Command::Sort { how, rows: None })
         }),
     },
+    // **Every flag has its long name**: `-k`/`--key`, `-l`/`--levels`,
+    // `-r`/`--reverse` as `:sort` spells it; `--under` only long, since `u`
+    // is `:sort`'s 去重 and a letter that means two things in two sorts is a
+    // slip waiting to happen.
+    Entry {
+        name: "sort-sections",
+        aliases: &[],
+        help: "cmd.commands.sort-sections",
+        needs: &[],
+        params: &[Param::Free("cmd.arg.sort-sections-flags")],
+        build: Some(|p| {
+            let wants = |value: &str| CommandError::Wants {
+                command: "sort-sections",
+                value: value.to_string(),
+                wants: Wants::Said("cmd.takes.sort-sections"),
+            };
+            let mut order = SectionOrder::default();
+            let mut words = p.arg(0).unwrap_or("").split_whitespace();
+            while let Some(word) = words.next() {
+                let (flag, inline) = match word.split_once('=') {
+                    Some((flag, value)) if flag.starts_with("--") => (flag, Some(value)),
+                    _ => (word, None),
+                };
+                match flag {
+                    "-r" | "--reverse" => order.reverse = true,
+                    "--under" => order.under = true,
+                    "-k" | "--key" => {
+                        let value = inline.or_else(|| words.next()).ok_or_else(|| wants(word))?;
+                        order.key = match value {
+                            "pinyin" => SectionSort::Pinyin,
+                            "unicode" => SectionSort::Unicode,
+                            "number" => SectionSort::Number,
+                            _ => return Err(wants(value)),
+                        };
+                    }
+                    "-l" | "--levels" => {
+                        let value = inline.or_else(|| words.next()).ok_or_else(|| wants(word))?;
+                        let (lo, hi) = value.split_once('-').unwrap_or((value, value));
+                        let level = |v: &str| v.parse::<usize>().ok().filter(|n| (1..=6).contains(n));
+                        match (level(lo), level(hi)) {
+                            (Some(lo), Some(hi)) if lo <= hi => order.levels = Some((lo, hi)),
+                            _ => return Err(wants(value)),
+                        }
+                    }
+                    _ => return Err(wants(word)),
+                }
+            }
+            Ok(Command::SortSections { order, rows: None })
+        }),
+    },
     Entry {
         name: "split-join",
         aliases: &[],
@@ -6785,6 +6870,26 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[],
         build: Some(|_| Ok(Command::Tutor)),
+    },
+    // **The patterns live in the file**, so the command takes none: the
+    // front matter's `heading-numbering` list, or the same list in a
+    // comment above the first heading. `-off` takes the numbers off by that
+    // same list — the way to change it is off, edit, on.
+    Entry {
+        name: "heading-numbering",
+        aliases: &[],
+        help: "cmd.commands.heading-numbering",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::HeadingNumbering { on: true })),
+    },
+    Entry {
+        name: "heading-numbering-off",
+        aliases: &[],
+        help: "cmd.commands.heading-numbering-off",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::HeadingNumbering { on: false })),
     },
     Entry {
         name: "help",
@@ -10213,7 +10318,7 @@ mod tests {
                     Param::Free(_) => match name {
                         "grep" | "run" | "pipe" | "run-shell-in-buffer" | "replace" => "x",
                         "table-new" => "3x4",
-                        "sort" => "-r",
+                        "sort" | "sort-sections" => "-r",
                         _ => "1",
                     }
                     .to_string(),

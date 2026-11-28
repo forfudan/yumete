@@ -1803,6 +1803,20 @@ pub(super) fn outline_of(
     syntax: crate::syntax::Syntax,
     block_of: &dyn Fn(usize) -> crate::markdown::Block,
 ) -> Vec<(usize, usize, String)> {
+    let mut out = marked_outline(rope, syntax, block_of);
+    plain_chapters(rope, &mut out);
+    out
+}
+
+/// **The headings the markup itself marks**: `#` and setext in Markdown,
+/// `=` in Typst, and Typst's `#include` lines. No guessing at chapters in
+/// unmarked prose — what `:sort-sections` and `:heading-numbering` move and
+/// number is only what the file says is a heading.
+pub(super) fn marked_outline(
+    rope: &ropey::Rope,
+    syntax: crate::syntax::Syntax,
+    block_of: &dyn Fn(usize) -> crate::markdown::Block,
+) -> Vec<(usize, usize, String)> {
     let mut out = Vec::new();
     for line in 0..rope.len_lines() {
         let text = rope.line(line).to_string();
@@ -1878,6 +1892,12 @@ pub(super) fn outline_of(
         }
         out.push((line, depth, title.to_string()));
     }
+    out
+}
+
+/// The chapters of a file whose markup marks none, added to `out` when it
+/// is empty.
+fn plain_chapters(rope: &ropey::Rope, out: &mut Vec<(usize, usize, String)>) {
     // **A novel is a text file with chapters in it and no markup at all.**
     // 資治通鑑 is 700 chapters and not one `#` — exactly the file where
     // 「go to chapter 412」 is worth a key, and the one this said had no
@@ -2001,7 +2021,6 @@ pub(super) fn outline_of(
             }
         }
     }
-    out
 }
 
 /// How many lines apart the Typst scan keeps the scanner's state

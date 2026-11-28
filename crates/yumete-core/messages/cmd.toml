@@ -259,6 +259,12 @@ zhs = "<栏> a｜d …"
 en = "<column> a｜d …"
 
 [[message]]
+# 命令參數的佔位：按標題排章節的開關（:sort-sections）（草稿）
+key = "cmd.arg.sort-sections-flags"
+zhs = "-k pinyin｜unicode｜number  -l 2-3  -r  --under"
+en = "-k pinyin｜unicode｜number  -l 2-3  -r  --under"
+
+[[message]]
 # 命令參數的佔位：撤銷幾步，或回到多久以前（:earlier、:later）（草稿）
 key = "cmd.arg.steps-or-time"
 zhs = "<步数>｜<时间>"
@@ -888,6 +894,20 @@ en = "hard-wrap to a width without changing content: the selection or the unit a
 find = "硬換行 硬换行 重排 換行 换行 折行 wrap fill gq textwidth 寬度 宽度 段落 注釋 注释"
 
 [[message]]
+# ： 命令菜单里 heading-numbering 那一项的说明（草稿）
+key = "cmd.commands.heading-numbering"
+zhs = "按文件里写的 heading-numbering 列表给 Markdown 标题编号或更新编号"
+en = "number a Markdown file's headings, or bring their numbers up to date, by the heading-numbering list the file names"
+find = "编号 标题 章节 自动编号 numbering headings section numbers"
+
+[[message]]
+# ： 命令菜单里 heading-numbering-off 那一项的说明（草稿）
+key = "cmd.commands.heading-numbering-off"
+zhs = "按 heading-numbering 列表去掉 Markdown 标题的编号"
+en = "take off the numbers the heading-numbering list gave a Markdown file's headings"
+find = "编号 去掉 标题 numbering remove headings"
+
+[[message]]
 # : 命令選單裏 help 那一項的説明(commands 組)
 key = "cmd.commands.help"
 zhs = "以可搜索的文件打开按键与命令列表"
@@ -1280,6 +1300,13 @@ key = "cmd.commands.sort"
 zhs = "排序：多个选区排各选区的内容，否则排选中的行，无选区排全文；按码位，-r 倒序，-i 不分大小写，n 按数值，u 去重"
 en = "sort several selections' texts, else the selected lines or every line; by code point, -r reversed, -i ignoring case, n by number, u unique"
 find = "排序 倒序 逆序 sort reverse lines 行"
+
+[[message]]
+# ： 命令菜单里 sort-sections 那一项的说明（草稿）
+key = "cmd.commands.sort-sections"
+zhs = "按标题给同级章节排序，每节带着正文和子节走；-k 排法(pinyin 默认、unicode、number)，-l 只排哪几级，-r 倒序，--under 只排光标所在那一节的子节"
+en = "order sibling sections by heading, each with its body and subsections; -k by pinyin (default), unicode or number, -l which levels, -r reversed, --under only the sections under the cursor's"
+find = "排序 章节 标题 拼音 大纲 sort sections headings outline chapters"
 
 [[message]]
 # : 命令選單裏 split-join 那一項的説明(commands 組)
@@ -2694,6 +2721,12 @@ en = ", "
 key = "cmd.takes.sort"
 zhs = "-r(倒序)、-i 或 i(不分大小写)、n(按数值)、u(去重)"
 en = "-r (reversed), -i or i (ignoring case), n (by number) or u (unique)"
+
+[[message]]
+# :sort-sections 收的參數（草稿）
+key = "cmd.takes.sort-sections"
+zhs = "-k 或 --key 加 pinyin、unicode、number，-l 或 --levels 加 2 或 2-3，-r 或 --reverse，--under"
+en = "-k or --key with pinyin, unicode or number, -l or --levels with 2 or 2-3, -r or --reverse, or --under"
 
 [[message]]
 # :s 後面少了查找或替換（草稿）

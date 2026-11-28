@@ -2,6 +2,13 @@
 
 Written for people who use it to write, not for the commit log: each line says what you can *do*, and what changed under you. The numbers are the feature table in `docs/development.md` §5.2.
 
+## Unreleased
+
+### Added
+
+- **`:sort-sections` puts sibling sections in order by their headings** (#1068), in Markdown and Typst: each section moves with its text and its own sections. By toned pinyin read word by word (the default), by code point (`-k unicode`) or by the number in the title (`-k number`, 第十二章 included); `-l 2-3` sorts only some levels, `-r` reverses, `--under` sorts only the sections under the cursor's. One `u` undoes it.
+- **`:heading-numbering` numbers a Markdown file's headings by the patterns the file names** (#1069), in its front matter or a comment: `heading-numbering: ["-", "第一章 ", "1. ", "1.1. "]`. Running it again brings the numbers up to date, `:heading-numbering-off` takes them off, and a heading marked `<!-- omit from toc -->` is skipped.
+
 ## 0.27.0 · 2026-11-26
 
 ### Added

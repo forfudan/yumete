@@ -49787,3 +49787,145 @@ fn space_comma_flips_settings_and_shows_their_values() {
     press(&mut ed, " ,3");
     assert_eq!(ed.pages_horizontal(), 3, "a digit cuts the page in use");
 }
+
+/// A reader that knows a word's reading as a whole: 行 is xíng in 行走,
+/// where the per-character table would say háng.
+struct Spoken;
+
+impl yumete_cjk::Reader for Spoken {
+    fn read(&self, word: &str) -> Option<Vec<String>> {
+        let readings: &[&str] = match word {
+            "行走" => &["xíng", "zǒu"],
+            "火" => &["huǒ"],
+            "天" => &["tiān"],
+            "田" => &["tián"],
+            _ => return None,
+        };
+        Some(readings.iter().map(|r| r.to_string()).collect())
+    }
+
+    fn available(&self) -> bool {
+        true
+    }
+}
+
+/// Every title one word, so the reading is the reader's for the whole.
+struct WholeTitle;
+
+impl yumete_cjk::Segmenter for WholeTitle {
+    fn segment(&self, s: &str) -> Vec<(usize, usize)> {
+        vec![(0, s.chars().count())]
+    }
+}
+
+fn spoken_markdown(text: &str) -> Editor {
+    let mut ed = markdown(text);
+    ed.set_reader(Box::new(Spoken));
+    ed.set_segmenter(Box::new(WholeTitle));
+    ed
+}
+
+#[test]
+fn sort_sections_reads_titles_by_word_with_tones_and_moves_whole_sections() {
+    let text = "前言\n# 田\n田的正文\n# 行走\n# 天\n## 乙\n# 火\n";
+    let mut ed = spoken_markdown(text);
+    ed.execute(":3").unwrap();
+    ed.execute(":sort-sections").unwrap();
+    assert_eq!(ed.current_buffer().text(), "前言\n# 火\n# 天\n## 乙\n# 田\n田的正文\n# 行走\n");
+    assert_eq!(ed.status(), say!("sections.sorted", 5, 4));
+    // The cursor went with its section's body.
+    let rope = ed.current_buffer().rope().clone();
+    assert_eq!(rope.line(rope.char_to_line(ed.cursor())).to_string(), "田的正文\n");
+    press(&mut ed, "u");
+    assert_eq!(ed.current_buffer().text(), text);
+}
+
+#[test]
+fn sort_sections_without_readings_uses_the_built_in_table() {
+    let mut ed = markdown("# 天\n# 山\n# 日");
+    ed.execute(":sort-sections").unwrap();
+    assert_eq!(ed.current_buffer().text(), "# 日\n# 山\n# 天");
+    ed.execute(":sort-sections").unwrap();
+    assert_eq!(ed.status(), say!("sections.sort-already", 3));
+}
+
+#[test]
+fn sort_sections_leaves_a_fence_alone_even_under_render_off() {
+    for render in [":render full", ":render off"] {
+        let mut ed = markdown("# b\n```\n# 不是標題\n```\n# a\n");
+        ed.execute(render).unwrap();
+        ed.execute(":sort-sections -k unicode").unwrap();
+        assert_eq!(ed.current_buffer().text(), "# a\n# b\n```\n# 不是標題\n```\n", "{render}");
+    }
+}
+
+#[test]
+fn sort_sections_flags() {
+    let mut ed = markdown("# 第十章\n# 第二章\n# 序\n");
+    ed.execute(":sort-sections --key number").unwrap();
+    assert_eq!(ed.current_buffer().text(), "# 第二章\n# 第十章\n# 序\n");
+
+    let mut ed = markdown("# a\n## x\n## y\n# b\n");
+    ed.execute(":sort-sections -k unicode -l 2 -r").unwrap();
+    assert_eq!(ed.current_buffer().text(), "# a\n## y\n## x\n# b\n");
+
+    let mut ed = markdown("# z\n## b\n## a\n# y\n## d\n## c\n");
+    ed.execute(":5").unwrap();
+    ed.execute(":sort-sections -k unicode --under").unwrap();
+    assert_eq!(ed.current_buffer().text(), "# z\n## b\n## a\n# y\n## c\n## d\n");
+
+    let mut ed = markdown("# b\n# a\n# d\n# c\n");
+    ed.execute(":3,4sort-sections -k unicode").unwrap();
+    assert_eq!(ed.current_buffer().text(), "# b\n# a\n# c\n# d\n");
+
+    for wrong in [":sort-sections -k strokes", ":sort-sections -l 7", ":sort-sections -u"] {
+        assert!(ed.execute(wrong).is_err(), "{wrong}");
+    }
+}
+
+#[test]
+fn sort_sections_in_typst_and_not_in_plain_text() {
+    let mut ed = markdown("= 天\n正文\n= 山\n");
+    ed.execute(":syntax typst").unwrap();
+    ed.execute(":sort-sections").unwrap();
+    assert_eq!(ed.current_buffer().text(), "= 山\n= 天\n正文\n");
+
+    let mut ed = typed("第二章\n正文\n第一章\n正文\n");
+    ed.execute(":syntax text").unwrap();
+    ed.execute(":sort-sections").unwrap();
+    assert_eq!(ed.status(), say!("sections.sort-markup-only"));
+}
+
+#[test]
+fn heading_numbering_numbers_updates_and_takes_off() {
+    let text = "# 甲\n## 乙\n```\n# 碼\n```\n# 丙\n";
+    let mut ed = markdown(text);
+    ed.execute(":heading-numbering").unwrap();
+    assert_eq!(ed.current_buffer().text(), "# 1. 甲\n## 1.1. 乙\n```\n# 碼\n```\n# 2. 丙\n");
+    assert_eq!(ed.status(), say!("sections.numbered", 3));
+    ed.execute(":heading-numbering").unwrap();
+    assert_eq!(ed.status(), say!("sections.numbering-current"));
+    ed.execute(":heading-numbering-off").unwrap();
+    assert_eq!(ed.current_buffer().text(), text);
+    press(&mut ed, "u");
+    assert_eq!(ed.current_buffer().text(), "# 1. 甲\n## 1.1. 乙\n```\n# 碼\n```\n# 2. 丙\n");
+}
+
+#[test]
+fn heading_numbering_follows_the_files_list_and_skips_what_it_omits() {
+    let mut ed = markdown("<!-- heading-numbering: [\"-\", \"第一章 \"] -->\n# 書\n## 山\n## 目錄 <!-- omit from toc -->\n## 城\n");
+    ed.execute(":heading-numbering").unwrap();
+    assert_eq!(
+        ed.current_buffer().text(),
+        "<!-- heading-numbering: [\"-\", \"第一章 \"] -->\n# 書\n## 第一章 山\n## 目錄 <!-- omit from toc -->\n## 第二章 城\n"
+    );
+}
+
+#[test]
+fn heading_numbering_leaves_typst_to_its_own_numbering() {
+    let mut ed = markdown("= 天\n");
+    ed.execute(":syntax typst").unwrap();
+    ed.execute(":heading-numbering").unwrap();
+    assert_eq!(ed.current_buffer().text(), "= 天\n");
+    assert_eq!(ed.status(), say!("sections.numbering-typst"));
+}

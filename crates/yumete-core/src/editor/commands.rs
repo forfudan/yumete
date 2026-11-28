@@ -850,6 +850,17 @@ impl Editor {
                 self.align_lines(&sign);
                 Ok(CommandOutcome::Continue)
             }
+            Command::SortSections { order, rows } => {
+                if self.asks_to_swap_rows(rows.as_ref(), line) {
+                    return Ok(CommandOutcome::Continue);
+                }
+                self.sort_sections(order, rows);
+                Ok(CommandOutcome::Continue)
+            }
+            Command::HeadingNumbering { on } => {
+                self.heading_numbering(on);
+                Ok(CommandOutcome::Continue)
+            }
             Command::Sort { how, rows } => {
                 if self.asks_to_swap_rows(rows.as_ref(), line) {
                     return Ok(CommandOutcome::Continue);
