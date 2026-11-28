@@ -189,7 +189,7 @@ impl Metrics {
         // 矮到連號碼都擺不下的頁面上，這一列跟着一起沒有。
         let diff_row = diff_row.min(head_rows);
         // …and the diagnostics row goes before the numbers do.
-        let problem_row = problem_row.min(head_rows - diff_row);
+        let problem_row = problem_row.min(head_rows.saturating_sub(diff_row + numbers));
         // Bands are equal by construction: the page is divided, not packed, so
         // the second band can never be a row shorter than the first.
         let bands = bands.clamp(1, 4);

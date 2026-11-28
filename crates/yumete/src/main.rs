@@ -607,6 +607,13 @@ fn main() -> ExitCode {
                 return ExitCode::from(2);
             }
             match import::run(&which) {
+                // No terminal to open it in: the config is printed, for the
+                // reader to put where they want, and nothing is written.
+                Ok(ready) if !std::io::stdout().is_terminal() && shot.is_none() => {
+                    print!("{}", ready.text);
+                    eprintln!("yumete: not a terminal, so the imported config is printed and nothing is written; run ye --import in a terminal to open it");
+                    return ExitCode::SUCCESS;
+                }
                 Ok(ready) => Some(ready),
                 Err(code) => return code,
             }

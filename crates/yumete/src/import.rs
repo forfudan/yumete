@@ -1247,25 +1247,30 @@ pub fn run(which: &str) -> Result<Ready, ExitCode> {
         eprintln!("yumete: cannot make {}: {err}", dir.display());
         return Err(ExitCode::FAILURE);
     }
-    println!("yumete: {} is open, not yet written; :w writes it", path.display());
-    println!(
-        "{} line{} carried over; {} item{} not, listed at the end of the file",
-        imported.carried,
-        if imported.carried == 1 { "" } else { "s" },
-        imported.skipped,
-        if imported.skipped == 1 { "" } else { "s" },
-    );
-    if beside {
-        println!("config.toml was already there, so this goes beside it; copy what you want into config.toml");
-    }
-    if !imported.moved.is_empty() {
-        let n = imported.moved.len();
-        println!("{n} of yumete's Space key{} now do{} what your config says; where what they did is now:", if n == 1 { "" } else { "s" }, if n == 1 { "es" } else { "" });
-        for line in imported.moved.iter().take(SUMMARY) {
-            println!("  {line}");
+    // **Said only where the editor is about to open it**: with the output
+    // going elsewhere the config itself is what is printed, and this would
+    // land in the middle of it.
+    if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
+        println!("yumete: {} is open, not yet written; :w writes it", path.display());
+        println!(
+            "{} line{} carried over; {} item{} not, listed at the end of the file",
+            imported.carried,
+            if imported.carried == 1 { "" } else { "s" },
+            imported.skipped,
+            if imported.skipped == 1 { "" } else { "s" },
+        );
+        if beside {
+            println!("config.toml was already there, so this goes beside it; copy what you want into config.toml");
         }
-        if n > SUMMARY {
-            println!("  and {} more", n - SUMMARY);
+        if !imported.moved.is_empty() {
+            let n = imported.moved.len();
+            println!("{n} of yumete's Space key{} now do{} what your config says; where what they did is now:", if n == 1 { "" } else { "s" }, if n == 1 { "es" } else { "" });
+            for line in imported.moved.iter().take(SUMMARY) {
+                println!("  {line}");
+            }
+            if n > SUMMARY {
+                println!("  and {} more", n - SUMMARY);
+            }
         }
     }
     let report = report(&path, beside, &imported);

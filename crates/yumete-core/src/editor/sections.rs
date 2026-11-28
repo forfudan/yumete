@@ -181,7 +181,7 @@ impl Editor {
 /// after the numbered ones under `-k number`), then the number, the
 /// syllables, and the title itself, which settles same-sounding titles by
 /// code point.
-type SectionKey = (u8, u64, Vec<(String, u8)>, String);
+type SectionKey = (u8, Vec<u64>, Vec<(String, u8)>, String);
 
 impl Editor {
     /// **The headings the markup marks**, as `(line, level, title)`: read by
@@ -301,7 +301,13 @@ impl Editor {
                 None => (0, lines.len()),
             }
         };
-        let to = to.min(lines.len());
+        let mut to = to.min(lines.len());
+        // **A section is sorted whole or not at all.** A range that ends
+        // inside one would cut its tail off, and the tail would then follow
+        // whatever section was moved in front of it.
+        if !order.under {
+            to = (0..all.len()).filter(|&i| (from..to).contains(&all[i].0)).map(end_of).fold(to, usize::max);
+        }
         let heads: Vec<crate::headings::Head> = all
             .iter()
             .filter(|(line, ..)| (from..to).contains(line))
@@ -317,12 +323,18 @@ impl Editor {
             .map(|(_, _, title)| {
                 let text = crate::headings::visible_title(title, typst);
                 match order.key {
-                    SectionSort::Unicode => (0, 0, Vec::new(), text),
-                    SectionSort::Number => match crate::numerals::first_number(&text) {
-                        Some(n) => (0, n, Vec::new(), text),
-                        None => (1, 0, Vec::new(), text),
-                    },
-                    SectionSort::Pinyin => (0, 0, self.spoken(&text), text),
+                    SectionSort::Unicode => (0, Vec::new(), Vec::new(), text),
+                    // A title with no number goes last either way: the class
+                    // turns with `-r` so that reversing does not lift it.
+                    SectionSort::Number => {
+                        let numbers = crate::numerals::first_number(&text);
+                        let last = u8::from(!order.reverse);
+                        match numbers.is_empty() {
+                            false => (1 - last, numbers, Vec::new(), text),
+                            true => (last, numbers, Vec::new(), text),
+                        }
+                    }
+                    SectionSort::Pinyin => (0, Vec::new(), self.spoken(&text), text),
                 }
             })
             .collect();
@@ -387,6 +399,7 @@ impl Editor {
         }
         if chains(&self.marked_heads()) != chains_before {
             self.undo();
+            self.current_buffer_mut().forget_redo();
             self.status = say!("sections.sort-check-failed");
             return;
         }
@@ -454,11 +467,11 @@ impl Editor {
             }
         };
         let done = crate::headings::renumber(&lines, &heads, &numbering, on);
-        let doubled = done.doubled.iter().map(|l| (l + 1).to_string()).collect::<Vec<_>>().join("、");
+        let left = done.left.iter().map(|l| (l + 1).to_string()).collect::<Vec<_>>().join("、");
         let (Some(&(first, _)), Some(&(last, _))) = (done.lines.first(), done.lines.last()) else {
-            self.status = match (on, doubled.is_empty()) {
+            self.status = match (on, left.is_empty()) {
                 (true, true) => say!("sections.numbering-current"),
-                (true, false) => say!("sections.numbering-doubled", 0, doubled),
+                (true, false) => say!("sections.numbering-left", 0, left),
                 (false, _) => say!("sections.numbering-none-to-take"),
             };
             return;
@@ -507,9 +520,9 @@ impl Editor {
         self.current_buffer_mut().put_folds_through(folds, &move_to);
         self.sel.map(|r| crate::selection::Range::new(move_to(r.anchor), move_to(r.head)));
         self.refresh_goal_column();
-        self.status = match (on, doubled.is_empty()) {
+        self.status = match (on, left.is_empty()) {
             (true, true) => say!("sections.numbered", done.lines.len()),
-            (true, false) => say!("sections.numbering-doubled", done.lines.len(), doubled),
+            (true, false) => say!("sections.numbering-left", done.lines.len(), left),
             (false, _) => say!("sections.unnumbered", done.lines.len()),
         };
     }

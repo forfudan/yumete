@@ -180,7 +180,9 @@ fn read_chinese(text: &str) -> Option<u64> {
             }
             '万' | '萬' | '亿' | '億' => {
                 let unit = if matches!(c, '万' | '萬') { 10_000 } else { 100_000_000 };
-                total = (total + section + part.unwrap_or(0)) * unit;
+                // 萬 alone is ten thousand, as 十 alone is ten.
+                let lead = total + section + part.unwrap_or(0);
+                total = if lead == 0 && part.is_none() { 1 } else { lead } * unit;
                 section = 0;
                 part = None;
             }
@@ -258,19 +260,36 @@ fn read_roman(text: &str) -> Option<u64> {
     u64::try_from(total).ok()
 }
 
-/// **The first number in `text`**, in Arabic digits or Chinese numerals —
-/// `12` and 「第十二章」 both read 12. What `:sort-sections -k number`
-/// orders by.
-pub fn first_number(text: &str) -> Option<u64> {
-    let chars: Vec<char> = text.chars().collect();
-    let start = chars
-        .iter()
-        .position(|&c| Counting::Arabic.spells(c) || Counting::Chinese.spells(c) || Counting::Financial.spells(c))?;
-    let system = [Counting::Arabic, Counting::Chinese, Counting::Financial]
-        .into_iter()
-        .find(|s| s.spells(chars[start]))?;
-    let run: String = chars[start..].iter().take_while(|&&c| system.spells(c)).collect();
-    system.read(&run)
+/// **The first number in `text`**, in Arabic digits (full-width ones too)
+/// or Chinese numerals, with the numbers dotted onto it: `12` and
+/// 「第十二章」 read `[12]`, `1.10. 結論` reads `[1, 10]`. What
+/// `:sort-sections -k number` orders by, so 1.2 comes before 1.10.
+pub fn first_number(text: &str) -> Vec<u64> {
+    let chars: Vec<char> = text
+        .chars()
+        .map(|c| match c {
+            '０'..='９' => char::from(b'0' + (c as u32 - '０' as u32) as u8),
+            _ => c,
+        })
+        .collect();
+    let systems = [Counting::Arabic, Counting::Chinese, Counting::Financial];
+    let Some(start) = chars.iter().position(|&c| systems.iter().any(|s| s.spells(c))) else { return Vec::new() };
+    let Some(system) = systems.into_iter().find(|s| s.spells(chars[start])) else { return Vec::new() };
+    let mut out = Vec::new();
+    let mut at = start;
+    loop {
+        let run: String = chars[at..].iter().take_while(|&&c| system.spells(c)).collect();
+        match system.read(&run) {
+            Some(n) => out.push(n),
+            None => break,
+        }
+        at += run.chars().count();
+        match (chars.get(at), chars.get(at + 1)) {
+            (Some('.'), Some(&next)) if system.spells(next) => at += 1,
+            _ => break,
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -318,8 +337,11 @@ mod tests {
 
     #[test]
     fn the_first_number_of_a_title() {
-        assert_eq!(first_number("第十二章 出山"), Some(12));
-        assert_eq!(first_number("Part 7: the end"), Some(7));
-        assert_eq!(first_number("序"), None);
+        assert_eq!(first_number("第十二章 出山"), vec![12]);
+        assert_eq!(first_number("Part 7: the end"), vec![7]);
+        assert_eq!(first_number("1.10. 結論"), vec![1, 10]);
+        assert_eq!(first_number("第１２章"), vec![12]);
+        assert_eq!(first_number("萬里"), vec![10_000]);
+        assert!(first_number("序").is_empty());
     }
 }

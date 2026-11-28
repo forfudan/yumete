@@ -789,10 +789,10 @@ zhs = "编号已是最新"
 en = "the numbers are up to date"
 
 [[message]]
-# :heading-numbering 編好了，但有幾行會出兩個編號，那幾行沒改（{1} 是行號）（草稿）
-key = "sections.numbering-doubled"
-zhs = "改了 {0} 个标题的编号；第 {1} 行会有两个编号，没改"
-en = "{0|heading|headings} renumbered; line {1} would read two numbers and was left"
+# :heading-numbering 編好了，但有幾行沒改：會讀成兩個編號，或下劃線式標題加了編號會變成列表（{1} 是行號）（草稿）
+key = "sections.numbering-left"
+zhs = "改了 {0} 个标题的编号；第 {1} 行没改（会读成两个编号，或下划线式标题会变成列表）"
+en = "{0|heading|headings} renumbered; line {1} left as it was (it would read two numbers, or an underlined title would turn into a list item)"
 
 [[message]]
 # :heading-numbering 用在不是 Markdown 的文件上（草稿）

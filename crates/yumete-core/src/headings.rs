@@ -290,6 +290,13 @@ impl Pattern {
                     at(rest, after, most).map(|n| n + literal.len())
                 }
                 Piece::Count(counting) => {
+                    // The 0 of a skipped level, which letters have no
+                    // spelling for and so is written as a digit.
+                    if *counting != Counting::Arabic && text.starts_with('0') {
+                        if let Some(m) = at(rest, &text[1..], most) {
+                            return Some(m + 1);
+                        }
+                    }
                     let run: usize = text.chars().take_while(|&c| counting.spells(c)).map(char::len_utf8).sum();
                     // Shortest first is wrong for `1.1.`, longest first for a
                     // run a literal digit ends: try every length, longest first.
@@ -498,11 +505,25 @@ fn title_start(line: &str) -> usize {
 }
 
 /// What numbering does to a file: the lines it rewrites, and the headings
-/// it left alone because they would have read two numbers.
+/// it left alone — those that would have read two numbers, and underlined
+/// (setext) titles a number would turn into a list item.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Renumbered {
     pub lines: Vec<(usize, String)>,
-    pub doubled: Vec<usize>,
+    pub left: Vec<usize>,
+}
+
+/// Whether `line` opens a list item: `-`, `+` or `*`, or up to nine digits
+/// and `.` or `)`, then a space or the end. An underlined title that reads
+/// so is a list item and no longer a heading.
+fn opens_a_list(line: &str) -> bool {
+    let line = line.trim_start_matches(' ');
+    let spaced = |rest: &str| rest.is_empty() || rest.starts_with([' ', '\t']);
+    if let Some(rest) = line.strip_prefix(['-', '+', '*']) {
+        return spaced(rest);
+    }
+    let digits = line.len() - line.trim_start_matches(|c: char| c.is_ascii_digit()).len();
+    (1..=9).contains(&digits) && line[digits..].strip_prefix(['.', ')']).is_some_and(spaced)
 }
 
 /// **Every heading numbered by `numbering`, or its number taken off**
@@ -533,10 +554,15 @@ pub fn renumber(lines: &[String], heads: &[Numbered], numbering: &Numbering, on:
             _ => None,
         };
         if number.is_some() && pattern.is_some_and(|p| p.written_at(bare, most).is_some()) {
-            out.doubled.push(head.line);
+            out.left.push(head.line);
             continue;
         }
         let new = format!("{}{}{}", &line[..start], number.unwrap_or_default(), bare);
+        let underlined = !line.trim_start_matches(' ').starts_with('#');
+        if underlined && opens_a_list(&new) {
+            out.left.push(head.line);
+            continue;
+        }
         if new != *line {
             out.lines.push((head.line, new));
         }
@@ -639,7 +665,7 @@ mod tests {
         for (line, text) in done.lines {
             lines[line] = text;
         }
-        (lines.join("\n"), done.doubled)
+        (lines.join("\n"), done.left)
     }
 
     #[test]
@@ -689,6 +715,26 @@ mod tests {
         let (out, doubled) = apply("# 1. 1. a", true);
         assert_eq!(out, "# 1. 1. a");
         assert_eq!(doubled, vec![0]);
+    }
+
+    #[test]
+    fn a_zero_written_for_a_skipped_level_is_read_back() {
+        let text = "<!-- heading-numbering: ['I. ', 'I.a. '] -->\n## x";
+        let (once, _) = apply(text, true);
+        assert!(once.ends_with("## 0.a. x"), "{once}");
+        assert_eq!(apply(&once, true).0, once);
+    }
+
+    #[test]
+    fn an_underlined_title_is_not_turned_into_a_list_item() {
+        let lines = lines("Title\n=====\n# b");
+        let heads = [Numbered { line: 0, level: 1, omitted: false }, Numbered { line: 2, level: 1, omitted: false }];
+        let numbering = Numbering { levels: Numbering::default_levels(), traditional: false };
+        let done = renumber(&lines, &heads, &numbering, true);
+        assert_eq!(done.left, vec![0]);
+        assert_eq!(done.lines, vec![(2, "# 2. b".to_string())]);
+        let chapters = Numbering { levels: vec![Some(Pattern::parse("第一章 "))], traditional: false };
+        assert_eq!(renumber(&lines, &heads, &chapters, true).lines[0], (0, "第一章 Title".to_string()));
     }
 
     #[test]

@@ -49929,3 +49929,19 @@ fn heading_numbering_leaves_typst_to_its_own_numbering() {
     assert_eq!(ed.current_buffer().text(), "= 天\n");
     assert_eq!(ed.status(), say!("sections.numbering-typst"));
 }
+
+#[test]
+fn sort_sections_takes_a_section_a_range_cuts_into_whole() {
+    let mut ed = markdown("# b\nB1\nB2\n# a\nA1\nA2\n");
+    ed.execute(":1,5sort-sections -k unicode").unwrap();
+    assert_eq!(ed.current_buffer().text(), "# a\nA1\nA2\n# b\nB1\nB2\n");
+}
+
+#[test]
+fn sort_sections_by_number_reads_dotted_numbers_and_keeps_unnumbered_last() {
+    let mut ed = markdown("## 1.10. j\n## 序\n## 1.2. b\n## 1.3. c\n");
+    ed.execute(":sort-sections -k number").unwrap();
+    assert_eq!(ed.current_buffer().text(), "## 1.2. b\n## 1.3. c\n## 1.10. j\n## 序\n");
+    ed.execute(":sort-sections -k number -r").unwrap();
+    assert_eq!(ed.current_buffer().text(), "## 1.10. j\n## 1.3. c\n## 1.2. b\n## 序\n");
+}

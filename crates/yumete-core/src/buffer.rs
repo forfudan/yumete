@@ -3074,6 +3074,12 @@ impl Buffer {
         self.history.grouping = was;
     }
 
+    /// Drop the steps `redo` would take: after a change was taken back
+    /// because it was wrong, redoing it must not bring it back.
+    pub fn forget_redo(&mut self) {
+        self.history.redo.clear();
+    }
+
     /// Turn an announced undo point into a real one, now that the text has
     /// moved. Called from the two places that move it.
     fn earn_snapshot(&mut self) {
