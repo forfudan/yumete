@@ -15928,6 +15928,92 @@ fn committing_moves_head_so_the_gutter_catches_up() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **`:changed-files <commit>`**: every file changed since that commit,
+/// committed or not and untracked too, and a file chosen opens beside what
+/// git had of it there — a renamed one by its old name, a deleted one empty
+/// beside its old text. A commit git cannot read, or a range, opens nothing
+/// and says git's words.
+#[test]
+fn changed_files_since_a_commit_lists_and_compares_against_it() {
+    let dir = tmp().join(format!("yumete-changed-since-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("gone")).unwrap();
+    let git = |args: &[&str]| {
+        let ok = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&dir)
+            .args(["-c", "user.name=t", "-c", "user.email=t@t"])
+            .args(args)
+            .output()
+            .is_ok_and(|o| o.status.success());
+        assert!(ok, "git {args:?}");
+    };
+    std::fs::write(dir.join("kept.md"), "first draft\n").unwrap();
+    std::fs::write(dir.join("old-name.md"), "a line that moves house\nand its neighbour\n").unwrap();
+    std::fs::write(dir.join("gone/away.md"), "soon to be deleted\n").unwrap();
+    std::fs::write(dir.join("untouched.md"), "never changes\n").unwrap();
+    git(&["init", "-q"]);
+    git(&["add", "."]);
+    git(&["commit", "-qm", "one"]);
+    std::fs::write(dir.join("kept.md"), "second draft\n").unwrap();
+    git(&["mv", "old-name.md", "new-name.md"]);
+    git(&["rm", "-q", "-r", "gone"]);
+    git(&["commit", "-qm", "two"]);
+    std::fs::write(dir.join("fresh.md"), "not yet tracked\n").unwrap();
+
+    let mut ed = Editor::new();
+    assert!(ed.set_working_dir(&dir));
+    ed.execute("changed-files HEAD~1").unwrap();
+    let picker = ed.picker().expect("a picker");
+    assert!(picker.title.contains("HEAD~1"), "the title names the base: {}", picker.title);
+    let mut rows: Vec<(String, char)> = picker
+        .items()
+        .iter()
+        .map(|i| match i {
+            crate::picker::Item::Changed(path, Some((letter, _))) => (path.clone(), *letter),
+            other => panic!("{other:?}"),
+        })
+        .collect();
+    rows.sort();
+    let want = [("fresh.md", 'U'), ("gone/away.md", 'D'), ("kept.md", 'M'), ("new-name.md", 'R')];
+    assert_eq!(rows, want.map(|(p, l)| (p.to_string(), l)), "untouched.md is not among them");
+
+    let pick = |ed: &mut Editor, query: &str| {
+        for c in query.chars() {
+            ed.on_key(Key::Char(c));
+        }
+        ed.on_key(Key::Enter);
+    };
+    let old_text = |ed: &mut Editor| {
+        assert!(ed.diff_in_view(), "the comparison is open: {}", ed.status());
+        assert!(ed.diff_to_column(true), "the keys go to the old text");
+        let text = ed.current_buffer().text();
+        ed.diff_to_column(false);
+        text
+    };
+    // Renamed: compared with the text under its old name.
+    pick(&mut ed, "new-name");
+    assert!(ed.current_buffer().path().is_some_and(|p| p.ends_with("new-name.md")));
+    assert_eq!(old_text(&mut ed), "a line that moves house\nand its neighbour\n", "{}", ed.status());
+    assert!(ed.diff_columns().is_some_and(|c| c.left.contains("HEAD~1")));
+
+    // Deleted, folder and all: opens empty, beside what it held.
+    ed.execute("changed-files HEAD~1").unwrap();
+    pick(&mut ed, "away");
+    assert_eq!(ed.current_buffer().text(), "");
+    assert_eq!(old_text(&mut ed), "soon to be deleted\n", "{}", ed.status());
+
+    // Git's own words, and no picker.
+    ed.execute("changed-files no-such-commit").unwrap();
+    assert!(ed.picker().is_none());
+    assert!(ed.status().contains("no-such-commit"), "{}", ed.status());
+    ed.execute("changed-files HEAD~1..HEAD").unwrap();
+    assert!(ed.picker().is_none(), "a range is not one commit");
+    assert!(ed.status().contains("single revision"), "{}", ed.status());
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **`x` 在行尾只選這一行**（照 helix）。
 ///
 /// 在行尾按 `x` 不連下一行一起選；helix 只選這一行。

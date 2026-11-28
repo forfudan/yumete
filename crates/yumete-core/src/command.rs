@@ -871,9 +871,9 @@ pub enum Command {
     RecentFilesGlobal,
     /// `:recent-projects` — the directories a session was ever kept for.
     RecentProjects,
-    /// `:changed-files` — the files git reports and the unsaved buffers
-    /// (`空格 g`).
-    ChangedFiles,
+    /// `:changed-files [commit]` — the files git reports and the unsaved
+    /// buffers (`空格 g`); with a commit, every file changed since it.
+    ChangedFiles(Option<String>),
     /// `:sidebar-outline-level [n]` — the outline down to level `n`; `0`
     /// closes it, and bare reports.
     Outline(Option<usize>),
@@ -6864,8 +6864,8 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.changed-files",
         needs: &[],
-        params: &[],
-        build: Some(|_| Ok(Command::ChangedFiles)),
+        params: &[Param::Free("cmd.arg.commit")],
+        build: Some(|p| Ok(Command::ChangedFiles(p.arg(0).map(|s| s.to_string())))),
     },
     Entry {
         name: "recent-projects",

@@ -213,6 +213,34 @@ impl Changes {
             .current_dir(dir)
             .output()
             .map_err(|e| e.to_string())?;
+        Self::shown(out, path, encoding)
+    }
+
+    /// **The same, by the file's path from the repository's top**
+    /// (`:changed-files <commit>`): a renamed file is asked for by the name
+    /// it had then, and a deleted one whose folder went with it has no
+    /// directory left to stand in.
+    pub fn text_in(
+        top: &Path,
+        name: &str,
+        commit: &str,
+        encoding: &'static crate::encoding::Encoding,
+    ) -> Result<String, String> {
+        let out = std::process::Command::new("git")
+            .args(["--no-optional-locks", "show"])
+            .arg(format!("{commit}:{name}"))
+            .current_dir(top)
+            .output()
+            .map_err(|e| e.to_string())?;
+        Self::shown(out, &top.join(name), encoding)
+    }
+
+    /// What `git show` printed, read in `encoding`, or what git said instead.
+    fn shown(
+        out: std::process::Output,
+        path: &Path,
+        encoding: &'static crate::encoding::Encoding,
+    ) -> Result<String, String> {
         match out.status.success() {
             true => crate::encoding::read_bytes(&out.stdout, encoding)
                 .ok_or_else(|| crate::say!("encoding.refused", path.display())),
@@ -432,6 +460,8 @@ pub struct FileStatus {
     /// conflict.
     pub letter: char,
     pub staging: Staging,
+    /// The name it had before a rename or copy.
+    pub was: Option<String>,
 }
 
 /// **Every changed file in the repository holding `dir`**, and that
@@ -451,8 +481,8 @@ pub fn status(dir: &Path) -> Option<(PathBuf, Vec<FileStatus>)> {
 }
 
 /// `git status --porcelain=v1 -z`, read: `XY path\0`, with a second path
-/// after a rename or copy (the old name, dropped). `X` is the index, `Y` the
-/// working tree.
+/// after a rename or copy (the old name). `X` is the index, `Y` the working
+/// tree.
 pub fn parse_status(raw: &[u8]) -> Vec<FileStatus> {
     let mut out = Vec::new();
     let mut fields = raw.split(|&b| b == 0).filter(|f| !f.is_empty());
@@ -462,9 +492,10 @@ pub fn parse_status(raw: &[u8]) -> Vec<FileStatus> {
         }
         let (x, y) = (field[0] as char, field[1] as char);
         let path = String::from_utf8_lossy(&field[3..]).into_owned();
-        if matches!(x, 'R' | 'C') || matches!(y, 'R' | 'C') {
-            fields.next();
-        }
+        let was = match matches!(x, 'R' | 'C') || matches!(y, 'R' | 'C') {
+            true => fields.next().map(|f| String::from_utf8_lossy(f).into_owned()),
+            false => None,
+        };
         let conflict = matches!((x, y), ('D', 'D') | ('A', 'A') | ('U', _) | (_, 'U'));
         let (letter, staging) = match (x, y) {
             ('!', '!') => continue,
@@ -489,7 +520,76 @@ pub fn parse_status(raw: &[u8]) -> Vec<FileStatus> {
                 (letter, staging)
             }
         };
-        out.push(FileStatus { path, letter, staging });
+        out.push(FileStatus { path, letter, staging, was });
+    }
+    out
+}
+
+/// **Every file changed since `commit`** in the repository holding `dir`,
+/// committed or not, untracked ones too, and that repository's top
+/// (`:changed-files <commit>`).
+///
+/// `git diff <commit>` against the working tree, renames found, and
+/// `git ls-files --others` for what git does not track yet, which a diff
+/// never shows. `commit` goes to git as typed and must name one commit: a
+/// range is refused in git's own words, as are a commit that does not exist
+/// and a directory outside a repository.
+pub fn changed_since(dir: &Path, commit: &str) -> Result<(PathBuf, Vec<FileStatus>), String> {
+    let run = |at: &Path, args: &[&str]| -> Result<Vec<u8>, String> {
+        let out = std::process::Command::new("git")
+            .arg("--no-optional-locks")
+            .arg("-C")
+            .arg(at)
+            .args(args)
+            .output()
+            .map_err(|e| e.to_string())?;
+        match out.status.success() {
+            true => Ok(out.stdout),
+            false => Err(String::from_utf8_lossy(&out.stderr).trim().to_string()),
+        }
+    };
+    let top = run(dir, &["rev-parse", "--show-toplevel"])?;
+    let top = PathBuf::from(String::from_utf8_lossy(&top).trim());
+    let raw = run(&top, &["diff", "--name-status", "-z", "--find-renames", "--end-of-options", commit, "--"])?;
+    // `a..b` is a range to `git diff`; asked for one commit, git says it is
+    // not one.
+    run(&top, &["rev-parse", "--verify", "--end-of-options", &format!("{commit}^{{commit}}")])?;
+    let mut files = parse_name_status(&raw);
+    let untracked = run(&top, &["ls-files", "--others", "--exclude-standard", "-z"])?;
+    for path in untracked.split(|&b| b == 0).filter(|f| !f.is_empty()) {
+        let path = String::from_utf8_lossy(path).into_owned();
+        if !files.iter().any(|f| f.path == path) {
+            files.push(FileStatus { path, letter: 'U', staging: Staging::Unstaged, was: None });
+        }
+    }
+    Ok((top, files))
+}
+
+/// `git diff --name-status -z`, read: `X\0path\0`, or `R100\0old\0new\0`
+/// after a rename or copy. One column, so every change is drawn as one still
+/// to be dealt with, and an unmerged file as in conflict.
+pub fn parse_name_status(raw: &[u8]) -> Vec<FileStatus> {
+    let mut out = Vec::new();
+    let mut fields = raw.split(|&b| b == 0).filter(|f| !f.is_empty());
+    let text = |f: &[u8]| String::from_utf8_lossy(f).into_owned();
+    while let Some(field) = fields.next() {
+        let kind = field[0] as char;
+        let Some(first) = fields.next().map(text) else { break };
+        let (path, was) = match kind {
+            'R' | 'C' => match fields.next() {
+                Some(new) => (text(new), Some(first)),
+                None => break,
+            },
+            _ => (first, None),
+        };
+        let (letter, staging) = match kind {
+            'A' => ('A', Staging::Unstaged),
+            'D' => ('D', Staging::Unstaged),
+            'R' | 'C' => ('R', Staging::Unstaged),
+            'U' => ('C', Staging::Conflict),
+            _ => ('M', Staging::Unstaged),
+        };
+        out.push(FileStatus { path, letter, staging, was });
     }
     out
 }
@@ -530,6 +630,30 @@ mod tests {
         ];
         let want: Vec<(String, char, Staging)> = want.iter().map(|(p, l, s)| (p.to_string(), *l, *s)).collect();
         assert_eq!(got, want);
+    }
+
+    /// `git diff --name-status -z <commit>` read into the same letters: a
+    /// rename keeps the name it had, for asking git what it held then.
+    #[test]
+    fn name_status_is_read_into_letters_and_the_old_name() {
+        let raw = b"M\0edited.md\0A\0new.md\0D\0gone/old.md\0R087\0from.md\0to.md\0C100\0src.md\0copy.md\0T\0link\0U\0fight.md\0";
+        let got: Vec<(String, char, Option<String>)> =
+            parse_name_status(raw).into_iter().map(|f| (f.path, f.letter, f.was)).collect();
+        let want = [
+            ("edited.md", 'M', None),
+            ("new.md", 'A', None),
+            ("gone/old.md", 'D', None),
+            ("to.md", 'R', Some("from.md")),
+            ("copy.md", 'R', Some("src.md")),
+            ("link", 'M', None),
+            ("fight.md", 'C', None),
+        ];
+        let want: Vec<(String, char, Option<String>)> =
+            want.iter().map(|(p, l, w)| (p.to_string(), *l, w.map(str::to_string))).collect();
+        assert_eq!(got, want);
+        let staging: Vec<Staging> = parse_name_status(raw).into_iter().map(|f| f.staging).collect();
+        assert_eq!(staging.last(), Some(&Staging::Conflict), "unmerged is a conflict");
+        assert!(staging[..6].iter().all(|s| *s == Staging::Unstaged));
     }
 
     /// **改之前寫的是什麼，也要留着**。

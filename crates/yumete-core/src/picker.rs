@@ -178,11 +178,31 @@ pub struct Picker {
     /// list takes the whole box. Shown or not, a box too narrow for both
     /// draws the list alone.
     pub preview_hidden: bool,
+    /// **The commit a changed-files picker counts from**
+    /// (`:changed-files <commit>`): a file chosen opens beside what git had
+    /// of it there.
+    pub since: Option<Since>,
     /// **名單那一列有幾行**——翻一頁翻的就是這個數。
     ///
     /// 這個編輯器没有 viewport（`Editor::page_lines` 那一格同理），所以畫的那一
     /// 支每一幀量一次，告訴核心。上一幀的答案，而窗口的高度上一幀和這一幀一樣。
     rows: usize,
+}
+
+/// **What `:changed-files <commit>` compares against**: the commit as typed,
+/// and the names renamed files had there, new name to old, both from the
+/// repository's top.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Since {
+    pub commit: String,
+    pub renamed: Vec<(String, String)>,
+}
+
+impl Since {
+    /// The name `path` had at the commit.
+    pub fn name_then<'a>(&'a self, path: &'a str) -> &'a str {
+        self.renamed.iter().find(|(now, _)| now == path).map_or(path, |(_, then)| then)
+    }
 }
 
 /// Where a caret is being asked to go.
@@ -216,6 +236,7 @@ impl Picker {
             verbatim: false,
             live: false,
             preview_hidden: false,
+            since: None,
             // 畫之前先按過鍵的話（`--keys`、測試），一頁就是這個數。
             rows: 10,
         }

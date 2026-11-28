@@ -740,7 +740,13 @@ impl Editor {
         };
         let commit = commit.unwrap_or("HEAD");
         let encoding = self.current_buffer().encoding_on_disk();
-        let text = match crate::vcs::Changes::text_at(&path, commit, encoding) {
+        self.show_git_diff(commit, crate::vcs::Changes::text_at(&path, commit, encoding));
+    }
+
+    /// The view beside `text`, what git had of this file at `commit`, or
+    /// git's own words for why it had nothing.
+    pub(super) fn show_git_diff(&mut self, commit: &str, text: Result<String, String>) {
+        let text = match text {
             Ok(text) => text.strip_prefix('\u{feff}').unwrap_or(&text).to_string(),
             Err(why) => {
                 self.status = say!("diff.git-said", commit, why);

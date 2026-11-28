@@ -1195,8 +1195,11 @@ impl Editor {
                 self.open_project_picker();
                 Ok(CommandOutcome::Continue)
             }
-            Command::ChangedFiles => {
-                self.open_changed_picker();
+            Command::ChangedFiles(since) => {
+                match since.as_deref().map(str::trim).filter(|c| !c.is_empty()) {
+                    Some(commit) => self.open_changed_since(commit),
+                    None => self.open_changed_picker(),
+                }
                 Ok(CommandOutcome::Continue)
             }
             Command::Tutor => {

@@ -1133,6 +1133,12 @@ zhs = "改动过的文件"
 en = "changed files"
 
 [[message]]
+# : :changed-files 給了提交時那一扇挑選器的標題，{0} 是提交（草稿）
+key = "picker.changed-since"
+zhs = "自 {0} 以来改动过的文件"
+en = "changed since {0}"
+
+[[message]]
 # 挑選器標題：gd gD gy gi 找到不止一處時
 key = "picker.declarations"
 zhs = "声明（{0} 处）"

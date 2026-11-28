@@ -2039,6 +2039,7 @@ impl Editor {
         // helix's jump list picker centres a place off the page; its other
         // pickers centre it wherever it is (`align_view`).
         let jumps = self.picker.as_ref().is_some_and(|p| p.title == say!("picker.jumplist"));
+        let since = self.picker.as_ref().and_then(|p| p.since.clone());
         self.close_picker();
         match chosen {
             Some(crate::picker::Item::File(path) | crate::picker::Item::Changed(path, _)) => {
@@ -2048,6 +2049,18 @@ impl Editor {
                 };
                 if let Err(err) = self.open_file(&full) {
                     self.status = say!("buffer.cannot-open", path, err);
+                    return;
+                }
+                // Beside the commit the list counts from. A deleted file
+                // opens empty, so its column of old text is all there is; an
+                // unsaved buffer outside the repository, named by its whole
+                // path, has no version there and only opens.
+                if let (Some(since), Some(root)) = (since, &root) {
+                    if Path::new(&path).is_relative() {
+                        let encoding = self.current_buffer().encoding_on_disk();
+                        let text = crate::vcs::Changes::text_in(root, since.name_then(&path), &since.commit, encoding);
+                        self.show_git_diff(&since.commit, text);
+                    }
                 }
             }
             // **換項目＝去那裏重新開始**，由前端 `chdir` ＋ `exec`。
@@ -2520,7 +2533,7 @@ impl Editor {
     /// now. Outside a repository it lists the unsaved buffers alone.
     pub(super) fn open_changed_picker(&mut self) {
         let here = self.working_dir();
-        let (root, mut items) = match crate::vcs::status(&here) {
+        let (root, items) = match crate::vcs::status(&here) {
             Some((top, files)) => {
                 let items: Vec<crate::picker::Item> = files
                     .into_iter()
@@ -2530,6 +2543,45 @@ impl Editor {
             }
             None => (here, Vec::new()),
         };
+        self.show_changed_picker(say!("picker.changed-files"), root, items, None);
+    }
+
+    /// **改動過的文件，從某個提交算起** — `:changed-files <commit>`.
+    ///
+    /// Every file changed since `commit`, committed or not, untracked ones
+    /// too, and the unsaved buffers as above. A file chosen opens beside
+    /// what git had of it at `commit`, as `:git-diff <commit>` does. When
+    /// git cannot answer — no such commit, a range, no repository — its own
+    /// words are said and no picker opens.
+    pub(super) fn open_changed_since(&mut self, commit: &str) {
+        let (root, files) = match crate::vcs::changed_since(&self.working_dir(), commit) {
+            Ok(found) => found,
+            Err(why) => {
+                self.status = say!("diff.git-said", commit, why);
+                return;
+            }
+        };
+        let renamed = files
+            .iter()
+            .filter_map(|f| Some((f.path.clone(), f.was.clone()?)))
+            .collect();
+        let items = files
+            .into_iter()
+            .map(|f| crate::picker::Item::Changed(f.path, Some((f.letter, f.staging))))
+            .collect();
+        let since = crate::picker::Since { commit: commit.to_string(), renamed };
+        self.show_changed_picker(say!("picker.changed-since", commit), root, items, Some(since));
+    }
+
+    /// The changed-files picker over git's `items`, with every unsaved
+    /// buffer git did not name added.
+    fn show_changed_picker(
+        &mut self,
+        title: String,
+        root: PathBuf,
+        mut items: Vec<crate::picker::Item>,
+        since: Option<crate::picker::Since>,
+    ) {
         // Git spells the top `C:/Users/…` on Windows and a buffer's path may be
         // `\\?\C:\Users\…`: both resolved, and compared with forward slashes,
         // which is how git writes the paths it lists.
@@ -2549,8 +2601,9 @@ impl Editor {
                 items.push(crate::picker::Item::Changed(shown, None));
             }
         }
-        let mut picker = crate::picker::Picker::new(&say!("picker.changed-files"), items);
+        let mut picker = crate::picker::Picker::new(&title, items);
         picker.root = Some(root);
+        picker.since = since;
         self.show_the_picker(picker);
     }
 
