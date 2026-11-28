@@ -49951,7 +49951,6 @@ fn sort_sections_by_number_reads_dotted_numbers_and_keeps_unnumbered_last() {
 /// file git does not know.
 #[test]
 fn blame_follows_the_cursor_line_and_the_edits() {
-    use crate::blame::Said;
     let dir = tmp().join(format!("yumete-blame-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
@@ -49977,10 +49976,8 @@ fn blame_follows_the_cursor_line_and_the_edits() {
     assert!(ed.blame_at_end_of(0).is_none(), "off by default");
     ed.execute("view-blame").unwrap();
     assert!(ed.blame_on(), "{}", ed.status());
-    let committed = |ed: &Editor, line: usize| match ed.blame_at_end_of(line) {
-        Some(Said::Committed(c)) => Some((c.author.clone(), c.summary.clone())),
-        _ => None,
-    };
+    let committed =
+        |ed: &Editor, line: usize| ed.blame_at_end_of(line).map(|c| (c.author.clone(), c.summary.clone()));
     let planted = Some(("Lin Qiu".to_string(), "Plant the orchard".to_string()));
     assert_eq!(committed(&ed, 0), planted);
     // Only the cursor's line says it.
@@ -49990,14 +49987,14 @@ fn blame_follows_the_cursor_line_and_the_edits() {
     ed.goto_line(3);
     press(&mut ed, "Oplums");
     ed.on_key(Key::Esc);
-    assert_eq!(ed.blame_at_end_of(2), Some(Said::NotCommitted));
+    assert!(ed.blame_at_end_of(2).is_none(), "a new line says nothing");
     ed.goto_line(4);
     assert_eq!(committed(&ed, 3), planted);
-    // Typed into, the line is not committed; while typing, nothing is said.
+    // Typed into, the line is not committed: nothing is said, while typing or after.
     press(&mut ed, "A ripe");
     assert!(ed.blame_at_end_of(3).is_none(), "nothing while typing in Insert");
     ed.on_key(Key::Esc);
-    assert_eq!(ed.blame_at_end_of(3), Some(Said::NotCommitted));
+    assert!(ed.blame_at_end_of(3).is_none(), "a line typed into says nothing");
 
     // A file git does not track: the switch says so and stays off.
     let loose = dir.join("loose.md");

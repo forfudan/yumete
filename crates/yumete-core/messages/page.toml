@@ -57,12 +57,6 @@ zhs = "{0} 个月前"
 en = "{0|month|months} ago"
 
 [[message]]
-# :view-blame 开着，光标所在行还没提交过，或者打开后改过，画在行末（草稿）
-key = "blame.not-committed"
-zhs = "尚未提交"
-en = "not committed yet"
-
-[[message]]
 # :view-blame on，可是 git 答不出这个文件：不在 git 仓里、没有提交过、仓里还没有第一个提交，或者机器上没有 git——开关保持关着（草稿）
 key = "blame.not-in-git"
 zhs = "行末提交信息：关(此文件不在 git 中)"

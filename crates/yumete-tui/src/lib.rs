@@ -16497,15 +16497,12 @@ fn draw_horizontal(
                 let now = yumete_core::blame::now();
                 let whole = yumete_core::blame::words(blamed, now);
                 // The name and the date are the least worth drawing.
-                let least = match blamed {
-                    yumete_core::blame::Said::Committed(c) => yumete_cjk::str_width(&yumete_core::say!(
-                        "blame.line",
-                        c.author,
-                        yumete_core::blame::ago(c.time, now),
-                        "…"
-                    )),
-                    yumete_core::blame::Said::NotCommitted => yumete_cjk::str_width(&whole),
-                };
+                let least = yumete_cjk::str_width(&yumete_core::say!(
+                    "blame.line",
+                    blamed.author,
+                    yumete_core::blame::ago(blamed.time, now),
+                    "…"
+                ));
                 if room >= least {
                     let said = format!("  {}", elide(&whole, room));
                     let from = text_area.x + used.saturating_sub(left) as u16 + 2;

@@ -344,8 +344,7 @@ pub fn scheme_words(name: &str, series: &str, author: &str, shown: bool) -> Opti
 
 /// **The cursor line's blame**: the commit in full — its hash, author, date
 /// and summary. Nothing for a line nobody has committed.
-pub fn blame_words(said: yumete_core::blame::Said<'_>) -> Option<Said> {
-    let yumete_core::blame::Said::Committed(c) = said else { return None };
+pub fn blame_words(c: &yumete_core::blame::Commit) -> Option<Said> {
     let rows = [
         field(say!("blame.author"), format!("{} {}", c.author, c.mail)),
         field(say!("blame.date"), yumete_core::clock::date_time(c.time)),

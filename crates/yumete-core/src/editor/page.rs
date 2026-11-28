@@ -2144,12 +2144,13 @@ impl Editor {
         self.blame.insert(id, answer);
     }
 
-    /// **What is said after the end of `line`**: who committed it, or that
-    /// nobody has. Only on the cursor's line in the window with the keys,
-    /// not while typing in Insert (the line is half written, and the words
-    /// would sit where the next character goes), and not on an empty line
-    /// nobody committed. Looks the answer up; never asks git.
-    pub fn blame_at_end_of(&self, line: usize) -> Option<crate::blame::Said<'_>> {
+    /// **What is said after the end of `line`**: who committed it. Only on
+    /// the cursor's line in the window with the keys, not while typing in
+    /// Insert (the line is half written, and the words would sit where the
+    /// next character goes), and nothing on a line nobody committed yet: a
+    /// note on every line being written is noise, and the change mark in the
+    /// margin already says it. Looks the answer up; never asks git.
+    pub fn blame_at_end_of(&self, line: usize) -> Option<&crate::blame::Commit> {
         if !self.blame_on
             || self.mode == Mode::Insert
             || self.viewing.get().is_some_and(|v| v.window != self.live)
@@ -2160,11 +2161,9 @@ impl Editor {
         let blame = self.blame.get(&self.current_buffer().id())?.as_ref()?;
         let rope = self.current_buffer().rope();
         let now = rope.get_line(line)?.to_string();
-        let said = blame.at(line, &now)?;
-        let empty = now.trim_end_matches(['\n', '\r']).is_empty();
-        match said {
-            crate::blame::Said::NotCommitted if empty => None,
-            said => Some(said),
+        match blame.at(line, &now)? {
+            crate::blame::Said::Committed(commit) => Some(commit),
+            crate::blame::Said::NotCommitted => None,
         }
     }
 

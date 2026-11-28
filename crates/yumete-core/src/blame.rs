@@ -188,13 +188,10 @@ impl Blame {
     }
 }
 
-/// The words drawn after the line: `author, 3 days ago • summary`, or that
-/// nobody has committed it. `now` is seconds since 1970.
-pub fn words(said: Said<'_>, now: i64) -> String {
-    match said {
-        Said::Committed(c) => say!("blame.line", c.author, ago(c.time, now), c.summary),
-        Said::NotCommitted => say!("blame.not-committed"),
-    }
+/// The words drawn after the line: `author, 3 days ago • summary`. `now` is
+/// seconds since 1970.
+pub fn words(c: &Commit, now: i64) -> String {
+    say!("blame.line", c.author, ago(c.time, now), c.summary)
 }
 
 /// Seconds since 1970, now.
