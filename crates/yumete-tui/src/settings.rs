@@ -56,11 +56,20 @@ impl ConfigWatch {
     /// relative path, and `~/.config/yumete/config.toml` through a symlinked
     /// home is the same file by two names. The three shapes are
     /// [`yumete_config::config_dir`]'s `config.toml`, a project's
-    /// `.yumete/config.toml`, and a project's `.yumete.toml`.
+    /// `.yumete/config.toml`, and a project's `.yumete.toml` — and the
+    /// `config.imported.toml` (or `-2`, `-3`…) an import puts beside the
+    /// global one, which is read to be copied in.
     fn is_a_config(path: &std::path::Path) -> bool {
         let named = |what: &str| path.file_name().is_some_and(|n| n == what);
         if named(".yumete.toml") {
             return true;
+        }
+        let imported = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(|n| n.starts_with("config.imported") && n.ends_with(".toml"));
+        if imported {
+            return path.parent() == Some(yumete_config::config_dir().as_path());
         }
         if !named("config.toml") {
             return false;
@@ -835,7 +844,13 @@ mod config_watch_tests {
         // here would pass on one machine and fail on the next.
         let global = yumete_config::config_dir().join("config.toml");
         assert!(ConfigWatch::is_a_config(&global), "{}", global.display());
-        let yes = ["/book/.yumete/config.toml", ".yumete/config.toml", "/book/.yumete.toml"];
+        // An import's file beside it, and only beside it.
+        for name in ["config.imported.toml", "config.imported-2.toml"] {
+            let beside = yumete_config::config_dir().join(name);
+            assert!(ConfigWatch::is_a_config(&beside), "{}", beside.display());
+            assert!(!ConfigWatch::is_a_config(&std::path::Path::new("/book").join(name)), "{name} elsewhere");
+        }
+        let yes =["/book/.yumete/config.toml", ".yumete/config.toml", "/book/.yumete.toml"];
         let no = [
             "/book/Cargo.toml",
             "/book/config.toml",

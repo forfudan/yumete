@@ -15,8 +15,12 @@
 //! - **Once, on request.** yumete never reads another editor's files on its
 //!   own (see `write_the_first_config` in `main.rs`): this is a command the
 //!   reader types, and its result is an ordinary config file.
-//! - **Never over a config that is there.** With no `config.toml` it writes
-//!   one; with one, it writes `config.imported.toml` beside it and says so.
+//! - **Read before it is written.** The result opens in the editor as the
+//!   file it would be, changed and not yet on disk: the config check marks
+//!   what it would complain of line by line, and `:w` writes it.
+//! - **Never over a config that is there.** With no `config.toml` the file
+//!   is `config.toml`; with one, `config.imported.toml` beside it, and the
+//!   import says so.
 //! - **What did not come over is listed** at the end of the file, one line an
 //!   item with its reason, so the file is the whole report.
 //!
@@ -125,16 +129,6 @@ pub fn target(dir: &Path) -> (PathBuf, bool) {
         }
         n += 1;
     }
-}
-
-/// Write the import: a new file is only ever created, never written through
-/// one that appeared since, and the first start's one-liner is replaced.
-fn write(path: &Path, text: &str) -> std::io::Result<()> {
-    use std::io::Write;
-    if std::fs::read_to_string(path).is_ok_and(|was| was == FIRST_CONFIG) {
-        return std::fs::write(path, text);
-    }
-    std::fs::OpenOptions::new().write(true).create_new(true).open(path)?.write_all(text.as_bytes())
 }
 
 /// What an import wrote, and how much of it.
@@ -1125,10 +1119,21 @@ fn now() -> String {
     format!("{}-{}-{} {}:{}", &s[0..4], &s[4..6], &s[6..8], &s[8..10], &s[10..12])
 }
 
-/// **`yumete --import <which>`.** What it says is English, as the other
-/// shell commands' is (`--grep`, `--export`): it is read in a terminal by
-/// someone setting up, often from a script or a dotfiles README.
-pub fn run(which: &str) -> ExitCode {
+/// **An import, ready to be read**: the file it would be written to, what
+/// it would hold, and the report the editor opens beside it.
+#[derive(Debug)]
+pub struct Ready {
+    pub path: PathBuf,
+    pub text: String,
+    pub report: String,
+}
+
+/// **`yumete --import <which>`**: the import worked out and nothing
+/// written, for the editor to open ([`Ready`]); the exit status when it
+/// could not be. What it says is English, as the other shell commands' is
+/// (`--grep`, `--export`): it is read in a terminal by someone setting up,
+/// often from a dotfiles README.
+pub fn run(which: &str) -> Result<Ready, ExitCode> {
     let env = |name: &str| std::env::var(name).ok();
     let dir = yumete_config::config_dir();
     let (path, beside) = target(&dir);
@@ -1137,20 +1142,20 @@ pub fn run(which: &str) -> ExitCode {
     if matches!(which, "lazyvim" | "nvim" | "neovim") {
         if let Err(app) = nvim_app(&env) {
             eprintln!("yumete: {}. Nothing was read or written.", bad_app(&app));
-            return ExitCode::FAILURE;
+            return Err(ExitCode::FAILURE);
         }
     }
     let imported = match which {
         "helix" => {
             let Some(from) = helix_config_path(&env) else {
                 eprintln!("yumete: cannot tell where helix's config is (no HOME)");
-                return ExitCode::FAILURE;
+                return Err(ExitCode::FAILURE);
             };
             let source = match std::fs::read_to_string(&from) {
                 Ok(source) => source,
                 Err(_) => {
                     eprintln!("yumete: no helix config at {}", from.display());
-                    return ExitCode::FAILURE;
+                    return Err(ExitCode::FAILURE);
                 }
             };
             let languages = std::fs::read_to_string(from.with_file_name("languages.toml")).ok();
@@ -1158,26 +1163,26 @@ pub fn run(which: &str) -> ExitCode {
                 Ok(imported) => imported,
                 Err(why) => {
                     eprintln!("yumete: {} does not parse: {why}", from.display());
-                    return ExitCode::FAILURE;
+                    return Err(ExitCode::FAILURE);
                 }
             }
         }
         "lazyvim" => {
             let Some(nvim) = nvim_dir(&env) else {
                 eprintln!("yumete: cannot tell where Neovim's config is (no HOME)");
-                return ExitCode::FAILURE;
+                return Err(ExitCode::FAILURE);
             };
             let Some(sign) = lazyvim_sign(&nvim) else {
                 eprintln!("yumete: no LazyVim in {}", nvim.display());
                 eprintln!("looked for lazyvim.json, and LazyVim in lazy-lock.json and lua/config/lazy.lua");
-                return ExitCode::FAILURE;
+                return Err(ExitCode::FAILURE);
             };
             import_lazyvim(&env, &nvim, &sign, &when, beside)
         }
         "nvim" | "neovim" => {
             let Some(nvim) = nvim_dir(&env) else {
                 eprintln!("yumete: cannot tell where Neovim's config is (no HOME)");
-                return ExitCode::FAILURE;
+                return Err(ExitCode::FAILURE);
             };
             // **A LazyVim config gets the LazyVim import** (decision 3).
             if let Some(sign) = lazyvim_sign(&nvim) {
@@ -1186,7 +1191,7 @@ pub fn run(which: &str) -> ExitCode {
             } else {
                 if !nvim.is_dir() {
                     eprintln!("yumete: no Neovim config at {}", nvim.display());
-                    return ExitCode::FAILURE;
+                    return Err(ExitCode::FAILURE);
                 }
                 match read_nvim("nvim", &env, false, dump::TIMEOUT) {
                     Ok((user, base, said)) => {
@@ -1200,7 +1205,7 @@ pub fn run(which: &str) -> ExitCode {
                             "yumete: --import {which} runs your Neovim to read its settings, and {}. Nothing was written.",
                             failed.said(false)
                         );
-                        return ExitCode::FAILURE;
+                        return Err(ExitCode::FAILURE);
                     }
                 }
             }
@@ -1210,11 +1215,11 @@ pub fn run(which: &str) -> ExitCode {
                 Ok(Some(vimrc)) => vimrc,
                 Ok(None) => {
                     eprintln!("yumete: no vimrc found; looked for ~/.vimrc, ~/.vim/vimrc and ~/.config/vim/vimrc");
-                    return ExitCode::FAILURE;
+                    return Err(ExitCode::FAILURE);
                 }
                 Err(why) => {
                     eprintln!("yumete: {why}");
-                    return ExitCode::FAILURE;
+                    return Err(ExitCode::FAILURE);
                 }
             };
             match read_vim("vim", &env, &vimrc, dump::TIMEOUT) {
@@ -1228,20 +1233,21 @@ pub fn run(which: &str) -> ExitCode {
                         "yumete: --import vim runs your Vim to read its settings, and {}. Nothing was written.",
                         failed.said(true)
                     );
-                    return ExitCode::FAILURE;
+                    return Err(ExitCode::FAILURE);
                 }
             }
         }
         other => {
             eprintln!("yumete: --import takes helix, vim, nvim or lazyvim, not '{other}'");
-            return ExitCode::from(2);
+            return Err(ExitCode::from(2));
         }
     };
-    if let Err(err) = std::fs::create_dir_all(&dir).and_then(|()| write(&path, &imported.text)) {
-        eprintln!("yumete: cannot write {}: {err}", path.display());
-        return ExitCode::FAILURE;
+    // Somewhere for `:w` to write to; the file itself is the reader's to write.
+    if let Err(err) = std::fs::create_dir_all(&dir) {
+        eprintln!("yumete: cannot make {}: {err}", dir.display());
+        return Err(ExitCode::FAILURE);
     }
-    println!("yumete: wrote {}", path.display());
+    println!("yumete: {} is open, not yet written; :w writes it", path.display());
     println!(
         "{} line{} carried over; {} item{} not, listed at the end of the file",
         imported.carried,
@@ -1250,7 +1256,7 @@ pub fn run(which: &str) -> ExitCode {
         if imported.skipped == 1 { "" } else { "s" },
     );
     if beside {
-        println!("config.toml was already there, so this went beside it; copy what you want into config.toml");
+        println!("config.toml was already there, so this goes beside it; copy what you want into config.toml");
     }
     if !imported.moved.is_empty() {
         let n = imported.moved.len();
@@ -1262,21 +1268,12 @@ pub fn run(which: &str) -> ExitCode {
             println!("  and {} more", n - SUMMARY);
         }
     }
-    // Kept for the editor to open next time; a report that cannot be kept
-    // is still at the end of the file.
     let report = report(&path, beside, &imported);
-    if std::fs::create_dir_all(yumete_config::data_dir()).and_then(|()| std::fs::write(report_path(), report)).is_ok() {
-        println!("yumete shows the whole report the next time it starts");
-    }
-    ExitCode::SUCCESS
+    Ok(Ready { path, text: imported.text, report })
 }
 
 /// How many moved keys the terminal prints before 「and N more」.
 const SUMMARY: usize = 5;
-
-fn report_path() -> PathBuf {
-    yumete_config::data_dir().join("import-report.txt")
-}
 
 /// **The report the editor opens after an import**: where the config went,
 /// then the two lists from the end of the file, as text rather than
@@ -1297,16 +1294,6 @@ fn report(path: &Path, beside: bool, imported: &Imported) -> String {
         out.push('\n');
     }
     out
-}
-
-/// **The last import's report, taken**: read and removed, so it is shown
-/// once. A file that cannot be removed is shown all the same, and again at
-/// the next start, rather than never.
-pub fn take_report() -> Option<String> {
-    let path = report_path();
-    let text = std::fs::read_to_string(&path).ok()?;
-    let _ = std::fs::remove_file(&path);
-    Some(text)
 }
 
 #[cfg(test)]
@@ -1711,9 +1698,8 @@ language-servers = ["gopls", "golangci-lint-lsp"]
         // The first start's one-liner is no config of the reader's.
         std::fs::write(dir.join("config.toml"), FIRST_CONFIG).unwrap();
         assert_eq!(target(&dir), (dir.join("config.toml"), false));
-        write(&dir.join("config.toml"), "[keys]\npreset = \"helix\"\n").unwrap();
-        assert_eq!(target(&dir), (dir.join("config.imported.toml"), true));
-        assert!(write(&dir.join("config.toml"), "x").is_err(), "a config of theirs is never written over");
+        std::fs::write(dir.join("config.toml"), "[keys]\npreset = \"helix\"\n").unwrap();
+        assert_eq!(target(&dir), (dir.join("config.imported.toml"), true), "a config of theirs is never the target");
         std::fs::write(dir.join("config.imported.toml"), "").unwrap();
         assert_eq!(target(&dir), (dir.join("config.imported-2.toml"), true));
         let _ = std::fs::remove_dir_all(&dir);

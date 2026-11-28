@@ -1094,6 +1094,21 @@ impl Editor {
         self.open_file_as(path, None)
     }
 
+    /// **Open `path` holding `text`, not yet written**: the buffer is the
+    /// file as it would be, marked changed, so `:w` writes it and `:q` asks
+    /// first. What the file holds now, if it is there, is what an undo goes
+    /// back to. Refused, and nothing opened in its place, when the session
+    /// opens everything read-only.
+    pub fn open_unsaved<P: AsRef<Path>>(&mut self, path: P, text: &str) -> io::Result<()> {
+        self.open_file(path)?;
+        let len = self.current_buffer().rope().len_chars();
+        if self.current_buffer_mut().replace(0..len, text).is_err() {
+            return Err(io::Error::from(io::ErrorKind::PermissionDenied));
+        }
+        self.set_cursor(0);
+        Ok(())
+    }
+
     /// Open `path`, in `told` when the reader said which encoding
     /// (`:open ++enc=big5`, `--encoding=`, the picker), else as it looks.
     ///
@@ -2843,6 +2858,33 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::canonicalize(&dir).unwrap()
+    }
+
+    /// **A buffer opened unsaved is the file as it would be**: at its path,
+    /// holding the text, changed and not yet on disk; `:w` writes exactly
+    /// that text, over a file that was there or where none was.
+    #[test]
+    fn a_buffer_opened_unsaved_is_written_by_w() {
+        let dir = folder("unsaved");
+        for (name, was) in [("new.toml", None), ("there.toml", Some("old = 1\n"))] {
+            let path = dir.join(name);
+            if let Some(was) = was {
+                std::fs::write(&path, was).unwrap();
+            }
+            let mut ed = Editor::new();
+            ed.open_unsaved(&path, "[editor]\nscrolloff = 3\n").unwrap();
+            assert_eq!(ed.current_buffer().path(), Some(path.as_path()), "{name}");
+            assert_eq!(ed.current_buffer().text(), "[editor]\nscrolloff = 3\n", "{name}");
+            assert!(ed.current_buffer().is_modified(), "{name}: changed, not written");
+            assert_eq!(std::fs::read_to_string(&path).ok().as_deref(), was, "{name}: the disk untouched");
+            ed.execute(":w").unwrap();
+            assert_eq!(std::fs::read_to_string(&path).unwrap(), "[editor]\nscrolloff = 3\n", "{name}");
+            assert!(!ed.current_buffer().is_modified(), "{name}");
+        }
+        let mut ed = Editor::new();
+        ed.set_readonly_default(true);
+        assert!(ed.open_unsaved(dir.join("locked.toml"), "x = 1\n").is_err(), "a read-only session refuses it");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// **Typst going online is said**: a `downloading` line on the

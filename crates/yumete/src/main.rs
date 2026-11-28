@@ -200,7 +200,7 @@ fn main() -> ExitCode {
     // 而它也認拼音。
     let mut listing: Option<String> = None;
     // `--import helix`, `lazyvim`, `vim` or `nvim`: another editor's config
-    // written once into ours, then exit. See `import.rs`.
+    // turned into ours, opened unsaved for `:w`. See `import.rs`.
     let mut import: Option<String> = None;
     // `--import-word`: the Word files and folders named, each a `.md` beside
     // it or under `--out`, then exit. See `yumete_core::word`.
@@ -597,15 +597,22 @@ fn main() -> ExitCode {
         eprintln!("try 'yumete --help'");
         return ExitCode::from(2);
     }
-    // **`--import` does one thing and leaves**: files or a
-    // search beside it would be quietly dropped, so they are refused.
-    if let Some(which) = import {
-        if !files.is_empty() || grep.is_some() || listing.is_some() || export.is_some() {
-            eprintln!("yumete: --import writes a config file and exits; it takes nothing else");
-            return ExitCode::from(2);
+    // **`--import` opens one thing**: the config it worked out, unsaved.
+    // Files or a search beside it would be quietly dropped, so they are
+    // refused.
+    let imported = match import {
+        Some(which) => {
+            if !files.is_empty() || grep.is_some() || listing.is_some() || export.is_some() {
+                eprintln!("yumete: --import opens the imported config and nothing else; it takes no files, search or export");
+                return ExitCode::from(2);
+            }
+            match import::run(&which) {
+                Ok(ready) => Some(ready),
+                Err(code) => return code,
+            }
         }
-        return import::run(&which);
-    }
+        None => None,
+    };
     if import_word {
         if grep.is_some() || listing.is_some() || export.is_some() {
             eprintln!("yumete: --import-word converts Word files and exits; it takes no search or export");
@@ -880,6 +887,17 @@ fn main() -> ExitCode {
     if let Some(first) = first_opened.filter(|&first| first + 1 != editor.buffer_position().0) {
         editor.show_buffer_at(first);
     }
+    // **An import opens as the file it would be**, changed and not yet
+    // written, its report beside it: the reader reads it, the config check
+    // marks what it would complain of, and `:w` writes it.
+    if let Some(ready) = &imported {
+        editor.open_report(&yumete_core::say!("ui.import-report"), &ready.report);
+        if let Err(err) = editor.open_unsaved(&ready.path, &ready.text) {
+            eprintln!("yumete: cannot open '{}': {err}", ready.path.display());
+            return ExitCode::FAILURE;
+        }
+        first_opened.get_or_insert(editor.buffer_position().0.saturating_sub(1));
+    }
     if first_opened.is_some() {
         editor.note_the_starting_place();
     }
@@ -904,7 +922,7 @@ fn main() -> ExitCode {
     // thing, not a return to work.
     let printing = force_preview || !std::io::stdout().is_terminal();
     let wants_last_time = config.editor.session || resume;
-    let restored = if files.is_empty() && !printing && !fresh && wants_last_time {
+    let restored = if files.is_empty() && imported.is_none() && !printing && !fresh && wants_last_time {
         let opened = editor.restore_session();
         // The windows come back only with the files they show.
         if opened > 0 {
@@ -926,7 +944,7 @@ fn main() -> ExitCode {
     // stdout 是不是終端），所以這裏照 752 行 `printing_now` 的判準，多問一句
     // `shot.is_none()`。
     let drawing = !(force_preview || (!std::io::stdout().is_terminal() && shot.is_none()));
-    if files.is_empty() && drawing && restored == 0 {
+    if files.is_empty() && imported.is_none() && drawing && restored == 0 {
         editor.opened_with_nothing();
     }
     // **第一次打開，機器上有 vim 的痕跡就直接換成 vim 鍵位**。
@@ -945,7 +963,7 @@ fn main() -> ExitCode {
     // **The note names `--import` when it would help**: LazyVim
     // or a helix config seen, read only to know they are there.
     let configured = yumete_config::config_dir().join("config.toml").exists();
-    if brand_new && drawing && !configured {
+    if brand_new && drawing && !configured && imported.is_none() {
         let env = |name: &str| std::env::var(name).ok();
         let lazyvim = import::nvim_dir(&env).and_then(|dir| import::lazyvim_sign(&dir)).is_some();
         let helix = import::helix_config_path(&env).is_some_and(|path| path.is_file());
@@ -968,16 +986,6 @@ fn main() -> ExitCode {
         match editor.intro() {
             true => editor.says_at_the_start(note),
             false => editor.set_status(note),
-        }
-    }
-    // **The last import's report**, once, in a read-only buffer of its own:
-    // what came over is in the config, and what it took from yumete and
-    // where that went is read here, beside the text.
-    // Only for a run that draws: `--preview`, a pipe and `--timing` would
-    // take it and show it to nobody.
-    if drawing && !private && shot.is_none() {
-        if let Some(report) = import::take_report() {
-            editor.open_report(&yumete_core::say!("ui.import-report"), &report);
         }
     }
     mark("session", &mut marks);
@@ -2804,9 +2812,9 @@ OPTIONS:
                      choice made inside is.
         --preview    Print a non-interactive preview instead of the editor.
         --import EDITOR
-                     Write another editor's config into yumete's, once, and
-                     exit. helix: its config.toml, the keys and the
-                     settings yumete has. vim, nvim (or neovim): the
+                     Turn another editor's config into yumete's and open it,
+                     not yet written: :w writes it. helix: its config.toml,
+                     the keys and the settings yumete has. vim, nvim (or neovim): the
                      settings and maps yumete can take for certain. No
                      theme is carried over; pick one with :theme.
                      lazyvim: LazyVim's Space menu, the config the docs site
@@ -2816,7 +2824,7 @@ OPTIONS:
                      temporary directory, and read what it set: any code in
                      your config runs there, as each time you open that
                      editor, but nothing of yours is written to. With no
-                     config.toml yet it writes one; with one,
+                     config.toml yet the file is config.toml; with one,
                      config.imported.toml beside it. What did not carry over
                      is listed at the end of the file.
 
